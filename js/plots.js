@@ -1,5 +1,5 @@
 // ================= FOREST =================
-function drawForest(studies,m){
+export function drawForest(studies,m){
  const svg=d3.select("#forestPlot"); svg.selectAll("*").remove();
  const tooltip=d3.select("#tooltip");
 
@@ -47,7 +47,7 @@ function drawForest(studies,m){
 }
 
 // ================= FUNNEL =================
-function drawFunnel(studies,m){
+export function drawFunnel(studies,m){
  const svg=d3.select("#funnelPlot"); svg.selectAll("*").remove();
 
  const x=d3.scaleLinear()

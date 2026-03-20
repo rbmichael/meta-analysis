@@ -5,22 +5,22 @@
 <title>Meta-analysis Tool</title>
 <link rel="stylesheet" href="css/styles.css">
 <script src="https://d3js.org/d3.v7.min.js"></script>
-<script src="js/analysis.js"></script>
-<script src="js/trimfill.js"></script>
-<script src="js/plots.js"></script>
-<script src="js/ui.js"></script>
-<script src="js/benchmarks.js"></script>
-<script src="js/tests.js"></script>
+<script type="module" src="js/analysis.js"></script>
+<script type="module" src="js/trimfill.js"></script>
+<script type="module" src="js/plots.js"></script>
+<script type="module" src="js/ui.js"></script>
+<script type="module" src="js/benchmarks.js"></script>
+<script type="module" src="js/tests.js"></script>
 </head>
 <body>
 
 <h2>Meta-analysis Tool</h2>
 
 <input type="file" id="csvFile" accept=".csv">
-<button onclick="importCSV()">Import CSV</button>
-<button onclick="exportCSV()">Export CSV</button>
+<button id="import">Import CSV</button>
+<button id="export">Export CSV</button>
 
-<select id="effectType" onchange="runAnalysis()">
+<select id="effectType">
 <option value="MD">Mean Difference</option>
 <option value="SMD">Hedges g</option>
 </select>
@@ -32,8 +32,8 @@
 </tr>
 </table>
 
-<button onclick="addRow()">Add Study</button>
-<button onclick="runAnalysis()">Run</button>
+<button id="addStudy">Add Study</button>
+<button id="run">Run</button>
 
 <div id="results"></div>
 

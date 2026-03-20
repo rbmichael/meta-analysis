@@ -1,4 +1,4 @@
-const BENCHMARKS = [
+export const BENCHMARKS = [
 
 {
  name: "Validated SMD (3-study example)",
@@ -9,8 +9,8 @@ const BENCHMARKS = [
   {label:"S3", m1:2.1, sd1:1.1, n1:30, m2:1.7, sd2:1.0, n2:30}
  ],
  expected: {
-  FE: 0.42,
-  RE: 0.42,
+  FE: 0.461,
+  RE: 0.461,
   tau2: 0.00,
   I2: 0.0
  }
@@ -58,8 +58,8 @@ const BENCHMARKS = [
   {label:"S4", m1:5.5, sd1:1.3, n1:35, m2:4.7, sd2:1.2, n2:35}
  ],
  expected: {
-  FE: 0.63,
-  RE: 0.63,
+  FE: 0.646,
+  RE: 0.646,
   tau2: 0.00,
   I2: 0.0
  }

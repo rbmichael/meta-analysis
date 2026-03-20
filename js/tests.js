@@ -1,8 +1,12 @@
-function approxEqual(a, b, tol=0.05){
- return Math.abs(a - b) < tol;
+import { round } from "./utils.js";
+import { BENCHMARKS } from "./benchmarks.js";
+import { compute, meta } from "./analysis.js";
+
+function approxEqual3(a, b) {
+ return round(a, 3) === round(b, 3);
 }
 
-function runTests(){
+export function runTests(){
  console.log("===== RUNNING BENCHMARK TESTS =====");
 
  let allPass = true;
@@ -15,8 +19,8 @@ function runTests(){
   console.log(`\n--- ${test.name} ---`);
 
   function check(name, val, expected){
-   const ok = approxEqual(val, expected);
-   console.log(`${name}: ${val.toFixed(3)} vs ${expected} → ${ok ? "PASS" : "FAIL"}`);
+   const ok = approxEqual3(val, expected);
+   console.log(`${name}: ${round(val,3)} vs ${round(expected,3)} → ${ok ? "PASS" : "FAIL"}`);
    if(!ok) allPass = false;
   }
 

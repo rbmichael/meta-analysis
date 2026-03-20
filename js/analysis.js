@@ -15,7 +15,7 @@ function hedgesG(s){
  };
 }
 
-function compute(s,type){
+export function compute(s,type){
  if(type === "SMD"){
   const g = hedgesG(s);
   return {
@@ -38,7 +38,7 @@ function compute(s,type){
  };
 }
 
-function meta(studies){
+export function meta(studies){
 
  // ---------- guards ----------
  const k = studies.length;

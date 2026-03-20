@@ -1,5 +1,5 @@
 // ================= TRIM-FILL =================
-function trimFill(studies){
+export function trimFill(studies){
  if(studies.length<3) return [];
  const center=d3.median(studies,d=>d.md);
  let left=studies.filter(d=>d.md<center);
