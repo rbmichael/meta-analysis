@@ -16,6 +16,8 @@ function init(){
  addRow(["B",12,3,40,9,3,40]);
  addRow(["C",9,2,30,7,2,30]);
  runAnalysis();
+ 
+ runTests();
 }
 window.onload=init;
 
