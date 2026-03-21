@@ -38,7 +38,59 @@ export function compute(s,type){
  };
 }
 
-export function meta(studies){
+// ================= REML TAU² =================
+function tau2_REML(studies, tol = 1e-8, maxIter = 100){
+
+ const k = studies.length;
+ if(k <= 1) return 0;
+
+ // Initial value: DL estimate (good starting point)
+ const W = d3.sum(studies, d => d.w);
+ const FE = d3.sum(studies, d => d.md * d.w) / W;
+
+ const Q = d3.sum(studies, d => d.w * (d.md - FE)**2);
+ const df = k - 1;
+ const sumW2 = d3.sum(studies, d => d.w * d.w);
+ const C = W - (sumW2 / W);
+
+ let tau2 = C > 0 ? Math.max(0, (Q - df) / C) : 0;
+
+ // Iterative REML
+ for(let iter = 0; iter < maxIter; iter++){
+
+  const w = studies.map(d => 1 / Math.max(d.varMD + tau2, MIN_VAR));
+  const Wt = d3.sum(w);
+
+  const mu = d3.sum(studies.map((d,i) => d.md * w[i])) / Wt;
+
+  // Score function (REML)
+  let S = 0;
+  let info = 0;
+
+  for(let i = 0; i < k; i++){
+   const vi = studies[i].varMD + tau2;
+   const ri = studies[i].md - mu;
+
+   S += (ri*ri - vi) / (vi*vi);
+   info += 1 / (vi*vi);
+  }
+
+  // Newton-Raphson update
+  const delta = S / info;
+  const newTau2 = Math.max(0, tau2 + delta);
+
+  if(Math.abs(newTau2 - tau2) < tol){
+   tau2 = newTau2;
+   break;
+  }
+
+  tau2 = newTau2;
+ }
+
+ return tau2;
+}
+
+export function meta(studies, method="DL"){
 
  // ---------- guards ----------
  const k = studies.length;
@@ -73,15 +125,16 @@ export function meta(studies){
  }
  I2 = Math.max(0, Math.min(100, I2));
 
- // ---------- tau² (DerSimonian–Laird) ----------
- const sumW2 = d3.sum(studies, d => d.w * d.w);
- const C = W > 0 ? (W - (sumW2 / W)) : 0;
+ // ---------- tau² (REML or DerSimonian–Laird) ----------
+ let tau2;
 
- let tau2 = 0;
- if(C > 0 && Q > df){
-  tau2 = (Q - df) / C;
+ if(method === "REML"){
+  tau2 = tau2_REML(studies);
+ } else {
+  const sumW2 = d3.sum(studies, d => d.w * d.w);
+  const C = W - (sumW2 / W);
+  tau2 = C > 0 ? Math.max(0, (Q - df) / C) : 0;
  }
- tau2 = Math.max(0, tau2);
 
  // ---------- random-effects ----------
  const wRE = studies.map(d => 1 / Math.max(d.varMD + tau2, MIN_VAR));

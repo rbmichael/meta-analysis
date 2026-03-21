@@ -90,7 +90,8 @@ function runAnalysis(){
 
  if(!studies.length) return;
 
- const m=meta(studies);
+ const method = document.getElementById("tauMethod")?.value || "DL";
+ const m = meta(studies, method);
  const tf=trimFill(studies);
  const all=[...studies,...tf];
 
