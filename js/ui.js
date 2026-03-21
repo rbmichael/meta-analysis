@@ -15,15 +15,53 @@ document.getElementById("tauMethod").addEventListener("change", runAnalysis);
 document.getElementById("ciMethod").addEventListener("change", runAnalysis);
 
 function addRow(values){
- const row=document.getElementById("inputTable").insertRow();
- const v=values||["","","","","","",""];
- row.innerHTML=`<td><input value="${v[0]||""}"></td>
+ const row = document.getElementById("inputTable").insertRow();
+ const v = values || ["","","","","","",""];
+
+ row.innerHTML = `
+ <td><input value="${v[0]||""}"></td>
  <td><input value="${v[1]||""}"></td>
  <td><input value="${v[2]||""}"></td>
  <td><input value="${v[3]||""}"></td>
  <td><input value="${v[4]||""}"></td>
  <td><input value="${v[5]||""}"></td>
- <td><input value="${v[6]||""}"></td>`;
+ <td><input value="${v[6]||""}"></td>
+ <td>
+   <button class="remove-btn">✖</button>
+   <button class="clear-btn">🧹</button>
+ </td>
+ `;
+
+ row.querySelectorAll("input").forEach(input => {
+  input.addEventListener("input", runAnalysis);
+ });
+
+ // attach listeners
+ row.querySelector(".remove-btn").addEventListener("click", function(){
+   removeRow(this);
+ });
+
+ row.querySelector(".clear-btn").addEventListener("click", function(){
+   clearRow(this);
+ });
+}
+
+function removeRow(btn){
+ const table = document.getElementById("inputTable");
+ if(table.rows.length <= 2) return; // keep at least 1 data row
+
+ const row = btn.closest("tr");
+ row.remove();
+ runAnalysis();
+}
+
+function clearRow(btn){
+ const row = btn.closest("tr");
+ const inputs = row.querySelectorAll("input");
+
+ inputs.forEach(input => input.value = "");
+
+ runAnalysis();
 }
 
 function init(){
