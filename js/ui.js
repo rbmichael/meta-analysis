@@ -33,7 +33,10 @@ function addRow(values){
  `;
 
  row.querySelectorAll("input").forEach(input => {
-  input.addEventListener("input", runAnalysis);
+  input.addEventListener("input", () => {
+    validateRow(row);
+    runAnalysis();
+  });
  });
 
  // attach listeners
@@ -64,12 +67,70 @@ function clearRow(btn){
  runAnalysis();
 }
 
+function validateRow(row){
+
+ const inputs = row.querySelectorAll("input");
+
+ // column meanings:
+ // 0 = label (ignore)
+ // 1–6 = numeric
+
+ let valid = true;
+
+ inputs.forEach((input, idx) => {
+
+  input.classList.remove("input-error");
+
+  if(idx === 0) return; // label
+
+  const val = input.value.trim();
+
+  if(val === "" || isNaN(val)){
+    input.classList.add("input-error");
+    valid = false;
+    return;
+  }
+
+  const num = +val;
+
+  // optional stricter rules
+  if(idx === 3 || idx === 6){ // n1, n2
+    if(num <= 0){
+      input.classList.add("input-error");
+      valid = false;
+    }
+  }
+
+  if(idx === 2 || idx === 5){ // SDs
+    if(num <= 0){
+      input.classList.add("input-error");
+      valid = false;
+    }
+  }
+
+ });
+
+ // row-level highlight
+ if(!valid){
+  row.classList.add("row-error");
+ } else {
+  row.classList.remove("row-error");
+ }
+
+ return valid;
+}
+
 function init(){
  addRow(["A",10,2,50,8,2,50]);
  addRow(["B",12,3,40,9,3,40]);
  addRow(["C",9,2,30,7,2,30]);
- runAnalysis();
+
+ document.querySelectorAll("#inputTable tr").forEach((row,i)=>{
+  if(i === 0) return;
+  validateRow(row);
+ });
  
+ runAnalysis();
  runTests();
 }
 window.onload=init;
@@ -120,7 +181,10 @@ function runAnalysis(){
  for(let i=1;i<rows.length;i++){
   const v=[...rows[i].querySelectorAll('input')].map(x=>x.value);
 
-  if(v.slice(1).some(x=>x===""||isNaN(x))) continue;
+  const row = rows[i];
+  const isValid = validateRow(row);
+
+  if(!isValid) continue;
 
   studies.push(compute({
    label:v[0],
