@@ -139,6 +139,47 @@ export function eggerTest(studies){
  };
 }
 
+// ================= INFLUENCE DIAGNOSTICS =================
+export function influenceDiagnostics(studies, method="DL", ciMethod="normal"){
+  const n = studies.length;
+  if(n < 2) return [];
+
+  // full RE meta-analysis
+  const full = meta(studies, method, ciMethod);
+
+  const diagnostics = studies.map((study, idx) => {
+    // leave-one-out studies
+    const loo = studies.filter((_, i) => i !== idx);
+    const looMeta = meta(loo, method, ciMethod);
+
+    // standardized residual
+	const r = (study.md - full.RE) / Math.sqrt(study.varMD + full.tau2);
+
+    // DFBETA for RE
+	const dfbeta = (full.RE - looMeta.RE) / looMeta.seRE;
+
+    // change in tau²
+    const deltaTau2 = full.tau2 - looMeta.tau2;
+
+	const outlier = Math.abs(r) > 2;
+	const influential = Math.abs(dfbeta) > 1;
+
+	return {
+	  label: study.label,
+	  RE_loo: looMeta.RE,
+	  tau2_loo: looMeta.tau2,
+	  stdResidual: r,
+	  DFBETA: dfbeta,
+	  deltaTau2: deltaTau2,
+	  outlier,
+	  influential
+	};
+  });
+
+  return diagnostics;
+}
+
+// ================ META-ANALYSIS ===============
 export function meta(studies, method="DL", ciMethod="normal"){
 
  // ---------- guards ----------

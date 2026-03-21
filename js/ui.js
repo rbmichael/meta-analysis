@@ -1,5 +1,5 @@
 // ================= UI =================
-import { compute, eggerTest, meta } from "./analysis.js";
+import { compute, eggerTest, meta, influenceDiagnostics } from "./analysis.js";
 import { fmt } from "./utils.js";
 import { runTests } from "./tests.js";
 import { trimFill } from "./trimfill.js";
@@ -225,10 +225,49 @@ function runAnalysis(){
    all = [...studies, ...tf];
  }
 
- // meta-anslysis
- const m = meta(studies, method, ciMethod);
- const egger = eggerTest(studies);
+// meta-analysis
+const m = meta(studies, method, ciMethod);
+const egger = eggerTest(studies);
+const influence = influenceDiagnostics(studies, method, ciMethod);
 
+let influenceHTML = `
+<b>Influence diagnostics:</b><br>
+<table border="1">
+  <tr>
+    <th>Study</th>
+    <th>RE (LOO)</th>
+    <th>Δτ²</th>
+    <th>Std Residual</th>
+    <th>DFBETA</th>
+    <th>Flag</th>
+  </tr>
+`;
+
+influence.forEach(d => {
+  const isFlagged = d.outlier || d.influential;
+
+  const rowClass = isFlagged
+    ? "style='background:#ffe6e6;'"
+    : "";
+
+  let flagText = "";
+  if (d.outlier) flagText = "Outlier";
+  else if (d.influential) flagText = "Influential";
+
+  influenceHTML += `
+    <tr ${rowClass}>
+      <td>${d.label}</td>
+      <td>${isFinite(d.RE_loo) ? d.RE_loo.toFixed(3) : "NA"}</td>
+      <td>${isFinite(d.deltaTau2) ? d.deltaTau2.toFixed(3) : "NA"}</td>
+      <td>${isFinite(d.stdResidual) ? d.stdResidual.toFixed(3) : "NA"}</td>
+      <td>${isFinite(d.DFBETA) ? d.DFBETA.toFixed(3) : "NA"}</td>
+      <td>${flagText}</td>
+    </tr>
+  `;
+});
+
+influenceHTML += "</table>";
+ 
  // compute adjusted RE if requested
  let mAdjusted = null;
  if(useTF && useTFAdjusted && tf.length > 0){
@@ -246,6 +285,8 @@ function runAnalysis(){
   <b>Egger intercept:</b> ${fmt(egger.intercept)} | p=${fmt(egger.p)}<br>
   <b>Trim & Fill:</b> ${useTF ? "ON" : "OFF"} (${tf.length} filled studies)
  `;
+ 
+ document.getElementById("results").innerHTML += influenceHTML;
 
  drawForest(all,m);
  drawFunnel(all,m);
