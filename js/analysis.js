@@ -263,120 +263,99 @@ export function subgroupAnalysis(studies, method="REML", ciMethod="z") {
 }
 
 // ================ META-ANALYSIS ===============
-export function meta(studies, method="DL", ciMethod="normal"){
+export function meta(studies, method="DL", ciMethod="normal") {
 
- // ---------- guards ----------
- const k = studies.length;
- if(k === 0){
-  return {
-   FE: NaN, seFE: NaN,
-   RE: NaN, seRE: NaN,
-   tau2: 0, Q: NaN, df: 0, I2: 0,
-   predLow: NaN, predHigh: NaN
-  };
- }
-
- // ---------- fixed-effect ----------
- const W = d3.sum(studies, d => d.w);
- const FE = W > 0 ? d3.sum(studies, d => d.md * d.w) / W : 0;
- const seFE = W > 0 ? Math.sqrt(1 / W) : NaN;
-
- // ---------- heterogeneity (FE weights ONLY) ----------
- let Q = 0;
- for(let i = 0; i < k; i++){
-  const d = studies[i];
-  const diff = d.md - FE;
-  Q += d.w * diff * diff;
- }
-
- const df = k - 1;
-
- // ---------- I² ----------
- let I2 = 0;
- if(Q > df && Q > 0){
-  I2 = ((Q - df) / Q) * 100;
- }
- I2 = Math.max(0, Math.min(100, I2));
-
- // ---------- tau² (REML or DerSimonian–Laird) ----------
- let tau2;
-
- if(method === "REML"){
-  tau2 = tau2_REML(studies);
- } else {
-  const sumW2 = d3.sum(studies, d => d.w * d.w);
-  const C = W - (sumW2 / W);
-  tau2 = C > 0 ? Math.max(0, (Q - df) / C) : 0;
- }
-
- // ---------- random-effects ----------
- const wRE = studies.map(d => 1 / Math.max(d.varMD + tau2, MIN_VAR));
- const WRE = d3.sum(wRE);
-
- const RE = WRE > 0
-  ? d3.sum(studies.map((d,i) => d.md * wRE[i])) / WRE
-  : NaN;
-
- let seRE = WRE > 0 ? Math.sqrt(1 / WRE) : NaN;
- let crit = 1.96; // default normal
-
- if(ciMethod === "KH" && studies.length > 1){
-
-  const df = studies.length - 1;
-
-  // KH variance estimator
-  let sum = 0;
-  for(let i = 0; i < studies.length; i++){
-   const diff = studies[i].md - RE;
-   sum += wRE[i] * diff * diff;
+  const k = studies.length;
+  if(k === 0){
+    return {
+      FE: NaN, seFE: NaN,
+      RE: NaN, seRE: NaN,
+      tau2: 0, Q: NaN, df: 0, I2: 0,
+      predLow: NaN, predHigh: NaN,
+      ciLow: NaN, ciHigh: NaN,
+      crit: NaN, stat: NaN, pval: NaN, dist: null
+    };
   }
 
-  const varKH = sum / (df * WRE);
-  seRE = Math.sqrt(Math.max(varKH, 0));
+  // ---------- fixed-effect ----------
+  const W = d3.sum(studies, d => d.w);
+  const FE = W > 0 ? d3.sum(studies, d => d.md * d.w) / W : 0;
+  const seFE = W > 0 ? Math.sqrt(1 / W) : NaN;
 
-  crit = tCritical(df);
- }
+  // ---------- heterogeneity (FE weights) ----------
+  let Q = 0;
+  for(let i = 0; i < k; i++){
+    const d = studies[i];
+    Q += d.w * Math.pow(d.md - FE, 2);
+  }
 
-let stat, pval, dist;
+  const dfQ = k - 1;
 
-if(ciMethod === "KH" && studies.length > 1){
+  // ---------- I² ----------
+  let I2 = 0;
+  if(Q > dfQ && Q > 0) I2 = ((Q - dfQ)/Q) * 100;
+  I2 = Math.max(0, Math.min(100, I2));
 
- const df = studies.length - 1;
+  // ---------- tau² ----------
+  let tau2 = 0;
+  if(method === "REML"){
+    tau2 = tau2_REML(studies);
+  } else {
+    const sumW2 = d3.sum(studies, d => d.w*d.w);
+    const C = W - (sumW2/W);
+    tau2 = C > 0 ? Math.max(0, (Q - dfQ)/C) : 0;
+  }
 
- stat = RE / seRE;
- dist = "t";
+  // ---------- random-effects ----------
+  const wRE = studies.map(d => 1 / Math.max(d.varMD + tau2, MIN_VAR));
+  const WRE = d3.sum(wRE);
+  const RE = WRE > 0 ? d3.sum(studies.map((d,i)=>d.md*wRE[i])) / WRE : NaN;
 
- const p = 1 - tCDF(Math.abs(stat), df);
- pval = 2 * p;
+  let seRE = WRE > 0 ? Math.sqrt(1 / WRE) : NaN;
+  let crit = 1.96;
+  let stat, pval, dist;
 
-} else {
+  // ---------- Knapp-Hartung / small-sample t ----------
+  if((ciMethod === "KH" || ciMethod === "t") && k > 1){
+    const dfKH = k - 1;
 
- stat = RE / seRE;
- dist = "z";
+    // KH variance: Q_RE / df * 1 / sum(w_i)
+    let sum = 0;
+    for(let i = 0; i < k; i++){
+      sum += wRE[i] * Math.pow(studies[i].md - RE, 2);
+    }
+    const varKH = sum / (dfKH * WRE);
+    seRE = Math.sqrt(Math.max(varKH, 0));
 
- const p = 1 - normalCDF(Math.abs(stat));
- pval = 2 * p;
-} 
- 
- // ---------- prediction interval ----------
- const predVar = (seRE * seRE) + tau2;
+    crit = tCritical(dfKH);
+    stat = RE / seRE;
+    dist = "t";
+    pval = 2 * (1 - tCDF(Math.abs(stat), dfKH));
+  } else {
+    stat = RE / seRE;
+    dist = "z";
+    pval = 2 * (1 - normalCDF(Math.abs(stat)));
+  }
 
- return {
-  FE,
-  seFE,
-  RE,
-  seRE,
-  tau2,
-  Q,
-  df,
-  I2,
-  predLow: RE - 1.96 * Math.sqrt(predVar),
-  predHigh: RE + 1.96 * Math.sqrt(predVar),
-  ciLow: RE - crit * seRE,
-  ciHigh: RE + crit * seRE,
-  crit,
-  stat,
-  pval,
-  dist
- };
+  // ---------- prediction interval ----------
+  const predVar = seRE*seRE + tau2;
+
+  return {
+    FE,
+    seFE,
+    RE,
+    seRE,
+    tau2,
+    Q,
+    df: dfQ,
+    I2,
+    predLow: RE - 1.96 * Math.sqrt(predVar),
+    predHigh: RE + 1.96 * Math.sqrt(predVar),
+    ciLow: RE - crit * seRE,
+    ciHigh: RE + crit * seRE,
+    crit,
+    stat,
+    pval,
+    dist
+  };
 }
