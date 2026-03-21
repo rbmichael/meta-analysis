@@ -1,6 +1,6 @@
 // ================= UI =================
 import { compute, eggerTest, meta, influenceDiagnostics, subgroupAnalysis } from "./analysis.js";
-import { fmt } from "./utils.js";
+import { fmt, transformEffect, transformCI } from "./utils.js";
 import { runTests } from "./tests.js";
 import { trimFill } from "./trimfill.js";
 import { drawForest, drawFunnel } from "./plots.js";
@@ -207,12 +207,27 @@ function runAnalysis(){
 	  // ✅ Get group safely via class
 	  const group = row.querySelector(".group")?.value.trim() || "";
 
-	  // Compute effect size
-	  const study = compute({
-		label: v[0],
-		m1: +v[1], sd1: +v[2], n1: +v[3],
-		m2: +v[4], sd2: +v[5], n2: +v[6]
-	  }, type);
+		// Compute effect size
+		let study;
+
+		if (type === "OR" || type === "RR") {
+
+		  study = compute({
+			label: v[0],
+			a: +v[1],
+			b: +v[2],
+			c: +v[3],
+			d: +v[4]
+		  }, type);
+
+		} else {
+
+		  study = compute({
+			label: v[0],
+			m1: +v[1], sd1: +v[2], n1: +v[3],
+			m2: +v[4], sd2: +v[5], n2: +v[6]
+		  }, type);
+		}
 
 	  // ✅ Attach group
 	  study.group = group;
@@ -300,14 +315,17 @@ function runAnalysis(){
 	  Object.entries(subgroup.groups).forEach(([g, r]) => {
 		// Detect single-study groups
 		const isSingle = r.k === 1;
+		
+		const y_disp = transformEffect(r.y, type);
+		const ci_disp = transformCI(r.ci.lb, r.ci.ub, type);
 
 		subgroupHTML += `
 		  <tr>
 			<td>${g}</td>
 			<td>${r.k}</td>
-			<td>${isFinite(r.y) ? r.y.toFixed(3) : "NA"}</td>
-			<td>${isSingle ? "NA" : isFinite(r.se) ? r.se.toFixed(3) : "NA"}</td>
-			<td>[${isSingle ? "NA" : r.ci.lb.toFixed(3)}, ${isSingle ? "NA" : r.ci.ub.toFixed(3)}]</td>
+			<td>${isFinite(y_disp) ? fmt(y_disp) : "NA"}</td>
+			<td>${isSingle ? "NA" : isFinite(r.se) ? fmt(r.se) : "NA"}</td>
+			<td>[${isSingle ? "NA" : fmt(ci_disp.lb)}, ${isSingle ? "NA" : fmt(ci_disp.ub)}]</td>
 			<td>${isSingle ? "NA" : isFinite(r.tau2) ? r.tau2.toFixed(3) : "0"}</td>
 			<td>${isSingle ? "NA" : isFinite(r.I2) ? r.I2.toFixed(1) : "0"}</td>
 		  </tr>
@@ -328,23 +346,42 @@ function runAnalysis(){
 	  subgroupHTML = "<i>Add at least 2 groups to see subgroup analysis</i><br>";
 	}
  
- // compute adjusted RE if requested
- let mAdjusted = null;
- if(useTF && useTFAdjusted && tf.length > 0){
-   mAdjusted = meta([...studies, ...tf]);
- }
+	 // compute adjusted RE if requested
+	 let mAdjusted = null;
+	 if(useTF && useTFAdjusted && tf.length > 0){
+	   mAdjusted = meta([...studies, ...tf]);
+	 }
 
- document.getElementById("results").innerHTML=`
-  <b>FE:</b> ${fmt(m.FE)} |
-  <b>RE:</b> ${fmt(m.RE)}<br>
-  ${useTF && mAdjusted ? `<b>RE (adjusted):</b> ${fmt(mAdjusted.RE)}<br>` : ""}
-  CI [${fmt(m.ciLow)}, ${fmt(m.ciHigh)}]<br>
-  τ²=${fmt(m.tau2)} | I²=${fmt(m.I2)}%<br>
-  ${m.dist}-stat=${fmt(m.stat)} | p=${fmt(m.pval)}<br>
-  Prediction=[${fmt(m.predLow)}, ${fmt(m.predHigh)}]<br>
-  <b>Egger intercept:</b> ${fmt(egger.intercept)} | p=${fmt(egger.p)}<br>
-  <b>Trim & Fill:</b> ${useTF ? "ON" : "OFF"} (${tf.length} filled studies)
- `;
+	// Transform helpers
+	const FE_disp = transformEffect(m.FE, type);
+	const RE_disp = transformEffect(m.RE, type);
+	const ci_disp = transformCI(m.ciLow, m.ciHigh, type);
+	const pred_disp = transformCI(m.predLow, m.predHigh, type);
+
+	// Trim-fill adjusted
+	let RE_adj_disp = null;
+	if(useTF && mAdjusted){
+	  RE_adj_disp = transformEffect(mAdjusted.RE, type);
+	}
+
+	let effectLabel = "Effect";
+
+	if (type === "OR") effectLabel = "Odds Ratio";
+	else if (type === "RR") effectLabel = "Risk Ratio";
+	else if (type === "SMD") effectLabel = "SMD";
+	else if (type === "MD") effectLabel = "Mean Difference";
+
+	document.getElementById("results").innerHTML=`
+	  <b>${effectLabel} (FE):</b> ${fmt(FE_disp)} |
+	  <b>${effectLabel} (RE):</b> ${fmt(RE_disp)}<br>
+	  ${useTF && mAdjusted ? `<b>RE (adjusted):</b> ${fmt(RE_adj_disp)}<br>` : ""}
+	  CI [${fmt(ci_disp.lb)}, ${fmt(ci_disp.ub)}]<br>
+	  τ²=${fmt(m.tau2)} | I²=${fmt(m.I2)}%<br>
+	  ${m.dist}-stat=${fmt(m.stat)} | p=${fmt(m.pval)}<br>
+	  Prediction=[${fmt(pred_disp.lb)}, ${fmt(pred_disp.ub)}]<br>
+	  <b>Egger intercept:</b> ${fmt(egger.intercept)} | p=${fmt(egger.p)}<br>
+	  <b>Trim & Fill:</b> ${useTF ? "ON" : "OFF"} (${tf.length} filled studies)
+	`;
  
  document.getElementById("results").innerHTML += influenceHTML;
  document.getElementById("results").innerHTML += subgroupHTML;

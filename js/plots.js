@@ -4,7 +4,7 @@ export function drawForest(studies,m){
  const tooltip=d3.select("#tooltip");
 
  const x=d3.scaleLinear()
-  .domain(d3.extent(studies.flatMap(d=>[d.md-1.96*d.se,d.md+1.96*d.se])))
+  .domain(d3.extent(studies.flatMap(d=>[d.yi-1.96*d.se,d.yi+1.96*d.se])))
   .nice().range([100,800]);
 
  const y=d3.scaleBand()
@@ -18,8 +18,8 @@ export function drawForest(studies,m){
 
  svg.selectAll("line.ci")
   .data(studies).enter().append("line")
-  .attr("x1",d=>x(d.md-1.96*d.se))
-  .attr("x2",d=>x(d.md+1.96*d.se))
+  .attr("x1",d=>x(d.yi-1.96*d.se))
+  .attr("x2",d=>x(d.yi+1.96*d.se))
   .attr("y1",d=>y(d.label))
   .attr("y2",d=>y(d.label))
   .attr("stroke","white");
@@ -28,7 +28,7 @@ export function drawForest(studies,m){
 
  svg.selectAll("rect")
   .data(studies).enter().append("rect")
-  .attr("x",d=>x(d.md)-Math.sqrt(d.w/wMax)*10)
+  .attr("x",d=>x(d.yi)-Math.sqrt(d.w/wMax)*10)
   .attr("y",d=>y(d.label)-5)
   .attr("width",d=>Math.sqrt(d.w/wMax)*20)
   .attr("height",10)
@@ -36,7 +36,7 @@ export function drawForest(studies,m){
   .attr("stroke","white")
   .on("mousemove",(e,d)=>{
    tooltip.style("opacity",1)
-    .html(`${d.label}<br>${d.md.toFixed(2)}<br>CI: ${(d.md-1.96*d.se).toFixed(2)}–${(d.md+1.96*d.se).toFixed(2)}`)
+    .html(`${d.label}<br>${d.yi.toFixed(2)}<br>CI: ${(d.yi-1.96*d.se).toFixed(2)}–${(d.yi+1.96*d.se).toFixed(2)}`)
     .style("left",(e.pageX+10)+"px")
     .style("top",(e.pageY-20)+"px");
   })
@@ -51,7 +51,7 @@ export function drawFunnel(studies,m,egger){
  const svg=d3.select("#funnelPlot"); svg.selectAll("*").remove();
 
  const x=d3.scaleLinear()
-  .domain(d3.extent(studies,d=>d.md)).nice()
+  .domain(d3.extent(studies,d=>d.yi)).nice()
   .range([50,450]);
 
  const y=d3.scaleLinear()
@@ -60,7 +60,7 @@ export function drawFunnel(studies,m,egger){
 
  svg.selectAll("circle")
   .data(studies).enter().append("circle")
-  .attr("cx",d=>x(d.md))
+  .attr("cx",d=>x(d.yi))
   .attr("cy",d=>y(d.se))
   .attr("r",4)
   .attr("fill",d=>d.filled?"none":"white")

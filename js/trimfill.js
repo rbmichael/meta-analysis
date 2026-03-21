@@ -1,10 +1,10 @@
 export function trimFill(studies){
   if(studies.length < 3) return [];
 
-  const center = d3.median(studies, d => d.md);
+  const center = d3.median(studies, d => d.yi);
 
-  const left = studies.filter(d => d.md < center);
-  const right = studies.filter(d => d.md > center);
+  const left = studies.filter(d => d.yi < center);
+  const right = studies.filter(d => d.yi > center);
 
   let missing = Math.abs(left.length - right.length);
 
@@ -18,7 +18,7 @@ export function trimFill(studies){
 
   const filledStudies = source.slice(0, fillCount).map(d => ({
     ...d,
-    md: 2 * center - d.md,
+    md: 2 * center - d.yi,
     label: d.label + " (filled)",
     filled: true
   }));

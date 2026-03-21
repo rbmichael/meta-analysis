@@ -137,3 +137,29 @@ export function logGamma(z) {
   }
   return x + Math.log(ser * Math.sqrt(2 * Math.PI));
 }
+
+// ================= EFFECT TRANSFORMS =================
+export function transformEffect(x, type) {
+  if (!isFinite(x)) return NaN;
+
+  if (type === "OR" || type === "RR") {
+    return Math.exp(x);
+  }
+
+  return x; // MD, SMD
+}
+
+export function transformCI(lb, ub, type) {
+  if (!isFinite(lb) || !isFinite(ub)) {
+    return { lb: NaN, ub: NaN };
+  }
+
+  if (type === "OR" || type === "RR") {
+    return {
+      lb: Math.exp(lb),
+      ub: Math.exp(ub)
+    };
+  }
+
+  return { lb, ub };
+}
