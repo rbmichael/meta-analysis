@@ -1,5 +1,5 @@
 // ================= UI =================
-import { compute, meta } from "./analysis.js";
+import { compute, eggerTest, meta } from "./analysis.js";
 import { fmt } from "./utils.js";
 import { runTests } from "./tests.js";
 import { trimFill } from "./trimfill.js";
@@ -94,6 +94,7 @@ function runAnalysis(){
  const ciMethod = document.getElementById("ciMethod")?.value || "normal";
  const m = meta(studies, method, ciMethod);
  const tf=trimFill(studies);
+ const egger = eggerTest(studies);
  const all=[...studies,...tf];
 
  document.getElementById("results").innerHTML=`
@@ -102,7 +103,8 @@ function runAnalysis(){
   CI [${fmt(m.ciLow)}, ${fmt(m.ciHigh)}]<br>
   τ²=${fmt(m.tau2)} | I²=${fmt(m.I2)}%<br>
   ${m.dist}-stat=${fmt(m.stat)} | p=${fmt(m.pval)}<br>
-  Prediction=[${fmt(m.predLow)}, ${fmt(m.predHigh)}]
+  Prediction=[${fmt(m.predLow)}, ${fmt(m.predHigh)}]<br>
+  <b>Egger intercept:</b> ${fmt(egger.intercept)} | p=${fmt(egger.p)}
  `;
 
  drawForest(all,m);

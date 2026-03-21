@@ -47,7 +47,7 @@ export function drawForest(studies,m){
 }
 
 // ================= FUNNEL =================
-export function drawFunnel(studies,m){
+export function drawFunnel(studies,m,egger){
  const svg=d3.select("#funnelPlot"); svg.selectAll("*").remove();
 
  const x=d3.scaleLinear()
@@ -70,6 +70,30 @@ export function drawFunnel(studies,m){
   .attr("x1",x(m.RE)).attr("x2",x(m.RE))
   .attr("y1",50).attr("y2",350)
   .attr("stroke","cyan").attr("stroke-dasharray","4");
+
+// ================= EGGER REGRESSION LINE =================
+if(egger && isFinite(egger.slope)){
+
+ const seMin = d3.min(studies, d => d.se);
+ const seMax = d3.max(studies, d => d.se);
+
+ const lineData = d3.range(seMin, seMax, (seMax-seMin)/50).map(se => {
+  const x = se * (egger.intercept + egger.slope * (1/se));
+  return { x, se };
+ });
+
+ const line = d3.line()
+  .x(d => xScale(d.x))
+  .y(d => yScale(d.se));
+
+ svg.append("path")
+  .datum(lineData)
+  .attr("fill", "none")
+  .attr("stroke", "red")
+  .attr("stroke-width", 2)
+  .attr("stroke-dasharray", "4,2")
+  .attr("d", line);
+}
 
  svg.append("g").attr("transform","translate(0,350)").call(d3.axisBottom(x));
  svg.append("g").attr("transform","translate(50,0)").call(d3.axisLeft(y));

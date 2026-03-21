@@ -92,6 +92,53 @@ function tau2_REML(studies, tol = 1e-8, maxIter = 100){
  return tau2;
 }
 
+// ================= EGGER TEST =================
+export function eggerTest(studies){
+
+ const k = studies.length;
+ if(k < 3){
+  return { intercept: NaN, slope: NaN, p: NaN };
+ }
+
+ const Z = studies.map(d => d.md / d.se);
+ const X = studies.map(d => 1 / d.se);
+
+ const meanX = d3.mean(X);
+ const meanZ = d3.mean(Z);
+
+ // slope
+ let num = 0, den = 0;
+ for(let i=0;i<k;i++){
+  num += (X[i]-meanX)*(Z[i]-meanZ);
+  den += (X[i]-meanX)*(X[i]-meanX);
+ }
+
+ const slope = num / den;
+ const intercept = meanZ - slope * meanX;
+
+ // residual variance
+ let rss = 0;
+ for(let i=0;i<k;i++){
+  const fit = intercept + slope * X[i];
+  rss += (Z[i] - fit)**2;
+ }
+
+ const df = k - 2;
+ const seIntercept = Math.sqrt(rss / df) * Math.sqrt(1/k + (meanX*meanX)/den);
+
+ const t = intercept / seIntercept;
+
+ // approximate p-value (use normal for now)
+ const p = 2 * (1 - normalCDF(Math.abs(t)));
+
+ return {
+  intercept,
+  slope,
+  p,
+  t
+ };
+}
+
 export function meta(studies, method="DL", ciMethod="normal"){
 
  // ---------- guards ----------
