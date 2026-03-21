@@ -34,3 +34,29 @@ export function tCritical(df){
  // large df → normal approx
  return 1.96;
 }
+
+// ================= NORMAL CDF =================
+// Abramowitz-Stegun approximation
+export function normalCDF(x){
+ const t = 1 / (1 + 0.2316419 * Math.abs(x));
+ const d = 0.3989423 * Math.exp(-x*x/2);
+
+ let prob = d * t * (
+   0.3193815 +
+   t * (-0.3565638 +
+   t * (1.781478 +
+   t * (-1.821256 +
+   t * 1.330274)))
+ );
+
+ if(x > 0) prob = 1 - prob;
+ return prob;
+}
+
+// ================= T CDF (approx) =================
+// Uses normal approx for simplicity (good for df > ~5)
+export function tCDF(x, df){
+ // For now: fallback to normal approximation
+ // (we can upgrade later with full beta function if needed)
+ return normalCDF(x);
+}

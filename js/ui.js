@@ -97,10 +97,12 @@ function runAnalysis(){
  const all=[...studies,...tf];
 
  document.getElementById("results").innerHTML=`
- <b>FE:</b> ${fmt(m.FE)} |
- <b>RE:</b> ${fmt(m.RE)} CI [${fmt(m.ciLow)}, ${fmt(m.ciHigh)}]<br>
- τ²=${fmt(m.tau2)} | I²=${fmt(m.I2)}%<br>
- Prediction=[${fmt(m.predLow)}, ${fmt(m.predHigh)}]
+  <b>FE:</b> ${fmt(m.FE)} |
+  <b>RE:</b> ${fmt(m.RE)}<br>
+  CI [${fmt(m.ciLow)}, ${fmt(m.ciHigh)}]<br>
+  τ²=${fmt(m.tau2)} | I²=${fmt(m.I2)}%<br>
+  ${m.dist}-stat=${fmt(m.stat)} | p=${fmt(m.pval)}<br>
+  Prediction=[${fmt(m.predLow)}, ${fmt(m.predHigh)}]
  `;
 
  drawForest(all,m);

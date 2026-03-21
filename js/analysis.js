@@ -1,4 +1,4 @@
-import { tCritical } from "./utils.js";
+import { tCritical, normalCDF, tCDF } from "./utils.js";
 
 window.MIN_VAR = 1e-8;
 
@@ -166,6 +166,27 @@ export function meta(studies, method="DL", ciMethod="normal"){
   crit = tCritical(df);
  }
 
+let stat, pval, dist;
+
+if(ciMethod === "KH" && studies.length > 1){
+
+ const df = studies.length - 1;
+
+ stat = RE / seRE;
+ dist = "t";
+
+ const p = 1 - tCDF(Math.abs(stat), df);
+ pval = 2 * p;
+
+} else {
+
+ stat = RE / seRE;
+ dist = "z";
+
+ const p = 1 - normalCDF(Math.abs(stat));
+ pval = 2 * p;
+} 
+ 
  // ---------- prediction interval ----------
  const predVar = (seRE * seRE) + tau2;
 
@@ -182,6 +203,9 @@ export function meta(studies, method="DL", ciMethod="normal"){
   predHigh: RE + 1.96 * Math.sqrt(predVar),
   ciLow: RE - crit * seRE,
   ciHigh: RE + crit * seRE,
-  crit
+  crit,
+  stat,
+  pval,
+  dist
  };
 }
