@@ -14,6 +14,23 @@ document.getElementById("effectType").addEventListener("change", runAnalysis);
 document.getElementById("tauMethod").addEventListener("change", runAnalysis);
 document.getElementById("ciMethod").addEventListener("change", runAnalysis);
 
+const trimFillCheckbox = document.getElementById("useTrimFill");
+const adjustedCheckbox = document.getElementById("useTFAdjusted");
+
+// Initial state
+adjustedCheckbox.disabled = !trimFillCheckbox.checked;
+
+// Update on change
+trimFillCheckbox.addEventListener("change", () => {
+  adjustedCheckbox.disabled = !trimFillCheckbox.checked;
+  // Optionally uncheck adjusted if disabled
+  if(!trimFillCheckbox.checked) adjustedCheckbox.checked = false;
+
+  runAnalysis();
+});
+
+adjustedCheckbox.addEventListener("change", runAnalysis);
+
 function addRow(values){
  const row = document.getElementById("inputTable").insertRow();
  const v = values || ["","","","","","",""];
@@ -197,19 +214,37 @@ function runAnalysis(){
 
  const method = document.getElementById("tauMethod")?.value || "DL";
  const ciMethod = document.getElementById("ciMethod")?.value || "normal";
+ const useTF = document.getElementById("useTrimFill")?.checked;
+ const useTFAdjusted = document.getElementById("useTFAdjusted")?.checked;
+
+ let tf = [];
+ let all = studies;
+
+ if(useTF){
+   tf = trimFill(studies);
+   all = [...studies, ...tf];
+ }
+
+ // meta-anslysis
  const m = meta(studies, method, ciMethod);
- const tf=trimFill(studies);
  const egger = eggerTest(studies);
- const all=[...studies,...tf];
+
+ // compute adjusted RE if requested
+ let mAdjusted = null;
+ if(useTF && useTFAdjusted && tf.length > 0){
+   mAdjusted = meta([...studies, ...tf]);
+ }
 
  document.getElementById("results").innerHTML=`
   <b>FE:</b> ${fmt(m.FE)} |
   <b>RE:</b> ${fmt(m.RE)}<br>
+  ${useTF && mAdjusted ? `<b>RE (adjusted):</b> ${fmt(mAdjusted.RE)}<br>` : ""}
   CI [${fmt(m.ciLow)}, ${fmt(m.ciHigh)}]<br>
   τ²=${fmt(m.tau2)} | I²=${fmt(m.I2)}%<br>
   ${m.dist}-stat=${fmt(m.stat)} | p=${fmt(m.pval)}<br>
   Prediction=[${fmt(m.predLow)}, ${fmt(m.predHigh)}]<br>
-  <b>Egger intercept:</b> ${fmt(egger.intercept)} | p=${fmt(egger.p)}
+  <b>Egger intercept:</b> ${fmt(egger.intercept)} | p=${fmt(egger.p)}<br>
+  <b>Trim & Fill:</b> ${useTF ? "ON" : "OFF"} (${tf.length} filled studies)
  `;
 
  drawForest(all,m);
