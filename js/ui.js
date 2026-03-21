@@ -1,5 +1,5 @@
 // ================= UI =================
-import { compute, eggerTest, meta, influenceDiagnostics } from "./analysis.js";
+import { compute, eggerTest, meta, influenceDiagnostics, subgroupAnalysis } from "./analysis.js";
 import { fmt } from "./utils.js";
 import { runTests } from "./tests.js";
 import { trimFill } from "./trimfill.js";
@@ -43,6 +43,7 @@ function addRow(values){
  <td><input value="${v[4]||""}"></td>
  <td><input value="${v[5]||""}"></td>
  <td><input value="${v[6]||""}"></td>
+ <td><input class="group" type="text" value="${v[7]||""}" placeholder="e.g. A"></td>
  <td>
    <button class="remove-btn">✖</button>
    <button class="clear-btn">🧹</button>
@@ -98,7 +99,7 @@ function validateRow(row){
 
   input.classList.remove("input-error");
 
-  if(idx === 0) return; // label
+  if(idx === 0 || idx === 7) return; // label
 
   const val = input.value.trim();
 
@@ -138,9 +139,9 @@ function validateRow(row){
 }
 
 function init(){
- addRow(["A",10,2,50,8,2,50]);
- addRow(["B",12,3,40,9,3,40]);
- addRow(["C",9,2,30,7,2,30]);
+ addRow(["Study1",10,2,50,8,2,50,"A"]);
+ addRow(["Study2",12,3,40,9,3,40,"A"]);
+ addRow(["Study3",9,2,30,7,2,30,"B"]);
 
  document.querySelectorAll("#inputTable tr").forEach((row,i)=>{
   if(i === 0) return;
@@ -190,25 +191,34 @@ function exportCSV(){
 
 // ================= ANALYSIS =================
 function runAnalysis(){
- const type=document.getElementById("effectType").value;
- const rows=document.querySelectorAll("#inputTable tr");
+	const type=document.getElementById("effectType").value;
+	const rows=document.querySelectorAll("#inputTable tr");
 
- let studies=[];
+	let studies = [];
 
- for(let i=1;i<rows.length;i++){
-  const v=[...rows[i].querySelectorAll('input')].map(x=>x.value);
+	for (let i = 1; i < rows.length; i++) {
+	  const row = rows[i];
+	  const inputs = [...row.querySelectorAll("input")];
+	  const v = inputs.map(x => x.value);
 
-  const row = rows[i];
-  const isValid = validateRow(row);
+	  const isValid = validateRow(row);
+	  if (!isValid) continue;
 
-  if(!isValid) continue;
+	  // ✅ Get group safely via class
+	  const group = row.querySelector(".group")?.value.trim() || "";
 
-  studies.push(compute({
-   label:v[0],
-   m1:+v[1],sd1:+v[2],n1:+v[3],
-   m2:+v[4],sd2:+v[5],n2:+v[6]
-  },type));
- }
+	  // Compute effect size
+	  const study = compute({
+		label: v[0],
+		m1: +v[1], sd1: +v[2], n1: +v[3],
+		m2: +v[4], sd2: +v[5], n2: +v[6]
+	  }, type);
+
+	  // ✅ Attach group
+	  study.group = group;
+
+	  studies.push(study);
+	}
 
  if(!studies.length) return;
 
@@ -225,48 +235,98 @@ function runAnalysis(){
    all = [...studies, ...tf];
  }
 
-// meta-analysis
-const m = meta(studies, method, ciMethod);
-const egger = eggerTest(studies);
-const influence = influenceDiagnostics(studies, method, ciMethod);
+	// meta-analysis
+	const m = meta(studies, method, ciMethod);
+	const egger = eggerTest(studies);
+	const influence = influenceDiagnostics(studies, method, ciMethod);
+	const subgroup = subgroupAnalysis(studies, method, ciMethod);
 
-let influenceHTML = `
-<b>Influence diagnostics:</b><br>
-<table border="1">
-  <tr>
-    <th>Study</th>
-    <th>RE (LOO)</th>
-    <th>Δτ²</th>
-    <th>Std Residual</th>
-    <th>DFBETA</th>
-    <th>Flag</th>
-  </tr>
-`;
+	let influenceHTML = `
+	<b>Influence diagnostics:</b><br>
+	<table border="1">
+	  <tr>
+		<th>Study</th>
+		<th>RE (LOO)</th>
+		<th>Δτ²</th>
+		<th>Std Residual</th>
+		<th>DFBETA</th>
+		<th>Flag</th>
+	  </tr>
+	`;
 
-influence.forEach(d => {
-  const isFlagged = d.outlier || d.influential;
+	influence.forEach(d => {
+	  const isFlagged = d.outlier || d.influential;
 
-  const rowClass = isFlagged
-    ? "style='background:#ffe6e6;'"
-    : "";
+	  const rowClass = isFlagged
+		? "style='background:#ffe6e6;'"
+		: "";
 
-  let flagText = "";
-  if (d.outlier) flagText = "Outlier";
-  else if (d.influential) flagText = "Influential";
+	  let flagText = "";
+	  if (d.outlier) flagText = "Outlier";
+	  else if (d.influential) flagText = "Influential";
 
-  influenceHTML += `
-    <tr ${rowClass}>
-      <td>${d.label}</td>
-      <td>${isFinite(d.RE_loo) ? d.RE_loo.toFixed(3) : "NA"}</td>
-      <td>${isFinite(d.deltaTau2) ? d.deltaTau2.toFixed(3) : "NA"}</td>
-      <td>${isFinite(d.stdResidual) ? d.stdResidual.toFixed(3) : "NA"}</td>
-      <td>${isFinite(d.DFBETA) ? d.DFBETA.toFixed(3) : "NA"}</td>
-      <td>${flagText}</td>
-    </tr>
-  `;
-});
+	  influenceHTML += `
+		<tr ${rowClass}>
+		  <td>${d.label}</td>
+		  <td>${isFinite(d.RE_loo) ? d.RE_loo.toFixed(3) : "NA"}</td>
+		  <td>${isFinite(d.deltaTau2) ? d.deltaTau2.toFixed(3) : "NA"}</td>
+		  <td>${isFinite(d.stdResidual) ? d.stdResidual.toFixed(3) : "NA"}</td>
+		  <td>${isFinite(d.DFBETA) ? d.DFBETA.toFixed(3) : "NA"}</td>
+		  <td>${flagText}</td>
+		</tr>
+	  `;
+	});
 
-influenceHTML += "</table>";
+	influenceHTML += "</table>";
+	 
+	// ================= SUBGROUP TABLE =================
+	let subgroupHTML = "";
+
+	if (subgroup && subgroup.G >= 2) {
+	  subgroupHTML += `
+	  <b>Subgroup analysis:</b><br>
+	  <table border="1">
+		<tr>
+		  <th>Group</th>
+		  <th>k</th>
+		  <th>Effect</th>
+		  <th>SE</th>
+		  <th>CI</th>
+		  <th>τ²</th>
+		  <th>I² (%)</th>
+		</tr>
+	  `;
+
+	  Object.entries(subgroup.groups).forEach(([g, r]) => {
+		// Detect single-study groups
+		const isSingle = r.k === 1;
+
+		subgroupHTML += `
+		  <tr>
+			<td>${g}</td>
+			<td>${r.k}</td>
+			<td>${isFinite(r.y) ? r.y.toFixed(3) : "NA"}</td>
+			<td>${isSingle ? "NA" : isFinite(r.se) ? r.se.toFixed(3) : "NA"}</td>
+			<td>[${isSingle ? "NA" : r.ci.lb.toFixed(3)}, ${isSingle ? "NA" : r.ci.ub.toFixed(3)}]</td>
+			<td>${isSingle ? "NA" : isFinite(r.tau2) ? r.tau2.toFixed(3) : "0"}</td>
+			<td>${isSingle ? "NA" : isFinite(r.I2) ? r.I2.toFixed(1) : "0"}</td>
+		  </tr>
+		`;
+	  });
+
+	  subgroupHTML += `
+		<tr style="font-weight:bold;">
+		  <td colspan="7">
+			Q_between = ${subgroup.Qbetween.toFixed(3)}, 
+			df = ${subgroup.df}, 
+			p = ${subgroup.p.toFixed(4)}
+		  </td>
+		</tr>
+	  </table>
+	  `;
+	} else {
+	  subgroupHTML = "<i>Add at least 2 groups to see subgroup analysis</i><br>";
+	}
  
  // compute adjusted RE if requested
  let mAdjusted = null;
@@ -287,6 +347,7 @@ influenceHTML += "</table>";
  `;
  
  document.getElementById("results").innerHTML += influenceHTML;
+ document.getElementById("results").innerHTML += subgroupHTML;
 
  drawForest(all,m);
  drawFunnel(all,m);

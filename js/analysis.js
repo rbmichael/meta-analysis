@@ -1,4 +1,4 @@
-import { tCritical, normalCDF, tCDF } from "./utils.js";
+import { tCritical, normalCDF, tCDF, chiSquareCDF } from "./utils.js";
 
 window.MIN_VAR = 1e-8;
 
@@ -17,27 +17,31 @@ function hedgesG(s){
  };
 }
 
-export function compute(s,type){
- if(type === "SMD"){
-  const g = hedgesG(s);
+export function compute(s, type) {
+  if (type === "SMD") {
+    const g = hedgesG(s);
+    return {
+      ...s,
+      md: g.es,
+      varMD: g.var,
+      se: Math.sqrt(g.var),
+      w: 1 / g.var,
+      yi: g.es,       // effect size for meta-analysis
+      vi: g.var       // variance for meta-analysis
+    };
+  }
+
+  const varMD = Math.max((s.sd1 ** 2) / s.n1 + (s.sd2 ** 2) / s.n2, MIN_VAR);
+
   return {
-   ...s,
-   md: g.es,
-   varMD: g.var,
-   se: Math.sqrt(g.var),
-   w: 1 / g.var
+    ...s,
+    md: s.m1 - s.m2,
+    varMD,
+    se: Math.sqrt(varMD),
+    w: 1 / varMD,
+    yi: s.m1 - s.m2, // effect size for meta-analysis
+    vi: varMD        // variance for meta-analysis
   };
- }
-
- const varMD = Math.max((s.sd1**2)/s.n1 + (s.sd2**2)/s.n2, MIN_VAR);
-
- return {
-  ...s,
-  md: s.m1 - s.m2,
-  varMD,
-  se: Math.sqrt(varMD),
-  w: 1 / varMD
- };
 }
 
 // ================= REML TAU² =================
@@ -177,6 +181,85 @@ export function influenceDiagnostics(studies, method="DL", ciMethod="normal"){
   });
 
   return diagnostics;
+}
+
+export function subgroupAnalysis(studies, method="REML", ciMethod="z") {
+  // Filter valid studies with group
+  const valid = studies.filter(s =>
+    s && isFinite(s.yi) && isFinite(s.vi) && s.group != null && s.group !== ""
+  );
+
+  if (valid.length < 2) return null;
+
+  // Group studies
+  const groups = {};
+  valid.forEach(s => {
+    const g = String(s.group).trim();
+    if (!g) return;
+    if (!groups[g]) groups[g] = [];
+    groups[g].push(s);
+  });
+
+  const groupNames = Object.keys(groups);
+  if (groupNames.length < 2) return null;
+
+  // Overall meta
+  const overall = meta(valid, method, ciMethod);
+
+  // Per-group meta
+  const results = {};
+  let Qwithin_sum = 0;
+
+  groupNames.forEach(g => {
+    const groupStudies = groups[g];
+    let res;
+
+    if (groupStudies.length === 1) {
+      // Only one study → use its yi/vi as effect size
+      const s = groupStudies[0];
+      res = {
+        RE: s.yi,
+        se: Math.sqrt(s.vi),
+        ciLow: s.yi - 1.96 * Math.sqrt(s.vi),
+        ciHigh: s.yi + 1.96 * Math.sqrt(s.vi),
+        tau2: 0,
+        I2: 0,
+        Q: 0
+      };
+    } else {
+      res = meta(groupStudies, method, ciMethod);
+    }
+
+    // Map to UI-friendly structure
+    results[g] = {
+      k: groupStudies.length,
+      y: res.RE,
+      se: res.se ?? Math.sqrt(res.vi ?? 0), // fallback if se missing
+      ci: { lb: res.ciLow, ub: res.ciHigh },
+      tau2: res.tau2 ?? 0,
+      I2: res.I2 ?? 0
+    };
+
+    if (isFinite(res.Q)) Qwithin_sum += res.Q;
+  });
+
+  // Between-group heterogeneity
+  let Qbetween = overall.Q - Qwithin_sum;
+  if (!isFinite(Qbetween) || Qbetween < 0) Qbetween = 0;
+
+  const df = groupNames.length - 1;
+
+  // p-value using chi-square CDF
+  const p = 1 - chiSquareCDF(Qbetween, df);
+
+  return {
+    groups: results,
+    Qbetween,
+    df,
+    p,
+    k: valid.length,
+    G: groupNames.length
+  };
 }
 
 // ================ META-ANALYSIS ===============
