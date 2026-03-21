@@ -138,15 +138,23 @@ export function logGamma(z) {
   return x + Math.log(ser * Math.sqrt(2 * Math.PI));
 }
 
-// ================= EFFECT TRANSFORMS =================
+// ================= EFFECT TRANSFORMS (PROFILE-AWARE) =================
 export function transformEffect(x, type) {
   if (!isFinite(x)) return NaN;
 
+  // Binary ratios
   if (type === "OR" || type === "RR") {
     return Math.exp(x);
   }
 
-  return x; // MD, SMD
+  // Continuous measures
+  if (type === "MD" || type === "SMD") {
+    return x;
+  }
+
+  // Fallback for unknown type
+  console.warn("Unknown effect type in transformEffect:", type);
+  return x;
 }
 
 export function transformCI(lb, ub, type) {
@@ -161,5 +169,10 @@ export function transformCI(lb, ub, type) {
     };
   }
 
+  if (type === "MD" || type === "SMD") {
+    return { lb, ub };
+  }
+
+  console.warn("Unknown effect type in transformCI:", type);
   return { lb, ub };
 }
