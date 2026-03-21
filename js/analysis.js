@@ -1,3 +1,5 @@
+import { tCritical } from "./utils.js";
+
 window.MIN_VAR = 1e-8;
 
 // ================= STATS =================
@@ -90,7 +92,7 @@ function tau2_REML(studies, tol = 1e-8, maxIter = 100){
  return tau2;
 }
 
-export function meta(studies, method="DL"){
+export function meta(studies, method="DL", ciMethod="normal"){
 
  // ---------- guards ----------
  const k = studies.length;
@@ -144,7 +146,25 @@ export function meta(studies, method="DL"){
   ? d3.sum(studies.map((d,i) => d.md * wRE[i])) / WRE
   : NaN;
 
- const seRE = WRE > 0 ? Math.sqrt(1 / WRE) : NaN;
+ let seRE = WRE > 0 ? Math.sqrt(1 / WRE) : NaN;
+ let crit = 1.96; // default normal
+
+ if(ciMethod === "KH" && studies.length > 1){
+
+  const df = studies.length - 1;
+
+  // KH variance estimator
+  let sum = 0;
+  for(let i = 0; i < studies.length; i++){
+   const diff = studies[i].md - RE;
+   sum += wRE[i] * diff * diff;
+  }
+
+  const varKH = sum / (df * WRE);
+  seRE = Math.sqrt(Math.max(varKH, 0));
+
+  crit = tCritical(df);
+ }
 
  // ---------- prediction interval ----------
  const predVar = (seRE * seRE) + tau2;
@@ -159,6 +179,9 @@ export function meta(studies, method="DL"){
   df,
   I2,
   predLow: RE - 1.96 * Math.sqrt(predVar),
-  predHigh: RE + 1.96 * Math.sqrt(predVar)
+  predHigh: RE + 1.96 * Math.sqrt(predVar),
+  ciLow: RE - crit * seRE,
+  ciHigh: RE + crit * seRE,
+  crit
  };
 }

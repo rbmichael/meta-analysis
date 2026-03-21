@@ -9,6 +9,7 @@
 <script type="module" src="js/trimfill.js"></script>
 <script type="module" src="js/plots.js"></script>
 <script type="module" src="js/ui.js"></script>
+<script type="module" src="js/utils.js"></script>
 <script type="module" src="js/benchmarks.js"></script>
 <script type="module" src="js/tests.js"></script>
 </head>
@@ -28,6 +29,11 @@
 <select id="tauMethod">
   <option value="DL">DerSimonian-Laird</option>
   <option value="REML">REML</option>
+</select>
+
+<select id="ciMethod">
+  <option value="normal">Normal CI</option>
+  <option value="KH">Knapp-Hartung</option>
 </select>
 
 <table id="inputTable">

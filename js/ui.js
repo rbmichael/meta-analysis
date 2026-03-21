@@ -91,13 +91,14 @@ function runAnalysis(){
  if(!studies.length) return;
 
  const method = document.getElementById("tauMethod")?.value || "DL";
- const m = meta(studies, method);
+ const ciMethod = document.getElementById("ciMethod")?.value || "normal";
+ const m = meta(studies, method, ciMethod);
  const tf=trimFill(studies);
  const all=[...studies,...tf];
 
  document.getElementById("results").innerHTML=`
  <b>FE:</b> ${fmt(m.FE)} |
- <b>RE:</b> ${fmt(m.RE)}<br>
+ <b>RE:</b> ${fmt(m.RE)} CI [${fmt(m.ciLow)}, ${fmt(m.ciHigh)}]<br>
  τ²=${fmt(m.tau2)} | I²=${fmt(m.I2)}%<br>
  Prediction=[${fmt(m.predLow)}, ${fmt(m.predHigh)}]
  `;
