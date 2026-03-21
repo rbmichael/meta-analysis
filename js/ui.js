@@ -5,11 +5,14 @@ import { runTests } from "./tests.js";
 import { trimFill } from "./trimfill.js";
 import { drawForest, drawFunnel } from "./plots.js";
 
-document.getElementById("effectType").addEventListener("change", runAnalysis);
 document.getElementById("addStudy").addEventListener("click", addRow);
 document.getElementById("run").addEventListener("click", runAnalysis);
 document.getElementById("import").addEventListener("click", importCSV);
 document.getElementById("export").addEventListener("click", exportCSV);
+
+document.getElementById("effectType").addEventListener("change", runAnalysis);
+document.getElementById("tauMethod").addEventListener("change", runAnalysis);
+document.getElementById("ciMethod").addEventListener("change", runAnalysis);
 
 function addRow(values){
  const row=document.getElementById("inputTable").insertRow();
