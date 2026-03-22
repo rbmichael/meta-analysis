@@ -618,7 +618,7 @@ function runAnalysis() {
   `;
   document.getElementById("results").innerHTML += influenceHTML + subgroupHTML;
 
-  drawForest(all,m);
+  drawForest(all,m, { ciMethod });
   drawFunnel(all,m);
   
   updateValidationWarnings(studies, excluded, softWarnings);

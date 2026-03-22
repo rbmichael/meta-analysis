@@ -325,24 +325,41 @@ export function meta(studies, method="DL", ciMethod="normal") {
   const RE = WRE>0 ? d3.sum(studies.map((d,i)=>d.yi*wRE[i]))/WRE : NaN;
   let seRE = WRE>0 ? Math.sqrt(1/WRE) : NaN;
 
-  let crit = 1.96;
-  let stat, pval, dist;
+	let crit, stat, pval, dist;
 
-  if((ciMethod==="KH" || ciMethod==="t") && k>1){
-    const dfKH = k-1;
-    let sum=0;
-    for(let i=0;i<k;i++) sum += wRE[i]*Math.pow(studies[i].yi - RE,2);
-    const varKH = sum / (dfKH*WRE);
-    seRE = Math.sqrt(Math.max(varKH,0));
-    crit = tCritical(dfKH);
-    stat = RE/seRE;
-    dist = "t";
-    pval = 2*(1 - tCDF(Math.abs(stat), dfKH));
-  } else {
-    stat = RE/seRE;
-    dist = "z";
-    pval = 2*(1 - normalCDF(Math.abs(stat)));
-  }
+	if (ciMethod === "KH" && k > 1) {
+	  // --- Knapp-Hartung ---
+	  const df = k - 1;
+
+	  let sum = 0;
+	  for (let i = 0; i < k; i++) {
+		sum += wRE[i] * Math.pow(studies[i].yi - RE, 2);
+	  }
+
+	  const varKH = sum / (df * WRE);
+	  seRE = Math.sqrt(Math.max(varKH, 0));
+
+	  crit = tCritical(df);
+	  stat = RE / seRE;
+	  dist = "t";
+	  pval = 2 * (1 - tCDF(Math.abs(stat), df));
+
+	} else if (ciMethod === "t" && k > 1) {
+	  // --- t-distribution (no variance adjustment) ---
+	  const df = k - 1;
+
+	  crit = tCritical(df);
+	  stat = RE / seRE;
+	  dist = "t";
+	  pval = 2 * (1 - tCDF(Math.abs(stat), df));
+
+	} else {
+	  // --- Normal (Wald) ---
+	  crit = 1.96;
+	  stat = RE / seRE;
+	  dist = "z";
+	  pval = k <= 1 ? NaN : 2 * (1 - normalCDF(Math.abs(stat)));
+	}
 
   const predVar = seRE*seRE + tau2;
   
