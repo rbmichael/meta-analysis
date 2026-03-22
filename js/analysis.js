@@ -262,14 +262,16 @@ export function FE_mean(corrected) {
 }
 
 // -------------------------------
-// Compute I²
+// Compute I² using fixed-effect weights (1/vi), matching metafor convention.
+// tau2 is unused but kept for API compatibility.
 export function I2(corrected, tau2) {
-  const wRE = corrected.map(d => 1 / (d.vi + tau2));
-  const WRE = wRE.reduce((a,b)=>a+b,0);
-  const mu = corrected.reduce((sum,d,i)=> sum + wRE[i]*d.yi,0)/WRE;
-  const Q = corrected.reduce((sum,d,i)=> sum + wRE[i]*(d.yi - mu)**2,0);
   const k = corrected.length;
-  return k>1 ? Math.max(0, (Q - (k-1))/Q)*100 : 0;
+  if (k <= 1) return 0;
+  const wFE = corrected.map(d => 1 / d.vi);
+  const W = wFE.reduce((a, b) => a + b, 0);
+  const mu = corrected.reduce((sum, d, i) => sum + wFE[i] * d.yi, 0) / W;
+  const Q = corrected.reduce((sum, d, i) => sum + wFE[i] * (d.yi - mu) ** 2, 0);
+  return Math.max(0, Math.min(100, ((Q - (k - 1)) / Q) * 100));
 }
 
 // ================= EGGER TEST =================
