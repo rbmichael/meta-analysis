@@ -196,15 +196,16 @@ if(egger && isFinite(egger.slope)){
 
  const seMin = d3.min(studies, d => d.se);
  const seMax = d3.max(studies, d => d.se);
+ if(seMin === seMax) return;
 
  const lineData = d3.range(seMin, seMax, (seMax-seMin)/50).map(se => {
-  const x = se * (egger.intercept + egger.slope * (1/se));
-  return { x, se };
+  const yi_hat = egger.intercept * se + egger.slope;
+  return { yi_hat, se };
  });
 
  const line = d3.line()
-  .x(d => xScale(d.x))
-  .y(d => yScale(d.se));
+  .x(d => x(d.yi_hat))
+  .y(d => y(d.se));
 
  svg.append("path")
   .datum(lineData)

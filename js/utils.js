@@ -15,24 +15,20 @@ export function fmt(value, digits = 3) {
 }
 
 // ================= T CRITICAL =================
-// Approximate t critical (two-tailed, 95%)
-export function tCritical(df){
+// Two-tailed 95% critical value via bisection on tCDF.
+export function tCritical(df) {
+  if (!isFinite(df) || df <= 0) return 1.96;
 
- // Simple lookup for small df (accurate)
- const table = {
-  1:12.706, 2:4.303, 3:3.182, 4:2.776, 5:2.571,
-  6:2.447, 7:2.365, 8:2.306, 9:2.262, 10:2.228,
-  12:2.179, 15:2.131, 20:2.086, 25:2.060, 30:2.042
- };
+  const target = 0.975; // P(T <= t) = 0.975 for two-tailed 95%
+  let lo = 0, hi = 20;  // t_{0.975,1} ≈ 12.706; 20 is a safe upper bound
 
- if(df <= 30){
-  const keys = Object.keys(table).map(Number);
-  const closest = keys.reduce((a,b)=>Math.abs(b-df)<Math.abs(a-df)?b:a);
-  return table[closest];
- }
+  for (let i = 0; i < 64; i++) {
+    const mid = (lo + hi) / 2;
+    if (tCDF(mid, df) < target) lo = mid;
+    else hi = mid;
+  }
 
- // large df → normal approx
- return 1.96;
+  return (lo + hi) / 2;
 }
 
 // ================= NORMAL CDF =================
@@ -53,12 +49,65 @@ export function normalCDF(x){
  return prob;
 }
 
-// ================= T CDF (approx) =================
-// Uses normal approx for simplicity (good for df > ~5)
-export function tCDF(x, df){
- // For now: fallback to normal approximation
- // (we can upgrade later with full beta function if needed)
- return normalCDF(x);
+// ================= REGULARIZED INCOMPLETE BETA =================
+// I_x(a, b) via Lentz continued-fraction algorithm.
+// Uses symmetry relation I_x(a,b) = 1 - I_{1-x}(b,a) for numerical stability.
+function regularizedBeta(x, a, b) {
+  if (x < 0 || x > 1) return NaN;
+  if (x === 0) return 0;
+  if (x === 1) return 1;
+
+  // Use symmetry to keep x in the range that converges faster
+  if (x > (a + 1) / (a + b + 2)) return 1 - regularizedBeta(1 - x, b, a);
+
+  const lbeta = logGamma(a) + logGamma(b) - logGamma(a + b);
+  const front = Math.exp(a * Math.log(x) + b * Math.log(1 - x) - lbeta) / a;
+
+  // Lentz continued fraction for betaCF
+  const TINY = 1e-30;
+  const EPS  = 1e-14;
+  const MAX_ITER = 200;
+
+  let c = 1;
+  let d = 1 - (a + b) * x / (a + 1);
+  if (Math.abs(d) < TINY) d = TINY;
+  d = 1 / d;
+  let h = d;
+
+  for (let m = 1; m <= MAX_ITER; m++) {
+    const m2 = 2 * m;
+
+    // Even step
+    let aa = m * (b - m) * x / ((a + m2 - 1) * (a + m2));
+    d = 1 + aa * d; if (Math.abs(d) < TINY) d = TINY;
+    c = 1 + aa / c; if (Math.abs(c) < TINY) c = TINY;
+    d = 1 / d;
+    h *= d * c;
+
+    // Odd step
+    aa = -(a + m) * (a + b + m) * x / ((a + m2) * (a + m2 + 1));
+    d = 1 + aa * d; if (Math.abs(d) < TINY) d = TINY;
+    c = 1 + aa / c; if (Math.abs(c) < TINY) c = TINY;
+    d = 1 / d;
+    const delta = d * c;
+    h *= delta;
+
+    if (Math.abs(delta - 1) < EPS) break;
+  }
+
+  return front * h;
+}
+
+// ================= T CDF =================
+// Exact CDF of Student's t with df degrees of freedom.
+// Relation to incomplete beta: P(T <= x) = 1 - I_{df/(df+x²)}(df/2, 1/2) / 2
+export function tCDF(x, df) {
+  if (!isFinite(x) || !isFinite(df) || df <= 0) return NaN;
+
+  const t2  = x * x;
+  const p_upper = regularizedBeta(df / (df + t2), df / 2, 0.5) / 2;
+
+  return x >= 0 ? 1 - p_upper : p_upper;
 }
 
 export function chiSquareCDF(x, k) {

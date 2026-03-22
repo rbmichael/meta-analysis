@@ -583,7 +583,7 @@ function runAnalysis() {
   const useTFAdjusted = document.getElementById("useTFAdjusted")?.checked;
 
   let tf = [], all = studies;
-  if (useTF) { tf = trimFill(studies); all = [...studies, ...tf]; }
+  if (useTF) { tf = trimFill(studies, method); all = [...studies, ...tf]; }
 
   let m = meta(studies, method, ciMethod);
 
@@ -667,7 +667,7 @@ function runAnalysis() {
   document.getElementById("results").innerHTML += influenceHTML + subgroupHTML;
 
   drawForest(all, m, { ciMethod });
-  drawFunnel(all, m);
+  drawFunnel(all, m, egger);
   
   updateValidationWarnings(studies, excluded, softWarnings);
 }
