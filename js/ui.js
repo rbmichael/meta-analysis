@@ -1,5 +1,5 @@
 // ================= UI =================
-import { compute, eggerTest, meta, influenceDiagnostics, subgroupAnalysis } from "./analysis.js";
+import { compute, eggerTest, meta, influenceDiagnostics, subgroupAnalysis, validateStudy } from "./analysis.js";
 import { fmt, transformEffect, transformCI } from "./utils.js";
 import { runTests } from "./tests.js";
 import { trimFill } from "./trimfill.js";
@@ -166,31 +166,53 @@ function clearRow(btn) {
   runAnalysis();
 }
 
-// ---------------- VALIDATE ----------------
+// ---------------- VALIDATE ROW ----------------
 function validateRow(row) {
-  const inputs = row.querySelectorAll("input");
-  let valid = true;
+  const type = document.getElementById("effectType").value;
+  const profile = effectProfiles[type];
+  if (!profile) return false;
 
-  inputs.forEach((input, idx) => {
-    input.classList.remove("input-error");
-
-    // Skip validation for Study column (first) and Group column (last)
-    if (idx === 0 || idx === inputs.length - 1) return;
-
-    const val = input.value.trim();
-    if (val === "" || isNaN(val)) {
-      input.classList.add("input-error");
-      valid = false;
-      return;
-    }
-
-    const num = +val;
-    // stricter rules for SD and N columns
-    if (num <= 0 && (idx === 2 || idx === 5 || idx === 3 || idx === 6)) valid = false;
+  const inputs = [...row.querySelectorAll("input")];
+  const studyInput = { label: inputs[0].value.trim() };
+  profile.inputs.forEach((key, idx) => {
+    const val = inputs[idx + 1].value.trim();
+    studyInput[key] = val === "" ? NaN : +val;
   });
 
-  row.classList.toggle("row-error", !valid);
-  return valid;
+  const result = validateStudy(studyInput, type);
+
+  // Clear previous error styles
+  inputs.forEach(input => input.classList.remove("input-error"));
+  row.classList.remove("row-error");
+
+  // Highlight invalid inputs
+  if (!result.valid) {
+    row.classList.add("row-error");
+    Object.keys(result.errors).forEach(key => {
+      const idx = profile.inputs.indexOf(key);
+      if (idx >= 0) inputs[idx + 1].classList.add("input-error"); // skip Study (0) and Group (last)
+    });
+  }
+
+  // Subgroup warning (optional small notice below table)
+  const groupInput = row.querySelector(".group");
+  if (groupInput) {
+    const groupName = groupInput.value.trim();
+    if (groupName && groupName.length > 0) {
+      const table = document.getElementById("inputTable");
+      const groupRows = [...table.rows].slice(1).filter(r => {
+        const g = r.querySelector(".group")?.value.trim();
+        return g === groupName;
+      });
+      if (groupRows.length < 2) {
+        row.setAttribute("title", "Warning: subgroup has fewer than 2 studies");
+      } else {
+        row.removeAttribute("title");
+      }
+    }
+  }
+
+  return result.valid;
 }
 
 // ---------------- CSV (with column warning) ----------------

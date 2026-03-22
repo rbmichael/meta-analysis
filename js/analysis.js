@@ -337,3 +337,38 @@ export function meta(studies, method="DL", ciMethod="normal") {
     dist
   };
 }
+
+// ================= INPUT VALIDATION =================
+export function validateStudy(study, type) {
+  const errors = {};
+  let valid = true;
+
+  if (!type) return { valid: false, errors: { general: "Unknown effect type" } };
+
+  if (type === "MD" || type === "SMD") {
+    const n1 = study.n1, n2 = study.n2;
+    const sd1 = study.sd1, sd2 = study.sd2;
+    if (!isFinite(n1) || n1 < 2) { valid = false; errors.n1 = "n1 must be ≥ 2"; }
+    if (!isFinite(n2) || n2 < 2) { valid = false; errors.n2 = "n2 must be ≥ 2"; }
+    if (!isFinite(sd1) || sd1 <= 0) { valid = false; errors.sd1 = "sd1 must be > 0"; }
+    if (!isFinite(sd2) || sd2 <= 0) { valid = false; errors.sd2 = "sd2 must be > 0"; }
+    if (!isFinite(study.m1)) { valid = false; errors.m1 = "m1 must be numeric"; }
+    if (!isFinite(study.m2)) { valid = false; errors.m2 = "m2 must be numeric"; }
+  }
+  else if (type === "OR" || type === "RR") {
+    ["a","b","c","d"].forEach(k => {
+      const v = study[k];
+      if (!isFinite(v) || v < 0) { valid = false; errors[k] = `${k} must be ≥ 0`; }
+    });
+  }
+  else if (type === "GENERIC") {
+    if (!isFinite(study.yi)) { valid = false; errors.yi = "yi must be numeric"; }
+    if (!isFinite(study.vi) || study.vi <= 0) { valid = false; errors.vi = "vi must be > 0"; }
+  }
+  else {
+    valid = false;
+    errors.general = "Unsupported effect type";
+  }
+
+  return { valid, errors };
+}
