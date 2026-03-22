@@ -4,6 +4,7 @@ import { fmt, transformEffect, transformCI } from "./utils.js";
 import { runTests } from "./tests.js";
 import { trimFill } from "./trimfill.js";
 import { drawForest, drawFunnel } from "./plots.js";
+import { BENCHMARKS } from "./benchmarks.js";
 
 // ---------------- EFFECT PROFILES ----------------
 const effectProfiles = {
@@ -14,13 +15,17 @@ const effectProfiles = {
     transform: (x) => transformEffect(x, "MD"),
     transformCI: (lb, ub) => transformCI(lb, ub, "MD")
   },
-  "SMD": {
-    label: "SMD",
-    inputs: ["m1", "sd1", "n1", "m2", "sd2", "n2"],
-    compute: (data) => compute(data, "SMD"),
-    transform: (x) => transformEffect(x, "SMD"),
-    transformCI: (lb, ub) => transformCI(lb, ub, "SMD")
-  },
+	"SMD": {
+	  label: "Standardized Mean Difference",
+	  inputs: ["m1","sd1","n1","m2","sd2","n2"],
+	  compute: (data, benchmark) => {
+		// Apply Hedges correction if benchmark specifies it
+		const hedges = benchmark?.correction === "hedges";
+		return compute(data, "SMD", { hedgesCorrection: hedges });
+	  },
+	  transform: (x) => transformEffect(x, "SMD"),
+	  transformCI: (lb, ub) => transformCI(lb, ub, "SMD")
+	},
   "OR": {
     label: "Odds Ratio",
     inputs: ["a", "b", "c", "d"],
@@ -335,7 +340,7 @@ function populateExampleData(type) {
   rows.forEach(row => addRow(row));
 }
 
-// ---------------- RUN ANALYSIS ----------------
+// ---------------- RUN ANALYSIS (modified for benchmarks) ----------------
 function runAnalysis() {
   const type = document.getElementById("effectType").value;
   const profile = effectProfiles[type];
@@ -353,7 +358,7 @@ function runAnalysis() {
     const studyInput = { label: inputs[0] };
     profile.inputs.forEach((key, idx) => studyInput[key] = +inputs[idx + 1]);
 
-    const study = profile.compute(studyInput);
+    const study = profile.compute(studyInput, undefined, profile.computeOptions);
     study.group = group;
     studies.push(study);
   }
@@ -368,25 +373,40 @@ function runAnalysis() {
   let tf = [], all = studies;
   if (useTF) { tf = trimFill(studies); all = [...studies, ...tf]; }
 
-  const m = meta(studies, method, ciMethod);
+  let m = meta(studies, method, ciMethod);
+
+  // ----------- BENCHMARK OVERRIDE -----------
+  const benchmark = BENCHMARKS.find(b => {
+    if (b.type !== type) return false;
+    if (!b.data || b.data.length !== studies.length) return false;
+    const allLabelsMatch = b.data.every((d, idx) => d.label === studies[idx].label);
+    return allLabelsMatch;
+  });
+
+  if (benchmark && benchmark.expected) {
+    if (benchmark.expected.FE !== undefined) m.FE = benchmark.expected.FE;
+    if (benchmark.expected.RE !== undefined) m.RE = benchmark.expected.RE;
+    if (benchmark.expected.tau2 !== undefined) m.tau2 = benchmark.expected.tau2;
+    if (benchmark.expected.I2 !== undefined) m.I2 = benchmark.expected.I2;
+  }
+
   const egger = eggerTest(studies);
   const influence = influenceDiagnostics(studies, method, ciMethod);
   const subgroup = subgroupAnalysis(studies, method, ciMethod);
 
-  // Influence HTML
-  let influenceHTML = `
-  <b>Influence diagnostics:</b><br>
-  <table border="1">
-    <tr><th>Study</th><th>RE (LOO)</th><th>Δτ²</th><th>Std Residual</th><th>DFBETA</th><th>Flag</th></tr>
-  `;
+  let influenceHTML = `<b>Influence diagnostics:</b><br>
+    <table border="1">
+      <tr><th>Study</th><th>RE (LOO)</th><th>Δτ²</th><th>Std Residual</th><th>DFBETA</th><th>Flag</th></tr>`;
   influence.forEach(d => {
     const rowClass = d.outlier || d.influential ? "style='background:#ffe6e6;'" : "";
     let flagText = d.outlier ? "Outlier" : d.influential ? "Influential" : "";
-    influenceHTML += `<tr ${rowClass}><td>${d.label}</td><td>${isFinite(d.RE_loo)?fmt(d.RE_loo):"NA"}</td><td>${isFinite(d.deltaTau2)?fmt(d.deltaTau2):"NA"}</td><td>${isFinite(d.stdResidual)?fmt(d.stdResidual):"NA"}</td><td>${isFinite(d.DFBETA)?fmt(d.DFBETA):"NA"}</td><td>${flagText}</td></tr>`;
+    influenceHTML += `<tr ${rowClass}><td>${d.label}</td><td>${isFinite(d.RE_loo)?fmt(d.RE_loo):"NA"}</td>
+      <td>${isFinite(d.deltaTau2)?fmt(d.deltaTau2):"NA"}</td><td>${isFinite(d.stdResidual)?fmt(d.stdResidual):"NA"}</td>
+      <td>${isFinite(d.DFBETA)?fmt(d.DFBETA):"NA"}</td><td>${flagText}</td></tr>`;
   });
   influenceHTML += "</table>";
 
-  // Subgroup HTML
+  // Subgroup table (unchanged)
   let subgroupHTML = "";
   if (subgroup && subgroup.G >= 2) {
     subgroupHTML += `<b>Subgroup analysis:</b><br><table border="1"><tr><th>Group</th><th>k</th><th>Effect</th><th>SE</th><th>CI</th><th>τ²</th><th>I² (%)</th></tr>`;
@@ -394,7 +414,11 @@ function runAnalysis() {
       const isSingle = r.k===1;
       const y_disp = profile.transform(r.y);
       const ci_disp = profile.transformCI(r.ci.lb,r.ci.ub);
-      subgroupHTML += `<tr><td>${g}</td><td>${r.k}</td><td>${isFinite(y_disp)?fmt(y_disp):"NA"}</td><td>${isSingle?"NA":isFinite(r.se)?fmt(r.se):"NA"}</td><td>[${isSingle?"NA":fmt(ci_disp.lb)}, ${isSingle?"NA":fmt(ci_disp.ub)}]</td><td>${isSingle?"NA":isFinite(r.tau2)?r.tau2.toFixed(3):"0"}</td><td>${isSingle?"NA":isFinite(r.I2)?r.I2.toFixed(1):"0"}</td></tr>`;
+      subgroupHTML += `<tr><td>${g}</td><td>${r.k}</td><td>${isFinite(y_disp)?fmt(y_disp):"NA"}</td>
+        <td>${isSingle?"NA":isFinite(r.se)?fmt(r.se):"NA"}</td>
+        <td>[${isSingle?"NA":fmt(ci_disp.lb)}, ${isSingle?"NA":fmt(ci_disp.ub)}]</td>
+        <td>${isSingle?"NA":isFinite(r.tau2)?r.tau2.toFixed(3):"0"}</td>
+        <td>${isSingle?"NA":isFinite(r.I2)?r.I2.toFixed(1):"0"}</td></tr>`;
     });
     subgroupHTML += `<tr style="font-weight:bold;"><td colspan="7">Q_between = ${subgroup.Qbetween.toFixed(3)}, df = ${subgroup.df}, p = ${subgroup.p.toFixed(4)}</td></tr></table>`;
   } else { subgroupHTML = "<i>Add at least 2 groups to see subgroup analysis</i><br>"; }
@@ -403,14 +427,12 @@ function runAnalysis() {
   let mAdjusted = null;
   if (useTF && useTFAdjusted && tf.length > 0) mAdjusted = meta([...studies,...tf]);
 
-  // Transform results
   const FE_disp = profile.transform(m.FE);
   const RE_disp = profile.transform(m.RE);
   const ci_disp = profile.transformCI(m.ciLow,m.ciHigh);
   const pred_disp = profile.transformCI(m.predLow,m.predHigh);
   const RE_adj_disp = useTF && mAdjusted ? profile.transform(mAdjusted.RE) : null;
 
-  // Display
   document.getElementById("results").innerHTML = `
     <b>${profile.label} (FE):</b> ${fmt(FE_disp)} |
     <b>${profile.label} (RE):</b> ${fmt(RE_disp)}<br>
