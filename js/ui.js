@@ -4,7 +4,6 @@ import { fmt, transformEffect, transformCI } from "./utils.js";
 import { runTests } from "./tests.js";
 import { trimFill } from "./trimfill.js";
 import { drawForest, drawFunnel } from "./plots.js";
-import { BENCHMARKS } from "./benchmarks.js";
 
 // ---------------- EFFECT PROFILES ----------------
 const effectProfiles = {
@@ -586,21 +585,6 @@ function runAnalysis() {
   if (useTF) { tf = trimFill(studies, method); all = [...studies, ...tf]; }
 
   let m = meta(studies, method, ciMethod);
-
-  // ----------- BENCHMARK OVERRIDE -----------
-  const benchmark = BENCHMARKS.find(b => {
-    if (b.type !== type) return false;
-    if (!b.data || b.data.length !== studies.length) return false;
-    const allLabelsMatch = b.data.every((d, idx) => d.label === studies[idx].label);
-    return allLabelsMatch;
-  });
-
-  if (benchmark && benchmark.expected) {
-    if (benchmark.expected.FE !== undefined) m.FE = benchmark.expected.FE;
-    if (benchmark.expected.RE !== undefined) m.RE = benchmark.expected.RE;
-    if (benchmark.expected.tau2 !== undefined) m.tau2 = benchmark.expected.tau2;
-    if (benchmark.expected.I2 !== undefined) m.I2 = benchmark.expected.I2;
-  }
 
   const egger = eggerTest(studies);
   const influence = influenceDiagnostics(studies, method, ciMethod);

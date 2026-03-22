@@ -165,68 +165,57 @@ export function compute(s, type, options = {}) {
   return { ...s, md: s.m1 - s.m2, varMD, se: Math.sqrt(varMD), w: 1/varMD, yi: s.m1 - s.m2, vi: varMD };
 }
 
-// ================= SMD REML =================
+// ================= REML TAU² =================
+// General-purpose REML estimator. Works for any effect type — studies must
+// already have yi and vi set (as produced by compute()). Uses the DL
+// estimator as the starting value and refines via Fisher scoring.
 export function tau2_REML(studies, tol = 1e-10, maxIter = 100) {
 
   const k = studies.length;
-  if(k <= 1) return 0;
+  if (k <= 1) return 0;
 
-  // --- 1️⃣ Compute raw yi, vi, and Hedges J ---
-  const corrected = studies.map(d => {
-    const df = d.n1 + d.n2 - 2;
-    const J = 1 - 3 / (4*df - 1);           // Hedges small-sample correction
-    const s_pooled = Math.sqrt(((d.n1 -1)*d.sd1**2 + (d.n2 -1)*d.sd2**2) / df);
-    const md = (d.m1 - d.m2)/s_pooled;      // Cohen's d
-    const yi = md * J;
-    const vi = (d.n1 + d.n2)/(d.n1*d.n2) + (yi**2)/(2*(d.n1 + d.n2));
-    return { ...d, yi, vi, J };
-  });
+  // --- 1️⃣ Initial tau² (DL / HE estimator) ---
+  const w0 = studies.map(d => 1 / d.vi);
+  const W0 = w0.reduce((a, b) => a + b, 0);
+  const ybar = studies.reduce((sum, d, i) => sum + w0[i] * d.yi, 0) / W0;
+  const Q = studies.reduce((sum, d, i) => sum + w0[i] * (d.yi - ybar) ** 2, 0);
+  const c = W0 - w0.reduce((sum, wi) => sum + wi * wi / W0, 0);
+  let tau2 = Math.max(0, (Q - (k - 1)) / c);
 
-  // --- 2️⃣ Initial tau² (HE estimator) ---
-  const w0 = corrected.map(d => 1 / d.vi);
-  const W0 = w0.reduce((a,b)=>a+b,0);
-  const ybar = corrected.reduce((sum,d,i)=> sum + w0[i]*d.yi,0)/W0;
-  const Q = corrected.reduce((sum,d,i)=> sum + w0[i]*(d.yi - ybar)**2,0);
-  const c = W0 - w0.reduce((sum,wi)=> sum + wi*wi/W0,0);
-  let tau2 = Math.max(0, (Q - (k-1))/c);
-
-  // --- 3️⃣ Fisher scoring iteration ---
-  for(let iter=0; iter<maxIter; iter++){
-    const w = corrected.map(d => 1 / (d.vi + tau2));
-    const W = w.reduce((a,b)=>a+b,0);
-    const mu = corrected.reduce((sum,d,i)=> sum + w[i]*d.yi,0)/W;
+  // --- 2️⃣ Fisher scoring iteration ---
+  for (let iter = 0; iter < maxIter; iter++) {
+    const w = studies.map(d => 1 / (d.vi + tau2));
+    const W = w.reduce((a, b) => a + b, 0);
+    const mu = studies.reduce((sum, d, i) => sum + w[i] * d.yi, 0) / W;
 
     const h = w.map(wi => wi / W);
 
     let score = 0, info = 0;
-    for(let i=0; i<k; i++){
-      const vi_tau = corrected[i].vi + tau2;
-      const ri = corrected[i].yi - mu;
-      score += (ri*ri)/(vi_tau*vi_tau) - (1-h[i])/vi_tau;
-      info  += (1-h[i])/(vi_tau*vi_tau);
+    for (let i = 0; i < k; i++) {
+      const vi_tau = studies[i].vi + tau2;
+      const ri = studies[i].yi - mu;
+      score += (ri * ri) / (vi_tau * vi_tau) - (1 - h[i]) / vi_tau;
+      info  += (1 - h[i]) / (vi_tau * vi_tau);
     }
 
     let step = score / info;
     let newTau2 = tau2 + step;
 
-    // Step-halving to prevent negative tau²
+    // Step-halving to keep tau² non-negative
     let halveIter = 0;
-    while(newTau2 < 0 && halveIter < 20){
+    while (newTau2 < 0 && halveIter < 20) {
       step /= 2;
       newTau2 = tau2 + step;
       halveIter++;
     }
     newTau2 = Math.max(0, newTau2);
 
-    if(Math.abs(newTau2 - tau2) < tol){
+    if (Math.abs(newTau2 - tau2) < tol) {
       tau2 = newTau2;
       break;
     }
 
     tau2 = newTau2;
-
-    // TEMP: log iteration
-    console.log(`tau2=${tau2}, iter=${iter}`);
   }
 
   return tau2;
@@ -299,7 +288,7 @@ export function eggerTest(studies){
   const df = k-2;
   const seIntercept = Math.sqrt(rss/df) * Math.sqrt(1/k + (meanX*meanX)/den);
   const t = intercept/seIntercept;
-  const p = 2 * (1 - normalCDF(Math.abs(t)));
+  const p = 2 * (1 - tCDF(Math.abs(t), df));
   return { intercept, slope, p, t };
 }
 
