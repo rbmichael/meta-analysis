@@ -190,11 +190,11 @@ function validateRow(row) {
     row.classList.add("row-error");
     Object.keys(result.errors).forEach(key => {
       const idx = profile.inputs.indexOf(key);
-      if (idx >= 0) inputs[idx + 1].classList.add("input-error"); // skip Study (0) and Group (last)
+      if (idx >= 0) inputs[idx + 1].classList.add("input-error"); 
     });
   }
 
-  // Subgroup warning (optional small notice below table)
+  // Subgroup warning (tooltip)
   const groupInput = row.querySelector(".group");
   if (groupInput) {
     const groupName = groupInput.value.trim();
@@ -212,7 +212,137 @@ function validateRow(row) {
     }
   }
 
+  // Attach errors for summary panel
+  row.dataset.validationErrors = JSON.stringify(result.errors || {});
+
   return result.valid;
+}
+
+// ---------------- SOFT WARNINGS ----------------
+function getSoftWarnings(studyInput, type, label) {
+  const warnings = [];
+
+  if (type === "MD" || type === "SMD") {
+    const { n1, n2, sd1, sd2 } = studyInput;
+
+    if (isFinite(n1) && n1 < 10) {
+      warnings.push(`⚠️ ${label}: small sample size (n1 < 10)`);
+    }
+    if (isFinite(n2) && n2 < 10) {
+      warnings.push(`⚠️ ${label}: small sample size (n2 < 10)`);
+    }
+
+    if (isFinite(n1) && isFinite(n2)) {
+      const ratio = Math.max(n1, n2) / Math.min(n1, n2);
+      if (ratio > 3) {
+        warnings.push(`⚠️ ${label}: highly imbalanced group sizes`);
+      }
+    }
+
+    if (isFinite(sd1) && isFinite(sd2)) {
+      const ratio = Math.max(sd1, sd2) / Math.min(sd1, sd2);
+      if (ratio > 3) {
+        warnings.push(`⚠️ ${label}: large SD imbalance`);
+      }
+    }
+  }
+
+  else if (type === "OR" || type === "RR") {
+    const { a, b, c, d } = studyInput;
+
+    // Zero-event cells
+    if ([a, b, c, d].some(v => v === 0)) {
+      warnings.push(`⚠️ ${label}: zero cell detected (continuity correction applied)`);
+    }
+
+    // Rare events
+    const total = (a + b + c + d);
+    if (isFinite(total) && total > 0) {
+      const minCell = Math.min(a, b, c, d);
+      if (minCell / total < 0.05) {
+        warnings.push(`⚠️ ${label}: rare events (unstable estimate)`);
+      }
+    }
+  }
+
+  else if (type === "GENERIC") {
+    const { vi } = studyInput;
+    if (isFinite(vi) && vi > 1) {
+      warnings.push(`⚠️ ${label}: large variance (low precision study)`);
+    }
+  }
+
+  return warnings;
+}
+
+// --------------- UPDATE VALIDATION WARNINGS (BELOW INPUT TABLE) -----------------
+function updateValidationWarnings(studies, excluded, softWarnings) {
+  const table = document.getElementById("inputTable");
+  const warningDiv = document.getElementById("validationWarnings");
+  const rows = [...table.rows].slice(1);
+
+  const messages = [];
+  const subgroupMap = {};
+
+  // ---------------- INPUT ERRORS ----------------
+  rows.forEach((row, idx) => {
+    const label = row.querySelector("input")?.value || `Row ${idx+1}`;
+    const errors = JSON.parse(row.dataset.validationErrors || "{}");
+
+    Object.entries(errors).forEach(([field, msg]) => {
+      messages.push(`❌ ${label}: ${msg}`);
+    });
+
+    const groupName = row.querySelector(".group")?.value.trim();
+    if (groupName) {
+      if (!subgroupMap[groupName]) subgroupMap[groupName] = [];
+      subgroupMap[groupName].push(label);
+    }
+  });
+
+  // ---------------- SUBGROUP WARNINGS ----------------
+  Object.entries(subgroupMap).forEach(([group, studiesInGroup]) => {
+    if (studiesInGroup.length < 2) {
+      messages.push(`⚠️ Subgroup "${group}" has <2 studies (${studiesInGroup.join(", ")})`);
+    }
+  });
+
+  // ---------------- EXCLUDED STUDIES ----------------
+  if (excluded.length > 0) {
+    excluded.forEach(e => {
+      messages.push(`⚠️ Excluded: ${e.label} (${e.reason})`);
+    });
+  }
+  
+  // ---------------- SOFT WARNINGS --------------------
+  softWarnings.forEach(w => messages.push(w));
+
+  // ---------------- ANALYSIS WARNINGS ----------------
+  const k = studies.length;
+
+  if (k === 0) {
+    messages.push("❌ No valid studies available for analysis");
+  } else {
+    if (k < 2) {
+      messages.push("⚠️ Fewer than 2 studies: meta-analysis not meaningful");
+    }
+    if (k < 3) {
+      messages.push("⚠️ Egger test requires ≥ 3 studies");
+    }
+
+    // Check for extremely small variances (numerical instability)
+    const tinyVar = studies.some(s => s.vi < 1e-8);
+    if (tinyVar) {
+      messages.push("⚠️ One or more studies have extremely small variance (may inflate weights)");
+    }
+  }
+
+  // ---------------- RENDER ----------------
+  if (messages.length > 0) {
+    warningDiv.innerHTML = messages.map(m => `• ${m}`).join("<br>");
+  } else {
+    warningDiv.innerHTML = "";
+  }
 }
 
 // ---------------- CSV (with column warning) ----------------
@@ -369,21 +499,41 @@ function runAnalysis() {
   if (!profile) return;
 
   const rows = document.querySelectorAll("#inputTable tr");
-  let studies = [];
 
-  for (let i = 1; i < rows.length; i++) {
-    const row = rows[i];
-    const inputs = [...row.querySelectorAll("input")].map(x => x.value);
-    if (!validateRow(row)) continue;
+	let studies = [];
+	let excluded = [];
+	let softWarnings = [];
 
-    const group = row.querySelector(".group")?.value.trim() || "";
-    const studyInput = { label: inputs[0] };
-    profile.inputs.forEach((key, idx) => studyInput[key] = +inputs[idx + 1]);
+	for (let i = 1; i < rows.length; i++) {
+	  const row = rows[i];
+	  const inputs = [...row.querySelectorAll("input")].map(x => x.value);
 
-    const study = profile.compute(studyInput, undefined, profile.computeOptions);
-    study.group = group;
-    studies.push(study);
-  }
+	  const isValid = validateRow(row);
+
+	  const group = row.querySelector(".group")?.value.trim() || "";
+	  const label = inputs[0] || `Row ${i}`;
+
+	  const studyInput = { label };
+	  profile.inputs.forEach((key, idx) => studyInput[key] = +inputs[idx + 1]);
+
+	  // Collect soft warnings regardless of validity
+	  softWarnings.push(...getSoftWarnings(studyInput, type, label));
+
+	  if (!isValid) {
+		excluded.push({ label, reason: "Invalid input" });
+		continue;
+	  }
+
+	  const study = profile.compute(studyInput, undefined, profile.computeOptions);
+
+	  if (!isFinite(study.yi) || !isFinite(study.vi)) {
+		excluded.push({ label, reason: "Computation failed (invalid effect size or variance)" });
+		continue;
+	  }
+
+	  study.group = group;
+	  studies.push(study);
+	}
 
   if (!studies.length) return;
 
@@ -470,4 +620,6 @@ function runAnalysis() {
 
   drawForest(all,m);
   drawFunnel(all,m);
+  
+  updateValidationWarnings(studies, excluded, softWarnings);
 }
