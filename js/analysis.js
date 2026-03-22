@@ -77,8 +77,7 @@ export function compute(s, type, options = {}) {
   return { ...s, md: s.m1 - s.m2, varMD, se: Math.sqrt(varMD), w: 1/varMD, yi: s.m1 - s.m2, vi: varMD };
 }
 
-// ================= SMD REML (Metafor-accurate, safe) =================
-// ================= SMD REML – metafor-exact clone =================
+// ================= SMD REML =================
 export function tau2_REML(studies, tol = 1e-10, maxIter = 100) {
 
   const k = studies.length;
@@ -145,7 +144,31 @@ export function tau2_REML(studies, tol = 1e-10, maxIter = 100) {
   return tau2;
 }
 
-// -------------------------------
+// ================= TAU² PAULE-MANDEL =================
+export function tau2_PM(studies, tol = 1e-10, maxIter = 100) {
+  const k = studies.length;
+  if (k <= 1) return 0;
+
+  let tau2 = 0;
+
+  for (let iter = 0; iter < maxIter; iter++) {
+    const w = studies.map(d => 1 / (d.vi + tau2));
+    const W = w.reduce((a, b) => a + b, 0);
+    const mu = studies.reduce((sum, d, i) => sum + w[i] * d.yi, 0) / W;
+
+    const Q = studies.reduce((sum, d, i) => {
+      return sum + w[i] * Math.pow(d.yi - mu, 2);
+    }, 0);
+
+    const newTau2 = Math.max(0, tau2 + (Q - (k - 1)) / W);
+
+    if (Math.abs(newTau2 - tau2) < tol) return newTau2;
+    tau2 = newTau2;
+  }
+
+  return tau2;
+}
+
 // Compute RE mean given tau²
 export function RE_mean(corrected, tau2) {
   const wRE = corrected.map(d => 1 / (d.vi + tau2));
@@ -284,12 +307,17 @@ export function meta(studies, method="DL", ciMethod="normal") {
   I2 = Math.max(0, Math.min(100,I2));
 
   let tau2 = 0;
-  if(method==="REML") tau2 = tau2_REML(studies, 1e-12, 500);
-  else {
-    const sumW2 = d3.sum(wFE.map(w=>w*w));
-    const C = W - (sumW2/W);
-    tau2 = C>0 ? Math.max(0, (Q-dfQ)/C) : 0;
-  }
+	if (method === "REML") {
+	  tau2 = tau2_REML(studies, 1e-12, 500);
+	}
+	else if (method === "PM") {
+	  tau2 = tau2_PM(studies);
+	}
+	else { // DL fallback
+		const sumW2 = d3.sum(wFE.map(w=>w*w));
+		const C = W - (sumW2/W);
+		tau2 = C>0 ? Math.max(0, (Q-dfQ)/C) : 0;
+	}
 
   // ---------- RANDOM EFFECT ----------
   const wRE = studies.map(d => 1 / Math.max(d.vi + tau2, MIN_VAR));
