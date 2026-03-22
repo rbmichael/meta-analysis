@@ -15,6 +15,7 @@ const effectProfiles = {
     transform: (x) => transformEffect(x, "MD"),
     transformCI: (lb, ub) => transformCI(lb, ub, "MD")
   },
+  
 	"SMD": {
 	  label: "Standardized Mean Difference",
 	  inputs: ["m1","sd1","n1","m2","sd2","n2"],
@@ -26,6 +27,26 @@ const effectProfiles = {
 	  transform: (x) => transformEffect(x, "SMD"),
 	  transformCI: (lb, ub) => transformCI(lb, ub, "SMD")
 	},
+	
+	"MD_paired": {
+	  label: "Mean Difference (Paired)",
+	  inputs: ["m_pre", "sd_pre", "m_post", "sd_post", "n", "r"],
+	  compute: (data) => compute(data, "MD_paired"),
+	  transform: (x) => transformEffect(x, "MD"),
+	  transformCI: (lb, ub) => transformCI(lb, ub, "MD")
+	},
+
+	"SMD_paired": {
+	  label: "Standardized Mean Change",
+	  inputs: ["m_pre", "sd_pre", "m_post", "sd_post", "n", "r"],
+	  compute: (data, benchmark) => {
+		const hedges = benchmark?.correction === "hedges";
+		return compute(data, "SMD_paired", { hedgesCorrection: hedges });
+	  },
+	  transform: (x) => transformEffect(x, "SMD"),
+	  transformCI: (lb, ub) => transformCI(lb, ub, "SMD")
+	},
+	
   "OR": {
     label: "Odds Ratio",
     inputs: ["a", "b", "c", "d"],
@@ -33,6 +54,7 @@ const effectProfiles = {
     transform: (x) => transformEffect(x, "OR"),
     transformCI: (lb, ub) => transformCI(lb, ub, "OR")
   },
+  
   "RR": {
     label: "Risk Ratio",
     inputs: ["a", "b", "c", "d"],
@@ -170,52 +192,39 @@ function clearRow(btn) {
 function validateRow(row) {
   const type = document.getElementById("effectType").value;
   const profile = effectProfiles[type];
-  if (!profile) return false;
+  const inputs = row.querySelectorAll("input");
 
-  const inputs = [...row.querySelectorAll("input")];
-  const studyInput = { label: inputs[0].value.trim() };
-  profile.inputs.forEach((key, idx) => {
-    const val = inputs[idx + 1].value.trim();
-    studyInput[key] = val === "" ? NaN : +val;
+  let valid = true;
+
+  inputs.forEach((input, idx) => {
+    input.classList.remove("input-error");
+
+    // Skip Study + Group
+    if (idx === 0 || idx === inputs.length - 1) return;
+
+    const key = profile.inputs[idx - 1];
+    const val = input.value.trim();
+
+    if (val === "" || isNaN(val)) {
+      input.classList.add("input-error");
+      valid = false;
+      return;
+    }
+
+    const num = +val;
+
+    // -------- RULES BY VARIABLE --------
+    if (key.includes("sd") && num <= 0) valid = false;
+    if (key === "n" && num <= 1) valid = false;
+
+    // Correlation must be between -1 and 1
+    if (key === "r" && (num < -1 || num > 1)) valid = false;
+
+    if (!valid) input.classList.add("input-error");
   });
 
-  const result = validateStudy(studyInput, type);
-
-  // Clear previous error styles
-  inputs.forEach(input => input.classList.remove("input-error"));
-  row.classList.remove("row-error");
-
-  // Highlight invalid inputs
-  if (!result.valid) {
-    row.classList.add("row-error");
-    Object.keys(result.errors).forEach(key => {
-      const idx = profile.inputs.indexOf(key);
-      if (idx >= 0) inputs[idx + 1].classList.add("input-error"); 
-    });
-  }
-
-  // Subgroup warning (tooltip)
-  const groupInput = row.querySelector(".group");
-  if (groupInput) {
-    const groupName = groupInput.value.trim();
-    if (groupName && groupName.length > 0) {
-      const table = document.getElementById("inputTable");
-      const groupRows = [...table.rows].slice(1).filter(r => {
-        const g = r.querySelector(".group")?.value.trim();
-        return g === groupName;
-      });
-      if (groupRows.length < 2) {
-        row.setAttribute("title", "Warning: subgroup has fewer than 2 studies");
-      } else {
-        row.removeAttribute("title");
-      }
-    }
-  }
-
-  // Attach errors for summary panel
-  row.dataset.validationErrors = JSON.stringify(result.errors || {});
-
-  return result.valid;
+  row.classList.toggle("row-error", !valid);
+  return valid;
 }
 
 // ---------------- SOFT WARNINGS ----------------
@@ -485,7 +494,17 @@ function populateExampleData(type) {
       ["Study1", 12, 5, 8, 15, 6, 9, "A"],
       ["Study2", 20, 10, 5, 25, 12, 7, "B"],
       ["Study3", 10, 4, 6, 12, 5, 7, "B"]
-    ]
+    ],
+	"MD_paired": [
+	  ["Study1", 10, 2, 8, 2, 30, 0.5, "A"],
+	  ["Study2", 12, 3, 9, 3, 32, 0.6, "A"],
+	  ["Study3", 9, 2, 7, 2, 28, 0.4, "B"]
+	],
+	"SMD_paired": [
+	  ["Study1", 10, 2, 8, 2, 30, 0.5, "A"],
+	  ["Study2", 12, 3, 9, 3, 32, 0.6, "A"],
+	  ["Study3", 9, 2, 7, 2, 28, 0.4, "B"]
+	]
   };
 
   const rows = exampleData[type] || [];
@@ -500,40 +519,48 @@ function runAnalysis() {
 
   const rows = document.querySelectorAll("#inputTable tr");
 
-	let studies = [];
-	let excluded = [];
-	let softWarnings = [];
+  let studies = [];
+  let excluded = [];
+  let softWarnings = [];
+  let missingCorrelation = false; // <-- NEW
 
-	for (let i = 1; i < rows.length; i++) {
-	  const row = rows[i];
-	  const inputs = [...row.querySelectorAll("input")].map(x => x.value);
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    const inputs = [...row.querySelectorAll("input")].map(x => x.value);
 
-	  const isValid = validateRow(row);
+    const isValid = validateRow(row);
 
-	  const group = row.querySelector(".group")?.value.trim() || "";
-	  const label = inputs[0] || `Row ${i}`;
+    const group = row.querySelector(".group")?.value.trim() || "";
+    const label = inputs[0] || `Row ${i}`;
 
-	  const studyInput = { label };
-	  profile.inputs.forEach((key, idx) => studyInput[key] = +inputs[idx + 1]);
+    const studyInput = { label };
+    profile.inputs.forEach((key, idx) => studyInput[key] = +inputs[idx + 1]);
 
-	  // Collect soft warnings regardless of validity
-	  softWarnings.push(...getSoftWarnings(studyInput, type, label));
+    // --- NEW: check for missing correlation in paired designs ---
+    if ((type === "MD_paired" || type === "SMD_paired") && !isFinite(studyInput.r)) {
+      missingCorrelation = true;
+      // Optionally, assume r = 0.5 for computation
+      studyInput.r = 0.5;
+    }
 
-	  if (!isValid) {
-		excluded.push({ label, reason: "Invalid input" });
-		continue;
-	  }
+    // Collect soft warnings regardless of validity
+    softWarnings.push(...getSoftWarnings(studyInput, type, label));
 
-	  const study = profile.compute(studyInput, undefined, profile.computeOptions);
+    if (!isValid) {
+      excluded.push({ label, reason: "Invalid input" });
+      continue;
+    }
 
-	  if (!isFinite(study.yi) || !isFinite(study.vi)) {
-		excluded.push({ label, reason: "Computation failed (invalid effect size or variance)" });
-		continue;
-	  }
+    const study = profile.compute(studyInput, undefined, profile.computeOptions);
 
-	  study.group = group;
-	  studies.push(study);
-	}
+    if (!isFinite(study.yi) || !isFinite(study.vi)) {
+      excluded.push({ label, reason: "Computation failed (invalid effect size or variance)" });
+      continue;
+    }
+
+    study.group = group;
+    studies.push(study);
+  }
 
   if (!studies.length) return;
 
@@ -605,7 +632,15 @@ function runAnalysis() {
   const pred_disp = profile.transformCI(m.predLow,m.predHigh);
   const RE_adj_disp = useTF && mAdjusted ? profile.transform(mAdjusted.RE) : null;
 
-  document.getElementById("results").innerHTML = `
+  // --- INSERT CORRELATION WARNING ---
+  let warningHTML = "";
+  if (missingCorrelation) {
+    warningHTML = `<div style="color: orange; font-weight: bold;">
+      ⚠️ Some paired studies are missing correlation (r). Assumed r = 0.5 for computation.
+    </div>`;
+  }
+
+  document.getElementById("results").innerHTML = warningHTML + `
     <b>${profile.label} (FE):</b> ${fmt(FE_disp)} |
     <b>${profile.label} (RE):</b> ${fmt(RE_disp)}<br>
     ${useTF && mAdjusted ? `<b>RE (adjusted):</b> ${fmt(RE_adj_disp)}<br>` : ""}
@@ -618,8 +653,8 @@ function runAnalysis() {
   `;
   document.getElementById("results").innerHTML += influenceHTML + subgroupHTML;
 
-  drawForest(all,m, { ciMethod });
-  drawFunnel(all,m);
+  drawForest(all, m, { ciMethod });
+  drawFunnel(all, m);
   
   updateValidationWarnings(studies, excluded, softWarnings);
 }

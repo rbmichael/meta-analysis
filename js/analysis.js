@@ -59,6 +59,67 @@ export function compute(s, type, options = {}) {
     return { ...s, md: g.es, varMD: g.var, se: Math.sqrt(g.var), w: 1/g.var, yi: g.es, vi: g.var };
   }
 
+	// ================ PAIRED MEAN DIFFERENCES ================
+	if (type === "MD_paired") {
+	  const { m_pre, m_post, sd_pre, sd_post, n, r } = s;
+
+	  if (![m_pre, m_post, sd_pre, sd_post, n].every(isFinite) || n < 2) {
+		return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+	  }
+
+	  const corr = isFinite(r) ? r : 0.5; // fallback assumption
+
+	  const md = m_post - m_pre;
+
+	  const varMD = (sd_pre**2 + sd_post**2 - 2*corr*sd_pre*sd_post) / n;
+
+	  return {
+		...s,
+		yi: md,
+		vi: Math.max(varMD, MIN_VAR),
+		se: Math.sqrt(Math.max(varMD, MIN_VAR)),
+		w: 1 / Math.max(varMD, MIN_VAR),
+		md,
+		varMD
+	  };
+	}
+
+	// =============== STANDARDIZED PAIRED MEAN DIFFERENCES =================
+	if (type === "SMD_paired") {
+	  const { m_pre, m_post, sd_pre, sd_post, n, r } = s;
+
+	  if (![m_pre, m_post, sd_pre, sd_post, n].every(isFinite) || n < 2) {
+		return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+	  }
+
+	  const corr = isFinite(r) ? r : 0.5;
+
+	  const mean_change = m_post - m_pre;
+
+	  const sd_change = Math.sqrt(
+		sd_pre**2 + sd_post**2 - 2*corr*sd_pre*sd_post
+	  );
+
+	  const d = mean_change / sd_change;
+
+	  // Hedges correction
+	  const df = n - 1;
+	  const J = 1 - (3 / (4*df - 1));
+	  const g = d * J;
+
+	  const var_d = (1/n) + (d*d)/(2*n);
+
+	  return {
+		...s,
+		yi: g,
+		vi: Math.max(var_d, MIN_VAR),
+		se: Math.sqrt(Math.max(var_d, MIN_VAR)),
+		w: 1 / Math.max(var_d, MIN_VAR),
+		md: g,
+		varMD: var_d
+	  };
+	}
+
 	// ================ GENERIC ===============
 	if (type === "GENERIC") {
 	  return {
