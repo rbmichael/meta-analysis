@@ -24,9 +24,14 @@ export function trimFill(studies, method = "DL", maxIter = 100) {
     const d = studies.map(s => s.yi - center);
     const ranks = assignRanks(d);
 
-    // Sum of ranks for the right side (positive deviations)
+    // Always sum ranks for the larger side so that left-side asymmetry
+    // is detected correctly (previously always summed the right side).
+    const nRight = d.filter(di => di > 0).length;
+    const nLeft  = d.filter(di => di < 0).length;
+    const largerIsRight = nRight >= nLeft;
+
     let Tn = 0;
-    d.forEach((di, i) => { if (di > 0) Tn += ranks[i]; });
+    d.forEach((di, i) => { if (largerIsRight ? di > 0 : di < 0) Tn += ranks[i]; });
 
     // L0 formula (Duval & Tweedie 2000, eq. 5)
     const raw = (4 * Tn - k * (k + 1) / 2) / (2 * k - 1);

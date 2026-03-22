@@ -1,5 +1,5 @@
 // ================= UI =================
-import { compute, eggerTest, meta, influenceDiagnostics, subgroupAnalysis, validateStudy } from "./analysis.js";
+import { compute, eggerTest, meta, influenceDiagnostics, subgroupAnalysis } from "./analysis.js";
 import { fmt, transformEffect, transformCI } from "./utils.js";
 import { runTests } from "./tests.js";
 import { trimFill } from "./trimfill.js";
@@ -18,11 +18,7 @@ const effectProfiles = {
 	"SMD": {
 	  label: "Standardized Mean Difference",
 	  inputs: ["m1","sd1","n1","m2","sd2","n2"],
-	  compute: (data, benchmark) => {
-		// Apply Hedges correction if benchmark specifies it
-		const hedges = benchmark?.correction === "hedges";
-		return compute(data, "SMD", { hedgesCorrection: hedges });
-	  },
+	  compute: (data) => compute(data, "SMD", { hedgesCorrection: true }),
 	  transform: (x) => transformEffect(x, "SMD"),
 	  transformCI: (lb, ub) => transformCI(lb, ub, "SMD")
 	},
@@ -38,10 +34,7 @@ const effectProfiles = {
 	"SMD_paired": {
 	  label: "Standardized Mean Change",
 	  inputs: ["m_pre", "sd_pre", "m_post", "sd_post", "n", "r"],
-	  compute: (data, benchmark) => {
-		const hedges = benchmark?.correction === "hedges";
-		return compute(data, "SMD_paired", { hedgesCorrection: hedges });
-	  },
+	  compute: (data) => compute(data, "SMD_paired"),
 	  transform: (x) => transformEffect(x, "SMD"),
 	  transformCI: (lb, ub) => transformCI(lb, ub, "SMD")
 	},
@@ -202,6 +195,7 @@ function validateRow(row) {
   const inputs = row.querySelectorAll("input");
 
   let valid = true;
+  const errors = {};
 
   inputs.forEach((input, idx) => {
     input.classList.remove("input-error");
@@ -214,6 +208,7 @@ function validateRow(row) {
 
     if (val === "" || isNaN(val)) {
       input.classList.add("input-error");
+      errors[key] = `${key} is required`;
       valid = false;
       return;
     }
@@ -221,15 +216,20 @@ function validateRow(row) {
     const num = +val;
 
     // -------- RULES BY VARIABLE --------
-    if (key.includes("sd") && num <= 0) valid = false;
-    if (key === "n" && num <= 1) valid = false;
+    let inputValid = true;
+    let errorMsg = null;
+    if (key.includes("sd") && num <= 0) { inputValid = false; errorMsg = `${key} must be > 0`; }
+    if (key === "n" && num <= 1)         { inputValid = false; errorMsg = `${key} must be ≥ 2`; }
+    if (key === "r" && (num < -1 || num > 1)) { inputValid = false; errorMsg = `${key} must be between -1 and 1`; }
 
-    // Correlation must be between -1 and 1
-    if (key === "r" && (num < -1 || num > 1)) valid = false;
-
-    if (!valid) input.classList.add("input-error");
+    if (!inputValid) {
+      input.classList.add("input-error");
+      errors[key] = errorMsg;
+      valid = false;
+    }
   });
 
+  row.dataset.validationErrors = JSON.stringify(errors);
   row.classList.toggle("row-error", !valid);
   return valid;
 }
@@ -621,7 +621,7 @@ function runAnalysis() {
 
   // Adjusted RE
   let mAdjusted = null;
-  if (useTF && useTFAdjusted && tf.length > 0) mAdjusted = meta([...studies,...tf]);
+  if (useTF && useTFAdjusted && tf.length > 0) mAdjusted = meta([...studies,...tf], method, ciMethod);
 
   const FE_disp = profile.transform(m.FE);
   const RE_disp = profile.transform(m.RE);

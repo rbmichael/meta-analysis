@@ -321,7 +321,7 @@ export function influenceDiagnostics(studies, method="DL", ciMethod="normal"){
 }
 
 // ================= SUBGROUP =================
-export function subgroupAnalysis(studies, method="REML", ciMethod="z") {
+export function subgroupAnalysis(studies, method="REML", ciMethod="normal") {
   const valid = studies.filter(s => s && isFinite(s.yi) && isFinite(s.vi) && s.group != null && s.group !== "");
   if(valid.length < 2) return null;
   const groups = {};
@@ -402,7 +402,8 @@ export function meta(studies, method="DL", ciMethod="normal") {
   const wRE = studies.map(d => 1 / Math.max(d.vi + tau2, MIN_VAR));
   const WRE = d3.sum(wRE);
   const RE = WRE>0 ? d3.sum(studies.map((d,i)=>d.yi*wRE[i]))/WRE : NaN;
-  let seRE = WRE>0 ? Math.sqrt(1/WRE) : NaN;
+  const seRE_base = WRE>0 ? Math.sqrt(1/WRE) : NaN;  // used for prediction interval
+  let seRE = seRE_base;
 
 	let crit, stat, pval, dist;
 
@@ -440,8 +441,11 @@ export function meta(studies, method="DL", ciMethod="normal") {
 	  pval = k <= 1 ? NaN : 2 * (1 - normalCDF(Math.abs(stat)));
 	}
 
-  const predVar = seRE*seRE + tau2;
-  
+  // Prediction interval: Higgins et al. (2009), t_{k-2} quantile.
+  // Requires k >= 3 (df = k-2 >= 1). Uses base seRE, not KH-adjusted.
+  const predVar = seRE_base * seRE_base + tau2;
+  const predCrit = k >= 3 ? tCritical(k - 2) : NaN;
+
   return {
     FE,
     seFE,
@@ -451,8 +455,8 @@ export function meta(studies, method="DL", ciMethod="normal") {
     Q,
     df: dfQ,
     I2,
-    predLow: RE - 1.96*Math.sqrt(predVar),
-    predHigh: RE + 1.96*Math.sqrt(predVar),
+    predLow:  isFinite(predCrit) ? RE - predCrit * Math.sqrt(predVar) : NaN,
+    predHigh: isFinite(predCrit) ? RE + predCrit * Math.sqrt(predVar) : NaN,
     ciLow: RE - crit*seRE,
     ciHigh: RE + crit*seRE,
     crit,
@@ -479,11 +483,19 @@ export function validateStudy(study, type) {
     if (!isFinite(study.m1)) { valid = false; errors.m1 = "m1 must be numeric"; }
     if (!isFinite(study.m2)) { valid = false; errors.m2 = "m2 must be numeric"; }
   }
-  else if (type === "OR" || type === "RR") {
+  else if (type === "OR" || type === "RR" || type === "RD") {
     ["a","b","c","d"].forEach(k => {
       const v = study[k];
       if (!isFinite(v) || v < 0) { valid = false; errors[k] = `${k} must be ≥ 0`; }
     });
+  }
+  else if (type === "MD_paired" || type === "SMD_paired") {
+    if (!isFinite(study.m_pre))              { valid = false; errors.m_pre  = "m_pre must be numeric"; }
+    if (!isFinite(study.m_post))             { valid = false; errors.m_post = "m_post must be numeric"; }
+    if (!isFinite(study.sd_pre)  || study.sd_pre  <= 0) { valid = false; errors.sd_pre  = "sd_pre must be > 0"; }
+    if (!isFinite(study.sd_post) || study.sd_post <= 0) { valid = false; errors.sd_post = "sd_post must be > 0"; }
+    if (!isFinite(study.n) || study.n < 2)  { valid = false; errors.n = "n must be ≥ 2"; }
+    if (isFinite(study.r) && (study.r < -1 || study.r > 1)) { valid = false; errors.r = "r must be between -1 and 1"; }
   }
   else if (type === "GENERIC") {
     if (!isFinite(study.yi)) { valid = false; errors.yi = "yi must be numeric"; }
