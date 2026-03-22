@@ -147,6 +147,9 @@ export function transformEffect(x, type) {
     return Math.exp(x);
   }
 
+	// Risk difference
+	if (type === "RD") return x;  // continuous scale, no transformation
+
   // Continuous measures
   if (type === "MD" || type === "SMD") {
     return x;
@@ -168,6 +171,8 @@ export function transformCI(lb, ub, type) {
       ub: Math.exp(ub)
     };
   }
+
+	if (type === "RD") return { lb, ub }; // raw difference
 
   if (type === "MD" || type === "SMD") {
     return { lb, ub };

@@ -61,7 +61,15 @@ const effectProfiles = {
     compute: (data) => compute(data, "RR"),
     transform: (x) => transformEffect(x, "RR"),
     transformCI: (lb, ub) => transformCI(lb, ub, "RR")
-  }
+  },
+
+	"RD": {
+	  label: "Risk Difference",
+	  inputs: ["a", "b", "c", "d"],  // a/b = events/non-events in treatment, c/d = control
+	  compute: (data) => compute(data, "RD"),
+	  transform: (x) => transformEffect(x, "RD"),
+	  transformCI: (lb, ub) => transformCI(lb, ub, "RD")
+	}
 };
 
 // ---------------- INITIALIZE ----------------
@@ -504,6 +512,11 @@ function populateExampleData(type) {
 	  ["Study1", 10, 2, 8, 2, 30, 0.5, "A"],
 	  ["Study2", 12, 3, 9, 3, 32, 0.6, "A"],
 	  ["Study3", 9, 2, 7, 2, 28, 0.4, "B"]
+	],
+	"RD": [
+		["Study 1", 12, 8, 15, 10, "A"],  // a=12, b=8, c=15, d=10
+		["Study 2", 20, 10, 18, 12, "A"],
+		["Study 3", 8, 7, 10, 9, "B"]
 	]
   };
 

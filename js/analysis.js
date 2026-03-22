@@ -40,18 +40,45 @@ export function compute(s, type, options = {}) {
     }
   }
 
-  // ================= BINARY DATA =================
-  if (type === "OR" || type === "RR") {
-    let { a, b, c, d } = s;
-    if ([a, b, c, d].some(v => !isFinite(v) || v < 0)) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
-    if (a === 0 || b === 0 || c === 0 || d === 0) a += 0.5, b += 0.5, c += 0.5, d += 0.5;
+	// ================= BINARY DATA =================
+	if (type === "OR" || type === "RR" || type === "RD") {
+	  let { a, b, c, d } = s;
+	  if ([a, b, c, d].some(v => !isFinite(v) || v < 0)) 
+		return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+	  
+	  // optional continuity correction for OR/RR
+	  if (type === "OR" || type === "RR") {
+		if (a === 0 || b === 0 || c === 0 || d === 0) a += 0.5, b += 0.5, c += 0.5, d += 0.5;
+	  }
 
-    let yi, vi;
-    if (type === "OR") { yi = Math.log((a*d)/(b*c)); vi = 1/a + 1/b + 1/c + 1/d; }
-    else { const risk1 = a/(a+b), risk2 = c/(c+d); yi = Math.log(risk1/risk2); vi = (1/a - 1/(a+b)) + (1/c - 1/(c+d)); }
+	  let yi, vi;
 
-    return { ...s, yi, vi: Math.max(vi, MIN_VAR), se: Math.sqrt(Math.max(vi, MIN_VAR)), w: 1/Math.max(vi, MIN_VAR), md: yi, varMD: vi };
-  }
+	  if (type === "OR") { 
+		yi = Math.log((a*d)/(b*c)); 
+		vi = 1/a + 1/b + 1/c + 1/d; 
+	  } else if (type === "RR") { 
+		const risk1 = a/(a+b), risk2 = c/(c+d); 
+		yi = Math.log(risk1/risk2); 
+		vi = (1/a - 1/(a+b)) + (1/c - 1/(c+d)); 
+	  } else if (type === "RD") {
+		// Risk Difference
+		const risk1 = a / (a + b);
+		const risk2 = c / (c + d);
+		yi = risk1 - risk2;
+		vi = (risk1*(1-risk1)/ (a+b)) + (risk2*(1-risk2)/ (c+d));
+	  }
+
+	  const safeVi = Math.max(vi, MIN_VAR);
+	  return {
+		...s,
+		yi,
+		vi: safeVi,
+		se: Math.sqrt(safeVi),
+		w: 1/safeVi,
+		md: yi,
+		varMD: safeVi
+	  };
+	}
 
   // ================= CONTINUOUS DATA (SMD) =================
   if (type === "SMD") {
