@@ -1,5 +1,5 @@
 // ================= UI =================
-import { compute, eggerTest, meta, influenceDiagnostics, subgroupAnalysis, metaRegression } from "./analysis.js";
+import { compute, eggerTest, beggTest, fatPetTest, failSafeN, meta, influenceDiagnostics, subgroupAnalysis, metaRegression } from "./analysis.js";
 import { fmt, transformEffect, transformCI } from "./utils.js";
 import { runTests } from "./tests.js";
 import { trimFill } from "./trimfill.js";
@@ -537,7 +537,7 @@ function updateValidationWarnings(studies, excluded, softWarnings) {
       messages.push("⚠️ Fewer than 2 studies: meta-analysis not meaningful");
     }
     if (k < 3) {
-      messages.push("⚠️ Egger test requires ≥ 3 studies");
+      messages.push("⚠️ Egger / Begg / FAT-PET tests require ≥ 3 studies");
     }
 
     // Check for extremely small variances (numerical instability)
@@ -958,7 +958,10 @@ function runAnalysis() {
 
   let m = meta(studies, method, ciMethod);
 
-  const egger = eggerTest(studies);
+  const egger  = eggerTest(studies);
+  const begg   = beggTest(studies);
+  const fatpet = fatPetTest(studies);
+  const fsn    = failSafeN(studies);
   const influence = influenceDiagnostics(studies, method, ciMethod);
   const subgroup = subgroupAnalysis(studies, method, ciMethod);
 
@@ -1017,7 +1020,11 @@ function runAnalysis() {
     τ²=${fmt(m.tau2)} | I²=${fmt(m.I2)}%<br>
     ${m.dist}-stat=${fmt(m.stat)} | p=${fmt(m.pval)}<br>
     Prediction=[${fmt(pred_disp.lb)}, ${fmt(pred_disp.ub)}]<br>
-    <b>Egger intercept:</b> ${fmt(egger.intercept)} | p=${fmt(egger.p)}<br>
+    <b>Publication bias:</b><br>
+    &nbsp;&nbsp;Egger: intercept=${isFinite(egger.intercept)?fmt(egger.intercept):"NA"} | p=${isFinite(egger.p)?fmt(egger.p):"NA (k<3)"}<br>
+    &nbsp;&nbsp;Begg: τ=${isFinite(begg.tau)?fmt(begg.tau):"NA"} | p=${isFinite(begg.p)?fmt(begg.p):"NA (k<3)"}<br>
+    &nbsp;&nbsp;FAT (bias): β₁=${isFinite(fatpet.slope)?fmt(fatpet.slope):"NA"} | p=${isFinite(fatpet.slopeP)?fmt(fatpet.slopeP):"NA (k<3)"} &nbsp;·&nbsp; PET (effect at SE→0): ${isFinite(fatpet.intercept)?fmt(profile.transform(fatpet.intercept)):"NA"} | p=${isFinite(fatpet.interceptP)?fmt(fatpet.interceptP):"NA (k<3)"}<br>
+    &nbsp;&nbsp;Fail-safe N (Rosenthal): ${isFinite(fsn.rosenthal)?Math.round(fsn.rosenthal):"NA"} &nbsp;·&nbsp; Orwin (trivial=0.1): ${isFinite(fsn.orwin)?Math.round(fsn.orwin):"NA"}<br>
     <b>Trim & Fill:</b> ${useTF?"ON":"OFF"} (${tf.length} filled studies)
   `;
   document.getElementById("results").innerHTML += influenceHTML + subgroupHTML;

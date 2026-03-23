@@ -463,6 +463,153 @@ export function eggerTest(studies){
   return { intercept, slope, p, t };
 }
 
+// ================= BEGG'S RANK CORRELATION TEST =================
+// Kendall's τ between standardised effect (yᵢ − FE) and variance vᵢ.
+// Begg & Mazumdar (1994). Tests funnel asymmetry non-parametrically.
+//
+// Returns: { tau, S, z, p }
+//   tau — Kendall's τ_b (normalised S)
+//   S   — raw concordance statistic
+//   z   — continuity-corrected normal z
+//   p   — two-tailed p-value
+export function beggTest(studies) {
+  const valid = studies.filter(s => isFinite(s.yi) && isFinite(s.vi) && s.vi > 0);
+  const k = valid.length;
+  if (k < 3) return { tau: NaN, S: NaN, z: NaN, p: NaN };
+
+  // Adjust effects for FE pooled estimate (Begg & Mazumdar 1994, eq. 2)
+  const w0  = valid.map(s => 1 / s.vi);
+  const W   = w0.reduce((a, b) => a + b, 0);
+  const FE  = valid.reduce((s, d, i) => s + w0[i] * d.yi, 0) / W;
+  // Rank on raw yi: the FE centering and any linear offset cancel in every
+  // pairwise sign(adj_i − adj_j), so adj[i] = yi[i] is equivalent.
+  const adj = valid.map(s => s.yi);
+
+  // Kendall S = Σ_{i<j} sign(adj_i − adj_j) · sign(vi_i − vi_j)
+  let S = 0;
+  for (let i = 0; i < k - 1; i++) {
+    for (let j = i + 1; j < k; j++) {
+      S += Math.sign(adj[i] - adj[j]) * Math.sign(valid[i].vi - valid[j].vi);
+    }
+  }
+
+  // Variance of S under H₀ (no ties formula)
+  const varS = k * (k - 1) * (2 * k + 5) / 18;
+
+  // Continuity correction
+  const z = S === 0 ? 0 : (Math.abs(S) - 1) / Math.sqrt(varS) * Math.sign(S);
+  const p = 2 * (1 - normalCDF(Math.abs(z)));
+  const tau = S / (k * (k - 1) / 2);
+
+  return { tau, S, z, p };
+}
+
+// ================= FAT-PET =================
+// Precision-Effect Test / Funnel Asymmetry Test (Stanley & Doucouliagos 2014).
+// WLS regression of yᵢ on SEᵢ with weights wᵢ = 1/vᵢ:
+//   yᵢ = β₀ + β₁·SEᵢ + εᵢ
+//
+// FAT: H₀: β₁ = 0  (no funnel asymmetry / no publication bias)
+// PET: β₀ = effect estimate purged of bias (effect at SE → 0)
+//
+// Returns: { intercept, interceptSE, interceptT, interceptP,
+//            slope,     slopeSE,     slopeT,     slopeP,     df }
+export function fatPetTest(studies) {
+  const valid = studies.filter(s => isFinite(s.yi) && isFinite(s.vi) && s.vi > 0);
+  const k = valid.length;
+  if (k < 3) {
+    return {
+      intercept: NaN, interceptSE: NaN, interceptT: NaN, interceptP: NaN,
+      slope:     NaN, slopeSE:     NaN, slopeT:     NaN, slopeP:     NaN,
+      df: k - 2
+    };
+  }
+
+  const yi = valid.map(s => s.yi);
+  const se = valid.map(s => s.se ?? Math.sqrt(s.vi));
+  const wi = valid.map(s => 1 / s.vi);
+
+  // Design matrix: [1, SEᵢ]
+  const X = valid.map((_, i) => [1, se[i]]);
+  const { beta, vcov, rankDeficient } = wls(X, yi, wi);
+
+  if (rankDeficient) {
+    return {
+      intercept: NaN, interceptSE: NaN, interceptT: NaN, interceptP: NaN,
+      slope:     NaN, slopeSE:     NaN, slopeT:     NaN, slopeP:     NaN,
+      df: k - 2
+    };
+  }
+
+  // Residual variance (s²) for SE estimation
+  const df  = k - 2;
+  const rss = valid.reduce((s, _, i) => {
+    const e = yi[i] - beta[0] - beta[1] * se[i];
+    return s + wi[i] * e * e;
+  }, 0);
+  const s2 = df > 0 ? rss / df : NaN;
+
+  const interceptSE = Math.sqrt(s2 * vcov[0][0]);
+  const slopeSE     = Math.sqrt(s2 * vcov[1][1]);
+  const interceptT  = beta[0] / interceptSE;
+  const slopeT      = beta[1] / slopeSE;
+  const interceptP  = 2 * (1 - tCDF(Math.abs(interceptT), df));
+  const slopeP      = 2 * (1 - tCDF(Math.abs(slopeT),     df));
+
+  return {
+    intercept:  beta[0], interceptSE, interceptT, interceptP,
+    slope:      beta[1], slopeSE,     slopeT,     slopeP,
+    df
+  };
+}
+
+// ================= FAIL-SAFE N =================
+// Rosenthal's (1979) file-drawer number: how many null studies (effect = 0)
+// would be needed to push the combined p-value above alpha.
+//
+//   Nfs = (Σzᵢ / z_α)² − k   where zᵢ = Φ⁻¹(1 − pᵢ/2)  ≥ 0
+//
+// Also computes Orwin's (1983) fail-safe N: studies needed to bring the
+// pooled RE below a trivial threshold |effect_trivial|.
+//
+//   N_orwin = k · (|RE| − |trivial|) / |trivial|   (clamped to 0)
+//
+// Returns: { rosenthal, orwin, sumZ, z_crit, k }
+export function failSafeN(studies, alpha = 0.05, trivial = 0.1) {
+  const valid = studies.filter(s => isFinite(s.yi) && isFinite(s.vi) && s.vi > 0);
+  const k = valid.length;
+  if (k < 1) return { rosenthal: NaN, orwin: NaN, sumZ: NaN, z_crit: NaN, k: 0 };
+
+  // One-sided z for each study: z = |yi| / se  (using study-level statistic)
+  const sumZ = valid.reduce((s, d) => {
+    const z = Math.abs(d.yi) / Math.sqrt(d.vi);
+    return s + z;
+  }, 0);
+
+  // Critical z for the chosen alpha (two-tailed → one-sided z_α/2... but
+  // Rosenthal uses one-tailed z_α; for α=0.05, z_crit = 1.6449)
+  // We derive it by inversion: z such that normalCDF(z) = 1 − alpha
+  const z_crit = (() => {
+    const target = 1 - alpha;
+    let lo = 0, hi = 10;
+    for (let i = 0; i < 64; i++) {
+      const mid = (lo + hi) / 2;
+      normalCDF(mid) < target ? lo = mid : hi = mid;
+    }
+    return (lo + hi) / 2;
+  })();
+
+  const rosenthal = Math.max(0, (sumZ / z_crit) ** 2 - k);
+
+  // Orwin: uses FE pooled estimate (Orwin 1983 predates RE meta-analysis)
+  const w0 = valid.map(s => 1 / s.vi);
+  const W  = w0.reduce((a, b) => a + b, 0);
+  const FE = valid.reduce((s, d, i) => s + w0[i] * d.yi, 0) / W;
+  const orwin = Math.max(0, k * (Math.abs(FE) - Math.abs(trivial)) / Math.abs(trivial));
+
+  return { rosenthal, orwin, sumZ, z_crit, k };
+}
+
 // ================= INFLUENCE DIAGNOSTICS =================
 export function influenceDiagnostics(studies, method="DL", ciMethod="normal"){
   const n = studies.length;

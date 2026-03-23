@@ -1,6 +1,6 @@
 import { round, transformEffect, transformCI } from "./utils.js";
 import { BENCHMARKS } from "./benchmarks.js";
-import { compute, meta, metaRegression, tau2_HS, tau2_HE, tau2_ML, tau2_SJ } from "./analysis.js";
+import { compute, meta, metaRegression, tau2_HS, tau2_HE, tau2_ML, tau2_SJ, beggTest, fatPetTest, failSafeN } from "./analysis.js";
 
 // Tolerances vary by field:
 //   FE, RE  — absolute 0.01   (pooled estimates are on a stable scale)
@@ -419,4 +419,127 @@ export function runTests() {
   tchk("meta(SJ).tau2",  mSJ.tau2, (Math.sqrt(65) - 3) / 6, 0.05);
 
   console.log(tauPass ? "\n✅ ALL TAU² UNIT TESTS PASSED" : "\n❌ SOME TAU² UNIT TESTS FAILED");
+
+  // ===== PUBLICATION BIAS UNIT TESTS =====
+  console.log("\n===== PUBLICATION BIAS UNIT TESTS =====\n");
+  let biasPass = true;
+
+  function bchk(name, val, expected, tol = 1e-4) {
+    const ok = isFinite(val) && Math.abs(val - expected) < tol;
+    console.log(`  ${name}: ${round(val, 5)} (expected ${round(expected, 5)}) → ${ok ? "PASS" : "FAIL"}`);
+    if (!ok) biasPass = false;
+  }
+  function bchkNaN(name, val) {
+    const ok = !isFinite(val);
+    console.log(`  ${name}: ${val} → ${ok ? "PASS (NaN as expected)" : "FAIL (expected NaN)"}`);
+    if (!ok) biasPass = false;
+  }
+  function bchkTrue(name, cond) {
+    console.log(`  ${name} → ${cond ? "PASS" : "FAIL"}`);
+    if (!cond) biasPass = false;
+  }
+
+  // ---- Begg's test ----
+  // Equal vi → all sign(vi_i − vi_j) = 0 → S = 0, τ = 0, p = 1
+  console.log("--- Begg: symmetric funnel (equal vi) ---");
+  {
+    const s = [{ yi: 0, vi: 1, se: 1 }, { yi: 1, vi: 1, se: 1 }, { yi: 3, vi: 1, se: 1 }];
+    const b = beggTest(s);
+    bchk("S = 0",   b.S,   0, 1e-9);
+    bchk("τ = 0",   b.tau, 0, 1e-9);
+    bchk("p = 1",   b.p,   1, 1e-6);
+  }
+
+  // Designed asymmetric case: larger studies (smaller vi) have larger effects.
+  // yi=[0,1,2], vi=[1,0.5,0.25] → all three pairs discordant → S = −3, τ = −1
+  console.log("--- Begg: all-discordant funnel (S = −3) ---");
+  {
+    const s = [
+      { yi: 0, vi: 1,    se: 1    },
+      { yi: 1, vi: 0.5,  se: Math.sqrt(0.5)  },
+      { yi: 2, vi: 0.25, se: 0.5  }
+    ];
+    const b = beggTest(s);
+    bchk("S = −3",  b.S,   -3, 1e-9);
+    bchk("τ = −1",  b.tau, -1, 1e-9);
+    // var(S) = k(k-1)(2k+5)/18 = 11/3; z = (3-1)/√(11/3) ≈ 1.044; p ≈ 0.296
+    // k=3 cannot reach p<0.05 regardless of S — check finite and in plausible range
+    bchkTrue("p finite and > 0.2", isFinite(b.p) && b.p > 0.2 && b.p < 0.4);
+  }
+
+  // k < 3 → NaN
+  console.log("--- Begg: k < 3 → NaN ---");
+  bchkNaN("k=2 → NaN p", beggTest([{ yi: 0, vi: 1 }, { yi: 1, vi: 1 }]).p);
+
+  // ---- FAT-PET ----
+  // Pure effect (yi constant, no relationship with SE):
+  //   slope ≈ 0, intercept ≈ constant
+  console.log("--- FAT-PET: pure effect (yi = 0.5, varying vi) ---");
+  {
+    const s = [
+      { yi: 0.5, vi: 0.1, se: Math.sqrt(0.1) },
+      { yi: 0.5, vi: 0.2, se: Math.sqrt(0.2) },
+      { yi: 0.5, vi: 0.3, se: Math.sqrt(0.3) }
+    ];
+    const f = fatPetTest(s);
+    bchk("slope ≈ 0",   f.slope,     0,   0.01);
+    bchk("intercept ≈ 0.5", f.intercept, 0.5, 0.01);
+  }
+
+  // Pure bias (yi = SEi exactly):
+  //   slope ≈ 1, intercept ≈ 0
+  // yi=[0.1,0.2,0.3], vi=[0.01,0.04,0.09], SE=[0.1,0.2,0.3]
+  console.log("--- FAT-PET: pure bias (yi = SEi) ---");
+  {
+    const s = [
+      { yi: 0.1, vi: 0.01, se: 0.1 },
+      { yi: 0.2, vi: 0.04, se: 0.2 },
+      { yi: 0.3, vi: 0.09, se: 0.3 }
+    ];
+    const f = fatPetTest(s);
+    // With perfect fit, residuals = 0 → s² = 0 → SEs = 0 → t = ±Inf.
+    // Just check the point estimates; p-values are degenerate.
+    bchk("slope ≈ 1",   f.slope,     1, 0.001);
+    bchk("intercept ≈ 0", f.intercept, 0, 0.001);
+  }
+
+  // k < 3 → NaN
+  console.log("--- FAT-PET: k < 3 → NaN ---");
+  bchkNaN("k=2 → NaN slope", fatPetTest([{ yi: 0, vi: 1, se: 1 }, { yi: 1, vi: 1, se: 1 }]).slope);
+
+  // ---- Fail-safe N ----
+  // All studies at yi = 0 → sumZ = 0 → Rosenthal = 0 (clamped)
+  console.log("--- Fail-safe N: all null studies → Nfs = 0 ---");
+  {
+    const s = [{ yi: 0, vi: 1 }, { yi: 0, vi: 1 }, { yi: 0, vi: 1 }];
+    const f = failSafeN(s);
+    bchk("Rosenthal = 0", f.rosenthal, 0, 1e-9);
+  }
+
+  // One study at yi = 3, vi = 1: z = 3, z_crit ≈ 1.6449
+  // Nfs = (3 / 1.6449)² − 1 ≈ 2.327
+  console.log("--- Fail-safe N: one study z=3 ---");
+  {
+    const s = [{ yi: 3, vi: 1 }];
+    const f = failSafeN(s);
+    bchk("sumZ = 3",           f.sumZ,       3,     1e-9);
+    bchk("z_crit ≈ 1.6449",   f.z_crit,     1.6449, 0.001);
+    bchk("Rosenthal ≈ 2.327", f.rosenthal,  (3 / f.z_crit) ** 2 - 1, 0.001);
+  }
+
+  // Orwin: k * (|RE| − trivial) / trivial
+  // Studies yi=[0.3,0.3,0.3], vi=[1,1,1], RE=0.3, trivial=0.1
+  // N_orwin = 3 * (0.3 − 0.1) / 0.1 = 6
+  console.log("--- Fail-safe N: Orwin ---");
+  {
+    const s = [{ yi: 0.3, vi: 1 }, { yi: 0.3, vi: 1 }, { yi: 0.3, vi: 1 }];
+    const f = failSafeN(s, 0.05, 0.1);
+    bchk("Orwin = 6", f.orwin, 6, 0.001);
+  }
+
+  // k = 0 → NaN
+  console.log("--- Fail-safe N: k=0 → NaN ---");
+  bchkNaN("k=0 → NaN", failSafeN([]).rosenthal);
+
+  console.log(biasPass ? "\n✅ ALL PUBLICATION BIAS TESTS PASSED" : "\n❌ SOME PUBLICATION BIAS TESTS FAILED");
 }
