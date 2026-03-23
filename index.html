@@ -148,8 +148,18 @@
       <div class="plot-export">
         <button class="export-btn" data-target="forestPlot" data-format="svg">SVG</button>
         <button class="export-btn" data-target="forestPlot" data-format="png">PNG</button>
+        <label class="forest-pagesize-label">
+          Studies per page
+          <select id="forestPageSize">
+            <option value="20">20</option>
+            <option value="30" selected>30</option>
+            <option value="50">50</option>
+            <option value="Infinity">All</option>
+          </select>
+        </label>
       </div>
       <svg id="forestPlot" width="900" height="420"></svg>
+      <div id="forestNav"></div>
     </div>
 
     <div class="plot-block">

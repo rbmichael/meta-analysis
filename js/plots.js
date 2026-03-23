@@ -175,28 +175,73 @@ export function drawForest(studies, m, options = {}) {
     KH: "Knapp-Hartung"
   }[ciMethod] || ciMethod;
 
+  // ----------- PAGINATION -----------
+  // pageSize === Infinity means "show all studies on one page".
+  const rawPageSize  = options.pageSize ?? 30;
+  const pageSize     = rawPageSize === Infinity ? studies.length : rawPageSize;
+  const page         = options.page ?? 0;
+  const totalPages   = Math.max(1, Math.ceil(studies.length / pageSize));
+  const isLastPage   = page >= totalPages - 1;
+
+  // Slice to the studies visible on this page.
+  const pageStudies  = studies.slice(page * pageSize, (page + 1) * pageSize);
+
   // ----------- LAYOUT -----------
   // All coordinates are derived from this single object so that
-  // adding/removing studies resizes the SVG automatically, and
-  // later steps (annotations, headers) just reference L.* constants.
-  const k = studies.length;
-  const L = {
-    rowH:    22,   // px per study row
-    labelW:  180,  // px reserved for study labels (left column)
-    plotW:   440,  // px for the CI strip (centre column)
-    annotW:  240,  // px reserved for numeric annotations (right column, steps 2+)
-    headerH: 28,   // px for the column-header row above the studies
-    summaryH: 106, // px for the summary area below the last study row
-  };
+  // adding/removing studies resizes the SVG automatically.
+  // Row height and font sizes are chosen from the TOTAL study count so that
+  // all pages share the same visual density regardless of how many rows
+  // appear on each individual page.
+  const k = studies.length;           // total — governs adaptive size breakpoints
+
+  const L = k <= 20
+    ? { rowH: 22, labelFontSize: "11px", annotFontSize: "10px", titleFontSize: "12px", boxHalf: 5, diamondHH: 8 }
+    : k <= 40
+    ? { rowH: 18, labelFontSize: "10px", annotFontSize: "9px",  titleFontSize: "11px", boxHalf: 4, diamondHH: 7 }
+    : { rowH: 14, labelFontSize: "9px",  annotFontSize: "8px",  titleFontSize: "10px", boxHalf: 3, diamondHH: 6 };
+
+  // Fixed dimensions (independent of k)
+  L.labelW   = 180;
+  L.plotW    = 440;
+  L.annotW   = 240;
+  L.headerH  = 28;
+  L.summaryH = 106;
+
+  // Fixed widths and summary height
   L.totalW   = L.labelW + L.plotW + L.annotW;          // 860
-  L.totalH   = L.headerH + k * L.rowH + L.summaryH;
-  L.studyY0  = L.headerH;                              // top of first study row
-  L.studyY1  = L.headerH + k * L.rowH;                 // bottom of last study row
-  L.diamondY = L.studyY1 + 20;                         // vertical centre of diamond
-  L.piY      = L.studyY1 + 44;                         // vertical centre of PI line
-  L.hetY     = L.studyY1 + 76;                         // heterogeneity summary line
-  L.axisY    = L.totalH  - 8;                          // x-axis position (studyY1 + 98)
-  L.annotX0  = L.labelW + L.plotW;                     // left edge of annotation column (620)
+  L.summaryH = isLastPage ? L.summaryH : 36;            // shrink on non-last pages
+  L.studyY0  = L.headerH;
+  L.sepH     = Math.max(14, L.rowH);                    // separator row height for group boundaries
+
+  // ----------- Y-POSITION MAP -----------
+  // Compute the vertical centre of every study row, inserting a separator gap
+  // whenever the group field changes.  When no study has a group, this
+  // degenerates to a simple uniform grid identical to scaleBand(padding=0).
+  const hasGroups = studies.some(d => d.group && d.group.trim() !== "");
+  const yPos       = {};       // label → centre-y of that row
+  const separators = [];       // { y: topY, group: name } — drawn between groups
+  let cursor   = L.studyY0;
+  let prevGroup = null;
+
+  pageStudies.forEach(d => {
+    const group = (d.group || "").trim();
+    if (hasGroups && prevGroup !== null && group !== prevGroup) {
+      separators.push({ y: cursor, group });
+      cursor += L.sepH;
+    }
+    yPos[d.label] = cursor + L.rowH / 2;
+    cursor += L.rowH;
+    prevGroup = hasGroups ? group : null;
+  });
+
+  // Derived positions — studyY1 now reflects separator gaps
+  L.studyY1  = cursor;
+  L.totalH   = L.studyY1 + L.summaryH;
+  L.diamondY = L.studyY1 + 20;
+  L.piY      = L.studyY1 + 44;
+  L.hetY     = L.studyY1 + 76;
+  L.axisY    = L.totalH  - 8;
+  L.annotX0  = L.labelW  + L.plotW;
 
   // Resize SVG to fit the current study count
   svg.attr("width", L.totalW).attr("height", L.totalH);
@@ -218,17 +263,12 @@ export function drawForest(studies, m, options = {}) {
     .nice()
     .range([L.labelW, L.labelW + L.plotW]);
 
-  const y = d3.scaleBand()
-    .domain(studies.map(d => d.label))
-    .range([L.studyY0, L.studyY1])
-    .padding(0.4);
-
   // ----------- TITLE -----------
   svg.append("text")
     .attr("x", L.labelW + L.plotW / 2)
     .attr("y", L.headerH / 2 + 5)
     .attr("text-anchor", "middle")
-    .style("font-size", "12px")
+    .style("font-size", L.titleFontSize)
     .text(`Random-effects model (${ciLabel})`);
 
   // ----------- NULL REFERENCE LINE -----------
@@ -237,34 +277,35 @@ export function drawForest(studies, m, options = {}) {
   if (nullX >= L.labelW && nullX <= L.labelW + L.plotW) {
     svg.append("line")
       .attr("x1", nullX).attr("x2", nullX)
-      .attr("y1", L.studyY0).attr("y2", L.diamondY + 8)
+      .attr("y1", L.studyY0).attr("y2", isLastPage ? L.diamondY + 8 : L.studyY1)
       .attr("stroke", "white")
       .attr("stroke-dasharray", "4");
   }
 
   // ----------- STUDY CIs -----------
   svg.selectAll("line.ci")
-    .data(studies)
+    .data(pageStudies)
     .enter()
     .append("line")
     .attr("x1", d => x(d.yi - studyCrit * d.se))
     .attr("x2", d => x(d.yi + studyCrit * d.se))
-    .attr("y1", d => y(d.label) + y.bandwidth() / 2)
-    .attr("y2", d => y(d.label) + y.bandwidth() / 2)
+    .attr("y1", d => yPos[d.label])
+    .attr("y2", d => yPos[d.label])
     .attr("stroke", "white")
     .attr("stroke-width", 1.5);
 
   // ----------- WEIGHTS (BOXES) -----------
+  // wMax from full studies so box sizes are comparable across pages.
   const wMax = d3.max(studies, d => d.w);
 
   svg.selectAll("rect")
-    .data(studies)
+    .data(pageStudies)
     .enter()
     .append("rect")
-    .attr("x", d => x(d.yi) - Math.sqrt(d.w / wMax) * 10)
-    .attr("y", d => y(d.label) + y.bandwidth() / 2 - 5)
-    .attr("width", d => Math.sqrt(d.w / wMax) * 20)
-    .attr("height", 10)
+    .attr("x", d => x(d.yi) - Math.sqrt(d.w / wMax) * L.boxHalf * 2)
+    .attr("y", d => yPos[d.label] - L.boxHalf)
+    .attr("width", d => Math.sqrt(d.w / wMax) * L.boxHalf * 4)
+    .attr("height", L.boxHalf * 2)
     .attr("fill", d => d.filled ? "none" : "white")
     .attr("stroke", "white")
     .on("mousemove", (e, d) => {
@@ -292,19 +333,35 @@ export function drawForest(studies, m, options = {}) {
 
   // Direct study labels (replaces d3.axisLeft — labels are drawn in the
   // label column, right-aligned just left of the plot strip)
-  studies.forEach(d => {
+  pageStudies.forEach(d => {
     const lbl = d.label.length > 28 ? d.label.slice(0, 26) + "\u2026" : d.label;
     svg.append("text")
       .attr("x", L.labelW - 8)
-      .attr("y", y(d.label) + y.bandwidth() / 2 + 4)
+      .attr("y", yPos[d.label] + 4)
       .attr("text-anchor", "end")
-      .style("font-size", "11px")
+      .style("font-size", L.labelFontSize)
       .attr("fill", d.filled ? "#888" : "#eee")
       .text(lbl);
   });
 
-  // ----------- POOLED EFFECT (DIAMOND) -----------
-  const diamondHalfHeight = 8;
+  // ----------- CONTINUED LABEL (non-last pages only) -----------
+  if (!isLastPage) {
+    svg.append("text")
+      .attr("x", L.labelW + L.plotW / 2)
+      .attr("y", L.studyY1 + 18)
+      .attr("text-anchor", "middle")
+      .style("font-size", L.annotFontSize)
+      .attr("fill", "#555")
+      .text(`— page ${page + 1} of ${totalPages}, continued —`);
+  }
+
+  // ----------- POOLED EFFECT (DIAMOND) — last page only -----------
+  if (!isLastPage) {
+    svg.attr("height", L.totalH);
+    return { totalPages };
+  }
+
+  const diamondHalfHeight = L.diamondHH;
   const ciLow  = m.ciLow;
   const ciHigh = m.ciHigh;
   const center = m.RE;
@@ -337,7 +394,7 @@ export function drawForest(studies, m, options = {}) {
     .attr("x", L.labelW - 8)
     .attr("y", hY)
     .attr("text-anchor", "end")
-    .style("font-size", "11px")
+    .style("font-size", L.labelFontSize)
     .attr("fill", "#999")
     .text("Study");
 
@@ -359,14 +416,35 @@ export function drawForest(studies, m, options = {}) {
     .attr("y1", L.studyY0).attr("y2", L.studyY1 + 12)
     .attr("stroke", "#333");
 
+  // ----------- GROUP SEPARATORS -----------
+  // Drawn only when studies carry a group field. Each separator consists of
+  // a full-width rule and a bold group-label centred in the label column.
+  separators.forEach(({ y: sepTop, group }) => {
+    // Horizontal rule near the bottom of the gap (just above the new group)
+    const ruleY = sepTop + L.sepH - 3;
+    svg.append("line")
+      .attr("x1", 0).attr("x2", L.totalW)
+      .attr("y1", ruleY).attr("y2", ruleY)
+      .attr("stroke", "#2e2e4e");
+
+    // Group label right-aligned in the label column
+    svg.append("text")
+      .attr("x", L.labelW - 8)
+      .attr("y", ruleY - 3)
+      .attr("text-anchor", "end")
+      .style("font-size", L.annotFontSize)
+      .style("font-weight", "bold")
+      .attr("fill", "#99b8d4")
+      .text(group);
+  });
+
   // ----------- ANNOTATION COLUMNS (right panel) -----------
   // Sub-column x anchors within the annotW strip
   const efAnnotX = L.annotX0 + 8;    // left-aligned "Effect [95% CI]"
   const wtAnnotX = L.totalW - 6;     // right-aligned "Weight"
 
-  // Weight percentages are computed over real studies only.
-  // Imputed (trim-and-fill) studies are excluded so that real-study
-  // percentages sum to 100% and the pooled "100%" label is consistent.
+  // Weight percentages use the full studies array as the denominator so that
+  // a study's share is its global RE weight, not its share within one page.
   const realStudies  = studies.filter(d => !d.filled);
   const totalW_annot = d3.sum(realStudies, d => d.w);
 
@@ -374,7 +452,7 @@ export function drawForest(studies, m, options = {}) {
   svg.append("text")
     .attr("x", efAnnotX)
     .attr("y", hY)
-    .style("font-size", "11px")
+    .style("font-size", L.labelFontSize)
     .attr("fill", "#999")
     .text("Effect [95% CI]");
 
@@ -382,13 +460,13 @@ export function drawForest(studies, m, options = {}) {
     .attr("x", wtAnnotX)
     .attr("y", hY)
     .attr("text-anchor", "end")
-    .style("font-size", "11px")
+    .style("font-size", L.labelFontSize)
     .attr("fill", "#999")
     .text("Weight");
 
-  // Per-study rows
-  studies.forEach(d => {
-    const rowMid = y(d.label) + y.bandwidth() / 2 + 4;
+  // Per-study rows (page slice only)
+  pageStudies.forEach(d => {
+    const rowMid = yPos[d.label] + 4;
 
     // Back-transformed effect and CI on display scale (study CIs always use z = 1.96)
     const ef  = profile.transform(d.yi);
@@ -407,7 +485,7 @@ export function drawForest(studies, m, options = {}) {
     svg.append("text")
       .attr("x", efAnnotX)
       .attr("y", rowMid)
-      .style("font-size", "10px")
+      .style("font-size", L.annotFontSize)
       .attr("fill", d.filled ? "#888" : "#ddd")
       .text(`${efStr} ${ciStr}`);
 
@@ -415,7 +493,7 @@ export function drawForest(studies, m, options = {}) {
       .attr("x", wtAnnotX)
       .attr("y", rowMid)
       .attr("text-anchor", "end")
-      .style("font-size", "10px")
+      .style("font-size", L.annotFontSize)
       .attr("fill", d.filled ? "#888" : "#ddd")
       .text(wPct);
   });
@@ -430,7 +508,7 @@ export function drawForest(studies, m, options = {}) {
   svg.append("text")
     .attr("x", efAnnotX)
     .attr("y", L.diamondY + 4)
-    .style("font-size", "10px")
+    .style("font-size", L.annotFontSize)
     .attr("fill", "#ffd740")
     .text(`${pooledEfStr} ${pooledCiStr}`);
 
@@ -438,7 +516,7 @@ export function drawForest(studies, m, options = {}) {
     .attr("x", wtAnnotX)
     .attr("y", L.diamondY + 4)
     .attr("text-anchor", "end")
-    .style("font-size", "10px")
+    .style("font-size", L.annotFontSize)
     .attr("fill", "#ffd740")
     .text("100%");
 
@@ -473,7 +551,7 @@ export function drawForest(studies, m, options = {}) {
       .attr("x", x(m.RE))
       .attr("y", L.piY + 15)
       .attr("text-anchor", "middle")
-      .style("font-size", "11px")
+      .style("font-size", L.labelFontSize)
       .attr("fill", "cyan")
       .text(`Prediction interval: ${isFinite(pi_disp.lb) ? pi_disp.lb.toFixed(3) : "NA"} to ${isFinite(pi_disp.ub) ? pi_disp.ub.toFixed(3) : "NA"}`);
   }
@@ -494,9 +572,11 @@ export function drawForest(studies, m, options = {}) {
     .attr("x", L.labelW + L.plotW / 2)
     .attr("y", L.hetY)
     .attr("text-anchor", "middle")
-    .style("font-size", "10.5px")
+    .style("font-size", L.annotFontSize)
     .attr("fill", "#888")
     .text(`Heterogeneity:  τ² = ${tau2Str},  I² = ${I2Str},  Q(df=${dfStr}) = ${QStr},  p = ${QpStr}`);
+
+  return { totalPages };
 }
 
 // ================= FUNNEL =================

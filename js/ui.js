@@ -225,6 +225,18 @@ document.getElementById("export").addEventListener("click", exportCSV);
 document.getElementById("addMod").addEventListener("click", addModerator);
 document.getElementById("modName").addEventListener("keydown", e => { if (e.key === "Enter") addModerator(); });
 document.getElementById("cumulativeOrder").addEventListener("change", runAnalysis);
+document.getElementById("forestPageSize").addEventListener("change", () => {
+  if (!_forestArgs) return;
+  forestPage = 0;
+  const rawPageSize = document.getElementById("forestPageSize").value;
+  const pageSize    = rawPageSize === "Infinity" ? Infinity : +rawPageSize;
+  _forestArgs.options = { ..._forestArgs.options, pageSize };
+  const { totalPages } = drawForest(
+    _forestArgs.studies, _forestArgs.m,
+    { ..._forestArgs.options, page: forestPage }
+  );
+  renderForestNav(totalPages);
+});
 
 // ---------------- PLOT EXPORT ----------------
 // Single delegated listener covers all static plot-export buttons and any
@@ -985,6 +997,43 @@ function renderRegressionPanel(reg, method, ciMethod, kExcluded = 0) {
 const outputSection = document.getElementById("outputSection");
 const staleBanner   = document.getElementById("staleBanner");
 
+// ---------------- FOREST PLOT PAGINATION STATE ----------------
+let forestPage = 0;
+let _forestArgs = null;  // { studies, m, options } — cached for page-nav re-renders
+
+function renderForestNav(totalPages) {
+  const nav = document.getElementById("forestNav");
+  if (!nav) return;
+  if (totalPages <= 1) { nav.innerHTML = ""; return; }
+
+  nav.innerHTML =
+    `<button id="forestPrev" ${forestPage === 0 ? "disabled" : ""}>&#8249; Prev</button>` +
+    `<span>Page ${forestPage + 1} of ${totalPages}</span>` +
+    `<button id="forestNext" ${forestPage >= totalPages - 1 ? "disabled" : ""}>Next &#8250;</button>`;
+
+  document.getElementById("forestPrev").addEventListener("click", () => {
+    if (forestPage > 0) {
+      forestPage--;
+      const { totalPages: tp } = drawForest(
+        _forestArgs.studies, _forestArgs.m,
+        { ..._forestArgs.options, page: forestPage }
+      );
+      renderForestNav(tp);
+    }
+  });
+
+  document.getElementById("forestNext").addEventListener("click", () => {
+    if (forestPage < totalPages - 1) {
+      forestPage++;
+      const { totalPages: tp } = drawForest(
+        _forestArgs.studies, _forestArgs.m,
+        { ..._forestArgs.options, page: forestPage }
+      );
+      renderForestNav(tp);
+    }
+  });
+}
+
 function markStale() {
   // Only show the banner once the output section has been revealed
   if (outputSection.style.display === "block") staleBanner.style.display = "";
@@ -1276,7 +1325,14 @@ function runAnalysis() {
       });
   }
 
-  drawForest(all, m, { ciMethod, profile });
+  // Reset to page 0 on every fresh run and cache args for nav re-renders.
+  forestPage = 0;
+  const rawPageSize  = document.getElementById("forestPageSize")?.value ?? "30";
+  const pageSize     = rawPageSize === "Infinity" ? Infinity : +rawPageSize;
+  const forestOpts   = { ciMethod, profile, pageSize };
+  _forestArgs        = { studies: all, m, options: forestOpts };
+  const { totalPages } = drawForest(all, m, { ...forestOpts, page: forestPage });
+  renderForestNav(totalPages);
   drawFunnel(all, m, egger, profile);
   drawInfluencePlot(influence);
 
