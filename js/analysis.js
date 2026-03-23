@@ -239,6 +239,101 @@ export function compute(s, type, options = {}) {
   return { ...s, md: s.m1 - s.m2, varMD, se: Math.sqrt(varMD), w: 1/varMD, yi: s.m1 - s.m2, vi: varMD };
 }
 
+// ================= HUNTER-SCHMIDT TAU² =================
+// Method-of-moments. Identical to DL except the denominator is Σwᵢ
+// rather than the bias-corrected c = Σwᵢ − Σwᵢ²/Σwᵢ.
+// Generally produces larger τ² estimates than DL.
+export function tau2_HS(studies) {
+  const k = studies.length;
+  if (k <= 1) return 0;
+  const w = studies.map(d => 1 / d.vi);
+  const W = w.reduce((a, b) => a + b, 0);
+  const ybar = studies.reduce((s, d, i) => s + w[i] * d.yi, 0) / W;
+  const Q = studies.reduce((s, d, i) => s + w[i] * (d.yi - ybar) ** 2, 0);
+  return Math.max(0, (Q - (k - 1)) / W);
+}
+
+// ================= HEDGES TAU² =================
+// Unweighted method-of-moments (Hedges & Olkin 1985).
+// τ²_HE = max(0, SSuw/(k−1) − mean(vᵢ))
+// where SSuw = Σ(yᵢ − ȳ_uw)² is the unweighted sum of squared deviations.
+// Does not depend on within-study variances for the residual term — useful
+// when vᵢ are suspected to be unreliable.
+export function tau2_HE(studies) {
+  const k = studies.length;
+  if (k <= 1) return 0;
+  const ybar = studies.reduce((s, d) => s + d.yi, 0) / k;
+  const SS   = studies.reduce((s, d) => s + (d.yi - ybar) ** 2, 0);
+  const meanV = studies.reduce((s, d) => s + d.vi, 0) / k;
+  return Math.max(0, SS / (k - 1) - meanV);
+}
+
+// ================= SIDIK-JONKMAN TAU² =================
+// Iterative estimator (Sidik & Jonkman 2005) that seeds from the raw
+// unweighted between-study variance instead of the Q statistic.
+// More robust than DL when k is small or within-study variances are
+// poorly estimated.
+export function tau2_SJ(studies, tol = 1e-10, maxIter = 200) {
+  const k = studies.length;
+  if (k <= 1) return 0;
+  const ybar0 = studies.reduce((s, d) => s + d.yi, 0) / k;
+  // Seed: raw between-study variance (always > 0 unless all yi identical)
+  let tau2 = studies.reduce((s, d) => s + (d.yi - ybar0) ** 2, 0) / k;
+  if (tau2 === 0) return 0;
+  for (let iter = 0; iter < maxIter; iter++) {
+    const w   = studies.map(d => 1 / (d.vi + tau2));
+    const W   = w.reduce((a, b) => a + b, 0);
+    const mu  = studies.reduce((s, d, i) => s + w[i] * d.yi, 0) / W;
+    const newTau2 = studies.reduce((s, d, i) => {
+      return s + d.vi * (d.yi - mu) ** 2 / (d.vi + tau2);
+    }, 0) / k;
+    if (Math.abs(newTau2 - tau2) < tol) return Math.max(0, newTau2);
+    tau2 = Math.max(0, newTau2);
+  }
+  return tau2;
+}
+
+// ================= ML TAU² =================
+// Maximum Likelihood estimator via Fisher scoring. Same algorithm as REML
+// but without the leverage correction in the score/information terms:
+//   score = Σ [(yᵢ−μ)²/(vᵢ+τ²)² − 1/(vᵢ+τ²)]
+//   info  = Σ [1/(vᵢ+τ²)²]
+// ML is asymptotically unbiased but has greater downward bias than REML
+// in small samples. Useful when comparing nested models via LRT.
+export function tau2_ML(studies, tol = 1e-10, maxIter = 100) {
+  const k = studies.length;
+  if (k <= 1) return 0;
+  // Seed with DL estimate
+  const w0 = studies.map(d => 1 / d.vi);
+  const W0 = w0.reduce((a, b) => a + b, 0);
+  const ybar0 = studies.reduce((s, d, i) => s + w0[i] * d.yi, 0) / W0;
+  const Q0 = studies.reduce((s, d, i) => s + w0[i] * (d.yi - ybar0) ** 2, 0);
+  const c0 = W0 - w0.reduce((s, wi) => s + wi * wi / W0, 0);
+  let tau2 = Math.max(0, (Q0 - (k - 1)) / c0);
+
+  for (let iter = 0; iter < maxIter; iter++) {
+    const w  = studies.map(d => 1 / (d.vi + tau2));
+    const W  = w.reduce((a, b) => a + b, 0);
+    const mu = studies.reduce((s, d, i) => s + w[i] * d.yi, 0) / W;
+    let score = 0, info = 0;
+    for (let i = 0; i < k; i++) {
+      const vi_tau = studies[i].vi + tau2;
+      const r = studies[i].yi - mu;
+      score += r * r / (vi_tau * vi_tau) - 1 / vi_tau;
+      info  += 1 / (vi_tau * vi_tau);
+    }
+    if (info <= 0) break;
+    let step = score / info;
+    let newTau2 = tau2 + step;
+    let sh = 0;
+    while (newTau2 < 0 && sh++ < 20) { step /= 2; newTau2 = tau2 + step; }
+    newTau2 = Math.max(0, newTau2);
+    if (Math.abs(newTau2 - tau2) < tol) { tau2 = newTau2; break; }
+    tau2 = newTau2;
+  }
+  return tau2;
+}
+
 // ================= REML TAU² =================
 // General-purpose REML estimator. Works for any effect type — studies must
 // already have yi and vi set (as produced by compute()). Uses the DL
@@ -460,12 +555,12 @@ export function meta(studies, method="DL", ciMethod="normal") {
   I2 = Math.max(0, Math.min(100,I2));
 
   let tau2 = 0;
-	if (method === "REML") {
-	  tau2 = tau2_REML(studies, 1e-12, 500);
-	}
-	else if (method === "PM") {
-	  tau2 = tau2_PM(studies);
-	}
+	if      (method === "REML") tau2 = tau2_REML(studies, 1e-12, 500);
+	else if (method === "PM")   tau2 = tau2_PM(studies);
+	else if (method === "ML")   tau2 = tau2_ML(studies);
+	else if (method === "HS")   tau2 = tau2_HS(studies);
+	else if (method === "HE")   tau2 = tau2_HE(studies);
+	else if (method === "SJ")   tau2 = tau2_SJ(studies);
 	else { // DL fallback
 		const sumW2 = d3.sum(wFE.map(w=>w*w));
 		const C = W - (sumW2/W);
@@ -757,9 +852,91 @@ function tau2Reg_PM(yi, vi, X, tol = 1e-10, maxIter = 100) {
   return tau2;
 }
 
+// HS regression: same as DL but denominator is Σwᵢ (FE weights)
+function tau2Reg_HS(yi, vi, X) {
+  const k = vi.length, p = X[0].length;
+  const df = k - p;
+  if (df <= 0) return 0;
+  const w0 = vi.map(v => 1 / v);
+  const { beta, rankDeficient } = wls(X, yi, w0);
+  if (rankDeficient) return 0;
+  const QE  = yi.reduce((s, y, i) => s + w0[i] * (y - dot(X[i], beta)) ** 2, 0);
+  const sumW = w0.reduce((a, b) => a + b, 0);
+  return sumW > 0 ? Math.max(0, (QE - df) / sumW) : 0;
+}
+
+// HE regression: unweighted — residuals from unweighted OLS fit
+function tau2Reg_HE(yi, vi, X) {
+  const k = vi.length, p = X[0].length;
+  const df = k - p;
+  if (df <= 0) return 0;
+  // Unweighted OLS: wᵢ = 1 for all i
+  const w1 = vi.map(() => 1);
+  const { beta, rankDeficient } = wls(X, yi, w1);
+  if (rankDeficient) return 0;
+  const SS   = yi.reduce((s, y, i) => s + (y - dot(X[i], beta)) ** 2, 0);
+  const meanV = vi.reduce((a, b) => a + b, 0) / k;
+  return Math.max(0, SS / df - meanV);
+}
+
+// SJ regression: iterative, seeded from unweighted residual variance
+function tau2Reg_SJ(yi, vi, X, tol = 1e-10, maxIter = 200) {
+  const k = vi.length, p = X[0].length;
+  if (k - p <= 0) return 0;
+  // Seed from unweighted OLS residuals
+  const w1 = vi.map(() => 1);
+  const { beta: beta0, rankDeficient } = wls(X, yi, w1);
+  if (rankDeficient) return 0;
+  let tau2 = yi.reduce((s, y, i) => s + (y - dot(X[i], beta0)) ** 2, 0) / k;
+  if (tau2 === 0) return 0;
+  for (let iter = 0; iter < maxIter; iter++) {
+    const w  = vi.map(v => 1 / (v + tau2));
+    const { beta, rankDeficient: rd } = wls(X, yi, w);
+    if (rd) break;
+    const newTau2 = yi.reduce((s, y, i) => {
+      return s + vi[i] * (y - dot(X[i], beta)) ** 2 / (vi[i] + tau2);
+    }, 0) / k;
+    if (Math.abs(newTau2 - tau2) < tol) return Math.max(0, newTau2);
+    tau2 = Math.max(0, newTau2);
+  }
+  return tau2;
+}
+
+// ML regression: Fisher scoring without leverage correction
+function tau2Reg_ML(yi, vi, X, tol = 1e-10, maxIter = 100) {
+  const k = vi.length, p = X[0].length;
+  if (k - p <= 0) return 0;
+  let tau2 = tau2Reg_DL(yi, vi, X);
+  for (let iter = 0; iter < maxIter; iter++) {
+    const w = vi.map(v => 1 / (v + tau2));
+    const { beta, rankDeficient } = wls(X, yi, w);
+    if (rankDeficient) break;
+    const e = yi.map((y, i) => y - dot(X[i], beta));
+    let score = 0, info = 0;
+    for (let i = 0; i < k; i++) {
+      const vi_tau = vi[i] + tau2;
+      score += e[i] * e[i] / (vi_tau * vi_tau) - 1 / vi_tau;
+      info  += 1 / (vi_tau * vi_tau);
+    }
+    if (info <= 0) break;
+    let step = score / info;
+    let newTau2 = tau2 + step;
+    let sh = 0;
+    while (newTau2 < 0 && sh++ < 20) { step /= 2; newTau2 = tau2 + step; }
+    newTau2 = Math.max(0, newTau2);
+    if (Math.abs(newTau2 - tau2) < tol) { tau2 = newTau2; break; }
+    tau2 = newTau2;
+  }
+  return tau2;
+}
+
 export function tau2_metaReg(yi, vi, X, method = "REML", tol = 1e-10, maxIter = 100) {
   if (method === "REML") return tau2Reg_REML(yi, vi, X, tol, maxIter);
   if (method === "PM")   return tau2Reg_PM  (yi, vi, X, tol, maxIter);
+  if (method === "ML")   return tau2Reg_ML  (yi, vi, X, tol, maxIter);
+  if (method === "HS")   return tau2Reg_HS  (yi, vi, X);
+  if (method === "HE")   return tau2Reg_HE  (yi, vi, X);
+  if (method === "SJ")   return tau2Reg_SJ  (yi, vi, X, tol, maxIter);
   return tau2Reg_DL(yi, vi, X);
 }
 

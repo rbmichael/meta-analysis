@@ -1,6 +1,6 @@
 import { round, transformEffect, transformCI } from "./utils.js";
 import { BENCHMARKS } from "./benchmarks.js";
-import { compute, meta, metaRegression } from "./analysis.js";
+import { compute, meta, metaRegression, tau2_HS, tau2_HE, tau2_ML, tau2_SJ } from "./analysis.js";
 
 // Tolerances vary by field:
 //   FE, RE  — absolute 0.01   (pooled estimates are on a stable scale)
@@ -346,4 +346,77 @@ export function runTests() {
   pchkNaN("PFT n<1   → NaN", compute({ x: 0, n: 0 }, "PFT").yi);
 
   console.log(propPass ? "\n✅ ALL PROPORTION UNIT TESTS PASSED" : "\n❌ SOME PROPORTION UNIT TESTS FAILED");
+
+  // ===== TAU² ESTIMATOR UNIT TESTS =====
+  // Directly exercises tau2_HS, tau2_HE, tau2_ML, tau2_SJ on the
+  // synthetic equal-variance dataset yi=[0,1,3], vi=[1,1,1].
+  //
+  // With equal vi, the analytical fixed points are:
+  //   Q = 42/9 ≈ 4.667,  ΣW = 3,  c = 2 (DL denominator)
+  //   HS:  (Q−df)/ΣW          = 8/9         ≈ 0.8889
+  //   HE:  SS_uw/(k−1)−mean(v) = 4/3        ≈ 1.3333
+  //   ML:  score=0 → (42/9)/(1+τ²)=3       → τ²=5/9   ≈ 0.5556
+  //   SJ:  τ²(1+τ²)=14/9                   → τ²=(−1+√65)/6 ≈ 0.8437
+  //
+  // Also checks ordering relationships that always hold (Viechtbauer 2005):
+  //   ML ≤ DL ≤ HE  (for this dataset)
+  //   HS ≤ DL       (HS denominator ΣW ≥ c always)
+  console.log("\n===== TAU² ESTIMATOR UNIT TESTS =====\n");
+  let tauPass = true;
+
+  function tchk(name, val, expected, tol) {
+    // relative tolerance for tau2
+    const scale = Math.max(Math.abs(expected), 0.001);
+    const ok = isFinite(val) && Math.abs(val - expected) / scale < tol;
+    console.log(`  ${name}: ${round(val, 5)} (expected ${round(expected, 5)}) → ${ok ? "PASS" : "FAIL"}`);
+    if (!ok) tauPass = false;
+  }
+  function tchkTrue(name, cond) {
+    console.log(`  ${name} → ${cond ? "PASS" : "FAIL"}`);
+    if (!cond) tauPass = false;
+  }
+
+  const s3 = [{ yi: 0, vi: 1 }, { yi: 1, vi: 1 }, { yi: 3, vi: 1 }];
+
+  // 1. Known analytical values (5% relative tolerance, matching benchmark suite)
+  console.log("--- Analytical values (yi=[0,1,3], vi=[1,1,1]) ---");
+  tchk("HS  τ² = 8/9",        tau2_HS(s3),  8 / 9,  0.05);
+  tchk("HE  τ² = 4/3",        tau2_HE(s3),  4 / 3,  0.05);
+  tchk("ML  τ² = 5/9",        tau2_ML(s3),  5 / 9,  0.05);
+  tchk("SJ  τ² = (√65−3)/6",  tau2_SJ(s3),  (Math.sqrt(65) - 3) / 6, 0.05);
+
+  // 2. Ordering relationships for this dataset (all inequalities are exact)
+  console.log("--- Ordering: ML ≤ HS ≤ DL = HE = REML ---");
+  const hs = tau2_HS(s3), he = tau2_HE(s3), ml = tau2_ML(s3), sj = tau2_SJ(s3);
+  tchkTrue("ML ≤ HS",  ml <= hs + 1e-9);
+  tchkTrue("HS ≤ HE",  hs <= he + 1e-9);
+  tchkTrue("SJ > 0",   sj > 0);
+
+  // 3. Edge cases: k ≤ 1 returns 0 without error
+  console.log("--- Edge cases ---");
+  tchk("HS  k=1 → 0", tau2_HS([{ yi: 1, vi: 1 }]), 0, 0.001);
+  tchk("HE  k=1 → 0", tau2_HE([{ yi: 1, vi: 1 }]), 0, 0.001);
+  tchk("ML  k=1 → 0", tau2_ML([{ yi: 1, vi: 1 }]), 0, 0.001);
+  tchk("SJ  k=1 → 0", tau2_SJ([{ yi: 1, vi: 1 }]), 0, 0.001);
+
+  // 4. Homogeneous studies: all yi identical → τ² = 0 for all methods
+  console.log("--- Homogeneous yi → τ² = 0 ---");
+  const sHom = [{ yi: 1, vi: 0.5 }, { yi: 1, vi: 1 }, { yi: 1, vi: 2 }];
+  tchk("HS  homogeneous → 0", tau2_HS(sHom), 0, 0.001);
+  tchk("HE  homogeneous → 0", tau2_HE(sHom), 0, 0.001);
+  tchk("ML  homogeneous → 0", tau2_ML(sHom), 0, 0.001);
+  tchk("SJ  homogeneous → 0", tau2_SJ(sHom), 0, 0.001);
+
+  // 5. meta() dispatch: method strings route to the right estimator
+  console.log("--- meta() dispatch ---");
+  const mHS = meta(s3, "HS");
+  const mHE = meta(s3, "HE");
+  const mML = meta(s3, "ML");
+  const mSJ = meta(s3, "SJ");
+  tchk("meta(HS).tau2",  mHS.tau2, 8 / 9, 0.05);
+  tchk("meta(HE).tau2",  mHE.tau2, 4 / 3, 0.05);
+  tchk("meta(ML).tau2",  mML.tau2, 5 / 9, 0.05);
+  tchk("meta(SJ).tau2",  mSJ.tau2, (Math.sqrt(65) - 3) / 6, 0.05);
+
+  console.log(tauPass ? "\n✅ ALL TAU² UNIT TESTS PASSED" : "\n❌ SOME TAU² UNIT TESTS FAILED");
 }

@@ -430,6 +430,115 @@ export const BENCHMARKS = [
       I2:   89.5
     },
     citation: "Synthetic dataset. Expected values computed analytically from PFT (Freeman-Tukey) formulas."
+  },
+
+  // ================================================================
+  // TAU² ESTIMATOR BENCHMARKS
+  //
+  // Dataset: yi=[0, 1, 3], vi=[1, 1, 1]  (k=3, equal variances)
+  //
+  // Because all vi are equal, the weighted mean equals the unweighted
+  // mean for any τ² value, so FE = RE = (0+1+3)/3 = 4/3 ≈ 1.333 for
+  // every method.  I² = (Q−df)/Q = (4.667−2)/4.667 = 57.1% (fixed).
+  // Only τ² differs by method, making this ideal for isolating each
+  // estimator formula.  All expected values derived analytically.
+  //
+  //   Q  = Σwᵢ(yᵢ−ȳ)²  =  42/9  ≈ 4.667
+  //   df = k−1 = 2
+  //   ΣW = Σwᵢ  = 3   (wᵢ=1/vᵢ=1)
+  //   c  = ΣW − ΣW²/ΣW = 2   (DL denominator)
+  // ================================================================
+
+  // ----------------------------------------------------------------
+  // HS — Hunter-Schmidt
+  // τ²_HS = max(0, (Q−df) / ΣW) = (4.667−2)/3 = 8/9 ≈ 0.889
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic τ² test – HS (k=3, equal vi)",
+    type: "GENERIC",
+    tauMethod: "HS",
+    data: [
+      { label: "Study 1", yi: 0, vi: 1 },
+      { label: "Study 2", yi: 1, vi: 1 },
+      { label: "Study 3", yi: 3, vi: 1 }
+    ],
+    expected: {
+      FE:   1.333,
+      RE:   1.333,
+      tau2: 0.8889,   // 8/9
+      I2:  57.1
+    },
+    citation: "Synthetic. τ²_HS = (Q−df)/ΣW = (42/9−2)/3 = 8/9. Derived analytically."
+  },
+
+  // ----------------------------------------------------------------
+  // HE — Hedges (unweighted method of moments)
+  // τ²_HE = SS_uw/(k−1) − mean(vᵢ)
+  //       = (42/9)/2 − 1 = 7/3 − 1 = 4/3 ≈ 1.333
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic τ² test – HE (k=3, equal vi)",
+    type: "GENERIC",
+    tauMethod: "HE",
+    data: [
+      { label: "Study 1", yi: 0, vi: 1 },
+      { label: "Study 2", yi: 1, vi: 1 },
+      { label: "Study 3", yi: 3, vi: 1 }
+    ],
+    expected: {
+      FE:   1.333,
+      RE:   1.333,
+      tau2: 1.3333,   // 4/3
+      I2:  57.1
+    },
+    citation: "Synthetic. τ²_HE = SS_uw/(k−1) − mean(v) = (42/9)/2 − 1 = 4/3. Derived analytically."
+  },
+
+  // ----------------------------------------------------------------
+  // ML — Maximum Likelihood
+  // Fixed point of score=0:  (42/9)/(1+τ²)² = 3/(1+τ²)
+  // → 1+τ² = (42/9)/3 = 14/9  → τ² = 5/9 ≈ 0.556
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic τ² test – ML (k=3, equal vi)",
+    type: "GENERIC",
+    tauMethod: "ML",
+    data: [
+      { label: "Study 1", yi: 0, vi: 1 },
+      { label: "Study 2", yi: 1, vi: 1 },
+      { label: "Study 3", yi: 3, vi: 1 }
+    ],
+    expected: {
+      FE:   1.333,
+      RE:   1.333,
+      tau2: 0.5556,   // 5/9
+      I2:  57.1
+    },
+    citation: "Synthetic. τ²_ML fixed point: (42/9)/(1+τ²) = 3 → τ² = 5/9. Derived analytically."
+  },
+
+  // ----------------------------------------------------------------
+  // SJ — Sidik-Jonkman
+  // Fixed point: τ²(1+τ²) = (1/k)·Σvᵢ(yᵢ−μ)²/(vᵢ+τ²)·(1+τ²)
+  // With equal vᵢ=1: τ²(1+τ²) = (42/9)/3 = 14/9
+  // → τ² = (√65−3)/6 ≈ 0.844
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic τ² test – SJ (k=3, equal vi)",
+    type: "GENERIC",
+    tauMethod: "SJ",
+    data: [
+      { label: "Study 1", yi: 0, vi: 1 },
+      { label: "Study 2", yi: 1, vi: 1 },
+      { label: "Study 3", yi: 3, vi: 1 }
+    ],
+    expected: {
+      FE:   1.333,
+      RE:   1.333,
+      tau2: 0.8437,   // (√65−3)/6
+      I2:  57.1
+    },
+    citation: "Synthetic. τ²_SJ fixed point: τ²(1+τ²) = 14/9 → τ² = (√65−3)/6. Derived analytically."
   }
 
 ];
