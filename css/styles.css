@@ -1,4 +1,9 @@
-body { font-family: Arial; background:#121212; color:#eee; margin:20px; }
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+body { font-family: Arial; background:#121212; color:#eee; }
 table { border-collapse: collapse; margin-bottom: 20px; }
 th, td { border: 1px solid #444; padding:6px; text-align:center; }
 input, select { width:70px; background:#1e1e1e; color:#eee; border:1px solid #555; }
@@ -37,7 +42,6 @@ input {
   border-radius: 8px;
   padding: 16px 20px;
   margin-bottom: 24px;
-  max-width: 1100px;
 }
 
 .section-title-row {
@@ -283,9 +287,6 @@ input {
 }
 
 /* ---- Output section (hidden until first Run) ---- */
-#outputSection {
-  display: none;
-}
 
 /* ---- Plot blocks ---- */
 .plot-block {
@@ -490,7 +491,7 @@ input {
 
 /* ---- Help popover ---- */
 #helpPopover {
-  position: absolute;
+  position: fixed;
   z-index: 9999;
   width: 320px;
   background: #1a1a2e;
@@ -532,3 +533,97 @@ input {
   line-height: 1.55;
   margin: 0;
 }
+
+/* ================================================================
+   APP SHELL — header + two-column layout
+   ================================================================ */
+
+/* ---- Fixed top bar ---- */
+#appHeader {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 40px;
+  background: #161616;
+  border-bottom: 1px solid #2a2a2a;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 18px;
+  z-index: 100;
+  flex-shrink: 0;
+  gap: 12px;
+}
+
+@media (max-width: 480px) {
+  #appTitle { display: none; }
+  #appHeader { justify-content: center; }
+}
+
+#appTitle {
+  font-size: 0.9em;
+  font-weight: bold;
+  letter-spacing: 0.06em;
+  color: #aaa;
+  margin-right: 20px;
+}
+
+/* ---- View toggle (segmented control) ---- */
+#viewToggleGroup {
+  display: flex;
+  gap: 2px;
+  background: #0e0e0e;
+  border: 1px solid #2a2a2a;
+  border-radius: 5px;
+  padding: 2px;
+}
+
+.toggle-btn {
+  padding: 3px 16px;
+  font-size: 0.8em;
+  background: transparent;
+  color: #666;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  margin: 0;
+  transition: background 0.15s, color 0.15s;
+}
+
+.toggle-btn:hover {
+  color: #aaa;
+}
+
+.toggle-btn.active {
+  background: #1e2840;
+  color: #cce0f5;
+}
+
+/* Stale indicator dot on the Results button */
+#toggleResults.stale::after {
+  content: "";
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  background: #f0c060;
+  border-radius: 50%;
+  margin-left: 5px;
+  vertical-align: middle;
+}
+
+/* ---- Single-column layout, sits below the fixed header ---- */
+#appLayout {
+  margin-top: 40px; /* clear the fixed header */
+  padding: 16px;
+  box-sizing: border-box;
+}
+
+/* ---- Output placeholder (shown before first run) ---- */
+#outputPlaceholder {
+  color: #444;
+  font-size: 0.88em;
+  padding: 40px 0 20px;
+  text-align: center;
+}
+

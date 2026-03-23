@@ -15,237 +15,252 @@
 </head>
 <body>
 
-<h2>Meta-analysis Tool</h2>
-
-<!-- ===================== INPUT SECTION ===================== -->
-<div class="section" id="inputSection">
-  <p class="section-title">Input</p>
-
-  <!-- File controls -->
-  <div class="settings-row">
-    <input type="file" id="csvFile" accept=".csv">
-    <button id="import">Import CSV</button>
-    <button id="export">Export CSV</button>
-    <input type="file" id="sessionFile" accept=".json" style="display:none">
-    <button id="saveSession">Save Session</button>
-    <button id="loadSession">Load Session</button>
+<!-- ===================== APP HEADER ===================== -->
+<header id="appHeader">
+  <span id="appTitle">Meta-analysis Tool</span>
+  <div id="viewToggleGroup">
+    <button class="toggle-btn active" id="toggleInput"  data-view="input">Input</button>
+    <button class="toggle-btn"        id="toggleResults" data-view="results">Results</button>
   </div>
-  <div id="csvWarning" style="color:red; display:none; margin-bottom:10px;"></div>
+</header>
 
-  <!-- ---- Import preview panel (hidden until a file is chosen) ---- -->
-  <div id="importPreview" style="display:none">
+<!-- ===================== APP LAYOUT ===================== -->
+<div id="appLayout">
 
-    <!-- Detected settings row -->
-    <div class="preview-meta">
-      <span class="preview-badge" id="previewDelimiter"></span>
+  <!-- =========== INPUT =========== -->
+    <div class="section" id="inputSection">
+      <p class="section-title">Input</p>
 
-      <label class="preview-type-label">
-        Effect type
-        <select id="previewEffectType">
-          <option value="MD">Mean Difference</option>
-          <option value="SMD">Standardized Mean Difference (Hedges g)</option>
-          <option value="MD_paired">Mean Difference (Paired)</option>
-          <option value="SMD_paired">Standardized Mean Difference (Paired)</option>
-          <option value="OR">Odds Ratio (OR)</option>
-          <option value="RR">Risk Ratio (RR)</option>
-          <option value="RD">Risk Difference (RD)</option>
-          <option value="HR">Hazard Ratio (HR)</option>
-          <option value="IRR">Incidence Rate Ratio (IRR)</option>
-          <option value="IR">Incidence Rate (log)</option>
-          <option value="COR">Correlation (raw r)</option>
-          <option value="ZCOR">Correlation (Fisher's z)</option>
-          <option value="PR">Proportion (raw)</option>
-          <option value="PLN">Proportion (log)</option>
-          <option value="PLO">Proportion (logit)</option>
-          <option value="PAS">Proportion (arcsine)</option>
-          <option value="PFT">Proportion (Freeman-Tukey)</option>
-          <option value="GENERIC">Generic (yi / vi)</option>
-        </select>
-      </label>
-
-      <span id="previewConfidence" class="preview-confidence"></span>
-    </div>
-
-    <!-- Column mapping summary -->
-    <div id="previewMapping" class="preview-mapping"></div>
-
-    <!-- First 5 data rows -->
-    <div id="previewTable" class="preview-table-wrap"></div>
-
-    <!-- Action buttons -->
-    <div class="preview-actions">
-      <button id="previewImport" class="preview-import-btn">Import</button>
-      <button id="previewCancel" class="preview-cancel-btn">Cancel</button>
-    </div>
-  </div>
-
-  <!-- Settings row 1: effect type, τ² method, CI method -->
-  <div class="settings-row">
-    <label>
-      Effect type<button class="help-btn" data-help-select="effectType" data-help-prefix="effect." title="Help">?</button>
-      <select id="effectType">
-        <option value="MD">Mean Difference</option>
-        <option value="SMD">Standardized Mean Difference (Hedges g)</option>
-        <option value="MD_paired">Mean Difference (Paired)</option>
-        <option value="SMD_paired">Standardized Mean Difference (Paired)</option>
-        <option value="OR">Odds Ratio (OR)</option>
-        <option value="RR">Risk Ratio (RR)</option>
-        <option value="RD">Risk Difference (RD)</option>
-        <option value="HR">Hazard Ratio (HR)</option>
-        <option value="IRR">Incidence Rate Ratio (IRR)</option>
-        <option value="IR">Incidence Rate (log)</option>
-        <option value="COR">Correlation (raw r)</option>
-        <option value="ZCOR">Correlation (Fisher's z)</option>
-        <option value="PR">Proportion (raw)</option>
-        <option value="PLN">Proportion (log)</option>
-        <option value="PLO">Proportion (logit)</option>
-        <option value="PAS">Proportion (arcsine)</option>
-        <option value="PFT">Proportion (Freeman-Tukey)</option>
-        <option value="GENERIC">Generic (yi / vi)</option>
-      </select>
-    </label>
-
-    <label>
-      τ² estimator<button class="help-btn" data-help-select="tauMethod" data-help-prefix="tau." title="Help">?</button>
-      <select id="tauMethod">
-        <option value="DL">DerSimonian-Laird (DL)</option>
-        <option value="REML">REML</option>
-        <option value="PM">Paule-Mandel (PM)</option>
-        <option value="ML">Maximum Likelihood (ML)</option>
-        <option value="HS">Hunter-Schmidt (HS)</option>
-        <option value="HE">Hedges (HE)</option>
-        <option value="SJ">Sidik-Jonkman (SJ)</option>
-      </select>
-    </label>
-
-    <label>
-      CI method<button class="help-btn" data-help-select="ciMethod" data-help-prefix="ci." title="Help">?</button>
-      <select id="ciMethod">
-        <option value="normal">Normal CI</option>
-        <option value="KH">Knapp-Hartung</option>
-        <option value="t">t-distribution</option>
-      </select>
-    </label>
-  </div>
-
-  <!-- Settings row 2: cumulative order, trim-and-fill -->
-  <div class="settings-row">
-    <label>
-      Cumulative order<button class="help-btn" data-help-select="cumulativeOrder" data-help-prefix="cumorder." title="Help">?</button>
-      <select id="cumulativeOrder">
-        <option value="input">Input order</option>
-        <option value="precision_desc">Most precise first</option>
-        <option value="precision_asc">Least precise first</option>
-        <option value="effect_asc">Effect ascending</option>
-        <option value="effect_desc">Effect descending</option>
-      </select>
-    </label>
-
-    <label class="inline">
-      <input type="checkbox" id="useTrimFill">
-      Apply trim-and-fill<button class="help-btn" data-help="bias.trimfill" title="Help">?</button>
-    </label>
-    <label class="inline">
-      <input type="checkbox" id="useTFAdjusted">
-      Show adjusted RE after trim-and-fill<button class="help-btn" data-help="bias.trimfill" title="Help">?</button>
-    </label>
-  </div>
-
-  <!-- Moderator manager -->
-  <div id="moderatorManager">
-    <strong>Moderators:</strong>
-    <input type="text" id="modName" placeholder="Column name" style="width:110px">
-    <select id="modType">
-      <option value="continuous">Continuous</option>
-      <option value="categorical">Categorical</option>
-    </select>
-    <button id="addMod">+ Add</button>
-  </div>
-
-  <!-- Data table -->
-  <table id="inputTable">
-    <tr>
-      <th>Study</th><th>Mean₁</th><th>SD₁</th><th>n₁</th>
-      <th>Mean₂</th><th>SD₂</th><th>n₂</th>
-      <th>Group</th>
-      <th>Actions</th>
-    </tr>
-  </table>
-
-  <div id="validationWarnings" style="color: red; margin-top: 10px;"></div>
-
-  <button id="addStudy">Add Study</button>
-  <button id="run">Run</button>
-</div>
-
-<!-- ===================== OUTPUT SECTION ===================== -->
-<div id="outputSection">
-  <div class="section">
-    <div class="section-title-row">
-      <p class="section-title">Results</p>
-      <div class="report-export">
-        <button id="exportReportHTML" class="report-btn">Export HTML</button>
-        <button id="exportReportPDF"  class="report-btn">Export PDF</button>
+      <!-- File controls -->
+      <div class="settings-row">
+        <input type="file" id="csvFile" accept=".csv">
+        <button id="import">Import CSV</button>
+        <button id="export">Export CSV</button>
+        <input type="file" id="sessionFile" accept=".json" style="display:none">
+        <button id="saveSession">Save Session</button>
+        <button id="loadSession">Load Session</button>
       </div>
-    </div>
+      <div id="csvWarning" style="color:red; display:none; margin-bottom:10px;"></div>
 
-    <div id="staleBanner">
-      ⚠️ Data or settings changed — click Run to update.
-    </div>
+      <!-- ---- Import preview panel (hidden until a file is chosen) ---- -->
+      <div id="importPreview" style="display:none">
 
-    <div id="results"></div>
-    <div id="studyTable"></div>
-    <div id="regressionPanel" style="display:none"></div>
+        <!-- Detected settings row -->
+        <div class="preview-meta">
+          <span class="preview-badge" id="previewDelimiter"></span>
 
-    <div id="bubblePlots"></div>
+          <label class="preview-type-label">
+            Effect type
+            <select id="previewEffectType">
+              <option value="MD">Mean Difference</option>
+              <option value="SMD">Standardized Mean Difference (Hedges g)</option>
+              <option value="MD_paired">Mean Difference (Paired)</option>
+              <option value="SMD_paired">Standardized Mean Difference (Paired)</option>
+              <option value="OR">Odds Ratio (OR)</option>
+              <option value="RR">Risk Ratio (RR)</option>
+              <option value="RD">Risk Difference (RD)</option>
+              <option value="HR">Hazard Ratio (HR)</option>
+              <option value="IRR">Incidence Rate Ratio (IRR)</option>
+              <option value="IR">Incidence Rate (log)</option>
+              <option value="COR">Correlation (raw r)</option>
+              <option value="ZCOR">Correlation (Fisher's z)</option>
+              <option value="PR">Proportion (raw)</option>
+              <option value="PLN">Proportion (log)</option>
+              <option value="PLO">Proportion (logit)</option>
+              <option value="PAS">Proportion (arcsine)</option>
+              <option value="PFT">Proportion (Freeman-Tukey)</option>
+              <option value="GENERIC">Generic (yi / vi)</option>
+            </select>
+          </label>
 
-    <div class="plot-block">
-      <p class="plot-label">Forest plot</p>
-      <div class="plot-export">
-        <button class="export-btn" data-target="forestPlot" data-format="svg">SVG</button>
-        <button class="export-btn" data-target="forestPlot" data-format="png">PNG</button>
-        <label class="forest-pagesize-label">
-          Studies per page
-          <select id="forestPageSize">
-            <option value="20">20</option>
-            <option value="30" selected>30</option>
-            <option value="50">50</option>
-            <option value="Infinity">All</option>
+          <span id="previewConfidence" class="preview-confidence"></span>
+        </div>
+
+        <!-- Column mapping summary -->
+        <div id="previewMapping" class="preview-mapping"></div>
+
+        <!-- First 5 data rows -->
+        <div id="previewTable" class="preview-table-wrap"></div>
+
+        <!-- Action buttons -->
+        <div class="preview-actions">
+          <button id="previewImport" class="preview-import-btn">Import</button>
+          <button id="previewCancel" class="preview-cancel-btn">Cancel</button>
+        </div>
+      </div>
+
+      <!-- Settings row 1: effect type, τ² method, CI method -->
+      <div class="settings-row">
+        <label>
+          Effect type<button class="help-btn" data-help-select="effectType" data-help-prefix="effect." title="Help">?</button>
+          <select id="effectType">
+            <option value="MD">Mean Difference</option>
+            <option value="SMD">Standardized Mean Difference (Hedges g)</option>
+            <option value="MD_paired">Mean Difference (Paired)</option>
+            <option value="SMD_paired">Standardized Mean Difference (Paired)</option>
+            <option value="OR">Odds Ratio (OR)</option>
+            <option value="RR">Risk Ratio (RR)</option>
+            <option value="RD">Risk Difference (RD)</option>
+            <option value="HR">Hazard Ratio (HR)</option>
+            <option value="IRR">Incidence Rate Ratio (IRR)</option>
+            <option value="IR">Incidence Rate (log)</option>
+            <option value="COR">Correlation (raw r)</option>
+            <option value="ZCOR">Correlation (Fisher's z)</option>
+            <option value="PR">Proportion (raw)</option>
+            <option value="PLN">Proportion (log)</option>
+            <option value="PLO">Proportion (logit)</option>
+            <option value="PAS">Proportion (arcsine)</option>
+            <option value="PFT">Proportion (Freeman-Tukey)</option>
+            <option value="GENERIC">Generic (yi / vi)</option>
+          </select>
+        </label>
+
+        <label>
+          τ² estimator<button class="help-btn" data-help-select="tauMethod" data-help-prefix="tau." title="Help">?</button>
+          <select id="tauMethod">
+            <option value="DL">DerSimonian-Laird (DL)</option>
+            <option value="REML">REML</option>
+            <option value="PM">Paule-Mandel (PM)</option>
+            <option value="ML">Maximum Likelihood (ML)</option>
+            <option value="HS">Hunter-Schmidt (HS)</option>
+            <option value="HE">Hedges (HE)</option>
+            <option value="SJ">Sidik-Jonkman (SJ)</option>
+          </select>
+        </label>
+
+        <label>
+          CI method<button class="help-btn" data-help-select="ciMethod" data-help-prefix="ci." title="Help">?</button>
+          <select id="ciMethod">
+            <option value="normal">Normal CI</option>
+            <option value="KH">Knapp-Hartung</option>
+            <option value="t">t-distribution</option>
           </select>
         </label>
       </div>
-      <svg id="forestPlot" width="900" height="420"></svg>
-      <div id="forestNav"></div>
-    </div>
 
-    <div class="plot-block">
-      <p class="plot-label">Funnel plot</p>
-      <div class="plot-export">
-        <button class="export-btn" data-target="funnelPlot" data-format="svg">SVG</button>
-        <button class="export-btn" data-target="funnelPlot" data-format="png">PNG</button>
-      </div>
-      <svg id="funnelPlot" width="500" height="400"></svg>
-    </div>
+      <!-- Settings row 2: cumulative order, trim-and-fill -->
+      <div class="settings-row">
+        <label>
+          Cumulative order<button class="help-btn" data-help-select="cumulativeOrder" data-help-prefix="cumorder." title="Help">?</button>
+          <select id="cumulativeOrder">
+            <option value="input">Input order</option>
+            <option value="precision_desc">Most precise first</option>
+            <option value="precision_asc">Least precise first</option>
+            <option value="effect_asc">Effect ascending</option>
+            <option value="effect_desc">Effect descending</option>
+          </select>
+        </label>
 
-    <div class="plot-block">
-      <p class="plot-label">Influence plot</p>
-      <div class="plot-export">
-        <button class="export-btn" data-target="influencePlot" data-format="svg">SVG</button>
-        <button class="export-btn" data-target="influencePlot" data-format="png">PNG</button>
+        <label class="inline">
+          <input type="checkbox" id="useTrimFill">
+          Apply trim-and-fill<button class="help-btn" data-help="bias.trimfill" title="Help">?</button>
+        </label>
+        <label class="inline">
+          <input type="checkbox" id="useTFAdjusted">
+          Show adjusted RE after trim-and-fill<button class="help-btn" data-help="bias.trimfill" title="Help">?</button>
+        </label>
       </div>
-      <svg id="influencePlot" width="500" height="400"></svg>
-    </div>
 
-    <div class="plot-block">
-      <p class="plot-label">Cumulative forest plot</p>
-      <div class="plot-export">
-        <button class="export-btn" data-target="cumulativePlot" data-format="svg">SVG</button>
-        <button class="export-btn" data-target="cumulativePlot" data-format="png">PNG</button>
+      <!-- Moderator manager -->
+      <div id="moderatorManager">
+        <strong>Moderators:</strong>
+        <input type="text" id="modName" placeholder="Column name" style="width:110px">
+        <select id="modType">
+          <option value="continuous">Continuous</option>
+          <option value="categorical">Categorical</option>
+        </select>
+        <button id="addMod">+ Add</button>
       </div>
-      <svg id="cumulativePlot" width="900" height="420"></svg>
+
+      <!-- Data table -->
+      <table id="inputTable">
+        <tr>
+          <th>Study</th><th>Mean₁</th><th>SD₁</th><th>n₁</th>
+          <th>Mean₂</th><th>SD₂</th><th>n₂</th>
+          <th>Group</th>
+          <th>Actions</th>
+        </tr>
+      </table>
+
+      <div id="validationWarnings" style="color: red; margin-top: 10px;"></div>
+
+      <button id="addStudy">Add Study</button>
+      <button id="run">Run</button>
     </div>
-  </div>
-</div>
+  <!-- =========== OUTPUT =========== -->
+    <div id="outputSection">
+      <div class="section">
+        <div class="section-title-row">
+          <p class="section-title">Results</p>
+          <div class="report-export">
+            <button id="exportReportHTML" class="report-btn">Export HTML</button>
+            <button id="exportReportPDF"  class="report-btn">Export PDF</button>
+          </div>
+        </div>
+
+        <div id="outputPlaceholder">
+          Run the analysis to see results.
+        </div>
+
+        <div id="staleBanner">
+          ⚠️ Data or settings changed — click Run to update.
+        </div>
+
+        <div id="results"></div>
+        <div id="studyTable"></div>
+        <div id="regressionPanel" style="display:none"></div>
+
+        <div id="bubblePlots"></div>
+
+        <div class="plot-block">
+          <p class="plot-label">Forest plot</p>
+          <div class="plot-export">
+            <button class="export-btn" data-target="forestPlot" data-format="svg">SVG</button>
+            <button class="export-btn" data-target="forestPlot" data-format="png">PNG</button>
+            <label class="forest-pagesize-label">
+              Studies per page
+              <select id="forestPageSize">
+                <option value="20">20</option>
+                <option value="30" selected>30</option>
+                <option value="50">50</option>
+                <option value="Infinity">All</option>
+              </select>
+            </label>
+          </div>
+          <svg id="forestPlot" width="900" height="420"></svg>
+          <div id="forestNav"></div>
+        </div>
+
+        <div class="plot-block">
+          <p class="plot-label">Funnel plot</p>
+          <div class="plot-export">
+            <button class="export-btn" data-target="funnelPlot" data-format="svg">SVG</button>
+            <button class="export-btn" data-target="funnelPlot" data-format="png">PNG</button>
+          </div>
+          <svg id="funnelPlot" width="500" height="400"></svg>
+        </div>
+
+        <div class="plot-block">
+          <p class="plot-label">Influence plot</p>
+          <div class="plot-export">
+            <button class="export-btn" data-target="influencePlot" data-format="svg">SVG</button>
+            <button class="export-btn" data-target="influencePlot" data-format="png">PNG</button>
+          </div>
+          <svg id="influencePlot" width="500" height="400"></svg>
+        </div>
+
+        <div class="plot-block">
+          <p class="plot-label">Cumulative forest plot</p>
+          <div class="plot-export">
+            <button class="export-btn" data-target="cumulativePlot" data-format="svg">SVG</button>
+            <button class="export-btn" data-target="cumulativePlot" data-format="png">PNG</button>
+          </div>
+          <svg id="cumulativePlot" width="900" height="420"></svg>
+        </div>
+      </div>
+    </div><!-- #outputSection -->
+
+</div><!-- #appLayout -->
 
 <div class="tooltip" id="tooltip"></div>
 

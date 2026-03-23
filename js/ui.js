@@ -197,8 +197,9 @@ function showHelp(anchorEl, key) {
   if (top + popH > window.innerHeight - margin)
     top = rect.top - popH - margin;
 
-  _helpPopover.style.top  = `${top  + window.scrollY}px`;
-  _helpPopover.style.left = `${left + window.scrollX}px`;
+  // position: fixed — coordinates are already viewport-relative, no scroll offset needed.
+  _helpPopover.style.top  = `${top}px`;
+  _helpPopover.style.left = `${left}px`;
 }
 
 function hideHelp() {
@@ -321,9 +322,31 @@ function makeModTd(name, type) {
   return td;
 }
 
+// ---------------- VIEW TOGGLE ----------------
+
+const _inputSection  = document.getElementById("inputSection");
+const _outputSection = document.getElementById("outputSection");
+const _toggleInput   = document.getElementById("toggleInput");
+const _toggleResults = document.getElementById("toggleResults");
+
+function showView(name) {
+  const showInput = name === "input";
+  _inputSection.style.display  = showInput ? "" : "none";
+  _outputSection.style.display = showInput ? "none" : "";
+  _toggleInput.classList.toggle("active", showInput);
+  _toggleResults.classList.toggle("active", !showInput);
+  window.scrollTo(0, 0);
+}
+
+_toggleInput.addEventListener("click",   () => showView("input"));
+_toggleResults.addEventListener("click", () => showView("results"));
+
+// Show input view by default; output hidden until first run switches to it.
+showView("input");
+
 // ---------------- INITIALIZE ----------------
 document.getElementById("addStudy").addEventListener("click", () => { addRow(); markStale(); });
-document.getElementById("run").addEventListener("click", runAnalysis);
+document.getElementById("run").addEventListener("click", () => { runAnalysis(); showView("results"); });
 document.getElementById("import").addEventListener("click", () => document.getElementById("csvFile").click());
 document.getElementById("csvFile").addEventListener("change", e => { if (e.target.files[0]) previewCSV(e.target.files[0]); });
 document.getElementById("previewImport").addEventListener("click", commitImport);
@@ -947,16 +970,23 @@ function commitImport() {
     addRow(v);
   });
 
-  // Show a warning for any required column that was absent
+  // Dismiss the preview panel (also clears csvWarning).
+  cancelImport();
+
+  // Show a warning for any required column that was absent — must come after
+  // cancelImport() so the warning is not immediately cleared by it.
   const warningDiv  = document.getElementById("csvWarning");
   const missingCols = profile.inputs.filter(c => !(c.toLowerCase() in headerMap));
   if (missingCols.length > 0) {
     warningDiv.textContent = `Warning: CSV is missing required columns: ${missingCols.join(", ")}`;
     warningDiv.style.display = "block";
+    // Stay on the input view so the warning is visible.
+    runAnalysis();
+    return;
   }
 
-  cancelImport();
   runAnalysis();
+  showView("results");
 }
 
 function cancelImport() {
@@ -1120,9 +1150,13 @@ function loadSession(file) {
     if (missingCols.length > 0) {
       warningDiv.textContent = `Warning: session is missing data for: ${missingCols.join(", ")}`;
       warningDiv.style.display = "block";
+      // Stay on the input view so the warning is visible.
+      runAnalysis();
+      return;
     }
 
     runAnalysis();
+    showView("results");
   };
   reader.readAsText(file);
 }
@@ -1427,8 +1461,12 @@ function renderRegressionPanel(reg, method, ciMethod, kExcluded = 0) {
 }
 
 // ---------------- OUTPUT SECTION VISIBILITY ----------------
-const outputSection = document.getElementById("outputSection");
-const staleBanner   = document.getElementById("staleBanner");
+const staleBanner       = document.getElementById("staleBanner");
+const outputPlaceholder = document.getElementById("outputPlaceholder");
+
+// The output panel is always present in the DOM. Track whether the first run
+// has happened so the stale banner is not shown on an empty panel.
+let _hasRunOnce = false;
 
 // ---------------- FOREST PLOT PAGINATION STATE ----------------
 let forestPage = 0;
@@ -1471,8 +1509,10 @@ function renderForestNav(totalPages) {
 }
 
 function markStale() {
-  // Only show the banner once the output section has been revealed
-  if (outputSection.style.display === "block") staleBanner.style.display = "";
+  // Only show stale indicators after the first run has produced results.
+  if (!_hasRunOnce) return;
+  staleBanner.style.display = "block";
+  _toggleResults.classList.add("stale");
 }
 
 // ---------------- STUDY-LEVEL RESULTS TABLE ----------------
@@ -1568,9 +1608,11 @@ function runAnalysis() {
   const profile = effectProfiles[type];
   if (!profile) return;
 
-  // Reveal the output section on first run; clear any stale warning
-  outputSection.style.display = "block";
+  // Hide the placeholder and clear stale indicators on each run.
+  if (outputPlaceholder) outputPlaceholder.style.display = "none";
   staleBanner.style.display = "none";
+  _toggleResults.classList.remove("stale");
+  _hasRunOnce = true;
 
   const rows = document.querySelectorAll("#inputTable tr");
 
