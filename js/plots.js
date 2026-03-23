@@ -1,3 +1,5 @@
+import { chiSquareCDF } from "./utils.js";
+
 // ================= BUBBLE PLOT =================
 // One bubble chart per continuous moderator.
 // Bubble radius ∝ √(RE weight).  Regression line is the marginal fit:
@@ -159,10 +161,12 @@ export function drawForest(studies, m, options = {}) {
   const tooltip = d3.select("#tooltip");
   const ciMethod = options.ciMethod || "normal";
   // Identity profile as fallback (MD/SMD/etc. that don't need back-transform)
-  const profile  = options.profile  || { transform: x => x, transformCI: (lb, ub) => ({ lb, ub }) };
+  const profile = options.profile || { transform: x => x, transformCI: (lb, ub) => ({ lb, ub }) };
 
-  // Use correct critical value
+  // crit: pooled-model critical value (used only for the diamond)
   const crit = m.crit || 1.96;
+  // studyCrit: always 1.96 — individual study CIs are standard normal regardless of CI method
+  const studyCrit = 1.96;
 
   // CI method label
   const ciLabel = {
@@ -171,49 +175,84 @@ export function drawForest(studies, m, options = {}) {
     KH: "Knapp-Hartung"
   }[ciMethod] || ciMethod;
 
+  // ----------- LAYOUT -----------
+  // All coordinates are derived from this single object so that
+  // adding/removing studies resizes the SVG automatically, and
+  // later steps (annotations, headers) just reference L.* constants.
+  const k = studies.length;
+  const L = {
+    rowH:    22,   // px per study row
+    labelW:  180,  // px reserved for study labels (left column)
+    plotW:   440,  // px for the CI strip (centre column)
+    annotW:  240,  // px reserved for numeric annotations (right column, steps 2+)
+    headerH: 28,   // px for the column-header row above the studies
+    summaryH: 106, // px for the summary area below the last study row
+  };
+  L.totalW   = L.labelW + L.plotW + L.annotW;          // 860
+  L.totalH   = L.headerH + k * L.rowH + L.summaryH;
+  L.studyY0  = L.headerH;                              // top of first study row
+  L.studyY1  = L.headerH + k * L.rowH;                 // bottom of last study row
+  L.diamondY = L.studyY1 + 20;                         // vertical centre of diamond
+  L.piY      = L.studyY1 + 44;                         // vertical centre of PI line
+  L.hetY     = L.studyY1 + 76;                         // heterogeneity summary line
+  L.axisY    = L.totalH  - 8;                          // x-axis position (studyY1 + 98)
+  L.annotX0  = L.labelW + L.plotW;                     // left edge of annotation column (620)
+
+  // Resize SVG to fit the current study count
+  svg.attr("width", L.totalW).attr("height", L.totalH);
+
   // ----------- SCALES -----------
+  // Collect all values that must fit inside the plot strip:
+  //   study CIs (±1.96·se), pooled CI, and prediction interval.
+  const domainVals = studies.flatMap(d => [
+    d.yi - studyCrit * d.se,
+    d.yi + studyCrit * d.se,
+  ]);
+  if (isFinite(m.ciLow))    domainVals.push(m.ciLow);
+  if (isFinite(m.ciHigh))   domainVals.push(m.ciHigh);
+  if (isFinite(m.predLow))  domainVals.push(m.predLow);
+  if (isFinite(m.predHigh)) domainVals.push(m.predHigh);
+
   const x = d3.scaleLinear()
-    .domain(d3.extent(studies.flatMap(d => [
-      d.yi - crit * d.se,
-      d.yi + crit * d.se
-    ])))
+    .domain(d3.extent(domainVals))
     .nice()
-    .range([100, 800]);
+    .range([L.labelW, L.labelW + L.plotW]);
 
   const y = d3.scaleBand()
     .domain(studies.map(d => d.label))
-    .range([40, 300])
+    .range([L.studyY0, L.studyY1])
     .padding(0.4);
 
   // ----------- TITLE -----------
   svg.append("text")
-    .attr("x", 450)
-    .attr("y", 20)
+    .attr("x", L.labelW + L.plotW / 2)
+    .attr("y", L.headerH / 2 + 5)
     .attr("text-anchor", "middle")
     .style("font-size", "12px")
     .text(`Random-effects model (${ciLabel})`);
 
-  // ----------- ZERO LINE -----------
-  svg.append("line")
-    .attr("x1", x(0))
-    .attr("x2", x(0))
-    .attr("y1", 0)
-    .attr("y2", 350)
-    .attr("stroke", "white")
-    .attr("stroke-dasharray", "4");
+  // ----------- NULL REFERENCE LINE -----------
+  // Only draw if the null value (0 on the internal scale) falls inside the plot strip.
+  const nullX = x(0);
+  if (nullX >= L.labelW && nullX <= L.labelW + L.plotW) {
+    svg.append("line")
+      .attr("x1", nullX).attr("x2", nullX)
+      .attr("y1", L.studyY0).attr("y2", L.diamondY + 8)
+      .attr("stroke", "white")
+      .attr("stroke-dasharray", "4");
+  }
 
   // ----------- STUDY CIs -----------
   svg.selectAll("line.ci")
     .data(studies)
     .enter()
     .append("line")
-    .attr("x1", d => x(d.yi - crit * d.se))
-    .attr("x2", d => x(d.yi + crit * d.se))
-    .attr("y1", d => y(d.label))
-    .attr("y2", d => y(d.label))
+    .attr("x1", d => x(d.yi - studyCrit * d.se))
+    .attr("x2", d => x(d.yi + studyCrit * d.se))
+    .attr("y1", d => y(d.label) + y.bandwidth() / 2)
+    .attr("y2", d => y(d.label) + y.bandwidth() / 2)
     .attr("stroke", "white")
-    .attr("stroke-width", ciMethod === "KH" ? 3 : 1.5)
-    .attr("stroke-dasharray", ciMethod === "KH" ? "4,2" : "0");
+    .attr("stroke-width", 1.5);
 
   // ----------- WEIGHTS (BOXES) -----------
   const wMax = d3.max(studies, d => d.w);
@@ -223,15 +262,15 @@ export function drawForest(studies, m, options = {}) {
     .enter()
     .append("rect")
     .attr("x", d => x(d.yi) - Math.sqrt(d.w / wMax) * 10)
-    .attr("y", d => y(d.label) - 5)
+    .attr("y", d => y(d.label) + y.bandwidth() / 2 - 5)
     .attr("width", d => Math.sqrt(d.w / wMax) * 20)
     .attr("height", 10)
     .attr("fill", d => d.filled ? "none" : "white")
     .attr("stroke", "white")
     .on("mousemove", (e, d) => {
       const ef_disp = profile.transform(d.yi);
-      const lo_disp = profile.transform(d.yi - crit * d.se);
-      const hi_disp = profile.transform(d.yi + crit * d.se);
+      const lo_disp = profile.transform(d.yi - studyCrit * d.se);
+      const hi_disp = profile.transform(d.yi + studyCrit * d.se);
       tooltip.style("opacity", 1)
         .html(`
           ${d.label}<br>
@@ -245,29 +284,36 @@ export function drawForest(studies, m, options = {}) {
 
   // ----------- AXES -----------
   svg.append("g")
-    .attr("transform", "translate(0,380)")
+    .attr("transform", `translate(0,${L.axisY})`)
     .call(d3.axisBottom(x).tickFormat(v => {
       const d = profile.transform(v);
       return isFinite(d) ? +d.toFixed(3) : "";
     }));
 
-  svg.append("g")
-    .attr("transform", "translate(100,0)")
-    .call(d3.axisLeft(y));
+  // Direct study labels (replaces d3.axisLeft — labels are drawn in the
+  // label column, right-aligned just left of the plot strip)
+  studies.forEach(d => {
+    const lbl = d.label.length > 28 ? d.label.slice(0, 26) + "\u2026" : d.label;
+    svg.append("text")
+      .attr("x", L.labelW - 8)
+      .attr("y", y(d.label) + y.bandwidth() / 2 + 4)
+      .attr("text-anchor", "end")
+      .style("font-size", "11px")
+      .attr("fill", d.filled ? "#888" : "#eee")
+      .text(lbl);
+  });
 
   // ----------- POOLED EFFECT (DIAMOND) -----------
-  const diamondY = 340;
   const diamondHalfHeight = 8;
-
-  const ciLow = m.ciLow;
+  const ciLow  = m.ciLow;
   const ciHigh = m.ciHigh;
   const center = m.RE;
 
   const diamond = [
-    [x(ciLow), diamondY],
-    [x(center), diamondY - diamondHalfHeight],
-    [x(ciHigh), diamondY],
-    [x(center), diamondY + diamondHalfHeight]
+    [x(ciLow),   L.diamondY],
+    [x(center),  L.diamondY - diamondHalfHeight],
+    [x(ciHigh),  L.diamondY],
+    [x(center),  L.diamondY + diamondHalfHeight]
   ];
 
   svg.append("polygon")
@@ -283,49 +329,174 @@ export function drawForest(studies, m, options = {}) {
       return "Normal (Wald) CI";
     });
 
-	// ----------- PREDICTION INTERVAL -----------
-	if (isFinite(m.predLow) && isFinite(m.predHigh)) {
-	  const piY = 365; // slightly below diamond
+  // ----------- COLUMN HEADERS + SEPARATORS -----------
+  const hY = L.headerH / 2 + 5;  // vertical centre of header band
 
-	  // Line for PI
-	  svg.append("line")
-		.attr("x1", x(m.predLow))
-		.attr("x2", x(m.predHigh))
-		.attr("y1", piY)
-		.attr("y2", piY)
-		.attr("stroke", "cyan")
-		.attr("stroke-width", 2)
-		.attr("stroke-dasharray", "6,3")
-		.append("title")
-		.text("Prediction interval: expected range of true effects in future studies");
+  // "Study" header over the label column
+  svg.append("text")
+    .attr("x", L.labelW - 8)
+    .attr("y", hY)
+    .attr("text-anchor", "end")
+    .style("font-size", "11px")
+    .attr("fill", "#999")
+    .text("Study");
 
-	  // End caps
-	  svg.append("line")
-		.attr("x1", x(m.predLow))
-		.attr("x2", x(m.predLow))
-		.attr("y1", piY - 5)
-		.attr("y2", piY + 5)
-		.attr("stroke", "cyan")
-		.attr("stroke-width", 2);
+  // Horizontal rule below the header row
+  svg.append("line")
+    .attr("x1", 0).attr("x2", L.totalW)
+    .attr("y1", L.headerH).attr("y2", L.headerH)
+    .attr("stroke", "#333");
 
-	  svg.append("line")
-		.attr("x1", x(m.predHigh))
-		.attr("x2", x(m.predHigh))
-		.attr("y1", piY - 5)
-		.attr("y2", piY + 5)
-		.attr("stroke", "cyan")
-		.attr("stroke-width", 2);
+  // Thin vertical rule between label column and plot strip
+  svg.append("line")
+    .attr("x1", L.labelW).attr("x2", L.labelW)
+    .attr("y1", L.studyY0).attr("y2", L.studyY1 + 12)
+    .attr("stroke", "#333");
 
-	  // Label
-	  const pi_disp = profile.transformCI(m.predLow, m.predHigh);
-	  svg.append("text")
-		.attr("x", x(m.RE))
-		.attr("y", piY + 15)
-		.attr("text-anchor", "middle")
-		.style("font-size", "11px")
-		.attr("fill", "cyan")
-		.text(`Prediction interval: ${isFinite(pi_disp.lb) ? pi_disp.lb.toFixed(3) : "NA"} to ${isFinite(pi_disp.ub) ? pi_disp.ub.toFixed(3) : "NA"}`);
-	}
+  // Thin vertical rule between plot strip and annotation column
+  svg.append("line")
+    .attr("x1", L.annotX0).attr("x2", L.annotX0)
+    .attr("y1", L.studyY0).attr("y2", L.studyY1 + 12)
+    .attr("stroke", "#333");
+
+  // ----------- ANNOTATION COLUMNS (right panel) -----------
+  // Sub-column x anchors within the annotW strip
+  const efAnnotX = L.annotX0 + 8;    // left-aligned "Effect [95% CI]"
+  const wtAnnotX = L.totalW - 6;     // right-aligned "Weight"
+
+  // Weight percentages are computed over real studies only.
+  // Imputed (trim-and-fill) studies are excluded so that real-study
+  // percentages sum to 100% and the pooled "100%" label is consistent.
+  const realStudies  = studies.filter(d => !d.filled);
+  const totalW_annot = d3.sum(realStudies, d => d.w);
+
+  // Column headers (inside the headerH band, aligned with the title)
+  svg.append("text")
+    .attr("x", efAnnotX)
+    .attr("y", hY)
+    .style("font-size", "11px")
+    .attr("fill", "#999")
+    .text("Effect [95% CI]");
+
+  svg.append("text")
+    .attr("x", wtAnnotX)
+    .attr("y", hY)
+    .attr("text-anchor", "end")
+    .style("font-size", "11px")
+    .attr("fill", "#999")
+    .text("Weight");
+
+  // Per-study rows
+  studies.forEach(d => {
+    const rowMid = y(d.label) + y.bandwidth() / 2 + 4;
+
+    // Back-transformed effect and CI on display scale (study CIs always use z = 1.96)
+    const ef  = profile.transform(d.yi);
+    const lo  = profile.transform(d.yi - studyCrit * d.se);
+    const hi  = profile.transform(d.yi + studyCrit * d.se);
+    const efStr = isFinite(ef) ? ef.toFixed(3) : "NA";
+    const ciStr = `[${isFinite(lo) ? lo.toFixed(3) : "NA"}, ${isFinite(hi) ? hi.toFixed(3) : "NA"}]`;
+
+    // Weight % — imputed studies get "—" since they are phantom observations
+    const wPct = d.filled
+      ? "\u2014"
+      : (isFinite(d.w) && totalW_annot > 0)
+        ? (d.w / totalW_annot * 100).toFixed(1) + "%"
+        : "NA";
+
+    svg.append("text")
+      .attr("x", efAnnotX)
+      .attr("y", rowMid)
+      .style("font-size", "10px")
+      .attr("fill", d.filled ? "#888" : "#ddd")
+      .text(`${efStr} ${ciStr}`);
+
+    svg.append("text")
+      .attr("x", wtAnnotX)
+      .attr("y", rowMid)
+      .attr("text-anchor", "end")
+      .style("font-size", "10px")
+      .attr("fill", d.filled ? "#888" : "#ddd")
+      .text(wPct);
+  });
+
+  // Pooled row — aligned with diamond, highlighted in gold
+  const pooledEf = profile.transform(m.RE);
+  const pooledLo = profile.transform(m.ciLow);
+  const pooledHi = profile.transform(m.ciHigh);
+  const pooledEfStr = isFinite(pooledEf) ? pooledEf.toFixed(3) : "NA";
+  const pooledCiStr = `[${isFinite(pooledLo) ? pooledLo.toFixed(3) : "NA"}, ${isFinite(pooledHi) ? pooledHi.toFixed(3) : "NA"}]`;
+
+  svg.append("text")
+    .attr("x", efAnnotX)
+    .attr("y", L.diamondY + 4)
+    .style("font-size", "10px")
+    .attr("fill", "#ffd740")
+    .text(`${pooledEfStr} ${pooledCiStr}`);
+
+  svg.append("text")
+    .attr("x", wtAnnotX)
+    .attr("y", L.diamondY + 4)
+    .attr("text-anchor", "end")
+    .style("font-size", "10px")
+    .attr("fill", "#ffd740")
+    .text("100%");
+
+  // ----------- PREDICTION INTERVAL -----------
+  if (isFinite(m.predLow) && isFinite(m.predHigh)) {
+    // Line
+    svg.append("line")
+      .attr("x1", x(m.predLow))
+      .attr("x2", x(m.predHigh))
+      .attr("y1", L.piY)
+      .attr("y2", L.piY)
+      .attr("stroke", "cyan")
+      .attr("stroke-width", 2)
+      .attr("stroke-dasharray", "6,3")
+      .append("title")
+      .text("Prediction interval: expected range of true effects in future studies");
+
+    // End caps
+    svg.append("line")
+      .attr("x1", x(m.predLow)).attr("x2", x(m.predLow))
+      .attr("y1", L.piY - 5).attr("y2", L.piY + 5)
+      .attr("stroke", "cyan").attr("stroke-width", 2);
+
+    svg.append("line")
+      .attr("x1", x(m.predHigh)).attr("x2", x(m.predHigh))
+      .attr("y1", L.piY - 5).attr("y2", L.piY + 5)
+      .attr("stroke", "cyan").attr("stroke-width", 2);
+
+    // Label
+    const pi_disp = profile.transformCI(m.predLow, m.predHigh);
+    svg.append("text")
+      .attr("x", x(m.RE))
+      .attr("y", L.piY + 15)
+      .attr("text-anchor", "middle")
+      .style("font-size", "11px")
+      .attr("fill", "cyan")
+      .text(`Prediction interval: ${isFinite(pi_disp.lb) ? pi_disp.lb.toFixed(3) : "NA"} to ${isFinite(pi_disp.ub) ? pi_disp.ub.toFixed(3) : "NA"}`);
+  }
+
+  // ----------- HETEROGENEITY SUMMARY LINE -----------
+  // Compute Q p-value from the chi-square distribution (df = k − 1)
+  const Qp = (isFinite(m.Q) && isFinite(m.df) && m.df > 0)
+    ? 1 - chiSquareCDF(m.Q, m.df)
+    : NaN;
+
+  const tau2Str = isFinite(m.tau2) ? m.tau2.toFixed(3) : "NA";
+  const I2Str   = isFinite(m.I2)   ? m.I2.toFixed(1) + "%" : "NA";
+  const QStr    = isFinite(m.Q)    ? m.Q.toFixed(2)  : "NA";
+  const dfStr   = isFinite(m.df)   ? m.df            : "NA";
+  const QpStr   = isFinite(Qp)     ? (Qp < 0.001 ? "< 0.001" : Qp.toFixed(3)) : "NA";
+
+  svg.append("text")
+    .attr("x", L.labelW + L.plotW / 2)
+    .attr("y", L.hetY)
+    .attr("text-anchor", "middle")
+    .style("font-size", "10.5px")
+    .attr("fill", "#888")
+    .text(`Heterogeneity:  τ² = ${tau2Str},  I² = ${I2Str},  Q(df=${dfStr}) = ${QStr},  p = ${QpStr}`);
 }
 
 // ================= FUNNEL =================
