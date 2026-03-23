@@ -149,6 +149,53 @@ input {
 .reg-sig-1 { color: #a8d8a8; }
 .reg-note  { font-size: 0.78em; color: #666; margin-top: 6px; }
 
+/* ---- Study-level results table ---- */
+#studyTable {
+  margin: 16px 0;
+  overflow-x: auto;
+  max-width: 860px;
+}
+
+.study-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88em;
+}
+
+.study-table th {
+  background: #1e2840;
+  font-weight: normal;
+  color: #aac;
+  text-align: right;
+  padding: 5px 10px;
+  border: 1px solid #333;
+}
+
+.study-table th:first-child { text-align: left; }
+
+.study-table td {
+  padding: 5px 10px;
+  border: 1px solid #2a2a2a;
+  text-align: right;
+  color: #ddd;
+}
+
+.study-table td:first-child {
+  text-align: left;
+  font-family: monospace;
+}
+
+.study-table tr:nth-child(even) td { background: #171727; }
+
+.study-table .imputed-row td { color: #555; font-style: italic; }
+
+.study-table .pooled-row td {
+  color: #ffd740;
+  font-weight: bold;
+  background: #1e1e10;
+  border-top: 2px solid #555;
+}
+
 /* ---- Plot export buttons ---- */
 .plot-export {
   display: flex;

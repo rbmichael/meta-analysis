@@ -990,6 +990,89 @@ function markStale() {
   if (outputSection.style.display === "block") staleBanner.style.display = "";
 }
 
+// ---------------- STUDY-LEVEL RESULTS TABLE ----------------
+function renderStudyTable(studies, m, profile) {
+  const container = document.getElementById("studyTable");
+  if (!container) return;
+
+  const tau2   = isFinite(m.tau2) ? m.tau2 : 0;
+  const real   = studies.filter(d => !d.filled);
+  const totalW = real.reduce((s, d) => s + 1 / (d.vi + tau2), 0);
+
+  // SE column header: label the scale when yi is stored on a transformed scale.
+  const transformedScaleProfile = (
+    profile.label.includes("Ratio")      ||  // OR, RR, HR, IRR
+    profile.label.includes("Hazard")     ||  // HR (also caught by Ratio, belt-and-suspenders)
+    profile.label.includes("Rate")       ||  // IRR, IR
+    profile.label.includes("log")        ||  // PLN, IR (log)
+    profile.label.includes("logit")      ||  // PLO
+    profile.label.includes("arcsine")    ||  // PAS
+    profile.label.includes("Freeman")    ||  // PFT
+    profile.label.includes("Fisher")         // ZCOR
+  );
+  const seLabel = transformedScaleProfile ? "SE (transformed)" : "SE";
+
+  // Escape HTML to prevent injection from user-supplied study labels.
+  function escapeHTML(s) {
+    return String(s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  // Build one row object per study
+  const rows = studies.map(d => {
+    const wi    = 1 / (d.vi + tau2);
+    const pct   = d.filled ? null : wi / totalW * 100;
+    const ef    = profile.transform(d.yi);
+    const lo    = profile.transform(d.yi - 1.96 * d.se);
+    const hi    = profile.transform(d.yi + 1.96 * d.se);
+    return { label: escapeHTML(d.label), ef, lo, hi, se: d.se, pct, filled: !!d.filled };
+  });
+
+  // Pooled row values
+  const pooledEf = profile.transform(m.RE);
+  const pooledLo = profile.transform(m.ciLow);
+  const pooledHi = profile.transform(m.ciHigh);
+
+  function fmtVal(v) { return isFinite(v) ? v.toFixed(3) : "NA"; }
+  function fmtPct(v) { return v !== null && isFinite(v) ? v.toFixed(1) + "%" : "\u2014"; }
+  function truncate(s, n) { return s.length > n ? s.slice(0, n - 1) + "\u2026" : s; }
+
+  const headerRow = `
+    <tr>
+      <th>Study</th>
+      <th>Effect</th>
+      <th>95% CI (low)</th>
+      <th>95% CI (high)</th>
+      <th>${seLabel}</th>
+      <th>RE Weight</th>
+    </tr>`;
+
+  const studyRows = rows.map(r => `
+    <tr class="${r.filled ? "imputed-row" : ""}">
+      <td>${truncate(r.label, 40)}</td>
+      <td>${fmtVal(r.ef)}</td>
+      <td>${fmtVal(r.lo)}</td>
+      <td>${fmtVal(r.hi)}</td>
+      <td>${fmtVal(r.se)}</td>
+      <td>${fmtPct(r.pct)}</td>
+    </tr>`).join("");
+
+  const pooledRow = `
+    <tr class="pooled-row">
+      <td>Pooled (RE)</td>
+      <td>${fmtVal(pooledEf)}</td>
+      <td>${fmtVal(pooledLo)}</td>
+      <td>${fmtVal(pooledHi)}</td>
+      <td>${fmtVal(m.seRE)}</td>
+      <td>100%</td>
+    </tr>`;
+
+  container.innerHTML = `<table class="study-table">${headerRow}${studyRows}${pooledRow}</table>`;
+}
+
 // ---------------- RUN ANALYSIS (modified for benchmarks) ----------------
 function runAnalysis() {
   const type = document.getElementById("effectType").value;
@@ -1151,6 +1234,8 @@ function runAnalysis() {
     <b>Trim & Fill:</b> ${useTF?"ON":"OFF"} (${tf.length} filled studies)
   `;
   document.getElementById("results").innerHTML += influenceHTML + subgroupHTML;
+
+  renderStudyTable(all, m, profile);
 
   // ---- Meta-regression ----
   // buildDesignMatrix expects { key, type }; ui state stores { name, type }.
