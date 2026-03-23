@@ -237,6 +237,9 @@ document.getElementById("previewImport").addEventListener("click", commitImport)
 document.getElementById("previewCancel").addEventListener("click", cancelImport);
 document.getElementById("previewEffectType").addEventListener("change", e => refreshPreviewUI(e.target.value));
 document.getElementById("export").addEventListener("click", exportCSV);
+document.getElementById("saveSession").addEventListener("click", saveSession);
+document.getElementById("loadSession").addEventListener("click", () => document.getElementById("sessionFile").click());
+document.getElementById("sessionFile").addEventListener("change", e => { if (e.target.files[0]) { loadSession(e.target.files[0]); e.target.value = ""; } });
 document.getElementById("addMod").addEventListener("click", addModerator);
 document.getElementById("modName").addEventListener("keydown", e => { if (e.key === "Enter") addModerator(); });
 document.getElementById("cumulativeOrder").addEventListener("change", runAnalysis);
@@ -869,6 +872,166 @@ function cancelImport() {
   document.getElementById("csvWarning").style.display = "none";
   // Reset the file input so choosing the same file again fires the change event.
   document.getElementById("csvFile").value = "";
+}
+
+// ---------------- SESSION SCHEMA ----------------
+
+const SESSION_VERSION = 1;
+
+// Snapshot the current input state as a plain JSON-serialisable object.
+// This is the single source of truth for the session schema used by both
+// saveSession (serialises) and loadSession (validates + applies).
+//
+// Schema:
+//   version       — integer, bumped on breaking changes
+//   settings      — the six UI controls that govern analysis behaviour
+//   moderators    — array of { name, type } objects
+//   studies       — array of { study, inputs: {col: value}, group, moderators: {name: value} }
+function buildSessionObject() {
+  const type    = document.getElementById("effectType").value;
+  const profile = effectProfiles[type];
+
+  const settings = {
+    effectType:      type,
+    tauMethod:       document.getElementById("tauMethod").value,
+    ciMethod:        document.getElementById("ciMethod").value,
+    cumulativeOrder: document.getElementById("cumulativeOrder").value,
+    useTrimFill:     document.getElementById("useTrimFill").checked,
+    useTFAdjusted:   document.getElementById("useTFAdjusted").checked,
+  };
+
+  const savedModerators = moderators.map(m => ({ name: m.name, type: m.type }));
+
+  const studies = [];
+  document.querySelectorAll("#inputTable tr").forEach((r, i) => {
+    if (i === 0) return; // skip header
+    const inputs = [...r.querySelectorAll("input")];
+    // inputs order: Study, ...profile.inputs, Group, ...moderators
+    const study = inputs[0]?.value ?? "";
+    const effectInputs = {};
+    profile.inputs.forEach((col, idx) => {
+      effectInputs[col] = inputs[idx + 1]?.value ?? "";
+    });
+    const group = inputs[profile.inputs.length + 1]?.value ?? "";
+    const modValues = {};
+    moderators.forEach((m, modIdx) => {
+      modValues[m.name] = inputs[profile.inputs.length + 2 + modIdx]?.value ?? "";
+    });
+
+    // Skip completely empty rows
+    const allVals = [study, ...Object.values(effectInputs), group, ...Object.values(modValues)];
+    if (allVals.every(v => v === "")) return;
+
+    studies.push({ study, inputs: effectInputs, group, moderators: modValues });
+  });
+
+  return { version: SESSION_VERSION, settings, moderators: savedModerators, studies };
+}
+
+// ---------------- SESSION SAVE ----------------
+
+function saveSession() {
+  const session = buildSessionObject();
+  const json    = JSON.stringify(session, null, 2);
+  const blob    = new Blob(["\uFEFF" + json], { type: "application/json;charset=utf-8;" });
+  const url     = URL.createObjectURL(blob);
+  const a       = document.createElement("a");
+  a.href        = url;
+  a.download    = "session.json";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// ---------------- SESSION LOAD ----------------
+
+function loadSession(file) {
+  const warningDiv = document.getElementById("csvWarning");
+  warningDiv.style.display = "none";
+
+  // Dismiss any in-progress CSV import so the preview panel doesn't linger
+  // over the freshly-loaded session data.
+  cancelImport();
+
+  const reader = new FileReader();
+  reader.onerror = () => {
+    warningDiv.textContent = "Could not read the selected session file.";
+    warningDiv.style.display = "block";
+  };
+  reader.onload = e => {
+    let session;
+    try {
+      // Strip BOM if present, then parse.
+      session = JSON.parse(e.target.result.replace(/^\uFEFF/, ""));
+    } catch {
+      warningDiv.textContent = "Session file is not valid JSON.";
+      warningDiv.style.display = "block";
+      return;
+    }
+
+    // Version check — only reject future breaking versions.
+    if (typeof session.version !== "number") {
+      warningDiv.textContent = "Session file is missing a version field.";
+      warningDiv.style.display = "block";
+      return;
+    }
+    if (session.version > SESSION_VERSION) {
+      warningDiv.textContent = `Unsupported session version (${session.version}).`;
+      warningDiv.style.display = "block";
+      return;
+    }
+
+    const { settings = {}, moderators: savedMods = [], studies: savedStudies = [] } = session;
+
+    // Apply settings
+    const s = settings;
+    if (s.effectType      && document.getElementById("effectType").querySelector(`option[value="${s.effectType}"]`))
+      document.getElementById("effectType").value      = s.effectType;
+    if (s.tauMethod       && document.getElementById("tauMethod").querySelector(`option[value="${s.tauMethod}"]`))
+      document.getElementById("tauMethod").value       = s.tauMethod;
+    if (s.ciMethod        && document.getElementById("ciMethod").querySelector(`option[value="${s.ciMethod}"]`))
+      document.getElementById("ciMethod").value        = s.ciMethod;
+    if (s.cumulativeOrder && document.getElementById("cumulativeOrder").querySelector(`option[value="${s.cumulativeOrder}"]`))
+      document.getElementById("cumulativeOrder").value = s.cumulativeOrder;
+    if (typeof s.useTrimFill   === "boolean") document.getElementById("useTrimFill").checked   = s.useTrimFill;
+    if (typeof s.useTFAdjusted === "boolean") document.getElementById("useTFAdjusted").checked = s.useTFAdjusted;
+
+    // Rebuild moderators
+    clearModerators();
+    savedMods.forEach(m => {
+      if (m.name && (m.type === "continuous" || m.type === "categorical"))
+        doAddModerator(m.name, m.type);
+    });
+
+    // Rebuild table
+    const type    = document.getElementById("effectType").value;
+    const profile = effectProfiles[type];
+    updateTableHeaders();
+    const table = document.getElementById("inputTable");
+    while (table.rows.length > 1) table.deleteRow(1);
+
+    savedStudies.forEach(row => {
+      const v = [];
+      v.push(row.study ?? "");
+      profile.inputs.forEach(col => v.push(row.inputs?.[col] ?? ""));
+      v.push(row.group ?? "");
+      moderators.forEach(m => v.push(row.moderators?.[m.name] ?? ""));
+      addRow(v);
+    });
+
+    // Warn about any effect-input columns absent from the saved data.
+    const missingCols = profile.inputs.filter(col =>
+      savedStudies.length > 0 && savedStudies.every(r => r.inputs?.[col] === undefined)
+    );
+    if (missingCols.length > 0) {
+      warningDiv.textContent = `Warning: session is missing data for: ${missingCols.join(", ")}`;
+      warningDiv.style.display = "block";
+    }
+
+    runAnalysis();
+  };
+  reader.readAsText(file);
 }
 
 // ---------------- CSV EXPORT ----------------
