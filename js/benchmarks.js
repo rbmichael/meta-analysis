@@ -539,6 +539,102 @@ export const BENCHMARKS = [
       I2:  57.1
     },
     citation: "Synthetic. τ²_SJ fixed point: τ²(1+τ²) = 14/9 → τ² = (√65−3)/6. Derived analytically."
+  },
+
+  // ----------------------------------------------------------------
+  // HR — Synthetic hazard ratio dataset (hand-computed, DL)
+  // yi = log(hr),  se = (log(ci_hi)−log(ci_lo)) / (2·1.96),  vi = se²
+  // 4 studies, equal se=0.25 (vi=0.0625) on log scale.
+  // Because all vi are equal, RE = FE regardless of τ².
+  //   yi: [−0.5, −0.1, −0.9, −0.3]
+  //   FE = (−0.5−0.1−0.9−0.3)/4 = −0.450
+  //   Q  = Σwi·(yi−FE)² = 16·(0.05²+0.35²+0.45²+0.15²) = 16·0.35 = 5.6
+  //   df = 3,  c = ΣW − ΣW²/ΣW = 64 − 16 = 48
+  //   τ²_DL = (5.6−3)/48 = 0.054
+  //   I²    = (5.6−3)/5.6 = 46.4%
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic – HR (log hazard ratio, DL)",
+    type: "HR",
+    tauMethod: "DL",
+    data: [
+      // hr = exp(yi), ci_lo/ci_hi = exp(yi ∓ 0.49)  [0.49 = 1.96·0.25]
+      { label: "Study 1", hr: 0.6065, ci_lo: 0.3716, ci_hi: 0.9900 },
+      { label: "Study 2", hr: 0.9048, ci_lo: 0.5543, ci_hi: 1.4770 },
+      { label: "Study 3", hr: 0.4066, ci_lo: 0.2491, ci_hi: 0.6637 },
+      { label: "Study 4", hr: 0.7408, ci_lo: 0.4538, ci_hi: 1.2092 }
+    ],
+    expected: {
+      // yi = log(hr), verified by formula
+      yi:   [-0.500, -0.100, -0.900, -0.300],
+      FE:   -0.450,
+      RE:   -0.450,   // equal vi → RE = FE
+      tau2:  0.054,
+      I2:   46.4
+    },
+    citation: "Synthetic dataset. Expected values derived analytically from HR log-scale formulas."
+  },
+
+  // ----------------------------------------------------------------
+  // IRR — Synthetic incidence rate ratio dataset (hand-computed, DL)
+  // yi = log(x1/t1) − log(x2/t2),  vi = 1/x1 + 1/x2
+  // 4 studies: x1=[5,18,8,14], x2=20 for all, t1=t2=100.
+  //   yi: [ln(0.25), ln(0.9), ln(0.4), ln(0.7)]
+  //       = [−1.3863, −0.1054, −0.9163, −0.3567]
+  //   vi: [0.250, 0.1056, 0.175, 0.1214]
+  //   FE = −0.537  (verified analytically)
+  //   τ²_DL = 0.138,  I² = 47.7%,  RE = −0.605
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic – IRR (incidence rate ratio, DL)",
+    type: "IRR",
+    tauMethod: "DL",
+    data: [
+      { label: "Study 1", x1: 5,  t1: 100, x2: 20, t2: 100 },
+      { label: "Study 2", x1: 18, t1: 100, x2: 20, t2: 100 },
+      { label: "Study 3", x1: 8,  t1: 100, x2: 20, t2: 100 },
+      { label: "Study 4", x1: 14, t1: 100, x2: 20, t2: 100 }
+    ],
+    expected: {
+      // yi = log(x1/x2) since t1=t2
+      yi:   [-1.386, -0.105, -0.916, -0.357],
+      FE:   -0.537,
+      RE:   -0.605,
+      tau2:  0.138,
+      I2:   47.7
+    },
+    citation: "Synthetic dataset. Expected values derived analytically from IRR Poisson formulas."
+  },
+
+  // ----------------------------------------------------------------
+  // IR — Synthetic incidence rate dataset (hand-computed, DL)
+  // yi = log(x/t),  vi = 1/x
+  // 4 studies: x=[10,25,5,20], t=[200,300,400,250].
+  //   yi: [ln(0.05), ln(25/300), ln(0.0125), ln(0.08)]
+  //       = [−2.9957, −2.4849, −4.3820, −2.5257]
+  //   vi: [0.1, 0.04, 0.2, 0.05]
+  //   FE = −2.742  (verified analytically)
+  //   τ²_DL = 0.335,  I² = 82.0%,  RE = −2.997
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic – IR (incidence rate log, DL)",
+    type: "IR",
+    tauMethod: "DL",
+    data: [
+      { label: "Study 1", x: 10, t: 200 },
+      { label: "Study 2", x: 25, t: 300 },
+      { label: "Study 3", x:  5, t: 400 },
+      { label: "Study 4", x: 20, t: 250 }
+    ],
+    expected: {
+      // yi = log(x/t), verified by formula
+      yi:   [-2.996, -2.485, -4.382, -2.526],
+      FE:   -2.742,
+      RE:   -2.997,
+      tau2:  0.335,
+      I2:   82.0
+    },
+    citation: "Synthetic dataset. Expected values derived analytically from Poisson IR formulas."
   }
 
 ];

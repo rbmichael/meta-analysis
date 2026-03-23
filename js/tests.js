@@ -745,4 +745,198 @@ export function runTests() {
   }
 
   console.log(cumPass ? "\n✅ ALL CUMULATIVE META TESTS PASSED" : "\n❌ SOME CUMULATIVE META TESTS FAILED");
+
+  // ===== HR / IRR / IR UNIT TESTS =====
+  //
+  // Tests cover:
+  //   1. yi and vi formulas (exact analytical values)
+  //   2. Invalid input → NaN / w=0
+  //   3. Continuity correction (IRR: x=0; IR: x=0)
+  //   4. Back-transform consistency (transformEffect / transformCI)
+  //   5. Pooled meta() on the benchmark dataset
+  // ================================================================
+  let hrPass = true;
+  console.log("\n===== HR / IRR / IR UNIT TESTS =====\n");
+
+  function hrchk(name, val, expected, tol = 1e-4) {
+    const ok = isFinite(val) && isFinite(expected) && Math.abs(val - expected) <= tol;
+    console.log(`  ${name}: ${round(val, 6)} (expected ${round(expected, 6)}) → ${ok ? "PASS" : "FAIL"}`);
+    if (!ok) hrPass = false;
+  }
+  function hrchkTrue(name, cond) {
+    console.log(`  ${name}: ${cond ? "PASS" : "FAIL"}`);
+    if (!cond) hrPass = false;
+  }
+
+  // --- HR: yi / vi formulas ---
+  // hr=0.5, ci_lo=0.25, ci_hi=1.0
+  // yi  = ln(0.5) = −0.693147
+  // se  = (ln(1.0) − ln(0.25)) / (2·1.96) = ln(4) / 3.92 = 1.386294 / 3.92 = 0.353646
+  // vi  = se² = 0.125066
+  console.log("--- HR: yi / vi formula ---");
+  {
+    const s = compute({ hr: 0.5, ci_lo: 0.25, ci_hi: 1.0 }, "HR");
+    hrchk("yi = ln(hr)",          s.yi, Math.log(0.5));
+    hrchk("se = CI_width/3.92",   s.se, Math.log(4) / 3.92);
+    hrchk("vi = se²",             s.vi, s.se * s.se);
+    hrchk("w  = 1/vi",            s.w,  1 / s.vi);
+  }
+
+  // --- HR: invalid inputs produce NaN ---
+  console.log("--- HR: invalid inputs → NaN ---");
+  {
+    hrchkTrue("hr ≤ 0 → NaN yi",       !isFinite(compute({ hr: -1,  ci_lo: 0.5, ci_hi: 1.0 }, "HR").yi));
+    hrchkTrue("hr = 0 → NaN yi",       !isFinite(compute({ hr: 0,   ci_lo: 0.5, ci_hi: 1.0 }, "HR").yi));
+    hrchkTrue("ci_lo ≥ ci_hi → NaN yi",!isFinite(compute({ hr: 0.5, ci_lo: 1.0, ci_hi: 0.5 }, "HR").yi));
+    hrchkTrue("ci_lo ≤ 0 → NaN yi",    !isFinite(compute({ hr: 0.5, ci_lo: 0,   ci_hi: 1.0 }, "HR").yi));
+  }
+
+  // --- HR: back-transform ---
+  // transformEffect(yi, "HR") = exp(yi) = hr
+  // transformCI recovers (ci_lo, ci_hi) on original scale
+  console.log("--- HR: back-transform ---");
+  {
+    const s = compute({ hr: 0.5, ci_lo: 0.25, ci_hi: 1.0 }, "HR");
+    const seRE = s.se;
+    hrchk("transformEffect → hr",     transformEffect(s.yi, "HR"), 0.5);
+    const ci = transformCI(s.yi - 1.96 * seRE, s.yi + 1.96 * seRE, "HR");
+    hrchk("CI lower recovers ci_lo",  ci.lb, 0.25);
+    hrchk("CI upper recovers ci_hi",  ci.ub, 1.0);
+  }
+
+  // --- IRR: yi / vi formulas ---
+  // x1=10, t1=100, x2=20, t2=100
+  // yi  = ln(10/100) − ln(20/100) = ln(0.5) = −0.693147
+  // vi  = 1/10 + 1/20 = 0.15
+  console.log("--- IRR: yi / vi formula ---");
+  {
+    const s = compute({ x1: 10, t1: 100, x2: 20, t2: 100 }, "IRR");
+    hrchk("yi = ln(x1/t1) − ln(x2/t2)", s.yi, Math.log(0.5));
+    hrchk("vi = 1/x1 + 1/x2",           s.vi, 1/10 + 1/20);
+    hrchk("se = √vi",                    s.se, Math.sqrt(1/10 + 1/20));
+    hrchk("w  = 1/vi",                   s.w,  1 / s.vi);
+  }
+
+  // --- IRR: continuity correction (x1=0 or x2=0 → add 0.5 to both) ---
+  // x1=0, t1=100, x2=10, t2=100 → x1=0.5, x2=10.5
+  // yi  = ln(0.5/100) − ln(10.5/100) = ln(0.5/10.5) = ln(1/21) ≈ −3.044522
+  // vi  = 1/0.5 + 1/10.5 = 2 + 0.095238 = 2.095238
+  console.log("--- IRR: continuity correction (x1=0) ---");
+  {
+    const s = compute({ x1: 0, t1: 100, x2: 10, t2: 100 }, "IRR");
+    hrchk("yi with correction", s.yi, Math.log(0.5 / 10.5));
+    hrchk("vi with correction", s.vi, 1 / 0.5 + 1 / 10.5);
+  }
+
+  // --- IRR: both arms zero → continuity applied to both ---
+  // x1=0, x2=0 → x1=0.5, x2=0.5; yi = ln(t2/t1) (rate ratio = 1 if t1=t2)
+  console.log("--- IRR: continuity correction (both zero) ---");
+  {
+    const s = compute({ x1: 0, t1: 100, x2: 0, t2: 100 }, "IRR");
+    hrchk("yi both-zero = 0", s.yi, 0);   // ln(0.5/0.5) = 0
+    hrchk("vi both-zero",     s.vi, 1/0.5 + 1/0.5);
+  }
+
+  // --- IRR: invalid inputs produce NaN ---
+  console.log("--- IRR: invalid inputs → NaN ---");
+  {
+    hrchkTrue("x1 < 0 → NaN",  !isFinite(compute({ x1: -1, t1: 100, x2: 10, t2: 100 }, "IRR").yi));
+    hrchkTrue("t1 = 0 → NaN",  !isFinite(compute({ x1: 5,  t1: 0,   x2: 10, t2: 100 }, "IRR").yi));
+    hrchkTrue("t2 ≤ 0 → NaN",  !isFinite(compute({ x1: 5,  t1: 100, x2: 10, t2: -1  }, "IRR").yi));
+  }
+
+  // --- IRR: back-transform ---
+  console.log("--- IRR: back-transform ---");
+  {
+    const s = compute({ x1: 10, t1: 100, x2: 20, t2: 100 }, "IRR");
+    hrchk("transformEffect → IRR", transformEffect(s.yi, "IRR"), 0.5);
+  }
+
+  // --- IR: yi / vi formulas ---
+  // x=5, t=100 → yi = ln(0.05) = −2.995732,  vi = 1/5 = 0.2
+  console.log("--- IR: yi / vi formula ---");
+  {
+    const s = compute({ x: 5, t: 100 }, "IR");
+    hrchk("yi = ln(x/t)", s.yi, Math.log(5 / 100));
+    hrchk("vi = 1/x",     s.vi, 1 / 5);
+    hrchk("se = √vi",     s.se, Math.sqrt(1 / 5));
+    hrchk("w  = 1/vi",    s.w,  5);
+  }
+
+  // --- IR: continuity correction (x=0 → x=0.5) ---
+  // x=0, t=100 → yi = ln(0.5/100) = ln(0.005) ≈ −5.298317,  vi = 1/0.5 = 2
+  console.log("--- IR: continuity correction (x=0) ---");
+  {
+    const s = compute({ x: 0, t: 100 }, "IR");
+    hrchk("yi with correction", s.yi, Math.log(0.5 / 100));
+    hrchk("vi with correction", s.vi, 1 / 0.5);
+  }
+
+  // --- IR: invalid inputs produce NaN ---
+  console.log("--- IR: invalid inputs → NaN ---");
+  {
+    hrchkTrue("x < 0 → NaN",  !isFinite(compute({ x: -1, t: 100 }, "IR").yi));
+    hrchkTrue("t = 0 → NaN",  !isFinite(compute({ x: 5,  t: 0   }, "IR").yi));
+    hrchkTrue("t < 0 → NaN",  !isFinite(compute({ x: 5,  t: -50 }, "IR").yi));
+  }
+
+  // --- IR: back-transform ---
+  console.log("--- IR: back-transform ---");
+  {
+    const s = compute({ x: 5, t: 100 }, "IR");
+    hrchk("transformEffect → rate", transformEffect(s.yi, "IR"), 5 / 100);
+  }
+
+  // --- Pooled: HR benchmark (equal vi → RE = FE = −0.450) ---
+  console.log("--- HR pooled (benchmark, DL) ---");
+  {
+    const data = [
+      { hr: 0.6065, ci_lo: 0.3716, ci_hi: 0.9900 },
+      { hr: 0.9048, ci_lo: 0.5543, ci_hi: 1.4770 },
+      { hr: 0.4066, ci_lo: 0.2491, ci_hi: 0.6637 },
+      { hr: 0.7408, ci_lo: 0.4538, ci_hi: 1.2092 }
+    ];
+    const studies = data.map(d => compute(d, "HR"));
+    const m = meta(studies, "DL");
+    hrchk("FE",   m.FE,   -0.450, 0.01);
+    hrchk("RE",   m.RE,   -0.450, 0.01);
+    hrchk("tau2", m.tau2,  0.054, 0.054 * 0.1);   // 10% relative
+    hrchk("I2",   m.I2,   46.4,   0.5);
+  }
+
+  // --- Pooled: IRR benchmark (FE=−0.537, RE=−0.605, τ²=0.138, I²=47.7%) ---
+  console.log("--- IRR pooled (benchmark, DL) ---");
+  {
+    const data = [
+      { x1: 5,  t1: 100, x2: 20, t2: 100 },
+      { x1: 18, t1: 100, x2: 20, t2: 100 },
+      { x1: 8,  t1: 100, x2: 20, t2: 100 },
+      { x1: 14, t1: 100, x2: 20, t2: 100 }
+    ];
+    const studies = data.map(d => compute(d, "IRR"));
+    const m = meta(studies, "DL");
+    hrchk("FE",   m.FE,   -0.537, 0.01);
+    hrchk("RE",   m.RE,   -0.605, 0.01);
+    hrchk("tau2", m.tau2,  0.138, 0.138 * 0.1);
+    hrchk("I2",   m.I2,   47.7,   0.5);
+  }
+
+  // --- Pooled: IR benchmark (FE=−2.742, RE=−2.997, τ²=0.335, I²=82.0%) ---
+  console.log("--- IR pooled (benchmark, DL) ---");
+  {
+    const data = [
+      { x: 10, t: 200 },
+      { x: 25, t: 300 },
+      { x:  5, t: 400 },
+      { x: 20, t: 250 }
+    ];
+    const studies = data.map(d => compute(d, "IR"));
+    const m = meta(studies, "DL");
+    hrchk("FE",   m.FE,   -2.742, 0.01);
+    hrchk("RE",   m.RE,   -2.997, 0.01);
+    hrchk("tau2", m.tau2,  0.335, 0.335 * 0.1);
+    hrchk("I2",   m.I2,   82.0,   0.5);
+  }
+
+  console.log(hrPass ? "\n✅ ALL HR/IRR/IR UNIT TESTS PASSED" : "\n❌ SOME HR/IRR/IR UNIT TESTS FAILED");
 }

@@ -125,6 +125,30 @@ const effectProfiles = {
     compute: (data) => compute(data, "GENERIC"),
     transform: (x) => x,
     transformCI: (lb, ub) => ({ lb, ub })
+  },
+
+  "HR": {
+    label: "Hazard Ratio",
+    inputs: ["hr", "ci_lo", "ci_hi"],
+    compute: (data) => compute(data, "HR"),
+    transform: (x) => transformEffect(x, "HR"),
+    transformCI: (lb, ub) => transformCI(lb, ub, "HR")
+  },
+
+  "IRR": {
+    label: "Incidence Rate Ratio",
+    inputs: ["x1", "t1", "x2", "t2"],
+    compute: (data) => compute(data, "IRR"),
+    transform: (x) => transformEffect(x, "IRR"),
+    transformCI: (lb, ub) => transformCI(lb, ub, "IRR")
+  },
+
+  "IR": {
+    label: "Incidence Rate (log)",
+    inputs: ["x", "t"],
+    compute: (data) => compute(data, "IR"),
+    transform: (x) => transformEffect(x, "IR"),
+    transformCI: (lb, ub) => transformCI(lb, ub, "IR")
   }
 };
 
@@ -378,6 +402,26 @@ function validateRow(row) {
         if (isFinite(nVal) && num > nVal) { inputValid = false; errorMsg = "x cannot exceed n"; }
       }
     }
+    // IRR event counts: non-negative integers
+    if (key === "x1" || key === "x2") {
+      if (!Number.isInteger(num) || num < 0) { inputValid = false; errorMsg = `${key} must be a non-negative integer`; }
+    }
+    // Person-time: strictly positive
+    if (key === "t" || key === "t1" || key === "t2") {
+      if (num <= 0) { inputValid = false; errorMsg = `${key} must be > 0`; }
+    }
+    // HR: hazard ratio and CI bounds must be strictly positive
+    if (key === "hr" || key === "ci_lo" || key === "ci_hi") {
+      if (num <= 0) { inputValid = false; errorMsg = `${key} must be > 0`; }
+    }
+    // HR: ci_lo must be less than ci_hi (cross-field check)
+    if (key === "ci_lo") {
+      const hiInput = Array.from(row.querySelectorAll("input")).find(
+        (el, i) => i > 0 && profile.inputs[i - 1] === "ci_hi"
+      );
+      const hiVal = hiInput ? +hiInput.value : NaN;
+      if (isFinite(hiVal) && num >= hiVal) { inputValid = false; errorMsg = "ci_lo must be < ci_hi"; }
+    }
     // r as pre-post correlation (paired designs): allow [-1, 1]
     // r as Pearson correlation (COR/ZCOR): must be strictly within (-1, 1)
     if (key === "r" && (type === "COR" || type === "ZCOR")) {
@@ -479,6 +523,20 @@ function getSoftWarnings(studyInput, type, label) {
     const { vi } = studyInput;
     if (isFinite(vi) && vi > 1) {
       warnings.push(`⚠️ ${label}: large variance (low precision study)`);
+    }
+  }
+
+  else if (type === "IRR") {
+    const { x1, x2 } = studyInput;
+    if (x1 === 0 || x2 === 0) {
+      warnings.push(`⚠️ ${label}: zero events (continuity correction of 0.5 applied to both arms)`);
+    }
+  }
+
+  else if (type === "IR") {
+    const { x } = studyInput;
+    if (x === 0) {
+      warnings.push(`⚠️ ${label}: zero events (continuity correction: x set to 0.5)`);
     }
   }
 
@@ -767,6 +825,27 @@ function populateExampleData(type) {
       ["Study 3", -1.348, 0.214, ""],
       ["Study 4", -1.442, 0.045, ""],
       ["Study 5", -0.218, 0.031, ""]
+    ],
+    "HR": [
+      ["Study 1", 0.72, 0.54, 0.96, ""],
+      ["Study 2", 0.85, 0.62, 1.17, ""],
+      ["Study 3", 0.61, 0.45, 0.83, ""],
+      ["Study 4", 0.78, 0.58, 1.05, ""],
+      ["Study 5", 0.69, 0.51, 0.93, ""]
+    ],
+    "IRR": [
+      ["Study 1", 12, 1200, 20, 1000, ""],
+      ["Study 2", 25, 2500, 35, 2000, ""],
+      ["Study 3",  8,  800, 15,  900, ""],
+      ["Study 4", 18, 1800, 28, 1500, ""],
+      ["Study 5", 30, 3000, 42, 2800, ""]
+    ],
+    "IR": [
+      ["Study 1", 15, 1000, ""],
+      ["Study 2", 28, 2500, ""],
+      ["Study 3",  9,  800, ""],
+      ["Study 4", 22, 1500, ""],
+      ["Study 5", 12,  900, ""]
     ]
   };
 
@@ -1050,8 +1129,8 @@ function runAnalysis() {
       });
   }
 
-  drawForest(all, m, { ciMethod });
-  drawFunnel(all, m, egger);
+  drawForest(all, m, { ciMethod, profile });
+  drawFunnel(all, m, egger, profile);
 
   // ---- Cumulative meta-analysis ----
   const cumulativeOrder = document.getElementById("cumulativeOrder")?.value || "input";

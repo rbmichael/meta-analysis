@@ -221,6 +221,52 @@ export function compute(s, type, options = {}) {
     return { ...s, yi, vi: safeVi, se: Math.sqrt(safeVi), w: 1 / safeVi };
   }
 
+  // ================= HAZARD RATIO =================
+  // Input: { hr, ci_lo, ci_hi } — published Cox model output on the original scale.
+  // SE is recovered from the 95% CI width on the log scale.
+  // All three inputs must be strictly positive and ci_lo < ci_hi.
+  if (type === "HR") {
+    const { hr, ci_lo, ci_hi } = s;
+    if (!isFinite(hr)    || hr    <= 0 ||
+        !isFinite(ci_lo) || ci_lo <= 0 ||
+        !isFinite(ci_hi) || ci_hi <= 0 ||
+        ci_lo >= ci_hi)
+      return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+    const yi = Math.log(hr);
+    const se = (Math.log(ci_hi) - Math.log(ci_lo)) / (2 * 1.96);
+    const vi = Math.max(se * se, MIN_VAR);
+    return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
+  }
+
+  // ================= INCIDENCE RATE RATIO =================
+  // Input: { x1, t1, x2, t2 } — events and person-time per arm.
+  // Continuity correction: if either event count is 0, add 0.5 to both.
+  if (type === "IRR") {
+    let { x1, t1, x2, t2 } = s;
+    if (!isFinite(x1) || x1 < 0 ||
+        !isFinite(x2) || x2 < 0 ||
+        !isFinite(t1) || t1 <= 0 ||
+        !isFinite(t2) || t2 <= 0)
+      return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+    if (x1 === 0 || x2 === 0) { x1 += 0.5; x2 += 0.5; }
+    const yi = Math.log(x1 / t1) - Math.log(x2 / t2);
+    const vi = Math.max(1 / x1 + 1 / x2, MIN_VAR);
+    return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
+  }
+
+  // ================= INCIDENCE RATE (single arm) =================
+  // Input: { x, t } — events and person-time.
+  // Continuity correction: if x = 0, use x = 0.5.
+  if (type === "IR") {
+    let { x, t } = s;
+    if (!isFinite(x) || x < 0 || !isFinite(t) || t <= 0)
+      return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+    if (x === 0) x = 0.5;
+    const yi = Math.log(x / t);
+    const vi = Math.max(1 / x, MIN_VAR);
+    return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
+  }
+
 	// ================ GENERIC ===============
 	if (type === "GENERIC") {
 	  return {
@@ -1362,6 +1408,24 @@ export function validateStudy(study, type) {
   else if (type === "GENERIC") {
     if (!isFinite(study.yi)) { valid = false; errors.yi = "yi must be numeric"; }
     if (!isFinite(study.vi) || study.vi <= 0) { valid = false; errors.vi = "vi must be > 0"; }
+  }
+  else if (type === "HR") {
+    if (!isFinite(study.hr)    || study.hr    <= 0) { valid = false; errors.hr    = "HR must be > 0"; }
+    if (!isFinite(study.ci_lo) || study.ci_lo <= 0) { valid = false; errors.ci_lo = "CI lower must be > 0"; }
+    if (!isFinite(study.ci_hi) || study.ci_hi <= 0) { valid = false; errors.ci_hi = "CI upper must be > 0"; }
+    if (isFinite(study.ci_lo) && isFinite(study.ci_hi) && study.ci_lo >= study.ci_hi) {
+      valid = false; errors.ci_lo = "CI lower must be < CI upper";
+    }
+  }
+  else if (type === "IRR") {
+    if (!isFinite(study.x1) || study.x1 < 0) { valid = false; errors.x1 = "x1 must be ≥ 0"; }
+    if (!isFinite(study.x2) || study.x2 < 0) { valid = false; errors.x2 = "x2 must be ≥ 0"; }
+    if (!isFinite(study.t1) || study.t1 <= 0) { valid = false; errors.t1 = "t1 must be > 0"; }
+    if (!isFinite(study.t2) || study.t2 <= 0) { valid = false; errors.t2 = "t2 must be > 0"; }
+  }
+  else if (type === "IR") {
+    if (!isFinite(study.x) || study.x < 0) { valid = false; errors.x = "x must be ≥ 0"; }
+    if (!isFinite(study.t) || study.t <= 0) { valid = false; errors.t = "t must be > 0"; }
   }
   else {
     valid = false;

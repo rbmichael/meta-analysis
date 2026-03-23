@@ -216,8 +216,8 @@ export function logGamma(z) {
 export function transformEffect(x, type) {
   if (!isFinite(x)) return NaN;
 
-  // Binary ratios
-  if (type === "OR" || type === "RR") {
+  // Ratio measures — all stored on log scale, display as exp(yi)
+  if (type === "OR" || type === "RR" || type === "HR" || type === "IRR" || type === "IR") {
     return Math.exp(x);
   }
 
@@ -250,7 +250,7 @@ export function transformCI(lb, ub, type) {
     return { lb: NaN, ub: NaN };
   }
 
-  if (type === "OR" || type === "RR") {
+  if (type === "OR" || type === "RR" || type === "HR" || type === "IRR" || type === "IR") {
     return {
       lb: Math.exp(lb),
       ub: Math.exp(ub)

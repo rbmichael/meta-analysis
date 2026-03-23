@@ -158,6 +158,8 @@ export function drawForest(studies, m, options = {}) {
 
   const tooltip = d3.select("#tooltip");
   const ciMethod = options.ciMethod || "normal";
+  // Identity profile as fallback (MD/SMD/etc. that don't need back-transform)
+  const profile  = options.profile  || { transform: x => x, transformCI: (lb, ub) => ({ lb, ub }) };
 
   // Use correct critical value
   const crit = m.crit || 1.96;
@@ -227,11 +229,14 @@ export function drawForest(studies, m, options = {}) {
     .attr("fill", d => d.filled ? "none" : "white")
     .attr("stroke", "white")
     .on("mousemove", (e, d) => {
+      const ef_disp = profile.transform(d.yi);
+      const lo_disp = profile.transform(d.yi - crit * d.se);
+      const hi_disp = profile.transform(d.yi + crit * d.se);
       tooltip.style("opacity", 1)
         .html(`
           ${d.label}<br>
-          Effect: ${d.yi.toFixed(2)}<br>
-          CI (${ciLabel}): ${(d.yi - crit * d.se).toFixed(2)} – ${(d.yi + crit * d.se).toFixed(2)}
+          Effect: ${isFinite(ef_disp) ? ef_disp.toFixed(3) : "NA"}<br>
+          CI (${ciLabel}): ${isFinite(lo_disp) ? lo_disp.toFixed(3) : "NA"} – ${isFinite(hi_disp) ? hi_disp.toFixed(3) : "NA"}
         `)
         .style("left", (e.pageX + 10) + "px")
         .style("top", (e.pageY - 20) + "px");
@@ -241,7 +246,10 @@ export function drawForest(studies, m, options = {}) {
   // ----------- AXES -----------
   svg.append("g")
     .attr("transform", "translate(0,380)")
-    .call(d3.axisBottom(x));
+    .call(d3.axisBottom(x).tickFormat(v => {
+      const d = profile.transform(v);
+      return isFinite(d) ? +d.toFixed(3) : "";
+    }));
 
   svg.append("g")
     .attr("transform", "translate(100,0)")
@@ -309,18 +317,20 @@ export function drawForest(studies, m, options = {}) {
 		.attr("stroke-width", 2);
 
 	  // Label
+	  const pi_disp = profile.transformCI(m.predLow, m.predHigh);
 	  svg.append("text")
 		.attr("x", x(m.RE))
 		.attr("y", piY + 15)
 		.attr("text-anchor", "middle")
 		.style("font-size", "11px")
 		.attr("fill", "cyan")
-		.text(`Prediction interval: ${m.predLow.toFixed(2)} to ${m.predHigh.toFixed(2)}`);
+		.text(`Prediction interval: ${isFinite(pi_disp.lb) ? pi_disp.lb.toFixed(3) : "NA"} to ${isFinite(pi_disp.ub) ? pi_disp.ub.toFixed(3) : "NA"}`);
 	}
 }
 
 // ================= FUNNEL =================
-export function drawFunnel(studies,m,egger){
+export function drawFunnel(studies, m, egger, profile) {
+  profile = profile || { transform: x => x, transformCI: (lb, ub) => ({ lb, ub }) };
  const svg=d3.select("#funnelPlot"); svg.selectAll("*").remove();
 
  const x=d3.scaleLinear()
@@ -369,7 +379,10 @@ if(egger && isFinite(egger.slope)){
   .attr("d", line);
 }
 
- svg.append("g").attr("transform","translate(0,350)").call(d3.axisBottom(x));
+ svg.append("g").attr("transform","translate(0,350)").call(d3.axisBottom(x).tickFormat(v => {
+   const d = profile.transform(v);
+   return isFinite(d) ? +d.toFixed(3) : "";
+ }));
  svg.append("g").attr("transform","translate(50,0)").call(d3.axisLeft(y));
 }
 
