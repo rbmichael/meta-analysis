@@ -356,4 +356,26 @@ export const HELP = {
            "of effect-ascending; useful as a sensitivity check.",
   },
 
+  // ------------------------------------------------------------------ //
+  // Sensitivity analysis                                                 //
+  // ------------------------------------------------------------------ //
+
+  "sens.loo": {
+    title: "Leave-one-out analysis",
+    body:  "Re-runs the meta-analysis k times, each time omitting one study. " +
+           "The pooled estimate, confidence interval, I², and τ² are shown for each " +
+           "omission. Rows highlighted amber indicate that removing that study changes " +
+           "statistical significance (p = .05 threshold), suggesting the overall " +
+           "conclusion is sensitive to that study. Requires at least 3 studies.",
+  },
+
+  "sens.estimator": {
+    title: "τ² estimator comparison",
+    body:  "Runs the random-effects model with all seven available τ² estimators " +
+           "(DL, REML, PM, ML, HS, HE, SJ) and displays their pooled estimates side " +
+           "by side. If results differ substantially across estimators, the conclusion " +
+           "is sensitive to the choice of heterogeneity estimation method. The " +
+           "currently selected estimator is highlighted.",
+  },
+
 };

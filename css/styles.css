@@ -627,3 +627,72 @@ input {
   text-align: center;
 }
 
+/* ---- Sensitivity analysis panel ---- */
+#sensitivityPanel {
+  margin: 16px 0;
+  max-width: 860px;
+}
+
+.sens-block {
+  border: 1px solid #333;
+  border-radius: 6px;
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+
+.sens-summary {
+  background: #1e2840;
+  padding: 8px 14px;
+  font-size: 0.9em;
+  font-weight: bold;
+  color: #aac;
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  user-select: none;
+}
+
+.sens-summary::-webkit-details-marker { display: none; }
+
+.sens-block[open] .sens-summary::before { content: "▾ "; }
+.sens-block:not([open]) .sens-summary::before { content: "▸ "; }
+
+.sens-table {
+  width: 100%;
+  margin: 0;
+}
+
+/* Significance-change highlight */
+.sens-sigchange td {
+  background: #2e2200 !important;
+  color: #f0c060;
+}
+
+/* Current-method highlight in estimator comparison */
+.sens-current td {
+  background: #1a2a1a !important;
+  color: #a8d8a8;
+}
+
+.sens-delta {
+  font-family: monospace;
+  font-size: 0.9em;
+  color: #999;
+}
+
+.sens-note {
+  font-size: 0.75em;
+  color: #555;
+  padding: 6px 14px 10px;
+  line-height: 1.5;
+}
+
+.sens-placeholder {
+  color: #555;
+  font-size: 0.88em;
+  padding: 16px 14px;
+  margin: 0;
+}
+

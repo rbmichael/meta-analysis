@@ -1,5 +1,5 @@
 // ================= UI =================
-import { compute, eggerTest, beggTest, fatPetTest, failSafeN, meta, influenceDiagnostics, subgroupAnalysis, metaRegression, cumulativeMeta } from "./analysis.js";
+import { compute, eggerTest, beggTest, fatPetTest, failSafeN, meta, influenceDiagnostics, subgroupAnalysis, metaRegression, cumulativeMeta, leaveOneOut, estimatorComparison } from "./analysis.js";
 import { fmt, transformEffect, transformCI } from "./utils.js";
 import { runTests } from "./tests.js";
 import { trimFill } from "./trimfill.js";
@@ -1515,6 +1515,142 @@ function markStale() {
   _toggleResults.classList.add("stale");
 }
 
+// ---------------- SENSITIVITY ANALYSIS PANEL ----------------
+function renderSensitivityPanel(studies, m, method, ciMethod, profile) {
+  const container = document.getElementById("sensitivityPanel");
+  if (!container) return;
+
+  // Preserve open/collapsed state of the two <details> blocks across re-renders.
+  const blocks = container.querySelectorAll(".sens-block");
+  const openState = [...blocks].map(b => b.open);
+  const looOpen = openState[0] ?? true;
+  const estOpen = openState[1] ?? true;
+
+  function fv(v)  { return isFinite(v) ? v.toFixed(3) : "—"; }
+  function fvp(v) { return isFinite(v) ? (v < 0.001 ? "<.001" : v.toFixed(3)) : "—"; }
+  function truncate(s, n) { const e = escapeHTML(s); return e.length > n ? e.slice(0, n - 1) + "\u2026" : e; }
+
+  // ---- Leave-one-out ----
+  // Pass the already-computed meta result to avoid rerunning meta() for the full set.
+  const loo     = leaveOneOut(studies, method, ciMethod, m);
+  const fullSig = loo.full.pval < 0.05;
+  const fullEst = profile.transform(loo.full.RE);
+
+  let looBody;
+  if (loo.rows.length === 0) {
+    looBody = `<p class="sens-placeholder">Need at least 3 studies for leave-one-out analysis.</p>`;
+  } else {
+    const headerRow = `
+      <tr>
+        <th>Study omitted</th>
+        <th>Estimate</th>
+        <th>95% CI (low)</th>
+        <th>95% CI (high)</th>
+        <th>I² (%)</th>
+        <th>τ²</th>
+        <th>p</th>
+        <th>Δ estimate</th>
+      </tr>`;
+
+    const dataRows = loo.rows.map(row => {
+      const est     = profile.transform(row.estimate);
+      const ci      = profile.transformCI(row.lb, row.ub);
+      const delta   = est - fullEst;
+      const sigChange = row.significant !== fullSig;
+      const cls     = sigChange ? " class=\"sens-sigchange\"" : "";
+      const deltaStr = (delta >= 0 ? "+" : "") + fv(delta);
+      return `
+        <tr${cls}>
+          <td>${truncate(row.label, 40)}</td>
+          <td>${fv(est)}</td>
+          <td>${fv(ci.lb)}</td>
+          <td>${fv(ci.ub)}</td>
+          <td>${fv(row.i2)}</td>
+          <td>${fv(row.tau2)}</td>
+          <td>${fvp(row.pval)}</td>
+          <td class="sens-delta">${deltaStr}</td>
+        </tr>`;
+    }).join("");
+
+    looBody = `
+      <table class="study-table sens-table">
+        <thead>${headerRow}</thead>
+        <tbody>${dataRows}</tbody>
+      </table>
+      <div class="sens-note">
+        Rows highlighted amber: removing that study changes statistical significance (p = .05 threshold).
+        Δ estimate = back-transformed leave-one-out estimate minus full-set estimate.
+      </div>`;
+  }
+
+  // ---- Estimator comparison ----
+  const TAU_METHOD_LABELS = {
+    DL:   "DerSimonian-Laird (DL)",
+    REML: "REML",
+    PM:   "Paule-Mandel (PM)",
+    ML:   "Maximum Likelihood (ML)",
+    HS:   "Hunter-Schmidt (HS)",
+    HE:   "Hedges (HE)",
+    SJ:   "Sidik-Jonkman (SJ)",
+  };
+
+  const estRows = estimatorComparison(studies, ciMethod).map(row => {
+    const est  = profile.transform(row.estimate);
+    const ci   = profile.transformCI(row.lb, row.ub);
+    const isCurrent = row.method === method;
+    const cls  = isCurrent ? " class=\"sens-current\"" : "";
+    return `
+      <tr${cls}>
+        <td>${TAU_METHOD_LABELS[row.method] ?? row.method}${isCurrent ? " ★" : ""}</td>
+        <td>${fv(est)}</td>
+        <td>${fv(ci.lb)}</td>
+        <td>${fv(ci.ub)}</td>
+        <td>${fv(row.tau2)}</td>
+        <td>${fv(row.i2)}</td>
+      </tr>`;
+  }).join("");
+
+  const estBody = `
+    <table class="study-table sens-table">
+      <thead>
+        <tr>
+          <th>τ² estimator</th>
+          <th>Estimate</th>
+          <th>95% CI (low)</th>
+          <th>95% CI (high)</th>
+          <th>τ²</th>
+          <th>I² (%)</th>
+        </tr>
+      </thead>
+      <tbody>${estRows}</tbody>
+    </table>
+    <div class="sens-note">★ = currently selected estimator.</div>`;
+
+  container.innerHTML = `
+    <details class="sens-block"${looOpen ? " open" : ""}>
+      <summary class="sens-summary">
+        Leave-one-out analysis ${hBtn("sens.loo")}
+      </summary>
+      ${looBody}
+    </details>
+    <details class="sens-block"${estOpen ? " open" : ""}>
+      <summary class="sens-summary">
+        τ² estimator comparison ${hBtn("sens.estimator")}
+      </summary>
+      ${estBody}
+    </details>`;
+
+  // Prevent <summary> from toggling <details> when a help button inside it is
+  // clicked. stopPropagation() at the button level would also block the
+  // document-level help listener, so we use preventDefault() on the summary
+  // instead — this cancels the toggle while still letting the event bubble.
+  container.querySelectorAll(".sens-summary").forEach(summary => {
+    summary.addEventListener("click", e => {
+      if (e.target.closest(".help-btn")) e.preventDefault();
+    });
+  });
+}
+
 // ---------------- STUDY-LEVEL RESULTS TABLE ----------------
 function renderStudyTable(studies, m, profile) {
   const container = document.getElementById("studyTable");
@@ -1767,6 +1903,7 @@ function runAnalysis() {
   document.getElementById("results").innerHTML += influenceHTML + subgroupHTML;
 
   renderStudyTable(all, m, profile);
+  renderSensitivityPanel(studies, m, method, ciMethod, profile);
 
   // ---- Meta-regression ----
   // buildDesignMatrix expects { key, type }; ui state stores { name, type }.

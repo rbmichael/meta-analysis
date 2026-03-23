@@ -1490,3 +1490,57 @@ export function cumulativeMeta(studies, method = "DL", ciMethod = "normal") {
     };
   });
 }
+
+// ================= LEAVE-ONE-OUT SENSITIVITY =================
+// Removes each study in turn and re-runs the meta-analysis on the remaining
+// k−1 studies.  Requires at least 3 studies (returns empty rows otherwise).
+//
+// Returns:
+//   full — meta() result for the complete set
+//   rows — one entry per study:
+//     { label, estimate, lb, ub, tau2, i2, pval, significant }
+//   where `significant` reflects whether the leave-one-out result is
+//   statistically significant at p < 0.05.  The rendering layer can compare
+//   this against `full.pval < 0.05` to flag significance changes.
+export function leaveOneOut(studies, method = "DL", ciMethod = "normal", precomputedFull = null) {
+  const full = precomputedFull ?? meta(studies, method, ciMethod);
+  if (studies.length < 3) return { full, rows: [] };
+
+  const rows = studies.map((omitted, omitIdx) => {
+    const subset = studies.filter((_, i) => i !== omitIdx);
+    const m = meta(subset, method, ciMethod);
+    return {
+      label:       omitted.label ?? `Study ${omitIdx + 1}`,
+      estimate:    m.RE,
+      lb:          m.ciLow,
+      ub:          m.ciHigh,
+      tau2:        m.tau2,
+      i2:          m.I2,
+      pval:        m.pval,
+      significant: m.pval < 0.05,
+    };
+  });
+
+  return { full, rows };
+}
+
+// ================= ESTIMATOR COMPARISON =================
+// Runs the meta-analysis with every available τ² estimator and returns the
+// results side-by-side so the analyst can judge estimator sensitivity.
+//
+// Returns an array of 7 entries (one per method):
+//   { method, estimate, lb, ub, tau2, i2 }
+export function estimatorComparison(studies, ciMethod = "normal") {
+  const methods = ["DL", "REML", "PM", "ML", "HS", "HE", "SJ"];
+  return methods.map(method => {
+    const m = meta(studies, method, ciMethod);
+    return {
+      method,
+      estimate: m.RE,
+      lb:       m.ciLow,
+      ub:       m.ciHigh,
+      tau2:     m.tau2,
+      i2:       m.I2,
+    };
+  });
+}
