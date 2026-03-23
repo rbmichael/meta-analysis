@@ -7,6 +7,7 @@ import { drawForest, drawFunnel, drawBubble, drawInfluencePlot, drawCumulativeFo
 import { exportSVG, exportPNG } from "./export.js";
 import { buildReport, downloadHTML, openPrintPreview } from "./report.js";
 import { parseCSV, detectEffectType } from "./csv.js";
+import { HELP } from "./help.js";
 
 // ---------------- EFFECT PROFILES ----------------
 const effectProfiles = {
@@ -162,6 +163,98 @@ function escapeHTML(s) {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+// ---------------- HELP POPOVER ----------------
+
+const _helpPopover = document.getElementById("helpPopover");
+const _helpTitle   = document.getElementById("helpPopoverTitle");
+const _helpBody    = document.getElementById("helpPopoverBody");
+
+function showHelp(anchorEl, key) {
+  const entry = HELP[key];
+  if (!entry) return;
+
+  _helpTitle.textContent = entry.title;
+  _helpBody.textContent  = entry.body;
+  _helpPopover.style.display = "block";
+
+  // Position below the anchor, clamped to viewport.
+  const rect     = anchorEl.getBoundingClientRect();
+  const popW     = _helpPopover.offsetWidth  || 320;
+  const popH     = _helpPopover.offsetHeight || 120;
+  const margin   = 8;
+
+  let top  = rect.bottom + margin;
+  let left = rect.left;
+
+  // Clamp horizontally so the popover doesn't overflow the right edge.
+  if (left + popW > window.innerWidth - margin)
+    left = window.innerWidth - popW - margin;
+  if (left < margin) left = margin;
+
+  // If it would overflow the bottom, flip above the anchor.
+  if (top + popH > window.innerHeight - margin)
+    top = rect.top - popH - margin;
+
+  _helpPopover.style.top  = `${top  + window.scrollY}px`;
+  _helpPopover.style.left = `${left + window.scrollX}px`;
+}
+
+function hideHelp() {
+  _helpPopover.style.display = "none";
+}
+
+// Close on any click outside the popover, but not when clicking a help button
+// (those are handled by the click toggle below).
+document.addEventListener("pointerdown", e => {
+  if (_helpPopover.style.display !== "none"
+      && !_helpPopover.contains(e.target)
+      && !e.target.closest(".help-btn"))
+    hideHelp();
+});
+
+// Single delegated listener for all .help-btn clicks.
+// Buttons may use either:
+//   data-help="KEY"                          — fixed key
+//   data-help-select="selectId"
+//   data-help-prefix="prefix."              — key = prefix + select.value (resolved at click time)
+document.addEventListener("click", e => {
+  const btn = e.target.closest(".help-btn");
+  if (!btn) return;
+  e.stopPropagation();
+
+  let key;
+  if (btn.dataset.helpSelect) {
+    const sel    = document.getElementById(btn.dataset.helpSelect);
+    const prefix = btn.dataset.helpPrefix ?? "";
+    const value  = sel ? sel.value : "";
+    key = prefix + value;
+    if (!HELP[key]) {
+      console.warn(`help-btn: no HELP entry for key "${key}" (select="${btn.dataset.helpSelect}", prefix="${prefix}", value="${value}")`);
+      return;
+    }
+  } else {
+    key = btn.dataset.help;
+    if (!HELP[key]) {
+      console.warn(`help-btn: no HELP entry for key "${key}"`);
+      return;
+    }
+  }
+
+  // Toggle: clicking the same button again closes the popover.
+  if (_helpPopover.style.display !== "none" &&
+      _helpPopover.dataset.activeKey === key) {
+    hideHelp();
+  } else {
+    _helpPopover.dataset.activeKey = key;
+    showHelp(btn, key);
+  }
+});
+
+// Convenience: inline help button for injected HTML strings.
+function hBtn(key) {
+  return `<button class="help-btn" data-help="${key}" title="Help">?</button>`;
 }
 
 // ---------------- MODERATOR STATE ----------------
@@ -1432,14 +1525,18 @@ function renderStudyTable(studies, m, profile) {
   function fmtPct(v) { return v !== null && isFinite(v) ? v.toFixed(1) + "%" : "\u2014"; }
   function truncate(s, n) { return s.length > n ? s.slice(0, n - 1) + "\u2026" : s; }
 
+  // Resolve the effect type key by object identity for the help button.
+  const effectTypeKey = Object.keys(effectProfiles).find(k => effectProfiles[k] === profile) ?? "";
+  const effectHelpBtn = effectTypeKey ? hBtn("effect." + effectTypeKey) : "";
+
   const headerRow = `
     <tr>
       <th>Study</th>
-      <th>Effect</th>
+      <th>Effect ${effectHelpBtn}</th>
       <th>95% CI (low)</th>
       <th>95% CI (high)</th>
       <th>${seLabel}</th>
-      <th>RE Weight</th>
+      <th>RE Weight ${hBtn("het.tau2")}</th>
     </tr>`;
 
   const studyRows = rows.map(r => `
@@ -1615,15 +1712,15 @@ function runAnalysis() {
     <b>${profile.label} (RE):</b> ${fmt(RE_disp)}<br>
     ${useTF && mAdjusted ? `<b>RE (adjusted):</b> ${fmt(RE_adj_disp)}<br>` : ""}
     CI [${fmt(ci_disp.lb)}, ${fmt(ci_disp.ub)}]<br>
-    τ²=${fmt(m.tau2)} [${fmt(m.tauCI[0])}, ${isFinite(m.tauCI[1])?fmt(m.tauCI[1]):"∞"}] | I²=${fmt(m.I2)}% [${fmt(m.I2CI[0])}%, ${fmt(m.I2CI[1])}%] | H²-CI=[${fmt(m.H2CI[0])}, ${isFinite(m.H2CI[1])?fmt(m.H2CI[1]):"∞"}]<br>
-    ${m.dist}-stat=${fmt(m.stat)} | p=${fmt(m.pval)}<br>
+    ${hBtn("het.tau2")}τ²=${fmt(m.tau2)} [${fmt(m.tauCI[0])}, ${isFinite(m.tauCI[1])?fmt(m.tauCI[1]):"∞"}] | ${hBtn("het.I2")}I²=${fmt(m.I2)}% [${fmt(m.I2CI[0])}%, ${fmt(m.I2CI[1])}%] | ${hBtn("het.H2")}H²-CI=[${fmt(m.H2CI[0])}, ${isFinite(m.H2CI[1])?fmt(m.H2CI[1]):"∞"}]<br>
+    ${hBtn("het.Q")}${m.dist}-stat=${fmt(m.stat)} | p=${fmt(m.pval)}<br>
     Prediction=[${fmt(pred_disp.lb)}, ${fmt(pred_disp.ub)}]<br>
     <b>Publication bias:</b><br>
-    &nbsp;&nbsp;Egger: intercept=${isFinite(egger.intercept)?fmt(egger.intercept):"NA"} | p=${isFinite(egger.p)?fmt(egger.p):"NA (k<3)"}<br>
-    &nbsp;&nbsp;Begg: τ=${isFinite(begg.tau)?fmt(begg.tau):"NA"} | p=${isFinite(begg.p)?fmt(begg.p):"NA (k<3)"}<br>
-    &nbsp;&nbsp;FAT (bias): β₁=${isFinite(fatpet.slope)?fmt(fatpet.slope):"NA"} | p=${isFinite(fatpet.slopeP)?fmt(fatpet.slopeP):"NA (k<3)"} &nbsp;·&nbsp; PET (effect at SE→0): ${isFinite(fatpet.intercept)?fmt(profile.transform(fatpet.intercept)):"NA"} | p=${isFinite(fatpet.interceptP)?fmt(fatpet.interceptP):"NA (k<3)"}<br>
-    &nbsp;&nbsp;Fail-safe N (Rosenthal): ${isFinite(fsn.rosenthal)?Math.round(fsn.rosenthal):"NA"} &nbsp;·&nbsp; Orwin (trivial=0.1): ${isFinite(fsn.orwin)?Math.round(fsn.orwin):"NA"}<br>
-    <b>Trim & Fill:</b> ${useTF?"ON":"OFF"} (${tf.length} filled studies)
+    &nbsp;&nbsp;${hBtn("bias.egger")}Egger: intercept=${isFinite(egger.intercept)?fmt(egger.intercept):"NA"} | p=${isFinite(egger.p)?fmt(egger.p):"NA (k<3)"}<br>
+    &nbsp;&nbsp;${hBtn("bias.begg")}Begg: τ=${isFinite(begg.tau)?fmt(begg.tau):"NA"} | p=${isFinite(begg.p)?fmt(begg.p):"NA (k<3)"}<br>
+    &nbsp;&nbsp;${hBtn("bias.fatpet")}FAT (bias): β₁=${isFinite(fatpet.slope)?fmt(fatpet.slope):"NA"} | p=${isFinite(fatpet.slopeP)?fmt(fatpet.slopeP):"NA (k<3)"} &nbsp;·&nbsp; PET (effect at SE→0): ${isFinite(fatpet.intercept)?fmt(profile.transform(fatpet.intercept)):"NA"} | p=${isFinite(fatpet.interceptP)?fmt(fatpet.interceptP):"NA (k<3)"}<br>
+    &nbsp;&nbsp;${hBtn("bias.fsn")}Fail-safe N (Rosenthal): ${isFinite(fsn.rosenthal)?Math.round(fsn.rosenthal):"NA"} &nbsp;·&nbsp; Orwin (trivial=0.1): ${isFinite(fsn.orwin)?Math.round(fsn.orwin):"NA"}<br>
+    <b>Trim & Fill:</b>${hBtn("bias.trimfill")} ${useTF?"ON":"OFF"} (${tf.length} filled studies)
   `;
   document.getElementById("results").innerHTML += influenceHTML + subgroupHTML;
 

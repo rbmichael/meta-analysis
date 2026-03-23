@@ -460,3 +460,75 @@ input {
   margin: 16px 0;
 }
 #bubblePlots svg { background: #181828; border: 1px solid #333; border-radius: 4px; }
+
+/* ---- Help buttons ---- */
+.help-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  padding: 0;
+  margin: 0 0 0 5px;
+  font-size: 0.68em;
+  font-weight: bold;
+  line-height: 1;
+  background: #1e2840;
+  color: #6688aa;
+  border: 1px solid #2a3f60;
+  border-radius: 50%;
+  cursor: pointer;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+
+.help-btn:hover {
+  background: #253350;
+  color: #99c0e0;
+  border-color: #4a6f9f;
+}
+
+/* ---- Help popover ---- */
+#helpPopover {
+  position: absolute;
+  z-index: 9999;
+  width: 320px;
+  background: #1a1a2e;
+  border: 1px solid #3a3a6a;
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+  padding: 10px 12px 12px;
+  font-size: 0.82em;
+}
+
+.help-popover-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.help-popover-title {
+  font-weight: bold;
+  color: #99b8d4;
+  font-size: 1em;
+}
+
+.help-popover-close {
+  background: none;
+  border: none;
+  color: #666;
+  font-size: 1.1em;
+  cursor: pointer;
+  padding: 0 0 0 8px;
+  line-height: 1;
+  margin: 0;
+}
+
+.help-popover-close:hover { color: #ccc; }
+
+.help-popover-body {
+  color: #bbb;
+  line-height: 1.55;
+  margin: 0;
+}
