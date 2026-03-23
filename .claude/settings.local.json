@@ -9,7 +9,8 @@
       "Bash(curl:*)",
       "WebFetch(domain:raw.githubusercontent.com)",
       "Bash(python3:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(wc:*)"
     ]
   }
 }
