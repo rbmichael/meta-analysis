@@ -4,6 +4,7 @@ import { fmt, transformEffect, transformCI } from "./utils.js";
 import { runTests } from "./tests.js";
 import { trimFill } from "./trimfill.js";
 import { drawForest, drawFunnel, drawBubble, drawInfluencePlot, drawCumulativeForest } from "./plots.js";
+import { exportSVG, exportPNG } from "./export.js";
 
 // ---------------- EFFECT PROFILES ----------------
 const effectProfiles = {
@@ -224,6 +225,19 @@ document.getElementById("export").addEventListener("click", exportCSV);
 document.getElementById("addMod").addEventListener("click", addModerator);
 document.getElementById("modName").addEventListener("keydown", e => { if (e.key === "Enter") addModerator(); });
 document.getElementById("cumulativeOrder").addEventListener("change", runAnalysis);
+
+// ---------------- PLOT EXPORT ----------------
+// Single delegated listener covers all static plot-export buttons and any
+// bubble-plot buttons injected dynamically during runAnalysis.
+document.addEventListener("click", e => {
+  const btn = e.target.closest(".export-btn");
+  if (!btn) return;
+  const svgEl = document.getElementById(btn.dataset.target);
+  if (!svgEl) return;
+  const name = btn.dataset.target;
+  if (btn.dataset.format === "svg") exportSVG(svgEl, name + ".svg");
+  else exportPNG(svgEl, name + ".png");
+});
 
 // ---------------- EFFECT TYPE HANDLER ----------------
 document.getElementById("effectType").addEventListener("change", () => {
@@ -1153,9 +1167,27 @@ function runAnalysis() {
   if (reg && !reg.rankDeficient) {
     moderators
       .filter(mod => mod.type === "continuous")
-      .forEach(mod => {
+      .forEach((mod, i) => {
         const idx = reg.colNames.indexOf(mod.name);
-        if (idx >= 1) drawBubble(reg.studiesUsed, reg, mod.name, idx, bubbleContainer);
+        if (idx < 1) return;
+
+        // Wrap each bubble in a block-level div so export buttons sit above it.
+        const wrap = document.createElement("div");
+        bubbleContainer.appendChild(wrap);
+        drawBubble(reg.studiesUsed, reg, mod.name, idx, wrap);
+
+        // Assign a stable id to the SVG that was just appended, then add buttons.
+        const bubbleSvg = wrap.querySelector("svg");
+        if (bubbleSvg) {
+          const svgId = `bubblePlot_${i}`;
+          bubbleSvg.id = svgId;
+          const exportDiv = document.createElement("div");
+          exportDiv.className = "plot-export";
+          exportDiv.innerHTML =
+            `<button class="export-btn" data-target="${svgId}" data-format="svg">SVG</button>` +
+            `<button class="export-btn" data-target="${svgId}" data-format="png">PNG</button>`;
+          wrap.insertBefore(exportDiv, bubbleSvg);
+        }
       });
   }
 

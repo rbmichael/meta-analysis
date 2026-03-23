@@ -149,6 +149,29 @@ input {
 .reg-sig-1 { color: #a8d8a8; }
 .reg-note  { font-size: 0.78em; color: #666; margin-top: 6px; }
 
+/* ---- Plot export buttons ---- */
+.plot-export {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.export-btn {
+  padding: 2px 8px;
+  font-size: 0.72em;
+  background: #222;
+  color: #888;
+  border: 1px solid #444;
+  border-radius: 3px;
+  cursor: pointer;
+  margin: 0;
+}
+
+.export-btn:hover {
+  color: #ccc;
+  border-color: #666;
+}
+
 /* ---- Bubble plots ---- */
 #bubblePlots {
   display: flex;
