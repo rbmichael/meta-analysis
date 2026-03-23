@@ -5,6 +5,7 @@ import { runTests } from "./tests.js";
 import { trimFill } from "./trimfill.js";
 import { drawForest, drawFunnel, drawBubble, drawInfluencePlot, drawCumulativeForest } from "./plots.js";
 import { exportSVG, exportPNG } from "./export.js";
+import { buildReport, downloadHTML, openPrintPreview } from "./report.js";
 
 // ---------------- EFFECT PROFILES ----------------
 const effectProfiles = {
@@ -239,6 +240,41 @@ document.getElementById("forestPageSize").addEventListener("change", () => {
 });
 
 // ---------------- PLOT EXPORT ----------------
+// ---------------- REPORT EXPORT BUTTONS ----------------
+// buildReport internally re-renders every forest page into a hidden element
+// then restores the live view.  After it returns we re-render the live forest
+// at the currently-viewed page and re-sync the nav, because buildReport has no
+// access to renderForestNav.
+function buildReportAndResync() {
+  if (!_reportArgs) return null;
+  // Pass the live forestPage so the restore inside collectForestSVGs lands on
+  // the correct page rather than always page 0 (which was the value at cache time).
+  const args = {
+    ..._reportArgs,
+    forestOptions: { ..._reportArgs.forestOptions, currentPage: forestPage },
+  };
+  const html = buildReport(args);
+  // Re-render the live forest at the current page and re-sync nav buttons.
+  if (_forestArgs) {
+    const { totalPages } = drawForest(
+      _forestArgs.studies, _forestArgs.m,
+      { ..._forestArgs.options, page: forestPage }
+    );
+    renderForestNav(totalPages);
+  }
+  return html;
+}
+
+document.getElementById("exportReportHTML").addEventListener("click", () => {
+  const html = buildReportAndResync();
+  if (html) downloadHTML(html);
+});
+
+document.getElementById("exportReportPDF").addEventListener("click", () => {
+  const html = buildReportAndResync();
+  if (html) openPrintPreview(html);
+});
+
 // Single delegated listener covers all static plot-export buttons and any
 // bubble-plot buttons injected dynamically during runAnalysis.
 document.addEventListener("click", e => {
@@ -1001,6 +1037,9 @@ const staleBanner   = document.getElementById("staleBanner");
 let forestPage = 0;
 let _forestArgs = null;  // { studies, m, options } — cached for page-nav re-renders
 
+// ---------------- REPORT STATE ----------------
+let _reportArgs = null;  // cached after each run; consumed by export buttons
+
 function renderForestNav(totalPages) {
   const nav = document.getElementById("forestNav");
   if (!nav) return;
@@ -1333,6 +1372,15 @@ function runAnalysis() {
   _forestArgs        = { studies: all, m, options: forestOpts };
   const { totalPages } = drawForest(all, m, { ...forestOpts, page: forestPage });
   renderForestNav(totalPages);
+
+  // Cache state for report export buttons.
+  _reportArgs = {
+    studies: all, m, profile, reg,
+    tf, egger, begg, fatpet, fsn,
+    influence, subgroup, method, ciMethod,
+    useTF, mAdjusted,
+    forestOptions: { ...forestOpts, currentPage: forestPage },
+  };
   drawFunnel(all, m, egger, profile);
   drawInfluencePlot(influence);
 

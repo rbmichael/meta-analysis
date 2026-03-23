@@ -1,0 +1,604 @@
+// ================= REPORT BUILDER =================
+// buildReport(args) — assembles a self-contained HTML report string from the
+//   last completed analysis state.
+//
+// Steps 2 and 3 (downloadHTML / openPrintPreview) are added in later steps.
+//
+// args shape (set by _reportArgs in ui.js):
+//   { studies, m, profile, reg, tf, egger, begg, fatpet, fsn,
+//     influence, subgroup, method, ciMethod, useTF, mAdjusted,
+//     forestOptions }   ← forestOptions = { ciMethod, profile, pageSize }
+
+import { drawForest } from "./plots.js";
+
+// ---------------------------------------------------------------------------
+// SVG serialization
+// ---------------------------------------------------------------------------
+
+const REPORT_BG = "#121212";
+
+function serializeSVG(svgEl) {
+  if (!svgEl) return "";
+  const clone = svgEl.cloneNode(true);
+  clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+
+  const w = clone.getAttribute("width")  || String(svgEl.getBoundingClientRect().width);
+  const h = clone.getAttribute("height") || String(svgEl.getBoundingClientRect().height);
+  clone.setAttribute("width",  w);
+  clone.setAttribute("height", h);
+
+  // Inject a background rect so the SVG is self-contained on any background
+  // colour (dark report page, white print page, standalone file viewer).
+  const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+  bg.setAttribute("width",  "100%");
+  bg.setAttribute("height", "100%");
+  bg.setAttribute("fill",   REPORT_BG);
+  clone.insertBefore(bg, clone.firstChild);
+
+  return new XMLSerializer().serializeToString(clone);
+}
+
+// Render every forest-plot page to SVG strings.
+//
+// We render directly into the live #forestPlot element rather than using a
+// hidden temporary element.  Because this function runs synchronously inside
+// a click handler the browser never repaints between renders, so the user
+// sees no flicker.  The originally-displayed page is restored before the
+// function returns.
+function collectForestSVGs(studies, m, forestOptions) {
+  const svgEl = document.getElementById("forestPlot");
+  if (!svgEl) return [];
+
+  const svgs = [];
+  let totalPages = 1;
+
+  // Render page 0 to discover totalPages; capture its SVG immediately.
+  try {
+    ({ totalPages } = drawForest(studies, m, { ...forestOptions, page: 0 }));
+    svgs.push(serializeSVG(svgEl));
+  } catch (e) {
+    console.error("collectForestSVGs: failed to render page 0", e);
+    return [];
+  }
+
+  for (let p = 1; p < totalPages; p++) {
+    try {
+      drawForest(studies, m, { ...forestOptions, page: p });
+      svgs.push(serializeSVG(svgEl));
+    } catch (e) {
+      console.error(`collectForestSVGs: failed to render page ${p}`, e);
+    }
+  }
+
+  // Restore the originally-displayed page.
+  try {
+    drawForest(studies, m, { ...forestOptions, page: forestOptions.currentPage ?? 0 });
+  } catch (e) {
+    console.error("collectForestSVGs: failed to restore page", e);
+  }
+
+  return svgs;
+}
+
+// ---------------------------------------------------------------------------
+// Formatting helpers
+// ---------------------------------------------------------------------------
+
+function fmt(v, d = 3) { return isFinite(v) ? (+v).toFixed(d) : "—"; }
+
+function fmtP(p) {
+  if (!isFinite(p)) return "—";
+  if (p < 0.0001)   return "&lt;0.0001";
+  return (+p).toFixed(4);
+}
+
+function esc(s) {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+// ---------------------------------------------------------------------------
+// Section builders
+// ---------------------------------------------------------------------------
+
+function sectionSummary(args) {
+  const { m, profile, method, ciMethod, useTF, tf, mAdjusted, studies } = args;
+
+  const k        = studies.filter(d => !d.filled).length;
+  const FE_disp  = profile.transform(m.FE);
+  const RE_disp  = profile.transform(m.RE);
+  const ci       = profile.transformCI(m.ciLow, m.ciHigh);
+  const pred     = profile.transformCI(m.predLow, m.predHigh);
+  const RE_adj   = (useTF && mAdjusted) ? profile.transform(mAdjusted.RE) : null;
+  const ciLabel  = ciMethod === "KH" ? "Knapp-Hartung"
+                 : ciMethod === "t"  ? "t-distribution"
+                 : "Normal (z)";
+  const tauCI1   = fmt(m.tauCI[0]);
+  const tauCI2   = isFinite(m.tauCI[1]) ? fmt(m.tauCI[1]) : "∞";
+  const H2hi     = isFinite(m.H2CI[1])  ? fmt(m.H2CI[1])  : "∞";
+
+  return `
+<section>
+  <h2>Summary</h2>
+  <table class="stat-table">
+    <tr><th>Setting</th><th>Value</th></tr>
+    <tr><td>Effect type</td><td>${esc(profile.label)}</td></tr>
+    <tr><td>τ² estimator</td><td>${esc(method)}</td></tr>
+    <tr><td>CI method</td><td>${esc(ciLabel)}</td></tr>
+    <tr><td>Studies (k)</td><td>${k}${tf.length > 0 ? ` + ${tf.length} imputed (trim &amp; fill)` : ""}</td></tr>
+  </table>
+  <table class="stat-table" style="margin-top:14px">
+    <tr><th>Statistic</th><th>Value</th></tr>
+    <tr><td>${esc(profile.label)} — Fixed Effects</td><td>${fmt(FE_disp)}</td></tr>
+    <tr><td>${esc(profile.label)} — Random Effects</td><td><strong>${fmt(RE_disp)}</strong></td></tr>
+    ${RE_adj !== null ? `<tr><td>RE (trim-and-fill adjusted)</td><td>${fmt(RE_adj)}</td></tr>` : ""}
+    <tr><td>95% CI</td><td>[${fmt(ci.lb)}, ${fmt(ci.ub)}]</td></tr>
+    <tr><td>95% Prediction interval</td><td>[${fmt(pred.lb)}, ${fmt(pred.ub)}]</td></tr>
+    <tr><td>τ²</td><td>${fmt(m.tau2)} [${tauCI1}, ${tauCI2}]</td></tr>
+    <tr><td>I²</td><td>${fmt(m.I2)}% [${fmt(m.I2CI[0])}%, ${fmt(m.I2CI[1])}%]</td></tr>
+    <tr><td>H²-CI</td><td>[${fmt(m.H2CI[0])}, ${H2hi}]</td></tr>
+    <tr><td>Q (df = ${m.df})</td><td>${fmt(m.Q)}</td></tr>
+    <tr><td>${esc(m.dist)}-statistic</td><td>${fmt(m.stat)}, p = ${fmtP(m.pval)}</td></tr>
+  </table>
+</section>`;
+}
+
+function sectionPubBias(args) {
+  const { egger, begg, fatpet, fsn, useTF, tf, profile } = args;
+  const petEff = isFinite(fatpet.intercept)
+    ? fmt(profile.transform(fatpet.intercept)) : "—";
+
+  return `
+<section>
+  <h2>Publication Bias</h2>
+  <table class="stat-table">
+    <tr><th>Test</th><th>Statistic</th><th>p-value</th></tr>
+    <tr>
+      <td>Egger (intercept)</td>
+      <td>${isFinite(egger.intercept) ? fmt(egger.intercept) : "—"}</td>
+      <td>${isFinite(egger.p) ? fmtP(egger.p) : "NA (k &lt; 3)"}</td>
+    </tr>
+    <tr>
+      <td>Begg (rank correlation τ)</td>
+      <td>${isFinite(begg.tau) ? fmt(begg.tau) : "—"}</td>
+      <td>${isFinite(begg.p)   ? fmtP(begg.p)  : "NA (k &lt; 3)"}</td>
+    </tr>
+    <tr>
+      <td>FAT — β₁ (bias)</td>
+      <td>${isFinite(fatpet.slope) ? fmt(fatpet.slope) : "—"}</td>
+      <td>${isFinite(fatpet.slopeP) ? fmtP(fatpet.slopeP) : "NA (k &lt; 3)"}</td>
+    </tr>
+    <tr>
+      <td>PET — effect at SE → 0</td>
+      <td>${petEff}</td>
+      <td>${isFinite(fatpet.interceptP) ? fmtP(fatpet.interceptP) : "NA (k &lt; 3)"}</td>
+    </tr>
+  </table>
+  <p style="margin-top:10px">
+    Fail-safe N (Rosenthal): <strong>${isFinite(fsn.rosenthal) ? Math.round(fsn.rosenthal) : "—"}</strong>
+    &nbsp;·&nbsp;
+    Fail-safe N (Orwin, trivial = 0.1): <strong>${isFinite(fsn.orwin) ? Math.round(fsn.orwin) : "—"}</strong>
+  </p>
+  <p>Trim &amp; Fill: <strong>${useTF ? "ON" : "OFF"}</strong>${tf.length > 0 ? ` (${tf.length} filled)` : ""}</p>
+</section>`;
+}
+
+function sectionInfluence(influence, k) {
+  if (!influence || !influence.length) return "";
+
+  const thresh2k = fmt(2 / k);
+  const thresh4k = fmt(4 / k);
+
+  const rows = influence.map(d => {
+    const anyFlag = d.outlier || d.influential || d.highLeverage || d.highCookD;
+    const flags   = [
+      d.outlier      ? "Outlier"     : "",
+      d.influential  ? "Influential" : "",
+      d.highLeverage ? "Hi-Lev"      : "",
+      d.highCookD    ? "Hi-Cook"     : "",
+    ].filter(Boolean).join(", ");
+    const cls = anyFlag ? ' class="flagged"' : "";
+    return `<tr${cls}>
+      <td>${esc(d.label)}</td>
+      <td>${isFinite(d.RE_loo)      ? fmt(d.RE_loo)      : "—"}</td>
+      <td>${isFinite(d.deltaTau2)   ? fmt(d.deltaTau2)   : "—"}</td>
+      <td>${isFinite(d.stdResidual) ? fmt(d.stdResidual) : "—"}</td>
+      <td>${isFinite(d.DFBETA)      ? fmt(d.DFBETA)      : "—"}</td>
+      <td>${isFinite(d.hat)         ? d.hat.toFixed(3)   : "—"}</td>
+      <td>${isFinite(d.cookD)       ? d.cookD.toFixed(3) : "—"}</td>
+      <td>${flags}</td>
+    </tr>`;
+  }).join("");
+
+  return `
+<section>
+  <h2>Influence Diagnostics</h2>
+  <table class="stat-table">
+    <thead><tr>
+      <th>Study</th><th>RE (LOO)</th><th>Δτ²</th><th>Std Residual</th>
+      <th>DFBETA</th><th>Hat</th><th>Cook's D</th><th>Flags</th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table>
+  <p class="note">Thresholds: Hat &gt; ${thresh2k} (= 2/k) · Cook's D &gt; ${thresh4k} (= 4/k)</p>
+</section>`;
+}
+
+function sectionSubgroup(subgroup, profile) {
+  if (!subgroup || subgroup.G < 2) return "";
+
+  const rows = Object.entries(subgroup.groups).map(([g, r]) => {
+    const single   = r.k === 1;
+    const y_disp   = profile.transform(r.y);
+    const ci_disp  = profile.transformCI(r.ci.lb, r.ci.ub);
+    return `<tr>
+      <td>${esc(g)}</td>
+      <td>${r.k}</td>
+      <td>${isFinite(y_disp) ? fmt(y_disp) : "—"}</td>
+      <td>${single ? "—" : (isFinite(r.se)  ? fmt(r.se)  : "—")}</td>
+      <td>${single ? "—" : `[${fmt(ci_disp.lb)}, ${fmt(ci_disp.ub)}]`}</td>
+      <td>${single ? "—" : (isFinite(r.tau2) ? r.tau2.toFixed(3) : "0")}</td>
+      <td>${single ? "—" : (isFinite(r.I2)   ? r.I2.toFixed(1)   : "0")}${single ? "" : "%"}</td>
+    </tr>`;
+  }).join("");
+
+  return `
+<section>
+  <h2>Subgroup Analysis</h2>
+  <table class="stat-table">
+    <thead><tr>
+      <th>Group</th><th>k</th><th>Effect</th><th>SE</th>
+      <th>95% CI</th><th>τ²</th><th>I²</th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table>
+  <p class="note">
+    Q<sub>between</sub> = ${subgroup.Qbetween.toFixed(3)},
+    df = ${subgroup.df},
+    p = ${subgroup.p.toFixed(4)}
+  </p>
+</section>`;
+}
+
+function sectionStudyTable(args) {
+  const { studies, m, profile } = args;
+
+  const tau2   = isFinite(m.tau2) ? m.tau2 : 0;
+  const real   = studies.filter(d => !d.filled);
+  const totalW = real.reduce((s, d) => s + 1 / (d.vi + tau2), 0);
+
+  const transformedScale = (
+    profile.label.includes("Ratio")   ||
+    profile.label.includes("Hazard")  ||
+    profile.label.includes("Rate")    ||
+    profile.label.includes("log")     ||
+    profile.label.includes("logit")   ||
+    profile.label.includes("arcsine") ||
+    profile.label.includes("Freeman") ||
+    profile.label.includes("Fisher")
+  );
+  const seLabel = transformedScale ? "SE (transformed)" : "SE";
+
+  function fmtV(v)   { return isFinite(v) ? (+v).toFixed(3) : "—"; }
+  function fmtPct(v) { return (v !== null && isFinite(v)) ? v.toFixed(1) + "%" : "—"; }
+
+  const rows = studies.map(d => {
+    const wi  = 1 / (d.vi + tau2);
+    const pct = d.filled ? null : wi / totalW * 100;
+    const ef  = profile.transform(d.yi);
+    const lo  = profile.transform(d.yi - 1.96 * d.se);
+    const hi  = profile.transform(d.yi + 1.96 * d.se);
+    const lbl = d.label.length > 40 ? d.label.slice(0, 39) + "\u2026" : d.label;
+    const cls = d.filled ? ' class="imputed"' : "";
+    return `<tr${cls}>
+      <td>${esc(lbl)}</td>
+      <td>${fmtV(ef)}</td>
+      <td>${fmtV(lo)}</td>
+      <td>${fmtV(hi)}</td>
+      <td>${fmtV(d.se)}</td>
+      <td>${fmtPct(pct)}</td>
+    </tr>`;
+  }).join("");
+
+  const pooledEf = profile.transform(m.RE);
+  const pooledLo = profile.transform(m.ciLow);
+  const pooledHi = profile.transform(m.ciHigh);
+
+  return `
+<section>
+  <h2>Study-Level Results</h2>
+  <table class="stat-table study-tbl">
+    <thead><tr>
+      <th>Study</th><th>Effect</th><th>95% CI (low)</th><th>95% CI (high)</th>
+      <th>${esc(seLabel)}</th><th>RE Weight</th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+    <tfoot><tr class="pooled">
+      <td>Pooled (RE)</td>
+      <td>${fmtV(pooledEf)}</td>
+      <td>${fmtV(pooledLo)}</td>
+      <td>${fmtV(pooledHi)}</td>
+      <td>${fmtV(m.seRE)}</td>
+      <td>100%</td>
+    </tr></tfoot>
+  </table>
+</section>`;
+}
+
+function sectionRegression(reg, method, ciMethod) {
+  if (!reg || reg.rankDeficient || !reg.colNames) return "";
+
+  const ciLabel   = ciMethod === "KH" ? "Knapp-Hartung" : "Normal CI";
+  const statLabel = reg.dist === "t" ? `t(${reg.QEdf})` : "z";
+  const QMlabel   = reg.QMdist === "F"
+    ? `F(${reg.QMdf}, ${reg.QEdf})`
+    : `χ²(${reg.QMdf})`;
+  const R2row = reg.p > 1 && isFinite(reg.R2)
+    ? ` · R² = ${fmt(reg.R2 * 100)}%` : "";
+
+  function stars(p) {
+    if (p < 0.001) return "***";
+    if (p < 0.01)  return "**";
+    if (p < 0.05)  return "*";
+    if (p < 0.10)  return ".";
+    return "";
+  }
+
+  const rows = reg.colNames.map((name, j) => {
+    const [lo, hi] = reg.ci[j];
+    const cls = j === 0 ? ' class="intercept"' : "";
+    return `<tr${cls}>
+      <td>${esc(name)}</td>
+      <td>${fmt(reg.beta[j])}</td>
+      <td>${fmt(reg.se[j])}</td>
+      <td>${fmt(reg.zval[j])}</td>
+      <td>${fmtP(reg.pval[j])}</td>
+      <td>[${fmt(lo)}, ${fmt(hi)}]</td>
+      <td>${stars(reg.pval[j])}</td>
+    </tr>`;
+  }).join("");
+
+  return `
+<section>
+  <h2>Meta-Regression</h2>
+  <p class="meta-line">
+    k = ${reg.k} · ${esc(method)} · ${esc(ciLabel)}
+    · τ² = ${fmt(reg.tau2)} · I² = ${fmt(reg.I2)}%${R2row}
+    · QE(${reg.QEdf}) = ${fmt(reg.QE)}, p = ${fmtP(reg.QEp)}
+    ${reg.p > 1 ? `· QM ${esc(QMlabel)} = ${fmt(reg.QM)}, p = ${fmtP(reg.QMp)}` : ""}
+  </p>
+  <table class="stat-table">
+    <thead><tr>
+      <th>Term</th><th>β</th><th>SE</th><th>${esc(statLabel)}</th>
+      <th>p</th><th>95% CI</th><th></th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table>
+  <p class="note">*** p &lt; .001 · ** p &lt; .01 · * p &lt; .05 · . p &lt; .10</p>
+</section>`;
+}
+
+function sectionPlot(label, svgStrings) {
+  const filled = svgStrings.filter(Boolean);
+  if (!filled.length) return "";
+  return `
+<section class="plot-section">
+  <h2>${esc(label)}</h2>
+  ${filled.map(s => `<div class="svg-wrap">${s}</div>`).join("\n  ")}
+</section>`;
+}
+
+// ---------------------------------------------------------------------------
+// Embedded CSS
+// ---------------------------------------------------------------------------
+
+function reportCSS() {
+  return `
+    *, *::before, *::after { box-sizing: border-box; }
+    body {
+      font-family: Arial, sans-serif;
+      background: #121212;
+      color: #eee;
+      margin: 0;
+      padding: 24px 32px;
+      font-size: 14px;
+    }
+    h1 { font-size: 1.4em; margin: 0 0 4px 0; }
+    h2 {
+      font-size: 0.78em;
+      font-weight: bold;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: #888;
+      margin: 0 0 12px 0;
+      padding-bottom: 6px;
+      border-bottom: 1px solid #2e2e2e;
+    }
+    .report-meta { font-size: 0.82em; color: #666; margin-bottom: 28px; }
+    section {
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 16px 20px;
+      margin-bottom: 24px;
+    }
+    .stat-table {
+      border-collapse: collapse;
+      font-size: 0.88em;
+      width: 100%;
+      max-width: 900px;
+    }
+    .stat-table th {
+      background: #1e2840;
+      color: #aac;
+      font-weight: normal;
+      text-align: left;
+      padding: 5px 10px;
+      border: 1px solid #333;
+    }
+    .stat-table td {
+      padding: 5px 10px;
+      border: 1px solid #2a2a2a;
+      color: #ddd;
+    }
+    .stat-table tbody tr:nth-child(even) td { background: #171727; }
+    .study-tbl td:first-child { font-family: monospace; }
+    .imputed td { color: #555; font-style: italic; }
+    .pooled td {
+      color: #ffd740;
+      font-weight: bold;
+      background: #1e1e10 !important;
+      border-top: 2px solid #555;
+    }
+    .intercept td { color: #999; font-style: italic; }
+    .flagged td { background: #2a1a1a !important; }
+    .meta-line { font-size: 0.84em; color: #aaa; margin: 0 0 8px 0; }
+    .note { font-size: 0.78em; color: #666; margin-top: 6px; }
+    p { margin: 4px 0; }
+    .svg-wrap { margin-bottom: 12px; overflow-x: auto; }
+    .svg-wrap svg { display: block; }
+
+    @media print {
+      body { background: #fff; color: #000; padding: 12px 16px; }
+      section { background: #fff; border-color: #ccc; page-break-inside: avoid; }
+      h2 { color: #444; border-color: #ccc; }
+      .stat-table th { background: #e8e8f0; color: #333; }
+      .stat-table td { color: #222; }
+      .stat-table tbody tr:nth-child(even) td { background: #f5f5f5; }
+      .imputed td { color: #999; }
+      .pooled td { color: #6a5000; background: #fffff0 !important; }
+      .flagged td { background: #fff5f5 !important; }
+      .meta-line { color: #555; }
+      .note { color: #888; }
+      .plot-section { page-break-before: always; }
+      .svg-wrap svg { max-width: 100%; height: auto; }
+    }
+  `;
+}
+
+// ---------------------------------------------------------------------------
+// Download helper
+// ---------------------------------------------------------------------------
+
+// Trigger a browser download of htmlString as a .html file.
+// Uses the same Blob / anchor pattern as export.js to ensure Firefox and
+// older Safari compatibility (detached-element clicks are silently ignored).
+export function downloadHTML(htmlString, filename = "meta-analysis-report.html") {
+  const blob = new Blob([htmlString], { type: "text/html;charset=utf-8" });
+  const url  = URL.createObjectURL(blob);
+
+  const a = document.createElement("a");
+  a.href     = url;
+  a.download = filename;
+  a.style.display = "none";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+
+  // Revoke on next tick so the download has time to start.
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// ---------------------------------------------------------------------------
+// Print-preview helper (PDF export)
+// ---------------------------------------------------------------------------
+
+// Open the report in a new browser window and immediately invoke the print
+// dialog so the user can "Save as PDF" via the browser's built-in PDF printer.
+//
+// Strategy:
+//   1. Open a blank window synchronously (must happen in the same user-gesture
+//      tick as the click, otherwise pop-up blockers will suppress it).
+//   2. Write the HTML into the new document.
+//   3. Wait for all resources (fonts, images embedded in SVGs) to finish
+//      loading via the window's load event before calling print().  If the
+//      window is already "complete" by the time the listener fires — which can
+//      happen when the HTML has no external resources — we call print()
+//      immediately.
+export function openPrintPreview(htmlString) {
+  const win = window.open("", "_blank");
+  if (!win) {
+    // Pop-up was blocked; fall back to a direct HTML download so the user
+    // is not left with a silent failure.
+    downloadHTML(htmlString, "meta-analysis-report.html");
+    return;
+  }
+
+  win.document.open();
+  win.document.write(htmlString);
+  win.document.close();
+
+  // Use the new window's load event so that inline SVG images (which the
+  // browser may decode asynchronously) are fully rendered before printing.
+  if (win.document.readyState === "complete") {
+    win.print();
+  } else {
+    win.addEventListener("load", () => win.print(), { once: true });
+  }
+}
+
+export function buildReport(args) {
+  const {
+    studies, m, profile, reg, tf, influence, subgroup,
+    method, ciMethod, useTF, forestOptions,
+  } = args;
+
+  const date  = new Date().toLocaleDateString(undefined, {
+    year: "numeric", month: "long", day: "numeric",
+  });
+  const k = studies.filter(d => !d.filled).length;
+  const ciLabel = ciMethod === "KH" ? "Knapp-Hartung"
+                : ciMethod === "t"  ? "t-dist CI"
+                : "Normal CI";
+
+  // Collect forest SVGs for every page; other plots read directly from DOM.
+  const forestSVGs   = forestOptions
+    ? collectForestSVGs(studies, m, forestOptions)
+    : [];
+
+  function liveSVG(id) {
+    const el = document.getElementById(id);
+    return el ? serializeSVG(el) : "";
+  }
+  const bubbleSVGs = (() => {
+    const c = document.getElementById("bubblePlots");
+    return c ? Array.from(c.querySelectorAll("svg")).map(serializeSVG) : [];
+  })();
+
+  const body = [
+    sectionSummary(args),
+    sectionPubBias(args),
+    sectionInfluence(influence, k),
+    sectionSubgroup(subgroup, profile),
+    sectionStudyTable(args),
+    sectionRegression(reg, method, ciMethod),
+    sectionPlot("Forest Plot", forestSVGs),
+    sectionPlot("Funnel Plot",            [liveSVG("funnelPlot")]),
+    sectionPlot("Influence Plot",         [liveSVG("influencePlot")]),
+    sectionPlot("Cumulative Forest Plot", [liveSVG("cumulativePlot")]),
+    sectionPlot("Bubble Plots",           bubbleSVGs),
+  ].join("\n");
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Meta-Analysis Report</title>
+  <style>${reportCSS()}</style>
+</head>
+<body>
+  <h1>Meta-Analysis Report</h1>
+  <p class="report-meta">
+    Generated ${esc(date)}
+    &nbsp;·&nbsp; k = ${k}${tf.length > 0 ? ` + ${tf.length} imputed` : ""}
+    &nbsp;·&nbsp; ${esc(profile.label)}
+    &nbsp;·&nbsp; ${esc(method)}
+    &nbsp;·&nbsp; ${esc(ciLabel)}
+  </p>
+  ${body}
+</body>
+</html>`;
+}
