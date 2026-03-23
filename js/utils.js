@@ -246,35 +246,6 @@ export function transformEffect(x, type) {
 }
 
 export function transformCI(lb, ub, type) {
-  if (!isFinite(lb) || !isFinite(ub)) {
-    return { lb: NaN, ub: NaN };
-  }
-
-  if (type === "OR" || type === "RR" || type === "HR" || type === "IRR" || type === "IR" || type === "ROM" || type === "CVR" || type === "VR") {
-    return {
-      lb: Math.exp(lb),
-      ub: Math.exp(ub)
-    };
-  }
-
-	if (type === "RD") return { lb, ub }; // raw difference
-
-  if (type === "MD" || type === "SMD" || type === "SMDH" || type === "MD_paired" || type === "SMD_paired") {
-    return { lb, ub };
-  }
-
-  if (type === "ZCOR") return { lb: Math.tanh(lb), ub: Math.tanh(ub) };
-  if (type === "COR")  return { lb, ub };
-
-  // Proportions — apply same back-transform to both CI bounds
-  if (type === "PR"  || type === "PLN" || type === "PLO" ||
-      type === "PAS" || type === "PFT") {
-    return {
-      lb: transformEffect(lb, type),
-      ub: transformEffect(ub, type)
-    };
-  }
-
-  console.warn("Unknown effect type in transformCI:", type);
-  return { lb, ub };
+  if (!isFinite(lb) || !isFinite(ub)) return { lb: NaN, ub: NaN };
+  return { lb: transformEffect(lb, type), ub: transformEffect(ub, type) };
 }

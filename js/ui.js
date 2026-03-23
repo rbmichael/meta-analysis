@@ -1,6 +1,7 @@
 // ================= UI =================
-import { compute, eggerTest, beggTest, fatPetTest, failSafeN, meta, influenceDiagnostics, subgroupAnalysis, metaRegression, cumulativeMeta, leaveOneOut, estimatorComparison } from "./analysis.js";
-import { fmt, transformEffect, transformCI } from "./utils.js";
+import { eggerTest, beggTest, fatPetTest, failSafeN, meta, influenceDiagnostics, subgroupAnalysis, metaRegression, cumulativeMeta, leaveOneOut, estimatorComparison } from "./analysis.js";
+import { fmt } from "./utils.js";
+import { effectProfiles, getProfile } from "./profiles.js";
 import { runTests } from "./tests.js";
 import { trimFill } from "./trimfill.js";
 import { drawForest, drawFunnel, drawBubble, drawInfluencePlot, drawCumulativeForest } from "./plots.js";
@@ -8,185 +9,6 @@ import { exportSVG, exportPNG } from "./export.js";
 import { buildReport, downloadHTML, openPrintPreview } from "./report.js";
 import { parseCSV, detectEffectType } from "./csv.js";
 import { HELP } from "./help.js";
-
-// ---------------- EFFECT PROFILES ----------------
-const effectProfiles = {
-  "MD": {
-    label: "Mean Difference",
-    inputs: ["m1", "sd1", "n1", "m2", "sd2", "n2"],
-    compute: (data) => compute(data, "MD"),
-    transform: (x) => transformEffect(x, "MD"),
-    transformCI: (lb, ub) => transformCI(lb, ub, "MD")
-  },
-  
-	"SMD": {
-	  label: "Standardized Mean Difference",
-	  inputs: ["m1","sd1","n1","m2","sd2","n2"],
-	  compute: (data) => compute(data, "SMD", { hedgesCorrection: true }),
-	  transform: (x) => transformEffect(x, "SMD"),
-	  transformCI: (lb, ub) => transformCI(lb, ub, "SMD")
-	},
-
-  "SMDH": {
-    label: "Standardized Mean Difference (heteroscedastic)",
-    inputs: ["m1", "sd1", "n1", "m2", "sd2", "n2"],
-    compute: (data) => compute(data, "SMDH"),
-    transform: (x) => transformEffect(x, "SMDH"),
-    transformCI: (lb, ub) => transformCI(lb, ub, "SMDH")
-  },
-
-	"MD_paired": {
-	  label: "Mean Difference (Paired)",
-	  inputs: ["m_pre", "sd_pre", "m_post", "sd_post", "n", "r"],
-	  compute: (data) => compute(data, "MD_paired"),
-	  transform: (x) => transformEffect(x, "MD_paired"),
-	  transformCI: (lb, ub) => transformCI(lb, ub, "MD_paired")
-	},
-
-	"SMD_paired": {
-	  label: "Standardized Mean Change",
-	  inputs: ["m_pre", "sd_pre", "m_post", "sd_post", "n", "r"],
-	  compute: (data) => compute(data, "SMD_paired"),
-	  transform: (x) => transformEffect(x, "SMD_paired"),
-	  transformCI: (lb, ub) => transformCI(lb, ub, "SMD_paired")
-	},
-
-  "ROM": {
-    label: "Ratio of Means (ROM)",
-    inputs: ["m1", "sd1", "n1", "m2", "sd2", "n2"],
-    compute: (data) => compute(data, "ROM"),
-    transform: (x) => transformEffect(x, "ROM"),
-    transformCI: (lb, ub) => transformCI(lb, ub, "ROM")
-  },
-
-  "CVR": {
-    label: "Coefficient of Variation Ratio (CVR)",
-    inputs: ["m1", "sd1", "n1", "m2", "sd2", "n2"],
-    compute: (data) => compute(data, "CVR"),
-    transform: (x) => transformEffect(x, "CVR"),
-    transformCI: (lb, ub) => transformCI(lb, ub, "CVR")
-  },
-
-  "VR": {
-    label: "Variability Ratio (VR)",
-    inputs: ["sd1", "n1", "sd2", "n2"],
-    compute: (data) => compute(data, "VR"),
-    transform: (x) => transformEffect(x, "VR"),
-    transformCI: (lb, ub) => transformCI(lb, ub, "VR")
-  },
-
-  "OR": {
-    label: "Odds Ratio",
-    inputs: ["a", "b", "c", "d"],
-    compute: (data) => compute(data, "OR"),
-    transform: (x) => transformEffect(x, "OR"),
-    transformCI: (lb, ub) => transformCI(lb, ub, "OR")
-  },
-  
-  "RR": {
-    label: "Risk Ratio",
-    inputs: ["a", "b", "c", "d"],
-    compute: (data) => compute(data, "RR"),
-    transform: (x) => transformEffect(x, "RR"),
-    transformCI: (lb, ub) => transformCI(lb, ub, "RR")
-  },
-
-	"RD": {
-	  label: "Risk Difference",
-	  inputs: ["a", "b", "c", "d"],  // a/b = events/non-events in treatment, c/d = control
-	  compute: (data) => compute(data, "RD"),
-	  transform: (x) => transformEffect(x, "RD"),
-	  transformCI: (lb, ub) => transformCI(lb, ub, "RD")
-	},
-
-  "COR": {
-    label: "Correlation (raw r)",
-    inputs: ["r", "n"],
-    compute: (data) => compute(data, "COR"),
-    transform: (x) => transformEffect(x, "COR"),
-    transformCI: (lb, ub) => transformCI(lb, ub, "COR")
-  },
-
-  "ZCOR": {
-    label: "Correlation (Fisher's z)",
-    inputs: ["r", "n"],
-    compute: (data) => compute(data, "ZCOR"),
-    transform: (x) => transformEffect(x, "ZCOR"),
-    transformCI: (lb, ub) => transformCI(lb, ub, "ZCOR")
-  },
-
-  "PR": {
-    label: "Proportion (raw)",
-    inputs: ["x", "n"],
-    compute: (data) => compute(data, "PR"),
-    transform: (x) => transformEffect(x, "PR"),
-    transformCI: (lb, ub) => transformCI(lb, ub, "PR")
-  },
-
-  "PLN": {
-    label: "Proportion (log)",
-    inputs: ["x", "n"],
-    compute: (data) => compute(data, "PLN"),
-    transform: (x) => transformEffect(x, "PLN"),
-    transformCI: (lb, ub) => transformCI(lb, ub, "PLN")
-  },
-
-  "PLO": {
-    label: "Proportion (logit)",
-    inputs: ["x", "n"],
-    compute: (data) => compute(data, "PLO"),
-    transform: (x) => transformEffect(x, "PLO"),
-    transformCI: (lb, ub) => transformCI(lb, ub, "PLO")
-  },
-
-  "PAS": {
-    label: "Proportion (arcsine)",
-    inputs: ["x", "n"],
-    compute: (data) => compute(data, "PAS"),
-    transform: (x) => transformEffect(x, "PAS"),
-    transformCI: (lb, ub) => transformCI(lb, ub, "PAS")
-  },
-
-  "PFT": {
-    label: "Proportion (Freeman-Tukey)",
-    inputs: ["x", "n"],
-    compute: (data) => compute(data, "PFT"),
-    transform: (x) => transformEffect(x, "PFT"),
-    transformCI: (lb, ub) => transformCI(lb, ub, "PFT")
-  },
-
-  "GENERIC": {
-    label: "Generic (yi / vi)",
-    inputs: ["yi", "vi"],
-    compute: (data) => compute(data, "GENERIC"),
-    transform: (x) => x,
-    transformCI: (lb, ub) => ({ lb, ub })
-  },
-
-  "HR": {
-    label: "Hazard Ratio",
-    inputs: ["hr", "ci_lo", "ci_hi"],
-    compute: (data) => compute(data, "HR"),
-    transform: (x) => transformEffect(x, "HR"),
-    transformCI: (lb, ub) => transformCI(lb, ub, "HR")
-  },
-
-  "IRR": {
-    label: "Incidence Rate Ratio",
-    inputs: ["x1", "t1", "x2", "t2"],
-    compute: (data) => compute(data, "IRR"),
-    transform: (x) => transformEffect(x, "IRR"),
-    transformCI: (lb, ub) => transformCI(lb, ub, "IRR")
-  },
-
-  "IR": {
-    label: "Incidence Rate (log)",
-    inputs: ["x", "t"],
-    compute: (data) => compute(data, "IR"),
-    transform: (x) => transformEffect(x, "IR"),
-    transformCI: (lb, ub) => transformCI(lb, ub, "IR")
-  }
-};
 
 // ---------------- SHARED HELPERS ----------------
 function escapeHTML(s) {
@@ -584,85 +406,36 @@ function clearRow(btn) {
 
 // ---------------- VALIDATE ROW ----------------
 function validateRow(row) {
-  const type = document.getElementById("effectType").value;
-  const profile = effectProfiles[type];
-  const inputs = row.querySelectorAll("input");
+  const type    = document.getElementById("effectType").value;
+  const profile = getProfile(type);
+  const inputs  = row.querySelectorAll("input");
 
-  let valid = true;
-  const errors = {};
+  // Clear previous error state on all inputs.
+  inputs.forEach(input => input.classList.remove("input-error"));
 
+  if (!profile) {
+    row.dataset.validationErrors = "{}";
+    row.classList.remove("row-error");
+    return true;
+  }
+
+  // Build a study object from the effect-column inputs (skip label, group, moderators).
+  const studyObj = {};
   inputs.forEach((input, idx) => {
-    input.classList.remove("input-error");
-
-    // Skip Study (first), Group (.group class), and moderator (data-mod) inputs.
-    // Only the p effect-input columns (indices 1..p) are validated here.
     if (idx === 0 || input.classList.contains("group") || "mod" in input.dataset) return;
-
     const key = profile.inputs[idx - 1];
     const val = input.value.trim();
+    studyObj[key] = (val === "" || isNaN(val)) ? NaN : +val;
+  });
 
-    if (val === "" || isNaN(val)) {
-      input.classList.add("input-error");
-      errors[key] = `${key} is required`;
-      valid = false;
-      return;
-    }
+  // Delegate to the profile's validate function.
+  const { valid, errors } = profile.validate(studyObj);
 
-    const num = +val;
-
-    // -------- RULES BY VARIABLE --------
-    let inputValid = true;
-    let errorMsg = null;
-    if (key.includes("sd") && num <= 0) { inputValid = false; errorMsg = `${key} must be > 0`; }
-    if (key === "vi" && num <= 0)        { inputValid = false; errorMsg = "vi must be > 0"; }
-    if (key === "n") {
-      const minN = type === "ZCOR" ? 4 : type === "COR" ? 3 : 2;
-      if (num < minN) { inputValid = false; errorMsg = `n must be ≥ ${minN}${type === "ZCOR" ? " for Fisher's z" : ""}`; }
-    }
-    if (key === "x") {
-      if (!Number.isInteger(num) || num < 0) { inputValid = false; errorMsg = "x must be a non-negative integer"; }
-      else {
-        // Check x ≤ n in the same row
-        const nInput = Array.from(row.querySelectorAll("input")).find(
-          (el, i) => i > 0 && profile.inputs[i - 1] === "n"
-        );
-        const nVal = nInput ? +nInput.value : NaN;
-        if (isFinite(nVal) && num > nVal) { inputValid = false; errorMsg = "x cannot exceed n"; }
-      }
-    }
-    // IRR event counts: non-negative integers
-    if (key === "x1" || key === "x2") {
-      if (!Number.isInteger(num) || num < 0) { inputValid = false; errorMsg = `${key} must be a non-negative integer`; }
-    }
-    // Person-time: strictly positive
-    if (key === "t" || key === "t1" || key === "t2") {
-      if (num <= 0) { inputValid = false; errorMsg = `${key} must be > 0`; }
-    }
-    // HR: hazard ratio and CI bounds must be strictly positive
-    if (key === "hr" || key === "ci_lo" || key === "ci_hi") {
-      if (num <= 0) { inputValid = false; errorMsg = `${key} must be > 0`; }
-    }
-    // HR: ci_lo must be less than ci_hi (cross-field check)
-    if (key === "ci_lo") {
-      const hiInput = Array.from(row.querySelectorAll("input")).find(
-        (el, i) => i > 0 && profile.inputs[i - 1] === "ci_hi"
-      );
-      const hiVal = hiInput ? +hiInput.value : NaN;
-      if (isFinite(hiVal) && num >= hiVal) { inputValid = false; errorMsg = "ci_lo must be < ci_hi"; }
-    }
-    // r as pre-post correlation (paired designs): allow [-1, 1]
-    // r as Pearson correlation (COR/ZCOR): must be strictly within (-1, 1)
-    if (key === "r" && (type === "COR" || type === "ZCOR")) {
-      if (Math.abs(num) >= 1) { inputValid = false; errorMsg = "r must be strictly between -1 and 1"; }
-    } else if (key === "r" && (num < -1 || num > 1)) {
-      inputValid = false; errorMsg = "r must be between -1 and 1";
-    }
-
-    if (!inputValid) {
-      input.classList.add("input-error");
-      errors[key] = errorMsg;
-      valid = false;
-    }
+  // Mark individual inputs whose key has an error.
+  inputs.forEach((input, idx) => {
+    if (idx === 0 || input.classList.contains("group") || "mod" in input.dataset) return;
+    const key = profile.inputs[idx - 1];
+    if (errors[key]) input.classList.add("input-error");
   });
 
   row.dataset.validationErrors = JSON.stringify(errors);
@@ -672,198 +445,7 @@ function validateRow(row) {
 
 // ---------------- SOFT WARNINGS ----------------
 function getSoftWarnings(studyInput, type, label) {
-  const warnings = [];
-
-  if (type === "MD" || type === "SMD" || type === "SMDH") {
-    const { n1, n2, sd1, sd2 } = studyInput;
-
-    if (isFinite(n1) && n1 < 10) {
-      warnings.push(`⚠️ ${label}: small sample size (n1 < 10)`);
-    }
-    if (isFinite(n2) && n2 < 10) {
-      warnings.push(`⚠️ ${label}: small sample size (n2 < 10)`);
-    }
-
-    if (isFinite(n1) && isFinite(n2)) {
-      const ratio = Math.max(n1, n2) / Math.min(n1, n2);
-      if (ratio > 3) {
-        warnings.push(`⚠️ ${label}: highly imbalanced group sizes`);
-      }
-    }
-
-    if (isFinite(sd1) && isFinite(sd2)) {
-      const ratio = Math.max(sd1, sd2) / Math.min(sd1, sd2);
-      if (ratio > 3) {
-        warnings.push(`⚠️ ${label}: large SD imbalance`);
-      }
-    }
-
-    // SMDH-specific: if SDs are nearly equal the standard SMD is equally valid
-    // and more commonly reported — alert the user.
-    if (type === "SMDH" && isFinite(sd1) && isFinite(sd2) && sd1 > 0 && sd2 > 0) {
-      const sdRatio = Math.max(sd1, sd2) / Math.min(sd1, sd2);
-      if (sdRatio < 1.1) {
-        warnings.push(`⚠️ ${label}: sd1 ≈ sd2 — standard SMD (pooled SD) is equally valid and more widely reported`);
-      }
-    }
-  }
-
-  else if (type === "OR" || type === "RR") {
-    const { a, b, c, d } = studyInput;
-
-    // Zero-event cells
-    if ([a, b, c, d].some(v => v === 0)) {
-      warnings.push(`⚠️ ${label}: zero cell detected (continuity correction applied)`);
-    }
-
-    // Rare events
-    const total = (a + b + c + d);
-    if (isFinite(total) && total > 0) {
-      const minCell = Math.min(a, b, c, d);
-      if (minCell / total < 0.05) {
-        warnings.push(`⚠️ ${label}: rare events (unstable estimate)`);
-      }
-    }
-  }
-
-  else if (type === "COR" || type === "ZCOR") {
-    const { r, n } = studyInput;
-    if (isFinite(n) && n < 10) {
-      warnings.push(`⚠️ ${label}: small sample size (n < 10) — correlation estimate unreliable`);
-    }
-    if (isFinite(r) && Math.abs(r) > 0.9) {
-      warnings.push(`⚠️ ${label}: |r| > 0.90 — variance estimate near boundary, interpret cautiously`);
-    }
-  }
-
-  else if (type === "PR" || type === "PLN" || type === "PLO" ||
-           type === "PAS" || type === "PFT") {
-    const { x, n } = studyInput;
-    if (isFinite(n) && n < 20) {
-      warnings.push(`⚠️ ${label}: small sample size (n < 20) — proportion estimate unreliable`);
-    }
-    if (isFinite(x) && isFinite(n) && n > 0) {
-      const p = x / n;
-      if (p === 0 || p === 1) {
-        if (type === "PR") {
-          warnings.push(`⚠️ ${label}: extreme proportion (0 or 1) — variance is zero, study has no weight`);
-        }
-        // PLN/PLO: continuity correction applied automatically
-        // PAS/PFT: formula is well-defined at boundaries, no correction needed
-      } else if (p < 0.05 || p > 0.95) {
-        warnings.push(`⚠️ ${label}: extreme proportion (< 5% or > 95%) — consider log or logit transform`);
-      }
-    }
-  }
-
-  else if (type === "GENERIC") {
-    const { vi } = studyInput;
-    if (isFinite(vi) && vi > 1) {
-      warnings.push(`⚠️ ${label}: large variance (low precision study)`);
-    }
-  }
-
-  else if (type === "IRR") {
-    const { x1, x2 } = studyInput;
-    if (x1 === 0 || x2 === 0) {
-      warnings.push(`⚠️ ${label}: zero events (continuity correction of 0.5 applied to both arms)`);
-    }
-  }
-
-  else if (type === "IR") {
-    const { x } = studyInput;
-    if (x === 0) {
-      warnings.push(`⚠️ ${label}: zero events (continuity correction: x set to 0.5)`);
-    }
-  }
-
-  else if (type === "ROM") {
-    const { m1, m2, sd1, sd2, n1, n2 } = studyInput;
-    // Non-positive means make log(m1/m2) undefined — explain the exclusion clearly.
-    if (isFinite(m1) && m1 <= 0) {
-      warnings.push(`⚠️ ${label}: m1 ≤ 0 — ROM requires strictly positive means (study excluded)`);
-    }
-    if (isFinite(m2) && m2 <= 0) {
-      warnings.push(`⚠️ ${label}: m2 ≤ 0 — ROM requires strictly positive means (study excluded)`);
-    }
-    // Non-positive SDs also make the delta-method variance undefined.
-    if (isFinite(sd1) && sd1 <= 0) {
-      warnings.push(`⚠️ ${label}: sd1 ≤ 0 — standard deviation must be positive (study excluded)`);
-    }
-    if (isFinite(sd2) && sd2 <= 0) {
-      warnings.push(`⚠️ ${label}: sd2 ≤ 0 — standard deviation must be positive (study excluded)`);
-    }
-    // Small samples inflate the delta-method variance approximation.
-    if (isFinite(n1) && n1 < 10) {
-      warnings.push(`⚠️ ${label}: small sample size (n1 < 10) — delta-method variance may be unreliable`);
-    }
-    if (isFinite(n2) && n2 < 10) {
-      warnings.push(`⚠️ ${label}: small sample size (n2 < 10) — delta-method variance may be unreliable`);
-    }
-    // Large CV (sd/mean > 1) means the log-normal assumption is questionable.
-    if (isFinite(sd1) && isFinite(m1) && m1 > 0 && sd1 / m1 > 1) {
-      warnings.push(`⚠️ ${label}: CV₁ > 1 (sd1/m1 > 1) — high variability; delta-method approximation may be poor`);
-    }
-    if (isFinite(sd2) && isFinite(m2) && m2 > 0 && sd2 / m2 > 1) {
-      warnings.push(`⚠️ ${label}: CV₂ > 1 (sd2/m2 > 1) — high variability; delta-method approximation may be poor`);
-    }
-  }
-
-  else if (type === "CVR") {
-    const { m1, m2, sd1, sd2, n1, n2 } = studyInput;
-    // Non-positive means or SDs make CVR undefined.
-    if (isFinite(m1) && m1 <= 0) {
-      warnings.push(`⚠️ ${label}: m1 ≤ 0 — CVR requires strictly positive means (study excluded)`);
-    }
-    if (isFinite(m2) && m2 <= 0) {
-      warnings.push(`⚠️ ${label}: m2 ≤ 0 — CVR requires strictly positive means (study excluded)`);
-    }
-    if (isFinite(sd1) && sd1 <= 0) {
-      warnings.push(`⚠️ ${label}: sd1 ≤ 0 — standard deviation must be positive (study excluded)`);
-    }
-    if (isFinite(sd2) && sd2 <= 0) {
-      warnings.push(`⚠️ ${label}: sd2 ≤ 0 — standard deviation must be positive (study excluded)`);
-    }
-    // Small samples: variance formula uses (n-1) in denominator; n=2 is valid but noisy.
-    if (isFinite(n1) && n1 < 10) {
-      warnings.push(`⚠️ ${label}: small sample size (n1 < 10) — CVR variance estimate unreliable`);
-    }
-    if (isFinite(n2) && n2 < 10) {
-      warnings.push(`⚠️ ${label}: small sample size (n2 < 10) — CVR variance estimate unreliable`);
-    }
-    // Large CV (> 1) means the lognormality assumption underlying the variance formula is strained.
-    if (isFinite(sd1) && isFinite(m1) && m1 > 0 && sd1 / m1 > 1) {
-      warnings.push(`⚠️ ${label}: CV₁ > 1 (sd1/m1 > 1) — large coefficient of variation; variance approximation may be poor`);
-    }
-    if (isFinite(sd2) && isFinite(m2) && m2 > 0 && sd2 / m2 > 1) {
-      warnings.push(`⚠️ ${label}: CV₂ > 1 (sd2/m2 > 1) — large coefficient of variation; variance approximation may be poor`);
-    }
-  }
-
-  else if (type === "VR") {
-    const { sd1, sd2, n1, n2 } = studyInput;
-    if (isFinite(sd1) && sd1 <= 0) {
-      warnings.push(`⚠️ ${label}: sd1 ≤ 0 — standard deviation must be positive (study excluded)`);
-    }
-    if (isFinite(sd2) && sd2 <= 0) {
-      warnings.push(`⚠️ ${label}: sd2 ≤ 0 — standard deviation must be positive (study excluded)`);
-    }
-    if (isFinite(n1) && n1 < 10) {
-      warnings.push(`⚠️ ${label}: small sample size (n1 < 10) — VR variance estimate unreliable`);
-    }
-    if (isFinite(n2) && n2 < 10) {
-      warnings.push(`⚠️ ${label}: small sample size (n2 < 10) — VR variance estimate unreliable`);
-    }
-    // Extreme SD ratio suggests possible scale differences between studies.
-    if (isFinite(sd1) && isFinite(sd2) && sd1 > 0 && sd2 > 0) {
-      const ratio = Math.max(sd1, sd2) / Math.min(sd1, sd2);
-      if (ratio > 4) {
-        warnings.push(`⚠️ ${label}: extreme SD ratio (> 4) — check units are consistent across studies`);
-      }
-    }
-  }
-
-  return warnings;
+  return getProfile(type)?.softWarnings(studyInput, label) ?? [];
 }
 
 // --------------- UPDATE VALIDATION WARNINGS (BELOW INPUT TABLE) -----------------
@@ -1334,7 +916,18 @@ function exportCSV() {
 }
 
 // ---------------- INIT ----------------
+function populateEffectTypeDropdowns() {
+  const options = Object.entries(effectProfiles)
+    .map(([val, p]) => `<option value="${val}">${p.label}</option>`)
+    .join("");
+  document.getElementById("effectType").innerHTML = options;
+  document.getElementById("previewEffectType").innerHTML = options;
+}
+
 function init() {
+  // Populate effect type dropdowns from profiles
+  populateEffectTypeDropdowns();
+
   // Set default effect type
   const defaultType = document.getElementById("effectType").value;
   updateTableHeaders();
@@ -1357,153 +950,8 @@ window.onload = init;
 // ---------------- POPULATE EXAMPLES ----------------
 function populateExampleData(type) {
   const table = document.getElementById("inputTable");
-  while (table.rows.length > 1) table.deleteRow(1); // clear existing rows
-
-  const exampleData = {
-    "MD": [
-      ["Study1", 10, 2, 30, 8, 2, 28, "A"],
-      ["Study2", 12, 3, 32, 9, 3, 30, "A"],
-      ["Study3", 9, 2, 28, 7, 2, 25, "B"]
-    ],
-    "SMD": [
-      ["Study1", 10, 2, 30, 8, 2, 28, "A"],
-      ["Study2", 12, 3, 32, 9, 3, 30, "A"],
-      ["Study3", 9, 2, 28, 7, 2, 25, "B"]
-    ],
-    "SMDH": [
-      ["Study1", 10, 3.5, 30, 8,   1.2, 28, "A"],
-      ["Study2", 12, 4.1, 32, 9,   1.8, 30, "A"],
-      ["Study3",  9, 2.8, 28, 7,   1.0, 25, "B"],
-      ["Study4", 14, 5.0, 40, 10,  2.3, 38, "B"],
-      ["Study5", 11, 3.2, 35, 8.5, 1.5, 33, ""]
-    ],
-    "ROM": [
-      ["Study 1", 28.5, 4.2, 45, 22.1, 3.8, 43, ""],
-      ["Study 2", 35.2, 6.1, 60, 24.8, 5.2, 58, ""],
-      ["Study 3", 19.8, 3.3, 32, 16.2, 2.9, 30, ""],
-      ["Study 4", 42.1, 7.5, 80, 31.5, 6.8, 78, ""],
-      ["Study 5", 25.6, 4.8, 50, 20.3, 4.1, 48, ""]
-    ],
-    "CVR": [
-      ["Study 1", 25.0, 6.2, 40, 24.8, 3.5, 38, ""],
-      ["Study 2", 30.1, 9.0, 55, 29.7, 4.8, 52, ""],
-      ["Study 3", 18.5, 5.1, 30, 19.0, 3.0, 28, ""],
-      ["Study 4", 42.0, 11.5, 70, 40.5, 6.2, 68, ""],
-      ["Study 5", 22.3, 7.8, 45, 23.1, 4.9, 43, ""]
-    ],
-    "VR": [
-      ["Study 1", 4.2, 40, 2.8, 38, ""],
-      ["Study 2", 5.5, 55, 3.2, 52, ""],
-      ["Study 3", 3.8, 30, 2.5, 28, ""],
-      ["Study 4", 6.1, 70, 4.0, 68, ""],
-      ["Study 5", 4.9, 45, 3.5, 43, ""]
-    ],
-    "OR": [
-      ["Study1", 12, 5, 8, 15, "A"],
-      ["Study2", 20, 10, 5, 25, "B"],
-      ["Study3", 10, 4, 6, 12, "B"]
-    ],
-    "RR": [
-      ["Study1", 12, 5, 8, 15, "A"],
-      ["Study2", 20, 10, 5, 25, "B"],
-      ["Study3", 10, 4, 6, 12, "B"]
-    ],
-	"MD_paired": [
-	  ["Study1", 10, 2, 8, 2, 30, 0.5, "A"],
-	  ["Study2", 12, 3, 9, 3, 32, 0.6, "A"],
-	  ["Study3", 9, 2, 7, 2, 28, 0.4, "B"]
-	],
-	"SMD_paired": [
-	  ["Study1", 10, 2, 8, 2, 30, 0.5, "A"],
-	  ["Study2", 12, 3, 9, 3, 32, 0.6, "A"],
-	  ["Study3", 9, 2, 7, 2, 28, 0.4, "B"]
-	],
-	"RD": [
-		["Study 1", 12, 8, 15, 10, "A"],
-		["Study 2", 20, 10, 18, 12, "A"],
-		["Study 3", 8, 7, 10, 9, "B"]
-	],
-    "COR": [
-      ["Study 1", 0.45, 62, ""],
-      ["Study 2", 0.56, 90, ""],
-      ["Study 3", 0.38, 45, ""],
-      ["Study 4", 0.61, 120, ""],
-      ["Study 5", 0.42, 75, ""]
-    ],
-    "ZCOR": [
-      ["Study 1", 0.45, 62, ""],
-      ["Study 2", 0.56, 90, ""],
-      ["Study 3", 0.38, 45, ""],
-      ["Study 4", 0.61, 120, ""],
-      ["Study 5", 0.42, 75, ""]
-    ],
-    "PR": [
-      ["Study 1", 12, 80, ""],
-      ["Study 2", 25, 120, ""],
-      ["Study 3", 8,  60, ""],
-      ["Study 4", 40, 200, ""],
-      ["Study 5", 18, 100, ""]
-    ],
-    "PLN": [
-      ["Study 1", 12, 80, ""],
-      ["Study 2", 25, 120, ""],
-      ["Study 3", 8,  60, ""],
-      ["Study 4", 40, 200, ""],
-      ["Study 5", 18, 100, ""]
-    ],
-    "PLO": [
-      ["Study 1", 12, 80, ""],
-      ["Study 2", 25, 120, ""],
-      ["Study 3", 8,  60, ""],
-      ["Study 4", 40, 200, ""],
-      ["Study 5", 18, 100, ""]
-    ],
-    "PAS": [
-      ["Study 1", 12, 80, ""],
-      ["Study 2", 25, 120, ""],
-      ["Study 3", 8,  60, ""],
-      ["Study 4", 40, 200, ""],
-      ["Study 5", 18, 100, ""]
-    ],
-    "PFT": [
-      ["Study 1", 12, 80, ""],
-      ["Study 2", 25, 120, ""],
-      ["Study 3", 8,  60, ""],
-      ["Study 4", 40, 200, ""],
-      ["Study 5", 18, 100, ""]
-    ],
-    "GENERIC": [
-      ["Study 1", -0.889, 0.326, ""],
-      ["Study 2", -1.585, 0.255, ""],
-      ["Study 3", -1.348, 0.214, ""],
-      ["Study 4", -1.442, 0.045, ""],
-      ["Study 5", -0.218, 0.031, ""]
-    ],
-    "HR": [
-      ["Study 1", 0.72, 0.54, 0.96, ""],
-      ["Study 2", 0.85, 0.62, 1.17, ""],
-      ["Study 3", 0.61, 0.45, 0.83, ""],
-      ["Study 4", 0.78, 0.58, 1.05, ""],
-      ["Study 5", 0.69, 0.51, 0.93, ""]
-    ],
-    "IRR": [
-      ["Study 1", 12, 1200, 20, 1000, ""],
-      ["Study 2", 25, 2500, 35, 2000, ""],
-      ["Study 3",  8,  800, 15,  900, ""],
-      ["Study 4", 18, 1800, 28, 1500, ""],
-      ["Study 5", 30, 3000, 42, 2800, ""]
-    ],
-    "IR": [
-      ["Study 1", 15, 1000, ""],
-      ["Study 2", 28, 2500, ""],
-      ["Study 3",  9,  800, ""],
-      ["Study 4", 22, 1500, ""],
-      ["Study 5", 12,  900, ""]
-    ]
-  };
-
-  const rows = exampleData[type] || [];
-  rows.forEach(row => addRow(row));
+  while (table.rows.length > 1) table.deleteRow(1);
+  (getProfile(type)?.exampleData ?? []).forEach(row => addRow(row));
 }
 
 // ---------------- META-REGRESSION RESULTS PANEL ----------------
@@ -1820,17 +1268,7 @@ function renderStudyTable(studies, m, profile) {
   const totalW = real.reduce((s, d) => s + 1 / (d.vi + tau2), 0);
 
   // SE column header: label the scale when yi is stored on a transformed scale.
-  const transformedScaleProfile = (
-    profile.label.includes("Ratio")      ||  // OR, RR, HR, IRR
-    profile.label.includes("Hazard")     ||  // HR (also caught by Ratio, belt-and-suspenders)
-    profile.label.includes("Rate")       ||  // IRR, IR
-    profile.label.includes("log")        ||  // PLN, IR (log)
-    profile.label.includes("logit")      ||  // PLO
-    profile.label.includes("arcsine")    ||  // PAS
-    profile.label.includes("Freeman")    ||  // PFT
-    profile.label.includes("Fisher")         // ZCOR
-  );
-  const seLabel = transformedScaleProfile ? "SE (transformed)" : "SE";
+  const seLabel = profile.isTransformedScale ? "SE (transformed)" : "SE";
 
   // Escape HTML to prevent injection from user-supplied study labels.
   function escapeHTML(s) {
@@ -1943,7 +1381,7 @@ function runAnalysis() {
       continue;
     }
 
-    const study = profile.compute(studyInput, undefined, profile.computeOptions);
+    const study = profile.compute(studyInput);
 
     if (!isFinite(study.yi) || !isFinite(study.vi)) {
       excluded.push({ label, reason: "Computation failed (invalid effect size or variance)" });
