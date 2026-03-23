@@ -1370,3 +1370,35 @@ export function validateStudy(study, type) {
 
   return { valid, errors };
 }
+
+// ================= CUMULATIVE META-ANALYSIS =================
+// Runs meta() on the first k studies for k = 1 … studies.length,
+// returning a sequence of pooled estimates in the chosen accumulation order.
+//
+// Parameters:
+//   studies   — array already sorted into the desired accumulation order;
+//               each entry must have { yi, vi, label } set (post-compute)
+//   method    — τ² estimator passed through to meta()
+//   ciMethod  — CI method passed through to meta()
+//
+// Returns an array of k objects:
+//   { k, addedLabel, RE, seRE, ciLow, ciHigh, tau2, I2 }
+//
+// Note: for k = 1, meta() returns τ² = 0 and uses a normal CI with
+// crit = 1.96, matching the behaviour of a single-study analysis.
+export function cumulativeMeta(studies, method = "DL", ciMethod = "normal") {
+  return studies.map((s, idx) => {
+    const prefix = studies.slice(0, idx + 1);
+    const m = meta(prefix, method, ciMethod);
+    return {
+      k:          idx + 1,
+      addedLabel: s.label ?? `Study ${idx + 1}`,
+      RE:         m.RE,
+      seRE:       m.seRE,
+      ciLow:      m.ciLow,
+      ciHigh:     m.ciHigh,
+      tau2:       m.tau2,
+      I2:         m.I2
+    };
+  });
+}

@@ -1,9 +1,9 @@
 // ================= UI =================
-import { compute, eggerTest, beggTest, fatPetTest, failSafeN, meta, influenceDiagnostics, subgroupAnalysis, metaRegression } from "./analysis.js";
+import { compute, eggerTest, beggTest, fatPetTest, failSafeN, meta, influenceDiagnostics, subgroupAnalysis, metaRegression, cumulativeMeta } from "./analysis.js";
 import { fmt, transformEffect, transformCI } from "./utils.js";
 import { runTests } from "./tests.js";
 import { trimFill } from "./trimfill.js";
-import { drawForest, drawFunnel, drawBubble } from "./plots.js";
+import { drawForest, drawFunnel, drawBubble, drawCumulativeForest } from "./plots.js";
 
 // ---------------- EFFECT PROFILES ----------------
 const effectProfiles = {
@@ -1052,6 +1052,22 @@ function runAnalysis() {
 
   drawForest(all, m, { ciMethod });
   drawFunnel(all, m, egger);
+
+  // ---- Cumulative meta-analysis ----
+  const cumulativeOrder = document.getElementById("cumulativeOrder")?.value || "input";
+  const cumulativeStudies = studies.slice(); // copy; studies already have yi/vi/label
+  if (cumulativeOrder === "precision_desc") {
+    cumulativeStudies.sort((a, b) => a.vi - b.vi);   // smallest vi (most precise) first
+  } else if (cumulativeOrder === "precision_asc") {
+    cumulativeStudies.sort((a, b) => b.vi - a.vi);   // largest vi (least precise) first
+  } else if (cumulativeOrder === "effect_asc") {
+    cumulativeStudies.sort((a, b) => a.yi - b.yi);
+  } else if (cumulativeOrder === "effect_desc") {
+    cumulativeStudies.sort((a, b) => b.yi - a.yi);
+  }
+  // "input" order: no sort — preserves table order
+  const cumResults = cumulativeMeta(cumulativeStudies, method, ciMethod);
+  drawCumulativeForest(cumResults, profile);
 
   updateValidationWarnings(studies, excluded, softWarnings);
 }

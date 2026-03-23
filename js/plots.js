@@ -372,3 +372,147 @@ if(egger && isFinite(egger.slope)){
  svg.append("g").attr("transform","translate(0,350)").call(d3.axisBottom(x));
  svg.append("g").attr("transform","translate(50,0)").call(d3.axisLeft(y));
 }
+
+// ================= CUMULATIVE FOREST =================
+// Draws a cumulative meta-analysis plot: each row shows the pooled RE
+// estimate and 95% CI after adding one more study in accumulation order.
+// The final row uses a diamond marker; earlier rows use filled circles.
+//
+// Parameters:
+//   cumulativeResults — array from cumulativeMeta(), already in order
+//   profile           — effect-type profile with .label, .transform, .transformCI
+export function drawCumulativeForest(cumulativeResults, profile) {
+  const svg = d3.select("#cumulativePlot");
+  svg.selectAll("*").remove();
+
+  if (!cumulativeResults || cumulativeResults.length === 0) return;
+
+  const k      = cumulativeResults.length;
+  const rowH   = 22;
+  const margin = { top: 40, right: 90, bottom: 46, left: 200 };
+  const plotW  = 580;
+  const totalW = margin.left + plotW + margin.right;
+  const totalH = margin.top + k * rowH + margin.bottom;
+
+  svg.attr("width", totalW).attr("height", totalH);
+
+  const tooltip = d3.select("#tooltip");
+
+  // Back-transform all results to the display scale
+  const rows = cumulativeResults.map(r => {
+    const re_disp = profile.transform(r.RE);
+    const ci      = profile.transformCI(r.ciLow, r.ciHigh);
+    return { ...r, re_disp, lo_disp: ci.lb, hi_disp: ci.ub };
+  });
+
+  // X scale across all display-scale CI bounds
+  const allX = rows.flatMap(r => [r.lo_disp, r.re_disp, r.hi_disp]).filter(isFinite);
+  const [xMin, xMax] = d3.extent(allX);
+  const xPad  = Math.max((xMax - xMin) * 0.05, 1e-6);
+  const xScale = d3.scaleLinear()
+    .domain([xMin - xPad, xMax + xPad])
+    .nice()
+    .range([0, plotW]);
+
+  const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+
+  // Title
+  svg.append("text")
+    .attr("x", margin.left + plotW / 2).attr("y", 20)
+    .attr("text-anchor", "middle")
+    .style("font-size", "12px")
+    .text("Cumulative meta-analysis");
+
+  // Null reference line (at the back-transformed 0 — e.g. 0 for MD, 1 for OR/RR)
+  const nullDisp = profile.transform(0);
+  if (isFinite(nullDisp)) {
+    g.append("line")
+      .attr("x1", xScale(nullDisp)).attr("x2", xScale(nullDisp))
+      .attr("y1", 0).attr("y2", k * rowH)
+      .attr("stroke", "white").attr("stroke-dasharray", "4,3").attr("opacity", 0.45);
+  }
+
+  // One row per cumulative step
+  rows.forEach((r, i) => {
+    const cy     = (i + 0.5) * rowH;
+    const isLast = i === k - 1;
+    const colour = isLast ? "#ffd740" : "white";
+
+    // Label (left panel)
+    svg.append("text")
+      .attr("x", margin.left - 8).attr("y", margin.top + cy + 4)
+      .attr("text-anchor", "end")
+      .style("font-size", "11px")
+      .attr("fill", colour)
+      .text(r.addedLabel);
+
+    const x1 = isFinite(r.lo_disp)  ? xScale(r.lo_disp)  : null;
+    const x2 = isFinite(r.hi_disp)  ? xScale(r.hi_disp)  : null;
+    const cx = isFinite(r.re_disp)  ? xScale(r.re_disp)  : null;
+
+    // CI line
+    if (x1 !== null && x2 !== null) {
+      g.append("line")
+        .attr("x1", x1).attr("x2", x2)
+        .attr("y1", cy).attr("y2", cy)
+        .attr("stroke", colour).attr("stroke-width", 1.5);
+    }
+
+    // Marker: diamond for final row, filled circle for others
+    if (cx !== null) {
+      if (isLast) {
+        const dh  = 7;
+        const pts = [[x1 ?? cx, cy], [cx, cy - dh], [x2 ?? cx, cy], [cx, cy + dh]]
+          .map(p => p.join(",")).join(" ");
+        g.append("polygon")
+          .attr("points", pts)
+          .attr("fill", colour).attr("stroke", colour);
+      } else {
+        g.append("circle")
+          .attr("cx", cx).attr("cy", cy).attr("r", 4)
+          .attr("fill", colour).attr("stroke", colour);
+      }
+    }
+
+    // RE value text (right of plot)
+    if (isFinite(r.re_disp)) {
+      svg.append("text")
+        .attr("x", margin.left + plotW + 6).attr("y", margin.top + cy + 4)
+        .style("font-size", "10px")
+        .attr("fill", colour)
+        .text(r.re_disp.toFixed(3));
+    }
+
+    // Invisible hit rect for tooltip
+    const hitX1 = Math.min(x1 ?? cx ?? 0, cx ?? 0);
+    const hitX2 = Math.max(x2 ?? cx ?? plotW, cx ?? plotW);
+    g.append("rect")
+      .attr("x", hitX1 - 4).attr("y", cy - rowH / 2)
+      .attr("width", Math.max(hitX2 - hitX1 + 8, 20)).attr("height", rowH)
+      .attr("fill", "transparent")
+      .on("mousemove", event => {
+        tooltip.style("opacity", 1)
+          .html(`<b>After: ${r.addedLabel}</b> (k = ${r.k})<br>` +
+                `RE = ${isFinite(r.re_disp)  ? r.re_disp.toFixed(3)  : "NA"}&nbsp; ` +
+                `CI [${isFinite(r.lo_disp) ? r.lo_disp.toFixed(3) : "NA"}, ` +
+                    `${isFinite(r.hi_disp) ? r.hi_disp.toFixed(3) : "NA"}]<br>` +
+                `τ² = ${isFinite(r.tau2) ? r.tau2.toFixed(3) : "NA"}&nbsp; ` +
+                `I² = ${isFinite(r.I2)   ? r.I2.toFixed(1)   : "NA"}%`)
+          .style("left", (event.pageX + 12) + "px")
+          .style("top",  (event.pageY - 28) + "px");
+      })
+      .on("mouseout", () => tooltip.style("opacity", 0));
+  });
+
+  // X axis
+  g.append("g")
+    .attr("transform", `translate(0,${k * rowH + 6})`)
+    .call(d3.axisBottom(xScale).ticks(5));
+
+  // X axis label
+  svg.append("text")
+    .attr("x", margin.left + plotW / 2).attr("y", totalH - 6)
+    .attr("text-anchor", "middle")
+    .style("font-size", "11px").attr("fill", "#ccc")
+    .text(profile.label);
+}

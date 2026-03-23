@@ -56,6 +56,14 @@
   <option value="t">t-distribution</option>
 </select>
 
+<select id="cumulativeOrder">
+  <option value="input">Cumulative order: input</option>
+  <option value="precision_desc">Cumulative order: most precise first</option>
+  <option value="precision_asc">Cumulative order: least precise first</option>
+  <option value="effect_asc">Cumulative order: effect ascending</option>
+  <option value="effect_desc">Cumulative order: effect descending</option>
+</select>
+
 <label>
   <input type="checkbox" id="useTrimFill">
   Apply trim-and-fill
@@ -96,6 +104,7 @@
 
 <svg id="forestPlot" width="900" height="420"></svg>
 <svg id="funnelPlot" width="500" height="400"></svg>
+<svg id="cumulativePlot" width="900" height="420"></svg>
 
 <div class="tooltip" id="tooltip"></div>
 

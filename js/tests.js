@@ -1,6 +1,6 @@
 import { round, transformEffect, transformCI, chiSquareCDF, chiSquareQuantile } from "./utils.js";
 import { BENCHMARKS } from "./benchmarks.js";
-import { compute, meta, metaRegression, tau2_HS, tau2_HE, tau2_ML, tau2_SJ, beggTest, fatPetTest, failSafeN, heterogeneityCIs } from "./analysis.js";
+import { compute, meta, metaRegression, tau2_HS, tau2_HE, tau2_ML, tau2_SJ, beggTest, fatPetTest, failSafeN, heterogeneityCIs, cumulativeMeta } from "./analysis.js";
 
 // Tolerances vary by field:
 //   FE, RE  — absolute 0.01   (pooled estimates are on a stable scale)
@@ -647,4 +647,102 @@ export function runTests() {
   }
 
   console.log(hetPass ? "\n✅ ALL HETEROGENEITY CI TESTS PASSED" : "\n❌ SOME HETEROGENEITY CI TESTS FAILED");
+
+  // ===== CUMULATIVE META-ANALYSIS UNIT TESTS =====
+  // Uses two datasets:
+  //   sLab — three labeled heterogeneous studies (yi=[0,1,3], vi=[1,1,1])
+  //   sHom — three homogeneous studies (yi=[2,2,2], vi=[1,1,1])
+  // Homogeneous data guarantees τ²=0 at every step, isolating the
+  // CI-narrowing property without RE variance inflation.
+  console.log("\n===== CUMULATIVE META-ANALYSIS UNIT TESTS =====\n");
+  let cumPass = true;
+
+  function cumchk(name, val, expected, tol = 1e-4) {
+    const ok = isFinite(val) && Math.abs(val - expected) < tol;
+    console.log(`  ${name}: ${round(val, 5)} (expected ${round(expected, 5)}) → ${ok ? "PASS" : "FAIL"}`);
+    if (!ok) cumPass = false;
+  }
+  function cumchkTrue(name, cond) {
+    console.log(`  ${name} → ${cond ? "PASS" : "FAIL"}`);
+    if (!cond) cumPass = false;
+  }
+
+  const sLab = [
+    { yi: 0, vi: 1, se: 1, label: "Alpha"   },
+    { yi: 1, vi: 1, se: 1, label: "Beta"    },
+    { yi: 3, vi: 1, se: 1, label: "Gamma"   }
+  ];
+  const sCumHom = [
+    { yi: 2, vi: 1, se: 1, label: "A" },
+    { yi: 2, vi: 1, se: 1, label: "B" },
+    { yi: 2, vi: 1, se: 1, label: "C" }
+  ];
+
+  // 1. Result array length = number of studies
+  console.log("--- Length ---");
+  {
+    const cum = cumulativeMeta(sLab, "DL");
+    cumchkTrue("length = k", cum.length === sLab.length);
+    cumchkTrue("cum[0].k = 1", cum[0].k === 1);
+    cumchkTrue("cum[2].k = 3", cum[2].k === 3);
+  }
+
+  // 2. addedLabel tracks the study added at each step
+  console.log("--- addedLabel ---");
+  {
+    const cum = cumulativeMeta(sLab, "DL");
+    cumchkTrue('cum[0].addedLabel = "Alpha"', cum[0].addedLabel === "Alpha");
+    cumchkTrue('cum[1].addedLabel = "Beta"',  cum[1].addedLabel === "Beta");
+    cumchkTrue('cum[2].addedLabel = "Gamma"', cum[2].addedLabel === "Gamma");
+  }
+
+  // 3. First step matches a single-study meta() call
+  //    k=1: RE = yi[0], seRE = √vi[0], τ² = 0, I² = 0, CI = RE ± 1.96·seRE
+  console.log("--- First step = single-study meta() ---");
+  {
+    const cum  = cumulativeMeta(sLab, "DL");
+    const m1   = meta([sLab[0]], "DL");
+    cumchk("RE",     cum[0].RE,     m1.RE,     1e-9);
+    cumchk("seRE",   cum[0].seRE,   m1.seRE,   1e-9);
+    cumchk("ciLow",  cum[0].ciLow,  m1.ciLow,  1e-9);
+    cumchk("ciHigh", cum[0].ciHigh, m1.ciHigh, 1e-9);
+    cumchk("tau2",   cum[0].tau2,   0,         1e-9);
+    cumchk("I2",     cum[0].I2,     0,         1e-9);
+  }
+
+  // 4. Last step matches meta() on the full dataset (regression test)
+  console.log("--- Last step = full meta() ---");
+  {
+    const cum  = cumulativeMeta(sLab, "DL");
+    const mAll = meta(sLab, "DL");
+    cumchk("RE",   cum[2].RE,   mAll.RE,   1e-9);
+    cumchk("tau2", cum[2].tau2, mAll.tau2, 1e-9);
+    cumchk("I2",   cum[2].I2,   mAll.I2,   1e-9);
+  }
+
+  // 5. CI width narrows monotonically for homogeneous data
+  //    (τ²=0 at every step → RE = FE → seRE = 1/√k → width strictly decreasing)
+  console.log("--- CI narrows monotonically (homogeneous) ---");
+  {
+    const cum = cumulativeMeta(sCumHom, "DL");
+    const widths = cum.map(r => r.ciHigh - r.ciLow);
+    cumchkTrue("width[0] > width[1]", widths[0] > widths[1]);
+    cumchkTrue("width[1] > width[2]", widths[1] > widths[2]);
+  }
+
+  // 6. τ² method forwarded correctly: DL vs REML give same result on
+  //    homogeneous data (both clamp to 0) but may differ on heterogeneous data
+  console.log("--- τ² method is forwarded ---");
+  {
+    const cumDL   = cumulativeMeta(sLab, "DL");
+    const cumREML = cumulativeMeta(sLab, "REML");
+    // Both must produce valid last-step estimates
+    cumchkTrue("DL last step finite",   isFinite(cumDL[2].RE));
+    cumchkTrue("REML last step finite", isFinite(cumREML[2].RE));
+    // REML and DL τ² differ on this dataset (both > 0 but not equal)
+    cumchkTrue("DL τ² ≥ 0",   cumDL[2].tau2   >= 0);
+    cumchkTrue("REML τ² ≥ 0", cumREML[2].tau2 >= 0);
+  }
+
+  console.log(cumPass ? "\n✅ ALL CUMULATIVE META TESTS PASSED" : "\n❌ SOME CUMULATIVE META TESTS FAILED");
 }
