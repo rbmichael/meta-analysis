@@ -161,7 +161,7 @@ export function drawForest(studies, m, options = {}) {
   const tooltip = d3.select("#tooltip");
   const ciMethod = options.ciMethod || "normal";
   // Identity profile as fallback (MD/SMD/etc. that don't need back-transform)
-  const profile = options.profile || { transform: x => x, transformCI: (lb, ub) => ({ lb, ub }) };
+  const profile = options.profile || { transform: x => x };
 
   // crit: pooled-model critical value (used only for the diamond)
   const crit = m.crit || 1.96;
@@ -546,7 +546,7 @@ export function drawForest(studies, m, options = {}) {
       .attr("stroke", "cyan").attr("stroke-width", 2);
 
     // Label
-    const pi_disp = profile.transformCI(m.predLow, m.predHigh);
+    const pi_disp = { lb: profile.transform(m.predLow), ub: profile.transform(m.predHigh) };
     svg.append("text")
       .attr("x", x(m.RE))
       .attr("y", L.piY + 15)
@@ -581,7 +581,7 @@ export function drawForest(studies, m, options = {}) {
 
 // ================= FUNNEL =================
 export function drawFunnel(studies, m, egger, profile) {
-  profile = profile || { transform: x => x, transformCI: (lb, ub) => ({ lb, ub }) };
+  profile = profile || { transform: x => x };
  const svg=d3.select("#funnelPlot"); svg.selectAll("*").remove();
 
  const x=d3.scaleLinear()
@@ -763,7 +763,7 @@ export function drawInfluencePlot(influence) {
 //
 // Parameters:
 //   cumulativeResults — array from cumulativeMeta(), already in order
-//   profile           — effect-type profile with .label, .transform, .transformCI
+//   profile           — effect-type profile with .label, .transform
 export function drawCumulativeForest(cumulativeResults, profile) {
   const svg = d3.select("#cumulativePlot");
   svg.selectAll("*").remove();
@@ -784,7 +784,7 @@ export function drawCumulativeForest(cumulativeResults, profile) {
   // Back-transform all results to the display scale
   const rows = cumulativeResults.map(r => {
     const re_disp = profile.transform(r.RE);
-    const ci      = profile.transformCI(r.ciLow, r.ciHigh);
+    const ci      = { lb: profile.transform(r.ciLow), ub: profile.transform(r.ciHigh) };
     return { ...r, re_disp, lo_disp: ci.lb, hi_disp: ci.ub };
   });
 

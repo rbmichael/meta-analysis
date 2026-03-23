@@ -110,8 +110,8 @@ function sectionSummary(args) {
   const k        = studies.filter(d => !d.filled).length;
   const FE_disp  = profile.transform(m.FE);
   const RE_disp  = profile.transform(m.RE);
-  const ci       = profile.transformCI(m.ciLow, m.ciHigh);
-  const pred     = profile.transformCI(m.predLow, m.predHigh);
+  const ci       = { lb: profile.transform(m.ciLow),   ub: profile.transform(m.ciHigh) };
+  const pred     = { lb: profile.transform(m.predLow), ub: profile.transform(m.predHigh) };
   const RE_adj   = (useTF && mAdjusted) ? profile.transform(mAdjusted.RE) : null;
   const ciLabel  = ciMethod === "KH" ? "Knapp-Hartung"
                  : ciMethod === "t"  ? "t-distribution"
@@ -233,7 +233,7 @@ function sectionSubgroup(subgroup, profile) {
   const rows = Object.entries(subgroup.groups).map(([g, r]) => {
     const single   = r.k === 1;
     const y_disp   = profile.transform(r.y);
-    const ci_disp  = profile.transformCI(r.ci.lb, r.ci.ub);
+    const ci_disp  = { lb: profile.transform(r.ci.lb), ub: profile.transform(r.ci.ub) };
     return `<tr>
       <td>${esc(g)}</td>
       <td>${r.k}</td>

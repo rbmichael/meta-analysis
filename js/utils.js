@@ -245,7 +245,3 @@ export function transformEffect(x, type) {
   return x;
 }
 
-export function transformCI(lb, ub, type) {
-  if (!isFinite(lb) || !isFinite(ub)) return { lb: NaN, ub: NaN };
-  return { lb: transformEffect(lb, type), ub: transformEffect(ub, type) };
-}

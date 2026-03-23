@@ -1,4 +1,4 @@
-import { round, transformEffect, transformCI, chiSquareCDF, chiSquareQuantile } from "./utils.js";
+import { round, transformEffect, chiSquareCDF, chiSquareQuantile } from "./utils.js";
 import { BENCHMARKS } from "./benchmarks.js";
 import { compute, meta, metaRegression, tau2_HS, tau2_HE, tau2_ML, tau2_SJ, beggTest, fatPetTest, failSafeN, heterogeneityCIs, cumulativeMeta, influenceDiagnostics } from "./analysis.js";
 
@@ -232,9 +232,10 @@ export function runTests() {
   }
 
   // 4. ZCOR CI back-transform: both bounds transformed
-  console.log("--- ZCOR transformCI ---");
+  console.log("--- ZCOR CI back-transform ---");
   {
-    const { lb, ub } = transformCI(Math.atanh(0.3), Math.atanh(0.7), "ZCOR");
+    const lb = transformEffect(Math.atanh(0.3), "ZCOR");
+    const ub = transformEffect(Math.atanh(0.7), "ZCOR");
     cchk("CI lb back-transformed to 0.3", lb, 0.3, 1e-10);
     cchk("CI ub back-transformed to 0.7", ub, 0.7, 1e-10);
   }
@@ -752,7 +753,7 @@ export function runTests() {
   //   1. yi and vi formulas (exact analytical values)
   //   2. Invalid input → NaN / w=0
   //   3. Continuity correction (IRR: x=0; IR: x=0)
-  //   4. Back-transform consistency (transformEffect / transformCI)
+  //   4. Back-transform consistency (transformEffect applied to both CI bounds)
   //   5. Pooled meta() on the benchmark dataset
   // ================================================================
   let hrPass = true;
@@ -793,15 +794,16 @@ export function runTests() {
 
   // --- HR: back-transform ---
   // transformEffect(yi, "HR") = exp(yi) = hr
-  // transformCI recovers (ci_lo, ci_hi) on original scale
+  // transformEffect applied to both bounds recovers (ci_lo, ci_hi) on original scale
   console.log("--- HR: back-transform ---");
   {
     const s = compute({ hr: 0.5, ci_lo: 0.25, ci_hi: 1.0 }, "HR");
     const seRE = s.se;
     hrchk("transformEffect → hr",     transformEffect(s.yi, "HR"), 0.5);
-    const ci = transformCI(s.yi - 1.96 * seRE, s.yi + 1.96 * seRE, "HR");
-    hrchk("CI lower recovers ci_lo",  ci.lb, 0.25);
-    hrchk("CI upper recovers ci_hi",  ci.ub, 1.0);
+    const ciLb = transformEffect(s.yi - 1.96 * seRE, "HR");
+    const ciUb = transformEffect(s.yi + 1.96 * seRE, "HR");
+    hrchk("CI lower recovers ci_lo",  ciLb, 0.25);
+    hrchk("CI upper recovers ci_hi",  ciUb, 1.0);
   }
 
   // --- IRR: yi / vi formulas ---
@@ -1049,7 +1051,7 @@ export function runTests() {
   //   1. yi and vi formulas (exact analytical values)
   //   2. Invalid inputs → NaN / w=0
   //   3. Back-transform round-trip: exp(log(m1/m2)) = m1/m2
-  //   4. transformCI applies exp() to both bounds
+  //   4. CI back-transform: exp() applied to both bounds
   //   5. Pooled meta() on a 3-study dataset (DL)
   //
   // Spot-check study:  m1=2, sd1=0.5, n1=20,  m2=1, sd2=0.4, n2=25
@@ -1111,15 +1113,17 @@ export function runTests() {
     });
   }
 
-  // 4. transformCI applies exp() to both bounds
-  console.log("--- 4. transformCI ---");
+  // 4. Back-transform applies exp() to both bounds
+  console.log("--- 4. CI back-transform ---");
   {
     const s = compute({ m1: 2, sd1: 0.5, n1: 20, m2: 1, sd2: 0.4, n2: 25 }, "ROM");
-    const ciLog = { lb: s.yi - 1.96 * s.se, ub: s.yi + 1.96 * s.se };
-    const ci = transformCI(ciLog.lb, ciLog.ub, "ROM");
-    romchk("CI lb = exp(yi - 1.96·se)", ci.lb, Math.exp(ciLog.lb), 1e-10);
-    romchk("CI ub = exp(yi + 1.96·se)", ci.ub, Math.exp(ciLog.ub), 1e-10);
-    romchkTrue("CI lb < 1 (ratio < 1 is plausible end)", ci.lb < ci.ub);
+    const rawLb = s.yi - 1.96 * s.se;
+    const rawUb = s.yi + 1.96 * s.se;
+    const ciLb = transformEffect(rawLb, "ROM");
+    const ciUb = transformEffect(rawUb, "ROM");
+    romchk("CI lb = exp(yi - 1.96·se)", ciLb, Math.exp(rawLb), 1e-10);
+    romchk("CI ub = exp(yi + 1.96·se)", ciUb, Math.exp(rawUb), 1e-10);
+    romchkTrue("CI lb < ub", ciLb < ciUb);
   }
 
   // 5. Pooled meta() — 3-study DL
@@ -1327,9 +1331,10 @@ export function runTests() {
   {
     const s = compute({ m1: 20, sd1: 4, n1: 40, m2: 20, sd2: 2, n2: 38 }, "CVR");
     cvrchk("exp(yi) = 2.0", transformEffect(s.yi, "CVR"), 2.0, 1e-9);
-    const ci = transformCI(s.yi - 1.96 * s.se, s.yi + 1.96 * s.se, "CVR");
-    cvrchkTrue("CI lb > 0", ci.lb > 0);
-    cvrchkTrue("CI lb < exp(yi) < ub", ci.lb < 2.0 && 2.0 < ci.ub);
+    const ciLb = transformEffect(s.yi - 1.96 * s.se, "CVR");
+    const ciUb = transformEffect(s.yi + 1.96 * s.se, "CVR");
+    cvrchkTrue("CI lb > 0", ciLb > 0);
+    cvrchkTrue("CI lb < exp(yi) < ub", ciLb < 2.0 && 2.0 < ciUb);
   }
 
   // 5. Pooled meta() — 3-study DL
@@ -1425,9 +1430,10 @@ export function runTests() {
   {
     const s = compute({ sd1: 4, n1: 40, sd2: 2, n2: 38 }, "VR");
     vrchk("exp(yi) = 2.0", transformEffect(s.yi, "VR"), 2.0, 1e-9);
-    const ci = transformCI(s.yi - 1.96 * s.se, s.yi + 1.96 * s.se, "VR");
-    vrchkTrue("CI lb > 0", ci.lb > 0);
-    vrchkTrue("CI lb < exp(yi) < ub", ci.lb < 2.0 && 2.0 < ci.ub);
+    const ciLb = transformEffect(s.yi - 1.96 * s.se, "VR");
+    const ciUb = transformEffect(s.yi + 1.96 * s.se, "VR");
+    vrchkTrue("CI lb > 0", ciLb > 0);
+    vrchkTrue("CI lb < exp(yi) < ub", ciLb < 2.0 && 2.0 < ciUb);
   }
 
   // 6. Pooled meta() — 3-study DL with heterogeneous SDs

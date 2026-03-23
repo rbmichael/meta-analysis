@@ -1,18 +1,19 @@
 // ================= EFFECT PROFILES =================
 // Single source of truth for every effect type.
 // Each profile contains:
-//   label        — display name used in dropdowns
-//   inputs       — ordered column names expected in the data table
-//   compute      — derives yi/vi from raw study data
-//   transform    — back-transforms a single value for display
-//   transformCI  — back-transforms a CI pair for display
-//   validate     — returns { valid, errors } for hard input validation
-//   softWarnings — returns string[] of advisory warnings
-//   exampleData  — rows passed to addRow() when the type is first selected
-//                  format: [label, ...inputs, group]
+//   label             — display name used in dropdowns
+//   isTransformedScale— true when yi is on a transformed scale (log, logit, etc.)
+//   inputs            — ordered column names expected in the data table
+//   compute           — derives yi/vi from raw study data
+//   transform         — back-transforms a single value for display
+//   validate          — returns { valid, errors } for hard input validation
+//   softWarnings      — returns string[] of advisory warnings
+//   exampleData       — rows passed to addRow() when the type is first selected
+//                       format: [label, ...inputs, group]
+// To back-transform a CI pair use: { lb: profile.transform(lb), ub: profile.transform(ub) }
 
 import { compute } from "./analysis.js";
-import { transformEffect, transformCI } from "./utils.js";
+import { transformEffect } from "./utils.js";
 
 export const effectProfiles = {
 
@@ -22,7 +23,6 @@ export const effectProfiles = {
     inputs: ["m1", "sd1", "n1", "m2", "sd2", "n2"],
     compute:     (data) => compute(data, "MD"),
     transform:   (x) => transformEffect(x, "MD"),
-    transformCI: (lb, ub) => transformCI(lb, ub, "MD"),
 
     validate(s) {
       const errors = {};
@@ -59,7 +59,6 @@ export const effectProfiles = {
     inputs: ["m1", "sd1", "n1", "m2", "sd2", "n2"],
     compute:     (data) => compute(data, "SMD", { hedgesCorrection: true }),
     transform:   (x) => transformEffect(x, "SMD"),
-    transformCI: (lb, ub) => transformCI(lb, ub, "SMD"),
 
     validate(s) {
       const errors = {};
@@ -96,7 +95,6 @@ export const effectProfiles = {
     inputs: ["m1", "sd1", "n1", "m2", "sd2", "n2"],
     compute:     (data) => compute(data, "SMDH"),
     transform:   (x) => transformEffect(x, "SMDH"),
-    transformCI: (lb, ub) => transformCI(lb, ub, "SMDH"),
 
     validate(s) {
       const errors = {};
@@ -138,7 +136,6 @@ export const effectProfiles = {
     inputs: ["m_pre", "sd_pre", "m_post", "sd_post", "n", "r"],
     compute:     (data) => compute(data, "MD_paired"),
     transform:   (x) => transformEffect(x, "MD_paired"),
-    transformCI: (lb, ub) => transformCI(lb, ub, "MD_paired"),
 
     validate(s) {
       const errors = {};
@@ -166,7 +163,6 @@ export const effectProfiles = {
     inputs: ["m_pre", "sd_pre", "m_post", "sd_post", "n", "r"],
     compute:     (data) => compute(data, "SMD_paired"),
     transform:   (x) => transformEffect(x, "SMD_paired"),
-    transformCI: (lb, ub) => transformCI(lb, ub, "SMD_paired"),
 
     validate(s) {
       const errors = {};
@@ -195,7 +191,6 @@ export const effectProfiles = {
     inputs: ["m1", "sd1", "n1", "m2", "sd2", "n2"],
     compute:     (data) => compute(data, "ROM"),
     transform:   (x) => transformEffect(x, "ROM"),
-    transformCI: (lb, ub) => transformCI(lb, ub, "ROM"),
 
     validate(s) {
       const errors = {};
@@ -247,7 +242,6 @@ export const effectProfiles = {
     inputs: ["m1", "sd1", "n1", "m2", "sd2", "n2"],
     compute:     (data) => compute(data, "CVR"),
     transform:   (x) => transformEffect(x, "CVR"),
-    transformCI: (lb, ub) => transformCI(lb, ub, "CVR"),
 
     validate(s) {
       const errors = {};
@@ -299,7 +293,6 @@ export const effectProfiles = {
     inputs: ["sd1", "n1", "sd2", "n2"],
     compute:     (data) => compute(data, "VR"),
     transform:   (x) => transformEffect(x, "VR"),
-    transformCI: (lb, ub) => transformCI(lb, ub, "VR"),
 
     validate(s) {
       const errors = {};
@@ -342,7 +335,6 @@ export const effectProfiles = {
     inputs: ["a", "b", "c", "d"],
     compute:     (data) => compute(data, "OR"),
     transform:   (x) => transformEffect(x, "OR"),
-    transformCI: (lb, ub) => transformCI(lb, ub, "OR"),
 
     validate(s) {
       const errors = {};
@@ -376,7 +368,6 @@ export const effectProfiles = {
     inputs: ["a", "b", "c", "d"],
     compute:     (data) => compute(data, "RR"),
     transform:   (x) => transformEffect(x, "RR"),
-    transformCI: (lb, ub) => transformCI(lb, ub, "RR"),
 
     validate(s) {
       const errors = {};
@@ -409,7 +400,6 @@ export const effectProfiles = {
     inputs: ["a", "b", "c", "d"],
     compute:     (data) => compute(data, "RD"),
     transform:   (x) => transformEffect(x, "RD"),
-    transformCI: (lb, ub) => transformCI(lb, ub, "RD"),
 
     validate(s) {
       const errors = {};
@@ -434,7 +424,6 @@ export const effectProfiles = {
     inputs: ["r", "n"],
     compute:     (data) => compute(data, "COR"),
     transform:   (x) => transformEffect(x, "COR"),
-    transformCI: (lb, ub) => transformCI(lb, ub, "COR"),
 
     validate(s) {
       const errors = {};
@@ -468,7 +457,6 @@ export const effectProfiles = {
     inputs: ["r", "n"],
     compute:     (data) => compute(data, "ZCOR"),
     transform:   (x) => transformEffect(x, "ZCOR"),
-    transformCI: (lb, ub) => transformCI(lb, ub, "ZCOR"),
 
     validate(s) {
       const errors = {};
@@ -501,7 +489,6 @@ export const effectProfiles = {
     inputs: ["x", "n"],
     compute:     (data) => compute(data, "PR"),
     transform:   (x) => transformEffect(x, "PR"),
-    transformCI: (lb, ub) => transformCI(lb, ub, "PR"),
 
     validate(s) {
       const errors = {};
@@ -541,7 +528,6 @@ export const effectProfiles = {
     inputs: ["x", "n"],
     compute:     (data) => compute(data, "PLN"),
     transform:   (x) => transformEffect(x, "PLN"),
-    transformCI: (lb, ub) => transformCI(lb, ub, "PLN"),
 
     validate(s) {
       const errors = {};
@@ -579,7 +565,6 @@ export const effectProfiles = {
     inputs: ["x", "n"],
     compute:     (data) => compute(data, "PLO"),
     transform:   (x) => transformEffect(x, "PLO"),
-    transformCI: (lb, ub) => transformCI(lb, ub, "PLO"),
 
     validate(s) {
       const errors = {};
@@ -617,7 +602,6 @@ export const effectProfiles = {
     inputs: ["x", "n"],
     compute:     (data) => compute(data, "PAS"),
     transform:   (x) => transformEffect(x, "PAS"),
-    transformCI: (lb, ub) => transformCI(lb, ub, "PAS"),
 
     validate(s) {
       const errors = {};
@@ -655,7 +639,6 @@ export const effectProfiles = {
     inputs: ["x", "n"],
     compute:     (data) => compute(data, "PFT"),
     transform:   (x) => transformEffect(x, "PFT"),
-    transformCI: (lb, ub) => transformCI(lb, ub, "PFT"),
 
     validate(s) {
       const errors = {};
@@ -692,7 +675,6 @@ export const effectProfiles = {
     inputs: ["yi", "vi"],
     compute:     (data) => compute(data, "GENERIC"),
     transform:   (x) => x,
-    transformCI: (lb, ub) => ({ lb, ub }),
 
     validate(s) {
       const errors = {};
@@ -724,7 +706,6 @@ export const effectProfiles = {
     inputs: ["hr", "ci_lo", "ci_hi"],
     compute:     (data) => compute(data, "HR"),
     transform:   (x) => transformEffect(x, "HR"),
-    transformCI: (lb, ub) => transformCI(lb, ub, "HR"),
 
     validate(s) {
       const errors = {};
@@ -754,7 +735,6 @@ export const effectProfiles = {
     inputs: ["x1", "t1", "x2", "t2"],
     compute:     (data) => compute(data, "IRR"),
     transform:   (x) => transformEffect(x, "IRR"),
-    transformCI: (lb, ub) => transformCI(lb, ub, "IRR"),
 
     validate(s) {
       const errors = {};
@@ -788,7 +768,6 @@ export const effectProfiles = {
     inputs: ["x", "t"],
     compute:     (data) => compute(data, "IR"),
     transform:   (x) => transformEffect(x, "IR"),
-    transformCI: (lb, ub) => transformCI(lb, ub, "IR"),
 
     validate(s) {
       const errors = {};

@@ -1161,7 +1161,7 @@ function renderSensitivityPanel(studies, m, method, ciMethod, profile) {
 
     const dataRows = loo.rows.map(row => {
       const est     = profile.transform(row.estimate);
-      const ci      = profile.transformCI(row.lb, row.ub);
+      const ci      = { lb: profile.transform(row.lb), ub: profile.transform(row.ub) };
       const delta   = est - fullEst;
       const sigChange = row.significant !== fullSig;
       const cls     = sigChange ? " class=\"sens-sigchange\"" : "";
@@ -1203,7 +1203,7 @@ function renderSensitivityPanel(studies, m, method, ciMethod, profile) {
 
   const estRows = estimatorComparison(studies, ciMethod).map(row => {
     const est  = profile.transform(row.estimate);
-    const ci   = profile.transformCI(row.lb, row.ub);
+    const ci   = { lb: profile.transform(row.lb), ub: profile.transform(row.ub) };
     const isCurrent = row.method === method;
     const cls  = isCurrent ? " class=\"sens-current\"" : "";
     return `
@@ -1454,7 +1454,7 @@ function runAnalysis() {
     Object.entries(subgroup.groups).forEach(([g,r])=>{
       const isSingle = r.k===1;
       const y_disp = profile.transform(r.y);
-      const ci_disp = profile.transformCI(r.ci.lb,r.ci.ub);
+      const ci_disp = { lb: profile.transform(r.ci.lb), ub: profile.transform(r.ci.ub) };
       subgroupHTML += `<tr><td>${g}</td><td>${r.k}</td><td>${isFinite(y_disp)?fmt(y_disp):"NA"}</td>
         <td>${isSingle?"NA":isFinite(r.se)?fmt(r.se):"NA"}</td>
         <td>[${isSingle?"NA":fmt(ci_disp.lb)}, ${isSingle?"NA":fmt(ci_disp.ub)}]</td>
@@ -1470,8 +1470,8 @@ function runAnalysis() {
 
   const FE_disp = profile.transform(m.FE);
   const RE_disp = profile.transform(m.RE);
-  const ci_disp = profile.transformCI(m.ciLow,m.ciHigh);
-  const pred_disp = profile.transformCI(m.predLow,m.predHigh);
+  const ci_disp   = { lb: profile.transform(m.ciLow),   ub: profile.transform(m.ciHigh) };
+  const pred_disp = { lb: profile.transform(m.predLow), ub: profile.transform(m.predHigh) };
   const RE_adj_disp = useTF && mAdjusted ? profile.transform(mAdjusted.RE) : null;
 
   // --- INSERT CORRELATION WARNING ---
