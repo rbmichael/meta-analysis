@@ -60,6 +60,34 @@ Confirmed directly from metadat HTML documentation.
 
 Note: REML tau² for RD not confirmed from source; use DL for RD benchmark.
 
+### BCG as meta-regression moderator: absolute latitude (ablat)
+
+Used in step-4 regression benchmark. Absolute latitude values from dat.bcg$ablat
+(metadat package). Same study order as the table above.
+
+| Label                    | ablat |
+|--------------------------|------:|
+| Aronson 1948             |    44 |
+| Ferguson & Simes 1949    |    55 |
+| Rosenthal et al 1960     |    42 |
+| Hart & Sutherland 1977   |    52 |
+| Frimodt-Moller 1973      |    13 |
+| Stein & Aronson 1953     |    44 |
+| Vandiviere et al 1973    |    19 |
+| TPT Madras 1980          |    13 |
+| Coetzee & Berjak 1968    |    27 |
+| Rosenthal et al 1961     |    42 |
+| Comstock et al 1974      |    18 |
+| Comstock & Webster 1969  |    33 |
+| Comstock et al 1976      |    33 |
+
+Expected from metafor rma(yi, vi, mods=~ablat, data=dat.bcg, method="REML"):
+- intrcpt = -0.5769 (se=0.2312)
+- ablat   = -0.0291 (se=0.0073)
+- tau²    =  0.1012 (residual, vs 0.313 unconditional)
+- QE(df=11) = 49.2071, p < .0001
+- QM(df=1)  = 15.9024, p < .0001
+
 ---
 
 ## Normand 1999 Dataset (dat.normand1999)

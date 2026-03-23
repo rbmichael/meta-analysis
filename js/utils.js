@@ -118,6 +118,16 @@ export function chiSquareCDF(x, k) {
   return regularizedGammaP(k / 2, x / 2);
 }
 
+// CDF of the F distribution with d1 and d2 degrees of freedom.
+// Uses the regularised incomplete beta: P(F_{d1,d2} ≤ f) = I_{x}(d1/2, d2/2)
+// where x = d1·f / (d1·f + d2).
+export function fCDF(f, d1, d2) {
+  if (!isFinite(f) || f <= 0) return 0;
+  if (!isFinite(d1) || d1 <= 0 || !isFinite(d2) || d2 <= 0) return NaN;
+  const x = (d1 * f) / (d1 * f + d2);
+  return regularizedBeta(x, d1 / 2, d2 / 2);
+}
+
 // Regularized lower incomplete gamma function P(a, x)
 export function regularizedGammaP(a, x) {
   // Lanczos approximation for gamma function

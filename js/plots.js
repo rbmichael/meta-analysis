@@ -1,3 +1,156 @@
+// ================= BUBBLE PLOT =================
+// One bubble chart per continuous moderator.
+// Bubble radius ∝ √(RE weight).  Regression line is the marginal fit:
+// ŷ(x) = β₀ + β_j·x + Σ_{i≠j} β_i · wmean(X_i)   (other predictors at their weighted means).
+export function drawBubble(studies, reg, modName, modIdx, container) {
+  const W = 460, H = 340;
+  const margin = { top: 34, right: 18, bottom: 52, left: 56 };
+  const iW = W - margin.left - margin.right;
+  const iH = H - margin.top - margin.bottom;
+
+  // studies is already the regression's studiesUsed set (all moderators valid).
+  // Guard against any residual edge cases.
+  const valid = studies.filter(s => isFinite(s[modName]) && isFinite(s.yi) && isFinite(s.vi));
+  if (valid.length < 2) return;
+
+  const tau2  = isFinite(reg.tau2) ? reg.tau2 : 0;
+  const wArr  = valid.map(s => 1 / (s.vi + tau2));
+  const wSum  = wArr.reduce((a, b) => a + b, 0);
+  const wMax  = Math.max(...wArr);
+  const rMax  = 15;
+
+  // ---- Marginal line: hold every other predictor at its RE-weighted mean ----
+  const { beta, colNames, vcov, crit, s2 } = reg;
+
+  function colValues(col) {
+    if (col.includes(':')) {
+      const [key, level] = col.split(':');
+      return valid.map(s => s[key] === level ? 1 : 0);
+    }
+    return valid.map(s => +s[col]);
+  }
+
+  // wmeans[i] = weighted mean of column i (0 for intercept, 0 placeholder for modIdx).
+  // The vector l(x) used for SE: l = wmeans with l[modIdx] = x, l[0] = 1.
+  const wmeans = new Array(colNames.length).fill(0);
+  wmeans[0] = 1;
+
+  let intercept0 = beta[0];
+  for (let i = 1; i < colNames.length; i++) {
+    if (i === modIdx) continue;
+    const vals = colValues(colNames[i]);
+    const wm   = vals.reduce((s, v, k) => s + wArr[k] * v, 0) / wSum;
+    wmeans[i]  = wm;
+    intercept0 += beta[i] * wm;
+  }
+  const slope = beta[modIdx];
+
+  // SE of the marginal fitted value at x: sqrt(l(x)' vcov l(x) * s2)
+  function seAt(x) {
+    if (!vcov) return NaN;
+    const l = wmeans.slice();
+    l[modIdx] = x;
+    let q = 0;
+    for (let r = 0; r < l.length; r++)
+      for (let c = 0; c < l.length; c++)
+        q += l[r] * vcov[r][c] * l[c];
+    return Math.sqrt(Math.max(0, q) * s2);
+  }
+
+  // ---- Scales ----
+  const xVals = valid.map(s => s[modName]);
+  const [xMin, xMax] = d3.extent(xVals);
+  const xPad = (xMax - xMin) * 0.12 || 0.5;
+  const xScale = d3.scaleLinear().domain([xMin - xPad, xMax + xPad]).range([0, iW]);
+
+  const yVals = valid.map(s => s.yi);
+  const [yMin, yMax] = d3.extent(yVals);
+  const yPad = (yMax - yMin) * 0.15 || 0.2;
+  const yScale = d3.scaleLinear().domain([yMin - yPad, yMax + yPad]).nice().range([iH, 0]);
+
+  // ---- SVG ----
+  const svg = d3.select(container).append("svg").attr("width", W).attr("height", H);
+  const g   = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+
+  // Zero line
+  const [yd0, yd1] = yScale.domain();
+  if (yd0 < 0 && yd1 > 0) {
+    g.append("line")
+      .attr("x1", 0).attr("x2", iW)
+      .attr("y1", yScale(0)).attr("y2", yScale(0))
+      .attr("stroke", "#444").attr("stroke-dasharray", "4,2");
+  }
+
+  // Prediction band + regression line (band drawn first, behind line)
+  if (isFinite(slope) && isFinite(intercept0)) {
+    const [xl, xr] = xScale.domain();
+    const nPts = 80;
+    const step = (xr - xl) / (nPts - 1);
+    const pts  = Array.from({ length: nPts }, (_, i) => xl + i * step);
+
+    // Shaded band
+    if (vcov && isFinite(crit)) {
+      const area = d3.area()
+        .x(x  => xScale(x))
+        .y0(x => yScale(intercept0 + slope * x - crit * seAt(x)))
+        .y1(x => yScale(intercept0 + slope * x + crit * seAt(x)));
+      g.append("path")
+        .datum(pts)
+        .attr("fill", "rgba(79, 195, 247, 0.12)")
+        .attr("stroke", "none")
+        .attr("d", area);
+    }
+
+    // Regression line
+    g.append("line")
+      .attr("x1", xScale(xl)).attr("y1", yScale(intercept0 + slope * xl))
+      .attr("x2", xScale(xr)).attr("y2", yScale(intercept0 + slope * xr))
+      .attr("stroke", "#4fc3f7").attr("stroke-width", 2);
+  }
+
+  // Bubbles
+  const tooltip = d3.select("#tooltip");
+  g.selectAll("circle")
+    .data(valid)
+    .enter().append("circle")
+    .attr("cx", s => xScale(s[modName]))
+    .attr("cy", s => yScale(s.yi))
+    .attr("r",  (s, i) => Math.max(3, rMax * Math.sqrt(wArr[i] / wMax)))
+    .attr("fill",   "rgba(255,255,255,0.12)")
+    .attr("stroke", "white")
+    .attr("stroke-width", 1.2)
+    .on("mousemove", (event, s) => {
+      const fitted = intercept0 + slope * s[modName];
+      tooltip.style("opacity", 1)
+        .html(`<b>${s.label}</b><br>${modName}: ${s[modName]}<br>yi: ${s.yi.toFixed(3)}<br>ŷ: ${fitted.toFixed(3)}`)
+        .style("left", (event.pageX + 12) + "px")
+        .style("top",  (event.pageY - 24) + "px");
+    })
+    .on("mouseout", () => tooltip.style("opacity", 0));
+
+  // Axes
+  g.append("g").attr("transform", `translate(0,${iH})`).call(d3.axisBottom(xScale).ticks(5));
+  g.append("g").call(d3.axisLeft(yScale).ticks(5));
+
+  // Axis labels
+  g.append("text")
+    .attr("x", iW / 2).attr("y", iH + 42)
+    .attr("text-anchor", "middle").attr("fill", "#ccc").style("font-size", "12px")
+    .text(modName);
+
+  g.append("text")
+    .attr("transform", "rotate(-90)")
+    .attr("x", -iH / 2).attr("y", -44)
+    .attr("text-anchor", "middle").attr("fill", "#ccc").style("font-size", "12px")
+    .text("Effect size (yi)");
+
+  // Title
+  svg.append("text")
+    .attr("x", margin.left + iW / 2).attr("y", 16)
+    .attr("text-anchor", "middle").attr("fill", "#eee").style("font-size", "13px")
+    .text(`${modName}  (β = ${isFinite(slope) ? slope.toFixed(3) : "NA"})`);
+}
+
 // ================= FOREST =================
 export function drawForest(studies, m, options = {}) {
   const svg = d3.select("#forestPlot");

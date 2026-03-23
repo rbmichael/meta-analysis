@@ -1,4 +1,4 @@
-import { tCritical, normalCDF, tCDF, chiSquareCDF } from "./utils.js";
+import { tCritical, normalCDF, tCDF, chiSquareCDF, fCDF } from "./utils.js";
 
 window.MIN_VAR = 1e-8;
 
@@ -463,6 +463,375 @@ export function meta(studies, method="DL", ciMethod="normal") {
     stat,
     pval,
     dist
+  };
+}
+
+// ================= META-REGRESSION DESIGN MATRIX =================
+// Builds the k×p design matrix X for meta-regression.
+//
+// moderators: array of { key: string, type: "continuous" | "categorical" }
+//   key  — property name on each study object
+//   type — "continuous" (read as number) or "categorical" (dummy-coded)
+//
+// Returns:
+//   X         — k×p row-major matrix (array of k rows, each a p-length array)
+//   colNames  — p column labels; first is always "intercept"
+//   refLevels — maps each categorical key to its (dropped) reference level
+//   validMask — k booleans; true when all entries in that row are finite
+//   k, p      — matrix dimensions
+export function buildDesignMatrix(studies, moderators = []) {
+  const k = studies.length;
+
+  // Build column-by-column, then transpose to row-major at the end.
+  const columns  = [Array(k).fill(1)];  // intercept
+  const colNames = ["intercept"];
+  const refLevels = {};
+
+  for (const { key, type } of moderators) {
+    const raw = studies.map(s => s[key]);
+
+    if (type === "categorical") {
+      // Unique non-null levels, sorted so the reference is deterministic.
+      const levels = [...new Set(raw.filter(v => v != null && v !== ""))].sort();
+      if (levels.length < 2) continue;  // degenerate — nothing to dummy-code
+
+      refLevels[key] = levels[0];
+
+      for (const level of levels.slice(1)) {
+        // Missing values become NaN so validMask catches them.
+        columns.push(raw.map(v => (v == null || v === "") ? NaN : (v === level ? 1 : 0)));
+        colNames.push(`${key}:${level}`);
+      }
+
+    } else {
+      // Continuous: coerce to number; non-numeric (including undefined) → NaN.
+      columns.push(raw.map(v => +v));
+      colNames.push(key);
+    }
+  }
+
+  const p = columns.length;
+
+  // Transpose: X[i][j] = study i, column j.
+  const X = Array.from({ length: k }, (_, i) => columns.map(col => col[i]));
+
+  // A row is valid only when every entry is finite (no NaN / ±Infinity).
+  const validMask = X.map(row => row.every(isFinite));
+
+  return { X, colNames, refLevels, validMask, k, p };
+}
+
+// ================= WEIGHTED LEAST SQUARES =================
+// Fits y = X·beta by WLS with weights w = 1/(vi + tau²).
+// Called at every tau² iteration inside metaRegression, so kept lean.
+//
+// X    — k×p row-major design matrix (from buildDesignMatrix)
+// y    — k-length array of effect sizes
+// w    — k-length array of weights
+//
+// Returns:
+//   beta          — p-length coefficient vector
+//   vcov          — p×p variance-covariance matrix = (X'WX)⁻¹
+//   rankDeficient — true when X'WX is singular (results are NaN-filled)
+export function wls(X, y, w) {
+  const k = X.length;
+  const p = X[0].length;
+
+  // --- X'WX (p×p, symmetric) and X'Wy (p-vector) ---
+  const XtWX = Array.from({ length: p }, () => Array(p).fill(0));
+  const XtWy = Array(p).fill(0);
+
+  for (let i = 0; i < k; i++) {
+    const wi = w[i];
+    for (let j = 0; j < p; j++) {
+      XtWy[j] += wi * X[i][j] * y[i];
+      for (let l = j; l < p; l++) {            // exploit symmetry
+        const v = wi * X[i][j] * X[i][l];
+        XtWX[j][l] += v;
+        if (l !== j) XtWX[l][j] += v;
+      }
+    }
+  }
+
+  // --- Invert X'WX ---
+  const inv = matInverse(XtWX);
+  if (inv === null) {
+    return {
+      beta: Array(p).fill(NaN),
+      vcov: Array.from({ length: p }, () => Array(p).fill(NaN)),
+      rankDeficient: true
+    };
+  }
+
+  // --- beta = (X'WX)⁻¹ · X'Wy ---
+  const beta = inv.map(row => row.reduce((s, v, j) => s + v * XtWy[j], 0));
+
+  return { beta, vcov: inv, rankDeficient: false };
+}
+
+// Gauss-Jordan elimination with partial pivoting.
+// Returns the inverse of the p×p matrix A, or null if singular.
+// Not exported — used only by wls.
+function matInverse(A) {
+  const p = A.length;
+
+  // Augment A with the identity: M = [A | I]
+  const M = A.map((row, i) => {
+    const aug = row.slice();
+    for (let j = 0; j < p; j++) aug.push(i === j ? 1 : 0);
+    return aug;
+  });
+
+  for (let col = 0; col < p; col++) {
+    // Partial pivoting: swap in the row with the largest absolute value
+    let pivotRow = col;
+    for (let row = col + 1; row < p; row++) {
+      if (Math.abs(M[row][col]) > Math.abs(M[pivotRow][col])) pivotRow = row;
+    }
+    [M[col], M[pivotRow]] = [M[pivotRow], M[col]];
+
+    const pivot = M[col][col];
+    if (Math.abs(pivot) < 1e-14) return null;   // singular or near-singular
+
+    // Scale the pivot row so the leading entry becomes 1
+    for (let j = col; j < 2 * p; j++) M[col][j] /= pivot;
+
+    // Zero out every other row in this column
+    for (let row = 0; row < p; row++) {
+      if (row === col) continue;
+      const f = M[row][col];
+      if (f === 0) continue;
+      for (let j = col; j < 2 * p; j++) M[row][j] -= f * M[col][j];
+    }
+  }
+
+  // The right half of M is now A⁻¹
+  return M.map(row => row.slice(p));
+}
+
+// ================= TAU² FOR META-REGRESSION =================
+
+function dot(a, b) {
+  return a.reduce((s, v, i) => s + v * b[i], 0);
+}
+
+function quadForm(A, x) {
+  return dot(x, A.map(row => dot(row, x)));
+}
+
+function tau2Reg_DL(yi, vi, X) {
+  const k = vi.length, p = X[0].length;
+  const df = k - p;
+  if (df <= 0) return 0;
+  const w0 = vi.map(v => 1 / v);
+  const { beta, vcov, rankDeficient } = wls(X, yi, w0);
+  if (rankDeficient) return 0;
+  const QE = yi.reduce((s, y, i) => {
+    const e = y - dot(X[i], beta);
+    return s + w0[i] * e * e;
+  }, 0);
+  const c = w0.reduce((s, wi, i) => s + wi * (1 - wi * quadForm(vcov, X[i])), 0);
+  return c > 0 ? Math.max(0, (QE - df) / c) : 0;
+}
+
+function tau2Reg_REML(yi, vi, X, tol = 1e-10, maxIter = 100) {
+  const k = vi.length, p = X[0].length;
+  if (k - p <= 0) return 0;
+  let tau2 = tau2Reg_DL(yi, vi, X);
+  for (let iter = 0; iter < maxIter; iter++) {
+    const w = vi.map(v => 1 / (v + tau2));
+    const { beta, vcov, rankDeficient } = wls(X, yi, w);
+    if (rankDeficient) break;
+    const h = X.map((xi, i) => w[i] * quadForm(vcov, xi));
+    const e = yi.map((y, i) => y - dot(X[i], beta));
+    let score = 0, info = 0;
+    for (let i = 0; i < k; i++) {
+      const pi = w[i] * (1 - h[i]);
+      score += w[i] * w[i] * e[i] * e[i] - pi;
+      info  += w[i] * pi;
+    }
+    if (info <= 0) break;
+    let step = score / info;
+    let newTau2 = tau2 + step;
+    let sh = 0;
+    while (newTau2 < 0 && sh++ < 20) { step /= 2; newTau2 = tau2 + step; }
+    newTau2 = Math.max(0, newTau2);
+    if (Math.abs(newTau2 - tau2) < tol) { tau2 = newTau2; break; }
+    tau2 = newTau2;
+  }
+  return tau2;
+}
+
+function tau2Reg_PM(yi, vi, X, tol = 1e-10, maxIter = 100) {
+  const k = vi.length, p = X[0].length;
+  const df = k - p;
+  if (df <= 0) return 0;
+  let tau2 = 0;
+  for (let iter = 0; iter < maxIter; iter++) {
+    const w = vi.map(v => 1 / (v + tau2));
+    const { beta, rankDeficient } = wls(X, yi, w);
+    if (rankDeficient) break;
+    const QE = yi.reduce((s, y, i) => {
+      const e = y - dot(X[i], beta);
+      return s + w[i] * e * e;
+    }, 0);
+    const sumW = w.reduce((a, b) => a + b, 0);
+    const newTau2 = Math.max(0, tau2 + (QE - df) / sumW);
+    if (Math.abs(newTau2 - tau2) < tol) return newTau2;
+    tau2 = newTau2;
+  }
+  return tau2;
+}
+
+export function tau2_metaReg(yi, vi, X, method = "REML", tol = 1e-10, maxIter = 100) {
+  if (method === "REML") return tau2Reg_REML(yi, vi, X, tol, maxIter);
+  if (method === "PM")   return tau2Reg_PM  (yi, vi, X, tol, maxIter);
+  return tau2Reg_DL(yi, vi, X);
+}
+
+// ================= META-REGRESSION =================
+// Fits a weighted mixed-effects meta-regression model.
+//
+// Parameters:
+//   studies    — array of study objects, each with { yi, vi, ... }
+//   moderators — array of { key, type } passed to buildDesignMatrix
+//   method     — tau² estimator: "REML" (default), "DL", "PM"
+//   ciMethod   — "normal" (default) or "KH" (Knapp-Hartung)
+//
+// Returns:
+//   beta       — p-vector of coefficients
+//   se         — p-vector of standard errors
+//   zval/tval  — test statistics (z for normal, t for KH)
+//   pval       — two-tailed p-values
+//   ci         — [ [lo,hi], ... ] per coefficient
+//   tau2       — estimated between-study variance
+//   QE         — residual heterogeneity statistic
+//   QEdf       — df for QE (k − p)
+//   QEp        — p-value for QE (chi-squared)
+//   QM         — omnibus test for moderators (Wald chi-sq or F)
+//   QMdf       — df for QM (p − 1, i.e. excluding intercept)
+//   QMp        — p-value for QM
+//   I2         — residual I² (%)
+//   colNames   — column names matching beta
+//   k          — number of studies used
+//   p          — number of parameters
+//   rankDeficient — true if design matrix was singular
+export function metaRegression(studies, moderators = [], method = "REML", ciMethod = "normal") {
+  // Filter to studies with finite yi and vi
+  const valid = studies.filter(s => isFinite(s.yi) && isFinite(s.vi) && s.vi > 0);
+  const k = valid.length;
+
+  const { X, colNames, validMask, p } = buildDesignMatrix(valid, moderators);
+
+  // Further filter rows where all moderator values are finite
+  const rows   = valid.filter((_, i) => validMask[i]);
+  const Xf     = X.filter((_, i) => validMask[i]);
+  const kf     = rows.length;
+  const yi     = rows.map(s => s.yi);
+  const vi     = rows.map(s => s.vi);
+
+  const empty = {
+    beta: Array(p).fill(NaN), se: Array(p).fill(NaN),
+    zval: Array(p).fill(NaN), pval: Array(p).fill(NaN),
+    ci: Array(p).fill([NaN, NaN]),
+    tau2: NaN, QE: NaN, QEdf: kf - p, QEp: NaN,
+    QM: NaN, QMdf: p - 1, QMp: NaN, I2: NaN,
+    colNames, k: kf, p, rankDeficient: true
+  };
+
+  if (kf < p + 1) return empty;
+
+  // ---- tau² ----
+  const tau2 = tau2_metaReg(yi, vi, Xf, method);
+
+  // ---- pseudo-R² (proportion of heterogeneity explained by moderators) ----
+  // Only meaningful when there are actual moderators (p > 1).
+  const X0   = Xf.map(() => [1]);  // intercept-only design matrix
+  const tau2_0 = p > 1 ? tau2_metaReg(yi, vi, X0, method) : tau2;
+  const R2 = p > 1 && tau2_0 > 0 ? Math.max(0, (tau2_0 - tau2) / tau2_0) : NaN;
+
+  // ---- WLS with RE weights ----
+  const w = vi.map(v => 1 / (v + tau2));
+  const { beta, vcov, rankDeficient } = wls(Xf, yi, w);
+  if (rankDeficient) return { ...empty, rankDeficient: true };
+
+  // ---- residuals and QE ----
+  const e   = yi.map((y, i) => y - dot(Xf[i], beta));
+  const QE  = e.reduce((s, ei, i) => s + w[i] * ei * ei, 0);
+  const QEdf = kf - p;
+  const QEp  = QEdf > 0 ? 1 - chiSquareCDF(QE, QEdf) : NaN;
+
+  // ---- I² (residual) ----
+  // Use tau2/(tau2 + typical_vi) so I² is consistent with tau2 (avoids I²=0
+  // when tau2>0, which happens with REML when QE≤QEdf).
+  // typical_vi = QEdf/c where c = Σw0ᵢ(1−hᵢ) is the FE-leverage-adjusted
+  // denominator (same as used in the DL estimator for regression).
+  const w0 = vi.map(v => 1 / v);
+  const { vcov: vcov0, rankDeficient: rd0 } = wls(Xf, yi, w0);
+  let I2 = 0;
+  if (!rd0 && QEdf > 0) {
+    const c = w0.reduce((s, wi, i) => s + wi * (1 - wi * quadForm(vcov0, Xf[i])), 0);
+    if (c > 0) I2 = Math.max(0, tau2 / (tau2 + QEdf / c) * 100);
+  }
+
+  // ---- SE and CIs for beta ----
+  // s2: KH variance inflation factor (Knapp & Hartung 2003, eq. 8)
+  const useKH = ciMethod === "KH" && kf > p && QEdf > 0;
+  const s2 = useKH ? Math.max(1, QE / QEdf) : 1;
+
+  let se, crit, zval, pval, ci, dist;
+
+  if (useKH) {
+    se    = vcov.map((row, j) => Math.sqrt(Math.max(0, row[j]) * s2));
+    crit  = tCritical(QEdf);
+    dist  = "t";
+    zval  = beta.map((b, j) => b / se[j]);
+    pval  = zval.map(t => 2 * (1 - tCDF(Math.abs(t), QEdf)));
+    ci    = beta.map((b, j) => [b - crit * se[j], b + crit * se[j]]);
+  } else {
+    se    = vcov.map((row, j) => Math.sqrt(Math.max(0, row[j])));
+    crit  = 1.96;
+    dist  = "z";
+    zval  = beta.map((b, j) => b / se[j]);
+    pval  = zval.map(z => 2 * (1 - normalCDF(Math.abs(z))));
+    ci    = beta.map((b, j) => [b - crit * se[j], b + crit * se[j]]);
+  }
+
+  // ---- Omnibus test for moderators (QM) ----
+  // Normal: Wald chi-sq on beta[1..p-1] with p-1 df.
+  // KH:     F = QM_chi / (s2 * (p-1))  with F(p-1, k-p) distribution.
+  let QM = NaN, QMdf = p - 1, QMp = NaN;
+  if (p > 1) {
+    const idx = Array.from({ length: p - 1 }, (_, i) => i + 1);
+    const betaMod = idx.map(j => beta[j]);
+    const vcovMod = idx.map(r => idx.map(c => vcov[r][c]));
+    const invMod  = matInverse(vcovMod);
+    if (invMod !== null) {
+      const QMchi = betaMod.reduce((s, bi, r) =>
+        s + bi * invMod[r].reduce((ss, v, c) => ss + v * betaMod[c], 0), 0);
+      if (useKH) {
+        QM  = QMchi / (s2 * QMdf);   // F-statistic
+        QMp = 1 - fCDF(QM, QMdf, QEdf);
+      } else {
+        QM  = QMchi;                   // chi-sq statistic
+        QMp = 1 - chiSquareCDF(QM, QMdf);
+      }
+    }
+  }
+
+  const fitted      = Xf.map(xi => dot(xi, beta));
+  const stdResiduals = e.map((ei, i) => ei / Math.sqrt(vi[i] + tau2));
+
+  return {
+    beta, se, zval, pval, ci, vcov, crit, s2,
+    tau2, tau2_0, R2,
+    QE, QEdf, QEp,
+    QM, QMdf, QMp, QMdist: useKH ? "F" : "chi2",
+    I2, colNames, k: kf, p, rankDeficient: false, dist,
+    fitted, residuals: e, stdResiduals,
+    labels: rows.map(s => s.label || ""),
+    studiesUsed: rows,   // exact set used in the fit (for bubble plot)
+    yi, vi    // pass through for display
   };
 }
 

@@ -30,6 +30,7 @@
 <option value="OR">Odds Ratio (OR)</option>
 <option value="RR">Risk Ratio (RR)</option>
 <option value="RD">Risk Difference (RD)</option>
+<option value="GENERIC">Generic (yi / vi)</option>
 </select>
 
 <select id="tauMethod">
@@ -53,6 +54,16 @@
   Show adjusted RE after trim-and-fill
 </label>
 
+<div id="moderatorManager">
+  <strong>Moderators:</strong>
+  <input type="text" id="modName" placeholder="Column name" style="width:110px">
+  <select id="modType">
+    <option value="continuous">Continuous</option>
+    <option value="categorical">Categorical</option>
+  </select>
+  <button id="addMod">+ Add</button>
+</div>
+
 <table id="inputTable">
 <tr>
 <th>Study</th><th>Mean₁</th><th>SD₁</th><th>n₁</th>
@@ -68,6 +79,9 @@
 <button id="run">Run</button>
 
 <div id="results"></div>
+<div id="regressionPanel" style="display:none"></div>
+
+<div id="bubblePlots"></div>
 
 <svg id="forestPlot" width="900" height="420"></svg>
 <svg id="funnelPlot" width="500" height="400"></svg>

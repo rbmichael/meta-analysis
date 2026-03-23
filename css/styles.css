@@ -29,3 +29,47 @@ button { padding:6px 12px; margin:5px; background:#333; color:white; border:none
 input {
   transition: border 0.2s, background-color 0.2s;
 }
+
+/* ---- Regression Panel ---- */
+#regressionPanel {
+  margin: 20px 0;
+  border: 1px solid #444;
+  border-radius: 6px;
+  overflow: hidden;
+  max-width: 860px;
+}
+.reg-header {
+  background: #1e3a5f;
+  padding: 8px 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.reg-title { font-weight: bold; font-size: 1.05em; }
+.reg-meta  { font-size: 0.85em; color: #99b8d4; }
+.reg-het {
+  background: #161626;
+  padding: 7px 14px;
+  font-size: 0.88em;
+  color: #ccc;
+  border-bottom: 1px solid #333;
+}
+.reg-body { padding: 10px 14px; }
+.reg-table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 0.92em; }
+.reg-table th { background: #1e2840; font-weight: normal; color: #aac; }
+.reg-table th, .reg-table td { padding: 5px 10px; border: 1px solid #333; text-align: right; }
+.reg-table th:first-child, .reg-table td:first-child { text-align: left; font-family: monospace; }
+.reg-intercept td { color: #999; font-style: italic; }
+.reg-sig-3 { color: #ff9f43; font-weight: bold; }
+.reg-sig-2 { color: #ffd700; font-weight: bold; }
+.reg-sig-1 { color: #a8d8a8; }
+.reg-note  { font-size: 0.78em; color: #666; margin-top: 6px; }
+
+/* ---- Bubble plots ---- */
+#bubblePlots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 16px 0;
+}
+#bubblePlots svg { background: #181828; border: 1px solid #333; border-radius: 4px; }

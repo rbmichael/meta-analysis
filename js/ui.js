@@ -1,9 +1,9 @@
 // ================= UI =================
-import { compute, eggerTest, meta, influenceDiagnostics, subgroupAnalysis } from "./analysis.js";
+import { compute, eggerTest, meta, influenceDiagnostics, subgroupAnalysis, metaRegression } from "./analysis.js";
 import { fmt, transformEffect, transformCI } from "./utils.js";
 import { runTests } from "./tests.js";
 import { trimFill } from "./trimfill.js";
-import { drawForest, drawFunnel } from "./plots.js";
+import { drawForest, drawFunnel, drawBubble } from "./plots.js";
 
 // ---------------- EFFECT PROFILES ----------------
 const effectProfiles = {
@@ -61,14 +61,88 @@ const effectProfiles = {
 	  compute: (data) => compute(data, "RD"),
 	  transform: (x) => transformEffect(x, "RD"),
 	  transformCI: (lb, ub) => transformCI(lb, ub, "RD")
-	}
+	},
+
+  "GENERIC": {
+    label: "Generic (yi / vi)",
+    inputs: ["yi", "vi"],
+    compute: (data) => compute(data, "GENERIC"),
+    transform: (x) => x,
+    transformCI: (lb, ub) => ({ lb, ub })
+  }
 };
+
+// ---------------- MODERATOR STATE ----------------
+let moderators = []; // { name: string, type: "continuous"|"categorical" }
+
+// Low-level: add one moderator to state + DOM (no form read, no runAnalysis call).
+function doAddModerator(name, type) {
+  if (!name || moderators.some(m => m.name === name)) return;
+  moderators.push({ name, type });
+
+  const table = document.getElementById("inputTable");
+  const headerRow = table.rows[0];
+  headerRow.insertBefore(makeModTh(name), headerRow.lastElementChild);
+
+  for (let i = 1; i < table.rows.length; i++) {
+    const row = table.rows[i];
+    row.insertBefore(makeModTd(name, type), row.lastElementChild);
+  }
+}
+
+// Reset all moderators — clears state and removes all data-mod DOM elements.
+function clearModerators() {
+  moderators = [];
+  document.querySelectorAll("[data-mod]").forEach(el => el.remove());
+}
+
+function addModerator() {
+  const nameEl = document.getElementById("modName");
+  const name = nameEl.value.trim();
+  const type = document.getElementById("modType").value;
+  if (!name) return;
+  doAddModerator(name, type);
+  nameEl.value = "";
+  runAnalysis();
+}
+
+function removeModerator(name) {
+  moderators = moderators.filter(m => m.name !== name);
+  const table = document.getElementById("inputTable");
+  for (let i = 0; i < table.rows.length; i++) {
+    const cell = [...table.rows[i].cells].find(c => c.dataset.mod === name);
+    if (cell) cell.remove();
+  }
+  runAnalysis();
+}
+
+function makeModTh(name) {
+  const th = document.createElement("th");
+  th.dataset.mod = name;
+  th.innerHTML = `${name} <button class="remove-mod-btn" data-mod="${name}" title="Remove moderator">×</button>`;
+  th.querySelector(".remove-mod-btn").addEventListener("click", () => removeModerator(name));
+  return th;
+}
+
+function makeModTd(name, type) {
+  const td = document.createElement("td");
+  td.dataset.mod = name;
+  const input = document.createElement("input");
+  input.dataset.mod = name;
+  input.style.width = "70px";
+  input.placeholder = type === "categorical" ? "A/B/…" : "0";
+  input.addEventListener("input", runAnalysis);
+  td.appendChild(input);
+  return td;
+}
 
 // ---------------- INITIALIZE ----------------
 document.getElementById("addStudy").addEventListener("click", () => addRow());
 document.getElementById("run").addEventListener("click", runAnalysis);
 document.getElementById("import").addEventListener("click", importCSV);
 document.getElementById("export").addEventListener("click", exportCSV);
+document.getElementById("addMod").addEventListener("click", addModerator);
+document.getElementById("modName").addEventListener("keydown", e => { if (e.key === "Enter") addModerator(); });
 
 // ---------------- EFFECT TYPE HANDLER ----------------
 document.getElementById("effectType").addEventListener("change", () => {
@@ -121,6 +195,9 @@ function updateTableHeaders() {
   thGroup.textContent = "Group";
   headerRow.appendChild(thGroup);
 
+  // Moderator columns
+  moderators.forEach(({ name }) => headerRow.appendChild(makeModTh(name)));
+
   // Actions column
   const thActions = document.createElement("th");
   thActions.textContent = "Actions";
@@ -151,13 +228,22 @@ function addRow(values) {
     cell.appendChild(input);
   });
 
-  // ---- Group column ----
+  // ---- Group column ---- (fixed index: 1 Study + p effects + 1 Group)
   const groupCell = row.insertCell();
   const groupInput = document.createElement("input");
   groupInput.className = "group";
   groupInput.placeholder = "e.g. A";
-  groupInput.value = v[v.length - 1] || "";
+  groupInput.value = v[profile.inputs.length + 1] || "";
   groupCell.appendChild(groupInput);
+
+  // ---- Moderator columns ---- (values at indices after Group)
+  const modOffset = profile.inputs.length + 2;
+  moderators.forEach(({ name, type }, modIdx) => {
+    const td = makeModTd(name, type);
+    const val = v[modOffset + modIdx];
+    if (val !== undefined) td.querySelector("input").value = val;
+    row.appendChild(td);
+  });
 
   // ---- Actions ----
   const actionCell = row.insertCell();
@@ -200,8 +286,9 @@ function validateRow(row) {
   inputs.forEach((input, idx) => {
     input.classList.remove("input-error");
 
-    // Skip Study + Group
-    if (idx === 0 || idx === inputs.length - 1) return;
+    // Skip Study (first), Group (.group class), and moderator (data-mod) inputs.
+    // Only the p effect-input columns (indices 1..p) are validated here.
+    if (idx === 0 || input.classList.contains("group") || "mod" in input.dataset) return;
 
     const key = profile.inputs[idx - 1];
     const val = input.value.trim();
@@ -219,6 +306,7 @@ function validateRow(row) {
     let inputValid = true;
     let errorMsg = null;
     if (key.includes("sd") && num <= 0) { inputValid = false; errorMsg = `${key} must be > 0`; }
+    if (key === "vi" && num <= 0)        { inputValid = false; errorMsg = "vi must be > 0"; }
     if (key === "n" && num <= 1)         { inputValid = false; errorMsg = `${key} must be ≥ 2`; }
     if (key === "r" && (num < -1 || num > 1)) { inputValid = false; errorMsg = `${key} must be between -1 and 1`; }
 
@@ -385,7 +473,6 @@ function importCSV() {
     }) || document.getElementById("effectType").value;
 
     document.getElementById("effectType").value = detectedType;
-    updateTableHeaders();
 
     // Check required columns
     const profile = effectProfiles[detectedType];
@@ -395,35 +482,37 @@ function importCSV() {
       warningDiv.style.display = "block";
     }
 
-    // Map headers to indices
+    // Map headers to column indices
     const headerMap = {};
     headers.forEach((h, idx) => headerMap[h.toLowerCase()] = idx);
 
-    // Clear table and add rows
+    // Detect moderator columns: anything that isn't Study, Group, or an effect input
+    const knownCols = new Set(['study', 'group', ...profile.inputs.map(c => c.toLowerCase())]);
+    const modCols = headers.filter(h => !knownCols.has(h.toLowerCase()));
+
+    // Infer type: continuous if every non-empty value in the column parses as a number
+    const dataRows = allRows.slice(1).map(r => r.split(',').map(s => s.trim()));
+    clearModerators();
+    modCols.forEach(col => {
+      const ci = headerMap[col.toLowerCase()];
+      const vals = dataRows.map(r => r[ci] ?? "").filter(v => v !== "");
+      const type = vals.length > 0 && vals.every(v => !isNaN(v)) ? "continuous" : "categorical";
+      moderators.push({ name: col, type });   // push to state only — no DOM yet
+    });
+
+    // Rebuild headers (effect type + detected moderators) then clear data rows
+    updateTableHeaders();
     const table = document.getElementById("inputTable");
     while (table.rows.length > 1) table.deleteRow(1);
 
-	const rowsData = allRows.slice(1);
-	rowsData.forEach(r => {
-	  const values = r.split(',').map(s => s.trim());
-	  const v = [];
-
-	  // ---- Study column first ----
-	  const studyIdx = headerMap['study'];
-	  v.push(studyIdx !== undefined ? values[studyIdx] : "");
-
-	  // ---- Effect columns ----
-	  profile.inputs.forEach(col => {
-		const idx = headerMap[col.toLowerCase()];
-		v.push(idx !== undefined ? values[idx] : "");
-	  });
-
-	  // ---- Group column ----
-	  const groupIdx = headerMap['group'];
-	  v.push(groupIdx !== undefined ? values[groupIdx] : "");
-
-	  addRow(v);
-	});
+    dataRows.forEach(values => {
+      const v = [];
+      v.push(values[headerMap['study']] ?? "");                          // Study
+      profile.inputs.forEach(col => v.push(values[headerMap[col.toLowerCase()]] ?? ""));  // Effects
+      v.push(values[headerMap['group']] ?? "");                          // Group
+      modCols.forEach(col => v.push(values[headerMap[col.toLowerCase()]] ?? ""));         // Moderators
+      addRow(v);
+    });
 
     runAnalysis();
   };
@@ -436,8 +525,8 @@ function exportCSV() {
   const type = document.getElementById("effectType").value;
   const profile = effectProfiles[type];
 
-  // Build headers dynamically
-  const headers = ["Study", ...profile.inputs, "Group"];
+  // Build headers dynamically (moderator names appended after Group)
+  const headers = ["Study", ...profile.inputs, "Group", ...moderators.map(m => m.name)];
   const tableRows = [headers.join(',')];
 
   // Gather table rows
@@ -513,14 +602,134 @@ function populateExampleData(type) {
 	  ["Study3", 9, 2, 7, 2, 28, 0.4, "B"]
 	],
 	"RD": [
-		["Study 1", 12, 8, 15, 10, "A"],  // a=12, b=8, c=15, d=10
+		["Study 1", 12, 8, 15, 10, "A"],
 		["Study 2", 20, 10, 18, 12, "A"],
 		["Study 3", 8, 7, 10, 9, "B"]
-	]
+	],
+    "GENERIC": [
+      ["Study 1", -0.889, 0.326, ""],
+      ["Study 2", -1.585, 0.255, ""],
+      ["Study 3", -1.348, 0.214, ""],
+      ["Study 4", -1.442, 0.045, ""],
+      ["Study 5", -0.218, 0.031, ""]
+    ]
   };
 
   const rows = exampleData[type] || [];
   rows.forEach(row => addRow(row));
+}
+
+// ---------------- META-REGRESSION RESULTS PANEL ----------------
+function renderRegressionPanel(reg, method, ciMethod, kExcluded = 0) {
+  const panel = document.getElementById("regressionPanel");
+
+  if (!moderators.length) { panel.style.display = "none"; return; }
+  panel.style.display = "block";
+
+  if (reg.rankDeficient) {
+    panel.innerHTML = `
+      <div class="reg-header">
+        <span class="reg-title">Meta-Regression</span>
+      </div>
+      <div class="reg-body"><i>Design matrix is rank-deficient — check moderator coding.</i></div>`;
+    return;
+  }
+
+  const statLabel = reg.dist === "t" ? `t(${reg.QEdf})` : "z";
+  const QMlabel   = reg.QMdist === "F"
+    ? `F(${reg.QMdf}, ${reg.QEdf})`
+    : `χ²(${reg.QMdf})`;
+  const ciLabel   = ciMethod === "KH" ? "Knapp-Hartung" : "Normal CI";
+
+  function stars(p) {
+    if (p < 0.001) return `<span class="reg-sig-3">***</span>`;
+    if (p < 0.01)  return `<span class="reg-sig-2">**</span>`;
+    if (p < 0.05)  return `<span class="reg-sig-1">*</span>`;
+    if (p < 0.10)  return `<span style="color:#666">.</span>`;
+    return "";
+  }
+
+  function fmtP(p) {
+    if (!isFinite(p)) return "—";
+    if (p < 0.0001) return `<span class="reg-sig-3">&lt;0.0001</span>`;
+    const cls = p < 0.001 ? "reg-sig-3" : p < 0.01 ? "reg-sig-2" : p < 0.05 ? "reg-sig-1" : "";
+    return cls ? `<span class="${cls}">${fmt(p)}</span>` : fmt(p);
+  }
+
+  const QMrow = reg.p > 1
+    ? ` &nbsp;·&nbsp; QM ${QMlabel} = ${fmt(reg.QM)}, p = ${fmtP(reg.QMp)}`
+    : "";
+
+  let rows = "";
+  reg.colNames.forEach((name, j) => {
+    const [lo, hi] = reg.ci[j];
+    rows += `<tr class="${j === 0 ? "reg-intercept" : ""}">
+      <td>${name}</td>
+      <td>${fmt(reg.beta[j])}</td>
+      <td>${fmt(reg.se[j])}</td>
+      <td>${fmt(reg.zval[j])}</td>
+      <td>${fmtP(reg.pval[j])}</td>
+      <td>[${fmt(lo)}, ${fmt(hi)}]</td>
+      <td>${stars(reg.pval[j])}</td>
+    </tr>`;
+  });
+
+  // ---- Fitted values table ----
+  let fittedRows = "";
+  if (reg.labels && reg.fitted) {
+    reg.labels.forEach((lbl, i) => {
+      const sr = reg.stdResiduals[i];
+      const flag = Math.abs(sr) > 1.96 ? " style='color:#ff9f43'" : "";
+      fittedRows += `<tr>
+        <td>${lbl || i + 1}</td>
+        <td>${fmt(reg.yi[i])}</td>
+        <td>${fmt(reg.fitted[i])}</td>
+        <td>${fmt(reg.residuals[i])}</td>
+        <td${flag}>${fmt(sr)}</td>
+      </tr>`;
+    });
+  }
+
+  const lowDfWarning = reg.QEdf < 3
+    ? `<div class="reg-note" style="color:#ff9f43">⚠ Very few residual df (k − p = ${reg.QEdf}) — estimates may be unreliable.</div>`
+    : "";
+  const excludedWarning = kExcluded > 0
+    ? `<div class="reg-note" style="color:#ff9f43">⚠ ${kExcluded} ${kExcluded === 1 ? "study" : "studies"} excluded from regression (missing moderator value${kExcluded === 1 ? "" : "s"}).</div>`
+    : "";
+
+  panel.innerHTML = `
+    <div class="reg-header">
+      <span class="reg-title">Meta-Regression</span>
+      <span class="reg-meta">k = ${reg.k} &nbsp;·&nbsp; ${method} &nbsp;·&nbsp; ${ciLabel}</span>
+    </div>
+    <div class="reg-het">
+      τ² = ${fmt(reg.tau2)} (residual) &nbsp;·&nbsp; I² = ${fmt(reg.I2)}%
+      ${reg.p > 1 ? `&nbsp;·&nbsp; R² = ${isFinite(reg.R2) ? fmt(reg.R2 * 100) + "%" : "N/A"}` : ""}
+      &nbsp;·&nbsp; QE(${reg.QEdf}) = ${fmt(reg.QE)}, p = ${fmtP(reg.QEp)}
+      ${QMrow}
+    </div>
+    <div class="reg-body">
+      ${excludedWarning}${lowDfWarning}
+      <table class="reg-table">
+        <thead><tr>
+          <th>Term</th><th>β</th><th>SE</th><th>${statLabel}</th>
+          <th>p</th><th>95% CI</th><th></th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <div class="reg-note">*** p &lt; .001 &nbsp;·&nbsp; ** p &lt; .01 &nbsp;·&nbsp; * p &lt; .05 &nbsp;·&nbsp; · p &lt; .10</div>
+      ${fittedRows ? `
+      <details style="margin-top:10px">
+        <summary style="cursor:pointer; color:#aaa; font-size:0.88em">Fitted values &amp; residuals (k = ${reg.k})</summary>
+        <table class="reg-table" style="margin-top:6px">
+          <thead><tr>
+            <th>Study</th><th>yᵢ</th><th>ŷᵢ</th><th>eᵢ</th><th>std. eᵢ</th>
+          </tr></thead>
+          <tbody>${fittedRows}</tbody>
+        </table>
+        <div class="reg-note">Standardized residuals |std. e| &gt; 1.96 highlighted.</div>
+      </details>` : ""}
+    </div>`;
 }
 
 // ---------------- RUN ANALYSIS (modified for benchmarks) ----------------
@@ -571,6 +780,14 @@ function runAnalysis() {
     }
 
     study.group = group;
+
+    // ---- Moderator values ----
+    moderators.forEach(({ name, type }) => {
+      const inp = row.querySelector(`input[data-mod="${name}"]`);
+      const raw = inp ? inp.value.trim() : "";
+      study[name] = type === "continuous" ? (raw === "" ? NaN : +raw) : raw;
+    });
+
     studies.push(study);
   }
 
@@ -650,8 +867,29 @@ function runAnalysis() {
   `;
   document.getElementById("results").innerHTML += influenceHTML + subgroupHTML;
 
+  // ---- Meta-regression ----
+  // buildDesignMatrix expects { key, type }; ui state stores { name, type }.
+  const modSpec = moderators.map(m => ({ key: m.name, type: m.type }));
+  const reg = moderators.length > 0
+    ? metaRegression(studies, modSpec, method, ciMethod)
+    : null;
+  const kExcluded = reg ? studies.length - reg.k : 0;
+  renderRegressionPanel(reg ?? {}, method, ciMethod, kExcluded);
+
+  // ---- Bubble plots (one per continuous moderator) ----
+  const bubbleContainer = document.getElementById("bubblePlots");
+  bubbleContainer.innerHTML = "";
+  if (reg && !reg.rankDeficient) {
+    moderators
+      .filter(mod => mod.type === "continuous")
+      .forEach(mod => {
+        const idx = reg.colNames.indexOf(mod.name);
+        if (idx >= 1) drawBubble(reg.studiesUsed, reg, mod.name, idx, bubbleContainer);
+      });
+  }
+
   drawForest(all, m, { ciMethod });
   drawFunnel(all, m, egger);
-  
+
   updateValidationWarnings(studies, excluded, softWarnings);
 }
