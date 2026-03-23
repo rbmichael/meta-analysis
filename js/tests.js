@@ -1144,4 +1144,125 @@ export function runTests() {
   }
 
   console.log(romPass ? "\n✅ ALL ROM UNIT TESTS PASSED" : "\n❌ SOME ROM UNIT TESTS FAILED");
+
+  // ===== SMDH UNIT TESTS =====
+  //
+  // Tests cover:
+  //   1. yi and vi formulas (exact analytical values)
+  //   2. Invalid inputs → NaN / w=0
+  //   3. J → 1 as n → ∞ (correction vanishes for large samples)
+  //   4. SMDH yi = SMD yi when sd1 = sd2 (standardisers coincide)
+  //   5. Pooled meta() on a 3-study dataset (DL)
+  //
+  // Spot-check study:  m1=10, sd1=3, n1=30,  m2=8, sd2=1, n2=28
+  //   df   = 56
+  //   sdi² = (9 + 1) / 2 = 5,  sdi = √5
+  //   d    = 2 / √5 ≈ 0.894427
+  //   J    = 1 − 3 / (4·56 − 1) = 220/223 ≈ 0.986547
+  //   g    = d · J ≈ 0.882393
+  //   vi_d = (9/30 + 1/28) / 5  +  (4/5) / (2·56)
+  //        = 0.067143 + 0.007143 = 0.074286
+  //   vi_g = vi_d · J² = 0.074286 · (220/223)² ≈ 0.072300
+  //
+  // 3-study pool (DL):
+  //   Study 1: m1=10, sd1=3,   n1=30,  m2=8,  sd2=1,   n2=28 → g≈0.882, vi≈0.0723
+  //   Study 2: m1=6,  sd1=2.5, n1=25,  m2=5,  sd2=0.8, n2=22 → g≈0.530, vi≈0.0814
+  //   Study 3: m1=14, sd1=4.5, n1=35,  m2=10, sd2=1.5, n2=33 → g≈1.179, vi≈0.0667
+  //   FE≈0.885,  RE≈0.879,  tau2≈0.031,  I2≈30%
+  // ================================================================
+  let smdhPass = true;
+  console.log("\n===== SMDH UNIT TESTS =====\n");
+
+  function smdhchk(name, val, expected, tol = 1e-5) {
+    const ok = isFinite(val) && isFinite(expected) && Math.abs(val - expected) <= tol;
+    console.log(`  ${name}: ${round(val, 7)} (expected ${round(expected, 7)}) → ${ok ? "PASS" : "FAIL"}`);
+    if (!ok) smdhPass = false;
+  }
+  function smdhchkTrue(name, cond) {
+    console.log(`  ${name}: ${cond ? "PASS" : "FAIL"}`);
+    if (!cond) smdhPass = false;
+  }
+
+  // 1. yi / vi formula spot-check
+  console.log("--- 1. yi / vi formulas ---");
+  {
+    const s = compute({ m1: 10, sd1: 3, n1: 30, m2: 8, sd2: 1, n2: 28 }, "SMDH");
+    const df   = 56;
+    const sdi2 = 5;                              // (9+1)/2
+    const d    = 2 / Math.sqrt(sdi2);            // 2/√5
+    const J    = 1 - 3 / (4 * df - 1);          // 220/223
+    const g    = d * J;
+    const vi_d = (9/30 + 1/28) / sdi2 + d**2 / (2*df);
+    const vi_g = vi_d * J**2;
+    smdhchk("yi = g",        s.yi, g);
+    smdhchk("vi = vi_g",     s.vi, vi_g);
+    smdhchk("se = √vi_g",    s.se, Math.sqrt(vi_g));
+    smdhchk("w  = 1/vi_g",   s.w,  1 / vi_g, 1e-3);
+  }
+
+  // 2. Invalid inputs → NaN / w=0
+  console.log("--- 2. Invalid inputs → NaN ---");
+  {
+    const base = { m1: 10, sd1: 3, n1: 30, m2: 8, sd2: 1, n2: 28 };
+    smdhchkTrue("sd1 = 0  → NaN yi",  !isFinite(compute({ ...base, sd1: 0   }, "SMDH").yi));
+    smdhchkTrue("sd2 = 0  → NaN yi",  !isFinite(compute({ ...base, sd2: 0   }, "SMDH").yi));
+    smdhchkTrue("sd1 < 0  → NaN yi",  !isFinite(compute({ ...base, sd1: -1  }, "SMDH").yi));
+    smdhchkTrue("n1 = 1   → NaN yi",  !isFinite(compute({ ...base, n1:  1   }, "SMDH").yi));
+    smdhchkTrue("n2 = 1   → NaN yi",  !isFinite(compute({ ...base, n2:  1   }, "SMDH").yi));
+    smdhchkTrue("sd1 = 0  → w = 0",       compute({ ...base, sd1: 0   }, "SMDH").w === 0);
+  }
+
+  // 3. J → 1 as n → ∞
+  //    n1=n2=10000 → df=19998, J = 1 − 3/79991 ≈ 0.999963
+  console.log("--- 3. J → 1 for large n ---");
+  {
+    const s = compute({ m1: 10, sd1: 3, n1: 10000, m2: 8, sd2: 1, n2: 10000 }, "SMDH");
+    const df_large = 19998;
+    const J_large  = 1 - 3 / (4 * df_large - 1);
+    smdhchkTrue("J > 0.9999 for n=10000", J_large > 0.9999);
+    // g should be within 0.01% of the uncorrected d
+    const sdi2 = 5;
+    const d_large = 2 / Math.sqrt(sdi2);
+    smdhchk("yi ≈ d (J ≈ 1)", s.yi, d_large * J_large, 1e-6);
+  }
+
+  // 4. SMDH yi = SMD yi when sd1 = sd2
+  //    When sd1=sd2=s: sdi = √((s²+s²)/2) = s = pooled SD → d identical.
+  //    J correction uses the same df so g is identical too.
+  //    Variances differ slightly (SMDH uses df, SMD uses n1+n2 in second term).
+  console.log("--- 4. SMDH yi = SMD yi when sd1 = sd2 ---");
+  {
+    const args = { m1: 10, sd1: 2, n1: 30, m2: 8, sd2: 2, n2: 28 };
+    const smdh = compute(args, "SMDH");
+    const smd  = compute(args, "SMD");
+    smdhchk("yi SMDH = yi SMD (sd1=sd2)", smdh.yi, smd.yi, 1e-9);
+    // variances differ slightly: SMD uses d²/(2·(n1+n2)) and skips J² on vi,
+    // SMDH uses d²/(2·df) and multiplies by J². With n≈30 this compounds to ~2–3%.
+    smdhchkTrue("vi SMDH ≈ vi SMD (within 5%)",
+      isFinite(smdh.vi) && isFinite(smd.vi) &&
+      Math.abs(smdh.vi - smd.vi) / smd.vi < 0.05);
+  }
+
+  // 5. Pooled meta() — 3-study DL
+  console.log("--- 5. Pooled meta() (k=3, DL) ---");
+  {
+    const studies = [
+      compute({ m1: 10, sd1: 3,   n1: 30, m2: 8,  sd2: 1,   n2: 28 }, "SMDH"),
+      compute({ m1: 6,  sd1: 2.5, n1: 25, m2: 5,  sd2: 0.8, n2: 22 }, "SMDH"),
+      compute({ m1: 14, sd1: 4.5, n1: 35, m2: 10, sd2: 1.5, n2: 33 }, "SMDH"),
+    ];
+
+    // Per-study yi spot-checks
+    smdhchk("yi[0] ≈ 0.882", studies[0].yi, 0.882, 0.001);
+    smdhchk("yi[1] ≈ 0.530", studies[1].yi, 0.530, 0.001);
+    smdhchk("yi[2] ≈ 1.179", studies[2].yi, 1.179, 0.001);
+
+    const m = meta(studies, "DL");
+    smdhchk("FE   ≈ 0.885", m.FE,   0.885, 0.01);
+    smdhchk("RE   ≈ 0.879", m.RE,   0.879, 0.01);
+    smdhchk("tau2 ≈ 0.031", m.tau2, 0.031, 0.003);
+    smdhchk("I2   ≈ 30%",   m.I2,   30.0,  1.0);
+  }
+
+  console.log(smdhPass ? "\n✅ ALL SMDH UNIT TESTS PASSED" : "\n❌ SOME SMDH UNIT TESTS FAILED");
 }

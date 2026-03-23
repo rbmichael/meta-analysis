@@ -86,6 +86,32 @@ export function compute(s, type, options = {}) {
     return { ...s, md: g.es, varMD: g.var, se: Math.sqrt(g.var), w: 1/g.var, yi: g.es, vi: g.var };
   }
 
+  // ================= HETEROSCEDASTIC SMD (SMDH) =================
+  // Standardizer: sdi = sqrt((sd1² + sd2²) / 2)  — average-variance approach.
+  // Does not assume equal population variances (Bonett 2009).
+  // Raw effect:  d   = (m1 - m2) / sdi
+  // J correction: J  = 1 - 3 / (4·df - 1),  df = n1 + n2 - 2
+  // Corrected:   g   = d · J
+  // Variance:    vi  = (sd1²/n1 + sd2²/n2) / sdi²  +  d² / (2·df)
+  //              vi_g = vi · J²
+  if (type === "SMDH") {
+    const { m1, sd1, n1, m2, sd2, n2 } = s;
+    if (!isFinite(m1) || !isFinite(sd1) || !isFinite(n1) ||
+        !isFinite(m2) || !isFinite(sd2) || !isFinite(n2) ||
+        sd1 <= 0 || sd2 <= 0 || n1 < 2 || n2 < 2) {
+      return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+    }
+    const df   = n1 + n2 - 2;
+    const sdi2 = (sd1 ** 2 + sd2 ** 2) / 2;           // average variance
+    const sdi  = Math.sqrt(sdi2);
+    const d    = (m1 - m2) / sdi;
+    const J    = 1 - 3 / (4 * df - 1);                // Hedges correction
+    const g    = d * J;
+    const vi_d = (sd1 ** 2 / n1 + sd2 ** 2 / n2) / sdi2 + d ** 2 / (2 * df);
+    const vi_g = Math.max(vi_d * J ** 2, MIN_VAR);
+    return { ...s, md: g, varMD: vi_g, yi: g, vi: vi_g, se: Math.sqrt(vi_g), w: 1 / vi_g };
+  }
+
 	// ================ PAIRED MEAN DIFFERENCES ================
 	if (type === "MD_paired") {
 	  const { m_pre, m_post, sd_pre, sd_post, n, r } = s;
@@ -1403,15 +1429,21 @@ export function validateStudy(study, type) {
 
   if (!type) return { valid: false, errors: { general: "Unknown effect type" } };
 
-  if (type === "MD" || type === "SMD") {
+  if (type === "MD" || type === "SMD" || type === "SMDH" || type === "ROM") {
     const n1 = study.n1, n2 = study.n2;
     const sd1 = study.sd1, sd2 = study.sd2;
-    if (!isFinite(n1) || n1 < 2) { valid = false; errors.n1 = "n1 must be ≥ 2"; }
-    if (!isFinite(n2) || n2 < 2) { valid = false; errors.n2 = "n2 must be ≥ 2"; }
+    const minN = (type === "SMDH") ? 2 : 1;
+    if (!isFinite(n1) || n1 < minN) { valid = false; errors.n1 = `n1 must be ≥ ${minN}`; }
+    if (!isFinite(n2) || n2 < minN) { valid = false; errors.n2 = `n2 must be ≥ ${minN}`; }
     if (!isFinite(sd1) || sd1 <= 0) { valid = false; errors.sd1 = "sd1 must be > 0"; }
     if (!isFinite(sd2) || sd2 <= 0) { valid = false; errors.sd2 = "sd2 must be > 0"; }
     if (!isFinite(study.m1)) { valid = false; errors.m1 = "m1 must be numeric"; }
     if (!isFinite(study.m2)) { valid = false; errors.m2 = "m2 must be numeric"; }
+    // ROM additionally requires strictly positive means
+    if (type === "ROM") {
+      if (isFinite(study.m1) && study.m1 <= 0) { valid = false; errors.m1 = "m1 must be > 0"; }
+      if (isFinite(study.m2) && study.m2 <= 0) { valid = false; errors.m2 = "m2 must be > 0"; }
+    }
   }
   else if (type === "OR" || type === "RR" || type === "RD") {
     ["a","b","c","d"].forEach(k => {

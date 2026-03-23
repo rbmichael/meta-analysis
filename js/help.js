@@ -40,6 +40,22 @@ export const HELP = {
            "small, medium, and large.",
   },
 
+  "effect.SMDH": {
+    title: "Standardized Mean Difference — heteroscedastic (SMDH)",
+    body:  "A variant of Hedges' g that does not assume equal population variances. " +
+           "Instead of the pooled SD, the standardizer is sdi = √((sd₁² + sd₂²) / 2) " +
+           "— the square root of the average group variance. " +
+           "The same Hedges J correction is applied, and the delta-method variance " +
+           "is vi = (sd₁²/n₁ + sd₂²/n₂) / sdi² + d² / (2·df). " +
+           "Prefer SMDH over SMD when the intervention is expected to change the " +
+           "outcome variance (e.g. a treatment that both shifts and narrows the " +
+           "distribution), making the homoscedasticity assumption of the pooled SD " +
+           "implausible. When sd₁ ≈ sd₂ the two estimators agree closely and the " +
+           "standard SMD is more widely understood. " +
+           "Corresponds to measure=\"SMDH\" in metafor. " +
+           "Reference: Bonett (2009), Psychological Methods.",
+  },
+
   "effect.MD_paired": {
     title: "Mean Difference — Paired (MD paired)",
     body:  "Raw mean difference for pre/post or matched-pairs designs. " +

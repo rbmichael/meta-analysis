@@ -26,7 +26,15 @@ const effectProfiles = {
 	  transform: (x) => transformEffect(x, "SMD"),
 	  transformCI: (lb, ub) => transformCI(lb, ub, "SMD")
 	},
-	
+
+  "SMDH": {
+    label: "Standardized Mean Difference (heteroscedastic)",
+    inputs: ["m1", "sd1", "n1", "m2", "sd2", "n2"],
+    compute: (data) => compute(data, "SMDH"),
+    transform: (x) => transformEffect(x, "SMDH"),
+    transformCI: (lb, ub) => transformCI(lb, ub, "SMDH")
+  },
+
 	"MD_paired": {
 	  label: "Mean Difference (Paired)",
 	  inputs: ["m_pre", "sd_pre", "m_post", "sd_post", "n", "r"],
@@ -650,7 +658,7 @@ function validateRow(row) {
 function getSoftWarnings(studyInput, type, label) {
   const warnings = [];
 
-  if (type === "MD" || type === "SMD") {
+  if (type === "MD" || type === "SMD" || type === "SMDH") {
     const { n1, n2, sd1, sd2 } = studyInput;
 
     if (isFinite(n1) && n1 < 10) {
@@ -671,6 +679,15 @@ function getSoftWarnings(studyInput, type, label) {
       const ratio = Math.max(sd1, sd2) / Math.min(sd1, sd2);
       if (ratio > 3) {
         warnings.push(`⚠️ ${label}: large SD imbalance`);
+      }
+    }
+
+    // SMDH-specific: if SDs are nearly equal the standard SMD is equally valid
+    // and more commonly reported — alert the user.
+    if (type === "SMDH" && isFinite(sd1) && isFinite(sd2) && sd1 > 0 && sd2 > 0) {
+      const sdRatio = Math.max(sd1, sd2) / Math.min(sd1, sd2);
+      if (sdRatio < 1.1) {
+        warnings.push(`⚠️ ${label}: sd1 ≈ sd2 — standard SMD (pooled SD) is equally valid and more widely reported`);
       }
     }
   }
@@ -1282,6 +1299,13 @@ function populateExampleData(type) {
       ["Study1", 10, 2, 30, 8, 2, 28, "A"],
       ["Study2", 12, 3, 32, 9, 3, 30, "A"],
       ["Study3", 9, 2, 28, 7, 2, 25, "B"]
+    ],
+    "SMDH": [
+      ["Study1", 10, 3.5, 30, 8,   1.2, 28, "A"],
+      ["Study2", 12, 4.1, 32, 9,   1.8, 30, "A"],
+      ["Study3",  9, 2.8, 28, 7,   1.0, 25, "B"],
+      ["Study4", 14, 5.0, 40, 10,  2.3, 38, "B"],
+      ["Study5", 11, 3.2, 35, 8.5, 1.5, 33, ""]
     ],
     "ROM": [
       ["Study 1", 28.5, 4.2, 45, 22.1, 3.8, 43, ""],
