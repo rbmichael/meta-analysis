@@ -217,7 +217,7 @@ export function transformEffect(x, type) {
   if (!isFinite(x)) return NaN;
 
   // Ratio measures — all stored on log scale, display as exp(yi)
-  if (type === "OR" || type === "RR" || type === "HR" || type === "IRR" || type === "IR" || type === "ROM" || type === "CVR") {
+  if (type === "OR" || type === "RR" || type === "HR" || type === "IRR" || type === "IR" || type === "ROM" || type === "CVR" || type === "VR") {
     return Math.exp(x);
   }
 
@@ -250,7 +250,7 @@ export function transformCI(lb, ub, type) {
     return { lb: NaN, ub: NaN };
   }
 
-  if (type === "OR" || type === "RR" || type === "HR" || type === "IRR" || type === "IR" || type === "ROM" || type === "CVR") {
+  if (type === "OR" || type === "RR" || type === "HR" || type === "IRR" || type === "IR" || type === "ROM" || type === "CVR" || type === "VR") {
     return {
       lb: Math.exp(lb),
       ub: Math.exp(ub)

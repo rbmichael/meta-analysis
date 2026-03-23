@@ -67,6 +67,14 @@ const effectProfiles = {
     transformCI: (lb, ub) => transformCI(lb, ub, "CVR")
   },
 
+  "VR": {
+    label: "Variability Ratio (VR)",
+    inputs: ["sd1", "n1", "sd2", "n2"],
+    compute: (data) => compute(data, "VR"),
+    transform: (x) => transformEffect(x, "VR"),
+    transformCI: (lb, ub) => transformCI(lb, ub, "VR")
+  },
+
   "OR": {
     label: "Odds Ratio",
     inputs: ["a", "b", "c", "d"],
@@ -832,6 +840,29 @@ function getSoftWarnings(studyInput, type, label) {
     }
   }
 
+  else if (type === "VR") {
+    const { sd1, sd2, n1, n2 } = studyInput;
+    if (isFinite(sd1) && sd1 <= 0) {
+      warnings.push(`⚠️ ${label}: sd1 ≤ 0 — standard deviation must be positive (study excluded)`);
+    }
+    if (isFinite(sd2) && sd2 <= 0) {
+      warnings.push(`⚠️ ${label}: sd2 ≤ 0 — standard deviation must be positive (study excluded)`);
+    }
+    if (isFinite(n1) && n1 < 10) {
+      warnings.push(`⚠️ ${label}: small sample size (n1 < 10) — VR variance estimate unreliable`);
+    }
+    if (isFinite(n2) && n2 < 10) {
+      warnings.push(`⚠️ ${label}: small sample size (n2 < 10) — VR variance estimate unreliable`);
+    }
+    // Extreme SD ratio suggests possible scale differences between studies.
+    if (isFinite(sd1) && isFinite(sd2) && sd1 > 0 && sd2 > 0) {
+      const ratio = Math.max(sd1, sd2) / Math.min(sd1, sd2);
+      if (ratio > 4) {
+        warnings.push(`⚠️ ${label}: extreme SD ratio (> 4) — check units are consistent across studies`);
+      }
+    }
+  }
+
   return warnings;
 }
 
@@ -1359,6 +1390,13 @@ function populateExampleData(type) {
       ["Study 3", 18.5, 5.1, 30, 19.0, 3.0, 28, ""],
       ["Study 4", 42.0, 11.5, 70, 40.5, 6.2, 68, ""],
       ["Study 5", 22.3, 7.8, 45, 23.1, 4.9, 43, ""]
+    ],
+    "VR": [
+      ["Study 1", 4.2, 40, 2.8, 38, ""],
+      ["Study 2", 5.5, 55, 3.2, 52, ""],
+      ["Study 3", 3.8, 30, 2.5, 28, ""],
+      ["Study 4", 6.1, 70, 4.0, 68, ""],
+      ["Study 5", 4.9, 45, 3.5, 43, ""]
     ],
     "OR": [
       ["Study1", 12, 5, 8, 15, "A"],

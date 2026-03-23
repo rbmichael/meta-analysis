@@ -134,6 +134,21 @@ export function compute(s, type, options = {}) {
     return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
   }
 
+  // ================= VARIABILITY RATIO (VR) =================
+  // yi  = log(sd1 / sd2)   — stored on log scale, back-transform with exp()
+  // vi  = 1/(2*(n1-1)) + 1/(2*(n2-1))
+  // Requires: sd1 > 0, sd2 > 0, n1 ≥ 2, n2 ≥ 2  (means not needed)
+  if (type === "VR") {
+    const { sd1, n1, sd2, n2 } = s;
+    if (!isFinite(sd1) || !isFinite(n1) || !isFinite(sd2) || !isFinite(n2) ||
+        sd1 <= 0 || sd2 <= 0 || n1 < 2 || n2 < 2) {
+      return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+    }
+    const yi = Math.log(sd1 / sd2);
+    const vi = Math.max(1 / (2 * (n1 - 1)) + 1 / (2 * (n2 - 1)), MIN_VAR);
+    return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
+  }
+
 	// ================ PAIRED MEAN DIFFERENCES ================
 	if (type === "MD_paired") {
 	  const { m_pre, m_post, sd_pre, sd_post, n, r } = s;
@@ -1519,6 +1534,12 @@ export function validateStudy(study, type) {
   else if (type === "IR") {
     if (!isFinite(study.x) || study.x < 0) { valid = false; errors.x = "x must be ≥ 0"; }
     if (!isFinite(study.t) || study.t <= 0) { valid = false; errors.t = "t must be > 0"; }
+  }
+  else if (type === "VR") {
+    if (!isFinite(study.sd1) || study.sd1 <= 0) { valid = false; errors.sd1 = "sd1 must be > 0"; }
+    if (!isFinite(study.sd2) || study.sd2 <= 0) { valid = false; errors.sd2 = "sd2 must be > 0"; }
+    if (!isFinite(study.n1)  || study.n1  < 2)  { valid = false; errors.n1  = "n1 must be ≥ 2"; }
+    if (!isFinite(study.n2)  || study.n2  < 2)  { valid = false; errors.n2  = "n2 must be ≥ 2"; }
   }
   else {
     valid = false;

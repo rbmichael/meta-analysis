@@ -43,6 +43,23 @@ export const HELP = {
            "Reference: Nakagawa et al. (2015), Methods in Ecology and Evolution.",
   },
 
+  "effect.VR": {
+    title: "Variability Ratio (VR)",
+    body:  "The log ratio of two standard deviations: yi = log(sd₁ / sd₂), " +
+           "stored on the log scale and back-transformed to the ratio scale (sd₁/sd₂) for display. " +
+           "A value of 1 indicates equal spread in both groups; values above 1 indicate " +
+           "greater absolute variability in group 1. " +
+           "The variance formula is vi = 1/(2·(n₁−1)) + 1/(2·(n₂−1)), " +
+           "which depends only on sample sizes — not on the observed SDs themselves. " +
+           "Only sd₁, sd₂, n₁, and n₂ are required; group means are not needed. " +
+           "Both SDs must be strictly positive and n ≥ 2 per group. " +
+           "VR measures absolute dispersion, in contrast to CVR (Coefficient of Variation Ratio) " +
+           "which measures relative dispersion (SD/mean). Prefer VR when the outcome scale is " +
+           "fixed and meaningful; prefer CVR when you want to control for mean-level differences. " +
+           "Corresponds to measure=\"VR\" in metafor. " +
+           "Reference: Nakagawa et al. (2015), Methods in Ecology and Evolution.",
+  },
+
   "effect.MD": {
     title: "Mean Difference (MD)",
     body:  "The raw arithmetic difference between two group means (μ₁ − μ₂). " +

@@ -1359,4 +1359,102 @@ export function runTests() {
   }
 
   console.log(cvrPass ? "\n✅ ALL CVR UNIT TESTS PASSED" : "\n❌ SOME CVR UNIT TESTS FAILED");
+
+  // ================================================================
+  // VR UNIT TESTS
+  // ================================================================
+  console.log("\n===== VR UNIT TESTS =====\n");
+  let vrPass = true;
+
+  function vrchk(name, val, expected, tol = 1e-4) {
+    const ok = Math.abs(val - expected) < tol;
+    console.log(`  ${name}: ${round(val, 6)} (expected ${round(expected, 6)}) → ${ok ? "PASS" : "FAIL"}`);
+    if (!ok) vrPass = false;
+  }
+  function vrchkTrue(name, cond) {
+    console.log(`  ${name}: ${cond ? "PASS" : "FAIL"}`);
+    if (!cond) vrPass = false;
+  }
+
+  // 1. yi / vi formula spot-check
+  // sd1=4, n1=40, sd2=2, n2=38
+  // yi = log(4/2) = log(2)
+  // vi = 1/(2*39) + 1/(2*37)
+  console.log("--- 1. yi / vi formulas ---");
+  {
+    const s = compute({ sd1: 4, n1: 40, sd2: 2, n2: 38 }, "VR");
+    const yi_exp = Math.log(4 / 2);
+    const vi_exp = 1 / (2 * 39) + 1 / (2 * 37);
+    vrchk("yi = log(sd1/sd2)", s.yi, yi_exp);
+    vrchk("vi formula",        s.vi, vi_exp);
+    vrchk("se = √vi",          s.se, Math.sqrt(vi_exp));
+    vrchk("w  = 1/vi",         s.w,  1 / vi_exp, 1e-3);
+  }
+
+  // 2. Invalid inputs → NaN / w=0
+  console.log("--- 2. Invalid inputs → NaN ---");
+  {
+    const base = { sd1: 4, n1: 40, sd2: 2, n2: 38 };
+    vrchkTrue("sd1 = 0  → NaN yi",  !isFinite(compute({ ...base, sd1:  0  }, "VR").yi));
+    vrchkTrue("sd1 < 0  → NaN yi",  !isFinite(compute({ ...base, sd1: -1  }, "VR").yi));
+    vrchkTrue("sd2 = 0  → NaN yi",  !isFinite(compute({ ...base, sd2:  0  }, "VR").yi));
+    vrchkTrue("n1 = 1   → NaN yi",  !isFinite(compute({ ...base, n1:   1  }, "VR").yi));
+    vrchkTrue("n2 = 1   → NaN yi",  !isFinite(compute({ ...base, n2:   1  }, "VR").yi));
+    vrchkTrue("sd2 = 0  → w = 0",       compute({ ...base, sd2:  0  }, "VR").w === 0);
+  }
+
+  // 3. VR = 1 (yi = 0) when sd1 = sd2
+  console.log("--- 3. yi = 0 when sd1 = sd2 ---");
+  {
+    const s = compute({ sd1: 3, n1: 30, sd2: 3, n2: 28 }, "VR");
+    vrchk("yi = 0 (sd1 = sd2)", s.yi, 0);
+    vrchkTrue("vi > 0 (sampling variance present)", isFinite(s.vi) && s.vi > 0);
+  }
+
+  // 4. vi depends only on n, not on SD values
+  //    Two studies with different SDs but same n must have identical vi.
+  console.log("--- 4. vi depends only on n ---");
+  {
+    const s1 = compute({ sd1: 4,  n1: 40, sd2: 2, n2: 38 }, "VR");
+    const s2 = compute({ sd1: 10, n1: 40, sd2: 1, n2: 38 }, "VR");
+    vrchk("vi same when n same (different SDs)", s1.vi, s2.vi, 1e-12);
+  }
+
+  // 5. Back-transform: exp(yi) = sd1/sd2
+  console.log("--- 5. Back-transform: exp(yi) = sd1/sd2 ---");
+  {
+    const s = compute({ sd1: 4, n1: 40, sd2: 2, n2: 38 }, "VR");
+    vrchk("exp(yi) = 2.0", transformEffect(s.yi, "VR"), 2.0, 1e-9);
+    const ci = transformCI(s.yi - 1.96 * s.se, s.yi + 1.96 * s.se, "VR");
+    vrchkTrue("CI lb > 0", ci.lb > 0);
+    vrchkTrue("CI lb < exp(yi) < ub", ci.lb < 2.0 && 2.0 < ci.ub);
+  }
+
+  // 6. Pooled meta() — 3-study DL with heterogeneous SDs
+  // Study 1: sd1=4.0, n1=40, sd2=2.0, n2=38 → yi=log(2.0)≈0.6931
+  // Study 2: sd1=3.5, n1=30, sd2=1.5, n2=28 → yi=log(7/3)≈0.8473
+  // Study 3: sd1=5.0, n1=50, sd2=3.0, n2=48 → yi=log(5/3)≈0.5108
+  console.log("--- 6. Pooled meta() (k=3, DL) ---");
+  {
+    const studies = [
+      compute({ sd1: 4.0, n1: 40, sd2: 2.0, n2: 38 }, "VR"),
+      compute({ sd1: 3.5, n1: 30, sd2: 1.5, n2: 28 }, "VR"),
+      compute({ sd1: 5.0, n1: 50, sd2: 3.0, n2: 48 }, "VR"),
+    ];
+    vrchk("yi[0] = log(2.0)", studies[0].yi, Math.log(2.0),     1e-9);
+    vrchk("yi[1] = log(7/3)", studies[1].yi, Math.log(7 / 3),   1e-9);
+    vrchk("yi[2] = log(5/3)", studies[2].yi, Math.log(5 / 3),   1e-9);
+
+    const m = meta(studies, "DL");
+    // All yi > 0, so FE and RE must be positive; bounded by min/max yi
+    vrchkTrue("FE > 0",                          m.FE > 0);
+    vrchkTrue("FE in (log(5/3), log(7/3))",      m.FE > Math.log(5 / 3) && m.FE < Math.log(7 / 3));
+    vrchkTrue("RE in (log(5/3), log(7/3))",      m.RE > Math.log(5 / 3) && m.RE < Math.log(7 / 3));
+    vrchkTrue("tau2 ≥ 0",                        isFinite(m.tau2) && m.tau2 >= 0);
+    vrchkTrue("I2 ≥ 0",                          isFinite(m.I2)   && m.I2   >= 0);
+    // Back-transformed RE should be > 1 (sd1 > sd2 in all studies)
+    vrchkTrue("exp(RE) > 1", Math.exp(m.RE) > 1);
+  }
+
+  console.log(vrPass ? "\n✅ ALL VR UNIT TESTS PASSED" : "\n❌ SOME VR UNIT TESTS FAILED");
 }
