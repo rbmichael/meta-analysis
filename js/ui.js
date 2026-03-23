@@ -6,6 +6,7 @@ import { trimFill } from "./trimfill.js";
 import { drawForest, drawFunnel, drawBubble, drawInfluencePlot, drawCumulativeForest } from "./plots.js";
 import { exportSVG, exportPNG } from "./export.js";
 import { buildReport, downloadHTML, openPrintPreview } from "./report.js";
+import { parseCSV, detectEffectType } from "./csv.js";
 
 // ---------------- EFFECT PROFILES ----------------
 const effectProfiles = {
@@ -154,6 +155,15 @@ const effectProfiles = {
   }
 };
 
+// ---------------- SHARED HELPERS ----------------
+function escapeHTML(s) {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
 // ---------------- MODERATOR STATE ----------------
 let moderators = []; // { name: string, type: "continuous"|"categorical" }
 
@@ -221,7 +231,11 @@ function makeModTd(name, type) {
 // ---------------- INITIALIZE ----------------
 document.getElementById("addStudy").addEventListener("click", () => { addRow(); markStale(); });
 document.getElementById("run").addEventListener("click", runAnalysis);
-document.getElementById("import").addEventListener("click", importCSV);
+document.getElementById("import").addEventListener("click", () => document.getElementById("csvFile").click());
+document.getElementById("csvFile").addEventListener("change", e => { if (e.target.files[0]) previewCSV(e.target.files[0]); });
+document.getElementById("previewImport").addEventListener("click", commitImport);
+document.getElementById("previewCancel").addEventListener("click", cancelImport);
+document.getElementById("previewEffectType").addEventListener("change", e => refreshPreviewUI(e.target.value));
 document.getElementById("export").addEventListener("click", exportCSV);
 document.getElementById("addMod").addEventListener("click", addModerator);
 document.getElementById("modName").addEventListener("keydown", e => { if (e.key === "Enter") addModerator(); });
@@ -676,99 +690,226 @@ function updateValidationWarnings(studies, excluded, softWarnings) {
   }
 }
 
-// ---------------- CSV (with column warning) ----------------
-function importCSV() {
-  const file = document.getElementById('csvFile').files[0];
-  const warningDiv = document.getElementById("csvWarning");
-  warningDiv.style.display = "none"; // reset warning
+// ---------------- CSV IMPORT — TWO-PHASE PREVIEW / COMMIT ----------------
 
-  if (!file) return;
+// Cached parsed CSV waiting for user confirmation.
+let _pendingImport = null;  // { parsed: { delimiter, headers, rows } }
+
+// Classify every CSV header against the chosen effect profile.
+// Returns { matched, missing, modCols, structural, confidence }.
+function classifyColumns(headers, type) {
+  const profile   = effectProfiles[type];
+  const required  = new Set(profile.inputs.map(i => i.toLowerCase()));
+  const structural = new Set(["study", "group"]);
+  const lowerHdr  = new Set(headers.map(h => h.toLowerCase()));
+
+  const matched    = profile.inputs.filter(i =>  lowerHdr.has(i.toLowerCase()));
+  const missing    = profile.inputs.filter(i => !lowerHdr.has(i.toLowerCase()));
+  const modCols    = headers.filter(h => !required.has(h.toLowerCase()) && !structural.has(h.toLowerCase()));
+  const structCols = headers.filter(h =>  structural.has(h.toLowerCase()));
+
+  const score = profile.inputs.length > 0 ? matched.length / profile.inputs.length : 0;
+  const confidence = score === 1 ? "full" : score > 0 ? "partial" : "none";
+
+  return { matched, missing, modCols, structural: structCols, confidence };
+}
+
+// Rebuild the mapping chips and preview table for the currently-selected type.
+function refreshPreviewUI(type) {
+  if (!_pendingImport) return;
+  const { headers, rows } = _pendingImport.parsed;
+  const cls = classifyColumns(headers, type);
+
+  // Confidence pill — show "tied" when the auto-detected type is ambiguous and
+  // the user hasn't manually overridden the dropdown.
+  const confEl = document.getElementById("previewConfidence");
+  const isAutoDetected = _pendingImport.tied && type === _pendingImport.detectedType;
+  const displayConf = (isAutoDetected && cls.confidence === "full") ? "tied" : cls.confidence;
+  const confText = {
+    full:    "✓ all columns matched",
+    tied:    "⚠ ambiguous — multiple types match",
+    partial: "⚠ partial match",
+    none:    "✗ no columns matched",
+  };
+  confEl.textContent = confText[displayConf];
+  confEl.className = `preview-confidence conf-${displayConf}`;
+
+  // Column mapping chips
+  const lowerMatched    = new Set(cls.matched.map(c => c.toLowerCase()));
+  const lowerStructural = new Set(cls.structural.map(c => c.toLowerCase()));
+
+  let chips = "";
+  cls.structural.forEach(c =>
+    chips += `<span class="chip chip-ignored">${escapeHTML(c)}</span>`);
+  cls.matched.forEach(c =>
+    chips += `<span class="chip chip-matched">✓ ${escapeHTML(c)}</span>`);
+  cls.missing.forEach(c =>
+    chips += `<span class="chip chip-missing">✗ ${escapeHTML(c)}</span>`);
+  cls.modCols.forEach(c =>
+    chips += `<span class="chip chip-moderator">~ ${escapeHTML(c)}</span>`);
+  document.getElementById("previewMapping").innerHTML = chips;
+
+  // Data preview table (first 5 rows)
+  function colClass(h) {
+    const hl = h.toLowerCase();
+    if (lowerStructural.has(hl)) return "";
+    if (lowerMatched.has(hl))    return "col-matched";
+    return "col-moderator";
+  }
+
+  let tbl = '<table class="preview-table"><thead><tr>';
+  headers.forEach(h => {
+    tbl += `<th class="${colClass(h)}">${escapeHTML(h)}</th>`;
+  });
+  tbl += "</tr></thead><tbody>";
+  rows.slice(0, 5).forEach(row => {
+    tbl += "<tr>";
+    row.forEach(cell => tbl += `<td>${escapeHTML(cell)}</td>`);
+    tbl += "</tr>";
+  });
+  tbl += "</tbody></table>";
+  document.getElementById("previewTable").innerHTML = tbl;
+}
+
+// Phase 1 — called when the user selects a file.
+// Parses the file and populates the preview panel without touching the table.
+function previewCSV(file) {
+  const warningDiv = document.getElementById("csvWarning");
+  warningDiv.style.display = "none";
 
   const reader = new FileReader();
+  reader.onerror = () => {
+    warningDiv.textContent = "Could not read the selected file.";
+    warningDiv.style.display = "block";
+  };
   reader.onload = e => {
-    const allRows = e.target.result.split('\n').map(r => r.trim()).filter(r => r);
-    if (allRows.length === 0) return;
+    const parsed = parseCSV(e.target.result);
 
-    const headers = allRows[0].split(',').map(h => h.trim());
-    const headerLower = headers.map(h => h.toLowerCase());
-
-    // Detect effect type automatically
-    let detectedType = Object.keys(effectProfiles).find(type => {
-      const profile = effectProfiles[type];
-      const profileLower = profile.inputs.map(i => i.toLowerCase());
-      return profileLower.every(col => headerLower.includes(col));
-    }) || document.getElementById("effectType").value;
-
-    document.getElementById("effectType").value = detectedType;
-
-    // Check required columns
-    const profile = effectProfiles[detectedType];
-    const missingCols = profile.inputs.filter(c => !headerLower.includes(c.toLowerCase()));
-    if (missingCols.length > 0) {
-      warningDiv.textContent = `Warning: CSV is missing required columns: ${missingCols.join(', ')}`;
+    if (!parsed.headers.length) {
+      warningDiv.textContent = "The selected file appears to be empty.";
       warningDiv.style.display = "block";
+      return;
     }
 
-    // Map headers to column indices
-    const headerMap = {};
-    headers.forEach((h, idx) => headerMap[h.toLowerCase()] = idx);
+    // Detect effect type before storing so detectedType is available to refreshPreviewUI.
+    const currentType = document.getElementById("effectType").value;
+    const detection   = detectEffectType(parsed.headers, currentType, effectProfiles);
 
-    // Detect moderator columns: anything that isn't Study, Group, or an effect input
-    const knownCols = new Set(['study', 'group', ...profile.inputs.map(c => c.toLowerCase())]);
-    const modCols = headers.filter(h => !knownCols.has(h.toLowerCase()));
+    _pendingImport = { parsed, detectedType: detection.type, tied: detection.tied };
 
-    // Infer type: continuous if every non-empty value in the column parses as a number
-    const dataRows = allRows.slice(1).map(r => r.split(',').map(s => s.trim()));
-    clearModerators();
-    modCols.forEach(col => {
-      const ci = headerMap[col.toLowerCase()];
-      const vals = dataRows.map(r => r[ci] ?? "").filter(v => v !== "");
-      const type = vals.length > 0 && vals.every(v => !isNaN(v)) ? "continuous" : "categorical";
-      moderators.push({ name: col, type });   // push to state only — no DOM yet
-    });
+    // Delimiter badge
+    const delimNames = { ",": "comma", ";": "semicolon", "\t": "tab" };
+    document.getElementById("previewDelimiter").textContent =
+      `delimiter: ${delimNames[parsed.delimiter] ?? parsed.delimiter}`;
 
-    // Rebuild headers (effect type + detected moderators) then clear data rows
-    updateTableHeaders();
-    const table = document.getElementById("inputTable");
-    while (table.rows.length > 1) table.deleteRow(1);
+    document.getElementById("previewEffectType").value = detection.type;
 
-    dataRows.forEach(values => {
-      const v = [];
-      v.push(values[headerMap['study']] ?? "");                          // Study
-      profile.inputs.forEach(col => v.push(values[headerMap[col.toLowerCase()]] ?? ""));  // Effects
-      v.push(values[headerMap['group']] ?? "");                          // Group
-      modCols.forEach(col => v.push(values[headerMap[col.toLowerCase()]] ?? ""));         // Moderators
-      addRow(v);
-    });
-
-    runAnalysis();
+    refreshPreviewUI(detection.type);
+    document.getElementById("importPreview").style.display = "block";
   };
-
   reader.readAsText(file);
 }
 
-// ---------------- CSV EXPORT (updated) ----------------
-function exportCSV() {
-  const type = document.getElementById("effectType").value;
+// Phase 2 — called when the user clicks "Import" in the preview panel.
+// Commits the parsed data to the table and runs analysis.
+function commitImport() {
+  if (!_pendingImport) return;
+  const { headers, rows } = _pendingImport.parsed;
+
+  const type    = document.getElementById("previewEffectType").value;
   const profile = effectProfiles[type];
 
-  // Build headers dynamically (moderator names appended after Group)
-  const headers = ["Study", ...profile.inputs, "Group", ...moderators.map(m => m.name)];
-  const tableRows = [headers.join(',')];
+  // Build header → index map
+  const headerMap = {};
+  headers.forEach((h, idx) => { headerMap[h.toLowerCase()] = idx; });
 
-  // Gather table rows
-  document.querySelectorAll("#inputTable tr").forEach((r, i) => {
-    if (i === 0) return; // skip header
-    const vals = [...r.querySelectorAll("input")].map(x => x.value);
-    // Only include rows with at least one non-empty input
-    if (vals.some(v => v !== "")) tableRows.push(vals.join(','));
+  // Classify columns
+  const knownCols = new Set(["study", "group", ...profile.inputs.map(c => c.toLowerCase())]);
+  const modCols   = headers.filter(h => !knownCols.has(h.toLowerCase()));
+
+  // Infer moderator types and register them
+  clearModerators();
+  modCols.forEach(col => {
+    const ci     = headerMap[col.toLowerCase()];
+    const vals   = rows.map(r => r[ci] ?? "").filter(v => v.trim() !== "");
+    const mtype  = vals.length > 0 && vals.every(v => !isNaN(v.trim())) ? "continuous" : "categorical";
+    moderators.push({ name: col, type: mtype });
   });
 
-  const blob = new Blob([tableRows.join('\n')], { type: "text/csv;charset=utf-8;" });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
+  // Apply detected effect type and rebuild table headers
+  document.getElementById("effectType").value = type;
+  updateTableHeaders();
+  const table = document.getElementById("inputTable");
+  while (table.rows.length > 1) table.deleteRow(1);
+
+  rows.forEach(values => {
+    const v = [];
+    v.push(values[headerMap["study"]] ?? "");
+    profile.inputs.forEach(col => v.push(values[headerMap[col.toLowerCase()]] ?? ""));
+    v.push(values[headerMap["group"]] ?? "");
+    modCols.forEach(col => v.push(values[headerMap[col.toLowerCase()]] ?? ""));
+    addRow(v);
+  });
+
+  // Show a warning for any required column that was absent
+  const warningDiv  = document.getElementById("csvWarning");
+  const missingCols = profile.inputs.filter(c => !(c.toLowerCase() in headerMap));
+  if (missingCols.length > 0) {
+    warningDiv.textContent = `Warning: CSV is missing required columns: ${missingCols.join(", ")}`;
+    warningDiv.style.display = "block";
+  }
+
+  cancelImport();
+  runAnalysis();
+}
+
+function cancelImport() {
+  _pendingImport = null;
+  document.getElementById("importPreview").style.display = "none";
+  document.getElementById("csvWarning").style.display = "none";
+  // Reset the file input so choosing the same file again fires the change event.
+  document.getElementById("csvFile").value = "";
+}
+
+// ---------------- CSV EXPORT ----------------
+
+// RFC 4180: wrap field in quotes if it contains comma, quote, or newline;
+// escape internal quotes by doubling them.
+function csvField(value) {
+  const s = String(value ?? "");
+  if (s.includes(",") || s.includes('"') || s.includes("\n") || s.includes("\r")) {
+    return '"' + s.replace(/"/g, '""') + '"';
+  }
+  return s;
+}
+
+function csvRow(fields) {
+  return fields.map(csvField).join(",");
+}
+
+function exportCSV() {
+  const type    = document.getElementById("effectType").value;
+  const profile = effectProfiles[type];
+
+  // Headers: Study, effect inputs, Group, then any moderator columns
+  const headers = ["Study", ...profile.inputs, "Group", ...moderators.map(m => m.name)];
+  const lines   = [csvRow(headers)];
+
+  document.querySelectorAll("#inputTable tr").forEach((r, i) => {
+    if (i === 0) return; // skip header row
+    const vals = [...r.querySelectorAll("input")].map(x => x.value);
+    if (vals.some(v => v !== "")) lines.push(csvRow(vals));
+  });
+
+  const blob = new Blob(["\uFEFF" + lines.join("\r\n")], { type: "text/csv;charset=utf-8;" });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement("a");
+  a.href     = url;
   a.download = "meta_data.csv";
+  document.body.appendChild(a);
   a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 // ---------------- INIT ----------------
