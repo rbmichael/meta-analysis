@@ -1,6 +1,6 @@
 import { round, transformEffect, transformCI, chiSquareCDF, chiSquareQuantile } from "./utils.js";
 import { BENCHMARKS } from "./benchmarks.js";
-import { compute, meta, metaRegression, tau2_HS, tau2_HE, tau2_ML, tau2_SJ, beggTest, fatPetTest, failSafeN, heterogeneityCIs, cumulativeMeta } from "./analysis.js";
+import { compute, meta, metaRegression, tau2_HS, tau2_HE, tau2_ML, tau2_SJ, beggTest, fatPetTest, failSafeN, heterogeneityCIs, cumulativeMeta, influenceDiagnostics } from "./analysis.js";
 
 // Tolerances vary by field:
 //   FE, RE  — absolute 0.01   (pooled estimates are on a stable scale)
@@ -939,4 +939,107 @@ export function runTests() {
   }
 
   console.log(hrPass ? "\n✅ ALL HR/IRR/IR UNIT TESTS PASSED" : "\n❌ SOME HR/IRR/IR UNIT TESTS FAILED");
+
+  // ===== COOK'S D / HAT VALUE UNIT TESTS =====
+  //
+  // Dataset A: yi=[0,1,3], vi=[1,1,1], DL  (used throughout)
+  //   τ²_DL = 4/3,  RE weights w_i = 3/7 each,  W = 9/7
+  //   h_i   = 1/3 for all  (equal vi → equal leverage)
+  //   RE_loo = [2,  3/2,  1/2]  (verified analytically)
+  //   D_i   = [4/7,  1/28,  25/28]  (= (RE−RE_loo)²·W)
+  //
+  // Dataset B: yi=[2,2,2], vi=[1,1,1]  — homogeneous, all D_i = 0
+  // Dataset C: yi=[0,0,0], vi=[1,1,0.001]  — study 3 has h≈0.998 > 2/3
+  // Dataset D: yi=[0,0,0,0,10], vi=[1,1,1,1,1]  — study 5 has D≈1 > 4/5
+  // ==========================================================
+  let infPass = true;
+  console.log("\n===== COOK'S D / HAT VALUE UNIT TESTS =====\n");
+
+  function infchk(name, val, expected, tol = 1e-4) {
+    const ok = isFinite(val) && isFinite(expected) && Math.abs(val - expected) <= tol;
+    console.log(`  ${name}: ${round(val, 6)} (expected ${round(expected, 6)}) → ${ok ? "PASS" : "FAIL"}`);
+    if (!ok) infPass = false;
+  }
+  function infchkTrue(name, cond) {
+    console.log(`  ${name}: ${cond ? "PASS" : "FAIL"}`);
+    if (!cond) infPass = false;
+  }
+
+  const sA = [{ yi: 0, vi: 1 }, { yi: 1, vi: 1 }, { yi: 3, vi: 1 }];
+  const sB = [{ yi: 2, vi: 1 }, { yi: 2, vi: 1 }, { yi: 2, vi: 1 }];
+  const sC = [{ yi: 0, vi: 1 }, { yi: 0, vi: 1 }, { yi: 0, vi: 0.001 }];
+  const sD = [{ yi: 0, vi: 1 }, { yi: 0, vi: 1 }, { yi: 0, vi: 1 }, { yi: 0, vi: 1 }, { yi: 10, vi: 1 }];
+
+  const infA = influenceDiagnostics(sA, "DL");
+  const infB = influenceDiagnostics(sB, "DL");
+  const infC = influenceDiagnostics(sC, "DL");
+  const infD = influenceDiagnostics(sD, "DL");
+
+  // 1. Hat values always sum to 1  (Σh_i = ΣW_i/W = 1)
+  console.log("--- 1. Σh_i = 1 (identity) ---");
+  {
+    const sumA = infA.reduce((s, d) => s + d.hat, 0);
+    const sumB = infB.reduce((s, d) => s + d.hat, 0);
+    const sumD = infD.reduce((s, d) => s + d.hat, 0);
+    infchk("Σh (dataset A)", sumA, 1, 1e-9);
+    infchk("Σh (dataset B)", sumB, 1, 1e-9);
+    infchk("Σh (dataset D)", sumD, 1, 1e-9);
+  }
+
+  // 2. Equal vi → h_i = 1/k for all studies
+  //    Dataset A: k=3, all vi=1, τ²=4/3 → w_i=3/7 each → h_i=1/3
+  console.log("--- 2. h_i = 1/k for equal vi ---");
+  {
+    infA.forEach((d, i) => infchk(`h[${i}] = 1/3`, d.hat, 1 / 3, 1e-9));
+  }
+
+  // 3. Cook's D = 0 for homogeneous yi
+  //    Dataset B: all yi=2 → removing any study leaves RE_loo=2 → shift=0
+  console.log("--- 3. D_i = 0 for homogeneous yi ---");
+  {
+    infB.forEach((d, i) => infchk(`D[${i}] = 0`, d.cookD, 0, 1e-9));
+  }
+
+  // 4. Analytical Cook's D — Dataset A
+  //    W = 9/7,  RE = 4/3
+  //    RE_loo = [2, 3/2, 1/2]  (derived analytically in comments above)
+  //    D[0] = (4/3 − 2)² × 9/7  = (4/9)×(9/7)  = 4/7  ≈ 0.571429
+  //    D[1] = (4/3 − 3/2)² × 9/7 = (1/36)×(9/7) = 1/28 ≈ 0.035714
+  //    D[2] = (4/3 − 1/2)² × 9/7 = (25/36)×(9/7)= 25/28 ≈ 0.892857
+  console.log("--- 4. Analytical Cook's D (dataset A) ---");
+  {
+    const tol = 1e-4;
+    infchk("D[0] = 4/7",  infA[0].cookD, 4  / 7,  tol);
+    infchk("D[1] = 1/28", infA[1].cookD, 1  / 28, tol);
+    infchk("D[2] = 25/28",infA[2].cookD, 25 / 28, tol);
+  }
+
+  // 5. High-leverage flag
+  //    Dataset C: yi=[0,0,0], vi=[1,1,0.001] → Q=0, τ²=0
+  //    w = [1, 1, 1000], W = 1002
+  //    h[0]=h[1] = 1/1002 ≈ 0.001 < 2/3 → highLeverage=false
+  //    h[2] = 1000/1002 ≈ 0.998 > 2/3 → highLeverage=true
+  console.log("--- 5. High-leverage flag (dataset C) ---");
+  {
+    infchk("h[2] ≈ 1000/1002",  infC[2].hat, 1000 / 1002, 1e-4);
+    infchkTrue("h[0] not flagged", !infC[0].highLeverage);
+    infchkTrue("h[1] not flagged", !infC[1].highLeverage);
+    infchkTrue("h[2] flagged",      infC[2].highLeverage);
+  }
+
+  // 6. High Cook's D flag
+  //    Dataset D: k=5, yi=[0,0,0,0,10], vi=[1,1,1,1,1]
+  //    τ²_DL=19, W*=0.25, RE=2, RE_loo[4]=0
+  //    D[4] = (2−0)²×0.25 = 1.0 > 4/5=0.8 → highCookD=true
+  //    Dataset A: all D < 4/3 ≈ 1.333 → highCookD=false for all
+  console.log("--- 6. High Cook's D flag (datasets D and A) ---");
+  {
+    infchk("D[4] ≈ 1.0", infD[4].cookD, 1.0, 1e-4);
+    infchkTrue("D[4] flagged (D > 4/k=0.8)", infD[4].highCookD);
+    infchkTrue("D[0] not flagged",            !infD[0].highCookD);
+    // Dataset A: D_max = 25/28 ≈ 0.893 < 4/3 ≈ 1.333 → all clear
+    infA.forEach((d, i) => infchkTrue(`A D[${i}] not flagged`, !d.highCookD));
+  }
+
+  console.log(infPass ? "\n✅ ALL COOK'S D / HAT UNIT TESTS PASSED" : "\n❌ SOME COOK'S D / HAT UNIT TESTS FAILED");
 }

@@ -3,7 +3,7 @@ import { compute, eggerTest, beggTest, fatPetTest, failSafeN, meta, influenceDia
 import { fmt, transformEffect, transformCI } from "./utils.js";
 import { runTests } from "./tests.js";
 import { trimFill } from "./trimfill.js";
-import { drawForest, drawFunnel, drawBubble, drawCumulativeForest } from "./plots.js";
+import { drawForest, drawFunnel, drawBubble, drawInfluencePlot, drawCumulativeForest } from "./plots.js";
 
 // ---------------- EFFECT PROFILES ----------------
 const effectProfiles = {
@@ -1044,17 +1044,33 @@ function runAnalysis() {
   const influence = influenceDiagnostics(studies, method, ciMethod);
   const subgroup = subgroupAnalysis(studies, method, ciMethod);
 
+  const k = influence.length;
   let influenceHTML = `<b>Influence diagnostics:</b><br>
     <table border="1">
-      <tr><th>Study</th><th>RE (LOO)</th><th>Δτ²</th><th>Std Residual</th><th>DFBETA</th><th>Flag</th></tr>`;
+      <tr><th>Study</th><th>RE (LOO)</th><th>Δτ²</th><th>Std Residual</th><th>DFBETA</th><th>Hat</th><th>Cook's D</th><th>Flag</th></tr>`;
   influence.forEach(d => {
-    const rowClass = d.outlier || d.influential ? "style='background:#ffe6e6;'" : "";
-    let flagText = d.outlier ? "Outlier" : d.influential ? "Influential" : "";
-    influenceHTML += `<tr ${rowClass}><td>${d.label}</td><td>${isFinite(d.RE_loo)?fmt(d.RE_loo):"NA"}</td>
-      <td>${isFinite(d.deltaTau2)?fmt(d.deltaTau2):"NA"}</td><td>${isFinite(d.stdResidual)?fmt(d.stdResidual):"NA"}</td>
-      <td>${isFinite(d.DFBETA)?fmt(d.DFBETA):"NA"}</td><td>${flagText}</td></tr>`;
+    const anyFlag = d.outlier || d.influential || d.highLeverage || d.highCookD;
+    const rowStyle = anyFlag ? "style='background:#ffe6e6;'" : "";
+    const hatStyle  = d.highLeverage ? " style='color:orange;font-weight:bold;'" : "";
+    const cookStyle = d.highCookD    ? " style='color:orange;font-weight:bold;'" : "";
+    const flags = [
+      d.outlier      ? "Outlier"    : "",
+      d.influential  ? "Influential": "",
+      d.highLeverage ? "Hi-Lev"     : "",
+      d.highCookD    ? "Hi-Cook"    : ""
+    ].filter(Boolean).join(", ");
+    influenceHTML += `<tr ${rowStyle}>
+      <td>${d.label}</td>
+      <td>${isFinite(d.RE_loo)      ? fmt(d.RE_loo)      : "NA"}</td>
+      <td>${isFinite(d.deltaTau2)   ? fmt(d.deltaTau2)   : "NA"}</td>
+      <td>${isFinite(d.stdResidual) ? fmt(d.stdResidual) : "NA"}</td>
+      <td>${isFinite(d.DFBETA)      ? fmt(d.DFBETA)      : "NA"}</td>
+      <td${hatStyle}>${isFinite(d.hat)   ? d.hat.toFixed(3)   : "NA"}</td>
+      <td${cookStyle}>${isFinite(d.cookD) ? d.cookD.toFixed(3) : "NA"}</td>
+      <td>${flags}</td></tr>`;
   });
-  influenceHTML += "</table>";
+  influenceHTML += `</table>
+    <small style="color:#aaa;">Thresholds: Hat &gt; ${fmt(2/k)} (= 2/k); Cook's D &gt; ${fmt(4/k)} (= 4/k)</small>`;
 
   // Subgroup table (unchanged)
   let subgroupHTML = "";
@@ -1131,6 +1147,7 @@ function runAnalysis() {
 
   drawForest(all, m, { ciMethod, profile });
   drawFunnel(all, m, egger, profile);
+  drawInfluencePlot(influence);
 
   // ---- Cumulative meta-analysis ----
   const cumulativeOrder = document.getElementById("cumulativeOrder")?.value || "input";

@@ -661,6 +661,12 @@ export function influenceDiagnostics(studies, method="DL", ciMethod="normal"){
   const n = studies.length;
   if(n < 2) return [];
   const full = meta(studies, method, ciMethod);
+
+  // Total RE weight W = Σ 1/(vi + τ²_full).
+  // Computed directly from studies rather than via 1/seRE² because seRE
+  // may be the KH-adjusted value (not equal to sqrt(1/W)) when ciMethod="KH".
+  const W = studies.reduce((s, d) => s + 1 / (d.vi + full.tau2), 0);
+
   return studies.map((study, idx) => {
     const loo = studies.filter((_, i) => i !== idx);
     const looMeta = meta(loo, method, ciMethod);
@@ -669,6 +675,20 @@ export function influenceDiagnostics(studies, method="DL", ciMethod="normal"){
     const deltaTau2 = full.tau2 - looMeta.tau2;
     const outlier = Math.abs(r) > 2;
     const influential = Math.abs(dfbeta) > 1;
+
+    // Hat value: h_i = w_i / W  (fraction of total RE weight held by study i)
+    const wi  = 1 / (study.vi + full.tau2);
+    const hat = wi / W;
+
+    // Cook's distance: D_i = (RE_full − RE_loo)² × W
+    // Equivalent to (RE_full − RE_loo)² / Var(RE_full) where Var = 1/W.
+    // Measures how far the pooled estimate moves (in SE units) on study removal.
+    const cookD = (full.RE - looMeta.RE) ** 2 * W;
+
+    // Conventional flags (regression-analogy thresholds)
+    const highLeverage = hat  > 2 / n;   // h_i > 2/k
+    const highCookD    = cookD > 4 / n;  // D_i > 4/k
+
     return {
       label: study.label,
       RE_loo: looMeta.RE,
@@ -677,7 +697,11 @@ export function influenceDiagnostics(studies, method="DL", ciMethod="normal"){
       DFBETA: dfbeta,
       deltaTau2,
       outlier,
-      influential
+      influential,
+      hat,
+      cookD,
+      highLeverage,
+      highCookD
     };
   });
 }

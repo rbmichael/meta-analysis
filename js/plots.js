@@ -386,6 +386,125 @@ if(egger && isFinite(egger.slope)){
  svg.append("g").attr("transform","translate(50,0)").call(d3.axisLeft(y));
 }
 
+// ================= INFLUENCE PLOT (hat vs Cook's D) =================
+// Scatter plot with one point per study.
+//   x = hat value (leverage)
+//   y = Cook's distance
+// Dashed reference lines at x = 2/k and y = 4/k divide the plot into
+// four quadrants; studies in the top-right quadrant are flagged in red.
+//
+// Parameters:
+//   influence — array from influenceDiagnostics(), each entry has
+//               { label, hat, cookD, highLeverage, highCookD }
+export function drawInfluencePlot(influence) {
+  const svg = d3.select("#influencePlot");
+  svg.selectAll("*").remove();
+
+  if (!influence || influence.length < 2) return;
+
+  const k = influence.length;
+  const hatThresh  = 2 / k;
+  const cookThresh = 4 / k;
+
+  const margin = { top: 30, right: 20, bottom: 50, left: 60 };
+  const W = +svg.attr("width")  || 500;
+  const H = +svg.attr("height") || 400;
+  const iW = W - margin.left - margin.right;
+  const iH = H - margin.top  - margin.bottom;
+
+  const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+
+  const tooltip = d3.select("#tooltip");
+
+  // Scales — pad 10% beyond the max on each axis so points aren't clipped
+  const xMax = Math.max(d3.max(influence, d => d.hat),  hatThresh  * 1.5);
+  const yMax = Math.max(d3.max(influence, d => d.cookD), cookThresh * 1.5);
+
+  const x = d3.scaleLinear().domain([0, xMax * 1.1]).range([0, iW]);
+  const y = d3.scaleLinear().domain([0, yMax * 1.1]).range([iH, 0]);
+
+  // ----------- QUADRANT SHADING (top-right = both flags) -----------
+  const x2 = x(hatThresh);
+  const y2 = y(cookThresh);
+  if (isFinite(x2) && isFinite(y2)) {
+    g.append("rect")
+      .attr("x", x2).attr("y", 0)
+      .attr("width", iW - x2).attr("height", y2)
+      .attr("fill", "rgba(255,80,80,0.08)");
+  }
+
+  // ----------- REFERENCE LINES -----------
+  if (isFinite(x(hatThresh))) {
+    g.append("line")
+      .attr("x1", x(hatThresh)).attr("x2", x(hatThresh))
+      .attr("y1", 0).attr("y2", iH)
+      .attr("stroke", "#888").attr("stroke-dasharray", "4,3")
+      .append("title").text(`Hat threshold = 2/k = ${hatThresh.toFixed(3)}`);
+  }
+  if (isFinite(y(cookThresh))) {
+    g.append("line")
+      .attr("x1", 0).attr("x2", iW)
+      .attr("y1", y(cookThresh)).attr("y2", y(cookThresh))
+      .attr("stroke", "#888").attr("stroke-dasharray", "4,3")
+      .append("title").text(`Cook's D threshold = 4/k = ${cookThresh.toFixed(3)}`);
+  }
+
+  // ----------- POINTS -----------
+  g.selectAll("circle")
+    .data(influence)
+    .enter().append("circle")
+    .attr("cx", d => x(d.hat))
+    .attr("cy", d => y(d.cookD))
+    .attr("r", 5)
+    .attr("fill", d => (d.highLeverage && d.highCookD) ? "red"
+                      : (d.highLeverage || d.highCookD) ? "orange"
+                      : "white")
+    .attr("stroke", d => (d.highLeverage && d.highCookD) ? "red"
+                        : (d.highLeverage || d.highCookD) ? "orange"
+                        : "#aaa")
+    .attr("opacity", 0.85)
+    .on("mousemove", (e, d) => {
+      tooltip.style("opacity", 1)
+        .html(`${d.label}<br>Hat: ${d.hat.toFixed(4)}<br>Cook's D: ${d.cookD.toFixed(4)}`)
+        .style("left", (e.pageX + 10) + "px")
+        .style("top",  (e.pageY - 20) + "px");
+    })
+    .on("mouseout", () => tooltip.style("opacity", 0));
+
+  // ----------- LABELS (only flagged studies) -----------
+  g.selectAll("text.pt-label")
+    .data(influence.filter(d => d.highLeverage || d.highCookD))
+    .enter().append("text")
+    .attr("class", "pt-label")
+    .attr("x", d => x(d.hat) + 7)
+    .attr("y", d => y(d.cookD) + 4)
+    .style("font-size", "10px")
+    .attr("fill", d => (d.highLeverage && d.highCookD) ? "red" : "orange")
+    .text(d => d.label);
+
+  // ----------- AXES -----------
+  g.append("g").attr("transform", `translate(0,${iH})`).call(d3.axisBottom(x).ticks(5));
+  g.append("g").call(d3.axisLeft(y).ticks(5));
+
+  // Axis labels
+  g.append("text")
+    .attr("x", iW / 2).attr("y", iH + 38)
+    .attr("text-anchor", "middle").attr("fill", "#ccc").style("font-size", "12px")
+    .text("Hat value (leverage)");
+
+  g.append("text")
+    .attr("transform", "rotate(-90)")
+    .attr("x", -iH / 2).attr("y", -46)
+    .attr("text-anchor", "middle").attr("fill", "#ccc").style("font-size", "12px")
+    .text("Cook's distance");
+
+  // Title
+  svg.append("text")
+    .attr("x", margin.left + iW / 2).attr("y", 18)
+    .attr("text-anchor", "middle").style("font-size", "12px")
+    .text("Influence plot  (red = both flags, orange = one flag)");
+}
+
 // ================= CUMULATIVE FOREST =================
 // Draws a cumulative meta-analysis plot: each row shows the pooled RE
 // estimate and 95% CI after adding one more study in accumulation order.
