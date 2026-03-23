@@ -10,6 +10,20 @@ export const HELP = {
   // Effect types                                                         //
   // ------------------------------------------------------------------ //
 
+  "effect.ROM": {
+    title: "Ratio of Means (ROM)",
+    body:  "The log ratio of two group means: yi = log(m₁/m₂), " +
+           "with variance vi = sd₁²/(n₁·m₁²) + sd₂²/(n₂·m₂²) " +
+           "from the delta method. Results are back-transformed to the ratio scale " +
+           "(m₁/m₂) for display: a value of 1 indicates no difference, values above 1 " +
+           "indicate a higher mean in group 1. " +
+           "Both means must be strictly positive — the log is undefined at zero or below. " +
+           "Widely used in ecology (plant biomass, population abundance) and increasingly " +
+           "in psychology. Introduced by Hedges, Gurevitch & Curtis (1999). " +
+           "The delta-method variance approximation becomes unreliable when the " +
+           "coefficient of variation (SD/mean) exceeds 1.",
+  },
+
   "effect.MD": {
     title: "Mean Difference (MD)",
     body:  "The raw arithmetic difference between two group means (μ₁ − μ₂). " +

@@ -1042,4 +1042,106 @@ export function runTests() {
   }
 
   console.log(infPass ? "\n✅ ALL COOK'S D / HAT UNIT TESTS PASSED" : "\n❌ SOME COOK'S D / HAT UNIT TESTS FAILED");
+
+  // ===== ROM UNIT TESTS =====
+  //
+  // Tests cover:
+  //   1. yi and vi formulas (exact analytical values)
+  //   2. Invalid inputs → NaN / w=0
+  //   3. Back-transform round-trip: exp(log(m1/m2)) = m1/m2
+  //   4. transformCI applies exp() to both bounds
+  //   5. Pooled meta() on a 3-study dataset (DL)
+  //
+  // Spot-check study:  m1=2, sd1=0.5, n1=20,  m2=1, sd2=0.4, n2=25
+  //   yi = ln(2/1) = ln(2) = 0.693147
+  //   vi = 0.5²/(20×2²) + 0.4²/(25×1²)
+  //      = 0.25/80 + 0.16/25  =  0.003125 + 0.0064  =  0.009525
+  //
+  // 3-study pool (DL):
+  //   Study 1: m1=4, sd1=1, n1=30,  m2=2, sd2=0.8, n2=30
+  //     yi=ln(2)=0.6931,  vi=1/480+0.64/120=0.007417
+  //   Study 2: m1=3, sd1=0.9, n1=40,  m2=2, sd2=0.7, n2=40
+  //     yi=ln(1.5)=0.4055,  vi=0.81/360+0.49/160=0.005313
+  //   Study 3: m1=5, sd1=1.2, n1=25,  m2=3, sd2=1, n2=25
+  //     yi=ln(5/3)=0.5108,  vi=1.44/625+1/225=0.006748
+  //   FE≈0.521,  RE≈0.532,  tau2≈0.0146,  I2≈69.3%
+  // ================================================================
+  let romPass = true;
+  console.log("\n===== ROM UNIT TESTS =====\n");
+
+  function romchk(name, val, expected, tol = 1e-6) {
+    const ok = isFinite(val) && isFinite(expected) && Math.abs(val - expected) <= tol;
+    console.log(`  ${name}: ${round(val, 7)} (expected ${round(expected, 7)}) → ${ok ? "PASS" : "FAIL"}`);
+    if (!ok) romPass = false;
+  }
+  function romchkTrue(name, cond) {
+    console.log(`  ${name}: ${cond ? "PASS" : "FAIL"}`);
+    if (!cond) romPass = false;
+  }
+
+  // 1. yi and vi formula spot-check
+  console.log("--- 1. yi / vi formulas ---");
+  {
+    const s = compute({ m1: 2, sd1: 0.5, n1: 20, m2: 1, sd2: 0.4, n2: 25 }, "ROM");
+    romchk("yi = ln(2/1)",    s.yi, Math.log(2));
+    romchk("vi = 0.25/80 + 0.16/25", s.vi, 0.003125 + 0.0064);
+    romchk("se = sqrt(vi)",   s.se, Math.sqrt(0.009525));
+    romchk("w  = 1/vi",       s.w,  1 / 0.009525);
+  }
+
+  // 2. Invalid inputs → NaN / w=0
+  console.log("--- 2. Invalid inputs → NaN ---");
+  {
+    const base = { m1: 2, sd1: 0.5, n1: 20, m2: 1, sd2: 0.4, n2: 25 };
+    romchkTrue("m1 = 0  → NaN yi",  !isFinite(compute({ ...base, m1:  0   }, "ROM").yi));
+    romchkTrue("m1 < 0  → NaN yi",  !isFinite(compute({ ...base, m1: -1   }, "ROM").yi));
+    romchkTrue("m2 = 0  → NaN yi",  !isFinite(compute({ ...base, m2:  0   }, "ROM").yi));
+    romchkTrue("sd1 = 0 → NaN yi",  !isFinite(compute({ ...base, sd1: 0   }, "ROM").yi));
+    romchkTrue("n1 = 0  → NaN yi",  !isFinite(compute({ ...base, n1:  0   }, "ROM").yi));
+    romchkTrue("m1 = 0  → w = 0",       compute({ ...base, m1:  0   }, "ROM").w === 0);
+  }
+
+  // 3. Back-transform: transformEffect round-trip
+  console.log("--- 3. Back-transform round-trip ---");
+  {
+    const ratios = [0.5, 1.0, 2.0, 3.5];
+    ratios.forEach(r => {
+      const yi = Math.log(r);
+      romchk(`exp(ln(${r})) = ${r}`, transformEffect(yi, "ROM"), r, 1e-10);
+    });
+  }
+
+  // 4. transformCI applies exp() to both bounds
+  console.log("--- 4. transformCI ---");
+  {
+    const s = compute({ m1: 2, sd1: 0.5, n1: 20, m2: 1, sd2: 0.4, n2: 25 }, "ROM");
+    const ciLog = { lb: s.yi - 1.96 * s.se, ub: s.yi + 1.96 * s.se };
+    const ci = transformCI(ciLog.lb, ciLog.ub, "ROM");
+    romchk("CI lb = exp(yi - 1.96·se)", ci.lb, Math.exp(ciLog.lb), 1e-10);
+    romchk("CI ub = exp(yi + 1.96·se)", ci.ub, Math.exp(ciLog.ub), 1e-10);
+    romchkTrue("CI lb < 1 (ratio < 1 is plausible end)", ci.lb < ci.ub);
+  }
+
+  // 5. Pooled meta() — 3-study DL
+  console.log("--- 5. Pooled meta() (k=3, DL) ---");
+  {
+    const studies = [
+      compute({ m1: 4, sd1: 1.0, n1: 30, m2: 2, sd2: 0.8, n2: 30 }, "ROM"),
+      compute({ m1: 3, sd1: 0.9, n1: 40, m2: 2, sd2: 0.7, n2: 40 }, "ROM"),
+      compute({ m1: 5, sd1: 1.2, n1: 25, m2: 3, sd2: 1.0, n2: 25 }, "ROM"),
+    ];
+
+    // Verify per-study yi values first
+    romchk("yi[0] = ln(2)",   studies[0].yi, Math.log(2),     1e-6);
+    romchk("yi[1] = ln(1.5)", studies[1].yi, Math.log(1.5),   1e-6);
+    romchk("yi[2] = ln(5/3)", studies[2].yi, Math.log(5 / 3), 1e-6);
+
+    const m = meta(studies, "DL");
+    romchk("FE   ≈ 0.521",  m.FE,   0.521,  0.01);
+    romchk("RE   ≈ 0.532",  m.RE,   0.532,  0.01);
+    romchk("tau2 ≈ 0.0146", m.tau2, 0.0146, 0.002);
+    romchk("I2   ≈ 69.3%",  m.I2,   69.3,   0.5);
+  }
+
+  console.log(romPass ? "\n✅ ALL ROM UNIT TESTS PASSED" : "\n❌ SOME ROM UNIT TESTS FAILED");
 }

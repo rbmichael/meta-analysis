@@ -169,6 +169,7 @@ export function detectEffectType(headers, currentType, profiles) {
     type:       best.type,
     confidence: maxScore === 1 ? "full" : "partial",
     tied:       candidates.length > 1,
+    tiedTypes:  candidates.map(c => c.type),
     matched,
     missing,
   };

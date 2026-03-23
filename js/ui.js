@@ -31,17 +31,25 @@ const effectProfiles = {
 	  label: "Mean Difference (Paired)",
 	  inputs: ["m_pre", "sd_pre", "m_post", "sd_post", "n", "r"],
 	  compute: (data) => compute(data, "MD_paired"),
-	  transform: (x) => transformEffect(x, "MD"),
-	  transformCI: (lb, ub) => transformCI(lb, ub, "MD")
+	  transform: (x) => transformEffect(x, "MD_paired"),
+	  transformCI: (lb, ub) => transformCI(lb, ub, "MD_paired")
 	},
 
 	"SMD_paired": {
 	  label: "Standardized Mean Change",
 	  inputs: ["m_pre", "sd_pre", "m_post", "sd_post", "n", "r"],
 	  compute: (data) => compute(data, "SMD_paired"),
-	  transform: (x) => transformEffect(x, "SMD"),
-	  transformCI: (lb, ub) => transformCI(lb, ub, "SMD")
+	  transform: (x) => transformEffect(x, "SMD_paired"),
+	  transformCI: (lb, ub) => transformCI(lb, ub, "SMD_paired")
 	},
+
+  "ROM": {
+    label: "Ratio of Means (ROM)",
+    inputs: ["m1", "sd1", "n1", "m2", "sd2", "n2"],
+    compute: (data) => compute(data, "ROM"),
+    transform: (x) => transformEffect(x, "ROM"),
+    transformCI: (lb, ub) => transformCI(lb, ub, "ROM")
+  },
 	
   "OR": {
     label: "Odds Ratio",
@@ -736,6 +744,38 @@ function getSoftWarnings(studyInput, type, label) {
     }
   }
 
+  else if (type === "ROM") {
+    const { m1, m2, sd1, sd2, n1, n2 } = studyInput;
+    // Non-positive means make log(m1/m2) undefined — explain the exclusion clearly.
+    if (isFinite(m1) && m1 <= 0) {
+      warnings.push(`⚠️ ${label}: m1 ≤ 0 — ROM requires strictly positive means (study excluded)`);
+    }
+    if (isFinite(m2) && m2 <= 0) {
+      warnings.push(`⚠️ ${label}: m2 ≤ 0 — ROM requires strictly positive means (study excluded)`);
+    }
+    // Non-positive SDs also make the delta-method variance undefined.
+    if (isFinite(sd1) && sd1 <= 0) {
+      warnings.push(`⚠️ ${label}: sd1 ≤ 0 — standard deviation must be positive (study excluded)`);
+    }
+    if (isFinite(sd2) && sd2 <= 0) {
+      warnings.push(`⚠️ ${label}: sd2 ≤ 0 — standard deviation must be positive (study excluded)`);
+    }
+    // Small samples inflate the delta-method variance approximation.
+    if (isFinite(n1) && n1 < 10) {
+      warnings.push(`⚠️ ${label}: small sample size (n1 < 10) — delta-method variance may be unreliable`);
+    }
+    if (isFinite(n2) && n2 < 10) {
+      warnings.push(`⚠️ ${label}: small sample size (n2 < 10) — delta-method variance may be unreliable`);
+    }
+    // Large CV (sd/mean > 1) means the log-normal assumption is questionable.
+    if (isFinite(sd1) && isFinite(m1) && m1 > 0 && sd1 / m1 > 1) {
+      warnings.push(`⚠️ ${label}: CV₁ > 1 (sd1/m1 > 1) — high variability; delta-method approximation may be poor`);
+    }
+    if (isFinite(sd2) && isFinite(m2) && m2 > 0 && sd2 / m2 > 1) {
+      warnings.push(`⚠️ ${label}: CV₂ > 1 (sd2/m2 > 1) — high variability; delta-method approximation may be poor`);
+    }
+  }
+
   return warnings;
 }
 
@@ -844,9 +884,13 @@ function refreshPreviewUI(type) {
   const confEl = document.getElementById("previewConfidence");
   const isAutoDetected = _pendingImport.tied && type === _pendingImport.detectedType;
   const displayConf = (isAutoDetected && cls.confidence === "full") ? "tied" : cls.confidence;
+  const otherTypes = (_pendingImport.tiedTypes ?? []).filter(t => t !== type);
+  const tiedMsg = otherTypes.length > 0
+    ? `⚠ ambiguous — also matches: ${otherTypes.join(", ")}`
+    : "⚠ ambiguous — multiple types match";
   const confText = {
     full:    "✓ all columns matched",
-    tied:    "⚠ ambiguous — multiple types match",
+    tied:    tiedMsg,
     partial: "⚠ partial match",
     none:    "✗ no columns matched",
   };
@@ -914,7 +958,7 @@ function previewCSV(file) {
     const currentType = document.getElementById("effectType").value;
     const detection   = detectEffectType(parsed.headers, currentType, effectProfiles);
 
-    _pendingImport = { parsed, detectedType: detection.type, tied: detection.tied };
+    _pendingImport = { parsed, detectedType: detection.type, tied: detection.tied, tiedTypes: detection.tiedTypes ?? [] };
 
     // Delimiter badge
     const delimNames = { ",": "comma", ";": "semicolon", "\t": "tab" };
@@ -1238,6 +1282,13 @@ function populateExampleData(type) {
       ["Study1", 10, 2, 30, 8, 2, 28, "A"],
       ["Study2", 12, 3, 32, 9, 3, 30, "A"],
       ["Study3", 9, 2, 28, 7, 2, 25, "B"]
+    ],
+    "ROM": [
+      ["Study 1", 28.5, 4.2, 45, 22.1, 3.8, 43, ""],
+      ["Study 2", 35.2, 6.1, 60, 24.8, 5.2, 58, ""],
+      ["Study 3", 19.8, 3.3, 32, 16.2, 2.9, 30, ""],
+      ["Study 4", 42.1, 7.5, 80, 31.5, 6.8, 78, ""],
+      ["Study 5", 25.6, 4.8, 50, 20.3, 4.1, 48, ""]
     ],
     "OR": [
       ["Study1", 12, 5, 8, 15, "A"],

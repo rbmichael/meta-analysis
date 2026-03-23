@@ -280,6 +280,21 @@ export function compute(s, type, options = {}) {
 	  };
 	}
 
+  // ================= LOG RATIO OF MEANS (ROM) =================
+  // yi = log(m1/m2);  vi = sd1²/(n1·m1²) + sd2²/(n2·m2²)
+  // Both means must be strictly positive; non-positive inputs yield NaN.
+  if (type === "ROM") {
+    const { m1, sd1, n1, m2, sd2, n2 } = s;
+    if (!isFinite(m1) || !isFinite(sd1) || !isFinite(n1) ||
+        !isFinite(m2) || !isFinite(sd2) || !isFinite(n2) ||
+        m1 <= 0 || m2 <= 0 || sd1 <= 0 || sd2 <= 0 || n1 < 1 || n2 < 1) {
+      return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+    }
+    const yi = Math.log(m1 / m2);
+    const vi = Math.max((sd1 ** 2) / (n1 * m1 ** 2) + (sd2 ** 2) / (n2 * m2 ** 2), MIN_VAR);
+    return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
+  }
+
   // ================= MD fallback =================
   const varMD = Math.max((s.sd1**2)/s.n1 + (s.sd2**2)/s.n2, MIN_VAR);
   return { ...s, md: s.m1 - s.m2, varMD, se: Math.sqrt(varMD), w: 1/varMD, yi: s.m1 - s.m2, vi: varMD };
