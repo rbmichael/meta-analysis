@@ -118,6 +118,21 @@ export function chiSquareCDF(x, k) {
   return regularizedGammaP(k / 2, x / 2);
 }
 
+// Chi-square quantile (inverse CDF) via bisection on chiSquareCDF.
+// Returns x such that P(χ²_df ≤ x) = p.
+export function chiSquareQuantile(p, df) {
+  if (!isFinite(p) || p <= 0 || p >= 1 || !isFinite(df) || df <= 0) return NaN;
+  let lo = 0, hi = Math.max(df * 4 + 100, 50);
+  // Ensure hi is above the target quantile
+  while (chiSquareCDF(hi, df) < p) hi *= 2;
+  for (let i = 0; i < 64; i++) {
+    const mid = (lo + hi) / 2;
+    if (chiSquareCDF(mid, df) < p) lo = mid;
+    else hi = mid;
+  }
+  return (lo + hi) / 2;
+}
+
 // CDF of the F distribution with d1 and d2 degrees of freedom.
 // Uses the regularised incomplete beta: P(F_{d1,d2} ≤ f) = I_{x}(d1/2, d2/2)
 // where x = d1·f / (d1·f + d2).

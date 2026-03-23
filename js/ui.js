@@ -1017,7 +1017,7 @@ function runAnalysis() {
     <b>${profile.label} (RE):</b> ${fmt(RE_disp)}<br>
     ${useTF && mAdjusted ? `<b>RE (adjusted):</b> ${fmt(RE_adj_disp)}<br>` : ""}
     CI [${fmt(ci_disp.lb)}, ${fmt(ci_disp.ub)}]<br>
-    τ²=${fmt(m.tau2)} | I²=${fmt(m.I2)}%<br>
+    τ²=${fmt(m.tau2)} [${fmt(m.tauCI[0])}, ${isFinite(m.tauCI[1])?fmt(m.tauCI[1]):"∞"}] | I²=${fmt(m.I2)}% [${fmt(m.I2CI[0])}%, ${fmt(m.I2CI[1])}%] | H²-CI=[${fmt(m.H2CI[0])}, ${isFinite(m.H2CI[1])?fmt(m.H2CI[1]):"∞"}]<br>
     ${m.dist}-stat=${fmt(m.stat)} | p=${fmt(m.pval)}<br>
     Prediction=[${fmt(pred_disp.lb)}, ${fmt(pred_disp.ub)}]<br>
     <b>Publication bias:</b><br>

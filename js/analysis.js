@@ -1,4 +1,4 @@
-import { tCritical, normalCDF, tCDF, chiSquareCDF, fCDF } from "./utils.js";
+import { tCritical, normalCDF, tCDF, chiSquareCDF, chiSquareQuantile, fCDF } from "./utils.js";
 
 window.MIN_VAR = 1e-8;
 
@@ -681,6 +681,78 @@ export function subgroupAnalysis(studies, method="REML", ciMethod="normal") {
   return { groups: results, Qbetween, df, p, k: valid.length, G: groupNames.length };
 }
 
+// ================= Q-PROFILE HETEROGENEITY CIs =================
+// Weighted Q statistic as a function of τ². Monotone decreasing in τ²;
+// equals Q_FE when τ² = 0.
+function qProfile(tau2, studies) {
+  const w  = studies.map(d => 1 / (d.vi + tau2));
+  const W  = w.reduce((a, b) => a + b, 0);
+  const mu = studies.reduce((s, d, i) => s + w[i] * d.yi, 0) / W;
+  return studies.reduce((s, d, i) => s + w[i] * (d.yi - mu) ** 2, 0);
+}
+
+// Q-profile 95% CI for τ², I², H² (Viechtbauer 2007).
+// Inverts the Q-profile statistic against chi-square quantiles.
+//
+// Returns: { tauCI: [lo, hi], I2CI: [lo, hi], H2CI: [lo, hi] }
+//   tauCI  — 95% CI for τ² on the variance scale
+//   I2CI   — corresponding I² (%) bounds
+//   H2CI   — corresponding H² bounds
+export function heterogeneityCIs(studies, tau2, alpha = 0.05) {
+  const k = studies.length;
+  if (k < 2) return { tauCI: [0, NaN], I2CI: [0, NaN], H2CI: [1, NaN] };
+
+  const df    = k - 1;
+  const chiLo = chiSquareQuantile(alpha / 2,       df);  // lower quantile (small x)
+  const chiHi = chiSquareQuantile(1 - alpha / 2,   df);  // upper quantile (large x)
+
+  const Q_FE = qProfile(0, studies);
+
+  // --- Lower τ² bound: Q_τ(τ²_lo) = chiHi ---
+  // Q is decreasing; if Q_FE ≤ chiHi, no positive solution → τ²_lo = 0.
+  let tau2_lo;
+  if (Q_FE <= chiHi) {
+    tau2_lo = 0;
+  } else {
+    let lo = 0, hi = Math.max(tau2, 1);
+    while (qProfile(hi, studies) > chiHi) hi *= 2;
+    for (let i = 0; i < 64; i++) {
+      const mid = (lo + hi) / 2;
+      if (qProfile(mid, studies) > chiHi) lo = mid; else hi = mid;
+    }
+    tau2_lo = (lo + hi) / 2;
+  }
+
+  // --- Upper τ² bound: Q_τ(τ²_hi) = chiLo ---
+  // Q → 0 as τ² → ∞, so a solution always exists when chiLo > 0.
+  let tau2_hi;
+  if (!isFinite(chiLo) || chiLo <= 0) {
+    tau2_hi = Infinity;
+  } else {
+    let lo = tau2_lo, hi = Math.max(tau2, 1);
+    while (qProfile(hi, studies) > chiLo) hi *= 2;
+    for (let i = 0; i < 64; i++) {
+      const mid = (lo + hi) / 2;
+      if (qProfile(mid, studies) > chiLo) lo = mid; else hi = mid;
+    }
+    tau2_hi = (lo + hi) / 2;
+  }
+
+  // --- I² and H² CIs ---
+  // σ²_typical = (k-1) / Σ(1/vi)  [FE-weight-based typical sampling variance]
+  const sumWFE = studies.reduce((s, d) => s + 1 / d.vi, 0);
+  const sigma2 = df / sumWFE;
+
+  const toI2 = t => 100 * t / (t + sigma2);
+  const toH2 = t => t / sigma2 + 1;
+
+  return {
+    tauCI: [tau2_lo, tau2_hi],
+    I2CI:  [toI2(tau2_lo), isFinite(tau2_hi) ? toI2(tau2_hi) : 100],
+    H2CI:  [toH2(tau2_lo), isFinite(tau2_hi) ? toH2(tau2_hi) : Infinity]
+  };
+}
+
 // ================ META-ANALYSIS ===============
 export function meta(studies, method="DL", ciMethod="normal") {
   const k = studies.length;
@@ -762,6 +834,9 @@ export function meta(studies, method="DL", ciMethod="normal") {
   const predVar = seRE_base * seRE_base + tau2;
   const predCrit = k >= 3 ? tCritical(k - 2) : NaN;
 
+  // Q-profile CIs for τ², I², H²
+  const hetCI = heterogeneityCIs(studies, tau2);
+
   return {
     FE,
     seFE,
@@ -771,6 +846,9 @@ export function meta(studies, method="DL", ciMethod="normal") {
     Q,
     df: dfQ,
     I2,
+    tauCI:  hetCI.tauCI,
+    I2CI:   hetCI.I2CI,
+    H2CI:   hetCI.H2CI,
     predLow:  isFinite(predCrit) ? RE - predCrit * Math.sqrt(predVar) : NaN,
     predHigh: isFinite(predCrit) ? RE + predCrit * Math.sqrt(predVar) : NaN,
     ciLow: RE - crit*seRE,

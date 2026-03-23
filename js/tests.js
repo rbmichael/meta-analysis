@@ -1,6 +1,6 @@
-import { round, transformEffect, transformCI } from "./utils.js";
+import { round, transformEffect, transformCI, chiSquareCDF, chiSquareQuantile } from "./utils.js";
 import { BENCHMARKS } from "./benchmarks.js";
-import { compute, meta, metaRegression, tau2_HS, tau2_HE, tau2_ML, tau2_SJ, beggTest, fatPetTest, failSafeN } from "./analysis.js";
+import { compute, meta, metaRegression, tau2_HS, tau2_HE, tau2_ML, tau2_SJ, beggTest, fatPetTest, failSafeN, heterogeneityCIs } from "./analysis.js";
 
 // Tolerances vary by field:
 //   FE, RE  — absolute 0.01   (pooled estimates are on a stable scale)
@@ -542,4 +542,109 @@ export function runTests() {
   bchkNaN("k=0 → NaN", failSafeN([]).rosenthal);
 
   console.log(biasPass ? "\n✅ ALL PUBLICATION BIAS TESTS PASSED" : "\n❌ SOME PUBLICATION BIAS TESTS FAILED");
+
+  // ===== HETEROGENEITY CI UNIT TESTS =====
+  // Tests chiSquareQuantile (inverse CDF) and heterogeneityCIs (Q-profile).
+  // The df=2 chi-square CDF has closed form F(x) = 1 − exp(−x/2), which
+  // allows exact analytic expected values without look-up tables.
+  console.log("\n===== HETEROGENEITY CI UNIT TESTS =====\n");
+  let hetPass = true;
+
+  function hchk(name, val, expected, tol = 1e-3) {
+    const ok = isFinite(val) && Math.abs(val - expected) < tol;
+    console.log(`  ${name}: ${round(val, 5)} (expected ${round(expected, 5)}) → ${ok ? "PASS" : "FAIL"}`);
+    if (!ok) hetPass = false;
+  }
+  function hchkTrue(name, cond) {
+    console.log(`  ${name} → ${cond ? "PASS" : "FAIL"}`);
+    if (!cond) hetPass = false;
+  }
+  function hchkNaN(name, val) {
+    const ok = !isFinite(val);
+    console.log(`  ${name}: ${val} → ${ok ? "PASS (NaN/Inf as expected)" : "FAIL"}`);
+    if (!ok) hetPass = false;
+  }
+
+  // 1. chiSquareQuantile accuracy — df=2 closed form F(x) = 1 − exp(−x/2)
+  //    Exact quantiles: x = −2 ln(1−p)
+  console.log("--- chiSquareQuantile (df=2 closed form) ---");
+  {
+    const q975 = -2 * Math.log(0.025);  // ≈ 7.3778
+    const q025 = -2 * Math.log(0.975);  // ≈ 0.05063
+    hchk("χ²(0.975, 2)", chiSquareQuantile(0.975, 2), q975, 1e-4);
+    hchk("χ²(0.025, 2)", chiSquareQuantile(0.025, 2), q025, 1e-4);
+  }
+
+  // 2. chiSquareQuantile round-trip: chiSquareCDF(chiSquareQuantile(p, df), df) ≈ p
+  console.log("--- chiSquareQuantile round-trip ---");
+  [[0.025, 4], [0.5, 2], [0.975, 12]].forEach(([p, df]) => {
+    const x     = chiSquareQuantile(p, df);
+    const pBack = chiSquareCDF(x, df);
+    hchk(`CDF(Q(${p}, ${df}), ${df}) ≈ ${p}`, pBack, p, 1e-6);
+  });
+
+  // 3. Structural properties: bounds ordered and within valid ranges
+  console.log("--- CI bounds ordering and range ---");
+  {
+    const s  = [{ yi: 0, vi: 1 }, { yi: 1, vi: 1 }, { yi: 3, vi: 1 }];
+    const ci = heterogeneityCIs(s, meta(s, "DL").tau2);
+    hchkTrue("tauCI[0] ≤ tauCI[1]", ci.tauCI[0] <= ci.tauCI[1]);
+    hchkTrue("I2CI[0]  ≤ I2CI[1]",  ci.I2CI[0]  <= ci.I2CI[1]);
+    hchkTrue("H2CI[0]  ≤ H2CI[1]",  ci.H2CI[0]  <= ci.H2CI[1]);
+    hchkTrue("tauCI[0] ≥ 0",        ci.tauCI[0] >= 0);
+    hchkTrue("I2CI[0]  ≥ 0",        ci.I2CI[0]  >= 0);
+    hchkTrue("I2CI[1]  ≤ 100",      ci.I2CI[1]  <= 100);
+    hchkTrue("H2CI[0]  ≥ 1",        ci.H2CI[0]  >= 1);
+  }
+
+  // 4. Homogeneous studies (all yi equal) → Q = 0 < χ²_{k-1, 0.975} → τ²_lo = 0
+  console.log("--- Homogeneous studies: tau2_lo = 0 ---");
+  {
+    const sHom = [{ yi: 2, vi: 1 }, { yi: 2, vi: 1 }, { yi: 2, vi: 1 }];
+    const ci   = heterogeneityCIs(sHom, 0);
+    hchk("tau2_lo = 0",  ci.tauCI[0], 0, 1e-10);
+    hchk("I2CI[0] = 0",  ci.I2CI[0],  0, 1e-10);
+    hchk("H2CI[0] = 1",  ci.H2CI[0],  1, 1e-10);
+  }
+
+  // 5. Analytical upper bound for equal-vi dataset: yi=[0,1,3], vi=[1,1,1], df=2
+  //
+  //   Q_FE = Σ(yi − 4/3)² = 16/9 + 1/9 + 25/9 = 42/9 ≈ 4.667
+  //   Q_τ(τ²) = Q_FE / (1 + τ²)   [because equal wi = 1/(1+τ²)]
+  //
+  //   τ²_lo: Q_τ = χ²_{2, 0.975} = 7.378 → Q_FE/7.378 − 1 < 0 → clamped to 0
+  //   τ²_hi: Q_τ = χ²_{2, 0.025} = −2 ln(0.975)
+  //          τ²_hi = Q_FE / (−2 ln(0.975)) − 1
+  console.log("--- Analytical upper bound (yi=[0,1,3], vi=[1,1,1]) ---");
+  {
+    const s    = [{ yi: 0, vi: 1 }, { yi: 1, vi: 1 }, { yi: 3, vi: 1 }];
+    const ci   = heterogeneityCIs(s, 0);
+    const chiLo   = -2 * Math.log(0.975);       // exact χ²_{2, 0.025}
+    const expHi   = (42 / 9) / chiLo - 1;       // ≈ 91.2
+    hchk("tau2_lo = 0",           ci.tauCI[0], 0,      1e-9);
+    hchk("tau2_hi (analytical)",  ci.tauCI[1], expHi,  0.05);
+  }
+
+  // 6. meta() attaches tauCI / I2CI / H2CI to the return object
+  console.log("--- meta() includes CI fields ---");
+  {
+    const s = [{ yi: 0, vi: 1 }, { yi: 1, vi: 1 }, { yi: 3, vi: 1 }];
+    const m = meta(s, "DL");
+    hchkTrue("m.tauCI length 2",    Array.isArray(m.tauCI) && m.tauCI.length === 2);
+    hchkTrue("m.I2CI length 2",     Array.isArray(m.I2CI)  && m.I2CI.length  === 2);
+    hchkTrue("m.H2CI length 2",     Array.isArray(m.H2CI)  && m.H2CI.length  === 2);
+    hchkTrue("m.tauCI[0] ≥ 0",      m.tauCI[0] >= 0);
+    // I2CI should bracket the meta() I2 point estimate (within numerical noise)
+    hchkTrue("I2CI contains I2",    m.I2CI[0] <= m.I2 + 0.1 && m.I2CI[1] >= m.I2 - 0.1);
+  }
+
+  // 7. k < 2 → degenerate sentinel values
+  console.log("--- k < 2 → degenerate ---");
+  {
+    const ci = heterogeneityCIs([{ yi: 1, vi: 1 }], 0);
+    hchk("tauCI[0] = 0",  ci.tauCI[0], 0, 1e-10);
+    hchkNaN("tauCI[1] = NaN", ci.tauCI[1]);
+  }
+
+  console.log(hetPass ? "\n✅ ALL HETEROGENEITY CI TESTS PASSED" : "\n❌ SOME HETEROGENEITY CI TESTS FAILED");
 }
