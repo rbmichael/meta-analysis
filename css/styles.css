@@ -30,6 +30,90 @@ input {
   transition: border 0.2s, background-color 0.2s;
 }
 
+/* ---- Input / Output sections ---- */
+.section {
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 8px;
+  padding: 16px 20px;
+  margin-bottom: 24px;
+  max-width: 1100px;
+}
+
+.section-title {
+  font-size: 0.75em;
+  font-weight: bold;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #888;
+  margin: 0 0 14px 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #2e2e2e;
+}
+
+/* Settings dropdowns laid out in a horizontal row */
+.settings-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  align-items: flex-end;
+  margin-bottom: 14px;
+}
+
+.settings-row label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.8em;
+  color: #aaa;
+}
+
+/* Inline labels (checkboxes) stay horizontal */
+.settings-row label.inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  color: #ccc;
+  font-size: 0.9em;
+}
+
+.settings-row select,
+.settings-row input[type="text"] {
+  width: auto;
+  min-width: 160px;
+}
+
+/* ---- Stale banner ---- */
+#staleBanner {
+  display: none;
+  background: #2e2200;
+  border: 1px solid #6b4e00;
+  border-radius: 4px;
+  padding: 7px 14px;
+  margin-bottom: 14px;
+  font-size: 0.88em;
+  color: #f0c060;
+}
+
+/* ---- Output section (hidden until first Run) ---- */
+#outputSection {
+  display: none;
+}
+
+/* ---- Plot blocks ---- */
+.plot-block {
+  margin-bottom: 28px;
+}
+
+.plot-label {
+  font-size: 0.75em;
+  font-weight: bold;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #666;
+  margin-bottom: 6px;
+}
+
 /* ---- Regression Panel ---- */
 #regressionPanel {
   margin: 20px 0;

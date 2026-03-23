@@ -217,12 +217,13 @@ function makeModTd(name, type) {
 }
 
 // ---------------- INITIALIZE ----------------
-document.getElementById("addStudy").addEventListener("click", () => addRow());
+document.getElementById("addStudy").addEventListener("click", () => { addRow(); markStale(); });
 document.getElementById("run").addEventListener("click", runAnalysis);
 document.getElementById("import").addEventListener("click", importCSV);
 document.getElementById("export").addEventListener("click", exportCSV);
 document.getElementById("addMod").addEventListener("click", addModerator);
 document.getElementById("modName").addEventListener("keydown", e => { if (e.key === "Enter") addModerator(); });
+document.getElementById("cumulativeOrder").addEventListener("change", runAnalysis);
 
 // ---------------- EFFECT TYPE HANDLER ----------------
 document.getElementById("effectType").addEventListener("change", () => {
@@ -966,11 +967,24 @@ function renderRegressionPanel(reg, method, ciMethod, kExcluded = 0) {
     </div>`;
 }
 
+// ---------------- OUTPUT SECTION VISIBILITY ----------------
+const outputSection = document.getElementById("outputSection");
+const staleBanner   = document.getElementById("staleBanner");
+
+function markStale() {
+  // Only show the banner once the output section has been revealed
+  if (outputSection.style.display === "block") staleBanner.style.display = "";
+}
+
 // ---------------- RUN ANALYSIS (modified for benchmarks) ----------------
 function runAnalysis() {
   const type = document.getElementById("effectType").value;
   const profile = effectProfiles[type];
   if (!profile) return;
+
+  // Reveal the output section on first run; clear any stale warning
+  outputSection.style.display = "block";
+  staleBanner.style.display = "none";
 
   const rows = document.querySelectorAll("#inputTable tr");
 

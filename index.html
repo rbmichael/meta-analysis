@@ -17,98 +17,152 @@
 
 <h2>Meta-analysis Tool</h2>
 
-<input type="file" id="csvFile" accept=".csv">
-<button id="import">Import CSV</button>
-<button id="export">Export CSV</button>
-<div id="csvWarning" style="color:red; display:none;"></div>
+<!-- ===================== INPUT SECTION ===================== -->
+<div class="section" id="inputSection">
+  <p class="section-title">Input</p>
 
-<select id="effectType">
-<option value="MD">Mean Difference</option>
-<option value="SMD">Standardized Mean Difference (Hedges g)</option>
-<option value="MD_paired">Mean Difference (Paired)</option>
-<option value="SMD_paired">Standardized Mean Difference (Paired)</option>
-<option value="OR">Odds Ratio (OR)</option>
-<option value="RR">Risk Ratio (RR)</option>
-<option value="RD">Risk Difference (RD)</option>
-<option value="HR">Hazard Ratio (HR)</option>
-<option value="IRR">Incidence Rate Ratio (IRR)</option>
-<option value="IR">Incidence Rate (log)</option>
-<option value="COR">Correlation (raw r)</option>
-<option value="ZCOR">Correlation (Fisher's z)</option>
-<option value="PR">Proportion (raw)</option>
-<option value="PLN">Proportion (log)</option>
-<option value="PLO">Proportion (logit)</option>
-<option value="PAS">Proportion (arcsine)</option>
-<option value="PFT">Proportion (Freeman-Tukey)</option>
-<option value="GENERIC">Generic (yi / vi)</option>
-</select>
+  <!-- File controls -->
+  <div class="settings-row">
+    <input type="file" id="csvFile" accept=".csv">
+    <button id="import">Import CSV</button>
+    <button id="export">Export CSV</button>
+  </div>
+  <div id="csvWarning" style="color:red; display:none; margin-bottom:10px;"></div>
 
-<select id="tauMethod">
-  <option value="DL">DerSimonian-Laird (DL)</option>
-  <option value="REML">REML</option>
-  <option value="PM">Paule-Mandel (PM)</option>
-  <option value="ML">Maximum Likelihood (ML)</option>
-  <option value="HS">Hunter-Schmidt (HS)</option>
-  <option value="HE">Hedges (HE)</option>
-  <option value="SJ">Sidik-Jonkman (SJ)</option>
-</select>
+  <!-- Settings row 1: effect type, τ² method, CI method -->
+  <div class="settings-row">
+    <label>
+      Effect type
+      <select id="effectType">
+        <option value="MD">Mean Difference</option>
+        <option value="SMD">Standardized Mean Difference (Hedges g)</option>
+        <option value="MD_paired">Mean Difference (Paired)</option>
+        <option value="SMD_paired">Standardized Mean Difference (Paired)</option>
+        <option value="OR">Odds Ratio (OR)</option>
+        <option value="RR">Risk Ratio (RR)</option>
+        <option value="RD">Risk Difference (RD)</option>
+        <option value="HR">Hazard Ratio (HR)</option>
+        <option value="IRR">Incidence Rate Ratio (IRR)</option>
+        <option value="IR">Incidence Rate (log)</option>
+        <option value="COR">Correlation (raw r)</option>
+        <option value="ZCOR">Correlation (Fisher's z)</option>
+        <option value="PR">Proportion (raw)</option>
+        <option value="PLN">Proportion (log)</option>
+        <option value="PLO">Proportion (logit)</option>
+        <option value="PAS">Proportion (arcsine)</option>
+        <option value="PFT">Proportion (Freeman-Tukey)</option>
+        <option value="GENERIC">Generic (yi / vi)</option>
+      </select>
+    </label>
 
-<select id="ciMethod">
-  <option value="normal">Normal CI</option>
-  <option value="KH">Knapp-Hartung</option>
-  <option value="t">t-distribution</option>
-</select>
+    <label>
+      τ² estimator
+      <select id="tauMethod">
+        <option value="DL">DerSimonian-Laird (DL)</option>
+        <option value="REML">REML</option>
+        <option value="PM">Paule-Mandel (PM)</option>
+        <option value="ML">Maximum Likelihood (ML)</option>
+        <option value="HS">Hunter-Schmidt (HS)</option>
+        <option value="HE">Hedges (HE)</option>
+        <option value="SJ">Sidik-Jonkman (SJ)</option>
+      </select>
+    </label>
 
-<select id="cumulativeOrder">
-  <option value="input">Cumulative order: input</option>
-  <option value="precision_desc">Cumulative order: most precise first</option>
-  <option value="precision_asc">Cumulative order: least precise first</option>
-  <option value="effect_asc">Cumulative order: effect ascending</option>
-  <option value="effect_desc">Cumulative order: effect descending</option>
-</select>
+    <label>
+      CI method
+      <select id="ciMethod">
+        <option value="normal">Normal CI</option>
+        <option value="KH">Knapp-Hartung</option>
+        <option value="t">t-distribution</option>
+      </select>
+    </label>
+  </div>
 
-<label>
-  <input type="checkbox" id="useTrimFill">
-  Apply trim-and-fill
-</label>
-<label>
-  <input type="checkbox" id="useTFAdjusted">
-  Show adjusted RE after trim-and-fill
-</label>
+  <!-- Settings row 2: cumulative order, trim-and-fill -->
+  <div class="settings-row">
+    <label>
+      Cumulative order
+      <select id="cumulativeOrder">
+        <option value="input">Input order</option>
+        <option value="precision_desc">Most precise first</option>
+        <option value="precision_asc">Least precise first</option>
+        <option value="effect_asc">Effect ascending</option>
+        <option value="effect_desc">Effect descending</option>
+      </select>
+    </label>
 
-<div id="moderatorManager">
-  <strong>Moderators:</strong>
-  <input type="text" id="modName" placeholder="Column name" style="width:110px">
-  <select id="modType">
-    <option value="continuous">Continuous</option>
-    <option value="categorical">Categorical</option>
-  </select>
-  <button id="addMod">+ Add</button>
+    <label class="inline">
+      <input type="checkbox" id="useTrimFill">
+      Apply trim-and-fill
+    </label>
+    <label class="inline">
+      <input type="checkbox" id="useTFAdjusted">
+      Show adjusted RE after trim-and-fill
+    </label>
+  </div>
+
+  <!-- Moderator manager -->
+  <div id="moderatorManager">
+    <strong>Moderators:</strong>
+    <input type="text" id="modName" placeholder="Column name" style="width:110px">
+    <select id="modType">
+      <option value="continuous">Continuous</option>
+      <option value="categorical">Categorical</option>
+    </select>
+    <button id="addMod">+ Add</button>
+  </div>
+
+  <!-- Data table -->
+  <table id="inputTable">
+    <tr>
+      <th>Study</th><th>Mean₁</th><th>SD₁</th><th>n₁</th>
+      <th>Mean₂</th><th>SD₂</th><th>n₂</th>
+      <th>Group</th>
+      <th>Actions</th>
+    </tr>
+  </table>
+
+  <div id="validationWarnings" style="color: red; margin-top: 10px;"></div>
+
+  <button id="addStudy">Add Study</button>
+  <button id="run">Run</button>
 </div>
 
-<table id="inputTable">
-<tr>
-<th>Study</th><th>Mean₁</th><th>SD₁</th><th>n₁</th>
-<th>Mean₂</th><th>SD₂</th><th>n₂</th>
-<th>Group</th>
-<th>Actions</th>
-</tr>
-</table>
+<!-- ===================== OUTPUT SECTION ===================== -->
+<div id="outputSection">
+  <div class="section">
+    <p class="section-title">Results</p>
 
-<div id="validationWarnings" style="color: red; margin-top: 10px;"></div>
+    <div id="staleBanner">
+      ⚠️ Data or settings changed — click Run to update.
+    </div>
 
-<button id="addStudy">Add Study</button>
-<button id="run">Run</button>
+    <div id="results"></div>
+    <div id="regressionPanel" style="display:none"></div>
 
-<div id="results"></div>
-<div id="regressionPanel" style="display:none"></div>
+    <div id="bubblePlots"></div>
 
-<div id="bubblePlots"></div>
+    <div class="plot-block">
+      <p class="plot-label">Forest plot</p>
+      <svg id="forestPlot" width="900" height="420"></svg>
+    </div>
 
-<svg id="forestPlot" width="900" height="420"></svg>
-<svg id="funnelPlot" width="500" height="400"></svg>
-<svg id="influencePlot" width="500" height="400"></svg>
-<svg id="cumulativePlot" width="900" height="420"></svg>
+    <div class="plot-block">
+      <p class="plot-label">Funnel plot</p>
+      <svg id="funnelPlot" width="500" height="400"></svg>
+    </div>
+
+    <div class="plot-block">
+      <p class="plot-label">Influence plot</p>
+      <svg id="influencePlot" width="500" height="400"></svg>
+    </div>
+
+    <div class="plot-block">
+      <p class="plot-label">Cumulative forest plot</p>
+      <svg id="cumulativePlot" width="900" height="420"></svg>
+    </div>
+  </div>
+</div>
 
 <div class="tooltip" id="tooltip"></div>
 
