@@ -214,6 +214,10 @@ export function transformEffect(x, type) {
     return x;
   }
 
+  // Correlation: ZCOR back-transforms Fisher's z → r; COR is already on r scale
+  if (type === "ZCOR") return Math.tanh(x);
+  if (type === "COR")  return x;
+
   // Fallback for unknown type
   console.warn("Unknown effect type in transformEffect:", type);
   return x;
@@ -236,6 +240,9 @@ export function transformCI(lb, ub, type) {
   if (type === "MD" || type === "SMD") {
     return { lb, ub };
   }
+
+  if (type === "ZCOR") return { lb: Math.tanh(lb), ub: Math.tanh(ub) };
+  if (type === "COR")  return { lb, ub };
 
   console.warn("Unknown effect type in transformCI:", type);
   return { lb, ub };

@@ -193,3 +193,61 @@ Pooled (FE):   beta=0.7887  (SE=0.1208, CI=[0.5520, 1.0254], Q=19.73)
 
 Note: metafor's SMCR measure (raw-score standardization using sd_pre) gives
 different yi=[0.5056, 1.0481, 1.8054, 1.4181, 0.0801]. The app uses SMCC.
+
+---
+
+## Synthetic Correlation Dataset (ZCOR and COR benchmarks)
+
+Synthetic 5-study dataset used to benchmark Fisher's z (ZCOR) and raw
+correlation (COR) effect types. All expected values computed analytically;
+no external software required for verification.
+
+| Label   |    r |   n |
+|---------|-----:|----:|
+| Study 1 | 0.50 |  53 |
+| Study 2 | 0.30 | 103 |
+| Study 3 | 0.60 |  43 |
+| Study 4 | 0.40 |  78 |
+| Study 5 | 0.25 | 123 |
+
+### ZCOR — Fisher's z transform
+
+App formula: yi = atanh(r),  vi = 1/(n−3),  wi = n−3
+
+Per-study z values:
+
+| Label   |      yi (z) |    vi |
+|---------|------------:|------:|
+| Study 1 |     0.54931 | 1/50  |
+| Study 2 |     0.30952 | 1/100 |
+| Study 3 |     0.69315 | 1/40  |
+| Study 4 |     0.42365 | 1/75  |
+| Study 5 |     0.25541 | 1/120 |
+
+Pooled (DL, z scale):
+- W = 385, Σwi·zi = 148.567 → FE_z = 0.3859
+- Q = 7.847, df = 4, c = 296.36 → τ² = 0.01298
+- I² = (Q−df)/Q × 100 = 49.0%
+- RE_z = 0.4130
+
+Back-transformed to r: FE_r = tanh(0.3859) ≈ 0.368, RE_r = tanh(0.4130) ≈ 0.392
+
+### COR — Raw correlation
+
+App formula: yi = r,  vi = (1−r²)²/(n−1)
+
+Per-study values:
+
+| Label   |   yi |       vi |
+|---------|-----:|---------:|
+| Study 1 | 0.50 | 0.010817 |
+| Study 2 | 0.30 | 0.008119 |
+| Study 3 | 0.60 | 0.009752 |
+| Study 4 | 0.40 | 0.009164 |
+| Study 5 | 0.25 | 0.007204 |
+
+Pooled (DL):
+- W = 566.10, FE_r = 0.394
+- Q = 9.361, df = 4, c = 468.22 → τ² = 0.01145
+- I² = 57.3%
+- RE_r = 0.403

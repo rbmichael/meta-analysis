@@ -63,6 +63,22 @@ const effectProfiles = {
 	  transformCI: (lb, ub) => transformCI(lb, ub, "RD")
 	},
 
+  "COR": {
+    label: "Correlation (raw r)",
+    inputs: ["r", "n"],
+    compute: (data) => compute(data, "COR"),
+    transform: (x) => transformEffect(x, "COR"),
+    transformCI: (lb, ub) => transformCI(lb, ub, "COR")
+  },
+
+  "ZCOR": {
+    label: "Correlation (Fisher's z)",
+    inputs: ["r", "n"],
+    compute: (data) => compute(data, "ZCOR"),
+    transform: (x) => transformEffect(x, "ZCOR"),
+    transformCI: (lb, ub) => transformCI(lb, ub, "ZCOR")
+  },
+
   "GENERIC": {
     label: "Generic (yi / vi)",
     inputs: ["yi", "vi"],
@@ -307,8 +323,17 @@ function validateRow(row) {
     let errorMsg = null;
     if (key.includes("sd") && num <= 0) { inputValid = false; errorMsg = `${key} must be > 0`; }
     if (key === "vi" && num <= 0)        { inputValid = false; errorMsg = "vi must be > 0"; }
-    if (key === "n" && num <= 1)         { inputValid = false; errorMsg = `${key} must be ≥ 2`; }
-    if (key === "r" && (num < -1 || num > 1)) { inputValid = false; errorMsg = `${key} must be between -1 and 1`; }
+    if (key === "n") {
+      const minN = type === "ZCOR" ? 4 : type === "COR" ? 3 : 2;
+      if (num < minN) { inputValid = false; errorMsg = `n must be ≥ ${minN}${type === "ZCOR" ? " for Fisher's z" : ""}`; }
+    }
+    // r as pre-post correlation (paired designs): allow [-1, 1]
+    // r as Pearson correlation (COR/ZCOR): must be strictly within (-1, 1)
+    if (key === "r" && (type === "COR" || type === "ZCOR")) {
+      if (Math.abs(num) >= 1) { inputValid = false; errorMsg = "r must be strictly between -1 and 1"; }
+    } else if (key === "r" && (num < -1 || num > 1)) {
+      inputValid = false; errorMsg = "r must be between -1 and 1";
+    }
 
     if (!inputValid) {
       input.classList.add("input-error");
@@ -366,6 +391,16 @@ function getSoftWarnings(studyInput, type, label) {
       if (minCell / total < 0.05) {
         warnings.push(`⚠️ ${label}: rare events (unstable estimate)`);
       }
+    }
+  }
+
+  else if (type === "COR" || type === "ZCOR") {
+    const { r, n } = studyInput;
+    if (isFinite(n) && n < 10) {
+      warnings.push(`⚠️ ${label}: small sample size (n < 10) — correlation estimate unreliable`);
+    }
+    if (isFinite(r) && Math.abs(r) > 0.9) {
+      warnings.push(`⚠️ ${label}: |r| > 0.90 — variance estimate near boundary, interpret cautiously`);
     }
   }
 
@@ -606,6 +641,20 @@ function populateExampleData(type) {
 		["Study 2", 20, 10, 18, 12, "A"],
 		["Study 3", 8, 7, 10, 9, "B"]
 	],
+    "COR": [
+      ["Study 1", 0.45, 62, ""],
+      ["Study 2", 0.56, 90, ""],
+      ["Study 3", 0.38, 45, ""],
+      ["Study 4", 0.61, 120, ""],
+      ["Study 5", 0.42, 75, ""]
+    ],
+    "ZCOR": [
+      ["Study 1", 0.45, 62, ""],
+      ["Study 2", 0.56, 90, ""],
+      ["Study 3", 0.38, 45, ""],
+      ["Study 4", 0.61, 120, ""],
+      ["Study 5", 0.42, 75, ""]
+    ],
     "GENERIC": [
       ["Study 1", -0.889, 0.326, ""],
       ["Study 2", -1.585, 0.255, ""],

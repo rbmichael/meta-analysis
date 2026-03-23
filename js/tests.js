@@ -1,4 +1,4 @@
-import { round } from "./utils.js";
+import { round, transformEffect, transformCI } from "./utils.js";
 import { BENCHMARKS } from "./benchmarks.js";
 import { compute, meta, metaRegression } from "./analysis.js";
 
@@ -183,4 +183,69 @@ export function runTests() {
   }
 
   console.log(regBenchPass ? "\n✅ REGRESSION BENCHMARK PASSED" : "\n❌ REGRESSION BENCHMARK FAILED");
+
+  // ===== COR / ZCOR UNIT TESTS =====
+  // Tests that the generic benchmark loop cannot cover:
+  //   1. ZCOR back-transform round-trip (atanh → tanh = identity)
+  //   2. COR vi formula spot-check
+  //   3. Edge-case guarding (|r|≥1, n too small)
+  console.log("\n===== COR / ZCOR UNIT TESTS =====\n");
+  let corPass = true;
+
+  function cchk(name, val, expected, tol = 1e-6) {
+    const ok = isFinite(val) && Math.abs(val - expected) < tol;
+    console.log(`  ${name}: ${round(val, 6)} (expected ${round(expected, 6)}) → ${ok ? "PASS" : "FAIL"}`);
+    if (!ok) corPass = false;
+  }
+  function cchkNaN(name, val) {
+    const ok = !isFinite(val);
+    console.log(`  ${name}: ${val} → ${ok ? "PASS (NaN/Inf as expected)" : "FAIL (expected NaN)"}`);
+    if (!ok) corPass = false;
+  }
+
+  // 1. ZCOR compute(): yi = atanh(r), vi = 1/(n-3)
+  console.log("--- ZCOR compute() ---");
+  {
+    const s = compute({ r: 0.5, n: 53 }, "ZCOR");
+    cchk("yi = atanh(0.5)", s.yi, Math.atanh(0.5));
+    cchk("vi = 1/50",       s.vi, 1 / 50);
+    cchk("se = sqrt(vi)",   s.se, Math.sqrt(1 / 50));
+  }
+
+  // 2. COR compute(): yi = r, vi = (1-r²)²/(n-1)
+  console.log("--- COR compute() ---");
+  {
+    const s = compute({ r: 0.5, n: 53 }, "COR");
+    cchk("yi = r",                s.yi, 0.5);
+    cchk("vi = (1-0.25)²/52",    s.vi, (0.75 * 0.75) / 52);
+  }
+
+  // 3. ZCOR back-transform: tanh(atanh(r)) = r (round-trip)
+  console.log("--- ZCOR back-transform round-trip ---");
+  {
+    const rs = [0.1, 0.3, 0.5, 0.7, 0.9, -0.4];
+    rs.forEach(r => {
+      const z  = Math.atanh(r);
+      const rt = transformEffect(z, "ZCOR");   // tanh(z)
+      cchk(`tanh(atanh(${r})) = ${r}`, rt, r, 1e-10);
+    });
+  }
+
+  // 4. ZCOR CI back-transform: both bounds transformed
+  console.log("--- ZCOR transformCI ---");
+  {
+    const { lb, ub } = transformCI(Math.atanh(0.3), Math.atanh(0.7), "ZCOR");
+    cchk("CI lb back-transformed to 0.3", lb, 0.3, 1e-10);
+    cchk("CI ub back-transformed to 0.7", ub, 0.7, 1e-10);
+  }
+
+  // 5. Edge cases: invalid inputs return NaN yi
+  console.log("--- Edge cases ---");
+  cchkNaN("ZCOR r=1  → NaN",  compute({ r:  1.0, n: 50 }, "ZCOR").yi);
+  cchkNaN("ZCOR r=-1 → NaN",  compute({ r: -1.0, n: 50 }, "ZCOR").yi);
+  cchkNaN("ZCOR n=3  → NaN",  compute({ r:  0.5, n:  3 }, "ZCOR").yi);  // n-3=0
+  cchkNaN("COR  r=1  → NaN",  compute({ r:  1.0, n: 50 }, "COR" ).yi);
+  cchkNaN("COR  n=1  → NaN",  compute({ r:  0.5, n:  1 }, "COR" ).yi);
+
+  console.log(corPass ? "\n✅ ALL COR/ZCOR UNIT TESTS PASSED" : "\n❌ SOME COR/ZCOR UNIT TESTS FAILED");
 }

@@ -147,6 +147,26 @@ export function compute(s, type, options = {}) {
 	  };
 	}
 
+  // ================= CORRELATION =================
+  if (type === "COR" || type === "ZCOR") {
+    const { r, n } = s;
+
+    if (!isFinite(r) || !isFinite(n) || Math.abs(r) >= 1 || n < 2)
+      return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+
+    if (type === "COR") {
+      // Raw correlation: yi = r, vi = (1−r²)²/(n−1)
+      const vi = Math.max((1 - r * r) ** 2 / (n - 1), MIN_VAR);
+      return { ...s, yi: r, vi, se: Math.sqrt(vi), w: 1 / vi };
+    }
+
+    // ZCOR: Fisher's z-transform, vi = 1/(n−3)
+    if (n < 4) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+    const yi = Math.atanh(r);           // 0.5 * ln((1+r)/(1−r))
+    const vi = Math.max(1 / (n - 3), MIN_VAR);
+    return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
+  }
+
 	// ================ GENERIC ===============
 	if (type === "GENERIC") {
 	  return {

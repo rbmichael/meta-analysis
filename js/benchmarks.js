@@ -245,6 +245,64 @@ export const BENCHMARKS = [
   },
 
   // ----------------------------------------------------------------
+  // ZCOR — synthetic 5-study dataset (hand-computed, DL)
+  // yi = atanh(r),  vi = 1/(n−3)
+  // FE weights wi = n−3 (exact integers, so FE_z is a simple weighted mean).
+  // τ²_DL, RE_z verified analytically; per-study zi verified by formula.
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic – ZCOR (Fisher's z, DL)",
+    type: "ZCOR",
+    tauMethod: "DL",
+    data: [
+      { label: "Study 1", r: 0.50, n: 53  },
+      { label: "Study 2", r: 0.30, n: 103 },
+      { label: "Study 3", r: 0.60, n: 43  },
+      { label: "Study 4", r: 0.40, n: 78  },
+      { label: "Study 5", r: 0.25, n: 123 }
+    ],
+    expected: {
+      // yi = atanh(r); verified to machine precision via Math.atanh
+      yi:   [0.54931, 0.30952, 0.69315, 0.42365, 0.25541],
+      // FE_z = Σ(wi·zi)/Σwi, wi=n-3; pooled on z scale (not back-transformed here)
+      FE:    0.3859,
+      RE:    0.4130,
+      tau2:  0.01298,
+      I2:   49.0
+    },
+    citation: "Synthetic dataset. Expected values computed analytically from Fisher z formulas."
+  },
+
+  // ----------------------------------------------------------------
+  // COR — synthetic 5-study dataset (hand-computed, DL)
+  // Same r/n as ZCOR benchmark; different vi formula: (1−r²)²/(n−1).
+  // yi = r (raw correlation, no transform).
+  // τ²_DL and pooled estimates verified analytically.
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic – COR (raw correlation, DL)",
+    type: "COR",
+    tauMethod: "DL",
+    data: [
+      { label: "Study 1", r: 0.50, n: 53  },
+      { label: "Study 2", r: 0.30, n: 103 },
+      { label: "Study 3", r: 0.60, n: 43  },
+      { label: "Study 4", r: 0.40, n: 78  },
+      { label: "Study 5", r: 0.25, n: 123 }
+    ],
+    expected: {
+      // yi = r exactly
+      yi:   [0.500, 0.300, 0.600, 0.400, 0.250],
+      // FE/RE on raw r scale; pooled values verified analytically via vi=(1-r²)²/(n-1)
+      FE:    0.394,
+      RE:    0.403,
+      tau2:  0.01145,
+      I2:   57.3
+    },
+    citation: "Synthetic dataset. Expected values computed analytically from raw-correlation formulas."
+  },
+
+  // ----------------------------------------------------------------
   // SMD_paired — Morris (2008), treatment arm (5 studies)
   // Same raw data as MD_paired benchmark above.
   // d = (m_post - m_pre) / sd_change,  g = d · J(n-1),  vi = 1/n + d²/(2n)
