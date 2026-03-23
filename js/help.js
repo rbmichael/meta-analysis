@@ -24,6 +24,25 @@ export const HELP = {
            "coefficient of variation (SD/mean) exceeds 1.",
   },
 
+  "effect.CVR": {
+    title: "Coefficient of Variation Ratio (CVR)",
+    body:  "The log ratio of two coefficients of variation: yi = log(CV₁ / CV₂), " +
+           "where CV₁ = sd₁/m₁ and CV₂ = sd₂/m₂. " +
+           "Results are back-transformed to the ratio scale (CV₁/CV₂) for display: " +
+           "a value of 1 means equal relative variability across groups, " +
+           "values above 1 indicate greater relative dispersion in group 1. " +
+           "The variance formula is vi = 1/(2·(n₁−1)) + CV₁²/n₁ + 1/(2·(n₂−1)) + CV₂²/n₂, " +
+           "which combines the sampling variance of each log-CV estimate. " +
+           "Both means must be strictly positive (the CV is undefined at zero or below), " +
+           "and both SDs must be positive; a minimum n of 2 per group is required. " +
+           "The variance approximation degrades when CVs exceed 1 (highly skewed populations). " +
+           "CVR is useful when you want to compare variability independently of the mean — " +
+           "for example, to test whether an intervention homogenises or disperses outcomes " +
+           "beyond any shift in the mean. " +
+           "Corresponds to measure=\"CVR\" in metafor. " +
+           "Reference: Nakagawa et al. (2015), Methods in Ecology and Evolution.",
+  },
+
   "effect.MD": {
     title: "Mean Difference (MD)",
     body:  "The raw arithmetic difference between two group means (μ₁ − μ₂). " +

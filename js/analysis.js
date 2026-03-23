@@ -112,6 +112,28 @@ export function compute(s, type, options = {}) {
     return { ...s, md: g, varMD: vi_g, yi: g, vi: vi_g, se: Math.sqrt(vi_g), w: 1 / vi_g };
   }
 
+  // ================= COEFFICIENT OF VARIATION RATIO (CVR) =================
+  // cv1 = sd1/m1,  cv2 = sd2/m2
+  // yi  = log(cv1 / cv2)   — stored on log scale, back-transform with exp()
+  // vi  = 1/(2*(n1-1)) + cv1²/n1 + 1/(2*(n2-1)) + cv2²/n2
+  // Requires: m1 > 0, m2 > 0, sd1 > 0, sd2 > 0, n1 ≥ 2, n2 ≥ 2
+  if (type === "CVR") {
+    const { m1, sd1, n1, m2, sd2, n2 } = s;
+    if (!isFinite(m1) || !isFinite(sd1) || !isFinite(n1) ||
+        !isFinite(m2) || !isFinite(sd2) || !isFinite(n2) ||
+        m1 <= 0 || m2 <= 0 || sd1 <= 0 || sd2 <= 0 || n1 < 2 || n2 < 2) {
+      return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+    }
+    const cv1 = sd1 / m1;
+    const cv2 = sd2 / m2;
+    const yi  = Math.log(cv1 / cv2);
+    const vi  = Math.max(
+      1 / (2 * (n1 - 1)) + cv1 ** 2 / n1 + 1 / (2 * (n2 - 1)) + cv2 ** 2 / n2,
+      MIN_VAR
+    );
+    return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
+  }
+
 	// ================ PAIRED MEAN DIFFERENCES ================
 	if (type === "MD_paired") {
 	  const { m_pre, m_post, sd_pre, sd_post, n, r } = s;
@@ -1429,18 +1451,18 @@ export function validateStudy(study, type) {
 
   if (!type) return { valid: false, errors: { general: "Unknown effect type" } };
 
-  if (type === "MD" || type === "SMD" || type === "SMDH" || type === "ROM") {
+  if (type === "MD" || type === "SMD" || type === "SMDH" || type === "ROM" || type === "CVR") {
     const n1 = study.n1, n2 = study.n2;
     const sd1 = study.sd1, sd2 = study.sd2;
-    const minN = (type === "SMDH") ? 2 : 1;
+    const minN = (type === "SMDH" || type === "CVR") ? 2 : 1;
     if (!isFinite(n1) || n1 < minN) { valid = false; errors.n1 = `n1 must be ≥ ${minN}`; }
     if (!isFinite(n2) || n2 < minN) { valid = false; errors.n2 = `n2 must be ≥ ${minN}`; }
     if (!isFinite(sd1) || sd1 <= 0) { valid = false; errors.sd1 = "sd1 must be > 0"; }
     if (!isFinite(sd2) || sd2 <= 0) { valid = false; errors.sd2 = "sd2 must be > 0"; }
     if (!isFinite(study.m1)) { valid = false; errors.m1 = "m1 must be numeric"; }
     if (!isFinite(study.m2)) { valid = false; errors.m2 = "m2 must be numeric"; }
-    // ROM additionally requires strictly positive means
-    if (type === "ROM") {
+    // ROM and CVR additionally require strictly positive means
+    if (type === "ROM" || type === "CVR") {
       if (isFinite(study.m1) && study.m1 <= 0) { valid = false; errors.m1 = "m1 must be > 0"; }
       if (isFinite(study.m2) && study.m2 <= 0) { valid = false; errors.m2 = "m2 must be > 0"; }
     }

@@ -58,7 +58,15 @@ const effectProfiles = {
     transform: (x) => transformEffect(x, "ROM"),
     transformCI: (lb, ub) => transformCI(lb, ub, "ROM")
   },
-	
+
+  "CVR": {
+    label: "Coefficient of Variation Ratio (CVR)",
+    inputs: ["m1", "sd1", "n1", "m2", "sd2", "n2"],
+    compute: (data) => compute(data, "CVR"),
+    transform: (x) => transformEffect(x, "CVR"),
+    transformCI: (lb, ub) => transformCI(lb, ub, "CVR")
+  },
+
   "OR": {
     label: "Odds Ratio",
     inputs: ["a", "b", "c", "d"],
@@ -793,6 +801,37 @@ function getSoftWarnings(studyInput, type, label) {
     }
   }
 
+  else if (type === "CVR") {
+    const { m1, m2, sd1, sd2, n1, n2 } = studyInput;
+    // Non-positive means or SDs make CVR undefined.
+    if (isFinite(m1) && m1 <= 0) {
+      warnings.push(`⚠️ ${label}: m1 ≤ 0 — CVR requires strictly positive means (study excluded)`);
+    }
+    if (isFinite(m2) && m2 <= 0) {
+      warnings.push(`⚠️ ${label}: m2 ≤ 0 — CVR requires strictly positive means (study excluded)`);
+    }
+    if (isFinite(sd1) && sd1 <= 0) {
+      warnings.push(`⚠️ ${label}: sd1 ≤ 0 — standard deviation must be positive (study excluded)`);
+    }
+    if (isFinite(sd2) && sd2 <= 0) {
+      warnings.push(`⚠️ ${label}: sd2 ≤ 0 — standard deviation must be positive (study excluded)`);
+    }
+    // Small samples: variance formula uses (n-1) in denominator; n=2 is valid but noisy.
+    if (isFinite(n1) && n1 < 10) {
+      warnings.push(`⚠️ ${label}: small sample size (n1 < 10) — CVR variance estimate unreliable`);
+    }
+    if (isFinite(n2) && n2 < 10) {
+      warnings.push(`⚠️ ${label}: small sample size (n2 < 10) — CVR variance estimate unreliable`);
+    }
+    // Large CV (> 1) means the lognormality assumption underlying the variance formula is strained.
+    if (isFinite(sd1) && isFinite(m1) && m1 > 0 && sd1 / m1 > 1) {
+      warnings.push(`⚠️ ${label}: CV₁ > 1 (sd1/m1 > 1) — large coefficient of variation; variance approximation may be poor`);
+    }
+    if (isFinite(sd2) && isFinite(m2) && m2 > 0 && sd2 / m2 > 1) {
+      warnings.push(`⚠️ ${label}: CV₂ > 1 (sd2/m2 > 1) — large coefficient of variation; variance approximation may be poor`);
+    }
+  }
+
   return warnings;
 }
 
@@ -1313,6 +1352,13 @@ function populateExampleData(type) {
       ["Study 3", 19.8, 3.3, 32, 16.2, 2.9, 30, ""],
       ["Study 4", 42.1, 7.5, 80, 31.5, 6.8, 78, ""],
       ["Study 5", 25.6, 4.8, 50, 20.3, 4.1, 48, ""]
+    ],
+    "CVR": [
+      ["Study 1", 25.0, 6.2, 40, 24.8, 3.5, 38, ""],
+      ["Study 2", 30.1, 9.0, 55, 29.7, 4.8, 52, ""],
+      ["Study 3", 18.5, 5.1, 30, 19.0, 3.0, 28, ""],
+      ["Study 4", 42.0, 11.5, 70, 40.5, 6.2, 68, ""],
+      ["Study 5", 22.3, 7.8, 45, 23.1, 4.9, 43, ""]
     ],
     "OR": [
       ["Study1", 12, 5, 8, 15, "A"],

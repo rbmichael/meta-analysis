@@ -1265,4 +1265,98 @@ export function runTests() {
   }
 
   console.log(smdhPass ? "\n✅ ALL SMDH UNIT TESTS PASSED" : "\n❌ SOME SMDH UNIT TESTS FAILED");
+
+  // ================================================================
+  // CVR UNIT TESTS
+  // ================================================================
+  console.log("\n===== CVR UNIT TESTS =====\n");
+  let cvrPass = true;
+
+  function cvrchk(name, val, expected, tol = 1e-4) {
+    const ok = Math.abs(val - expected) < tol;
+    console.log(`  ${name}: ${round(val, 6)} (expected ${round(expected, 6)}) → ${ok ? "PASS" : "FAIL"}`);
+    if (!ok) cvrPass = false;
+  }
+  function cvrchkTrue(name, cond) {
+    console.log(`  ${name}: ${cond ? "PASS" : "FAIL"}`);
+    if (!cond) cvrPass = false;
+  }
+
+  // 1. yi / vi formula spot-check
+  // m1=20, sd1=4, n1=40, m2=20, sd2=2, n2=38
+  // cv1 = 4/20 = 0.2,  cv2 = 2/20 = 0.1
+  // yi  = log(0.2 / 0.1) = log(2)
+  // vi  = 1/(2·39) + 0.04/40 + 1/(2·37) + 0.01/38
+  console.log("--- 1. yi / vi formulas ---");
+  {
+    const s = compute({ m1: 20, sd1: 4, n1: 40, m2: 20, sd2: 2, n2: 38 }, "CVR");
+    const cv1 = 0.2, cv2 = 0.1;
+    const yi_exp = Math.log(cv1 / cv2);
+    const vi_exp = 1 / (2 * 39) + cv1**2 / 40 + 1 / (2 * 37) + cv2**2 / 38;
+    cvrchk("yi = log(cv1/cv2)", s.yi, yi_exp);
+    cvrchk("vi formula",        s.vi, vi_exp);
+    cvrchk("se = √vi",          s.se, Math.sqrt(vi_exp));
+    cvrchk("w  = 1/vi",         s.w,  1 / vi_exp, 1e-3);
+  }
+
+  // 2. Invalid inputs → NaN / w=0
+  console.log("--- 2. Invalid inputs → NaN ---");
+  {
+    const base = { m1: 20, sd1: 4, n1: 40, m2: 20, sd2: 2, n2: 38 };
+    cvrchkTrue("m1 = 0   → NaN yi",  !isFinite(compute({ ...base, m1:  0  }, "CVR").yi));
+    cvrchkTrue("m1 < 0   → NaN yi",  !isFinite(compute({ ...base, m1: -1  }, "CVR").yi));
+    cvrchkTrue("m2 = 0   → NaN yi",  !isFinite(compute({ ...base, m2:  0  }, "CVR").yi));
+    cvrchkTrue("sd1 = 0  → NaN yi",  !isFinite(compute({ ...base, sd1: 0  }, "CVR").yi));
+    cvrchkTrue("sd2 < 0  → NaN yi",  !isFinite(compute({ ...base, sd2: -1 }, "CVR").yi));
+    cvrchkTrue("n1 = 1   → NaN yi",  !isFinite(compute({ ...base, n1:  1  }, "CVR").yi));
+    cvrchkTrue("n2 = 1   → NaN yi",  !isFinite(compute({ ...base, n2:  1  }, "CVR").yi));
+    cvrchkTrue("m2 = 0   → w = 0",       compute({ ...base, m2:  0  }, "CVR").w === 0);
+  }
+
+  // 3. CVR = 1 (yi = 0) when cv1 = cv2
+  //    m1=10, sd1=2, n1=30 → cv1=0.2;  m2=20, sd2=4, n2=28 → cv2=0.2
+  console.log("--- 3. yi = 0 when CV₁ = CV₂ ---");
+  {
+    const s = compute({ m1: 10, sd1: 2, n1: 30, m2: 20, sd2: 4, n2: 28 }, "CVR");
+    cvrchk("yi = 0 (cv1=cv2=0.2)", s.yi, 0);
+    cvrchkTrue("vi > 0 (sampling variance present)", isFinite(s.vi) && s.vi > 0);
+  }
+
+  // 4. transformEffect back-transform: exp(yi) = cv1/cv2
+  console.log("--- 4. Back-transform: exp(yi) = CV₁/CV₂ ---");
+  {
+    const s = compute({ m1: 20, sd1: 4, n1: 40, m2: 20, sd2: 2, n2: 38 }, "CVR");
+    cvrchk("exp(yi) = 2.0", transformEffect(s.yi, "CVR"), 2.0, 1e-9);
+    const ci = transformCI(s.yi - 1.96 * s.se, s.yi + 1.96 * s.se, "CVR");
+    cvrchkTrue("CI lb > 0", ci.lb > 0);
+    cvrchkTrue("CI lb < exp(yi) < ub", ci.lb < 2.0 && 2.0 < ci.ub);
+  }
+
+  // 5. Pooled meta() — 3-study DL
+  // Studies share cv1=0.2, cv2=0.1 (yi=log2) except study 3 (higher cv1)
+  // Study 1: m1=20, sd1=4, n1=40, m2=20, sd2=2, n2=38
+  // Study 2: m1=15, sd1=3, n1=30, m2=15, sd2=1.5, n2=28
+  // Study 3: m1=25, sd1=6, n1=50, m2=24, sd2=2.4, n2=48  (cv1=0.24, cv2=0.1)
+  console.log("--- 5. Pooled meta() (k=3, DL) ---");
+  {
+    const studies = [
+      compute({ m1: 20, sd1: 4,   n1: 40, m2: 20, sd2: 2,   n2: 38 }, "CVR"),
+      compute({ m1: 15, sd1: 3,   n1: 30, m2: 15, sd2: 1.5, n2: 28 }, "CVR"),
+      compute({ m1: 25, sd1: 6,   n1: 50, m2: 24, sd2: 2.4, n2: 48 }, "CVR"),
+    ];
+    cvrchk("yi[0] = log(2)",     studies[0].yi, Math.log(2),    1e-9);
+    cvrchk("yi[1] = log(2)",     studies[1].yi, Math.log(2),    1e-9);
+    cvrchk("yi[2] = log(2.4)",   studies[2].yi, Math.log(2.4),  1e-9);
+
+    const m = meta(studies, "DL");
+    // FE and RE should lie between log(2) and log(2.4); tau2 should be small but positive
+    cvrchkTrue("FE in (log2, log2.4)", m.FE > Math.log(2) && m.FE < Math.log(2.4));
+    cvrchkTrue("RE in (log2, log2.4)", m.RE > Math.log(2) && m.RE < Math.log(2.4));
+    cvrchkTrue("tau2 ≥ 0",            isFinite(m.tau2) && m.tau2 >= 0);
+    cvrchkTrue("I2 ≥ 0",              isFinite(m.I2)   && m.I2   >= 0);
+    // Back-transformed RE should be > 1 (cv1 > cv2 in all studies)
+    cvrchkTrue("exp(RE) > 1", Math.exp(m.RE) > 1);
+  }
+
+  console.log(cvrPass ? "\n✅ ALL CVR UNIT TESTS PASSED" : "\n❌ SOME CVR UNIT TESTS FAILED");
 }
