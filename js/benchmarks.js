@@ -1,123 +1,276 @@
 // benchmarks.js
 export const BENCHMARKS = [
 
-  // -------------------------
-  // Mean Difference – Textbook Example (Borenstein et al.)
+  // ----------------------------------------------------------------
+  // GENERIC — BCG Vaccine (dat.bcg, log RR, pre-computed yi/vi)
+  // Source: Colditz et al. (1994). JAMA 271(9), 698–702.
+  // Verified against metafor rma() at full precision.
+  // ----------------------------------------------------------------
   {
-    name: "Textbook MD Example",
-    type: "MD",
+    name: "BCG Vaccine – GENERIC (log RR, metafor exact)",
+    type: "GENERIC",
+    tauMethod: "REML",
     data: [
-      {label:"S1", m1:5, sd1:1, n1:50, m2:4, sd2:1, n2:50},
-      {label:"S2", m1:6, sd1:1, n1:50, m2:5, sd2:1, n2:50},
-      {label:"S3", m1:7, sd1:1, n1:50, m2:6, sd2:1, n2:50}
+      { label: "Aronson 1948",          yi: -0.8893113339202054, vi: 0.3255847650039614   },
+      { label: "Ferguson & Simes 1949", yi: -1.5853886572014306, vi: 0.19458112139814387  },
+      { label: "Rosenthal 1960",        yi: -1.348073148299693,  vi: 0.41536796536796533  },
+      { label: "Hart & Sutherland 1977",yi: -1.4415511900213054, vi: 0.020010031902247573 },
+      { label: "Frimodt-Moller 1973",   yi: -0.2175473222112957, vi: 0.05121017216963086  },
+      { label: "Stein & Aronson 1953",  yi: -0.786115585818864,  vi: 0.0069056184559087574},
+      { label: "Vandiviere 1973",       yi: -1.6208982235983924, vi: 0.22301724757231517  },
+      { label: "TPT Madras 1980",       yi:  0.011952333523841173,vi: 0.00396157929781773 },
+      { label: "Coetzee & Berjak 1968", yi: -0.4694176487381487, vi: 0.056434210463248966 },
+      { label: "Rosenthal 1961",        yi: -1.3713448034727846, vi: 0.07302479361302891  },
+      { label: "Comstock 1974",         yi: -0.33935882833839015,vi: 0.01241221397155972  },
+      { label: "Comstock & Webster 1969",yi: 0.4459134005713783, vi: 0.5325058452001528   },
+      { label: "Comstock 1976",         yi: -0.017313948216879493,vi: 0.0714046596839863  }
     ],
     expected: {
-      FE: 1.0,
-      RE: 1.0,
-      tau2: 0.0,
-      I2: 0.0
-    }
+      FE:   -0.430,
+      RE:   -0.714,
+      tau2:  0.313,
+      I2:   92.2
+    },
+    citation: "Colditz et al. (1994) JAMA 271:698–702. dat.bcg in metafor."
   },
 
-  // -------------------------
-  // Standardized Mean Difference – metafor dataset dat.bcg
-	{
-	  name: "BCG Vaccine – yi/vi (metafor exact FULL PRECISION)",
-	  type: "GENERIC",
-	  data: [
-		{label:"Aronson 1948", yi:-0.8893113339202054, vi:0.3255847650039614},
-		{label:"Ferguson & Simes 1949", yi:-1.5853886572014306, vi:0.19458112139814387},
-		{label:"Rosenthal 1960", yi:-1.348073148299693, vi:0.41536796536796533},
-		{label:"Hart & Sutherland 1977", yi:-1.4415511900213054, vi:0.020010031902247573},
-		{label:"Frimodt-Moller 1973", yi:-0.2175473222112957, vi:0.05121017216963086},
-		{label:"Stein & Aronson 1953", yi:-0.786115585818864, vi:0.0069056184559087574},
-		{label:"Vandiviere 1973", yi:-1.6208982235983924, vi:0.22301724757231517},
-		{label:"TPT Madras 1980", yi:0.011952333523841173, vi:0.00396157929781773},
-		{label:"Coetzee & Berjak 1968", yi:-0.4694176487381487, vi:0.056434210463248966},
-		{label:"Rosenthal 1961", yi:-1.3713448034727846, vi:0.07302479361302891},
-		{label:"Comstock 1974", yi:-0.33935882833839015, vi:0.01241221397155972},
-		{label:"Comstock & Webster 1969", yi:0.4459134005713783, vi:0.5325058452001528},
-		{label:"Comstock 1976", yi:-0.017313948216879493, vi:0.0714046596839863}
-	  ],
-	  expected: {
-		FE: -0.436,
-		RE: -0.714,
-		tau2: 0.313,
-		I2: 92.2
-	  },
-	  citation: "BCG vaccine meta-analysis (colditz et al.), verified by metafor rma()"
-	},
+  // ----------------------------------------------------------------
+  // OR — BCG Vaccine (dat.bcg, log odds ratio)
+  // Same 13 studies as GENERIC benchmark above; raw 2x2 counts used here
+  // to exercise the compute("OR") pipeline.
+  // yi = ln(a*d / b*c),  vi = 1/a + 1/b + 1/c + 1/d
+  // Per-study yi computed from raw counts (verified by hand).
+  // Pooled FE/RE/τ²/I² confirmed from metafor test files (DL method;
+  // REML not independently confirmed for OR in available test files).
+  // ----------------------------------------------------------------
+  {
+    name: "BCG Vaccine – OR (dat.bcg, DL)",
+    type: "OR",
+    tauMethod: "DL",
+    data: [
+      { label: "Aronson 1948",           a:   4, b:   119, c:  11, d:   128 },
+      { label: "Ferguson & Simes 1949",  a:   6, b:   300, c:  29, d:   274 },
+      { label: "Rosenthal 1960",         a:   3, b:   228, c:  11, d:   209 },
+      { label: "Hart & Sutherland 1977", a:  62, b: 13536, c: 248, d: 12619 },
+      { label: "Frimodt-Moller 1973",    a:  33, b:  5036, c:  47, d:  5761 },
+      { label: "Stein & Aronson 1953",   a: 180, b:  1361, c: 372, d:  1079 },
+      { label: "Vandiviere 1973",        a:   8, b:  2537, c:  10, d:   619 },
+      { label: "TPT Madras 1980",        a: 505, b: 87886, c: 499, d: 87892 },
+      { label: "Coetzee & Berjak 1968",  a:  29, b:  7470, c:  45, d:  7232 },
+      { label: "Rosenthal 1961",         a:  17, b:  1699, c:  65, d:  1600 },
+      { label: "Comstock 1974",          a: 186, b: 50448, c: 141, d: 27197 },
+      { label: "Comstock & Webster 1969",a:   5, b:  2493, c:   3, d:  2338 },
+      { label: "Comstock 1976",          a:  27, b: 16886, c:  29, d: 17825 }
+    ],
+    expected: {
+      // ln(a*d / b*c) per study, computed from raw counts
+      yi:   [-0.9389, -1.6658, -1.3863, -1.4564, -0.2189, -0.9581,
+             -1.6338,  0.0120, -0.4715, -1.4012, -0.3407,  0.4468, -0.0173],
+      FE:   -0.436,
+      RE:   -0.747,
+      tau2:  0.366,
+      I2:   92.65
+    },
+    citation: "Colditz et al. (1994) JAMA 271:698–702. dat.bcg in metafor. DL pooled values from metafor test suite."
+  },
 
-	// metafor dataset dat.normand1999 (SMD example)
-	{
-	  name: "Normand 1999 – SMD (yi/vi, metafor exact)",
-	  type: "GENERIC",
-	  data: [
-		// yi and vi computed using metafor’s escalc()
-		{ label: "Study 1", yi: -0.294651213, vi: 0.043565782 },
-		{ label: "Study 2", yi: -0.418634120, vi: 0.049764896 },
-		{ label: "Study 3", yi: -0.102938011, vi: 0.065182371 },
-		{ label: "Study 4", yi: -0.321734128, vi: 0.057219512 },
-		{ label: "Study 5", yi: -0.489702445, vi: 0.048372340 }
-	  ],
-	  expected: {
-		FE: -0.357,   // fixed-effect pooled SMD (log scale)
-		RE: -0.357,   // random-effects (REML) also approximately same
-		tau2: 0.000,  // very low heterogeneity
-		I2: 0.000     // essentially 0
-	  },
-	  citation: "R metafor escalc() SMD example (Normand 1999)"
-	},
-	
-	{
-	  name: "Heterogeneous SMD – yi/vi (metafor test)",
-	  type: "GENERIC",
-	  data: [
-		{ label: "Study 1", yi: 0.225, vi: 0.021 },
-		{ label: "Study 2", yi: 0.567, vi: 0.030 },
-		{ label: "Study 3", yi: -0.112, vi: 0.025 },
-		{ label: "Study 4", yi: 0.889, vi: 0.035 },
-		{ label: "Study 5", yi: 0.342, vi: 0.028 }
-	  ],
-	  expected: {
-		FE: 0.384,   // fixed-effect pooled
-		RE: 0.401,   // random-effects (REML)
-		tau2: 0.048, // noticeable heterogeneity
-		I2: 55.3     // moderate heterogeneity (%)
-	  },
-	  citation: "Synthetic meta-analysis from metafor for SMD heterogeneity"
-	},
-	
-	// ---------------- SMD Benchmark – Small Textbook Example (metafor-style) ----------------
-	{
-	  name: "Textbook SMD – Metafor Exact",
-	  type: "SMD",
-	  correction: "hedges",       // Hedges' g applied
-	  tauMethod: "REML",           // tau² method
-	  ciMethod: "normal",          // CI method
-	  data: [
-		{ label: "Study A", m1: 10, sd1: 2, n1: 20, m2: 12, sd2: 3, n2: 20 },
-		{ label: "Study B", m1: 15, sd1: 4, n1: 25, m2: 14, sd2: 3, n2: 25 },
-		{ label: "Study C", m1: 8, sd1: 1.5, n1: 15, m2: 9, sd2: 1.7, n2: 15 }
-	  ],
-	  // Expected values computed using metafor (full precision)
-	  expected: {
-		yi: [
-		  -0.7688791523298342,
-		  0.27840015678130037,
-		  -0.6069238652936485
-		],
-		vi: [
-		  0.1076923076923077,
-		  0.0808,
-		  0.13981841763942932
-		],
-		FE: -0.279085,     // Fixed-effect SMD
-		RE: -0.329374,     // Random-effect SMD (tau² estimated via REML)
-		tau2: 0.005,       // Random-effect variance
-		I2: 5.0            // Heterogeneity %
-	  }
-	}
+  // ----------------------------------------------------------------
+  // RR — BCG Vaccine (dat.bcg, log risk ratio)
+  // Same raw counts as OR benchmark above.
+  // yi = ln((a/(a+b)) / (c/(c+d))),  vi = (1/a - 1/(a+b)) + (1/c - 1/(c+d))
+  // Per-study yi rounded from full-precision metafor values in GENERIC benchmark.
+  // Pooled FE/RE/τ²/I² confirmed from metadat HTML documentation (REML).
+  // ----------------------------------------------------------------
+  {
+    name: "BCG Vaccine – RR (dat.bcg, REML)",
+    type: "RR",
+    tauMethod: "REML",
+    data: [
+      { label: "Aronson 1948",           a:   4, b:   119, c:  11, d:   128 },
+      { label: "Ferguson & Simes 1949",  a:   6, b:   300, c:  29, d:   274 },
+      { label: "Rosenthal 1960",         a:   3, b:   228, c:  11, d:   209 },
+      { label: "Hart & Sutherland 1977", a:  62, b: 13536, c: 248, d: 12619 },
+      { label: "Frimodt-Moller 1973",    a:  33, b:  5036, c:  47, d:  5761 },
+      { label: "Stein & Aronson 1953",   a: 180, b:  1361, c: 372, d:  1079 },
+      { label: "Vandiviere 1973",        a:   8, b:  2537, c:  10, d:   619 },
+      { label: "TPT Madras 1980",        a: 505, b: 87886, c: 499, d: 87892 },
+      { label: "Coetzee & Berjak 1968",  a:  29, b:  7470, c:  45, d:  7232 },
+      { label: "Rosenthal 1961",         a:  17, b:  1699, c:  65, d:  1600 },
+      { label: "Comstock 1974",          a: 186, b: 50448, c: 141, d: 27197 },
+      { label: "Comstock & Webster 1969",a:   5, b:  2493, c:   3, d:  2338 },
+      { label: "Comstock 1976",          a:  27, b: 16886, c:  29, d: 17825 }
+    ],
+    expected: {
+      // Rounded from full-precision metafor values in the GENERIC benchmark above
+      yi:   [-0.8893, -1.5854, -1.3481, -1.4416, -0.2175, -0.7861,
+             -1.6209,  0.0120, -0.4694, -1.3713, -0.3394,  0.4459, -0.0173],
+      FE:   -0.430,
+      RE:   -0.715,
+      tau2:  0.313,
+      I2:   92.2
+    },
+    citation: "Colditz et al. (1994) JAMA 271:698–702. dat.bcg in metafor. REML pooled values from metadat HTML docs."
+  },
 
+  // ----------------------------------------------------------------
+  // RD — BCG Vaccine (dat.bcg, risk difference)
+  // Same raw counts as OR/RR benchmarks above.
+  // yi = a/(a+b) - c/(c+d),  vi = risk1*(1-risk1)/(a+b) + risk2*(1-risk2)/(c+d)
+  // Per-study yi computed from raw counts (verified by hand).
+  // Pooled FE/RE/τ²/I² from agent research (DL; REML not confirmed for RD).
+  // τ² is close to zero in absolute terms (~2e-5) but I² is high because
+  // the per-study vi are also tiny for the large-n studies.
+  // ----------------------------------------------------------------
+  {
+    name: "BCG Vaccine – RD (dat.bcg, DL)",
+    type: "RD",
+    tauMethod: "DL",
+    data: [
+      { label: "Aronson 1948",           a:   4, b:   119, c:  11, d:   128 },
+      { label: "Ferguson & Simes 1949",  a:   6, b:   300, c:  29, d:   274 },
+      { label: "Rosenthal 1960",         a:   3, b:   228, c:  11, d:   209 },
+      { label: "Hart & Sutherland 1977", a:  62, b: 13536, c: 248, d: 12619 },
+      { label: "Frimodt-Moller 1973",    a:  33, b:  5036, c:  47, d:  5761 },
+      { label: "Stein & Aronson 1953",   a: 180, b:  1361, c: 372, d:  1079 },
+      { label: "Vandiviere 1973",        a:   8, b:  2537, c:  10, d:   619 },
+      { label: "TPT Madras 1980",        a: 505, b: 87886, c: 499, d: 87892 },
+      { label: "Coetzee & Berjak 1968",  a:  29, b:  7470, c:  45, d:  7232 },
+      { label: "Rosenthal 1961",         a:  17, b:  1699, c:  65, d:  1600 },
+      { label: "Comstock 1974",          a: 186, b: 50448, c: 141, d: 27197 },
+      { label: "Comstock & Webster 1969",a:   5, b:  2493, c:   3, d:  2338 },
+      { label: "Comstock 1976",          a:  27, b: 16886, c:  29, d: 17825 }
+    ],
+    expected: {
+      // risk1 - risk2 per study, computed from raw counts
+      yi:   [-0.04662, -0.07610, -0.03701, -0.01471, -0.00158, -0.13957,
+             -0.01276,  0.00007, -0.00232, -0.02913, -0.00148,  0.00072, -0.00003],
+      FE:   -0.0009,
+      RE:   -0.0071,
+      tau2:  0.00002,
+      I2:   95.66
+    },
+    citation: "Colditz et al. (1994) JAMA 271:698–702. dat.bcg in metafor. DL pooled values from agent research; Q=276.47 confirmed."
+  },
+
+  // ----------------------------------------------------------------
+  // MD — Normand 1999 (dat.normand1999)
+  // Source: Normand SLT (1999). Stat Med 18(3), 321–359.
+  // Stroke rehabilitation: specialist (group 1) vs routine care (group 2).
+  // yi = m1 - m2 (days); negative = specialist care shorter stay.
+  // vi = sd1²/n1 + sd2²/n2  (app formula, matches metadat HTML docs).
+  // Expected values confirmed from metafor rma(measure="MD", method="REML").
+  // ----------------------------------------------------------------
+  {
+    name: "Normand 1999 – MD (dat.normand1999, REML)",
+    type: "MD",
+    tauMethod: "REML",
+    data: [
+      { label: "Edinburgh",          n1: 155, m1:  55, sd1: 47, n2: 156, m2:  75, sd2: 64 },
+      { label: "Orpington-Mild",     n1:  31, m1:  27, sd1:  7, n2:  32, m2:  29, sd2:  4 },
+      { label: "Orpington-Moderate", n1:  75, m1:  64, sd1: 17, n2:  71, m2: 119, sd2: 29 },
+      { label: "Orpington-Severe",   n1:  18, m1:  66, sd1: 20, n2:  18, m2: 137, sd2: 48 },
+      { label: "Montreal-Home",      n1:   8, m1:  14, sd1:  8, n2:  13, m2:  18, sd2: 11 },
+      { label: "Montreal-Transfer",  n1:  57, m1:  19, sd1:  7, n2:  52, m2:  18, sd2:  4 },
+      { label: "Newcastle",          n1:  34, m1:  52, sd1: 45, n2:  33, m2:  41, sd2: 34 },
+      { label: "Umea",               n1: 110, m1:  21, sd1: 16, n2: 183, m2:  31, sd2: 27 },
+      { label: "Uppsala",            n1:  60, m1:  30, sd1: 27, n2:  52, m2:  23, sd2: 20 }
+    ],
+    expected: {
+      // yi = m1 - m2 (days); exact integer differences
+      yi:   [-20, -2, -55, -71, -4, 1, 11, -10, 7],
+      FE:   -3.464,
+      RE:   -15.106,
+      tau2:  684.6,
+      I2:   96.65
+    },
+    citation: "Normand (1999) Stat Med 18:321–359. dat.normand1999 in metafor."
+  },
+
+  // ----------------------------------------------------------------
+  // SMD (Hedges' g) — Normand 1999, first 4 studies
+  // Same source as MD benchmark above; subset of 4 studies used because
+  // REML τ²=1.009 is confirmed from a metafor test file for this subset.
+  // Per-study g values confirmed against metafor escalc(measure="SMD") output.
+  // ----------------------------------------------------------------
+  {
+    name: "Normand 1999 – SMD Hedges' g, 4 studies (REML)",
+    type: "SMD",
+    correction: "hedges",
+    tauMethod: "REML",
+    data: [
+      { label: "Edinburgh",          n1: 155, m1:  55, sd1: 47, n2: 156, m2:  75, sd2: 64 },
+      { label: "Orpington-Mild",     n1:  31, m1:  27, sd1:  7, n2:  32, m2:  29, sd2:  4 },
+      { label: "Orpington-Moderate", n1:  75, m1:  64, sd1: 17, n2:  71, m2: 119, sd2: 29 },
+      { label: "Orpington-Severe",   n1:  18, m1:  66, sd1: 20, n2:  18, m2: 137, sd2: 48 }
+    ],
+    expected: {
+      // Hedges' g per study, confirmed from metafor escalc(measure="SMD")
+      yi:   [-0.3552, -0.3479, -2.3176, -1.8880],
+      FE:   -0.788,
+      RE:   -1.207,
+      tau2:  1.009,
+      I2:   96.0
+    },
+    citation: "Normand (1999) Stat Med 18:321–359. dat.normand1999 in metafor. REML τ²=1.009 from metafor test suite."
+  },
+
+  // ----------------------------------------------------------------
+  // MD_paired — Morris (2008), treatment arm (5 studies)
+  // Source: Morris SB (2008). Org Res Methods 11(2), 364–386.
+  // yi = m_post - m_pre
+  // sd_change = sqrt(sd_pre² + sd_post² - 2·r·sd_pre·sd_post)
+  // vi = sd_change² / n
+  // Per-study yi/vi verified by hand. Pooled values from metafor test suite.
+  // ----------------------------------------------------------------
+  {
+    name: "Morris 2008 – MD_paired (REML)",
+    type: "MD_paired",
+    tauMethod: "REML",
+    data: [
+      { label: "Study 1", m_pre: 30.6, m_post: 38.5, sd_pre: 15.0, sd_post: 11.6, n: 20, r: 0.47 },
+      { label: "Study 2", m_pre: 23.5, m_post: 26.8, sd_pre:  3.1, sd_post:  4.1, n: 50, r: 0.64 },
+      { label: "Study 3", m_pre:  0.5, m_post:  0.7, sd_pre:  0.1, sd_post:  0.1, n:  9, r: 0.77 },
+      { label: "Study 4", m_pre: 53.4, m_post: 75.9, sd_pre: 14.5, sd_post:  4.4, n: 10, r: 0.89 },
+      { label: "Study 5", m_pre: 35.6, m_post: 36.0, sd_pre:  4.7, sd_post:  4.6, n: 14, r: 0.44 }
+    ],
+    expected: {
+      // yi = m_post - m_pre (exact); vi verified by hand
+      yi:   [7.9, 3.3, 0.2, 22.5, 0.4],
+      FE:    0.209,
+      RE:    6.416,
+      tau2: 73.57,
+      I2:   95.84
+    },
+    citation: "Morris (2008) Org Res Methods 11:364–386. Pooled values from metafor test suite."
+  },
+
+  // ----------------------------------------------------------------
+  // SMD_paired — Morris (2008), treatment arm (5 studies)
+  // Same raw data as MD_paired benchmark above.
+  // d = (m_post - m_pre) / sd_change,  g = d · J(n-1),  vi = 1/n + d²/(2n)
+  // where J(df) = 1 - 3/(4·df - 1)  (Hedges' correction)
+  // Per-study g/vi verified by hand. Pooled values from metafor test suite.
+  // ----------------------------------------------------------------
+  {
+    name: "Morris 2008 – SMD_paired (REML)",
+    type: "SMD_paired",
+    tauMethod: "REML",
+    data: [
+      { label: "Study 1", m_pre: 30.6, m_post: 38.5, sd_pre: 15.0, sd_post: 11.6, n: 20, r: 0.47 },
+      { label: "Study 2", m_pre: 23.5, m_post: 26.8, sd_pre:  3.1, sd_post:  4.1, n: 50, r: 0.64 },
+      { label: "Study 3", m_pre:  0.5, m_post:  0.7, sd_pre:  0.1, sd_post:  0.1, n:  9, r: 0.77 },
+      { label: "Study 4", m_pre: 53.4, m_post: 75.9, sd_pre: 14.5, sd_post:  4.4, n: 10, r: 0.89 },
+      { label: "Study 5", m_pre: 35.6, m_post: 36.0, sd_pre:  4.7, sd_post:  4.6, n: 14, r: 0.44 }
+    ],
+    expected: {
+      // Hedges' g per study, verified by hand against app formula
+      yi:   [0.5417, 1.0201, 2.6639, 1.9093, 0.0765],
+      FE:    0.789,
+      RE:    1.062,
+      tau2:  0.651,
+      I2:   79.73
+    },
+    citation: "Morris (2008) Org Res Methods 11:364–386. Pooled values from metafor test suite."
+  }
 
 ];
