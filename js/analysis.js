@@ -167,6 +167,60 @@ export function compute(s, type, options = {}) {
     return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
   }
 
+  // ================= PROPORTIONS =================
+  // Input: { x, n }  where x = events, n = total (both non-negative integers).
+  // PLN and PLO apply a continuity correction (x += 0.5, n += 1) when x = 0
+  // or x = n, matching the OR/RR zero-cell convention.
+  if (type === "PR" || type === "PLN" || type === "PLO" ||
+      type === "PAS" || type === "PFT") {
+    let { x, n } = s;
+
+    if (!isFinite(x) || !isFinite(n) || n < 1 || x < 0 || x > n)
+      return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+
+    // Continuity correction for boundary proportions on log/logit scale
+    if ((type === "PLN" || type === "PLO") && (x === 0 || x === n)) {
+      x += 0.5;
+      n += 1;
+    }
+
+    const p = x / n;
+    let yi, vi;
+
+    if (type === "PR") {
+      // Raw proportion: yi = p,  vi = p(1−p)/n
+      yi = p;
+      vi = p * (1 - p) / n;
+
+    } else if (type === "PLN") {
+      // Log proportion: yi = ln(p),  vi = (1−p)/(n·p)
+      if (p <= 0) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+      yi = Math.log(p);
+      vi = (1 - p) / (n * p);
+
+    } else if (type === "PLO") {
+      // Logit: yi = ln(p/(1−p)),  vi = 1/(n·p·(1−p))
+      if (p <= 0 || p >= 1) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+      yi = Math.log(p / (1 - p));
+      vi = 1 / (n * p * (1 - p));
+
+    } else if (type === "PAS") {
+      // Arcsine (single): yi = arcsin(√p),  vi = 1/(4n)
+      yi = Math.asin(Math.sqrt(p));
+      vi = 1 / (4 * n);
+
+    } else {
+      // PFT — Freeman-Tukey double arcsine:
+      // yi = arcsin(√(x/(n+1))) + arcsin(√((x+1)/(n+1))),  vi = 1/(n+0.5)
+      yi = Math.asin(Math.sqrt(x / (n + 1))) +
+           Math.asin(Math.sqrt((x + 1) / (n + 1)));
+      vi = 1 / (n + 0.5);
+    }
+
+    const safeVi = Math.max(vi, MIN_VAR);
+    return { ...s, yi, vi: safeVi, se: Math.sqrt(safeVi), w: 1 / safeVi };
+  }
+
 	// ================ GENERIC ===============
 	if (type === "GENERIC") {
 	  return {
@@ -885,6 +939,23 @@ export function validateStudy(study, type) {
     if (!isFinite(study.sd_post) || study.sd_post <= 0) { valid = false; errors.sd_post = "sd_post must be > 0"; }
     if (!isFinite(study.n) || study.n < 2)  { valid = false; errors.n = "n must be ≥ 2"; }
     if (isFinite(study.r) && (study.r < -1 || study.r > 1)) { valid = false; errors.r = "r must be between -1 and 1"; }
+  }
+  else if (type === "COR" || type === "ZCOR") {
+    if (!isFinite(study.r) || Math.abs(study.r) >= 1) { valid = false; errors.r = "r must be strictly between -1 and 1"; }
+    const minN = type === "ZCOR" ? 4 : 3;
+    if (!isFinite(study.n) || study.n < minN) { valid = false; errors.n = `n must be ≥ ${minN}`; }
+  }
+  else if (type === "PR" || type === "PLN" || type === "PLO" ||
+           type === "PAS" || type === "PFT") {
+    if (!isFinite(study.x) || !Number.isInteger(study.x) || study.x < 0) {
+      valid = false; errors.x = "x must be a non-negative integer";
+    }
+    if (!isFinite(study.n) || study.n < 1) {
+      valid = false; errors.n = "n must be ≥ 1";
+    }
+    if (isFinite(study.x) && isFinite(study.n) && study.x > study.n) {
+      valid = false; errors.x = "x cannot exceed n";
+    }
   }
   else if (type === "GENERIC") {
     if (!isFinite(study.yi)) { valid = false; errors.yi = "yi must be numeric"; }

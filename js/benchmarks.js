@@ -329,6 +329,107 @@ export const BENCHMARKS = [
       I2:   79.73
     },
     citation: "Morris (2008) Org Res Methods 11:364–386. Pooled values from metafor test suite."
+  },
+
+  // ----------------------------------------------------------------
+  // PR — Synthetic proportion dataset (raw proportion)
+  // 4 studies with x/n data, equal n=100.
+  // yi = p = x/n,  vi = p(1-p)/n.
+  // Per-study yi exact; FE/RE/tau2/I2 computed analytically (DL).
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic Proportion – PR (DL)",
+    type: "PR",
+    tauMethod: "DL",
+    data: [
+      { label: "Study 1", x: 10, n: 100 },
+      { label: "Study 2", x: 30, n: 100 },
+      { label: "Study 3", x: 20, n: 100 },
+      { label: "Study 4", x: 40, n: 100 }
+    ],
+    expected: {
+      yi:   [0.100, 0.300, 0.200, 0.400],
+      FE:    0.208,
+      RE:    0.246,
+      tau2:  0.01581,
+      I2:   90.7
+    },
+    citation: "Synthetic dataset. Expected values computed analytically from PR formulas."
+  },
+
+  // ----------------------------------------------------------------
+  // PLO — Synthetic proportion dataset (logit)
+  // Same 4 studies. yi = logit(p),  vi = 1 / (n·p·(1−p)).
+  // Per-study logit yi verified by hand. FE/RE/tau2/I2 analytic (DL).
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic Proportion – PLO (DL)",
+    type: "PLO",
+    tauMethod: "DL",
+    data: [
+      { label: "Study 1", x: 10, n: 100 },
+      { label: "Study 2", x: 30, n: 100 },
+      { label: "Study 3", x: 20, n: 100 },
+      { label: "Study 4", x: 40, n: 100 }
+    ],
+    expected: {
+      yi:   [-2.197, -0.847, -1.386, -0.405],
+      FE:   -0.993,
+      RE:   -1.174,
+      tau2:  0.4197,
+      I2:   87.6
+    },
+    citation: "Synthetic dataset. Expected values computed analytically from PLO (logit) formulas."
+  },
+
+  // ----------------------------------------------------------------
+  // PAS — Synthetic proportion dataset (arcsine square root)
+  // Same 4 studies. yi = arcsin(√p),  vi = 1/(4n).
+  // All vi equal (n=100) => RE = FE. tau2/I2 analytic (DL).
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic Proportion – PAS (DL)",
+    type: "PAS",
+    tauMethod: "DL",
+    data: [
+      { label: "Study 1", x: 10, n: 100 },
+      { label: "Study 2", x: 30, n: 100 },
+      { label: "Study 3", x: 20, n: 100 },
+      { label: "Study 4", x: 40, n: 100 }
+    ],
+    expected: {
+      yi:   [0.322, 0.580, 0.464, 0.685],
+      FE:    0.513,
+      RE:    0.513,
+      tau2:  0.02186,
+      I2:   89.7
+    },
+    citation: "Synthetic dataset. Expected values computed analytically from PAS (arcsine) formulas."
+  },
+
+  // ----------------------------------------------------------------
+  // PFT — Synthetic proportion dataset (Freeman-Tukey double-arcsine)
+  // Same 4 studies. yi = arcsin(√(x/(n+1))) + arcsin(√((x+1)/(n+1)))
+  // vi = 1/(n+0.5). Equal vi => RE = FE. tau2/I2 analytic (DL).
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic Proportion – PFT (DL)",
+    type: "PFT",
+    tauMethod: "DL",
+    data: [
+      { label: "Study 1", x: 10, n: 100 },
+      { label: "Study 2", x: 30, n: 100 },
+      { label: "Study 3", x: 20, n: 100 },
+      { label: "Study 4", x: 40, n: 100 }
+    ],
+    expected: {
+      yi:   [0.656, 1.162, 0.934, 1.371],
+      FE:    1.031,
+      RE:    1.031,
+      tau2:  0.08445,
+      I2:   89.5
+    },
+    citation: "Synthetic dataset. Expected values computed analytically from PFT (Freeman-Tukey) formulas."
   }
 
 ];

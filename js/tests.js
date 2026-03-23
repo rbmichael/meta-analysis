@@ -248,4 +248,102 @@ export function runTests() {
   cchkNaN("COR  n=1  → NaN",  compute({ r:  0.5, n:  1 }, "COR" ).yi);
 
   console.log(corPass ? "\n✅ ALL COR/ZCOR UNIT TESTS PASSED" : "\n❌ SOME COR/ZCOR UNIT TESTS FAILED");
+
+  // ===== PROPORTION UNIT TESTS =====
+  // Spot-checks for each proportion type: compute() formulas and back-transforms.
+  // All expected values computed analytically.
+  console.log("\n===== PROPORTION UNIT TESTS =====\n");
+  let propPass = true;
+
+  function pchk(name, val, expected, tol = 1e-4) {
+    const ok = isFinite(val) && Math.abs(val - expected) < tol;
+    console.log(`  ${name}: ${round(val, 6)} (expected ${round(expected, 6)}) → ${ok ? "PASS" : "FAIL"}`);
+    if (!ok) propPass = false;
+  }
+  function pchkNaN(name, val) {
+    const ok = !isFinite(val);
+    console.log(`  ${name}: ${val} → ${ok ? "PASS (NaN/Inf as expected)" : "FAIL (expected NaN)"}`);
+    if (!ok) propPass = false;
+  }
+
+  // 1. PR: yi = p, vi = p(1-p)/n
+  console.log("--- PR compute() ---");
+  {
+    const s = compute({ x: 20, n: 100 }, "PR");
+    pchk("yi = 0.2",           s.yi, 0.2);
+    pchk("vi = 0.2*0.8/100",   s.vi, 0.0016);
+    pchk("se = sqrt(vi)",      s.se, Math.sqrt(0.0016));
+  }
+
+  // 2. PLN: yi = ln(p), vi = (1-p)/(n*p); continuity correction for x=0
+  console.log("--- PLN compute() ---");
+  {
+    const s = compute({ x: 20, n: 100 }, "PLN");
+    pchk("yi = ln(0.2)",       s.yi, Math.log(0.2));
+    pchk("vi = 0.8/(100*0.2)", s.vi, 0.8 / 20);
+  }
+  {
+    // x=0: continuity correction → x=0.5, n=101, p=0.5/101
+    const s0 = compute({ x: 0, n: 100 }, "PLN");
+    const p0 = 0.5 / 101;
+    pchk("PLN x=0 yi = ln(0.5/101)", s0.yi, Math.log(p0), 1e-6);
+  }
+
+  // 3. PLO: yi = logit(p) = ln(p/(1-p)), vi = 1/(n*p*(1-p))
+  console.log("--- PLO compute() ---");
+  {
+    const s = compute({ x: 20, n: 100 }, "PLO");
+    pchk("yi = logit(0.2)",    s.yi, Math.log(0.2 / 0.8));
+    pchk("vi = 1/(100*0.16)", s.vi, 1 / 16);
+  }
+  {
+    // x=n=100: continuity correction → x=100.5, n=101, p=100.5/101
+    const sn = compute({ x: 100, n: 100 }, "PLO");
+    const pn = 100.5 / 101;
+    pchk("PLO x=n yi = logit(100.5/101)", sn.yi, Math.log(pn / (1 - pn)), 1e-6);
+  }
+
+  // 4. PAS: yi = arcsin(sqrt(p)), vi = 1/(4n)
+  console.log("--- PAS compute() ---");
+  {
+    const s = compute({ x: 20, n: 100 }, "PAS");
+    pchk("yi = arcsin(sqrt(0.2))", s.yi, Math.asin(Math.sqrt(0.2)));
+    pchk("vi = 1/400",             s.vi, 1 / 400);
+  }
+
+  // 5. PFT: yi = arcsin(sqrt(x/(n+1))) + arcsin(sqrt((x+1)/(n+1))), vi = 1/(n+0.5)
+  console.log("--- PFT compute() ---");
+  {
+    const s = compute({ x: 20, n: 100 }, "PFT");
+    const expected_yi = Math.asin(Math.sqrt(20 / 101)) + Math.asin(Math.sqrt(21 / 101));
+    pchk("yi = arcsin(sqrt(20/101)) + arcsin(sqrt(21/101))", s.yi, expected_yi);
+    pchk("vi = 1/100.5", s.vi, 1 / 100.5);
+  }
+
+  // 6. Back-transforms: transformEffect
+  console.log("--- Proportion back-transforms ---");
+  pchk("PR back-transform (identity)",        transformEffect(0.3, "PR"),  0.3);
+  pchk("PLN back-transform exp(-1.6094)",     transformEffect(Math.log(0.2), "PLN"), 0.2, 1e-10);
+  pchk("PLO back-transform logistic(-1.386)", transformEffect(Math.log(0.2/0.8), "PLO"), 0.2, 1e-10);
+  pchk("PAS back-transform sin²(arcsin(√0.2))", transformEffect(Math.asin(Math.sqrt(0.2)), "PAS"), 0.2, 1e-10);
+  {
+    const yiFT = Math.asin(Math.sqrt(20/101)) + Math.asin(Math.sqrt(21/101));
+    pchk("PFT back-transform ≈ 0.2", transformEffect(yiFT, "PFT"), 0.2, 0.01);
+  }
+
+  // 7. Clamping: back-transforms never exceed [0,1]
+  console.log("--- Proportion clamping ---");
+  pchk("PLN clamp upper (large yi)",  transformEffect(100, "PLN"), 1.0);
+  pchk("PLN clamp lower (small yi)",  transformEffect(-100, "PLN"), 0.0);
+  pchk("PLO clamp upper (large yi)",  transformEffect(100, "PLO"), 1.0);
+  pchk("PLO clamp lower (small yi)",  transformEffect(-100, "PLO"), 0.0);
+
+  // 8. Edge cases: invalid inputs return NaN
+  console.log("--- Proportion edge cases ---");
+  pchkNaN("PR  x<0   → NaN", compute({ x: -1, n: 100 }, "PR").yi);
+  pchkNaN("PR  x>n   → NaN", compute({ x: 110, n: 100 }, "PR").yi);
+  pchkNaN("PLN n=0   → NaN", compute({ x: 0, n: 0 }, "PLN").yi);
+  pchkNaN("PFT n<1   → NaN", compute({ x: 0, n: 0 }, "PFT").yi);
+
+  console.log(propPass ? "\n✅ ALL PROPORTION UNIT TESTS PASSED" : "\n❌ SOME PROPORTION UNIT TESTS FAILED");
 }

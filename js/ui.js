@@ -79,6 +79,46 @@ const effectProfiles = {
     transformCI: (lb, ub) => transformCI(lb, ub, "ZCOR")
   },
 
+  "PR": {
+    label: "Proportion (raw)",
+    inputs: ["x", "n"],
+    compute: (data) => compute(data, "PR"),
+    transform: (x) => transformEffect(x, "PR"),
+    transformCI: (lb, ub) => transformCI(lb, ub, "PR")
+  },
+
+  "PLN": {
+    label: "Proportion (log)",
+    inputs: ["x", "n"],
+    compute: (data) => compute(data, "PLN"),
+    transform: (x) => transformEffect(x, "PLN"),
+    transformCI: (lb, ub) => transformCI(lb, ub, "PLN")
+  },
+
+  "PLO": {
+    label: "Proportion (logit)",
+    inputs: ["x", "n"],
+    compute: (data) => compute(data, "PLO"),
+    transform: (x) => transformEffect(x, "PLO"),
+    transformCI: (lb, ub) => transformCI(lb, ub, "PLO")
+  },
+
+  "PAS": {
+    label: "Proportion (arcsine)",
+    inputs: ["x", "n"],
+    compute: (data) => compute(data, "PAS"),
+    transform: (x) => transformEffect(x, "PAS"),
+    transformCI: (lb, ub) => transformCI(lb, ub, "PAS")
+  },
+
+  "PFT": {
+    label: "Proportion (Freeman-Tukey)",
+    inputs: ["x", "n"],
+    compute: (data) => compute(data, "PFT"),
+    transform: (x) => transformEffect(x, "PFT"),
+    transformCI: (lb, ub) => transformCI(lb, ub, "PFT")
+  },
+
   "GENERIC": {
     label: "Generic (yi / vi)",
     inputs: ["yi", "vi"],
@@ -327,6 +367,17 @@ function validateRow(row) {
       const minN = type === "ZCOR" ? 4 : type === "COR" ? 3 : 2;
       if (num < minN) { inputValid = false; errorMsg = `n must be ≥ ${minN}${type === "ZCOR" ? " for Fisher's z" : ""}`; }
     }
+    if (key === "x") {
+      if (!Number.isInteger(num) || num < 0) { inputValid = false; errorMsg = "x must be a non-negative integer"; }
+      else {
+        // Check x ≤ n in the same row
+        const nInput = Array.from(row.querySelectorAll("input")).find(
+          (el, i) => i > 0 && profile.inputs[i - 1] === "n"
+        );
+        const nVal = nInput ? +nInput.value : NaN;
+        if (isFinite(nVal) && num > nVal) { inputValid = false; errorMsg = "x cannot exceed n"; }
+      }
+    }
     // r as pre-post correlation (paired designs): allow [-1, 1]
     // r as Pearson correlation (COR/ZCOR): must be strictly within (-1, 1)
     if (key === "r" && (type === "COR" || type === "ZCOR")) {
@@ -401,6 +452,26 @@ function getSoftWarnings(studyInput, type, label) {
     }
     if (isFinite(r) && Math.abs(r) > 0.9) {
       warnings.push(`⚠️ ${label}: |r| > 0.90 — variance estimate near boundary, interpret cautiously`);
+    }
+  }
+
+  else if (type === "PR" || type === "PLN" || type === "PLO" ||
+           type === "PAS" || type === "PFT") {
+    const { x, n } = studyInput;
+    if (isFinite(n) && n < 20) {
+      warnings.push(`⚠️ ${label}: small sample size (n < 20) — proportion estimate unreliable`);
+    }
+    if (isFinite(x) && isFinite(n) && n > 0) {
+      const p = x / n;
+      if (p === 0 || p === 1) {
+        if (type === "PR") {
+          warnings.push(`⚠️ ${label}: extreme proportion (0 or 1) — variance is zero, study has no weight`);
+        }
+        // PLN/PLO: continuity correction applied automatically
+        // PAS/PFT: formula is well-defined at boundaries, no correction needed
+      } else if (p < 0.05 || p > 0.95) {
+        warnings.push(`⚠️ ${label}: extreme proportion (< 5% or > 95%) — consider log or logit transform`);
+      }
     }
   }
 
@@ -654,6 +725,41 @@ function populateExampleData(type) {
       ["Study 3", 0.38, 45, ""],
       ["Study 4", 0.61, 120, ""],
       ["Study 5", 0.42, 75, ""]
+    ],
+    "PR": [
+      ["Study 1", 12, 80, ""],
+      ["Study 2", 25, 120, ""],
+      ["Study 3", 8,  60, ""],
+      ["Study 4", 40, 200, ""],
+      ["Study 5", 18, 100, ""]
+    ],
+    "PLN": [
+      ["Study 1", 12, 80, ""],
+      ["Study 2", 25, 120, ""],
+      ["Study 3", 8,  60, ""],
+      ["Study 4", 40, 200, ""],
+      ["Study 5", 18, 100, ""]
+    ],
+    "PLO": [
+      ["Study 1", 12, 80, ""],
+      ["Study 2", 25, 120, ""],
+      ["Study 3", 8,  60, ""],
+      ["Study 4", 40, 200, ""],
+      ["Study 5", 18, 100, ""]
+    ],
+    "PAS": [
+      ["Study 1", 12, 80, ""],
+      ["Study 2", 25, 120, ""],
+      ["Study 3", 8,  60, ""],
+      ["Study 4", 40, 200, ""],
+      ["Study 5", 18, 100, ""]
+    ],
+    "PFT": [
+      ["Study 1", 12, 80, ""],
+      ["Study 2", 25, 120, ""],
+      ["Study 3", 8,  60, ""],
+      ["Study 4", 40, 200, ""],
+      ["Study 5", 18, 100, ""]
     ],
     "GENERIC": [
       ["Study 1", -0.889, 0.326, ""],

@@ -218,6 +218,13 @@ export function transformEffect(x, type) {
   if (type === "ZCOR") return Math.tanh(x);
   if (type === "COR")  return x;
 
+  // Proportions — all back-transform to p ∈ [0, 1]
+  if (type === "PR")  return Math.min(1, Math.max(0, x));
+  if (type === "PLN") return Math.min(1, Math.max(0, Math.exp(x)));
+  if (type === "PLO") return Math.min(1, Math.max(0, 1 / (1 + Math.exp(-x))));
+  if (type === "PAS") return Math.min(1, Math.max(0, Math.sin(x) ** 2));
+  if (type === "PFT") return Math.min(1, Math.max(0, Math.sin(x / 2) ** 2));
+
   // Fallback for unknown type
   console.warn("Unknown effect type in transformEffect:", type);
   return x;
@@ -243,6 +250,15 @@ export function transformCI(lb, ub, type) {
 
   if (type === "ZCOR") return { lb: Math.tanh(lb), ub: Math.tanh(ub) };
   if (type === "COR")  return { lb, ub };
+
+  // Proportions — apply same back-transform to both CI bounds
+  if (type === "PR"  || type === "PLN" || type === "PLO" ||
+      type === "PAS" || type === "PFT") {
+    return {
+      lb: transformEffect(lb, type),
+      ub: transformEffect(ub, type)
+    };
+  }
 
   console.warn("Unknown effect type in transformCI:", type);
   return { lb, ub };
