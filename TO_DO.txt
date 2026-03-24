@@ -54,16 +54,14 @@ BUG 4 [MEDIUM] ✓ RESOLVED 2026-03-25: Unbounded bisection loop in heterogeneit
            propagating as the bisection start point.
 
 --------------------------------------------------------------------------------
-BUG 5 [MEDIUM]: Correlation input not clamped away from ±1 singularity
+BUG 5 [MEDIUM] ✓ RESOLVED 2026-03-25: Correlation input not clamped away from ±1 singularity
 
-  File:    js/analysis.js ~ COR / ZCOR / PCOR / ZPCOR blocks
-  Symptom: Fisher's z-transform atanh(r) and its variance (1-r²)²/(n-1) have
-           singularities at r = ±1. If a user enters r = 1 or r = -1 the
-           transform yields ±Infinity and vi → 0 (clamped to MIN_VAR 1e-8),
-           causing that study to dominate the pooled estimate with near-infinite
-           weight.
-  Fix:     Clamp r to [-0.9999, 0.9999] and emit a validation warning if the
-           input equals ±1.
+  Was:     atanh(r) and (1-r²)²/(n-1) blow up at r = ±1. The UI path was
+           already safe (profile.compute() validates and rejects |r| ≥ 1),
+           but the standalone analysis.js compute() had no guard.
+  Fixed:   js/analysis.js — added r = Math.max(-0.9999, Math.min(0.9999, s.r))
+           at the top of both the COR/ZCOR block and the PCOR/ZPCOR block.
+           Validation warning for |r| ≥ 1 already present in profiles.js.
 
 --------------------------------------------------------------------------------
 BUG 6 [MEDIUM]: OR / RR all-zero-cell row silently produces yi = 0

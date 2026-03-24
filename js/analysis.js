@@ -199,7 +199,8 @@ export function compute(s, type, options = {}) {
 
   // ================= CORRELATION =================
   if (type === "COR" || type === "ZCOR") {
-    const { r, n } = s;
+    const { n } = s;
+    const r = Math.max(-0.9999, Math.min(0.9999, s.r));  // clamp away from ±1 singularity
 
     if (type === "COR") {
       // Raw correlation: yi = r, vi = (1−r²)²/(n−1)
@@ -218,7 +219,8 @@ export function compute(s, type, options = {}) {
   // PCOR:  yi = r,        vi = (1−r²)² / (n−p−1)
   // ZPCOR: yi = atanh(r), vi = 1 / (n−p−3)
   if (type === "PCOR" || type === "ZPCOR") {
-    const { r, n } = s;
+    const { n } = s;
+    const r = Math.max(-0.9999, Math.min(0.9999, s.r));  // clamp away from ±1 singularity
     const p = isFinite(s.p) ? s.p : 0;
 
     if (type === "PCOR") {
