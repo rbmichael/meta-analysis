@@ -1277,17 +1277,22 @@ export function heterogeneityCIs(studies, tau2, alpha = 0.05) {
 
   // --- Lower τ² bound: Q_τ(τ²_lo) = chiHi ---
   // Q is decreasing; if Q_FE ≤ chiHi, no positive solution → τ²_lo = 0.
+  const MAX_BOUND = 1e12;  // guard against unbounded doubling on pathological input
   let tau2_lo;
   if (Q_FE <= chiHi) {
     tau2_lo = 0;
   } else {
     let lo = 0, hi = Math.max(tau2, 1);
-    while (qProfile(hi, studies) > chiHi) hi *= 2;
-    for (let i = 0; i < BISECTION_ITERS; i++) {
-      const mid = (lo + hi) / 2;
-      if (qProfile(mid, studies) > chiHi) lo = mid; else hi = mid;
+    while (qProfile(hi, studies) > chiHi && hi < MAX_BOUND) hi *= 2;
+    if (qProfile(hi, studies) > chiHi) {
+      tau2_lo = NaN;  // bracket not found within MAX_BOUND
+    } else {
+      for (let i = 0; i < BISECTION_ITERS; i++) {
+        const mid = (lo + hi) / 2;
+        if (qProfile(mid, studies) > chiHi) lo = mid; else hi = mid;
+      }
+      tau2_lo = (lo + hi) / 2;
     }
-    tau2_lo = (lo + hi) / 2;
   }
 
   // --- Upper τ² bound: Q_τ(τ²_hi) = chiLo ---
@@ -1296,13 +1301,17 @@ export function heterogeneityCIs(studies, tau2, alpha = 0.05) {
   if (!isFinite(chiLo) || chiLo <= 0) {
     tau2_hi = Infinity;
   } else {
-    let lo = tau2_lo, hi = Math.max(tau2, 1);
-    while (qProfile(hi, studies) > chiLo) hi *= 2;
-    for (let i = 0; i < BISECTION_ITERS; i++) {
-      const mid = (lo + hi) / 2;
-      if (qProfile(mid, studies) > chiLo) lo = mid; else hi = mid;
+    let lo = isFinite(tau2_lo) ? tau2_lo : 0, hi = Math.max(tau2, 1);
+    while (qProfile(hi, studies) > chiLo && hi < MAX_BOUND) hi *= 2;
+    if (qProfile(hi, studies) > chiLo) {
+      tau2_hi = NaN;  // bracket not found within MAX_BOUND
+    } else {
+      for (let i = 0; i < BISECTION_ITERS; i++) {
+        const mid = (lo + hi) / 2;
+        if (qProfile(mid, studies) > chiLo) lo = mid; else hi = mid;
+      }
+      tau2_hi = (lo + hi) / 2;
     }
-    tau2_hi = (lo + hi) / 2;
   }
 
   // --- I² and H² CIs ---

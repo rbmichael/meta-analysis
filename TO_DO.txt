@@ -43,17 +43,15 @@ BUG 3 [HIGH] ✓ RESOLVED 2026-03-25: Begg's rank-correlation test missing tie c
            Degenerate case (varS ≤ 0) guarded; returns z=0, p=1.
 
 --------------------------------------------------------------------------------
-BUG 4 [MEDIUM]: Unbounded bisection loop in heterogeneityCIs()
+BUG 4 [MEDIUM] ✓ RESOLVED 2026-03-25: Unbounded bisection loop in heterogeneityCIs()
 
-  File:    js/analysis.js ~ heterogeneityCIs()
-  Symptom: Upper-bound search doubles hi indefinitely:
-             while (qProfile(hi, studies) > chiHi) hi *= 2;
-           For pathological τ²/Q combinations (e.g. very large tau with
-           near-zero within-study variances) this loop could run for hundreds
-           of iterations or overflow to Infinity.
-  Fix:     Add a guard:
-             while (qProfile(hi, studies) > chiHi && hi < 1e12) hi *= 2;
-           and return NaN bounds if the limit is hit.
+  Was:     Both upper-bound doubling loops in heterogeneityCIs() had no
+           iteration limit and could run indefinitely on pathological input.
+  Fixed:   js/analysis.js ~ heterogeneityCIs() — added MAX_BOUND = 1e12 guard
+           to both while loops; each loop now checks hi < MAX_BOUND and falls
+           through to a NaN return if the bracket is not found within that limit.
+           Upper-bound search for tau2_hi also guards against NaN tau2_lo
+           propagating as the bisection start point.
 
 --------------------------------------------------------------------------------
 BUG 5 [MEDIUM]: Correlation input not clamped away from ±1 singularity
