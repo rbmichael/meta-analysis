@@ -12,8 +12,7 @@
 //                       format: [label, ...inputs, group]
 // To back-transform a CI pair use: { lb: profile.transform(lb), ub: profile.transform(ub) }
 
-import { compute } from "./analysis.js";
-import { transformEffect } from "./utils.js";
+import { MIN_VAR, hedgesG } from "./utils.js";
 
 export const effectProfiles = {
 
@@ -21,8 +20,11 @@ export const effectProfiles = {
   "MD": {
     label:  "Mean Difference",
     inputs: ["m1", "sd1", "n1", "m2", "sd2", "n2"],
-    compute:     (data) => compute(data, "MD"),
-    transform:   (x) => transformEffect(x, "MD"),
+    compute(s) {
+      const varMD = Math.max(s.sd1**2/s.n1 + s.sd2**2/s.n2, MIN_VAR);
+      return { ...s, md: s.m1 - s.m2, varMD, se: Math.sqrt(varMD), w: 1/varMD, yi: s.m1 - s.m2, vi: varMD };
+    },
+    transform:   (x) => x,
 
     validate(s) {
       const errors = {};
@@ -57,8 +59,11 @@ export const effectProfiles = {
   "SMD": {
     label:  "Standardized Mean Difference (Hedges g)",
     inputs: ["m1", "sd1", "n1", "m2", "sd2", "n2"],
-    compute:     (data) => compute(data, "SMD", { hedgesCorrection: true }),
-    transform:   (x) => transformEffect(x, "SMD"),
+    compute(s) {
+      const g = hedgesG(s, { hedgesCorrection: true });
+      return { ...s, md: g.es, varMD: g.var, se: Math.sqrt(g.var), w: 1/g.var, yi: g.es, vi: g.var };
+    },
+    transform:   (x) => x,
 
     validate(s) {
       const errors = {};
@@ -93,8 +98,23 @@ export const effectProfiles = {
   "SMDH": {
     label:  "Standardized Mean Difference (heteroscedastic)",
     inputs: ["m1", "sd1", "n1", "m2", "sd2", "n2"],
-    compute:     (data) => compute(data, "SMDH"),
-    transform:   (x) => transformEffect(x, "SMDH"),
+    compute(s) {
+      const { m1, sd1, n1, m2, sd2, n2 } = s;
+      if (!isFinite(m1) || !isFinite(sd1) || !isFinite(n1) ||
+          !isFinite(m2) || !isFinite(sd2) || !isFinite(n2) ||
+          sd1 <= 0 || sd2 <= 0 || n1 < 2 || n2 < 2)
+        return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+      const df   = n1 + n2 - 2;
+      const sdi2 = (sd1 ** 2 + sd2 ** 2) / 2;
+      const sdi  = Math.sqrt(sdi2);
+      const d    = (m1 - m2) / sdi;
+      const J    = 1 - 3 / (4 * df - 1);
+      const g    = d * J;
+      const vi_d = (sd1 ** 2 / n1 + sd2 ** 2 / n2) / sdi2 + d ** 2 / (2 * df);
+      const vi_g = Math.max(vi_d * J ** 2, MIN_VAR);
+      return { ...s, md: g, varMD: vi_g, yi: g, vi: vi_g, se: Math.sqrt(vi_g), w: 1 / vi_g };
+    },
+    transform:   (x) => x,
 
     validate(s) {
       const errors = {};
@@ -134,8 +154,16 @@ export const effectProfiles = {
   "MD_paired": {
     label:  "Mean Difference (Paired)",
     inputs: ["m_pre", "sd_pre", "m_post", "sd_post", "n", "r"],
-    compute:     (data) => compute(data, "MD_paired"),
-    transform:   (x) => transformEffect(x, "MD_paired"),
+    compute(s) {
+      const { m_pre, m_post, sd_pre, sd_post, n, r } = s;
+      if (![m_pre, m_post, sd_pre, sd_post, n].every(isFinite) || n < 2)
+        return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+      const corr = isFinite(r) ? r : 0.5;
+      const md = m_post - m_pre;
+      const varMD = (sd_pre**2 + sd_post**2 - 2*corr*sd_pre*sd_post) / n;
+      return { ...s, yi: md, vi: Math.max(varMD, MIN_VAR), se: Math.sqrt(Math.max(varMD, MIN_VAR)), w: 1 / Math.max(varMD, MIN_VAR), md, varMD };
+    },
+    transform:   (x) => x,
 
     validate(s) {
       const errors = {};
@@ -161,8 +189,21 @@ export const effectProfiles = {
   "SMD_paired": {
     label:  "Standardized Mean Change",
     inputs: ["m_pre", "sd_pre", "m_post", "sd_post", "n", "r"],
-    compute:     (data) => compute(data, "SMD_paired"),
-    transform:   (x) => transformEffect(x, "SMD_paired"),
+    compute(s) {
+      const { m_pre, m_post, sd_pre, sd_post, n, r } = s;
+      if (![m_pre, m_post, sd_pre, sd_post, n].every(isFinite) || n < 2)
+        return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+      const corr = isFinite(r) ? r : 0.5;
+      const mean_change = m_post - m_pre;
+      const sd_change = Math.sqrt(sd_pre**2 + sd_post**2 - 2*corr*sd_pre*sd_post);
+      const d = mean_change / sd_change;
+      const df = n - 1;
+      const J = 1 - (3 / (4*df - 1));
+      const g = d * J;
+      const var_d = (1/n) + (d*d)/(2*n);
+      return { ...s, yi: g, vi: Math.max(var_d, MIN_VAR), se: Math.sqrt(Math.max(var_d, MIN_VAR)), w: 1 / Math.max(var_d, MIN_VAR), md: g, varMD: var_d };
+    },
+    transform:   (x) => x,
 
     validate(s) {
       const errors = {};
@@ -189,8 +230,17 @@ export const effectProfiles = {
     label:  "Ratio of Means (ROM)",
     isTransformedScale: true,
     inputs: ["m1", "sd1", "n1", "m2", "sd2", "n2"],
-    compute:     (data) => compute(data, "ROM"),
-    transform:   (x) => transformEffect(x, "ROM"),
+    compute(s) {
+      const { m1, sd1, n1, m2, sd2, n2 } = s;
+      if (!isFinite(m1) || !isFinite(sd1) || !isFinite(n1) ||
+          !isFinite(m2) || !isFinite(sd2) || !isFinite(n2) ||
+          m1 <= 0 || m2 <= 0 || sd1 <= 0 || sd2 <= 0 || n1 < 1 || n2 < 1)
+        return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+      const yi = Math.log(m1 / m2);
+      const vi = Math.max((sd1 ** 2) / (n1 * m1 ** 2) + (sd2 ** 2) / (n2 * m2 ** 2), MIN_VAR);
+      return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
+    },
+    transform:   (x) => Math.exp(x),
 
     validate(s) {
       const errors = {};
@@ -240,8 +290,19 @@ export const effectProfiles = {
     label:  "Coefficient of Variation Ratio (CVR)",
     isTransformedScale: true,
     inputs: ["m1", "sd1", "n1", "m2", "sd2", "n2"],
-    compute:     (data) => compute(data, "CVR"),
-    transform:   (x) => transformEffect(x, "CVR"),
+    compute(s) {
+      const { m1, sd1, n1, m2, sd2, n2 } = s;
+      if (!isFinite(m1) || !isFinite(sd1) || !isFinite(n1) ||
+          !isFinite(m2) || !isFinite(sd2) || !isFinite(n2) ||
+          m1 <= 0 || m2 <= 0 || sd1 <= 0 || sd2 <= 0 || n1 < 2 || n2 < 2)
+        return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+      const cv1 = sd1 / m1;
+      const cv2 = sd2 / m2;
+      const yi  = Math.log(cv1 / cv2);
+      const vi  = Math.max(1 / (2 * (n1 - 1)) + cv1 ** 2 / n1 + 1 / (2 * (n2 - 1)) + cv2 ** 2 / n2, MIN_VAR);
+      return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
+    },
+    transform:   (x) => Math.exp(x),
 
     validate(s) {
       const errors = {};
@@ -291,8 +352,16 @@ export const effectProfiles = {
     label:  "Variability Ratio (VR)",
     isTransformedScale: true,
     inputs: ["sd1", "n1", "sd2", "n2"],
-    compute:     (data) => compute(data, "VR"),
-    transform:   (x) => transformEffect(x, "VR"),
+    compute(s) {
+      const { sd1, n1, sd2, n2 } = s;
+      if (!isFinite(sd1) || !isFinite(n1) || !isFinite(sd2) || !isFinite(n2) ||
+          sd1 <= 0 || sd2 <= 0 || n1 < 2 || n2 < 2)
+        return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+      const yi = Math.log(sd1 / sd2);
+      const vi = Math.max(1 / (2 * (n1 - 1)) + 1 / (2 * (n2 - 1)), MIN_VAR);
+      return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
+    },
+    transform:   (x) => Math.exp(x),
 
     validate(s) {
       const errors = {};
@@ -333,8 +402,16 @@ export const effectProfiles = {
     label:  "Odds Ratio",
     isTransformedScale: true,
     inputs: ["a", "b", "c", "d"],
-    compute:     (data) => compute(data, "OR"),
-    transform:   (x) => transformEffect(x, "OR"),
+    compute(s) {
+      let { a, b, c, d } = s;
+      if ([a, b, c, d].some(v => !isFinite(v) || v < 0))
+        return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+      if (a === 0 || b === 0 || c === 0 || d === 0) { a += 0.5; b += 0.5; c += 0.5; d += 0.5; }
+      const yi = Math.log((a*d)/(b*c));
+      const vi = Math.max(1/a + 1/b + 1/c + 1/d, MIN_VAR);
+      return { ...s, yi, vi, se: Math.sqrt(vi), w: 1/vi, md: yi, varMD: vi };
+    },
+    transform:   (x) => Math.exp(x),
 
     validate(s) {
       const errors = {};
@@ -366,8 +443,17 @@ export const effectProfiles = {
     label:  "Risk Ratio",
     isTransformedScale: true,
     inputs: ["a", "b", "c", "d"],
-    compute:     (data) => compute(data, "RR"),
-    transform:   (x) => transformEffect(x, "RR"),
+    compute(s) {
+      let { a, b, c, d } = s;
+      if ([a, b, c, d].some(v => !isFinite(v) || v < 0))
+        return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+      if (a === 0 || b === 0 || c === 0 || d === 0) { a += 0.5; b += 0.5; c += 0.5; d += 0.5; }
+      const risk1 = a/(a+b), risk2 = c/(c+d);
+      const yi = Math.log(risk1/risk2);
+      const vi = Math.max((1/a - 1/(a+b)) + (1/c - 1/(c+d)), MIN_VAR);
+      return { ...s, yi, vi, se: Math.sqrt(vi), w: 1/vi, md: yi, varMD: vi };
+    },
+    transform:   (x) => Math.exp(x),
 
     validate(s) {
       const errors = {};
@@ -398,8 +484,17 @@ export const effectProfiles = {
   "RD": {
     label:  "Risk Difference",
     inputs: ["a", "b", "c", "d"],
-    compute:     (data) => compute(data, "RD"),
-    transform:   (x) => transformEffect(x, "RD"),
+    compute(s) {
+      const { a, b, c, d } = s;
+      if ([a, b, c, d].some(v => !isFinite(v) || v < 0))
+        return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+      const risk1 = a / (a + b);
+      const risk2 = c / (c + d);
+      const yi = risk1 - risk2;
+      const vi = Math.max((risk1*(1-risk1)/(a+b)) + (risk2*(1-risk2)/(c+d)), MIN_VAR);
+      return { ...s, yi, vi, se: Math.sqrt(vi), w: 1/vi, md: yi, varMD: vi };
+    },
+    transform:   (x) => x,
 
     validate(s) {
       const errors = {};
@@ -422,8 +517,14 @@ export const effectProfiles = {
   "COR": {
     label:  "Correlation (raw r)",
     inputs: ["r", "n"],
-    compute:     (data) => compute(data, "COR"),
-    transform:   (x) => transformEffect(x, "COR"),
+    compute(s) {
+      const { r, n } = s;
+      if (!isFinite(r) || !isFinite(n) || Math.abs(r) >= 1 || n < 2)
+        return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+      const vi = Math.max((1 - r * r) ** 2 / (n - 1), MIN_VAR);
+      return { ...s, yi: r, vi, se: Math.sqrt(vi), w: 1 / vi };
+    },
+    transform:   (x) => x,
 
     validate(s) {
       const errors = {};
@@ -455,8 +556,15 @@ export const effectProfiles = {
     label:  "Correlation (Fisher's z)",
     isTransformedScale: true,
     inputs: ["r", "n"],
-    compute:     (data) => compute(data, "ZCOR"),
-    transform:   (x) => transformEffect(x, "ZCOR"),
+    compute(s) {
+      const { r, n } = s;
+      if (!isFinite(r) || !isFinite(n) || Math.abs(r) >= 1 || n < 4)
+        return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+      const yi = Math.atanh(r);
+      const vi = Math.max(1 / (n - 3), MIN_VAR);
+      return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
+    },
+    transform:   (x) => Math.tanh(x),
 
     validate(s) {
       const errors = {};
@@ -487,8 +595,16 @@ export const effectProfiles = {
   "PR": {
     label:  "Proportion (raw)",
     inputs: ["x", "n"],
-    compute:     (data) => compute(data, "PR"),
-    transform:   (x) => transformEffect(x, "PR"),
+    compute(s) {
+      const { x, n } = s;
+      if (!isFinite(x) || !isFinite(n) || n < 1 || x < 0 || x > n)
+        return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+      const p = x / n;
+      const yi = p;
+      const vi = Math.max(p * (1 - p) / n, MIN_VAR);
+      return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
+    },
+    transform:   (x) => Math.min(1, Math.max(0, x)),
 
     validate(s) {
       const errors = {};
@@ -526,8 +642,18 @@ export const effectProfiles = {
     label:  "Proportion (log)",
     isTransformedScale: true,
     inputs: ["x", "n"],
-    compute:     (data) => compute(data, "PLN"),
-    transform:   (x) => transformEffect(x, "PLN"),
+    compute(s) {
+      let { x, n } = s;
+      if (!isFinite(x) || !isFinite(n) || n < 1 || x < 0 || x > n)
+        return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+      if (x === 0 || x === n) { x += 0.5; n += 1; }
+      const p = x / n;
+      if (p <= 0) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+      const yi = Math.log(p);
+      const vi = Math.max((1 - p) / (n * p), MIN_VAR);
+      return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
+    },
+    transform:   (x) => Math.min(1, Math.max(0, Math.exp(x))),
 
     validate(s) {
       const errors = {};
@@ -563,8 +689,18 @@ export const effectProfiles = {
     label:  "Proportion (logit)",
     isTransformedScale: true,
     inputs: ["x", "n"],
-    compute:     (data) => compute(data, "PLO"),
-    transform:   (x) => transformEffect(x, "PLO"),
+    compute(s) {
+      let { x, n } = s;
+      if (!isFinite(x) || !isFinite(n) || n < 1 || x < 0 || x > n)
+        return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+      if (x === 0 || x === n) { x += 0.5; n += 1; }
+      const p = x / n;
+      if (p <= 0 || p >= 1) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+      const yi = Math.log(p / (1 - p));
+      const vi = Math.max(1 / (n * p * (1 - p)), MIN_VAR);
+      return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
+    },
+    transform:   (x) => Math.min(1, Math.max(0, 1 / (1 + Math.exp(-x)))),
 
     validate(s) {
       const errors = {};
@@ -600,8 +736,16 @@ export const effectProfiles = {
     label:  "Proportion (arcsine)",
     isTransformedScale: true,
     inputs: ["x", "n"],
-    compute:     (data) => compute(data, "PAS"),
-    transform:   (x) => transformEffect(x, "PAS"),
+    compute(s) {
+      const { x, n } = s;
+      if (!isFinite(x) || !isFinite(n) || n < 1 || x < 0 || x > n)
+        return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+      const p = x / n;
+      const yi = Math.asin(Math.sqrt(p));
+      const vi = Math.max(1 / (4 * n), MIN_VAR);
+      return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
+    },
+    transform:   (x) => Math.min(1, Math.max(0, Math.sin(x) ** 2)),
 
     validate(s) {
       const errors = {};
@@ -637,8 +781,15 @@ export const effectProfiles = {
     label:  "Proportion (Freeman-Tukey)",
     isTransformedScale: true,
     inputs: ["x", "n"],
-    compute:     (data) => compute(data, "PFT"),
-    transform:   (x) => transformEffect(x, "PFT"),
+    compute(s) {
+      const { x, n } = s;
+      if (!isFinite(x) || !isFinite(n) || n < 1 || x < 0 || x > n)
+        return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+      const yi = Math.asin(Math.sqrt(x / (n + 1))) + Math.asin(Math.sqrt((x + 1) / (n + 1)));
+      const vi = Math.max(1 / (n + 0.5), MIN_VAR);
+      return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
+    },
+    transform:   (x) => Math.min(1, Math.max(0, Math.sin(x / 2) ** 2)),
 
     validate(s) {
       const errors = {};
@@ -673,7 +824,10 @@ export const effectProfiles = {
   "GENERIC": {
     label:  "Generic (yi / vi)",
     inputs: ["yi", "vi"],
-    compute:     (data) => compute(data, "GENERIC"),
+    compute(s) {
+      const vi = Math.max(s.vi, MIN_VAR);
+      return { ...s, yi: s.yi, vi, se: Math.sqrt(vi), w: 1 / vi, md: s.yi, varMD: s.vi };
+    },
     transform:   (x) => x,
 
     validate(s) {
@@ -704,8 +858,19 @@ export const effectProfiles = {
     label:  "Hazard Ratio",
     isTransformedScale: true,
     inputs: ["hr", "ci_lo", "ci_hi"],
-    compute:     (data) => compute(data, "HR"),
-    transform:   (x) => transformEffect(x, "HR"),
+    compute(s) {
+      const { hr, ci_lo, ci_hi } = s;
+      if (!isFinite(hr)    || hr    <= 0 ||
+          !isFinite(ci_lo) || ci_lo <= 0 ||
+          !isFinite(ci_hi) || ci_hi <= 0 ||
+          ci_lo >= ci_hi)
+        return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+      const yi = Math.log(hr);
+      const se = (Math.log(ci_hi) - Math.log(ci_lo)) / (2 * 1.96);
+      const vi = Math.max(se * se, MIN_VAR);
+      return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
+    },
+    transform:   (x) => Math.exp(x),
 
     validate(s) {
       const errors = {};
@@ -733,8 +898,17 @@ export const effectProfiles = {
     label:  "Incidence Rate Ratio",
     isTransformedScale: true,
     inputs: ["x1", "t1", "x2", "t2"],
-    compute:     (data) => compute(data, "IRR"),
-    transform:   (x) => transformEffect(x, "IRR"),
+    compute(s) {
+      let { x1, t1, x2, t2 } = s;
+      if (!isFinite(x1) || x1 < 0 || !isFinite(x2) || x2 < 0 ||
+          !isFinite(t1) || t1 <= 0 || !isFinite(t2) || t2 <= 0)
+        return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+      if (x1 === 0 || x2 === 0) { x1 += 0.5; x2 += 0.5; }
+      const yi = Math.log(x1 / t1) - Math.log(x2 / t2);
+      const vi = Math.max(1 / x1 + 1 / x2, MIN_VAR);
+      return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
+    },
+    transform:   (x) => Math.exp(x),
 
     validate(s) {
       const errors = {};
@@ -766,8 +940,16 @@ export const effectProfiles = {
     label:  "Incidence Rate (log)",
     isTransformedScale: true,
     inputs: ["x", "t"],
-    compute:     (data) => compute(data, "IR"),
-    transform:   (x) => transformEffect(x, "IR"),
+    compute(s) {
+      let { x, t } = s;
+      if (!isFinite(x) || x < 0 || !isFinite(t) || t <= 0)
+        return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+      if (x === 0) x = 0.5;
+      const yi = Math.log(x / t);
+      const vi = Math.max(1 / x, MIN_VAR);
+      return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
+    },
+    transform:   (x) => Math.exp(x),
 
     validate(s) {
       const errors = {};

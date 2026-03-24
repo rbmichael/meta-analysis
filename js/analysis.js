@@ -1,31 +1,4 @@
-import { tCritical, normalCDF, tCDF, chiSquareCDF, chiSquareQuantile, fCDF } from "./utils.js";
-
-window.MIN_VAR = 1e-8;
-
-// ================= STATS =================
-function hedgesG(s, options = {}) {
-  const n1 = s.n1, n2 = s.n2;
-  const df = n1 + n2 - 2;
-
-  // pooled SD
-  const sp = Math.sqrt(((n1 - 1) * s.sd1 ** 2 + (n2 - 1) * s.sd2 ** 2) / df);
-
-  // raw Cohen's d
-  const d = (s.m1 - s.m2) / sp;
-
-  // Hedge's g correction applied only if requested
-  const applyHedges = options.hedgesCorrection ?? true;
-  const J = 1 - (3 / (4 * df - 1));
-  const g = applyHedges ? d * J : d;
-
-  // variance using raw d (textbook style) or g
-  const varBase = (n1 + n2) / (n1 * n2) + (d * d) / (2 * (n1 + n2));
-
-  return {
-    es: g,
-    var: Math.max(varBase, MIN_VAR)
-  };
-}
+import { tCritical, normalCDF, tCDF, chiSquareCDF, chiSquareQuantile, fCDF, MIN_VAR, hedgesG } from "./utils.js";
 
 // ================= DYNAMIC COMPUTE =================
 export function compute(s, type, options = {}) {

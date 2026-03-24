@@ -212,6 +212,25 @@ export function logGamma(z) {
   return x + Math.log(ser * Math.sqrt(2 * Math.PI));
 }
 
+// ================= COMPUTE HELPERS =================
+
+// Minimum variance floor applied to all yi/vi computations.
+export const MIN_VAR = 1e-8;
+
+// Hedges g (bias-corrected Cohen's d) for two independent groups.
+// options.hedgesCorrection (default true) controls whether the J factor is applied.
+export function hedgesG(s, options = {}) {
+  const n1 = s.n1, n2 = s.n2;
+  const df = n1 + n2 - 2;
+  const sp = Math.sqrt(((n1 - 1) * s.sd1 ** 2 + (n2 - 1) * s.sd2 ** 2) / df);
+  const d  = (s.m1 - s.m2) / sp;
+  const applyHedges = options.hedgesCorrection ?? true;
+  const J  = 1 - (3 / (4 * df - 1));
+  const g  = applyHedges ? d * J : d;
+  const varBase = (n1 + n2) / (n1 * n2) + (d * d) / (2 * (n1 + n2));
+  return { es: g, var: Math.max(varBase, MIN_VAR) };
+}
+
 // ================= EFFECT TRANSFORMS (PROFILE-AWARE) =================
 export function transformEffect(x, type) {
   if (!isFinite(x)) return NaN;
