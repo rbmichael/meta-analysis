@@ -1,5 +1,6 @@
 import { tCritical, normalCDF, tCDF, chiSquareCDF, chiSquareQuantile, fCDF, hedgesG } from "./utils.js";
 import { MIN_VAR, REML_TOL, BISECTION_ITERS, Z_95 } from "./constants.js";
+import { validateStudy } from "./profiles.js";
 
 // ================= DYNAMIC COMPUTE =================
 export function compute(s, type, options = {}) {
@@ -14,12 +15,13 @@ export function compute(s, type, options = {}) {
     }
   }
 
+  const { valid } = validateStudy(s, type);
+  if (!valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+
 	// ================= BINARY DATA =================
 	if (type === "OR" || type === "RR" || type === "RD") {
 	  let { a, b, c, d } = s;
-	  if ([a, b, c, d].some(v => !isFinite(v) || v < 0)) 
-		return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
-	  
+
 	  // optional continuity correction for OR/RR
 	  if (type === "OR" || type === "RR") {
 		if (a === 0 || b === 0 || c === 0 || d === 0) a += 0.5, b += 0.5, c += 0.5, d += 0.5;
@@ -70,11 +72,6 @@ export function compute(s, type, options = {}) {
   //              vi_g = vi · J²
   if (type === "SMDH") {
     const { m1, sd1, n1, m2, sd2, n2 } = s;
-    if (!isFinite(m1) || !isFinite(sd1) || !isFinite(n1) ||
-        !isFinite(m2) || !isFinite(sd2) || !isFinite(n2) ||
-        sd1 <= 0 || sd2 <= 0 || n1 < 2 || n2 < 2) {
-      return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
-    }
     const df   = n1 + n2 - 2;
     const sdi2 = (sd1 ** 2 + sd2 ** 2) / 2;           // average variance
     const sdi  = Math.sqrt(sdi2);
@@ -93,11 +90,6 @@ export function compute(s, type, options = {}) {
   // Requires: m1 > 0, m2 > 0, sd1 > 0, sd2 > 0, n1 ≥ 2, n2 ≥ 2
   if (type === "CVR") {
     const { m1, sd1, n1, m2, sd2, n2 } = s;
-    if (!isFinite(m1) || !isFinite(sd1) || !isFinite(n1) ||
-        !isFinite(m2) || !isFinite(sd2) || !isFinite(n2) ||
-        m1 <= 0 || m2 <= 0 || sd1 <= 0 || sd2 <= 0 || n1 < 2 || n2 < 2) {
-      return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
-    }
     const cv1 = sd1 / m1;
     const cv2 = sd2 / m2;
     const yi  = Math.log(cv1 / cv2);
@@ -114,10 +106,6 @@ export function compute(s, type, options = {}) {
   // Requires: sd1 > 0, sd2 > 0, n1 ≥ 2, n2 ≥ 2  (means not needed)
   if (type === "VR") {
     const { sd1, n1, sd2, n2 } = s;
-    if (!isFinite(sd1) || !isFinite(n1) || !isFinite(sd2) || !isFinite(n2) ||
-        sd1 <= 0 || sd2 <= 0 || n1 < 2 || n2 < 2) {
-      return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
-    }
     const yi = Math.log(sd1 / sd2);
     const vi = Math.max(1 / (2 * (n1 - 1)) + 1 / (2 * (n2 - 1)), MIN_VAR);
     return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
@@ -126,11 +114,6 @@ export function compute(s, type, options = {}) {
 	// ================ PAIRED MEAN DIFFERENCES ================
 	if (type === "MD_paired") {
 	  const { m_pre, m_post, sd_pre, sd_post, n, r } = s;
-
-	  if (![m_pre, m_post, sd_pre, sd_post, n].every(isFinite) || n < 2) {
-		return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
-	  }
-
 	  const corr = isFinite(r) ? r : 0.5; // fallback assumption
 
 	  const md = m_post - m_pre;
@@ -151,11 +134,6 @@ export function compute(s, type, options = {}) {
 	// =============== STANDARDIZED PAIRED MEAN DIFFERENCES =================
 	if (type === "SMD_paired") {
 	  const { m_pre, m_post, sd_pre, sd_post, n, r } = s;
-
-	  if (![m_pre, m_post, sd_pre, sd_post, n].every(isFinite) || n < 2) {
-		return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
-	  }
-
 	  const corr = isFinite(r) ? r : 0.5;
 
 	  const mean_change = m_post - m_pre;
@@ -188,9 +166,6 @@ export function compute(s, type, options = {}) {
   if (type === "COR" || type === "ZCOR") {
     const { r, n } = s;
 
-    if (!isFinite(r) || !isFinite(n) || Math.abs(r) >= 1 || n < 2)
-      return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
-
     if (type === "COR") {
       // Raw correlation: yi = r, vi = (1−r²)²/(n−1)
       const vi = Math.max((1 - r * r) ** 2 / (n - 1), MIN_VAR);
@@ -198,7 +173,6 @@ export function compute(s, type, options = {}) {
     }
 
     // ZCOR: Fisher's z-transform, vi = 1/(n−3)
-    if (n < 4) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
     const yi = Math.atanh(r);           // 0.5 * ln((1+r)/(1−r))
     const vi = Math.max(1 / (n - 3), MIN_VAR);
     return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
@@ -211,9 +185,6 @@ export function compute(s, type, options = {}) {
   if (type === "PR" || type === "PLN" || type === "PLO" ||
       type === "PAS" || type === "PFT") {
     let { x, n } = s;
-
-    if (!isFinite(x) || !isFinite(n) || n < 1 || x < 0 || x > n)
-      return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
 
     // Continuity correction for boundary proportions on log/logit scale
     if ((type === "PLN" || type === "PLO") && (x === 0 || x === n)) {
@@ -231,13 +202,11 @@ export function compute(s, type, options = {}) {
 
     } else if (type === "PLN") {
       // Log proportion: yi = ln(p),  vi = (1−p)/(n·p)
-      if (p <= 0) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
       yi = Math.log(p);
       vi = (1 - p) / (n * p);
 
     } else if (type === "PLO") {
       // Logit: yi = ln(p/(1−p)),  vi = 1/(n·p·(1−p))
-      if (p <= 0 || p >= 1) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
       yi = Math.log(p / (1 - p));
       vi = 1 / (n * p * (1 - p));
 
@@ -264,11 +233,6 @@ export function compute(s, type, options = {}) {
   // All three inputs must be strictly positive and ci_lo < ci_hi.
   if (type === "HR") {
     const { hr, ci_lo, ci_hi } = s;
-    if (!isFinite(hr)    || hr    <= 0 ||
-        !isFinite(ci_lo) || ci_lo <= 0 ||
-        !isFinite(ci_hi) || ci_hi <= 0 ||
-        ci_lo >= ci_hi)
-      return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
     const yi = Math.log(hr);
     const se = (Math.log(ci_hi) - Math.log(ci_lo)) / (2 * Z_95);
     const vi = Math.max(se * se, MIN_VAR);
@@ -280,11 +244,6 @@ export function compute(s, type, options = {}) {
   // Continuity correction: if either event count is 0, add 0.5 to both.
   if (type === "IRR") {
     let { x1, t1, x2, t2 } = s;
-    if (!isFinite(x1) || x1 < 0 ||
-        !isFinite(x2) || x2 < 0 ||
-        !isFinite(t1) || t1 <= 0 ||
-        !isFinite(t2) || t2 <= 0)
-      return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
     if (x1 === 0 || x2 === 0) { x1 += 0.5; x2 += 0.5; }
     const yi = Math.log(x1 / t1) - Math.log(x2 / t2);
     const vi = Math.max(1 / x1 + 1 / x2, MIN_VAR);
@@ -296,8 +255,6 @@ export function compute(s, type, options = {}) {
   // Continuity correction: if x = 0, use x = 0.5.
   if (type === "IR") {
     let { x, t } = s;
-    if (!isFinite(x) || x < 0 || !isFinite(t) || t <= 0)
-      return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
     if (x === 0) x = 0.5;
     const yi = Math.log(x / t);
     const vi = Math.max(1 / x, MIN_VAR);
@@ -322,11 +279,6 @@ export function compute(s, type, options = {}) {
   // Both means must be strictly positive; non-positive inputs yield NaN.
   if (type === "ROM") {
     const { m1, sd1, n1, m2, sd2, n2 } = s;
-    if (!isFinite(m1) || !isFinite(sd1) || !isFinite(n1) ||
-        !isFinite(m2) || !isFinite(sd2) || !isFinite(n2) ||
-        m1 <= 0 || m2 <= 0 || sd1 <= 0 || sd2 <= 0 || n1 < 1 || n2 < 1) {
-      return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
-    }
     const yi = Math.log(m1 / m2);
     const vi = Math.max((sd1 ** 2) / (n1 * m1 ** 2) + (sd2 ** 2) / (n2 * m2 ** 2), MIN_VAR);
     return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
