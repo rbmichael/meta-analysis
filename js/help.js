@@ -101,23 +101,24 @@ export const HELP = {
   },
 
   "effect.SMD_paired": {
-    title: "Standardized Mean Change (SMD paired)",
-    body:  "The paired mean difference standardised by the pre-measurement SD, " +
-           "with correction for the pre-post correlation. " +
-           "Suitable for pooling pre/post studies that use different outcome scales.",
+    title: "Standardized Mean Change — pre-test SD (SMD paired / SMCR)",
+    body:  "The pre-post mean difference standardised by the pre-measurement SD (sd_pre). " +
+           "Equivalent to metafor's SMCR (Morris 2008). " +
+           "Hedges g correction is applied: g = d·J, J = 1 − 3/(4(n−1)−1). " +
+           "Variance: var(d) = 2(1−r)/n + d²/(2(n−1)); vi = J²·var(d). " +
+           "Requires the pre-post correlation r; defaults to 0.5 if not provided. " +
+           "Use this when studies report sd_pre but not sd_post.",
   },
 
   "effect.SMCC": {
     title: "Standardized Mean Change — change-score SD (SMCC)",
-    body:  "Standardizes the pre-post mean change by the SD of the change scores: " +
+    body:  "The pre-post mean difference standardised by the SD of the change scores: " +
            "sd_change = √(sd_pre² + sd_post² − 2r·sd_pre·sd_post). " +
            "Hedges g correction is applied: g = d·J, J = 1 − 3/(4(n−1)−1). " +
            "Variance: var(d) = 2(1−r)/n + d²/(2(n−1)); vi = J²·var(d). " +
-           "This is the proper SMCC formula (Borenstein et al. 2009; Morris 2008) — " +
-           "the variance explicitly reflects the pre-post correlation, unlike the " +
-           "simplified SMD_paired variance (1/n + d²/2n). " +
+           "Requires both sd_pre and sd_post plus the pre-post correlation r. " +
            "If r is not provided it defaults to 0.5 with a soft warning. " +
-           "Preferable over SMD_paired when the pre-post correlation is known.",
+           "Use this when studies report the change-score SD directly.",
   },
 
   "effect.OR": {

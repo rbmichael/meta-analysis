@@ -305,14 +305,15 @@ export const BENCHMARKS = [
   // ----------------------------------------------------------------
   // SMD_paired — Morris (2008), treatment arm (5 studies)
   // Same raw data as MD_paired benchmark above.
-  // d = (m_post - m_pre) / sd_change,  g = d · J(n-1),  vi = 1/n + d²/(2n)
-  // where J(df) = 1 - 3/(4·df - 1)  (Hedges' correction)
-  // Per-study g/vi verified by hand. Pooled values from metafor test suite.
+  // SMCR formula: d = (m_post - m_pre) / sd_pre  (pre-test SD standardiser)
+  // g = d · J(df),  J = 1 − 3/(4·df − 1),  df = n − 1
+  // vi = J² · [2(1−r)/n + d²/(2·df)]
+  // Per-study g verified by hand; pooled values computed analytically (DL).
   // ----------------------------------------------------------------
   {
-    name: "Morris 2008 – SMD_paired (REML)",
+    name: "Morris 2008 – SMD_paired (DL)",
     type: "SMD_paired",
-    tauMethod: "REML",
+    tauMethod: "DL",
     data: [
       { label: "Study 1", m_pre: 30.6, m_post: 38.5, sd_pre: 15.0, sd_post: 11.6, n: 20, r: 0.47 },
       { label: "Study 2", m_pre: 23.5, m_post: 26.8, sd_pre:  3.1, sd_post:  4.1, n: 50, r: 0.64 },
@@ -321,14 +322,14 @@ export const BENCHMARKS = [
       { label: "Study 5", m_pre: 35.6, m_post: 36.0, sd_pre:  4.7, sd_post:  4.6, n: 14, r: 0.44 }
     ],
     expected: {
-      // Hedges' g per study, verified by hand against app formula
-      yi:   [0.5417, 1.0201, 2.6639, 1.9093, 0.0765],
-      FE:    0.789,
-      RE:    1.062,
-      tau2:  0.651,
-      I2:   79.73
+      // Hedges' g per study: d = Δm/sd_pre, g = d·J, verified by hand
+      yi:   [0.5056, 1.0481, 1.8065, 1.4187, 0.0801],
+      FE:    0.839,
+      RE:    0.892,
+      tau2:  0.2474,
+      I2:   78.0
     },
-    citation: "Morris (2008) Org Res Methods 11:364–386. Pooled values from metafor test suite."
+    citation: "Morris (2008) Org Res Methods 11:364–386. Per-study g and pooled values computed analytically from SMCR formula."
   },
 
   // ----------------------------------------------------------------

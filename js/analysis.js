@@ -159,25 +159,24 @@ export function compute(s, type, options = {}) {
 
 	  const mean_change = m_post - m_pre;
 
-	  const sd_change = Math.sqrt(
-		sd_pre**2 + sd_post**2 - 2*corr*sd_pre*sd_post
-	  );
-
-	  const d = mean_change / sd_change;
+	  // Standardise by pre-test SD (SMCR per Morris 2008 / metafor).
+	  const d = mean_change / sd_pre;
 
 	  // Hedges correction
 	  const df = n - 1;
 	  const J = 1 - (3 / (4*df - 1));
 	  const g = d * J;
 
-	  const var_d = (1/n) + (d*d)/(2*n);
+	  // Variance: var(d) = 2(1−r)/n + d²/(2·df),  vi = J²·var(d)
+	  const var_d = 2 * (1 - corr) / n + (d * d) / (2 * df);
+	  const vi    = Math.max(J * J * var_d, MIN_VAR);
 
 	  return {
 		...s,
 		yi: g,
-		vi: Math.max(var_d, MIN_VAR),
-		se: Math.sqrt(Math.max(var_d, MIN_VAR)),
-		w: 1 / Math.max(var_d, MIN_VAR),
+		vi,
+		se: Math.sqrt(vi),
+		w: 1 / vi,
 		md: g,
 		varMD: var_d
 	  };

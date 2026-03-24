@@ -1,78 +1,43 @@
-TO-DO: ITEMS DEFERRED FROM REDESIGN
-=====================================
+TO-DO
+=====
 Last updated: 2026-03-25
 
---------------------------------------------------------------------------------
-ITEM 1: Restyle D3 plot internals to match the new design system
 
-  Context:  The full-app redesign (2026-03-24 onwards) is updating the CSS
-            chrome around the plots (containers, labels, export buttons,
-            navigation) but is intentionally leaving the D3 SVG internals
-            untouched to limit scope.
+================================================================================
+SECTION A — BUGS  (statistical or code-correctness issues)
+================================================================================
 
-  Affected plots:
-    - Forest plot        (js/plots.js → drawForest)
-    - Funnel plot        (js/plots.js → drawFunnel)
-    - Influence plot     (js/plots.js → drawInfluencePlot)
-    - Cumulative forest  (js/plots.js → drawCumulativeForest)
-    - Bubble plots       (js/plots.js → drawBubble)
-
-  What needs updating in each plot:
-    - Background color:   currently #181828 / transparent → use var(--bg-elevated) or #0a0a0c
-    - Axis line/tick color: currently grey hardcoded → use var(--fg-muted) / var(--border)
-    - Axis label color:   currently grey → var(--fg-muted)
-    - Grid line color:    → var(--border)
-    - Data point fills:   currently hardcoded blues/reds → align with accent palette
-    - CI line strokes:    → var(--fg-subtle) or var(--accent)
-    - Diamond (pooled) fill: → var(--accent) or accent-adjacent
-    - Funnel region fill: → rgba(94,106,210,0.08) (accent-glow at lower opacity)
-    - Regression line (bubble plot): → var(--accent)
-    - Text labels inside SVGs: → var(--fg-muted) or var(--fg)
-    - Trim-and-fill imputed points: keep visually distinct, use muted accent
-
-  Design token reference: css/styles.css → :root block
-  Design system reference: design-system doc (provided 2026-03-24)
+Items are rank-ordered by severity within this section.
+Resolved items are retained for reference.
 
 --------------------------------------------------------------------------------
-PUBLICATION-READINESS AUDIT (2026-03-25)
-Rank-ordered by importance / severity
---------------------------------------------------------------------------------
+BUG 1 [CRITICAL] ✓ RESOLVED 2026-03-25: SMD_paired variance formula was wrong
 
-ITEM 2 [CRITICAL]: SMD_paired variance formula is wrong
-
-  File:    js/analysis.js ~ line 173
-  Symptom: The variance of the paired standardized mean difference uses the
-           independent-samples large-sample formula (var_d = 1/n + d²/2n)
-           instead of the correct paired formula, and then further fails to
-           apply the J² correction when converting from Cohen's d to Hedges' g.
-  Impact:  Systematic underestimation of variance → CIs too narrow → inflated
-           test statistics and false positives. Every SMD_paired analysis is
-           affected.
-  Fix:     Replace the variance formula with the paired-design formula
-           (matching SMCC lines 196-197):
-             const var_d = 2 * (1 - corr) / n + (d * d) / (2 * df);
-             const vi    = Math.max(J * J * var_d, MIN_VAR);
-           and update vi, se, w, and varMD accordingly.
-  Ref:     Borenstein et al. (2009) §4.3; metafor escalc "SMCR"
+  Was:     Variance used the independent-samples formula (1/n + d²/2n), missing
+           the paired correction and the J² factor. The effect-size standardizer
+           also used sd_change (same as SMCC) instead of sd_pre (SMCR).
+  Fixed:   js/analysis.js — standardizer changed to sd_pre; variance updated to
+           J²·[2(1−r)/n + d²/(2·df)] per Morris (2008) / metafor SMCR.
+           js/benchmarks.js — expected values recomputed for corrected SMCR formula.
+           js/help.js — SMD_paired and SMCC descriptions updated to reflect the
+           correct distinction between the two measures.
 
 --------------------------------------------------------------------------------
-
-ITEM 3 [HIGH]: D3 globals used inside analysis.js for arithmetic
+BUG 2 [HIGH]: D3 globals used inside analysis.js for arithmetic
 
   File:    js/analysis.js lines 720, 1315–1316, 1339, 1346–1347
   Symptom: d3.sum() and d3.mean() are called directly in the statistical core
            (eggerTest, meta). D3 is loaded via CDN in index.html — if the CDN
-           call fails or the app is later bundled/tested offline, these calls
+           call fails or the app is later run offline or bundled, these calls
            throw ReferenceError and silently break the whole analysis.
-  Impact:  Reliability risk; also creates an implicit dependency between a
-           visualization library and statistical computation.
+  Impact:  Reliability risk; creates an implicit dependency on a visualisation
+           library for pure arithmetic.
   Fix:     Replace all d3.sum(arr) → arr.reduce((a,b)=>a+b,0)
                         d3.mean(arr) → arr.reduce((a,b)=>a+b,0)/arr.length
            (or add a local two-line sum/mean helper at the top of analysis.js)
 
 --------------------------------------------------------------------------------
-
-ITEM 4 [HIGH]: Begg's rank-correlation test missing tie correction
+BUG 3 [HIGH]: Begg's rank-correlation test missing tie correction
 
   File:    js/analysis.js ~ beggTest()
   Symptom: Variance of Kendall's S uses the no-ties formula
@@ -88,8 +53,7 @@ ITEM 4 [HIGH]: Begg's rank-correlation test missing tie correction
   Ref:     Kendall & Gibbons (1990) "Rank Correlation Methods" §3.3
 
 --------------------------------------------------------------------------------
-
-ITEM 5 [MEDIUM]: Unbounded bisection loop in heterogeneityCIs()
+BUG 4 [MEDIUM]: Unbounded bisection loop in heterogeneityCIs()
 
   File:    js/analysis.js ~ heterogeneityCIs()
   Symptom: Upper-bound search doubles hi indefinitely:
@@ -102,8 +66,7 @@ ITEM 5 [MEDIUM]: Unbounded bisection loop in heterogeneityCIs()
            and return NaN bounds if the limit is hit.
 
 --------------------------------------------------------------------------------
-
-ITEM 6 [MEDIUM]: Correlation input not clamped away from ±1 singularity
+BUG 5 [MEDIUM]: Correlation input not clamped away from ±1 singularity
 
   File:    js/analysis.js ~ COR / ZCOR / PCOR / ZPCOR blocks
   Symptom: Fisher's z-transform atanh(r) and its variance (1-r²)²/(n-1) have
@@ -115,8 +78,7 @@ ITEM 6 [MEDIUM]: Correlation input not clamped away from ±1 singularity
            input equals ±1.
 
 --------------------------------------------------------------------------------
-
-ITEM 7 [MEDIUM]: OR / RR all-zero-cell row silently produces yi = 0
+BUG 6 [MEDIUM]: OR / RR all-zero-cell row silently produces yi = 0
 
   File:    js/analysis.js ~ OR / RR continuity-correction block
   Symptom: Continuity correction (+0.5) is applied when any cell is zero.
@@ -127,22 +89,53 @@ ITEM 7 [MEDIUM]: OR / RR all-zero-cell row silently produces yi = 0
            four cells equal to zero and exclude/warn accordingly.
 
 --------------------------------------------------------------------------------
-
-ITEM 8 [MEDIUM]: Known test-suite failures (Harbord / Deeks / Rücker, k=4)
+BUG 7 [MEDIUM]: Test-suite failures — Harbord / Deeks / Rücker structural
+                 tests (k=4 datasets)
 
   File:    js/tests.js
-  Symptom: Three structural bias-test cases fail because the test datasets
-           produce near-degenerate regression problems (repeated marginal
-           totals, algebraic ill-conditioning, low predictor spread).
-           Documented in KNOWN_BUGS.txt items 2–4.
-  Impact:  Test coverage for these bias tests is currently absent.
-  Fix:     Replace the three offending test datasets with ones that have
-           adequate spread in the relevant predictor (√V, 1/√ESS, 1/se).
-           See KNOWN_BUGS.txt for dataset constraints in each case.
+
+  7a — Harbord structural (k=4)
+    Test:  interceptP ∈ (0,1) for a 4-study dataset
+    Cause: Studies 2, 3, and 4 share identical marginal totals, giving them
+           the same hypergeometric variance V and therefore the same √V (the
+           OLS predictor). With only 2 distinct x-values across 4 points the
+           regression is near-degenerate and the p-value falls outside (0,1)
+           or is NaN/Infinity.
+    Dataset: (30,10,10,50), (20,5,5,30), (15,10,10,25), (10,15,15,20)
+             Studies 2–4 have marginals (25,35,25,35) N=60 → same √V.
+    Fix:   Replace the dataset with one having 4 studies with distinct √V
+           values (no repeated marginal structures).
+
+  7b — Deeks structural (k=4)
+    Test:  interceptP ∈ (0,1) for a 4-study dataset
+    Cause: In Deeks WLS, the predictor is xi = 1/√ESS_i and the weight is
+           wi = ESS_i. This gives wi·xi² = 1 exactly for every study, making
+           the 2×2 normal-equation matrix ill-conditioned (det ≈ W·k − Wx²).
+           The Gauss-Jordan inversion inside wls() fails or produces extreme
+           values; the p-value is invalid.
+    Fix:   Replace the dataset with one having more spread in ESS values to
+           improve conditioning, or add a fallback for near-singular systems
+           in wls() when used specifically for Deeks.
+
+  7c — Rücker structural (k=4)
+    Test:  interceptP ∈ (0,1) for a 4-study dataset
+    Cause: The Rücker OLS predictor is xi = 1/se_i where
+           se_i = √(1/(4n1) + 1/(4n2)). For the chosen dataset the four
+           1/se values cluster tightly (≈8.3–10.0), giving a low-determinant
+           normal-equation matrix and an unreliable p-value.
+    Dataset: (40,10,10,40), (30,15,15,40), (25,10,10,35), (20,10,10,30)
+    Fix:   Replace the dataset with one having more spread in n1/n2 so that
+           the 1/se predictors span a wider range.
+
+
+================================================================================
+SECTION B — DEFERRED TASKS  (improvements, polish, non-correctness work)
+================================================================================
+
+Items are rank-ordered by importance within this section.
 
 --------------------------------------------------------------------------------
-
-ITEM 9 [LOW]: Prediction interval not labelled as using t_{k-2} quantile
+TASK 1 [MEDIUM]: Prediction interval method not labelled in output
 
   File:    js/ui.js (results rendering) / js/analysis.js line 1390
   Symptom: The prediction interval is computed correctly (Higgins et al. 2009,
@@ -153,26 +146,52 @@ ITEM 9 [LOW]: Prediction interval not labelled as using t_{k-2} quantile
            "Higgins et al. (2009), t_{k-2}" and clarifying the method.
 
 --------------------------------------------------------------------------------
-
-ITEM 10 [LOW]: Forest plot page indicator does not reference total study count
+TASK 2 [LOW]: Forest plot pagination does not clarify pooled estimate scope
 
   File:    js/plots.js → drawForest / js/ui.js → forestNav
-  Symptom: When studies are paginated, pooled-estimate diamond reflects ALL
+  Symptom: When studies are paginated, the pooled-estimate diamond reflects ALL
            studies, but the visible rows are only a subset. A user could
            misread the plot as showing a pooled estimate for k = page_size.
   Fix:     Add a prominent "Page N of M — pooled estimate includes all K
            studies" label to the forest plot or navigation bar.
 
 --------------------------------------------------------------------------------
-
-ITEM 11 [LOW]: Log-scale effect types do not annotate axes as log-scale
+TASK 3 [LOW]: Log-scale effect types do not annotate axes as log-scale
 
   File:    js/plots.js → drawForest, drawFunnel
-  Symptom: Effect types stored and displayed on a log scale (OR, RR, HR, ROM,
-           GOR) use raw yi values on the x-axis without a "log scale" label or
-           axis tick transformation. A reader could interpret the axis as a
-           linear odds-ratio scale.
+  Symptom: Effect types stored on a log scale (OR, RR, HR, ROM, GOR) use raw
+           yi values on the x-axis without a "log scale" label or tick
+           transformation. A reader could interpret the axis as linear.
   Fix:     Detect log-scale effect types from the profile's isLog flag and
            either (a) exponentiate ticks so the axis reads in natural units
            (0.5, 1, 2, 4…) or (b) add a "(log scale)" label to the x-axis.
 
+--------------------------------------------------------------------------------
+TASK 4 [LOW]: Restyle D3 plot internals to match the design system
+
+  Context: The full-app redesign (2026-03-24) updated the CSS chrome around
+           the plots but intentionally left the D3 SVG internals untouched
+           to limit scope.
+
+  Affected plots:
+    - Forest plot        (js/plots.js → drawForest)
+    - Funnel plot        (js/plots.js → drawFunnel)
+    - Influence plot     (js/plots.js → drawInfluencePlot)
+    - Cumulative forest  (js/plots.js → drawCumulativeForest)
+    - Bubble plots       (js/plots.js → drawBubble)
+
+  What needs updating in each plot:
+    - Background color:   currently #181828 / transparent → var(--bg-elevated)
+    - Axis line/tick color: currently hardcoded grey → var(--fg-muted) / var(--border)
+    - Axis label color:   currently hardcoded grey → var(--fg-muted)
+    - Grid line color:    → var(--border)
+    - Data point fills:   currently hardcoded blues/reds → align with accent palette
+    - CI line strokes:    → var(--fg-subtle) or var(--accent)
+    - Diamond (pooled) fill: → var(--accent) or accent-adjacent
+    - Funnel region fill: → rgba(94,106,210,0.08) (accent-glow at lower opacity)
+    - Regression line (bubble plot): → var(--accent)
+    - Text labels inside SVGs: → var(--fg-muted) or var(--fg)
+    - Trim-and-fill imputed points: keep visually distinct, use muted accent
+
+  Design token reference: css/styles.css → :root block
+  Design system reference: design-system doc (provided 2026-03-24)
