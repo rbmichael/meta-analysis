@@ -303,6 +303,40 @@ export function tau2_HS(studies) {
   return Math.max(0, (Q - (k - 1)) / W);
 }
 
+// ================= DL WITH ITERATION (DLIT) TAU² =================
+// Fixed-point iteration of the DL formula using RE-updated weights.
+// τ²_{new} = max(0, (Q(τ²) − (k−1)) / c(τ²))
+// Converges to a self-consistent solution; usually 2-3 iterations suffice.
+export function tau2_DLIT(studies, tol = REML_TOL, maxIter = 200) {
+  const k = studies.length;
+  if (k <= 1) return 0;
+
+  let tau2 = tau2_GENQ(studies);  // seed from DL (GENQ with aᵢ=1/vᵢ is DL)
+
+  for (let iter = 0; iter < maxIter; iter++) {
+    const w  = studies.map(d => 1 / (d.vi + tau2));
+    const W  = w.reduce((s, a) => s + a, 0);
+    const W2 = w.reduce((s, a) => s + a ** 2, 0);
+    const mu = studies.reduce((s, d, i) => s + w[i] * d.yi, 0) / W;
+    const Q  = studies.reduce((s, d, i) => s + w[i] * (d.yi - mu) ** 2, 0);
+    const c  = W - W2 / W;
+    const newTau2 = Math.max(0, (Q - (k - 1)) / c);
+    if (Math.abs(newTau2 - tau2) < tol) return newTau2;
+    tau2 = newTau2;
+  }
+
+  return tau2;
+}
+
+// ================= HUNTER-SCHMIDT (small-sample corrected) TAU² =================
+// HSk applies a k/(k−1) correction factor to the HS estimate to reduce
+// downward bias in small samples.
+export function tau2_HSk(studies) {
+  const k = studies.length;
+  if (k <= 1) return 0;
+  return tau2_HS(studies) * k / (k - 1);
+}
+
 // ================= HEDGES TAU² =================
 // Unweighted method-of-moments (Hedges & Olkin 1985).
 // τ²_HE = max(0, SSuw/(k−1) − mean(vᵢ))
@@ -463,6 +497,36 @@ export function tau2_PM(studies, tol = REML_TOL, maxIter = 100) {
   }
 
   return tau2;
+}
+
+// GENQ core: generalized Q-statistic estimator with arbitrary weights aᵢ.
+// DL is the special case aᵢ = 1/vᵢ; SQGENQ uses aᵢ = √(1/vᵢ).
+function genqCore(studies, weights) {
+  const k = studies.length;
+  if (k <= 1) return 0;
+
+  const A  = weights.reduce((s, a) => s + a, 0);
+  const ya = studies.reduce((s, d, i) => s + weights[i] * d.yi, 0) / A;
+  const Qa = studies.reduce((s, d, i) => s + weights[i] * (d.yi - ya) ** 2, 0);
+
+  const sumAV  = studies.reduce((s, d, i) => s + weights[i] * d.vi, 0);
+  const sumA2V = studies.reduce((s, d, i) => s + weights[i] ** 2 * d.vi, 0);
+  const sumA2  = weights.reduce((s, a) => s + a ** 2, 0);
+
+  const ba = sumAV - sumA2V / A;  // expected Q under homogeneity
+  const ca = A    - sumA2  / A;   // slope
+
+  return ca > 0 ? Math.max(0, (Qa - ba) / ca) : 0;
+}
+
+export function tau2_SQGENQ(studies) {
+  const weights = studies.map(d => Math.sqrt(1 / d.vi));
+  return genqCore(studies, weights);
+}
+
+export function tau2_GENQ(studies, weights) {
+  const w = weights ?? studies.map(d => 1 / d.vi);
+  return genqCore(studies, w);
 }
 
 // Compute RE mean given tau²
@@ -849,11 +913,16 @@ export function meta(studies, method="DL", ciMethod="normal") {
 
   let tau2 = 0;
 	if      (method === "REML") tau2 = tau2_REML(studies, 1e-12, 500);
-	else if (method === "PM")   tau2 = tau2_PM(studies);
-	else if (method === "ML")   tau2 = tau2_ML(studies);
-	else if (method === "HS")   tau2 = tau2_HS(studies);
-	else if (method === "HE")   tau2 = tau2_HE(studies);
-	else if (method === "SJ")   tau2 = tau2_SJ(studies);
+	else if (method === "PM")     tau2 = tau2_PM(studies);
+	else if (method === "ML")     tau2 = tau2_ML(studies);
+	else if (method === "HS")     tau2 = tau2_HS(studies);
+	else if (method === "HE")     tau2 = tau2_HE(studies);
+	else if (method === "SJ")     tau2 = tau2_SJ(studies);
+	else if (method === "GENQ")   tau2 = tau2_GENQ(studies);
+	else if (method === "SQGENQ") tau2 = tau2_SQGENQ(studies);
+	else if (method === "DLIT")   tau2 = tau2_DLIT(studies);
+	else if (method === "EBLUP")  tau2 = tau2_REML(studies, 1e-12, 500);
+	else if (method === "HSk")    tau2 = tau2_HSk(studies);
 	else { // DL fallback
 		const sumW2 = d3.sum(wFE.map(w=>w*w));
 		const C = W - (sumW2/W);
@@ -1457,7 +1526,7 @@ export function leaveOneOut(studies, method = "DL", ciMethod = "normal", precomp
 // Returns an array of 7 entries (one per method):
 //   { method, estimate, lb, ub, tau2, i2 }
 export function estimatorComparison(studies, ciMethod = "normal") {
-  const methods = ["DL", "REML", "PM", "ML", "HS", "HE", "SJ"];
+  const methods = ["DL", "REML", "PM", "ML", "HS", "HE", "SJ", "GENQ", "SQGENQ", "DLIT", "EBLUP", "HSk"];
   return methods.map(method => {
     const m = meta(studies, method, ciMethod);
     return {

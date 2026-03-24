@@ -271,6 +271,42 @@ export const HELP = {
            "Useful as a sensitivity check against DL/REML.",
   },
 
+  "tau.GENQ": {
+    title: "Generalized Q (GENQ)",
+    body:  "A generalisation of the DL estimator that allows arbitrary study weights aᵢ. " +
+           "With aᵢ = 1/vᵢ it reduces exactly to DL. " +
+           "Useful when custom weighting schemes are required; otherwise DL or REML is preferred.",
+  },
+
+  "tau.SQGENQ": {
+    title: "Square-root weight GENQ (SQGENQ)",
+    body:  "A GENQ variant using aᵢ = √(1/vᵢ) instead of the usual inverse-variance weights. " +
+           "Down-weights large, precise studies relative to DL, producing larger τ² estimates " +
+           "in heterogeneous sets. Included for sensitivity analysis.",
+  },
+
+  "tau.DLIT": {
+    title: "DL with iteration (DLIT)",
+    body:  "Applies the DL moment formula iteratively: after each estimate of τ², weights are " +
+           "updated as 1/(vᵢ + τ²) and the formula is re-applied until convergence. " +
+           "Seeds from the DL estimate and typically converges in 2–3 steps. " +
+           "Can reduce the underestimation bias of plain DL.",
+  },
+
+  "tau.EBLUP": {
+    title: "EBLUP (= REML)",
+    body:  "In the univariate random-effects model, the Empirical Best Linear Unbiased Predictor " +
+           "(EBLUP) of τ² is identical to REML (Harville 1977; Raudenbush 2009). " +
+           "This option is provided for compatibility with metafor's naming convention.",
+  },
+
+  "tau.HSk": {
+    title: "Hunter-Schmidt corrected (HSk)",
+    body:  "The standard Hunter-Schmidt (HS) estimate multiplied by k/(k−1) to correct the " +
+           "downward bias in small samples. Reduces to HS as k → ∞. " +
+           "Recommended over plain HS when k is small.",
+  },
+
   // ------------------------------------------------------------------ //
   // CI methods                                                           //
   // ------------------------------------------------------------------ //
