@@ -620,6 +620,59 @@ export const effectProfiles = {
   },
 
   // ------------------------------------------------------------------ //
+  "PHI": {
+    label:  "Phi Coefficient",
+    inputs: ["a", "b", "c", "d"],
+    compute(s) {
+      if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+      const { a, b, c, d } = s;
+      const N   = a + b + c + d;
+      const phi = (a*d - b*c) / Math.sqrt((a+b)*(c+d)*(a+c)*(b+d));
+      const vi  = Math.max((1 - phi*phi)**2 / (N - 1), MIN_VAR);
+      return { ...s, yi: phi, vi, se: Math.sqrt(vi), w: 1 / vi };
+    },
+    transform: (x) => x,
+
+    validate(s) {
+      const errors = {};
+      ["a", "b", "c", "d"].forEach(k => {
+        if (!isFinite(s[k]) || s[k] < 0) errors[k] = `${k} must be ≥ 0`;
+      });
+      if (!Object.keys(errors).length) {
+        const { a, b, c, d } = s;
+        if (a + b === 0) errors.a = errors.b = "row-1 marginal (a+b) must be > 0";
+        if (c + d === 0) errors.c = errors.d = "row-2 marginal (c+d) must be > 0";
+        if (a + c === 0) errors.a = errors.c = "col-1 marginal (a+c) must be > 0";
+        if (b + d === 0) errors.b = errors.d = "col-2 marginal (b+d) must be > 0";
+        if (a + b + c + d < 2) errors.a = "N must be ≥ 2";
+      }
+      return { valid: Object.keys(errors).length === 0, errors };
+    },
+
+    softWarnings(s, label) {
+      const w = [];
+      if ([s.a, s.b, s.c, s.d].some(v => isFinite(v) && v === 0))
+        w.push(`⚠️ ${label}: zero cell — phi is near a structural boundary`);
+      const N = s.a + s.b + s.c + s.d;
+      if (isFinite(N) && N < 20)
+        w.push(`⚠️ ${label}: small sample (N < 20) — phi estimate unreliable`);
+      const phi = isFinite(s.a) && isFinite(s.b) && isFinite(s.c) && isFinite(s.d)
+        ? (s.a*s.d - s.b*s.c) / Math.sqrt((s.a+s.b)*(s.c+s.d)*(s.a+s.c)*(s.b+s.d))
+        : NaN;
+      if (isFinite(phi) && Math.abs(phi) > 0.9)
+        w.push(`⚠️ ${label}: |φ| > 0.90 — variance estimate near boundary, interpret cautiously`);
+      return w;
+    },
+
+    exampleData: [
+      ["Study 1", 30, 10, 10, 50, ""],
+      ["Study 2", 25, 15, 12, 48, ""],
+      ["Study 3", 18,  8,  9, 35, ""],
+      ["Study 4", 22, 12, 11, 45, ""],
+    ],
+  },
+
+  // ------------------------------------------------------------------ //
   "PR": {
     label:  "Proportion (raw)",
     inputs: ["x", "n"],

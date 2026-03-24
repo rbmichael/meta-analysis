@@ -214,6 +214,16 @@ export function compute(s, type, options = {}) {
     return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
   }
 
+  // ================= PHI COEFFICIENT =================
+  // yi = (ad−bc) / √((a+b)(c+d)(a+c)(b+d));  vi = (1−φ²)²/(N−1)
+  if (type === "PHI") {
+    const { a, b, c, d } = s;
+    const N   = a + b + c + d;
+    const phi = (a*d - b*c) / Math.sqrt((a+b)*(c+d)*(a+c)*(b+d));
+    const vi  = Math.max((1 - phi*phi)**2 / (N - 1), MIN_VAR);
+    return { ...s, yi: phi, vi, se: Math.sqrt(vi), w: 1 / vi };
+  }
+
   // ================= PROPORTIONS =================
   // Input: { x, n }  where x = events, n = total (both non-negative integers).
   // PLN and PLO apply a continuity correction (x += 0.5, n += 1) when x = 0

@@ -1863,4 +1863,119 @@ export function runTests() {
   }
 
   console.log(smccPass ? "\n✅ ALL SMCC UNIT TESTS PASSED" : "\n❌ SOME SMCC UNIT TESTS FAILED");
+
+  // ===== PHI UNIT TESTS =====
+  //
+  // Tests cover:
+  //   1. Formula spot-check  (a=30,b=10,c=10,d=50)
+  //        N=100, φ=(1500−100)/√(40·60·40·60)=1400/2400=7/12
+  //        vi=(1−(7/12)²)²/99=(95/144)²/99=9025/2052864
+  //   2. Sign antisymmetry: swapping rows (a↔c, b↔d) negates φ
+  //   3. Zero marginal → NaN/w=0
+  //   4. Individual zero cell is valid (finite φ, w>0)
+  //   5. Bounds: |φ| ≤ 1 for valid data
+  //   6. transformEffect identity
+  //   7. Pooled meta() structural checks (k=3)
+  // ================================================================
+  let phiPass = true;
+  console.log("\n===== PHI UNIT TESTS =====\n");
+
+  function phiChk(name, val, expected, tol = 1e-9) {
+    const ok = isFinite(val) && isFinite(expected) && Math.abs(val - expected) <= tol;
+    console.log(`  ${name}: ${round(val, 9)} (expected ${round(expected, 9)}) → ${ok ? "PASS" : "FAIL"}`);
+    if (!ok) phiPass = false;
+  }
+  function phiChkTrue(name, cond) {
+    console.log(`  ${name}: ${cond ? "PASS" : "FAIL"}`);
+    if (!cond) phiPass = false;
+  }
+
+  // --- PHI 1: formula spot-check ---
+  // a=30,b=10,c=10,d=50 → N=100
+  // phi = (30*50 - 10*10) / sqrt(40*60*40*60) = 1400/2400 = 7/12
+  // vi  = (1-(7/12)^2)^2 / 99 = (95/144)^2 / 99 = 9025/2052864
+  console.log("--- PHI 1. Formula spot-check ---");
+  {
+    const s      = compute({ a: 30, b: 10, c: 10, d: 50 }, "PHI");
+    const phi_exp = 7 / 12;
+    const vi_exp  = (95 / 144) ** 2 / 99;
+    phiChk("φ = 7/12",        s.yi, phi_exp);
+    phiChk("vi = (95/144)²/99", s.vi, vi_exp);
+    phiChk("se = √vi",        s.se, Math.sqrt(vi_exp));
+    phiChk("w  = 1/vi",       s.w,  1 / vi_exp, 1e-6);
+  }
+
+  // --- PHI 2: sign antisymmetry (swap rows negates φ) ---
+  console.log("--- PHI 2. Sign antisymmetry: swap rows → −φ ---");
+  {
+    const sPos = compute({ a: 30, b: 10, c: 10, d: 50 }, "PHI");
+    const sNeg = compute({ a: 10, b: 50, c: 30, d: 10 }, "PHI");  // rows swapped
+    phiChk("φ_orig = −φ_swapped", sPos.yi, -sNeg.yi);
+    phiChk("vi symmetric",        sPos.vi,  sNeg.vi);
+  }
+
+  // --- PHI 3: zero marginal → NaN/w=0 ---
+  console.log("--- PHI 3. Zero marginal → NaN/w=0 ---");
+  {
+    phiChkTrue("a+b=0 → NaN yi", !isFinite(compute({ a: 0, b: 0, c: 5, d: 5 }, "PHI").yi));
+    phiChkTrue("c+d=0 → NaN yi", !isFinite(compute({ a: 5, b: 5, c: 0, d: 0 }, "PHI").yi));
+    phiChkTrue("a+c=0 → NaN yi", !isFinite(compute({ a: 0, b: 5, c: 0, d: 5 }, "PHI").yi));
+    phiChkTrue("b+d=0 → NaN yi", !isFinite(compute({ a: 5, b: 0, c: 5, d: 0 }, "PHI").yi));
+    phiChkTrue("a+b=0 → w=0",    compute({ a: 0, b: 0, c: 5, d: 5 }, "PHI").w === 0);
+  }
+
+  // --- PHI 4: individual zero cell is valid ---
+  // a=0,b=10,c=5,d=15 → N=30, all marginals > 0
+  console.log("--- PHI 4. Individual zero cell valid ---");
+  {
+    const s = compute({ a: 0, b: 10, c: 5, d: 15 }, "PHI");
+    phiChkTrue("finite φ with a=0",  isFinite(s.yi));
+    phiChkTrue("w > 0 with a=0",     s.w > 0);
+    // phi = (0*15 - 10*5) / sqrt(10*20*5*25) = -50 / sqrt(25000)
+    phiChk("φ = -50/√25000", s.yi, -50 / Math.sqrt(25000));
+  }
+
+  // --- PHI 5: |φ| ≤ 1 ---
+  console.log("--- PHI 5. |φ| ≤ 1 for valid data ---");
+  {
+    const cases = [
+      { a: 30, b: 10, c: 10, d: 50 },
+      { a:  5, b: 45, c: 40, d: 10 },
+      { a: 20, b: 20, c: 20, d: 20 },
+      { a: 50, b:  1, c:  1, d: 50 },
+    ];
+    cases.forEach(c => {
+      const s = compute(c, "PHI");
+      phiChkTrue(`|φ| ≤ 1 for (${c.a},${c.b},${c.c},${c.d})`, isFinite(s.yi) && Math.abs(s.yi) <= 1);
+    });
+  }
+
+  // --- PHI 6: transformEffect identity ---
+  console.log("--- PHI 6. transformEffect identity ---");
+  {
+    [-0.8, -0.5, 0, 0.5, 0.8].forEach(v =>
+      phiChk(`transformEffect(${v}, "PHI") = ${v}`, transformEffect(v, "PHI"), v, 1e-12)
+    );
+  }
+
+  // --- PHI 7: pooled meta() structural checks ---
+  console.log("--- PHI 7. Pooled meta() (k=3, DL) ---");
+  {
+    const studies = [
+      compute({ a: 30, b: 10, c: 10, d: 50 }, "PHI"),
+      compute({ a: 25, b: 15, c: 12, d: 48 }, "PHI"),
+      compute({ a: 18, b:  8, c:  9, d: 35 }, "PHI"),
+    ];
+    phiChkTrue("all yi finite",  studies.every(s => isFinite(s.yi)));
+    phiChkTrue("all vi > 0",     studies.every(s => s.vi > 0));
+    const m = meta(studies, "DL");
+    const minYi = Math.min(...studies.map(s => s.yi));
+    const maxYi = Math.max(...studies.map(s => s.yi));
+    phiChkTrue("FE in (min yi, max yi)", m.FE > minYi && m.FE < maxYi);
+    phiChkTrue("RE in (min yi, max yi)", m.RE > minYi && m.RE < maxYi);
+    phiChkTrue("tau2 ≥ 0",              isFinite(m.tau2) && m.tau2 >= 0);
+    phiChkTrue("CI lb < RE < CI ub",    m.ciLow < m.RE && m.RE < m.ciHigh);
+  }
+
+  console.log(phiPass ? "\n✅ ALL PHI UNIT TESTS PASSED" : "\n❌ SOME PHI UNIT TESTS FAILED");
 }

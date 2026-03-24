@@ -212,6 +212,19 @@ export const HELP = {
            "Results are back-transformed to r for display.",
   },
 
+  "effect.PHI": {
+    title: "Phi Coefficient (PHI)",
+    body:  "Pearson correlation for two binary variables, computed from a 2×2 table: " +
+           "φ = (ad − bc) / √((a+b)(c+d)(a+c)(b+d)). " +
+           "Ranges from −1 to +1; φ = 0 means no association. " +
+           "Variance: vi = (1 − φ²)² / (N − 1), the same approximation used for raw Pearson r (COR). " +
+           "Unlike OR or RR, phi captures symmetric association rather than a directional risk contrast. " +
+           "Inputs are the four cells of a 2×2 table (a, b, c, d ≥ 0); all four marginal totals " +
+           "(a+b, c+d, a+c, b+d) must be > 0. Individual zero cells are allowed but produce a warning. " +
+           "No continuity correction is applied (contrast with OR/RR). " +
+           "Pooled on the raw scale — no back-transformation.",
+  },
+
   "effect.PR": {
     title: "Proportion — raw (PR)",
     body:  "Single-group event proportion pooled on the untransformed (0–1) scale. " +

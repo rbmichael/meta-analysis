@@ -331,7 +331,7 @@ export function transformEffect(x, type) {
 
   // Correlation: ZCOR back-transforms Fisher's z → r; COR is already on r scale
   if (type === "ZCOR") return Math.tanh(x);
-  if (type === "COR")  return x;
+  if (type === "COR" || type === "PHI")  return x;
 
   // Proportions — all back-transform to p ∈ [0, 1]
   if (type === "PR")  return Math.min(1, Math.max(0, x));
