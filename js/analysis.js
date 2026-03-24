@@ -64,6 +64,19 @@ export function compute(s, type, options = {}) {
     return { ...s, yi: es, vi, se: Math.sqrt(vi), w: 1 / vi };
   }
 
+  // ================= SINGLE-GROUP MEAN (MN) =================
+  if (type === "MN") {
+    const vi = Math.max(s.sd ** 2 / s.n, MIN_VAR);
+    return { ...s, yi: s.m, vi, se: Math.sqrt(vi), w: 1 / vi };
+  }
+
+  // ================= SINGLE-GROUP MEAN LOG-TRANSFORMED (MNLN) =================
+  // yi = log(m);  vi = sd²/(n·m²)  — delta method for log(μ)
+  if (type === "MNLN") {
+    const vi = Math.max(s.sd ** 2 / (s.n * s.m ** 2), MIN_VAR);
+    return { ...s, yi: Math.log(s.m), vi, se: Math.sqrt(vi), w: 1 / vi };
+  }
+
   // ================= CONTINUOUS DATA (SMD) =================
   if (type === "SMD") {
     const g = hedgesG(s, options);

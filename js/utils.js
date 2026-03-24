@@ -317,7 +317,7 @@ export function transformEffect(x, type) {
   if (!isFinite(x)) return NaN;
 
   // Ratio measures — all stored on log scale, display as exp(yi)
-  if (type === "OR" || type === "RR" || type === "HR" || type === "IRR" || type === "IR" || type === "ROM" || type === "CVR" || type === "VR" || type === "GOR") {
+  if (type === "OR" || type === "RR" || type === "HR" || type === "IRR" || type === "IR" || type === "ROM" || type === "CVR" || type === "VR" || type === "GOR" || type === "MNLN") {
     return Math.exp(x);
   }
 
@@ -325,7 +325,7 @@ export function transformEffect(x, type) {
 	if (type === "RD") return x;  // continuous scale, no transformation
 
   // Continuous measures
-  if (type === "MD" || type === "SMD" || type === "SMDH" || type === "MD_paired" || type === "SMD_paired") {
+  if (type === "MD" || type === "SMD" || type === "SMDH" || type === "MD_paired" || type === "SMD_paired" || type === "MN") {
     return x;
   }
 

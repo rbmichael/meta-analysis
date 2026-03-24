@@ -944,6 +944,79 @@ export const effectProfiles = {
   },
 
   // ------------------------------------------------------------------ //
+  "MN": {
+    label:  "Mean (raw)",
+    inputs: ["m", "sd", "n"],
+    compute(s) {
+      if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+      const vi = Math.max(s.sd ** 2 / s.n, MIN_VAR);
+      return { ...s, yi: s.m, vi, se: Math.sqrt(vi), w: 1 / vi };
+    },
+    transform: (x) => x,
+
+    validate(s) {
+      const errors = {};
+      if (!isFinite(s.m))               errors.m  = "m must be numeric";
+      if (!isFinite(s.sd) || s.sd <= 0) errors.sd = "sd must be > 0";
+      if (!isFinite(s.n)  || s.n  <  1) errors.n  = "n must be ≥ 1";
+      return { valid: Object.keys(errors).length === 0, errors };
+    },
+
+    softWarnings(s, label) {
+      const w = [];
+      if (isFinite(s.sd) && isFinite(s.m) && s.m !== 0 && Math.abs(s.sd / s.m) > 1)
+        w.push(`⚠️ ${label}: high coefficient of variation (sd/m > 1) — consider MNLN`);
+      if (isFinite(s.n) && s.n < 10)
+        w.push(`⚠️ ${label}: small sample size (n < 10)`);
+      return w;
+    },
+
+    exampleData: [
+      ["Study 1", 24.3, 5.1, 45, ""],
+      ["Study 2", 22.8, 4.7, 38, ""],
+      ["Study 3", 26.1, 6.0, 52, ""],
+      ["Study 4", 23.5, 5.5, 41, ""],
+    ],
+  },
+
+  // ------------------------------------------------------------------ //
+  "MNLN": {
+    label:  "Mean (log)",
+    isTransformedScale: true,
+    inputs: ["m", "sd", "n"],
+    compute(s) {
+      if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+      const vi = Math.max(s.sd ** 2 / (s.n * s.m ** 2), MIN_VAR);
+      return { ...s, yi: Math.log(s.m), vi, se: Math.sqrt(vi), w: 1 / vi };
+    },
+    transform: (x) => Math.exp(x),
+
+    validate(s) {
+      const errors = {};
+      if (!isFinite(s.m)  || s.m  <= 0) errors.m  = "m must be > 0";
+      if (!isFinite(s.sd) || s.sd <= 0) errors.sd = "sd must be > 0";
+      if (!isFinite(s.n)  || s.n  <  1) errors.n  = "n must be ≥ 1";
+      return { valid: Object.keys(errors).length === 0, errors };
+    },
+
+    softWarnings(s, label) {
+      const w = [];
+      if (isFinite(s.sd) && isFinite(s.m) && s.m > 0 && s.sd / s.m > 0.5)
+        w.push(`⚠️ ${label}: CV = sd/m > 0.5 — delta-method variance approximation less accurate`);
+      if (isFinite(s.n) && s.n < 10)
+        w.push(`⚠️ ${label}: small sample size (n < 10)`);
+      return w;
+    },
+
+    exampleData: [
+      ["Study 1", 18.5, 6.2, 40, ""],
+      ["Study 2", 22.1, 9.4, 35, ""],
+      ["Study 3", 15.8, 5.0, 50, ""],
+      ["Study 4", 20.3, 7.8, 44, ""],
+    ],
+  },
+
+  // ------------------------------------------------------------------ //
   "GOR": {
     label:  "Generalised Odds Ratio (ordinal)",
     isTransformedScale: true,

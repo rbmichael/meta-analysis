@@ -151,6 +151,25 @@ export const HELP = {
            "Use for single-arm studies or prevalence estimates expressed as rates.",
   },
 
+  "effect.MN": {
+    title: "Mean — raw (MN)",
+    body:  "Synthesises the raw sample mean across single-arm studies. " +
+           "Effect size: yi = m̄; variance: vi = sd²/n. " +
+           "Assumes the sampling distribution of the mean is approximately normal. " +
+           "No back-transformation is applied — pooled estimate is on the original scale. " +
+           "If means are strictly positive and right-skewed, consider MNLN instead.",
+  },
+
+  "effect.MNLN": {
+    title: "Mean — log-transformed (MNLN)",
+    body:  "Synthesises the log-transformed sample mean across single-arm studies. " +
+           "Effect size: yi = log(m̄); variance: vi = sd²/(n·m̄²) via the delta method. " +
+           "Requires m̄ > 0. Pooled estimate back-transforms to the original mean scale " +
+           "via exp(). Preferable over MN when means span orders of magnitude or are " +
+           "right-skewed. The delta-method approximation is less accurate when the " +
+           "coefficient of variation (sd/m̄) exceeds 0.5.",
+  },
+
   "effect.GOR": {
     title: "Generalised Odds Ratio — ordinal (GOR)",
     body:  "Effect size for ordinal outcomes (Agresti 1980). " +

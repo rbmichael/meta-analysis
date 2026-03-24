@@ -1594,4 +1594,156 @@ export function runTests() {
   }
 
   console.log(gorPass ? "\n✅ ALL GOR UNIT TESTS PASSED" : "\n❌ SOME GOR UNIT TESTS FAILED");
+
+  // ===== MN / MNLN UNIT TESTS =====
+  //
+  // Tests cover:
+  //   MN:
+  //     1. yi / vi formula  (m=24.3, sd=5.1, n=45 → vi=26.01/45=0.578)
+  //     2. Negative / zero mean is valid (continuous scale, no log)
+  //     3. Invalid inputs → NaN / w=0
+  //     4. transformEffect is identity
+  //     5. Pooled meta(): k identical studies → RE = FE = m
+  //   MNLN:
+  //     6. yi / vi formula  (m=18.5, sd=6.2, n=40 → yi=log(18.5), vi=38.44/13690)
+  //     7. m ≤ 0 → NaN / w=0
+  //     8. Invalid inputs → NaN / w=0
+  //     9. transformEffect = exp(yi) = m (round-trip)
+  //    10. Pooled meta() structural checks
+  // ================================================================
+  let mnPass = true;
+  console.log("\n===== MN / MNLN UNIT TESTS =====\n");
+
+  function mnchk(name, val, expected, tol = 1e-6) {
+    const ok = isFinite(val) && isFinite(expected) && Math.abs(val - expected) <= tol;
+    console.log(`  ${name}: ${round(val, 7)} (expected ${round(expected, 7)}) → ${ok ? "PASS" : "FAIL"}`);
+    if (!ok) mnPass = false;
+  }
+  function mnchkTrue(name, cond) {
+    console.log(`  ${name}: ${cond ? "PASS" : "FAIL"}`);
+    if (!cond) mnPass = false;
+  }
+
+  // --- MN 1: yi / vi formula ---
+  // m=24.3, sd=5.1, n=45 → vi = 5.1²/45 = 26.01/45 = 0.578
+  console.log("--- MN 1. yi / vi formula ---");
+  {
+    const s = compute({ m: 24.3, sd: 5.1, n: 45 }, "MN");
+    mnchk("yi = m",          s.yi, 24.3);
+    mnchk("vi = sd²/n",      s.vi, 26.01 / 45);
+    mnchk("se = √vi",        s.se, Math.sqrt(26.01 / 45));
+    mnchk("w  = 1/vi",       s.w,  45 / 26.01);
+  }
+
+  // --- MN 2: negative and zero means are valid ---
+  console.log("--- MN 2. Negative/zero mean valid ---");
+  {
+    const sNeg  = compute({ m: -5.0, sd: 2.0, n: 30 }, "MN");
+    const sZero = compute({ m:  0.0, sd: 2.0, n: 30 }, "MN");
+    mnchkTrue("negative mean: yi finite",  isFinite(sNeg.yi));
+    mnchkTrue("negative mean: vi > 0",     sNeg.vi > 0);
+    mnchkTrue("zero mean: yi = 0",         sZero.yi === 0);
+    mnchkTrue("zero mean: vi > 0",         sZero.vi > 0);
+  }
+
+  // --- MN 3: invalid inputs → NaN / w=0 ---
+  console.log("--- MN 3. Invalid inputs → NaN / w=0 ---");
+  {
+    const base = { m: 24.3, sd: 5.1, n: 45 };
+    mnchkTrue("sd = 0  → NaN yi",  !isFinite(compute({ ...base, sd: 0    }, "MN").yi));
+    mnchkTrue("sd < 0  → NaN yi",  !isFinite(compute({ ...base, sd: -1   }, "MN").yi));
+    mnchkTrue("n = 0   → NaN yi",  !isFinite(compute({ ...base, n: 0     }, "MN").yi));
+    mnchkTrue("m = NaN → NaN yi",  !isFinite(compute({ ...base, m: NaN   }, "MN").yi));
+    mnchkTrue("sd = 0  → w = 0",   compute({ ...base, sd: 0 }, "MN").w === 0);
+  }
+
+  // --- MN 4: transformEffect is identity ---
+  console.log("--- MN 4. transformEffect identity ---");
+  {
+    const vals = [-5, 0, 12.7, 100];
+    vals.forEach(v => mnchk(`transformEffect(${v}, "MN") = ${v}`, transformEffect(v, "MN"), v, 1e-12));
+  }
+
+  // --- MN 5: k identical studies pool to that mean ---
+  console.log("--- MN 5. Pooled meta() — identical studies → RE = FE = m ---");
+  {
+    const studies = [
+      compute({ m: 20, sd: 4, n: 40 }, "MN"),
+      compute({ m: 20, sd: 4, n: 40 }, "MN"),
+      compute({ m: 20, sd: 4, n: 40 }, "MN"),
+    ];
+    const m = meta(studies, "DL");
+    mnchk("FE = 20", m.FE, 20, 1e-9);
+    mnchk("RE = 20", m.RE, 20, 1e-9);
+    mnchk("tau2 = 0 (homogeneous)", m.tau2, 0, 1e-9);
+  }
+
+  // --- MNLN 6: yi / vi formula ---
+  // m=18.5, sd=6.2, n=40 → yi=log(18.5), vi=6.2²/(40·18.5²)=38.44/13690
+  console.log("--- MNLN 6. yi / vi formula ---");
+  {
+    const s = compute({ m: 18.5, sd: 6.2, n: 40 }, "MNLN");
+    const vi_exp = 38.44 / 13690;
+    mnchk("yi = log(m)",        s.yi, Math.log(18.5));
+    mnchk("vi = sd²/(n·m²)",   s.vi, vi_exp, 1e-9);
+    mnchk("se = √vi",           s.se, Math.sqrt(vi_exp), 1e-9);
+    mnchk("w  = 1/vi",          s.w,  1 / vi_exp, 1e-6);
+  }
+
+  // --- MNLN 7: m ≤ 0 → NaN / w=0 ---
+  console.log("--- MNLN 7. m ≤ 0 → NaN / w=0 ---");
+  {
+    const base = { m: 18.5, sd: 6.2, n: 40 };
+    mnchkTrue("m = 0  → NaN yi",  !isFinite(compute({ ...base, m: 0   }, "MNLN").yi));
+    mnchkTrue("m < 0  → NaN yi",  !isFinite(compute({ ...base, m: -1  }, "MNLN").yi));
+    mnchkTrue("m = 0  → w = 0",   compute({ ...base, m: 0 }, "MNLN").w === 0);
+  }
+
+  // --- MNLN 8: invalid inputs → NaN / w=0 ---
+  console.log("--- MNLN 8. Invalid inputs → NaN / w=0 ---");
+  {
+    const base = { m: 18.5, sd: 6.2, n: 40 };
+    mnchkTrue("sd = 0  → NaN yi",  !isFinite(compute({ ...base, sd: 0  }, "MNLN").yi));
+    mnchkTrue("n = 0   → NaN yi",  !isFinite(compute({ ...base, n: 0   }, "MNLN").yi));
+    mnchkTrue("sd = 0  → w = 0",   compute({ ...base, sd: 0 }, "MNLN").w === 0);
+  }
+
+  // --- MNLN 9: back-transform round-trip exp(log(m)) = m ---
+  console.log("--- MNLN 9. Back-transform: exp(log(m)) = m ---");
+  {
+    const means = [1, 5.5, 18.5, 100];
+    means.forEach(m => {
+      mnchk(`exp(log(${m})) = ${m}`, transformEffect(Math.log(m), "MNLN"), m, 1e-10);
+    });
+    // CI back-transform: bounds are positive and straddle the point estimate
+    const s = compute({ m: 18.5, sd: 6.2, n: 40 }, "MNLN");
+    const lb = transformEffect(s.yi - 1.96 * s.se, "MNLN");
+    const ub = transformEffect(s.yi + 1.96 * s.se, "MNLN");
+    mnchkTrue("CI lb < m < CI ub", lb < 18.5 && 18.5 < ub);
+    mnchkTrue("CI lb > 0",         lb > 0);
+  }
+
+  // --- MNLN 10: pooled meta() structural checks ---
+  console.log("--- MNLN 10. Pooled meta() (k=3, DL) ---");
+  {
+    const studies = [
+      compute({ m: 18.5, sd: 6.2, n: 40 }, "MNLN"),
+      compute({ m: 22.1, sd: 9.4, n: 35 }, "MNLN"),
+      compute({ m: 15.8, sd: 5.0, n: 50 }, "MNLN"),
+    ];
+    mnchkTrue("all yi finite",  studies.every(s => isFinite(s.yi)));
+    mnchkTrue("all vi > 0",     studies.every(s => s.vi > 0));
+    const m = meta(studies, "DL");
+    const minYi = Math.min(...studies.map(s => s.yi));
+    const maxYi = Math.max(...studies.map(s => s.yi));
+    mnchkTrue("FE in (min yi, max yi)", m.FE > minYi && m.FE < maxYi);
+    mnchkTrue("RE in (min yi, max yi)", m.RE > minYi && m.RE < maxYi);
+    mnchkTrue("tau2 ≥ 0",              isFinite(m.tau2) && m.tau2 >= 0);
+    mnchkTrue("exp(RE) > 0",           Math.exp(m.RE) > 0);
+    // exp(RE) should be between min and max of the original means
+    mnchkTrue("exp(RE) between 15.8 and 22.1",
+      Math.exp(m.RE) > 15.8 && Math.exp(m.RE) < 22.1);
+  }
+
+  console.log(mnPass ? "\n✅ ALL MN / MNLN UNIT TESTS PASSED" : "\n❌ SOME MN / MNLN UNIT TESTS FAILED");
 }
