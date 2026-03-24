@@ -80,17 +80,15 @@ BUG 7 [MEDIUM]: Test-suite failures — Harbord / Deeks / Rücker structural
 
   File:    js/tests.js
 
-  7a — Harbord structural (k=4)
+  7a — Harbord structural (k=4) ✓ RESOLVED 2026-03-25
     Test:  interceptP ∈ (0,1) for a 4-study dataset
-    Cause: Studies 2, 3, and 4 share identical marginal totals, giving them
+    Cause: Studies 2, 3, and 4 shared identical marginal totals, giving them
            the same hypergeometric variance V and therefore the same √V (the
            OLS predictor). With only 2 distinct x-values across 4 points the
-           regression is near-degenerate and the p-value falls outside (0,1)
-           or is NaN/Infinity.
-    Dataset: (30,10,10,50), (20,5,5,30), (15,10,10,25), (10,15,15,20)
-             Studies 2–4 have marginals (25,35,25,35) N=60 → same √V.
-    Fix:   Replace the dataset with one having 4 studies with distinct √V
-           values (no repeated marginal structures).
+           regression was rank-deficient → nanResult returned.
+    Fixed: js/tests.js — replaced dataset with 4 studies having distinct √V
+           values: (10,5,5,30) N=50 √V=1.500, (30,10,10,50) N=100 √V=2.412,
+           (40,10,15,85) N=150 √V=2.792, (8,20,12,60) N=100 √V=1.805.
 
   7b — Deeks structural (k=4)
     Test:  interceptP ∈ (0,1) for a 4-study dataset

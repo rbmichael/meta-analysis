@@ -572,14 +572,15 @@ export function runTests() {
     bchkNaN("V=0 study skipped → k=2 → NaN", harbordTest(s).intercept);
   }
 
-  // Structural: k=4 studies → df=2, finite results, p ∈ (0,1)
+  // Structural: k=4 studies with distinct √V predictors → df=2, finite results, p ∈ (0,1)
+  // √V values: 1.500 (N=50), 2.412 (N=100), 2.792 (N=150), 1.805 (N=100) — all distinct.
   console.log("--- Harbord: structural (k=4) ---");
   {
     const s = [
-      { a:30,b:10,c:10,d:50 },
-      { a:20,b:5, c:5, d:30 },
-      { a:15,b:10,c:10,d:25 },
-      { a:10,b:15,c:15,d:20 },
+      { a:10, b:5,  c:5,  d:30 },
+      { a:30, b:10, c:10, d:50 },
+      { a:40, b:10, c:15, d:85 },
+      { a:8,  b:20, c:12, d:60 },
     ];
     const h = harbordTest(s);
     bchkTrue("df = 2",           h.df === 2);
