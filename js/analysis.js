@@ -760,13 +760,31 @@ export function beggTest(studies) {
     }
   }
 
-  // Variance of S under H₀ (no ties formula)
-  const varS = k * (k - 1) * (2 * k + 5) / 18;
+  // Variance of S under H₀ with Kendall-Gibbons tie correction
+  // (Kendall & Gibbons 1990 §3.3).
+  // Var(S) = [k(k−1)(2k+5) − tieTermX − tieTermY] / 18
+  // where tieTermZ = Σ t(t−1)(2t+5) over tie groups of size t in Z.
+  const tieStats = vals => {
+    const counts = new Map();
+    for (const v of vals) counts.set(v, (counts.get(v) || 0) + 1);
+    let varTerm = 0, pairs = 0;
+    for (const t of counts.values()) {
+      if (t > 1) { varTerm += t * (t - 1) * (2 * t + 5); pairs += t * (t - 1) / 2; }
+    }
+    return { varTerm, pairs };
+  };
+  const tsX  = tieStats(adj);
+  const tsY  = tieStats(valid.map(s => s.vi));
+  const varS = (k * (k - 1) * (2 * k + 5) - tsX.varTerm - tsY.varTerm) / 18;
 
-  // Continuity correction
-  const z = S === 0 ? 0 : (Math.abs(S) - 1) / Math.sqrt(varS) * Math.sign(S);
+  // Continuity-corrected z; guard degenerate varS (all values tied)
+  const z = (S === 0 || varS <= 0) ? 0 : (Math.abs(S) - 1) / Math.sqrt(varS) * Math.sign(S);
   const p = 2 * (1 - normalCDF(Math.abs(z)));
-  const tau = S / (k * (k - 1) / 2);
+
+  // Kendall τ_b with tie-corrected denominator
+  const p0    = k * (k - 1) / 2;
+  const denom = Math.sqrt((p0 - tsX.pairs) * (p0 - tsY.pairs));
+  const tau   = denom > 0 ? S / denom : 0;
 
   return { tau, S, z, p };
 }

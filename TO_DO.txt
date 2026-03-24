@@ -32,20 +32,15 @@ BUG 2 [HIGH] ✓ RESOLVED 2026-03-25: D3 globals used inside analysis.js for ari
              d3.mean(arr) → arr.reduce((a,b)=>a+b,0)/arr.length
 
 --------------------------------------------------------------------------------
-BUG 3 [HIGH]: Begg's rank-correlation test missing tie correction
+BUG 3 [HIGH] ✓ RESOLVED 2026-03-25: Begg's rank-correlation test missing tie correction
 
-  File:    js/analysis.js ~ beggTest()
-  Symptom: Variance of Kendall's S uses the no-ties formula
-           Var(S) = k(k-1)(2k+5)/18.
-           When studies share identical yi or vi (common with small k or
-           discrete effect types like OR with rounded inputs), ties reduce
-           the true variance, so the z-score is inflated and the p-value
-           is anti-conservative.
-  Fix:     Compute tie counts for X (effect sizes) and Y (variances) and
-           apply the standard Kendall-Gibbons tie-correction term:
-           Var(S) = [k(k-1)(2k+5) - Σt_j(t_j-1)(2t_j+5)] / 18
-           where t_j are tie-group sizes.
-  Ref:     Kendall & Gibbons (1990) "Rank Correlation Methods" §3.3
+  Was:     Var(S) used the no-ties formula k(k-1)(2k+5)/18, inflating z when
+           studies share identical yi or vi. τ used the uncorrected τ_a denominator.
+  Fixed:   js/analysis.js ~ beggTest() — tie-corrected variance per Kendall &
+           Gibbons (1990) §3.3:
+             Var(S) = [k(k-1)(2k+5) − tieTermX − tieTermY] / 18
+           τ now uses the τ_b denominator √((p0−tX)(p0−tY)).
+           Degenerate case (varS ≤ 0) guarded; returns z=0, p=1.
 
 --------------------------------------------------------------------------------
 BUG 4 [MEDIUM]: Unbounded bisection loop in heterogeneityCIs()
