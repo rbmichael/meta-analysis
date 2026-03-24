@@ -716,7 +716,7 @@ export function eggerTest(studies){
   if(k < 3) return { intercept: NaN, slope: NaN, p: NaN };
   const Z = studies.map(d => d.yi / d.se);
   const X = studies.map(d => 1 / d.se);
-  const meanX = d3.mean(X), meanZ = d3.mean(Z);
+  const meanX = X.reduce((a,b)=>a+b,0)/X.length, meanZ = Z.reduce((a,b)=>a+b,0)/Z.length;
   let num=0, den=0;
   for(let i=0;i<k;i++){ num += (X[i]-meanX)*(Z[i]-meanZ); den += (X[i]-meanX)**2; }
   const slope = num/den;
@@ -1311,8 +1311,8 @@ export function meta(studies, method="DL", ciMethod="normal") {
 
   // ---------- FIXED EFFECT ----------
   const wFE = studies.map(d => 1 / Math.max(d.vi, MIN_VAR));
-  const W = d3.sum(wFE);
-  const FE = W > 0 ? d3.sum(studies.map((d,i)=>d.yi*wFE[i]))/W : NaN;
+  const W = wFE.reduce((a,b)=>a+b,0);
+  const FE = W > 0 ? studies.reduce((a,d,i)=>a+d.yi*wFE[i],0)/W : NaN;
   const seFE = W > 0 ? Math.sqrt(1/W) : NaN;
 
   let Q = 0;
@@ -1335,15 +1335,15 @@ export function meta(studies, method="DL", ciMethod="normal") {
 	else if (method === "EBLUP")  tau2 = tau2_REML(studies, 1e-12, 500);
 	else if (method === "HSk")    tau2 = tau2_HSk(studies);
 	else { // DL fallback
-		const sumW2 = d3.sum(wFE.map(w=>w*w));
+		const sumW2 = wFE.reduce((a,w)=>a+w*w,0);
 		const C = W - (sumW2/W);
 		tau2 = C>0 ? Math.max(0, (Q-dfQ)/C) : 0;
 	}
 
   // ---------- RANDOM EFFECT ----------
   const wRE = studies.map(d => 1 / Math.max(d.vi + tau2, MIN_VAR));
-  const WRE = d3.sum(wRE);
-  const RE = WRE>0 ? d3.sum(studies.map((d,i)=>d.yi*wRE[i]))/WRE : NaN;
+  const WRE = wRE.reduce((a,b)=>a+b,0);
+  const RE = WRE>0 ? studies.reduce((a,d,i)=>a+d.yi*wRE[i],0)/WRE : NaN;
   const seRE_base = WRE>0 ? Math.sqrt(1/WRE) : NaN;  // used for prediction interval
   let seRE = seRE_base;
 

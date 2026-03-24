@@ -23,18 +23,13 @@ BUG 1 [CRITICAL] ✓ RESOLVED 2026-03-25: SMD_paired variance formula was wrong
            correct distinction between the two measures.
 
 --------------------------------------------------------------------------------
-BUG 2 [HIGH]: D3 globals used inside analysis.js for arithmetic
+BUG 2 [HIGH] ✓ RESOLVED 2026-03-25: D3 globals used inside analysis.js for arithmetic
 
-  File:    js/analysis.js lines 720, 1315–1316, 1339, 1346–1347
-  Symptom: d3.sum() and d3.mean() are called directly in the statistical core
-           (eggerTest, meta). D3 is loaded via CDN in index.html — if the CDN
-           call fails or the app is later run offline or bundled, these calls
-           throw ReferenceError and silently break the whole analysis.
-  Impact:  Reliability risk; creates an implicit dependency on a visualisation
-           library for pure arithmetic.
-  Fix:     Replace all d3.sum(arr) → arr.reduce((a,b)=>a+b,0)
-                        d3.mean(arr) → arr.reduce((a,b)=>a+b,0)/arr.length
-           (or add a local two-line sum/mean helper at the top of analysis.js)
+  Was:     d3.sum() and d3.mean() called directly in the statistical core
+           (eggerTest, meta) — would throw ReferenceError if CDN failed.
+  Fixed:   js/analysis.js — all 6 calls replaced with native Array.reduce():
+             d3.sum(arr)  → arr.reduce((a,b)=>a+b,0)
+             d3.mean(arr) → arr.reduce((a,b)=>a+b,0)/arr.length
 
 --------------------------------------------------------------------------------
 BUG 3 [HIGH]: Begg's rank-correlation test missing tie correction
