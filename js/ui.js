@@ -971,10 +971,10 @@ function renderRegressionPanel(reg, method, ciMethod, kExcluded = 0) {
   }
 
   const lowDfWarning = reg.QEdf < 3
-    ? `<div class="reg-note" style="color:#ff9f43">⚠ Very few residual df (k − p = ${reg.QEdf}) — estimates may be unreliable.</div>`
+    ? `<div class="reg-note reg-warn">⚠ Very few residual df (k − p = ${reg.QEdf}) — estimates may be unreliable.</div>`
     : "";
   const excludedWarning = kExcluded > 0
-    ? `<div class="reg-note" style="color:#ff9f43">⚠ ${kExcluded} ${kExcluded === 1 ? "study" : "studies"} excluded from regression (missing moderator value${kExcluded === 1 ? "" : "s"}).</div>`
+    ? `<div class="reg-note reg-warn">⚠ ${kExcluded} ${kExcluded === 1 ? "study" : "studies"} excluded from regression (missing moderator value${kExcluded === 1 ? "" : "s"}).</div>`
     : "";
 
   panel.innerHTML = `
@@ -999,9 +999,9 @@ function renderRegressionPanel(reg, method, ciMethod, kExcluded = 0) {
       </table>
       <div class="reg-note">*** p &lt; .001 &nbsp;·&nbsp; ** p &lt; .01 &nbsp;·&nbsp; * p &lt; .05 &nbsp;·&nbsp; · p &lt; .10</div>
       ${fittedRows ? `
-      <details style="margin-top:10px">
-        <summary style="cursor:pointer; color:#aaa; font-size:0.88em">Fitted values &amp; residuals (k = ${reg.k})</summary>
-        <table class="reg-table" style="margin-top:6px">
+      <details>
+        <summary>Fitted values &amp; residuals (k = ${reg.k})</summary>
+        <table class="reg-table">
           <thead><tr>
             <th>Study</th><th>yᵢ</th><th>ŷᵢ</th><th>eᵢ</th><th>std. eᵢ</th>
           </tr></thead>
@@ -1372,7 +1372,7 @@ function runAnalysis() {
       <tr><th>Study</th><th>RE (LOO)</th><th>Δτ²</th><th>Std Residual</th><th>DFBETA</th><th>Hat</th><th>Cook's D</th><th>Flag</th></tr>`;
   influence.forEach(d => {
     const anyFlag = d.outlier || d.influential || d.highLeverage || d.highCookD;
-    const rowStyle = anyFlag ? "style='background:#ffe6e6;'" : "";
+    const rowStyle = anyFlag ? "class='results-row-flagged'" : "";
     const hatStyle  = d.highLeverage ? " style='color:orange;font-weight:bold;'" : "";
     const cookStyle = d.highCookD    ? " style='color:orange;font-weight:bold;'" : "";
     const flags = [

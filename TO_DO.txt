@@ -1,0 +1,34 @@
+TO-DO: ITEMS DEFERRED FROM REDESIGN
+=====================================
+Last updated: 2026-03-24
+
+--------------------------------------------------------------------------------
+ITEM 1: Restyle D3 plot internals to match the new design system
+
+  Context:  The full-app redesign (2026-03-24 onwards) is updating the CSS
+            chrome around the plots (containers, labels, export buttons,
+            navigation) but is intentionally leaving the D3 SVG internals
+            untouched to limit scope.
+
+  Affected plots:
+    - Forest plot        (js/plots.js → drawForest)
+    - Funnel plot        (js/plots.js → drawFunnel)
+    - Influence plot     (js/plots.js → drawInfluencePlot)
+    - Cumulative forest  (js/plots.js → drawCumulativeForest)
+    - Bubble plots       (js/plots.js → drawBubble)
+
+  What needs updating in each plot:
+    - Background color:   currently #181828 / transparent → use var(--bg-elevated) or #0a0a0c
+    - Axis line/tick color: currently grey hardcoded → use var(--fg-muted) / var(--border)
+    - Axis label color:   currently grey → var(--fg-muted)
+    - Grid line color:    → var(--border)
+    - Data point fills:   currently hardcoded blues/reds → align with accent palette
+    - CI line strokes:    → var(--fg-subtle) or var(--accent)
+    - Diamond (pooled) fill: → var(--accent) or accent-adjacent
+    - Funnel region fill: → rgba(94,106,210,0.08) (accent-glow at lower opacity)
+    - Regression line (bubble plot): → var(--accent)
+    - Text labels inside SVGs: → var(--fg-muted) or var(--fg)
+    - Trim-and-fill imputed points: keep visually distinct, use muted accent
+
+  Design token reference: css/styles.css → :root block
+  Design system reference: design-system doc (provided 2026-03-24)

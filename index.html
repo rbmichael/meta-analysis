@@ -1,8 +1,14 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Meta-analysis Tool</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Meta-Analysis Tool</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>tailwind.config = { corePlugins: { preflight: false } }</script>
 <link rel="stylesheet" href="css/styles.css">
 <script src="https://d3js.org/d3.v7.min.js"></script>
 <script type="module" src="js/analysis.js"></script>
@@ -38,7 +44,7 @@
         <button id="saveSession">Save Session</button>
         <button id="loadSession">Load Session</button>
       </div>
-      <div id="csvWarning" style="color:red; display:none; margin-bottom:10px;"></div>
+      <div id="csvWarning"></div>
 
       <!-- ---- Import preview panel (hidden until a file is chosen) ---- -->
       <div id="importPreview" style="display:none">
@@ -148,7 +154,7 @@
         </tr>
       </table>
 
-      <div id="validationWarnings" style="color: red; margin-top: 10px;"></div>
+      <div id="validationWarnings"></div>
 
       <button id="addStudy">Add Study</button>
       <button id="run">Run</button>
