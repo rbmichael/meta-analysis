@@ -90,16 +90,14 @@ BUG 7 [MEDIUM]: Test-suite failures — Harbord / Deeks / Rücker structural
            values: (10,5,5,30) N=50 √V=1.500, (30,10,10,50) N=100 √V=2.412,
            (40,10,15,85) N=150 √V=2.792, (8,20,12,60) N=100 √V=1.805.
 
-  7b — Deeks structural (k=4)
+  7b — Deeks structural (k=4) ✓ RESOLVED 2026-03-25
     Test:  interceptP ∈ (0,1) for a 4-study dataset
-    Cause: In Deeks WLS, the predictor is xi = 1/√ESS_i and the weight is
-           wi = ESS_i. This gives wi·xi² = 1 exactly for every study, making
-           the 2×2 normal-equation matrix ill-conditioned (det ≈ W·k − Wx²).
-           The Gauss-Jordan inversion inside wls() fails or produces extreme
-           values; the p-value is invalid.
-    Fix:   Replace the dataset with one having more spread in ESS values to
-           improve conditioning, or add a fallback for near-singular systems
-           in wls() when used specifically for Deeks.
+    Cause: In Deeks WLS, wi·xi² = ESS·(1/√ESS)² = 1 exactly for every study,
+           so ΣW·x² = k exactly. The normal-equation determinant reduces to
+           ΣESS·k − (Σ√ESS)², which is small when ESS values are clustered
+           (old dataset: det≈4.3, condition number≈8900).
+    Fixed: js/tests.js — replaced dataset with studies spanning ESS≈11.7/37.3/
+           99.0/149.3 (N=30/75/200/300). det(X'WX)≈184; interceptP≈0.057.
 
   7c — Rücker structural (k=4)
     Test:  interceptP ∈ (0,1) for a 4-study dataset

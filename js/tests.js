@@ -662,14 +662,17 @@ export function runTests() {
     bchkNaN("zero-cell study skipped → k=2 → NaN", deeksTest(s).intercept);
   }
 
-  // Structural: k=4 studies → df=2, finite, p∈(0,1)
+  // Structural: k=4 studies with spread ESS values → df=2, finite, p∈(0,1).
+  // ESS: 11.7 (N=30), 37.3 (N=75), 99.0 (N=200), 149.3 (N=300).
+  // Wide ESS spread gives det(X'WX)≈184 vs ≈4 for equal-ESS designs,
+  // avoiding the near-singular normal equations from wi·xi²=1 identically.
   console.log("--- Deeks: structural (k=4) ---");
   {
     const s = [
-      { a:40,b:10,c:10,d:40 },
-      { a:30,b:15,c:15,d:40 },
-      { a:25,b:10,c:10,d:35 },
-      { a:20,b:10,c:10,d:30 },
+      { a:5,  b:15, c:3,   d:7   },
+      { a:20, b:10, c:15,  d:30  },
+      { a:50, b:30, c:40,  d:80  },
+      { a:80, b:20, c:60,  d:140 },
     ];
     const d = deeksTest(s);
     bchkTrue("df = 2",           d.df === 2);
