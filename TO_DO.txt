@@ -1,6 +1,6 @@
 TO-DO: ITEMS DEFERRED FROM REDESIGN
 =====================================
-Last updated: 2026-03-24
+Last updated: 2026-03-25
 
 --------------------------------------------------------------------------------
 ITEM 1: Restyle D3 plot internals to match the new design system
@@ -32,3 +32,147 @@ ITEM 1: Restyle D3 plot internals to match the new design system
 
   Design token reference: css/styles.css → :root block
   Design system reference: design-system doc (provided 2026-03-24)
+
+--------------------------------------------------------------------------------
+PUBLICATION-READINESS AUDIT (2026-03-25)
+Rank-ordered by importance / severity
+--------------------------------------------------------------------------------
+
+ITEM 2 [CRITICAL]: SMD_paired variance formula is wrong
+
+  File:    js/analysis.js ~ line 173
+  Symptom: The variance of the paired standardized mean difference uses the
+           independent-samples large-sample formula (var_d = 1/n + d²/2n)
+           instead of the correct paired formula, and then further fails to
+           apply the J² correction when converting from Cohen's d to Hedges' g.
+  Impact:  Systematic underestimation of variance → CIs too narrow → inflated
+           test statistics and false positives. Every SMD_paired analysis is
+           affected.
+  Fix:     Replace the variance formula with the paired-design formula
+           (matching SMCC lines 196-197):
+             const var_d = 2 * (1 - corr) / n + (d * d) / (2 * df);
+             const vi    = Math.max(J * J * var_d, MIN_VAR);
+           and update vi, se, w, and varMD accordingly.
+  Ref:     Borenstein et al. (2009) §4.3; metafor escalc "SMCR"
+
+--------------------------------------------------------------------------------
+
+ITEM 3 [HIGH]: D3 globals used inside analysis.js for arithmetic
+
+  File:    js/analysis.js lines 720, 1315–1316, 1339, 1346–1347
+  Symptom: d3.sum() and d3.mean() are called directly in the statistical core
+           (eggerTest, meta). D3 is loaded via CDN in index.html — if the CDN
+           call fails or the app is later bundled/tested offline, these calls
+           throw ReferenceError and silently break the whole analysis.
+  Impact:  Reliability risk; also creates an implicit dependency between a
+           visualization library and statistical computation.
+  Fix:     Replace all d3.sum(arr) → arr.reduce((a,b)=>a+b,0)
+                        d3.mean(arr) → arr.reduce((a,b)=>a+b,0)/arr.length
+           (or add a local two-line sum/mean helper at the top of analysis.js)
+
+--------------------------------------------------------------------------------
+
+ITEM 4 [HIGH]: Begg's rank-correlation test missing tie correction
+
+  File:    js/analysis.js ~ beggTest()
+  Symptom: Variance of Kendall's S uses the no-ties formula
+           Var(S) = k(k-1)(2k+5)/18.
+           When studies share identical yi or vi (common with small k or
+           discrete effect types like OR with rounded inputs), ties reduce
+           the true variance, so the z-score is inflated and the p-value
+           is anti-conservative.
+  Fix:     Compute tie counts for X (effect sizes) and Y (variances) and
+           apply the standard Kendall-Gibbons tie-correction term:
+           Var(S) = [k(k-1)(2k+5) - Σt_j(t_j-1)(2t_j+5)] / 18
+           where t_j are tie-group sizes.
+  Ref:     Kendall & Gibbons (1990) "Rank Correlation Methods" §3.3
+
+--------------------------------------------------------------------------------
+
+ITEM 5 [MEDIUM]: Unbounded bisection loop in heterogeneityCIs()
+
+  File:    js/analysis.js ~ heterogeneityCIs()
+  Symptom: Upper-bound search doubles hi indefinitely:
+             while (qProfile(hi, studies) > chiHi) hi *= 2;
+           For pathological τ²/Q combinations (e.g. very large tau with
+           near-zero within-study variances) this loop could run for hundreds
+           of iterations or overflow to Infinity.
+  Fix:     Add a guard:
+             while (qProfile(hi, studies) > chiHi && hi < 1e12) hi *= 2;
+           and return NaN bounds if the limit is hit.
+
+--------------------------------------------------------------------------------
+
+ITEM 6 [MEDIUM]: Correlation input not clamped away from ±1 singularity
+
+  File:    js/analysis.js ~ COR / ZCOR / PCOR / ZPCOR blocks
+  Symptom: Fisher's z-transform atanh(r) and its variance (1-r²)²/(n-1) have
+           singularities at r = ±1. If a user enters r = 1 or r = -1 the
+           transform yields ±Infinity and vi → 0 (clamped to MIN_VAR 1e-8),
+           causing that study to dominate the pooled estimate with near-infinite
+           weight.
+  Fix:     Clamp r to [-0.9999, 0.9999] and emit a validation warning if the
+           input equals ±1.
+
+--------------------------------------------------------------------------------
+
+ITEM 7 [MEDIUM]: OR / RR all-zero-cell row silently produces yi = 0
+
+  File:    js/analysis.js ~ OR / RR continuity-correction block
+  Symptom: Continuity correction (+0.5) is applied when any cell is zero.
+           If a=b=c=d=0 all cells become 0.5, giving yi = log(1) = 0 and
+           vi = 4. The study enters the analysis as if it observed no effect,
+           which is statistically meaningless.
+  Fix:     After the correction step, check whether the original row had all
+           four cells equal to zero and exclude/warn accordingly.
+
+--------------------------------------------------------------------------------
+
+ITEM 8 [MEDIUM]: Known test-suite failures (Harbord / Deeks / Rücker, k=4)
+
+  File:    js/tests.js
+  Symptom: Three structural bias-test cases fail because the test datasets
+           produce near-degenerate regression problems (repeated marginal
+           totals, algebraic ill-conditioning, low predictor spread).
+           Documented in KNOWN_BUGS.txt items 2–4.
+  Impact:  Test coverage for these bias tests is currently absent.
+  Fix:     Replace the three offending test datasets with ones that have
+           adequate spread in the relevant predictor (√V, 1/√ESS, 1/se).
+           See KNOWN_BUGS.txt for dataset constraints in each case.
+
+--------------------------------------------------------------------------------
+
+ITEM 9 [LOW]: Prediction interval not labelled as using t_{k-2} quantile
+
+  File:    js/ui.js (results rendering) / js/analysis.js line 1390
+  Symptom: The prediction interval is computed correctly (Higgins et al. 2009,
+           t_{k-2} critical value, base seRE not KH-adjusted — consistent with
+           metafor). However, the rendered output does not state the degrees of
+           freedom or cite the reference, which reviewers will expect.
+  Fix:     Add a footnote or tooltip to the prediction interval row citing
+           "Higgins et al. (2009), t_{k-2}" and clarifying the method.
+
+--------------------------------------------------------------------------------
+
+ITEM 10 [LOW]: Forest plot page indicator does not reference total study count
+
+  File:    js/plots.js → drawForest / js/ui.js → forestNav
+  Symptom: When studies are paginated, pooled-estimate diamond reflects ALL
+           studies, but the visible rows are only a subset. A user could
+           misread the plot as showing a pooled estimate for k = page_size.
+  Fix:     Add a prominent "Page N of M — pooled estimate includes all K
+           studies" label to the forest plot or navigation bar.
+
+--------------------------------------------------------------------------------
+
+ITEM 11 [LOW]: Log-scale effect types do not annotate axes as log-scale
+
+  File:    js/plots.js → drawForest, drawFunnel
+  Symptom: Effect types stored and displayed on a log scale (OR, RR, HR, ROM,
+           GOR) use raw yi values on the x-axis without a "log scale" label or
+           axis tick transformation. A reader could interpret the axis as a
+           linear odds-ratio scale.
+  Fix:     Detect log-scale effect types from the profile's isLog flag and
+           either (a) exponentiate ticks so the axis reads in natural units
+           (0.5, 1, 2, 4…) or (b) add a "(log scale)" label to the x-axis.
+
