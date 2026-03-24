@@ -527,6 +527,58 @@ export const HELP = {
            "study precision to be informative.",
   },
 
+  "bias.harbord": {
+    title: "Harbord's Test",
+    body:  "Modified Egger test for meta-analyses of binary outcomes (OR studies) proposed by " +
+           "Harbord et al. (2006, Stat Med 25:3443-3457). " +
+           "The standard Egger test has inflated Type I error for log-ORs because the effect " +
+           "size and its standard error share information (both depend on the same cell counts). " +
+           "Harbord's test sidesteps this by working with the score statistic: for each 2×2 table " +
+           "it computes E_i = (a+b)(a+c)/N (expected events) and " +
+           "V_i = (a+b)(c+d)(a+c)(b+d) / (N²(N−1)) (hypergeometric variance), then " +
+           "regresses z_i = (a − E_i)/√V_i on √V_i using OLS. " +
+           "A significant non-zero intercept indicates small-study effects. " +
+           "Requires raw 2×2 cell counts; not applicable to continuous or pre-computed effect sizes.",
+  },
+
+  "bias.peters": {
+    title: "Peters' Test",
+    body:  "Modified Egger test proposed by Peters et al. (2006, JAMA 295:676-680). " +
+           "Rather than regressing on the standard error (which shares variance components with log-OR), " +
+           "Peters regresses the effect size yi on 1/N (inverse total sample size) using " +
+           "inverse-variance weighted regression (weights = 1/vi). " +
+           "A significant non-zero intercept indicates small-study effects. " +
+           "Works with any effect type where total N can be determined (from a+b+c+d, n1+n2, or n). " +
+           "Preferred over Egger's test when the effect measure is an OR or RR.",
+  },
+
+  "bias.deeks": {
+    title: "Deeks' Test",
+    body:  "Funnel-plot asymmetry test for meta-analyses of diagnostic accuracy studies, " +
+           "proposed by Deeks et al. (2005, J Clin Epidemiol 58:882-893). " +
+           "Uses the effective sample size ESS_i = 2(a+c)(b+d)/N (harmonic mean of diseased " +
+           "and non-diseased group sizes, scaled by 2) as the precision surrogate. " +
+           "Regresses log(DOR_i) on 1/√ESS_i using weighted regression with weights ESS_i; " +
+           "a significant non-zero intercept indicates asymmetry. " +
+           "Requires raw 2×2 counts with all cells > 0 (zero cells make log DOR undefined; " +
+           "no continuity correction is applied). " +
+           "Designed specifically for diagnostic ORs — not appropriate for therapeutic OR/RR studies.",
+  },
+
+  "bias.ruecker": {
+    title: "Rücker's Test",
+    body:  "Arcsine-based Egger test for binary outcomes proposed by " +
+           "Rücker et al. (2008, Stat Med 27:4450-4465). " +
+           "Applies the variance-stabilising arcsine transformation: " +
+           "y_i = asin(√p1) − asin(√p2) with se_i = √(1/(4n1) + 1/(4n2)), " +
+           "then regresses the standardised statistic z_i = y_i/se_i on precision 1/se_i using OLS. " +
+           "Because the arcsine risk difference and its SE depend on different aspects of the data " +
+           "than the log-OR, this test has better-controlled Type I error than Egger for binary outcomes. " +
+           "Studies with zero group sizes (n1 = 0 or n2 = 0) are skipped; " +
+           "zero cells within a group (p = 0 or p = 1) are allowed. " +
+           "Requires raw 2×2 cell counts.",
+  },
+
   // ------------------------------------------------------------------ //
   // Cumulative order                                                     //
   // ------------------------------------------------------------------ //

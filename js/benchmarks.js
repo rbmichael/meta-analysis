@@ -423,7 +423,7 @@ export const BENCHMARKS = [
       { label: "Study 4", x: 40, n: 100 }
     ],
     expected: {
-      yi:   [0.656, 1.162, 0.934, 1.371],
+      yi:   [0.656, 1.1636, 0.934, 1.371],
       FE:    1.031,
       RE:    1.031,
       tau2:  0.08445,

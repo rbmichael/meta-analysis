@@ -1,6 +1,6 @@
 import { round, transformEffect, chiSquareCDF, chiSquareQuantile, parseCounts, bivariateNormalCDF, normalQuantile } from "./utils.js";
 import { BENCHMARKS } from "./benchmarks.js";
-import { compute, meta, metaRegression, tau2_HS, tau2_HE, tau2_ML, tau2_SJ, beggTest, fatPetTest, failSafeN, heterogeneityCIs, cumulativeMeta, influenceDiagnostics } from "./analysis.js";
+import { compute, meta, metaRegression, tau2_HS, tau2_HE, tau2_ML, tau2_SJ, beggTest, fatPetTest, failSafeN, heterogeneityCIs, cumulativeMeta, influenceDiagnostics, harbordTest, petersTest, deeksTest, rueckerTest } from "./analysis.js";
 
 // Tolerances vary by field:
 //   FE, RE  — absolute 0.01   (pooled estimates are on a stable scale)
@@ -541,6 +541,189 @@ export function runTests() {
   // k = 0 → NaN
   console.log("--- Fail-safe N: k=0 → NaN ---");
   bchkNaN("k=0 → NaN", failSafeN([]).rosenthal);
+
+  // ---- Harbord test ----
+  // Intermediate check: a=10,b=5,c=5,d=30, N=50
+  //   E = 15×15/50 = 4.5
+  //   V = 15×35×15×35 / (2500×49) = 275625/122500 = 2.25 (exact)
+  //   z = (10 − 4.5) / 1.5 = 11/3
+  console.log("--- Harbord: intermediates E, V, z ---");
+  {
+    const a = 10, b = 5, c = 5, d = 30, N = 50;
+    const E = (a+b)*(a+c)/N;
+    const V = (a+b)*(c+d)*(a+c)*(b+d) / (N*N*(N-1));
+    const z = (a - E) / Math.sqrt(V);
+    bchk("E = 4.5",  E, 4.5,  1e-12);
+    bchk("V = 2.25", V, 2.25, 1e-12);
+    bchk("z = 11/3", z, 11/3, 1e-12);
+  }
+
+  console.log("--- Harbord: k < 3 → NaN ---");
+  bchkNaN("k=2 → NaN intercept", harbordTest([{ a:10,b:5,c:5,d:30 }, { a:20,b:10,c:10,d:40 }]).intercept);
+
+  // Study with V=0 (zero marginal) is skipped; remaining k=2 → NaN
+  console.log("--- Harbord: V=0 study skipped ---");
+  {
+    const s = [
+      { a:0, b:0, c:5, d:5  },   // a+b=0 → V=0 → skipped
+      { a:10,b:5, c:5, d:30 },
+      { a:20,b:10,c:10,d:40 },
+    ];
+    bchkNaN("V=0 study skipped → k=2 → NaN", harbordTest(s).intercept);
+  }
+
+  // Structural: k=4 studies → df=2, finite results, p ∈ (0,1)
+  console.log("--- Harbord: structural (k=4) ---");
+  {
+    const s = [
+      { a:30,b:10,c:10,d:50 },
+      { a:20,b:5, c:5, d:30 },
+      { a:15,b:10,c:10,d:25 },
+      { a:10,b:15,c:15,d:20 },
+    ];
+    const h = harbordTest(s);
+    bchkTrue("df = 2",           h.df === 2);
+    bchkTrue("intercept finite", isFinite(h.intercept));
+    bchkTrue("slope finite",     isFinite(h.slope));
+    bchkTrue("p ∈ (0,1)",        isFinite(h.interceptP) && h.interceptP > 0 && h.interceptP < 1);
+  }
+
+  // ---- Peters test ----
+  // Mixed N sources: a+b+c+d, n1+n2, n — all three extraction paths in one call
+  console.log("--- Peters: N extraction (mixed sources) ---");
+  {
+    const s = [
+      { a:30,b:10,c:10,d:50, yi:0.5, vi:0.10 },   // N = a+b+c+d = 100
+      { n1:60, n2:40,         yi:0.4, vi:0.20 },   // N = n1+n2 = 100
+      { n:80,                 yi:0.3, vi:0.15 },   // N = n = 80
+    ];
+    bchkTrue("mixed N sources → finite intercept", isFinite(petersTest(s).intercept));
+  }
+
+  // Constant yi → intercept = yi exactly (WLS algebraic identity):
+  //   intercept = (Wxx·Wy − Wx·Wxy)/det = C·(Wxx·W − Wx²)/det = C
+  //   slope     = (W·Wxy − Wx·Wy)/det   = C·(W·Wx − Wx·W)/det = 0
+  // Point estimates exact; residuals = 0 → SE = 0 → t = ±Inf (degenerate, not checked)
+  console.log("--- Peters: constant yi → intercept = yi ---");
+  {
+    const s = [
+      { a:30,b:10,c:10,d:50, yi:0.5, vi:0.10 },
+      { a:20,b:5, c:5, d:30, yi:0.5, vi:0.25 },
+      { a:15,b:10,c:10,d:25, yi:0.5, vi:0.15 },
+    ];
+    const p = petersTest(s);
+    bchk("intercept = 0.5", p.intercept, 0.5, 1e-9);
+    bchk("slope = 0",       p.slope,     0,   1e-9);
+  }
+
+  console.log("--- Peters: k < 3 → NaN ---");
+  bchkNaN("k=2 → NaN intercept", petersTest([{ a:10,b:5,c:5,d:30, yi:0.5,vi:0.1 }, { a:20,b:10,c:10,d:40, yi:0.3,vi:0.2 }]).intercept);
+
+  // Structural: k=4 with realistic OR log-odds data → df=2, finite, p∈(0,1)
+  console.log("--- Peters: structural (k=4) ---");
+  {
+    const s = [
+      { a:30,b:10,c:10,d:50, yi:Math.log(30*50/(10*10)), vi:1/30+1/10+1/10+1/50 },
+      { a:20,b:5, c:5, d:30, yi:Math.log(20*30/(5*5)),   vi:1/20+1/5 +1/5 +1/30 },
+      { a:15,b:10,c:10,d:25, yi:Math.log(15*25/(10*10)), vi:1/15+1/10+1/10+1/25 },
+      { a:10,b:15,c:15,d:20, yi:Math.log(10*20/(15*15)), vi:1/10+1/15+1/15+1/20 },
+    ];
+    const p = petersTest(s);
+    bchkTrue("df = 2",           p.df === 2);
+    bchkTrue("intercept finite", isFinite(p.intercept));
+    bchkTrue("p ∈ (0,1)",        isFinite(p.interceptP) && p.interceptP > 0 && p.interceptP < 1);
+  }
+
+  // ---- Deeks test ----
+  // Intermediate check: a=40,b=10,c=10,d=40, N=100
+  //   ESS = 2×(50)×(50)/100 = 50
+  //   log(DOR) = log((40×40)/(10×10)) = log(16)
+  console.log("--- Deeks: intermediates ESS and log(DOR) ---");
+  {
+    const a = 40, b = 10, c = 10, d = 40, N = 100;
+    const ESS    = 2*(a+c)*(b+d)/N;
+    const logDOR = Math.log((a*d)/(b*c));
+    bchk("ESS = 50",          ESS,    50,           1e-12);
+    bchk("log(DOR) = log(16)", logDOR, Math.log(16), 1e-12);
+  }
+
+  console.log("--- Deeks: k < 3 → NaN ---");
+  bchkNaN("k=2 → NaN intercept", deeksTest([{ a:40,b:10,c:10,d:40 }, { a:30,b:15,c:15,d:30 }]).intercept);
+
+  // Zero cell (a=0) → log DOR undefined → study skipped; remaining k=2 → NaN
+  console.log("--- Deeks: zero-cell study skipped ---");
+  {
+    const s = [
+      { a:0, b:10,c:10,d:30 },   // a=0 → log DOR undefined → skipped
+      { a:40,b:10,c:10,d:40 },
+      { a:30,b:15,c:15,d:30 },
+    ];
+    bchkNaN("zero-cell study skipped → k=2 → NaN", deeksTest(s).intercept);
+  }
+
+  // Structural: k=4 studies → df=2, finite, p∈(0,1)
+  console.log("--- Deeks: structural (k=4) ---");
+  {
+    const s = [
+      { a:40,b:10,c:10,d:40 },
+      { a:30,b:15,c:15,d:40 },
+      { a:25,b:10,c:10,d:35 },
+      { a:20,b:10,c:10,d:30 },
+    ];
+    const d = deeksTest(s);
+    bchkTrue("df = 2",           d.df === 2);
+    bchkTrue("intercept finite", isFinite(d.intercept));
+    bchkTrue("p ∈ (0,1)",        isFinite(d.interceptP) && d.interceptP > 0 && d.interceptP < 1);
+  }
+
+  // ---- Rücker test ----
+  // Intermediate check: a=30,b=10,c=10,d=30
+  //   n1=40, n2=40, p1=0.75, p2=0.25
+  //   asin(√0.75) = asin(√3/2) = π/3;  asin(√0.25) = asin(1/2) = π/6
+  //   y = π/3 − π/6 = π/6
+  //   se = √(1/160 + 1/160) = 1/√80
+  //   z = y/se = (π/6)·√80
+  console.log("--- Rücker: intermediates y, se, z ---");
+  {
+    const a = 30, b = 10, c = 10, d = 30;
+    const n1 = a+b, n2 = c+d;
+    const p1 = a/n1, p2 = c/n2;
+    const se = Math.sqrt(1/(4*n1) + 1/(4*n2));
+    const y  = Math.asin(Math.sqrt(p1)) - Math.asin(Math.sqrt(p2));
+    const z  = y / se;
+    bchk("y = π/6",        y,  Math.PI/6,                   1e-12);
+    bchk("se = 1/√80",     se, 1/Math.sqrt(80),             1e-12);
+    bchk("z = (π/6)·√80",  z,  Math.PI/6 * Math.sqrt(80),  1e-12);
+  }
+
+  console.log("--- Rücker: k < 3 → NaN ---");
+  bchkNaN("k=2 → NaN intercept", rueckerTest([{ a:30,b:10,c:10,d:30 }, { a:20,b:10,c:10,d:20 }]).intercept);
+
+  // n1=0 → se undefined → study skipped; remaining k=2 → NaN
+  console.log("--- Rücker: n1=0 study skipped ---");
+  {
+    const s = [
+      { a:0, b:0, c:10,d:30 },   // n1=a+b=0 → skipped
+      { a:30,b:10,c:10,d:30 },
+      { a:20,b:10,c:10,d:20 },
+    ];
+    bchkNaN("n1=0 study skipped → k=2 → NaN", rueckerTest(s).intercept);
+  }
+
+  // Structural: k=4 studies → df=2, finite, p∈(0,1)
+  console.log("--- Rücker: structural (k=4) ---");
+  {
+    const s = [
+      { a:40,b:10,c:10,d:40 },
+      { a:30,b:15,c:15,d:40 },
+      { a:25,b:10,c:10,d:35 },
+      { a:20,b:10,c:10,d:30 },
+    ];
+    const r = rueckerTest(s);
+    bchkTrue("df = 2",           r.df === 2);
+    bchkTrue("intercept finite", isFinite(r.intercept));
+    bchkTrue("p ∈ (0,1)",        isFinite(r.interceptP) && r.interceptP > 0 && r.interceptP < 1);
+  }
 
   console.log(biasPass ? "\n✅ ALL PUBLICATION BIAS TESTS PASSED" : "\n❌ SOME PUBLICATION BIAS TESTS FAILED");
 

@@ -831,6 +831,264 @@ export function fatPetTest(studies) {
   };
 }
 
+// ================= HARBORD TEST =================
+// Harbord et al. (2006, Stat Med 25:3443-3457): modified Egger test for OR
+// studies that avoids the artefactual correlation between log(OR) and its SE.
+//
+// For each 2×2 table (a,b,c,d), N = a+b+c+d:
+//   E_i   = (a+b)(a+c)/N               (expected events under H₀)
+//   V_i   = (a+b)(c+d)(a+c)(b+d) / (N²(N−1))   (hypergeometric variance)
+//   z_i   = (a − E_i) / √V_i           (standardized score)
+//
+// OLS regression of z_i on √V_i; test H₀: intercept = 0.
+// Studies with V_i ≤ 0 (zero marginal or N < 2) are skipped.
+export function harbordTest(studies) {
+  const valid = studies.filter(s => {
+    const { a, b, c, d } = s;
+    if (!isFinite(a) || !isFinite(b) || !isFinite(c) || !isFinite(d)) return false;
+    if (a < 0 || b < 0 || c < 0 || d < 0) return false;
+    const N = a + b + c + d;
+    if (N < 2) return false;
+    const V = (a+b) * (c+d) * (a+c) * (b+d) / (N * N * (N - 1));
+    return V > 0;
+  });
+
+  const k = valid.length;
+  const nanResult = {
+    intercept: NaN, interceptSE: NaN, interceptT: NaN, interceptP: NaN,
+    slope:     NaN, slopeSE:     NaN, slopeT:     NaN, slopeP:     NaN,
+    df: k - 2
+  };
+  if (k < 3) return nanResult;
+
+  const ys = [], xs = [];
+  for (const s of valid) {
+    const { a, b, c, d } = s;
+    const N     = a + b + c + d;
+    const E     = (a + b) * (a + c) / N;
+    const V     = (a + b) * (c + d) * (a + c) * (b + d) / (N * N * (N - 1));
+    const sqrtV = Math.sqrt(V);
+    ys.push((a - E) / sqrtV);   // z_i = (O − E) / √V
+    xs.push(sqrtV);              // x_i = √V
+  }
+
+  const X   = xs.map(x => [1, x]);
+  const ws  = xs.map(() => 1);   // OLS — uniform weights
+  const { beta, vcov, rankDeficient } = wls(X, ys, ws);
+  if (rankDeficient) return nanResult;
+
+  const df  = k - 2;
+  const rss = ys.reduce((sum, y, i) => { const e = y - beta[0] - beta[1] * xs[i]; return sum + e * e; }, 0);
+  const s2  = rss / df;
+
+  const interceptSE = Math.sqrt(s2 * vcov[0][0]);
+  const slopeSE     = Math.sqrt(s2 * vcov[1][1]);
+  const interceptT  = beta[0] / interceptSE;
+  const slopeT      = beta[1] / slopeSE;
+  const interceptP  = 2 * (1 - tCDF(Math.abs(interceptT), df));
+  const slopeP      = 2 * (1 - tCDF(Math.abs(slopeT),     df));
+
+  return {
+    intercept: beta[0], interceptSE, interceptT, interceptP,
+    slope:     beta[1], slopeSE,     slopeT,     slopeP,
+    df
+  };
+}
+
+// ================= PETERS TEST =================
+// Peters et al. (2006, JAMA 295:676-680): WLS regression of yi on 1/N.
+// Uses inverse-variance weights (same as the meta-analysis model), which
+// avoids the Egger test's artefactual SE/yi correlation for binary outcomes.
+//
+// N is extracted in priority order: a+b+c+d → n1+n2 → n.
+// Studies where N cannot be determined or N < 2 are skipped.
+export function petersTest(studies) {
+  // Resolve total N from whatever count fields are present
+  function getN(s) {
+    if (isFinite(s.a) && isFinite(s.b) && isFinite(s.c) && isFinite(s.d))
+      return s.a + s.b + s.c + s.d;
+    if (isFinite(s.n1) && isFinite(s.n2))
+      return s.n1 + s.n2;
+    if (isFinite(s.n))
+      return s.n;
+    return NaN;
+  }
+
+  const valid = studies.filter(s => {
+    if (!isFinite(s.yi) || !isFinite(s.vi) || s.vi <= 0) return false;
+    const N = getN(s);
+    return isFinite(N) && N >= 2;
+  });
+
+  const k = valid.length;
+  const nanResult = {
+    intercept: NaN, interceptSE: NaN, interceptT: NaN, interceptP: NaN,
+    slope:     NaN, slopeSE:     NaN, slopeT:     NaN, slopeP:     NaN,
+    df: k - 2
+  };
+  if (k < 3) return nanResult;
+
+  const ys = valid.map(s => s.yi);
+  const xs = valid.map(s => 1 / getN(s));   // x_i = 1/N_i
+  const ws = valid.map(s => 1 / s.vi);      // w_i = 1/vi (inverse-variance)
+
+  const X = xs.map(x => [1, x]);
+  const { beta, vcov, rankDeficient } = wls(X, ys, ws);
+  if (rankDeficient) return nanResult;
+
+  const df  = k - 2;
+  const rss = valid.reduce((sum, s, i) => {
+    const e = ys[i] - beta[0] - beta[1] * xs[i];
+    return sum + ws[i] * e * e;
+  }, 0);
+  const s2 = rss / df;
+
+  const interceptSE = Math.sqrt(s2 * vcov[0][0]);
+  const slopeSE     = Math.sqrt(s2 * vcov[1][1]);
+  const interceptT  = beta[0] / interceptSE;
+  const slopeT      = beta[1] / slopeSE;
+  const interceptP  = 2 * (1 - tCDF(Math.abs(interceptT), df));
+  const slopeP      = 2 * (1 - tCDF(Math.abs(slopeT),     df));
+
+  return {
+    intercept: beta[0], interceptSE, interceptT, interceptP,
+    slope:     beta[1], slopeSE,     slopeT,     slopeP,
+    df
+  };
+}
+
+// ================= DEEKS TEST =================
+// Deeks et al. (2005, J Clin Epidemiol 58:882-893): funnel-plot asymmetry
+// test for meta-analyses of diagnostic test accuracy (DOR studies).
+//
+// For each 2×2 table (a,b,c,d), N = a+b+c+d:
+//   ESS_i = 2(a+c)(b+d)/N   (effective sample size: harmonic mean of row totals × 2)
+//   DOR_i = (a·d)/(b·c)     (diagnostic odds ratio)
+//
+// WLS regression of log(DOR_i) on 1/√ESS_i with weights ESS_i;
+// test H₀: intercept = 0.
+// Studies with any zero cell (log DOR undefined) or ESS ≤ 0 are skipped.
+export function deeksTest(studies) {
+  const valid = studies.filter(s => {
+    const { a, b, c, d } = s;
+    if (!isFinite(a) || !isFinite(b) || !isFinite(c) || !isFinite(d)) return false;
+    if (a <= 0 || b <= 0 || c <= 0 || d <= 0) return false;   // log DOR requires all > 0
+    const N = a + b + c + d;
+    const ESS = 2 * (a + c) * (b + d) / N;
+    return ESS > 0;
+  });
+
+  const k = valid.length;
+  const nanResult = {
+    intercept: NaN, interceptSE: NaN, interceptT: NaN, interceptP: NaN,
+    slope:     NaN, slopeSE:     NaN, slopeT:     NaN, slopeP:     NaN,
+    df: k - 2
+  };
+  if (k < 3) return nanResult;
+
+  const ys = [], xs = [], ws = [];
+  for (const s of valid) {
+    const { a, b, c, d } = s;
+    const N   = a + b + c + d;
+    const ESS = 2 * (a + c) * (b + d) / N;
+    ys.push(Math.log((a * d) / (b * c)));   // log(DOR)
+    xs.push(1 / Math.sqrt(ESS));            // 1/√ESS
+    ws.push(ESS);                           // weight = ESS
+  }
+
+  const X = xs.map(x => [1, x]);
+  const { beta, vcov, rankDeficient } = wls(X, ys, ws);
+  if (rankDeficient) return nanResult;
+
+  const df  = k - 2;
+  const rss = ys.reduce((sum, y, i) => {
+    const e = y - beta[0] - beta[1] * xs[i];
+    return sum + ws[i] * e * e;
+  }, 0);
+  const s2 = rss / df;
+
+  const interceptSE = Math.sqrt(s2 * vcov[0][0]);
+  const slopeSE     = Math.sqrt(s2 * vcov[1][1]);
+  const interceptT  = beta[0] / interceptSE;
+  const slopeT      = beta[1] / slopeSE;
+  const interceptP  = 2 * (1 - tCDF(Math.abs(interceptT), df));
+  const slopeP      = 2 * (1 - tCDF(Math.abs(slopeT),     df));
+
+  return {
+    intercept: beta[0], interceptSE, interceptT, interceptP,
+    slope:     beta[1], slopeSE,     slopeT,     slopeP,
+    df
+  };
+}
+
+// ================= RÜCKER TEST =================
+// Rücker et al. (2008, Stat Med 27:4450-4465): arcsine-based Egger test for
+// binary outcomes. Applies the variance-stabilising arcsine transformation so
+// that the effect size and its precision are less correlated than for log-OR,
+// reducing the artefactual bias inflated type-I error of the standard Egger test.
+//
+// For each 2×2 table (a,b,c,d):
+//   n1 = a+b,  n2 = c+d
+//   p1 = a/n1, p2 = c/n2
+//   y_i  = asin(√p1) − asin(√p2)          (arcsine risk difference)
+//   se_i = √(1/(4n1) + 1/(4n2))
+//   z_i  = y_i / se_i                      (standardised statistic)
+//
+// OLS regression (weights = 1) of z_i on 1/se_i (precision);
+// test H₀: intercept = 0.
+// Studies with n1 = 0 or n2 = 0 are skipped (se undefined).
+export function rueckerTest(studies) {
+  const valid = studies.filter(s => {
+    const { a, b, c, d } = s;
+    if (!isFinite(a) || !isFinite(b) || !isFinite(c) || !isFinite(d)) return false;
+    if (a < 0 || b < 0 || c < 0 || d < 0) return false;
+    return (a + b) > 0 && (c + d) > 0;
+  });
+
+  const k = valid.length;
+  const nanResult = {
+    intercept: NaN, interceptSE: NaN, interceptT: NaN, interceptP: NaN,
+    slope:     NaN, slopeSE:     NaN, slopeT:     NaN, slopeP:     NaN,
+    df: k - 2
+  };
+  if (k < 3) return nanResult;
+
+  const ys = [], xs = [];
+  for (const s of valid) {
+    const { a, b, c, d } = s;
+    const n1  = a + b;
+    const n2  = c + d;
+    const p1  = a / n1;
+    const p2  = c / n2;
+    const se  = Math.sqrt(1 / (4 * n1) + 1 / (4 * n2));
+    const y   = Math.asin(Math.sqrt(p1)) - Math.asin(Math.sqrt(p2));
+    ys.push(y / se);      // z_i = y_i / se_i
+    xs.push(1 / se);      // precision = 1/se_i
+  }
+
+  const X  = xs.map(x => [1, x]);
+  const ws = xs.map(() => 1);     // OLS — uniform weights
+  const { beta, vcov, rankDeficient } = wls(X, ys, ws);
+  if (rankDeficient) return nanResult;
+
+  const df  = k - 2;
+  const rss = ys.reduce((sum, y, i) => { const e = y - beta[0] - beta[1] * xs[i]; return sum + e * e; }, 0);
+  const s2  = rss / df;
+
+  const interceptSE = Math.sqrt(s2 * vcov[0][0]);
+  const slopeSE     = Math.sqrt(s2 * vcov[1][1]);
+  const interceptT  = beta[0] / interceptSE;
+  const slopeT      = beta[1] / slopeSE;
+  const interceptP  = 2 * (1 - tCDF(Math.abs(interceptT), df));
+  const slopeP      = 2 * (1 - tCDF(Math.abs(slopeT),     df));
+
+  return {
+    intercept: beta[0], interceptSE, interceptT, interceptP,
+    slope:     beta[1], slopeSE,     slopeT,     slopeP,
+    df
+  };
+}
+
 // ================= FAIL-SAFE N =================
 // Rosenthal's (1979) file-drawer number: how many null studies (effect = 0)
 // would be needed to push the combined p-value above alpha.
