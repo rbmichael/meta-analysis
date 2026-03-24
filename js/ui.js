@@ -2,7 +2,6 @@
 import { eggerTest, beggTest, fatPetTest, failSafeN, meta, influenceDiagnostics, subgroupAnalysis, metaRegression, cumulativeMeta, leaveOneOut, estimatorComparison } from "./analysis.js";
 import { fmt } from "./utils.js";
 import { effectProfiles, getProfile } from "./profiles.js";
-import { runTests } from "./tests.js";
 import { trimFill } from "./trimfill.js";
 import { drawForest, drawFunnel, drawBubble, drawInfluencePlot, drawCumulativeForest } from "./plots.js";
 import { exportSVG, exportPNG } from "./export.js";
@@ -886,7 +885,9 @@ function init() {
   });
 
   runAnalysis();
-  runTests();
+  if (new URLSearchParams(window.location.search).has("tests")) {
+    import("./tests.js").then(({ runTests }) => runTests());
+  }
 }
 
 window.onload = init;
