@@ -229,15 +229,17 @@ function showView(name) {
   window.scrollTo(0, 0);
 }
 
+_toggleResults.disabled = true;
+
 _toggleInput.addEventListener("click",   () => showView("input"));
-_toggleResults.addEventListener("click", () => showView("results"));
+_toggleResults.addEventListener("click", () => { if (!_toggleResults.disabled) showView("results"); });
 
 // Show input view by default; output hidden until first run switches to it.
 showView("input");
 
 // ---------------- INITIALIZE ----------------
 document.getElementById("addStudy").addEventListener("click", () => { addRow(); markStale(); });
-document.getElementById("run").addEventListener("click", () => { runAnalysis(); showView("results"); });
+document.getElementById("run").addEventListener("click", () => { if (runAnalysis()) showView("results"); });
 document.getElementById("import").addEventListener("click", () => document.getElementById("csvFile").click());
 document.getElementById("csvFile").addEventListener("change", e => { if (e.target.files[0]) previewCSV(e.target.files[0]); });
 document.getElementById("previewImport").addEventListener("click", commitImport);
@@ -1376,12 +1378,6 @@ function runAnalysis() {
   const profile = effectProfiles[type];
   if (!profile) return;
 
-  // Hide the placeholder and clear stale indicators on each run.
-  if (outputPlaceholder) outputPlaceholder.style.display = "none";
-  staleBanner.style.display = "none";
-  _toggleResults.classList.remove("stale");
-  _hasRunOnce = true;
-
   const rows = document.querySelectorAll("#inputTable tr");
 
   let studies = [];
@@ -1437,7 +1433,22 @@ function runAnalysis() {
     studies.push(study);
   }
 
-  if (!studies.length) return;
+  if (!studies.length) {
+    if (outputPlaceholder) {
+      outputPlaceholder.style.display = "";
+      outputPlaceholder.textContent = "No valid studies to analyse. Check the input table for errors.";
+    }
+    return false;
+  }
+
+  // Clear stale indicators and record first successful run.
+  if (outputPlaceholder) outputPlaceholder.style.display = "none";
+  staleBanner.style.display = "none";
+  _toggleResults.classList.remove("stale");
+  if (!_hasRunOnce) {
+    _hasRunOnce = true;
+    _toggleResults.disabled = false;
+  }
 
   const method = document.getElementById("tauMethod")?.value || "DL";
   const ciMethod = document.getElementById("ciMethod")?.value || "normal";
@@ -1615,4 +1626,5 @@ function runAnalysis() {
   drawCumulativeForest(cumResults, profile);
 
   updateValidationWarnings(studies, excluded, softWarnings);
+  return true;
 }
