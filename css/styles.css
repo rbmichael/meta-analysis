@@ -538,6 +538,71 @@ button:active {
   min-width: 160px;
 }
 
+/* ---- Draft restore banner ---- */
+#draftBanner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: rgba(94, 106, 210, 0.06);
+  border: 1px solid var(--border-accent);
+  border-radius: var(--radius-md);
+  padding: 8px 10px 8px 14px;
+  margin-bottom: 14px;
+  font-size: 0.8125rem;
+  color: var(--color-info);
+}
+
+#draftBannerText {
+  flex: 1;
+  min-width: 0;
+}
+
+.draft-banner-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+#draftStartFresh {
+  padding: 3px 10px;
+  font-size: 0.75rem;
+  background: transparent;
+  color: var(--color-info);
+  border: 1px solid rgba(153, 184, 212, 0.35);
+  border-radius: var(--radius-sm);
+  margin: 0;
+  transition: background var(--t-fast), border-color var(--t-fast);
+}
+
+#draftStartFresh:hover {
+  background: rgba(153, 184, 212, 0.10);
+  border-color: rgba(153, 184, 212, 0.55);
+}
+
+#draftDismiss {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  font-size: 1rem;
+  line-height: 1;
+  background: transparent;
+  color: var(--fg-muted);
+  border: none;
+  border-radius: var(--radius-sm);
+  margin: 0;
+  transition: color var(--t-fast), background var(--t-fast);
+}
+
+#draftDismiss:hover {
+  color: var(--fg);
+  background: var(--bg-surface);
+}
+
 /* ---- Stale banner ---- */
 #staleBanner {
   display: none;

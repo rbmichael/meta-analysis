@@ -8,9 +8,19 @@ import { exportSVG, exportPNG } from "./export.js";
 import { buildReport, downloadHTML, openPrintPreview } from "./report.js";
 import { parseCSV, detectEffectType } from "./csv.js";
 import { buildSession, serializeSession, parseSession, missingInputCols } from "./session.js";
+import { saveDraft, loadDraft, clearDraft } from "./autosave.js";
 import { downloadBlob, readTextFile, serializeCSV } from "./io.js";
 import { HELP } from "./help.js";
 import { Z_95 } from "./constants.js";
+
+// ---------------- AUTOSAVE ----------------
+
+let _saveTimer = null;
+
+function scheduleSave() {
+  clearTimeout(_saveTimer);
+  _saveTimer = setTimeout(() => saveDraft(gatherSessionState()), 1200);
+}
 
 // ---------------- SHARED HELPERS ----------------
 function escapeHTML(s) {
@@ -253,6 +263,42 @@ document.getElementById("forestPageSize").addEventListener("change", () => {
   renderForestNav(totalPages);
 });
 
+// ---------------- DRAFT BANNER ----------------
+
+function relativeTime(ts) {
+  const mins = Math.floor((Date.now() - ts) / 60000);
+  if (mins < 1)  return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24)  return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
+
+function showDraftBanner(savedAt) {
+  const banner = document.getElementById("draftBanner");
+  const text   = document.getElementById("draftBannerText");
+  text.textContent = "Draft restored" + (savedAt ? " · saved " + relativeTime(savedAt) : "");
+  banner.style.display = "";
+}
+
+function hideDraftBanner() {
+  document.getElementById("draftBanner").style.display = "none";
+}
+
+document.getElementById("draftDismiss").addEventListener("click", hideDraftBanner);
+
+document.getElementById("draftStartFresh").addEventListener("click", () => {
+  clearDraft();
+  clearModerators();
+  updateTableHeaders();
+  const table = document.getElementById("inputTable");
+  while (table.rows.length > 1) table.deleteRow(1);
+  addRow();
+  hideDraftBanner();
+});
+
+// Draft restore is handled inside init() — see below.
+
 // ---------------- PLOT EXPORT ----------------
 // ---------------- REPORT EXPORT BUTTONS ----------------
 // buildReport internally re-renders every forest page into a hidden element
@@ -411,6 +457,7 @@ function addRow(values) {
     input.addEventListener("input", () => {
       validateRow(row);
       runAnalysis();
+      scheduleSave();
     });
   });
 
@@ -424,6 +471,7 @@ function removeRow(btn) {
   if (table.rows.length <= 2) return;
   btn.closest("tr").remove();
   runAnalysis();
+  scheduleSave();
 }
 
 function clearRow(btn) {
@@ -788,32 +836,13 @@ function saveSession() {
   downloadBlob(serializeSession(gatherSessionState()), "session.json", "application/json;charset=utf-8;");
 }
 
-// ---------------- SESSION LOAD ----------------
+// ---------------- SESSION APPLY ----------------
+// Shared logic for applying a parsed session object to the UI.
+// Used by both loadSession() (file load) and draft restore (on-load autosave).
+// Returns { profile, savedStudies } so callers can inspect missing columns etc.
 
-async function loadSession(file) {
-  const warningDiv = document.getElementById("csvWarning");
-  warningDiv.style.display = "none";
-
-  // Dismiss any in-progress CSV import so the preview panel doesn't linger
-  // over the freshly-loaded session data.
-  cancelImport();
-
-  let text;
-  try { text = await readTextFile(file); }
-  catch {
-    warningDiv.textContent = "Could not read the selected session file.";
-    warningDiv.style.display = "block";
-    return;
-  }
-
-  const result = parseSession(text);
-  if (!result.ok) {
-    warningDiv.textContent = result.error;
-    warningDiv.style.display = "block";
-    return;
-  }
-
-  const { settings = {}, moderators: savedMods = [], studies: savedStudies = [] } = result.session;
+function applySession(session) {
+  const { settings = {}, moderators: savedMods = [], studies: savedStudies = [] } = session;
 
   // Apply settings
   const s = settings;
@@ -850,6 +879,36 @@ async function loadSession(file) {
     moderators.forEach(m => v.push(row.moderators?.[m.name] ?? ""));
     addRow(v);
   });
+
+  return { profile, savedStudies };
+}
+
+// ---------------- SESSION LOAD ----------------
+
+async function loadSession(file) {
+  const warningDiv = document.getElementById("csvWarning");
+  warningDiv.style.display = "none";
+
+  // Dismiss any in-progress CSV import so the preview panel doesn't linger
+  // over the freshly-loaded session data.
+  cancelImport();
+
+  let text;
+  try { text = await readTextFile(file); }
+  catch {
+    warningDiv.textContent = "Could not read the selected session file.";
+    warningDiv.style.display = "block";
+    return;
+  }
+
+  const result = parseSession(text);
+  if (!result.ok) {
+    warningDiv.textContent = result.error;
+    warningDiv.style.display = "block";
+    return;
+  }
+
+  const { profile, savedStudies } = applySession(result.session);
 
   // Warn about any effect-input columns absent from the saved data.
   const missingCols = missingInputCols(profile.inputs, savedStudies);
@@ -896,12 +955,17 @@ function init() {
   // Populate effect type dropdowns from profiles
   populateEffectTypeDropdowns();
 
-  // Set default effect type
-  const defaultType = document.getElementById("effectType").value;
-  updateTableHeaders();
-
-  // Populate example rows for default type
-  populateExampleData(defaultType);
+  // Restore autosaved draft if one exists, otherwise populate example data.
+  const draft = loadDraft();
+  if (draft && draft.studies?.length > 0) {
+    applySession(draft);
+    showDraftBanner(draft._savedAt);
+  } else {
+    // Set default effect type and populate example rows
+    const defaultType = document.getElementById("effectType").value;
+    updateTableHeaders();
+    populateExampleData(defaultType);
+  }
 
   // Validate all rows
   document.querySelectorAll("#inputTable tr").forEach((row, i) => {
@@ -1307,6 +1371,7 @@ function renderStudyTable(studies, m, profile) {
 
 // ---------------- RUN ANALYSIS (modified for benchmarks) ----------------
 function runAnalysis() {
+  scheduleSave();
   const type = document.getElementById("effectType").value;
   const profile = effectProfiles[type];
   if (!profile) return;
