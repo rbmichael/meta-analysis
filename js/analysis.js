@@ -1,4 +1,4 @@
-import { tCritical, normalCDF, tCDF, chiSquareCDF, chiSquareQuantile, fCDF, hedgesG } from "./utils.js";
+import { tCritical, normalCDF, tCDF, chiSquareCDF, chiSquareQuantile, fCDF, hedgesG, parseCounts, gorFromCounts } from "./utils.js";
 import { MIN_VAR, REML_TOL, BISECTION_ITERS, Z_95 } from "./constants.js";
 import { validateStudy } from "./profiles.js";
 
@@ -55,6 +55,14 @@ export function compute(s, type, options = {}) {
 		varMD: safeVi
 	  };
 	}
+
+  // ================= GENERALISED ODDS RATIO (GOR) =================
+  if (type === "GOR") {
+    const { es, var: v } = gorFromCounts(parseCounts(s.counts1), parseCounts(s.counts2));
+    if (!isFinite(es) || !isFinite(v)) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+    const vi = Math.max(v, MIN_VAR);
+    return { ...s, yi: es, vi, se: Math.sqrt(vi), w: 1 / vi };
+  }
 
   // ================= CONTINUOUS DATA (SMD) =================
   if (type === "SMD") {

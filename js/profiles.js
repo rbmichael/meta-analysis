@@ -12,7 +12,7 @@
 //                       format: [label, ...inputs, group]
 // To back-transform a CI pair use: { lb: profile.transform(lb), ub: profile.transform(ub) }
 
-import { hedgesG } from "./utils.js";
+import { hedgesG, parseCounts, gorFromCounts } from "./utils.js";
 import { MIN_VAR, Z_95 } from "./constants.js";
 
 export const effectProfiles = {
@@ -940,6 +940,64 @@ export const effectProfiles = {
       ["Study 3",  9,  800, ""],
       ["Study 4", 22, 1500, ""],
       ["Study 5", 12,  900, ""],
+    ],
+  },
+
+  // ------------------------------------------------------------------ //
+  "GOR": {
+    label:  "Generalised Odds Ratio (ordinal)",
+    isTransformedScale: true,
+    inputs: ["counts1", "counts2"],
+    rawInputs: new Set(["counts1", "counts2"]),
+
+    compute(s) {
+      if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+      const { es, var: v } = gorFromCounts(parseCounts(s.counts1), parseCounts(s.counts2));
+      if (!isFinite(es) || !isFinite(v)) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+      const vi = Math.max(v, MIN_VAR);
+      return { ...s, yi: es, vi, se: Math.sqrt(vi), w: 1 / vi };
+    },
+    transform: (x) => Math.exp(x),
+
+    validate(s) {
+      const errors = {};
+      const c1 = parseCounts(s.counts1);
+      const c2 = parseCounts(s.counts2);
+      if (!c1) {
+        errors.counts1 = "Enter space- or comma-separated non-negative integers (≥ 2 categories)";
+      }
+      if (!c2) {
+        errors.counts2 = "Enter space- or comma-separated non-negative integers (≥ 2 categories)";
+      }
+      if (c1 && c2 && c1.length !== c2.length) {
+        errors.counts1 = "Both groups must have the same number of categories";
+        errors.counts2 = "Both groups must have the same number of categories";
+      }
+      if (c1 && c1.reduce((s, v) => s + v, 0) === 0) errors.counts1 = "Group 1 total must be > 0";
+      if (c2 && c2.reduce((s, v) => s + v, 0) === 0) errors.counts2 = "Group 2 total must be > 0";
+      return { valid: Object.keys(errors).length === 0, errors };
+    },
+
+    softWarnings(s, label) {
+      const w = [];
+      const c1 = parseCounts(s.counts1);
+      const c2 = parseCounts(s.counts2);
+      if (c1 && c2 && c1.length === c2.length) {
+        const N1 = c1.reduce((a, b) => a + b, 0);
+        const N2 = c2.reduce((a, b) => a + b, 0);
+        if (N1 < 20 || N2 < 20)
+          w.push(`⚠️ ${label}: small sample — delta-method variance may be unreliable`);
+        const zeros = c1.filter((v, i) => v === 0 && c2[i] === 0).length;
+        if (zeros > 0)
+          w.push(`⚠️ ${label}: ${zeros} category/categories empty in both groups`);
+      }
+      return w;
+    },
+
+    exampleData: [
+      ["Study 1", "15,28,22,10", "10,20,30,15", ""],
+      ["Study 2", "20,35,18,7",  "12,25,32,11", ""],
+      ["Study 3", "18,30,20,8",  "9,22,28,16",  ""],
     ],
   },
 

@@ -151,6 +151,19 @@ export const HELP = {
            "Use for single-arm studies or prevalence estimates expressed as rates.",
   },
 
+  "effect.GOR": {
+    title: "Generalised Odds Ratio — ordinal (GOR)",
+    body:  "Effect size for ordinal outcomes (Agresti 1980). " +
+           "GOR = P(Y₁ > Y₂) / P(Y₁ < Y₂): the odds that a randomly selected " +
+           "participant from group 1 scores higher than one from group 2, relative " +
+           "to the reverse. GOR > 1 means group 1 tends to score higher. " +
+           "Stored on the log scale; displayed as the ratio (back-transformed). " +
+           "Input: enter category counts from lowest to highest category, separated " +
+           "by commas or spaces (e.g. \"15,28,22,10\"). Both groups must have the " +
+           "same number of categories. Returns undefined (NaN) when one group has " +
+           "zero probability of scoring strictly above or below the other (complete separation).",
+  },
+
   "effect.COR": {
     title: "Correlation — raw r (COR)",
     body:  "Pearson r pooled directly on the untransformed scale. " +

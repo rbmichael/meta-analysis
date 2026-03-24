@@ -427,7 +427,7 @@ function validateRow(row) {
     if (idx === 0 || input.classList.contains("group") || "mod" in input.dataset) return;
     const key = profile.inputs[idx - 1];
     const val = input.value.trim();
-    studyObj[key] = (val === "" || isNaN(val)) ? NaN : +val;
+    studyObj[key] = profile.rawInputs?.has(key) ? val : (val === "" || isNaN(val)) ? NaN : +val;
   });
 
   // Delegate to the profile's validate function.
@@ -1309,7 +1309,9 @@ function runAnalysis() {
     const label = inputs[0] || `Row ${i}`;
 
     const studyInput = { label };
-    profile.inputs.forEach((key, idx) => studyInput[key] = +inputs[idx + 1]);
+    profile.inputs.forEach((key, idx) => {
+      studyInput[key] = profile.rawInputs?.has(key) ? inputs[idx + 1] : +inputs[idx + 1];
+    });
 
     // --- NEW: check for missing correlation in paired designs ---
     if ((type === "MD_paired" || type === "SMD_paired") && !isFinite(studyInput.r)) {

@@ -230,12 +230,94 @@ export function hedgesG(s, options = {}) {
   return { es: g, var: Math.max(varBase, MIN_VAR) };
 }
 
+// ================= GENERALISED ODDS RATIO HELPERS =================
+
+// Parse a space-or-comma separated string of non-negative integers.
+// Returns an array of numbers, or null if any token is invalid.
+export function parseCounts(str) {
+  if (typeof str !== "string" || str.trim() === "") return null;
+  const tokens = str.trim().split(/[\s,]+/);
+  const counts = [];
+  for (const tok of tokens) {
+    const n = Number(tok);
+    if (!Number.isInteger(n) || n < 0) return null;
+    counts.push(n);
+  }
+  return counts.length >= 2 ? counts : null;
+}
+
+// Compute log(GOR) and its delta-method variance from two count arrays.
+// GOR = P(Y₁ > Y₂) / P(Y₁ < Y₂)  (Agresti 1980).
+// Returns { es: log(GOR), var } or { es: NaN, var: NaN } on complete separation.
+export function gorFromCounts(c1, c2) {
+  const nan = { es: NaN, var: NaN };
+  if (!c1 || !c2 || c1.length !== c2.length || c1.length < 2) return nan;
+
+  const C  = c1.length;
+  const N1 = c1.reduce((s, v) => s + v, 0);
+  const N2 = c2.reduce((s, v) => s + v, 0);
+  if (N1 === 0 || N2 === 0) return nan;
+
+  const p1 = c1.map(v => v / N1);
+  const p2 = c2.map(v => v / N2);
+
+  // Precompute strict left CDF and right tail for each group.
+  // L2[j] = P(Y₂ < j),  H2[j] = P(Y₂ > j)
+  // P1gt[k] = P(Y₁ > k), P1lt[k] = P(Y₁ < k)
+  const L2   = new Array(C).fill(0);  // L2[0] = 0
+  const H2   = new Array(C).fill(0);  // H2[C-1] = 0
+  const P1gt = new Array(C).fill(0);  // P1gt[C-1] = 0
+  const P1lt = new Array(C).fill(0);  // P1lt[0] = 0
+
+  for (let j = 1; j < C; j++) L2[j]   = L2[j - 1]   + p2[j - 1];
+  for (let j = C - 2; j >= 0; j--) H2[j]   = H2[j + 1]   + p2[j + 1];
+  for (let k = C - 2; k >= 0; k--) P1gt[k] = P1gt[k + 1] + p1[k + 1];
+  for (let k = 1; k < C; k++) P1lt[k]  = P1lt[k - 1]  + p1[k - 1];
+
+  // Concordant and discordant probabilities.
+  let theta = 0, phi = 0;
+  for (let j = 0; j < C; j++) {
+    theta += p1[j] * L2[j];
+    phi   += p1[j] * H2[j];
+  }
+  if (theta <= 0 || phi <= 0) return nan;  // complete separation
+
+  // Delta-method variance of log(theta/phi).
+  // Group 1 contributions (iterate over j):
+  let V1t = 0, V1p = 0, Cov1 = 0;
+  for (let j = 0; j < C; j++) {
+    const at = L2[j]   - theta;
+    const ap = H2[j]   - phi;
+    V1t  += p1[j] * at * at;
+    V1p  += p1[j] * ap * ap;
+    Cov1 += p1[j] * at * ap;
+  }
+  V1t /= N1;  V1p /= N1;  Cov1 /= N1;
+
+  // Group 2 contributions (iterate over k):
+  let V2t = 0, V2p = 0, Cov2 = 0;
+  for (let k = 0; k < C; k++) {
+    const bt = P1gt[k] - theta;
+    const bp = P1lt[k] - phi;
+    V2t  += p2[k] * bt * bt;
+    V2p  += p2[k] * bp * bp;
+    Cov2 += p2[k] * bt * bp;
+  }
+  V2t /= N2;  V2p /= N2;  Cov2 /= N2;
+
+  const varLog = (V1t + V2t) / (theta * theta)
+               + (V1p + V2p) / (phi   * phi)
+               - 2 * (Cov1 + Cov2) / (theta * phi);
+
+  return { es: Math.log(theta) - Math.log(phi), var: Math.max(varLog, MIN_VAR) };
+}
+
 // ================= EFFECT TRANSFORMS (PROFILE-AWARE) =================
 export function transformEffect(x, type) {
   if (!isFinite(x)) return NaN;
 
   // Ratio measures — all stored on log scale, display as exp(yi)
-  if (type === "OR" || type === "RR" || type === "HR" || type === "IRR" || type === "IR" || type === "ROM" || type === "CVR" || type === "VR") {
+  if (type === "OR" || type === "RR" || type === "HR" || type === "IRR" || type === "IR" || type === "ROM" || type === "CVR" || type === "VR" || type === "GOR") {
     return Math.exp(x);
   }
 

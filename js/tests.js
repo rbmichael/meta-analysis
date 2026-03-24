@@ -1,4 +1,4 @@
-import { round, transformEffect, chiSquareCDF, chiSquareQuantile } from "./utils.js";
+import { round, transformEffect, chiSquareCDF, chiSquareQuantile, parseCounts } from "./utils.js";
 import { BENCHMARKS } from "./benchmarks.js";
 import { compute, meta, metaRegression, tau2_HS, tau2_HE, tau2_ML, tau2_SJ, beggTest, fatPetTest, failSafeN, heterogeneityCIs, cumulativeMeta, influenceDiagnostics } from "./analysis.js";
 
@@ -1463,4 +1463,135 @@ export function runTests() {
   }
 
   console.log(vrPass ? "\n✅ ALL VR UNIT TESTS PASSED" : "\n❌ SOME VR UNIT TESTS FAILED");
+
+  // ===== GOR UNIT TESTS =====
+  //
+  // Tests cover:
+  //   1. parseCounts — valid and invalid inputs
+  //   2. yi / vi formula spot-check (exact analytical values)
+  //      c1=[10,20,10] N1=40, c2=[5,10,25] N2=40, C=3
+  //      p1=[1/4,1/2,1/4], p2=[1/8,1/4,5/8]
+  //      L2=[0,1/8,3/8], H2=[7/8,5/8,0]
+  //      θ = 1/4·0 + 1/2·1/8 + 1/4·3/8 = 5/32
+  //      φ = 1/4·7/8 + 1/2·5/8 + 1/4·0 = 17/32
+  //      log(GOR) = log(5/17) ≈ −1.223775
+  //      Var ≈ 0.165841  (delta method, see plan)
+  //   3. Symmetry: log(GOR(c1,c2)) = −log(GOR(c2,c1))
+  //   4. Equal distributions → GOR = 1, log(GOR) = 0
+  //   5. Complete separation → NaN
+  //   6. Invalid inputs → NaN / w=0
+  //   7. Back-transform: transformEffect(yi,"GOR") = exp(yi)
+  //   8. Pooled meta() on 3-study dataset
+  // ================================================================
+  let gorPass = true;
+  console.log("\n===== GOR UNIT TESTS =====\n");
+
+  function gorchk(name, val, expected, tol = 1e-5) {
+    const ok = isFinite(val) && isFinite(expected) && Math.abs(val - expected) <= tol;
+    console.log(`  ${name}: ${round(val, 7)} (expected ${round(expected, 7)}) → ${ok ? "PASS" : "FAIL"}`);
+    if (!ok) gorPass = false;
+  }
+  function gorchkTrue(name, cond) {
+    console.log(`  ${name}: ${cond ? "PASS" : "FAIL"}`);
+    if (!cond) gorPass = false;
+  }
+
+  // 1. parseCounts
+  console.log("--- 1. parseCounts ---");
+  {
+    gorchkTrue("valid '10,20,30'",              Array.isArray(parseCounts("10,20,30")));
+    gorchkTrue("valid '10 20 30' (spaces)",     Array.isArray(parseCounts("10 20 30")));
+    gorchkTrue("valid '10, 20, 30' (mixed)",    Array.isArray(parseCounts("10, 20, 30")));
+    gorchkTrue("correct length (3)",            parseCounts("10,20,30")?.length === 3);
+    gorchkTrue("correct values [10,20,30]",     parseCounts("10,20,30")?.join() === "10,20,30");
+    gorchkTrue("null for empty string",         parseCounts("")   === null);
+    gorchkTrue("null for single value",         parseCounts("10") === null);
+    gorchkTrue("null for negative value",       parseCounts("10,-1,20")  === null);
+    gorchkTrue("null for non-integer",          parseCounts("10,1.5,20") === null);
+    gorchkTrue("null for non-numeric",          parseCounts("10,abc,20") === null);
+    gorchkTrue("zero counts accepted",          Array.isArray(parseCounts("0,10,5")));
+  }
+
+  // 2. yi / vi formula spot-check
+  console.log("--- 2. yi / vi formula ---");
+  {
+    const s = compute({ counts1: "10,20,10", counts2: "5,10,25" }, "GOR");
+    gorchk("yi = log(5/17)",     s.yi, Math.log(5 / 17));
+    gorchk("vi ≈ 0.165841",      s.vi, 0.165841, 1e-4);
+    gorchk("se = √vi",           s.se, Math.sqrt(s.vi), 1e-9);
+    gorchk("w  = 1/vi",          s.w,  1 / s.vi,        1e-9);
+  }
+
+  // 3. Symmetry: swapping groups negates log(GOR)
+  console.log("--- 3. Symmetry: log(GOR(c1,c2)) = −log(GOR(c2,c1)) ---");
+  {
+    const s12 = compute({ counts1: "10,20,10", counts2: "5,10,25" }, "GOR");
+    const s21 = compute({ counts1: "5,10,25",  counts2: "10,20,10" }, "GOR");
+    gorchk("log(GOR(c1,c2)) = −log(GOR(c2,c1))", s12.yi, -s21.yi, 1e-9);
+  }
+
+  // 4. Equal distributions → GOR = 1, log(GOR) = 0
+  console.log("--- 4. Equal distributions → log(GOR) = 0 ---");
+  {
+    const s = compute({ counts1: "10,20,30", counts2: "10,20,30" }, "GOR");
+    gorchk("yi = 0 when c1 = c2", s.yi, 0, 1e-12);
+    gorchkTrue("vi > 0 (sampling variance present)", isFinite(s.vi) && s.vi > 0);
+  }
+
+  // 5. Complete separation → NaN
+  console.log("--- 5. Complete separation → NaN ---");
+  {
+    // All of group 1 in highest category, all of group 2 in lowest → φ = 0
+    gorchkTrue("φ=0 → NaN yi",  !isFinite(compute({ counts1: "0,0,20", counts2: "20,0,0" }, "GOR").yi));
+    gorchkTrue("φ=0 → w = 0",   compute({ counts1: "0,0,20", counts2: "20,0,0" }, "GOR").w === 0);
+  }
+
+  // 6. Invalid inputs → NaN / w=0
+  console.log("--- 6. Invalid inputs → NaN / w=0 ---");
+  {
+    gorchkTrue("empty counts1 → NaN yi",      !isFinite(compute({ counts1: "",       counts2: "5,10,25" }, "GOR").yi));
+    gorchkTrue("mismatched lengths → NaN yi", !isFinite(compute({ counts1: "10,20",  counts2: "5,10,25" }, "GOR").yi));
+    gorchkTrue("negative count → NaN yi",     !isFinite(compute({ counts1: "10,-1,20", counts2: "5,10,25" }, "GOR").yi));
+    gorchkTrue("zero group total → NaN yi",   !isFinite(compute({ counts1: "0,0,0", counts2: "5,10,25" }, "GOR").yi));
+    gorchkTrue("invalid → w = 0",             compute({ counts1: "", counts2: "5,10,25" }, "GOR").w === 0);
+  }
+
+  // 7. Back-transform: exp(log(GOR)) = GOR
+  console.log("--- 7. Back-transform: transformEffect(yi, 'GOR') = exp(yi) ---");
+  {
+    const s = compute({ counts1: "10,20,10", counts2: "5,10,25" }, "GOR");
+    gorchk("transformEffect = exp(yi)",        transformEffect(s.yi, "GOR"), Math.exp(s.yi), 1e-10);
+    gorchk("exp(log(5/17)) = 5/17",           transformEffect(s.yi, "GOR"), 5 / 17,         1e-7);
+    gorchkTrue("CI lb < back-transformed < CI ub", (() => {
+      const lb = transformEffect(s.yi - 1.96 * s.se, "GOR");
+      const ub = transformEffect(s.yi + 1.96 * s.se, "GOR");
+      return lb < (5 / 17) && (5 / 17) < ub;
+    })());
+  }
+
+  // 8. Pooled meta() — 3 consistent studies (group 1 scores higher in each)
+  // All studies use c1 concentrated in high categories, c2 in low → yi > 0
+  console.log("--- 8. Pooled meta() (k=3, DL) ---");
+  {
+    const studies = [
+      compute({ counts1: "5,10,25",  counts2: "15,20,5"  }, "GOR"),
+      compute({ counts1: "8,12,30",  counts2: "20,15,10" }, "GOR"),
+      compute({ counts1: "10,15,25", counts2: "18,18,8"  }, "GOR"),
+    ];
+    gorchkTrue("yi[0] > 0 (group 1 scores higher)", studies[0].yi > 0);
+    gorchkTrue("yi[1] > 0",                          studies[1].yi > 0);
+    gorchkTrue("yi[2] > 0",                          studies[2].yi > 0);
+    gorchkTrue("vi[0] > 0", isFinite(studies[0].vi) && studies[0].vi > 0);
+
+    const m = meta(studies, "DL");
+    gorchkTrue("FE > 0 (consistent positive effect)", m.FE > 0);
+    gorchkTrue("RE > 0",                               m.RE > 0);
+    gorchkTrue("RE between min and max yi",
+      m.RE > Math.min(...studies.map(s => s.yi)) &&
+      m.RE < Math.max(...studies.map(s => s.yi)));
+    gorchkTrue("tau2 ≥ 0", isFinite(m.tau2) && m.tau2 >= 0);
+    gorchkTrue("exp(RE) > 1 (back-transformed GOR > 1)", Math.exp(m.RE) > 1);
+  }
+
+  console.log(gorPass ? "\n✅ ALL GOR UNIT TESTS PASSED" : "\n❌ SOME GOR UNIT TESTS FAILED");
 }
