@@ -125,14 +125,12 @@ TASK 1 [MEDIUM] ✓ RESOLVED 2026-03-25: Prediction interval method not labelled
            the Higgins et al. (2009) citation.
 
 --------------------------------------------------------------------------------
-TASK 2 [LOW]: Forest plot pagination does not clarify pooled estimate scope
+TASK 2 [LOW] ✓ RESOLVED 2026-03-25: Forest plot pagination does not clarify pooled estimate scope
 
-  File:    js/plots.js → drawForest / js/ui.js → forestNav
-  Symptom: When studies are paginated, the pooled-estimate diamond reflects ALL
-           studies, but the visible rows are only a subset. A user could
-           misread the plot as showing a pooled estimate for k = page_size.
-  Fix:     Add a prominent "Page N of M — pooled estimate includes all K
-           studies" label to the forest plot or navigation bar.
+  Fixed:   js/ui.js → renderForestNav() — appended a
+             "Pooled estimate includes all K studies" note to the nav bar
+           whenever totalPages > 1. K is read from _forestArgs.studies.length.
+           css/styles.css — added .forest-nav-note (italic, var(--fg-subtle)).
 
 --------------------------------------------------------------------------------
 TASK 3 [LOW]: Log-scale effect types do not annotate axes as log-scale

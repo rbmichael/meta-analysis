@@ -1123,10 +1123,12 @@ function renderForestNav(totalPages) {
   if (!nav) return;
   if (totalPages <= 1) { nav.innerHTML = ""; return; }
 
+  const kAll = _forestArgs?.studies?.length ?? "?";
   nav.innerHTML =
     `<button id="forestPrev" ${forestPage === 0 ? "disabled" : ""}>&#8249; Prev</button>` +
     `<span>Page ${forestPage + 1} of ${totalPages}</span>` +
-    `<button id="forestNext" ${forestPage >= totalPages - 1 ? "disabled" : ""}>Next &#8250;</button>`;
+    `<button id="forestNext" ${forestPage >= totalPages - 1 ? "disabled" : ""}>Next &#8250;</button>` +
+    `<span class="forest-nav-note">Pooled estimate includes all ${kAll} studies</span>`;
 
   document.getElementById("forestPrev").addEventListener("click", () => {
     if (forestPage > 0) {
