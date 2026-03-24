@@ -8,6 +8,7 @@ import { drawForest, drawFunnel, drawBubble, drawInfluencePlot, drawCumulativeFo
 import { exportSVG, exportPNG } from "./export.js";
 import { buildReport, downloadHTML, openPrintPreview } from "./report.js";
 import { parseCSV, detectEffectType } from "./csv.js";
+import { buildSession, serializeSession, parseSession, missingInputCols } from "./session.js";
 import { HELP } from "./help.js";
 
 // ---------------- SHARED HELPERS ----------------
@@ -712,18 +713,9 @@ function cancelImport() {
 
 // ---------------- SESSION SCHEMA ----------------
 
-const SESSION_VERSION = 1;
-
-// Snapshot the current input state as a plain JSON-serialisable object.
-// This is the single source of truth for the session schema used by both
-// saveSession (serialises) and loadSession (validates + applies).
-//
-// Schema:
-//   version       — integer, bumped on breaking changes
-//   settings      — the six UI controls that govern analysis behaviour
-//   moderators    — array of { name, type } objects
-//   studies       — array of { study, inputs: {col: value}, group, moderators: {name: value} }
-function buildSessionObject() {
+// Gather the current UI state into a versioned session object.
+// Schema is defined in session.js.
+function gatherSessionState() {
   const type    = document.getElementById("effectType").value;
   const profile = effectProfiles[type];
 
@@ -761,19 +753,17 @@ function buildSessionObject() {
     studies.push({ study, inputs: effectInputs, group, moderators: modValues });
   });
 
-  return { version: SESSION_VERSION, settings, moderators: savedModerators, studies };
+  return buildSession(settings, savedModerators, studies);
 }
 
 // ---------------- SESSION SAVE ----------------
 
 function saveSession() {
-  const session = buildSessionObject();
-  const json    = JSON.stringify(session, null, 2);
-  const blob    = new Blob(["\uFEFF" + json], { type: "application/json;charset=utf-8;" });
-  const url     = URL.createObjectURL(blob);
-  const a       = document.createElement("a");
-  a.href        = url;
-  a.download    = "session.json";
+  const blob = new Blob([serializeSession(gatherSessionState())], { type: "application/json;charset=utf-8;" });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement("a");
+  a.href     = url;
+  a.download = "session.json";
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -796,29 +786,14 @@ function loadSession(file) {
     warningDiv.style.display = "block";
   };
   reader.onload = e => {
-    let session;
-    try {
-      // Strip BOM if present, then parse.
-      session = JSON.parse(e.target.result.replace(/^\uFEFF/, ""));
-    } catch {
-      warningDiv.textContent = "Session file is not valid JSON.";
+    const result = parseSession(e.target.result);
+    if (!result.ok) {
+      warningDiv.textContent = result.error;
       warningDiv.style.display = "block";
       return;
     }
 
-    // Version check — only reject future breaking versions.
-    if (typeof session.version !== "number") {
-      warningDiv.textContent = "Session file is missing a version field.";
-      warningDiv.style.display = "block";
-      return;
-    }
-    if (session.version > SESSION_VERSION) {
-      warningDiv.textContent = `Unsupported session version (${session.version}).`;
-      warningDiv.style.display = "block";
-      return;
-    }
-
-    const { settings = {}, moderators: savedMods = [], studies: savedStudies = [] } = session;
+    const { settings = {}, moderators: savedMods = [], studies: savedStudies = [] } = result.session;
 
     // Apply settings
     const s = settings;
@@ -857,9 +832,7 @@ function loadSession(file) {
     });
 
     // Warn about any effect-input columns absent from the saved data.
-    const missingCols = profile.inputs.filter(col =>
-      savedStudies.length > 0 && savedStudies.every(r => r.inputs?.[col] === undefined)
-    );
+    const missingCols = missingInputCols(profile.inputs, savedStudies);
     if (missingCols.length > 0) {
       warningDiv.textContent = `Warning: session is missing data for: ${missingCols.join(", ")}`;
       warningDiv.style.display = "block";
