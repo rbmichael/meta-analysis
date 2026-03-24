@@ -1,4 +1,4 @@
-import { round, transformEffect, chiSquareCDF, chiSquareQuantile, parseCounts } from "./utils.js";
+import { round, transformEffect, chiSquareCDF, chiSquareQuantile, parseCounts, bivariateNormalCDF, normalQuantile } from "./utils.js";
 import { BENCHMARKS } from "./benchmarks.js";
 import { compute, meta, metaRegression, tau2_HS, tau2_HE, tau2_ML, tau2_SJ, beggTest, fatPetTest, failSafeN, heterogeneityCIs, cumulativeMeta, influenceDiagnostics } from "./analysis.js";
 
@@ -1978,4 +1978,144 @@ export function runTests() {
   }
 
   console.log(phiPass ? "\n✅ ALL PHI UNIT TESTS PASSED" : "\n❌ SOME PHI UNIT TESTS FAILED");
+
+  // ===== RTET UNIT TESTS =====
+  //
+  // Tests cover:
+  //   1. Analytical spot-check (a=40,b=10,c=10,d=40)
+  //        h=k=0 (50/50 marginals), Φ₂(0,0;ρ)=¼+arcsin(ρ)/(2π)=0.4
+  //        → ρ_tet = sin(0.3π);  vi = 0.0625·(2π·cos(0.3π))²/100
+  //   2. |ρ_tet| ≥ |φ| for same table (Pearson inequality)
+  //   3. Sign antisymmetry: swapping rows negates ρ_tet
+  //   4. Transpose symmetry: (a,b,c,d) → (a,c,b,d) preserves ρ_tet
+  //   5. Zero cell → finite ρ_tet (continuity correction applied, w > 0)
+  //   6. Zero marginal → NaN/w=0
+  //   7. normalQuantile / bivariateNormalCDF utility spot-checks
+  //   8. transformEffect identity
+  //   9. Pooled meta() structural checks (k=3)
+  // ================================================================
+  let rtetPass = true;
+  console.log("\n===== RTET UNIT TESTS =====\n");
+
+  function rtetChk(name, val, expected, tol = 1e-5) {
+    const ok = isFinite(val) && isFinite(expected) && Math.abs(val - expected) <= tol;
+    console.log(`  ${name}: ${round(val, 8)} (expected ${round(expected, 8)}) → ${ok ? "PASS" : "FAIL"}`);
+    if (!ok) rtetPass = false;
+  }
+  function rtetChkTrue(name, cond) {
+    console.log(`  ${name}: ${cond ? "PASS" : "FAIL"}`);
+    if (!cond) rtetPass = false;
+  }
+
+  // --- RTET 1: analytical spot-check ---
+  // a=40,b=10,c=10,d=40 → h=k=0 (50/50 marginals → normalQuantile(0.5)=0)
+  // Φ₂(0,0;ρ) = 0.25 + arcsin(ρ)/(2π)  [known closed form at origin]
+  // p11 = 0.4  →  arcsin(ρ) = 0.3π  →  ρ = sin(0.3π)
+  // bvd(0,0;ρ) = 1/(2π·√(1−ρ²)) = 1/(2π·cos(0.3π))
+  // vi = 0.0625·(2π·cos(0.3π))² / 100
+  console.log("--- RTET 1. Analytical spot-check ---");
+  {
+    const s        = compute({ a: 40, b: 10, c: 10, d: 40 }, "RTET");
+    const rho_exp  = Math.sin(0.3 * Math.PI);
+    const vi_exp   = 0.0625 * (2 * Math.PI * Math.cos(0.3 * Math.PI)) ** 2 / 100;
+    rtetChk("ρ_tet = sin(0.3π)",        s.yi, rho_exp);
+    rtetChk("vi = 0.0625·(2π·cos)²/100", s.vi, vi_exp);
+    rtetChk("se = √vi",                 s.se, Math.sqrt(vi_exp));
+    rtetChk("w  = 1/vi",                s.w,  1 / vi_exp, 1e-3);
+  }
+
+  // --- RTET 2: |ρ_tet| ≥ |φ| (Pearson inequality) ---
+  console.log("--- RTET 2. |ρ_tet| ≥ |φ| for same table ---");
+  {
+    const tables = [
+      { a: 40, b: 10, c: 10, d: 40 },
+      { a: 25, b: 15, c: 12, d: 48 },
+      { a: 18, b:  8, c:  9, d: 35 },
+    ];
+    tables.forEach(t => {
+      const rtet = compute(t, "RTET").yi;
+      const denom = Math.sqrt((t.a+t.b)*(t.c+t.d)*(t.a+t.c)*(t.b+t.d));
+      const phi  = (t.a*t.d - t.b*t.c) / denom;
+      rtetChkTrue(`|ρ_tet|(${t.a},${t.b},${t.c},${t.d}) ≥ |φ|`,
+        isFinite(rtet) && Math.abs(rtet) >= Math.abs(phi) - 1e-9);
+    });
+  }
+
+  // --- RTET 3: sign antisymmetry (swap rows → −ρ) ---
+  console.log("--- RTET 3. Swap rows → −ρ_tet ---");
+  {
+    const sPos = compute({ a: 40, b: 10, c: 10, d: 40 }, "RTET");
+    const sNeg = compute({ a: 10, b: 40, c: 40, d: 10 }, "RTET");  // rows swapped
+    rtetChk("ρ_orig = −ρ_swapped", sPos.yi, -sNeg.yi);
+    rtetChk("vi symmetric",        sPos.vi,  sNeg.vi);
+  }
+
+  // --- RTET 4: transpose symmetry (a,b,c,d) → (a,c,b,d) → same ρ ---
+  console.log("--- RTET 4. Table transpose preserves ρ_tet ---");
+  {
+    const s1 = compute({ a: 30, b: 10, c: 20, d: 40 }, "RTET");
+    const s2 = compute({ a: 30, b: 20, c: 10, d: 40 }, "RTET");  // b↔c transposed
+    rtetChk("ρ(a,b,c,d) = ρ(a,c,b,d)", s1.yi, s2.yi);
+  }
+
+  // --- RTET 5: zero cell → finite ρ via continuity correction ---
+  console.log("--- RTET 5. Zero cell → finite ρ (continuity correction) ---");
+  {
+    const s = compute({ a: 0, b: 20, c: 10, d: 30 }, "RTET");
+    rtetChkTrue("finite ρ with a=0",  isFinite(s.yi));
+    rtetChkTrue("w > 0 with a=0",     s.w > 0);
+    rtetChkTrue("|ρ| ≤ 1 with a=0",  Math.abs(s.yi) <= 1);
+  }
+
+  // --- RTET 6: zero marginal → NaN/w=0 ---
+  console.log("--- RTET 6. Zero marginal → NaN/w=0 ---");
+  {
+    rtetChkTrue("a+b=0 → NaN yi", !isFinite(compute({ a: 0, b: 0, c: 5, d: 5 }, "RTET").yi));
+    rtetChkTrue("c+d=0 → NaN yi", !isFinite(compute({ a: 5, b: 5, c: 0, d: 0 }, "RTET").yi));
+    rtetChkTrue("a+b=0 → w=0",    compute({ a: 0, b: 0, c: 5, d: 5 }, "RTET").w === 0);
+  }
+
+  // --- RTET 7: normalQuantile and bivariateNormalCDF utility checks ---
+  console.log("--- RTET 7. Utility: normalQuantile / bivariateNormalCDF ---");
+  {
+    // normalQuantile is the inverse of normalCDF at round numbers
+    rtetChk("normalQuantile(0.5) = 0",   normalQuantile(0.5),   0,      1e-9);
+    rtetChk("normalQuantile(0.975) ≈ 1.96", normalQuantile(0.975), 1.959964, 1e-4);
+    rtetChk("normalQuantile(0.025) ≈ −1.96", normalQuantile(0.025), -1.959964, 1e-4);
+    // Φ₂(0,0;ρ) = 0.25 + arcsin(ρ)/(2π) — verify against our implementation
+    const rho = 0.5;
+    const expected_cdf = 0.25 + Math.asin(rho) / (2 * Math.PI);
+    rtetChk("Φ₂(0,0;0.5) = ¼+arcsin(0.5)/(2π)", bivariateNormalCDF(0, 0, 0.5), expected_cdf, 1e-6);
+    // Independence: Φ₂(h,k;0) = Φ(h)·Φ(k)  [Φ(1) ≈ 0.8413]
+    rtetChkTrue("Φ₂(1,1;0) ≈ Φ(1)²", Math.abs(bivariateNormalCDF(1, 1, 0) - 0.8413**2) < 0.001);
+  }
+
+  // --- RTET 8: transformEffect identity ---
+  console.log("--- RTET 8. transformEffect identity ---");
+  {
+    [-0.8, -0.5, 0, 0.5, 0.8].forEach(v =>
+      rtetChk(`transformEffect(${v}, "RTET") = ${v}`, transformEffect(v, "RTET"), v, 1e-12)
+    );
+  }
+
+  // --- RTET 9: pooled meta() structural checks ---
+  console.log("--- RTET 9. Pooled meta() (k=3, DL) ---");
+  {
+    const studies = [
+      compute({ a: 40, b: 10, c: 10, d: 40 }, "RTET"),
+      compute({ a: 30, b: 15, c: 12, d: 43 }, "RTET"),
+      compute({ a: 25, b:  8, c:  9, d: 38 }, "RTET"),
+    ];
+    rtetChkTrue("all yi finite",  studies.every(s => isFinite(s.yi)));
+    rtetChkTrue("all vi > 0",     studies.every(s => s.vi > 0));
+    const m = meta(studies, "DL");
+    const minYi = Math.min(...studies.map(s => s.yi));
+    const maxYi = Math.max(...studies.map(s => s.yi));
+    rtetChkTrue("FE in (min yi, max yi)", m.FE > minYi && m.FE < maxYi);
+    rtetChkTrue("RE in (min yi, max yi)", m.RE > minYi && m.RE < maxYi);
+    rtetChkTrue("tau2 ≥ 0",              isFinite(m.tau2) && m.tau2 >= 0);
+    rtetChkTrue("CI lb < RE < CI ub",    m.ciLow < m.RE && m.RE < m.ciHigh);
+  }
+
+  console.log(rtetPass ? "\n✅ ALL RTET UNIT TESTS PASSED" : "\n❌ SOME RTET UNIT TESTS FAILED");
 }

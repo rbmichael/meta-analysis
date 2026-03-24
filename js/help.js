@@ -225,6 +225,22 @@ export const HELP = {
            "Pooled on the raw scale — no back-transformation.",
   },
 
+  "effect.RTET": {
+    title: "Tetrachoric Correlation (RTET)",
+    body:  "Estimates the latent Pearson correlation between two underlying continuous, " +
+           "bivariate-normal variables from their dichotomisation in a 2×2 table (Pearson 1900). " +
+           "Algorithm: thresholds h = Φ⁻¹((a+b)/N) and k = Φ⁻¹((a+c)/N) are computed from " +
+           "the marginal proportions; the tetrachoric ρ is then found by bisecting the bivariate " +
+           "normal CDF Φ₂(h, k; ρ) = a/N. " +
+           "Variance: p_r(1−p_r)·p_c(1−p_c) / (N · φ₂(h,k;ρ)²), where φ₂ is the bivariate " +
+           "normal PDF evaluated at the thresholds — delta-method approximation. " +
+           "A zero cell triggers a +0.5 continuity correction to all cells before estimation. " +
+           "Key properties: |ρ_tet| ≥ |φ| for the same table; ρ_tet = φ only when marginals are 50/50. " +
+           "Appropriate when the binary outcomes reflect an underlying continuous normal construct. " +
+           "Contrast with PHI (distribution-free) and COR/ZCOR (continuous r input). " +
+           "Same inputs as OR/RR/PHI: a, b, c, d ≥ 0 with all four marginal totals > 0.",
+  },
+
   "effect.PR": {
     title: "Proportion — raw (PR)",
     body:  "Single-group event proportion pooled on the untransformed (0–1) scale. " +

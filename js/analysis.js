@@ -1,4 +1,4 @@
-import { tCritical, normalCDF, tCDF, chiSquareCDF, chiSquareQuantile, fCDF, hedgesG, parseCounts, gorFromCounts } from "./utils.js";
+import { tCritical, normalCDF, tCDF, chiSquareCDF, chiSquareQuantile, fCDF, hedgesG, parseCounts, gorFromCounts, tetrachoricFromCounts } from "./utils.js";
 import { MIN_VAR, REML_TOL, BISECTION_ITERS, Z_95 } from "./constants.js";
 import { validateStudy } from "./profiles.js";
 
@@ -222,6 +222,13 @@ export function compute(s, type, options = {}) {
     const phi = (a*d - b*c) / Math.sqrt((a+b)*(c+d)*(a+c)*(b+d));
     const vi  = Math.max((1 - phi*phi)**2 / (N - 1), MIN_VAR);
     return { ...s, yi: phi, vi, se: Math.sqrt(vi), w: 1 / vi };
+  }
+
+  // ================= TETRACHORIC CORRELATION =================
+  if (type === "RTET") {
+    const { rho, var: v } = tetrachoricFromCounts(s.a, s.b, s.c, s.d);
+    if (!isFinite(rho) || !isFinite(v)) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+    return { ...s, yi: rho, vi: v, se: Math.sqrt(v), w: 1 / v };
   }
 
   // ================= PROPORTIONS =================

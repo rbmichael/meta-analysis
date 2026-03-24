@@ -312,6 +312,122 @@ export function gorFromCounts(c1, c2) {
   return { es: Math.log(theta) - Math.log(phi), var: Math.max(varLog, MIN_VAR) };
 }
 
+// ================= NORMAL QUANTILE (INVERSE CDF) =================
+// Acklam's rational approximation — max absolute error ~1.5e-9 over (0,1).
+export function normalQuantile(p) {
+  if (!isFinite(p) || p <= 0 || p >= 1) return p <= 0 ? -Infinity : Infinity;
+
+  const a = [-3.969683028665376e+01,  2.209460984245205e+02,
+             -2.759285104469687e+02,  1.383577518672690e+02,
+             -3.066479806614716e+01,  2.506628277459239e+00];
+  const b = [-5.447609879822406e+01,  1.615858368580409e+02,
+             -1.556989798598866e+02,  6.680131188771972e+01,
+             -1.328068155288572e+01];
+  const c = [-7.784894002430293e-03, -3.223964580411365e-01,
+             -2.400758277161838e+00, -2.549732539343734e+00,
+              4.374664141464968e+00,  2.938163982698783e+00];
+  const d = [ 7.784695709041462e-03,  3.224671290700398e-01,
+              2.445134137142996e+00,  3.754408661907416e+00];
+
+  const p_lo = 0.02425, p_hi = 1 - p_lo;
+  let q;
+
+  if (p < p_lo) {
+    q = Math.sqrt(-2 * Math.log(p));
+    return (((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5]) /
+           ((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1);
+  }
+  if (p <= p_hi) {
+    q = p - 0.5;
+    const r = q * q;
+    return (((((a[0]*r+a[1])*r+a[2])*r+a[3])*r+a[4])*r+a[5])*q /
+           (((((b[0]*r+b[1])*r+b[2])*r+b[3])*r+b[4])*r+1);
+  }
+  q = Math.sqrt(-2 * Math.log(1 - p));
+  return -(((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5]) /
+          ((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1);
+}
+
+// ================= BIVARIATE NORMAL CDF =================
+// Φ₂(h, k; ρ) via Pearson's formula:
+//   Φ₂(h,k;ρ) = Φ(h)Φ(k) + ∫₀^ρ φ₂(h,k;t) dt
+// where φ₂(h,k;t) = exp(−(h²−2thk+k²)/(2(1−t²))) / (2π√(1−t²))
+// Integral evaluated by 20-point Gauss-Legendre on [0, ρ].
+const _GL20_X = [
+  -0.9931285991850949, -0.9639719272779138, -0.9122344282513259, -0.8391169718222188,
+  -0.7463064833401189, -0.6360536807265150, -0.5108670019508271, -0.3737060887154195,
+  -0.2277858511416451, -0.0765265211334973,  0.0765265211334973,  0.2277858511416451,
+   0.3737060887154195,  0.5108670019508271,  0.6360536807265150,  0.7463064833401189,
+   0.8391169718222188,  0.9122344282513259,  0.9639719272779138,  0.9931285991850949,
+];
+const _GL20_W = [
+  0.0176140071391521, 0.0406014298003869, 0.0626720483341091, 0.0832767415767048,
+  0.1019301198172404, 0.1181945319615184, 0.1316886384491766, 0.1420961093183820,
+  0.1491729864726037, 0.1527533871307258, 0.1527533871307258, 0.1491729864726037,
+  0.1420961093183820, 0.1316886384491766, 0.1181945319615184, 0.1019301198172404,
+  0.0832767415767048, 0.0626720483341091, 0.0406014298003869, 0.0176140071391521,
+];
+export function bivariateNormalCDF(h, k, rho) {
+  if (!isFinite(h) || !isFinite(k) || !isFinite(rho)) return NaN;
+  rho = Math.max(-1 + 1e-10, Math.min(1 - 1e-10, rho));
+  if (rho === 0) return normalCDF(h) * normalCDF(k);
+
+  const hh = h * h, kk = k * k, hk = h * k;
+  const TWO_PI = 2 * Math.PI;
+  let sum = 0;
+  for (let i = 0; i < 20; i++) {
+    const t  = rho * (_GL20_X[i] + 1) / 2;
+    const r2 = 1 - t * t;
+    sum += _GL20_W[i] * Math.exp(-(hh + kk - 2*t*hk) / (2*r2)) / (TWO_PI * Math.sqrt(r2));
+  }
+  return normalCDF(h) * normalCDF(k) + (rho / 2) * sum;
+}
+
+// ================= TETRACHORIC CORRELATION =================
+// Estimates the latent Pearson correlation from a 2×2 table (a,b,c,d).
+// Finds ρ by bisecting bivariateNormalCDF(h, k; ρ) = a/N.
+// Variance: p_r(1−p_r)·p_c(1−p_c) / (N · φ₂(h,k;ρ)²)  — delta method.
+// Returns { rho, var } or { rho: NaN, var: NaN } when the model cannot fit.
+export function tetrachoricFromCounts(a, b, c, d) {
+  const nan = { rho: NaN, var: NaN };
+  if (!isFinite(a) || !isFinite(b) || !isFinite(c) || !isFinite(d)) return nan;
+
+  // Continuity correction when any cell is zero
+  let aa = a, bb = b, cc = c, dd = d;
+  if (aa === 0 || bb === 0 || cc === 0 || dd === 0) {
+    aa += 0.5; bb += 0.5; cc += 0.5; dd += 0.5;
+  }
+
+  const N     = aa + bb + cc + dd;
+  const p_row = (aa + bb) / N;
+  const p_col = (aa + cc) / N;
+  const p11   = aa / N;
+
+  if (p_row <= 0 || p_row >= 1 || p_col <= 0 || p_col >= 1) return nan;
+
+  const h = normalQuantile(p_row);
+  const k = normalQuantile(p_col);
+
+  // Bisect ρ so that Φ₂(h, k; ρ) = p11
+  const EPS = 1e-10;
+  let lo = -1 + EPS, hi = 1 - EPS;
+  if (bivariateNormalCDF(h, k, lo) > p11 || bivariateNormalCDF(h, k, hi) < p11) return nan;
+
+  for (let i = 0; i < BISECTION_ITERS; i++) {
+    const mid = (lo + hi) / 2;
+    if (bivariateNormalCDF(h, k, mid) < p11) lo = mid; else hi = mid;
+  }
+  const rho = (lo + hi) / 2;
+
+  // Delta-method variance
+  const r2  = 1 - rho * rho;
+  const bvd = Math.exp(-(h*h + k*k - 2*rho*h*k) / (2*r2)) / (2 * Math.PI * Math.sqrt(r2));
+  if (!isFinite(bvd) || bvd === 0) return nan;
+  const v = p_row*(1 - p_row) * p_col*(1 - p_col) / (N * bvd * bvd);
+
+  return { rho, var: Math.max(v, MIN_VAR) };
+}
+
 // ================= EFFECT TRANSFORMS (PROFILE-AWARE) =================
 export function transformEffect(x, type) {
   if (!isFinite(x)) return NaN;
@@ -331,7 +447,7 @@ export function transformEffect(x, type) {
 
   // Correlation: ZCOR back-transforms Fisher's z → r; COR is already on r scale
   if (type === "ZCOR") return Math.tanh(x);
-  if (type === "COR" || type === "PHI")  return x;
+  if (type === "COR" || type === "PHI" || type === "RTET")  return x;
 
   // Proportions — all back-transform to p ∈ [0, 1]
   if (type === "PR")  return Math.min(1, Math.max(0, x));
