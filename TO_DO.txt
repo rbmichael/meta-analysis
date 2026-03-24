@@ -144,7 +144,7 @@ TASK 3 [LOW] ✓ RESOLVED 2026-03-25: Log-scale effect types do not annotate axe
            js/plots.js → drawFunnel — same label at y=378 below the axis.
 
 --------------------------------------------------------------------------------
-TASK 4 [LOW]: Restyle D3 plot internals to match the design system
+TASK 4 [LOW] ✓ RESOLVED 2026-03-25: Restyle D3 plot internals to match the design system
 
   Context: The full-app redesign (2026-03-24) updated the CSS chrome around
            the plots but intentionally left the D3 SVG internals untouched

@@ -968,6 +968,19 @@ input[type="file"]::file-selector-button:hover {
   border-radius: var(--radius-md);
 }
 
+/* D3-generated axis elements — styled via CSS so all plots inherit */
+.plot-block > svg .domain,
+.plot-block > svg .tick line,
+#bubblePlots svg .domain,
+#bubblePlots svg .tick line {
+  stroke: var(--border-hover);
+}
+.plot-block > svg .tick text,
+#bubblePlots svg .tick text {
+  fill: var(--fg-muted);
+  font-size: 11px;
+}
+
 /* ================================================================
    REGRESSION PANEL
    ================================================================ */

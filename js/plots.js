@@ -81,7 +81,7 @@ export function drawBubble(studies, reg, modName, modIdx, container) {
     g.append("line")
       .attr("x1", 0).attr("x2", iW)
       .attr("y1", yScale(0)).attr("y2", yScale(0))
-      .attr("stroke", "#444").attr("stroke-dasharray", "4,2");
+      .attr("stroke", "var(--border-hover)").attr("stroke-dasharray", "4,2");
   }
 
   // Prediction band + regression line (band drawn first, behind line)
@@ -99,7 +99,7 @@ export function drawBubble(studies, reg, modName, modIdx, container) {
         .y1(x => yScale(intercept0 + slope * x + crit * seAt(x)));
       g.append("path")
         .datum(pts)
-        .attr("fill", "rgba(79, 195, 247, 0.12)")
+        .attr("fill", "var(--accent-glow)")
         .attr("stroke", "none")
         .attr("d", area);
     }
@@ -108,7 +108,7 @@ export function drawBubble(studies, reg, modName, modIdx, container) {
     g.append("line")
       .attr("x1", xScale(xl)).attr("y1", yScale(intercept0 + slope * xl))
       .attr("x2", xScale(xr)).attr("y2", yScale(intercept0 + slope * xr))
-      .attr("stroke", "#4fc3f7").attr("stroke-width", 2);
+      .attr("stroke", "var(--accent)").attr("stroke-width", 2);
   }
 
   // Bubbles
@@ -119,8 +119,8 @@ export function drawBubble(studies, reg, modName, modIdx, container) {
     .attr("cx", s => xScale(s[modName]))
     .attr("cy", s => yScale(s.yi))
     .attr("r",  (s, i) => Math.max(3, rMax * Math.sqrt(wArr[i] / wMax)))
-    .attr("fill",   "rgba(255,255,255,0.12)")
-    .attr("stroke", "white")
+    .attr("fill",   "var(--bg-surface-hover)")
+    .attr("stroke", "var(--fg-subtle)")
     .attr("stroke-width", 1.2)
     .on("mousemove", (event, s) => {
       const fitted = intercept0 + slope * s[modName];
@@ -138,19 +138,19 @@ export function drawBubble(studies, reg, modName, modIdx, container) {
   // Axis labels
   g.append("text")
     .attr("x", iW / 2).attr("y", iH + 42)
-    .attr("text-anchor", "middle").attr("fill", "#ccc").style("font-size", "12px")
+    .attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "12px")
     .text(modName);
 
   g.append("text")
     .attr("transform", "rotate(-90)")
     .attr("x", -iH / 2).attr("y", -44)
-    .attr("text-anchor", "middle").attr("fill", "#ccc").style("font-size", "12px")
+    .attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "12px")
     .text("Effect size (yi)");
 
   // Title
   svg.append("text")
     .attr("x", margin.left + iW / 2).attr("y", 16)
-    .attr("text-anchor", "middle").attr("fill", "#eee").style("font-size", "13px")
+    .attr("text-anchor", "middle").attr("fill", "var(--fg)").style("font-size", "13px")
     .text(`${modName}  (β = ${isFinite(slope) ? slope.toFixed(3) : "NA"})`);
 }
 
@@ -270,6 +270,7 @@ export function drawForest(studies, m, options = {}) {
     .attr("x", L.labelW + L.plotW / 2)
     .attr("y", L.headerH / 2 + 5)
     .attr("text-anchor", "middle")
+    .attr("fill", "var(--fg-muted)")
     .style("font-size", L.titleFontSize)
     .text(`Random-effects model (${ciLabel})`);
 
@@ -280,7 +281,7 @@ export function drawForest(studies, m, options = {}) {
     svg.append("line")
       .attr("x1", nullX).attr("x2", nullX)
       .attr("y1", L.studyY0).attr("y2", isLastPage ? L.diamondY + 8 : L.studyY1)
-      .attr("stroke", "white")
+      .attr("stroke", "var(--border-hover)")
       .attr("stroke-dasharray", "4");
   }
 
@@ -293,7 +294,7 @@ export function drawForest(studies, m, options = {}) {
     .attr("x2", d => x(d.yi + studyCrit * d.se))
     .attr("y1", d => yPos[d.label])
     .attr("y2", d => yPos[d.label])
-    .attr("stroke", "white")
+    .attr("stroke", d => d.filled ? "var(--fg-muted)" : "var(--fg-subtle)")
     .attr("stroke-width", 1.5);
 
   // ----------- WEIGHTS (BOXES) -----------
@@ -308,8 +309,8 @@ export function drawForest(studies, m, options = {}) {
     .attr("y", d => yPos[d.label] - L.boxHalf)
     .attr("width", d => Math.sqrt(d.w / wMax) * L.boxHalf * 4)
     .attr("height", L.boxHalf * 2)
-    .attr("fill", d => d.filled ? "none" : "white")
-    .attr("stroke", "white")
+    .attr("fill", d => d.filled ? "none" : "var(--accent)")
+    .attr("stroke", d => d.filled ? "var(--fg-muted)" : "var(--accent)")
     .on("mousemove", (e, d) => {
       const ef_disp = profile.transform(d.yi);
       const lo_disp = profile.transform(d.yi - studyCrit * d.se);
@@ -339,7 +340,7 @@ export function drawForest(studies, m, options = {}) {
       .attr("y", L.axisY + 22)
       .attr("text-anchor", "middle")
       .style("font-size", L.annotFontSize)
-      .attr("fill", "#888")
+      .attr("fill", "var(--fg-muted)")
       .text("(log scale)");
   }
 
@@ -352,7 +353,7 @@ export function drawForest(studies, m, options = {}) {
       .attr("y", yPos[d.label] + 4)
       .attr("text-anchor", "end")
       .style("font-size", L.labelFontSize)
-      .attr("fill", d.filled ? "#888" : "#eee")
+      .attr("fill", d.filled ? "var(--fg-muted)" : "var(--fg)")
       .text(lbl);
   });
 
@@ -363,7 +364,7 @@ export function drawForest(studies, m, options = {}) {
       .attr("y", L.studyY1 + 18)
       .attr("text-anchor", "middle")
       .style("font-size", L.annotFontSize)
-      .attr("fill", "#555")
+      .attr("fill", "var(--fg-muted)")
       .text(`— page ${page + 1} of ${totalPages}, continued —`);
   }
 
@@ -387,8 +388,8 @@ export function drawForest(studies, m, options = {}) {
 
   svg.append("polygon")
     .attr("points", diamond.map(d => d.join(",")).join(" "))
-    .attr("fill", "white")
-    .attr("stroke", "white")
+    .attr("fill", "var(--accent)")
+    .attr("stroke", "var(--accent)")
     .attr("stroke-width", ciMethod === "KH" ? 2.5 : 1.5)
     .attr("stroke-dasharray", ciMethod === "KH" ? "4,2" : "0")
     .append("title")
@@ -407,26 +408,26 @@ export function drawForest(studies, m, options = {}) {
     .attr("y", hY)
     .attr("text-anchor", "end")
     .style("font-size", L.labelFontSize)
-    .attr("fill", "#999")
+    .attr("fill", "var(--fg-muted)")
     .text("Study");
 
   // Horizontal rule below the header row
   svg.append("line")
     .attr("x1", 0).attr("x2", L.totalW)
     .attr("y1", L.headerH).attr("y2", L.headerH)
-    .attr("stroke", "#333");
+    .attr("stroke", "var(--border-hover)");
 
   // Thin vertical rule between label column and plot strip
   svg.append("line")
     .attr("x1", L.labelW).attr("x2", L.labelW)
     .attr("y1", L.studyY0).attr("y2", L.studyY1 + 12)
-    .attr("stroke", "#333");
+    .attr("stroke", "var(--border-hover)");
 
   // Thin vertical rule between plot strip and annotation column
   svg.append("line")
     .attr("x1", L.annotX0).attr("x2", L.annotX0)
     .attr("y1", L.studyY0).attr("y2", L.studyY1 + 12)
-    .attr("stroke", "#333");
+    .attr("stroke", "var(--border-hover)");
 
   // ----------- GROUP SEPARATORS -----------
   // Drawn only when studies carry a group field. Each separator consists of
@@ -437,7 +438,7 @@ export function drawForest(studies, m, options = {}) {
     svg.append("line")
       .attr("x1", 0).attr("x2", L.totalW)
       .attr("y1", ruleY).attr("y2", ruleY)
-      .attr("stroke", "#2e2e4e");
+      .attr("stroke", "var(--border-accent)");
 
     // Group label right-aligned in the label column
     svg.append("text")
@@ -446,7 +447,7 @@ export function drawForest(studies, m, options = {}) {
       .attr("text-anchor", "end")
       .style("font-size", L.annotFontSize)
       .style("font-weight", "bold")
-      .attr("fill", "#99b8d4")
+      .attr("fill", "var(--color-info)")
       .text(group);
   });
 
@@ -465,7 +466,7 @@ export function drawForest(studies, m, options = {}) {
     .attr("x", efAnnotX)
     .attr("y", hY)
     .style("font-size", L.labelFontSize)
-    .attr("fill", "#999")
+    .attr("fill", "var(--fg-muted)")
     .text("Effect [95% CI]");
 
   svg.append("text")
@@ -473,7 +474,7 @@ export function drawForest(studies, m, options = {}) {
     .attr("y", hY)
     .attr("text-anchor", "end")
     .style("font-size", L.labelFontSize)
-    .attr("fill", "#999")
+    .attr("fill", "var(--fg-muted)")
     .text("Weight");
 
   // Per-study rows (page slice only)
@@ -498,7 +499,7 @@ export function drawForest(studies, m, options = {}) {
       .attr("x", efAnnotX)
       .attr("y", rowMid)
       .style("font-size", L.annotFontSize)
-      .attr("fill", d.filled ? "#888" : "#ddd")
+      .attr("fill", d.filled ? "var(--fg-muted)" : "var(--fg-subtle)")
       .text(`${efStr} ${ciStr}`);
 
     svg.append("text")
@@ -506,7 +507,7 @@ export function drawForest(studies, m, options = {}) {
       .attr("y", rowMid)
       .attr("text-anchor", "end")
       .style("font-size", L.annotFontSize)
-      .attr("fill", d.filled ? "#888" : "#ddd")
+      .attr("fill", d.filled ? "var(--fg-muted)" : "var(--fg-subtle)")
       .text(wPct);
   });
 
@@ -521,7 +522,7 @@ export function drawForest(studies, m, options = {}) {
     .attr("x", efAnnotX)
     .attr("y", L.diamondY + 4)
     .style("font-size", L.annotFontSize)
-    .attr("fill", "#ffd740")
+    .attr("fill", "var(--color-warning)")
     .text(`${pooledEfStr} ${pooledCiStr}`);
 
   svg.append("text")
@@ -529,7 +530,7 @@ export function drawForest(studies, m, options = {}) {
     .attr("y", L.diamondY + 4)
     .attr("text-anchor", "end")
     .style("font-size", L.annotFontSize)
-    .attr("fill", "#ffd740")
+    .attr("fill", "var(--color-warning)")
     .text("100%");
 
   // ----------- PREDICTION INTERVAL -----------
@@ -540,7 +541,7 @@ export function drawForest(studies, m, options = {}) {
       .attr("x2", x(m.predHigh))
       .attr("y1", L.piY)
       .attr("y2", L.piY)
-      .attr("stroke", "cyan")
+      .attr("stroke", "var(--accent-light)")
       .attr("stroke-width", 2)
       .attr("stroke-dasharray", "6,3")
       .append("title")
@@ -550,12 +551,12 @@ export function drawForest(studies, m, options = {}) {
     svg.append("line")
       .attr("x1", x(m.predLow)).attr("x2", x(m.predLow))
       .attr("y1", L.piY - 5).attr("y2", L.piY + 5)
-      .attr("stroke", "cyan").attr("stroke-width", 2);
+      .attr("stroke", "var(--accent-light)").attr("stroke-width", 2);
 
     svg.append("line")
       .attr("x1", x(m.predHigh)).attr("x2", x(m.predHigh))
       .attr("y1", L.piY - 5).attr("y2", L.piY + 5)
-      .attr("stroke", "cyan").attr("stroke-width", 2);
+      .attr("stroke", "var(--accent-light)").attr("stroke-width", 2);
 
     // Label
     const pi_disp = { lb: profile.transform(m.predLow), ub: profile.transform(m.predHigh) };
@@ -564,7 +565,7 @@ export function drawForest(studies, m, options = {}) {
       .attr("y", L.piY + 15)
       .attr("text-anchor", "middle")
       .style("font-size", L.labelFontSize)
-      .attr("fill", "cyan")
+      .attr("fill", "var(--accent-light)")
       .text(`Prediction interval: ${isFinite(pi_disp.lb) ? pi_disp.lb.toFixed(3) : "NA"} to ${isFinite(pi_disp.ub) ? pi_disp.ub.toFixed(3) : "NA"}`);
   }
 
@@ -585,7 +586,7 @@ export function drawForest(studies, m, options = {}) {
     .attr("y", L.hetY)
     .attr("text-anchor", "middle")
     .style("font-size", L.annotFontSize)
-    .attr("fill", "#888")
+    .attr("fill", "var(--fg-muted)")
     .text(`Heterogeneity:  τ² = ${tau2Str},  I² = ${I2Str},  Q(df=${dfStr}) = ${QStr},  p = ${QpStr}`);
 
   return { totalPages };
@@ -609,13 +610,13 @@ export function drawFunnel(studies, m, egger, profile) {
   .attr("cx",d=>x(d.yi))
   .attr("cy",d=>y(d.se))
   .attr("r",4)
-  .attr("fill",d=>d.filled?"none":"white")
-  .attr("stroke","white");
+  .attr("fill",d=>d.filled?"none":"var(--bg-surface-hover)")
+  .attr("stroke",d=>d.filled?"var(--fg-muted)":"var(--fg-subtle)");
 
  svg.append("line")
   .attr("x1",x(m.RE)).attr("x2",x(m.RE))
   .attr("y1",50).attr("y2",350)
-  .attr("stroke","cyan").attr("stroke-dasharray","4");
+  .attr("stroke","var(--accent)").attr("stroke-dasharray","4");
 
 // ================= EGGER REGRESSION LINE =================
 if(egger && isFinite(egger.slope)){
@@ -636,7 +637,7 @@ if(egger && isFinite(egger.slope)){
  svg.append("path")
   .datum(lineData)
   .attr("fill", "none")
-  .attr("stroke", "red")
+  .attr("stroke", "var(--color-error)")
   .attr("stroke-width", 2)
   .attr("stroke-dasharray", "4,2")
   .attr("d", line);
@@ -652,7 +653,7 @@ if(egger && isFinite(egger.slope)){
      .attr("y", 378)
      .attr("text-anchor", "middle")
      .style("font-size", "10px")
-     .attr("fill", "#888")
+     .attr("fill", "var(--fg-muted)")
      .text("(log scale)");
  }
  svg.append("g").attr("transform","translate(50,0)").call(d3.axisLeft(y));
@@ -702,7 +703,7 @@ export function drawInfluencePlot(influence) {
     g.append("rect")
       .attr("x", x2).attr("y", 0)
       .attr("width", iW - x2).attr("height", y2)
-      .attr("fill", "rgba(255,80,80,0.08)");
+      .attr("fill", "rgba(224,96,96,0.08)");
   }
 
   // ----------- REFERENCE LINES -----------
@@ -710,14 +711,14 @@ export function drawInfluencePlot(influence) {
     g.append("line")
       .attr("x1", x(hatThresh)).attr("x2", x(hatThresh))
       .attr("y1", 0).attr("y2", iH)
-      .attr("stroke", "#888").attr("stroke-dasharray", "4,3")
+      .attr("stroke", "var(--border-hover)").attr("stroke-dasharray", "4,3")
       .append("title").text(`Hat threshold = 2/k = ${hatThresh.toFixed(3)}`);
   }
   if (isFinite(y(cookThresh))) {
     g.append("line")
       .attr("x1", 0).attr("x2", iW)
       .attr("y1", y(cookThresh)).attr("y2", y(cookThresh))
-      .attr("stroke", "#888").attr("stroke-dasharray", "4,3")
+      .attr("stroke", "var(--border-hover)").attr("stroke-dasharray", "4,3")
       .append("title").text(`Cook's D threshold = 4/k = ${cookThresh.toFixed(3)}`);
   }
 
@@ -728,12 +729,12 @@ export function drawInfluencePlot(influence) {
     .attr("cx", d => x(d.hat))
     .attr("cy", d => y(d.cookD))
     .attr("r", 5)
-    .attr("fill", d => (d.highLeverage && d.highCookD) ? "red"
-                      : (d.highLeverage || d.highCookD) ? "orange"
-                      : "white")
-    .attr("stroke", d => (d.highLeverage && d.highCookD) ? "red"
-                        : (d.highLeverage || d.highCookD) ? "orange"
-                        : "#aaa")
+    .attr("fill", d => (d.highLeverage && d.highCookD) ? "var(--color-error)"
+                      : (d.highLeverage || d.highCookD) ? "var(--color-warning)"
+                      : "var(--bg-surface-hover)")
+    .attr("stroke", d => (d.highLeverage && d.highCookD) ? "var(--color-error)"
+                        : (d.highLeverage || d.highCookD) ? "var(--color-warning)"
+                        : "var(--fg-muted)")
     .attr("opacity", 0.85)
     .on("mousemove", (e, d) => {
       tooltip.style("opacity", 1)
@@ -751,7 +752,7 @@ export function drawInfluencePlot(influence) {
     .attr("x", d => x(d.hat) + 7)
     .attr("y", d => y(d.cookD) + 4)
     .style("font-size", "10px")
-    .attr("fill", d => (d.highLeverage && d.highCookD) ? "red" : "orange")
+    .attr("fill", d => (d.highLeverage && d.highCookD) ? "var(--color-error)" : "var(--color-warning)")
     .text(d => d.label);
 
   // ----------- AXES -----------
@@ -761,19 +762,19 @@ export function drawInfluencePlot(influence) {
   // Axis labels
   g.append("text")
     .attr("x", iW / 2).attr("y", iH + 38)
-    .attr("text-anchor", "middle").attr("fill", "#ccc").style("font-size", "12px")
+    .attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "12px")
     .text("Hat value (leverage)");
 
   g.append("text")
     .attr("transform", "rotate(-90)")
     .attr("x", -iH / 2).attr("y", -46)
-    .attr("text-anchor", "middle").attr("fill", "#ccc").style("font-size", "12px")
+    .attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "12px")
     .text("Cook's distance");
 
   // Title
   svg.append("text")
     .attr("x", margin.left + iW / 2).attr("y", 18)
-    .attr("text-anchor", "middle").style("font-size", "12px")
+    .attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "12px")
     .text("Influence plot  (red = both flags, orange = one flag)");
 }
 
@@ -824,6 +825,7 @@ export function drawCumulativeForest(cumulativeResults, profile) {
   svg.append("text")
     .attr("x", margin.left + plotW / 2).attr("y", 20)
     .attr("text-anchor", "middle")
+    .attr("fill", "var(--fg-muted)")
     .style("font-size", "12px")
     .text("Cumulative meta-analysis");
 
@@ -833,14 +835,14 @@ export function drawCumulativeForest(cumulativeResults, profile) {
     g.append("line")
       .attr("x1", xScale(nullDisp)).attr("x2", xScale(nullDisp))
       .attr("y1", 0).attr("y2", k * rowH)
-      .attr("stroke", "white").attr("stroke-dasharray", "4,3").attr("opacity", 0.45);
+      .attr("stroke", "var(--border-hover)").attr("stroke-dasharray", "4,3").attr("opacity", 0.6);
   }
 
   // One row per cumulative step
   rows.forEach((r, i) => {
     const cy     = (i + 0.5) * rowH;
     const isLast = i === k - 1;
-    const colour = isLast ? "#ffd740" : "white";
+    const colour = isLast ? "var(--color-warning)" : "var(--fg-subtle)";
 
     // Label (left panel)
     svg.append("text")
@@ -917,6 +919,6 @@ export function drawCumulativeForest(cumulativeResults, profile) {
   svg.append("text")
     .attr("x", margin.left + plotW / 2).attr("y", totalH - 6)
     .attr("text-anchor", "middle")
-    .style("font-size", "11px").attr("fill", "#ccc")
+    .style("font-size", "11px").attr("fill", "var(--fg-muted)")
     .text(profile.label);
 }
