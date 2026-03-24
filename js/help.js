@@ -212,6 +212,31 @@ export const HELP = {
            "Results are back-transformed to r for display.",
   },
 
+  "effect.PCOR": {
+    title: "Partial Correlation — raw r (PCOR)",
+    body:  "Pearson partial correlation controlling for p covariates, pooled on the untransformed scale. " +
+           "Inputs: r (partial correlation coefficient), n (sample size), p (number of covariates partialled out; default 0). " +
+           "Variance: vi = (1 − r²)² / (n − p − 1). " +
+           "When p = 0 this reduces exactly to COR: vi = (1 − r²)² / (n − 1). " +
+           "Minimum sample size: n ≥ p + 3 (ensures the denominator is ≥ 2). " +
+           "The same caveats as COR apply: r is bounded and its variance depends on the true ρ, " +
+           "so ZPCOR is generally preferred when r values are not all small. " +
+           "Pooled on the raw scale — no back-transformation.",
+  },
+
+  "effect.ZPCOR": {
+    title: "Partial Correlation — Fisher's z (ZPCOR)",
+    body:  "Partial correlation (controlling for p covariates) after Fisher's r-to-z transformation: " +
+           "z = atanh(r) = 0.5 ln[(1+r)/(1−r)]. " +
+           "Inputs: r (partial correlation), n (sample size), p (number of covariates; default 0). " +
+           "Variance: vi = 1 / (n − p − 3). " +
+           "When p = 0 this reduces exactly to ZCOR: vi = 1 / (n − 3). " +
+           "Minimum sample size: n ≥ p + 4 (ensures the variance denominator is ≥ 1). " +
+           "Because the Fisher z variance is nearly independent of the true ρ, ZPCOR is preferred " +
+           "over PCOR in the same way ZCOR is preferred over COR. " +
+           "Results are back-transformed to r for display.",
+  },
+
   "effect.PHI": {
     title: "Phi Coefficient (PHI)",
     body:  "Pearson correlation for two binary variables, computed from a 2×2 table: " +

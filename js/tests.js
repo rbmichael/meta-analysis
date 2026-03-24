@@ -2118,4 +2118,223 @@ export function runTests() {
   }
 
   console.log(rtetPass ? "\n✅ ALL RTET UNIT TESTS PASSED" : "\n❌ SOME RTET UNIT TESTS FAILED");
+
+  // ===== PCOR UNIT TESTS =====
+  //
+  // Tests cover:
+  //   1. Formula spot-check (r=0.5, n=50, p=3)
+  //        yi = 0.5
+  //        vi = (1 − 0.25)² / (50 − 3 − 1) = 0.5625 / 46
+  //   2. p=0 reduces exactly to COR (r=0.5, n=53)
+  //        PCOR vi = 0.5625/52 = COR vi = (1−r²)²/(n−1)
+  //   3. Sign symmetry: negating r negates yi, vi unchanged
+  //   4. Missing p defaults to 0 (same result as p=0)
+  //   5. Invalid inputs → NaN/w=0
+  //   6. transformEffect identity (raw scale)
+  //   7. Pooled meta() structural checks (k=3)
+  // ================================================================
+  let pcorPass = true;
+  console.log("\n===== PCOR UNIT TESTS =====\n");
+
+  function pcorChk(name, val, expected, tol = 1e-9) {
+    const ok = isFinite(val) && isFinite(expected) && Math.abs(val - expected) <= tol;
+    console.log(`  ${name}: ${round(val, 9)} (expected ${round(expected, 9)}) → ${ok ? "PASS" : "FAIL"}`);
+    if (!ok) pcorPass = false;
+  }
+  function pcorChkTrue(name, cond) {
+    console.log(`  ${name}: ${cond ? "PASS" : "FAIL"}`);
+    if (!cond) pcorPass = false;
+  }
+
+  // --- PCOR 1: formula spot-check ---
+  // r=0.5, n=50, p=3 → vi = (1−0.25)²/(46) = 0.5625/46
+  console.log("--- PCOR 1. Formula spot-check ---");
+  {
+    const s      = compute({ r: 0.5, n: 50, p: 3 }, "PCOR");
+    const expVi  = 0.5625 / 46;
+    pcorChk("yi = 0.5",          s.yi, 0.5);
+    pcorChk("vi = 0.5625/46",    s.vi, expVi);
+    pcorChk("se = √vi",          s.se, Math.sqrt(expVi));
+    pcorChk("w  = 1/vi",         s.w,  1 / expVi);
+  }
+
+  // --- PCOR 2: p=0 reduces to COR ---
+  // Both should give vi = (1−r²)²/(n−1)
+  console.log("--- PCOR 2. p=0 reduces to COR ---");
+  {
+    const sCOR  = compute({ r: 0.5, n: 53 }, "COR");
+    const sPCOR = compute({ r: 0.5, n: 53, p: 0 }, "PCOR");
+    pcorChk("yi identical to COR", sPCOR.yi, sCOR.yi);
+    pcorChk("vi identical to COR", sPCOR.vi, sCOR.vi);
+  }
+
+  // --- PCOR 3: sign symmetry ---
+  // negating r negates yi; vi = (1−r²)²/(n−p−1) is even in r → vi unchanged
+  console.log("--- PCOR 3. Sign symmetry ---");
+  {
+    const sPos = compute({ r:  0.5, n: 50, p: 3 }, "PCOR");
+    const sNeg = compute({ r: -0.5, n: 50, p: 3 }, "PCOR");
+    pcorChk("yi(−r) = −yi(r)",  sNeg.yi, -sPos.yi);
+    pcorChk("vi(−r) =  vi(r)",  sNeg.vi,  sPos.vi);
+  }
+
+  // --- PCOR 4: missing p defaults to 0 ---
+  console.log("--- PCOR 4. Missing p defaults to 0 ---");
+  {
+    const sNop = compute({ r: 0.5, n: 53 }, "PCOR");
+    const sP0  = compute({ r: 0.5, n: 53, p: 0 }, "PCOR");
+    pcorChk("yi same when p omitted", sNop.yi, sP0.yi);
+    pcorChk("vi same when p omitted", sNop.vi, sP0.vi);
+  }
+
+  // --- PCOR 5: invalid inputs → NaN/w=0 ---
+  console.log("--- PCOR 5. Invalid inputs ---");
+  {
+    pcorChkTrue("r=1  → NaN yi", !isFinite(compute({ r:  1.0, n: 50, p: 2 }, "PCOR").yi));
+    pcorChkTrue("r=-1 → NaN yi", !isFinite(compute({ r: -1.0, n: 50, p: 2 }, "PCOR").yi));
+    pcorChkTrue("n<p+3 → NaN yi", !isFinite(compute({ r: 0.5, n:  5, p: 3 }, "PCOR").yi));  // min n=6
+    pcorChkTrue("p<0  → NaN yi", !isFinite(compute({ r: 0.5, n: 50, p: -1 }, "PCOR").yi));
+    pcorChkTrue("n<p+3 → w=0",   compute({ r: 0.5, n: 5, p: 3 }, "PCOR").w === 0);
+  }
+
+  // --- PCOR 6: transformEffect identity ---
+  console.log("--- PCOR 6. transformEffect identity ---");
+  {
+    [-0.8, -0.3, 0, 0.3, 0.8].forEach(v =>
+      pcorChk(`transformEffect(${v}, "PCOR") = ${v}`, transformEffect(v, "PCOR"), v, 1e-12)
+    );
+  }
+
+  // --- PCOR 7: pooled meta() structural checks ---
+  console.log("--- PCOR 7. Pooled meta() (k=3, DL) ---");
+  {
+    const studies = [
+      compute({ r: 0.45, n:  80, p: 2 }, "PCOR"),
+      compute({ r: 0.38, n:  65, p: 2 }, "PCOR"),
+      compute({ r: 0.52, n: 110, p: 3 }, "PCOR"),
+    ];
+    const m = meta(studies, "DL", "PCOR");
+    const minYi = Math.min(...studies.map(s => s.yi));
+    const maxYi = Math.max(...studies.map(s => s.yi));
+    pcorChkTrue("FE finite",             isFinite(m.FE));
+    pcorChkTrue("RE finite",             isFinite(m.RE));
+    pcorChkTrue("FE in (min yi, max yi)", m.FE > minYi && m.FE < maxYi);
+    pcorChkTrue("RE in (min yi, max yi)", m.RE > minYi && m.RE < maxYi);
+    pcorChkTrue("tau2 ≥ 0",              isFinite(m.tau2) && m.tau2 >= 0);
+    pcorChkTrue("CI lb < RE < CI ub",    m.ciLow < m.RE && m.RE < m.ciHigh);
+  }
+
+  console.log(pcorPass ? "\n✅ ALL PCOR UNIT TESTS PASSED" : "\n❌ SOME PCOR UNIT TESTS FAILED");
+
+  // ===== ZPCOR UNIT TESTS =====
+  //
+  // Tests cover:
+  //   1. Formula spot-check (r=0.5, n=50, p=3)
+  //        yi = atanh(0.5), vi = 1/(50−3−3) = 1/44
+  //   2. p=0 reduces exactly to ZCOR (r=0.5, n=53)
+  //        ZPCOR vi = 1/50 = ZCOR vi = 1/(n−3)
+  //   3. Sign symmetry: negating r negates yi (atanh is odd), vi unchanged
+  //   4. Missing p defaults to 0 (same result as ZCOR)
+  //   5. Invalid inputs → NaN/w=0
+  //   6. Back-transform: tanh(atanh(r)) = r (round-trip)
+  //   7. Pooled meta() structural checks (k=3, back-transformed)
+  // ================================================================
+  let zpcorPass = true;
+  console.log("\n===== ZPCOR UNIT TESTS =====\n");
+
+  function zpcorChk(name, val, expected, tol = 1e-9) {
+    const ok = isFinite(val) && isFinite(expected) && Math.abs(val - expected) <= tol;
+    console.log(`  ${name}: ${round(val, 9)} (expected ${round(expected, 9)}) → ${ok ? "PASS" : "FAIL"}`);
+    if (!ok) zpcorPass = false;
+  }
+  function zpcorChkTrue(name, cond) {
+    console.log(`  ${name}: ${cond ? "PASS" : "FAIL"}`);
+    if (!cond) zpcorPass = false;
+  }
+
+  // --- ZPCOR 1: formula spot-check ---
+  // r=0.5, n=50, p=3 → yi=atanh(0.5), vi=1/44
+  console.log("--- ZPCOR 1. Formula spot-check ---");
+  {
+    const s     = compute({ r: 0.5, n: 50, p: 3 }, "ZPCOR");
+    const expYi = Math.atanh(0.5);
+    const expVi = 1 / 44;
+    zpcorChk("yi = atanh(0.5)", s.yi, expYi);
+    zpcorChk("vi = 1/44",       s.vi, expVi);
+    zpcorChk("se = √vi",        s.se, Math.sqrt(expVi));
+    zpcorChk("w  = 1/vi",       s.w,  1 / expVi);
+  }
+
+  // --- ZPCOR 2: p=0 reduces to ZCOR ---
+  // Both should give vi = 1/(n−3)
+  console.log("--- ZPCOR 2. p=0 reduces to ZCOR ---");
+  {
+    const sZCOR  = compute({ r: 0.5, n: 53 }, "ZCOR");
+    const sZPCOR = compute({ r: 0.5, n: 53, p: 0 }, "ZPCOR");
+    zpcorChk("yi identical to ZCOR", sZPCOR.yi, sZCOR.yi);
+    zpcorChk("vi identical to ZCOR", sZPCOR.vi, sZCOR.vi);
+  }
+
+  // --- ZPCOR 3: sign symmetry ---
+  // atanh is odd: atanh(−r) = −atanh(r); vi = 1/(n−p−3) independent of r
+  console.log("--- ZPCOR 3. Sign symmetry ---");
+  {
+    const sPos = compute({ r:  0.5, n: 50, p: 3 }, "ZPCOR");
+    const sNeg = compute({ r: -0.5, n: 50, p: 3 }, "ZPCOR");
+    zpcorChk("yi(−r) = −yi(r)",  sNeg.yi, -sPos.yi);
+    zpcorChk("vi(−r) =  vi(r)",  sNeg.vi,  sPos.vi);
+  }
+
+  // --- ZPCOR 4: missing p defaults to 0 ---
+  console.log("--- ZPCOR 4. Missing p defaults to 0 ---");
+  {
+    const sNop = compute({ r: 0.5, n: 53 }, "ZPCOR");
+    const sP0  = compute({ r: 0.5, n: 53, p: 0 }, "ZPCOR");
+    zpcorChk("yi same when p omitted", sNop.yi, sP0.yi);
+    zpcorChk("vi same when p omitted", sNop.vi, sP0.vi);
+  }
+
+  // --- ZPCOR 5: invalid inputs → NaN/w=0 ---
+  console.log("--- ZPCOR 5. Invalid inputs ---");
+  {
+    zpcorChkTrue("r=1  → NaN yi",  !isFinite(compute({ r:  1.0, n: 50, p: 2 }, "ZPCOR").yi));
+    zpcorChkTrue("r=-1 → NaN yi",  !isFinite(compute({ r: -1.0, n: 50, p: 2 }, "ZPCOR").yi));
+    zpcorChkTrue("n<p+4 → NaN yi", !isFinite(compute({ r: 0.5, n:  6, p: 3 }, "ZPCOR").yi));  // min n=7
+    zpcorChkTrue("p<0  → NaN yi",  !isFinite(compute({ r: 0.5, n: 50, p: -1 }, "ZPCOR").yi));
+    zpcorChkTrue("n<p+4 → w=0",    compute({ r: 0.5, n: 6, p: 3 }, "ZPCOR").w === 0);
+  }
+
+  // --- ZPCOR 6: back-transform round-trip tanh(atanh(r)) = r ---
+  console.log("--- ZPCOR 6. Back-transform round-trip ---");
+  {
+    [-0.8, -0.3, 0, 0.3, 0.8].forEach(r => {
+      const z  = compute({ r, n: 50, p: 3 }, "ZPCOR").yi;
+      const rt = transformEffect(z, "ZPCOR");
+      zpcorChk(`tanh(atanh(${r})) = ${r}`, rt, r, 1e-12);
+    });
+  }
+
+  // --- ZPCOR 7: pooled meta() structural checks ---
+  console.log("--- ZPCOR 7. Pooled meta() (k=3, DL) ---");
+  {
+    const studies = [
+      compute({ r: 0.45, n:  80, p: 2 }, "ZPCOR"),
+      compute({ r: 0.38, n:  65, p: 2 }, "ZPCOR"),
+      compute({ r: 0.52, n: 110, p: 3 }, "ZPCOR"),
+    ];
+    const m = meta(studies, "DL", "ZPCOR");
+    const minYi = Math.min(...studies.map(s => s.yi));
+    const maxYi = Math.max(...studies.map(s => s.yi));
+    zpcorChkTrue("FE finite",              isFinite(m.FE));
+    zpcorChkTrue("RE finite",              isFinite(m.RE));
+    zpcorChkTrue("FE in (min yi, max yi)", m.FE > minYi && m.FE < maxYi);
+    zpcorChkTrue("RE in (min yi, max yi)", m.RE > minYi && m.RE < maxYi);
+    zpcorChkTrue("tau2 ≥ 0",              isFinite(m.tau2) && m.tau2 >= 0);
+    zpcorChkTrue("CI lb < RE < CI ub",    m.ciLow < m.RE && m.RE < m.ciHigh);
+    // Back-transform: pooled RE on z scale → r scale
+    const reR = transformEffect(m.RE, "ZPCOR");
+    zpcorChkTrue("back-transformed RE ∈ (−1,1)", isFinite(reR) && Math.abs(reR) < 1);
+  }
+
+  console.log(zpcorPass ? "\n✅ ALL ZPCOR UNIT TESTS PASSED" : "\n❌ SOME ZPCOR UNIT TESTS FAILED");
 }

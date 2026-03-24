@@ -214,6 +214,25 @@ export function compute(s, type, options = {}) {
     return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
   }
 
+  // ================= PARTIAL CORRELATION =================
+  // Inputs: r, n, p (number of covariates; default 0 reduces to COR/ZCOR)
+  // PCOR:  yi = r,        vi = (1−r²)² / (n−p−1)
+  // ZPCOR: yi = atanh(r), vi = 1 / (n−p−3)
+  if (type === "PCOR" || type === "ZPCOR") {
+    const { r, n } = s;
+    const p = isFinite(s.p) ? s.p : 0;
+
+    if (type === "PCOR") {
+      const vi = Math.max((1 - r * r) ** 2 / (n - p - 1), MIN_VAR);
+      return { ...s, yi: r, vi, se: Math.sqrt(vi), w: 1 / vi };
+    }
+
+    // ZPCOR
+    const yi = Math.atanh(r);
+    const vi = Math.max(1 / (n - p - 3), MIN_VAR);
+    return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
+  }
+
   // ================= PHI COEFFICIENT =================
   // yi = (ad−bc) / √((a+b)(c+d)(a+c)(b+d));  vi = (1−φ²)²/(N−1)
   if (type === "PHI") {

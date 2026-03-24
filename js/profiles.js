@@ -620,6 +620,92 @@ export const effectProfiles = {
   },
 
   // ------------------------------------------------------------------ //
+  "PCOR": {
+    label:  "Partial Correlation (raw r)",
+    inputs: ["r", "n", "p"],
+    compute(s) {
+      if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+      const { r, n } = s;
+      const p  = isFinite(s.p) ? s.p : 0;
+      const vi = Math.max((1 - r * r) ** 2 / (n - p - 1), MIN_VAR);
+      return { ...s, yi: r, vi, se: Math.sqrt(vi), w: 1 / vi };
+    },
+    transform: (x) => x,
+
+    validate(s) {
+      const errors = {};
+      if (!isFinite(s.r) || Math.abs(s.r) >= 1) errors.r = "r must be strictly between -1 and 1";
+      const p = isFinite(s.p) ? s.p : 0;
+      if (isFinite(s.p) && s.p < 0)             errors.p = "p must be ≥ 0";
+      const minN = p + 3;
+      if (!isFinite(s.n) || s.n < minN)         errors.n = `n must be ≥ ${minN} (p + 3)`;
+      return { valid: Object.keys(errors).length === 0, errors };
+    },
+
+    softWarnings(s, label) {
+      const w = [];
+      const p = isFinite(s.p) ? s.p : 0;
+      if (isFinite(s.n) && (s.n - p - 1) < 10)
+        w.push(`⚠️ ${label}: small effective df (n − p − 1 = ${s.n - p - 1}) — partial correlation unreliable`);
+      if (isFinite(s.r) && Math.abs(s.r) > 0.9)
+        w.push(`⚠️ ${label}: |r| > 0.90 — variance estimate near boundary, interpret cautiously`);
+      return w;
+    },
+
+    exampleData: [
+      ["Study 1", 0.45,  80, 2, ""],
+      ["Study 2", 0.38,  65, 2, ""],
+      ["Study 3", 0.52, 110, 3, ""],
+      ["Study 4", 0.31,  90, 2, ""],
+      ["Study 5", 0.47, 130, 4, ""],
+    ],
+  },
+
+  // ------------------------------------------------------------------ //
+  "ZPCOR": {
+    label:  "Partial Correlation (Fisher's z)",
+    isTransformedScale: true,
+    inputs: ["r", "n", "p"],
+    compute(s) {
+      if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+      const { r, n } = s;
+      const p  = isFinite(s.p) ? s.p : 0;
+      const yi = Math.atanh(r);
+      const vi = Math.max(1 / (n - p - 3), MIN_VAR);
+      return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
+    },
+    transform: (x) => Math.tanh(x),
+
+    validate(s) {
+      const errors = {};
+      if (!isFinite(s.r) || Math.abs(s.r) >= 1) errors.r = "r must be strictly between -1 and 1";
+      const p = isFinite(s.p) ? s.p : 0;
+      if (isFinite(s.p) && s.p < 0)             errors.p = "p must be ≥ 0";
+      const minN = p + 4;
+      if (!isFinite(s.n) || s.n < minN)         errors.n = `n must be ≥ ${minN} (p + 4)`;
+      return { valid: Object.keys(errors).length === 0, errors };
+    },
+
+    softWarnings(s, label) {
+      const w = [];
+      const p = isFinite(s.p) ? s.p : 0;
+      if (isFinite(s.n) && (s.n - p - 3) < 10)
+        w.push(`⚠️ ${label}: small effective df (n − p − 3 = ${s.n - p - 3}) — Fisher z unreliable`);
+      if (isFinite(s.r) && Math.abs(s.r) > 0.9)
+        w.push(`⚠️ ${label}: |r| > 0.90 — variance estimate near boundary, interpret cautiously`);
+      return w;
+    },
+
+    exampleData: [
+      ["Study 1", 0.45,  80, 2, ""],
+      ["Study 2", 0.38,  65, 2, ""],
+      ["Study 3", 0.52, 110, 3, ""],
+      ["Study 4", 0.31,  90, 2, ""],
+      ["Study 5", 0.47, 130, 4, ""],
+    ],
+  },
+
+  // ------------------------------------------------------------------ //
   "PHI": {
     label:  "Phi Coefficient",
     inputs: ["a", "b", "c", "d"],
