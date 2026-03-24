@@ -9,6 +9,7 @@ import { exportSVG, exportPNG } from "./export.js";
 import { buildReport, downloadHTML, openPrintPreview } from "./report.js";
 import { parseCSV, detectEffectType } from "./csv.js";
 import { buildSession, serializeSession, parseSession, missingInputCols } from "./session.js";
+import { downloadBlob, readTextFile, serializeCSV } from "./io.js";
 import { HELP } from "./help.js";
 
 // ---------------- SHARED HELPERS ----------------
@@ -606,41 +607,41 @@ function refreshPreviewUI(type) {
 
 // Phase 1 — called when the user selects a file.
 // Parses the file and populates the preview panel without touching the table.
-function previewCSV(file) {
+async function previewCSV(file) {
   const warningDiv = document.getElementById("csvWarning");
   warningDiv.style.display = "none";
 
-  const reader = new FileReader();
-  reader.onerror = () => {
+  let text;
+  try { text = await readTextFile(file); }
+  catch {
     warningDiv.textContent = "Could not read the selected file.";
     warningDiv.style.display = "block";
-  };
-  reader.onload = e => {
-    const parsed = parseCSV(e.target.result);
+    return;
+  }
 
-    if (!parsed.headers.length) {
-      warningDiv.textContent = "The selected file appears to be empty.";
-      warningDiv.style.display = "block";
-      return;
-    }
+  const parsed = parseCSV(text);
 
-    // Detect effect type before storing so detectedType is available to refreshPreviewUI.
-    const currentType = document.getElementById("effectType").value;
-    const detection   = detectEffectType(parsed.headers, currentType, effectProfiles);
+  if (!parsed.headers.length) {
+    warningDiv.textContent = "The selected file appears to be empty.";
+    warningDiv.style.display = "block";
+    return;
+  }
 
-    _pendingImport = { parsed, detectedType: detection.type, tied: detection.tied, tiedTypes: detection.tiedTypes ?? [] };
+  // Detect effect type before storing so detectedType is available to refreshPreviewUI.
+  const currentType = document.getElementById("effectType").value;
+  const detection   = detectEffectType(parsed.headers, currentType, effectProfiles);
 
-    // Delimiter badge
-    const delimNames = { ",": "comma", ";": "semicolon", "\t": "tab" };
-    document.getElementById("previewDelimiter").textContent =
-      `delimiter: ${delimNames[parsed.delimiter] ?? parsed.delimiter}`;
+  _pendingImport = { parsed, detectedType: detection.type, tied: detection.tied, tiedTypes: detection.tiedTypes ?? [] };
 
-    document.getElementById("previewEffectType").value = detection.type;
+  // Delimiter badge
+  const delimNames = { ",": "comma", ";": "semicolon", "\t": "tab" };
+  document.getElementById("previewDelimiter").textContent =
+    `delimiter: ${delimNames[parsed.delimiter] ?? parsed.delimiter}`;
 
-    refreshPreviewUI(detection.type);
-    document.getElementById("importPreview").style.display = "block";
-  };
-  reader.readAsText(file);
+  document.getElementById("previewEffectType").value = detection.type;
+
+  refreshPreviewUI(detection.type);
+  document.getElementById("importPreview").style.display = "block";
 }
 
 // Phase 2 — called when the user clicks "Import" in the preview panel.
@@ -759,20 +760,12 @@ function gatherSessionState() {
 // ---------------- SESSION SAVE ----------------
 
 function saveSession() {
-  const blob = new Blob([serializeSession(gatherSessionState())], { type: "application/json;charset=utf-8;" });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement("a");
-  a.href     = url;
-  a.download = "session.json";
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  downloadBlob(serializeSession(gatherSessionState()), "session.json", "application/json;charset=utf-8;");
 }
 
 // ---------------- SESSION LOAD ----------------
 
-function loadSession(file) {
+async function loadSession(file) {
   const warningDiv = document.getElementById("csvWarning");
   warningDiv.style.display = "none";
 
@@ -780,112 +773,89 @@ function loadSession(file) {
   // over the freshly-loaded session data.
   cancelImport();
 
-  const reader = new FileReader();
-  reader.onerror = () => {
+  let text;
+  try { text = await readTextFile(file); }
+  catch {
     warningDiv.textContent = "Could not read the selected session file.";
     warningDiv.style.display = "block";
-  };
-  reader.onload = e => {
-    const result = parseSession(e.target.result);
-    if (!result.ok) {
-      warningDiv.textContent = result.error;
-      warningDiv.style.display = "block";
-      return;
-    }
+    return;
+  }
 
-    const { settings = {}, moderators: savedMods = [], studies: savedStudies = [] } = result.session;
+  const result = parseSession(text);
+  if (!result.ok) {
+    warningDiv.textContent = result.error;
+    warningDiv.style.display = "block";
+    return;
+  }
 
-    // Apply settings
-    const s = settings;
-    if (s.effectType      && document.getElementById("effectType").querySelector(`option[value="${s.effectType}"]`))
-      document.getElementById("effectType").value      = s.effectType;
-    if (s.tauMethod       && document.getElementById("tauMethod").querySelector(`option[value="${s.tauMethod}"]`))
-      document.getElementById("tauMethod").value       = s.tauMethod;
-    if (s.ciMethod        && document.getElementById("ciMethod").querySelector(`option[value="${s.ciMethod}"]`))
-      document.getElementById("ciMethod").value        = s.ciMethod;
-    if (s.cumulativeOrder && document.getElementById("cumulativeOrder").querySelector(`option[value="${s.cumulativeOrder}"]`))
-      document.getElementById("cumulativeOrder").value = s.cumulativeOrder;
-    if (typeof s.useTrimFill   === "boolean") document.getElementById("useTrimFill").checked   = s.useTrimFill;
-    if (typeof s.useTFAdjusted === "boolean") document.getElementById("useTFAdjusted").checked = s.useTFAdjusted;
+  const { settings = {}, moderators: savedMods = [], studies: savedStudies = [] } = result.session;
 
-    // Rebuild moderators
-    clearModerators();
-    savedMods.forEach(m => {
-      if (m.name && (m.type === "continuous" || m.type === "categorical"))
-        doAddModerator(m.name, m.type);
-    });
+  // Apply settings
+  const s = settings;
+  if (s.effectType      && document.getElementById("effectType").querySelector(`option[value="${s.effectType}"]`))
+    document.getElementById("effectType").value      = s.effectType;
+  if (s.tauMethod       && document.getElementById("tauMethod").querySelector(`option[value="${s.tauMethod}"]`))
+    document.getElementById("tauMethod").value       = s.tauMethod;
+  if (s.ciMethod        && document.getElementById("ciMethod").querySelector(`option[value="${s.ciMethod}"]`))
+    document.getElementById("ciMethod").value        = s.ciMethod;
+  if (s.cumulativeOrder && document.getElementById("cumulativeOrder").querySelector(`option[value="${s.cumulativeOrder}"]`))
+    document.getElementById("cumulativeOrder").value = s.cumulativeOrder;
+  if (typeof s.useTrimFill   === "boolean") document.getElementById("useTrimFill").checked   = s.useTrimFill;
+  if (typeof s.useTFAdjusted === "boolean") document.getElementById("useTFAdjusted").checked = s.useTFAdjusted;
 
-    // Rebuild table
-    const type    = document.getElementById("effectType").value;
-    const profile = effectProfiles[type];
-    updateTableHeaders();
-    const table = document.getElementById("inputTable");
-    while (table.rows.length > 1) table.deleteRow(1);
+  // Rebuild moderators
+  clearModerators();
+  savedMods.forEach(m => {
+    if (m.name && (m.type === "continuous" || m.type === "categorical"))
+      doAddModerator(m.name, m.type);
+  });
 
-    savedStudies.forEach(row => {
-      const v = [];
-      v.push(row.study ?? "");
-      profile.inputs.forEach(col => v.push(row.inputs?.[col] ?? ""));
-      v.push(row.group ?? "");
-      moderators.forEach(m => v.push(row.moderators?.[m.name] ?? ""));
-      addRow(v);
-    });
+  // Rebuild table
+  const type    = document.getElementById("effectType").value;
+  const profile = effectProfiles[type];
+  updateTableHeaders();
+  const table = document.getElementById("inputTable");
+  while (table.rows.length > 1) table.deleteRow(1);
 
-    // Warn about any effect-input columns absent from the saved data.
-    const missingCols = missingInputCols(profile.inputs, savedStudies);
-    if (missingCols.length > 0) {
-      warningDiv.textContent = `Warning: session is missing data for: ${missingCols.join(", ")}`;
-      warningDiv.style.display = "block";
-      // Stay on the input view so the warning is visible.
-      runAnalysis();
-      return;
-    }
+  savedStudies.forEach(row => {
+    const v = [];
+    v.push(row.study ?? "");
+    profile.inputs.forEach(col => v.push(row.inputs?.[col] ?? ""));
+    v.push(row.group ?? "");
+    moderators.forEach(m => v.push(row.moderators?.[m.name] ?? ""));
+    addRow(v);
+  });
 
+  // Warn about any effect-input columns absent from the saved data.
+  const missingCols = missingInputCols(profile.inputs, savedStudies);
+  if (missingCols.length > 0) {
+    warningDiv.textContent = `Warning: session is missing data for: ${missingCols.join(", ")}`;
+    warningDiv.style.display = "block";
+    // Stay on the input view so the warning is visible.
     runAnalysis();
-    showView("results");
-  };
-  reader.readAsText(file);
+    return;
+  }
+
+  runAnalysis();
+  showView("results");
 }
 
 // ---------------- CSV EXPORT ----------------
-
-// RFC 4180: wrap field in quotes if it contains comma, quote, or newline;
-// escape internal quotes by doubling them.
-function csvField(value) {
-  const s = String(value ?? "");
-  if (s.includes(",") || s.includes('"') || s.includes("\n") || s.includes("\r")) {
-    return '"' + s.replace(/"/g, '""') + '"';
-  }
-  return s;
-}
-
-function csvRow(fields) {
-  return fields.map(csvField).join(",");
-}
 
 function exportCSV() {
   const type    = document.getElementById("effectType").value;
   const profile = effectProfiles[type];
 
-  // Headers: Study, effect inputs, Group, then any moderator columns
   const headers = ["Study", ...profile.inputs, "Group", ...moderators.map(m => m.name)];
-  const lines   = [csvRow(headers)];
+  const rows    = [];
 
   document.querySelectorAll("#inputTable tr").forEach((r, i) => {
     if (i === 0) return; // skip header row
     const vals = [...r.querySelectorAll("input")].map(x => x.value);
-    if (vals.some(v => v !== "")) lines.push(csvRow(vals));
+    if (vals.some(v => v !== "")) rows.push(vals);
   });
 
-  const blob = new Blob(["\uFEFF" + lines.join("\r\n")], { type: "text/csv;charset=utf-8;" });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement("a");
-  a.href     = url;
-  a.download = "meta_data.csv";
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  downloadBlob(serializeCSV(headers, rows), "meta_data.csv", "text/csv;charset=utf-8;");
 }
 
 // ---------------- INIT ----------------

@@ -10,6 +10,7 @@
 //     forestOptions }   ← forestOptions = { ciMethod, profile, pageSize }
 
 import { drawForest } from "./plots.js";
+import { downloadBlob } from "./io.js";
 
 // ---------------------------------------------------------------------------
 // SVG serialization
@@ -487,19 +488,7 @@ function reportCSS() {
 // Uses the same Blob / anchor pattern as export.js to ensure Firefox and
 // older Safari compatibility (detached-element clicks are silently ignored).
 export function downloadHTML(htmlString, filename = "meta-analysis-report.html") {
-  const blob = new Blob([htmlString], { type: "text/html;charset=utf-8" });
-  const url  = URL.createObjectURL(blob);
-
-  const a = document.createElement("a");
-  a.href     = url;
-  a.download = filename;
-  a.style.display = "none";
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-
-  // Revoke on next tick so the download has time to start.
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  downloadBlob(htmlString, filename, "text/html;charset=utf-8");
 }
 
 // ---------------------------------------------------------------------------

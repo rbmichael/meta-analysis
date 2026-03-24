@@ -6,6 +6,8 @@
 // A dark background rect is injected into the clone so exported files
 // look identical to the on-screen rendering.
 
+import { downloadBlob, downloadBlobObject } from "./io.js";
+
 const BACKGROUND = "#121212";
 
 // ----------- internal helpers -----------
@@ -29,33 +31,14 @@ function prepareSVGClone(svgEl) {
   return clone;
 }
 
-// Trigger a file download from a Blob object URL.
-// The anchor must be briefly added to the document; detached-element clicks
-// are ignored by Firefox and older Safari.
-function downloadBlobURL(url, filename) {
-  const a = document.createElement("a");
-  a.href     = url;
-  a.download = filename;
-  a.style.display = "none";
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  // Revoke on next tick so the download has time to start.
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
 // ----------- public API -----------
 
 // Download the given SVG element as a .svg file.
 export function exportSVG(svgEl, filename = "plot.svg") {
   if (!svgEl) return;
 
-  const clone    = prepareSVGClone(svgEl);
-  const svgStr   = new XMLSerializer().serializeToString(clone);
-  const blob     = new Blob([svgStr], { type: "image/svg+xml;charset=utf-8" });
-  const url      = URL.createObjectURL(blob);
-
-  downloadBlobURL(url, filename);
+  const svgStr = new XMLSerializer().serializeToString(prepareSVGClone(svgEl));
+  downloadBlob(svgStr, filename, "image/svg+xml;charset=utf-8");
 }
 
 // Download the given SVG element as a .png file.
@@ -89,8 +72,7 @@ export function exportPNG(svgEl, filename = "plot.png", scale = 2) {
         exportSVG(svgEl, filename.replace(/\.png$/i, ".svg"));
         return;
       }
-      const url = URL.createObjectURL(blob);
-      downloadBlobURL(url, filename);
+      downloadBlobObject(blob, filename);
     }, "image/png");
   };
   img.onerror = () => {
