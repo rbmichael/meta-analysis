@@ -714,14 +714,16 @@ export function runTests() {
     bchkNaN("n1=0 study skipped → k=2 → NaN", rueckerTest(s).intercept);
   }
 
-  // Structural: k=4 studies → df=2, finite, p∈(0,1)
+  // Structural: k=4 studies with spread 1/se predictors → df=2, finite, p∈(0,1).
+  // 1/se values: 3.65 (n=5+10), 7.39 (n=25+30), 12.0 (n=60+90), 16.33 (n=100+200).
+  // Wide spread gives det(X'WX)≈364 vs ≈8.5 for the tightly clustered old design.
   console.log("--- Rücker: structural (k=4) ---");
   {
     const s = [
-      { a:40,b:10,c:10,d:40 },
-      { a:30,b:15,c:15,d:40 },
-      { a:25,b:10,c:10,d:35 },
-      { a:20,b:10,c:10,d:30 },
+      { a:2,  b:3,  c:4,   d:6   },
+      { a:15, b:10, c:10,  d:20  },
+      { a:40, b:20, c:30,  d:60  },
+      { a:80, b:20, c:60,  d:140 },
     ];
     const r = rueckerTest(s);
     bchkTrue("df = 2",           r.df === 2);

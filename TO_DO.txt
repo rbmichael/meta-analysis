@@ -99,15 +99,13 @@ BUG 7 [MEDIUM]: Test-suite failures — Harbord / Deeks / Rücker structural
     Fixed: js/tests.js — replaced dataset with studies spanning ESS≈11.7/37.3/
            99.0/149.3 (N=30/75/200/300). det(X'WX)≈184; interceptP≈0.057.
 
-  7c — Rücker structural (k=4)
+  7c — Rücker structural (k=4) ✓ RESOLVED 2026-03-25
     Test:  interceptP ∈ (0,1) for a 4-study dataset
     Cause: The Rücker OLS predictor is xi = 1/se_i where
-           se_i = √(1/(4n1) + 1/(4n2)). For the chosen dataset the four
-           1/se values cluster tightly (≈8.3–10.0), giving a low-determinant
-           normal-equation matrix and an unreliable p-value.
-    Dataset: (40,10,10,40), (30,15,15,40), (25,10,10,35), (20,10,10,30)
-    Fix:   Replace the dataset with one having more spread in n1/n2 so that
-           the 1/se predictors span a wider range.
+           se_i = √(1/(4n1) + 1/(4n2)). The old dataset had all four 1/se
+           values clustered in ≈8.3–10.0, giving det(X'WX)≈8.5.
+    Fixed: js/tests.js — replaced dataset with studies spanning n=5+10 to
+           n=100+200; 1/se values 3.65/7.39/12.0/16.33, det≈364, p≈0.116.
 
 
 ================================================================================
