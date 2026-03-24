@@ -24,6 +24,7 @@ export function compute(s, type, options = {}) {
 
 	  // optional continuity correction for OR/RR
 	  if (type === "OR" || type === "RR") {
+		if (a === 0 && b === 0 && c === 0 && d === 0) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
 		if (a === 0 || b === 0 || c === 0 || d === 0) a += 0.5, b += 0.5, c += 0.5, d += 0.5;
 	  }
 

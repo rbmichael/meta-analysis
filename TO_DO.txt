@@ -64,15 +64,15 @@ BUG 5 [MEDIUM] ✓ RESOLVED 2026-03-25: Correlation input not clamped away from 
            Validation warning for |r| ≥ 1 already present in profiles.js.
 
 --------------------------------------------------------------------------------
-BUG 6 [MEDIUM]: OR / RR all-zero-cell row silently produces yi = 0
+BUG 6 [MEDIUM] ✓ RESOLVED 2026-03-25: OR / RR all-zero-cell row silently produced yi = 0
 
-  File:    js/analysis.js ~ OR / RR continuity-correction block
-  Symptom: Continuity correction (+0.5) is applied when any cell is zero.
-           If a=b=c=d=0 all cells become 0.5, giving yi = log(1) = 0 and
-           vi = 4. The study enters the analysis as if it observed no effect,
-           which is statistically meaningless.
-  Fix:     After the correction step, check whether the original row had all
-           four cells equal to zero and exclude/warn accordingly.
+  Was:     If a=b=c=d=0 the continuity correction made all cells 0.5, giving
+           yi = log(1) = 0 and vi = 8 — a meaningless study silently included.
+  Fixed:   js/profiles.js — added hard validation error ("All cells are zero —
+           no data") to both OR and RR validate(), which blocks the study from
+           the analysis and highlights the row for the user.
+           js/analysis.js — added NaN early-return guard before the continuity
+           correction for defence in depth on the standalone compute() path.
 
 --------------------------------------------------------------------------------
 BUG 7 [MEDIUM]: Test-suite failures — Harbord / Deeks / Rücker structural

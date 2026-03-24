@@ -450,6 +450,8 @@ export const effectProfiles = {
       ["a", "b", "c", "d"].forEach(k => {
         if (!isFinite(s[k]) || s[k] < 0) errors[k] = `${k} must be ≥ 0`;
       });
+      if (!Object.keys(errors).length && s.a === 0 && s.b === 0 && s.c === 0 && s.d === 0)
+        errors.a = "All cells are zero — no data";
       return { valid: Object.keys(errors).length === 0, errors };
     },
 
@@ -491,6 +493,8 @@ export const effectProfiles = {
       ["a", "b", "c", "d"].forEach(k => {
         if (!isFinite(s[k]) || s[k] < 0) errors[k] = `${k} must be ≥ 0`;
       });
+      if (!Object.keys(errors).length && s.a === 0 && s.b === 0 && s.c === 0 && s.d === 0)
+        errors.a = "All cells are zero — no data";
       return { valid: Object.keys(errors).length === 0, errors };
     },
 
