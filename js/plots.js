@@ -333,6 +333,16 @@ export function drawForest(studies, m, options = {}) {
       return isFinite(d) ? +d.toFixed(3) : "";
     }));
 
+  if (profile.isLog) {
+    svg.append("text")
+      .attr("x", L.labelW + L.plotW / 2)
+      .attr("y", L.axisY + 22)
+      .attr("text-anchor", "middle")
+      .style("font-size", L.annotFontSize)
+      .attr("fill", "#888")
+      .text("(log scale)");
+  }
+
   // Direct study labels (replaces d3.axisLeft — labels are drawn in the
   // label column, right-aligned just left of the plot strip)
   pageStudies.forEach(d => {
@@ -636,6 +646,15 @@ if(egger && isFinite(egger.slope)){
    const d = profile.transform(v);
    return isFinite(d) ? +d.toFixed(3) : "";
  }));
+ if (profile.isLog) {
+   svg.append("text")
+     .attr("x", 250)
+     .attr("y", 378)
+     .attr("text-anchor", "middle")
+     .style("font-size", "10px")
+     .attr("fill", "#888")
+     .text("(log scale)");
+ }
  svg.append("g").attr("transform","translate(50,0)").call(d3.axisLeft(y));
 }
 

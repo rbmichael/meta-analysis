@@ -270,6 +270,7 @@ export const effectProfiles = {
   "ROM": {
     label:  "Ratio of Means (ROM)",
     isTransformedScale: true,
+    isLog: true,
     inputs: ["m1", "sd1", "n1", "m2", "sd2", "n2"],
     compute(s) {
       if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
@@ -327,6 +328,7 @@ export const effectProfiles = {
   "CVR": {
     label:  "Coefficient of Variation Ratio (CVR)",
     isTransformedScale: true,
+    isLog: true,
     inputs: ["m1", "sd1", "n1", "m2", "sd2", "n2"],
     compute(s) {
       if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
@@ -386,6 +388,7 @@ export const effectProfiles = {
   "VR": {
     label:  "Variability Ratio (VR)",
     isTransformedScale: true,
+    isLog: true,
     inputs: ["sd1", "n1", "sd2", "n2"],
     compute(s) {
       if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
@@ -434,6 +437,7 @@ export const effectProfiles = {
   "OR": {
     label:  "Odds Ratio",
     isTransformedScale: true,
+    isLog: true,
     inputs: ["a", "b", "c", "d"],
     compute(s) {
       if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
@@ -476,6 +480,7 @@ export const effectProfiles = {
   "RR": {
     label:  "Risk Ratio",
     isTransformedScale: true,
+    isLog: true,
     inputs: ["a", "b", "c", "d"],
     compute(s) {
       if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
@@ -1074,6 +1079,7 @@ export const effectProfiles = {
   "HR": {
     label:  "Hazard Ratio",
     isTransformedScale: true,
+    isLog: true,
     inputs: ["hr", "ci_lo", "ci_hi"],
     compute(s) {
       if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
@@ -1110,6 +1116,7 @@ export const effectProfiles = {
   "IRR": {
     label:  "Incidence Rate Ratio",
     isTransformedScale: true,
+    isLog: true,
     inputs: ["x1", "t1", "x2", "t2"],
     compute(s) {
       if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
@@ -1150,6 +1157,7 @@ export const effectProfiles = {
   "IR": {
     label:  "Incidence Rate (log)",
     isTransformedScale: true,
+    isLog: true,
     inputs: ["x", "t"],
     compute(s) {
       if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
@@ -1224,6 +1232,7 @@ export const effectProfiles = {
   "MNLN": {
     label:  "Mean (log)",
     isTransformedScale: true,
+    isLog: true,
     inputs: ["m", "sd", "n"],
     compute(s) {
       if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
@@ -1261,6 +1270,7 @@ export const effectProfiles = {
   "GOR": {
     label:  "Generalised Odds Ratio (ordinal)",
     isTransformedScale: true,
+    isLog: true,
     inputs: ["counts1", "counts2"],
     rawInputs: new Set(["counts1", "counts2"]),
 

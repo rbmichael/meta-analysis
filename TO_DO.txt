@@ -133,15 +133,15 @@ TASK 2 [LOW] ✓ RESOLVED 2026-03-25: Forest plot pagination does not clarify po
            css/styles.css — added .forest-nav-note (italic, var(--fg-subtle)).
 
 --------------------------------------------------------------------------------
-TASK 3 [LOW]: Log-scale effect types do not annotate axes as log-scale
+TASK 3 [LOW] ✓ RESOLVED 2026-03-25: Log-scale effect types do not annotate axes as log-scale
 
-  File:    js/plots.js → drawForest, drawFunnel
-  Symptom: Effect types stored on a log scale (OR, RR, HR, ROM, GOR) use raw
-           yi values on the x-axis without a "log scale" label or tick
-           transformation. A reader could interpret the axis as linear.
-  Fix:     Detect log-scale effect types from the profile's isLog flag and
-           either (a) exponentiate ticks so the axis reads in natural units
-           (0.5, 1, 2, 4…) or (b) add a "(log scale)" label to the x-axis.
+  Fixed:   js/profiles.js — added isLog: true to all 10 profiles whose
+           back-transform is Math.exp (ROM, CVR, VR, OR, RR, HR, IRR,
+           IR_log, Mean_log, GOR). Ticks were already exponentiated by the
+           existing profile.transform() tick formatter.
+           js/plots.js → drawForest — appended a centred "(log scale)" text
+           node below the x-axis when profile.isLog is true.
+           js/plots.js → drawFunnel — same label at y=378 below the axis.
 
 --------------------------------------------------------------------------------
 TASK 4 [LOW]: Restyle D3 plot internals to match the design system
