@@ -8,6 +8,7 @@
   --bg-elevated:      #0a0a0c;
   --bg-surface:       rgba(255, 255, 255, 0.05);
   --bg-surface-hover: rgba(255, 255, 255, 0.08);
+  --bg-header:        rgba(5, 5, 6, 0.85);
 
   /* Foreground */
   --fg:               #EDEDEF;
@@ -31,11 +32,42 @@
   --color-error:      #e06060;
   --color-info:       #99b8d4;
 
-  /* Shadows */
-  --shadow-sm:        0 1px 3px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.04);
-  --shadow-md:        0 0 0 1px rgba(255,255,255,0.06), 0 2px 20px rgba(0,0,0,0.4), 0 0 40px rgba(0,0,0,0.2);
-  --shadow-lg:        0 0 0 1px rgba(255,255,255,0.10), 0 8px 40px rgba(0,0,0,0.5), 0 0 80px rgba(94,106,210,0.10);
-  --shadow-accent:    0 0 0 1px rgba(94,106,210,0.50), 0 4px 12px rgba(94,106,210,0.30), inset 0 1px 0 0 rgba(255,255,255,0.12);
+  /* Semantic badge tints (bg + border) — derived from the dark-mode palette */
+  --badge-success-bg:     rgba(76, 175, 130, 0.12);
+  --badge-success-border: rgba(76, 175, 130, 0.28);
+  --badge-warning-bg:     rgba(240, 192, 96, 0.10);
+  --badge-warning-border: rgba(240, 192, 96, 0.28);
+  --badge-error-bg:       rgba(224, 96, 96, 0.10);
+  --badge-error-border:   rgba(224, 96, 96, 0.28);
+
+  /* UI surface tints */
+  --bg-th:                     rgba(255, 255, 255, 0.04);
+  --bg-row-alt:                rgba(255, 255, 255, 0.02);
+  --bg-pill:                   rgba(255, 255, 255, 0.03);
+  --bg-ghost:                  rgba(255, 255, 255, 0.06);
+  --bg-ghost-hover:            rgba(255, 255, 255, 0.09);
+  --bg-summary-hover:          rgba(255, 255, 255, 0.07);
+
+  /* Scrollbar */
+  --scrollbar-thumb:           rgba(255, 255, 255, 0.12);
+  --scrollbar-thumb-hover:     rgba(255, 255, 255, 0.20);
+
+  /* Disabled state */
+  --fg-disabled:               rgba(255, 255, 255, 0.15);
+  --border-disabled:           rgba(255, 255, 255, 0.05);
+
+  /* Accent button inner highlight */
+  --btn-inner-highlight:       rgba(255, 255, 255, 0.10);
+  --btn-inner-highlight-hover: rgba(255, 255, 255, 0.15);
+  --shadow-inner:              rgba(255, 255, 255, 0.12);
+
+  /* Shadows — ring components reference existing border/tint tokens so they
+     auto-flip when those tokens are overridden; black diffuse parts are
+     overridden wholesale in the light-mode block (Step 3). */
+  --shadow-sm:        0 1px 3px rgba(0,0,0,0.40), 0 0 0 1px var(--bg-th);
+  --shadow-md:        0 0 0 1px var(--border), 0 2px 20px rgba(0,0,0,0.40), 0 0 40px rgba(0,0,0,0.20);
+  --shadow-lg:        0 0 0 1px var(--border-hover), 0 8px 40px rgba(0,0,0,0.50), 0 0 80px rgba(94,106,210,0.10);
+  --shadow-accent:    0 0 0 1px rgba(94,106,210,0.50), 0 4px 12px rgba(94,106,210,0.30), inset 0 1px 0 0 var(--shadow-inner);
 
   /* Radius */
   --radius-xs:        3px;
@@ -53,6 +85,140 @@
   --t-fast:           150ms ease-out;
   --t-base:           200ms ease-out;
   --t-slow:           300ms ease-out;
+}
+
+/* ================================================================
+   LIGHT MODE TOKEN OVERRIDES
+   Two independent rules activate light mode:
+     1. [data-theme="light"]                 — manual toggle or JS-set preference
+     2. @media (prefers-color-scheme: light) — CSS-only OS fallback for the brief
+        window before JS runs; :not([data-theme="dark"]) lets a manual dark-pin win.
+   ================================================================ */
+
+[data-theme="light"] {
+  /* Backgrounds */
+  --bg-deep:          #f0f0f3;
+  --bg-base:          #ffffff;
+  --bg-elevated:      #f5f5f8;
+  --bg-surface:       rgba(0, 0, 0, 0.03);
+  --bg-surface-hover: rgba(0, 0, 0, 0.05);
+  --bg-header:        rgba(245, 245, 248, 0.85);
+
+  /* UI surface tints */
+  --bg-th:            rgba(0, 0, 0, 0.04);
+  --bg-row-alt:       rgba(0, 0, 0, 0.02);
+  --bg-pill:          rgba(0, 0, 0, 0.04);
+  --bg-ghost:         rgba(0, 0, 0, 0.05);
+  --bg-ghost-hover:   rgba(0, 0, 0, 0.08);
+  --bg-summary-hover: rgba(0, 0, 0, 0.06);
+
+  /* Foreground */
+  --fg:               #111113;
+  --fg-muted:         #6b7180;
+  --fg-subtle:        rgba(0, 0, 0, 0.55);
+
+  /* Accent — base hue unchanged; bright/light shifted darker for legibility */
+  --accent-bright:    #4a55c2;
+  --accent-light:     #4550b8;
+  --accent-glow:      rgba(94, 106, 210, 0.15);
+
+  /* Borders */
+  --border:           rgba(0, 0, 0, 0.09);
+  --border-hover:     rgba(0, 0, 0, 0.15);
+  --border-accent:    rgba(94, 106, 210, 0.35);
+
+  /* Semantic — shifted darker for legibility on white */
+  --color-success:    #1a7a50;
+  --color-warning:    #8a6000;
+  --color-error:      #b03030;
+  --color-info:       #3a6a9a;
+
+  /* Semantic badge tints — derived from the light-mode semantic palette */
+  --badge-success-bg:     rgba(26, 122, 80, 0.10);
+  --badge-success-border: rgba(26, 122, 80, 0.25);
+  --badge-warning-bg:     rgba(138, 96, 0, 0.10);
+  --badge-warning-border: rgba(138, 96, 0, 0.25);
+  --badge-error-bg:       rgba(176, 48, 48, 0.10);
+  --badge-error-border:   rgba(176, 48, 48, 0.25);
+
+  /* Scrollbar */
+  --scrollbar-thumb:           rgba(0, 0, 0, 0.15);
+  --scrollbar-thumb-hover:     rgba(0, 0, 0, 0.25);
+
+  /* Disabled */
+  --fg-disabled:               rgba(0, 0, 0, 0.25);
+  --border-disabled:           rgba(0, 0, 0, 0.10);
+
+  /* Button inner highlight — accent buttons keep white shimmer on indigo bg */
+  --btn-inner-highlight:       rgba(255, 255, 255, 0.70);
+  --btn-inner-highlight-hover: rgba(255, 255, 255, 0.80);
+  --shadow-inner:              rgba(255, 255, 255, 0.70);
+
+  /* Shadows — ring components auto-flip via --bg-th / --border / --border-hover;
+     only the black diffuse opacity needs to be reduced for a light surface. */
+  --shadow-sm:     0 1px 3px rgba(0,0,0,0.08), 0 0 0 1px var(--bg-th);
+  --shadow-md:     0 0 0 1px var(--border), 0 2px 20px rgba(0,0,0,0.08), 0 0 40px rgba(0,0,0,0.04);
+  --shadow-lg:     0 0 0 1px var(--border-hover), 0 8px 40px rgba(0,0,0,0.12), 0 0 80px rgba(94,106,210,0.08);
+  --shadow-accent: 0 0 0 1px rgba(94,106,210,0.40), 0 4px 12px rgba(94,106,210,0.20), inset 0 1px 0 0 var(--shadow-inner);
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    /* Backgrounds */
+    --bg-deep:          #f0f0f3;
+    --bg-base:          #ffffff;
+    --bg-elevated:      #f5f5f8;
+    --bg-surface:       rgba(0, 0, 0, 0.03);
+    --bg-surface-hover: rgba(0, 0, 0, 0.05);
+
+    /* UI surface tints */
+    --bg-th:            rgba(0, 0, 0, 0.04);
+    --bg-row-alt:       rgba(0, 0, 0, 0.02);
+    --bg-pill:          rgba(0, 0, 0, 0.04);
+    --bg-ghost:         rgba(0, 0, 0, 0.05);
+    --bg-ghost-hover:   rgba(0, 0, 0, 0.08);
+    --bg-summary-hover: rgba(0, 0, 0, 0.06);
+
+    /* Foreground */
+    --fg:               #111113;
+    --fg-muted:         #6b7180;
+    --fg-subtle:        rgba(0, 0, 0, 0.55);
+
+    /* Accent — base hue unchanged; bright/light shifted darker for legibility */
+    --accent-bright:    #4a55c2;
+    --accent-light:     #4550b8;
+    --accent-glow:      rgba(94, 106, 210, 0.15);
+
+    /* Borders */
+    --border:           rgba(0, 0, 0, 0.09);
+    --border-hover:     rgba(0, 0, 0, 0.15);
+    --border-accent:    rgba(94, 106, 210, 0.35);
+
+    /* Semantic — shifted darker for legibility on white */
+    --color-success:    #1a7a50;
+    --color-warning:    #8a6000;
+    --color-error:      #b03030;
+    --color-info:       #3a6a9a;
+
+    /* Scrollbar */
+    --scrollbar-thumb:           rgba(0, 0, 0, 0.15);
+    --scrollbar-thumb-hover:     rgba(0, 0, 0, 0.25);
+
+    /* Disabled */
+    --fg-disabled:               rgba(0, 0, 0, 0.25);
+    --border-disabled:           rgba(0, 0, 0, 0.10);
+
+    /* Button inner highlight — accent buttons keep white shimmer on indigo bg */
+    --btn-inner-highlight:       rgba(255, 255, 255, 0.70);
+    --btn-inner-highlight-hover: rgba(255, 255, 255, 0.80);
+    --shadow-inner:              rgba(255, 255, 255, 0.70);
+
+    /* Shadows */
+    --shadow-sm:     0 1px 3px rgba(0,0,0,0.08), 0 0 0 1px var(--bg-th);
+    --shadow-md:     0 0 0 1px var(--border), 0 2px 20px rgba(0,0,0,0.08), 0 0 40px rgba(0,0,0,0.04);
+    --shadow-lg:     0 0 0 1px var(--border-hover), 0 8px 40px rgba(0,0,0,0.12), 0 0 80px rgba(94,106,210,0.08);
+    --shadow-accent: 0 0 0 1px rgba(94,106,210,0.40), 0 4px 12px rgba(94,106,210,0.20), inset 0 1px 0 0 var(--shadow-inner);
+  }
 }
 
 /* ================================================================
@@ -89,7 +255,7 @@ input, select {
   width: 70px;
   background: var(--bg-elevated);
   color: var(--fg);
-  border: 1px solid rgba(255, 255, 255, 0.10);
+  border: 1px solid var(--border-hover);
   border-radius: var(--radius-sm);
   font-family: var(--font-sans);
   font-size: 0.8125rem;
@@ -105,7 +271,7 @@ input:focus, select:focus {
 button {
   padding: 5px 12px;
   margin: 4px;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--bg-ghost);
   color: var(--fg-muted);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
@@ -117,7 +283,7 @@ button {
 }
 
 button:hover {
-  background: rgba(255, 255, 255, 0.09);
+  background: var(--bg-ghost-hover);
   color: var(--fg);
   border-color: var(--border-hover);
 }
@@ -153,7 +319,7 @@ button:active {
 
 /* Header row */
 #inputTable th {
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--bg-th);
   color: var(--fg-muted);
   font-weight: 500;
   font-size: 0.75rem;
@@ -276,7 +442,7 @@ button:active {
 
 /* ---- Input / Output sections ---- */
 .section {
-  background: linear-gradient(160deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%);
+  background: linear-gradient(160deg, var(--bg-th) 0%, var(--bg-row-alt) 100%);
   border: 1px solid var(--border);
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-md);
@@ -402,7 +568,7 @@ input[type="file"] {
 }
 
 input[type="file"]::file-selector-button {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--bg-ghost);
   color: var(--fg-muted);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -416,7 +582,7 @@ input[type="file"]::file-selector-button {
 }
 
 input[type="file"]::file-selector-button:hover {
-  background: rgba(255, 255, 255, 0.09);
+  background: var(--bg-ghost-hover);
   color: var(--fg);
   border-color: var(--border-hover);
 }
@@ -445,7 +611,7 @@ input[type="file"]::file-selector-button:hover {
   background: var(--accent);
   color: #fff;
   border-color: rgba(94, 106, 210, 0.50);
-  box-shadow: 0 0 0 1px rgba(94,106,210,0.40), 0 2px 8px rgba(94,106,210,0.25), inset 0 1px 0 rgba(255,255,255,0.10);
+  box-shadow: 0 0 0 1px rgba(94,106,210,0.40), 0 2px 8px rgba(94,106,210,0.25), inset 0 1px 0 var(--btn-inner-highlight);
   font-weight: 600;
   padding: 6px 20px;
   margin-left: 4px;
@@ -454,7 +620,7 @@ input[type="file"]::file-selector-button:hover {
 #run:hover {
   background: var(--accent-bright);
   border-color: rgba(104, 114, 217, 0.60);
-  box-shadow: 0 0 0 1px rgba(94,106,210,0.50), 0 4px 16px rgba(94,106,210,0.35), inset 0 1px 0 rgba(255,255,255,0.15);
+  box-shadow: 0 0 0 1px rgba(94,106,210,0.50), 0 4px 16px rgba(94,106,210,0.35), inset 0 1px 0 var(--btn-inner-highlight-hover);
   color: #fff;
 }
 
@@ -522,10 +688,10 @@ input[type="file"]::file-selector-button:hover {
   white-space: nowrap;
 }
 
-.preview-confidence.conf-full    { background: rgba(76,175,130,0.12);  color: var(--color-success); border: 1px solid rgba(76,175,130,0.28); }
-.preview-confidence.conf-tied    { background: rgba(94,106,210,0.12);  color: var(--accent-light);              border: 1px solid var(--border-accent);  }
-.preview-confidence.conf-partial { background: rgba(240,192,96,0.10);  color: var(--color-warning); border: 1px solid rgba(240,192,96,0.28); }
-.preview-confidence.conf-none    { background: rgba(224,96,96,0.10);   color: var(--color-error);   border: 1px solid rgba(224,96,96,0.28);  }
+.preview-confidence.conf-full    { background: var(--badge-success-bg);  color: var(--color-success); border: 1px solid var(--badge-success-border); }
+.preview-confidence.conf-tied    { background: rgba(94,106,210,0.12);    color: var(--accent-light);  border: 1px solid var(--border-accent);          }
+.preview-confidence.conf-partial { background: var(--badge-warning-bg);  color: var(--color-warning); border: 1px solid var(--badge-warning-border); }
+.preview-confidence.conf-none    { background: var(--badge-error-bg);    color: var(--color-error);   border: 1px solid var(--badge-error-border);   }
 
 /* Column mapping chips */
 .preview-mapping {
@@ -543,9 +709,9 @@ input[type="file"]::file-selector-button:hover {
   white-space: nowrap;
 }
 
-.chip-matched   { background: rgba(76,175,130,0.12);  color: var(--color-success); border: 1px solid rgba(76,175,130,0.28); }
-.chip-missing   { background: rgba(224,96,96,0.10);   color: var(--color-error);   border: 1px solid rgba(224,96,96,0.28);  }
-.chip-moderator { background: rgba(240,192,96,0.10);  color: var(--color-warning); border: 1px solid rgba(240,192,96,0.28); }
+.chip-matched   { background: var(--badge-success-bg); color: var(--color-success); border: 1px solid var(--badge-success-border); }
+.chip-missing   { background: var(--badge-error-bg);   color: var(--color-error);   border: 1px solid var(--badge-error-border);   }
+.chip-moderator { background: var(--badge-warning-bg); color: var(--color-warning); border: 1px solid var(--badge-warning-border); }
 .chip-ignored   { background: var(--bg-surface);      color: var(--fg-subtle);     border: 1px solid var(--border);         }
 
 /* Data preview table */
@@ -558,12 +724,12 @@ input[type="file"]::file-selector-button:hover {
   border: 1px solid var(--border);
   /* Subtle scrollbar */
   scrollbar-width: thin;
-  scrollbar-color: rgba(255,255,255,0.12) transparent;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
 }
 
 .preview-table-wrap::-webkit-scrollbar       { width: 5px; height: 5px; }
 .preview-table-wrap::-webkit-scrollbar-track { background: transparent; }
-.preview-table-wrap::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 9999px; }
+.preview-table-wrap::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 9999px; }
 
 .preview-table {
   border-collapse: collapse;
@@ -573,7 +739,7 @@ input[type="file"]::file-selector-button:hover {
 }
 
 .preview-table th {
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--bg-th);
   color: var(--fg-muted);
   font-weight: 500;
   font-size: 0.75rem;
@@ -599,7 +765,7 @@ input[type="file"]::file-selector-button:hover {
   text-overflow: ellipsis;
 }
 
-.preview-table tr:nth-child(even) td { background: rgba(255,255,255,0.02); }
+.preview-table tr:nth-child(even) td { background: var(--bg-row-alt); }
 
 /* Action buttons */
 .preview-actions {
@@ -619,13 +785,13 @@ input[type="file"]::file-selector-button:hover {
   border-radius: var(--radius-md);
   cursor: pointer;
   margin: 0;
-  box-shadow: 0 0 0 1px rgba(94,106,210,0.40), 0 2px 8px rgba(94,106,210,0.25), inset 0 1px 0 rgba(255,255,255,0.10);
+  box-shadow: 0 0 0 1px rgba(94,106,210,0.40), 0 2px 8px rgba(94,106,210,0.25), inset 0 1px 0 var(--btn-inner-highlight);
   transition: background var(--t-fast), box-shadow var(--t-fast);
 }
 
 .preview-import-btn:hover {
   background: var(--accent-bright);
-  box-shadow: 0 0 0 1px rgba(94,106,210,0.50), 0 4px 16px rgba(94,106,210,0.35), inset 0 1px 0 rgba(255,255,255,0.15);
+  box-shadow: 0 0 0 1px rgba(94,106,210,0.50), 0 4px 16px rgba(94,106,210,0.35), inset 0 1px 0 var(--btn-inner-highlight-hover);
 }
 
 .preview-cancel-btn {
@@ -643,7 +809,7 @@ input[type="file"]::file-selector-button:hover {
 }
 
 .preview-cancel-btn:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--bg-surface);
   color: var(--fg);
   border-color: var(--border-hover);
 }
@@ -675,7 +841,7 @@ input[type="file"]::file-selector-button:hover {
 }
 
 #results th {
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--bg-th);
   color: var(--fg-muted);
   font-weight: 500;
   padding: 6px 10px;
@@ -697,7 +863,7 @@ input[type="file"]::file-selector-button:hover {
   font-size: 0.75rem;
 }
 
-#results tr:nth-child(even) td { background: rgba(255,255,255,0.02); }
+#results tr:nth-child(even) td { background: var(--bg-row-alt); }
 
 /* Flagged rows in the influence table (class applied by JS) */
 .results-row-flagged td {
@@ -773,7 +939,7 @@ input[type="file"]::file-selector-button:hover {
 }
 
 .reg-het {
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--bg-row-alt);
   padding: 7px 16px;
   font-size: 0.8rem;
   color: var(--fg-muted);
@@ -794,7 +960,7 @@ input[type="file"]::file-selector-button:hover {
 }
 
 .reg-table th {
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--bg-th);
   font-weight: 500;
   color: var(--fg-muted);
   padding: 6px 10px;
@@ -818,7 +984,7 @@ input[type="file"]::file-selector-button:hover {
   font-size: 0.75rem;
 }
 
-.reg-table tr:nth-child(even) td { background: rgba(255,255,255,0.02); }
+.reg-table tr:nth-child(even) td { background: var(--bg-row-alt); }
 
 .reg-intercept td {
   color: var(--fg-muted);
@@ -875,12 +1041,12 @@ input[type="file"]::file-selector-button:hover {
   overflow-x: auto;
   max-width: 900px;
   scrollbar-width: thin;
-  scrollbar-color: rgba(255,255,255,0.12) transparent;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
 }
 
 #studyTable::-webkit-scrollbar       { height: 5px; }
 #studyTable::-webkit-scrollbar-track { background: transparent; }
-#studyTable::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 9999px; }
+#studyTable::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 9999px; }
 
 .study-table {
   width: 100%;
@@ -889,7 +1055,7 @@ input[type="file"]::file-selector-button:hover {
 }
 
 .study-table th {
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--bg-th);
   font-weight: 500;
   color: var(--fg-muted);
   text-align: right;
@@ -914,7 +1080,7 @@ input[type="file"]::file-selector-button:hover {
   font-size: 0.75rem;
 }
 
-.study-table tr:nth-child(even) td { background: rgba(255,255,255,0.02); }
+.study-table tr:nth-child(even) td { background: var(--bg-row-alt); }
 
 .study-table .imputed-row td {
   color: var(--fg-subtle);
@@ -956,8 +1122,8 @@ input[type="file"]::file-selector-button:hover {
 }
 
 #forestNav button:disabled {
-  color: rgba(255,255,255,0.15);
-  border-color: rgba(255,255,255,0.05);
+  color: var(--fg-disabled);
+  border-color: var(--border-disabled);
   cursor: default;
 }
 
@@ -1100,7 +1266,7 @@ input[type="file"]::file-selector-button:hover {
   left: 0;
   right: 0;
   height: 44px;
-  background: rgba(5, 5, 6, 0.85);
+  background: var(--bg-header);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border-bottom: 1px solid var(--border);
@@ -1129,7 +1295,7 @@ input[type="file"]::file-selector-button:hover {
 #viewToggleGroup {
   display: flex;
   gap: 2px;
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--bg-pill);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   padding: 3px;
@@ -1151,13 +1317,39 @@ input[type="file"]::file-selector-button:hover {
 
 .toggle-btn:hover {
   color: var(--fg);
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--bg-surface);
 }
 
 .toggle-btn.active {
   background: rgba(94, 106, 210, 0.15);
   color: var(--accent-light);
   box-shadow: 0 0 0 1px rgba(94, 106, 210, 0.25);
+}
+
+/* ---- Theme toggle button ---- */
+.theme-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1;
+  background: transparent;
+  color: var(--fg-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background var(--t-fast), color var(--t-fast), border-color var(--t-fast);
+}
+
+.theme-toggle-btn:hover {
+  background: var(--bg-surface);
+  color: var(--fg);
+  border-color: var(--border-hover);
 }
 
 /* Stale indicator dot on the Results button */
@@ -1209,7 +1401,7 @@ input[type="file"]::file-selector-button:hover {
 }
 
 .sens-summary {
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--bg-th);
   padding: 10px 14px;
   font-size: 0.8125rem;
   font-weight: 500;
@@ -1224,7 +1416,7 @@ input[type="file"]::file-selector-button:hover {
 }
 
 .sens-summary:hover {
-  background: rgba(255, 255, 255, 0.07);
+  background: var(--bg-summary-hover);
   color: var(--fg);
 }
 
@@ -1301,16 +1493,16 @@ select:focus:not(:focus-visible) {
 /* ---- Global scrollbar ---- */
 html {
   scrollbar-width: thin;
-  scrollbar-color: rgba(255,255,255,0.12) transparent;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
 }
 
 html::-webkit-scrollbar       { width: 6px; }
 html::-webkit-scrollbar-track { background: transparent; }
 html::-webkit-scrollbar-thumb {
-  background: rgba(255,255,255,0.12);
+  background: var(--scrollbar-thumb);
   border-radius: var(--radius-full);
 }
-html::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.20); }
+html::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
 
 /* ---- Mobile refinements ---- */
 @media (max-width: 700px) {

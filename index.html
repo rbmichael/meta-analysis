@@ -9,6 +9,17 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600&display=swap" rel="stylesheet">
 <script src="https://cdn.tailwindcss.com"></script>
 <script>tailwind.config = { corePlugins: { preflight: false } }</script>
+<script>
+  /* Anti-FOUC: resolve theme before first paint so dark↔light never flashes.
+     Priority: localStorage > OS preference > dark (default). */
+  (function () {
+    var saved = localStorage.getItem("theme");
+    var theme = saved
+      ? saved
+      : window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+    document.documentElement.dataset.theme = theme;
+  })();
+</script>
 <link rel="stylesheet" href="css/styles.css">
 <script src="https://d3js.org/d3.v7.min.js"></script>
 <script type="module" src="js/analysis.js"></script>
@@ -26,6 +37,7 @@
     <button class="toggle-btn active" id="toggleInput"  data-view="input">Input</button>
     <button class="toggle-btn"        id="toggleResults" data-view="results">Results</button>
   </div>
+  <button id="themeToggle" class="theme-toggle-btn" title="Switch to light mode" aria-label="Toggle colour theme"></button>
 </header>
 
 <!-- ===================== APP LAYOUT ===================== -->

@@ -180,6 +180,31 @@ function makeModTd(name, type) {
 
 // ---------------- VIEW TOGGLE ----------------
 
+// ---------------- THEME TOGGLE ----------------
+
+const _themeToggle = document.getElementById("themeToggle");
+
+function _applyTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  const isLight = theme === "light";
+  _themeToggle.textContent = isLight ? "☾" : "☀";
+  _themeToggle.title       = isLight ? "Switch to dark mode" : "Switch to light mode";
+}
+
+// On load: honour localStorage, fall back to OS preference.
+_applyTheme(
+  localStorage.getItem("theme") ??
+  (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
+);
+
+_themeToggle.addEventListener("click", () => {
+  const next = document.documentElement.dataset.theme === "light" ? "dark" : "light";
+  localStorage.setItem("theme", next);
+  _applyTheme(next);
+});
+
+// ---------------- VIEW TOGGLE ----------------
+
 const _inputSection  = document.getElementById("inputSection");
 const _outputSection = document.getElementById("outputSection");
 const _toggleInput   = document.getElementById("toggleInput");
