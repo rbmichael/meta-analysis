@@ -222,6 +222,51 @@ export const effectProfiles = {
   },
 
   // ------------------------------------------------------------------ //
+  "SMCC": {
+    label:  "Standardized Mean Change (change-score SD)",
+    inputs: ["m_pre", "sd_pre", "m_post", "sd_post", "n", "r"],
+    compute(s) {
+      if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+      const { m_pre, m_post, sd_pre, sd_post, n, r } = s;
+      const corr = isFinite(r) ? r : 0.5;
+      const sd_change = Math.sqrt(sd_pre**2 + sd_post**2 - 2*corr*sd_pre*sd_post);
+      const d    = (m_post - m_pre) / sd_change;
+      const df   = n - 1;
+      const J    = 1 - (3 / (4*df - 1));
+      const g    = d * J;
+      // Variance: proper SMCC formula (Borenstein et al. 2009; Morris 2008)
+      // var(d) = 2(1−r)/n + d²/(2df);  var(g) = J²·var(d)
+      const var_d = 2 * (1 - corr) / n + (d * d) / (2 * df);
+      const vi    = Math.max(J * J * var_d, MIN_VAR);
+      return { ...s, yi: g, vi, se: Math.sqrt(vi), w: 1 / vi, md: g, varMD: var_d };
+    },
+    transform: (x) => x,
+
+    validate(s) {
+      const errors = {};
+      if (!isFinite(s.m_pre))                      errors.m_pre  = "m_pre must be numeric";
+      if (!isFinite(s.m_post))                     errors.m_post = "m_post must be numeric";
+      if (!isFinite(s.sd_pre)  || s.sd_pre  <= 0) errors.sd_pre  = "sd_pre must be > 0";
+      if (!isFinite(s.sd_post) || s.sd_post <= 0) errors.sd_post = "sd_post must be > 0";
+      if (!isFinite(s.n) || s.n < 2)              errors.n = "n must be ≥ 2";
+      if (isFinite(s.r) && (s.r < -1 || s.r > 1)) errors.r = "r must be between -1 and 1";
+      return { valid: Object.keys(errors).length === 0, errors };
+    },
+
+    softWarnings(s, label) {
+      if (!isFinite(s.r))
+        return [`⚠️ ${label}: r not provided — defaulting to 0.5. Supply the pre-post correlation for accurate variance.`];
+      return [];
+    },
+
+    exampleData: [
+      ["Study1", 10, 2, 8, 2, 30, 0.5, "A"],
+      ["Study2", 12, 3, 9, 3, 32, 0.6, "A"],
+      ["Study3",  9, 2, 7, 2, 28, 0.4, "B"],
+    ],
+  },
+
+  // ------------------------------------------------------------------ //
   "ROM": {
     label:  "Ratio of Means (ROM)",
     isTransformedScale: true,

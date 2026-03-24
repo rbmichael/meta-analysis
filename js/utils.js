@@ -325,7 +325,7 @@ export function transformEffect(x, type) {
 	if (type === "RD") return x;  // continuous scale, no transformation
 
   // Continuous measures
-  if (type === "MD" || type === "SMD" || type === "SMDH" || type === "MD_paired" || type === "SMD_paired" || type === "MN") {
+  if (type === "MD" || type === "SMD" || type === "SMDH" || type === "MD_paired" || type === "SMD_paired" || type === "SMCC" || type === "MN") {
     return x;
   }
 

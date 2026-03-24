@@ -1746,4 +1746,121 @@ export function runTests() {
   }
 
   console.log(mnPass ? "\n✅ ALL MN / MNLN UNIT TESTS PASSED" : "\n❌ SOME MN / MNLN UNIT TESTS FAILED");
+
+  // ===== SMCC UNIT TESTS =====
+  //
+  // Tests cover:
+  //   1. Formula spot-check  (m_pre=10, m_post=8, sd_pre=2, sd_post=2, n=30, r=0.5)
+  //        sd_change=2, d=-1, J=1-3/115, g=d·J
+  //        var_d = 2·(1-0.5)/30 + 1/(2·29) = 1/30 + 1/58
+  //        vi = J²·var_d
+  //   2. var formula depends on r — vi(r=0.2) ≠ vi(r=0.8)
+  //   3. J² applied to variance — vi < var_d
+  //   4. Missing r defaults to 0.5 (finite yi, w > 0)
+  //   5. Invalid inputs → NaN / w=0
+  //   6. transformEffect is identity
+  //   7. Pooled meta() structural checks (k=3)
+  // ================================================================
+  let smccPass = true;
+  console.log("\n===== SMCC UNIT TESTS =====\n");
+
+  function smccChk(name, val, expected, tol = 1e-6) {
+    const ok = isFinite(val) && isFinite(expected) && Math.abs(val - expected) <= tol;
+    console.log(`  ${name}: ${round(val, 7)} (expected ${round(expected, 7)}) → ${ok ? "PASS" : "FAIL"}`);
+    if (!ok) smccPass = false;
+  }
+  function smccChkTrue(name, cond) {
+    console.log(`  ${name}: ${cond ? "PASS" : "FAIL"}`);
+    if (!cond) smccPass = false;
+  }
+
+  // --- SMCC 1: formula spot-check ---
+  // m_pre=10, m_post=8, sd_pre=2, sd_post=2, n=30, r=0.5
+  // sd_change = sqrt(4+4-2*0.5*4) = sqrt(4) = 2
+  // d = (8-10)/2 = -1
+  // df=29, J = 1-3/(4*29-1) = 1-3/115
+  // g = d*J
+  // var_d = 2*(1-0.5)/30 + 1/(2*29) = 1/30 + 1/58
+  // vi = J²*var_d
+  console.log("--- SMCC 1. Formula spot-check ---");
+  {
+    const s = compute({ m_pre: 10, m_post: 8, sd_pre: 2, sd_post: 2, n: 30, r: 0.5 }, "SMCC");
+    const J      = 1 - 3 / 115;
+    const g_exp  = -1 * J;
+    const vard_exp = 1/30 + 1/58;
+    const vi_exp   = J * J * vard_exp;
+    smccChk("g  = d·J",          s.yi, g_exp,        1e-9);
+    smccChk("vi = J²·var_d",     s.vi, vi_exp,        1e-9);
+    smccChk("se = √vi",          s.se, Math.sqrt(vi_exp), 1e-9);
+    smccChk("w  = 1/vi",         s.w,  1 / vi_exp,    1e-6);
+    smccChk("varMD = var_d",     s.varMD, vard_exp,   1e-9);
+  }
+
+  // --- SMCC 2: var formula depends on r ---
+  console.log("--- SMCC 2. vi differs with r (r=0.2 vs r=0.8) ---");
+  {
+    const base = { m_pre: 10, m_post: 8, sd_pre: 2, sd_post: 2, n: 30 };
+    const s2 = compute({ ...base, r: 0.2 }, "SMCC");
+    const s8 = compute({ ...base, r: 0.8 }, "SMCC");
+    smccChkTrue("vi(r=0.2) ≠ vi(r=0.8)", Math.abs(s2.vi - s8.vi) > 1e-6);
+    smccChkTrue("yi(r=0.2) ≠ yi(r=0.8)", Math.abs(s2.yi - s8.yi) > 1e-6);
+  }
+
+  // --- SMCC 3: J² applied — vi < var_d ---
+  console.log("--- SMCC 3. J² applied: vi < varMD ---");
+  {
+    const s = compute({ m_pre: 10, m_post: 8, sd_pre: 2, sd_post: 2, n: 30, r: 0.5 }, "SMCC");
+    smccChkTrue("vi < varMD (J² < 1)", s.vi < s.varMD);
+  }
+
+  // --- SMCC 4: missing r defaults to 0.5 ---
+  console.log("--- SMCC 4. Missing r defaults to 0.5 ---");
+  {
+    const sNo = compute({ m_pre: 10, m_post: 8, sd_pre: 2, sd_post: 2, n: 30 }, "SMCC");
+    const s5  = compute({ m_pre: 10, m_post: 8, sd_pre: 2, sd_post: 2, n: 30, r: 0.5 }, "SMCC");
+    smccChkTrue("finite yi when r omitted",    isFinite(sNo.yi));
+    smccChkTrue("w > 0 when r omitted",        sNo.w > 0);
+    smccChk("yi matches r=0.5 result",         sNo.yi, s5.yi, 1e-12);
+    smccChk("vi matches r=0.5 result",         sNo.vi, s5.vi, 1e-12);
+  }
+
+  // --- SMCC 5: invalid inputs → NaN / w=0 ---
+  console.log("--- SMCC 5. Invalid inputs → NaN / w=0 ---");
+  {
+    const base = { m_pre: 10, m_post: 8, sd_pre: 2, sd_post: 2, n: 30, r: 0.5 };
+    smccChkTrue("sd_pre = 0  → NaN yi",  !isFinite(compute({ ...base, sd_pre:  0 }, "SMCC").yi));
+    smccChkTrue("sd_post = 0 → NaN yi",  !isFinite(compute({ ...base, sd_post: 0 }, "SMCC").yi));
+    smccChkTrue("n = 1       → NaN yi",  !isFinite(compute({ ...base, n: 1       }, "SMCC").yi));
+    smccChkTrue("r = 2       → NaN yi",  !isFinite(compute({ ...base, r: 2       }, "SMCC").yi));
+    smccChkTrue("sd_pre = 0  → w = 0",   compute({ ...base, sd_pre: 0 }, "SMCC").w === 0);
+  }
+
+  // --- SMCC 6: transformEffect is identity ---
+  console.log("--- SMCC 6. transformEffect identity ---");
+  {
+    [-2, 0, 0.5, 1.8].forEach(v =>
+      smccChk(`transformEffect(${v}, "SMCC") = ${v}`, transformEffect(v, "SMCC"), v, 1e-12)
+    );
+  }
+
+  // --- SMCC 7: pooled meta() structural checks ---
+  console.log("--- SMCC 7. Pooled meta() (k=3, DL) ---");
+  {
+    const studies = [
+      compute({ m_pre: 10, m_post: 8,  sd_pre: 2, sd_post: 2, n: 30, r: 0.5 }, "SMCC"),
+      compute({ m_pre: 12, m_post: 9,  sd_pre: 3, sd_post: 3, n: 40, r: 0.6 }, "SMCC"),
+      compute({ m_pre:  8, m_post: 6,  sd_pre: 2, sd_post: 2, n: 25, r: 0.4 }, "SMCC"),
+    ];
+    smccChkTrue("all yi finite",  studies.every(s => isFinite(s.yi)));
+    smccChkTrue("all vi > 0",     studies.every(s => s.vi > 0));
+    const m = meta(studies, "DL");
+    const minYi = Math.min(...studies.map(s => s.yi));
+    const maxYi = Math.max(...studies.map(s => s.yi));
+    smccChkTrue("FE in (min yi, max yi)", m.FE > minYi && m.FE < maxYi);
+    smccChkTrue("RE in (min yi, max yi)", m.RE > minYi && m.RE < maxYi);
+    smccChkTrue("tau2 ≥ 0",              isFinite(m.tau2) && m.tau2 >= 0);
+    smccChkTrue("CI lb < RE < CI ub",    m.ciLow < m.RE && m.RE < m.ciHigh);
+  }
+
+  console.log(smccPass ? "\n✅ ALL SMCC UNIT TESTS PASSED" : "\n❌ SOME SMCC UNIT TESTS FAILED");
 }
