@@ -334,6 +334,15 @@ export const HELP = {
            "between Normal and full KH adjustment.",
   },
 
+  "ci.PL": {
+    title: "Profile Likelihood CI",
+    body:  "Inverts the likelihood ratio test to find the set of μ values not rejected " +
+           "at the 5% level: { μ : 2[L(μ̂,τ̂²) − L_p(μ)] ≤ 3.84 }, where L_p(μ) is " +
+           "maximised over τ² for each fixed μ. Always uses ML internally regardless " +
+           "of the selected τ² estimator. Produces asymmetric CIs that are better " +
+           "calibrated than Wald CIs when k is small, at the cost of extra computation.",
+  },
+
   // ------------------------------------------------------------------ //
   // Heterogeneity statistics                                             //
   // ------------------------------------------------------------------ //

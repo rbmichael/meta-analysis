@@ -418,6 +418,88 @@ export function tau2_ML(studies, tol = REML_TOL, maxIter = 100) {
   return tau2;
 }
 
+// ================= LOG-LIKELIHOOD =================
+// Full normal log-likelihood for the random-effects model:
+//   L(μ, τ²) = −½ Σ [log(vᵢ + τ²) + (yᵢ − μ)² / (vᵢ + τ²)]
+export function logLik(studies, mu, tau2) {
+  let ll = 0;
+  for (const d of studies) {
+    const v = d.vi + tau2;
+    ll -= 0.5 * (Math.log(v) + (d.yi - mu) ** 2 / v);
+  }
+  return ll;
+}
+
+// ================= PROFILE TAU² =================
+// For a fixed pooled mean μ, find τ² ≥ 0 that maximises L(μ, τ²).
+// Solves the 1-D score equation via bisection:
+//   score(τ²) = ½ Σ [(yᵢ−μ)²/(vᵢ+τ²)² − 1/(vᵢ+τ²)] = 0
+// The score is monotonically decreasing in τ², so bisection is reliable.
+function profileTau2(studies, mu, tol = REML_TOL) {
+  function score(t2) {
+    let s = 0;
+    for (const d of studies) {
+      const v = d.vi + t2;
+      s += (d.yi - mu) ** 2 / (v * v) - 1 / v;
+    }
+    return s;
+  }
+
+  // If score at boundary ≤ 0, the maximum is at τ² = 0.
+  if (score(0) <= 0) return 0;
+
+  // Find an upper bound where the score is negative.
+  let hi = 1;
+  while (score(hi) > 0) hi *= 2;
+
+  // Bisect.
+  let lo = 0;
+  for (let i = 0; i < BISECTION_ITERS; i++) {
+    const mid = (lo + hi) / 2;
+    if (score(mid) > 0) lo = mid; else hi = mid;
+    if (hi - lo < tol) break;
+  }
+  return (lo + hi) / 2;
+}
+
+// ================= PROFILE LIKELIHOOD CI =================
+// CI for the pooled mean μ by inverting the likelihood ratio test:
+//   { μ : 2[L(μ̂,τ̂²) − L_p(μ)] ≤ χ²_{1,1−α} }
+// where L_p(μ) = L(μ, profileTau2(μ)).
+// Always uses ML internally regardless of the selected τ² estimator.
+// Returns [lower, upper].
+export function profileLikCI(studies, alpha = 0.05) {
+  const k = studies.length;
+  if (k <= 1) return [NaN, NaN];
+
+  const tau2ml = tau2_ML(studies);
+  const w      = studies.map(d => 1 / (d.vi + tau2ml));
+  const W      = w.reduce((a, b) => a + b, 0);
+  const muHat  = studies.reduce((s, d, i) => s + w[i] * d.yi, 0) / W;
+  const lMax   = logLik(studies, muHat, tau2ml);
+  const cutoff = chiSquareQuantile(1 - alpha, 1) / 2;  // ½ χ²_{1,1−α}
+
+  // plObj(mu) > 0 inside the CI, < 0 outside.
+  function plObj(mu) {
+    return logLik(studies, mu, profileTau2(studies, mu)) - (lMax - cutoff);
+  }
+
+  // Half-width of the search bracket: start at the Wald SE and expand if needed.
+  const seApprox = Math.sqrt(1 / W);
+  function findBound(sign) {
+    let delta = 2 * seApprox;
+    while (plObj(muHat + sign * delta) > 0) delta *= 2;
+    let lo = 0, hi = delta;
+    for (let i = 0; i < BISECTION_ITERS; i++) {
+      const mid = (lo + hi) / 2;
+      if (plObj(muHat + sign * mid) > 0) lo = mid; else hi = mid;
+    }
+    return muHat + sign * (lo + hi) / 2;
+  }
+
+  return [findBound(-1), findBound(+1)];
+}
+
 // ================= REML TAU² =================
 // General-purpose REML estimator. Works for any effect type — studies must
 // already have yi and vi set (as produced by compute()). Uses the DL
@@ -980,6 +1062,18 @@ export function meta(studies, method="DL", ciMethod="normal") {
   // Q-profile CIs for τ², I², H²
   const hetCI = heterogeneityCIs(studies, tau2);
 
+  // CI bounds — overridden below for profile likelihood.
+  let ciLow  = RE - crit * seRE;
+  let ciHigh = RE + crit * seRE;
+
+  if (ciMethod === "PL" && k > 1) {
+    // Profile likelihood CI: invert the LR test using ML internally.
+    // Point estimate and p-value remain Wald-based.
+    const plCI = profileLikCI(studies);
+    ciLow  = plCI[0];
+    ciHigh = plCI[1];
+  }
+
   return {
     FE,
     seFE,
@@ -994,8 +1088,8 @@ export function meta(studies, method="DL", ciMethod="normal") {
     H2CI:   hetCI.H2CI,
     predLow:  isFinite(predCrit) ? RE - predCrit * Math.sqrt(predVar) : NaN,
     predHigh: isFinite(predCrit) ? RE + predCrit * Math.sqrt(predVar) : NaN,
-    ciLow: RE - crit*seRE,
-    ciHigh: RE + crit*seRE,
+    ciLow,
+    ciHigh,
     crit,
     stat,
     pval,

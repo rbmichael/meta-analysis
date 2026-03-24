@@ -173,7 +173,8 @@ export function drawForest(studies, m, options = {}) {
   const ciLabel = {
     normal: "Normal (z)",
     t: "t-distribution",
-    KH: "Knapp-Hartung"
+    KH: "Knapp-Hartung",
+    PL: "Profile Likelihood"
   }[ciMethod] || ciMethod;
 
   // ----------- PAGINATION -----------

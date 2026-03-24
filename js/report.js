@@ -117,6 +117,7 @@ function sectionSummary(args) {
   const RE_adj   = (useTF && mAdjusted) ? profile.transform(mAdjusted.RE) : null;
   const ciLabel  = ciMethod === "KH" ? "Knapp-Hartung"
                  : ciMethod === "t"  ? "t-distribution"
+                 : ciMethod === "PL" ? "Profile Likelihood"
                  : "Normal (z)";
   const tauCI1   = fmt(m.tauCI[0]);
   const tauCI2   = isFinite(m.tauCI[1]) ? fmt(m.tauCI[1]) : "∞";
@@ -542,6 +543,7 @@ export function buildReport(args) {
   const k = studies.filter(d => !d.filled).length;
   const ciLabel = ciMethod === "KH" ? "Knapp-Hartung"
                 : ciMethod === "t"  ? "t-dist CI"
+                : ciMethod === "PL" ? "Profile Likelihood"
                 : "Normal CI";
 
   // Collect forest SVGs for every page; other plots read directly from DOM.
