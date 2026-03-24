@@ -12,7 +12,8 @@
 //                       format: [label, ...inputs, group]
 // To back-transform a CI pair use: { lb: profile.transform(lb), ub: profile.transform(ub) }
 
-import { MIN_VAR, hedgesG } from "./utils.js";
+import { hedgesG } from "./utils.js";
+import { MIN_VAR, Z_95 } from "./constants.js";
 
 export const effectProfiles = {
 
@@ -866,7 +867,7 @@ export const effectProfiles = {
           ci_lo >= ci_hi)
         return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
       const yi = Math.log(hr);
-      const se = (Math.log(ci_hi) - Math.log(ci_lo)) / (2 * 1.96);
+      const se = (Math.log(ci_hi) - Math.log(ci_lo)) / (2 * Z_95);
       const vi = Math.max(se * se, MIN_VAR);
       return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
     },

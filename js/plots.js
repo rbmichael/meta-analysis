@@ -1,4 +1,5 @@
 import { chiSquareCDF } from "./utils.js";
+import { Z_95 } from "./constants.js";
 
 // ================= BUBBLE PLOT =================
 // One bubble chart per continuous moderator.
@@ -164,9 +165,9 @@ export function drawForest(studies, m, options = {}) {
   const profile = options.profile || { transform: x => x };
 
   // crit: pooled-model critical value (used only for the diamond)
-  const crit = m.crit || 1.96;
-  // studyCrit: always 1.96 — individual study CIs are standard normal regardless of CI method
-  const studyCrit = 1.96;
+  const crit = m.crit || Z_95;
+  // studyCrit: always Z_95 — individual study CIs are standard normal regardless of CI method
+  const studyCrit = Z_95;
 
   // CI method label
   const ciLabel = {

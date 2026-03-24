@@ -1,3 +1,5 @@
+import { MIN_VAR, BISECTION_ITERS, Z_95 } from "./constants.js";
+
 // ================= ROUNDING =================
 
 // Safe rounding to n decimal places
@@ -17,12 +19,12 @@ export function fmt(value, digits = 3) {
 // ================= T CRITICAL =================
 // Two-tailed 95% critical value via bisection on tCDF.
 export function tCritical(df) {
-  if (!isFinite(df) || df <= 0) return 1.96;
+  if (!isFinite(df) || df <= 0) return Z_95;
 
   const target = 0.975; // P(T <= t) = 0.975 for two-tailed 95%
   let lo = 0, hi = 20;  // t_{0.975,1} ≈ 12.706; 20 is a safe upper bound
 
-  for (let i = 0; i < 64; i++) {
+  for (let i = 0; i < BISECTION_ITERS; i++) {
     const mid = (lo + hi) / 2;
     if (tCDF(mid, df) < target) lo = mid;
     else hi = mid;
@@ -125,7 +127,7 @@ export function chiSquareQuantile(p, df) {
   let lo = 0, hi = Math.max(df * 4 + 100, 50);
   // Ensure hi is above the target quantile
   while (chiSquareCDF(hi, df) < p) hi *= 2;
-  for (let i = 0; i < 64; i++) {
+  for (let i = 0; i < BISECTION_ITERS; i++) {
     const mid = (lo + hi) / 2;
     if (chiSquareCDF(mid, df) < p) lo = mid;
     else hi = mid;
@@ -213,9 +215,6 @@ export function logGamma(z) {
 }
 
 // ================= COMPUTE HELPERS =================
-
-// Minimum variance floor applied to all yi/vi computations.
-export const MIN_VAR = 1e-8;
 
 // Hedges g (bias-corrected Cohen's d) for two independent groups.
 // options.hedgesCorrection (default true) controls whether the J factor is applied.

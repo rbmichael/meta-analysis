@@ -11,6 +11,7 @@ import { parseCSV, detectEffectType } from "./csv.js";
 import { buildSession, serializeSession, parseSession, missingInputCols } from "./session.js";
 import { downloadBlob, readTextFile, serializeCSV } from "./io.js";
 import { HELP } from "./help.js";
+import { Z_95 } from "./constants.js";
 
 // ---------------- SHARED HELPERS ----------------
 function escapeHTML(s) {
@@ -957,7 +958,7 @@ function renderRegressionPanel(reg, method, ciMethod, kExcluded = 0) {
   if (reg.labels && reg.fitted) {
     reg.labels.forEach((lbl, i) => {
       const sr = reg.stdResiduals[i];
-      const flag = Math.abs(sr) > 1.96 ? " style='color:#ff9f43'" : "";
+      const flag = Math.abs(sr) > Z_95 ? " style='color:#ff9f43'" : "";
       fittedRows += `<tr>
         <td>${lbl || i + 1}</td>
         <td>${fmt(reg.yi[i])}</td>
@@ -1227,8 +1228,8 @@ function renderStudyTable(studies, m, profile) {
     const wi    = 1 / (d.vi + tau2);
     const pct   = d.filled ? null : wi / totalW * 100;
     const ef    = profile.transform(d.yi);
-    const lo    = profile.transform(d.yi - 1.96 * d.se);
-    const hi    = profile.transform(d.yi + 1.96 * d.se);
+    const lo    = profile.transform(d.yi - Z_95 * d.se);
+    const hi    = profile.transform(d.yi + Z_95 * d.se);
     return { label: escapeHTML(d.label), ef, lo, hi, se: d.se, pct, filled: !!d.filled };
   });
 

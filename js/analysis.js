@@ -1,4 +1,5 @@
-import { tCritical, normalCDF, tCDF, chiSquareCDF, chiSquareQuantile, fCDF, MIN_VAR, hedgesG } from "./utils.js";
+import { tCritical, normalCDF, tCDF, chiSquareCDF, chiSquareQuantile, fCDF, hedgesG } from "./utils.js";
+import { MIN_VAR, REML_TOL, BISECTION_ITERS, Z_95 } from "./constants.js";
 
 // ================= DYNAMIC COMPUTE =================
 export function compute(s, type, options = {}) {
@@ -269,7 +270,7 @@ export function compute(s, type, options = {}) {
         ci_lo >= ci_hi)
       return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
     const yi = Math.log(hr);
-    const se = (Math.log(ci_hi) - Math.log(ci_lo)) / (2 * 1.96);
+    const se = (Math.log(ci_hi) - Math.log(ci_lo)) / (2 * Z_95);
     const vi = Math.max(se * se, MIN_VAR);
     return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
   }
@@ -370,7 +371,7 @@ export function tau2_HE(studies) {
 // unweighted between-study variance instead of the Q statistic.
 // More robust than DL when k is small or within-study variances are
 // poorly estimated.
-export function tau2_SJ(studies, tol = 1e-10, maxIter = 200) {
+export function tau2_SJ(studies, tol = REML_TOL, maxIter = 200) {
   const k = studies.length;
   if (k <= 1) return 0;
   const ybar0 = studies.reduce((s, d) => s + d.yi, 0) / k;
@@ -397,7 +398,7 @@ export function tau2_SJ(studies, tol = 1e-10, maxIter = 200) {
 //   info  = Σ [1/(vᵢ+τ²)²]
 // ML is asymptotically unbiased but has greater downward bias than REML
 // in small samples. Useful when comparing nested models via LRT.
-export function tau2_ML(studies, tol = 1e-10, maxIter = 100) {
+export function tau2_ML(studies, tol = REML_TOL, maxIter = 100) {
   const k = studies.length;
   if (k <= 1) return 0;
   // Seed with DL estimate
@@ -435,7 +436,7 @@ export function tau2_ML(studies, tol = 1e-10, maxIter = 100) {
 // General-purpose REML estimator. Works for any effect type — studies must
 // already have yi and vi set (as produced by compute()). Uses the DL
 // estimator as the starting value and refines via Fisher scoring.
-export function tau2_REML(studies, tol = 1e-10, maxIter = 100) {
+export function tau2_REML(studies, tol = REML_TOL, maxIter = 100) {
 
   const k = studies.length;
   if (k <= 1) return 0;
@@ -488,7 +489,7 @@ export function tau2_REML(studies, tol = 1e-10, maxIter = 100) {
 }
 
 // ================= TAU² PAULE-MANDEL =================
-export function tau2_PM(studies, tol = 1e-10, maxIter = 100) {
+export function tau2_PM(studies, tol = REML_TOL, maxIter = 100) {
   const k = studies.length;
   if (k <= 1) return 0;
 
@@ -689,7 +690,7 @@ export function failSafeN(studies, alpha = 0.05, trivial = 0.1) {
   const z_crit = (() => {
     const target = 1 - alpha;
     let lo = 0, hi = 10;
-    for (let i = 0; i < 64; i++) {
+    for (let i = 0; i < BISECTION_ITERS; i++) {
       const mid = (lo + hi) / 2;
       normalCDF(mid) < target ? lo = mid : hi = mid;
     }
@@ -776,8 +777,8 @@ export function subgroupAnalysis(studies, method="REML", ciMethod="normal") {
       res = {
         RE: s.yi,
         se: Math.sqrt(s.vi),
-        ciLow: s.yi - 1.96 * Math.sqrt(s.vi),
-        ciHigh: s.yi + 1.96 * Math.sqrt(s.vi),
+        ciLow: s.yi - Z_95 * Math.sqrt(s.vi),
+        ciHigh: s.yi + Z_95 * Math.sqrt(s.vi),
         tau2: 0,
         I2: 0,
         Q: 0
@@ -837,7 +838,7 @@ export function heterogeneityCIs(studies, tau2, alpha = 0.05) {
   } else {
     let lo = 0, hi = Math.max(tau2, 1);
     while (qProfile(hi, studies) > chiHi) hi *= 2;
-    for (let i = 0; i < 64; i++) {
+    for (let i = 0; i < BISECTION_ITERS; i++) {
       const mid = (lo + hi) / 2;
       if (qProfile(mid, studies) > chiHi) lo = mid; else hi = mid;
     }
@@ -852,7 +853,7 @@ export function heterogeneityCIs(studies, tau2, alpha = 0.05) {
   } else {
     let lo = tau2_lo, hi = Math.max(tau2, 1);
     while (qProfile(hi, studies) > chiLo) hi *= 2;
-    for (let i = 0; i < 64; i++) {
+    for (let i = 0; i < BISECTION_ITERS; i++) {
       const mid = (lo + hi) / 2;
       if (qProfile(mid, studies) > chiLo) lo = mid; else hi = mid;
     }
@@ -944,7 +945,7 @@ export function meta(studies, method="DL", ciMethod="normal") {
 
 	} else {
 	  // --- Normal (Wald) ---
-	  crit = 1.96;
+	  crit = Z_95;
 	  stat = RE / seRE;
 	  dist = "z";
 	  pval = k <= 1 ? NaN : 2 * (1 - normalCDF(Math.abs(stat)));
@@ -1149,7 +1150,7 @@ function tau2Reg_DL(yi, vi, X) {
   return c > 0 ? Math.max(0, (QE - df) / c) : 0;
 }
 
-function tau2Reg_REML(yi, vi, X, tol = 1e-10, maxIter = 100) {
+function tau2Reg_REML(yi, vi, X, tol = REML_TOL, maxIter = 100) {
   const k = vi.length, p = X[0].length;
   if (k - p <= 0) return 0;
   let tau2 = tau2Reg_DL(yi, vi, X);
@@ -1177,7 +1178,7 @@ function tau2Reg_REML(yi, vi, X, tol = 1e-10, maxIter = 100) {
   return tau2;
 }
 
-function tau2Reg_PM(yi, vi, X, tol = 1e-10, maxIter = 100) {
+function tau2Reg_PM(yi, vi, X, tol = REML_TOL, maxIter = 100) {
   const k = vi.length, p = X[0].length;
   const df = k - p;
   if (df <= 0) return 0;
@@ -1226,7 +1227,7 @@ function tau2Reg_HE(yi, vi, X) {
 }
 
 // SJ regression: iterative, seeded from unweighted residual variance
-function tau2Reg_SJ(yi, vi, X, tol = 1e-10, maxIter = 200) {
+function tau2Reg_SJ(yi, vi, X, tol = REML_TOL, maxIter = 200) {
   const k = vi.length, p = X[0].length;
   if (k - p <= 0) return 0;
   // Seed from unweighted OLS residuals
@@ -1249,7 +1250,7 @@ function tau2Reg_SJ(yi, vi, X, tol = 1e-10, maxIter = 200) {
 }
 
 // ML regression: Fisher scoring without leverage correction
-function tau2Reg_ML(yi, vi, X, tol = 1e-10, maxIter = 100) {
+function tau2Reg_ML(yi, vi, X, tol = REML_TOL, maxIter = 100) {
   const k = vi.length, p = X[0].length;
   if (k - p <= 0) return 0;
   let tau2 = tau2Reg_DL(yi, vi, X);
@@ -1276,7 +1277,7 @@ function tau2Reg_ML(yi, vi, X, tol = 1e-10, maxIter = 100) {
   return tau2;
 }
 
-export function tau2_metaReg(yi, vi, X, method = "REML", tol = 1e-10, maxIter = 100) {
+export function tau2_metaReg(yi, vi, X, method = "REML", tol = REML_TOL, maxIter = 100) {
   if (method === "REML") return tau2Reg_REML(yi, vi, X, tol, maxIter);
   if (method === "PM")   return tau2Reg_PM  (yi, vi, X, tol, maxIter);
   if (method === "ML")   return tau2Reg_ML  (yi, vi, X, tol, maxIter);
@@ -1387,7 +1388,7 @@ export function metaRegression(studies, moderators = [], method = "REML", ciMeth
     ci    = beta.map((b, j) => [b - crit * se[j], b + crit * se[j]]);
   } else {
     se    = vcov.map((row, j) => Math.sqrt(Math.max(0, row[j])));
-    crit  = 1.96;
+    crit  = Z_95;
     dist  = "z";
     zval  = beta.map((b, j) => b / se[j]);
     pval  = zval.map(z => 2 * (1 - normalCDF(Math.abs(z))));

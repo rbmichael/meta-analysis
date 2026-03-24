@@ -11,6 +11,7 @@
 
 import { drawForest } from "./plots.js";
 import { downloadBlob } from "./io.js";
+import { Z_95 } from "./constants.js";
 
 // ---------------------------------------------------------------------------
 // SVG serialization
@@ -290,8 +291,8 @@ function sectionStudyTable(args) {
     const wi  = 1 / (d.vi + tau2);
     const pct = d.filled ? null : wi / totalW * 100;
     const ef  = profile.transform(d.yi);
-    const lo  = profile.transform(d.yi - 1.96 * d.se);
-    const hi  = profile.transform(d.yi + 1.96 * d.se);
+    const lo  = profile.transform(d.yi - Z_95 * d.se);
+    const hi  = profile.transform(d.yi + Z_95 * d.se);
     const lbl = d.label.length > 40 ? d.label.slice(0, 39) + "\u2026" : d.label;
     const cls = d.filled ? ' class="imputed"' : "";
     return `<tr${cls}>
