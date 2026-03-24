@@ -115,15 +115,14 @@ SECTION B — DEFERRED TASKS  (improvements, polish, non-correctness work)
 Items are rank-ordered by importance within this section.
 
 --------------------------------------------------------------------------------
-TASK 1 [MEDIUM]: Prediction interval method not labelled in output
+TASK 1 [MEDIUM] ✓ RESOLVED 2026-03-25: Prediction interval method not labelled in output
 
-  File:    js/ui.js (results rendering) / js/analysis.js line 1390
-  Symptom: The prediction interval is computed correctly (Higgins et al. 2009,
-           t_{k-2} critical value, base seRE not KH-adjusted — consistent with
-           metafor). However, the rendered output does not state the degrees of
-           freedom or cite the reference, which reviewers will expect.
-  Fix:     Add a footnote or tooltip to the prediction interval row citing
-           "Higgins et al. (2009), t_{k-2}" and clarifying the method.
+  Fixed:   js/ui.js — prediction interval line now reads:
+             "Prediction interval (Higgins 2009, t_{k-2}): [lb, ub]"
+           with a ? help button and "NA (k < 3)" when unavailable.
+           js/help.js — added "het.pred" entry explaining the method,
+           the t_{k-2} critical value, the base-seRE convention, and
+           the Higgins et al. (2009) citation.
 
 --------------------------------------------------------------------------------
 TASK 2 [LOW]: Forest plot pagination does not clarify pooled estimate scope

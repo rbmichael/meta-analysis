@@ -482,6 +482,22 @@ export const HELP = {
            "commonly reported.",
   },
 
+  "het.pred": {
+    title: "Prediction interval",
+    body:  "The prediction interval estimates the range within which the true " +
+           "effect of a new, comparable study would fall with 95% probability. " +
+           "Unlike the confidence interval (which quantifies uncertainty about " +
+           "the pooled mean), the prediction interval also accounts for " +
+           "between-study heterogeneity (τ²) and therefore widens as studies " +
+           "differ more from one another.\n\n" +
+           "Method: Higgins, Thompson & Spiegelhalter (2009, J R Stat Soc A " +
+           "172:137-159). Critical value from the t-distribution with df = k − 2, " +
+           "where k is the number of studies. Requires k ≥ 3; reported as NA " +
+           "otherwise. The base random-effects standard error (seRE) is used — " +
+           "not the Knapp-Hartung-adjusted value — consistent with metafor's " +
+           "default behaviour.",
+  },
+
   // ------------------------------------------------------------------ //
   // Publication bias                                                     //
   // ------------------------------------------------------------------ //
