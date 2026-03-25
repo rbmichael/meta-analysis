@@ -207,6 +207,18 @@
         <div id="sensitivityPanel"></div>
         <div id="regressionPanel" style="display:none"></div>
 
+        <div id="pCurvePanel"></div>
+
+        <div class="plot-block" id="pCurvePlotBlock" style="display:none">
+          <p class="plot-label">P-curve</p>
+          <div class="plot-export">
+            <button class="export-btn" data-target="pCurvePlot" data-format="svg">SVG</button>
+            <button class="export-btn" data-target="pCurvePlot" data-format="png">PNG</button>
+            <button class="export-btn" data-target="pCurvePlot" data-format="tiff">TIFF</button>
+          </div>
+          <svg id="pCurvePlot" width="500" height="380"></svg>
+        </div>
+
         <div id="bubblePlots"></div>
 
         <div class="plot-block">

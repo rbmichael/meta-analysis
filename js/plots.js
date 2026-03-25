@@ -1349,3 +1349,193 @@ export function drawCumulativeForest(cumulativeResults, profile) {
     .style("font-size", "11px").attr("fill", "var(--fg-muted)")
     .text(profile.label);
 }
+
+// ================= P-CURVE PLOT =================
+// drawPCurve(result)
+//
+// Bar chart of observed p-value proportions across five bins (.00–.01 … .04–.05),
+// with two reference lines:
+//   · H₀ (no effect)  — dashed horizontal at 20%   (var(--fg-subtle))
+//   · 33%-power curve — polyline of expected proportions (var(--color-warning))
+//
+// A legend identifies the two reference lines.
+//
+// Parameters:
+//   result — object returned by pCurve() in analysis.js
+export function drawPCurve(result) {
+  const svg = d3.select("#pCurvePlot");
+  svg.selectAll("*").remove();
+
+  if (!result || result.k === 0) return;
+
+  const { bins, expected0, expected33 } = result;
+
+  const margin = { top: 24, right: 24, bottom: 52, left: 56 };
+  const W = +svg.attr("width")  || 500;
+  const H = +svg.attr("height") || 380;
+  const iW = W - margin.left - margin.right;
+  const iH = H - margin.top  - margin.bottom;
+
+  const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+
+  // ---- Scales ----
+  // x: band scale for the 5 bins
+  const binLabels = bins.map(b => `${b.lo.toFixed(2)}–${b.hi.toFixed(2)}`);
+  const x = d3.scaleBand()
+    .domain(binLabels)
+    .range([0, iW])
+    .padding(0.25);
+
+  // y: proportion 0–1, ceiling at max(observed, expected33, 0.25) for headroom
+  const yMax = Math.max(
+    d3.max(bins, d => d.prop),
+    d3.max(expected33),
+    0.25
+  ) * 1.15;
+  const y = d3.scaleLinear().domain([0, yMax]).range([iH, 0]);
+
+  // ---- Gridlines ----
+  g.append("g")
+    .attr("class", "grid")
+    .call(
+      d3.axisLeft(y)
+        .ticks(5)
+        .tickSize(-iW)
+        .tickFormat("")
+    )
+    .selectAll("line")
+    .attr("stroke", "var(--border)")
+    .attr("stroke-dasharray", "2,3");
+  g.select(".grid .domain").remove();
+
+  // ---- Bars (observed proportions) ----
+  g.selectAll(".pcurve-bar")
+    .data(bins)
+    .enter().append("rect")
+    .attr("class", "pcurve-bar")
+    .attr("x",      (_, i) => x(binLabels[i]))
+    .attr("y",      d => y(d.prop))
+    .attr("width",  x.bandwidth())
+    .attr("height", d => iH - y(d.prop))
+    .attr("fill",   "var(--accent)")
+    .attr("opacity", 0.8);
+
+  // ---- Bar count labels ----
+  g.selectAll(".pcurve-count")
+    .data(bins)
+    .enter().append("text")
+    .attr("class", "pcurve-count")
+    .attr("x", (_, i) => x(binLabels[i]) + x.bandwidth() / 2)
+    .attr("y", d => y(d.prop) - 4)
+    .attr("text-anchor", "middle")
+    .attr("fill", "var(--fg-muted)")
+    .style("font-size", "10px")
+    .text(d => d.count > 0 ? `n=${d.count}` : "");
+
+  // ---- H₀ reference line (20%, dashed) ----
+  g.append("line")
+    .attr("x1", 0).attr("x2", iW)
+    .attr("y1", y(expected0)).attr("y2", y(expected0))
+    .attr("stroke", "var(--fg-subtle)")
+    .attr("stroke-width", 1.5)
+    .attr("stroke-dasharray", "5,3");
+
+  // ---- 33%-power reference line (polyline through bin midpoints) ----
+  const linePoints = bins.map((_, i) => [
+    x(binLabels[i]) + x.bandwidth() / 2,
+    y(expected33[i]),
+  ]);
+  g.append("polyline")
+    .attr("points", linePoints.map(p => p.join(",")).join(" "))
+    .attr("fill", "none")
+    .attr("stroke", "var(--color-warning)")
+    .attr("stroke-width", 2)
+    .attr("stroke-dasharray", "4,2");
+  // Circle markers at each bin midpoint
+  g.selectAll(".pcurve-33-dot")
+    .data(expected33)
+    .enter().append("circle")
+    .attr("class", "pcurve-33-dot")
+    .attr("cx", (_, i) => x(binLabels[i]) + x.bandwidth() / 2)
+    .attr("cy", d => y(d))
+    .attr("r", 3)
+    .attr("fill", "var(--color-warning)");
+
+  // ---- Axes ----
+  const axisX = g.append("g")
+    .attr("transform", `translate(0,${iH})`)
+    .call(d3.axisBottom(x));
+  axisX.select(".domain").attr("stroke", "var(--border-hover)");
+  axisX.selectAll(".tick line").attr("stroke", "var(--border-hover)");
+  axisX.selectAll(".tick text")
+    .attr("fill", "var(--fg-muted)")
+    .style("font-size", "11px");
+
+  const axisY = g.append("g")
+    .call(
+      d3.axisLeft(y)
+        .ticks(5)
+        .tickFormat(d => `${Math.round(d * 100)}%`)
+    );
+  axisY.select(".domain").attr("stroke", "var(--border-hover)");
+  axisY.selectAll(".tick line").attr("stroke", "var(--border-hover)");
+  axisY.selectAll(".tick text").attr("fill", "var(--fg-muted)");
+
+  // ---- Axis labels ----
+  svg.append("text")
+    .attr("x", margin.left + iW / 2)
+    .attr("y", H - 6)
+    .attr("text-anchor", "middle")
+    .attr("fill", "var(--fg-muted)")
+    .style("font-size", "11px")
+    .text("p-value");
+
+  svg.append("text")
+    .attr("transform", "rotate(-90)")
+    .attr("x", -(margin.top + iH / 2))
+    .attr("y", 14)
+    .attr("text-anchor", "middle")
+    .attr("fill", "var(--fg-muted)")
+    .style("font-size", "11px")
+    .text("Proportion of studies");
+
+  // ---- Legend ----
+  const LW = 172, LH = 46, PAD = 8, ROW = 16;
+  const legendX = iW - LW - 4;
+  const legendY = 4;
+  const lg = g.append("g").attr("transform", `translate(${legendX},${legendY})`);
+
+  lg.append("rect")
+    .attr("width", LW).attr("height", LH)
+    .attr("fill", "var(--bg-surface)")
+    .attr("stroke", "var(--border)")
+    .attr("stroke-width", 1)
+    .attr("rx", 3);
+
+  // Row 0: H₀ dashed line
+  lg.append("line")
+    .attr("x1", PAD).attr("x2", PAD + 18)
+    .attr("y1", PAD + ROW * 0 + ROW / 2).attr("y2", PAD + ROW * 0 + ROW / 2)
+    .attr("stroke", "var(--fg-subtle)")
+    .attr("stroke-width", 1.5)
+    .attr("stroke-dasharray", "5,3");
+  lg.append("text")
+    .attr("x", PAD + 22).attr("y", PAD + ROW * 0 + ROW / 2 + 4)
+    .attr("fill", "var(--fg-muted)").style("font-size", "9px")
+    .text("Expected (H₀, no effect)");
+
+  // Row 1: 33%-power dashed line + dot
+  lg.append("line")
+    .attr("x1", PAD).attr("x2", PAD + 18)
+    .attr("y1", PAD + ROW * 1 + ROW / 2).attr("y2", PAD + ROW * 1 + ROW / 2)
+    .attr("stroke", "var(--color-warning)")
+    .attr("stroke-width", 2)
+    .attr("stroke-dasharray", "4,2");
+  lg.append("circle")
+    .attr("cx", PAD + 9).attr("cy", PAD + ROW * 1 + ROW / 2)
+    .attr("r", 3).attr("fill", "var(--color-warning)");
+  lg.append("text")
+    .attr("x", PAD + 22).attr("y", PAD + ROW * 1 + ROW / 2 + 4)
+    .attr("fill", "var(--fg-muted)").style("font-size", "9px")
+    .text("Expected (33% power)");
+}

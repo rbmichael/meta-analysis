@@ -100,11 +100,11 @@
 //   ui.js calls init() on DOMContentLoaded, which populates dropdowns,
 //   restores any autosave draft, and attaches all event listeners.
 // =============================================================================
-import { eggerTest, beggTest, fatPetTest, failSafeN, meta, influenceDiagnostics, subgroupAnalysis, metaRegression, cumulativeMeta, leaveOneOut, estimatorComparison } from "./analysis.js";
+import { eggerTest, beggTest, fatPetTest, failSafeN, pCurve, meta, influenceDiagnostics, subgroupAnalysis, metaRegression, cumulativeMeta, leaveOneOut, estimatorComparison } from "./analysis.js";
 import { fmt } from "./utils.js";
 import { effectProfiles, getProfile } from "./profiles.js";
 import { trimFill } from "./trimfill.js";
-import { drawForest, drawFunnel, drawBubble, drawInfluencePlot, drawCumulativeForest } from "./plots.js";
+import { drawForest, drawFunnel, drawBubble, drawInfluencePlot, drawCumulativeForest, drawPCurve } from "./plots.js";
 import { exportSVG, exportPNG, exportTIFF } from "./export.js";
 import { buildReport, downloadHTML, openPrintPreview } from "./report.js";
 import { parseCSV, detectEffectType } from "./csv.js";
@@ -1588,6 +1588,46 @@ function renderStudyTable(studies, m, profile) {
   container.innerHTML = `<table class="study-table">${headerRow}${studyRows}${pooledRow}</table>`;
 }
 
+// ---------------- P-CURVE PANEL ----------------
+function renderPCurvePanel(pcurve) {
+  const panel     = document.getElementById("pCurvePanel");
+  const plotBlock = document.getElementById("pCurvePlotBlock");
+  if (!panel || !plotBlock) return;
+
+  const hasData = pcurve && pcurve.k > 0;
+  plotBlock.style.display = hasData ? "" : "none";
+
+  if (!hasData) {
+    panel.innerHTML = "";
+    return;
+  }
+
+  function fmtZ(z) { return isFinite(z) ? z.toFixed(3) : "—"; }
+  function fmtP(p) {
+    if (!isFinite(p)) return "—";
+    if (p < 0.001)  return "< 0.001";
+    if (p < 0.01)   return "< 0.01";
+    return p.toFixed(3);
+  }
+
+  const verdictLabels = {
+    "evidential":     "Evidential value",
+    "no-evidential":  "No evidential value",
+    "inconclusive":   "Inconclusive",
+    "insufficient":   "Insufficient data",
+  };
+
+  panel.innerHTML = `
+    <div class="pcurve-summary">
+      <span>P-curve &nbsp;·&nbsp; <strong>${pcurve.k}</strong> significant result${pcurve.k !== 1 ? "s" : ""} (p &lt; .05)</span>
+      <span>Right-skew test: Z = <strong>${fmtZ(pcurve.rightSkewZ)}</strong>, p = <strong>${fmtP(pcurve.rightSkewP)}</strong></span>
+      <span>Flatness test: Z = <strong>${fmtZ(pcurve.flatnessZ)}</strong>, p = <strong>${fmtP(pcurve.flatnessP)}</strong></span>
+      <span class="pcurve-verdict ${pcurve.verdict}">${verdictLabels[pcurve.verdict] ?? pcurve.verdict}</span>
+    </div>`;
+
+  drawPCurve(pcurve);
+}
+
 // -----------------------------------------------------------------------------
 // runAnalysis() → boolean
 // -----------------------------------------------------------------------------
@@ -1732,10 +1772,11 @@ function runAnalysis() {
 
   let m = meta(studies, method, ciMethod);
 
-  const egger  = eggerTest(studies);
-  const begg   = beggTest(studies);
-  const fatpet = fatPetTest(studies);
-  const fsn    = failSafeN(studies);
+  const egger   = eggerTest(studies);
+  const begg    = beggTest(studies);
+  const fatpet  = fatPetTest(studies);
+  const fsn     = failSafeN(studies);
+  const pcurve  = pCurve(studies);
   const influence = influenceDiagnostics(studies, method, ciMethod);
   const subgroup = subgroupAnalysis(studies, method, ciMethod);
 
@@ -1821,6 +1862,7 @@ function runAnalysis() {
 
   renderStudyTable(all, m, profile);
   renderSensitivityPanel(studies, m, method, ciMethod, profile);
+  renderPCurvePanel(pcurve);
 
   // ---- Meta-regression ----
   // buildDesignMatrix expects { key, type }; ui state stores { name, type }.
@@ -1874,7 +1916,7 @@ function runAnalysis() {
   // Cache state for report export buttons.
   _reportArgs = {
     studies: all, m, profile, reg,
-    tf, egger, begg, fatpet, fsn,
+    tf, egger, begg, fatpet, fsn, pcurve,
     influence, subgroup, method, ciMethod,
     useTF, mAdjusted,
     forestOptions: { ...forestOpts, currentPage: forestPage },

@@ -43,7 +43,7 @@
 // Dependencies: utils.js, constants.js, profiles.js
 // =============================================================================
 
-import { tCritical, normalCDF, tCDF, chiSquareCDF, chiSquareQuantile, fCDF, hedgesG, parseCounts, gorFromCounts, tetrachoricFromCounts } from "./utils.js";
+import { tCritical, normalCDF, normalQuantile, tCDF, chiSquareCDF, chiSquareQuantile, fCDF, hedgesG, parseCounts, gorFromCounts, tetrachoricFromCounts } from "./utils.js";
 import { MIN_VAR, REML_TOL, BISECTION_ITERS, Z_95 } from "./constants.js";
 import { validateStudy } from "./profiles.js";
 
@@ -2114,4 +2114,138 @@ export function estimatorComparison(studies, ciMethod = "normal") {
       i2:       m.I2,
     };
   });
+}
+
+// ================ P-CURVE ANALYSIS ================
+// pCurve(studies)
+//
+// Assesses the evidential value of a set of studies by examining the
+// distribution of their significant p-values (Simonsohn, Nelson & Simmons,
+// 2014, JPSP).
+//
+// Only studies with a two-tailed p-value < .05 are used; the p-values are
+// derived from each study's z-statistic (z = |yi / se|).
+//
+// Two continuous tests are performed using pp-values — quantile
+// transformations that should be Uniform(0,1) under each respective null:
+//
+//   Right-skew test (H₀: no effect, p-values uniform on [0,.05])
+//     pp0ᵢ  = pᵢ / 0.05
+//     Z     = (mean(pp0) − 0.5) × √(12k)
+//     p     = Φ(Z)   [one-tailed left; evidence → small pp0s → negative Z]
+//
+//   Flatness test (H₃₃: studies powered at only 33% — insufficient evidence)
+//     For a two-tailed z-test at power 33%, the noncentrality λ₃₃ satisfies
+//       1 − Φ(1.96 − λ) + Φ(−1.96 − λ) = 0.33  →  λ₃₃ ≈ 0.8406
+//     pp33ᵢ = P(p ≤ pᵢ | power = 33%) / 0.33
+//           = ([1 − Φ(zᵢ − λ₃₃)] + Φ(−zᵢ − λ₃₃)) / 0.33
+//     Z     = (mean(pp33) − 0.5) × √(12k)
+//     p     = 1 − Φ(Z)  [one-tailed right; flatness → large pp33s → positive Z]
+//
+// Returns
+// -------
+//   k             — number of significant studies used
+//   bins          — array of 5 objects { lo, hi, count, prop }
+//                   boundaries: .00, .01, .02, .03, .04, .05
+//   expected0     — expected proportion under H₀ (uniform): always 0.20
+//   expected33    — array of 5 expected proportions under 33% power
+//   rightSkewZ    — Z statistic for right-skew test
+//   rightSkewP    — one-tailed p for right-skew test
+//   flatnessZ     — Z statistic for flatness test
+//   flatnessP     — one-tailed p for flatness test
+//   verdict       — "evidential" | "no-evidential" | "inconclusive" | "insufficient"
+export function pCurve(studies) {
+  // ---- Step 1: derive p-values and keep only significant ones ----
+  const sig = studies
+    .filter(d => isFinite(d.yi) && isFinite(d.se) && d.se > 0)
+    .map(d => {
+      const z = Math.abs(d.yi / d.se);
+      const p = 2 * (1 - normalCDF(z));
+      return { z, p };
+    })
+    .filter(d => d.p < 0.05);
+
+  const k = sig.length;
+
+  // ---- Step 2: five-bin histogram ----
+  const BIN_EDGES = [0, 0.01, 0.02, 0.03, 0.04, 0.05];
+  const bins = BIN_EDGES.slice(0, 5).map((lo, i) => {
+    const hi    = BIN_EDGES[i + 1];
+    const count = sig.filter(d => d.p >= lo && d.p < hi).length;
+    return { lo, hi, count, prop: k > 0 ? count / k : 0 };
+  });
+
+  // ---- Step 3: find λ₃₃ (noncentrality for 33% power, two-tailed z-test) ----
+  // Solve: 1 − Φ(1.96 − λ) + Φ(−1.96 − λ) = 0.33 via bisection.
+  const POWER_33  = 0.33;
+  const Z_CRIT    = 1.96;
+  function power(lambda) {
+    return (1 - normalCDF(Z_CRIT - lambda)) + normalCDF(-Z_CRIT - lambda);
+  }
+  let lo33 = 0, hi33 = 10;
+  for (let i = 0; i < BISECTION_ITERS; i++) {
+    const mid = (lo33 + hi33) / 2;
+    power(mid) < POWER_33 ? (lo33 = mid) : (hi33 = mid);
+  }
+  const lambda33 = (lo33 + hi33) / 2;  // ≈ 0.8406
+
+  // pp33 CDF: probability that p-value ≤ p, conditional on p < .05, under 33% power.
+  // pp33(p) = ([1 − Φ(z_p − λ₃₃)] + Φ(−z_p − λ₃₃)) / POWER_33
+  // where z_p = Φ⁻¹(1 − p/2)  (the z corresponding to a two-tailed p-value)
+  function pp33CDF(p) {
+    if (p <= 0) return 0;
+    if (p >= 0.05) return 1;
+    const zp = normalQuantile(1 - p / 2);
+    return ((1 - normalCDF(zp - lambda33)) + normalCDF(-zp - lambda33)) / POWER_33;
+  }
+
+  // ---- Step 4: expected proportions under 33% power (for plot overlay) ----
+  const expected33 = BIN_EDGES.slice(0, 5).map((lo, i) => {
+    const hi = BIN_EDGES[i + 1];
+    return pp33CDF(hi) - pp33CDF(lo);
+  });
+
+  // ---- Step 5: right-skew test (H₀: no effect) ----
+  // pp0ᵢ = pᵢ / 0.05; under H₀ these are Uniform(0,1).
+  let rightSkewZ = NaN, rightSkewP = NaN;
+  if (k >= 1) {
+    const pp0    = sig.map(d => d.p / 0.05);
+    const mean0  = pp0.reduce((a, b) => a + b, 0) / k;
+    rightSkewZ   = (mean0 - 0.5) * Math.sqrt(12 * k);
+    rightSkewP   = normalCDF(rightSkewZ);  // one-tailed left
+  }
+
+  // ---- Step 6: flatness test (H₃₃: 33% power) ----
+  // pp33ᵢ = pp33CDF(pᵢ); under H₃₃ these are Uniform(0,1).
+  let flatnessZ = NaN, flatnessP = NaN;
+  if (k >= 1) {
+    const pp33   = sig.map(d => pp33CDF(d.p));
+    const mean33 = pp33.reduce((a, b) => a + b, 0) / k;
+    flatnessZ    = (mean33 - 0.5) * Math.sqrt(12 * k);
+    flatnessP    = 1 - normalCDF(flatnessZ);  // one-tailed right
+  }
+
+  // ---- Step 7: verdict ----
+  let verdict;
+  if (k < 3) {
+    verdict = "insufficient";
+  } else if (rightSkewP < 0.05) {
+    verdict = "evidential";
+  } else if (flatnessP < 0.05) {
+    verdict = "no-evidential";
+  } else {
+    verdict = "inconclusive";
+  }
+
+  return {
+    k,
+    bins,
+    expected0:  0.20,
+    expected33,
+    rightSkewZ,
+    rightSkewP,
+    flatnessZ,
+    flatnessP,
+    verdict,
+  };
 }
