@@ -9,12 +9,12 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600&display=swap" rel="stylesheet">
 <script>
   /* Anti-FOUC: resolve theme before first paint so dark↔light never flashes.
-     Priority: localStorage > OS preference > dark (default). */
+     Priority: localStorage > OS preference > light (default). */
   (function () {
     var saved = localStorage.getItem("theme");
     var theme = saved
       ? saved
-      : window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+      : window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
     document.documentElement.dataset.theme = theme;
   })();
 </script>
