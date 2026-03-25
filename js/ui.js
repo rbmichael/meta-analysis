@@ -319,6 +319,9 @@ _themeToggle.addEventListener("click", () => {
   const next = document.documentElement.dataset.theme === "light" ? "dark" : "light";
   localStorage.setItem("theme", next);
   _applyTheme(next);
+  if (_funnelArgs && _funnelContours) {
+    drawFunnel(..._funnelArgs, { contours: true });
+  }
 });
 
 // ---------------- VIEW TOGGLE ----------------
@@ -1308,6 +1311,19 @@ document.getElementById("forestTheme").addEventListener("change", e => {
   renderForestNav(totalPages);
 });
 
+// ---------------- FUNNEL PLOT MODE STATE ----------------
+let _funnelArgs     = null;   // [studies, m, egger, profile] — cached for mode toggle
+let _funnelContours = false;
+
+document.querySelectorAll(".funnel-mode-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    if (!_funnelArgs) return;
+    _funnelContours = btn.dataset.mode === "contour";
+    document.querySelectorAll(".funnel-mode-btn").forEach(b => b.classList.toggle("active", b === btn));
+    drawFunnel(..._funnelArgs, { contours: _funnelContours });
+  });
+});
+
 // ---------------- REPORT STATE ----------------
 let _reportArgs = null;  // cached after each run; consumed by export buttons
 
@@ -1863,7 +1879,8 @@ function runAnalysis() {
     useTF, mAdjusted,
     forestOptions: { ...forestOpts, currentPage: forestPage },
   };
-  drawFunnel(all, m, egger, profile);
+  _funnelArgs = [all, m, egger, profile];
+  drawFunnel(..._funnelArgs, { contours: _funnelContours });
   drawInfluencePlot(influence);
 
   // ---- Cumulative meta-analysis ----

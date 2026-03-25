@@ -798,70 +798,292 @@ export function drawForest(studies, m, options = {}) {
 }
 
 // ================= FUNNEL =================
-export function drawFunnel(studies, m, egger, profile) {
+// drawFunnel(studies, m, egger, profile, options)
+//
+// studies  — study objects with .yi (effect), .se (standard error), .filled flag
+// m        — pooled result object; uses m.RE for the vertical reference line
+// egger    — eggerTest() result { intercept, slope, p }; null to suppress line
+// profile  — effect-type profile with .label, .transform, .isLog
+// options  — { contours: false }
+//              contours: true  draws four significance bands (Peters et al. 2008)
+//                              and switches to a white publication-quality background.
+//
+// Layout
+// ------
+//   500 × 400 px SVG with margin { top:20, right:20, bottom:52, left:60 }.
+//   x-axis: symmetric around null (yi = 0), domain [-xHalf, +xHalf].
+//     xHalf = max(maxStudyEffect × 1.15, seMax × 2.8) — the 2.8 factor keeps
+//     the ±1.96 funnel arms inside the plot at the widest SE value.
+//   y-axis: SE from seMax (bottom) to 0 (top, inverted).
+//
+// Elements rendered (bottom to top)
+// ----------------------------------
+//   0. [contour mode] White background + four significance bands (outermost first)
+//   1. Funnel triangle  — two dashed lines from null apex (yi=0, SE=0) to
+//                         (±1.96×seMax, seMax), clipped to the x domain.
+//   2. Pooled RE line   — vertical dashed accent line at m.RE.
+//   3. Study circles    — filled for real studies, hollow for trim-and-fill imputed.
+//   4. Egger line       — red dashed regression line when egger.slope is finite.
+//   5. Axes + labels    — bottom x (effect measure) and left y ("Standard Error").
+//   6. [contour mode] Legend — four colour swatches with p-value labels (Step 3).
+export function drawFunnel(studies, m, egger, profile, options = {}) {
   profile = profile || { transform: x => x };
- const svg=d3.select("#funnelPlot"); svg.selectAll("*").remove();
+  const svg = d3.select("#funnelPlot");
+  svg.selectAll("*").remove();
 
- const x=d3.scaleLinear()
-  .domain(d3.extent(studies,d=>d.yi)).nice()
-  .range([50,450]);
+  if (!studies || studies.length === 0) return;
 
- const y=d3.scaleLinear()
-  .domain([d3.max(studies,d=>d.se),0])
-  .range([350,50]);
+  // ---- Layout ----
+  const margin = { top: 20, right: 20, bottom: 52, left: 60 };
+  const W = 500, H = 400;
+  const iW = W - margin.left - margin.right;   // 420
+  const iH = H - margin.top  - margin.bottom;  // 328
+  svg.attr("width", W).attr("height", H);
 
- svg.selectAll("circle")
-  .data(studies).enter().append("circle")
-  .attr("cx",d=>x(d.yi))
-  .attr("cy",d=>y(d.se))
-  .attr("r",4)
-  .attr("fill",d=>d.filled?"none":"var(--bg-surface-hover)")
-  .attr("stroke",d=>d.filled?"var(--fg-muted)":"var(--fg-subtle)");
+  const seMax = d3.max(studies, d => d.se);
 
- svg.append("line")
-  .attr("x1",x(m.RE)).attr("x2",x(m.RE))
-  .attr("y1",50).attr("y2",350)
-  .attr("stroke","var(--accent)").attr("stroke-dasharray","4");
+  // Symmetric x domain centred on the null (yi = 0).
+  const xHalf = Math.max(
+    d3.max(studies, d => Math.abs(d.yi)) * 1.15,
+    seMax * 2.8
+  );
 
-// ================= EGGER REGRESSION LINE =================
-if(egger && isFinite(egger.slope)){
+  const x = d3.scaleLinear()
+    .domain([-xHalf, xHalf])
+    .range([margin.left, W - margin.right]);
 
- const seMin = d3.min(studies, d => d.se);
- const seMax = d3.max(studies, d => d.se);
- if(seMin === seMax) return;
+  const y = d3.scaleLinear()
+    .domain([seMax, 0])
+    .range([H - margin.bottom, margin.top]);
 
- const lineData = d3.range(seMin, seMax, (seMax-seMin)/50).map(se => {
-  const yi_hat = egger.intercept * se + egger.slope;
-  return { yi_hat, se };
- });
+  // ---- Colour scheme — fixed values in contour mode, CSS vars otherwise ----
+  const contours = !!options.contours;
+  const isDark   = contours && document.documentElement.dataset.theme !== "light";
 
- const line = d3.line()
-  .x(d => x(d.yi_hat))
-  .y(d => y(d.se));
+  const bgColor    = contours ? (isDark ? "#121212" : "#ffffff") : null;
+  const fgColor    = contours ? (isDark ? "#cccccc" : "#333333") : "var(--fg-muted)";
+  const borderClr  = contours ? (isDark ? "#666666" : "#888888") : "var(--border-hover)";
+  const dotFill    = contours ? (isDark ? "#aaaaaa" : "#444444") : "var(--bg-surface-hover)";
+  const dotStroke  = contours ? (isDark ? "#cccccc" : "#333333") : "var(--fg-subtle)";
+  const dotFillImp = "none";
+  const dotStrImp  = contours ? (isDark ? "#777777" : "#777777") : "var(--fg-muted)";
 
- svg.append("path")
-  .datum(lineData)
-  .attr("fill", "none")
-  .attr("stroke", "var(--color-error)")
-  .attr("stroke-width", 2)
-  .attr("stroke-dasharray", "4,2")
-  .attr("d", line);
-}
+  // ---- Contour bands (Peters et al. 2008) ----
+  // Rendered outermost-to-innermost; each polygon overwrites the inner region
+  // of the previous band, producing a layered significance gradient.
+  //
+  // bandPath(z) returns the SVG path d-string for the region |yi| < z×se,
+  // clipped to the inner plot rectangle.
+  //   z = Infinity  → full plot rectangle (used for the outermost p<0.01 layer)
+  //   Triangle case : z×seMax ≤ xHalf — arm fits within the x domain
+  //   Trapezoid case: z×seMax > xHalf — arm is clipped by the x boundary at
+  //                   se = xHalf/z, producing two extra corner vertices
+  function bandPath(z) {
+    const x0 = x(-xHalf), x1 = x(xHalf);
+    const y0 = y(0),       y1 = y(seMax);
+    if (!isFinite(z)) {
+      return `M${x0},${y0} L${x1},${y0} L${x1},${y1} L${x0},${y1} Z`;
+    }
+    const seClip = xHalf / z;   // SE at which the arm reaches the x boundary
+    if (seClip >= seMax) {
+      // Triangle: arm stays inside the x domain across the full SE range
+      return [
+        `M${x(0)},${y(0)}`,
+        `L${x( z * seMax)},${y(seMax)}`,
+        `L${x(-z * seMax)},${y(seMax)}`,
+        "Z",
+      ].join(" ");
+    }
+    // Trapezoid: arm is clipped; two extra vertices where it hits the x boundary
+    return [
+      `M${x(0)},${y(0)}`,
+      `L${x( xHalf)},${y(seClip)}`,
+      `L${x( xHalf)},${y(seMax)}`,
+      `L${x(-xHalf)},${y(seMax)}`,
+      `L${x(-xHalf)},${y(seClip)}`,
+      "Z",
+    ].join(" ");
+  }
 
- svg.append("g").attr("transform","translate(0,350)").call(d3.axisBottom(x).tickFormat(v => {
-   const d = profile.transform(v);
-   return isFinite(d) ? +d.toFixed(3) : "";
- }));
- if (profile.isLog) {
-   svg.append("text")
-     .attr("x", 250)
-     .attr("y", 378)
-     .attr("text-anchor", "middle")
-     .style("font-size", "10px")
-     .attr("fill", "var(--fg-muted)")
-     .text("(log scale)");
- }
- svg.append("g").attr("transform","translate(50,0)").call(d3.axisLeft(y));
+  // Significance bands: { z-critical, fill colour, legend label }
+  // z values are for a two-tailed test: Φ⁻¹(1 − p/2)
+  //   p = 0.01 → z = 2.576,  p = 0.05 → z = 1.960,  p = 0.10 → z = 1.645
+  // Light: bands progress white → dark-gray outward (high significance = darker).
+  // Dark:  bands progress near-black → light-gray outward (high significance = lighter).
+  const BANDS = isDark
+    ? [
+        { z: Infinity, fill: "#505050", label: "p < 0.01"        },
+        { z: 2.576,    fill: "#383838", label: "0.01 ≤ p < 0.05" },
+        { z: 1.960,    fill: "#252525", label: "0.05 ≤ p < 0.10" },
+        { z: 1.645,    fill: "#161616", label: "p ≥ 0.10"         },
+      ]
+    : [
+        { z: Infinity, fill: "#a0a0a0", label: "p < 0.01"        },
+        { z: 2.576,    fill: "#c4c4c4", label: "0.01 ≤ p < 0.05" },
+        { z: 1.960,    fill: "#e4e4e4", label: "0.05 ≤ p < 0.10" },
+        { z: 1.645,    fill: "#ffffff", label: "p ≥ 0.10"         },
+      ];
+
+  if (contours) {
+    // Solid background so axes and data read correctly against the band colours.
+    svg.append("rect")
+      .attr("width", W).attr("height", H)
+      .attr("fill", bgColor);
+
+    BANDS.forEach(({ z, fill }) => {
+      svg.append("path")
+        .attr("d", bandPath(z))
+        .attr("fill", fill)
+        .attr("stroke", "none");
+    });
+  }
+
+  // ---- Funnel triangle (±1.96 × SE, centred on null) ----
+  // Clip arm endpoints to the x domain so lines never extend beyond the axes.
+  const armRight = Math.min( 1.96 * seMax,  xHalf);
+  const armLeft  = Math.max(-1.96 * seMax, -xHalf);
+
+  svg.append("line")
+    .attr("x1", x(0)).attr("y1", y(0))
+    .attr("x2", x(armRight)).attr("y2", y(seMax))
+    .attr("stroke", borderClr)
+    .attr("stroke-width", 1)
+    .attr("stroke-dasharray", "4,2");
+
+  svg.append("line")
+    .attr("x1", x(0)).attr("y1", y(0))
+    .attr("x2", x(armLeft)).attr("y2", y(seMax))
+    .attr("stroke", borderClr)
+    .attr("stroke-width", 1)
+    .attr("stroke-dasharray", "4,2");
+
+  // ---- Pooled RE vertical reference line ----
+  const reLineColor = contours ? (isDark ? "#5588cc" : "#2255aa") : "var(--accent)";
+  svg.append("line")
+    .attr("x1", x(m.RE)).attr("x2", x(m.RE))
+    .attr("y1", y(0)).attr("y2", y(seMax))
+    .attr("stroke", reLineColor)
+    .attr("stroke-dasharray", "4");
+
+  // ---- Study circles ----
+  svg.selectAll("circle")
+    .data(studies).enter().append("circle")
+    .attr("cx", d => x(d.yi))
+    .attr("cy", d => y(d.se))
+    .attr("r", 4)
+    .attr("fill",   d => d.filled ? dotFillImp : dotFill)
+    .attr("stroke", d => d.filled ? dotStrImp  : dotStroke);
+
+  // ---- Egger regression line ----
+  if (egger && isFinite(egger.slope)) {
+    const seMin = d3.min(studies, d => d.se);
+    if (seMin !== seMax) {
+      const lineData = d3.range(seMin, seMax, (seMax - seMin) / 50).map(se => ({
+        yi_hat: egger.intercept * se + egger.slope,
+        se,
+      }));
+      const eggerColor = contours ? (isDark ? "#cc4444" : "#aa2222") : "var(--color-error)";
+      svg.append("path")
+        .datum(lineData)
+        .attr("fill", "none")
+        .attr("stroke", eggerColor)
+        .attr("stroke-width", 2)
+        .attr("stroke-dasharray", "4,2")
+        .attr("d", d3.line().x(d => x(d.yi_hat)).y(d => y(d.se)));
+    }
+  }
+
+  // ---- Axes ----
+  const axisX = svg.append("g")
+    .attr("transform", `translate(0,${H - margin.bottom})`)
+    .call(d3.axisBottom(x).tickFormat(v => {
+      const t = profile.transform(v);
+      return isFinite(t) ? +t.toFixed(3) : "";
+    }));
+  axisX.select(".domain").attr("stroke", borderClr);
+  axisX.selectAll(".tick line").attr("stroke", borderClr);
+  axisX.selectAll(".tick text").attr("fill", fgColor);
+
+  const axisY = svg.append("g")
+    .attr("transform", `translate(${margin.left},0)`)
+    .call(d3.axisLeft(y));
+  axisY.select(".domain").attr("stroke", borderClr);
+  axisY.selectAll(".tick line").attr("stroke", borderClr);
+  axisY.selectAll(".tick text").attr("fill", fgColor);
+
+  // ---- Axis labels ----
+  // x: effect measure name; "(log scale)" suffix for log-transformed types
+  svg.append("text")
+    .attr("x", margin.left + iW / 2)
+    .attr("y", H - 4)
+    .attr("text-anchor", "middle")
+    .attr("fill", fgColor)
+    .style("font-size", "10px")
+    .text(profile.label + (profile.isLog ? " (log scale)" : ""));
+
+  // y: "Standard Error" rotated 90° along the left margin
+  svg.append("text")
+    .attr("transform", "rotate(-90)")
+    .attr("x", -(margin.top + iH / 2))
+    .attr("y", 12)
+    .attr("text-anchor", "middle")
+    .attr("fill", fgColor)
+    .style("font-size", "11px")
+    .text("Standard Error");
+
+  // ---- Contour legend ----
+  // Rendered last so it sits above all other elements.
+  // One row per significance band: colour swatch + p-value label.
+  // The white band (p ≥ 0.10) gets a grey swatch border so it is visible
+  // against the white legend background.
+  if (contours) {
+    const LW  = 120, LH  = 76;   // legend box dimensions
+    const PAD = 6;                // inner padding
+    const ROW = 16;               // height per row
+    const SW  = 10;               // swatch width and height
+
+    // Anchor: 8 px inside the top-right corner of the inner plot area.
+    const legendX = W - margin.right - LW - 8;
+    const legendY = margin.top + 8;
+
+    const lg = svg.append("g").attr("transform", `translate(${legendX},${legendY})`);
+
+    const legendBg     = isDark ? "#1e1e1e" : "#ffffff";
+    const legendBorder = isDark ? "#444444" : "#cccccc";
+    const legendFg     = isDark ? "#cccccc" : "#333333";
+    // The innermost band (last in BANDS) blends into the legend bg — give it a border.
+    const innermostFill = BANDS[BANDS.length - 1].fill;
+
+    // Background with subtle border
+    lg.append("rect")
+      .attr("width", LW).attr("height", LH)
+      .attr("fill", legendBg)
+      .attr("stroke", legendBorder)
+      .attr("stroke-width", 1)
+      .attr("rx", 2);
+
+    BANDS.forEach(({ fill, label }, i) => {
+      const rowY       = PAD + i * ROW;
+      const needBorder = fill === innermostFill;
+
+      // Colour swatch — innermost band swatch gets a border to remain visible
+      lg.append("rect")
+        .attr("x", PAD).attr("y", rowY + (ROW - SW) / 2)
+        .attr("width", SW).attr("height", SW)
+        .attr("fill", fill)
+        .attr("stroke", needBorder ? legendBorder : "none")
+        .attr("stroke-width", 1);
+
+      // Label
+      lg.append("text")
+        .attr("x", PAD + SW + 5)
+        .attr("y", rowY + ROW / 2 + 3)   // +3 aligns the text baseline visually
+        .attr("fill", legendFg)
+        .style("font-size", "9px")
+        .text(label);
+    });
+  }
+
 }
 
 // ================= INFLUENCE PLOT (hat vs Cook's D) =================
