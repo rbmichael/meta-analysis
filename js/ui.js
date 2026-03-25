@@ -104,7 +104,7 @@ import { eggerTest, beggTest, fatPetTest, failSafeN, pCurve, pUniform, baujat, m
 import { fmt } from "./utils.js";
 import { effectProfiles, getProfile } from "./profiles.js";
 import { trimFill } from "./trimfill.js";
-import { drawForest, drawFunnel, drawBubble, drawInfluencePlot, drawCumulativeForest, drawPCurve, drawPUniform, drawOrchardPlot, drawCaterpillarPlot, drawBaujatPlot, drawRoBTrafficLight, drawRoBSummary } from "./plots.js";
+import { drawForest, drawFunnel, drawBubble, drawInfluencePlot, drawCumulativeForest, drawCumulativeFunnel, drawPCurve, drawPUniform, drawOrchardPlot, drawCaterpillarPlot, drawBaujatPlot, drawRoBTrafficLight, drawRoBSummary } from "./plots.js";
 import { exportSVG, exportPNG, exportTIFF } from "./export.js";
 import { buildReport, downloadHTML, openPrintPreview } from "./report.js";
 import { parseCSV, detectEffectType } from "./csv.js";
@@ -513,6 +513,12 @@ document.getElementById("sessionFile").addEventListener("change", e => { if (e.t
 document.getElementById("addMod").addEventListener("click", addModerator);
 document.getElementById("modName").addEventListener("keydown", e => { if (e.key === "Enter") addModerator(); });
 document.getElementById("cumulativeOrder").addEventListener("change", runAnalysis);
+document.getElementById("cumulativeFunnelStep").addEventListener("input", e => {
+  if (!_cumFunnelStudies) return;
+  const step = +e.target.value;
+  _updateCumFunnelLabel(step);
+  drawCumulativeFunnel(_cumFunnelStudies, _cumFunnelResults, _cumFunnelProfile, step);
+});
 document.getElementById("forestPageSize").addEventListener("change", () => {
   if (!_forestArgs) return;
   forestPage = 0;
@@ -1479,6 +1485,16 @@ document.getElementById("forestTheme").addEventListener("change", e => {
 let _funnelArgs     = null;   // [studies, m, egger, profile] — cached for mode toggle
 let _funnelContours = false;
 
+let _cumFunnelStudies = null;  // sorted study array for cumulative funnel
+let _cumFunnelResults = null;  // cumResults array, same order
+let _cumFunnelProfile = null;  // effect-type profile
+
+function _updateCumFunnelLabel(stepIdx) {
+  const r = _cumFunnelResults[stepIdx];
+  document.getElementById("cumulativeFunnelLabel").textContent =
+    `Step ${stepIdx + 1} of ${_cumFunnelResults.length}\u2003added: ${r.addedLabel}`;
+}
+
 document.querySelectorAll(".funnel-mode-btn").forEach(btn => {
   btn.addEventListener("click", () => {
     if (!_funnelArgs) return;
@@ -2157,6 +2173,17 @@ function runAnalysis() {
   // "input" order: no sort — preserves table order
   const cumResults = cumulativeMeta(cumulativeStudies, method, ciMethod);
   drawCumulativeForest(cumResults, profile);
+
+  // ---- Cumulative funnel plot ----
+  _cumFunnelStudies = cumulativeStudies;
+  _cumFunnelResults = cumResults;
+  _cumFunnelProfile = profile;
+  const _cfSlider = document.getElementById("cumulativeFunnelStep");
+  _cfSlider.max   = cumResults.length - 1;
+  _cfSlider.value = cumResults.length - 1;
+  _updateCumFunnelLabel(cumResults.length - 1);
+  drawCumulativeFunnel(cumulativeStudies, cumResults, profile, cumResults.length - 1);
+  document.getElementById("cumulativeFunnelBlock").style.display = "";
 
   // ---- Orchard + caterpillar plots ----
   drawOrchardPlot(all, m, profile);

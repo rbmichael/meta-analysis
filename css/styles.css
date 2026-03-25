@@ -1972,6 +1972,31 @@ html::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); 
 }
 
 /* ================================================================
+   CUMULATIVE FUNNEL CONTROLS
+   ================================================================ */
+
+.cumfunnel-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 8px 0 6px;
+}
+
+.cumfunnel-label {
+  font-size: 0.8em;
+  color: var(--fg-muted);
+  white-space: nowrap;
+  min-width: 200px;
+}
+
+.cumfunnel-slider {
+  flex: 1;
+  max-width: 420px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+/* ================================================================
    IN-APP GUIDE
    ================================================================ */
 

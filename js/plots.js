@@ -24,6 +24,11 @@
 //     Cumulative forest plot: one row per cumulative step, showing how the
 //     pooled estimate evolves as studies are added in order.
 //
+//   drawCumulativeFunnel(cumulativeStudies, cumResults, profile, stepIdx)
+//     Cumulative funnel plot: shows the funnel at one cumulative step at a
+//     time.  Axes are globally fixed (all studies) so the view is stable as
+//     the slider advances.  The newly added study is highlighted in accent.
+//
 //   drawBubble(studies, reg, modName, modIdx, container)
 //     Bubble plot for a single continuous moderator in a meta-regression.
 //     Bubble radius ∝ √(RE weight); regression line is the marginal fit.
@@ -1374,6 +1379,198 @@ export function drawCumulativeForest(cumulativeResults, profile) {
     .attr("text-anchor", "middle")
     .style("font-size", "11px").attr("fill", "var(--fg-muted)")
     .text(profile.label);
+}
+
+// ================= CUMULATIVE FUNNEL PLOT =================
+//
+// drawCumulativeFunnel(cumulativeStudies, cumResults, profile, stepIdx)
+//
+// cumulativeStudies — the full sorted study array (all k, same order as cumResults)
+// cumResults        — array from cumulativeMeta(): { k, addedLabel, RE, … }
+// profile           — effect-type profile with .label, .transform, .isLog
+// stepIdx           — 0-based index; which step to render (0 = first study only,
+//                     k-1 = all studies)
+//
+// Design
+// ------
+//   Axes are fixed globally (computed from all k studies) so the view is
+//   stable as the slider advances — the funnel triangle never rescales.
+//
+//   x: symmetric around null (yi = 0), domain [-xHalf, +xHalf]
+//      xHalf = max(maxAbsYi × 1.15, seMax × 2.8) over ALL studies.
+//   y: SE from seMax_global (bottom) to 0 (top, inverted).
+//
+//   Funnel arms: ±1.96 × seMax_global, anchored at null, same as drawFunnel.
+//   RE line:     vertical dashed line at cumResults[stepIdx].RE.
+//   Dots:        studies 0..stepIdx-1 in standard grey; study stepIdx in accent.
+//   Annotation:  "k = n / total · added: label" in top-right corner.
+//
+// No Egger line is drawn (per-step Egger is unreliable for small k and the
+// purpose here is visual inspection of the evolving dot pattern).
+export function drawCumulativeFunnel(cumulativeStudies, cumResults, profile, stepIdx) {
+  profile = profile || { transform: x => x };
+  const svg = d3.select("#cumulativeFunnelPlot");
+  svg.selectAll("*").remove();
+
+  if (!cumulativeStudies || cumulativeStudies.length === 0 || !cumResults) return;
+
+  const k     = cumulativeStudies.length;
+  const step  = Math.max(0, Math.min(stepIdx, k - 1));
+  const cur   = cumResults[step];
+
+  // ---- Layout — identical to drawFunnel ----
+  const margin = { top: 30, right: 20, bottom: 52, left: 60 };
+  const W = 500, H = 420;
+  const iW = W - margin.left - margin.right;
+  const iH = H - margin.top  - margin.bottom;
+  svg.attr("width", W).attr("height", H);
+
+  const tooltip = d3.select("#tooltip");
+
+  // ---- Global axes (all studies, fixed regardless of step) ----
+  const seMax  = d3.max(cumulativeStudies, d => d.se);
+  const xHalf  = Math.max(
+    d3.max(cumulativeStudies, d => Math.abs(d.yi)) * 1.15,
+    seMax * 2.8
+  );
+
+  const x = d3.scaleLinear()
+    .domain([-xHalf, xHalf])
+    .range([margin.left, W - margin.right]);
+
+  const y = d3.scaleLinear()
+    .domain([seMax, 0])
+    .range([H - margin.bottom, margin.top]);
+
+  const fgColor  = "var(--fg-muted)";
+  const borderClr = "var(--border-hover)";
+
+  // ---- Funnel triangle (anchored at null = 0, global seMax) ----
+  const armRight = Math.min( 1.96 * seMax,  xHalf);
+  const armLeft  = Math.max(-1.96 * seMax, -xHalf);
+
+  svg.append("line")
+    .attr("x1", x(0)).attr("y1", y(0))
+    .attr("x2", x(armRight)).attr("y2", y(seMax))
+    .attr("stroke", borderClr)
+    .attr("stroke-width", 1)
+    .attr("stroke-dasharray", "4,2");
+
+  svg.append("line")
+    .attr("x1", x(0)).attr("y1", y(0))
+    .attr("x2", x(armLeft)).attr("y2", y(seMax))
+    .attr("stroke", borderClr)
+    .attr("stroke-width", 1)
+    .attr("stroke-dasharray", "4,2");
+
+  // ---- Pooled RE line for this step ----
+  if (isFinite(cur.RE)) {
+    svg.append("line")
+      .attr("x1", x(cur.RE)).attr("x2", x(cur.RE))
+      .attr("y1", y(0)).attr("y2", y(seMax))
+      .attr("stroke", "var(--accent)")
+      .attr("stroke-dasharray", "4");
+  }
+
+  // ---- Study dots ----
+  // Previous studies (0 .. step-1): standard grey
+  // Current step's study (step):    accent highlight
+  const prevStudies = cumulativeStudies.slice(0, step);
+  const newStudy    = cumulativeStudies[step];
+
+  svg.selectAll(".dot-prev")
+    .data(prevStudies).enter().append("circle")
+    .attr("class", "dot-prev")
+    .attr("cx", d => x(d.yi))
+    .attr("cy", d => y(d.se))
+    .attr("r", 4)
+    .attr("fill",   "var(--bg-surface-hover)")
+    .attr("stroke", "var(--fg-subtle)")
+    .on("mousemove", (event, d) => {
+      tooltip.style("opacity", 1)
+        .html(`<b>${d.label ?? ""}</b><br>` +
+              `yi = ${d.yi.toFixed(3)}&nbsp; SE = ${d.se.toFixed(3)}`)
+        .style("left", (event.pageX + 12) + "px")
+        .style("top",  (event.pageY - 28) + "px");
+    })
+    .on("mouseout", () => tooltip.style("opacity", 0));
+
+  if (newStudy) {
+    svg.append("circle")
+      .attr("cx", x(newStudy.yi))
+      .attr("cy", y(newStudy.se))
+      .attr("r", 5)
+      .attr("fill",         "var(--accent-light)")
+      .attr("stroke",       "var(--accent)")
+      .attr("stroke-width", 1.5)
+      .on("mousemove", (event) => {
+        tooltip.style("opacity", 1)
+          .html(`<b>${newStudy.label ?? ""}</b> ← added at this step<br>` +
+                `yi = ${newStudy.yi.toFixed(3)}&nbsp; SE = ${newStudy.se.toFixed(3)}`)
+          .style("left", (event.pageX + 12) + "px")
+          .style("top",  (event.pageY - 28) + "px");
+      })
+      .on("mouseout", () => tooltip.style("opacity", 0));
+  }
+
+  // ---- Step annotation (top-right) ----
+  const annotY = margin.top - 10;
+  svg.append("text")
+    .attr("x", W - margin.right)
+    .attr("y", annotY)
+    .attr("text-anchor", "end")
+    .attr("fill", "var(--fg-muted)")
+    .style("font-size", "10px")
+    .text(`k = ${step + 1} / ${k}\u2003added: ${cur.addedLabel}`);
+
+  // ---- RE estimate annotation (right of RE line, near top) ----
+  if (isFinite(cur.RE)) {
+    const reDisp = profile.transform(cur.RE);
+    if (isFinite(reDisp)) {
+      svg.append("text")
+        .attr("x", x(cur.RE) + 4)
+        .attr("y", y(0) + 12)
+        .attr("fill", "var(--accent)")
+        .style("font-size", "9px")
+        .text(reDisp.toFixed(3));
+    }
+  }
+
+  // ---- Axes ----
+  const axisX = svg.append("g")
+    .attr("transform", `translate(0,${H - margin.bottom})`)
+    .call(d3.axisBottom(x).tickFormat(v => {
+      const t = profile.transform(v);
+      return isFinite(t) ? +t.toFixed(3) : "";
+    }));
+  axisX.select(".domain").attr("stroke", borderClr);
+  axisX.selectAll(".tick line").attr("stroke", borderClr);
+  axisX.selectAll(".tick text").attr("fill", fgColor);
+
+  const axisY = svg.append("g")
+    .attr("transform", `translate(${margin.left},0)`)
+    .call(d3.axisLeft(y));
+  axisY.select(".domain").attr("stroke", borderClr);
+  axisY.selectAll(".tick line").attr("stroke", borderClr);
+  axisY.selectAll(".tick text").attr("fill", fgColor);
+
+  // ---- Axis labels ----
+  svg.append("text")
+    .attr("x", margin.left + iW / 2)
+    .attr("y", H - 4)
+    .attr("text-anchor", "middle")
+    .attr("fill", fgColor)
+    .style("font-size", "10px")
+    .text(profile.label + (profile.isLog ? " (log scale)" : ""));
+
+  svg.append("text")
+    .attr("transform", "rotate(-90)")
+    .attr("x", -(margin.top + iH / 2))
+    .attr("y", 12)
+    .attr("text-anchor", "middle")
+    .attr("fill", fgColor)
+    .style("font-size", "11px")
+    .text("Standard Error");
 }
 
 // ================= P-CURVE PLOT =================

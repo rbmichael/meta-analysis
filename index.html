@@ -362,6 +362,21 @@
           </div>
           <svg id="cumulativePlot" width="900" height="420"></svg>
         </div>
+
+        <div class="plot-block" id="cumulativeFunnelBlock" style="display:none">
+          <p class="plot-label">Cumulative funnel plot</p>
+          <div class="plot-export">
+            <button class="export-btn" data-target="cumulativeFunnelPlot" data-format="svg">SVG</button>
+            <button class="export-btn" data-target="cumulativeFunnelPlot" data-format="png">PNG</button>
+            <button class="export-btn" data-target="cumulativeFunnelPlot" data-format="tiff">TIFF</button>
+          </div>
+          <div class="cumfunnel-controls">
+            <span id="cumulativeFunnelLabel" class="cumfunnel-label"></span>
+            <input type="range" id="cumulativeFunnelStep" class="cumfunnel-slider"
+                   min="0" max="0" value="0" step="1">
+          </div>
+          <svg id="cumulativeFunnelPlot" width="500" height="420"></svg>
+        </div>
       </div>
     </div><!-- #outputSection -->
 
