@@ -365,7 +365,10 @@ document.getElementById("forestPageSize").addEventListener("change", () => {
   forestPage = 0;
   const rawPageSize = document.getElementById("forestPageSize").value;
   const pageSize    = rawPageSize === "Infinity" ? Infinity : +rawPageSize;
-  _forestArgs.options = { ..._forestArgs.options, pageSize };
+  _forestArgs.options = { ..._forestArgs.options, pageSize, theme: _forestTheme };
+  if (_reportArgs) {
+    _reportArgs = { ..._reportArgs, forestOptions: { ..._reportArgs.forestOptions, pageSize, currentPage: 0 } };
+  }
   const { totalPages } = drawForest(
     _forestArgs.studies, _forestArgs.m,
     { ..._forestArgs.options, page: forestPage }
@@ -1272,6 +1275,7 @@ let _hasRunOnce = false;
 let forestPage = 0;
 let _forestArgs = null;  // { studies, m, options } — cached for page-nav re-renders
 let _forestPoolDisplay = "RE"; // "FE" | "RE" | "Both"
+let _forestTheme = "default";  // visual style preset key (see forestThemes.js)
 
 document.querySelectorAll(".forest-pool-btn").forEach(btn => {
   btn.addEventListener("click", () => {
@@ -1283,6 +1287,17 @@ document.querySelectorAll(".forest-pool-btn").forEach(btn => {
     const { totalPages } = drawForest(_forestArgs.studies, _forestArgs.m, { ..._forestArgs.options, page: forestPage });
     renderForestNav(totalPages);
   });
+});
+
+document.getElementById("forestTheme").addEventListener("change", e => {
+  if (!_forestArgs) return;
+  _forestTheme = e.target.value;
+  _forestArgs.options = { ..._forestArgs.options, theme: _forestTheme };
+  if (_reportArgs) {
+    _reportArgs = { ..._reportArgs, forestOptions: { ..._reportArgs.forestOptions, theme: _forestTheme } };
+  }
+  const { totalPages } = drawForest(_forestArgs.studies, _forestArgs.m, { ..._forestArgs.options, page: forestPage });
+  renderForestNav(totalPages);
 });
 
 // ---------------- REPORT STATE ----------------
@@ -1826,7 +1841,7 @@ function runAnalysis() {
   forestPage = 0;
   const rawPageSize  = document.getElementById("forestPageSize")?.value ?? "30";
   const pageSize     = rawPageSize === "Infinity" ? Infinity : +rawPageSize;
-  const forestOpts   = { ciMethod, profile, pageSize, pooledDisplay: _forestPoolDisplay };
+  const forestOpts   = { ciMethod, profile, pageSize, pooledDisplay: _forestPoolDisplay, theme: _forestTheme };
   _forestArgs        = { studies: all, m, options: forestOpts };
   const { totalPages } = drawForest(all, m, { ...forestOpts, page: forestPage });
   renderForestNav(totalPages);

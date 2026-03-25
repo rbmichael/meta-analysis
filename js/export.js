@@ -1,32 +1,114 @@
-// ================= PLOT EXPORT UTILITIES =================
-// exportSVG  — downloads the plot as a .svg file
-// exportPNG  — downloads the plot as a .png file (2× resolution by default)
+// =============================================================================
+// export.js — SVG and PNG plot export
+// =============================================================================
+// Exports two public functions:
 //
-// Both functions clone the SVG so the live DOM element is never mutated.
-// A dark background rect is injected into the clone so exported files
-// look identical to the on-screen rendering.
+//   exportSVG(svgEl, filename)
+//     Clones the SVG, makes it self-contained, and downloads it as a .svg file.
+//
+//   exportPNG(svgEl, filename, scale)
+//     Same clone + self-contained step, then rasterises via <canvas> at `scale`×
+//     resolution (default 2×) and downloads the result as a .png file.
+//
+// Self-contained SVG pipeline (shared by both exports)
+// -----------------------------------------------------
+//   1. Deep-clone the live SVG element (never mutates the DOM).
+//   2. Resolve all CSS custom property references (var(--xxx)) in fill/stroke
+//      attributes and inline styles, replacing them with computed hex/rgba
+//      values.  This is required for standalone SVG files and PNG rasterisation,
+//      because both operate outside the page's CSS cascade.
+//   3. Add a background rect if the SVG does not already have one (journal
+//      presets embed their own white rect via drawForest(); the default theme
+//      does not, so a dark fallback rect is injected here).
+//
+// Dependencies: io.js (downloadBlob, downloadBlobObject)
+// =============================================================================
 
 import { downloadBlob, downloadBlobObject } from "./io.js";
 
-const BACKGROUND = "#121212";
+// Fallback background colour used when the SVG carries no embedded background
+// rect of its own (i.e. the "App default" / dark theme).
+const DARK_BACKGROUND = "#121212";
 
-// ----------- internal helpers -----------
+// Regex that matches a single var(--token) reference (one level, no fallback).
+const VAR_RE = /var\(\s*(--[\w-]+)\s*\)/g;
+
+// ----------- helpers (exported for report.js) -----------
+
+// resolveThemeVars(svgEl)
+// Walks every descendant of svgEl and replaces var(--xxx) references in
+// `fill` and `stroke` attributes, and in the fill/stroke/color properties of
+// any inline `style` attribute, with the computed value taken from the root
+// element's CSS custom properties.
+//
+// Must be called on the *clone* (not the live SVG) so the live DOM is not
+// mutated.  Operates synchronously — getComputedStyle is called once and
+// cached for the entire walk.
+export function resolveThemeVars(svgEl) {
+  const rootStyles = getComputedStyle(document.documentElement);
+
+  function resolveVal(val) {
+    return val.replace(VAR_RE, (_, prop) => {
+      const resolved = rootStyles.getPropertyValue(prop).trim();
+      return resolved || val;   // fall back to the original token if not found
+    });
+  }
+
+  svgEl.querySelectorAll("*").forEach(el => {
+    // Presentation attributes (set by D3 via .attr())
+    ["fill", "stroke"].forEach(attr => {
+      const val = el.getAttribute(attr);
+      if (val && val.includes("var(")) {
+        el.setAttribute(attr, resolveVal(val));
+      }
+    });
+
+    // Inline style properties (set by D3 via .style() or by the SVG renderer)
+    if (el.style) {
+      ["fill", "stroke", "color"].forEach(prop => {
+        const val = el.style.getPropertyValue(prop);
+        if (val && val.includes("var(")) {
+          el.style.setProperty(prop, resolveVal(val));
+        }
+      });
+    }
+  });
+}
+
+// hasEmbeddedBackground(svgEl)
+// Returns true when the SVG's first child is a <rect> covering the full
+// viewport — i.e. a background rect injected by drawForest() for journal
+// presets.  Used to avoid stacking a redundant dark rect behind it.
+export function hasEmbeddedBackground(svgEl) {
+  const first = svgEl.firstElementChild;
+  if (!first || first.tagName.toLowerCase() !== "rect") return false;
+  const w = first.getAttribute("width");
+  const h = first.getAttribute("height");
+  // drawForest sets explicit pixel dimensions; treat any explicit non-% value as present
+  return w && h && !w.includes("%") && !h.includes("%");
+}
 
 // Prepare a cloned, self-contained SVG element ready for serialisation.
 function prepareSVGClone(svgEl) {
   const clone = svgEl.cloneNode(true);
 
-  // Ensure the SVG namespace is declared (required for standalone SVG files
-  // and for the data-URL trick used in PNG export).
+  // Required for standalone SVG files and for the canvas data-URL technique.
   clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
 
-  // Prepend a background rect so the exported file has the dark background
-  // rather than transparent / white depending on the viewer.
-  const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-  bg.setAttribute("width",  "100%");
-  bg.setAttribute("height", "100%");
-  bg.setAttribute("fill",   BACKGROUND);
-  clone.insertBefore(bg, clone.firstChild);
+  // Step 2: resolve CSS vars before anything else so that the background-
+  // detection below sees resolved fill values, not var(--bg) strings.
+  resolveThemeVars(clone);
+
+  // Step 3: inject a dark background only when the SVG has no embedded rect.
+  // Journal presets insert their own rect (white/explicit colour) inside
+  // drawForest(); the default theme does not, so we add a dark fallback here.
+  if (!hasEmbeddedBackground(clone)) {
+    const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    bg.setAttribute("width",  clone.getAttribute("width")  || "100%");
+    bg.setAttribute("height", clone.getAttribute("height") || "100%");
+    bg.setAttribute("fill",   DARK_BACKGROUND);
+    clone.insertBefore(bg, clone.firstChild);
+  }
 
   return clone;
 }

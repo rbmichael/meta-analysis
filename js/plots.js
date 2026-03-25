@@ -36,6 +36,7 @@
 
 import { chiSquareCDF } from "./utils.js";
 import { Z_95 } from "./constants.js";
+import { FOREST_THEMES } from "./forestThemes.js";
 
 // ================= BUBBLE PLOT =================
 // One bubble chart per continuous moderator.
@@ -259,6 +260,9 @@ export function drawForest(studies, m, options = {}) {
   // Identity profile as fallback (MD/SMD/etc. that don't need back-transform)
   const profile = options.profile || { transform: x => x };
 
+  // Resolve visual theme — falls back to "default" (CSS vars) for unknown keys.
+  const T = FOREST_THEMES[options.theme] ?? FOREST_THEMES["default"];
+
   // Which pooled estimates to show: "FE", "RE" (default), or "Both"
   const pooledDisplay = options.pooledDisplay || "RE";
   const showFE   = pooledDisplay === "FE"   || pooledDisplay === "Both";
@@ -358,6 +362,16 @@ export function drawForest(studies, m, options = {}) {
   // Resize SVG to fit the current study count
   svg.attr("width", L.totalW).attr("height", L.totalH);
 
+  // Background rect — journal presets need an explicit white fill so that
+  // exported SVGs are self-contained.  The default theme is transparent (the
+  // page CSS provides the background colour).
+  if (T.bg && T.bg !== "transparent") {
+    svg.insert("rect", ":first-child")
+      .attr("width", L.totalW)
+      .attr("height", L.totalH)
+      .attr("fill", T.bg);
+  }
+
   // ----------- SCALES -----------
   // Collect all values that must fit inside the plot strip:
   //   study CIs (±1.96·se), pooled CI, and prediction interval.
@@ -386,8 +400,9 @@ export function drawForest(studies, m, options = {}) {
     .attr("x", L.labelW + L.plotW / 2)
     .attr("y", L.headerH / 2 + 5)
     .attr("text-anchor", "middle")
-    .attr("fill", "var(--fg-muted)")
+    .attr("fill", T.fgMuted)
     .style("font-size", L.titleFontSize)
+    .style("font-family", T.fontFamily)
     .text(showBoth
       ? `Fixed-effect and Random-effects models (RE: ${ciLabel})`
       : showFE
@@ -401,8 +416,8 @@ export function drawForest(studies, m, options = {}) {
     svg.append("line")
       .attr("x1", nullX).attr("x2", nullX)
       .attr("y1", L.studyY0).attr("y2", isLastPage ? L.diamondY + L.diamondHH : L.studyY1)
-      .attr("stroke", "var(--border-hover)")
-      .attr("stroke-dasharray", "4");
+      .attr("stroke", T.border)
+      .attr("stroke-dasharray", T.nullLineDash);
   }
 
   // ----------- STUDY CIs -----------
@@ -414,8 +429,8 @@ export function drawForest(studies, m, options = {}) {
     .attr("x2", d => x(d.yi + studyCrit * d.se))
     .attr("y1", d => yPos[d.label])
     .attr("y2", d => yPos[d.label])
-    .attr("stroke", d => d.filled ? "var(--fg-muted)" : "var(--fg-subtle)")
-    .attr("stroke-width", 1.5);
+    .attr("stroke", d => d.filled ? T.fgMuted : T.fgSubtle)
+    .attr("stroke-width", T.ciStrokeWidth);
 
   // ----------- WEIGHTS (BOXES) -----------
   // wMax from full studies so box sizes are comparable across pages.
@@ -429,8 +444,8 @@ export function drawForest(studies, m, options = {}) {
     .attr("y", d => yPos[d.label] - L.boxHalf)
     .attr("width", d => Math.sqrt(d.w / wMax) * L.boxHalf * 4)
     .attr("height", L.boxHalf * 2)
-    .attr("fill", d => d.filled ? "none" : "var(--accent)")
-    .attr("stroke", d => d.filled ? "var(--fg-muted)" : "var(--accent)")
+    .attr("fill", d => d.filled ? "none" : T.accent)
+    .attr("stroke", d => d.filled ? T.fgMuted : T.accent)
     .on("mousemove", (e, d) => {
       const ef_disp = profile.transform(d.yi);
       const lo_disp = profile.transform(d.yi - studyCrit * d.se);
@@ -447,12 +462,19 @@ export function drawForest(studies, m, options = {}) {
     .on("mouseout", () => tooltip.style("opacity", 0));
 
   // ----------- AXES -----------
-  svg.append("g")
+  const axisG = svg.append("g")
     .attr("transform", `translate(0,${L.axisY})`)
     .call(d3.axisBottom(x).tickFormat(v => {
       const d = profile.transform(v);
       return isFinite(d) ? +d.toFixed(3) : "";
     }));
+
+  // Apply theme colours to D3-generated axis elements (path, ticks, tick labels)
+  axisG.select(".domain").attr("stroke", T.border);
+  axisG.selectAll(".tick line").attr("stroke", T.border);
+  axisG.selectAll(".tick text")
+    .attr("fill", T.fgMuted)
+    .style("font-family", T.fontFamily);
 
   if (profile.isLog) {
     svg.append("text")
@@ -460,7 +482,8 @@ export function drawForest(studies, m, options = {}) {
       .attr("y", L.axisY + 22)
       .attr("text-anchor", "middle")
       .style("font-size", L.annotFontSize)
-      .attr("fill", "var(--fg-muted)")
+      .style("font-family", T.fontFamily)
+      .attr("fill", T.fgMuted)
       .text("(log scale)");
   }
 
@@ -473,7 +496,8 @@ export function drawForest(studies, m, options = {}) {
       .attr("y", yPos[d.label] + 4)
       .attr("text-anchor", "end")
       .style("font-size", L.labelFontSize)
-      .attr("fill", d.filled ? "var(--fg-muted)" : "var(--fg)")
+      .style("font-family", T.fontFamily)
+      .attr("fill", d.filled ? T.fgMuted : T.fg)
       .text(lbl);
   });
 
@@ -484,7 +508,8 @@ export function drawForest(studies, m, options = {}) {
       .attr("y", L.studyY1 + 18)
       .attr("text-anchor", "middle")
       .style("font-size", L.annotFontSize)
-      .attr("fill", "var(--fg-muted)")
+      .style("font-family", T.fontFamily)
+      .attr("fill", T.fgMuted)
       .text(`— page ${page + 1} of ${totalPages}, continued —`);
   }
 
@@ -530,6 +555,7 @@ export function drawForest(studies, m, options = {}) {
       .attr("y", yMid + 4)
       .attr("text-anchor", "end")
       .style("font-size", L.labelFontSize)
+      .style("font-family", T.fontFamily)
       .style("font-weight", "bold")
       .attr("fill", fillColor)
       .text(labelText);
@@ -539,7 +565,7 @@ export function drawForest(studies, m, options = {}) {
     drawDiamond(
       m.FE, feCiLow, feCiHigh,
       showBoth ? L.feDiamondY : L.diamondY,
-      "var(--fg-muted)",
+      T.accentFE,
       null,
       showBoth ? "Fixed" : "Fixed-effect",
       "Fixed-effect model CI (Normal/Z)"
@@ -554,7 +580,7 @@ export function drawForest(studies, m, options = {}) {
     drawDiamond(
       m.RE, m.ciLow, m.ciHigh,
       L.diamondY,
-      "var(--accent)",
+      T.accent,
       reDash,
       showBoth ? "Random" : "Random-effects",
       reTooltip
@@ -570,26 +596,28 @@ export function drawForest(studies, m, options = {}) {
     .attr("y", hY)
     .attr("text-anchor", "end")
     .style("font-size", L.labelFontSize)
-    .attr("fill", "var(--fg-muted)")
+    .style("font-family", T.fontFamily)
+    .attr("fill", T.fgMuted)
     .text("Study");
 
   // Horizontal rule below the header row
   svg.append("line")
     .attr("x1", 0).attr("x2", L.totalW)
     .attr("y1", L.headerH).attr("y2", L.headerH)
-    .attr("stroke", "var(--border-hover)");
+    .attr("stroke", T.border)
+    .attr("stroke-width", T.headerRuleWidth);
 
   // Thin vertical rule between label column and plot strip
   svg.append("line")
     .attr("x1", L.labelW).attr("x2", L.labelW)
     .attr("y1", L.studyY0).attr("y2", L.studyY1 + 12)
-    .attr("stroke", "var(--border-hover)");
+    .attr("stroke", T.border);
 
   // Thin vertical rule between plot strip and annotation column
   svg.append("line")
     .attr("x1", L.annotX0).attr("x2", L.annotX0)
     .attr("y1", L.studyY0).attr("y2", L.studyY1 + 12)
-    .attr("stroke", "var(--border-hover)");
+    .attr("stroke", T.border);
 
   // ----------- GROUP SEPARATORS -----------
   // Drawn only when studies carry a group field. Each separator consists of
@@ -600,7 +628,7 @@ export function drawForest(studies, m, options = {}) {
     svg.append("line")
       .attr("x1", 0).attr("x2", L.totalW)
       .attr("y1", ruleY).attr("y2", ruleY)
-      .attr("stroke", "var(--border-accent)");
+      .attr("stroke", T.groupSepStroke);
 
     // Group label right-aligned in the label column
     svg.append("text")
@@ -608,8 +636,9 @@ export function drawForest(studies, m, options = {}) {
       .attr("y", ruleY - 3)
       .attr("text-anchor", "end")
       .style("font-size", L.annotFontSize)
+      .style("font-family", T.fontFamily)
       .style("font-weight", "bold")
-      .attr("fill", "var(--color-info)")
+      .attr("fill", T.groupLabelFill)
       .text(group);
   });
 
@@ -628,7 +657,8 @@ export function drawForest(studies, m, options = {}) {
     .attr("x", efAnnotX)
     .attr("y", hY)
     .style("font-size", L.labelFontSize)
-    .attr("fill", "var(--fg-muted)")
+    .style("font-family", T.fontFamily)
+    .attr("fill", T.fgMuted)
     .text("Effect [95% CI]");
 
   svg.append("text")
@@ -636,7 +666,8 @@ export function drawForest(studies, m, options = {}) {
     .attr("y", hY)
     .attr("text-anchor", "end")
     .style("font-size", L.labelFontSize)
-    .attr("fill", "var(--fg-muted)")
+    .style("font-family", T.fontFamily)
+    .attr("fill", T.fgMuted)
     .text("Weight");
 
   // Per-study rows (page slice only)
@@ -661,7 +692,8 @@ export function drawForest(studies, m, options = {}) {
       .attr("x", efAnnotX)
       .attr("y", rowMid)
       .style("font-size", L.annotFontSize)
-      .attr("fill", d.filled ? "var(--fg-muted)" : "var(--fg-subtle)")
+      .style("font-family", T.fontFamily)
+      .attr("fill", d.filled ? T.fgMuted : T.fgSubtle)
       .text(`${efStr} ${ciStr}`);
 
     svg.append("text")
@@ -669,7 +701,8 @@ export function drawForest(studies, m, options = {}) {
       .attr("y", rowMid)
       .attr("text-anchor", "end")
       .style("font-size", L.annotFontSize)
-      .attr("fill", d.filled ? "var(--fg-muted)" : "var(--fg-subtle)")
+      .style("font-family", T.fontFamily)
+      .attr("fill", d.filled ? T.fgMuted : T.fgSubtle)
       .text(wPct);
   });
 
@@ -682,21 +715,25 @@ export function drawForest(studies, m, options = {}) {
     const ciStr = `[${isFinite(loT) ? loT.toFixed(3) : "NA"}, ${isFinite(hiT) ? hiT.toFixed(3) : "NA"}]`;
     svg.append("text")
       .attr("x", efAnnotX).attr("y", yMid + 4)
-      .style("font-size", L.annotFontSize).attr("fill", color)
+      .style("font-size", L.annotFontSize)
+      .style("font-family", T.fontFamily)
+      .attr("fill", color)
       .text(`${efStr} ${ciStr}`);
     svg.append("text")
       .attr("x", wtAnnotX).attr("y", yMid + 4)
       .attr("text-anchor", "end")
-      .style("font-size", L.annotFontSize).attr("fill", color)
+      .style("font-size", L.annotFontSize)
+      .style("font-family", T.fontFamily)
+      .attr("fill", color)
       .text("100%");
   }
 
   if (showFE) {
     annotatePooled(m.FE, feCiLow, feCiHigh,
-      showBoth ? L.feDiamondY : L.diamondY, "var(--fg-muted)");
+      showBoth ? L.feDiamondY : L.diamondY, T.accentFE);
   }
   if (showRE) {
-    annotatePooled(m.RE, m.ciLow, m.ciHigh, L.diamondY, "var(--color-warning)");
+    annotatePooled(m.RE, m.ciLow, m.ciHigh, L.diamondY, T.accentREAnnot);
   }
 
   // ----------- PREDICTION INTERVAL -----------
@@ -707,7 +744,7 @@ export function drawForest(studies, m, options = {}) {
       .attr("x2", x(m.predHigh))
       .attr("y1", L.piY)
       .attr("y2", L.piY)
-      .attr("stroke", "var(--accent-light)")
+      .attr("stroke", T.pi)
       .attr("stroke-width", 2)
       .attr("stroke-dasharray", "6,3")
       .append("title")
@@ -717,12 +754,12 @@ export function drawForest(studies, m, options = {}) {
     svg.append("line")
       .attr("x1", x(m.predLow)).attr("x2", x(m.predLow))
       .attr("y1", L.piY - 5).attr("y2", L.piY + 5)
-      .attr("stroke", "var(--accent-light)").attr("stroke-width", 2);
+      .attr("stroke", T.pi).attr("stroke-width", 2);
 
     svg.append("line")
       .attr("x1", x(m.predHigh)).attr("x2", x(m.predHigh))
       .attr("y1", L.piY - 5).attr("y2", L.piY + 5)
-      .attr("stroke", "var(--accent-light)").attr("stroke-width", 2);
+      .attr("stroke", T.pi).attr("stroke-width", 2);
 
     // Label
     const pi_disp = { lb: profile.transform(m.predLow), ub: profile.transform(m.predHigh) };
@@ -731,7 +768,8 @@ export function drawForest(studies, m, options = {}) {
       .attr("y", L.piY + 15)
       .attr("text-anchor", "middle")
       .style("font-size", L.labelFontSize)
-      .attr("fill", "var(--accent-light)")
+      .style("font-family", T.fontFamily)
+      .attr("fill", T.pi)
       .text(`Prediction interval: ${isFinite(pi_disp.lb) ? pi_disp.lb.toFixed(3) : "NA"} to ${isFinite(pi_disp.ub) ? pi_disp.ub.toFixed(3) : "NA"}`);
   }
 
@@ -752,7 +790,8 @@ export function drawForest(studies, m, options = {}) {
     .attr("y", L.hetY)
     .attr("text-anchor", "middle")
     .style("font-size", L.annotFontSize)
-    .attr("fill", "var(--fg-muted)")
+    .style("font-family", T.fontFamily)
+    .attr("fill", T.fgMuted)
     .text(`Heterogeneity:  τ² = ${tau2Str},  I² = ${I2Str},  Q(df=${dfStr}) = ${QStr},  p = ${QpStr}`);
 
   return { totalPages };

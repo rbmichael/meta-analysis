@@ -20,17 +20,19 @@
 // args shape (set by _reportArgs in ui.js):
 //   { studies, m, profile, reg, tf, egger, begg, fatpet, fsn,
 //     influence, subgroup, method, ciMethod, useTF, mAdjusted,
-//     forestOptions }   ← forestOptions = { ciMethod, profile, pageSize }
+//     forestOptions }   ← forestOptions = { ciMethod, profile, pageSize, theme }
 //
 // Dependencies
 // ------------
 //   plots.js     drawForest()
 //   io.js        downloadBlob()
 //   constants.js Z_95
+//   export.js    resolveThemeVars(), hasEmbeddedBackground()
 
 import { drawForest } from "./plots.js";
 import { downloadBlob } from "./io.js";
 import { Z_95 } from "./constants.js";
+import { resolveThemeVars, hasEmbeddedBackground } from "./export.js";
 
 // ---------------------------------------------------------------------------
 // SVG serialization
@@ -48,13 +50,20 @@ function serializeSVG(svgEl) {
   clone.setAttribute("width",  w);
   clone.setAttribute("height", h);
 
-  // Inject a background rect so the SVG is self-contained on any background
-  // colour (dark report page, white print page, standalone file viewer).
-  const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-  bg.setAttribute("width",  "100%");
-  bg.setAttribute("height", "100%");
-  bg.setAttribute("fill",   REPORT_BG);
-  clone.insertBefore(bg, clone.firstChild);
+  // Resolve CSS custom properties so SVGs are self-contained in the report
+  // document (which has its own CSS cascade that doesn't apply to serialised SVG).
+  resolveThemeVars(clone);
+
+  // Inject a dark background only when the SVG has no embedded background rect.
+  // Journal-preset forest plots include their own white rect via drawForest();
+  // skipping the dark inject preserves that white background in print/export.
+  if (!hasEmbeddedBackground(clone)) {
+    const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    bg.setAttribute("width",  "100%");
+    bg.setAttribute("height", "100%");
+    bg.setAttribute("fill",   REPORT_BG);
+    clone.insertBefore(bg, clone.firstChild);
+  }
 
   return new XMLSerializer().serializeToString(clone);
 }

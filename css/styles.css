@@ -1264,6 +1264,22 @@ input[type="file"]::file-selector-button:hover {
   font-size: 1em;
 }
 
+.forest-theme-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--fg-muted);
+  margin-left: 10px;
+}
+
+.forest-theme-label select {
+  width: auto;
+  min-width: 105px;
+  font-size: 1em;
+}
+
 /* ---- Plot export buttons ---- */
 .plot-export {
   display: flex;
