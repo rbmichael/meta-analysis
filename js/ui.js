@@ -519,6 +519,30 @@ document.getElementById("cumulativeFunnelStep").addEventListener("input", e => {
   _updateCumFunnelLabel(step);
   drawCumulativeFunnel(_cumFunnelStudies, _cumFunnelResults, _cumFunnelProfile, step);
 });
+document.getElementById("caterpillarPageSize").addEventListener("change", () => {
+  if (!_caterpillarArgs) return;
+  caterpillarPage = 0;
+  const raw = document.getElementById("caterpillarPageSize").value;
+  _caterpillarArgs.pageSize = raw === "Infinity" ? Infinity : +raw;
+  const { totalPages } = drawCaterpillarPlot(
+    _caterpillarArgs.studies, _caterpillarArgs.m, _caterpillarArgs.profile,
+    { pageSize: _caterpillarArgs.pageSize, page: caterpillarPage }
+  );
+  renderCaterpillarNav(totalPages);
+});
+
+document.getElementById("cumulativeForestPageSize").addEventListener("change", () => {
+  if (!_cumulativeForestArgs) return;
+  cumulativeForestPage = 0;
+  const raw = document.getElementById("cumulativeForestPageSize").value;
+  _cumulativeForestArgs.pageSize = raw === "Infinity" ? Infinity : +raw;
+  const { totalPages } = drawCumulativeForest(
+    _cumulativeForestArgs.results, _cumulativeForestArgs.profile,
+    { pageSize: _cumulativeForestArgs.pageSize, page: cumulativeForestPage }
+  );
+  renderCumulativeForestNav(totalPages);
+});
+
 document.getElementById("forestPageSize").addEventListener("change", () => {
   if (!_forestArgs) return;
   forestPage = 0;
@@ -1327,9 +1351,10 @@ function populateExampleData(type) {
 // ---------------- META-REGRESSION RESULTS PANEL ----------------
 function renderRegressionPanel(reg, method, ciMethod, kExcluded = 0) {
   const panel = document.getElementById("regressionPanel");
+  const section = document.getElementById("regressionSection");
 
-  if (!moderators.length) { panel.style.display = "none"; return; }
-  panel.style.display = "block";
+  if (!moderators.length) { section.style.display = "none"; return; }
+  section.style.display = "";
 
   if (reg.rankDeficient) {
     panel.innerHTML = `
@@ -1456,6 +1481,14 @@ document.getElementById("exportScale").addEventListener("change", e => {
 let forestPage = 0;
 let _forestArgs = null;  // { studies, m, options } — cached for page-nav re-renders
 let _forestPoolDisplay = "RE"; // "FE" | "RE" | "Both"
+
+// ---------------- CATERPILLAR PLOT PAGINATION STATE ----------------
+let caterpillarPage = 0;
+let _caterpillarArgs = null;  // { studies, m, profile, pageSize }
+
+// ---------------- CUMULATIVE FOREST PAGINATION STATE ----------------
+let cumulativeForestPage = 0;
+let _cumulativeForestArgs = null;  // { results, profile, pageSize }
 let _forestTheme = "default";  // visual style preset key (see forestThemes.js)
 
 document.querySelectorAll(".forest-pool-btn").forEach(btn => {
@@ -1538,6 +1571,70 @@ function renderForestNav(totalPages) {
         { ..._forestArgs.options, page: forestPage }
       );
       renderForestNav(tp);
+    }
+  });
+}
+
+function renderCaterpillarNav(totalPages) {
+  const nav = document.getElementById("caterpillarNav");
+  if (!nav) return;
+  if (totalPages <= 1) { nav.innerHTML = ""; return; }
+  const kAll = _caterpillarArgs?.studies?.length ?? "?";
+  nav.innerHTML =
+    `<button id="caterpillarPrev" ${caterpillarPage === 0 ? "disabled" : ""}>&#8249; Prev</button>` +
+    `<span>Page ${caterpillarPage + 1} of ${totalPages}</span>` +
+    `<button id="caterpillarNext" ${caterpillarPage >= totalPages - 1 ? "disabled" : ""}>Next &#8250;</button>` +
+    `<span class="forest-nav-note">Sorted by effect size across all ${kAll} studies</span>`;
+  document.getElementById("caterpillarPrev").addEventListener("click", () => {
+    if (caterpillarPage > 0) {
+      caterpillarPage--;
+      const { totalPages: tp } = drawCaterpillarPlot(
+        _caterpillarArgs.studies, _caterpillarArgs.m, _caterpillarArgs.profile,
+        { pageSize: _caterpillarArgs.pageSize, page: caterpillarPage }
+      );
+      renderCaterpillarNav(tp);
+    }
+  });
+  document.getElementById("caterpillarNext").addEventListener("click", () => {
+    if (caterpillarPage < totalPages - 1) {
+      caterpillarPage++;
+      const { totalPages: tp } = drawCaterpillarPlot(
+        _caterpillarArgs.studies, _caterpillarArgs.m, _caterpillarArgs.profile,
+        { pageSize: _caterpillarArgs.pageSize, page: caterpillarPage }
+      );
+      renderCaterpillarNav(tp);
+    }
+  });
+}
+
+function renderCumulativeForestNav(totalPages) {
+  const nav = document.getElementById("cumulativeForestNav");
+  if (!nav) return;
+  if (totalPages <= 1) { nav.innerHTML = ""; return; }
+  const kAll = _cumulativeForestArgs?.results?.length ?? "?";
+  nav.innerHTML =
+    `<button id="cumForestPrev" ${cumulativeForestPage === 0 ? "disabled" : ""}>&#8249; Prev</button>` +
+    `<span>Page ${cumulativeForestPage + 1} of ${totalPages}</span>` +
+    `<button id="cumForestNext" ${cumulativeForestPage >= totalPages - 1 ? "disabled" : ""}>Next &#8250;</button>` +
+    `<span class="forest-nav-note">Cumulative steps across all ${kAll} studies</span>`;
+  document.getElementById("cumForestPrev").addEventListener("click", () => {
+    if (cumulativeForestPage > 0) {
+      cumulativeForestPage--;
+      const { totalPages: tp } = drawCumulativeForest(
+        _cumulativeForestArgs.results, _cumulativeForestArgs.profile,
+        { pageSize: _cumulativeForestArgs.pageSize, page: cumulativeForestPage }
+      );
+      renderCumulativeForestNav(tp);
+    }
+  });
+  document.getElementById("cumForestNext").addEventListener("click", () => {
+    if (cumulativeForestPage < totalPages - 1) {
+      cumulativeForestPage++;
+      const { totalPages: tp } = drawCumulativeForest(
+        _cumulativeForestArgs.results, _cumulativeForestArgs.profile,
+        { pageSize: _cumulativeForestArgs.pageSize, page: cumulativeForestPage }
+      );
+      renderCumulativeForestNav(tp);
     }
   });
 }
@@ -1913,6 +2010,11 @@ function renderPUniformPanel(puniform, m, profile) {
 // -----------------------------------------------------------------------------
 function runAnalysis() {
   scheduleSave();
+  // Reset accordion sections to their default open/closed states on each run.
+  document.querySelectorAll(".results-section").forEach(d => d.removeAttribute("open"));
+  caterpillarPage = 0;
+  cumulativeForestPage = 0;
+
   const type = document.getElementById("effectType").value;
   const profile = effectProfiles[type];
   if (!profile) return;
@@ -2051,7 +2153,7 @@ function runAnalysis() {
         <td>${isSingle?"NA":isFinite(r.I2)?r.I2.toFixed(1):"0"}</td></tr>`;
     });
     subgroupHTML += `<tr style="font-weight:bold;"><td colspan="7">Q_between = ${subgroup.Qbetween.toFixed(3)}, df = ${subgroup.df}, p = ${subgroup.p.toFixed(4)}</td></tr></table>`;
-  } else { subgroupHTML = "<i>Add at least 2 groups to see subgroup analysis</i><br>"; }
+  }
 
   // Adjusted RE
   let mAdjusted = null;
@@ -2078,15 +2180,21 @@ function runAnalysis() {
     CI [${fmt(ci_disp.lb)}, ${fmt(ci_disp.ub)}]<br>
     ${hBtn("het.tau2")}τ²=${fmt(m.tau2)} [${fmt(m.tauCI[0])}, ${isFinite(m.tauCI[1])?fmt(m.tauCI[1]):"∞"}] | ${hBtn("het.I2")}I²=${fmt(m.I2)}% [${fmt(m.I2CI[0])}%, ${fmt(m.I2CI[1])}%] | ${hBtn("het.H2")}H²-CI=[${fmt(m.H2CI[0])}, ${isFinite(m.H2CI[1])?fmt(m.H2CI[1]):"∞"}]<br>
     ${hBtn("het.Q")}${m.dist}-stat=${fmt(m.stat)} | p=${fmt(m.pval)}<br>
-    ${hBtn("het.pred")}Prediction interval (Higgins 2009, t<sub>${m.df > 0 ? m.df - 1 : "—"}</sub>): ${isFinite(pred_disp.lb) ? `[${fmt(pred_disp.lb)}, ${fmt(pred_disp.ub)}]` : "NA (k &lt; 3)"}<br>
-    <b>Publication bias:</b><br>
+    ${hBtn("het.pred")}Prediction interval (Higgins 2009, t<sub>${m.df > 0 ? m.df - 1 : "—"}</sub>): ${isFinite(pred_disp.lb) ? `[${fmt(pred_disp.lb)}, ${fmt(pred_disp.ub)}]` : "NA (k &lt; 3)"}
+  `;
+
+  document.getElementById("pubBiasStats").innerHTML = `
     &nbsp;&nbsp;${hBtn("bias.egger")}Egger: intercept=${isFinite(egger.intercept)?fmt(egger.intercept):"NA"} | p=${isFinite(egger.p)?fmt(egger.p):"NA (k<3)"}<br>
     &nbsp;&nbsp;${hBtn("bias.begg")}Begg: τ=${isFinite(begg.tau)?fmt(begg.tau):"NA"} | p=${isFinite(begg.p)?fmt(begg.p):"NA (k<3)"}<br>
     &nbsp;&nbsp;${hBtn("bias.fatpet")}FAT (bias): β₁=${isFinite(fatpet.slope)?fmt(fatpet.slope):"NA"} | p=${isFinite(fatpet.slopeP)?fmt(fatpet.slopeP):"NA (k<3)"} &nbsp;·&nbsp; PET (effect at SE→0): ${isFinite(fatpet.intercept)?fmt(profile.transform(fatpet.intercept)):"NA"} | p=${isFinite(fatpet.interceptP)?fmt(fatpet.interceptP):"NA (k<3)"}<br>
     &nbsp;&nbsp;${hBtn("bias.fsn")}Fail-safe N (Rosenthal): ${isFinite(fsn.rosenthal)?Math.round(fsn.rosenthal):"NA"} &nbsp;·&nbsp; Orwin (trivial=0.1): ${isFinite(fsn.orwin)?Math.round(fsn.orwin):"NA"}<br>
-    <b>Trim & Fill:</b>${hBtn("bias.trimfill")} ${useTF?"ON":"OFF"} (${tf.length} filled studies)
+    <b>Trim &amp; Fill:</b>${hBtn("bias.trimfill")} ${useTF?"ON":"OFF"} (${tf.length} filled studies)
   `;
-  document.getElementById("results").innerHTML += influenceHTML + subgroupHTML;
+  document.getElementById("influenceDiagTable").innerHTML = influenceHTML;
+
+  const hasSubgroup = subgroup && subgroup.G >= 2;
+  document.getElementById("subgroupSection").style.display = hasSubgroup ? "" : "none";
+  document.getElementById("subgroupTable").innerHTML = hasSubgroup ? subgroupHTML : "";
 
   renderStudyTable(all, m, profile);
   renderSensitivityPanel(studies, m, method, ciMethod, profile);
@@ -2172,7 +2280,12 @@ function runAnalysis() {
   }
   // "input" order: no sort — preserves table order
   const cumResults = cumulativeMeta(cumulativeStudies, method, ciMethod);
-  drawCumulativeForest(cumResults, profile);
+  cumulativeForestPage = 0;
+  const rawCumPageSize = document.getElementById("cumulativeForestPageSize")?.value ?? "30";
+  const cumForestPageSize = rawCumPageSize === "Infinity" ? Infinity : +rawCumPageSize;
+  _cumulativeForestArgs = { results: cumResults, profile, pageSize: cumForestPageSize };
+  const { totalPages: cumForestPages } = drawCumulativeForest(cumResults, profile, { pageSize: cumForestPageSize, page: 0 });
+  renderCumulativeForestNav(cumForestPages);
 
   // ---- Cumulative funnel plot ----
   _cumFunnelStudies = cumulativeStudies;
@@ -2188,15 +2301,19 @@ function runAnalysis() {
   // ---- Orchard + caterpillar plots ----
   drawOrchardPlot(all, m, profile);
   document.getElementById("orchardPlotBlock").style.display = "";
-  drawCaterpillarPlot(all, m, profile);
+  caterpillarPage = 0;
+  const rawCatPageSize = document.getElementById("caterpillarPageSize")?.value ?? "30";
+  const catPageSize = rawCatPageSize === "Infinity" ? Infinity : +rawCatPageSize;
+  _caterpillarArgs = { studies: all, m, profile, pageSize: catPageSize };
+  const { totalPages: catPages } = drawCaterpillarPlot(all, m, profile, { pageSize: catPageSize, page: 0 });
+  renderCaterpillarNav(catPages);
   document.getElementById("caterpillarPlotBlock").style.display = "";
 
   // ---- Risk-of-bias plots ----
   const hasRoB = _robDomains.length > 0 && studies.length > 0;
   drawRoBTrafficLight(studies, _robDomains, _robData);
-  document.getElementById("robTrafficLightBlock").style.display = hasRoB ? "" : "none";
   drawRoBSummary(studies, _robDomains, _robData);
-  document.getElementById("robSummaryBlock").style.display = hasRoB ? "" : "none";
+  document.getElementById("robSection").style.display = hasRoB ? "" : "none";
 
   updateValidationWarnings(studies, excluded, softWarnings);
   return true;

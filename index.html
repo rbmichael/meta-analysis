@@ -210,173 +210,246 @@
           Run the analysis to see results.
         </div>
 
-        <div id="staleBanner">
-          ⚠️ Data or settings changed — click Run to update.
-        </div>
-
-        <div id="results"></div>
-        <div id="studyTable"></div>
-        <div id="sensitivityPanel"></div>
-        <div id="regressionPanel" style="display:none"></div>
-
-        <div id="pCurvePanel"></div>
-
-        <div class="plot-block" id="pCurvePlotBlock" style="display:none">
-          <p class="plot-label">P-curve</p>
-          <div class="plot-export">
-            <button class="export-btn" data-target="pCurvePlot" data-format="svg">SVG</button>
-            <button class="export-btn" data-target="pCurvePlot" data-format="png">PNG</button>
-            <button class="export-btn" data-target="pCurvePlot" data-format="tiff">TIFF</button>
+        <!-- ── Section 1: Core results (always open) ── -->
+        <div id="coreSection">
+          <div id="staleBanner">
+            ⚠️ Data or settings changed — click Run to update.
           </div>
-          <svg id="pCurvePlot" width="500" height="380"></svg>
+          <div id="results"></div>
         </div>
 
-        <div id="pUniformPanel"></div>
-
-        <div class="plot-block" id="pUniformPlotBlock" style="display:none">
-          <p class="plot-label">P-uniform</p>
-          <div class="plot-export">
-            <button class="export-btn" data-target="pUniformPlot" data-format="svg">SVG</button>
-            <button class="export-btn" data-target="pUniformPlot" data-format="png">PNG</button>
-            <button class="export-btn" data-target="pUniformPlot" data-format="tiff">TIFF</button>
-          </div>
-          <svg id="pUniformPlot" width="500" height="170"></svg>
-        </div>
-
-        <div id="bubblePlots"></div>
-
-        <div class="plot-block" id="robTrafficLightBlock" style="display:none">
-          <p class="plot-label">Risk-of-bias traffic light</p>
-          <div class="plot-export">
-            <button class="export-btn" data-target="robTrafficLight" data-format="svg">SVG</button>
-            <button class="export-btn" data-target="robTrafficLight" data-format="png">PNG</button>
-            <button class="export-btn" data-target="robTrafficLight" data-format="tiff">TIFF</button>
-          </div>
-          <svg id="robTrafficLight" width="500" height="400"></svg>
-        </div>
-
-        <div class="plot-block" id="robSummaryBlock" style="display:none">
-          <p class="plot-label">Risk-of-bias summary</p>
-          <div class="plot-export">
-            <button class="export-btn" data-target="robSummary" data-format="svg">SVG</button>
-            <button class="export-btn" data-target="robSummary" data-format="png">PNG</button>
-            <button class="export-btn" data-target="robSummary" data-format="tiff">TIFF</button>
-          </div>
-          <svg id="robSummary" width="500" height="300"></svg>
-        </div>
-
-        <div class="plot-block" id="orchardPlotBlock" style="display:none">
-          <p class="plot-label">Orchard plot</p>
-          <div class="plot-export">
-            <button class="export-btn" data-target="orchardPlot" data-format="svg">SVG</button>
-            <button class="export-btn" data-target="orchardPlot" data-format="png">PNG</button>
-            <button class="export-btn" data-target="orchardPlot" data-format="tiff">TIFF</button>
-          </div>
-          <svg id="orchardPlot" width="520" height="340"></svg>
-        </div>
-
-        <div class="plot-block" id="caterpillarPlotBlock" style="display:none">
-          <p class="plot-label">Caterpillar plot</p>
-          <div class="plot-export">
-            <button class="export-btn" data-target="caterpillarPlot" data-format="svg">SVG</button>
-            <button class="export-btn" data-target="caterpillarPlot" data-format="png">PNG</button>
-            <button class="export-btn" data-target="caterpillarPlot" data-format="tiff">TIFF</button>
-          </div>
-          <svg id="caterpillarPlot" width="520" height="400"></svg>
-        </div>
-
-        <div class="plot-block">
-          <p class="plot-label">Forest plot</p>
-          <div class="plot-export">
-            <button class="export-btn" data-target="forestPlot" data-format="svg">SVG</button>
-            <button class="export-btn" data-target="forestPlot" data-format="png">PNG</button>
-            <button class="export-btn" data-target="forestPlot" data-format="tiff">TIFF</button>
-            <div class="forest-pool-toggle" role="group" aria-label="Pooled estimate display">
-              <button class="forest-pool-btn" data-display="FE">FE</button>
-              <button class="forest-pool-btn active" data-display="RE">RE</button>
-              <button class="forest-pool-btn" data-display="Both">Both</button>
+        <!-- ── Section 2: Forest plot (always open) ── -->
+        <div id="forestSection">
+          <div class="plot-block">
+            <p class="plot-label">Forest plot</p>
+            <div class="plot-export">
+              <button class="export-btn" data-target="forestPlot" data-format="svg">SVG</button>
+              <button class="export-btn" data-target="forestPlot" data-format="png">PNG</button>
+              <button class="export-btn" data-target="forestPlot" data-format="tiff">TIFF</button>
+              <div class="forest-pool-toggle" role="group" aria-label="Pooled estimate display">
+                <button class="forest-pool-btn" data-display="FE">FE</button>
+                <button class="forest-pool-btn active" data-display="RE">RE</button>
+                <button class="forest-pool-btn" data-display="Both">Both</button>
+              </div>
+              <label class="forest-pagesize-label">
+                Studies per page
+                <select id="forestPageSize">
+                  <option value="20">20</option>
+                  <option value="30" selected>30</option>
+                  <option value="50">50</option>
+                  <option value="Infinity">All</option>
+                </select>
+              </label>
+              <label class="forest-theme-label" title="Visual style preset for the forest plot">
+                Style
+                <select id="forestTheme">
+                  <option value="default">App default</option>
+                  <option value="cochrane">Cochrane</option>
+                  <option value="jama">JAMA</option>
+                  <option value="bw">Black &amp; white</option>
+                </select>
+              </label>
             </div>
-            <label class="forest-pagesize-label">
-              Studies per page
-              <select id="forestPageSize">
-                <option value="20">20</option>
-                <option value="30" selected>30</option>
-                <option value="50">50</option>
-                <option value="Infinity">All</option>
-              </select>
-            </label>
-            <label class="forest-theme-label" title="Visual style preset for the forest plot">
-              Style
-              <select id="forestTheme">
-                <option value="default">App default</option>
-                <option value="cochrane">Cochrane</option>
-                <option value="jama">JAMA</option>
-                <option value="bw">Black &amp; white</option>
-              </select>
-            </label>
+            <svg id="forestPlot" width="900" height="420"></svg>
+            <div id="forestNav"></div>
           </div>
-          <svg id="forestPlot" width="900" height="420"></svg>
-          <div id="forestNav"></div>
         </div>
 
-        <div class="plot-block">
-          <p class="plot-label">Funnel plot</p>
-          <div class="plot-export">
-            <button class="export-btn" data-target="funnelPlot" data-format="svg">SVG</button>
-            <button class="export-btn" data-target="funnelPlot" data-format="png">PNG</button>
-            <button class="export-btn" data-target="funnelPlot" data-format="tiff">TIFF</button>
-            <div class="funnel-mode-toggle" role="group" aria-label="Funnel plot mode">
-              <button class="funnel-mode-btn active" data-mode="standard">Standard</button>
-              <button class="funnel-mode-btn"        data-mode="contour">Contour</button>
+        <!-- ── Section: Individual Studies (collapsed) ── -->
+        <details class="results-section" id="studyTableSection">
+          <summary class="results-section-header">Individual Studies</summary>
+          <div class="results-section-body">
+            <div id="studyTable"></div>
+          </div>
+        </details>
+
+        <!-- ── Section 3: Publication Bias (collapsed) ── -->
+        <details class="results-section" id="pubBiasSection">
+          <summary class="results-section-header">Publication Bias</summary>
+          <div class="results-section-body">
+            <div id="pubBiasStats"></div>
+          </div>
+          <div class="plot-block">
+            <p class="plot-label">Funnel plot</p>
+            <div class="plot-export">
+              <button class="export-btn" data-target="funnelPlot" data-format="svg">SVG</button>
+              <button class="export-btn" data-target="funnelPlot" data-format="png">PNG</button>
+              <button class="export-btn" data-target="funnelPlot" data-format="tiff">TIFF</button>
+              <div class="funnel-mode-toggle" role="group" aria-label="Funnel plot mode">
+                <button class="funnel-mode-btn active" data-mode="standard">Standard</button>
+                <button class="funnel-mode-btn"        data-mode="contour">Contour</button>
+              </div>
             </div>
+            <svg id="funnelPlot" width="500" height="400"></svg>
           </div>
-          <svg id="funnelPlot" width="500" height="400"></svg>
-        </div>
+        </details>
 
-        <div class="plot-block">
-          <p class="plot-label">Influence plot</p>
-          <div class="plot-export">
-            <button class="export-btn" data-target="influencePlot" data-format="svg">SVG</button>
-            <button class="export-btn" data-target="influencePlot" data-format="png">PNG</button>
-            <button class="export-btn" data-target="influencePlot" data-format="tiff">TIFF</button>
-          </div>
-          <svg id="influencePlot" width="500" height="400"></svg>
-        </div>
+        <!-- ── Section 4: Sensitivity Analysis (collapsed) ── -->
+        <details class="results-section" id="sensitivitySection">
+          <summary class="results-section-header">Sensitivity Analysis</summary>
+          <div id="sensitivityPanel"></div>
+        </details>
 
-        <div class="plot-block" id="baujatPlotBlock" style="display:none">
-          <p class="plot-label">Baujat plot</p>
-          <div class="plot-export">
-            <button class="export-btn" data-target="baujatPlot" data-format="svg">SVG</button>
-            <button class="export-btn" data-target="baujatPlot" data-format="png">PNG</button>
-            <button class="export-btn" data-target="baujatPlot" data-format="tiff">TIFF</button>
+        <!-- ── Section: Subgroup Analysis (collapsed, hidden until groups defined) ── -->
+        <details class="results-section" id="subgroupSection" style="display:none">
+          <summary class="results-section-header">Subgroup Analysis</summary>
+          <div class="results-section-body">
+            <div id="subgroupTable"></div>
           </div>
-          <svg id="baujatPlot" width="500" height="420"></svg>
-        </div>
+        </details>
 
-        <div class="plot-block">
-          <p class="plot-label">Cumulative forest plot</p>
-          <div class="plot-export">
-            <button class="export-btn" data-target="cumulativePlot" data-format="svg">SVG</button>
-            <button class="export-btn" data-target="cumulativePlot" data-format="png">PNG</button>
-            <button class="export-btn" data-target="cumulativePlot" data-format="tiff">TIFF</button>
+        <!-- ── Section 5: Diagnostics (collapsed) ── -->
+        <details class="results-section" id="diagnosticSection">
+          <summary class="results-section-header">Diagnostics</summary>
+          <div class="results-section-body">
+            <div id="influenceDiagTable"></div>
           </div>
-          <svg id="cumulativePlot" width="900" height="420"></svg>
-        </div>
+          <div class="plot-block">
+            <p class="plot-label">Influence plot</p>
+            <div class="plot-export">
+              <button class="export-btn" data-target="influencePlot" data-format="svg">SVG</button>
+              <button class="export-btn" data-target="influencePlot" data-format="png">PNG</button>
+              <button class="export-btn" data-target="influencePlot" data-format="tiff">TIFF</button>
+            </div>
+            <svg id="influencePlot" width="500" height="400"></svg>
+          </div>
+          <div class="plot-block" id="baujatPlotBlock" style="display:none">
+            <p class="plot-label">Baujat plot</p>
+            <div class="plot-export">
+              <button class="export-btn" data-target="baujatPlot" data-format="svg">SVG</button>
+              <button class="export-btn" data-target="baujatPlot" data-format="png">PNG</button>
+              <button class="export-btn" data-target="baujatPlot" data-format="tiff">TIFF</button>
+            </div>
+            <svg id="baujatPlot" width="500" height="420"></svg>
+          </div>
+        </details>
 
-        <div class="plot-block" id="cumulativeFunnelBlock" style="display:none">
-          <p class="plot-label">Cumulative funnel plot</p>
-          <div class="plot-export">
-            <button class="export-btn" data-target="cumulativeFunnelPlot" data-format="svg">SVG</button>
-            <button class="export-btn" data-target="cumulativeFunnelPlot" data-format="png">PNG</button>
-            <button class="export-btn" data-target="cumulativeFunnelPlot" data-format="tiff">TIFF</button>
+        <!-- ── Section 6: Cumulative Analysis (collapsed) ── -->
+        <details class="results-section" id="cumulativeSection">
+          <summary class="results-section-header">Cumulative Analysis</summary>
+          <div class="plot-block">
+            <p class="plot-label">Cumulative forest plot</p>
+            <div class="plot-export">
+              <button class="export-btn" data-target="cumulativePlot" data-format="svg">SVG</button>
+              <button class="export-btn" data-target="cumulativePlot" data-format="png">PNG</button>
+              <button class="export-btn" data-target="cumulativePlot" data-format="tiff">TIFF</button>
+              <label class="forest-pagesize-label">
+                Studies per page
+                <select id="cumulativeForestPageSize">
+                  <option value="20">20</option>
+                  <option value="30" selected>30</option>
+                  <option value="50">50</option>
+                  <option value="Infinity">All</option>
+                </select>
+              </label>
+            </div>
+            <svg id="cumulativePlot" width="900" height="420"></svg>
+            <div id="cumulativeForestNav"></div>
           </div>
-          <div class="cumfunnel-controls">
-            <span id="cumulativeFunnelLabel" class="cumfunnel-label"></span>
-            <input type="range" id="cumulativeFunnelStep" class="cumfunnel-slider"
-                   min="0" max="0" value="0" step="1">
+          <div class="plot-block" id="cumulativeFunnelBlock" style="display:none">
+            <p class="plot-label">Cumulative funnel plot</p>
+            <div class="plot-export">
+              <button class="export-btn" data-target="cumulativeFunnelPlot" data-format="svg">SVG</button>
+              <button class="export-btn" data-target="cumulativeFunnelPlot" data-format="png">PNG</button>
+              <button class="export-btn" data-target="cumulativeFunnelPlot" data-format="tiff">TIFF</button>
+            </div>
+            <div class="cumfunnel-controls">
+              <span id="cumulativeFunnelLabel" class="cumfunnel-label"></span>
+              <input type="range" id="cumulativeFunnelStep" class="cumfunnel-slider"
+                     min="0" max="0" value="0" step="1">
+            </div>
+            <svg id="cumulativeFunnelPlot" width="500" height="420"></svg>
           </div>
-          <svg id="cumulativeFunnelPlot" width="500" height="420"></svg>
-        </div>
+        </details>
+
+        <!-- ── Section 7: Alternative Visualisations (collapsed) ── -->
+        <details class="results-section" id="altVizSection">
+          <summary class="results-section-header">Alternative Visualisations</summary>
+          <div class="plot-block" id="orchardPlotBlock" style="display:none">
+            <p class="plot-label">Orchard plot</p>
+            <div class="plot-export">
+              <button class="export-btn" data-target="orchardPlot" data-format="svg">SVG</button>
+              <button class="export-btn" data-target="orchardPlot" data-format="png">PNG</button>
+              <button class="export-btn" data-target="orchardPlot" data-format="tiff">TIFF</button>
+            </div>
+            <svg id="orchardPlot" width="520" height="340"></svg>
+          </div>
+          <div class="plot-block" id="caterpillarPlotBlock" style="display:none">
+            <p class="plot-label">Caterpillar plot</p>
+            <div class="plot-export">
+              <button class="export-btn" data-target="caterpillarPlot" data-format="svg">SVG</button>
+              <button class="export-btn" data-target="caterpillarPlot" data-format="png">PNG</button>
+              <button class="export-btn" data-target="caterpillarPlot" data-format="tiff">TIFF</button>
+              <label class="forest-pagesize-label">
+                Studies per page
+                <select id="caterpillarPageSize">
+                  <option value="20">20</option>
+                  <option value="30" selected>30</option>
+                  <option value="50">50</option>
+                  <option value="Infinity">All</option>
+                </select>
+              </label>
+            </div>
+            <svg id="caterpillarPlot" width="520" height="400"></svg>
+            <div id="caterpillarNav"></div>
+          </div>
+        </details>
+
+        <!-- ── Section 8: P-value Analyses (collapsed) ── -->
+        <details class="results-section" id="pvalSection">
+          <summary class="results-section-header">P-value Analyses</summary>
+          <div id="pCurvePanel"></div>
+          <div class="plot-block" id="pCurvePlotBlock" style="display:none">
+            <p class="plot-label">P-curve</p>
+            <div class="plot-export">
+              <button class="export-btn" data-target="pCurvePlot" data-format="svg">SVG</button>
+              <button class="export-btn" data-target="pCurvePlot" data-format="png">PNG</button>
+              <button class="export-btn" data-target="pCurvePlot" data-format="tiff">TIFF</button>
+            </div>
+            <svg id="pCurvePlot" width="500" height="380"></svg>
+          </div>
+          <div id="pUniformPanel"></div>
+          <div class="plot-block" id="pUniformPlotBlock" style="display:none">
+            <p class="plot-label">P-uniform</p>
+            <div class="plot-export">
+              <button class="export-btn" data-target="pUniformPlot" data-format="svg">SVG</button>
+              <button class="export-btn" data-target="pUniformPlot" data-format="png">PNG</button>
+              <button class="export-btn" data-target="pUniformPlot" data-format="tiff">TIFF</button>
+            </div>
+            <svg id="pUniformPlot" width="500" height="170"></svg>
+          </div>
+        </details>
+
+        <!-- ── Section 9: Risk of Bias (collapsed, hidden until RoB data present) ── -->
+        <details class="results-section" id="robSection" style="display:none">
+          <summary class="results-section-header">Risk of Bias</summary>
+          <div class="plot-block" id="robTrafficLightBlock">
+            <p class="plot-label">Risk-of-bias traffic light</p>
+            <div class="plot-export">
+              <button class="export-btn" data-target="robTrafficLight" data-format="svg">SVG</button>
+              <button class="export-btn" data-target="robTrafficLight" data-format="png">PNG</button>
+              <button class="export-btn" data-target="robTrafficLight" data-format="tiff">TIFF</button>
+            </div>
+            <svg id="robTrafficLight" width="500" height="400"></svg>
+          </div>
+          <div class="plot-block" id="robSummaryBlock">
+            <p class="plot-label">Risk-of-bias summary</p>
+            <div class="plot-export">
+              <button class="export-btn" data-target="robSummary" data-format="svg">SVG</button>
+              <button class="export-btn" data-target="robSummary" data-format="png">PNG</button>
+              <button class="export-btn" data-target="robSummary" data-format="tiff">TIFF</button>
+            </div>
+            <svg id="robSummary" width="500" height="300"></svg>
+          </div>
+        </details>
+
+        <!-- ── Section 10: Meta-regression (collapsed, hidden until moderators present) ── -->
+        <details class="results-section" id="regressionSection" style="display:none">
+          <summary class="results-section-header">Meta-regression</summary>
+          <div id="regressionPanel"></div>
+          <div id="bubblePlots"></div>
+        </details>
+
       </div>
     </div><!-- #outputSection -->
 

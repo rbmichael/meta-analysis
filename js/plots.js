@@ -1244,7 +1244,7 @@ export function drawInfluencePlot(influence) {
 // Parameters:
 //   cumulativeResults — array from cumulativeMeta(), already in order
 //   profile           — effect-type profile with .label, .transform
-export function drawCumulativeForest(cumulativeResults, profile) {
+export function drawCumulativeForest(cumulativeResults, profile, options = {}) {
   const svg = d3.select("#cumulativePlot");
   svg.selectAll("*").remove();
 
@@ -1255,11 +1255,12 @@ export function drawCumulativeForest(cumulativeResults, profile) {
   const margin = { top: 40, right: 90, bottom: 46, left: 200 };
   const plotW  = 580;
   const totalW = margin.left + plotW + margin.right;
-  const totalH = margin.top + k * rowH + margin.bottom;
 
-  svg.attr("width", totalW).attr("height", totalH);
-
-  const tooltip = d3.select("#tooltip");
+  // ---- Pagination ----
+  const rawPageSize = options.pageSize ?? 30;
+  const pageSize    = rawPageSize === Infinity ? k : rawPageSize;
+  const page        = options.page ?? 0;
+  const totalPages  = Math.max(1, Math.ceil(k / pageSize));
 
   // Back-transform all results to the display scale
   const rows = cumulativeResults.map(r => {
@@ -1268,7 +1269,17 @@ export function drawCumulativeForest(cumulativeResults, profile) {
     return { ...r, re_disp, lo_disp: ci.lb, hi_disp: ci.ub };
   });
 
-  // X scale across all display-scale CI bounds
+  // Page slice — must come before totalH so pk reflects actual row count on this page
+  const pageRows = rows.slice(page * pageSize, (page + 1) * pageSize);
+  const pk = pageRows.length;
+
+  const totalH = margin.top + pk * rowH + margin.bottom;
+
+  svg.attr("width", totalW).attr("height", totalH);
+
+  const tooltip = d3.select("#tooltip");
+
+  // X scale across all display-scale CI bounds (all rows, not just this page)
   const allX = rows.flatMap(r => [r.lo_disp, r.re_disp, r.hi_disp]).filter(isFinite);
   const [xMin, xMax] = d3.extent(allX);
   const xPad  = Math.max((xMax - xMin) * 0.05, 1e-6);
@@ -1280,26 +1291,28 @@ export function drawCumulativeForest(cumulativeResults, profile) {
   const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
 
   // Title
+  const pageNote = totalPages > 1 ? ` (page ${page + 1} of ${totalPages})` : "";
   svg.append("text")
     .attr("x", margin.left + plotW / 2).attr("y", 20)
     .attr("text-anchor", "middle")
     .attr("fill", "var(--fg-muted)")
     .style("font-size", "12px")
-    .text("Cumulative meta-analysis");
+    .text(`Cumulative meta-analysis${pageNote}`);
 
   // Null reference line (at the back-transformed 0 — e.g. 0 for MD, 1 for OR/RR)
   const nullDisp = profile.transform(0);
   if (isFinite(nullDisp)) {
     g.append("line")
       .attr("x1", xScale(nullDisp)).attr("x2", xScale(nullDisp))
-      .attr("y1", 0).attr("y2", k * rowH)
+      .attr("y1", 0).attr("y2", pk * rowH)
       .attr("stroke", "var(--border-hover)").attr("stroke-dasharray", "4,3").attr("opacity", 0.6);
   }
 
-  // One row per cumulative step
-  rows.forEach((r, i) => {
-    const cy     = (i + 0.5) * rowH;
-    const isLast = i === k - 1;
+  // One row per cumulative step (current page only)
+  pageRows.forEach((r, i) => {
+    const cy          = (i + 0.5) * rowH;
+    const globalIdx   = page * pageSize + i;
+    const isLast      = globalIdx === k - 1;
     const colour = isLast ? "var(--color-warning)" : "var(--fg-subtle)";
 
     // Label (left panel)
@@ -1370,7 +1383,7 @@ export function drawCumulativeForest(cumulativeResults, profile) {
 
   // X axis
   g.append("g")
-    .attr("transform", `translate(0,${k * rowH + 6})`)
+    .attr("transform", `translate(0,${pk * rowH + 6})`)
     .call(d3.axisBottom(xScale).ticks(5));
 
   // X axis label
@@ -1379,6 +1392,8 @@ export function drawCumulativeForest(cumulativeResults, profile) {
     .attr("text-anchor", "middle")
     .style("font-size", "11px").attr("fill", "var(--fg-muted)")
     .text(profile.label);
+
+  return { totalPages };
 }
 
 // ================= CUMULATIVE FUNNEL PLOT =================
@@ -2125,7 +2140,7 @@ export function drawOrchardPlot(studies, m, profile) {
 // SVG height is set dynamically (16 px per study, capped at 900 px).
 // Studies that don't fit are hidden via an SVG clipPath so the x-axis always
 // remains visible.
-export function drawCaterpillarPlot(studies, m, profile) {
+export function drawCaterpillarPlot(studies, m, profile, options = {}) {
   const svg = d3.select("#caterpillarPlot");
   svg.selectAll("*").remove();
 
@@ -2142,6 +2157,14 @@ export function drawCaterpillarPlot(studies, m, profile) {
   const k = sorted.length;
   if (k === 0) return;
 
+  // ---- Pagination ----
+  const rawPageSize = options.pageSize ?? 30;
+  const pageSize    = rawPageSize === Infinity ? k : rawPageSize;
+  const page        = options.page ?? 0;
+  const totalPages  = Math.max(1, Math.ceil(k / pageSize));
+  const pageStudies = sorted.slice(page * pageSize, (page + 1) * pageSize);
+  const pk          = pageStudies.length;
+
   const ROW_H   = 16;
   const W       = +svg.attr("width") || 520;
   // Dynamic left margin fitted to the longest study label (≈6.5px per char at 10px font)
@@ -2149,15 +2172,12 @@ export function drawCaterpillarPlot(studies, m, profile) {
   const leftMargin  = Math.max(50, Math.min(160, Math.ceil(maxStudyLen * 6.5) + 14));
   const margin  = { top: 28, right: 20, bottom: 38, left: leftMargin };
 
-  // Dynamic height, capped at 900 px
-  const H = Math.min(900, margin.top + k * ROW_H + margin.bottom);
+  // Height fitted to the studies on this page (no cap needed with pagination)
+  const H = margin.top + pk * ROW_H + margin.bottom;
   svg.attr("height", H);
 
   const iW = W - margin.left - margin.right;
   const iH = H - margin.top  - margin.bottom;
-
-  // Visible rows that fit in iH
-  const visibleK = Math.min(k, Math.floor(iH / ROW_H));
 
   const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
 
@@ -2177,25 +2197,18 @@ export function drawCaterpillarPlot(studies, m, profile) {
     return idx >= 0 ? GROUP_COLORS[idx % GROUP_COLORS.length] : "var(--fg-subtle)";
   };
 
-  // ---- X scale (internal scale) ----
+  // ---- X scale — domain from ALL sorted studies for stability across pages ----
   // Individual study CI: yi ± Z_95 * se  (always normal, per forest plot convention)
-  const ciLows  = sorted.map(s => s.yi - Z_95 * (s.se || Math.sqrt(s.vi)));
-  const ciHighs = sorted.map(s => s.yi + Z_95 * (s.se || Math.sqrt(s.vi)));
-  const refs    = [...ciLows, ...ciHighs, m.RE, 0].filter(isFinite);
+  const allCiLows  = sorted.map(s => s.yi - Z_95 * (s.se || Math.sqrt(s.vi)));
+  const allCiHighs = sorted.map(s => s.yi + Z_95 * (s.se || Math.sqrt(s.vi)));
+  const refs    = [...allCiLows, ...allCiHighs, m.RE, 0].filter(isFinite);
   const xExtent = Math.max(...refs.map(Math.abs)) * 1.08 || 1;
   const x = d3.scaleLinear().domain([-xExtent, xExtent]).range([0, iW]);
-
-  // ---- Clip path so rows beyond iH don't overdraw the axis ----
-  const clipId = "caterpillar-clip";
-  svg.append("defs").append("clipPath").attr("id", clipId)
-    .append("rect").attr("width", iW).attr("height", iH);
-
-  const gClipped = g.append("g").attr("clip-path", `url(#${clipId})`);
 
   const tooltip = d3.select("#tooltip");
 
   // ---- Null reference line (dashed) ----
-  gClipped.append("line")
+  g.append("line")
     .attr("x1", x(0)).attr("x2", x(0))
     .attr("y1", 0).attr("y2", iH)
     .attr("stroke", "var(--border-hover)")
@@ -2204,7 +2217,7 @@ export function drawCaterpillarPlot(studies, m, profile) {
 
   // ---- RE line (solid, muted) ----
   if (isFinite(m.RE)) {
-    gClipped.append("line")
+    g.append("line")
       .attr("x1", x(m.RE)).attr("x2", x(m.RE))
       .attr("y1", 0).attr("y2", iH)
       .attr("stroke", "var(--accent)")
@@ -2212,15 +2225,15 @@ export function drawCaterpillarPlot(studies, m, profile) {
       .attr("stroke-opacity", 0.55);
   }
 
-  // ---- Study rows ----
-  sorted.slice(0, visibleK).forEach((s, i) => {
+  // ---- Study rows (current page only) ----
+  pageStudies.forEach((s, i) => {
     const cy    = i * ROW_H + ROW_H / 2;
-    const lo    = ciLows[i];
-    const hi    = ciHighs[i];
+    const lo    = s.yi - Z_95 * (s.se || Math.sqrt(s.vi));
+    const hi    = s.yi + Z_95 * (s.se || Math.sqrt(s.vi));
     const color = hasGroups ? groupColor(s.group || "") : "var(--fg-subtle)";
 
     // CI line
-    gClipped.append("line")
+    g.append("line")
       .attr("x1", x(lo)).attr("x2", x(hi))
       .attr("y1", cy).attr("y2", cy)
       .attr("stroke", color)
@@ -2229,7 +2242,7 @@ export function drawCaterpillarPlot(studies, m, profile) {
 
     // CI end ticks
     [lo, hi].forEach(v => {
-      gClipped.append("line")
+      g.append("line")
         .attr("x1", x(v)).attr("x2", x(v))
         .attr("y1", cy - 3).attr("y2", cy + 3)
         .attr("stroke", color)
@@ -2238,7 +2251,7 @@ export function drawCaterpillarPlot(studies, m, profile) {
     });
 
     // Point estimate circle
-    gClipped.append("circle")
+    g.append("circle")
       .attr("cx", x(s.yi)).attr("cy", cy)
       .attr("r", s.filled ? 2.5 : 3.2)
       .attr("fill", color)
@@ -2288,7 +2301,8 @@ export function drawCaterpillarPlot(studies, m, profile) {
     .text(profile.label);
 
   // ---- Heterogeneity + k annotation (top margin, clear of study rows) ----
-  const hetParts = [`k = ${k}`];
+  const pageNote = totalPages > 1 ? `  ·  page ${page + 1} of ${totalPages}` : "";
+  const hetParts = [`k = ${k}${pageNote}`];
   if (isFinite(m.I2))                 hetParts.push(`I² = ${(m.I2 * 100).toFixed(1)}%`);
   if (isFinite(m.tau2) && m.tau2 > 0) hetParts.push(`τ² = ${m.tau2.toFixed(3)}`);
   svg.append("text")
@@ -2319,6 +2333,8 @@ export function drawCaterpillarPlot(studies, m, profile) {
         .text(grp.length > 14 ? grp.slice(0, 13) + "…" : grp);
     });
   }
+
+  return { totalPages };
 }
 
 // ================= BAUJAT PLOT =================

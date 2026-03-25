@@ -1972,6 +1972,72 @@ html::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); 
 }
 
 /* ================================================================
+   RESULTS ACCORDION
+   ================================================================ */
+
+#coreSection,
+#forestSection {
+  margin-bottom: 0;
+}
+
+.results-section {
+  border-top: 1px solid var(--border);
+  margin: 0;
+}
+
+.results-section:last-child {
+  border-bottom: 1px solid var(--border);
+}
+
+.results-section > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 11px 4px;
+  cursor: pointer;
+  font-size: 0.78em;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+  list-style: none;
+  user-select: none;
+  outline: none;
+}
+
+.results-section > summary::-webkit-details-marker {
+  display: none;
+}
+
+.results-section > summary::after {
+  content: "";
+  display: inline-block;
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 6px solid var(--fg-muted);
+  transition: transform 0.18s ease;
+  flex-shrink: 0;
+}
+
+.results-section[open] > summary::after {
+  transform: rotate(180deg);
+}
+
+.results-section > summary:hover {
+  color: var(--fg);
+}
+
+.results-section > summary:hover::after {
+  border-top-color: var(--fg);
+}
+
+.results-section-body {
+  padding-bottom: 8px;
+}
+
+/* ================================================================
    CUMULATIVE FUNNEL CONTROLS
    ================================================================ */
 
