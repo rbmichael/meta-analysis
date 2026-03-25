@@ -35,9 +35,11 @@
 import { downloadBlob, downloadBlobObject } from "./io.js";
 import { encodeTIFF } from "./tiff.js";
 
-// Fallback background colour used when the SVG carries no embedded background
-// rect of its own (i.e. the "App default" / dark theme).
-const DARK_BACKGROUND = "#121212";
+// Derive the current page background colour from the app's active theme so
+// SVG exports match what the user sees (light or dark).
+function currentBgColour() {
+  return getComputedStyle(document.documentElement).getPropertyValue("--bg-base").trim() || "#121212";
+}
 
 // Regex that matches a single var(--token) reference (one level, no fallback).
 const VAR_RE = /var\(\s*(--[\w-]+)\s*\)/g;
@@ -115,7 +117,7 @@ function prepareSVGClone(svgEl) {
     const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
     bg.setAttribute("width",  clone.getAttribute("width")  || "100%");
     bg.setAttribute("height", clone.getAttribute("height") || "100%");
-    bg.setAttribute("fill",   DARK_BACKGROUND);
+    bg.setAttribute("fill",   currentBgColour());
     clone.insertBefore(bg, clone.firstChild);
   }
 

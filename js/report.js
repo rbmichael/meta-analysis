@@ -39,8 +39,6 @@ import { resolveThemeVars, hasEmbeddedBackground } from "./export.js";
 // SVG serialization
 // ---------------------------------------------------------------------------
 
-const REPORT_BG = "#121212";
-
 function serializeSVG(svgEl) {
   if (!svgEl) return "";
   const clone = svgEl.cloneNode(true);
@@ -55,14 +53,15 @@ function serializeSVG(svgEl) {
   // document (which has its own CSS cascade that doesn't apply to serialised SVG).
   resolveThemeVars(clone);
 
-  // Inject a dark background only when the SVG has no embedded background rect.
-  // Journal-preset forest plots include their own white rect via drawForest();
-  // skipping the dark inject preserves that white background in print/export.
+  // Inject a background rect when the SVG has no embedded one.
+  // Use the app's current --bg-base so the report matches the active theme.
   if (!hasEmbeddedBackground(clone)) {
     const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
     bg.setAttribute("width",  "100%");
     bg.setAttribute("height", "100%");
-    bg.setAttribute("fill",   REPORT_BG);
+    bg.setAttribute("fill",
+      getComputedStyle(document.documentElement).getPropertyValue("--bg-base").trim() || "#121212"
+    );
     clone.insertBefore(bg, clone.firstChild);
   }
 
@@ -491,12 +490,60 @@ function sectionPlot(label, svgStrings) {
 // ---------------------------------------------------------------------------
 
 function reportCSS() {
+  const isLight = document.documentElement.dataset.theme === "light";
+
+  const v = isLight ? {
+    bodyBg:       "#f5f5f8",
+    bodyColor:    "#1a1a1a",
+    metaColor:    "#888",
+    h2Color:      "#555",
+    h2Border:     "#d0d0d0",
+    sectionBg:    "#ffffff",
+    sectionBorder:"#ddd",
+    thBg:         "#e8e8f0",
+    thColor:      "#333",
+    thBorder:     "#ddd",
+    tdBorder:     "#e0e0e0",
+    tdColor:      "#222",
+    tdAltBg:      "#f5f5f8",
+    imputedColor: "#999",
+    pooledColor:  "#6a5000",
+    pooledBg:     "#fffff0",
+    pooledBorder: "#bbb",
+    interceptColor:"#777",
+    flaggedBg:    "#fff5f5",
+    metaLine:     "#555",
+    noteColor:    "#888",
+  } : {
+    bodyBg:       "#121212",
+    bodyColor:    "#eee",
+    metaColor:    "#666",
+    h2Color:      "#888",
+    h2Border:     "#2e2e2e",
+    sectionBg:    "#1a1a1a",
+    sectionBorder:"#333",
+    thBg:         "#1e2840",
+    thColor:      "#aac",
+    thBorder:     "#333",
+    tdBorder:     "#2a2a2a",
+    tdColor:      "#ddd",
+    tdAltBg:      "#171727",
+    imputedColor: "#555",
+    pooledColor:  "#ffd740",
+    pooledBg:     "#1e1e10",
+    pooledBorder: "#555",
+    interceptColor:"#999",
+    flaggedBg:    "#2a1a1a",
+    metaLine:     "#aaa",
+    noteColor:    "#666",
+  };
+
   return `
     *, *::before, *::after { box-sizing: border-box; }
     body {
       font-family: Arial, sans-serif;
-      background: #121212;
-      color: #eee;
+      background: ${v.bodyBg};
+      color: ${v.bodyColor};
       margin: 0;
       padding: 24px 32px;
       font-size: 14px;
@@ -507,15 +554,15 @@ function reportCSS() {
       font-weight: bold;
       letter-spacing: 0.1em;
       text-transform: uppercase;
-      color: #888;
+      color: ${v.h2Color};
       margin: 0 0 12px 0;
       padding-bottom: 6px;
-      border-bottom: 1px solid #2e2e2e;
+      border-bottom: 1px solid ${v.h2Border};
     }
-    .report-meta { font-size: 0.82em; color: #666; margin-bottom: 28px; }
+    .report-meta { font-size: 0.82em; color: ${v.metaColor}; margin-bottom: 28px; }
     section {
-      background: #1a1a1a;
-      border: 1px solid #333;
+      background: ${v.sectionBg};
+      border: 1px solid ${v.sectionBorder};
       border-radius: 8px;
       padding: 16px 20px;
       margin-bottom: 24px;
@@ -527,31 +574,31 @@ function reportCSS() {
       max-width: 900px;
     }
     .stat-table th {
-      background: #1e2840;
-      color: #aac;
+      background: ${v.thBg};
+      color: ${v.thColor};
       font-weight: normal;
       text-align: left;
       padding: 5px 10px;
-      border: 1px solid #333;
+      border: 1px solid ${v.thBorder};
     }
     .stat-table td {
       padding: 5px 10px;
-      border: 1px solid #2a2a2a;
-      color: #ddd;
+      border: 1px solid ${v.tdBorder};
+      color: ${v.tdColor};
     }
-    .stat-table tbody tr:nth-child(even) td { background: #171727; }
+    .stat-table tbody tr:nth-child(even) td { background: ${v.tdAltBg}; }
     .study-tbl td:first-child { font-family: monospace; }
-    .imputed td { color: #555; font-style: italic; }
+    .imputed td { color: ${v.imputedColor}; font-style: italic; }
     .pooled td {
-      color: #ffd740;
+      color: ${v.pooledColor};
       font-weight: bold;
-      background: #1e1e10 !important;
-      border-top: 2px solid #555;
+      background: ${v.pooledBg} !important;
+      border-top: 2px solid ${v.pooledBorder};
     }
-    .intercept td { color: #999; font-style: italic; }
-    .flagged td { background: #2a1a1a !important; }
-    .meta-line { font-size: 0.84em; color: #aaa; margin: 0 0 8px 0; }
-    .note { font-size: 0.78em; color: #666; margin-top: 6px; }
+    .intercept td { color: ${v.interceptColor}; font-style: italic; }
+    .flagged td { background: ${v.flaggedBg} !important; }
+    .meta-line { font-size: 0.84em; color: ${v.metaLine}; margin: 0 0 8px 0; }
+    .note { font-size: 0.78em; color: ${v.noteColor}; margin-top: 6px; }
     p { margin: 4px 0; }
     .svg-wrap { margin-bottom: 12px; overflow-x: auto; }
     .svg-wrap svg { display: block; }
