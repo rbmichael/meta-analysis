@@ -104,7 +104,7 @@ import { eggerTest, beggTest, fatPetTest, failSafeN, pCurve, pUniform, meta, inf
 import { fmt } from "./utils.js";
 import { effectProfiles, getProfile } from "./profiles.js";
 import { trimFill } from "./trimfill.js";
-import { drawForest, drawFunnel, drawBubble, drawInfluencePlot, drawCumulativeForest, drawPCurve, drawPUniform } from "./plots.js";
+import { drawForest, drawFunnel, drawBubble, drawInfluencePlot, drawCumulativeForest, drawPCurve, drawPUniform, drawOrchardPlot, drawCaterpillarPlot } from "./plots.js";
 import { exportSVG, exportPNG, exportTIFF } from "./export.js";
 import { buildReport, downloadHTML, openPrintPreview } from "./report.js";
 import { parseCSV, detectEffectType } from "./csv.js";
@@ -1989,6 +1989,12 @@ function runAnalysis() {
   // "input" order: no sort — preserves table order
   const cumResults = cumulativeMeta(cumulativeStudies, method, ciMethod);
   drawCumulativeForest(cumResults, profile);
+
+  // ---- Orchard + caterpillar plots ----
+  drawOrchardPlot(all, m, profile);
+  document.getElementById("orchardPlotBlock").style.display = "";
+  drawCaterpillarPlot(all, m, profile);
+  document.getElementById("caterpillarPlotBlock").style.display = "";
 
   updateValidationWarnings(studies, excluded, softWarnings);
   return true;

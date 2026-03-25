@@ -667,6 +667,8 @@ export function buildReport(args) {
     sectionPlot("Cumulative Forest Plot", [liveSVG("cumulativePlot")]),
     sectionPlot("P-curve",                [liveSVG("pCurvePlot")]),
     sectionPlot("P-uniform",              [liveSVG("pUniformPlot")]),
+    sectionPlot("Orchard Plot",           [liveSVG("orchardPlot")]),
+    sectionPlot("Caterpillar Plot",       [liveSVG("caterpillarPlot")]),
     sectionPlot("Bubble Plots",           bubbleSVGs),
   ].join("\n");
 

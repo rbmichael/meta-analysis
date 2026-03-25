@@ -28,6 +28,16 @@
 //     Bubble plot for a single continuous moderator in a meta-regression.
 //     Bubble radius ∝ √(RE weight); regression line is the marginal fit.
 //
+//   drawOrchardPlot(studies, m, profile)
+//     Orchard plot (Nakagawa et al., 2021): precision-weighted jittered study
+//     circles with pooled PI bar, CI bar, and RE diamond at the band centre.
+//     One band per group when groups are present.
+//
+//   drawCaterpillarPlot(studies, m, profile)
+//     Caterpillar plot: one horizontal CI segment per study, sorted by effect
+//     size descending.  Vertical lines mark the null and RE estimate.
+//     SVG height resizes dynamically (16 px/study, capped at 900 px).
+//
 // All plots use CSS custom properties (var(--fg), var(--accent), etc.) so
 // they respond automatically to light/dark theme switches.
 //
@@ -1678,4 +1688,413 @@ export function drawPUniform(result, m, profile) {
     .attr("fill", "var(--fg-muted)")
     .style("font-size", "11px")
     .text(profile.label + (profile.isLog ? " (log scale)" : ""));
+}
+
+// ================= ORCHARD PLOT =================
+// Precision-weighted jittered dot plot with pooled estimate overlaid.
+// Reference: Nakagawa et al. (2021) BMC Biology.
+//
+// Layout
+// ------
+//   One horizontal band per group (or a single band if no groups).
+//   Within each band:
+//     • Wide, low-opacity rect  → prediction interval (PI)
+//     • Narrower rect           → 95% CI
+//     • Diamond                 → RE point estimate
+//     • Jittered circles        → individual studies, r ∝ 1/SE
+//   Imputed (trim-fill) studies rendered with reduced opacity.
+export function drawOrchardPlot(studies, m, profile) {
+  const svg = d3.select("#orchardPlot");
+  svg.selectAll("*").remove();
+
+  if (!studies || studies.length === 0) return;
+
+  profile = profile || { transform: x => x, label: "Effect" };
+
+  const W = +svg.attr("width")  || 520;
+  const H = +svg.attr("height") || 340;
+  const margin = { top: 28, right: 20, bottom: 48, left: 110 };
+  const iW = W - margin.left - margin.right;
+  const iH = H - margin.top  - margin.bottom;
+
+  const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+
+  // ---- Group layout ----
+  const allGroups = [...new Set(studies.map(s => s.group || "").filter(Boolean))];
+  const hasGroups = allGroups.length > 1;
+  const bands = hasGroups ? allGroups : ["All studies"];
+
+  const bandStudies = bands.map(band =>
+    hasGroups ? studies.filter(s => s.group === band) : studies.slice()
+  );
+
+  const laneH = iH / bands.length;
+
+  // Cap the drawing height within each lane (prevents giant bars in single-band plots)
+  const DRAW_CAP = 80;
+  const drawH    = Math.min(laneH, DRAW_CAP);
+
+  // ---- X scale (internal / untransformed) ----
+  const allYi = studies.map(s => s.yi).filter(isFinite);
+  const piLow  = isFinite(m.predLow)  ? m.predLow  : null;
+  const piHigh = isFinite(m.predHigh) ? m.predHigh : null;
+  const refs   = [m.RE, m.ciLow, m.ciHigh, ...allYi, 0];
+  if (piLow  != null) refs.push(piLow);
+  if (piHigh != null) refs.push(piHigh);
+  const xExtent = Math.max(...refs.filter(isFinite).map(Math.abs)) * 1.12 || 1;
+  const x = d3.scaleLinear().domain([-xExtent, xExtent]).range([0, iW]);
+
+  const tooltip = d3.select("#tooltip");
+
+  const GROUP_COLORS = [
+    "var(--accent)",
+    "var(--color-info)",
+    "var(--color-warning)",
+    "var(--color-error)",
+    "#9966cc",
+    "#669966",
+  ];
+
+  // ---- Null reference line ----
+  g.append("line")
+    .attr("x1", x(0)).attr("x2", x(0))
+    .attr("y1", 0).attr("y2", iH)
+    .attr("stroke", "var(--border-hover)")
+    .attr("stroke-width", 1)
+    .attr("stroke-dasharray", "4,3");
+
+  // ---- Bands ----
+  bands.forEach((band, bi) => {
+    const cy     = laneH * bi + laneH / 2;   // lane centre
+    const color  = GROUP_COLORS[bi % GROUP_COLORS.length];
+    const bStudies = bandStudies[bi];
+
+    const jitterRange = drawH * 0.40;
+
+    // Precision weights for point sizing
+    const invSE    = bStudies.map(s => 1 / Math.max(s.se || Math.sqrt(Math.max(s.vi, 0)), 1e-6));
+    const maxInvSE = Math.max(...invSE) || 1;
+    const R_MIN = 2, R_MAX = 7;
+
+    // PI rect (very low opacity)
+    if (piLow != null && piHigh != null) {
+      const piW = Math.max(0, x(piHigh) - x(piLow));
+      if (piW > 0) {
+        g.append("rect")
+          .attr("x", x(piLow))
+          .attr("y", cy - drawH * 0.44)
+          .attr("width",  piW)
+          .attr("height", drawH * 0.88)
+          .attr("fill", color)
+          .attr("opacity", 0.10)
+          .attr("rx", 3);
+      }
+    }
+
+    // CI rect (moderate opacity)
+    if (isFinite(m.ciLow) && isFinite(m.ciHigh)) {
+      const ciW = Math.max(0, x(m.ciHigh) - x(m.ciLow));
+      if (ciW > 0) {
+        g.append("rect")
+          .attr("x", x(m.ciLow))
+          .attr("y", cy - drawH * 0.20)
+          .attr("width",  ciW)
+          .attr("height", drawH * 0.40)
+          .attr("fill", color)
+          .attr("opacity", 0.35)
+          .attr("rx", 2);
+      }
+    }
+
+    // RE diamond
+    if (isFinite(m.RE)) {
+      const S   = drawH * 0.18;
+      const cx  = x(m.RE);
+      const pts = [[cx, cy - S],[cx + S, cy],[cx, cy + S],[cx - S, cy]]
+        .map(p => p.join(",")).join(" ");
+      g.append("polygon")
+        .attr("points", pts)
+        .attr("fill", color);
+    }
+
+    // Jittered study circles (spread by index; deterministic)
+    bStudies.forEach((s, i) => {
+      if (!isFinite(s.yi)) return;
+      const n      = bStudies.length;
+      const jitter = n > 1 ? (i / (n - 1) - 0.5) * 2 * jitterRange : 0;
+      const r      = R_MIN + (R_MAX - R_MIN) * (invSE[i] / maxInvSE);
+
+      g.append("circle")
+        .attr("cx", x(s.yi))
+        .attr("cy", cy + jitter)
+        .attr("r",  r)
+        .attr("fill", color)
+        .attr("fill-opacity", s.filled ? 0.25 : 0.60)
+        .attr("stroke", "var(--bg-surface)")
+        .attr("stroke-width", 0.8)
+        .on("mousemove", (event) => {
+          const seVal = (s.se || Math.sqrt(Math.max(s.vi, 0))).toFixed(3);
+          const yi_t  = profile.transform(s.yi);
+          tooltip.style("opacity", 1)
+            .html(`<b>${s.label}</b><br>Effect: ${isFinite(yi_t) ? +yi_t.toFixed(3) : "NA"}<br>SE: ${seVal}${s.filled ? "<br><i>(imputed)</i>" : ""}`)
+            .style("left", (event.pageX + 12) + "px")
+            .style("top",  (event.pageY - 24) + "px");
+        })
+        .on("mouseout", () => tooltip.style("opacity", 0));
+    });
+
+    // Group label at lane centre (left margin)
+    if (hasGroups) {
+      const label = band.length > 18 ? band.slice(0, 17) + "…" : band;
+      g.append("text")
+        .attr("x", -8).attr("y", cy + 4)
+        .attr("text-anchor", "end")
+        .attr("fill", "var(--fg-muted)")
+        .style("font-size", "11px")
+        .text(label);
+    }
+
+    // Separator between bands
+    if (bi < bands.length - 1) {
+      g.append("line")
+        .attr("x1", 0).attr("x2", iW)
+        .attr("y1", laneH * (bi + 1)).attr("y2", laneH * (bi + 1))
+        .attr("stroke", "var(--border)")
+        .attr("stroke-width", 0.5)
+        .attr("stroke-dasharray", "3,4");
+    }
+  });
+
+  // ---- X axis ----
+  const axisX = g.append("g")
+    .attr("transform", `translate(0,${iH})`)
+    .call(d3.axisBottom(x).ticks(6).tickFormat(v => {
+      const t = profile.transform(v);
+      return isFinite(t) ? +t.toFixed(2) : "";
+    }));
+  axisX.select(".domain").attr("stroke", "var(--border-hover)");
+  axisX.selectAll(".tick line").attr("stroke", "var(--border-hover)");
+  axisX.selectAll(".tick text").attr("fill", "var(--fg-muted)").style("font-size", "10px");
+
+  // ---- X axis label ----
+  svg.append("text")
+    .attr("x", margin.left + iW / 2)
+    .attr("y", H - 6)
+    .attr("text-anchor", "middle")
+    .attr("fill", "var(--fg-muted)")
+    .style("font-size", "11px")
+    .text(profile.label);
+
+  // ---- Heterogeneity annotation ----
+  const hetParts = [];
+  if (isFinite(m.I2))            hetParts.push(`I² = ${(m.I2 * 100).toFixed(1)}%`);
+  if (isFinite(m.tau2) && m.tau2 > 0) hetParts.push(`τ² = ${m.tau2.toFixed(3)}`);
+  if (hetParts.length) {
+    g.append("text")
+      .attr("x", 4).attr("y", iH - 4)
+      .attr("fill", "var(--fg-muted)")
+      .style("font-size", "10px")
+      .text(hetParts.join("  "));
+  }
+}
+
+// ================= CATERPILLAR PLOT =================
+// One horizontal CI segment per study, sorted by effect size (descending).
+// Purely study-level — no pooled diamond.  Vertical reference lines mark the
+// null value (dashed) and the RE pooled estimate (solid).
+//
+// SVG height is set dynamically (16 px per study, capped at 900 px).
+// Studies that don't fit are hidden via an SVG clipPath so the x-axis always
+// remains visible.
+export function drawCaterpillarPlot(studies, m, profile) {
+  const svg = d3.select("#caterpillarPlot");
+  svg.selectAll("*").remove();
+
+  if (!studies || studies.length === 0) return;
+
+  profile = profile || { transform: x => x, label: "Effect" };
+
+  // ---- Sorted study list (descending yi so largest effect is at top) ----
+  const sorted = studies
+    .filter(s => isFinite(s.yi) && isFinite(s.vi))
+    .slice()
+    .sort((a, b) => b.yi - a.yi);
+
+  const k = sorted.length;
+  if (k === 0) return;
+
+  const ROW_H   = 16;
+  const W       = +svg.attr("width") || 520;
+  const margin  = { top: 28, right: 20, bottom: 38, left: 130 };
+
+  // Dynamic height, capped at 900 px
+  const H = Math.min(900, margin.top + k * ROW_H + margin.bottom);
+  svg.attr("height", H);
+
+  const iW = W - margin.left - margin.right;
+  const iH = H - margin.top  - margin.bottom;
+
+  // Visible rows that fit in iH
+  const visibleK = Math.min(k, Math.floor(iH / ROW_H));
+
+  const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+
+  // ---- Group colour palette ----
+  const allGroups = [...new Set(sorted.map(s => s.group || "").filter(Boolean))];
+  const hasGroups = allGroups.length > 1;
+  const GROUP_COLORS = [
+    "var(--accent)",
+    "var(--color-info)",
+    "var(--color-warning)",
+    "var(--color-error)",
+    "#9966cc",
+    "#669966",
+  ];
+  const groupColor = grp => {
+    const idx = allGroups.indexOf(grp);
+    return idx >= 0 ? GROUP_COLORS[idx % GROUP_COLORS.length] : "var(--fg-subtle)";
+  };
+
+  // ---- X scale (internal scale) ----
+  // Individual study CI: yi ± Z_95 * se  (always normal, per forest plot convention)
+  const ciLows  = sorted.map(s => s.yi - Z_95 * (s.se || Math.sqrt(s.vi)));
+  const ciHighs = sorted.map(s => s.yi + Z_95 * (s.se || Math.sqrt(s.vi)));
+  const refs    = [...ciLows, ...ciHighs, m.RE, 0].filter(isFinite);
+  const xExtent = Math.max(...refs.map(Math.abs)) * 1.08 || 1;
+  const x = d3.scaleLinear().domain([-xExtent, xExtent]).range([0, iW]);
+
+  // ---- Clip path so rows beyond iH don't overdraw the axis ----
+  const clipId = "caterpillar-clip";
+  svg.append("defs").append("clipPath").attr("id", clipId)
+    .append("rect").attr("width", iW).attr("height", iH);
+
+  const gClipped = g.append("g").attr("clip-path", `url(#${clipId})`);
+
+  const tooltip = d3.select("#tooltip");
+
+  // ---- Null reference line (dashed) ----
+  gClipped.append("line")
+    .attr("x1", x(0)).attr("x2", x(0))
+    .attr("y1", 0).attr("y2", iH)
+    .attr("stroke", "var(--border-hover)")
+    .attr("stroke-width", 1)
+    .attr("stroke-dasharray", "4,3");
+
+  // ---- RE line (solid, muted) ----
+  if (isFinite(m.RE)) {
+    gClipped.append("line")
+      .attr("x1", x(m.RE)).attr("x2", x(m.RE))
+      .attr("y1", 0).attr("y2", iH)
+      .attr("stroke", "var(--accent)")
+      .attr("stroke-width", 1.2)
+      .attr("stroke-opacity", 0.55);
+  }
+
+  // ---- Study rows ----
+  sorted.slice(0, visibleK).forEach((s, i) => {
+    const cy    = i * ROW_H + ROW_H / 2;
+    const lo    = ciLows[i];
+    const hi    = ciHighs[i];
+    const color = hasGroups ? groupColor(s.group || "") : "var(--fg-subtle)";
+
+    // CI line
+    gClipped.append("line")
+      .attr("x1", x(lo)).attr("x2", x(hi))
+      .attr("y1", cy).attr("y2", cy)
+      .attr("stroke", color)
+      .attr("stroke-width", s.filled ? 1 : 1.4)
+      .attr("stroke-opacity", s.filled ? 0.45 : 0.80);
+
+    // CI end ticks
+    [lo, hi].forEach(v => {
+      gClipped.append("line")
+        .attr("x1", x(v)).attr("x2", x(v))
+        .attr("y1", cy - 3).attr("y2", cy + 3)
+        .attr("stroke", color)
+        .attr("stroke-width", s.filled ? 1 : 1.4)
+        .attr("stroke-opacity", s.filled ? 0.45 : 0.80);
+    });
+
+    // Point estimate circle
+    gClipped.append("circle")
+      .attr("cx", x(s.yi)).attr("cy", cy)
+      .attr("r", s.filled ? 2.5 : 3.2)
+      .attr("fill", color)
+      .attr("fill-opacity", s.filled ? 0.40 : 1)
+      .on("mousemove", (event) => {
+        const seVal  = (s.se || Math.sqrt(s.vi)).toFixed(3);
+        const yi_t   = profile.transform(s.yi);
+        const lo_t   = profile.transform(lo);
+        const hi_t   = profile.transform(hi);
+        const fmtCI  = v => isFinite(v) ? +v.toFixed(3) : "NA";
+        tooltip.style("opacity", 1)
+          .html(`<b>${s.label}</b><br>Effect: ${fmtCI(yi_t)} [${fmtCI(lo_t)}, ${fmtCI(hi_t)}]<br>SE: ${seVal}${s.filled ? "<br><i>(imputed)</i>" : ""}`)
+          .style("left", (event.pageX + 12) + "px")
+          .style("top",  (event.pageY - 24) + "px");
+      })
+      .on("mouseout", () => tooltip.style("opacity", 0));
+
+    // Study label (left margin)
+    const maxChars = Math.floor((margin.left - 12) / 6.5);
+    const labelTxt = s.label.length > maxChars ? s.label.slice(0, maxChars - 1) + "…" : s.label;
+    g.append("text")
+      .attr("x", -8).attr("y", cy + 4)
+      .attr("text-anchor", "end")
+      .attr("fill", s.filled ? "var(--fg-muted)" : "var(--fg)")
+      .style("font-size", "10px")
+      .text(labelTxt);
+  });
+
+  // ---- X axis ----
+  const axisX = g.append("g")
+    .attr("transform", `translate(0,${iH})`)
+    .call(d3.axisBottom(x).ticks(6).tickFormat(v => {
+      const t = profile.transform(v);
+      return isFinite(t) ? +t.toFixed(2) : "";
+    }));
+  axisX.select(".domain").attr("stroke", "var(--border-hover)");
+  axisX.selectAll(".tick line").attr("stroke", "var(--border-hover)");
+  axisX.selectAll(".tick text").attr("fill", "var(--fg-muted)").style("font-size", "10px");
+
+  // ---- X axis label ----
+  svg.append("text")
+    .attr("x", margin.left + iW / 2)
+    .attr("y", H - 4)
+    .attr("text-anchor", "middle")
+    .attr("fill", "var(--fg-muted)")
+    .style("font-size", "11px")
+    .text(profile.label);
+
+  // ---- Heterogeneity + k annotation (top margin, clear of study rows) ----
+  const hetParts = [`k = ${k}`];
+  if (isFinite(m.I2))                 hetParts.push(`I² = ${(m.I2 * 100).toFixed(1)}%`);
+  if (isFinite(m.tau2) && m.tau2 > 0) hetParts.push(`τ² = ${m.tau2.toFixed(3)}`);
+  svg.append("text")
+    .attr("x", margin.left + 4)
+    .attr("y", 16)
+    .attr("fill", "var(--fg-muted)")
+    .style("font-size", "10px")
+    .text(hetParts.join("  "));
+
+  // ---- Legend (groups only) ----
+  if (hasGroups) {
+    allGroups.forEach((grp, gi) => {
+      const color = GROUP_COLORS[gi % GROUP_COLORS.length];
+      const lx = iW - 4;
+      const ly = gi * 14;
+      g.append("line")
+        .attr("x1", lx - 20).attr("x2", lx - 6)
+        .attr("y1", ly + 5).attr("y2", ly + 5)
+        .attr("stroke", color).attr("stroke-width", 2);
+      g.append("circle")
+        .attr("cx", lx - 13).attr("cy", ly + 5)
+        .attr("r", 3).attr("fill", color);
+      g.append("text")
+        .attr("x", lx - 24).attr("y", ly + 9)
+        .attr("text-anchor", "end")
+        .attr("fill", "var(--fg-muted)")
+        .style("font-size", "10px")
+        .text(grp.length > 14 ? grp.slice(0, 13) + "…" : grp);
+    });
+  }
 }
