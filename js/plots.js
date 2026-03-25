@@ -38,6 +38,10 @@
 //     size descending.  Vertical lines mark the null and RE estimate.
 //     SVG height resizes dynamically (16 px/study, capped at 900 px).
 //
+//   drawBaujatPlot(result, profile)
+//     Baujat diagnostic scatter (Baujat et al., 2002): x = contribution to Q,
+//     y = influence on FE pooled estimate.  Quadrant guides at mean x/y.
+//
 // All plots use CSS custom properties (var(--fg), var(--accent), etc.) so
 // they respond automatically to light/dark theme switches.
 //
@@ -2095,6 +2099,174 @@ export function drawCaterpillarPlot(studies, m, profile) {
         .attr("fill", "var(--fg-muted)")
         .style("font-size", "10px")
         .text(grp.length > 14 ? grp.slice(0, 13) + "…" : grp);
+    });
+  }
+}
+
+// ================= BAUJAT PLOT =================
+// Diagnostic scatter plot: x = each study's contribution to Cochran's Q,
+// y = each study's influence on the FE pooled estimate.
+// Dashed quadrant guides are drawn at the mean x and mean y across studies.
+// Studies in the top-right quadrant are both highly heterogeneous AND highly
+// influential — the primary targets for sensitivity investigation.
+// Reference: Baujat et al. (2002) Statistics in Medicine 21:2442–2456.
+export function drawBaujatPlot(result, profile) {
+  const svg = d3.select("#baujatPlot");
+  svg.selectAll("*").remove();
+
+  if (!result || result.k < 2) return;
+
+  profile = profile || { transform: x => x, label: "Effect" };
+
+  const W = +svg.attr("width")  || 500;
+  const H = +svg.attr("height") || 420;
+  const margin = { top: 30, right: 24, bottom: 58, left: 62 };
+  const iW = W - margin.left - margin.right;
+  const iH = H - margin.top  - margin.bottom;
+
+  const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+
+  const { points } = result;
+
+  // ---- Scales: both axes start at 0 (all values are non-negative) ----
+  const xMax = Math.max(...points.map(p => p.x))         * 1.15 || 1;
+  const yMax = Math.max(...points.map(p => p.influence)) * 1.15 || 1;
+  const x = d3.scaleLinear().domain([0, xMax]).range([0, iW]);
+  const y = d3.scaleLinear().domain([0, yMax]).range([iH, 0]);
+
+  // ---- Group colour palette ----
+  const allGroups = [...new Set(points.map(p => p.group || "").filter(Boolean))];
+  const hasGroups = allGroups.length > 1;
+  const GROUP_COLORS = [
+    "var(--accent)",
+    "var(--color-info)",
+    "var(--color-warning)",
+    "var(--color-error)",
+    "#9966cc",
+    "#669966",
+  ];
+  const pointColor = p => {
+    if (!hasGroups) return "var(--accent)";
+    const idx = allGroups.indexOf(p.group || "");
+    return idx >= 0 ? GROUP_COLORS[idx % GROUP_COLORS.length] : "var(--fg-subtle)";
+  };
+
+  // ---- Quadrant guide lines at mean x and mean y ----
+  const meanX = points.reduce((s, p) => s + p.x,         0) / points.length;
+  const meanY = points.reduce((s, p) => s + p.influence, 0) / points.length;
+
+  [{ val: meanX, axis: "x" }, { val: meanY, axis: "y" }].forEach(({ val, axis }) => {
+    const x1 = axis === "x" ? x(val) : 0;
+    const x2 = axis === "x" ? x(val) : iW;
+    const y1 = axis === "y" ? y(val) : 0;
+    const y2 = axis === "y" ? y(val) : iH;
+    g.append("line")
+      .attr("x1", x1).attr("x2", x2)
+      .attr("y1", y1).attr("y2", y2)
+      .attr("stroke", "var(--border-hover)")
+      .attr("stroke-width", 1)
+      .attr("stroke-dasharray", "5,3");
+  });
+
+  // ---- Points and labels ----
+  const tooltip = d3.select("#tooltip");
+  // Show inline labels only when k is small enough that they won't collide badly
+  const showLabels = points.length <= 25;
+
+  points.forEach(p => {
+    const cx = x(p.x);
+    const cy = y(p.influence);
+    const color = pointColor(p);
+
+    g.append("circle")
+      .attr("cx", cx).attr("cy", cy)
+      .attr("r", 5)
+      .attr("fill", color)
+      .attr("fill-opacity", 0.75)
+      .attr("stroke", "var(--bg-surface)")
+      .attr("stroke-width", 1)
+      .on("mousemove", (event) => {
+        const yi_t = profile.transform(p.yi);
+        tooltip.style("opacity", 1)
+          .html(
+            `<b>${p.label}</b>` +
+            `<br>Q contribution: ${p.x.toFixed(3)}` +
+            `<br>Influence: ${p.influence.toFixed(4)}` +
+            `<br>Effect (${profile.label}): ${isFinite(yi_t) ? +yi_t.toFixed(3) : "NA"}`
+          )
+          .style("left", (event.pageX + 12) + "px")
+          .style("top",  (event.pageY - 24) + "px");
+      })
+      .on("mouseout", () => tooltip.style("opacity", 0));
+
+    if (showLabels) {
+      const abbr = p.label.length > 9 ? p.label.slice(0, 8) + "…" : p.label;
+      g.append("text")
+        .attr("x", cx + 7).attr("y", cy + 4)
+        .attr("fill", "var(--fg-muted)")
+        .style("font-size", "9px")
+        .style("pointer-events", "none")
+        .text(abbr);
+    }
+  });
+
+  // ---- Axes ----
+  const axisX = g.append("g")
+    .attr("transform", `translate(0,${iH})`)
+    .call(d3.axisBottom(x).ticks(5).tickFormat(d3.format(".3~g")));
+  axisX.select(".domain").attr("stroke", "var(--border-hover)");
+  axisX.selectAll(".tick line").attr("stroke", "var(--border-hover)");
+  axisX.selectAll(".tick text").attr("fill", "var(--fg-muted)").style("font-size", "10px");
+
+  const axisY = g.append("g")
+    .call(d3.axisLeft(y).ticks(5).tickFormat(d3.format(".3~g")));
+  axisY.select(".domain").attr("stroke", "var(--border-hover)");
+  axisY.selectAll(".tick line").attr("stroke", "var(--border-hover)");
+  axisY.selectAll(".tick text").attr("fill", "var(--fg-muted)").style("font-size", "10px");
+
+  // ---- Axis labels ----
+  svg.append("text")
+    .attr("x", margin.left + iW / 2)
+    .attr("y", H - 8)
+    .attr("text-anchor", "middle")
+    .attr("fill", "var(--fg-muted)")
+    .style("font-size", "11px")
+    .text("Contribution to Cochran's Q");
+
+  svg.append("text")
+    .attr("transform", "rotate(-90)")
+    .attr("x", -(margin.top + iH / 2))
+    .attr("y", 14)
+    .attr("text-anchor", "middle")
+    .attr("fill", "var(--fg-muted)")
+    .style("font-size", "11px")
+    .text("Influence on pooled estimate");
+
+  // ---- Summary annotation: Q and FE estimate ----
+  const muFE_t = profile.transform(result.muFE);
+  const annotParts = [`Q = ${result.Q.toFixed(2)}`];
+  if (isFinite(muFE_t)) annotParts.push(`FE = ${(+muFE_t.toFixed(3))}`);
+  g.append("text")
+    .attr("x", iW - 2).attr("y", iH - 4)
+    .attr("text-anchor", "end")
+    .attr("fill", "var(--fg-muted)")
+    .style("font-size", "10px")
+    .text(annotParts.join("   "));
+
+  // ---- Legend (groups only) ----
+  if (hasGroups) {
+    allGroups.forEach((grp, gi) => {
+      const color = GROUP_COLORS[gi % GROUP_COLORS.length];
+      const lx = iW - 4;
+      const ly = gi * 16;
+      g.append("circle")
+        .attr("cx", lx - 80).attr("cy", ly + 5)
+        .attr("r", 5).attr("fill", color).attr("fill-opacity", 0.75);
+      g.append("text")
+        .attr("x", lx - 72).attr("y", ly + 9)
+        .attr("fill", "var(--fg-muted)")
+        .style("font-size", "10px")
+        .text(grp.length > 10 ? grp.slice(0, 9) + "…" : grp);
     });
   }
 }

@@ -100,11 +100,11 @@
 //   ui.js calls init() on DOMContentLoaded, which populates dropdowns,
 //   restores any autosave draft, and attaches all event listeners.
 // =============================================================================
-import { eggerTest, beggTest, fatPetTest, failSafeN, pCurve, pUniform, meta, influenceDiagnostics, subgroupAnalysis, metaRegression, cumulativeMeta, leaveOneOut, estimatorComparison } from "./analysis.js";
+import { eggerTest, beggTest, fatPetTest, failSafeN, pCurve, pUniform, baujat, meta, influenceDiagnostics, subgroupAnalysis, metaRegression, cumulativeMeta, leaveOneOut, estimatorComparison } from "./analysis.js";
 import { fmt } from "./utils.js";
 import { effectProfiles, getProfile } from "./profiles.js";
 import { trimFill } from "./trimfill.js";
-import { drawForest, drawFunnel, drawBubble, drawInfluencePlot, drawCumulativeForest, drawPCurve, drawPUniform, drawOrchardPlot, drawCaterpillarPlot } from "./plots.js";
+import { drawForest, drawFunnel, drawBubble, drawInfluencePlot, drawCumulativeForest, drawPCurve, drawPUniform, drawOrchardPlot, drawCaterpillarPlot, drawBaujatPlot } from "./plots.js";
 import { exportSVG, exportPNG, exportTIFF } from "./export.js";
 import { buildReport, downloadHTML, openPrintPreview } from "./report.js";
 import { parseCSV, detectEffectType } from "./csv.js";
@@ -1963,9 +1963,11 @@ function runAnalysis() {
   renderForestNav(totalPages);
 
   // Cache state for report export buttons.
+  const baujatResult = baujat(studies);
+
   _reportArgs = {
     studies: all, m, profile, reg,
-    tf, egger, begg, fatpet, fsn, pcurve, puniform,
+    tf, egger, begg, fatpet, fsn, pcurve, puniform, baujatResult,
     influence, subgroup, method, ciMethod,
     useTF, mAdjusted,
     forestOptions: { ...forestOpts, currentPage: forestPage },
@@ -1973,6 +1975,8 @@ function runAnalysis() {
   _funnelArgs = [all, m, egger, profile];
   drawFunnel(..._funnelArgs, { contours: _funnelContours });
   drawInfluencePlot(influence);
+  drawBaujatPlot(baujatResult, profile);
+  document.getElementById("baujatPlotBlock").style.display = baujatResult ? "" : "none";
 
   // ---- Cumulative meta-analysis ----
   const cumulativeOrder = document.getElementById("cumulativeOrder")?.value || "input";

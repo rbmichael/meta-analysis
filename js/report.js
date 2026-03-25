@@ -664,6 +664,7 @@ export function buildReport(args) {
     sectionPlot("Forest Plot", forestSVGs),
     sectionPlot("Funnel Plot",            [liveSVG("funnelPlot")]),
     sectionPlot("Influence Plot",         [liveSVG("influencePlot")]),
+    sectionPlot("Baujat Plot",            [liveSVG("baujatPlot")]),
     sectionPlot("Cumulative Forest Plot", [liveSVG("cumulativePlot")]),
     sectionPlot("P-curve",                [liveSVG("pCurvePlot")]),
     sectionPlot("P-uniform",              [liveSVG("pUniformPlot")]),

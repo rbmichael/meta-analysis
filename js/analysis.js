@@ -40,6 +40,11 @@
 //   subgroupAnalysis / metaRegression / estimatorComparison
 //     Sensitivity, influence, and moderator-analysis functions.
 //
+//   baujat(studies)
+//     Baujat diagnostic: per-study contribution to Cochran's Q (x) and
+//     influence on the FE pooled estimate (y).  All quantities are analytical
+//     (no iterative leave-one-out meta() calls required).
+//
 // Dependencies: utils.js, constants.js, profiles.js
 // =============================================================================
 
@@ -2378,4 +2383,59 @@ export function pUniform(studies, m) {
     significantEffect: k >= 3 && isFinite(p_sig)  && p_sig  < 0.05,
     biasDetected:      k >= 3 && isFinite(p_bias) && p_bias < 0.05,
   };
+}
+
+// ================= BAUJAT PLOT =================
+// -----------------------------------------------------------------------------
+// baujat(studies) → result | null
+// -----------------------------------------------------------------------------
+// Computes per-study coordinates for the Baujat diagnostic scatter plot
+// (Baujat et al., 2002, Statistics in Medicine).
+//
+// Both axes are derived analytically from fixed-effects quantities:
+//   w_i    = 1 / v_i                       (FE weight)
+//   W      = Σ w_i                          (total FE weight)
+//   μ̂_FE  = Σ(w_i · y_i) / W              (FE pooled estimate)
+//
+//   x_i    = w_i · (y_i − μ̂_FE)²          (contribution to Cochran's Q)
+//   infl_i = w_i² · (y_i − μ̂_FE)² / (W − w_i)
+//          = w_i · x_i / (W − w_i)         (influence on FE estimate)
+//
+// Returns
+// -------
+//   {
+//     points : [{ label, x, influence, yi, vi, group }],
+//     muFE   : number,   // overall FE pooled estimate
+//     Q      : number,   // Cochran's Q = Σ x_i
+//     k      : number,   // number of studies used
+//   }
+// Returns null when fewer than 2 studies have finite yi / vi.
+// -----------------------------------------------------------------------------
+export function baujat(studies) {
+  const valid = studies.filter(s => isFinite(s.yi) && isFinite(s.vi) && s.vi > 0);
+  if (valid.length < 2) return null;
+
+  // ---- FE quantities ----
+  const W   = valid.reduce((s, d) => s + 1 / d.vi, 0);
+  const muFE = valid.reduce((s, d) => s + d.yi / d.vi, 0) / W;
+  const Q   = valid.reduce((s, d) => s + (d.yi - muFE) ** 2 / d.vi, 0);
+
+  // ---- Per-study coordinates ----
+  const points = valid.map(s => {
+    const wi        = 1 / s.vi;
+    const dev       = s.yi - muFE;
+    const x         = wi * dev ** 2;           // contribution to Q
+    const influence = wi * x / (W - wi);       // influence on FE estimate
+
+    return {
+      label:     s.label,
+      x,
+      influence,
+      yi:        s.yi,
+      vi:        s.vi,
+      group:     s.group ?? null,
+    };
+  });
+
+  return { points, muFE, Q, k: valid.length };
 }
