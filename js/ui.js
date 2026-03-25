@@ -1163,6 +1163,19 @@ let _hasRunOnce = false;
 // ---------------- FOREST PLOT PAGINATION STATE ----------------
 let forestPage = 0;
 let _forestArgs = null;  // { studies, m, options } — cached for page-nav re-renders
+let _forestPoolDisplay = "RE"; // "FE" | "RE" | "Both"
+
+document.querySelectorAll(".forest-pool-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    if (!_forestArgs) return;
+    _forestPoolDisplay = btn.dataset.display;
+    document.querySelectorAll(".forest-pool-btn").forEach(b => b.classList.toggle("active", b === btn));
+    forestPage = 0;
+    _forestArgs.options = { ..._forestArgs.options, pooledDisplay: _forestPoolDisplay };
+    const { totalPages } = drawForest(_forestArgs.studies, _forestArgs.m, { ..._forestArgs.options, page: forestPage });
+    renderForestNav(totalPages);
+  });
+});
 
 // ---------------- REPORT STATE ----------------
 let _reportArgs = null;  // cached after each run; consumed by export buttons
@@ -1644,7 +1657,7 @@ function runAnalysis() {
   forestPage = 0;
   const rawPageSize  = document.getElementById("forestPageSize")?.value ?? "30";
   const pageSize     = rawPageSize === "Infinity" ? Infinity : +rawPageSize;
-  const forestOpts   = { ciMethod, profile, pageSize };
+  const forestOpts   = { ciMethod, profile, pageSize, pooledDisplay: _forestPoolDisplay };
   _forestArgs        = { studies: all, m, options: forestOpts };
   const { totalPages } = drawForest(all, m, { ...forestOpts, page: forestPage });
   renderForestNav(totalPages);

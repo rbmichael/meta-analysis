@@ -1211,6 +1211,43 @@ input[type="file"]::file-selector-button:hover {
   color: var(--fg-subtle, var(--fg-muted));
 }
 
+.forest-pool-toggle {
+  display: flex;
+  gap: 0;
+  margin-left: 8px;
+}
+
+.forest-pool-btn {
+  padding: 2px 8px;
+  font-size: 0.7rem;
+  background: transparent;
+  color: var(--fg-muted);
+  border: 1px solid var(--border);
+  border-radius: 0;
+  cursor: pointer;
+  margin: 0;
+  transition: color var(--t-fast), border-color var(--t-fast), background var(--t-fast);
+}
+
+.forest-pool-btn:first-child { border-radius: 3px 0 0 3px; }
+.forest-pool-btn:last-child  { border-radius: 0 3px 3px 0; }
+
+.forest-pool-btn:not(:first-child) { margin-left: -1px; }
+
+.forest-pool-btn:hover {
+  background: var(--bg-surface-hover);
+  color: var(--fg);
+  border-color: var(--border-hover);
+  z-index: 1;
+}
+
+.forest-pool-btn.active {
+  background: var(--accent);
+  color: var(--bg, #fff);
+  border-color: var(--accent);
+  z-index: 1;
+}
+
 .forest-pagesize-label {
   display: flex;
   align-items: center;

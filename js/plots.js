@@ -164,7 +164,17 @@ export function drawForest(studies, m, options = {}) {
   // Identity profile as fallback (MD/SMD/etc. that don't need back-transform)
   const profile = options.profile || { transform: x => x };
 
-  // crit: pooled-model critical value (used only for the diamond)
+  // Which pooled estimates to show: "FE", "RE" (default), or "Both"
+  const pooledDisplay = options.pooledDisplay || "RE";
+  const showFE   = pooledDisplay === "FE"   || pooledDisplay === "Both";
+  const showRE   = pooledDisplay === "RE"   || pooledDisplay === "Both";
+  const showBoth = showFE && showRE;
+
+  // FE CI bounds always use Z_95 (FE model is always normal)
+  const feCiLow  = isFinite(m.FE) ? m.FE - Z_95 * m.seFE : NaN;
+  const feCiHigh = isFinite(m.FE) ? m.FE + Z_95 * m.seFE : NaN;
+
+  // crit: pooled-model critical value (used only for the RE diamond)
   const crit = m.crit || Z_95;
   // studyCrit: always Z_95 — individual study CIs are standard normal regardless of CI method
   const studyCrit = Z_95;
@@ -209,9 +219,11 @@ export function drawForest(studies, m, options = {}) {
   L.headerH  = 28;
   L.summaryH = 106;
 
-  // Fixed widths and summary height
+  // Fixed widths and summary height.
+  // summaryH must accommodate: separator, diamond row(s), PI, het text, axis + tick labels.
+  // Axis tick labels need ~26px below the axis line to remain within the SVG.
   L.totalW   = L.labelW + L.plotW + L.annotW;          // 860
-  L.summaryH = isLastPage ? L.summaryH : 36;            // shrink on non-last pages
+  L.summaryH = isLastPage ? (showBoth ? 152 : 132) : 52;
   L.studyY0  = L.headerH;
   L.sepH     = Math.max(14, L.rowH);                    // separator row height for group boundaries
 
@@ -237,13 +249,16 @@ export function drawForest(studies, m, options = {}) {
   });
 
   // Derived positions — studyY1 now reflects separator gaps
-  L.studyY1  = cursor;
-  L.totalH   = L.studyY1 + L.summaryH;
-  L.diamondY = L.studyY1 + 20;
-  L.piY      = L.studyY1 + 44;
-  L.hetY     = L.studyY1 + 76;
-  L.axisY    = L.totalH  - 8;
-  L.annotX0  = L.labelW  + L.plotW;
+  L.studyY1    = cursor;
+  L.totalH     = L.studyY1 + L.summaryH;
+  // axisY: leave 26px below the axis for tick labels and optional "(log scale)" text.
+  L.axisY      = L.totalH - 26;
+  // Diamond rows sit below the study block; when showing both, FE is above RE.
+  L.feDiamondY = L.studyY1 + 18;
+  L.diamondY   = showBoth ? L.studyY1 + 36 : L.studyY1 + 18;   // RE (or sole) diamond
+  L.piY        = showBoth ? L.studyY1 + 60 : L.studyY1 + 44;
+  L.hetY       = showBoth ? L.studyY1 + 98 : L.studyY1 + 80;
+  L.annotX0    = L.labelW  + L.plotW;
 
   // Resize SVG to fit the current study count
   svg.attr("width", L.totalW).attr("height", L.totalH);
@@ -255,10 +270,16 @@ export function drawForest(studies, m, options = {}) {
     d.yi - studyCrit * d.se,
     d.yi + studyCrit * d.se,
   ]);
-  if (isFinite(m.ciLow))    domainVals.push(m.ciLow);
-  if (isFinite(m.ciHigh))   domainVals.push(m.ciHigh);
-  if (isFinite(m.predLow))  domainVals.push(m.predLow);
-  if (isFinite(m.predHigh)) domainVals.push(m.predHigh);
+  if (showRE) {
+    if (isFinite(m.ciLow))    domainVals.push(m.ciLow);
+    if (isFinite(m.ciHigh))   domainVals.push(m.ciHigh);
+    if (isFinite(m.predLow))  domainVals.push(m.predLow);
+    if (isFinite(m.predHigh)) domainVals.push(m.predHigh);
+  }
+  if (showFE) {
+    if (isFinite(feCiLow))    domainVals.push(feCiLow);
+    if (isFinite(feCiHigh))   domainVals.push(feCiHigh);
+  }
 
   const x = d3.scaleLinear()
     .domain(d3.extent(domainVals))
@@ -272,7 +293,11 @@ export function drawForest(studies, m, options = {}) {
     .attr("text-anchor", "middle")
     .attr("fill", "var(--fg-muted)")
     .style("font-size", L.titleFontSize)
-    .text(`Random-effects model (${ciLabel})`);
+    .text(showBoth
+      ? `Fixed-effect and Random-effects models (RE: ${ciLabel})`
+      : showFE
+        ? "Fixed-effect model"
+        : `Random-effects model (${ciLabel})`);
 
   // ----------- NULL REFERENCE LINE -----------
   // Only draw if the null value (0 on the internal scale) falls inside the plot strip.
@@ -280,7 +305,7 @@ export function drawForest(studies, m, options = {}) {
   if (nullX >= L.labelW && nullX <= L.labelW + L.plotW) {
     svg.append("line")
       .attr("x1", nullX).attr("x2", nullX)
-      .attr("y1", L.studyY0).attr("y2", isLastPage ? L.diamondY + 8 : L.studyY1)
+      .attr("y1", L.studyY0).attr("y2", isLastPage ? L.diamondY + L.diamondHH : L.studyY1)
       .attr("stroke", "var(--border-hover)")
       .attr("stroke-dasharray", "4");
   }
@@ -375,29 +400,59 @@ export function drawForest(studies, m, options = {}) {
   }
 
   const diamondHalfHeight = L.diamondHH;
-  const ciLow  = m.ciLow;
-  const ciHigh = m.ciHigh;
-  const center = m.RE;
 
-  const diamond = [
-    [x(ciLow),   L.diamondY],
-    [x(center),  L.diamondY - diamondHalfHeight],
-    [x(ciHigh),  L.diamondY],
-    [x(center),  L.diamondY + diamondHalfHeight]
-  ];
+  // Helper: draw one diamond and its left-column label
+  function drawDiamond(center, ciLow, ciHigh, yMid, fillColor, strokeDash, labelText, tooltipText) {
+    const pts = [
+      [x(ciLow),  yMid],
+      [x(center), yMid - diamondHalfHeight],
+      [x(ciHigh), yMid],
+      [x(center), yMid + diamondHalfHeight],
+    ];
+    svg.append("polygon")
+      .attr("points", pts.map(p => p.join(",")).join(" "))
+      .attr("fill", fillColor)
+      .attr("stroke", fillColor)
+      .attr("stroke-width", strokeDash ? 2.5 : 1.5)
+      .attr("stroke-dasharray", strokeDash || "0")
+      .append("title").text(tooltipText);
 
-  svg.append("polygon")
-    .attr("points", diamond.map(d => d.join(",")).join(" "))
-    .attr("fill", "var(--accent)")
-    .attr("stroke", "var(--accent)")
-    .attr("stroke-width", ciMethod === "KH" ? 2.5 : 1.5)
-    .attr("stroke-dasharray", ciMethod === "KH" ? "4,2" : "0")
-    .append("title")
-    .text(() => {
-      if (ciMethod === "KH") return "Knapp-Hartung CI (adjusted variance)";
-      if (ciMethod === "t") return "t-distribution CI";
-      return "Normal (Wald) CI";
-    });
+    // Label in left (study) column
+    svg.append("text")
+      .attr("x", L.labelW - 8)
+      .attr("y", yMid + 4)
+      .attr("text-anchor", "end")
+      .style("font-size", L.labelFontSize)
+      .style("font-weight", "bold")
+      .attr("fill", fillColor)
+      .text(labelText);
+  }
+
+  if (showFE) {
+    drawDiamond(
+      m.FE, feCiLow, feCiHigh,
+      showBoth ? L.feDiamondY : L.diamondY,
+      "var(--fg-muted)",
+      null,
+      showBoth ? "Fixed" : "Fixed-effect",
+      "Fixed-effect model CI (Normal/Z)"
+    );
+  }
+
+  if (showRE) {
+    const reDash = ciMethod === "KH" ? "4,2" : null;
+    const reTooltip = ciMethod === "KH" ? "Knapp-Hartung CI (adjusted variance)"
+      : ciMethod === "t" ? "t-distribution CI"
+      : "Normal (Wald) CI";
+    drawDiamond(
+      m.RE, m.ciLow, m.ciHigh,
+      L.diamondY,
+      "var(--accent)",
+      reDash,
+      showBoth ? "Random" : "Random-effects",
+      reTooltip
+    );
+  }
 
   // ----------- COLUMN HEADERS + SEPARATORS -----------
   const hY = L.headerH / 2 + 5;  // vertical centre of header band
@@ -511,27 +566,31 @@ export function drawForest(studies, m, options = {}) {
       .text(wPct);
   });
 
-  // Pooled row — aligned with diamond, highlighted in gold
-  const pooledEf = profile.transform(m.RE);
-  const pooledLo = profile.transform(m.ciLow);
-  const pooledHi = profile.transform(m.ciHigh);
-  const pooledEfStr = isFinite(pooledEf) ? pooledEf.toFixed(3) : "NA";
-  const pooledCiStr = `[${isFinite(pooledLo) ? pooledLo.toFixed(3) : "NA"}, ${isFinite(pooledHi) ? pooledHi.toFixed(3) : "NA"}]`;
+  // Pooled annotation rows — one per visible estimate
+  function annotatePooled(ef, lo, hi, yMid, color) {
+    const efT  = profile.transform(ef);
+    const loT  = profile.transform(lo);
+    const hiT  = profile.transform(hi);
+    const efStr = isFinite(efT) ? efT.toFixed(3) : "NA";
+    const ciStr = `[${isFinite(loT) ? loT.toFixed(3) : "NA"}, ${isFinite(hiT) ? hiT.toFixed(3) : "NA"}]`;
+    svg.append("text")
+      .attr("x", efAnnotX).attr("y", yMid + 4)
+      .style("font-size", L.annotFontSize).attr("fill", color)
+      .text(`${efStr} ${ciStr}`);
+    svg.append("text")
+      .attr("x", wtAnnotX).attr("y", yMid + 4)
+      .attr("text-anchor", "end")
+      .style("font-size", L.annotFontSize).attr("fill", color)
+      .text("100%");
+  }
 
-  svg.append("text")
-    .attr("x", efAnnotX)
-    .attr("y", L.diamondY + 4)
-    .style("font-size", L.annotFontSize)
-    .attr("fill", "var(--color-warning)")
-    .text(`${pooledEfStr} ${pooledCiStr}`);
-
-  svg.append("text")
-    .attr("x", wtAnnotX)
-    .attr("y", L.diamondY + 4)
-    .attr("text-anchor", "end")
-    .style("font-size", L.annotFontSize)
-    .attr("fill", "var(--color-warning)")
-    .text("100%");
+  if (showFE) {
+    annotatePooled(m.FE, feCiLow, feCiHigh,
+      showBoth ? L.feDiamondY : L.diamondY, "var(--fg-muted)");
+  }
+  if (showRE) {
+    annotatePooled(m.RE, m.ciLow, m.ciHigh, L.diamondY, "var(--color-warning)");
+  }
 
   // ----------- PREDICTION INTERVAL -----------
   if (isFinite(m.predLow) && isFinite(m.predHigh)) {
