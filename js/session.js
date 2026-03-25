@@ -10,11 +10,13 @@
 export const SESSION_VERSION = 1;
 
 // Build a versioned session object from explicit plain-JS arguments.
-// settings       — { effectType, tauMethod, ciMethod, cumulativeOrder, useTrimFill, useTFAdjusted }
+// settings        — { effectType, tauMethod, ciMethod, cumulativeOrder, useTrimFill, useTFAdjusted }
 // savedModerators — array of { name, type }
-// studies        — array of { study, inputs, group, moderators }
-export function buildSession(settings, savedModerators, studies) {
-  return { version: SESSION_VERSION, settings, moderators: savedModerators, studies };
+// studies         — array of { study, inputs, group, moderators }
+// rob             — { domains: string[], data: { [label]: { [domain]: string } } }
+//                   Optional; omitted fields default to empty on load.
+export function buildSession(settings, savedModerators, studies, rob = { domains: [], data: {} }) {
+  return { version: SESSION_VERSION, settings, moderators: savedModerators, studies, rob };
 }
 
 // Serialize a session object to a BOM-prefixed JSON string.

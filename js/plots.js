@@ -326,16 +326,27 @@ export function drawForest(studies, m, options = {}) {
     : { rowH: 14, labelFontSize: "9px",  annotFontSize: "8px",  titleFontSize: "10px", boxHalf: 3, diamondHH: 6 };
 
   // Fixed dimensions (independent of k)
-  L.labelW   = 180;
   L.plotW    = 440;
   L.annotW   = 240;
   L.headerH  = 28;
   L.summaryH = 106;
 
-  // Fixed widths and summary height.
+  // Dynamic label column: sized to the longest study or group label.
+  // charW approximates the advance width of the chosen font size.
+  const _charW   = parseFloat(L.labelFontSize) >= 11 ? 6.5 : parseFloat(L.labelFontSize) >= 10 ? 5.9 : 5.3;
+  const _maxStudy = studies.reduce((m, d) => Math.max(m, (d.label || "").length), 0);
+  const _maxGroup = studies.reduce((m, d) => Math.max(m, (d.group || "").length), 0);
+  // Diamond row labels ("Random-effects", "Fixed-effect") are also right-aligned in the
+  // label column, so they must be included in the width calculation.
+  const _diamondLabelLen = showBoth ? 6 : 14; // "Random" vs "Random-effects"
+  const _maxLen   = Math.min(Math.max(_maxStudy, _maxGroup, _diamondLabelLen), 28);
+  L.labelW   = Math.max(70, Math.min(180, Math.ceil(_maxLen * _charW) + 16));
+
+  // Derived total width and annotation offset
+  L.totalW   = L.labelW + L.plotW + L.annotW;
+
   // summaryH must accommodate: separator, diamond row(s), PI, het text, axis + tick labels.
   // Axis tick labels need ~26px below the axis line to remain within the SVG.
-  L.totalW   = L.labelW + L.plotW + L.annotW;          // 860
   L.summaryH = isLastPage ? (showBoth ? 152 : 132) : 52;
   L.studyY0  = L.headerH;
   L.sepH     = Math.max(14, L.rowH);                    // separator row height for group boundaries
@@ -504,7 +515,8 @@ export function drawForest(studies, m, options = {}) {
   // Direct study labels (replaces d3.axisLeft — labels are drawn in the
   // label column, right-aligned just left of the plot strip)
   pageStudies.forEach(d => {
-    const lbl = d.label.length > 28 ? d.label.slice(0, 26) + "\u2026" : d.label;
+    const _maxChars = Math.floor((L.labelW - 8) / _charW);
+    const lbl = d.label.length > _maxChars ? d.label.slice(0, _maxChars - 1) + "\u2026" : d.label;
     svg.append("text")
       .attr("x", L.labelW - 8)
       .attr("y", yPos[d.label] + 4)
@@ -751,7 +763,7 @@ export function drawForest(studies, m, options = {}) {
   }
 
   // ----------- PREDICTION INTERVAL -----------
-  if (isFinite(m.predLow) && isFinite(m.predHigh)) {
+  if (showRE && isFinite(m.predLow) && isFinite(m.predHigh)) {
     // Line
     svg.append("line")
       .attr("x1", x(m.predLow))
@@ -1717,16 +1729,21 @@ export function drawOrchardPlot(studies, m, profile) {
 
   const W = +svg.attr("width")  || 520;
   const H = +svg.attr("height") || 340;
-  const margin = { top: 28, right: 20, bottom: 48, left: 110 };
+
+  // ---- Group layout (computed before margin so left can scale to label width) ----
+  const allGroups = [...new Set(studies.map(s => s.group || "").filter(Boolean))];
+  const hasGroups = allGroups.length > 1;
+  const bands = hasGroups ? allGroups : ["All studies"];
+
+  // Dynamic left margin: fits longest group label when groups exist; minimal otherwise
+  const leftMargin = hasGroups
+    ? Math.max(60, Math.min(150, Math.ceil(allGroups.reduce((m, g) => Math.max(m, g.length), 0) * 6.8) + 14))
+    : 30;
+  const margin = { top: 28, right: 20, bottom: 48, left: leftMargin };
   const iW = W - margin.left - margin.right;
   const iH = H - margin.top  - margin.bottom;
 
   const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
-
-  // ---- Group layout ----
-  const allGroups = [...new Set(studies.map(s => s.group || "").filter(Boolean))];
-  const hasGroups = allGroups.length > 1;
-  const bands = hasGroups ? allGroups : ["All studies"];
 
   const bandStudies = bands.map(band =>
     hasGroups ? studies.filter(s => s.group === band) : studies.slice()
@@ -1849,7 +1866,8 @@ export function drawOrchardPlot(studies, m, profile) {
 
     // Group label at lane centre (left margin)
     if (hasGroups) {
-      const label = band.length > 18 ? band.slice(0, 17) + "…" : band;
+      const maxCharsGroup = Math.floor((margin.left - 8) / 6.8);
+      const label = band.length > maxCharsGroup ? band.slice(0, maxCharsGroup - 1) + "…" : band;
       g.append("text")
         .attr("x", -8).attr("y", cy + 4)
         .attr("text-anchor", "end")
@@ -1929,7 +1947,10 @@ export function drawCaterpillarPlot(studies, m, profile) {
 
   const ROW_H   = 16;
   const W       = +svg.attr("width") || 520;
-  const margin  = { top: 28, right: 20, bottom: 38, left: 130 };
+  // Dynamic left margin fitted to the longest study label (≈6.5px per char at 10px font)
+  const maxStudyLen = sorted.reduce((m, s) => Math.max(m, (s.label || "").length), 0);
+  const leftMargin  = Math.max(50, Math.min(160, Math.ceil(maxStudyLen * 6.5) + 14));
+  const margin  = { top: 28, right: 20, bottom: 38, left: leftMargin };
 
   // Dynamic height, capped at 900 px
   const H = Math.min(900, margin.top + k * ROW_H + margin.bottom);
@@ -2269,4 +2290,233 @@ export function drawBaujatPlot(result, profile) {
         .text(grp.length > 10 ? grp.slice(0, 9) + "…" : grp);
     });
   }
+}
+
+// ── drawRoBTrafficLight ──────────────────────────────────────────────────────
+// Traffic-light grid: studies (rows) × domains (columns), coloured circles.
+// studies  — array of study objects (used for labels)
+// domains  — string[]
+// robData  — { [studyLabel]: { [domain]: string } }  ("Low"|"Some concerns"|"High"|"NI"|"")
+export function drawRoBTrafficLight(studies, domains, robData) {
+  const svg = d3.select("#robTrafficLight");
+  svg.selectAll("*").remove();
+  if (!studies || !domains || domains.length === 0) return;
+
+  const ROB_COLORS = {
+    "Low":           "#4caf50",
+    "Some concerns": "#ff9800",
+    "High":          "#e53935",
+    "NI":            "#9e9e9e",
+  };
+
+  const CELL_W   = 44;
+  const CELL_H   = 22;
+  const TOP      = 70;   // space for rotated domain labels
+  const LEGEND_H = 30;
+
+  const k        = studies.length;
+  const d        = domains.length;
+
+  // LEFT: sized to the longest study label (≈6.5px per char at 11px font), clamped [60, 160]
+  const maxLabelLen = studies.reduce((m, s) => Math.max(m, (s.label ?? s.study ?? "").length), 0);
+  const LEFT = Math.max(60, Math.min(160, Math.ceil(maxLabelLen * 6.5) + 14));
+
+  // Legend needs LEFT + 290 + ~25px for "NI" text; content needs LEFT + d*CELL_W + 10
+  const LEGEND_MIN_W = LEFT + 315;
+  const svgW     = Math.max(LEGEND_MIN_W, LEFT + d * CELL_W + 10);
+  const svgH     = TOP + k * CELL_H + LEGEND_H + 10;
+
+  svg.attr("width", svgW).attr("height", svgH);
+
+  const tooltip = d3.select("#tooltip");
+
+  // ── Domain header labels (rotated −45°) ──
+  domains.forEach((dom, di) => {
+    const cx = LEFT + di * CELL_W + CELL_W / 2;
+    svg.append("text")
+      .attr("transform", `translate(${cx},${TOP - 4}) rotate(-45)`)
+      .attr("text-anchor", "start")
+      .attr("fill", "var(--fg)")
+      .style("font-size", "11px")
+      .text(dom.length > 14 ? dom.slice(0, 13) + "…" : dom);
+  });
+
+  // ── Rows ──
+  studies.forEach((s, si) => {
+    const label = s.label ?? s.study ?? "";
+    const cy    = TOP + si * CELL_H + CELL_H / 2;
+
+    // Study label
+    svg.append("text")
+      .attr("x", LEFT - 6)
+      .attr("y", cy + 4)
+      .attr("text-anchor", "end")
+      .attr("fill", "var(--fg)")
+      .style("font-size", "11px")
+      .text(label.length > 18 ? label.slice(0, 17) + "…" : label);
+
+    // Cells
+    domains.forEach((dom, di) => {
+      const rating = robData[label]?.[dom] ?? "";
+      const cx     = LEFT + di * CELL_W + CELL_W / 2;
+
+      if (rating && ROB_COLORS[rating]) {
+        svg.append("circle")
+          .attr("cx", cx).attr("cy", cy)
+          .attr("r", 7)
+          .attr("fill", ROB_COLORS[rating])
+          .attr("fill-opacity", 0.85)
+          .on("mouseover", (event) => {
+            tooltip.style("opacity", 1)
+              .html(`<strong>${label}</strong><br>${dom}<br>${rating}`);
+          })
+          .on("mousemove", (event) => {
+            tooltip
+              .style("left", (event.pageX + 12) + "px")
+              .style("top",  (event.pageY - 28) + "px");
+          })
+          .on("mouseout", () => tooltip.style("opacity", 0));
+      } else {
+        // Unrated dash
+        svg.append("line")
+          .attr("x1", cx - 5).attr("x2", cx + 5)
+          .attr("y1", cy).attr("y2", cy)
+          .attr("stroke", "var(--fg-muted)")
+          .attr("stroke-width", 1.5);
+      }
+    });
+  });
+
+  // ── Legend ──
+  const legendY = TOP + k * CELL_H + 14;
+  const items   = [["Low", "#4caf50"], ["Some concerns", "#ff9800"], ["High", "#e53935"], ["NI", "#9e9e9e"]];
+  let lx = LEFT;
+  items.forEach(([label, color]) => {
+    svg.append("circle").attr("cx", lx + 6).attr("cy", legendY).attr("r", 6).attr("fill", color).attr("fill-opacity", 0.85);
+    svg.append("text")
+      .attr("x", lx + 15).attr("y", legendY + 4)
+      .attr("fill", "var(--fg-muted)")
+      .style("font-size", "10px")
+      .text(label);
+    lx += label === "Some concerns" ? 110 : 60;
+  });
+}
+
+// ── drawRoBSummary ───────────────────────────────────────────────────────────
+// Stacked horizontal bar chart: one bar per domain showing proportion of
+// Low / Some concerns / High / NI ratings across all studies.
+// studies  — array of study objects (for count)
+// domains  — string[]
+// robData  — { [studyLabel]: { [domain]: string } }
+export function drawRoBSummary(studies, domains, robData) {
+  const svg = d3.select("#robSummary");
+  svg.selectAll("*").remove();
+  if (!studies || !domains || domains.length === 0) return;
+
+  const ROB_COLORS = {
+    "Low":           "#4caf50",
+    "Some concerns": "#ff9800",
+    "High":          "#e53935",
+    "NI":            "#9e9e9e",
+  };
+  const RATINGS   = ["Low", "Some concerns", "High", "NI"];
+
+  const BAR_H    = 22;
+  const BAR_GAP  = 6;
+  const TOP      = 20;
+  const LEGEND_H = 30;
+  const RIGHT    = 20;
+
+  const d   = domains.length;
+
+  // LEFT: sized to the longest domain label (≈6.5px per char at 11px font), clamped [60, 160]
+  const maxDomLen = domains.reduce((m, dom) => Math.max(m, dom.length), 0);
+  const LEFT = Math.max(60, Math.min(160, Math.ceil(maxDomLen * 6.5) + 14));
+
+  const svgW = Math.max(LEFT + 320, LEFT + 300 + RIGHT);
+  const svgH = TOP + d * (BAR_H + BAR_GAP) + LEGEND_H + 10;
+
+  svg.attr("width", svgW).attr("height", svgH);
+
+  const barW = svgW - LEFT - RIGHT;
+  const xScale = d3.scaleLinear().domain([0, 1]).range([0, barW]);
+
+  domains.forEach((dom, di) => {
+    const y    = TOP + di * (BAR_H + BAR_GAP);
+    const counts = { "Low": 0, "Some concerns": 0, "High": 0, "NI": 0, "": 0 };
+    studies.forEach(s => {
+      const label  = s.label ?? s.study ?? "";
+      const rating = robData[label]?.[dom] ?? "";
+      if (rating in counts) counts[rating]++;
+      else counts[""]++;
+    });
+    const total = studies.length || 1;
+
+    // Domain label
+    svg.append("text")
+      .attr("x", LEFT - 6).attr("y", y + BAR_H / 2 + 4)
+      .attr("text-anchor", "end")
+      .attr("fill", "var(--fg)")
+      .style("font-size", "11px")
+      .text(dom.length > 18 ? dom.slice(0, 17) + "…" : dom);
+
+    // Stacked bars
+    let xOffset = 0;
+    RATINGS.forEach(rating => {
+      const prop = counts[rating] / total;
+      if (prop === 0) return;
+      const w = xScale(prop);
+      svg.append("rect")
+        .attr("x", LEFT + xOffset).attr("y", y)
+        .attr("width", w).attr("height", BAR_H)
+        .attr("fill", ROB_COLORS[rating])
+        .attr("fill-opacity", 0.85)
+        .on("mouseover", (event) => {
+          d3.select("#tooltip").style("opacity", 1)
+            .html(`<strong>${dom}</strong><br>${rating}: ${counts[rating]} / ${total} (${Math.round(prop * 100)}%)`);
+        })
+        .on("mousemove", (event) => {
+          d3.select("#tooltip")
+            .style("left", (event.pageX + 12) + "px")
+            .style("top",  (event.pageY - 28) + "px");
+        })
+        .on("mouseout", () => d3.select("#tooltip").style("opacity", 0));
+
+      // Percentage label inside bar (if wide enough)
+      if (w >= 24) {
+        svg.append("text")
+          .attr("x", LEFT + xOffset + w / 2).attr("y", y + BAR_H / 2 + 4)
+          .attr("text-anchor", "middle")
+          .attr("fill", "#fff")
+          .style("font-size", "10px")
+          .style("pointer-events", "none")
+          .text(`${Math.round(prop * 100)}%`);
+      }
+      xOffset += w;
+    });
+
+    // Unrated remainder
+    const ratedProp = RATINGS.reduce((s, r) => s + counts[r] / total, 0);
+    if (ratedProp < 1) {
+      svg.append("rect")
+        .attr("x", LEFT + xOffset).attr("y", y)
+        .attr("width", xScale(1 - ratedProp)).attr("height", BAR_H)
+        .attr("fill", "var(--border)")
+        .attr("fill-opacity", 0.5);
+    }
+  });
+
+  // ── Legend ──
+  const legendY = TOP + d * (BAR_H + BAR_GAP) + 14;
+  const items   = [["Low", "#4caf50"], ["Some concerns", "#ff9800"], ["High", "#e53935"], ["NI", "#9e9e9e"]];
+  let lx = LEFT;
+  items.forEach(([label, color]) => {
+    svg.append("rect").attr("x", lx).attr("y", legendY - 8).attr("width", 12).attr("height", 12).attr("fill", color).attr("fill-opacity", 0.85);
+    svg.append("text")
+      .attr("x", lx + 15).attr("y", legendY + 2)
+      .attr("fill", "var(--fg-muted)")
+      .style("font-size", "10px")
+      .text(label);
+    lx += label === "Some concerns" ? 110 : 60;
+  });
 }

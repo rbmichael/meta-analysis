@@ -104,7 +104,7 @@ import { eggerTest, beggTest, fatPetTest, failSafeN, pCurve, pUniform, baujat, m
 import { fmt } from "./utils.js";
 import { effectProfiles, getProfile } from "./profiles.js";
 import { trimFill } from "./trimfill.js";
-import { drawForest, drawFunnel, drawBubble, drawInfluencePlot, drawCumulativeForest, drawPCurve, drawPUniform, drawOrchardPlot, drawCaterpillarPlot, drawBaujatPlot } from "./plots.js";
+import { drawForest, drawFunnel, drawBubble, drawInfluencePlot, drawCumulativeForest, drawPCurve, drawPUniform, drawOrchardPlot, drawCaterpillarPlot, drawBaujatPlot, drawRoBTrafficLight, drawRoBSummary } from "./plots.js";
 import { exportSVG, exportPNG, exportTIFF } from "./export.js";
 import { buildReport, downloadHTML, openPrintPreview } from "./report.js";
 import { parseCSV, detectEffectType } from "./csv.js";
@@ -235,6 +235,10 @@ function hBtn(key) {
 // ---------------- MODERATOR STATE ----------------
 let moderators = []; // { name: string, type: "continuous"|"categorical" }
 
+// ---- Risk-of-bias state ----
+let _robDomains = [];  // string[] — ordered domain names
+let _robData    = {};  // { [studyLabel]: { [domain]: "Low"|"Some concerns"|"High"|"NI"|"" } }
+
 // Low-level: add one moderator to state + DOM (no form read, no runAnalysis call).
 function doAddModerator(name, type) {
   if (!name || moderators.some(m => m.name === name)) return;
@@ -296,6 +300,125 @@ function makeModTd(name, type) {
   return td;
 }
 
+// ---- Risk-of-bias domain manager ----
+
+function _applyRoBClass(selectEl, value) {
+  selectEl.className = "";
+  if      (value === "Low")            selectEl.className = "rob-rating-low";
+  else if (value === "Some concerns")  selectEl.className = "rob-rating-some";
+  else if (value === "High")           selectEl.className = "rob-rating-high";
+  else if (value === "NI")             selectEl.className = "rob-rating-ni";
+}
+
+function renderRoBDomainTags() {
+  const container = document.getElementById("robDomainTags");
+  container.innerHTML = "";
+  _robDomains.forEach(name => {
+    const tag = document.createElement("span");
+    tag.className = "rob-domain-tag";
+    tag.textContent = name + " ";
+    const btn = document.createElement("button");
+    btn.textContent = "×";
+    btn.setAttribute("aria-label", `Remove ${name}`);
+    btn.addEventListener("click", () => removeRoBDomain(name));
+    tag.appendChild(btn);
+    container.appendChild(tag);
+  });
+}
+
+function renderRoBDataGrid() {
+  const container = document.getElementById("robDataGrid");
+  container.innerHTML = "";
+
+  if (_robDomains.length === 0) { container.style.display = "none"; return; }
+
+  // Collect current (non-empty) study labels from the input table.
+  const labels = [];
+  document.querySelectorAll("#inputTable tr").forEach((row, i) => {
+    if (i === 0) return;
+    const label = row.querySelector("input")?.value?.trim();
+    if (label) labels.push(label);
+  });
+
+  if (labels.length === 0) { container.style.display = "none"; return; }
+
+  container.style.display = "";
+
+  const table = document.createElement("table");
+
+  // Header
+  const hrow = table.createTHead().insertRow();
+  const th0 = document.createElement("th");
+  th0.textContent = "Study";
+  hrow.appendChild(th0);
+  _robDomains.forEach(domain => {
+    const th = document.createElement("th");
+    th.textContent = domain;
+    hrow.appendChild(th);
+  });
+
+  // Study rows
+  const tbody = table.createTBody();
+  labels.forEach(label => {
+    const row = tbody.insertRow();
+    const td0 = row.insertCell();
+    td0.textContent = label;
+    td0.className = "rob-study-label";
+
+    _robDomains.forEach(domain => {
+      const td = row.insertCell();
+      const sel = document.createElement("select");
+      ["", "Low", "Some concerns", "High", "NI"].forEach(opt => {
+        const o = document.createElement("option");
+        o.value = opt;
+        o.textContent = opt || "—";
+        sel.appendChild(o);
+      });
+      const current = _robData[label]?.[domain] ?? "";
+      sel.value = current;
+      _applyRoBClass(sel, current);
+
+      sel.addEventListener("change", () => {
+        if (!_robData[label]) _robData[label] = {};
+        _robData[label][domain] = sel.value;
+        _applyRoBClass(sel, sel.value);
+        markStale();
+        scheduleSave();
+      });
+
+      td.appendChild(sel);
+    });
+  });
+
+  container.appendChild(table);
+}
+
+function addRoBDomain() {
+  const input = document.getElementById("robDomainInput");
+  const name  = input.value.trim();
+  if (!name || _robDomains.includes(name)) return;
+  _robDomains.push(name);
+  input.value = "";
+  renderRoBDomainTags();
+  renderRoBDataGrid();
+  markStale();
+  scheduleSave();
+}
+
+function removeRoBDomain(name) {
+  _robDomains = _robDomains.filter(d => d !== name);
+  Object.values(_robData).forEach(ratings => { delete ratings[name]; });
+  renderRoBDomainTags();
+  renderRoBDataGrid();
+  markStale();
+  scheduleSave();
+}
+
+document.getElementById("addRobDomain").addEventListener("click", addRoBDomain);
+document.getElementById("robDomainInput").addEventListener("keydown", e => {
+  if (e.key === "Enter") addRoBDomain();
+});
+
 // ---------------- VIEW TOGGLE ----------------
 
 // ---------------- THEME TOGGLE ----------------
@@ -349,7 +472,7 @@ _toggleResults.addEventListener("click", () => { if (!_toggleResults.disabled) s
 showView("input");
 
 // ---------------- INITIALIZE ----------------
-document.getElementById("addStudy").addEventListener("click", () => { addRow(); markStale(); });
+document.getElementById("addStudy").addEventListener("click", () => { addRow(); renderRoBDataGrid(); markStale(); });
 document.getElementById("run").addEventListener("click", () => { if (runAnalysis()) showView("results"); });
 document.getElementById("import").addEventListener("click", () => document.getElementById("csvFile").click());
 document.getElementById("csvFile").addEventListener("change", e => { if (e.target.files[0]) previewCSV(e.target.files[0]); });
@@ -406,6 +529,10 @@ document.getElementById("draftDismiss").addEventListener("click", hideDraftBanne
 document.getElementById("draftStartFresh").addEventListener("click", () => {
   clearDraft();
   clearModerators();
+  _robDomains = [];
+  _robData    = {};
+  renderRoBDomainTags();
+  renderRoBDataGrid();
   updateTableHeaders();
   const table = document.getElementById("inputTable");
   while (table.rows.length > 1) table.deleteRow(1);
@@ -595,7 +722,11 @@ function addRow(values) {
 function removeRow(btn) {
   const table = document.getElementById("inputTable");
   if (table.rows.length <= 2) return;
-  btn.closest("tr").remove();
+  const row = btn.closest("tr");
+  const label = row.querySelector("input")?.value?.trim();
+  if (label) delete _robData[label];
+  row.remove();
+  renderRoBDataGrid();
   runAnalysis();
   scheduleSave();
 }
@@ -953,7 +1084,7 @@ function gatherSessionState() {
     studies.push({ study, inputs: effectInputs, group, moderators: modValues });
   });
 
-  return buildSession(settings, savedModerators, studies);
+  return buildSession(settings, savedModerators, studies, { domains: _robDomains, data: _robData });
 }
 
 // ---------------- SESSION SAVE ----------------
@@ -968,7 +1099,7 @@ function saveSession() {
 // Returns { profile, savedStudies } so callers can inspect missing columns etc.
 
 function applySession(session) {
-  const { settings = {}, moderators: savedMods = [], studies: savedStudies = [] } = session;
+  const { settings = {}, moderators: savedMods = [], studies: savedStudies = [], rob = {} } = session;
 
   // Apply settings
   const s = settings;
@@ -1005,6 +1136,12 @@ function applySession(session) {
     moderators.forEach(m => v.push(row.moderators?.[m.name] ?? ""));
     addRow(v);
   });
+
+  // Restore risk-of-bias state
+  _robDomains = Array.isArray(rob.domains) ? [...rob.domains] : [];
+  _robData    = (rob.data && typeof rob.data === "object") ? rob.data : {};
+  renderRoBDomainTags();
+  renderRoBDataGrid();
 
   return { profile, savedStudies };
 }
@@ -1999,6 +2136,13 @@ function runAnalysis() {
   document.getElementById("orchardPlotBlock").style.display = "";
   drawCaterpillarPlot(all, m, profile);
   document.getElementById("caterpillarPlotBlock").style.display = "";
+
+  // ---- Risk-of-bias plots ----
+  const hasRoB = _robDomains.length > 0 && studies.length > 0;
+  drawRoBTrafficLight(studies, _robDomains, _robData);
+  document.getElementById("robTrafficLightBlock").style.display = hasRoB ? "" : "none";
+  drawRoBSummary(studies, _robDomains, _robData);
+  document.getElementById("robSummaryBlock").style.display = hasRoB ? "" : "none";
 
   updateValidationWarnings(studies, excluded, softWarnings);
   return true;

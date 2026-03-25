@@ -688,6 +688,102 @@ input[type="file"]::file-selector-button:hover {
   color: var(--fg-muted);
 }
 
+/* ---- Risk-of-bias domain manager ---- */
+#robManager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 0 14px;
+  border-top: 1px solid var(--border);
+  margin-top: 2px;
+}
+
+#robManager strong {
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+}
+
+.rob-domain-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px 2px 10px;
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  font-size: 12px;
+  color: var(--fg);
+}
+
+.rob-domain-tag button {
+  background: none;
+  border: none;
+  color: var(--fg-muted);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 1px;
+}
+
+.rob-domain-tag button:hover { color: var(--fg); }
+
+/* ---- Risk-of-bias data entry grid ---- */
+#robDataGrid {
+  margin-top: 4px;
+  margin-bottom: 8px;
+  overflow-x: auto;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+
+#robDataGrid table {
+  border-collapse: collapse;
+  font-size: 12px;
+  width: auto;
+}
+
+#robDataGrid th,
+#robDataGrid td {
+  border: 1px solid var(--border);
+  padding: 3px 6px;
+  white-space: nowrap;
+}
+
+#robDataGrid th {
+  background: var(--bg-hover);
+  font-weight: 500;
+  text-align: center;
+  color: var(--fg-muted);
+  font-size: 11px;
+}
+
+.rob-study-label {
+  font-weight: 500;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--fg);
+}
+
+#robDataGrid select {
+  font-size: 11px;
+  padding: 1px 2px;
+  min-width: 110px;
+  border: none;
+  cursor: pointer;
+  border-radius: 3px;
+  color: inherit;
+}
+
+.rob-rating-low  { background: color-mix(in srgb, #4caf50 22%, transparent); }
+.rob-rating-some { background: color-mix(in srgb, #ff9800 22%, transparent); }
+.rob-rating-high { background: color-mix(in srgb, #e53935 22%, transparent); }
+.rob-rating-ni   { background: var(--bg-hover); }
+
 /* ---- Primary action: Run ---- */
 #run {
   background: var(--accent);

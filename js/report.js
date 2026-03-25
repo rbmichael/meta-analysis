@@ -670,6 +670,8 @@ export function buildReport(args) {
     sectionPlot("P-uniform",              [liveSVG("pUniformPlot")]),
     sectionPlot("Orchard Plot",           [liveSVG("orchardPlot")]),
     sectionPlot("Caterpillar Plot",       [liveSVG("caterpillarPlot")]),
+    sectionPlot("Risk-of-bias Traffic Light", [liveSVG("robTrafficLight")]),
+    sectionPlot("Risk-of-bias Summary",   [liveSVG("robSummary")]),
     sectionPlot("Bubble Plots",           bubbleSVGs),
   ].join("\n");
 
