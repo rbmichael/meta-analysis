@@ -2249,3 +2249,133 @@ export function pCurve(studies) {
     verdict,
   };
 }
+
+// ================ P-UNIFORM (van Assen, van Aert & Wicherts, 2015) ================
+// pUniform(studies, m)
+//
+// Bias-corrected effect estimate and two hypothesis tests using the conditional
+// uniformity of p-values under the true effect size.
+//
+// Method overview
+// ---------------
+// For each significant study (two-tailed p < .05), the absolute z-statistic
+// z_i = |yi / se_i| is computed, and the conditional quantile under a
+// hypothesised effect δ is:
+//
+//   q_i(δ) = [1 − Φ(z_i − δ/se_i)] / [1 − Φ(1.96 − δ/se_i)]
+//
+// Interpretation: q_i is the probability that a study with the same SE would
+// yield a p-value as small or smaller than p_i, given that it was significant
+// and the true effect is δ.  Under the true δ, q_i ~ Uniform(0, 1).
+//
+// The denominator is the power of study i at effect δ; it is clamped at
+// MIN_DENOM = 1e-10 to avoid division by zero at extreme negative δ.
+//
+// Because Σq_i(δ) is strictly increasing in δ, bisection solves for:
+//   · effect estimate δ* : Σq_i(δ*) = k/2
+//   · 95% CI lower bound  : Σq_i(δ_lo) = k/2 − 1.96 × √(k/12)
+//   · 95% CI upper bound  : Σq_i(δ_hi) = k/2 + 1.96 × √(k/12)
+//
+// Two tests
+// ---------
+//   Significance test  (H₀: δ = 0)
+//     Z_sig  = [Σq_i(0) − k/2] / √(k/12)
+//     p_sig  = Φ(Z_sig)           [one-tailed left; evidence → Z < 0]
+//
+//   Publication-bias test  (H₀: no bias — RE estimate equals true effect)
+//     Z_bias = [Σq_i(δ_RE) − k/2] / √(k/12)
+//     p_bias = 1 − Φ(Z_bias)      [one-tailed right; bias → Z > 0]
+//
+// Parameters
+// ----------
+//   studies — full studies array (filtering to significant is done internally)
+//   m       — meta() result object, used for m.RE (the RE estimate)
+//
+// Returns
+// -------
+//   k                — number of significant studies used
+//   estimate         — bias-corrected point estimate δ* (NaN if not solvable)
+//   ciLow, ciHigh    — 95% CI bounds (NaN if not solvable)
+//   Z_sig, p_sig     — significance test
+//   Z_bias, p_bias   — publication-bias test
+//   significantEffect — p_sig  < .05
+//   biasDetected      — p_bias < .05
+export function pUniform(studies, m) {
+  const MIN_DENOM  = 1e-10;  // clamp denominator to avoid division by near-zero power
+  const SEARCH_LO  = -10;    // bisection search range for δ (covers any practical effect)
+  const SEARCH_HI  =  10;
+
+  // ---- Step 1: significant studies ----
+  const sig = studies
+    .filter(d => isFinite(d.yi) && isFinite(d.se) && d.se > 0)
+    .map(d => ({
+      z:  Math.abs(d.yi / d.se),   // fold to upper tail
+      se: d.se,
+    }))
+    .filter(d => 2 * (1 - normalCDF(d.z)) < 0.05);
+
+  const k = sig.length;
+
+  // ---- Step 2: conditional quantile q_i(δ) for one study ----
+  function qi(z, se, delta) {
+    const lambda   = delta / se;
+    const numer    = 1 - normalCDF(z    - lambda);
+    const denom    = Math.max(1 - normalCDF(1.96 - lambda), MIN_DENOM);
+    return numer / denom;
+  }
+
+  // Σq_i(δ) — the aggregate target function, strictly increasing in δ.
+  function sumQ(delta) {
+    return sig.reduce((acc, d) => acc + qi(d.z, d.se, delta), 0);
+  }
+
+  // ---- Step 3: test statistics (computed regardless of k for completeness) ----
+  const sdUnif = k > 0 ? Math.sqrt(k / 12) : NaN;
+
+  const sq0   = k > 0 ? sumQ(0)    : NaN;
+  const sqRE  = k > 0 ? sumQ(isFinite(m?.RE) ? m.RE : 0) : NaN;
+
+  const Z_sig  = k > 0 ? (sq0  - k / 2) / sdUnif : NaN;
+  const Z_bias = k > 0 ? (sqRE - k / 2) / sdUnif : NaN;
+
+  const p_sig  = isFinite(Z_sig)  ? normalCDF(Z_sig)       : NaN;  // one-tailed left
+  const p_bias = isFinite(Z_bias) ? 1 - normalCDF(Z_bias)  : NaN;  // one-tailed right
+
+  // ---- Step 4: bisection helper ----
+  // Finds δ such that sumQ(δ) = target.
+  // Returns NaN if the target lies outside [sumQ(SEARCH_LO), sumQ(SEARCH_HI)].
+  function bisectDelta(target) {
+    const lo0 = sumQ(SEARCH_LO);
+    const hi0 = sumQ(SEARCH_HI);
+    if (target < lo0 || target > hi0) return NaN;
+    let lo = SEARCH_LO, hi = SEARCH_HI;
+    for (let i = 0; i < BISECTION_ITERS; i++) {
+      const mid = (lo + hi) / 2;
+      sumQ(mid) < target ? (lo = mid) : (hi = mid);
+    }
+    return (lo + hi) / 2;
+  }
+
+  // ---- Step 5: effect estimate and 95% CI ----
+  let estimate = NaN, ciLow = NaN, ciHigh = NaN;
+  if (k >= 1) {
+    const half    = k / 2;
+    const margin  = 1.96 * sdUnif;
+    estimate = bisectDelta(half);
+    ciLow    = bisectDelta(half - margin);
+    ciHigh   = bisectDelta(half + margin);
+  }
+
+  return {
+    k,
+    estimate,
+    ciLow,
+    ciHigh,
+    Z_sig,
+    p_sig,
+    Z_bias,
+    p_bias,
+    significantEffect: k >= 3 && isFinite(p_sig)  && p_sig  < 0.05,
+    biasDetected:      k >= 3 && isFinite(p_bias) && p_bias < 0.05,
+  };
+}

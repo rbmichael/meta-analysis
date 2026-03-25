@@ -1539,3 +1539,143 @@ export function drawPCurve(result) {
     .attr("fill", "var(--fg-muted)").style("font-size", "9px")
     .text("Expected (33% power)");
 }
+
+// ================= P-UNIFORM COMPARISON PLOT =================
+// drawPUniform(result, m, profile)
+//
+// Side-by-side horizontal CI comparison of the RE estimate and the
+// bias-corrected p-uniform estimate, sharing a common x-axis in the
+// transformed effect scale.  Immediately shows how much the bias
+// correction shifts the estimate and whether the CIs overlap.
+//
+// Layout: two labelled rows (RE / P-uniform), each with a CI line
+// and a point-estimate marker (diamond for RE, circle for p-uniform).
+// A vertical dashed reference line is drawn at x = 0 (null effect).
+//
+// Parameters:
+//   result  — object returned by pUniform() in analysis.js
+//   m       — meta() result, used for RE estimate and CI
+//   profile — effect profile (provides .transform and .label)
+export function drawPUniform(result, m, profile) {
+  const svg = d3.select("#pUniformPlot");
+  svg.selectAll("*").remove();
+
+  if (!result || result.k === 0 || !isFinite(result.estimate)) return;
+
+  profile = profile || { transform: x => x, label: "Effect" };
+
+  // ---- Layout ----
+  const margin = { top: 20, right: 24, bottom: 44, left: 100 };
+  const W = +svg.attr("width")  || 500;
+  const H = +svg.attr("height") || 170;
+  const iW = W - margin.left - margin.right;
+  const iH = H - margin.top  - margin.bottom;
+
+  const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+
+  // ---- Data rows ----
+  // Stored in the internal (untransformed) scale; profile.transform is applied
+  // only at the tick-formatter stage so the x scale stays linear and symmetric.
+  const rows = [
+    {
+      label:    "RE",
+      estimate: m.RE,
+      lo:       m.ciLow,
+      hi:       m.ciHigh,
+      color:    "var(--accent)",
+      shape:    "diamond",
+    },
+    {
+      label:    "P-uniform",
+      estimate: result.estimate,
+      lo:       result.ciLow,
+      hi:       result.ciHigh,
+      color:    "var(--color-info)",
+      shape:    "circle",
+    },
+  ].filter(r => isFinite(r.estimate) && isFinite(r.lo) && isFinite(r.hi));
+
+  if (rows.length === 0) return;
+
+  // ---- X scale (internal units, symmetric around null = 0) ----
+  const allVals = rows.flatMap(r => [r.lo, r.estimate, r.hi, 0]);
+  const xExtent = Math.max(...allVals.map(Math.abs)) * 1.15 || 1;
+  const x = d3.scaleLinear().domain([-xExtent, xExtent]).range([0, iW]);
+
+  // ---- Y positions — one per row, evenly spaced ----
+  const rowH  = iH / rows.length;
+  const rowMid = (i) => rowH * i + rowH / 2;
+
+  // ---- Reference line at x = 0 ----
+  g.append("line")
+    .attr("x1", x(0)).attr("x2", x(0))
+    .attr("y1", 0).attr("y2", iH)
+    .attr("stroke", "var(--border-hover)")
+    .attr("stroke-width", 1)
+    .attr("stroke-dasharray", "4,3");
+
+  // ---- CI lines and markers ----
+  rows.forEach((row, i) => {
+    const cy = rowMid(i);
+
+    // CI line with end ticks
+    const TICK = 5;
+    g.append("line")
+      .attr("x1", x(row.lo)).attr("x2", x(row.hi))
+      .attr("y1", cy).attr("y2", cy)
+      .attr("stroke", row.color).attr("stroke-width", 2);
+    [row.lo, row.hi].forEach(v => {
+      g.append("line")
+        .attr("x1", x(v)).attr("x2", x(v))
+        .attr("y1", cy - TICK).attr("y2", cy + TICK)
+        .attr("stroke", row.color).attr("stroke-width", 2);
+    });
+
+    // Point estimate marker
+    if (row.shape === "diamond") {
+      const S = 7;   // half-width of diamond
+      const pts = [
+        [x(row.estimate), cy - S],
+        [x(row.estimate) + S, cy],
+        [x(row.estimate), cy + S],
+        [x(row.estimate) - S, cy],
+      ].map(p => p.join(",")).join(" ");
+      g.append("polygon")
+        .attr("points", pts)
+        .attr("fill", row.color);
+    } else {
+      g.append("circle")
+        .attr("cx", x(row.estimate)).attr("cy", cy)
+        .attr("r", 6)
+        .attr("fill", row.color);
+    }
+
+    // Row label (left margin)
+    g.append("text")
+      .attr("x", -8).attr("y", cy + 4)
+      .attr("text-anchor", "end")
+      .attr("fill", "var(--fg-muted)")
+      .style("font-size", "11px")
+      .text(row.label);
+  });
+
+  // ---- X axis ----
+  const axisX = g.append("g")
+    .attr("transform", `translate(0,${iH})`)
+    .call(d3.axisBottom(x).ticks(6).tickFormat(v => {
+      const t = profile.transform(v);
+      return isFinite(t) ? +t.toFixed(2) : "";
+    }));
+  axisX.select(".domain").attr("stroke", "var(--border-hover)");
+  axisX.selectAll(".tick line").attr("stroke", "var(--border-hover)");
+  axisX.selectAll(".tick text").attr("fill", "var(--fg-muted)").style("font-size", "10px");
+
+  // ---- X axis label ----
+  svg.append("text")
+    .attr("x", margin.left + iW / 2)
+    .attr("y", H - 6)
+    .attr("text-anchor", "middle")
+    .attr("fill", "var(--fg-muted)")
+    .style("font-size", "11px")
+    .text(profile.label + (profile.isLog ? " (log scale)" : ""));
+}

@@ -20,6 +20,7 @@
 // args shape (set by _reportArgs in ui.js):
 //   { studies, m, profile, reg, tf, egger, begg, fatpet, fsn,
 //     influence, subgroup, method, ciMethod, useTF, mAdjusted,
+//     pcurve, puniform,
 //     forestOptions }   ← forestOptions = { ciMethod, profile, pageSize, theme }
 //
 // Dependencies
@@ -231,6 +232,52 @@ function sectionPubBias(args) {
     Fail-safe N (Orwin, trivial = 0.1): <strong>${isFinite(fsn.orwin) ? Math.round(fsn.orwin) : "—"}</strong>
   </p>
   <p>Trim &amp; Fill: <strong>${useTF ? "ON" : "OFF"}</strong>${tf.length > 0 ? ` (${tf.length} filled)` : ""}</p>
+</section>`;
+}
+
+function sectionPUniform(puniform, m, profile) {
+  if (!puniform || puniform.k < 3 || !isFinite(puniform.estimate)) return "";
+
+  function fmtEst(v) { return isFinite(v) ? fmt(profile.transform(v)) : "—"; }
+
+  const reEst  = fmtEst(m.RE);
+  const reLo   = fmtEst(m.ciLow);
+  const reHi   = fmtEst(m.ciHigh);
+  const puEst  = fmtEst(puniform.estimate);
+  const puLo   = fmtEst(puniform.ciLow);
+  const puHi   = fmtEst(puniform.ciHigh);
+
+  return `
+<section>
+  <h2>P-uniform (van Assen et al., 2015)</h2>
+  <p class="meta-line">${puniform.k} significant result${puniform.k !== 1 ? "s" : ""} (p &lt; .05) used &nbsp;·&nbsp; effect scale: ${esc(profile.label)}</p>
+  <table class="stat-table">
+    <thead>
+      <tr><th>Method</th><th>Estimate</th><th>95% CI</th><th>Z</th><th>p</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>RE (uncorrected)</td>
+        <td>${reEst}</td>
+        <td>[${reLo}, ${reHi}]</td>
+        <td>${fmt(puniform.Z_bias)}</td>
+        <td>${fmtP(puniform.p_bias)}</td>
+      </tr>
+      <tr>
+        <td>P-uniform (bias-corrected)</td>
+        <td>${puEst}</td>
+        <td>[${puLo}, ${puHi}]</td>
+        <td>${fmt(puniform.Z_sig)}</td>
+        <td>${fmtP(puniform.p_sig)}</td>
+      </tr>
+    </tbody>
+  </table>
+  <p class="note" style="margin-top:8px">
+    RE row: bias test (H₀: RE = true effect) — positive Z indicates overestimation.
+    P-uniform row: significance test (H₀: δ = 0) — negative Z indicates true positive effect.
+    ${puniform.biasDetected      ? "<strong>Bias detected</strong> (p &lt; .05)." : ""}
+    ${puniform.significantEffect ? "<strong>Significant effect after correction</strong> (p &lt; .05)." : ""}
+  </p>
 </section>`;
 }
 
@@ -580,6 +627,7 @@ export function buildReport(args) {
   const {
     studies, m, profile, reg, tf, influence, subgroup,
     method, ciMethod, useTF, forestOptions,
+    pcurve, puniform,
   } = args;
 
   const date  = new Date().toLocaleDateString(undefined, {
@@ -608,6 +656,7 @@ export function buildReport(args) {
   const body = [
     sectionSummary(args),
     sectionPubBias(args),
+    sectionPUniform(puniform, m, profile),
     sectionInfluence(influence, k),
     sectionSubgroup(subgroup, profile),
     sectionStudyTable(args),
@@ -616,6 +665,8 @@ export function buildReport(args) {
     sectionPlot("Funnel Plot",            [liveSVG("funnelPlot")]),
     sectionPlot("Influence Plot",         [liveSVG("influencePlot")]),
     sectionPlot("Cumulative Forest Plot", [liveSVG("cumulativePlot")]),
+    sectionPlot("P-curve",                [liveSVG("pCurvePlot")]),
+    sectionPlot("P-uniform",              [liveSVG("pUniformPlot")]),
     sectionPlot("Bubble Plots",           bubbleSVGs),
   ].join("\n");
 

@@ -100,11 +100,11 @@
 //   ui.js calls init() on DOMContentLoaded, which populates dropdowns,
 //   restores any autosave draft, and attaches all event listeners.
 // =============================================================================
-import { eggerTest, beggTest, fatPetTest, failSafeN, pCurve, meta, influenceDiagnostics, subgroupAnalysis, metaRegression, cumulativeMeta, leaveOneOut, estimatorComparison } from "./analysis.js";
+import { eggerTest, beggTest, fatPetTest, failSafeN, pCurve, pUniform, meta, influenceDiagnostics, subgroupAnalysis, metaRegression, cumulativeMeta, leaveOneOut, estimatorComparison } from "./analysis.js";
 import { fmt } from "./utils.js";
 import { effectProfiles, getProfile } from "./profiles.js";
 import { trimFill } from "./trimfill.js";
-import { drawForest, drawFunnel, drawBubble, drawInfluencePlot, drawCumulativeForest, drawPCurve } from "./plots.js";
+import { drawForest, drawFunnel, drawBubble, drawInfluencePlot, drawCumulativeForest, drawPCurve, drawPUniform } from "./plots.js";
 import { exportSVG, exportPNG, exportTIFF } from "./export.js";
 import { buildReport, downloadHTML, openPrintPreview } from "./report.js";
 import { parseCSV, detectEffectType } from "./csv.js";
@@ -1628,6 +1628,53 @@ function renderPCurvePanel(pcurve) {
   drawPCurve(pcurve);
 }
 
+// ---------------- P-UNIFORM PANEL ----------------
+function renderPUniformPanel(puniform, m, profile) {
+  const panel     = document.getElementById("pUniformPanel");
+  const plotBlock = document.getElementById("pUniformPlotBlock");
+  if (!panel || !plotBlock) return;
+
+  const hasData = puniform && puniform.k > 0 && isFinite(puniform.estimate);
+  plotBlock.style.display = hasData ? "" : "none";
+
+  if (!hasData) {
+    panel.innerHTML = "";
+    return;
+  }
+
+  function fmtZ(z) { return isFinite(z) ? z.toFixed(3) : "—"; }
+  function fmtP(p) {
+    if (!isFinite(p)) return "—";
+    if (p < 0.001) return "< 0.001";
+    if (p < 0.01)  return "< 0.01";
+    return p.toFixed(3);
+  }
+  function fmtEst(v) { return isFinite(v) ? fmt(profile.transform(v)) : "—"; }
+
+  const est = fmtEst(puniform.estimate);
+  const lo  = fmtEst(puniform.ciLow);
+  const hi  = fmtEst(puniform.ciHigh);
+
+  const flags = [];
+  if (puniform.k < 3) {
+    flags.push(`<span class="puniform-flag insufficient">Insufficient data (k &lt; 3)</span>`);
+  } else {
+    if (puniform.significantEffect) flags.push(`<span class="puniform-flag significant">Significant effect</span>`);
+    if (puniform.biasDetected)      flags.push(`<span class="puniform-flag biased">Bias detected</span>`);
+  }
+
+  panel.innerHTML = `
+    <div class="puniform-summary">
+      <span>P-uniform &nbsp;·&nbsp; <strong>${puniform.k}</strong> significant result${puniform.k !== 1 ? "s" : ""} (p &lt; .05)</span>
+      <span>Estimate: <strong>${est}</strong> [${lo}, ${hi}]</span>
+      <span>Significance test: Z = <strong>${fmtZ(puniform.Z_sig)}</strong>, p = <strong>${fmtP(puniform.p_sig)}</strong></span>
+      <span>Bias test: Z = <strong>${fmtZ(puniform.Z_bias)}</strong>, p = <strong>${fmtP(puniform.p_bias)}</strong></span>
+      ${flags.join(" ")}
+    </div>`;
+
+  drawPUniform(puniform, m, profile);
+}
+
 // -----------------------------------------------------------------------------
 // runAnalysis() → boolean
 // -----------------------------------------------------------------------------
@@ -1776,7 +1823,8 @@ function runAnalysis() {
   const begg    = beggTest(studies);
   const fatpet  = fatPetTest(studies);
   const fsn     = failSafeN(studies);
-  const pcurve  = pCurve(studies);
+  const pcurve   = pCurve(studies);
+  const puniform = pUniform(studies, m);
   const influence = influenceDiagnostics(studies, method, ciMethod);
   const subgroup = subgroupAnalysis(studies, method, ciMethod);
 
@@ -1863,6 +1911,7 @@ function runAnalysis() {
   renderStudyTable(all, m, profile);
   renderSensitivityPanel(studies, m, method, ciMethod, profile);
   renderPCurvePanel(pcurve);
+  renderPUniformPanel(puniform, m, profile);
 
   // ---- Meta-regression ----
   // buildDesignMatrix expects { key, type }; ui state stores { name, type }.
@@ -1916,7 +1965,7 @@ function runAnalysis() {
   // Cache state for report export buttons.
   _reportArgs = {
     studies: all, m, profile, reg,
-    tf, egger, begg, fatpet, fsn, pcurve,
+    tf, egger, begg, fatpet, fsn, pcurve, puniform,
     influence, subgroup, method, ciMethod,
     useTF, mAdjusted,
     forestOptions: { ...forestOpts, currentPage: forestPage },
