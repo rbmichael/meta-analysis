@@ -75,7 +75,7 @@ BUG 6 [MEDIUM] ✓ RESOLVED 2026-03-25: OR / RR all-zero-cell row silently produ
            correction for defence in depth on the standalone compute() path.
 
 --------------------------------------------------------------------------------
-BUG 7 [MEDIUM]: Test-suite failures — Harbord / Deeks / Rücker structural
+BUG 7 [MEDIUM] ✓ RESOLVED 2026-03-25: Test-suite failures — Harbord / Deeks / Rücker structural
                  tests (k=4 datasets)
 
   File:    js/tests.js
@@ -106,6 +106,21 @@ BUG 7 [MEDIUM]: Test-suite failures — Harbord / Deeks / Rücker structural
            values clustered in ≈8.3–10.0, giving det(X'WX)≈8.5.
     Fixed: js/tests.js — replaced dataset with studies spanning n=5+10 to
            n=100+200; 1/se values 3.65/7.39/12.0/16.33, det≈364, p≈0.116.
+
+--------------------------------------------------------------------------------
+BUG 8 [HIGH] ✓ RESOLVED 2026-03-25: logGamma computed logGamma(z+1) instead of logGamma(z)
+
+  Was:     The Lanczos loop `for (j) { ser += coef[j] / (++z); }` incremented
+           z in-place, destroying the original value. The return statement
+           `Math.log(ser * Math.sqrt(2π))` was missing the required division by
+           the original z, so the function effectively returned logGamma(z+1).
+           This corrupted regularizedBeta → tCDF for all df, producing tCDF > 1
+           for df=2 (e.g. tCDF(0.981, 2) = 1.355 instead of 0.785), making all
+           t-distribution p-values wrong — including Harbord/Deeks/Rücker
+           interceptP values which use df=2 for k=4 studies.
+  Fixed:   js/utils.js ~ logGamma() — saved original z as z0 before the loop;
+           return changed to `x + Math.log(2.5066282746310005 * ser / z0)`.
+           This matches the canonical Numerical Recipes gammln formula exactly.
 
 
 ================================================================================

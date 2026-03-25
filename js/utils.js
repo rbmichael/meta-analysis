@@ -205,13 +205,14 @@ export function logGamma(z) {
     -.261908384015814087e-4,
     .368991826595316234e-5
   ];
+  const z0 = z;
   let x = z + 5.2421875;
   x = (z + 0.5) * Math.log(x) - x;
   let ser = 0.999999999999997092;
   for (let j = 0; j < coef.length; j++) {
     ser += coef[j] / (++z);
   }
-  return x + Math.log(ser * Math.sqrt(2 * Math.PI));
+  return x + Math.log(2.5066282746310005 * ser / z0);
 }
 
 // ================= COMPUTE HELPERS =================
