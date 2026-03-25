@@ -112,6 +112,7 @@ import { buildSession, serializeSession, parseSession, missingInputCols } from "
 import { saveDraft, loadDraft, clearDraft } from "./autosave.js";
 import { downloadBlob, readTextFile, serializeCSV } from "./io.js";
 import { HELP } from "./help.js";
+import { renderGuide, HELP_TO_GUIDE } from "./guide.js";
 import { Z_95 } from "./constants.js";
 
 // ---------------- AUTOSAVE ----------------
@@ -145,12 +146,33 @@ const _helpPopover = document.getElementById("helpPopover");
 const _helpTitle   = document.getElementById("helpPopoverTitle");
 const _helpBody    = document.getElementById("helpPopoverBody");
 
+const _helpGuideLink = document.getElementById("helpPopoverGuideLink");
+
 function showHelp(anchorEl, key) {
   const entry = HELP[key];
   if (!entry) return;
 
   _helpTitle.textContent = entry.title;
   _helpBody.textContent  = entry.body;
+
+  // Show/hide "More detail →" cross-link to guide
+  const guideId = HELP_TO_GUIDE[key];
+  if (guideId) {
+    _helpGuideLink.style.display = "";
+    _helpGuideLink.onclick = (e) => {
+      e.preventDefault();
+      hideHelp();
+      showView("guide");
+      // After guide renders, scroll to the target topic
+      requestAnimationFrame(() => {
+        const el = document.getElementById(guideId);
+        if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    };
+  } else {
+    _helpGuideLink.style.display = "none";
+  }
+
   _helpPopover.style.display = "block";
 
   // Position below the anchor, clamped to viewport.
@@ -451,22 +473,27 @@ _themeToggle.addEventListener("click", () => {
 
 const _inputSection  = document.getElementById("inputSection");
 const _outputSection = document.getElementById("outputSection");
+const _guideSection  = document.getElementById("guideSection");
 const _toggleInput   = document.getElementById("toggleInput");
 const _toggleResults = document.getElementById("toggleResults");
+const _toggleGuide   = document.getElementById("toggleGuide");
 
 function showView(name) {
-  const showInput = name === "input";
-  _inputSection.style.display  = showInput ? "" : "none";
-  _outputSection.style.display = showInput ? "none" : "";
-  _toggleInput.classList.toggle("active", showInput);
-  _toggleResults.classList.toggle("active", !showInput);
+  _inputSection.style.display  = name === "input"   ? "" : "none";
+  _outputSection.style.display = name === "results" ? "" : "none";
+  _guideSection.style.display  = name === "guide"   ? "" : "none";
+  _toggleInput.classList.toggle("active",   name === "input");
+  _toggleResults.classList.toggle("active", name === "results");
+  _toggleGuide.classList.toggle("active",   name === "guide");
   window.scrollTo(0, 0);
+  if (name === "guide") renderGuide(document.getElementById("guidePanel"));
 }
 
 _toggleResults.disabled = true;
 
 _toggleInput.addEventListener("click",   () => showView("input"));
 _toggleResults.addEventListener("click", () => { if (!_toggleResults.disabled) showView("results"); });
+_toggleGuide.addEventListener("click",   () => showView("guide"));
 
 // Show input view by default; output hidden until first run switches to it.
 showView("input");

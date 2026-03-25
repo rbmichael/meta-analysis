@@ -32,8 +32,9 @@
 <header id="appHeader">
   <span id="appTitle">Meta-analysis Tool</span>
   <div id="viewToggleGroup">
-    <button class="toggle-btn active" id="toggleInput"  data-view="input">Input</button>
+    <button class="toggle-btn active" id="toggleInput"   data-view="input">Input</button>
     <button class="toggle-btn"        id="toggleResults" data-view="results">Results</button>
+    <button class="toggle-btn"        id="toggleGuide"   data-view="guide">Guide</button>
   </div>
   <button id="themeToggle" class="theme-toggle-btn" title="Switch to light mode" aria-label="Toggle colour theme"></button>
 </header>
@@ -364,6 +365,14 @@
       </div>
     </div><!-- #outputSection -->
 
+  <!-- =========== GUIDE =========== -->
+  <div id="guideSection" style="display:none">
+    <div id="guidePanel">
+      <aside class="guide-sidebar"></aside>
+      <div class="guide-content"></div>
+    </div>
+  </div><!-- #guideSection -->
+
 </div><!-- #appLayout -->
 
 <div class="tooltip" id="tooltip"></div>
@@ -374,6 +383,7 @@
     <button class="help-popover-close" onclick="document.getElementById('helpPopover').style.display='none';document.getElementById('helpPopover').dataset.activeKey='';">×</button>
   </div>
   <p id="helpPopoverBody" class="help-popover-body"></p>
+  <a id="helpPopoverGuideLink" class="help-popover-guide-link" href="#" style="display:none">More detail →</a>
 </div>
 
 </body>
