@@ -105,7 +105,7 @@ import { fmt } from "./utils.js";
 import { effectProfiles, getProfile } from "./profiles.js";
 import { trimFill } from "./trimfill.js";
 import { drawForest, drawFunnel, drawBubble, drawInfluencePlot, drawCumulativeForest } from "./plots.js";
-import { exportSVG, exportPNG } from "./export.js";
+import { exportSVG, exportPNG, exportTIFF } from "./export.js";
 import { buildReport, downloadHTML, openPrintPreview } from "./report.js";
 import { parseCSV, detectEffectType } from "./csv.js";
 import { buildSession, serializeSession, parseSession, missingInputCols } from "./session.js";
@@ -456,8 +456,9 @@ document.addEventListener("click", e => {
   const svgEl = document.getElementById(btn.dataset.target);
   if (!svgEl) return;
   const name = btn.dataset.target;
-  if (btn.dataset.format === "svg") exportSVG(svgEl, name + ".svg");
-  else exportPNG(svgEl, name + ".png");
+  if      (btn.dataset.format === "svg")  exportSVG(svgEl,  name + ".svg");
+  else if (btn.dataset.format === "png")  exportPNG(svgEl,  name + ".png",  _exportScale);
+  else if (btn.dataset.format === "tiff") exportTIFF(svgEl, name + ".tif",  _exportScale);
 });
 
 // ---------------- EFFECT TYPE HANDLER ----------------
@@ -1271,6 +1272,13 @@ const outputPlaceholder = document.getElementById("outputPlaceholder");
 // has happened so the stale banner is not shown on an empty panel.
 let _hasRunOnce = false;
 
+// ---------------- RASTER EXPORT RESOLUTION ----------------
+let _exportScale = 3;  // matches <option selected> in #exportScale (3× ≈ 288 dpi)
+
+document.getElementById("exportScale").addEventListener("change", e => {
+  _exportScale = +e.target.value;
+});
+
 // ---------------- FOREST PLOT PAGINATION STATE ----------------
 let forestPage = 0;
 let _forestArgs = null;  // { studies, m, options } — cached for page-nav re-renders
@@ -1831,7 +1839,8 @@ function runAnalysis() {
           exportDiv.className = "plot-export";
           exportDiv.innerHTML =
             `<button class="export-btn" data-target="${svgId}" data-format="svg">SVG</button>` +
-            `<button class="export-btn" data-target="${svgId}" data-format="png">PNG</button>`;
+            `<button class="export-btn" data-target="${svgId}" data-format="png">PNG</button>` +
+            `<button class="export-btn" data-target="${svgId}" data-format="tiff">TIFF</button>`;
           wrap.insertBefore(exportDiv, bubbleSvg);
         }
       });

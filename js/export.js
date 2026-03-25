@@ -1,16 +1,24 @@
 // =============================================================================
-// export.js — SVG and PNG plot export
+// export.js — SVG, PNG, and TIFF plot export
 // =============================================================================
-// Exports two public functions:
+// Exports three public functions:
 //
 //   exportSVG(svgEl, filename)
 //     Clones the SVG, makes it self-contained, and downloads it as a .svg file.
 //
 //   exportPNG(svgEl, filename, scale)
 //     Same clone + self-contained step, then rasterises via <canvas> at `scale`×
-//     resolution (default 2×) and downloads the result as a .png file.
+//     resolution (default 3×) and downloads the result as a .png file.
 //
-// Self-contained SVG pipeline (shared by both exports)
+//   exportTIFF(svgEl, filename, scale)
+//     Same SVG-to-canvas pipeline as exportPNG, but encodes the pixel data as
+//     an uncompressed RGB TIFF via tiff.js.  DPI metadata is written as
+//     scale × 96 so that the file reports the correct physical resolution to
+//     Photoshop, Preview, and journal submission portals.  Alpha is dropped
+//     (3-channel RGB) as most portals reject alpha-channel rasters.
+//     Falls back to SVG export if the canvas cannot be read (e.g. taint).
+//
+// Self-contained SVG pipeline (shared by all three exports)
 // -----------------------------------------------------
 //   1. Deep-clone the live SVG element (never mutates the DOM).
 //   2. Resolve all CSS custom property references (var(--xxx)) in fill/stroke
@@ -21,10 +29,11 @@
 //      presets embed their own white rect via drawForest(); the default theme
 //      does not, so a dark fallback rect is injected here).
 //
-// Dependencies: io.js (downloadBlob, downloadBlobObject)
+// Dependencies: io.js (downloadBlob, downloadBlobObject), tiff.js (encodeTIFF)
 // =============================================================================
 
 import { downloadBlob, downloadBlobObject } from "./io.js";
+import { encodeTIFF } from "./tiff.js";
 
 // Fallback background colour used when the SVG carries no embedded background
 // rect of its own (i.e. the "App default" / dark theme).
@@ -123,19 +132,18 @@ export function exportSVG(svgEl, filename = "plot.svg") {
   downloadBlob(svgStr, filename, "image/svg+xml;charset=utf-8");
 }
 
-// Download the given SVG element as a .png file.
-// scale controls output resolution (2 = 2× the SVG's pixel dimensions,
-// suitable for retina / print quality).
-export function exportPNG(svgEl, filename = "plot.png", scale = 2) {
-  if (!svgEl) return;
-
+// rasteriseSVG(svgEl, scale) → Promise<{canvas, ctx, w, h}>
+// Shared rasterisation step used by both exportPNG and exportTIFF.
+// Returns a Promise that resolves once the SVG image has been drawn onto the
+// canvas, or rejects on load error.
+function rasteriseSVG(svgEl, scale) {
   const w = +svgEl.getAttribute("width")  || svgEl.getBoundingClientRect().width;
   const h = +svgEl.getAttribute("height") || svgEl.getBoundingClientRect().height;
 
   const clone  = prepareSVGClone(svgEl);
   const svgStr = new XMLSerializer().serializeToString(clone);
 
-  // Encode as a data URL; UTF-8 encoding handles non-ASCII characters in labels.
+  // UTF-8 encoding handles non-ASCII characters in study labels.
   const svgDataURL = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svgStr);
 
   const canvas  = document.createElement("canvas");
@@ -145,9 +153,20 @@ export function exportPNG(svgEl, filename = "plot.png", scale = 2) {
   const ctx = canvas.getContext("2d");
   ctx.scale(scale, scale);
 
-  const img = new Image();
-  img.onload = () => {
-    ctx.drawImage(img, 0, 0);
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => { ctx.drawImage(img, 0, 0); resolve({ canvas, ctx, w: canvas.width, h: canvas.height }); };
+    img.onerror = reject;
+    img.src = svgDataURL;
+  });
+}
+
+// Download the given SVG element as a .png file.
+// scale controls output resolution (3 = 3× the SVG's pixel dimensions, ~288 dpi).
+export function exportPNG(svgEl, filename = "plot.png", scale = 3) {
+  if (!svgEl) return;
+
+  rasteriseSVG(svgEl, scale).then(({ canvas }) => {
     canvas.toBlob(blob => {
       if (!blob) {
         console.error("exportPNG: canvas.toBlob returned null. Falling back to SVG export.");
@@ -156,10 +175,27 @@ export function exportPNG(svgEl, filename = "plot.png", scale = 2) {
       }
       downloadBlobObject(blob, filename);
     }, "image/png");
-  };
-  img.onerror = () => {
-    console.error("exportPNG: failed to load SVG as image. Falling back to SVG export.");
+  }).catch(() => {
+    console.error("exportPNG: failed to rasterise SVG. Falling back to SVG export.");
     exportSVG(svgEl, filename.replace(/\.png$/i, ".svg"));
-  };
-  img.src = svgDataURL;
+  });
+}
+
+// Download the given SVG element as an uncompressed RGB TIFF file.
+// scale controls output resolution; dpi metadata is written as scale × 96 so
+// that Photoshop, Preview, and journal submission portals report the correct
+// physical resolution.  Alpha is dropped (3-channel RGB).
+export function exportTIFF(svgEl, filename = "plot.tif", scale = 3) {
+  if (!svgEl) return;
+
+  const dpi = Math.round(scale * 96);
+
+  rasteriseSVG(svgEl, scale).then(({ canvas, w, h }) => {
+    const rgba = canvas.getContext("2d").getImageData(0, 0, w, h).data;
+    const blob = encodeTIFF(w, h, rgba, dpi);
+    downloadBlobObject(blob, filename);
+  }).catch(() => {
+    console.error("exportTIFF: failed to rasterise SVG. Falling back to SVG export.");
+    exportSVG(svgEl, filename.replace(/\.tiff?$/i, ".svg"));
+  });
 }

@@ -180,6 +180,15 @@
         <div class="section-title-row">
           <p class="section-title">Results</p>
           <div class="report-export">
+            <label class="export-scale-label" title="Output resolution for PNG and TIFF exports">
+              Resolution
+              <select id="exportScale">
+                <option value="1">1× — screen (96 dpi)</option>
+                <option value="2">2× — retina (192 dpi)</option>
+                <option value="3" selected>3× — print (288 dpi)</option>
+                <option value="4">4× — high-res (384 dpi)</option>
+              </select>
+            </label>
             <button id="exportReportHTML" class="report-btn">Export HTML</button>
             <button id="exportReportPDF"  class="report-btn">Export PDF</button>
           </div>
@@ -205,6 +214,7 @@
           <div class="plot-export">
             <button class="export-btn" data-target="forestPlot" data-format="svg">SVG</button>
             <button class="export-btn" data-target="forestPlot" data-format="png">PNG</button>
+            <button class="export-btn" data-target="forestPlot" data-format="tiff">TIFF</button>
             <div class="forest-pool-toggle" role="group" aria-label="Pooled estimate display">
               <button class="forest-pool-btn" data-display="FE">FE</button>
               <button class="forest-pool-btn active" data-display="RE">RE</button>
@@ -238,6 +248,7 @@
           <div class="plot-export">
             <button class="export-btn" data-target="funnelPlot" data-format="svg">SVG</button>
             <button class="export-btn" data-target="funnelPlot" data-format="png">PNG</button>
+            <button class="export-btn" data-target="funnelPlot" data-format="tiff">TIFF</button>
           </div>
           <svg id="funnelPlot" width="500" height="400"></svg>
         </div>
@@ -247,6 +258,7 @@
           <div class="plot-export">
             <button class="export-btn" data-target="influencePlot" data-format="svg">SVG</button>
             <button class="export-btn" data-target="influencePlot" data-format="png">PNG</button>
+            <button class="export-btn" data-target="influencePlot" data-format="tiff">TIFF</button>
           </div>
           <svg id="influencePlot" width="500" height="400"></svg>
         </div>
@@ -256,6 +268,7 @@
           <div class="plot-export">
             <button class="export-btn" data-target="cumulativePlot" data-format="svg">SVG</button>
             <button class="export-btn" data-target="cumulativePlot" data-format="png">PNG</button>
+            <button class="export-btn" data-target="cumulativePlot" data-format="tiff">TIFF</button>
           </div>
           <svg id="cumulativePlot" width="900" height="420"></svg>
         </div>
