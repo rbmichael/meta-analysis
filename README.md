@@ -8,7 +8,7 @@ A browser-based meta-analysis tool. No installation, no server, no dependencies 
 
 ### Effect types
 
-31 effect measures across 9 categories, grouped in the UI:
+31 effect measures across 9 categories:
 
 | Category | Measures |
 |---|---|
@@ -24,31 +24,33 @@ A browser-based meta-analysis tool. No installation, no server, no dependencies 
 
 ### Heterogeneity
 
-- **τ² estimators:** REML (default), DerSimonian-Laird, Paule-Mandel, Maximum Likelihood, Hunter-Schmidt, Hedges, Sidik-Jonkman, Generalized Q
+- **τ² estimators:** REML (default), DerSimonian-Laird, Paule-Mandel, Maximum Likelihood, Hunter-Schmidt, Hedges, Sidik-Jonkman
 - **CI methods:** Normal/Wald, Knapp-Hartung, *t*-distribution, Profile Likelihood (requires REML or ML)
 - **Heterogeneity statistics:** Cochran's *Q*, *I*², *H*², τ², 95% prediction interval (Higgins 2009, *t*\_{*k*−2})
 - **Confidence intervals on heterogeneity:** Profile-likelihood CIs for τ², *I*², *H*²
 
 ### Publication bias
 
-| Test | Appropriate for |
-|---|---|
-| Egger's regression | Continuous outcomes |
-| Begg's rank correlation (τ_b, tie-corrected) | Any |
-| FAT-PET | Any |
-| Harbord's test | Binary outcomes (OR) |
-| Peters' test | Binary outcomes |
-| Deeks' test | Diagnostic accuracy |
-| Rücker's test | Binary outcomes |
+- **Egger's regression** — intercept test for funnel plot asymmetry
+- **Begg's rank correlation** — Kendall's τ_b with tie correction
+- **FAT-PET** — funnel asymmetry test and precision-effect test
+- **Fail-safe N** — Rosenthal and Orwin estimators
+- **Trim-and-fill** (L0 estimator) — imputes missing studies and reports the adjusted pooled estimate
+- **Funnel plot** — standard or contour-enhanced (p-value regions at α = .10, .05, .01)
 
-Trim-and-fill (L0 estimator) imputes missing studies and reports the adjusted pooled estimate. Rosenthal fail-safe N and Orwin fail-safe N are also available.
+### P-value analyses
+
+- **P-curve** — distribution of significant p-values; tests for evidential value and right-skew
+- **P-uniform*** — effect size estimate corrected for publication bias using the p-value distribution
 
 ### Sensitivity and influence
 
 - **Leave-one-out analysis** — flags studies whose omission would flip statistical significance
-- **Influence diagnostics** — Cook's distance, DFFITS, DFBETAS, hat values (*h*ᵢ), standardised residuals
-- **Estimator comparison** — runs all 8 τ² estimators side-by-side for a given dataset
-- **Cumulative meta-analysis** — adds studies in user-selected order (input order, precision, effect size)
+- **Influence diagnostics table** — Cook's distance, DFBETA, hat values (*h*ᵢ), standardised residuals, Δτ²
+- **Influence plot** — per-study leverage and influence visualised
+- **Baujat plot** — heterogeneity contribution vs. overall influence; identifies problematic studies
+- **Estimator comparison** — runs all 7 τ² estimators side-by-side for a given dataset
+- **Cumulative meta-analysis** — adds studies in user-selected order (input order, precision ascending/descending, effect size ascending/descending)
 
 ### Meta-regression
 
@@ -56,46 +58,67 @@ Continuous and categorical moderators. Multiple moderators may be added simultan
 
 ### Subgroup analysis
 
-Studies can be assigned to named groups. Pooled estimates are reported within each subgroup alongside the overall pooled estimate.
+Studies can be assigned to named groups via the Group column. Pooled estimates are reported within each subgroup alongside Q_between, degrees of freedom, and the between-group p-value.
+
+### Risk of bias
+
+A built-in RoB assessment panel accepts user-defined domains and Low / Some concerns / High / Not reported ratings per study. Results are visualised as a traffic light plot (per-study) and a summary bar chart (per-domain).
 
 ---
 
 ## Plots
 
+All plots export as SVG, PNG, or TIFF. Log-scale effect types label the axis in the display scale (e.g. OR, RR).
+
 | Plot | Description |
 |---|---|
-| Forest plot | Study CIs + pooled diamond. Toggle FE only, RE only, or both. Paginated for large datasets. |
-| Funnel plot | Effect vs. SE with Egger regression line. |
-| Influence plot | Leverage and influence diagnostics visualised per study. |
-| Cumulative forest | Cumulative pooled estimate as studies are added in order. |
+| Forest plot | Study CIs + pooled diamond(s). Toggle FE only, RE only, or both. Four visual themes (default, Cochrane, JAMA, black & white). Paginated for large datasets. |
+| Funnel plot | Effect vs. SE with Egger regression line. Toggle between standard and contour-enhanced modes. |
+| Influence plot | Per-study leverage and Cook's distance visualised as a bubble chart. |
+| Baujat plot | Scatter of heterogeneity contribution vs. overall influence; quadrant guides at the mean. |
+| Cumulative forest plot | Cumulative pooled estimate as studies are added in sequence. Paginated. |
+| Cumulative funnel plot | Funnel view at each cumulative step; slider-controlled. |
+| Orchard plot | Effect estimates as dots sized by precision, with RE diamond and 95% prediction interval. |
+| Caterpillar plot | Studies sorted by effect size with 95% CIs; group colour-coding. Paginated. |
+| P-curve | Distribution of significant p-values with right-skew and flat tests. |
+| P-uniform* | Publication-bias-corrected effect size estimate. |
+| RoB traffic light | Per-study, per-domain risk-of-bias ratings as a colour-coded grid. |
+| RoB summary | Stacked bar chart showing domain-level rating distributions. |
 | Bubble plots | Meta-regression fit per continuous moderator, bubbles sized by weight. |
-
-All plots export as SVG or PNG. Log-scale effect types annotate the axis accordingly.
 
 ---
 
 ## Data input
 
 - **Manual entry** — inline editable table; rows validate on input with per-field error highlighting
-- **CSV import** — auto-detects delimiter and effect type from column headers; shows a preview panel before committing
-- **Session save / load** — full application state (data, settings, moderators) serialised to JSON
-- **Auto-save** — drafts written to `localStorage`; a recovery banner appears on next load
+- **CSV import** — auto-detects delimiter and effect type from column headers; shows a preview panel with column-mapping controls before committing
+- **Session save / load** — full application state (data, settings, moderators, RoB ratings) serialised to JSON
+- **Auto-save** — drafts written to `localStorage`; a recovery banner appears on next load if unsaved changes exist
 
-CSV column names match the input fields for each effect type (e.g. `m1,sd1,n1,m2,sd2,n2` for MD; `a,b,c,d` for OR). A `label` column is optional but recommended.
+CSV column names match the input fields for each effect type (e.g. `m1,sd1,n1,m2,sd2,n2` for MD; `a,b,c,d` for OR). A `label` column is optional but recommended. A `group` column assigns studies to subgroups.
 
 ---
 
 ## Output and export
 
-- **HTML report** — self-contained document with all results tables and plots
-- **PDF** — print-to-PDF via the browser
-- **SVG / PNG** — individual plot export from the plot toolbar
+- **HTML report** — self-contained document with all results tables and plots embedded as inline SVG
+- **PDF** — print-to-PDF via the browser print dialog
+- **SVG / PNG / TIFF** — individual plot export from the plot toolbar
+
+---
+
+## Interface
+
+- **Three-panel layout** — Input, Results, and Guide tabs
+- **Collapsible results sections** — sections are collapsed by default; only core results and the forest plot are open on load, reducing visual overwhelm on large analyses
+- **Light and dark themes** — follows system preference by default; toggle available in the settings bar
+- **In-app methodology guide** — reference documentation for every statistical method in the tool, accessible from the Guide tab or via contextual help buttons (?) throughout the interface
 
 ---
 
 ## Usage
 
-Open `index.html` in any modern browser. No build step, no package manager, no internet connection required after the page loads (fonts are fetched from Google Fonts on first load; all statistical computation is local).
+Open `index.html` in any modern browser. No build step, no package manager, no internet connection required after the page loads (fonts are fetched from Google Fonts on first load; all computation is local).
 
 ```
 git clone https://github.com/rbmichael/meta-analysis.git
@@ -114,6 +137,8 @@ cd meta-analysis
 - Knapp G, Hartung J (2003). Improved tests for a random effects meta-regression with a single covariate. *Stat Med*, 22, 2693–2710.
 - Morris SB (2008). Estimating effect sizes from pretest-posttest-control group designs. *Org Res Methods*, 11, 364–386.
 - Paule RC, Mandel J (1982). Consensus values and weighting factors. *J Res Natl Bur Stand*, 87, 377–385.
+- Simonsohn U, Nelson LD, Simmons JP (2014). P-curve: A key to the file-drawer. *J Exp Psychol Gen*, 143(2), 534–547.
+- van Assen MALM, van Aert RCM, Wicherts JM (2015). Meta-analysis using effect size distributions of only statistically significant studies. *Psychol Methods*, 20(3), 293–309.
 - Viechtbauer W (2005). Bias and efficiency of meta-analytic variance estimators in the random-effects model. *J Educ Behav Stat*, 30, 261–293.
 - Viechtbauer W (2010). Conducting meta-analyses in R with the metafor package. *J Stat Softw*, 36(3), 1–48.
 
