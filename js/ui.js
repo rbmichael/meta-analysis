@@ -360,8 +360,17 @@ document.getElementById("effectType").addEventListener("change", () => {
   runAnalysis();
 });
 
-document.getElementById("tauMethod").addEventListener("change", runAnalysis);
-document.getElementById("ciMethod").addEventListener("change", runAnalysis);
+document.getElementById("tauMethod").addEventListener("change", () => { syncPLAvailability(); runAnalysis(); });
+document.getElementById("ciMethod").addEventListener("change", () => {
+  const ciSel  = document.getElementById("ciMethod");
+  const tauSel = document.getElementById("tauMethod");
+  // If PL is chosen but τ² is not likelihood-based, auto-switch τ² to REML.
+  if (ciSel.value === "PL" && tauSel.value !== "REML" && tauSel.value !== "ML") {
+    tauSel.value = "REML";
+  }
+  syncPLAvailability();
+  runAnalysis();
+});
 
 const trimFillCheckbox = document.getElementById("useTrimFill");
 const adjustedCheckbox = document.getElementById("useTFAdjusted");
@@ -945,12 +954,49 @@ function exportCSV() {
 }
 
 // ---------------- INIT ----------------
+
+// Group order for the effect type dropdown.
+const EFFECT_GROUP_ORDER = [
+  "Continuous (two groups)",
+  "Continuous (paired)",
+  "Continuous (single group)",
+  "Variability",
+  "Binary outcomes",
+  "Correlations",
+  "Proportions",
+  "Time-to-event / Rates",
+  "Generic",
+];
+
 function populateEffectTypeDropdowns() {
-  const options = Object.entries(effectProfiles)
-    .map(([val, p]) => `<option value="${val}">${p.label}</option>`)
+  // Build grouped <optgroup> HTML from profile group metadata.
+  const grouped = {};
+  for (const [val, p] of Object.entries(effectProfiles)) {
+    const g = p.group ?? "Other";
+    if (!grouped[g]) grouped[g] = [];
+    grouped[g].push(`<option value="${val}">${p.label}</option>`);
+  }
+  const html = EFFECT_GROUP_ORDER
+    .filter(g => grouped[g])
+    .map(g => `<optgroup label="${g}">${grouped[g].join("")}</optgroup>`)
     .join("");
-  document.getElementById("effectType").innerHTML = options;
-  document.getElementById("previewEffectType").innerHTML = options;
+  document.getElementById("effectType").innerHTML = html;
+  document.getElementById("previewEffectType").innerHTML = html;
+}
+
+// Profile Likelihood CI requires a likelihood-based τ² estimator (REML or ML).
+// When a method-of-moments estimator is selected, disable the PL option.
+// When PL is selected, auto-switch τ² to REML.
+function syncPLAvailability() {
+  const tauSel = document.getElementById("tauMethod");
+  const ciSel  = document.getElementById("ciMethod");
+  const plOpt  = ciSel.querySelector('option[value="PL"]');
+  if (!plOpt) return;
+  const likelihoodBased = tauSel.value === "REML" || tauSel.value === "ML";
+  plOpt.disabled = !likelihoodBased;
+  if (!likelihoodBased && ciSel.value === "PL") {
+    ciSel.value = "normal";
+  }
 }
 
 function init() {
@@ -963,11 +1009,14 @@ function init() {
     applySession(draft);
     showDraftBanner(draft._savedAt);
   } else {
-    // Set default effect type and populate example rows
-    const defaultType = document.getElementById("effectType").value;
+    // Default effect type: SMD (scale-free, broadly applicable)
+    document.getElementById("effectType").value = "SMD";
     updateTableHeaders();
-    populateExampleData(defaultType);
+    populateExampleData("SMD");
   }
+
+  // Initialise PL availability based on default/restored τ² estimator.
+  syncPLAvailability();
 
   // Validate all rows
   document.querySelectorAll("#inputTable tr").forEach((row, i) => {

@@ -381,6 +381,9 @@ export function tau2_HS(studies) {
 // Fixed-point iteration of the DL formula using RE-updated weights.
 // τ²_{new} = max(0, (Q(τ²) − (k−1)) / c(τ²))
 // Converges to a self-consistent solution; usually 2-3 iterations suffice.
+//
+// NOTE: Removed from the UI dropdown (rarely used in practice; inflates the
+// options list). Preserved here so it can be re-exposed if needed.
 export function tau2_DLIT(studies, tol = REML_TOL, maxIter = 200) {
   const k = studies.length;
   if (k <= 1) return 0;
@@ -405,6 +408,9 @@ export function tau2_DLIT(studies, tol = REML_TOL, maxIter = 200) {
 // ================= HUNTER-SCHMIDT (small-sample corrected) TAU² =================
 // HSk applies a k/(k−1) correction factor to the HS estimate to reduce
 // downward bias in small samples.
+//
+// NOTE: Removed from the UI dropdown (niche use; standard HS is already
+// available). Preserved here so it can be re-exposed if needed.
 export function tau2_HSk(studies) {
   const k = studies.length;
   if (k <= 1) return 0;
@@ -657,6 +663,8 @@ export function tau2_PM(studies, tol = REML_TOL, maxIter = 100) {
 
 // GENQ core: generalized Q-statistic estimator with arbitrary weights aᵢ.
 // DL is the special case aᵢ = 1/vᵢ; SQGENQ uses aᵢ = √(1/vᵢ).
+// NOTE: SQGENQ is removed from the UI dropdown (rarely used in practice).
+// Preserved here so it can be re-exposed if needed.
 function genqCore(studies, weights) {
   const k = studies.length;
   if (k <= 1) return 0;
@@ -1360,10 +1368,10 @@ export function meta(studies, method="DL", ciMethod="normal") {
 	else if (method === "HE")     tau2 = tau2_HE(studies);
 	else if (method === "SJ")     tau2 = tau2_SJ(studies);
 	else if (method === "GENQ")   tau2 = tau2_GENQ(studies);
-	else if (method === "SQGENQ") tau2 = tau2_SQGENQ(studies);
-	else if (method === "DLIT")   tau2 = tau2_DLIT(studies);
-	else if (method === "EBLUP")  tau2 = tau2_REML(studies, 1e-12, 500);
-	else if (method === "HSk")    tau2 = tau2_HSk(studies);
+	else if (method === "SQGENQ") tau2 = tau2_SQGENQ(studies);  // not in UI; see tau2_SQGENQ comment
+	else if (method === "DLIT")   tau2 = tau2_DLIT(studies);    // not in UI; see tau2_DLIT comment
+	else if (method === "EBLUP")  tau2 = tau2_REML(studies, 1e-12, 500); // not in UI; EBLUP = REML (mixed-model framing, same estimate)
+	else if (method === "HSk")    tau2 = tau2_HSk(studies);     // not in UI; see tau2_HSk comment
 	else { // DL fallback
 		const sumW2 = wFE.reduce((a,w)=>a+w*w,0);
 		const C = W - (sumW2/W);

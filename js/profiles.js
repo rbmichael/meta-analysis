@@ -20,6 +20,7 @@ export const effectProfiles = {
   // ------------------------------------------------------------------ //
   "MD": {
     label:  "Mean Difference",
+    group:  "Continuous (two groups)",
     inputs: ["m1", "sd1", "n1", "m2", "sd2", "n2"],
     compute(s) {
       const varMD = Math.max(s.sd1**2/s.n1 + s.sd2**2/s.n2, MIN_VAR);
@@ -59,6 +60,7 @@ export const effectProfiles = {
   // ------------------------------------------------------------------ //
   "SMD": {
     label:  "Standardized Mean Difference (Hedges g)",
+    group:  "Continuous (two groups)",
     inputs: ["m1", "sd1", "n1", "m2", "sd2", "n2"],
     compute(s) {
       const g = hedgesG(s, { hedgesCorrection: true });
@@ -98,6 +100,7 @@ export const effectProfiles = {
   // ------------------------------------------------------------------ //
   "SMDH": {
     label:  "Standardized Mean Difference (heteroscedastic)",
+    group:  "Continuous (two groups)",
     inputs: ["m1", "sd1", "n1", "m2", "sd2", "n2"],
     compute(s) {
       if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
@@ -151,6 +154,7 @@ export const effectProfiles = {
   // ------------------------------------------------------------------ //
   "MD_paired": {
     label:  "Mean Difference (Paired)",
+    group:  "Continuous (paired)",
     inputs: ["m_pre", "sd_pre", "m_post", "sd_post", "n", "r"],
     compute(s) {
       if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
@@ -185,6 +189,7 @@ export const effectProfiles = {
   // ------------------------------------------------------------------ //
   "SMD_paired": {
     label:  "Standardized Mean Change",
+    group:  "Continuous (paired)",
     inputs: ["m_pre", "sd_pre", "m_post", "sd_post", "n", "r"],
     compute(s) {
       if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
@@ -224,6 +229,7 @@ export const effectProfiles = {
   // ------------------------------------------------------------------ //
   "SMCC": {
     label:  "Standardized Mean Change (change-score SD)",
+    group:  "Continuous (paired)",
     inputs: ["m_pre", "sd_pre", "m_post", "sd_post", "n", "r"],
     compute(s) {
       if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
@@ -269,6 +275,7 @@ export const effectProfiles = {
   // ------------------------------------------------------------------ //
   "ROM": {
     label:  "Ratio of Means (ROM)",
+    group:  "Continuous (two groups)",
     isTransformedScale: true,
     isLog: true,
     inputs: ["m1", "sd1", "n1", "m2", "sd2", "n2"],
@@ -327,6 +334,7 @@ export const effectProfiles = {
   // ------------------------------------------------------------------ //
   "CVR": {
     label:  "Coefficient of Variation Ratio (CVR)",
+    group:  "Variability",
     isTransformedScale: true,
     isLog: true,
     inputs: ["m1", "sd1", "n1", "m2", "sd2", "n2"],
@@ -387,6 +395,7 @@ export const effectProfiles = {
   // ------------------------------------------------------------------ //
   "VR": {
     label:  "Variability Ratio (VR)",
+    group:  "Variability",
     isTransformedScale: true,
     isLog: true,
     inputs: ["sd1", "n1", "sd2", "n2"],
@@ -436,6 +445,7 @@ export const effectProfiles = {
   // ------------------------------------------------------------------ //
   "OR": {
     label:  "Odds Ratio",
+    group:  "Binary outcomes",
     isTransformedScale: true,
     isLog: true,
     inputs: ["a", "b", "c", "d"],
@@ -479,6 +489,7 @@ export const effectProfiles = {
   // ------------------------------------------------------------------ //
   "RR": {
     label:  "Risk Ratio",
+    group:  "Binary outcomes",
     isTransformedScale: true,
     isLog: true,
     inputs: ["a", "b", "c", "d"],
@@ -523,6 +534,7 @@ export const effectProfiles = {
   // ------------------------------------------------------------------ //
   "RD": {
     label:  "Risk Difference",
+    group:  "Binary outcomes",
     inputs: ["a", "b", "c", "d"],
     compute(s) {
       if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
@@ -555,6 +567,7 @@ export const effectProfiles = {
   // ------------------------------------------------------------------ //
   "COR": {
     label:  "Correlation (raw r)",
+    group:  "Correlations",
     inputs: ["r", "n"],
     compute(s) {
       if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
@@ -592,6 +605,7 @@ export const effectProfiles = {
   // ------------------------------------------------------------------ //
   "ZCOR": {
     label:  "Correlation (Fisher's z)",
+    group:  "Correlations",
     isTransformedScale: true,
     inputs: ["r", "n"],
     compute(s) {
@@ -631,6 +645,7 @@ export const effectProfiles = {
   // ------------------------------------------------------------------ //
   "PCOR": {
     label:  "Partial Correlation (raw r)",
+    group:  "Correlations",
     inputs: ["r", "n", "p"],
     compute(s) {
       if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
@@ -673,6 +688,7 @@ export const effectProfiles = {
   // ------------------------------------------------------------------ //
   "ZPCOR": {
     label:  "Partial Correlation (Fisher's z)",
+    group:  "Correlations",
     isTransformedScale: true,
     inputs: ["r", "n", "p"],
     compute(s) {
@@ -717,6 +733,7 @@ export const effectProfiles = {
   // ------------------------------------------------------------------ //
   "PHI": {
     label:  "Phi Coefficient",
+    group:  "Correlations",
     inputs: ["a", "b", "c", "d"],
     compute(s) {
       if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
@@ -770,6 +787,7 @@ export const effectProfiles = {
   // ------------------------------------------------------------------ //
   "RTET": {
     label:  "Tetrachoric Correlation",
+    group:  "Correlations",
     inputs: ["a", "b", "c", "d"],
     compute(s) {
       if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
@@ -823,6 +841,7 @@ export const effectProfiles = {
   // ------------------------------------------------------------------ //
   "PR": {
     label:  "Proportion (raw)",
+    group:  "Proportions",
     inputs: ["x", "n"],
     compute(s) {
       if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
@@ -868,6 +887,7 @@ export const effectProfiles = {
   // ------------------------------------------------------------------ //
   "PLN": {
     label:  "Proportion (log)",
+    group:  "Proportions",
     isTransformedScale: true,
     inputs: ["x", "n"],
     compute(s) {
@@ -913,6 +933,7 @@ export const effectProfiles = {
   // ------------------------------------------------------------------ //
   "PLO": {
     label:  "Proportion (logit)",
+    group:  "Proportions",
     isTransformedScale: true,
     inputs: ["x", "n"],
     compute(s) {
@@ -958,6 +979,7 @@ export const effectProfiles = {
   // ------------------------------------------------------------------ //
   "PAS": {
     label:  "Proportion (arcsine)",
+    group:  "Proportions",
     isTransformedScale: true,
     inputs: ["x", "n"],
     compute(s) {
@@ -1002,6 +1024,7 @@ export const effectProfiles = {
   // ------------------------------------------------------------------ //
   "PFT": {
     label:  "Proportion (Freeman-Tukey)",
+    group:  "Proportions",
     isTransformedScale: true,
     inputs: ["x", "n"],
     compute(s) {
@@ -1045,6 +1068,7 @@ export const effectProfiles = {
   // ------------------------------------------------------------------ //
   "GENERIC": {
     label:  "Generic (yi / vi)",
+    group:  "Generic",
     inputs: ["yi", "vi"],
     compute(s) {
       const vi = Math.max(s.vi, MIN_VAR);
@@ -1078,6 +1102,7 @@ export const effectProfiles = {
   // ------------------------------------------------------------------ //
   "HR": {
     label:  "Hazard Ratio",
+    group:  "Time-to-event / Rates",
     isTransformedScale: true,
     isLog: true,
     inputs: ["hr", "ci_lo", "ci_hi"],
@@ -1115,6 +1140,7 @@ export const effectProfiles = {
   // ------------------------------------------------------------------ //
   "IRR": {
     label:  "Incidence Rate Ratio",
+    group:  "Time-to-event / Rates",
     isTransformedScale: true,
     isLog: true,
     inputs: ["x1", "t1", "x2", "t2"],
@@ -1156,6 +1182,7 @@ export const effectProfiles = {
   // ------------------------------------------------------------------ //
   "IR": {
     label:  "Incidence Rate (log)",
+    group:  "Time-to-event / Rates",
     isTransformedScale: true,
     isLog: true,
     inputs: ["x", "t"],
@@ -1195,6 +1222,7 @@ export const effectProfiles = {
   // ------------------------------------------------------------------ //
   "MN": {
     label:  "Mean (raw)",
+    group:  "Continuous (single group)",
     inputs: ["m", "sd", "n"],
     compute(s) {
       if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
@@ -1231,6 +1259,7 @@ export const effectProfiles = {
   // ------------------------------------------------------------------ //
   "MNLN": {
     label:  "Mean (log)",
+    group:  "Continuous (single group)",
     isTransformedScale: true,
     isLog: true,
     inputs: ["m", "sd", "n"],
@@ -1269,6 +1298,7 @@ export const effectProfiles = {
   // ------------------------------------------------------------------ //
   "GOR": {
     label:  "Generalised Odds Ratio (ordinal)",
+    group:  "Binary outcomes",
     isTransformedScale: true,
     isLog: true,
     inputs: ["counts1", "counts2"],
