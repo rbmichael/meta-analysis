@@ -1,13 +1,32 @@
-// ================= REPORT BUILDER =================
-// buildReport(args) — assembles a self-contained HTML report string from the
-//   last completed analysis state.
+// =============================================================================
+// report.js — HTML report builder and export
+// =============================================================================
+// Assembles a self-contained, printable HTML report from the last completed
+// analysis state and exposes helpers to download it or open a print preview.
 //
-// Steps 2 and 3 (downloadHTML / openPrintPreview) are added in later steps.
+// Exports
+// -------
+//   buildReport(args) → string
+//     Serialises the current analysis into a full HTML document with embedded
+//     styles, SVG plots, and statistics tables.
+//
+//   downloadHTML(args)
+//     Calls buildReport(), wraps the result in a Blob, and triggers a download.
+//
+//   openPrintPreview(args)
+//     Calls buildReport() and opens the result in a new browser tab ready for
+//     window.print().
 //
 // args shape (set by _reportArgs in ui.js):
 //   { studies, m, profile, reg, tf, egger, begg, fatpet, fsn,
 //     influence, subgroup, method, ciMethod, useTF, mAdjusted,
 //     forestOptions }   ← forestOptions = { ciMethod, profile, pageSize }
+//
+// Dependencies
+// ------------
+//   plots.js     drawForest()
+//   io.js        downloadBlob()
+//   constants.js Z_95
 
 import { drawForest } from "./plots.js";
 import { downloadBlob } from "./io.js";
@@ -106,6 +125,15 @@ function esc(s) {
 // Section builders
 // ---------------------------------------------------------------------------
 
+// sectionSummary(args) → HTML string
+// Builds the "Summary" <section> of the exported report.
+// Renders two tables: (1) analysis settings (effect type, τ² estimator,
+// CI method, k), and (2) pooled statistics (FE/RE estimates, CI, prediction
+// interval, τ², I², H²-CI, Q and dist-statistic).
+// All estimates are back-transformed through profile.transform() before
+// formatting, so OR/RR/HR are displayed on their natural (ratio) scale.
+// Trim-fill adjusted RE is included as an extra row when useTF and mAdjusted
+// are both truthy.
 function sectionSummary(args) {
   const { m, profile, method, ciMethod, useTF, tf, mAdjusted, studies } = args;
 
@@ -149,6 +177,14 @@ function sectionSummary(args) {
 </section>`;
 }
 
+// sectionPubBias(args) → HTML string
+// Builds the "Publication Bias" <section> of the exported report.
+// Renders a three-column table (test, statistic, p-value) covering:
+//   Egger's test (intercept), Begg's test (rank correlation τ),
+//   FAT (funnel asymmetry test β₁), PET (effect at SE → 0).
+// Followed by fail-safe N paragraph (Rosenthal + Orwin) and trim-and-fill
+// status. PET estimate is back-transformed through profile.transform().
+// "NA (k < 3)" is shown for any test that requires at least 3 studies.
 function sectionPubBias(args) {
   const { egger, begg, fatpet, fsn, useTF, tf, profile } = args;
   const petEff = isFinite(fatpet.intercept)

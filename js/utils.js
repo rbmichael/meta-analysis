@@ -1,3 +1,26 @@
+// =============================================================================
+// utils.js — Mathematical and formatting utilities
+// =============================================================================
+// Self-contained numerical library used throughout the app.  Nothing in this
+// file touches the DOM or imports application state.
+//
+// Sections
+// --------
+//   Formatting       round(), fmt()
+//   Distributions    normalCDF(), normalQuantile(), tCDF(), tCritical(),
+//                    chiSquareCDF(), chiSquareQuantile(), fCDF(),
+//                    regularizedBeta(), regularizedGammaP(), logGamma()
+//   Bivariate        bivariateNormalCDF()
+//   Effect sizes     hedgesG(), tetrachoricFromCounts(), gorFromCounts()
+//   Parsing          parseCounts()
+//   Display          transformEffect()
+//
+// All numerical approximations cite their source algorithm in the function
+// comment.  No function in this file has side effects.
+//
+// Dependencies: constants.js
+// =============================================================================
+
 import { MIN_VAR, BISECTION_ITERS, Z_95 } from "./constants.js";
 
 // ================= ROUNDING =================

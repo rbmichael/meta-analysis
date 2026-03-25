@@ -1,14 +1,26 @@
-// ================= CSV UTILITIES =================
-// parseCSV(text)
-//   Parses raw CSV text into structured data.
-//   Returns { delimiter, headers, rows } where rows is string[][].
-//   Handles: UTF-8 BOM, auto-delimiter detection (comma / semicolon / tab),
-//   RFC 4180 quoted fields (embedded commas, newlines, escaped quotes).
+// =============================================================================
+// csv.js — CSV parsing and effect-type auto-detection
+// =============================================================================
+// Handles all CSV import logic: delimiter sniffing, RFC 4180 field parsing,
+// header normalisation, and heuristic matching of column names to effect-type
+// profiles.
 //
-// detectEffectType(headers, currentType, profiles)
-//   Scores every effect profile against the CSV headers and returns the
-//   best match along with confidence and column details.
-//   Returns { type, confidence, matched, missing }.
+// Exports
+// -------
+//   parseCSV(text)
+//     Parses raw CSV text into structured data.
+//     Returns { delimiter, headers, rows } where rows is string[][].
+//     Handles: UTF-8 BOM, auto-delimiter detection (comma / semicolon / tab),
+//     RFC 4180 quoted fields (embedded commas, newlines, escaped quotes).
+//
+//   detectEffectType(headers, currentType, profiles)
+//     Scores every effect profile against the CSV headers and returns the
+//     best-matching effect type.
+//     Returns { type, confidence, matched, missing }.
+//
+// Dependencies
+// ------------
+//   profiles.js  (effectProfiles — passed in as `profiles` argument)
 
 // ---------------------------------------------------------------------------
 // parseCSV

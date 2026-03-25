@@ -1,3 +1,39 @@
+// =============================================================================
+// plots.js — D3 plot renderers
+// =============================================================================
+// Renders all SVG visualisations directly into named DOM elements.
+// Each function is stateless: it clears its target SVG, then redraws from
+// scratch using the data passed in.  No function in this file reads from the
+// DOM beyond the SVG container and the shared #tooltip element.
+//
+// Exports
+// -------
+//   drawForest(studies, m, options)
+//     Forest plot with paginated study rows, FE/RE/Both pooled diamonds,
+//     prediction interval, heterogeneity summary, and annotation columns.
+//     options: { ciMethod, profile, pageSize, page, pooledDisplay }
+//     Returns { totalPages }.
+//
+//   drawFunnel(studies, m, egger, profile)
+//     Funnel plot (effect vs. SE) with optional Egger regression line.
+//
+//   drawInfluencePlot(studies, influence)
+//     Influence diagnostics plot (Cook's D, hat values, DFFITS per study).
+//
+//   drawCumulativeForest(steps, profile)
+//     Cumulative forest plot: one row per cumulative step, showing how the
+//     pooled estimate evolves as studies are added in order.
+//
+//   drawBubble(studies, reg, modName, modIdx, container)
+//     Bubble plot for a single continuous moderator in a meta-regression.
+//     Bubble radius ∝ √(RE weight); regression line is the marginal fit.
+//
+// All plots use CSS custom properties (var(--fg), var(--accent), etc.) so
+// they respond automatically to light/dark theme switches.
+//
+// Dependencies: utils.js (chiSquareCDF), constants.js (Z_95), D3 (global)
+// =============================================================================
+
 import { chiSquareCDF } from "./utils.js";
 import { Z_95 } from "./constants.js";
 
@@ -48,7 +84,13 @@ export function drawBubble(studies, reg, modName, modIdx, container) {
   }
   const slope = beta[modIdx];
 
-  // SE of the marginal fitted value at x: sqrt(l(x)' vcov l(x) * s2)
+  // seAt(x) → number
+  // Standard error of the regression line's fitted value at moderator value x.
+  // Uses the delta method: SE = √(l(x)ᵀ · Vcov · l(x) · s²), where l(x) is
+  // the predictor vector with all covariates held at their weighted means
+  // except the focal moderator, which is set to x.  Used to draw the shaded
+  // confidence band around the regression line in the bubble plot.
+  // Returns NaN when the variance-covariance matrix is unavailable.
   function seAt(x) {
     if (!vcov) return NaN;
     const l = wmeans.slice();
@@ -154,7 +196,60 @@ export function drawBubble(studies, reg, modName, modIdx, container) {
     .text(`${modName}  (β = ${isFinite(slope) ? slope.toFixed(3) : "NA"})`);
 }
 
-// ================= FOREST =================
+// -----------------------------------------------------------------------------
+// drawForest(studies, m, options) → { totalPages }
+// -----------------------------------------------------------------------------
+// Renders the forest plot into the #forestPlot SVG element using D3.
+// Handles pagination, adaptive row sizing, subgroup separators, weight boxes,
+// and one or two pooled diamonds (FE / RE / Both).
+//
+// Parameters
+// ----------
+//   studies  — array of study objects produced by profile.compute(); each must
+//              have: { yi, vi, se, w, label, group?, filled? }
+//              May include trim-fill imputed studies (flagged by filled: true).
+//   m        — output of meta(); must have: FE, seFE, RE, ciLow, ciHigh,
+//              predLow, predHigh, tau2, I2, crit, dist, stat, pval, df
+//   options  — optional configuration object:
+//     ciMethod      — CI method string for title label ("normal" | "t" | "KH" |
+//                     "PL"); default "normal"
+//     profile       — effect profile with .transform(x) for back-transform;
+//                     default identity
+//     pooledDisplay — "FE" | "RE" | "Both"; controls which diamond(s) appear
+//                     on the last page; default "RE"
+//     pageSize      — studies per page; Infinity = single page; default 30
+//     page          — 0-based page index; default 0
+//
+// Return value
+// ------------
+//   { totalPages }  — total number of pages at the current pageSize, so the
+//                     caller can render navigation buttons
+//
+// Layout strategy
+// ---------------
+//   All coordinates derive from a single layout object L computed at render
+//   time, keyed to the total study count k so that row heights and font sizes
+//   adapt uniformly across all pages:
+//     k ≤ 20  → rowH 22px, 11px labels
+//     k ≤ 40  → rowH 18px, 10px labels
+//     k > 40  → rowH 14px,  9px labels
+//
+//   Column layout (left → right):
+//     [labelW 180px] [plotW 440px] [annotW 240px]  = 860px total
+//
+//   Subgroup separators are inserted when consecutive studies differ in their
+//   .group field, pushing subsequent rows down by L.sepH.
+//
+//   The summary section (last page only) adds diamond(s), a PI bracket,
+//   heterogeneity text, and the D3 axis with tick labels. summaryH is sized
+//   to fit both diamonds when pooledDisplay = "Both".
+//
+// Rendering order
+// ---------------
+//   title → null reference line → study CI lines → weight boxes →
+//   study labels → annotation column → group separators → axis →
+//   (last page) diamond(s) → PI bracket → heterogeneity annotation
+// -----------------------------------------------------------------------------
 export function drawForest(studies, m, options = {}) {
   const svg = d3.select("#forestPlot");
   svg.selectAll("*").remove();
@@ -401,7 +496,19 @@ export function drawForest(studies, m, options = {}) {
 
   const diamondHalfHeight = L.diamondHH;
 
-  // Helper: draw one diamond and its left-column label
+  // drawDiamond(center, ciLow, ciHigh, yMid, fillColor, strokeDash, labelText, tooltipText)
+  // Appends one pooled-estimate diamond to the forest SVG.
+  //   center      — point estimate on the analysis scale (maps to x-scale)
+  //   ciLow/High  — CI bounds; define the left and right vertices of the diamond
+  //   yMid        — vertical centre pixel of the diamond row
+  //   fillColor   — CSS colour string (FE uses --fg-muted; RE uses --accent)
+  //   strokeDash  — stroke-dasharray string, or null for a solid border
+  //                 (KH CI uses "4,2" to visually distinguish adjusted CIs)
+  //   labelText   — short label written right-aligned in the study-name column
+  //   tooltipText — SVG <title> shown on hover
+  // The diamond is a 4-point polygon with vertices at (ciLow, yMid),
+  // (center, yMid−diamondHH), (ciHigh, yMid), (center, yMid+diamondHH).
+  // Closes over: svg, x, L (layout), diamondHalfHeight.
   function drawDiamond(center, ciLow, ciHigh, yMid, fillColor, strokeDash, labelText, tooltipText) {
     const pts = [
       [x(ciLow),  yMid],

@@ -1,16 +1,44 @@
-// ================= EFFECT PROFILES =================
-// Single source of truth for every effect type.
-// Each profile contains:
-//   label             — display name used in dropdowns
-//   isTransformedScale— true when yi is on a transformed scale (log, logit, etc.)
-//   inputs            — ordered column names expected in the data table
-//   compute           — derives yi/vi from raw study data
-//   transform         — back-transforms a single value for display
-//   validate          — returns { valid, errors } for hard input validation
-//   softWarnings      — returns string[] of advisory warnings
-//   exampleData       — rows passed to addRow() when the type is first selected
-//                       format: [label, ...inputs, group]
-// To back-transform a CI pair use: { lb: profile.transform(lb), ub: profile.transform(ub) }
+// =============================================================================
+// profiles.js — Effect-type registry
+// =============================================================================
+// Single source of truth for every supported effect measure.  Each entry in
+// effectProfiles defines how raw study inputs are transformed into a
+// standardised (yi, vi) pair, how results are back-transformed for display,
+// and what validation rules apply.
+//
+// Profile schema
+// --------------
+//   label             Display name shown in the effect-type dropdown.
+//   group             Optgroup label used to organise the dropdown.
+//   isTransformedScale  true when yi is on a transformed scale (log, logit, …).
+//                     Controls the "SE (transformed)" column label in the table.
+//   isLog             true when the back-transform is Math.exp.
+//                     Causes plots to append a "(log scale)" axis annotation.
+//   inputs            Ordered array of column names expected in the data table.
+//   rawInputs         (GOR only) Set of input fields that receive raw text
+//                     rather than a numeric value.
+//   compute(s)        Derives { yi, vi, se, w } from a raw study object s.
+//                     Returns NaN fields on validation failure.
+//   transform(x)      Back-transforms a single value on the yi scale to the
+//                     display scale (e.g. Math.exp for log-scale measures).
+//                     To back-transform a CI pair:
+//                       { lb: profile.transform(lb), ub: profile.transform(ub) }
+//   validate(s)       Hard validation.  Returns { valid: bool, errors: {} }
+//                     where errors maps field name → message string.
+//                     Studies that fail validation are excluded from analysis.
+//   softWarnings(s, label)  Advisory warnings returned as string[].
+//                     The study is still included; warnings appear in the UI.
+//   exampleData       Rows pre-loaded when the effect type is first selected.
+//                     Format: [label, ...inputs, group]
+//
+// Exports
+// -------
+//   effectProfiles    The registry object (keyed by effect-type code).
+//   getProfile(type)  Convenience accessor; returns null for unknown types.
+//   validateStudy(s, type)  Calls profile.validate(s); used by analysis.js.
+//
+// Dependencies: utils.js, constants.js
+// =============================================================================
 
 import { hedgesG, parseCounts, gorFromCounts, tetrachoricFromCounts } from "./utils.js";
 import { MIN_VAR, Z_95 } from "./constants.js";
@@ -18,6 +46,13 @@ import { MIN_VAR, Z_95 } from "./constants.js";
 export const effectProfiles = {
 
   // ------------------------------------------------------------------ //
+  // Threshold rationale shared by MD and SMD (pooled-SD continuous two-group):
+  //   n < 10      — With fewer than 10 per group the CLT approximation is poor and
+  //                 the Hedges J correction becomes inaccurate (df = n1+n2-2 is small).
+  //   ratio > 3   — Group-size imbalance: pooled-SD estimators assume roughly equal n;
+  //                 ratios beyond 3 inflate Type I error (Wilcox 1994).
+  //   SD ratio >3 — Equal-variance assumption of pooled SD breaks down; SMDH or separate
+  //                 Welch-style variance is preferable when SDs differ substantially.
   "MD": {
     label:  "Mean Difference",
     group:  "Continuous (two groups)",
@@ -98,6 +133,11 @@ export const effectProfiles = {
   },
 
   // ------------------------------------------------------------------ //
+  // Threshold rationale for SMDH (heteroscedastic SMD):
+  //   n < 10, ratio > 3 — same as MD/SMD above.
+  //   SD ratio < 1.1    — When the two SDs are nearly identical the equal-variance
+  //                       assumption holds; standard SMD (pooled SD) has lower variance
+  //                       and is more widely reported — SMDH adds no benefit here.
   "SMDH": {
     label:  "Standardized Mean Difference (heteroscedastic)",
     group:  "Continuous (two groups)",
@@ -227,6 +267,10 @@ export const effectProfiles = {
   },
 
   // ------------------------------------------------------------------ //
+  // Threshold rationale for SMCC (standardized mean change, change-score SD):
+  //   r missing — vi = J²·[2(1−r)/n + d²/2df] is highly sensitive to the
+  //               pre-post correlation; the default r = 0.5 can over- or under-
+  //               estimate variance by ≥ 50% when the true r is near 0 or 1.
   "SMCC": {
     label:  "Standardized Mean Change (change-score SD)",
     group:  "Continuous (paired)",
@@ -273,6 +317,13 @@ export const effectProfiles = {
   },
 
   // ------------------------------------------------------------------ //
+  // Threshold rationale for ROM (ratio of means, log scale):
+  //   m ≤ 0     — log(m1/m2) is undefined; study cannot contribute.
+  //   n < 10    — Delta-method variance sd²/(n·m²) uses a first-order Taylor
+  //               approximation; small n means the approximation error is large
+  //               relative to the true sampling variance.
+  //   CV > 1    — When sd/m > 1 higher-order terms of the Taylor expansion become
+  //               non-negligible; the delta-method underestimates variance.
   "ROM": {
     label:  "Ratio of Means (ROM)",
     group:  "Continuous (two groups)",
@@ -332,6 +383,11 @@ export const effectProfiles = {
   },
 
   // ------------------------------------------------------------------ //
+  // Threshold rationale for CVR (coefficient of variation ratio, log scale):
+  //   m ≤ 0  — CV = sd/m is undefined for non-positive means.
+  //   n < 10 — Same delta-method concern as ROM; asymptotic variance unreliable.
+  //   CV > 1 — The delta-method approximation for log(CV) degrades when the CV
+  //            itself is large; the higher-order terms become substantial.
   "CVR": {
     label:  "Coefficient of Variation Ratio (CVR)",
     group:  "Variability",
@@ -393,6 +449,12 @@ export const effectProfiles = {
   },
 
   // ------------------------------------------------------------------ //
+  // Threshold rationale for VR (variability ratio, log scale):
+  //   n < 10        — vi = 1/(2(n1−1)) + 1/(2(n2−1)) is derived from chi² df;
+  //                   with small df the chi² approximation for s² is poor.
+  //   SD ratio > 4  — An extreme ratio (> 4) between the two SDs most likely
+  //                   reflects inconsistent measurement units or a data entry
+  //                   error rather than a genuine variability difference.
   "VR": {
     label:  "Variability Ratio (VR)",
     group:  "Variability",
@@ -443,6 +505,13 @@ export const effectProfiles = {
   },
 
   // ------------------------------------------------------------------ //
+  // Threshold rationale shared by OR and RR (2×2 binary, log scale):
+  //   zero cell        — log(0) is −∞; the 0.5 continuity correction is the
+  //                      standard remedy (Gart & Zweifel 1967) but inflates
+  //                      variance, so the user should know it was applied.
+  //   min cell / N < 5% — Rule-of-thumb from Bradburn et al. (2007): sparse
+  //                       cells make the log-OR/RR asymptotically unstable;
+  //                       exact methods or Peto OR may be preferable.
   "OR": {
     label:  "Odds Ratio",
     group:  "Binary outcomes",
@@ -565,6 +634,11 @@ export const effectProfiles = {
   },
 
   // ------------------------------------------------------------------ //
+  // Threshold rationale shared by COR and ZCOR (Pearson correlation):
+  //   n < 10   — The asymptotic normal approximation for r (or Fisher z) is
+  //              poor with small n; bootstrap CIs are preferable below n = 10.
+  //   |r| > 0.9 — vi = (1−r²)²/(n−1) approaches 0 as r → ±1; the
+  //               estimate becomes increasingly unstable near the boundary.
   "COR": {
     label:  "Correlation (raw r)",
     group:  "Correlations",
@@ -643,6 +717,12 @@ export const effectProfiles = {
   },
 
   // ------------------------------------------------------------------ //
+  // Threshold rationale for PCOR and ZPCOR (partial correlations):
+  //   eff. df < 10 — Effective degrees of freedom = n−p−1 (PCOR) or n−p−3
+  //                  (ZPCOR, Fisher z). When this is < 10 the asymptotic
+  //                  variance formula is unreliable — same reasoning as n < 10
+  //                  for zero-order correlations, adjusted for p covariates.
+  //   |r| > 0.9    — Same boundary-instability issue as COR/ZCOR.
   "PCOR": {
     label:  "Partial Correlation (raw r)",
     group:  "Correlations",
@@ -731,6 +811,13 @@ export const effectProfiles = {
   },
 
   // ------------------------------------------------------------------ //
+  // Threshold rationale shared by PHI and RTET (2×2 cell-frequency correlations):
+  //   zero cell  — φ and ρ_tet are near structural boundaries (±1) when any
+  //                marginal frequency is zero; the variance approximation breaks down.
+  //   N < 20     — Cell-frequency-based correlations rely on asymptotic chi²
+  //                approximations; with fewer than 20 total observations the
+  //                expected-cell-count assumption (E ≥ 5) is often violated.
+  //   |r| > 0.9  — Same boundary-instability issue as COR/ZCOR.
   "PHI": {
     label:  "Phi Coefficient",
     group:  "Correlations",
@@ -839,6 +926,17 @@ export const effectProfiles = {
   },
 
   // ------------------------------------------------------------------ //
+  // Threshold rationale shared by PR, PLN, PLO, PAS, PFT (single-arm proportions):
+  //   n < 20       — The normal approximation to the binomial requires n·p ≥ 5
+  //                  and n·(1−p) ≥ 5; with n < 20 even moderate proportions can
+  //                  violate this, making asymptotic CIs unreliable.
+  //   p < 5%/>95%  — Near the [0,1] boundary, variance stabilisation fails for
+  //                  raw proportion (PR); log (PLN) and logit (PLO) are undefined
+  //                  at p=0/1 and need a continuity correction; arcsine (PAS) and
+  //                  Freeman-Tukey (PFT) handle extremes better but still show
+  //                  increased approximation error.
+  // PR additionally flags p = 0 or p = 1 exactly: the binomial variance p(1−p)/n
+  // equals zero, giving the study infinite weight — a structural problem.
   "PR": {
     label:  "Proportion (raw)",
     group:  "Proportions",
@@ -1066,6 +1164,11 @@ export const effectProfiles = {
   },
 
   // ------------------------------------------------------------------ //
+  // Threshold rationale for GENERIC (pass-through yi/vi):
+  //   vi > 1 — Informational only; no statistical basis for this cutoff.
+  //            A variance > 1 on the analysis scale (e.g. log-OR, SMD) means
+  //            the study's 95% CI spans roughly ±2 units, contributing very
+  //            little weight. The user may want to double-check the input.
   "GENERIC": {
     label:  "Generic (yi / vi)",
     group:  "Generic",
@@ -1138,6 +1241,10 @@ export const effectProfiles = {
   },
 
   // ------------------------------------------------------------------ //
+  // Threshold rationale for IRR (incidence rate ratio, log scale):
+  //   zero events — log(0) is −∞; the standard remedy is to add 0.5 to both
+  //                 event counts (analogous to the OR/RR zero-cell correction).
+  //                 Warning is informational so the user knows the correction fired.
   "IRR": {
     label:  "Incidence Rate Ratio",
     group:  "Time-to-event / Rates",
@@ -1180,6 +1287,9 @@ export const effectProfiles = {
   },
 
   // ------------------------------------------------------------------ //
+  // Threshold rationale for IR (single-arm incidence rate, log scale):
+  //   zero events — vi = 1/x; at x = 0 this is infinite. x is replaced by 0.5
+  //                 (consistent with Poisson continuity correction convention).
   "IR": {
     label:  "Incidence Rate (log)",
     group:  "Time-to-event / Rates",
@@ -1220,6 +1330,12 @@ export const effectProfiles = {
   },
 
   // ------------------------------------------------------------------ //
+  // Threshold rationale for MN (single-group raw mean):
+  //   CV > 1    — When sd/|m| > 1 the distribution is heavily right-skewed or
+  //               the mean is near zero; a log transform (MNLN) typically gives
+  //               better-behaved pooling.
+  //   n < 10    — vi = sd²/n; with very small n the sampling distribution of
+  //               the mean departs noticeably from normality.
   "MN": {
     label:  "Mean (raw)",
     group:  "Continuous (single group)",
@@ -1257,6 +1373,12 @@ export const effectProfiles = {
   },
 
   // ------------------------------------------------------------------ //
+  // Threshold rationale for MNLN (single-group log mean):
+  //   CV > 0.5 — vi = sd²/(n·m²) is the delta-method variance of log(μ).
+  //              The approximation uses only the first-order Taylor term; beyond
+  //              CV = 0.5 the second-order term becomes material and the delta-
+  //              method systematically underestimates the true variance.
+  //   n < 10   — Same as MN: small-n normality concern.
   "MNLN": {
     label:  "Mean (log)",
     group:  "Continuous (single group)",
@@ -1296,6 +1418,14 @@ export const effectProfiles = {
   },
 
   // ------------------------------------------------------------------ //
+  // Threshold rationale for GOR (generalised odds ratio, ordinal counts):
+  //   N < 20        — The GOR variance uses the delta method applied to a
+  //                   generalised U-statistic; with small group totals the
+  //                   asymptotic approximation is unreliable.
+  //   empty category — A category empty in both groups contributes zero to
+  //                    the concordance/discordance counts; it inflates the
+  //                    apparent number of categories without adding information
+  //                    and may indicate a data-coding error.
   "GOR": {
     label:  "Generalised Odds Ratio (ordinal)",
     group:  "Binary outcomes",

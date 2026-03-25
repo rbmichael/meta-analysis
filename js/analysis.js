@@ -1,8 +1,110 @@
+// =============================================================================
+// analysis.js — Core statistical engine
+// =============================================================================
+// Responsible for all numerical computation that sits above the per-study
+// effect-size level.  profiles.js computes each study's yi/vi; this module
+// takes those values and produces pooled estimates, heterogeneity statistics,
+// confidence intervals, and diagnostic tests.
+//
+// Main exports
+// ------------
+//   compute(studies, type)
+//     Dispatches per-study effect-size computation by effect type.
+//     Returns the studies array with yi, vi, se, w appended to each row.
+//
+//   meta(studies, method, ciMethod)
+//     Fits a random-effects (and fixed-effect) model.
+//     Returns { FE, seFE, RE, seRE, tau2, Q, df, I2, ciLow, ciHigh,
+//               predLow, predHigh, crit, stat, pval, dist, tauCI, I2CI, H2CI }.
+//
+//   tau2_DL / tau2_REML / tau2_ML / tau2_PM / tau2_HS / tau2_HE /
+//   tau2_SJ / tau2_GENQ
+//     Standalone τ² estimators; each accepts studies[] and returns a scalar.
+//     Four additional estimators (DLIT, HSk, SQGENQ, EBLUP) are retained in
+//     the codebase but removed from the UI — see individual comments.
+//
+//   eggerTest / beggTest / fatPetTest / harbordTest / petersTest /
+//   deeksTest / rueckerTest
+//     Publication-bias tests.  Each accepts studies[] (and m where needed)
+//     and returns an object with slope, intercept, z/t, and p-value fields.
+//
+//   failSafeN(studies, alpha, target)
+//     Rosenthal and Orwin fail-safe N.
+//
+//   heterogeneityCIs(studies, method)
+//     Profile-likelihood CIs for τ², I², and H².
+//
+//   trimFill (re-exported from trimfill.js via analysis pipeline)
+//
+//   influenceDiagnostics / leaveOneOut / cumulativeMeta /
+//   subgroupAnalysis / metaRegression / estimatorComparison
+//     Sensitivity, influence, and moderator-analysis functions.
+//
+// Dependencies: utils.js, constants.js, profiles.js
+// =============================================================================
+
 import { tCritical, normalCDF, tCDF, chiSquareCDF, chiSquareQuantile, fCDF, hedgesG, parseCounts, gorFromCounts, tetrachoricFromCounts } from "./utils.js";
 import { MIN_VAR, REML_TOL, BISECTION_ITERS, Z_95 } from "./constants.js";
 import { validateStudy } from "./profiles.js";
 
 // ================= DYNAMIC COMPUTE =================
+// -----------------------------------------------------------------------------
+// compute(s, type, options) → study object
+// -----------------------------------------------------------------------------
+// Converts one study's raw input fields into the canonical (yi, vi) pair used
+// by every downstream statistical function.
+//
+// Parameters
+// ----------
+//   s       — raw study object; required fields vary by effect type (see below)
+//   type    — effect-type string (e.g. "SMD", "OR", "HR"); if falsy, auto-
+//             detected from the fields present in s (MD for continuous inputs,
+//             OR for 2×2 count inputs, otherwise a warning + NaN return)
+//   options — passed through to hedgesG() for SMD (e.g. { correct: false } to
+//             skip the small-sample J correction)
+//
+// Return value
+// ------------
+//   A spread copy of s augmented with:
+//     yi   — effect size on the analysis scale (log for OR/RR/HR/IRR/CVR/VR/
+//             ROM/IR/MNLN/ZCOR/ZPCOR; Fisher-z for ZCOR/ZPCOR; raw otherwise)
+//     vi   — sampling variance (floored at MIN_VAR = 1e-10 to prevent division
+//             by zero in downstream weighting)
+//     se   — √vi
+//     w    — 1/vi (inverse-variance weight)
+//   Plus type-specific aliases used by back-transform / display code:
+//     md, varMD — raw effect and its variance (set for MD, SMD, SMDH, paired,
+//                 SMCC, GENERIC)
+//
+//   If validation fails or inputs yield non-finite results the function returns
+//   { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 } so that meta() can safely skip
+//   the study without crashing.
+//
+// Effect types handled (in dispatch order)
+// -----------------------------------------
+//   Binary 2×2      OR, RR, RD       (0.5 continuity correction for OR/RR)
+//   Generalised OR  GOR              (ordered-category counts via gorFromCounts)
+//   Single mean     MN               yi = m
+//   Single mean log MNLN             yi = log(m), delta-method vi
+//   Continuous 2-grp SMD             Hedges g via hedgesG()
+//                   SMDH             Heteroscedastic SMD (Bonett 2009)
+//   Variability     CVR, VR          log scale
+//   Paired          MD_paired        corr-adjusted variance (r fallback = 0.5)
+//                   SMD_paired       SMCR (Morris 2008), Hedges correction
+//                   SMCC             Change-score SD standardiser
+//   Correlations    COR              raw r, vi = (1−r²)²/(n−1)
+//                   ZCOR             Fisher z, vi = 1/(n−3)
+//                   PCOR, ZPCOR      partial correlations (p covariates)
+//                   PHI              2×2 phi coefficient
+//                   RTET             tetrachoric r via tetrachoricFromCounts()
+//   Proportions     PR, PLN, PLO, PAS, PFT
+//   Time-to-event   HR               log scale; SE back-calculated from CI
+//                   IRR              log scale; 0.5 correction for zero events
+//                   IR               single-arm log rate
+//   Generic         GENERIC          pass-through (yi, vi already on input)
+//   Ratio of means  ROM              yi = log(m1/m2), delta-method vi
+//   MD fallback     (anything else)  Welch-style vi = sd1²/n1 + sd2²/n2
+// -----------------------------------------------------------------------------
 export function compute(s, type, options = {}) {
   if (!type) {
     if ("m1" in s && "m2" in s && "sd1" in s && "sd2" in s && "n1" in s && "n2" in s) {
@@ -661,10 +763,23 @@ export function tau2_PM(studies, tol = REML_TOL, maxIter = 100) {
   return tau2;
 }
 
-// GENQ core: generalized Q-statistic estimator with arbitrary weights aᵢ.
-// DL is the special case aᵢ = 1/vᵢ; SQGENQ uses aᵢ = √(1/vᵢ).
-// NOTE: SQGENQ is removed from the UI dropdown (rarely used in practice).
-// Preserved here so it can be re-exposed if needed.
+// genqCore(studies, weights) → τ² estimate (≥ 0)
+// -------------------------------------------------
+// Generalised Q-statistic τ² estimator with caller-supplied weights aᵢ.
+// Computes the weighted pooled mean yā, the weighted sum of squared deviations
+// Qₐ, and the expected value of Qₐ under homogeneity (bₐ), then solves for τ²:
+//
+//   yā  = Σ(aᵢ yᵢ) / Σaᵢ
+//   Qₐ  = Σ aᵢ(yᵢ − yā)²
+//   bₐ  = ΣaᵢvᵢΣaᵢ − Σaᵢ²vᵢ) / Σaᵢ   (expected Qₐ under τ²=0)
+//   cₐ  = Σaᵢ − Σaᵢ²/Σaᵢ
+//   τ²  = max(0, (Qₐ − bₐ) / cₐ)
+//
+// Special cases (called via thin wrappers):
+//   DL       — aᵢ = 1/vᵢ   (standard inverse-variance weights)
+//   SQGENQ   — aᵢ = √(1/vᵢ) (square-root weights; rarely used, not in UI)
+//
+// Returns 0 when k ≤ 1 or cₐ ≤ 0 (degenerate design matrix).
 function genqCore(studies, weights) {
   const k = studies.length;
   if (k <= 1) return 0;

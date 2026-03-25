@@ -1,3 +1,25 @@
+// =============================================================================
+// trimfill.js — Trim-and-Fill publication bias correction
+// =============================================================================
+// Implements the Duval & Tweedie (2000) Trim and Fill method using the L0
+// rank-based estimator. Iterates until the number of imputed studies (k0)
+// stabilises, then reflects mirror-image studies around the converged pooled
+// estimate and re-runs the meta-analysis on the augmented dataset.
+//
+// Exports
+// -------
+//   trimFill(studies, method, maxIter) → study[]
+//     studies  — array of { yi, vi, label } objects (output of profiles.compute)
+//     method   — τ² estimator string passed to meta() for internal iterations
+//                (default "DL")
+//     maxIter  — convergence iteration cap (default 100)
+//     Returns the imputed studies only (not the originals); caller combines
+//     them with the original set to form the filled dataset.
+//
+// Dependencies
+// ------------
+//   analysis.js  meta()
+
 import { meta } from "./analysis.js";
 
 // Duval & Tweedie (2000) Trim and Fill — L0 estimator

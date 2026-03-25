@@ -1,4 +1,105 @@
-// ================= UI =================
+// =============================================================================
+// ui.js — Application controller and DOM layer
+// =============================================================================
+// Owns all interaction between the user and the rest of the app.  This is the
+// only module that reads from or writes to the DOM (aside from plots.js, which
+// renders into named SVG elements).
+//
+// Responsibilities
+// ----------------
+//   Input table      Build and maintain the study data table; add/remove rows;
+//                    validate cells on change; apply CSV imports.
+//
+//   Settings         Read effect type, τ² method, CI method, cumulative order,
+//                    and trim-and-fill toggles from the settings row.
+//
+//   runAnalysis()    Central orchestration function.  Reads the input table,
+//                    calls compute() → meta() → publication-bias tests →
+//                    influence diagnostics → all plot renderers, and populates
+//                    the results panels.  Returns true on success (used to gate
+//                    the Results tab).
+//
+//   Results panels   Render pooled-estimate text, heterogeneity stats,
+//                    subgroup table, leave-one-out table, estimator comparison,
+//                    and meta-regression panel from the analysis output.
+//
+//   Forest nav       Pagination state and FE/RE/Both toggle for the forest plot.
+//
+//   Import / export  CSV import with preview dialog; CSV export; session
+//                    save/load (JSON); HTML report; PDF; per-plot SVG/PNG.
+//
+//   Autosave         Debounced localStorage draft; recovery banner on reload.
+//
+//   Help system      Delegated click listener for all .help-btn elements;
+//                    popover positioning with viewport clamping.
+//
+//   Theme            Light/dark toggle; persisted to localStorage.
+//
+// Architecture
+// ============
+//
+// Module dependency graph  (A → B means A imports from B)
+// --------------------------------------------------------
+//   ui.js           → analysis.js, profiles.js, trimfill.js, plots.js,
+//                     report.js, csv.js, session.js, autosave.js,
+//                     export.js, io.js, help.js, utils.js
+//   analysis.js     → utils.js, constants.js
+//   profiles.js     → utils.js, constants.js
+//   trimfill.js     → analysis.js
+//   plots.js        → utils.js, constants.js
+//   report.js       → plots.js, io.js, constants.js
+//   session.js      → profiles.js
+//   autosave.js     → session.js
+//   export.js       → io.js
+//   utils.js        → constants.js
+//   csv.js          (no imports — pure functions)
+//   io.js           (no imports — browser API wrappers)
+//   help.js         (no imports — static content object)
+//   constants.js    (no imports — numeric constants only)
+//
+// Analysis pipeline  (triggered by runAnalysis() on every input change)
+// ----------------------------------------------------------------------
+//   DOM table rows
+//     │  profile.validate()              row-level hard validation
+//     │  profile.compute()               raw inputs → { yi, vi, se, w, … }
+//     ↓
+//   studies[]   { label, yi, vi, se, w, group, moderators, filled? }
+//     │  trimFill()  [optional]          appends imputed mirror studies
+//     ↓
+//   all[]   = studies ∪ imputed
+//     │  meta(studies, method, ciMethod)
+//     ↓
+//   m   { FE, seFE, RE, seRE, ciLow, ciHigh, predLow, predHigh,
+//          tau2, tauCI, I2, I2CI, H2CI, Q, stat, pval, df, crit, … }
+//     ├─ eggerTest(studies)              → { intercept, se, p }
+//     ├─ beggTest(studies)               → { tau, p }
+//     ├─ fatPetTest(studies)             → { slope, intercept, … }
+//     ├─ failSafeN(studies)              → { rosenthal, orwin }
+//     ├─ influenceDiagnostics(…)         → influence[]
+//     ├─ subgroupAnalysis(…)             → { groups, Qbetween, … }
+//     ├─ metaRegression(…)               → reg{}
+//     ├─ cumulativeMeta(…)               → cumResults[]
+//     └─ draw*(studies/m/…)              → SVG elements written to DOM
+//
+//   _forestArgs / _reportArgs are cached after each run so that forest
+//   pagination, FE/RE toggle, and report export can re-use the last
+//   analysis result without re-running the pipeline.
+//
+// Persistence layer
+// -----------------
+//   localStorage["meta-draft"]   autosave.js  — survives tab/browser close
+//   localStorage["theme"]        ui.js        — light/dark preference
+//   <input type="file"> (hidden) csv.js       — CSV import
+//   Blob download                io.js        — CSV export, session JSON,
+//                                               HTML report, SVG, PNG
+//
+// Entry point
+// -----------
+//   index.html loads ui.js as <script type="module">; no bundler.
+//   All other modules are resolved by the browser via native ES imports.
+//   ui.js calls init() on DOMContentLoaded, which populates dropdowns,
+//   restores any autosave draft, and attaches all event listeners.
+// =============================================================================
 import { eggerTest, beggTest, fatPetTest, failSafeN, meta, influenceDiagnostics, subgroupAnalysis, metaRegression, cumulativeMeta, leaveOneOut, estimatorComparison } from "./analysis.js";
 import { fmt } from "./utils.js";
 import { effectProfiles, getProfile } from "./profiles.js";
@@ -17,6 +118,13 @@ import { Z_95 } from "./constants.js";
 
 let _saveTimer = null;
 
+// scheduleSave()
+// Debounced autosave trigger. Resets the 1.2 s idle timer on every call; the
+// actual save only fires once the user stops making changes. Also serves as the
+// entry point that kicks off runAnalysis() — callers invoke scheduleSave()
+// rather than runAnalysis() directly so that rapid consecutive edits (e.g.
+// typing into a cell) coalesce into a single analysis run instead of
+// re-running on every keystroke.
 function scheduleSave() {
   clearTimeout(_saveTimer);
   _saveTimer = setTimeout(() => saveDraft(gatherSessionState()), 1200);
@@ -1215,6 +1323,12 @@ function renderForestNav(totalPages) {
   });
 }
 
+// markStale()
+// Signals that the displayed results are out of date with the current inputs.
+// Shows the stale-results banner and adds the "stale" CSS class to the results
+// toggle button so the user can see at a glance that a re-run is needed.
+// No-ops until the first successful runAnalysis() call (_hasRunOnce = true),
+// which prevents the banner from appearing before any results exist.
 function markStale() {
   // Only show stale indicators after the first run has produced results.
   if (!_hasRunOnce) return;
@@ -1435,7 +1549,62 @@ function renderStudyTable(studies, m, profile) {
   container.innerHTML = `<table class="study-table">${headerRow}${studyRows}${pooledRow}</table>`;
 }
 
-// ---------------- RUN ANALYSIS (modified for benchmarks) ----------------
+// -----------------------------------------------------------------------------
+// runAnalysis() → boolean
+// -----------------------------------------------------------------------------
+// Master orchestration function. Reads the entire UI state, runs the full
+// statistical pipeline, and updates every output panel. Called on every
+// meaningful input change (via the debounced scheduleSave pathway).
+//
+// Parameters
+// ----------
+//   none — all inputs are read directly from the DOM
+//
+// Return value
+// ------------
+//   true  — analysis completed successfully (≥1 valid study)
+//   false — bailed out early; no valid studies after row validation
+//
+// Pipeline (in execution order)
+// ------------------------------
+//   1. Read effectType → look up effectProfile
+//   2. For each table row:
+//        a. validate row (hard check — invalid rows are excluded)
+//        b. parse raw inputs via profile.inputs field list
+//        c. detect missing correlation in paired designs (r defaults to 0.5)
+//        d. collect soft warnings (range / plausibility checks)
+//        e. call profile.compute() → { yi, vi, se, w, … }
+//        f. attach subgroup label and moderator values
+//   3. Guard: if studies[] is empty, show placeholder and return false
+//   4. Clear stale indicators; unlock results panel on first successful run
+//   5. Read τ² method, CI method, trim-fill flags
+//   6. Optionally run trimFill() → augmented `all` dataset
+//   7. meta()                → pooled FE/RE estimates, heterogeneity
+//   8. eggerTest()           → funnel asymmetry (regression-based)
+//   9. beggTest()            → rank-correlation bias test
+//  10. fatPetTest()          → FAT/PET regression
+//  11. failSafeN()           → Rosenthal + Orwin fail-safe N
+//  12. influenceDiagnostics()→ leave-one-out, DFBETA, hat, Cook's D
+//  13. subgroupAnalysis()    → per-group pooling + Q_between
+//  14. Back-transform estimates through profile.transform() for display
+//  15. Write results panel HTML
+//  16. renderStudyTable(), renderSensitivityPanel()
+//  17. metaRegression() → renderRegressionPanel() + drawBubble() per moderator
+//  18. drawForest()  (page 0) → renderForestNav()
+//       ↳ caches args in _forestArgs for page-navigation re-renders
+//  19. Caches full state in _reportArgs for HTML-export buttons
+//  20. drawFunnel(), drawInfluencePlot()
+//  21. cumulativeMeta() → drawCumulativeForest()
+//  22. updateValidationWarnings()
+//  23. return true
+//
+// Side effects
+// ------------
+//   DOM   — rewrites #results, #forestPlot, #funnelPlot, #influencePlot,
+//            #cumulativeForestPlot, #studyTable, #sensitivityPanel,
+//            #regressionPanel, #bubblePlots, forest nav buttons, stale banner
+//   State — _forestArgs, _reportArgs, _hasRunOnce, forestPage ← 0
+// -----------------------------------------------------------------------------
 function runAnalysis() {
   scheduleSave();
   const type = document.getElementById("effectType").value;
