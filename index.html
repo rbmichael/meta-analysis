@@ -87,12 +87,12 @@
       <!-- Settings row 1: effect type, τ² method, CI method -->
       <div class="settings-row">
         <label>
-          Effect type<button class="help-btn" data-help-select="effectType" data-help-prefix="effect." title="Help">?</button>
+          <span>Effect type<button class="help-btn" data-help-select="effectType" data-help-prefix="effect." title="Help">?</button></span>
           <select id="effectType"></select>
         </label>
 
         <label>
-          τ² estimator<button class="help-btn" data-help-select="tauMethod" data-help-prefix="tau." title="Help">?</button>
+          <span>τ² estimator<button class="help-btn" data-help-select="tauMethod" data-help-prefix="tau." title="Help">?</button></span>
           <select id="tauMethod">
             <option value="DL">DerSimonian-Laird (DL)</option>
             <option value="REML">REML</option>
@@ -110,7 +110,7 @@
         </label>
 
         <label>
-          CI method<button class="help-btn" data-help-select="ciMethod" data-help-prefix="ci." title="Help">?</button>
+          <span>CI method<button class="help-btn" data-help-select="ciMethod" data-help-prefix="ci." title="Help">?</button></span>
           <select id="ciMethod">
             <option value="normal">Normal CI</option>
             <option value="KH">Knapp-Hartung</option>
@@ -123,7 +123,7 @@
       <!-- Settings row 2: cumulative order, trim-and-fill -->
       <div class="settings-row">
         <label>
-          Cumulative order<button class="help-btn" data-help-select="cumulativeOrder" data-help-prefix="cumorder." title="Help">?</button>
+          <span>Cumulative order<button class="help-btn" data-help-select="cumulativeOrder" data-help-prefix="cumorder." title="Help">?</button></span>
           <select id="cumulativeOrder">
             <option value="input">Input order</option>
             <option value="precision_desc">Most precise first</option>
