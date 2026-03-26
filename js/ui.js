@@ -474,17 +474,21 @@ _themeToggle.addEventListener("click", () => {
 const _inputSection  = document.getElementById("inputSection");
 const _outputSection = document.getElementById("outputSection");
 const _guideSection  = document.getElementById("guideSection");
+const _aboutSection  = document.getElementById("aboutSection");
 const _toggleInput   = document.getElementById("toggleInput");
 const _toggleResults = document.getElementById("toggleResults");
 const _toggleGuide   = document.getElementById("toggleGuide");
+const _toggleAbout   = document.getElementById("toggleAbout");
 
 function showView(name) {
   _inputSection.style.display  = name === "input"   ? "" : "none";
   _outputSection.style.display = name === "results" ? "" : "none";
   _guideSection.style.display  = name === "guide"   ? "" : "none";
+  _aboutSection.style.display  = name === "about"   ? "" : "none";
   _toggleInput.classList.toggle("active",   name === "input");
   _toggleResults.classList.toggle("active", name === "results");
   _toggleGuide.classList.toggle("active",   name === "guide");
+  _toggleAbout.classList.toggle("active",   name === "about");
   window.scrollTo(0, 0);
   if (name === "guide") renderGuide(document.getElementById("guidePanel"));
 }
@@ -494,6 +498,7 @@ _toggleResults.disabled = true;
 _toggleInput.addEventListener("click",   () => showView("input"));
 _toggleResults.addEventListener("click", () => { if (!_toggleResults.disabled) showView("results"); });
 _toggleGuide.addEventListener("click",   () => showView("guide"));
+_toggleAbout.addEventListener("click",   () => showView("about"));
 
 // Show input view by default; output hidden until first run switches to it.
 showView("input");

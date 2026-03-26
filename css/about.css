@@ -1,0 +1,161 @@
+/* ================================================================
+   ABOUT SECTION
+   ================================================================ */
+
+/* Escape appLayout padding/max-width — mirrors the #guideSection pattern */
+#aboutSection {
+  margin: -20px -20px 0;
+  height: calc(100vh - 44px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+
+#aboutSection::-webkit-scrollbar       { width: 5px; }
+#aboutSection::-webkit-scrollbar-track { background: transparent; }
+#aboutSection::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 9999px; }
+
+/* ---- Content column ---- */
+#aboutContent {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 40px 48px 64px;
+  font-size: 0.9rem;
+  line-height: 1.7;
+  color: var(--fg);
+}
+
+/* ---- Intro paragraph ---- */
+.about-intro {
+  font-size: 1rem;
+  color: var(--fg);
+  margin: 0 0 36px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* ---- Section headings ---- */
+#aboutContent h2 {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--fg-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin: 36px 0 12px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* ---- Body text ---- */
+#aboutContent p {
+  margin: 0 0 12px;
+  color: var(--fg-subtle);
+}
+
+/* ---- Lists ---- */
+#aboutContent ul,
+#aboutContent ol:not(.about-refs) {
+  margin: 0 0 16px;
+  padding-left: 1.4em;
+  color: var(--fg-subtle);
+}
+
+#aboutContent li {
+  margin-bottom: 5px;
+}
+
+/* Strong labels inside list items keep full foreground colour */
+#aboutContent li strong {
+  color: var(--fg);
+}
+
+/* ---- Inline code ---- */
+#aboutContent code {
+  font-family: var(--font-mono);
+  font-size: 0.875em;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  padding: 1px 5px;
+  color: var(--accent-light);
+}
+
+/* ---- Table wrapper — enables horizontal scroll on narrow viewports ---- */
+.about-table-wrap {
+  overflow-x: auto;
+  margin-bottom: 16px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+
+.about-table-wrap::-webkit-scrollbar       { height: 4px; }
+.about-table-wrap::-webkit-scrollbar-track { background: transparent; }
+.about-table-wrap::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 9999px; }
+
+/* Tables — override the global table/th/td reset (center alignment, 20px margin) */
+#aboutContent table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+  margin-bottom: 0;
+}
+
+#aboutContent th {
+  background: var(--bg-th);
+  color: var(--fg-muted);
+  font-weight: 500;
+  font-size: 0.75rem;
+  text-align: left;
+  padding: 7px 12px;
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+#aboutContent td {
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  text-align: left;
+  color: var(--fg-subtle);
+  vertical-align: top;
+}
+
+/* First column: label / category — visually distinct */
+#aboutContent td:first-child {
+  color: var(--fg);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+#aboutContent tr:nth-child(even) td {
+  background: var(--bg-row-alt);
+}
+
+/* ---- References list ---- */
+.about-refs {
+  margin: 0 0 12px;
+  padding-left: 1.8em;
+  font-size: 0.8125rem;
+  color: var(--fg-muted);
+  line-height: 1.75;
+}
+
+.about-refs li {
+  margin-bottom: 5px;
+}
+
+.about-refs em {
+  color: var(--fg-subtle);
+  font-style: italic;
+}
+
+/* ---- Responsive ---- */
+@media (max-width: 700px) {
+  #aboutContent {
+    padding: 24px 20px 40px;
+  }
+
+  /* Allow category column to wrap on small screens */
+  #aboutContent td:first-child {
+    white-space: normal;
+  }
+}

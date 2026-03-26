@@ -35,6 +35,7 @@
     <button class="toggle-btn active" id="toggleInput"   data-view="input">Input</button>
     <button class="toggle-btn"        id="toggleResults" data-view="results">Results</button>
     <button class="toggle-btn"        id="toggleGuide"   data-view="guide">Guide</button>
+    <button class="toggle-btn"        id="toggleAbout"   data-view="about">About</button>
   </div>
   <button id="themeToggle" class="theme-toggle-btn" title="Switch to light mode" aria-label="Toggle colour theme"></button>
 </header>
@@ -460,6 +461,178 @@
       <div class="guide-content"></div>
     </div>
   </div><!-- #guideSection -->
+
+  <!-- =========== ABOUT =========== -->
+  <div id="aboutSection" style="display:none">
+    <article id="aboutContent">
+
+      <p class="about-intro">A browser-based meta-analysis tool. No installation, no server, no
+      dependencies beyond a modern browser. All computation runs locally in JavaScript — data
+      never leaves the machine.</p>
+
+      <!-- ---- Effect types ---- -->
+      <h2>Effect types</h2>
+      <div class="about-table-wrap">
+        <table class="stat-table">
+          <thead><tr><th>Category</th><th>Measures</th></tr></thead>
+          <tbody>
+            <tr>
+              <td>Continuous — two groups</td>
+              <td>Mean Difference (MD), Hedges' <em>g</em> (SMD), SMD heteroscedastic (SMDH), Ratio of Means (ROM)</td>
+            </tr>
+            <tr>
+              <td>Continuous — paired</td>
+              <td>Mean Difference Paired (MD_paired), Standardised Mean Change / pre-SD (SMD_paired), Standardised Mean Change / change-score SD (SMCC)</td>
+            </tr>
+            <tr>
+              <td>Continuous — single group</td>
+              <td>Mean raw (MN), Mean log (MNLN)</td>
+            </tr>
+            <tr>
+              <td>Variability</td>
+              <td>Coefficient of Variation Ratio (CVR), Variability Ratio (VR)</td>
+            </tr>
+            <tr>
+              <td>Binary outcomes</td>
+              <td>Odds Ratio (OR), Risk Ratio (RR), Risk Difference (RD), Generalised Odds Ratio — ordinal (GOR)</td>
+            </tr>
+            <tr>
+              <td>Correlations</td>
+              <td>Pearson <em>r</em> (COR), Fisher's <em>z</em> (ZCOR), Partial <em>r</em> (PCOR), Partial Fisher's <em>z</em> (ZPCOR), Phi (PHI), Tetrachoric (RTET)</td>
+            </tr>
+            <tr>
+              <td>Proportions</td>
+              <td>Raw (PR), Log (PLN), Logit (PLO), Arcsine (PAS), Freeman-Tukey double arcsine (PFT)</td>
+            </tr>
+            <tr>
+              <td>Time-to-event / Rates</td>
+              <td>Hazard Ratio (HR), Incidence Rate Ratio (IRR), Incidence Rate log (IR)</td>
+            </tr>
+            <tr>
+              <td>Generic</td>
+              <td>Pre-computed <em>y</em><sub>i</sub> / <em>v</em><sub>i</sub> (GENERIC)</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- ---- Heterogeneity ---- -->
+      <h2>Heterogeneity</h2>
+      <ul>
+        <li><strong>τ² estimators:</strong> REML (default), DerSimonian–Laird, Paule–Mandel, Maximum Likelihood, Hunter–Schmidt, Hedges, Sidik–Jonkman, Generalised Q</li>
+        <li><strong>CI methods:</strong> Normal/Wald, Knapp–Hartung, <em>t</em>-distribution, Profile Likelihood (REML or ML)</li>
+        <li><strong>Statistics:</strong> Cochran's <em>Q</em>, <em>I</em>², <em>H</em>², τ², 95% prediction interval (Higgins 2009)</li>
+        <li><strong>Confidence intervals on heterogeneity:</strong> Profile-likelihood CIs for τ², <em>I</em>², <em>H</em>²</li>
+      </ul>
+
+      <!-- ---- Publication bias ---- -->
+      <h2>Publication bias</h2>
+      <ul>
+        <li><strong>Egger's regression</strong> — intercept test for funnel plot asymmetry</li>
+        <li><strong>Begg's rank correlation</strong> — Kendall's τ<sub>b</sub> with tie correction</li>
+        <li><strong>FAT-PET</strong> — funnel asymmetry test and precision-effect test</li>
+        <li><strong>Fail-safe N</strong> — Rosenthal and Orwin estimators</li>
+        <li><strong>Trim-and-fill</strong> (L0) — imputes missing studies and reports the adjusted pooled estimate</li>
+        <li><strong>Funnel plot</strong> — standard or contour-enhanced (α = .10, .05, .01 regions)</li>
+      </ul>
+
+      <!-- ---- P-value analyses ---- -->
+      <h2>P-value analyses</h2>
+      <ul>
+        <li><strong>P-curve</strong> — distribution of significant <em>p</em>-values; tests for evidential value and right-skew (Simonsohn et al., 2014)</li>
+        <li><strong>P-uniform*</strong> — publication-bias-corrected effect size estimate using the <em>p</em>-value distribution (van Assen et al., 2015)</li>
+      </ul>
+
+      <!-- ---- Sensitivity & influence ---- -->
+      <h2>Sensitivity and influence</h2>
+      <ul>
+        <li><strong>Leave-one-out</strong> — flags studies whose omission would flip statistical significance</li>
+        <li><strong>Influence diagnostics</strong> — Cook's distance, DFBETA, hat values, standardised residuals, Δτ²</li>
+        <li><strong>Influence and Baujat plots</strong> — per-study leverage and heterogeneity contribution visualised</li>
+        <li><strong>Estimator comparison</strong> — runs all τ² estimators side-by-side on the current dataset</li>
+        <li><strong>Cumulative meta-analysis</strong> — adds studies in user-selected order (input order, precision, or effect size)</li>
+      </ul>
+
+      <!-- ---- Meta-regression ---- -->
+      <h2>Meta-regression</h2>
+      <p>Continuous and categorical moderators; multiple moderators may be added simultaneously.
+      Results include coefficients, standard errors, <em>z</em>/<em>t</em> statistics,
+      <em>p</em>-values, and <em>R</em>² (proportion of heterogeneity explained).
+      Bubble plots are generated per continuous moderator.</p>
+
+      <!-- ---- Subgroup analysis ---- -->
+      <h2>Subgroup analysis</h2>
+      <p>Studies are assigned to named groups via the Group column. Pooled estimates are reported
+      within each subgroup alongside <em>Q</em><sub>between</sub>, degrees of freedom, and the
+      between-group <em>p</em>-value.</p>
+
+      <!-- ---- Risk of bias ---- -->
+      <h2>Risk of bias</h2>
+      <p>User-defined RoB domains with Low / Some concerns / High / Not reported ratings per study.
+      Visualised as a per-study traffic light grid and a per-domain summary bar chart.</p>
+
+      <!-- ---- Plots ---- -->
+      <h2>Plots</h2>
+      <p>All plots export as SVG, PNG, or TIFF.</p>
+      <div class="about-table-wrap">
+        <table class="stat-table">
+          <thead><tr><th>Plot</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td>Forest plot</td><td>Study CIs + pooled diamond(s). Toggle FE / RE / both. Four visual themes. Paginated.</td></tr>
+            <tr><td>Funnel plot</td><td>Effect vs. SE with Egger regression line. Standard or contour-enhanced (p-value regions).</td></tr>
+            <tr><td>Influence plot</td><td>Per-study leverage and Cook's distance visualised as a bubble chart.</td></tr>
+            <tr><td>Baujat plot</td><td>Heterogeneity contribution vs. overall influence; quadrant guides at the mean.</td></tr>
+            <tr><td>Cumulative forest plot</td><td>Cumulative pooled estimate as studies are added in sequence. Paginated.</td></tr>
+            <tr><td>Cumulative funnel plot</td><td>Funnel at each cumulative step; slider-controlled.</td></tr>
+            <tr><td>Orchard plot</td><td>Effect estimates as precision-sized dots with RE diamond and prediction interval.</td></tr>
+            <tr><td>Caterpillar plot</td><td>Studies sorted by effect size with 95% CIs; group colour-coding. Paginated.</td></tr>
+            <tr><td>P-curve</td><td>Distribution of significant <em>p</em>-values with right-skew and flatness tests.</td></tr>
+            <tr><td>P-uniform*</td><td>Publication-bias-corrected effect size estimate.</td></tr>
+            <tr><td>RoB traffic light</td><td>Per-study, per-domain ratings as a colour-coded grid.</td></tr>
+            <tr><td>RoB summary</td><td>Stacked bar chart of domain-level rating distributions.</td></tr>
+            <tr><td>Bubble plots</td><td>Meta-regression fit per continuous moderator, bubbles sized by weight.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- ---- Data input ---- -->
+      <h2>Data input</h2>
+      <ul>
+        <li><strong>Manual entry</strong> — inline editable table with per-field validation and error highlighting</li>
+        <li><strong>CSV import</strong> — auto-detects delimiter and effect type from column headers; preview panel with column-mapping controls before committing</li>
+        <li><strong>Session save / load</strong> — full application state (data, settings, moderators, RoB ratings) serialised to JSON</li>
+        <li><strong>Auto-save</strong> — drafts written to <code>localStorage</code>; a recovery banner appears on reload if unsaved changes exist</li>
+      </ul>
+      <p>CSV column names match the input fields for each effect type (e.g. <code>m1, sd1, n1, m2, sd2, n2</code>
+      for MD; <code>a, b, c, d</code> for OR). A <code>label</code> column is optional but recommended.
+      A <code>group</code> column assigns studies to subgroups.</p>
+
+      <!-- ---- Export ---- -->
+      <h2>Export</h2>
+      <ul>
+        <li><strong>HTML report</strong> — self-contained document with all results tables and plots as inline SVG</li>
+        <li><strong>PDF</strong> — via the browser's print dialog</li>
+        <li><strong>SVG / PNG / TIFF</strong> — individual plot export from each plot's toolbar</li>
+      </ul>
+
+      <!-- ---- References ---- -->
+      <h2>Statistical references</h2>
+      <ol class="about-refs">
+        <li>Borenstein M, Hedges LV, Higgins JPT, Rothstein HR (2009). <em>Introduction to Meta-Analysis.</em> Wiley.</li>
+        <li>DerSimonian R, Laird N (1986). Meta-analysis in clinical trials. <em>Controlled Clinical Trials,</em> 7, 177–188.</li>
+        <li>Hedges LV, Olkin I (1985). <em>Statistical Methods for Meta-Analysis.</em> Academic Press.</li>
+        <li>Higgins JPT, Thompson SG, Spiegelhalter DJ (2009). A re-evaluation of random-effects meta-analysis. <em>J R Stat Soc A,</em> 172, 137–159.</li>
+        <li>Knapp G, Hartung J (2003). Improved tests for a random effects meta-regression with a single covariate. <em>Stat Med,</em> 22, 2693–2710.</li>
+        <li>Morris SB (2008). Estimating effect sizes from pretest-posttest-control group designs. <em>Org Res Methods,</em> 11, 364–386.</li>
+        <li>Paule RC, Mandel J (1982). Consensus values and weighting factors. <em>J Res Natl Bur Stand,</em> 87, 377–385.</li>
+        <li>Simonsohn U, Nelson LD, Simmons JP (2014). P-curve: A key to the file-drawer. <em>J Exp Psychol Gen,</em> 143(2), 534–547.</li>
+        <li>van Assen MALM, van Aert RCM, Wicherts JM (2015). Meta-analysis using effect size distributions of only statistically significant studies. <em>Psychol Methods,</em> 20(3), 293–309.</li>
+        <li>Viechtbauer W (2005). Bias and efficiency of meta-analytic variance estimators in the random-effects model. <em>J Educ Behav Stat,</em> 30, 261–293.</li>
+        <li>Viechtbauer W (2010). Conducting meta-analyses in R with the metafor package. <em>J Stat Softw,</em> 36(3), 1–48.</li>
+      </ol>
+
+    </article>
+  </div><!-- #aboutSection -->
 
 </div><!-- #appLayout -->
 
