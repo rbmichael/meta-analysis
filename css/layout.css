@@ -1,0 +1,309 @@
+/* ---- Input / Output sections ---- */
+.section {
+  background: linear-gradient(160deg, var(--bg-th) 0%, var(--bg-row-alt) 100%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-md);
+  padding: 20px 24px;
+  margin-bottom: 24px;
+}
+
+.section-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 12px;
+  margin-bottom: 16px;
+}
+
+/* When standalone (no row wrapper), title carries its own separator */
+.section-title {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+  margin: 0;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 14px;
+}
+
+/* When inside a row wrapper the row handles the separator */
+.section-title-row .section-title {
+  padding-bottom: 0;
+  border-bottom: none;
+  margin-bottom: 0;
+}
+
+/* ---- Report export buttons (HTML / PDF) + resolution selector ---- */
+.report-export {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.export-scale-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--fg-muted);
+  margin-right: 6px;
+}
+
+.export-scale-label select {
+  width: auto;
+  min-width: 155px;
+  font-size: 1em;
+}
+
+.report-btn {
+  padding: 3px 10px;
+  font-size: 0.75rem;
+  background: var(--bg-surface);
+  border-radius: var(--radius-sm);
+  margin: 0;
+}
+
+.report-btn:hover {
+  background: var(--bg-surface-hover);
+  color: var(--fg);
+  border-color: var(--border-accent);
+}
+
+/* Settings dropdowns laid out in a horizontal row */
+.settings-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: flex-end;
+  margin-bottom: 14px;
+}
+
+.settings-row label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--fg-muted);
+}
+
+/* Inline labels (checkboxes) stay horizontal */
+.settings-row label.inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 7px;
+  color: var(--fg);
+  font-size: 0.875rem;
+  font-weight: 400;
+  cursor: pointer;
+}
+
+.settings-row select,
+.settings-row input[type="text"] {
+  width: auto;
+  min-width: 160px;
+}
+
+/* ---- Help buttons ---- */
+.help-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  padding: 0;
+  margin: 0 0 0 5px;
+  font-size: 0.68em;
+  font-weight: 600;
+  line-height: 1;
+  background: var(--accent-subtle);
+  color: var(--accent);
+  border: 1px solid var(--border-accent);
+  border-radius: var(--radius-full);
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+
+.help-btn:hover {
+  background: var(--accent-glow);
+  color: var(--accent-bright);
+  border-color: var(--border-accent-strong);
+}
+
+/* ---- Help popover ---- */
+#helpPopover {
+  position: fixed;
+  z-index: 9999;
+  width: 320px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-accent);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg), var(--shadow-accent);
+  padding: 10px 12px 12px;
+  font-size: 0.82em;
+}
+
+.help-popover-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.help-popover-title {
+  font-weight: 600;
+  color: var(--color-info);
+  font-size: 1em;
+}
+
+.help-popover-close {
+  background: none;
+  border: none;
+  font-size: 1.1em;
+  padding: 0 0 0 8px;
+  line-height: 1;
+  margin: 0;
+  transition: color var(--t-fast);
+}
+
+.help-popover-close:hover { color: var(--fg); }
+
+.help-popover-body {
+  color: var(--fg-subtle);
+  line-height: 1.6;
+  margin: 0;
+}
+
+.help-popover-guide-link {
+  display: block;
+  margin-top: 8px;
+  font-size: 0.88em;
+  color: var(--accent-light);
+  text-decoration: none;
+  cursor: pointer;
+}
+.help-popover-guide-link:hover { text-decoration: underline; }
+
+/* ================================================================
+   APP SHELL — header + layout
+   ================================================================ */
+
+/* ---- Fixed top bar ---- */
+#appHeader {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 44px;
+  background: var(--bg-header);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  z-index: 100;
+  flex-shrink: 0;
+  gap: 12px;
+}
+
+@media (max-width: 480px) {
+  #appTitle { display: none; }
+  #appHeader { justify-content: center; }
+}
+
+#appTitle {
+  font-size: 0.875rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--fg-muted);
+}
+
+/* ---- View toggle (segmented control) ---- */
+#viewToggleGroup {
+  display: flex;
+  gap: 2px;
+  background: var(--bg-pill);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 3px;
+}
+
+.toggle-btn {
+  padding: 4px 18px;
+  background: transparent;
+  border: none;
+  border-radius: 5px;
+  margin: 0;
+  transition: background var(--t-fast), color var(--t-fast), box-shadow var(--t-fast);
+}
+
+.toggle-btn:hover {
+  color: var(--fg);
+  background: var(--bg-surface);
+}
+
+.toggle-btn.active {
+  background: var(--accent-glow);
+  color: var(--accent-light);
+  box-shadow: 0 0 0 1px var(--border-accent);
+}
+
+/* ---- Theme toggle button ---- */
+.theme-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1;
+  background: transparent;
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+}
+
+.theme-toggle-btn:hover {
+  background: var(--bg-surface);
+  color: var(--fg);
+  border-color: var(--border-hover);
+}
+
+/* Stale indicator dot on the Results button */
+#toggleResults.stale::after {
+  content: "";
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  background: var(--color-warning);
+  border-radius: 50%;
+  margin-left: 5px;
+  vertical-align: middle;
+}
+
+/* ---- Single-column layout, sits below the fixed header ---- */
+#appLayout {
+  margin-top: 44px;
+  margin-left: auto;
+  margin-right: auto;
+  max-width: 1200px;
+  padding: 20px;
+  box-sizing: border-box;
+}
+
+/* ---- Output placeholder (shown before first run) ---- */
+#outputPlaceholder {
+  color: var(--fg-muted);
+  font-size: 0.875rem;
+  padding: 48px 0 24px;
+  text-align: center;
+  opacity: 0.5;
+}

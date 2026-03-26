@@ -1,0 +1,312 @@
+/* ================================================================
+   OUTPUT SECTION
+   ================================================================ */
+
+/* ---- Main results summary block ---- */
+#results {
+  font-size: 0.875rem;
+  line-height: 1.9;
+  color: var(--fg);
+  margin-bottom: 16px;
+}
+
+#results b {
+  color: var(--fg);
+  font-weight: 600;
+}
+
+/* Override legacy border="1" attribute on JS-generated tables */
+#results table {
+  border-collapse: collapse;
+  border: none;
+  margin: 8px 0 12px;
+  font-size: 0.8125rem;
+  max-width: 100%;
+}
+
+#results th {
+  background: var(--bg-th);
+  color: var(--fg-muted);
+  font-weight: 500;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  text-align: left;
+  white-space: nowrap;
+}
+
+#results td {
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  color: var(--fg);
+  text-align: right;
+}
+
+#results td:first-child {
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+}
+
+#results tr:nth-child(even) td { background: var(--bg-row-alt); }
+
+/* Flagged rows in the influence table (class applied by JS) */
+.results-row-flagged td {
+  background: var(--badge-error-bg-faint) !important;
+}
+
+/* ================================================================
+   REGRESSION PANEL
+   ================================================================ */
+
+#regressionPanel {
+  margin: 16px 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  max-width: 900px;
+  box-shadow: var(--shadow-sm);
+}
+
+.reg-header {
+  background: var(--accent-subtle);
+  border-bottom: 1px solid var(--border-accent);
+  padding: 10px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.reg-title {
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: var(--fg);
+}
+
+.reg-meta {
+  font-size: 0.75rem;
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+}
+
+.reg-het {
+  background: var(--bg-row-alt);
+  padding: 7px 16px;
+  font-size: 0.8rem;
+  color: var(--fg-muted);
+  border-bottom: 1px solid var(--border);
+  font-family: var(--font-mono);
+  line-height: 1.8;
+}
+
+.reg-body {
+  padding: 12px 16px;
+}
+
+.reg-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 8px;
+  font-size: 0.8125rem;
+}
+
+.reg-table th {
+  background: var(--bg-th);
+  font-weight: 500;
+  color: var(--fg-muted);
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.reg-table td {
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  text-align: right;
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+}
+
+.reg-table th:first-child,
+.reg-table td:first-child {
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+}
+
+.reg-table tr:nth-child(even) td { background: var(--bg-row-alt); }
+
+.reg-intercept td {
+  color: var(--fg-muted);
+  font-style: italic;
+}
+
+/* Significance stars — domain-standard color encoding */
+.reg-sig-3 { color: var(--reg-sig-3-color); font-weight: 600; }
+.reg-sig-2 { color: var(--reg-sig-2-color); font-weight: 600; }
+.reg-sig-1 { color: var(--reg-sig-1-color); }
+
+.reg-note {
+  font-size: 0.75rem;
+  color: var(--fg-muted);
+  opacity: 0.7;
+  margin-top: 8px;
+  line-height: 1.6;
+}
+
+/* Warning variant of reg-note (replaces inline style="color:#ff9f43") */
+.reg-warn {
+  color: var(--color-warning);
+  opacity: 1;
+}
+
+/* Fitted values accordion */
+#regressionPanel details {
+  margin-top: 12px;
+}
+
+#regressionPanel details > summary {
+  cursor: pointer;
+  font-size: 0.8125rem;
+  color: var(--fg-muted);
+  user-select: none;
+  list-style: none;
+  padding: 3px 0;
+  transition: color var(--t-fast);
+}
+
+#regressionPanel details > summary::-webkit-details-marker { display: none; }
+
+#regressionPanel details > summary::before      { content: "▸"; margin-right: 5px; font-size: 0.8em; }
+#regressionPanel details[open] > summary::before { content: "▾"; color: var(--accent); }
+#regressionPanel details[open] > summary         { color: var(--fg); }
+
+#regressionPanel details .reg-table {
+  margin-top: 8px;
+}
+
+/* ---- Study-level results table ---- */
+#studyTable {
+  margin: 8px 0 16px;
+  overflow-x: auto;
+  max-width: 900px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+
+#studyTable::-webkit-scrollbar       { height: 5px; }
+#studyTable::-webkit-scrollbar-track { background: transparent; }
+#studyTable::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 9999px; }
+
+.study-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+}
+
+.study-table th {
+  background: var(--bg-th);
+  font-weight: 500;
+  color: var(--fg-muted);
+  text-align: right;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.study-table th:first-child { text-align: left; }
+
+.study-table td {
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  text-align: right;
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+}
+
+.study-table td:first-child {
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+}
+
+.study-table tr:nth-child(even) td { background: var(--bg-row-alt); }
+
+.study-table .imputed-row td {
+  color: var(--fg-subtle);
+  font-style: italic;
+}
+
+.study-table .pooled-row td {
+  color: var(--accent-light);
+  font-weight: 600;
+  background: var(--accent-subtle);
+  border-top: 1px solid var(--border-accent);
+}
+
+/* ================================================================
+   RESULTS ACCORDION
+   ================================================================ */
+
+#coreSection,
+#forestSection {
+  margin-bottom: 0;
+}
+
+.results-section {
+  border-top: 1px solid var(--border);
+  margin: 0;
+}
+
+.results-section:last-child {
+  border-bottom: 1px solid var(--border);
+}
+
+.results-section > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 11px 4px;
+  cursor: pointer;
+  font-size: 0.78em;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+  list-style: none;
+  user-select: none;
+  outline: none;
+}
+
+.results-section > summary::-webkit-details-marker {
+  display: none;
+}
+
+.results-section > summary::after {
+  content: "";
+  display: inline-block;
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 6px solid var(--fg-muted);
+  transition: transform 0.18s ease;
+  flex-shrink: 0;
+}
+
+.results-section[open] > summary::after {
+  transform: rotate(180deg);
+}
+
+.results-section > summary:hover {
+  color: var(--fg);
+}
+
+.results-section > summary:hover::after {
+  border-top-color: var(--fg);
+}
+
+.results-section-body {
+  padding-bottom: 8px;
+}

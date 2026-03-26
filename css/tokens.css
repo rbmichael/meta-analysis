@@ -1,0 +1,127 @@
+/* ================================================================
+   DESIGN TOKENS
+   light-dark(lightVal, darkVal) resolves via the color-scheme property:
+     :root sets color-scheme: light dark  (follows OS preference)
+     [data-theme="light"] forces color-scheme: light
+     [data-theme="dark"]  forces color-scheme: dark
+   ================================================================ */
+:root {
+  color-scheme: light dark;
+
+  /* Backgrounds */
+  --bg-deep:          light-dark(#f0f0f3, #020203);
+  --bg-base:          light-dark(#ffffff, #050506);
+  --bg-elevated:      light-dark(#f5f5f8, #0a0a0c);
+  --bg-surface:       light-dark(rgba(0,0,0,0.03), rgba(255,255,255,0.05));
+  --bg-surface-hover: light-dark(rgba(0,0,0,0.05), rgba(255,255,255,0.08));
+  --bg-header:        light-dark(rgba(245,245,248,0.85), rgba(5,5,6,0.85));
+
+  /* Foreground */
+  --fg:               light-dark(#111113, #EDEDEF);
+  --fg-muted:         light-dark(#6b7180, #8A8F98);
+  --fg-subtle:        light-dark(rgba(0,0,0,0.55), rgba(255,255,255,0.60));
+
+  /* Accent */
+  --accent:           #5E6AD2;
+  --accent-bright:    light-dark(#4a55c2, #6872D9);
+  --accent-light:     light-dark(#4550b8, #a8b0e8);
+  --accent-glow:      light-dark(rgba(94,106,210,0.15), rgba(94,106,210,0.30));
+
+  /* Borders */
+  --border:           light-dark(rgba(0,0,0,0.09), rgba(255,255,255,0.06));
+  --border-hover:     light-dark(rgba(0,0,0,0.15), rgba(255,255,255,0.10));
+  --border-accent:    light-dark(rgba(94,106,210,0.35), rgba(94,106,210,0.30));
+
+  /* Semantic */
+  --color-success:    light-dark(#1a7a50, #4caf82);
+  --color-warning:    light-dark(#8a6000, #f0c060);
+  --color-error:      light-dark(#b03030, #e06060);
+  --color-info:       light-dark(#3a6a9a, #99b8d4);
+
+  /* Semantic badge tints (bg + border) */
+  --badge-success-bg:     light-dark(rgba(26,122,80,0.10),   rgba(76,175,130,0.12));
+  --badge-success-border: light-dark(rgba(26,122,80,0.25),   rgba(76,175,130,0.28));
+  --badge-warning-bg:     light-dark(rgba(138,96,0,0.10),    rgba(240,192,96,0.10));
+  --badge-warning-border: light-dark(rgba(138,96,0,0.25),    rgba(240,192,96,0.28));
+  --badge-error-bg:       light-dark(rgba(176,48,48,0.10),   rgba(224,96,96,0.10));
+  --badge-error-border:   light-dark(rgba(176,48,48,0.25),   rgba(224,96,96,0.28));
+
+  /* UI surface tints */
+  --bg-th:            light-dark(rgba(0,0,0,0.04), rgba(255,255,255,0.04));
+  --bg-row-alt:       light-dark(rgba(0,0,0,0.02), rgba(255,255,255,0.02));
+  --bg-pill:          light-dark(rgba(0,0,0,0.04), rgba(255,255,255,0.03));
+  --bg-ghost:         light-dark(rgba(0,0,0,0.05), rgba(255,255,255,0.06));
+  --bg-ghost-hover:   light-dark(rgba(0,0,0,0.08), rgba(255,255,255,0.09));
+  --bg-summary-hover: light-dark(rgba(0,0,0,0.06), rgba(255,255,255,0.07));
+
+  /* Scrollbar */
+  --scrollbar-thumb:           light-dark(rgba(0,0,0,0.15), rgba(255,255,255,0.12));
+  --scrollbar-thumb-hover:     light-dark(rgba(0,0,0,0.25), rgba(255,255,255,0.20));
+
+  /* Disabled state */
+  --fg-disabled:               light-dark(rgba(0,0,0,0.25),   rgba(255,255,255,0.15));
+  --border-disabled:           light-dark(rgba(0,0,0,0.10),   rgba(255,255,255,0.05));
+
+  /* Accent button inner highlight */
+  --btn-inner-highlight:       light-dark(rgba(255,255,255,0.70), rgba(255,255,255,0.10));
+  --btn-inner-highlight-hover: light-dark(rgba(255,255,255,0.80), rgba(255,255,255,0.15));
+  --shadow-inner:              light-dark(rgba(255,255,255,0.70), rgba(255,255,255,0.12));
+
+  /* Shadows */
+  --shadow-sm:     0 1px 3px light-dark(rgba(0,0,0,0.08), rgba(0,0,0,0.40)), 0 0 0 1px var(--bg-th);
+  --shadow-md:     0 0 0 1px var(--border), 0 2px 20px light-dark(rgba(0,0,0,0.08), rgba(0,0,0,0.40)), 0 0 40px light-dark(rgba(0,0,0,0.04), rgba(0,0,0,0.20));
+  --shadow-lg:     0 0 0 1px var(--border-hover), 0 8px 40px light-dark(rgba(0,0,0,0.12), rgba(0,0,0,0.50)), 0 0 80px light-dark(rgba(94,106,210,0.08), rgba(94,106,210,0.10));
+  --shadow-accent: 0 0 0 1px light-dark(rgba(94,106,210,0.40), rgba(94,106,210,0.50)), 0 4px 12px light-dark(rgba(94,106,210,0.20), rgba(94,106,210,0.30)), inset 0 1px 0 0 var(--shadow-inner);
+  /* Focus ring */
+  --shadow-focus:  0 0 0 3px light-dark(rgba(94,106,210,0.20), rgba(94,106,210,0.28));
+
+  /* Accent tint background — subtle filled surface for headers, focused cells, pooled rows */
+  --accent-subtle:              light-dark(rgba(94,106,210,0.06), rgba(94,106,210,0.10));
+
+  /* Accent button chrome — border + layered glow shadows */
+  --border-accent-strong:       light-dark(rgba(94,106,210,0.45), rgba(94,106,210,0.55));
+  --shadow-btn-accent:          0 0 0 1px light-dark(rgba(94,106,210,0.40), rgba(94,106,210,0.50)), 0 2px 8px light-dark(rgba(94,106,210,0.22), rgba(94,106,210,0.30)), inset 0 1px 0 var(--btn-inner-highlight);
+  --shadow-btn-accent-hover:    0 0 0 1px light-dark(rgba(94,106,210,0.50), rgba(94,106,210,0.60)), 0 4px 16px light-dark(rgba(94,106,210,0.30), rgba(94,106,210,0.40)), inset 0 1px 0 var(--btn-inner-highlight-hover);
+
+  /* Extended badge tints — error hover/glow/faint, warning faint/hover, info */
+  --badge-error-bg-faint:       light-dark(rgba(176,48,48,0.05),  rgba(224,96,96,0.07));
+  --badge-error-bg-hover:       light-dark(rgba(176,48,48,0.13),  rgba(224,96,96,0.17));
+  --badge-error-border-hover:   light-dark(rgba(176,48,48,0.28),  rgba(224,96,96,0.35));
+  --badge-error-glow:           light-dark(rgba(176,48,48,0.14),  rgba(224,96,96,0.18));
+  --badge-warning-bg-faint:     light-dark(rgba(138,96,0,0.07),   rgba(240,192,96,0.08));
+  --badge-warning-bg-hover:     light-dark(rgba(138,96,0,0.12),   rgba(240,192,96,0.14));
+  --badge-warning-border-hover: light-dark(rgba(138,96,0,0.25),   rgba(240,192,96,0.28));
+  --badge-info-bg:              light-dark(rgba(58,106,154,0.08),  rgba(153,184,212,0.10));
+  --badge-info-border:          light-dark(rgba(58,106,154,0.30),  rgba(153,184,212,0.40));
+  --badge-info-border-hover:    light-dark(rgba(58,106,154,0.55),  rgba(153,184,212,0.60));
+
+  /* RoB rating tints — use semantic colours so they adapt to theme changes */
+  --rob-low-bg:                 color-mix(in srgb, var(--color-success) 22%, transparent);
+  --rob-some-bg:                color-mix(in srgb, var(--color-warning) 22%, transparent);
+  --rob-high-bg:                color-mix(in srgb, var(--color-error)   22%, transparent);
+
+  /* Regression significance star colours */
+  --reg-sig-3-color:            light-dark(#d97706, #ff9f43);
+  --reg-sig-2-color:            light-dark(#ca8a04, #ffc947);
+  --reg-sig-1-color:            light-dark(#16a34a, #86efac);
+
+  /* Radius */
+  --radius-xs:        3px;
+  --radius-sm:        4px;
+  --radius-md:        8px;
+  --radius-lg:        12px;
+  --radius-xl:        16px;
+  --radius-full:      9999px;
+
+  /* Typography */
+  --font-sans:        "Inter", system-ui, -apple-system, sans-serif;
+  --font-mono:        ui-monospace, "JetBrains Mono", "Fira Code", monospace;
+
+  /* Transitions */
+  --t-fast:           150ms ease-out;
+  --t-base:           200ms ease-out;
+  --t-slow:           300ms ease-out;
+}
+
+[data-theme="light"] { color-scheme: light; }
+[data-theme="dark"]  { color-scheme: dark; }

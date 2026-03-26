@@ -803,10 +803,33 @@ function genqCore(studies, weights) {
   return ca > 0 ? Math.max(0, (Qa - ba) / ca) : 0;
 }
 
+// ================= SQUARE-ROOT GENQ (SQGENQ) TAU² =================
+// Generalised Q-statistic estimator using square-root weights aᵢ = √(1/vᵢ)
+// instead of the standard inverse-variance weights aᵢ = 1/vᵢ used by DL.
+// Down-weights high-precision studies more aggressively than DL and is
+// less sensitive to outlying within-study variances.
+//
+// NOTE: Removed from the UI dropdown (rarely preferred over DL or standard
+// GENQ in practice). Available programmatically via meta("SQGENQ", ...) and
+// included in estimatorComparison(). Preserved for completeness.
 export function tau2_SQGENQ(studies) {
   const weights = studies.map(d => Math.sqrt(1 / d.vi));
   return genqCore(studies, weights);
 }
+
+// ================= EBLUP (no separate function — aliases REML) =================
+// Empirical Bayes Linear Unbiased Predictor (EBLUP) produces the same τ²
+// as REML when estimated by Fisher scoring in the standard normal-normal
+// random-effects model.  The "EBLUP" label comes from the mixed-model
+// framing (per-study effects uᵢ are treated as random deviates); "REML"
+// refers to the estimation criterion on the marginal likelihood.  Both labels
+// converge to the same numerical estimate, so the dispatch in meta() simply
+// aliases "EBLUP" → tau2_REML.
+//
+// NOTE: Removed from the UI dropdown (redundant with REML; the EBLUP label
+// appears in some multilevel / longitudinal software output and is retained
+// here so that datasets using that terminology can still be dispatched
+// correctly). Included in estimatorComparison() alongside the other methods.
 
 export function tau2_GENQ(studies, weights) {
   const w = weights ?? studies.map(d => 1 / d.vi);
@@ -1488,10 +1511,11 @@ export function meta(studies, method="DL", ciMethod="normal") {
 	else if (method === "HE")     tau2 = tau2_HE(studies);
 	else if (method === "SJ")     tau2 = tau2_SJ(studies);
 	else if (method === "GENQ")   tau2 = tau2_GENQ(studies);
-	else if (method === "SQGENQ") tau2 = tau2_SQGENQ(studies);  // not in UI; see tau2_SQGENQ comment
-	else if (method === "DLIT")   tau2 = tau2_DLIT(studies);    // not in UI; see tau2_DLIT comment
-	else if (method === "EBLUP")  tau2 = tau2_REML(studies, 1e-12, 500); // not in UI; EBLUP = REML (mixed-model framing, same estimate)
-	else if (method === "HSk")    tau2 = tau2_HSk(studies);     // not in UI; see tau2_HSk comment
+	// ---- Non-UI estimators: not in the dropdown but reachable via meta() and estimatorComparison() ----
+	else if (method === "SQGENQ") tau2 = tau2_SQGENQ(studies);              // see tau2_SQGENQ
+	else if (method === "DLIT")   tau2 = tau2_DLIT(studies);                // see tau2_DLIT
+	else if (method === "EBLUP")  tau2 = tau2_REML(studies, 1e-12, 500);   // alias: EBLUP = REML — see EBLUP block above tau2_GENQ
+	else if (method === "HSk")    tau2 = tau2_HSk(studies);                 // see tau2_HSk
 	else { // DL fallback
 		const sumW2 = wFE.reduce((a,w)=>a+w*w,0);
 		const C = W - (sumW2/W);
@@ -2104,8 +2128,12 @@ export function leaveOneOut(studies, method = "DL", ciMethod = "normal", precomp
 // Runs the meta-analysis with every available τ² estimator and returns the
 // results side-by-side so the analyst can judge estimator sensitivity.
 //
-// Returns an array of 7 entries (one per method):
+// Returns an array of 12 entries (one per method):
 //   { method, estimate, lb, ub, tau2, i2 }
+// The first 8 ("DL" … "GENQ") are the standard UI-exposed methods.
+// The remaining 4 ("SQGENQ", "DLIT", "EBLUP", "HSk") are the non-UI
+// estimators documented above; they are included here so the comparison
+// panel can display a complete picture when all estimators are of interest.
 export function estimatorComparison(studies, ciMethod = "normal") {
   const methods = ["DL", "REML", "PM", "ML", "HS", "HE", "SJ", "GENQ", "SQGENQ", "DLIT", "EBLUP", "HSk"];
   return methods.map(method => {

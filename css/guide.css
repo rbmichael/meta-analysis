@@ -1,0 +1,132 @@
+/* ================================================================
+   IN-APP GUIDE
+   ================================================================ */
+
+#guideSection {
+  /* Escape the appLayout padding/max-width so the guide fills the viewport */
+  margin: -20px -20px 0;
+  height: calc(100vh - 44px);
+  overflow: hidden;
+}
+
+#guidePanel {
+  display: flex;
+  height: 100%;
+  max-width: none;
+}
+
+/* ---- Sidebar ---- */
+.guide-sidebar {
+  width: 220px;
+  min-width: 180px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  padding: 24px 12px 24px 20px;
+  border-right: 1px solid var(--border);
+  height: 100%;
+  box-sizing: border-box;
+}
+
+.guide-nav-section {
+  font-size: 0.72em;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--fg-muted);
+  margin: 18px 0 4px 4px;
+}
+.guide-nav-section:first-child { margin-top: 0; }
+
+.guide-nav-link {
+  display: block;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm, 4px);
+  color: var(--fg-subtle);
+  text-decoration: none;
+  font-size: 0.82em;
+  line-height: 1.4;
+  margin-bottom: 1px;
+  transition: color var(--t-fast), background var(--t-fast);
+}
+.guide-nav-link:hover {
+  color: var(--fg);
+  background: var(--bg-surface-hover);
+}
+.guide-nav-link.active {
+  color: var(--accent-light);
+  background: var(--bg-surface);
+}
+
+/* ---- Content area ---- */
+.guide-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 32px 48px 48px 40px;
+  max-width: 780px;
+}
+
+.guide-section-heading {
+  font-size: 1.05em;
+  font-weight: 600;
+  color: var(--fg-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin: 40px 0 20px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+.guide-section-heading:first-child { margin-top: 0; }
+
+.guide-topic {
+  margin-bottom: 40px;
+}
+
+.guide-topic h3 {
+  font-size: 1em;
+  font-weight: 600;
+  color: var(--fg);
+  margin: 0 0 10px;
+}
+
+.guide-topic-body {
+  color: var(--fg-subtle);
+  font-size: 0.875em;
+  line-height: 1.75;
+}
+.guide-topic-body p { margin: 0 0 10px; }
+.guide-topic-body p:last-child { margin-bottom: 0; }
+.guide-topic-body ul,
+.guide-topic-body ol {
+  padding-left: 1.4em;
+  margin: 0 0 10px;
+}
+.guide-topic-body li { margin-bottom: 3px; }
+.guide-topic-body code {
+  font-family: "JetBrains Mono", "Fira Mono", "Courier New", monospace;
+  font-size: 0.9em;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 1px 4px;
+  color: var(--accent-light);
+}
+.guide-topic-body strong { color: var(--fg); font-weight: 600; }
+
+.guide-ref-heading {
+  font-size: 0.78em;
+  font-weight: 600;
+  color: var(--fg-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin: 18px 0 6px;
+}
+
+.guide-refs {
+  padding-left: 1.4em;
+  margin: 0;
+  font-size: 0.78em;
+  color: var(--fg-muted);
+  line-height: 1.6;
+}
+.guide-refs li { margin-bottom: 4px; }
+.guide-refs em { color: var(--fg-subtle); font-style: italic; }

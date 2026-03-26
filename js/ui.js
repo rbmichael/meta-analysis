@@ -81,7 +81,7 @@
 //     ├─ cumulativeMeta(…)               → cumResults[]
 //     └─ draw*(studies/m/…)              → SVG elements written to DOM
 //
-//   _forestArgs / _reportArgs are cached after each run so that forest
+//   forestPlot.args / appState.reportArgs are cached after each run so that forest
 //   pagination, FE/RE toggle, and report export can re-use the last
 //   analysis result without re-running the pipeline.
 //
@@ -464,8 +464,8 @@ _themeToggle.addEventListener("click", () => {
   const next = document.documentElement.dataset.theme === "light" ? "dark" : "light";
   localStorage.setItem("theme", next);
   _applyTheme(next);
-  if (_funnelArgs && _funnelContours) {
-    drawFunnel(..._funnelArgs, { contours: true });
+  if (funnelPlot.args && funnelPlot.contours) {
+    drawFunnel(...funnelPlot.args, { contours: true });
   }
 });
 
@@ -514,47 +514,47 @@ document.getElementById("addMod").addEventListener("click", addModerator);
 document.getElementById("modName").addEventListener("keydown", e => { if (e.key === "Enter") addModerator(); });
 document.getElementById("cumulativeOrder").addEventListener("change", runAnalysis);
 document.getElementById("cumulativeFunnelStep").addEventListener("input", e => {
-  if (!_cumFunnelStudies) return;
+  if (!cumFunnelPlot.studies) return;
   const step = +e.target.value;
   _updateCumFunnelLabel(step);
-  drawCumulativeFunnel(_cumFunnelStudies, _cumFunnelResults, _cumFunnelProfile, step);
+  drawCumulativeFunnel(cumFunnelPlot.studies, cumFunnelPlot.results, cumFunnelPlot.profile, step);
 });
 document.getElementById("caterpillarPageSize").addEventListener("change", () => {
-  if (!_caterpillarArgs) return;
-  caterpillarPage = 0;
+  if (!caterpillarPlot.args) return;
+  caterpillarPlot.page = 0;
   const raw = document.getElementById("caterpillarPageSize").value;
-  _caterpillarArgs.pageSize = raw === "Infinity" ? Infinity : +raw;
+  caterpillarPlot.args.pageSize = raw === "Infinity" ? Infinity : +raw;
   const { totalPages } = drawCaterpillarPlot(
-    _caterpillarArgs.studies, _caterpillarArgs.m, _caterpillarArgs.profile,
-    { pageSize: _caterpillarArgs.pageSize, page: caterpillarPage }
+    caterpillarPlot.args.studies, caterpillarPlot.args.m, caterpillarPlot.args.profile,
+    { pageSize: caterpillarPlot.args.pageSize, page: caterpillarPlot.page }
   );
   renderCaterpillarNav(totalPages);
 });
 
 document.getElementById("cumulativeForestPageSize").addEventListener("change", () => {
-  if (!_cumulativeForestArgs) return;
-  cumulativeForestPage = 0;
+  if (!cumForestPlot.args) return;
+  cumForestPlot.page = 0;
   const raw = document.getElementById("cumulativeForestPageSize").value;
-  _cumulativeForestArgs.pageSize = raw === "Infinity" ? Infinity : +raw;
+  cumForestPlot.args.pageSize = raw === "Infinity" ? Infinity : +raw;
   const { totalPages } = drawCumulativeForest(
-    _cumulativeForestArgs.results, _cumulativeForestArgs.profile,
-    { pageSize: _cumulativeForestArgs.pageSize, page: cumulativeForestPage }
+    cumForestPlot.args.results, cumForestPlot.args.profile,
+    { pageSize: cumForestPlot.args.pageSize, page: cumForestPlot.page }
   );
   renderCumulativeForestNav(totalPages);
 });
 
 document.getElementById("forestPageSize").addEventListener("change", () => {
-  if (!_forestArgs) return;
-  forestPage = 0;
+  if (!forestPlot.args) return;
+  forestPlot.page = 0;
   const rawPageSize = document.getElementById("forestPageSize").value;
   const pageSize    = rawPageSize === "Infinity" ? Infinity : +rawPageSize;
-  _forestArgs.options = { ..._forestArgs.options, pageSize, theme: _forestTheme };
-  if (_reportArgs) {
-    _reportArgs = { ..._reportArgs, forestOptions: { ..._reportArgs.forestOptions, pageSize, currentPage: 0 } };
+  forestPlot.args.options = { ...forestPlot.args.options, pageSize, theme: forestPlot.theme };
+  if (appState.reportArgs) {
+    appState.reportArgs = { ...appState.reportArgs, forestOptions: { ...appState.reportArgs.forestOptions, pageSize, currentPage: 0 } };
   }
   const { totalPages } = drawForest(
-    _forestArgs.studies, _forestArgs.m,
-    { ..._forestArgs.options, page: forestPage }
+    forestPlot.args.studies, forestPlot.args.m,
+    { ...forestPlot.args.options, page: forestPlot.page }
   );
   renderForestNav(totalPages);
 });
@@ -606,19 +606,19 @@ document.getElementById("draftStartFresh").addEventListener("click", () => {
 // at the currently-viewed page and re-sync the nav, because buildReport has no
 // access to renderForestNav.
 function buildReportAndResync() {
-  if (!_reportArgs) return null;
-  // Pass the live forestPage so the restore inside collectForestSVGs lands on
+  if (!appState.reportArgs) return null;
+  // Pass the live forestPlot.page so the restore inside collectForestSVGs lands on
   // the correct page rather than always page 0 (which was the value at cache time).
   const args = {
-    ..._reportArgs,
-    forestOptions: { ..._reportArgs.forestOptions, currentPage: forestPage },
+    ...appState.reportArgs,
+    forestOptions: { ...appState.reportArgs.forestOptions, currentPage: forestPlot.page },
   };
   const html = buildReport(args);
   // Re-render the live forest at the current page and re-sync nav buttons.
-  if (_forestArgs) {
+  if (forestPlot.args) {
     const { totalPages } = drawForest(
-      _forestArgs.studies, _forestArgs.m,
-      { ..._forestArgs.options, page: forestPage }
+      forestPlot.args.studies, forestPlot.args.m,
+      { ...forestPlot.args.options, page: forestPlot.page }
     );
     renderForestNav(totalPages);
   }
@@ -644,8 +644,8 @@ document.addEventListener("click", e => {
   if (!svgEl) return;
   const name = btn.dataset.target;
   if      (btn.dataset.format === "svg")  exportSVG(svgEl,  name + ".svg");
-  else if (btn.dataset.format === "png")  exportPNG(svgEl,  name + ".png",  _exportScale);
-  else if (btn.dataset.format === "tiff") exportTIFF(svgEl, name + ".tif",  _exportScale);
+  else if (btn.dataset.format === "png")  exportPNG(svgEl,  name + ".png",  appState.exportScale);
+  else if (btn.dataset.format === "tiff") exportTIFF(svgEl, name + ".tif",  appState.exportScale);
 });
 
 // ---------------- EFFECT TYPE HANDLER ----------------
@@ -953,7 +953,7 @@ function refreshPreviewUI(type) {
     none:    "✗ no columns matched",
   };
   confEl.textContent = confText[displayConf];
-  confEl.className = `preview-confidence conf-${displayConf}`;
+  confEl.className = `badge-pill conf-${displayConf}`;
 
   // Column mapping chips
   const lowerMatched    = new Set(cls.matched.map(c => c.toLowerCase()));
@@ -961,13 +961,13 @@ function refreshPreviewUI(type) {
 
   let chips = "";
   cls.structural.forEach(c =>
-    chips += `<span class="chip chip-ignored">${escapeHTML(c)}</span>`);
+    chips += `<span class="badge-pill chip-ignored">${escapeHTML(c)}</span>`);
   cls.matched.forEach(c =>
-    chips += `<span class="chip chip-matched">✓ ${escapeHTML(c)}</span>`);
+    chips += `<span class="badge-pill chip-matched">✓ ${escapeHTML(c)}</span>`);
   cls.missing.forEach(c =>
-    chips += `<span class="chip chip-missing">✗ ${escapeHTML(c)}</span>`);
+    chips += `<span class="badge-pill chip-missing">✗ ${escapeHTML(c)}</span>`);
   cls.modCols.forEach(c =>
-    chips += `<span class="chip chip-moderator">~ ${escapeHTML(c)}</span>`);
+    chips += `<span class="badge-pill chip-moderator">~ ${escapeHTML(c)}</span>`);
   document.getElementById("previewMapping").innerHTML = chips;
 
   // Data preview table (first 5 rows)
@@ -1349,6 +1349,52 @@ function populateExampleData(type) {
 }
 
 // ---------------- META-REGRESSION RESULTS PANEL ----------------
+
+function regStars(p) {
+  if (p < 0.001) return `<span class="reg-sig-3">***</span>`;
+  if (p < 0.01)  return `<span class="reg-sig-2">**</span>`;
+  if (p < 0.05)  return `<span class="reg-sig-1">*</span>`;
+  if (p < 0.10)  return `<span style="color:#666">.</span>`;
+  return "";
+}
+
+function regFmtP(p) {
+  if (!isFinite(p)) return "—";
+  if (p < 0.0001) return `<span class="reg-sig-3">&lt;0.0001</span>`;
+  const cls = p < 0.001 ? "reg-sig-3" : p < 0.01 ? "reg-sig-2" : p < 0.05 ? "reg-sig-1" : "";
+  return cls ? `<span class="${cls}">${fmt(p)}</span>` : fmt(p);
+}
+
+function buildRegCoeffRows(reg) {
+  return reg.colNames.map((name, j) => {
+    const [lo, hi] = reg.ci[j];
+    return `<tr class="${j === 0 ? "reg-intercept" : ""}">
+      <td>${name}</td>
+      <td>${fmt(reg.beta[j])}</td>
+      <td>${fmt(reg.se[j])}</td>
+      <td>${fmt(reg.zval[j])}</td>
+      <td>${regFmtP(reg.pval[j])}</td>
+      <td>[${fmt(lo)}, ${fmt(hi)}]</td>
+      <td>${regStars(reg.pval[j])}</td>
+    </tr>`;
+  }).join("");
+}
+
+function buildRegFittedRows(reg) {
+  if (!reg.labels || !reg.fitted) return "";
+  return reg.labels.map((lbl, i) => {
+    const sr   = reg.stdResiduals[i];
+    const flag = Math.abs(sr) > Z_95 ? " style='color:#ff9f43'" : "";
+    return `<tr>
+      <td>${lbl || i + 1}</td>
+      <td>${fmt(reg.yi[i])}</td>
+      <td>${fmt(reg.fitted[i])}</td>
+      <td>${fmt(reg.residuals[i])}</td>
+      <td${flag}>${fmt(sr)}</td>
+    </tr>`;
+  }).join("");
+}
+
 function renderRegressionPanel(reg, method, ciMethod, kExcluded = 0) {
   const panel = document.getElementById("regressionPanel");
   const section = document.getElementById("regressionSection");
@@ -1371,54 +1417,12 @@ function renderRegressionPanel(reg, method, ciMethod, kExcluded = 0) {
     : `χ²(${reg.QMdf})`;
   const ciLabel   = ciMethod === "KH" ? "Knapp-Hartung" : "Normal CI";
 
-  function stars(p) {
-    if (p < 0.001) return `<span class="reg-sig-3">***</span>`;
-    if (p < 0.01)  return `<span class="reg-sig-2">**</span>`;
-    if (p < 0.05)  return `<span class="reg-sig-1">*</span>`;
-    if (p < 0.10)  return `<span style="color:#666">.</span>`;
-    return "";
-  }
-
-  function fmtP(p) {
-    if (!isFinite(p)) return "—";
-    if (p < 0.0001) return `<span class="reg-sig-3">&lt;0.0001</span>`;
-    const cls = p < 0.001 ? "reg-sig-3" : p < 0.01 ? "reg-sig-2" : p < 0.05 ? "reg-sig-1" : "";
-    return cls ? `<span class="${cls}">${fmt(p)}</span>` : fmt(p);
-  }
-
   const QMrow = reg.p > 1
-    ? ` &nbsp;·&nbsp; QM ${QMlabel} = ${fmt(reg.QM)}, p = ${fmtP(reg.QMp)}`
+    ? ` &nbsp;·&nbsp; QM ${QMlabel} = ${fmt(reg.QM)}, p = ${regFmtP(reg.QMp)}`
     : "";
 
-  let rows = "";
-  reg.colNames.forEach((name, j) => {
-    const [lo, hi] = reg.ci[j];
-    rows += `<tr class="${j === 0 ? "reg-intercept" : ""}">
-      <td>${name}</td>
-      <td>${fmt(reg.beta[j])}</td>
-      <td>${fmt(reg.se[j])}</td>
-      <td>${fmt(reg.zval[j])}</td>
-      <td>${fmtP(reg.pval[j])}</td>
-      <td>[${fmt(lo)}, ${fmt(hi)}]</td>
-      <td>${stars(reg.pval[j])}</td>
-    </tr>`;
-  });
-
-  // ---- Fitted values table ----
-  let fittedRows = "";
-  if (reg.labels && reg.fitted) {
-    reg.labels.forEach((lbl, i) => {
-      const sr = reg.stdResiduals[i];
-      const flag = Math.abs(sr) > Z_95 ? " style='color:#ff9f43'" : "";
-      fittedRows += `<tr>
-        <td>${lbl || i + 1}</td>
-        <td>${fmt(reg.yi[i])}</td>
-        <td>${fmt(reg.fitted[i])}</td>
-        <td>${fmt(reg.residuals[i])}</td>
-        <td${flag}>${fmt(sr)}</td>
-      </tr>`;
-    });
-  }
+  const rows       = buildRegCoeffRows(reg);
+  const fittedRows = buildRegFittedRows(reg);
 
   const lowDfWarning = reg.QEdf < 3
     ? `<div class="reg-note reg-warn">⚠ Very few residual df (k − p = ${reg.QEdf}) — estimates may be unreliable.</div>`
@@ -1435,7 +1439,7 @@ function renderRegressionPanel(reg, method, ciMethod, kExcluded = 0) {
     <div class="reg-het">
       τ² = ${fmt(reg.tau2)} (residual) &nbsp;·&nbsp; I² = ${fmt(reg.I2)}%
       ${reg.p > 1 ? `&nbsp;·&nbsp; R² = ${isFinite(reg.R2) ? fmt(reg.R2 * 100) + "%" : "N/A"}` : ""}
-      &nbsp;·&nbsp; QE(${reg.QEdf}) = ${fmt(reg.QE)}, p = ${fmtP(reg.QEp)}
+      &nbsp;·&nbsp; QE(${reg.QEdf}) = ${fmt(reg.QE)}, p = ${regFmtP(reg.QEp)}
       ${QMrow}
     </div>
     <div class="reg-body">
@@ -1466,288 +1470,249 @@ function renderRegressionPanel(reg, method, ciMethod, kExcluded = 0) {
 const staleBanner       = document.getElementById("staleBanner");
 const outputPlaceholder = document.getElementById("outputPlaceholder");
 
-// The output panel is always present in the DOM. Track whether the first run
-// has happened so the stale banner is not shown on an empty panel.
-let _hasRunOnce = false;
+// ---- Structured plot/app state objects ----
+// Grouping related variables prevents scattered module-level names and makes
+// each subsystem's state self-documenting.
 
-// ---------------- RASTER EXPORT RESOLUTION ----------------
-let _exportScale = 3;  // matches <option selected> in #exportScale (3× ≈ 288 dpi)
+const appState = {
+  hasRunOnce:  false,  // prevents stale banner before the first run
+  exportScale: 3,      // matches <option selected> in #exportScale (3× ≈ 288 dpi)
+  reportArgs:  null,   // cached after each run; consumed by export buttons
+};
+
+const forestPlot = {
+  page:        0,
+  args:        null,        // { studies, m, options } — cached for page-nav re-renders
+  poolDisplay: "RE",        // "FE" | "RE" | "Both"
+  theme:       "default",   // visual style preset key (see forestThemes.js)
+};
+
+const caterpillarPlot = {
+  page: 0,
+  args: null,               // { studies, m, profile, pageSize }
+};
+
+const cumForestPlot = {
+  page: 0,
+  args: null,               // { results, profile, pageSize }
+};
+
+const funnelPlot = {
+  args:     null,           // [studies, m, egger, profile] — cached for mode toggle
+  contours: false,
+};
+
+const cumFunnelPlot = {
+  studies: null,            // sorted study array for cumulative funnel
+  results: null,            // cumResults array, same order
+  profile: null,            // effect-type profile
+};
 
 document.getElementById("exportScale").addEventListener("change", e => {
-  _exportScale = +e.target.value;
+  appState.exportScale = +e.target.value;
 });
-
-// ---------------- FOREST PLOT PAGINATION STATE ----------------
-let forestPage = 0;
-let _forestArgs = null;  // { studies, m, options } — cached for page-nav re-renders
-let _forestPoolDisplay = "RE"; // "FE" | "RE" | "Both"
-
-// ---------------- CATERPILLAR PLOT PAGINATION STATE ----------------
-let caterpillarPage = 0;
-let _caterpillarArgs = null;  // { studies, m, profile, pageSize }
-
-// ---------------- CUMULATIVE FOREST PAGINATION STATE ----------------
-let cumulativeForestPage = 0;
-let _cumulativeForestArgs = null;  // { results, profile, pageSize }
-let _forestTheme = "default";  // visual style preset key (see forestThemes.js)
 
 document.querySelectorAll(".forest-pool-btn").forEach(btn => {
   btn.addEventListener("click", () => {
-    if (!_forestArgs) return;
-    _forestPoolDisplay = btn.dataset.display;
+    if (!forestPlot.args) return;
+    forestPlot.poolDisplay = btn.dataset.display;
     document.querySelectorAll(".forest-pool-btn").forEach(b => b.classList.toggle("active", b === btn));
-    forestPage = 0;
-    _forestArgs.options = { ..._forestArgs.options, pooledDisplay: _forestPoolDisplay };
-    const { totalPages } = drawForest(_forestArgs.studies, _forestArgs.m, { ..._forestArgs.options, page: forestPage });
+    forestPlot.page = 0;
+    forestPlot.args.options = { ...forestPlot.args.options, pooledDisplay: forestPlot.poolDisplay };
+    const { totalPages } = drawForest(forestPlot.args.studies, forestPlot.args.m, { ...forestPlot.args.options, page: forestPlot.page });
     renderForestNav(totalPages);
   });
 });
 
 document.getElementById("forestTheme").addEventListener("change", e => {
-  if (!_forestArgs) return;
-  _forestTheme = e.target.value;
-  _forestArgs.options = { ..._forestArgs.options, theme: _forestTheme };
-  if (_reportArgs) {
-    _reportArgs = { ..._reportArgs, forestOptions: { ..._reportArgs.forestOptions, theme: _forestTheme } };
+  if (!forestPlot.args) return;
+  forestPlot.theme = e.target.value;
+  forestPlot.args.options = { ...forestPlot.args.options, theme: forestPlot.theme };
+  if (appState.reportArgs) {
+    appState.reportArgs = { ...appState.reportArgs, forestOptions: { ...appState.reportArgs.forestOptions, theme: forestPlot.theme } };
   }
-  const { totalPages } = drawForest(_forestArgs.studies, _forestArgs.m, { ..._forestArgs.options, page: forestPage });
+  const { totalPages } = drawForest(forestPlot.args.studies, forestPlot.args.m, { ...forestPlot.args.options, page: forestPlot.page });
   renderForestNav(totalPages);
 });
 
-// ---------------- FUNNEL PLOT MODE STATE ----------------
-let _funnelArgs     = null;   // [studies, m, egger, profile] — cached for mode toggle
-let _funnelContours = false;
-
-let _cumFunnelStudies = null;  // sorted study array for cumulative funnel
-let _cumFunnelResults = null;  // cumResults array, same order
-let _cumFunnelProfile = null;  // effect-type profile
-
-function _updateCumFunnelLabel(stepIdx) {
-  const r = _cumFunnelResults[stepIdx];
-  document.getElementById("cumulativeFunnelLabel").textContent =
-    `Step ${stepIdx + 1} of ${_cumFunnelResults.length}\u2003added: ${r.addedLabel}`;
-}
-
 document.querySelectorAll(".funnel-mode-btn").forEach(btn => {
   btn.addEventListener("click", () => {
-    if (!_funnelArgs) return;
-    _funnelContours = btn.dataset.mode === "contour";
+    if (!funnelPlot.args) return;
+    funnelPlot.contours = btn.dataset.mode === "contour";
     document.querySelectorAll(".funnel-mode-btn").forEach(b => b.classList.toggle("active", b === btn));
-    drawFunnel(..._funnelArgs, { contours: _funnelContours });
+    drawFunnel(...funnelPlot.args, { contours: funnelPlot.contours });
   });
 });
 
-// ---------------- REPORT STATE ----------------
-let _reportArgs = null;  // cached after each run; consumed by export buttons
-
-function renderForestNav(totalPages) {
-  const nav = document.getElementById("forestNav");
-  if (!nav) return;
-  if (totalPages <= 1) { nav.innerHTML = ""; return; }
-
-  const kAll = _forestArgs?.studies?.length ?? "?";
-  nav.innerHTML =
-    `<button id="forestPrev" ${forestPage === 0 ? "disabled" : ""}>&#8249; Prev</button>` +
-    `<span>Page ${forestPage + 1} of ${totalPages}</span>` +
-    `<button id="forestNext" ${forestPage >= totalPages - 1 ? "disabled" : ""}>Next &#8250;</button>` +
-    `<span class="forest-nav-note">Pooled estimate includes all ${kAll} studies</span>`;
-
-  document.getElementById("forestPrev").addEventListener("click", () => {
-    if (forestPage > 0) {
-      forestPage--;
-      const { totalPages: tp } = drawForest(
-        _forestArgs.studies, _forestArgs.m,
-        { ..._forestArgs.options, page: forestPage }
-      );
-      renderForestNav(tp);
-    }
-  });
-
-  document.getElementById("forestNext").addEventListener("click", () => {
-    if (forestPage < totalPages - 1) {
-      forestPage++;
-      const { totalPages: tp } = drawForest(
-        _forestArgs.studies, _forestArgs.m,
-        { ..._forestArgs.options, page: forestPage }
-      );
-      renderForestNav(tp);
-    }
-  });
+function _updateCumFunnelLabel(stepIdx) {
+  const r = cumFunnelPlot.results[stepIdx];
+  document.getElementById("cumulativeFunnelLabel").textContent =
+    `Step ${stepIdx + 1} of ${cumFunnelPlot.results.length}\u2003added: ${r.addedLabel}`;
 }
 
-function renderCaterpillarNav(totalPages) {
-  const nav = document.getElementById("caterpillarNav");
-  if (!nav) return;
-  if (totalPages <= 1) { nav.innerHTML = ""; return; }
-  const kAll = _caterpillarArgs?.studies?.length ?? "?";
-  nav.innerHTML =
-    `<button id="caterpillarPrev" ${caterpillarPage === 0 ? "disabled" : ""}>&#8249; Prev</button>` +
-    `<span>Page ${caterpillarPage + 1} of ${totalPages}</span>` +
-    `<button id="caterpillarNext" ${caterpillarPage >= totalPages - 1 ? "disabled" : ""}>Next &#8250;</button>` +
-    `<span class="forest-nav-note">Sorted by effect size across all ${kAll} studies</span>`;
-  document.getElementById("caterpillarPrev").addEventListener("click", () => {
-    if (caterpillarPage > 0) {
-      caterpillarPage--;
-      const { totalPages: tp } = drawCaterpillarPlot(
-        _caterpillarArgs.studies, _caterpillarArgs.m, _caterpillarArgs.profile,
-        { pageSize: _caterpillarArgs.pageSize, page: caterpillarPage }
-      );
-      renderCaterpillarNav(tp);
-    }
-  });
-  document.getElementById("caterpillarNext").addEventListener("click", () => {
-    if (caterpillarPage < totalPages - 1) {
-      caterpillarPage++;
-      const { totalPages: tp } = drawCaterpillarPlot(
-        _caterpillarArgs.studies, _caterpillarArgs.m, _caterpillarArgs.profile,
-        { pageSize: _caterpillarArgs.pageSize, page: caterpillarPage }
-      );
-      renderCaterpillarNav(tp);
-    }
-  });
+// makeNavRenderer(cfg) — factory for paginated-plot navigation bars.
+// cfg: { navId, prevId, nextId, note(k), getKAll(), getPage(), setPage(n), redraw(page) }
+function makeNavRenderer(cfg) {
+  return function renderNav(totalPages) {
+    const nav = document.getElementById(cfg.navId);
+    if (!nav) return;
+    if (totalPages <= 1) { nav.innerHTML = ""; return; }
+
+    const page = cfg.getPage();
+    nav.innerHTML =
+      `<button id="${cfg.prevId}" ${page === 0 ? "disabled" : ""}>&#8249; Prev</button>` +
+      `<span>Page ${page + 1} of ${totalPages}</span>` +
+      `<button id="${cfg.nextId}" ${page >= totalPages - 1 ? "disabled" : ""}>Next &#8250;</button>` +
+      `<span class="forest-nav-note">${cfg.note(cfg.getKAll())}</span>`;
+
+    document.getElementById(cfg.prevId).addEventListener("click", () => {
+      if (cfg.getPage() > 0) {
+        cfg.setPage(cfg.getPage() - 1);
+        const { totalPages: tp } = cfg.redraw(cfg.getPage());
+        renderNav(tp);
+      }
+    });
+
+    document.getElementById(cfg.nextId).addEventListener("click", () => {
+      if (cfg.getPage() < totalPages - 1) {
+        cfg.setPage(cfg.getPage() + 1);
+        const { totalPages: tp } = cfg.redraw(cfg.getPage());
+        renderNav(tp);
+      }
+    });
+  };
 }
 
-function renderCumulativeForestNav(totalPages) {
-  const nav = document.getElementById("cumulativeForestNav");
-  if (!nav) return;
-  if (totalPages <= 1) { nav.innerHTML = ""; return; }
-  const kAll = _cumulativeForestArgs?.results?.length ?? "?";
-  nav.innerHTML =
-    `<button id="cumForestPrev" ${cumulativeForestPage === 0 ? "disabled" : ""}>&#8249; Prev</button>` +
-    `<span>Page ${cumulativeForestPage + 1} of ${totalPages}</span>` +
-    `<button id="cumForestNext" ${cumulativeForestPage >= totalPages - 1 ? "disabled" : ""}>Next &#8250;</button>` +
-    `<span class="forest-nav-note">Cumulative steps across all ${kAll} studies</span>`;
-  document.getElementById("cumForestPrev").addEventListener("click", () => {
-    if (cumulativeForestPage > 0) {
-      cumulativeForestPage--;
-      const { totalPages: tp } = drawCumulativeForest(
-        _cumulativeForestArgs.results, _cumulativeForestArgs.profile,
-        { pageSize: _cumulativeForestArgs.pageSize, page: cumulativeForestPage }
-      );
-      renderCumulativeForestNav(tp);
-    }
-  });
-  document.getElementById("cumForestNext").addEventListener("click", () => {
-    if (cumulativeForestPage < totalPages - 1) {
-      cumulativeForestPage++;
-      const { totalPages: tp } = drawCumulativeForest(
-        _cumulativeForestArgs.results, _cumulativeForestArgs.profile,
-        { pageSize: _cumulativeForestArgs.pageSize, page: cumulativeForestPage }
-      );
-      renderCumulativeForestNav(tp);
-    }
-  });
-}
+const renderForestNav = makeNavRenderer({
+  navId:   "forestNav",
+  prevId:  "forestPrev",
+  nextId:  "forestNext",
+  note:    k => `Pooled estimate includes all ${k} studies`,
+  getKAll: () => forestPlot.args?.studies?.length ?? "?",
+  getPage: () => forestPlot.page,
+  setPage: p  => { forestPlot.page = p; },
+  redraw:  p  => drawForest(forestPlot.args.studies, forestPlot.args.m, { ...forestPlot.args.options, page: p }),
+});
+
+const renderCaterpillarNav = makeNavRenderer({
+  navId:   "caterpillarNav",
+  prevId:  "caterpillarPrev",
+  nextId:  "caterpillarNext",
+  note:    k => `Sorted by effect size across all ${k} studies`,
+  getKAll: () => caterpillarPlot.args?.studies?.length ?? "?",
+  getPage: () => caterpillarPlot.page,
+  setPage: p  => { caterpillarPlot.page = p; },
+  redraw:  p  => drawCaterpillarPlot(
+    caterpillarPlot.args.studies, caterpillarPlot.args.m, caterpillarPlot.args.profile,
+    { pageSize: caterpillarPlot.args.pageSize, page: p }
+  ),
+});
+
+const renderCumulativeForestNav = makeNavRenderer({
+  navId:   "cumulativeForestNav",
+  prevId:  "cumForestPrev",
+  nextId:  "cumForestNext",
+  note:    k => `Cumulative steps across all ${k} studies`,
+  getKAll: () => cumForestPlot.args?.results?.length ?? "?",
+  getPage: () => cumForestPlot.page,
+  setPage: p  => { cumForestPlot.page = p; },
+  redraw:  p  => drawCumulativeForest(
+    cumForestPlot.args.results, cumForestPlot.args.profile,
+    { pageSize: cumForestPlot.args.pageSize, page: p }
+  ),
+});
 
 // markStale()
 // Signals that the displayed results are out of date with the current inputs.
 // Shows the stale-results banner and adds the "stale" CSS class to the results
 // toggle button so the user can see at a glance that a re-run is needed.
-// No-ops until the first successful runAnalysis() call (_hasRunOnce = true),
+// No-ops until the first successful runAnalysis() call (appState.hasRunOnce = true),
 // which prevents the banner from appearing before any results exist.
 function markStale() {
   // Only show stale indicators after the first run has produced results.
-  if (!_hasRunOnce) return;
+  if (!appState.hasRunOnce) return;
   staleBanner.style.display = "block";
   _toggleResults.classList.add("stale");
 }
 
 // ---------------- SENSITIVITY ANALYSIS PANEL ----------------
-function renderSensitivityPanel(studies, m, method, ciMethod, profile) {
-  const container = document.getElementById("sensitivityPanel");
-  if (!container) return;
 
-  // Preserve open/collapsed state of the two <details> blocks across re-renders.
-  const blocks = container.querySelectorAll(".sens-block");
-  const openState = [...blocks].map(b => b.open);
-  const looOpen = openState[0] ?? true;
-  const estOpen = openState[1] ?? true;
+const TAU_METHOD_LABELS = {
+  DL:   "DerSimonian-Laird (DL)",
+  REML: "REML",
+  PM:   "Paule-Mandel (PM)",
+  ML:   "Maximum Likelihood (ML)",
+  HS:   "Hunter-Schmidt (HS)",
+  HE:   "Hedges (HE)",
+  SJ:   "Sidik-Jonkman (SJ)",
+};
 
-  function fv(v)  { return isFinite(v) ? v.toFixed(3) : "—"; }
-  function fvp(v) { return isFinite(v) ? (v < 0.001 ? "<.001" : v.toFixed(3)) : "—"; }
-  function truncate(s, n) { const e = escapeHTML(s); return e.length > n ? e.slice(0, n - 1) + "\u2026" : e; }
+function sensFv(v)  { return isFinite(v) ? v.toFixed(3) : "—"; }
+function sensFvp(v) { return isFinite(v) ? (v < 0.001 ? "<.001" : v.toFixed(3)) : "—"; }
+function sensTrunc(s, n) { const e = escapeHTML(s); return e.length > n ? e.slice(0, n - 1) + "\u2026" : e; }
 
-  // ---- Leave-one-out ----
-  // Pass the already-computed meta result to avoid rerunning meta() for the full set.
-  const loo     = leaveOneOut(studies, method, ciMethod, m);
-  const fullSig = loo.full.pval < 0.05;
-  const fullEst = profile.transform(loo.full.RE);
-
-  let looBody;
+function buildLooBody(loo, fullSig, fullEst, profile) {
   if (loo.rows.length === 0) {
-    looBody = `<p class="sens-placeholder">Need at least 3 studies for leave-one-out analysis.</p>`;
-  } else {
-    const headerRow = `
-      <tr>
-        <th>Study omitted</th>
-        <th>Estimate</th>
-        <th>95% CI (low)</th>
-        <th>95% CI (high)</th>
-        <th>I² (%)</th>
-        <th>τ²</th>
-        <th>p</th>
-        <th>Δ estimate</th>
-      </tr>`;
-
-    const dataRows = loo.rows.map(row => {
-      const est     = profile.transform(row.estimate);
-      const ci      = { lb: profile.transform(row.lb), ub: profile.transform(row.ub) };
-      const delta   = est - fullEst;
-      const sigChange = row.significant !== fullSig;
-      const cls     = sigChange ? " class=\"sens-sigchange\"" : "";
-      const deltaStr = (delta >= 0 ? "+" : "") + fv(delta);
-      return `
-        <tr${cls}>
-          <td>${truncate(row.label, 40)}</td>
-          <td>${fv(est)}</td>
-          <td>${fv(ci.lb)}</td>
-          <td>${fv(ci.ub)}</td>
-          <td>${fv(row.i2)}</td>
-          <td>${fv(row.tau2)}</td>
-          <td>${fvp(row.pval)}</td>
-          <td class="sens-delta">${deltaStr}</td>
-        </tr>`;
-    }).join("");
-
-    looBody = `
-      <table class="study-table sens-table">
-        <thead>${headerRow}</thead>
-        <tbody>${dataRows}</tbody>
-      </table>
-      <div class="sens-note">
-        Rows highlighted amber: removing that study changes statistical significance (p = .05 threshold).
-        Δ estimate = back-transformed leave-one-out estimate minus full-set estimate.
-      </div>`;
+    return `<p class="sens-placeholder">Need at least 3 studies for leave-one-out analysis.</p>`;
   }
+  const headerRow = `
+    <tr>
+      <th>Study omitted</th>
+      <th>Estimate</th>
+      <th>95% CI (low)</th>
+      <th>95% CI (high)</th>
+      <th>I² (%)</th>
+      <th>τ²</th>
+      <th>p</th>
+      <th>Δ estimate</th>
+    </tr>`;
+  const dataRows = loo.rows.map(row => {
+    const est       = profile.transform(row.estimate);
+    const ci        = { lb: profile.transform(row.lb), ub: profile.transform(row.ub) };
+    const delta     = est - fullEst;
+    const sigChange = row.significant !== fullSig;
+    const cls       = sigChange ? " class=\"sens-sigchange\"" : "";
+    const deltaStr  = (delta >= 0 ? "+" : "") + sensFv(delta);
+    return `
+      <tr${cls}>
+        <td>${sensTrunc(row.label, 40)}</td>
+        <td>${sensFv(est)}</td>
+        <td>${sensFv(ci.lb)}</td>
+        <td>${sensFv(ci.ub)}</td>
+        <td>${sensFv(row.i2)}</td>
+        <td>${sensFv(row.tau2)}</td>
+        <td>${sensFvp(row.pval)}</td>
+        <td class="sens-delta">${deltaStr}</td>
+      </tr>`;
+  }).join("");
+  return `
+    <table class="study-table sens-table">
+      <thead>${headerRow}</thead>
+      <tbody>${dataRows}</tbody>
+    </table>
+    <div class="sens-note">
+      Rows highlighted amber: removing that study changes statistical significance (p = .05 threshold).
+      Δ estimate = back-transformed leave-one-out estimate minus full-set estimate.
+    </div>`;
+}
 
-  // ---- Estimator comparison ----
-  const TAU_METHOD_LABELS = {
-    DL:   "DerSimonian-Laird (DL)",
-    REML: "REML",
-    PM:   "Paule-Mandel (PM)",
-    ML:   "Maximum Likelihood (ML)",
-    HS:   "Hunter-Schmidt (HS)",
-    HE:   "Hedges (HE)",
-    SJ:   "Sidik-Jonkman (SJ)",
-  };
-
-  const estRows = estimatorComparison(studies, ciMethod).map(row => {
-    const est  = profile.transform(row.estimate);
-    const ci   = { lb: profile.transform(row.lb), ub: profile.transform(row.ub) };
+function buildEstimatorBody(estData, method, profile) {
+  const rows = estData.map(row => {
+    const est       = profile.transform(row.estimate);
+    const ci        = { lb: profile.transform(row.lb), ub: profile.transform(row.ub) };
     const isCurrent = row.method === method;
-    const cls  = isCurrent ? " class=\"sens-current\"" : "";
+    const cls       = isCurrent ? " class=\"sens-current\"" : "";
     return `
       <tr${cls}>
         <td>${TAU_METHOD_LABELS[row.method] ?? row.method}${isCurrent ? " ★" : ""}</td>
-        <td>${fv(est)}</td>
-        <td>${fv(ci.lb)}</td>
-        <td>${fv(ci.ub)}</td>
-        <td>${fv(row.tau2)}</td>
-        <td>${fv(row.i2)}</td>
+        <td>${sensFv(est)}</td>
+        <td>${sensFv(ci.lb)}</td>
+        <td>${sensFv(ci.ub)}</td>
+        <td>${sensFv(row.tau2)}</td>
+        <td>${sensFv(row.i2)}</td>
       </tr>`;
   }).join("");
-
-  const estBody = `
+  return `
     <table class="study-table sens-table">
       <thead>
         <tr>
@@ -1759,9 +1724,29 @@ function renderSensitivityPanel(studies, m, method, ciMethod, profile) {
           <th>I² (%)</th>
         </tr>
       </thead>
-      <tbody>${estRows}</tbody>
+      <tbody>${rows}</tbody>
     </table>
     <div class="sens-note">★ = currently selected estimator.</div>`;
+}
+function renderSensitivityPanel(studies, m, method, ciMethod, profile) {
+  const container = document.getElementById("sensitivityPanel");
+  if (!container) return;
+
+  // Preserve open/collapsed state of the two <details> blocks across re-renders.
+  const blocks = container.querySelectorAll(".sens-block");
+  const openState = [...blocks].map(b => b.open);
+  const looOpen = openState[0] ?? true;
+  const estOpen = openState[1] ?? true;
+
+  // ---- Leave-one-out ----
+  // Pass the already-computed meta result to avoid rerunning meta() for the full set.
+  const loo     = leaveOneOut(studies, method, ciMethod, m);
+  const fullSig = loo.full.pval < 0.05;
+  const fullEst = profile.transform(loo.full.RE);
+  const looBody = buildLooBody(loo, fullSig, fullEst, profile);
+
+  // ---- Estimator comparison ----
+  const estBody = buildEstimatorBody(estimatorComparison(studies, ciMethod), method, profile);
 
   container.innerHTML = `
     <details class="sens-block"${looOpen ? " open" : ""}>
@@ -1899,7 +1884,7 @@ function renderPCurvePanel(pcurve) {
       <span>P-curve &nbsp;·&nbsp; <strong>${pcurve.k}</strong> significant result${pcurve.k !== 1 ? "s" : ""} (p &lt; .05)</span>
       <span>Right-skew test: Z = <strong>${fmtZ(pcurve.rightSkewZ)}</strong>, p = <strong>${fmtP(pcurve.rightSkewP)}</strong></span>
       <span>Flatness test: Z = <strong>${fmtZ(pcurve.flatnessZ)}</strong>, p = <strong>${fmtP(pcurve.flatnessP)}</strong></span>
-      <span class="pcurve-verdict ${pcurve.verdict}">${verdictLabels[pcurve.verdict] ?? pcurve.verdict}</span>
+      <span class="status-pill ${pcurve.verdict}">${verdictLabels[pcurve.verdict] ?? pcurve.verdict}</span>
     </div>`;
 
   drawPCurve(pcurve);
@@ -1934,10 +1919,10 @@ function renderPUniformPanel(puniform, m, profile) {
 
   const flags = [];
   if (puniform.k < 3) {
-    flags.push(`<span class="puniform-flag insufficient">Insufficient data (k &lt; 3)</span>`);
+    flags.push(`<span class="status-pill insufficient">Insufficient data (k &lt; 3)</span>`);
   } else {
-    if (puniform.significantEffect) flags.push(`<span class="puniform-flag significant">Significant effect</span>`);
-    if (puniform.biasDetected)      flags.push(`<span class="puniform-flag biased">Bias detected</span>`);
+    if (puniform.significantEffect) flags.push(`<span class="status-pill significant">Significant effect</span>`);
+    if (puniform.biasDetected)      flags.push(`<span class="status-pill biased">Bias detected</span>`);
   }
 
   panel.innerHTML = `
@@ -1950,6 +1935,62 @@ function renderPUniformPanel(puniform, m, profile) {
     </div>`;
 
   drawPUniform(puniform, m, profile);
+}
+
+function buildInfluenceHTML(influence) {
+  const k    = influence.length;
+  const rows = influence.map(d => {
+    const anyFlag  = d.outlier || d.influential || d.highLeverage || d.highCookD;
+    const rowStyle = anyFlag ? "class='results-row-flagged'" : "";
+    const hatStyle  = d.highLeverage ? " style='color:orange;font-weight:bold;'" : "";
+    const cookStyle = d.highCookD    ? " style='color:orange;font-weight:bold;'" : "";
+    const flags = [
+      d.outlier      ? "Outlier"     : "",
+      d.influential  ? "Influential" : "",
+      d.highLeverage ? "Hi-Lev"      : "",
+      d.highCookD    ? "Hi-Cook"     : "",
+    ].filter(Boolean).join(", ");
+    return `<tr ${rowStyle}>
+      <td>${d.label}</td>
+      <td>${isFinite(d.RE_loo)      ? fmt(d.RE_loo)      : "NA"}</td>
+      <td>${isFinite(d.deltaTau2)   ? fmt(d.deltaTau2)   : "NA"}</td>
+      <td>${isFinite(d.stdResidual) ? fmt(d.stdResidual) : "NA"}</td>
+      <td>${isFinite(d.DFBETA)      ? fmt(d.DFBETA)      : "NA"}</td>
+      <td${hatStyle}>${isFinite(d.hat)   ? d.hat.toFixed(3)   : "NA"}</td>
+      <td${cookStyle}>${isFinite(d.cookD) ? d.cookD.toFixed(3) : "NA"}</td>
+      <td>${flags}</td></tr>`;
+  }).join("");
+  return `<b>Influence diagnostics:</b><br>
+    <table border="1">
+      <tr><th>Study</th><th>RE (LOO)</th><th>Δτ²</th><th>Std Residual</th><th>DFBETA</th><th>Hat</th><th>Cook's D</th><th>Flag</th></tr>
+      ${rows}
+    </table>
+    <small style="color:#aaa;">Thresholds: Hat &gt; ${fmt(2/k)} (= 2/k); Cook's D &gt; ${fmt(4/k)} (= 4/k)</small>`;
+}
+
+function buildSubgroupHTML(subgroup, profile) {
+  const rows = Object.entries(subgroup.groups).map(([g, r]) => {
+    const isSingle = r.k === 1;
+    const y_disp   = profile.transform(r.y);
+    const ci_disp  = { lb: profile.transform(r.ci.lb), ub: profile.transform(r.ci.ub) };
+    return `<tr>
+      <td>${g}</td>
+      <td>${r.k}</td>
+      <td>${isFinite(y_disp) ? fmt(y_disp) : "NA"}</td>
+      <td>${isSingle ? "NA" : isFinite(r.se)   ? fmt(r.se)         : "NA"}</td>
+      <td>[${isSingle ? "NA" : fmt(ci_disp.lb)}, ${isSingle ? "NA" : fmt(ci_disp.ub)}]</td>
+      <td>${isSingle ? "NA" : isFinite(r.tau2) ? r.tau2.toFixed(3) : "0"}</td>
+      <td>${isSingle ? "NA" : isFinite(r.I2)   ? r.I2.toFixed(1)   : "0"}</td>
+    </tr>`;
+  }).join("");
+  return `<b>Subgroup analysis:</b><br>
+    <table border="1">
+      <tr><th>Group</th><th>k</th><th>Effect</th><th>SE</th><th>CI</th><th>τ²</th><th>I² (%)</th></tr>
+      ${rows}
+      <tr style="font-weight:bold;">
+        <td colspan="7">Q_between = ${subgroup.Qbetween.toFixed(3)}, df = ${subgroup.df}, p = ${subgroup.p.toFixed(4)}</td>
+      </tr>
+    </table>`;
 }
 
 // -----------------------------------------------------------------------------
@@ -1994,8 +2035,8 @@ function renderPUniformPanel(puniform, m, profile) {
 //  16. renderStudyTable(), renderSensitivityPanel()
 //  17. metaRegression() → renderRegressionPanel() + drawBubble() per moderator
 //  18. drawForest()  (page 0) → renderForestNav()
-//       ↳ caches args in _forestArgs for page-navigation re-renders
-//  19. Caches full state in _reportArgs for HTML-export buttons
+//       ↳ caches args in forestPlot.args for page-navigation re-renders
+//  19. Caches full state in appState.reportArgs for HTML-export buttons
 //  20. drawFunnel(), drawInfluencePlot()
 //  21. cumulativeMeta() → drawCumulativeForest()
 //  22. updateValidationWarnings()
@@ -2006,14 +2047,14 @@ function renderPUniformPanel(puniform, m, profile) {
 //   DOM   — rewrites #results, #forestPlot, #funnelPlot, #influencePlot,
 //            #cumulativeForestPlot, #studyTable, #sensitivityPanel,
 //            #regressionPanel, #bubblePlots, forest nav buttons, stale banner
-//   State — _forestArgs, _reportArgs, _hasRunOnce, forestPage ← 0
+//   State — forestPlot.args, appState.reportArgs, appState.hasRunOnce, forestPlot.page ← 0
 // -----------------------------------------------------------------------------
 function runAnalysis() {
   scheduleSave();
   // Reset accordion sections to their default open/closed states on each run.
   document.querySelectorAll(".results-section").forEach(d => d.removeAttribute("open"));
-  caterpillarPage = 0;
-  cumulativeForestPage = 0;
+  caterpillarPlot.page = 0;
+  cumForestPlot.page = 0;
 
   const type = document.getElementById("effectType").value;
   const profile = effectProfiles[type];
@@ -2086,8 +2127,8 @@ function runAnalysis() {
   if (outputPlaceholder) outputPlaceholder.style.display = "none";
   staleBanner.style.display = "none";
   _toggleResults.classList.remove("stale");
-  if (!_hasRunOnce) {
-    _hasRunOnce = true;
+  if (!appState.hasRunOnce) {
+    appState.hasRunOnce = true;
     _toggleResults.disabled = false;
   }
 
@@ -2110,50 +2151,9 @@ function runAnalysis() {
   const influence = influenceDiagnostics(studies, method, ciMethod);
   const subgroup = subgroupAnalysis(studies, method, ciMethod);
 
-  const k = influence.length;
-  let influenceHTML = `<b>Influence diagnostics:</b><br>
-    <table border="1">
-      <tr><th>Study</th><th>RE (LOO)</th><th>Δτ²</th><th>Std Residual</th><th>DFBETA</th><th>Hat</th><th>Cook's D</th><th>Flag</th></tr>`;
-  influence.forEach(d => {
-    const anyFlag = d.outlier || d.influential || d.highLeverage || d.highCookD;
-    const rowStyle = anyFlag ? "class='results-row-flagged'" : "";
-    const hatStyle  = d.highLeverage ? " style='color:orange;font-weight:bold;'" : "";
-    const cookStyle = d.highCookD    ? " style='color:orange;font-weight:bold;'" : "";
-    const flags = [
-      d.outlier      ? "Outlier"    : "",
-      d.influential  ? "Influential": "",
-      d.highLeverage ? "Hi-Lev"     : "",
-      d.highCookD    ? "Hi-Cook"    : ""
-    ].filter(Boolean).join(", ");
-    influenceHTML += `<tr ${rowStyle}>
-      <td>${d.label}</td>
-      <td>${isFinite(d.RE_loo)      ? fmt(d.RE_loo)      : "NA"}</td>
-      <td>${isFinite(d.deltaTau2)   ? fmt(d.deltaTau2)   : "NA"}</td>
-      <td>${isFinite(d.stdResidual) ? fmt(d.stdResidual) : "NA"}</td>
-      <td>${isFinite(d.DFBETA)      ? fmt(d.DFBETA)      : "NA"}</td>
-      <td${hatStyle}>${isFinite(d.hat)   ? d.hat.toFixed(3)   : "NA"}</td>
-      <td${cookStyle}>${isFinite(d.cookD) ? d.cookD.toFixed(3) : "NA"}</td>
-      <td>${flags}</td></tr>`;
-  });
-  influenceHTML += `</table>
-    <small style="color:#aaa;">Thresholds: Hat &gt; ${fmt(2/k)} (= 2/k); Cook's D &gt; ${fmt(4/k)} (= 4/k)</small>`;
-
-  // Subgroup table (unchanged)
-  let subgroupHTML = "";
-  if (subgroup && subgroup.G >= 2) {
-    subgroupHTML += `<b>Subgroup analysis:</b><br><table border="1"><tr><th>Group</th><th>k</th><th>Effect</th><th>SE</th><th>CI</th><th>τ²</th><th>I² (%)</th></tr>`;
-    Object.entries(subgroup.groups).forEach(([g,r])=>{
-      const isSingle = r.k===1;
-      const y_disp = profile.transform(r.y);
-      const ci_disp = { lb: profile.transform(r.ci.lb), ub: profile.transform(r.ci.ub) };
-      subgroupHTML += `<tr><td>${g}</td><td>${r.k}</td><td>${isFinite(y_disp)?fmt(y_disp):"NA"}</td>
-        <td>${isSingle?"NA":isFinite(r.se)?fmt(r.se):"NA"}</td>
-        <td>[${isSingle?"NA":fmt(ci_disp.lb)}, ${isSingle?"NA":fmt(ci_disp.ub)}]</td>
-        <td>${isSingle?"NA":isFinite(r.tau2)?r.tau2.toFixed(3):"0"}</td>
-        <td>${isSingle?"NA":isFinite(r.I2)?r.I2.toFixed(1):"0"}</td></tr>`;
-    });
-    subgroupHTML += `<tr style="font-weight:bold;"><td colspan="7">Q_between = ${subgroup.Qbetween.toFixed(3)}, df = ${subgroup.df}, p = ${subgroup.p.toFixed(4)}</td></tr></table>`;
-  }
+  const influenceHTML = buildInfluenceHTML(influence);
+  const hasSubgroup   = subgroup && subgroup.G >= 2;
+  const subgroupHTML  = hasSubgroup ? buildSubgroupHTML(subgroup, profile) : "";
 
   // Adjusted RE
   let mAdjusted = null;
@@ -2192,9 +2192,8 @@ function runAnalysis() {
   `;
   document.getElementById("influenceDiagTable").innerHTML = influenceHTML;
 
-  const hasSubgroup = subgroup && subgroup.G >= 2;
   document.getElementById("subgroupSection").style.display = hasSubgroup ? "" : "none";
-  document.getElementById("subgroupTable").innerHTML = hasSubgroup ? subgroupHTML : "";
+  document.getElementById("subgroupTable").innerHTML = subgroupHTML;
 
   renderStudyTable(all, m, profile);
   renderSensitivityPanel(studies, m, method, ciMethod, profile);
@@ -2242,26 +2241,26 @@ function runAnalysis() {
   }
 
   // Reset to page 0 on every fresh run and cache args for nav re-renders.
-  forestPage = 0;
+  forestPlot.page = 0;
   const rawPageSize  = document.getElementById("forestPageSize")?.value ?? "30";
   const pageSize     = rawPageSize === "Infinity" ? Infinity : +rawPageSize;
-  const forestOpts   = { ciMethod, profile, pageSize, pooledDisplay: _forestPoolDisplay, theme: _forestTheme };
-  _forestArgs        = { studies: all, m, options: forestOpts };
-  const { totalPages } = drawForest(all, m, { ...forestOpts, page: forestPage });
+  const forestOpts   = { ciMethod, profile, pageSize, pooledDisplay: forestPlot.poolDisplay, theme: forestPlot.theme };
+  forestPlot.args        = { studies: all, m, options: forestOpts };
+  const { totalPages } = drawForest(all, m, { ...forestOpts, page: forestPlot.page });
   renderForestNav(totalPages);
 
   // Cache state for report export buttons.
   const baujatResult = baujat(studies);
 
-  _reportArgs = {
+  appState.reportArgs = {
     studies: all, m, profile, reg,
     tf, egger, begg, fatpet, fsn, pcurve, puniform, baujatResult,
     influence, subgroup, method, ciMethod,
     useTF, mAdjusted,
-    forestOptions: { ...forestOpts, currentPage: forestPage },
+    forestOptions: { ...forestOpts, currentPage: forestPlot.page },
   };
-  _funnelArgs = [all, m, egger, profile];
-  drawFunnel(..._funnelArgs, { contours: _funnelContours });
+  funnelPlot.args = [all, m, egger, profile];
+  drawFunnel(...funnelPlot.args, { contours: funnelPlot.contours });
   drawInfluencePlot(influence);
   drawBaujatPlot(baujatResult, profile);
   document.getElementById("baujatPlotBlock").style.display = baujatResult ? "" : "none";
@@ -2280,17 +2279,17 @@ function runAnalysis() {
   }
   // "input" order: no sort — preserves table order
   const cumResults = cumulativeMeta(cumulativeStudies, method, ciMethod);
-  cumulativeForestPage = 0;
+  cumForestPlot.page = 0;
   const rawCumPageSize = document.getElementById("cumulativeForestPageSize")?.value ?? "30";
   const cumForestPageSize = rawCumPageSize === "Infinity" ? Infinity : +rawCumPageSize;
-  _cumulativeForestArgs = { results: cumResults, profile, pageSize: cumForestPageSize };
+  cumForestPlot.args = { results: cumResults, profile, pageSize: cumForestPageSize };
   const { totalPages: cumForestPages } = drawCumulativeForest(cumResults, profile, { pageSize: cumForestPageSize, page: 0 });
   renderCumulativeForestNav(cumForestPages);
 
   // ---- Cumulative funnel plot ----
-  _cumFunnelStudies = cumulativeStudies;
-  _cumFunnelResults = cumResults;
-  _cumFunnelProfile = profile;
+  cumFunnelPlot.studies = cumulativeStudies;
+  cumFunnelPlot.results = cumResults;
+  cumFunnelPlot.profile = profile;
   const _cfSlider = document.getElementById("cumulativeFunnelStep");
   _cfSlider.max   = cumResults.length - 1;
   _cfSlider.value = cumResults.length - 1;
@@ -2301,10 +2300,10 @@ function runAnalysis() {
   // ---- Orchard + caterpillar plots ----
   drawOrchardPlot(all, m, profile);
   document.getElementById("orchardPlotBlock").style.display = "";
-  caterpillarPage = 0;
+  caterpillarPlot.page = 0;
   const rawCatPageSize = document.getElementById("caterpillarPageSize")?.value ?? "30";
   const catPageSize = rawCatPageSize === "Infinity" ? Infinity : +rawCatPageSize;
-  _caterpillarArgs = { studies: all, m, profile, pageSize: catPageSize };
+  caterpillarPlot.args = { studies: all, m, profile, pageSize: catPageSize };
   const { totalPages: catPages } = drawCaterpillarPlot(all, m, profile, { pageSize: catPageSize, page: 0 });
   renderCaterpillarNav(catPages);
   document.getElementById("caterpillarPlotBlock").style.display = "";

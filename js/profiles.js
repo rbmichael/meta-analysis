@@ -43,16 +43,63 @@
 import { hedgesG, parseCounts, gorFromCounts, tetrachoricFromCounts } from "./utils.js";
 import { MIN_VAR, Z_95 } from "./constants.js";
 
+// ---------------------------------------------------------------------------
+// Shared validation helpers — called from the profile objects below so that
+// common field-set checks are not duplicated across similar effect types.
+// ---------------------------------------------------------------------------
+
+// validateTwoGroup(s, minN) → { valid, errors }
+// Hard validation for the six fields shared by MD, SMD, and SMDH.
+// minN: minimum per-group sample size (1 for MD/SMD, 2 for SMDH).
+function validateTwoGroup(s, minN) {
+  const errors = {};
+  if (!isFinite(s.m1))                errors.m1  = "m1 must be numeric";
+  if (!isFinite(s.sd1) || s.sd1 <= 0) errors.sd1 = "sd1 must be > 0";
+  if (!isFinite(s.n1)  || s.n1  < minN) errors.n1 = `n1 must be ≥ ${minN}`;
+  if (!isFinite(s.m2))                errors.m2  = "m2 must be numeric";
+  if (!isFinite(s.sd2) || s.sd2 <= 0) errors.sd2 = "sd2 must be > 0";
+  if (!isFinite(s.n2)  || s.n2  < minN) errors.n2 = `n2 must be ≥ ${minN}`;
+  return { valid: Object.keys(errors).length === 0, errors };
+}
+
+// softWarnTwoGroup(s, label) → string[]
+// Advisory warnings for two-group continuous designs (MD, SMD, SMDH base).
+// Threshold rationale:
+//   n < 10      — With fewer than 10 per group the CLT approximation is poor and
+//                 the Hedges J correction becomes inaccurate (df = n1+n2-2 is small).
+//   ratio > 3   — Group-size imbalance: pooled-SD estimators assume roughly equal n;
+//                 ratios beyond 3 inflate Type I error (Wilcox 1994).
+//   SD ratio >3 — Equal-variance assumption of pooled SD breaks down; SMDH or separate
+//                 Welch-style variance is preferable when SDs differ substantially.
+function softWarnTwoGroup(s, label) {
+  const w = [];
+  if (isFinite(s.n1) && s.n1 < 10)
+    w.push(`⚠️ ${label}: small sample size (n1 < 10)`);
+  if (isFinite(s.n2) && s.n2 < 10)
+    w.push(`⚠️ ${label}: small sample size (n2 < 10)`);
+  if (isFinite(s.n1) && isFinite(s.n2) && Math.max(s.n1, s.n2) / Math.min(s.n1, s.n2) > 3)
+    w.push(`⚠️ ${label}: highly imbalanced group sizes`);
+  if (isFinite(s.sd1) && isFinite(s.sd2) && Math.max(s.sd1, s.sd2) / Math.min(s.sd1, s.sd2) > 3)
+    w.push(`⚠️ ${label}: large SD imbalance`);
+  return w;
+}
+
+// validatePaired(s) → { valid, errors }
+// Hard validation for the six fields shared by MD_paired, SMD_paired, and SMCC.
+function validatePaired(s) {
+  const errors = {};
+  if (!isFinite(s.m_pre))                       errors.m_pre  = "m_pre must be numeric";
+  if (!isFinite(s.m_post))                      errors.m_post = "m_post must be numeric";
+  if (!isFinite(s.sd_pre)  || s.sd_pre  <= 0)  errors.sd_pre  = "sd_pre must be > 0";
+  if (!isFinite(s.sd_post) || s.sd_post <= 0)  errors.sd_post = "sd_post must be > 0";
+  if (!isFinite(s.n) || s.n < 2)               errors.n = "n must be ≥ 2";
+  if (isFinite(s.r) && (s.r < -1 || s.r > 1)) errors.r = "r must be between -1 and 1";
+  return { valid: Object.keys(errors).length === 0, errors };
+}
+
 export const effectProfiles = {
 
   // ------------------------------------------------------------------ //
-  // Threshold rationale shared by MD and SMD (pooled-SD continuous two-group):
-  //   n < 10      — With fewer than 10 per group the CLT approximation is poor and
-  //                 the Hedges J correction becomes inaccurate (df = n1+n2-2 is small).
-  //   ratio > 3   — Group-size imbalance: pooled-SD estimators assume roughly equal n;
-  //                 ratios beyond 3 inflate Type I error (Wilcox 1994).
-  //   SD ratio >3 — Equal-variance assumption of pooled SD breaks down; SMDH or separate
-  //                 Welch-style variance is preferable when SDs differ substantially.
   "MD": {
     label:  "Mean Difference",
     group:  "Continuous (two groups)",
@@ -62,28 +109,8 @@ export const effectProfiles = {
       return { ...s, md: s.m1 - s.m2, varMD, se: Math.sqrt(varMD), w: 1/varMD, yi: s.m1 - s.m2, vi: varMD };
     },
     transform:   (x) => x,
-
-    validate(s) {
-      const errors = {};
-      if (!isFinite(s.m1))              errors.m1  = "m1 must be numeric";
-      if (!isFinite(s.sd1) || s.sd1 <= 0) errors.sd1 = "sd1 must be > 0";
-      if (!isFinite(s.n1)  || s.n1  < 1)  errors.n1  = "n1 must be ≥ 1";
-      if (!isFinite(s.m2))              errors.m2  = "m2 must be numeric";
-      if (!isFinite(s.sd2) || s.sd2 <= 0) errors.sd2 = "sd2 must be > 0";
-      if (!isFinite(s.n2)  || s.n2  < 1)  errors.n2  = "n2 must be ≥ 1";
-      return { valid: Object.keys(errors).length === 0, errors };
-    },
-
-    softWarnings(s, label) {
-      const w = [];
-      if (isFinite(s.n1) && s.n1 < 10) w.push(`⚠️ ${label}: small sample size (n1 < 10)`);
-      if (isFinite(s.n2) && s.n2 < 10) w.push(`⚠️ ${label}: small sample size (n2 < 10)`);
-      if (isFinite(s.n1) && isFinite(s.n2) && Math.max(s.n1, s.n2) / Math.min(s.n1, s.n2) > 3)
-        w.push(`⚠️ ${label}: highly imbalanced group sizes`);
-      if (isFinite(s.sd1) && isFinite(s.sd2) && Math.max(s.sd1, s.sd2) / Math.min(s.sd1, s.sd2) > 3)
-        w.push(`⚠️ ${label}: large SD imbalance`);
-      return w;
-    },
+    validate:      (s) => validateTwoGroup(s, 1),
+    softWarnings:  softWarnTwoGroup,
 
     exampleData: [
       ["Study1", 10, 2, 30, 8, 2, 28, "A"],
@@ -102,28 +129,8 @@ export const effectProfiles = {
       return { ...s, md: g.es, varMD: g.var, se: Math.sqrt(g.var), w: 1/g.var, yi: g.es, vi: g.var };
     },
     transform:   (x) => x,
-
-    validate(s) {
-      const errors = {};
-      if (!isFinite(s.m1))              errors.m1  = "m1 must be numeric";
-      if (!isFinite(s.sd1) || s.sd1 <= 0) errors.sd1 = "sd1 must be > 0";
-      if (!isFinite(s.n1)  || s.n1  < 1)  errors.n1  = "n1 must be ≥ 1";
-      if (!isFinite(s.m2))              errors.m2  = "m2 must be numeric";
-      if (!isFinite(s.sd2) || s.sd2 <= 0) errors.sd2 = "sd2 must be > 0";
-      if (!isFinite(s.n2)  || s.n2  < 1)  errors.n2  = "n2 must be ≥ 1";
-      return { valid: Object.keys(errors).length === 0, errors };
-    },
-
-    softWarnings(s, label) {
-      const w = [];
-      if (isFinite(s.n1) && s.n1 < 10) w.push(`⚠️ ${label}: small sample size (n1 < 10)`);
-      if (isFinite(s.n2) && s.n2 < 10) w.push(`⚠️ ${label}: small sample size (n2 < 10)`);
-      if (isFinite(s.n1) && isFinite(s.n2) && Math.max(s.n1, s.n2) / Math.min(s.n1, s.n2) > 3)
-        w.push(`⚠️ ${label}: highly imbalanced group sizes`);
-      if (isFinite(s.sd1) && isFinite(s.sd2) && Math.max(s.sd1, s.sd2) / Math.min(s.sd1, s.sd2) > 3)
-        w.push(`⚠️ ${label}: large SD imbalance`);
-      return w;
-    },
+    validate:      (s) => validateTwoGroup(s, 1),
+    softWarnings:  softWarnTwoGroup,
 
     exampleData: [
       ["Study1", 10, 2, 30, 8, 2, 28, "A"],
@@ -133,11 +140,9 @@ export const effectProfiles = {
   },
 
   // ------------------------------------------------------------------ //
-  // Threshold rationale for SMDH (heteroscedastic SMD):
-  //   n < 10, ratio > 3 — same as MD/SMD above.
-  //   SD ratio < 1.1    — When the two SDs are nearly identical the equal-variance
-  //                       assumption holds; standard SMD (pooled SD) has lower variance
-  //                       and is more widely reported — SMDH adds no benefit here.
+  // SMDH uses minN = 2 (variance formula requires df = n1+n2-2 ≥ 2) and adds
+  // one extra warning beyond softWarnTwoGroup: when SD ratio < 1.1 the equal-
+  // variance assumption holds and standard SMD is preferable.
   "SMDH": {
     label:  "Standardized Mean Difference (heteroscedastic)",
     group:  "Continuous (two groups)",
@@ -157,25 +162,10 @@ export const effectProfiles = {
     },
     transform:   (x) => x,
 
-    validate(s) {
-      const errors = {};
-      if (!isFinite(s.m1))                errors.m1  = "m1 must be numeric";
-      if (!isFinite(s.sd1) || s.sd1 <= 0) errors.sd1 = "sd1 must be > 0";
-      if (!isFinite(s.n1)  || s.n1  < 2)  errors.n1  = "n1 must be ≥ 2";
-      if (!isFinite(s.m2))                errors.m2  = "m2 must be numeric";
-      if (!isFinite(s.sd2) || s.sd2 <= 0) errors.sd2 = "sd2 must be > 0";
-      if (!isFinite(s.n2)  || s.n2  < 2)  errors.n2  = "n2 must be ≥ 2";
-      return { valid: Object.keys(errors).length === 0, errors };
-    },
+    validate: (s) => validateTwoGroup(s, 2),
 
     softWarnings(s, label) {
-      const w = [];
-      if (isFinite(s.n1) && s.n1 < 10) w.push(`⚠️ ${label}: small sample size (n1 < 10)`);
-      if (isFinite(s.n2) && s.n2 < 10) w.push(`⚠️ ${label}: small sample size (n2 < 10)`);
-      if (isFinite(s.n1) && isFinite(s.n2) && Math.max(s.n1, s.n2) / Math.min(s.n1, s.n2) > 3)
-        w.push(`⚠️ ${label}: highly imbalanced group sizes`);
-      if (isFinite(s.sd1) && isFinite(s.sd2) && Math.max(s.sd1, s.sd2) / Math.min(s.sd1, s.sd2) > 3)
-        w.push(`⚠️ ${label}: large SD imbalance`);
+      const w = softWarnTwoGroup(s, label);
       if (isFinite(s.sd1) && isFinite(s.sd2) && s.sd1 > 0 && s.sd2 > 0 &&
           Math.max(s.sd1, s.sd2) / Math.min(s.sd1, s.sd2) < 1.1)
         w.push(`⚠️ ${label}: sd1 ≈ sd2 — standard SMD (pooled SD) is equally valid and more widely reported`);
@@ -206,17 +196,7 @@ export const effectProfiles = {
     },
     transform:   (x) => x,
 
-    validate(s) {
-      const errors = {};
-      if (!isFinite(s.m_pre))                  errors.m_pre  = "m_pre must be numeric";
-      if (!isFinite(s.m_post))                 errors.m_post = "m_post must be numeric";
-      if (!isFinite(s.sd_pre)  || s.sd_pre  <= 0) errors.sd_pre  = "sd_pre must be > 0";
-      if (!isFinite(s.sd_post) || s.sd_post <= 0) errors.sd_post = "sd_post must be > 0";
-      if (!isFinite(s.n) || s.n < 2)          errors.n = "n must be ≥ 2";
-      if (isFinite(s.r) && (s.r < -1 || s.r > 1)) errors.r = "r must be between -1 and 1";
-      return { valid: Object.keys(errors).length === 0, errors };
-    },
-
+    validate:     (s) => validatePaired(s),
     softWarnings(_s, _label) { return []; },
 
     exampleData: [
@@ -246,17 +226,7 @@ export const effectProfiles = {
     },
     transform:   (x) => x,
 
-    validate(s) {
-      const errors = {};
-      if (!isFinite(s.m_pre))                  errors.m_pre  = "m_pre must be numeric";
-      if (!isFinite(s.m_post))                 errors.m_post = "m_post must be numeric";
-      if (!isFinite(s.sd_pre)  || s.sd_pre  <= 0) errors.sd_pre  = "sd_pre must be > 0";
-      if (!isFinite(s.sd_post) || s.sd_post <= 0) errors.sd_post = "sd_post must be > 0";
-      if (!isFinite(s.n) || s.n < 2)          errors.n = "n must be ≥ 2";
-      if (isFinite(s.r) && (s.r < -1 || s.r > 1)) errors.r = "r must be between -1 and 1";
-      return { valid: Object.keys(errors).length === 0, errors };
-    },
-
+    validate:     (s) => validatePaired(s),
     softWarnings(_s, _label) { return []; },
 
     exampleData: [

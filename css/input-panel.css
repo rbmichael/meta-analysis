@@ -1,0 +1,384 @@
+/* ================================================================
+   INPUT TABLE
+   ================================================================ */
+
+#inputTable {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 12px;
+  font-size: 0.8125rem;
+}
+
+/* Header row */
+#inputTable th {
+  background: var(--bg-th);
+  color: var(--fg-muted);
+  font-weight: 500;
+  font-size: 0.75rem;
+  letter-spacing: 0.03em;
+  padding: 7px 8px;
+  border: 1px solid var(--border);
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* Data cells */
+#inputTable td {
+  padding: 2px;
+  border: 1px solid var(--border);
+  background: transparent;
+  text-align: center;
+}
+
+/* Inputs that live inside table cells */
+#inputTable td input {
+  width: 100%;
+  box-sizing: border-box;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  color: var(--fg);
+  font-size: 0.8125rem;
+  padding: 5px 6px;
+  text-align: center;
+  transition: background var(--t-fast);
+}
+
+#inputTable td input:focus {
+  outline: none;
+  background: var(--accent-subtle);
+  box-shadow: none;
+}
+
+/* Study name column — left-aligned, monospace feel */
+#inputTable td:first-child input {
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+}
+
+/* Group column — slightly muted */
+#inputTable td input.group {
+  color: var(--fg-muted);
+  text-align: left;
+}
+
+/* Actions column */
+#inputTable td:last-child {
+  white-space: nowrap;
+  padding: 3px 4px;
+}
+
+/* Remove / clear row buttons */
+.remove-btn,
+.clear-btn {
+  padding: 2px 6px;
+  font-size: 0.7rem;
+  margin: 0 1px;
+  border-radius: var(--radius-xs);
+  line-height: 1.4;
+  min-width: 0;
+}
+
+.remove-btn:hover {
+  background: var(--badge-error-bg-hover);
+  color: var(--color-error);
+  border-color: var(--badge-error-border-hover);
+}
+
+.clear-btn:hover {
+  background: var(--badge-warning-bg-hover);
+  color: var(--color-warning);
+  border-color: var(--badge-warning-border-hover);
+}
+
+/* ---- Validation states ---- */
+
+/* Invalid cell: accent border + subtle glow */
+.input-error {
+  border: 1px solid var(--color-error) !important;
+  box-shadow: 0 0 0 2px var(--badge-error-glow) !important;
+  border-radius: var(--radius-xs);
+}
+
+/* Invalid row: very faint red tint on all cells */
+.row-error td {
+  background: var(--badge-error-bg-faint) !important;
+}
+
+/* ---- Validation warnings (below table) ---- */
+#validationWarnings {
+  margin-top: 8px;
+  font-size: 0.8rem;
+  line-height: 1.8;
+  color: var(--fg-muted);
+}
+
+/* ❌ error lines */
+#validationWarnings br + *,
+#validationWarnings {
+  /* messages separated by <br> — color whole block, emoji handles distinction */
+}
+
+/* ---- CSV import warning ---- */
+#csvWarning {
+  font-size: 0.8125rem;
+  color: var(--color-error);
+  background: var(--badge-error-bg-faint);
+  border: 1px solid var(--badge-error-border);
+  border-radius: var(--radius-md);
+  padding: 6px 12px;
+  margin-bottom: 10px;
+  display: none;
+}
+
+/* ---- Draft restore banner ---- */
+#draftBanner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--accent-subtle);
+  border: 1px solid var(--border-accent);
+  border-radius: var(--radius-md);
+  padding: 8px 10px 8px 14px;
+  margin-bottom: 14px;
+  font-size: 0.8125rem;
+  color: var(--color-info);
+}
+
+#draftBannerText {
+  flex: 1;
+  min-width: 0;
+}
+
+.draft-banner-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+#draftStartFresh {
+  padding: 3px 10px;
+  font-size: 0.75rem;
+  background: transparent;
+  color: var(--color-info);
+  border: 1px solid var(--badge-info-border);
+  border-radius: var(--radius-sm);
+  margin: 0;
+  transition: background var(--t-fast), border-color var(--t-fast);
+}
+
+#draftStartFresh:hover {
+  background: var(--badge-info-bg);
+  border-color: var(--badge-info-border-hover);
+}
+
+#draftDismiss {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  font-size: 1rem;
+  line-height: 1;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  margin: 0;
+  transition: color var(--t-fast), background var(--t-fast);
+}
+
+#draftDismiss:hover {
+  color: var(--fg);
+  background: var(--bg-surface);
+}
+
+/* ---- Stale banner ---- */
+#staleBanner {
+  display: none;
+  background: var(--badge-warning-bg-faint);
+  border: 1px solid var(--badge-warning-border);
+  border-radius: var(--radius-md);
+  padding: 8px 14px;
+  margin-bottom: 14px;
+  font-size: 0.8125rem;
+  color: var(--color-warning);
+}
+
+/* ---- Checkbox override ---- */
+input[type="checkbox"] {
+  width: auto;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+/* ---- File input override ---- */
+input[type="file"] {
+  width: auto;
+  background: transparent;
+  border: none;
+  padding: 0;
+  color: var(--fg-muted);
+  font-size: 0.8125rem;
+}
+
+input[type="file"]::file-selector-button {
+  background: var(--bg-ghost);
+  color: var(--fg-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 4px 10px;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  margin-right: 8px;
+  transition: background var(--t-fast), color var(--t-fast), border-color var(--t-fast);
+}
+
+input[type="file"]::file-selector-button:hover {
+  background: var(--bg-ghost-hover);
+  color: var(--fg);
+  border-color: var(--border-hover);
+}
+
+/* ---- Moderator manager ---- */
+#moderatorManager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 0 14px;
+  border-top: 1px solid var(--border);
+  margin-top: 2px;
+}
+
+#moderatorManager strong {
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+}
+
+/* ---- Risk-of-bias domain manager ---- */
+#robManager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 0 14px;
+  border-top: 1px solid var(--border);
+  margin-top: 2px;
+}
+
+#robManager strong {
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+}
+
+.rob-domain-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px 2px 10px;
+  background: var(--bg-th);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  font-size: 12px;
+  color: var(--fg);
+}
+
+.rob-domain-tag button {
+  background: none;
+  border: none;
+  color: var(--fg-muted);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 1px;
+}
+
+.rob-domain-tag button:hover { color: var(--fg); }
+
+/* ---- Risk-of-bias data entry grid ---- */
+#robDataGrid {
+  margin-top: 4px;
+  margin-bottom: 8px;
+  overflow-x: auto;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+
+#robDataGrid table {
+  border-collapse: collapse;
+  font-size: 12px;
+  width: auto;
+}
+
+#robDataGrid th,
+#robDataGrid td {
+  border: 1px solid var(--border);
+  padding: 3px 6px;
+  white-space: nowrap;
+}
+
+#robDataGrid th {
+  background: var(--bg-th);
+  font-weight: 500;
+  text-align: center;
+  color: var(--fg-muted);
+  font-size: 11px;
+}
+
+.rob-study-label {
+  font-weight: 500;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--fg);
+}
+
+#robDataGrid select {
+  font-size: 11px;
+  padding: 1px 2px;
+  min-width: 110px;
+  border: none;
+  cursor: pointer;
+  border-radius: 3px;
+  color: inherit;
+}
+
+.rob-rating-low  { background: var(--rob-low-bg); }
+.rob-rating-some { background: var(--rob-some-bg); }
+.rob-rating-high { background: var(--rob-high-bg); }
+.rob-rating-ni   { background: var(--bg-th); }
+
+/* ---- Primary action: Run ---- */
+#run {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--border-accent-strong);
+  box-shadow: var(--shadow-btn-accent);
+  font-weight: 600;
+  padding: 6px 20px;
+  margin-left: 4px;
+}
+
+#run:hover {
+  background: var(--accent-bright);
+  border-color: var(--border-accent-strong);
+  box-shadow: var(--shadow-btn-accent-hover);
+  color: #fff;
+}
+
+/* ---- Secondary action: Add Study ---- */
+#addStudy {
+  padding: 6px 14px;
+}

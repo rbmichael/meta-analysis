@@ -130,6 +130,22 @@ function esc(s) {
     .replace(/"/g, "&quot;");
 }
 
+// buildTable(headers, rows, opts) → HTML string
+// Shared helper for every stat-table in the report.
+//   headers    string[]  — header cell text (HTML-safe strings passed by callers)
+//   rows       string[]  — pre-built <tr>…</tr> strings
+//   opts.extraClass string  — appended to class="stat-table …"
+//   opts.style      string  — inline style on the <table> element
+//   opts.tfoot      string  — raw inner HTML for a <tfoot> block (optional)
+function buildTable(headers, rows, { extraClass = "", style = "", tfoot = "" } = {}) {
+  const cls  = extraClass ? ` ${extraClass}` : "";
+  const styl = style      ? ` style="${style}"` : "";
+  const head = `<thead><tr>${headers.map(h => `<th>${h}</th>`).join("")}</tr></thead>`;
+  const body = `<tbody>${rows.join("")}</tbody>`;
+  const foot = tfoot ? `<tfoot>${tfoot}</tfoot>` : "";
+  return `<table class="stat-table${cls}"${styl}>${head}${body}${foot}</table>`;
+}
+
 // ---------------------------------------------------------------------------
 // Section builders
 // ---------------------------------------------------------------------------
@@ -160,29 +176,38 @@ function sectionSummary(args) {
   const tauCI2   = isFinite(m.tauCI[1]) ? fmt(m.tauCI[1]) : "∞";
   const H2hi     = isFinite(m.H2CI[1])  ? fmt(m.H2CI[1])  : "∞";
 
+  const settingsTable = buildTable(
+    ["Setting", "Value"],
+    [
+      `<tr><td>Effect type</td><td>${esc(profile.label)}</td></tr>`,
+      `<tr><td>τ² estimator</td><td>${esc(method)}</td></tr>`,
+      `<tr><td>CI method</td><td>${esc(ciLabel)}</td></tr>`,
+      `<tr><td>Studies (k)</td><td>${k}${tf.length > 0 ? ` + ${tf.length} imputed (trim &amp; fill)` : ""}</td></tr>`,
+    ]
+  );
+
+  const statsTable = buildTable(
+    ["Statistic", "Value"],
+    [
+      `<tr><td>${esc(profile.label)} — Fixed Effects</td><td>${fmt(FE_disp)}</td></tr>`,
+      `<tr><td>${esc(profile.label)} — Random Effects</td><td><strong>${fmt(RE_disp)}</strong></td></tr>`,
+      RE_adj !== null ? `<tr><td>RE (trim-and-fill adjusted)</td><td>${fmt(RE_adj)}</td></tr>` : "",
+      `<tr><td>95% CI</td><td>[${fmt(ci.lb)}, ${fmt(ci.ub)}]</td></tr>`,
+      `<tr><td>95% Prediction interval</td><td>[${fmt(pred.lb)}, ${fmt(pred.ub)}]</td></tr>`,
+      `<tr><td>τ²</td><td>${fmt(m.tau2)} [${tauCI1}, ${tauCI2}]</td></tr>`,
+      `<tr><td>I²</td><td>${fmt(m.I2)}% [${fmt(m.I2CI[0])}%, ${fmt(m.I2CI[1])}%]</td></tr>`,
+      `<tr><td>H²-CI</td><td>[${fmt(m.H2CI[0])}, ${H2hi}]</td></tr>`,
+      `<tr><td>Q (df = ${m.df})</td><td>${fmt(m.Q)}</td></tr>`,
+      `<tr><td>${esc(m.dist)}-statistic</td><td>${fmt(m.stat)}, p = ${fmtP(m.pval)}</td></tr>`,
+    ].filter(Boolean),
+    { style: "margin-top:14px" }
+  );
+
   return `
 <section>
   <h2>Summary</h2>
-  <table class="stat-table">
-    <tr><th>Setting</th><th>Value</th></tr>
-    <tr><td>Effect type</td><td>${esc(profile.label)}</td></tr>
-    <tr><td>τ² estimator</td><td>${esc(method)}</td></tr>
-    <tr><td>CI method</td><td>${esc(ciLabel)}</td></tr>
-    <tr><td>Studies (k)</td><td>${k}${tf.length > 0 ? ` + ${tf.length} imputed (trim &amp; fill)` : ""}</td></tr>
-  </table>
-  <table class="stat-table" style="margin-top:14px">
-    <tr><th>Statistic</th><th>Value</th></tr>
-    <tr><td>${esc(profile.label)} — Fixed Effects</td><td>${fmt(FE_disp)}</td></tr>
-    <tr><td>${esc(profile.label)} — Random Effects</td><td><strong>${fmt(RE_disp)}</strong></td></tr>
-    ${RE_adj !== null ? `<tr><td>RE (trim-and-fill adjusted)</td><td>${fmt(RE_adj)}</td></tr>` : ""}
-    <tr><td>95% CI</td><td>[${fmt(ci.lb)}, ${fmt(ci.ub)}]</td></tr>
-    <tr><td>95% Prediction interval</td><td>[${fmt(pred.lb)}, ${fmt(pred.ub)}]</td></tr>
-    <tr><td>τ²</td><td>${fmt(m.tau2)} [${tauCI1}, ${tauCI2}]</td></tr>
-    <tr><td>I²</td><td>${fmt(m.I2)}% [${fmt(m.I2CI[0])}%, ${fmt(m.I2CI[1])}%]</td></tr>
-    <tr><td>H²-CI</td><td>[${fmt(m.H2CI[0])}, ${H2hi}]</td></tr>
-    <tr><td>Q (df = ${m.df})</td><td>${fmt(m.Q)}</td></tr>
-    <tr><td>${esc(m.dist)}-statistic</td><td>${fmt(m.stat)}, p = ${fmtP(m.pval)}</td></tr>
-  </table>
+  ${settingsTable}
+  ${statsTable}
 </section>`;
 }
 
@@ -199,32 +224,20 @@ function sectionPubBias(args) {
   const petEff = isFinite(fatpet.intercept)
     ? fmt(profile.transform(fatpet.intercept)) : "—";
 
+  const table = buildTable(
+    ["Test", "Statistic", "p-value"],
+    [
+      `<tr><td>Egger (intercept)</td><td>${isFinite(egger.intercept) ? fmt(egger.intercept) : "—"}</td><td>${isFinite(egger.p) ? fmtP(egger.p) : "NA (k &lt; 3)"}</td></tr>`,
+      `<tr><td>Begg (rank correlation τ)</td><td>${isFinite(begg.tau) ? fmt(begg.tau) : "—"}</td><td>${isFinite(begg.p) ? fmtP(begg.p) : "NA (k &lt; 3)"}</td></tr>`,
+      `<tr><td>FAT — β₁ (bias)</td><td>${isFinite(fatpet.slope) ? fmt(fatpet.slope) : "—"}</td><td>${isFinite(fatpet.slopeP) ? fmtP(fatpet.slopeP) : "NA (k &lt; 3)"}</td></tr>`,
+      `<tr><td>PET — effect at SE → 0</td><td>${petEff}</td><td>${isFinite(fatpet.interceptP) ? fmtP(fatpet.interceptP) : "NA (k &lt; 3)"}</td></tr>`,
+    ]
+  );
+
   return `
 <section>
   <h2>Publication Bias</h2>
-  <table class="stat-table">
-    <tr><th>Test</th><th>Statistic</th><th>p-value</th></tr>
-    <tr>
-      <td>Egger (intercept)</td>
-      <td>${isFinite(egger.intercept) ? fmt(egger.intercept) : "—"}</td>
-      <td>${isFinite(egger.p) ? fmtP(egger.p) : "NA (k &lt; 3)"}</td>
-    </tr>
-    <tr>
-      <td>Begg (rank correlation τ)</td>
-      <td>${isFinite(begg.tau) ? fmt(begg.tau) : "—"}</td>
-      <td>${isFinite(begg.p)   ? fmtP(begg.p)  : "NA (k &lt; 3)"}</td>
-    </tr>
-    <tr>
-      <td>FAT — β₁ (bias)</td>
-      <td>${isFinite(fatpet.slope) ? fmt(fatpet.slope) : "—"}</td>
-      <td>${isFinite(fatpet.slopeP) ? fmtP(fatpet.slopeP) : "NA (k &lt; 3)"}</td>
-    </tr>
-    <tr>
-      <td>PET — effect at SE → 0</td>
-      <td>${petEff}</td>
-      <td>${isFinite(fatpet.interceptP) ? fmtP(fatpet.interceptP) : "NA (k &lt; 3)"}</td>
-    </tr>
-  </table>
+  ${table}
   <p style="margin-top:10px">
     Fail-safe N (Rosenthal): <strong>${isFinite(fsn.rosenthal) ? Math.round(fsn.rosenthal) : "—"}</strong>
     &nbsp;·&nbsp;
@@ -246,31 +259,19 @@ function sectionPUniform(puniform, m, profile) {
   const puLo   = fmtEst(puniform.ciLow);
   const puHi   = fmtEst(puniform.ciHigh);
 
+  const table = buildTable(
+    ["Method", "Estimate", "95% CI", "Z", "p"],
+    [
+      `<tr><td>RE (uncorrected)</td><td>${reEst}</td><td>[${reLo}, ${reHi}]</td><td>${fmt(puniform.Z_bias)}</td><td>${fmtP(puniform.p_bias)}</td></tr>`,
+      `<tr><td>P-uniform (bias-corrected)</td><td>${puEst}</td><td>[${puLo}, ${puHi}]</td><td>${fmt(puniform.Z_sig)}</td><td>${fmtP(puniform.p_sig)}</td></tr>`,
+    ]
+  );
+
   return `
 <section>
   <h2>P-uniform (van Assen et al., 2015)</h2>
   <p class="meta-line">${puniform.k} significant result${puniform.k !== 1 ? "s" : ""} (p &lt; .05) used &nbsp;·&nbsp; effect scale: ${esc(profile.label)}</p>
-  <table class="stat-table">
-    <thead>
-      <tr><th>Method</th><th>Estimate</th><th>95% CI</th><th>Z</th><th>p</th></tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td>RE (uncorrected)</td>
-        <td>${reEst}</td>
-        <td>[${reLo}, ${reHi}]</td>
-        <td>${fmt(puniform.Z_bias)}</td>
-        <td>${fmtP(puniform.p_bias)}</td>
-      </tr>
-      <tr>
-        <td>P-uniform (bias-corrected)</td>
-        <td>${puEst}</td>
-        <td>[${puLo}, ${puHi}]</td>
-        <td>${fmt(puniform.Z_sig)}</td>
-        <td>${fmtP(puniform.p_sig)}</td>
-      </tr>
-    </tbody>
-  </table>
+  ${table}
   <p class="note" style="margin-top:8px">
     RE row: bias test (H₀: RE = true effect) — positive Z indicates overestimation.
     P-uniform row: significance test (H₀: δ = 0) — negative Z indicates true positive effect.
@@ -310,13 +311,10 @@ function sectionInfluence(influence, k) {
   return `
 <section>
   <h2>Influence Diagnostics</h2>
-  <table class="stat-table">
-    <thead><tr>
-      <th>Study</th><th>RE (LOO)</th><th>Δτ²</th><th>Std Residual</th>
-      <th>DFBETA</th><th>Hat</th><th>Cook's D</th><th>Flags</th>
-    </tr></thead>
-    <tbody>${rows}</tbody>
-  </table>
+  ${buildTable(
+    ["Study", "RE (LOO)", "Δτ²", "Std Residual", "DFBETA", "Hat", "Cook's D", "Flags"],
+    rows
+  )}
   <p class="note">Thresholds: Hat &gt; ${thresh2k} (= 2/k) · Cook's D &gt; ${thresh4k} (= 4/k)</p>
 </section>`;
 }
@@ -342,13 +340,7 @@ function sectionSubgroup(subgroup, profile) {
   return `
 <section>
   <h2>Subgroup Analysis</h2>
-  <table class="stat-table">
-    <thead><tr>
-      <th>Group</th><th>k</th><th>Effect</th><th>SE</th>
-      <th>95% CI</th><th>τ²</th><th>I²</th>
-    </tr></thead>
-    <tbody>${rows}</tbody>
-  </table>
+  ${buildTable(["Group", "k", "Effect", "SE", "95% CI", "τ²", "I²"], rows)}
   <p class="note">
     Q<sub>between</sub> = ${subgroup.Qbetween.toFixed(3)},
     df = ${subgroup.df},
@@ -401,24 +393,23 @@ function sectionStudyTable(args) {
   const pooledLo = profile.transform(m.ciLow);
   const pooledHi = profile.transform(m.ciHigh);
 
-  return `
-<section>
-  <h2>Study-Level Results</h2>
-  <table class="stat-table study-tbl">
-    <thead><tr>
-      <th>Study</th><th>Effect</th><th>95% CI (low)</th><th>95% CI (high)</th>
-      <th>${esc(seLabel)}</th><th>RE Weight</th>
-    </tr></thead>
-    <tbody>${rows}</tbody>
-    <tfoot><tr class="pooled">
+  const tfoot = `<tr class="pooled">
       <td>Pooled (RE)</td>
       <td>${fmtV(pooledEf)}</td>
       <td>${fmtV(pooledLo)}</td>
       <td>${fmtV(pooledHi)}</td>
       <td>${fmtV(m.seRE)}</td>
       <td>100%</td>
-    </tr></tfoot>
-  </table>
+    </tr>`;
+
+  return `
+<section>
+  <h2>Study-Level Results</h2>
+  ${buildTable(
+    ["Study", "Effect", "95% CI (low)", "95% CI (high)", esc(seLabel), "RE Weight"],
+    rows,
+    { extraClass: "study-tbl", tfoot }
+  )}
 </section>`;
 }
 
@@ -464,13 +455,7 @@ function sectionRegression(reg, method, ciMethod) {
     · QE(${reg.QEdf}) = ${fmt(reg.QE)}, p = ${fmtP(reg.QEp)}
     ${reg.p > 1 ? `· QM ${esc(QMlabel)} = ${fmt(reg.QM)}, p = ${fmtP(reg.QMp)}` : ""}
   </p>
-  <table class="stat-table">
-    <thead><tr>
-      <th>Term</th><th>β</th><th>SE</th><th>${esc(statLabel)}</th>
-      <th>p</th><th>95% CI</th><th></th>
-    </tr></thead>
-    <tbody>${rows}</tbody>
-  </table>
+  ${buildTable(["Term", "β", "SE", esc(statLabel), "p", "95% CI", ""], rows)}
   <p class="note">*** p &lt; .001 · ** p &lt; .01 · * p &lt; .05 · . p &lt; .10</p>
 </section>`;
 }

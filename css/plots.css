@@ -1,0 +1,182 @@
+/* ================================================================
+   PLOT CHROME
+   ================================================================ */
+
+.plot-block {
+  padding-bottom: 28px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.plot-block:last-child {
+  border-bottom: none;
+  padding-bottom: 4px;
+  margin-bottom: 0;
+}
+
+.plot-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+  margin: 0 0 8px;
+}
+
+/* SVG elements rendered directly inside a plot block */
+.plot-block > svg {
+  display: block;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+/* D3-generated axis elements — styled via CSS so all plots inherit */
+.plot-block > svg .domain,
+.plot-block > svg .tick line,
+#bubblePlots svg .domain,
+#bubblePlots svg .tick line {
+  stroke: var(--border-hover);
+}
+.plot-block > svg .tick text,
+#bubblePlots svg .tick text {
+  fill: var(--fg-muted);
+  font-size: 11px;
+}
+
+/* ---- Forest plot page navigation ---- */
+#forestNav {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  font-size: 0.82em;
+  color: var(--fg-muted);
+}
+
+#forestNav button {
+  padding: 3px 10px;
+  background: transparent;
+  border-radius: var(--radius-xs);
+  font-size: 0.9em;
+}
+
+#forestNav button:hover:not(:disabled) {
+  background: var(--bg-surface-hover);
+  color: var(--fg);
+  border-color: var(--border-hover);
+}
+
+#forestNav button:disabled {
+  color: var(--fg-disabled);
+  border-color: var(--border-disabled);
+  cursor: default;
+}
+
+.forest-nav-note {
+  margin-left: 6px;
+  font-style: italic;
+  color: var(--fg-subtle, var(--fg-muted));
+}
+
+/* ---- Segmented toggle buttons (forest pool / funnel mode) ---- */
+.forest-pool-toggle,
+.funnel-mode-toggle {
+  display: flex;
+  gap: 0;
+  margin-left: 8px;
+}
+
+.forest-pool-btn,
+.funnel-mode-btn {
+  padding: 2px 8px;
+  font-size: 0.7rem;
+  background: transparent;
+  border-radius: 0;
+  margin: 0;
+}
+
+.forest-pool-btn:first-child,
+.funnel-mode-btn:first-child { border-radius: 3px 0 0 3px; }
+
+.forest-pool-btn:last-child,
+.funnel-mode-btn:last-child  { border-radius: 0 3px 3px 0; }
+
+.forest-pool-btn:not(:first-child),
+.funnel-mode-btn:not(:first-child) { margin-left: -1px; }
+
+.forest-pool-btn:hover,
+.funnel-mode-btn:hover {
+  background: var(--bg-surface-hover);
+  color: var(--fg);
+  border-color: var(--border-hover);
+  z-index: 1;
+}
+
+.forest-pool-btn.active,
+.funnel-mode-btn.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+  z-index: 1;
+}
+
+.forest-pagesize-label,
+.forest-theme-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--fg-muted);
+  margin-left: 10px;
+}
+
+.forest-pagesize-label select { min-width: 60px;  font-size: 1em; width: auto; }
+.forest-theme-label  select   { min-width: 105px; font-size: 1em; width: auto; }
+
+/* ---- Plot export buttons ---- */
+.plot-export {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.export-btn {
+  padding: 2px 8px;
+  font-size: 0.7rem;
+  background: transparent;
+  border-radius: var(--radius-xs);
+  margin: 0;
+}
+
+.export-btn:hover {
+  background: var(--bg-surface-hover);
+  color: var(--fg);
+  border-color: var(--border-hover);
+}
+
+/* TIFF button is visually subordinate (print-only workflow) but distinct */
+.export-btn[data-format="tiff"] {
+  color: var(--fg-subtle);
+  border-style: dashed;
+}
+
+.export-btn[data-format="tiff"]:hover {
+  color: var(--fg);
+  border-style: solid;
+  border-color: var(--border-hover);
+}
+
+/* ---- Bubble plots ---- */
+#bubblePlots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 16px 0;
+}
+#bubblePlots svg {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
