@@ -943,6 +943,40 @@ export function beggTest(studies) {
   return { tau, S, z, p };
 }
 
+// ================= SHARED WLS HELPERS (pub-bias tests) =================
+// Used by fatPetTest, harbordTest, petersTest, deeksTest, rueckerTest.
+
+// NaN result object for when a pub-bias regression cannot be computed.
+function _pubBiasNaN(df) {
+  return {
+    intercept: NaN, interceptSE: NaN, interceptT: NaN, interceptP: NaN,
+    slope:     NaN, slopeSE:     NaN, slopeT:     NaN, slopeP:     NaN,
+    df
+  };
+}
+
+// Compute RSS, s², SE/t/p for intercept and slope from WLS output.
+// ys, xs, ws must be parallel arrays of length k; df = k − 2.
+function _wlsFinish(beta, vcov, ys, xs, ws, df) {
+  let rss = 0;
+  for (let i = 0; i < ys.length; i++) {
+    const e = ys[i] - beta[0] - beta[1] * xs[i];
+    rss += ws[i] * e * e;
+  }
+  const s2          = df > 0 ? rss / df : NaN;
+  const interceptSE = Math.sqrt(s2 * vcov[0][0]);
+  const slopeSE     = Math.sqrt(s2 * vcov[1][1]);
+  const interceptT  = beta[0] / interceptSE;
+  const slopeT      = beta[1] / slopeSE;
+  const interceptP  = 2 * (1 - tCDF(Math.abs(interceptT), df));
+  const slopeP      = 2 * (1 - tCDF(Math.abs(slopeT),     df));
+  return {
+    intercept: beta[0], interceptSE, interceptT, interceptP,
+    slope:     beta[1], slopeSE,     slopeT,     slopeP,
+    df
+  };
+}
+
 // ================= FAT-PET =================
 // Precision-Effect Test / Funnel Asymmetry Test (Stanley & Doucouliagos 2014).
 // WLS regression of yᵢ on SEᵢ with weights wᵢ = 1/vᵢ:
@@ -956,50 +990,17 @@ export function beggTest(studies) {
 export function fatPetTest(studies) {
   const valid = studies.filter(s => isFinite(s.yi) && isFinite(s.vi) && s.vi > 0);
   const k = valid.length;
-  if (k < 3) {
-    return {
-      intercept: NaN, interceptSE: NaN, interceptT: NaN, interceptP: NaN,
-      slope:     NaN, slopeSE:     NaN, slopeT:     NaN, slopeP:     NaN,
-      df: k - 2
-    };
-  }
+  if (k < 3) return _pubBiasNaN(k - 2);
 
-  const yi = valid.map(s => s.yi);
-  const se = valid.map(s => s.se ?? Math.sqrt(s.vi));
-  const wi = valid.map(s => 1 / s.vi);
+  const ys = valid.map(s => s.yi);
+  const xs = valid.map(s => s.se ?? Math.sqrt(s.vi));
+  const ws = valid.map(s => 1 / s.vi);
 
-  // Design matrix: [1, SEᵢ]
-  const X = valid.map((_, i) => [1, se[i]]);
-  const { beta, vcov, rankDeficient } = wls(X, yi, wi);
+  const X = xs.map(x => [1, x]);
+  const { beta, vcov, rankDeficient } = wls(X, ys, ws);
+  if (rankDeficient) return _pubBiasNaN(k - 2);
 
-  if (rankDeficient) {
-    return {
-      intercept: NaN, interceptSE: NaN, interceptT: NaN, interceptP: NaN,
-      slope:     NaN, slopeSE:     NaN, slopeT:     NaN, slopeP:     NaN,
-      df: k - 2
-    };
-  }
-
-  // Residual variance (s²) for SE estimation
-  const df  = k - 2;
-  const rss = valid.reduce((s, _, i) => {
-    const e = yi[i] - beta[0] - beta[1] * se[i];
-    return s + wi[i] * e * e;
-  }, 0);
-  const s2 = df > 0 ? rss / df : NaN;
-
-  const interceptSE = Math.sqrt(s2 * vcov[0][0]);
-  const slopeSE     = Math.sqrt(s2 * vcov[1][1]);
-  const interceptT  = beta[0] / interceptSE;
-  const slopeT      = beta[1] / slopeSE;
-  const interceptP  = 2 * (1 - tCDF(Math.abs(interceptT), df));
-  const slopeP      = 2 * (1 - tCDF(Math.abs(slopeT),     df));
-
-  return {
-    intercept:  beta[0], interceptSE, interceptT, interceptP,
-    slope:      beta[1], slopeSE,     slopeT,     slopeP,
-    df
-  };
+  return _wlsFinish(beta, vcov, ys, xs, ws, k - 2);
 }
 
 // ================= HARBORD TEST =================
@@ -1025,12 +1026,7 @@ export function harbordTest(studies) {
   });
 
   const k = valid.length;
-  const nanResult = {
-    intercept: NaN, interceptSE: NaN, interceptT: NaN, interceptP: NaN,
-    slope:     NaN, slopeSE:     NaN, slopeT:     NaN, slopeP:     NaN,
-    df: k - 2
-  };
-  if (k < 3) return nanResult;
+  if (k < 3) return _pubBiasNaN(k - 2);
 
   const ys = [], xs = [];
   for (const s of valid) {
@@ -1043,27 +1039,12 @@ export function harbordTest(studies) {
     xs.push(sqrtV);              // x_i = √V
   }
 
-  const X   = xs.map(x => [1, x]);
-  const ws  = xs.map(() => 1);   // OLS — uniform weights
+  const X  = xs.map(x => [1, x]);
+  const ws = xs.map(() => 1);   // OLS — uniform weights
   const { beta, vcov, rankDeficient } = wls(X, ys, ws);
-  if (rankDeficient) return nanResult;
+  if (rankDeficient) return _pubBiasNaN(k - 2);
 
-  const df  = k - 2;
-  const rss = ys.reduce((sum, y, i) => { const e = y - beta[0] - beta[1] * xs[i]; return sum + e * e; }, 0);
-  const s2  = rss / df;
-
-  const interceptSE = Math.sqrt(s2 * vcov[0][0]);
-  const slopeSE     = Math.sqrt(s2 * vcov[1][1]);
-  const interceptT  = beta[0] / interceptSE;
-  const slopeT      = beta[1] / slopeSE;
-  const interceptP  = 2 * (1 - tCDF(Math.abs(interceptT), df));
-  const slopeP      = 2 * (1 - tCDF(Math.abs(slopeT),     df));
-
-  return {
-    intercept: beta[0], interceptSE, interceptT, interceptP,
-    slope:     beta[1], slopeSE,     slopeT,     slopeP,
-    df
-  };
+  return _wlsFinish(beta, vcov, ys, xs, ws, k - 2);
 }
 
 // ================= PETERS TEST =================
@@ -1092,12 +1073,7 @@ export function petersTest(studies) {
   });
 
   const k = valid.length;
-  const nanResult = {
-    intercept: NaN, interceptSE: NaN, interceptT: NaN, interceptP: NaN,
-    slope:     NaN, slopeSE:     NaN, slopeT:     NaN, slopeP:     NaN,
-    df: k - 2
-  };
-  if (k < 3) return nanResult;
+  if (k < 3) return _pubBiasNaN(k - 2);
 
   const ys = valid.map(s => s.yi);
   const xs = valid.map(s => 1 / getN(s));   // x_i = 1/N_i
@@ -1105,27 +1081,9 @@ export function petersTest(studies) {
 
   const X = xs.map(x => [1, x]);
   const { beta, vcov, rankDeficient } = wls(X, ys, ws);
-  if (rankDeficient) return nanResult;
+  if (rankDeficient) return _pubBiasNaN(k - 2);
 
-  const df  = k - 2;
-  const rss = valid.reduce((sum, s, i) => {
-    const e = ys[i] - beta[0] - beta[1] * xs[i];
-    return sum + ws[i] * e * e;
-  }, 0);
-  const s2 = rss / df;
-
-  const interceptSE = Math.sqrt(s2 * vcov[0][0]);
-  const slopeSE     = Math.sqrt(s2 * vcov[1][1]);
-  const interceptT  = beta[0] / interceptSE;
-  const slopeT      = beta[1] / slopeSE;
-  const interceptP  = 2 * (1 - tCDF(Math.abs(interceptT), df));
-  const slopeP      = 2 * (1 - tCDF(Math.abs(slopeT),     df));
-
-  return {
-    intercept: beta[0], interceptSE, interceptT, interceptP,
-    slope:     beta[1], slopeSE,     slopeT,     slopeP,
-    df
-  };
+  return _wlsFinish(beta, vcov, ys, xs, ws, k - 2);
 }
 
 // ================= DEEKS TEST =================
@@ -1150,12 +1108,7 @@ export function deeksTest(studies) {
   });
 
   const k = valid.length;
-  const nanResult = {
-    intercept: NaN, interceptSE: NaN, interceptT: NaN, interceptP: NaN,
-    slope:     NaN, slopeSE:     NaN, slopeT:     NaN, slopeP:     NaN,
-    df: k - 2
-  };
-  if (k < 3) return nanResult;
+  if (k < 3) return _pubBiasNaN(k - 2);
 
   const ys = [], xs = [], ws = [];
   for (const s of valid) {
@@ -1169,27 +1122,9 @@ export function deeksTest(studies) {
 
   const X = xs.map(x => [1, x]);
   const { beta, vcov, rankDeficient } = wls(X, ys, ws);
-  if (rankDeficient) return nanResult;
+  if (rankDeficient) return _pubBiasNaN(k - 2);
 
-  const df  = k - 2;
-  const rss = ys.reduce((sum, y, i) => {
-    const e = y - beta[0] - beta[1] * xs[i];
-    return sum + ws[i] * e * e;
-  }, 0);
-  const s2 = rss / df;
-
-  const interceptSE = Math.sqrt(s2 * vcov[0][0]);
-  const slopeSE     = Math.sqrt(s2 * vcov[1][1]);
-  const interceptT  = beta[0] / interceptSE;
-  const slopeT      = beta[1] / slopeSE;
-  const interceptP  = 2 * (1 - tCDF(Math.abs(interceptT), df));
-  const slopeP      = 2 * (1 - tCDF(Math.abs(slopeT),     df));
-
-  return {
-    intercept: beta[0], interceptSE, interceptT, interceptP,
-    slope:     beta[1], slopeSE,     slopeT,     slopeP,
-    df
-  };
+  return _wlsFinish(beta, vcov, ys, xs, ws, k - 2);
 }
 
 // ================= RÜCKER TEST =================
@@ -1217,12 +1152,7 @@ export function rueckerTest(studies) {
   });
 
   const k = valid.length;
-  const nanResult = {
-    intercept: NaN, interceptSE: NaN, interceptT: NaN, interceptP: NaN,
-    slope:     NaN, slopeSE:     NaN, slopeT:     NaN, slopeP:     NaN,
-    df: k - 2
-  };
-  if (k < 3) return nanResult;
+  if (k < 3) return _pubBiasNaN(k - 2);
 
   const ys = [], xs = [];
   for (const s of valid) {
@@ -1238,26 +1168,11 @@ export function rueckerTest(studies) {
   }
 
   const X  = xs.map(x => [1, x]);
-  const ws = xs.map(() => 1);     // OLS — uniform weights
+  const ws = xs.map(() => 1);   // OLS — uniform weights
   const { beta, vcov, rankDeficient } = wls(X, ys, ws);
-  if (rankDeficient) return nanResult;
+  if (rankDeficient) return _pubBiasNaN(k - 2);
 
-  const df  = k - 2;
-  const rss = ys.reduce((sum, y, i) => { const e = y - beta[0] - beta[1] * xs[i]; return sum + e * e; }, 0);
-  const s2  = rss / df;
-
-  const interceptSE = Math.sqrt(s2 * vcov[0][0]);
-  const slopeSE     = Math.sqrt(s2 * vcov[1][1]);
-  const interceptT  = beta[0] / interceptSE;
-  const slopeT      = beta[1] / slopeSE;
-  const interceptP  = 2 * (1 - tCDF(Math.abs(interceptT), df));
-  const slopeP      = 2 * (1 - tCDF(Math.abs(slopeT),     df));
-
-  return {
-    intercept: beta[0], interceptSE, interceptT, interceptP,
-    slope:     beta[1], slopeSE,     slopeT,     slopeP,
-    df
-  };
+  return _wlsFinish(beta, vcov, ys, xs, ws, k - 2);
 }
 
 // ================= FAIL-SAFE N =================
