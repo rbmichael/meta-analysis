@@ -97,6 +97,66 @@ function validatePaired(s) {
   return { valid: Object.keys(errors).length === 0, errors };
 }
 
+// validateCells(s) → errors object
+// Basic cell check for a, b, c, d (used by OR, RR, RD, PHI, RTET).
+function validateCells(s) {
+  const errors = {};
+  ["a", "b", "c", "d"].forEach(k => {
+    if (!isFinite(s[k]) || s[k] < 0) errors[k] = `${k} must be ≥ 0`;
+  });
+  return errors;
+}
+
+// validateBinaryMarginals(errors, s) — mutates errors in place
+// Adds marginal-sum checks for 2×2 correlation tables (PHI, RTET).
+function validateBinaryMarginals(errors, s) {
+  const { a, b, c, d } = s;
+  if (a + b === 0) errors.a = errors.b = "row-1 marginal (a+b) must be > 0";
+  if (c + d === 0) errors.c = errors.d = "row-2 marginal (c+d) must be > 0";
+  if (a + c === 0) errors.a = errors.c = "col-1 marginal (a+c) must be > 0";
+  if (b + d === 0) errors.b = errors.d = "col-2 marginal (b+d) must be > 0";
+  if (a + b + c + d < 2) errors.a = "N must be ≥ 2";
+}
+
+// validateProportion(s) → { valid, errors }
+// Hard validation for x/n proportion inputs (PR, PLN, PLO, PAS, PFT).
+function validateProportion(s) {
+  const errors = {};
+  if (!isFinite(s.x) || !Number.isInteger(s.x) || s.x < 0) errors.x = "x must be a non-negative integer";
+  if (!isFinite(s.n) || s.n < 1)                            errors.n = "n must be ≥ 1";
+  if (isFinite(s.x) && isFinite(s.n) && s.x > s.n)         errors.x = "x cannot exceed n";
+  return { valid: Object.keys(errors).length === 0, errors };
+}
+
+// softWarnProportion(s, label, zeroOne) → string[]
+// Advisory warnings for proportion types (PR, PLN, PLO, PAS, PFT).
+// zeroOne=true adds the exact-0/1 variance warning (PR only).
+function softWarnProportion(s, label, zeroOne = false) {
+  const w = [];
+  if (isFinite(s.n) && s.n < 20)
+    w.push(`⚠️ ${label}: small sample size (n < 20) — proportion estimate unreliable`);
+  if (isFinite(s.x) && isFinite(s.n) && s.n > 0) {
+    const p = s.x / s.n;
+    if (zeroOne && (p === 0 || p === 1))
+      w.push(`⚠️ ${label}: extreme proportion (0 or 1) — variance is zero, study has no weight`);
+    else if (p < 0.05 || p > 0.95)
+      w.push(`⚠️ ${label}: extreme proportion (< 5% or > 95%) — consider log or logit transform`);
+  }
+  return w;
+}
+
+// softWarnBinaryCounts(s, label) → string[]
+// Advisory warnings for OR/RR: zero-cell continuity correction and rare events.
+function softWarnBinaryCounts(s, label) {
+  const w = [];
+  if ([s.a, s.b, s.c, s.d].some(v => v === 0))
+    w.push(`⚠️ ${label}: zero cell detected (continuity correction applied)`);
+  const total = s.a + s.b + s.c + s.d;
+  if (isFinite(total) && total > 0 && Math.min(s.a, s.b, s.c, s.d) / total < 0.05)
+    w.push(`⚠️ ${label}: rare events (unstable estimate)`);
+  return w;
+}
+
 export const effectProfiles = {
 
   // ------------------------------------------------------------------ //
@@ -262,16 +322,7 @@ export const effectProfiles = {
     },
     transform: (x) => x,
 
-    validate(s) {
-      const errors = {};
-      if (!isFinite(s.m_pre))                      errors.m_pre  = "m_pre must be numeric";
-      if (!isFinite(s.m_post))                     errors.m_post = "m_post must be numeric";
-      if (!isFinite(s.sd_pre)  || s.sd_pre  <= 0) errors.sd_pre  = "sd_pre must be > 0";
-      if (!isFinite(s.sd_post) || s.sd_post <= 0) errors.sd_post = "sd_post must be > 0";
-      if (!isFinite(s.n) || s.n < 2)              errors.n = "n must be ≥ 2";
-      if (isFinite(s.r) && (s.r < -1 || s.r > 1)) errors.r = "r must be between -1 and 1";
-      return { valid: Object.keys(errors).length === 0, errors };
-    },
+    validate: validatePaired,
 
     softWarnings(s, label) {
       if (!isFinite(s.r))
@@ -499,24 +550,13 @@ export const effectProfiles = {
     transform:   (x) => Math.exp(x),
 
     validate(s) {
-      const errors = {};
-      ["a", "b", "c", "d"].forEach(k => {
-        if (!isFinite(s[k]) || s[k] < 0) errors[k] = `${k} must be ≥ 0`;
-      });
+      const errors = validateCells(s);
       if (!Object.keys(errors).length && s.a === 0 && s.b === 0 && s.c === 0 && s.d === 0)
         errors.a = "All cells are zero — no data";
       return { valid: Object.keys(errors).length === 0, errors };
     },
 
-    softWarnings(s, label) {
-      const w = [];
-      if ([s.a, s.b, s.c, s.d].some(v => v === 0))
-        w.push(`⚠️ ${label}: zero cell detected (continuity correction applied)`);
-      const total = s.a + s.b + s.c + s.d;
-      if (isFinite(total) && total > 0 && Math.min(s.a, s.b, s.c, s.d) / total < 0.05)
-        w.push(`⚠️ ${label}: rare events (unstable estimate)`);
-      return w;
-    },
+    softWarnings: softWarnBinaryCounts,
 
     exampleData: [
       ["Study1", 12,  5,  8, 15, "A"],
@@ -544,24 +584,13 @@ export const effectProfiles = {
     transform:   (x) => Math.exp(x),
 
     validate(s) {
-      const errors = {};
-      ["a", "b", "c", "d"].forEach(k => {
-        if (!isFinite(s[k]) || s[k] < 0) errors[k] = `${k} must be ≥ 0`;
-      });
+      const errors = validateCells(s);
       if (!Object.keys(errors).length && s.a === 0 && s.b === 0 && s.c === 0 && s.d === 0)
         errors.a = "All cells are zero — no data";
       return { valid: Object.keys(errors).length === 0, errors };
     },
 
-    softWarnings(s, label) {
-      const w = [];
-      if ([s.a, s.b, s.c, s.d].some(v => v === 0))
-        w.push(`⚠️ ${label}: zero cell detected (continuity correction applied)`);
-      const total = s.a + s.b + s.c + s.d;
-      if (isFinite(total) && total > 0 && Math.min(s.a, s.b, s.c, s.d) / total < 0.05)
-        w.push(`⚠️ ${label}: rare events (unstable estimate)`);
-      return w;
-    },
+    softWarnings: softWarnBinaryCounts,
 
     exampleData: [
       ["Study1", 12,  5,  8, 15, "A"],
@@ -587,10 +616,7 @@ export const effectProfiles = {
     transform:   (x) => x,
 
     validate(s) {
-      const errors = {};
-      ["a", "b", "c", "d"].forEach(k => {
-        if (!isFinite(s[k]) || s[k] < 0) errors[k] = `${k} must be ≥ 0`;
-      });
+      const errors = validateCells(s);
       return { valid: Object.keys(errors).length === 0, errors };
     },
 
@@ -803,18 +829,8 @@ export const effectProfiles = {
     transform: (x) => x,
 
     validate(s) {
-      const errors = {};
-      ["a", "b", "c", "d"].forEach(k => {
-        if (!isFinite(s[k]) || s[k] < 0) errors[k] = `${k} must be ≥ 0`;
-      });
-      if (!Object.keys(errors).length) {
-        const { a, b, c, d } = s;
-        if (a + b === 0) errors.a = errors.b = "row-1 marginal (a+b) must be > 0";
-        if (c + d === 0) errors.c = errors.d = "row-2 marginal (c+d) must be > 0";
-        if (a + c === 0) errors.a = errors.c = "col-1 marginal (a+c) must be > 0";
-        if (b + d === 0) errors.b = errors.d = "col-2 marginal (b+d) must be > 0";
-        if (a + b + c + d < 2) errors.a = "N must be ≥ 2";
-      }
+      const errors = validateCells(s);
+      if (!Object.keys(errors).length) validateBinaryMarginals(errors, s);
       return { valid: Object.keys(errors).length === 0, errors };
     },
 
@@ -855,18 +871,8 @@ export const effectProfiles = {
     transform: (x) => x,
 
     validate(s) {
-      const errors = {};
-      ["a", "b", "c", "d"].forEach(k => {
-        if (!isFinite(s[k]) || s[k] < 0) errors[k] = `${k} must be ≥ 0`;
-      });
-      if (!Object.keys(errors).length) {
-        const { a, b, c, d } = s;
-        if (a + b === 0) errors.a = errors.b = "row-1 marginal (a+b) must be > 0";
-        if (c + d === 0) errors.c = errors.d = "row-2 marginal (c+d) must be > 0";
-        if (a + c === 0) errors.a = errors.c = "col-1 marginal (a+c) must be > 0";
-        if (b + d === 0) errors.b = errors.d = "col-2 marginal (b+d) must be > 0";
-        if (a + b + c + d < 2) errors.a = "N must be ≥ 2";
-      }
+      const errors = validateCells(s);
+      if (!Object.keys(errors).length) validateBinaryMarginals(errors, s);
       return { valid: Object.keys(errors).length === 0, errors };
     },
 
@@ -921,27 +927,8 @@ export const effectProfiles = {
     },
     transform:   (x) => Math.min(1, Math.max(0, x)),
 
-    validate(s) {
-      const errors = {};
-      if (!isFinite(s.x) || !Number.isInteger(s.x) || s.x < 0) errors.x = "x must be a non-negative integer";
-      if (!isFinite(s.n) || s.n < 1)                           errors.n = "n must be ≥ 1";
-      if (isFinite(s.x) && isFinite(s.n) && s.x > s.n)        errors.x = "x cannot exceed n";
-      return { valid: Object.keys(errors).length === 0, errors };
-    },
-
-    softWarnings(s, label) {
-      const w = [];
-      if (isFinite(s.n) && s.n < 20)
-        w.push(`⚠️ ${label}: small sample size (n < 20) — proportion estimate unreliable`);
-      if (isFinite(s.x) && isFinite(s.n) && s.n > 0) {
-        const p = s.x / s.n;
-        if (p === 0 || p === 1)
-          w.push(`⚠️ ${label}: extreme proportion (0 or 1) — variance is zero, study has no weight`);
-        else if (p < 0.05 || p > 0.95)
-          w.push(`⚠️ ${label}: extreme proportion (< 5% or > 95%) — consider log or logit transform`);
-      }
-      return w;
-    },
+    validate: validateProportion,
+    softWarnings: (s, label) => softWarnProportion(s, label, true),
 
     exampleData: [
       ["Study 1", 12,  80, ""],
@@ -969,25 +956,8 @@ export const effectProfiles = {
     },
     transform:   (x) => Math.min(1, Math.max(0, Math.exp(x))),
 
-    validate(s) {
-      const errors = {};
-      if (!isFinite(s.x) || !Number.isInteger(s.x) || s.x < 0) errors.x = "x must be a non-negative integer";
-      if (!isFinite(s.n) || s.n < 1)                           errors.n = "n must be ≥ 1";
-      if (isFinite(s.x) && isFinite(s.n) && s.x > s.n)        errors.x = "x cannot exceed n";
-      return { valid: Object.keys(errors).length === 0, errors };
-    },
-
-    softWarnings(s, label) {
-      const w = [];
-      if (isFinite(s.n) && s.n < 20)
-        w.push(`⚠️ ${label}: small sample size (n < 20) — proportion estimate unreliable`);
-      if (isFinite(s.x) && isFinite(s.n) && s.n > 0) {
-        const p = s.x / s.n;
-        if (p < 0.05 || p > 0.95)
-          w.push(`⚠️ ${label}: extreme proportion (< 5% or > 95%) — consider log or logit transform`);
-      }
-      return w;
-    },
+    validate: validateProportion,
+    softWarnings: softWarnProportion,
 
     exampleData: [
       ["Study 1", 12,  80, ""],
@@ -1015,25 +985,8 @@ export const effectProfiles = {
     },
     transform:   (x) => Math.min(1, Math.max(0, 1 / (1 + Math.exp(-x)))),
 
-    validate(s) {
-      const errors = {};
-      if (!isFinite(s.x) || !Number.isInteger(s.x) || s.x < 0) errors.x = "x must be a non-negative integer";
-      if (!isFinite(s.n) || s.n < 1)                           errors.n = "n must be ≥ 1";
-      if (isFinite(s.x) && isFinite(s.n) && s.x > s.n)        errors.x = "x cannot exceed n";
-      return { valid: Object.keys(errors).length === 0, errors };
-    },
-
-    softWarnings(s, label) {
-      const w = [];
-      if (isFinite(s.n) && s.n < 20)
-        w.push(`⚠️ ${label}: small sample size (n < 20) — proportion estimate unreliable`);
-      if (isFinite(s.x) && isFinite(s.n) && s.n > 0) {
-        const p = s.x / s.n;
-        if (p < 0.05 || p > 0.95)
-          w.push(`⚠️ ${label}: extreme proportion (< 5% or > 95%) — consider log or logit transform`);
-      }
-      return w;
-    },
+    validate: validateProportion,
+    softWarnings: softWarnProportion,
 
     exampleData: [
       ["Study 1", 12,  80, ""],
@@ -1060,25 +1013,8 @@ export const effectProfiles = {
     },
     transform:   (x) => Math.min(1, Math.max(0, Math.sin(x) ** 2)),
 
-    validate(s) {
-      const errors = {};
-      if (!isFinite(s.x) || !Number.isInteger(s.x) || s.x < 0) errors.x = "x must be a non-negative integer";
-      if (!isFinite(s.n) || s.n < 1)                           errors.n = "n must be ≥ 1";
-      if (isFinite(s.x) && isFinite(s.n) && s.x > s.n)        errors.x = "x cannot exceed n";
-      return { valid: Object.keys(errors).length === 0, errors };
-    },
-
-    softWarnings(s, label) {
-      const w = [];
-      if (isFinite(s.n) && s.n < 20)
-        w.push(`⚠️ ${label}: small sample size (n < 20) — proportion estimate unreliable`);
-      if (isFinite(s.x) && isFinite(s.n) && s.n > 0) {
-        const p = s.x / s.n;
-        if (p < 0.05 || p > 0.95)
-          w.push(`⚠️ ${label}: extreme proportion (< 5% or > 95%) — consider log or logit transform`);
-      }
-      return w;
-    },
+    validate: validateProportion,
+    softWarnings: softWarnProportion,
 
     exampleData: [
       ["Study 1", 12,  80, ""],
@@ -1104,25 +1040,8 @@ export const effectProfiles = {
     },
     transform:   (x) => Math.min(1, Math.max(0, Math.sin(x / 2) ** 2)),
 
-    validate(s) {
-      const errors = {};
-      if (!isFinite(s.x) || !Number.isInteger(s.x) || s.x < 0) errors.x = "x must be a non-negative integer";
-      if (!isFinite(s.n) || s.n < 1)                           errors.n = "n must be ≥ 1";
-      if (isFinite(s.x) && isFinite(s.n) && s.x > s.n)        errors.x = "x cannot exceed n";
-      return { valid: Object.keys(errors).length === 0, errors };
-    },
-
-    softWarnings(s, label) {
-      const w = [];
-      if (isFinite(s.n) && s.n < 20)
-        w.push(`⚠️ ${label}: small sample size (n < 20) — proportion estimate unreliable`);
-      if (isFinite(s.x) && isFinite(s.n) && s.n > 0) {
-        const p = s.x / s.n;
-        if (p < 0.05 || p > 0.95)
-          w.push(`⚠️ ${label}: extreme proportion (< 5% or > 95%) — consider log or logit transform`);
-      }
-      return w;
-    },
+    validate: validateProportion,
+    softWarnings: softWarnProportion,
 
     exampleData: [
       ["Study 1", 12,  80, ""],
