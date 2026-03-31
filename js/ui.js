@@ -2067,6 +2067,12 @@ function runAnalysis() {
 
   const rows = document.querySelectorAll("#inputTable tr");
 
+  // Row inputs are ordered: [label, ...profile.inputs, group, ...moderators].
+  // Pre-compute the offset so moderator values can be read from the already-
+  // collected inputs array rather than querying the DOM for each moderator
+  // on every row.
+  const modOffset = profile.inputs.length + 2;
+
   let studies = [];
   let excluded = [];
   let softWarnings = [];
@@ -2111,9 +2117,8 @@ function runAnalysis() {
     study.group = group;
 
     // ---- Moderator values ----
-    moderators.forEach(({ name, type }) => {
-      const inp = row.querySelector(`input[data-mod="${name}"]`);
-      const raw = inp ? inp.value.trim() : "";
+    moderators.forEach(({ name, type }, modIdx) => {
+      const raw = (inputs[modOffset + modIdx]?.value ?? "").trim();
       study[name] = type === "continuous" ? (raw === "" ? NaN : +raw) : raw;
     });
 
