@@ -498,12 +498,18 @@ export function tau2_DLIT(studies, tol = REML_TOL, maxIter = 200) {
   let tau2 = tau2_GENQ(studies);  // seed from DL (GENQ with aᵢ=1/vᵢ is DL)
 
   for (let iter = 0; iter < maxIter; iter++) {
-    const w  = studies.map(d => 1 / (d.vi + tau2));
-    const W  = w.reduce((s, a) => s + a, 0);
-    const W2 = w.reduce((s, a) => s + a ** 2, 0);
-    const mu = studies.reduce((s, d, i) => s + w[i] * d.yi, 0) / W;
-    const Q  = studies.reduce((s, d, i) => s + w[i] * (d.yi - mu) ** 2, 0);
-    const c  = W - W2 / W;
+    let W = 0, W2 = 0, Wmu = 0;
+    for (const d of studies) {
+      const wi = 1 / (d.vi + tau2);
+      W += wi; W2 += wi * wi; Wmu += wi * d.yi;
+    }
+    const mu = Wmu / W;
+    let Q = 0;
+    for (const d of studies) {
+      const r = d.yi - mu;
+      Q += r * r / (d.vi + tau2);
+    }
+    const c = W - W2 / W;
     const newTau2 = Math.max(0, (Q - (k - 1)) / c);
     if (Math.abs(newTau2 - tau2) < tol) return newTau2;
     tau2 = newTau2;
@@ -552,12 +558,18 @@ export function tau2_SJ(studies, tol = REML_TOL, maxIter = 200) {
   let tau2 = studies.reduce((s, d) => s + (d.yi - ybar0) ** 2, 0) / k;
   if (tau2 === 0) return 0;
   for (let iter = 0; iter < maxIter; iter++) {
-    const w   = studies.map(d => 1 / (d.vi + tau2));
-    const W   = w.reduce((a, b) => a + b, 0);
-    const mu  = studies.reduce((s, d, i) => s + w[i] * d.yi, 0) / W;
-    const newTau2 = studies.reduce((s, d, i) => {
-      return s + d.vi * (d.yi - mu) ** 2 / (d.vi + tau2);
-    }, 0) / k;
+    let W = 0, Wmu = 0;
+    for (const d of studies) {
+      const wi = 1 / (d.vi + tau2);
+      W += wi; Wmu += wi * d.yi;
+    }
+    const mu = Wmu / W;
+    let s = 0;
+    for (const d of studies) {
+      const r = d.yi - mu;
+      s += d.vi * r * r / (d.vi + tau2);
+    }
+    const newTau2 = s / k;
     if (Math.abs(newTau2 - tau2) < tol) return Math.max(0, newTau2);
     tau2 = Math.max(0, newTau2);
   }
@@ -575,21 +587,28 @@ export function tau2_ML(studies, tol = REML_TOL, maxIter = 100) {
   const k = studies.length;
   if (k <= 1) return 0;
   // Seed with DL estimate
-  const w0 = studies.map(d => 1 / d.vi);
-  const W0 = w0.reduce((a, b) => a + b, 0);
-  const ybar0 = studies.reduce((s, d, i) => s + w0[i] * d.yi, 0) / W0;
-  const Q0 = studies.reduce((s, d, i) => s + w0[i] * (d.yi - ybar0) ** 2, 0);
-  const c0 = W0 - w0.reduce((s, wi) => s + wi * wi / W0, 0);
+  let W0 = 0, W02 = 0, W0mu = 0;
+  for (const d of studies) {
+    const wi = 1 / d.vi;
+    W0 += wi; W02 += wi * wi; W0mu += wi * d.yi;
+  }
+  const ybar0 = W0mu / W0;
+  let Q0 = 0;
+  for (const d of studies) Q0 += (d.yi - ybar0) ** 2 / d.vi;
+  const c0 = W0 - W02 / W0;
   let tau2 = Math.max(0, (Q0 - (k - 1)) / c0);
 
   for (let iter = 0; iter < maxIter; iter++) {
-    const w  = studies.map(d => 1 / (d.vi + tau2));
-    const W  = w.reduce((a, b) => a + b, 0);
-    const mu = studies.reduce((s, d, i) => s + w[i] * d.yi, 0) / W;
+    let W = 0, Wmu = 0;
+    for (const d of studies) {
+      const wi = 1 / (d.vi + tau2);
+      W += wi; Wmu += wi * d.yi;
+    }
+    const mu = Wmu / W;
     let score = 0, info = 0;
-    for (let i = 0; i < k; i++) {
-      const vi_tau = studies[i].vi + tau2;
-      const r = studies[i].yi - mu;
+    for (const d of studies) {
+      const vi_tau = d.vi + tau2;
+      const r = d.yi - mu;
       score += r * r / (vi_tau * vi_tau) - 1 / vi_tau;
       info  += 1 / (vi_tau * vi_tau);
     }
@@ -697,27 +716,33 @@ export function tau2_REML(studies, tol = REML_TOL, maxIter = 100) {
   if (k <= 1) return 0;
 
   // --- 1️⃣ Initial tau² (DL / HE estimator) ---
-  const w0 = studies.map(d => 1 / d.vi);
-  const W0 = w0.reduce((a, b) => a + b, 0);
-  const ybar = studies.reduce((sum, d, i) => sum + w0[i] * d.yi, 0) / W0;
-  const Q = studies.reduce((sum, d, i) => sum + w0[i] * (d.yi - ybar) ** 2, 0);
-  const c = W0 - w0.reduce((sum, wi) => sum + wi * wi / W0, 0);
-  let tau2 = Math.max(0, (Q - (k - 1)) / c);
+  let W0 = 0, W02 = 0, W0mu = 0;
+  for (const d of studies) {
+    const wi = 1 / d.vi;
+    W0 += wi; W02 += wi * wi; W0mu += wi * d.yi;
+  }
+  const ybar = W0mu / W0;
+  let Qseed = 0;
+  for (const d of studies) Qseed += (d.yi - ybar) ** 2 / d.vi;
+  const c = W0 - W02 / W0;
+  let tau2 = Math.max(0, (Qseed - (k - 1)) / c);
 
   // --- 2️⃣ Fisher scoring iteration ---
   for (let iter = 0; iter < maxIter; iter++) {
-    const w = studies.map(d => 1 / (d.vi + tau2));
-    const W = w.reduce((a, b) => a + b, 0);
-    const mu = studies.reduce((sum, d, i) => sum + w[i] * d.yi, 0) / W;
-
-    const h = w.map(wi => wi / W);
+    let W = 0, Wmu = 0;
+    for (const d of studies) {
+      const wi = 1 / (d.vi + tau2);
+      W += wi; Wmu += wi * d.yi;
+    }
+    const mu = Wmu / W;
 
     let score = 0, info = 0;
-    for (let i = 0; i < k; i++) {
-      const vi_tau = studies[i].vi + tau2;
-      const ri = studies[i].yi - mu;
-      score += (ri * ri) / (vi_tau * vi_tau) - (1 - h[i]) / vi_tau;
-      info  += (1 - h[i]) / (vi_tau * vi_tau);
+    for (const d of studies) {
+      const vi_tau = d.vi + tau2;
+      const hi = 1 / (vi_tau * W);  // h[i] = w[i]/W = 1/(vi_tau·W)
+      const ri = d.yi - mu;
+      score += ri * ri / (vi_tau * vi_tau) - (1 - hi) / vi_tau;
+      info  += (1 - hi) / (vi_tau * vi_tau);
     }
 
     let step = score / info;
@@ -751,16 +776,18 @@ export function tau2_PM(studies, tol = REML_TOL, maxIter = 100) {
   let tau2 = 0;
 
   for (let iter = 0; iter < maxIter; iter++) {
-    const w = studies.map(d => 1 / (d.vi + tau2));
-    const W = w.reduce((a, b) => a + b, 0);
-    const mu = studies.reduce((sum, d, i) => sum + w[i] * d.yi, 0) / W;
-
-    const Q = studies.reduce((sum, d, i) => {
-      return sum + w[i] * Math.pow(d.yi - mu, 2);
-    }, 0);
-
+    let W = 0, Wmu = 0;
+    for (const d of studies) {
+      const wi = 1 / (d.vi + tau2);
+      W += wi; Wmu += wi * d.yi;
+    }
+    const mu = Wmu / W;
+    let Q = 0;
+    for (const d of studies) {
+      const r = d.yi - mu;
+      Q += r * r / (d.vi + tau2);
+    }
     const newTau2 = Math.max(0, tau2 + (Q - (k - 1)) / W);
-
     if (Math.abs(newTau2 - tau2) < tol) return newTau2;
     tau2 = newTau2;
   }
