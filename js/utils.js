@@ -453,34 +453,29 @@ export function tetrachoricFromCounts(a, b, c, d) {
 }
 
 // ================= EFFECT TRANSFORMS (PROFILE-AWARE) =================
+const _clamp01 = v => Math.min(1, Math.max(0, v));
+const _TRANSFORMS = {
+  // Log-scale ratio measures → exp(yi)
+  OR: Math.exp, RR: Math.exp, HR: Math.exp, IRR: Math.exp, IR: Math.exp,
+  ROM: Math.exp, CVR: Math.exp, VR: Math.exp, GOR: Math.exp, MNLN: Math.exp,
+  // Identity — already on display scale
+  RD: x => x, MD: x => x, SMD: x => x, SMDH: x => x,
+  MD_paired: x => x, SMD_paired: x => x, SMCC: x => x, MN: x => x,
+  COR: x => x, PCOR: x => x, PHI: x => x, RTET: x => x,
+  // Fisher's z → r
+  ZCOR: Math.tanh, ZPCOR: Math.tanh,
+  // Proportions → p ∈ [0, 1]
+  PR:  x => _clamp01(x),
+  PLN: x => _clamp01(Math.exp(x)),
+  PLO: x => _clamp01(1 / (1 + Math.exp(-x))),
+  PAS: x => _clamp01(Math.sin(x) ** 2),
+  PFT: x => _clamp01(Math.sin(x / 2) ** 2),
+};
+
 export function transformEffect(x, type) {
   if (!isFinite(x)) return NaN;
-
-  // Ratio measures — all stored on log scale, display as exp(yi)
-  if (type === "OR" || type === "RR" || type === "HR" || type === "IRR" || type === "IR" || type === "ROM" || type === "CVR" || type === "VR" || type === "GOR" || type === "MNLN") {
-    return Math.exp(x);
-  }
-
-	// Risk difference
-	if (type === "RD") return x;  // continuous scale, no transformation
-
-  // Continuous measures
-  if (type === "MD" || type === "SMD" || type === "SMDH" || type === "MD_paired" || type === "SMD_paired" || type === "SMCC" || type === "MN") {
-    return x;
-  }
-
-  // Correlation: ZCOR/ZPCOR back-transform Fisher's z → r; others already on r scale
-  if (type === "ZCOR" || type === "ZPCOR") return Math.tanh(x);
-  if (type === "COR" || type === "PCOR" || type === "PHI" || type === "RTET") return x;
-
-  // Proportions — all back-transform to p ∈ [0, 1]
-  if (type === "PR")  return Math.min(1, Math.max(0, x));
-  if (type === "PLN") return Math.min(1, Math.max(0, Math.exp(x)));
-  if (type === "PLO") return Math.min(1, Math.max(0, 1 / (1 + Math.exp(-x))));
-  if (type === "PAS") return Math.min(1, Math.max(0, Math.sin(x) ** 2));
-  if (type === "PFT") return Math.min(1, Math.max(0, Math.sin(x / 2) ** 2));
-
-  // Fallback for unknown type
+  const fn = _TRANSFORMS[type];
+  if (fn) return fn(x);
   console.warn("Unknown effect type in transformEffect:", type);
   return x;
 }
