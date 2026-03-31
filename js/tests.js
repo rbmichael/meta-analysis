@@ -19,10 +19,55 @@ function approxEqual(a, b, field) {
   return Math.abs(a - b) < 0.01;
 }
 
+// Factory that returns a bundle of check helpers all sharing the same pass variable.
+// Each test section calls makeChk(() => { sectionPass = false; }, defaultTol) and
+// destructures only the helpers it needs, renaming them to match existing call sites.
+function makeChk(onFail, defaultTol = 0.001) {
+  return {
+    // Numeric check — absolute tolerance. |val−expected| < tol and val must be finite.
+    chk(name, val, expected, tol = defaultTol) {
+      const ok = isFinite(val) && Math.abs(val - expected) <= tol;
+      console.log(`  ${name}: ${round(val, 5)} (expected ${round(expected, 5)}) → ${ok ? "PASS" : "FAIL"}`);
+      if (!ok) onFail();
+    },
+    // Numeric check — relative tolerance. Always pass tol explicitly.
+    chkRel(name, val, expected, tol) {
+      const scale = Math.max(Math.abs(expected), 0.001);
+      const ok = isFinite(val) && Math.abs(val - expected) / scale < tol;
+      console.log(`  ${name}: ${round(val, 5)} (expected ${round(expected, 5)}) → ${ok ? "PASS" : "FAIL"}`);
+      if (!ok) onFail();
+    },
+    // Expects NaN or Infinity.
+    chkNaN(name, val) {
+      const ok = !isFinite(val);
+      console.log(`  ${name}: ${val} → ${ok ? "PASS (NaN/Inf as expected)" : "FAIL (expected NaN)"}`);
+      if (!ok) onFail();
+    },
+    // Boolean / condition check.
+    chkTrue(name, cond) {
+      console.log(`  ${name}: ${cond ? "PASS" : "FAIL"}`);
+      if (!cond) onFail();
+    },
+    // Numeric check using benchmark approxEqual tolerances (FE/RE/yi/tau2/I2 fields).
+    chkField(name, val, expected, field) {
+      const ok = approxEqual(val, expected, field);
+      console.log(`  ${name}: ${round(val, 4)} vs ${round(expected, 4)} → ${ok ? "PASS" : "FAIL"}`);
+      if (!ok) onFail();
+    },
+    // Strict-equality check — for counts, booleans, strings.
+    chkExact(name, got, expected) {
+      const ok = (got === expected);
+      console.log(`  ${name}: ${got} (expected ${expected}) → ${ok ? "PASS" : "FAIL"}`);
+      if (!ok) onFail();
+    },
+  };
+}
+
 export function runTests() {
   console.log("===== RUNNING BENCHMARK TESTS =====\n");
 
   let allPass = true;
+  const { chkField: check } = makeChk(() => { allPass = false; });
 
   BENCHMARKS.forEach(test => {
     const tauMethod = test.tauMethod || "REML";
@@ -36,12 +81,6 @@ export function runTests() {
     });
 
     const m = meta(studies, tauMethod, ciMethod);
-
-    function check(name, val, expected, field) {
-      const ok = approxEqual(val, expected, field);
-      console.log(`  ${name}: ${round(val, 4)} vs ${round(expected, 4)} → ${ok ? "PASS" : "FAIL"}`);
-      if (!ok) allPass = false;
-    }
 
     console.log(`--- ${test.name} (${test.type}, ${tauMethod}, CI=${ciMethod}) ---`);
     check("FE",   m.FE,   test.expected.FE,   "FE");
@@ -67,12 +106,7 @@ export function runTests() {
   // ---- metaRegression smoke tests ----
   console.log("\n===== META-REGRESSION SMOKE TESTS =====\n");
   let regPass = true;
-
-  function chk(name, val, expected, tol = 0.001) {
-    const ok = Math.abs(val - expected) < tol;
-    console.log(`  ${name}: ${round(val, 4)} (expected ${round(expected, 4)}) → ${ok ? "PASS" : "FAIL"}`);
-    if (!ok) regPass = false;
-  }
+  const { chk } = makeChk(() => { regPass = false; });
 
   // 1. Intercept-only: beta[0] and tau2 must match meta() RE and tau2.
   //    QE uses RE weights (1/(vi+tau2)), so QE < Q (which uses FE weights 1/vi).
@@ -119,12 +153,7 @@ export function runTests() {
   // across all effect types and tau² estimators.
   console.log("\n===== INTERCEPT-ONLY REGRESSION vs META() =====\n");
   let intPass = true;
-
-  function ichk(name, val, expected, field) {
-    const ok = approxEqual(val, expected, field);
-    console.log(`  ${name}: ${round(val, 4)} vs ${round(expected, 4)} → ${ok ? "PASS" : "FAIL"}`);
-    if (!ok) intPass = false;
-  }
+  const { chkField: ichk } = makeChk(() => { intPass = false; });
 
   BENCHMARKS.forEach(test => {
     const tauMethod = test.tauMethod || "REML";
@@ -149,12 +178,7 @@ export function runTests() {
   // Expected values from metafor 4.x output for dat.bcg.
   console.log("\n===== REGRESSION BENCHMARK: BCG + ablat (REML) =====\n");
   let regBenchPass = true;
-
-  function rbchk(name, val, expected, field) {
-    const ok = approxEqual(val, expected, field);
-    console.log(`  ${name}: ${round(val, 4)} vs ${round(expected, 4)} → ${ok ? "PASS" : "FAIL"}`);
-    if (!ok) regBenchPass = false;
-  }
+  const { chkField: rbchk } = makeChk(() => { regBenchPass = false; });
 
   {
     // Absolute latitude for the 13 BCG studies (same order as BENCHMARKS[0].data).
@@ -196,17 +220,7 @@ export function runTests() {
   //   3. Edge-case guarding (|r|≥1, n too small)
   console.log("\n===== COR / ZCOR UNIT TESTS =====\n");
   let corPass = true;
-
-  function cchk(name, val, expected, tol = 1e-6) {
-    const ok = isFinite(val) && Math.abs(val - expected) < tol;
-    console.log(`  ${name}: ${round(val, 6)} (expected ${round(expected, 6)}) → ${ok ? "PASS" : "FAIL"}`);
-    if (!ok) corPass = false;
-  }
-  function cchkNaN(name, val) {
-    const ok = !isFinite(val);
-    console.log(`  ${name}: ${val} → ${ok ? "PASS (NaN/Inf as expected)" : "FAIL (expected NaN)"}`);
-    if (!ok) corPass = false;
-  }
+  const { chk: cchk, chkNaN: cchkNaN } = makeChk(() => { corPass = false; }, 1e-6);
 
   // 1. ZCOR compute(): yi = atanh(r), vi = 1/(n-3)
   console.log("--- ZCOR compute() ---");
@@ -260,17 +274,7 @@ export function runTests() {
   // All expected values computed analytically.
   console.log("\n===== PROPORTION UNIT TESTS =====\n");
   let propPass = true;
-
-  function pchk(name, val, expected, tol = 1e-4) {
-    const ok = isFinite(val) && Math.abs(val - expected) < tol;
-    console.log(`  ${name}: ${round(val, 6)} (expected ${round(expected, 6)}) → ${ok ? "PASS" : "FAIL"}`);
-    if (!ok) propPass = false;
-  }
-  function pchkNaN(name, val) {
-    const ok = !isFinite(val);
-    console.log(`  ${name}: ${val} → ${ok ? "PASS (NaN/Inf as expected)" : "FAIL (expected NaN)"}`);
-    if (!ok) propPass = false;
-  }
+  const { chk: pchk, chkNaN: pchkNaN } = makeChk(() => { propPass = false; }, 1e-4);
 
   // 1. PR: yi = p, vi = p(1-p)/n
   console.log("--- PR compute() ---");
@@ -369,18 +373,7 @@ export function runTests() {
   //   HS ≤ DL       (HS denominator ΣW ≥ c always)
   console.log("\n===== TAU² ESTIMATOR UNIT TESTS =====\n");
   let tauPass = true;
-
-  function tchk(name, val, expected, tol) {
-    // relative tolerance for tau2
-    const scale = Math.max(Math.abs(expected), 0.001);
-    const ok = isFinite(val) && Math.abs(val - expected) / scale < tol;
-    console.log(`  ${name}: ${round(val, 5)} (expected ${round(expected, 5)}) → ${ok ? "PASS" : "FAIL"}`);
-    if (!ok) tauPass = false;
-  }
-  function tchkTrue(name, cond) {
-    console.log(`  ${name} → ${cond ? "PASS" : "FAIL"}`);
-    if (!cond) tauPass = false;
-  }
+  const { chkRel: tchk, chkTrue: tchkTrue } = makeChk(() => { tauPass = false; });
 
   const s3 = [{ yi: 0, vi: 1 }, { yi: 1, vi: 1 }, { yi: 3, vi: 1 }];
 
@@ -429,21 +422,7 @@ export function runTests() {
   // ===== PUBLICATION BIAS UNIT TESTS =====
   console.log("\n===== PUBLICATION BIAS UNIT TESTS =====\n");
   let biasPass = true;
-
-  function bchk(name, val, expected, tol = 1e-4) {
-    const ok = isFinite(val) && Math.abs(val - expected) < tol;
-    console.log(`  ${name}: ${round(val, 5)} (expected ${round(expected, 5)}) → ${ok ? "PASS" : "FAIL"}`);
-    if (!ok) biasPass = false;
-  }
-  function bchkNaN(name, val) {
-    const ok = !isFinite(val);
-    console.log(`  ${name}: ${val} → ${ok ? "PASS (NaN as expected)" : "FAIL (expected NaN)"}`);
-    if (!ok) biasPass = false;
-  }
-  function bchkTrue(name, cond) {
-    console.log(`  ${name} → ${cond ? "PASS" : "FAIL"}`);
-    if (!cond) biasPass = false;
-  }
+  const { chk: bchk, chkNaN: bchkNaN, chkTrue: bchkTrue } = makeChk(() => { biasPass = false; }, 1e-4);
 
   // ---- Begg's test ----
   // Equal vi → all sign(vi_i − vi_j) = 0 → S = 0, τ = 0, p = 1
@@ -744,21 +723,7 @@ export function runTests() {
   // allows exact analytic expected values without look-up tables.
   console.log("\n===== HETEROGENEITY CI UNIT TESTS =====\n");
   let hetPass = true;
-
-  function hchk(name, val, expected, tol = 1e-3) {
-    const ok = isFinite(val) && Math.abs(val - expected) < tol;
-    console.log(`  ${name}: ${round(val, 5)} (expected ${round(expected, 5)}) → ${ok ? "PASS" : "FAIL"}`);
-    if (!ok) hetPass = false;
-  }
-  function hchkTrue(name, cond) {
-    console.log(`  ${name} → ${cond ? "PASS" : "FAIL"}`);
-    if (!cond) hetPass = false;
-  }
-  function hchkNaN(name, val) {
-    const ok = !isFinite(val);
-    console.log(`  ${name}: ${val} → ${ok ? "PASS (NaN/Inf as expected)" : "FAIL"}`);
-    if (!ok) hetPass = false;
-  }
+  const { chk: hchk, chkNaN: hchkNaN, chkTrue: hchkTrue } = makeChk(() => { hetPass = false; }, 1e-3);
 
   // 1. chiSquareQuantile accuracy — df=2 closed form F(x) = 1 − exp(−x/2)
   //    Exact quantiles: x = −2 ln(1−p)
@@ -851,16 +816,7 @@ export function runTests() {
   // CI-narrowing property without RE variance inflation.
   console.log("\n===== CUMULATIVE META-ANALYSIS UNIT TESTS =====\n");
   let cumPass = true;
-
-  function cumchk(name, val, expected, tol = 1e-4) {
-    const ok = isFinite(val) && Math.abs(val - expected) < tol;
-    console.log(`  ${name}: ${round(val, 5)} (expected ${round(expected, 5)}) → ${ok ? "PASS" : "FAIL"}`);
-    if (!ok) cumPass = false;
-  }
-  function cumchkTrue(name, cond) {
-    console.log(`  ${name} → ${cond ? "PASS" : "FAIL"}`);
-    if (!cond) cumPass = false;
-  }
+  const { chk: cumchk, chkTrue: cumchkTrue } = makeChk(() => { cumPass = false; }, 1e-4);
 
   const sLab = [
     { yi: 0, vi: 1, se: 1, label: "Alpha"   },
@@ -952,16 +908,7 @@ export function runTests() {
   // ================================================================
   let hrPass = true;
   console.log("\n===== HR / IRR / IR UNIT TESTS =====\n");
-
-  function hrchk(name, val, expected, tol = 1e-4) {
-    const ok = isFinite(val) && isFinite(expected) && Math.abs(val - expected) <= tol;
-    console.log(`  ${name}: ${round(val, 6)} (expected ${round(expected, 6)}) → ${ok ? "PASS" : "FAIL"}`);
-    if (!ok) hrPass = false;
-  }
-  function hrchkTrue(name, cond) {
-    console.log(`  ${name}: ${cond ? "PASS" : "FAIL"}`);
-    if (!cond) hrPass = false;
-  }
+  const { chk: hrchk, chkTrue: hrchkTrue } = makeChk(() => { hrPass = false; }, 1e-4);
 
   // --- HR: yi / vi formulas ---
   // hr=0.5, ci_lo=0.25, ci_hi=1.0
@@ -1150,16 +1097,7 @@ export function runTests() {
   // ==========================================================
   let infPass = true;
   console.log("\n===== COOK'S D / HAT VALUE UNIT TESTS =====\n");
-
-  function infchk(name, val, expected, tol = 1e-4) {
-    const ok = isFinite(val) && isFinite(expected) && Math.abs(val - expected) <= tol;
-    console.log(`  ${name}: ${round(val, 6)} (expected ${round(expected, 6)}) → ${ok ? "PASS" : "FAIL"}`);
-    if (!ok) infPass = false;
-  }
-  function infchkTrue(name, cond) {
-    console.log(`  ${name}: ${cond ? "PASS" : "FAIL"}`);
-    if (!cond) infPass = false;
-  }
+  const { chk: infchk, chkTrue: infchkTrue } = makeChk(() => { infPass = false; }, 1e-4);
 
   const sA = [{ yi: 0, vi: 1 }, { yi: 1, vi: 1 }, { yi: 3, vi: 1 }];
   const sB = [{ yi: 2, vi: 1 }, { yi: 2, vi: 1 }, { yi: 2, vi: 1 }];
@@ -1264,16 +1202,7 @@ export function runTests() {
   // ================================================================
   let romPass = true;
   console.log("\n===== ROM UNIT TESTS =====\n");
-
-  function romchk(name, val, expected, tol = 1e-6) {
-    const ok = isFinite(val) && isFinite(expected) && Math.abs(val - expected) <= tol;
-    console.log(`  ${name}: ${round(val, 7)} (expected ${round(expected, 7)}) → ${ok ? "PASS" : "FAIL"}`);
-    if (!ok) romPass = false;
-  }
-  function romchkTrue(name, cond) {
-    console.log(`  ${name}: ${cond ? "PASS" : "FAIL"}`);
-    if (!cond) romPass = false;
-  }
+  const { chk: romchk, chkTrue: romchkTrue } = makeChk(() => { romPass = false; }, 1e-6);
 
   // 1. yi and vi formula spot-check
   console.log("--- 1. yi / vi formulas ---");
@@ -1370,16 +1299,7 @@ export function runTests() {
   // ================================================================
   let smdhPass = true;
   console.log("\n===== SMDH UNIT TESTS =====\n");
-
-  function smdhchk(name, val, expected, tol = 1e-5) {
-    const ok = isFinite(val) && isFinite(expected) && Math.abs(val - expected) <= tol;
-    console.log(`  ${name}: ${round(val, 7)} (expected ${round(expected, 7)}) → ${ok ? "PASS" : "FAIL"}`);
-    if (!ok) smdhPass = false;
-  }
-  function smdhchkTrue(name, cond) {
-    console.log(`  ${name}: ${cond ? "PASS" : "FAIL"}`);
-    if (!cond) smdhPass = false;
-  }
+  const { chk: smdhchk, chkTrue: smdhchkTrue } = makeChk(() => { smdhPass = false; }, 1e-5);
 
   // 1. yi / vi formula spot-check
   console.log("--- 1. yi / vi formulas ---");
@@ -1469,16 +1389,7 @@ export function runTests() {
   // ================================================================
   console.log("\n===== CVR UNIT TESTS =====\n");
   let cvrPass = true;
-
-  function cvrchk(name, val, expected, tol = 1e-4) {
-    const ok = Math.abs(val - expected) < tol;
-    console.log(`  ${name}: ${round(val, 6)} (expected ${round(expected, 6)}) → ${ok ? "PASS" : "FAIL"}`);
-    if (!ok) cvrPass = false;
-  }
-  function cvrchkTrue(name, cond) {
-    console.log(`  ${name}: ${cond ? "PASS" : "FAIL"}`);
-    if (!cond) cvrPass = false;
-  }
+  const { chk: cvrchk, chkTrue: cvrchkTrue } = makeChk(() => { cvrPass = false; }, 1e-4);
 
   // 1. yi / vi formula spot-check
   // m1=20, sd1=4, n1=40, m2=20, sd2=2, n2=38
@@ -1564,16 +1475,7 @@ export function runTests() {
   // ================================================================
   console.log("\n===== VR UNIT TESTS =====\n");
   let vrPass = true;
-
-  function vrchk(name, val, expected, tol = 1e-4) {
-    const ok = Math.abs(val - expected) < tol;
-    console.log(`  ${name}: ${round(val, 6)} (expected ${round(expected, 6)}) → ${ok ? "PASS" : "FAIL"}`);
-    if (!ok) vrPass = false;
-  }
-  function vrchkTrue(name, cond) {
-    console.log(`  ${name}: ${cond ? "PASS" : "FAIL"}`);
-    if (!cond) vrPass = false;
-  }
+  const { chk: vrchk, chkTrue: vrchkTrue } = makeChk(() => { vrPass = false; }, 1e-4);
 
   // 1. yi / vi formula spot-check
   // sd1=4, n1=40, sd2=2, n2=38
@@ -1679,16 +1581,7 @@ export function runTests() {
   // ================================================================
   let gorPass = true;
   console.log("\n===== GOR UNIT TESTS =====\n");
-
-  function gorchk(name, val, expected, tol = 1e-5) {
-    const ok = isFinite(val) && isFinite(expected) && Math.abs(val - expected) <= tol;
-    console.log(`  ${name}: ${round(val, 7)} (expected ${round(expected, 7)}) → ${ok ? "PASS" : "FAIL"}`);
-    if (!ok) gorPass = false;
-  }
-  function gorchkTrue(name, cond) {
-    console.log(`  ${name}: ${cond ? "PASS" : "FAIL"}`);
-    if (!cond) gorPass = false;
-  }
+  const { chk: gorchk, chkTrue: gorchkTrue } = makeChk(() => { gorPass = false; }, 1e-5);
 
   // 1. parseCounts
   console.log("--- 1. parseCounts ---");
@@ -1807,16 +1700,7 @@ export function runTests() {
   // ================================================================
   let mnPass = true;
   console.log("\n===== MN / MNLN UNIT TESTS =====\n");
-
-  function mnchk(name, val, expected, tol = 1e-6) {
-    const ok = isFinite(val) && isFinite(expected) && Math.abs(val - expected) <= tol;
-    console.log(`  ${name}: ${round(val, 7)} (expected ${round(expected, 7)}) → ${ok ? "PASS" : "FAIL"}`);
-    if (!ok) mnPass = false;
-  }
-  function mnchkTrue(name, cond) {
-    console.log(`  ${name}: ${cond ? "PASS" : "FAIL"}`);
-    if (!cond) mnPass = false;
-  }
+  const { chk: mnchk, chkTrue: mnchkTrue } = makeChk(() => { mnPass = false; }, 1e-6);
 
   // --- MN 1: yi / vi formula ---
   // m=24.3, sd=5.1, n=45 → vi = 5.1²/45 = 26.01/45 = 0.578
@@ -1957,16 +1841,7 @@ export function runTests() {
   // ================================================================
   let smccPass = true;
   console.log("\n===== SMCC UNIT TESTS =====\n");
-
-  function smccChk(name, val, expected, tol = 1e-6) {
-    const ok = isFinite(val) && isFinite(expected) && Math.abs(val - expected) <= tol;
-    console.log(`  ${name}: ${round(val, 7)} (expected ${round(expected, 7)}) → ${ok ? "PASS" : "FAIL"}`);
-    if (!ok) smccPass = false;
-  }
-  function smccChkTrue(name, cond) {
-    console.log(`  ${name}: ${cond ? "PASS" : "FAIL"}`);
-    if (!cond) smccPass = false;
-  }
+  const { chk: smccChk, chkTrue: smccChkTrue } = makeChk(() => { smccPass = false; }, 1e-6);
 
   // --- SMCC 1: formula spot-check ---
   // m_pre=10, m_post=8, sd_pre=2, sd_post=2, n=30, r=0.5
@@ -2073,16 +1948,7 @@ export function runTests() {
   // ================================================================
   let phiPass = true;
   console.log("\n===== PHI UNIT TESTS =====\n");
-
-  function phiChk(name, val, expected, tol = 1e-9) {
-    const ok = isFinite(val) && isFinite(expected) && Math.abs(val - expected) <= tol;
-    console.log(`  ${name}: ${round(val, 9)} (expected ${round(expected, 9)}) → ${ok ? "PASS" : "FAIL"}`);
-    if (!ok) phiPass = false;
-  }
-  function phiChkTrue(name, cond) {
-    console.log(`  ${name}: ${cond ? "PASS" : "FAIL"}`);
-    if (!cond) phiPass = false;
-  }
+  const { chk: phiChk, chkTrue: phiChkTrue } = makeChk(() => { phiPass = false; }, 1e-9);
 
   // --- PHI 1: formula spot-check ---
   // a=30,b=10,c=10,d=50 → N=100
@@ -2190,16 +2056,7 @@ export function runTests() {
   // ================================================================
   let rtetPass = true;
   console.log("\n===== RTET UNIT TESTS =====\n");
-
-  function rtetChk(name, val, expected, tol = 1e-5) {
-    const ok = isFinite(val) && isFinite(expected) && Math.abs(val - expected) <= tol;
-    console.log(`  ${name}: ${round(val, 8)} (expected ${round(expected, 8)}) → ${ok ? "PASS" : "FAIL"}`);
-    if (!ok) rtetPass = false;
-  }
-  function rtetChkTrue(name, cond) {
-    console.log(`  ${name}: ${cond ? "PASS" : "FAIL"}`);
-    if (!cond) rtetPass = false;
-  }
+  const { chk: rtetChk, chkTrue: rtetChkTrue } = makeChk(() => { rtetPass = false; }, 1e-5);
 
   // --- RTET 1: analytical spot-check ---
   // a=40,b=10,c=10,d=40 → h=k=0 (50/50 marginals → normalQuantile(0.5)=0)
@@ -2334,16 +2191,7 @@ export function runTests() {
   // ================================================================
   let pcorPass = true;
   console.log("\n===== PCOR UNIT TESTS =====\n");
-
-  function pcorChk(name, val, expected, tol = 1e-9) {
-    const ok = isFinite(val) && isFinite(expected) && Math.abs(val - expected) <= tol;
-    console.log(`  ${name}: ${round(val, 9)} (expected ${round(expected, 9)}) → ${ok ? "PASS" : "FAIL"}`);
-    if (!ok) pcorPass = false;
-  }
-  function pcorChkTrue(name, cond) {
-    console.log(`  ${name}: ${cond ? "PASS" : "FAIL"}`);
-    if (!cond) pcorPass = false;
-  }
+  const { chk: pcorChk, chkTrue: pcorChkTrue } = makeChk(() => { pcorPass = false; }, 1e-9);
 
   // --- PCOR 1: formula spot-check ---
   // r=0.5, n=50, p=3 → vi = (1−0.25)²/(46) = 0.5625/46
@@ -2519,16 +2367,7 @@ export function runTests() {
   // ================================================================
   let zpcorPass = true;
   console.log("\n===== ZPCOR UNIT TESTS =====\n");
-
-  function zpcorChk(name, val, expected, tol = 1e-9) {
-    const ok = isFinite(val) && isFinite(expected) && Math.abs(val - expected) <= tol;
-    console.log(`  ${name}: ${round(val, 9)} (expected ${round(expected, 9)}) → ${ok ? "PASS" : "FAIL"}`);
-    if (!ok) zpcorPass = false;
-  }
-  function zpcorChkTrue(name, cond) {
-    console.log(`  ${name}: ${cond ? "PASS" : "FAIL"}`);
-    if (!cond) zpcorPass = false;
-  }
+  const { chk: zpcorChk, chkTrue: zpcorChkTrue } = makeChk(() => { zpcorPass = false; }, 1e-9);
 
   // --- ZPCOR 1: formula spot-check ---
   // r=0.5, n=50, p=3 → yi=atanh(0.5), vi=1/44
@@ -2781,16 +2620,7 @@ export function runTests() {
   //             integer equality for k0; abs 1 for rosenthal/orwin counts.
   console.log("\n===== PUBLICATION BIAS BENCHMARKS =====\n");
   let pubBiasPass = true;
-
-  function pbchk(name, val, expected, tol = 0.001) {
-    const ok = isFinite(val) && isFinite(expected) && Math.abs(val - expected) <= tol;
-    console.log(`  ${name}: ${round(val, 5)} (expected ${round(expected, 5)}) → ${ok ? "PASS" : "FAIL"}`);
-    if (!ok) pubBiasPass = false;
-  }
-  function pbchkTrue(name, cond) {
-    console.log(`  ${name} → ${cond ? "PASS" : "FAIL"}`);
-    if (!cond) pubBiasPass = false;
-  }
+  const { chk: pbchk, chkTrue: pbchkTrue } = makeChk(() => { pubBiasPass = false; });
 
   PUB_BIAS_BENCHMARKS.forEach(bm => {
     console.log(`--- ${bm.name} ---`);
@@ -2870,23 +2700,8 @@ export function runTests() {
   // Boolean flags are checked for exact equality.
   console.log("\n===== INFLUENCE / LOO BENCHMARKS =====\n");
   let infBenchPass = true;
-
-  function ibchk(name, val, expected, tol = 0.001) {
-    const ok = isFinite(val) && isFinite(expected) && Math.abs(val - expected) <= tol;
-    console.log(`  ${name}: ${round(val, 5)} (expected ${round(expected, 5)}) → ${ok ? "PASS" : "FAIL"}`);
-    if (!ok) infBenchPass = false;
-  }
-  function ibchkTau(name, val, expected) {
-    const scale = Math.max(Math.abs(expected), 0.001);
-    const ok = isFinite(val) && Math.abs(val - expected) / scale < 0.05;
-    console.log(`  ${name}: ${round(val, 5)} (expected ${round(expected, 5)}) → ${ok ? "PASS" : "FAIL"}`);
-    if (!ok) infBenchPass = false;
-  }
-  function ibchkBool(name, val, expected) {
-    const ok = val === expected;
-    console.log(`  ${name}: ${val} (expected ${expected}) → ${ok ? "PASS" : "FAIL"}`);
-    if (!ok) infBenchPass = false;
-  }
+  const { chk: ibchk, chkRel: ibchkTau_, chkExact: ibchkBool } = makeChk(() => { infBenchPass = false; });
+  const ibchkTau = (name, val, expected) => ibchkTau_(name, val, expected, 0.05);
 
   INFLUENCE_BENCHMARKS.forEach(bm => {
     console.log(`--- ${bm.name} (${bm.tauMethod || "DL"}) ---`);
@@ -2924,19 +2739,7 @@ export function runTests() {
   // Not exhaustive — benchmarks for these functions are a separate future phase.
   console.log("\n===== UTILITY FUNCTION SMOKE TESTS =====\n");
   let utilPass = true;
-
-  // Exact-equality or boolean check (prints the raw value for readability).
-  function uchk(name, got, expected) {
-    const ok = (got === expected);
-    console.log(`  ${name}: ${got} → ${ok ? "PASS" : "FAIL"}`);
-    if (!ok) utilPass = false;
-  }
-  // Absolute-tolerance numerical check.
-  function uchkApprox(name, got, expected, tol = 0.01) {
-    const ok = isFinite(got) && isFinite(expected) && Math.abs(got - expected) < tol;
-    console.log(`  ${name}: ${round(got, 4)} (exp ${round(expected, 4)}) → ${ok ? "PASS" : "FAIL"}`);
-    if (!ok) utilPass = false;
-  }
+  const { chkExact: uchk, chk: uchkApprox } = makeChk(() => { utilPass = false; }, 0.01);
 
   // Shared dataset — all 5 studies significant (|yi/se| > 1.96), 2 named groups.
   // z-scores: A≈3.58, B=2.50, C≈3.79, D≈2.45, E≈3.18 — strongly right-skewed for pCurve.
@@ -3109,17 +2912,7 @@ export function runTests() {
   // Tests the Duval & Tweedie L0 estimator, mirror-image reflection, and edge cases.
   console.log("\n===== TRIM-AND-FILL UNIT TESTS =====\n");
   let tfPass = true;
-
-  function tfchk(name, got, expected) {
-    const ok = (got === expected);
-    console.log(`  ${name}: ${got} → ${ok ? "PASS" : "FAIL"}`);
-    if (!ok) tfPass = false;
-  }
-  function tfchkApprox(name, got, expected, tol = 0.001) {
-    const ok = isFinite(got) && isFinite(expected) && Math.abs(got - expected) < tol;
-    console.log(`  ${name}: ${round(got, 4)} (exp ${round(expected, 4)}) → ${ok ? "PASS" : "FAIL"}`);
-    if (!ok) tfPass = false;
-  }
+  const { chkExact: tfchk, chk: tfchkApprox } = makeChk(() => { tfPass = false; });
 
   // ---- k < 3: immediate empty return ----
   // Code returns [] before any iteration when studies.length < 3.
