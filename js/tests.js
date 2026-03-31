@@ -1,6 +1,7 @@
-import { round, transformEffect, chiSquareCDF, chiSquareQuantile, parseCounts, bivariateNormalCDF, normalQuantile } from "./utils.js";
-import { BENCHMARKS } from "./benchmarks.js";
-import { compute, meta, metaRegression, tau2_HS, tau2_HE, tau2_ML, tau2_SJ, beggTest, fatPetTest, failSafeN, heterogeneityCIs, cumulativeMeta, influenceDiagnostics, harbordTest, petersTest, deeksTest, rueckerTest } from "./analysis.js";
+import { round, transformEffect, chiSquareCDF, chiSquareQuantile, parseCounts, bivariateNormalCDF, normalQuantile, fCDF } from "./utils.js";
+import { BENCHMARKS, PUB_BIAS_BENCHMARKS, INFLUENCE_BENCHMARKS } from "./benchmarks.js";
+import { compute, meta, metaRegression, tau2_HS, tau2_HE, tau2_ML, tau2_SJ, beggTest, eggerTest, fatPetTest, failSafeN, heterogeneityCIs, cumulativeMeta, influenceDiagnostics, harbordTest, petersTest, deeksTest, rueckerTest, leaveOneOut, baujat, pCurve, pUniform, estimatorComparison, subgroupAnalysis } from "./analysis.js";
+import { trimFill } from "./trimfill.js";
 
 // Tolerances vary by field:
 //   FE, RE  — absolute 0.01   (pooled estimates are on a stable scale)
@@ -25,6 +26,7 @@ export function runTests() {
 
   BENCHMARKS.forEach(test => {
     const tauMethod = test.tauMethod || "REML";
+    const ciMethod  = test.ciMethod  || "normal";
 
     // Build studies array: use pre-computed yi/vi or derive via compute()
     const studies = test.data.map(d => {
@@ -33,7 +35,7 @@ export function runTests() {
       return { ...d, yi: s.yi, vi: s.vi, se: s.se };
     });
 
-    const m = meta(studies, tauMethod);
+    const m = meta(studies, tauMethod, ciMethod);
 
     function check(name, val, expected, field) {
       const ok = approxEqual(val, expected, field);
@@ -41,11 +43,14 @@ export function runTests() {
       if (!ok) allPass = false;
     }
 
-    console.log(`--- ${test.name} (${test.type}, ${tauMethod}) ---`);
+    console.log(`--- ${test.name} (${test.type}, ${tauMethod}, CI=${ciMethod}) ---`);
     check("FE",   m.FE,   test.expected.FE,   "FE");
     check("RE",   m.RE,   test.expected.RE,   "RE");
     check("tau2", m.tau2, test.expected.tau2, "tau2");
     check("I2",   m.I2,   test.expected.I2,   "I2");
+
+    if (test.expected.ciLow  !== undefined) check("ciLow",  m.ciLow,  test.expected.ciLow,  "FE");
+    if (test.expected.ciHigh !== undefined) check("ciHigh", m.ciHigh, test.expected.ciHigh, "FE");
 
     // Per-study yi checks (exercises the compute() pipeline for raw-data effect types)
     if (test.expected.yi) {
@@ -2321,6 +2326,11 @@ export function runTests() {
   //   5. Invalid inputs → NaN/w=0
   //   6. transformEffect identity (raw scale)
   //   7. Pooled meta() structural checks (k=3)
+  //   8. Additional r spot-checks (r=0.3 and r=0.7, exact vi)
+  //   9. vi is even in r: vi(+r) = vi(−r) exactly
+  //  10. Monotonicity in n: larger n → smaller vi (fixed r, p)
+  //  11. Monotonicity in p: larger p → larger vi (fixed r, n)
+  //  12. Boundary n = p+3 (minimum valid; n=p+2 → NaN)
   // ================================================================
   let pcorPass = true;
   console.log("\n===== PCOR UNIT TESTS =====\n");
@@ -2413,6 +2423,80 @@ export function runTests() {
     pcorChkTrue("CI lb < RE < CI ub",    m.ciLow < m.RE && m.RE < m.ciHigh);
   }
 
+  // --- PCOR 8: additional r spot-checks ---
+  // vi = (1−r²)² / (n−p−1). Vary r; n=50, p=2 → denominator=47.
+  //   r=0.3: vi = (1−0.09)²/47 = 0.8281/47  (exact)
+  //   r=0.7: vi = (1−0.49)²/47 = 0.2601/47  (exact)
+  console.log("--- PCOR 8. Additional r spot-checks ---");
+  {
+    const s3 = compute({ r: 0.3, n: 50, p: 2 }, "PCOR");
+    pcorChk("r=0.3: yi = 0.3",           s3.yi, 0.3);
+    pcorChk("r=0.3: vi = 0.8281/47",     s3.vi, 0.8281 / 47);
+    const s7 = compute({ r: 0.7, n: 50, p: 2 }, "PCOR");
+    pcorChk("r=0.7: yi = 0.7",           s7.yi, 0.7);
+    pcorChk("r=0.7: vi = 0.2601/47",     s7.vi, 0.2601 / 47);
+  }
+
+  // --- PCOR 9: vi is even in r ---
+  // vi = (1−r²)²/(n−p−1) — (1−r²)² is identical for +r and −r.
+  // This is distinct from sign symmetry (test 3): here we check exact equality
+  // of vi values, not just that they are equal to each other.
+  console.log("--- PCOR 9. vi is even in r ---");
+  {
+    for (const r of [0.3, 0.5, 0.7]) {
+      const sp = compute({ r:  r, n: 60, p: 3 }, "PCOR");
+      const sn = compute({ r: -r, n: 60, p: 3 }, "PCOR");
+      const expVi = (1 - r*r)**2 / (60 - 3 - 1);
+      pcorChk(`vi(r= ${r}) = (1−${r}²)²/56`, sp.vi, expVi);
+      pcorChk(`vi(r=−${r}) = (1−${r}²)²/56`, sn.vi, expVi);
+    }
+  }
+
+  // --- PCOR 10: monotonicity in n ---
+  // Larger n → smaller vi (more data, smaller sampling variance).
+  // vi = (1−r²)² / (n−p−1); fixed r=0.4, p=2.
+  console.log("--- PCOR 10. Monotonicity in n ---");
+  {
+    const r = 0.4, p = 2, f = (1 - r*r)**2;
+    const pairs = [[30, f/27], [50, f/47], [100, f/97], [200, f/197]];
+    for (const [n, expVi] of pairs)
+      pcorChk(`n=${n}: vi = (0.84)²/${n-p-1}`, compute({ r, n, p }, "PCOR").vi, expVi);
+    // Structural: strictly decreasing
+    const viArr = pairs.map(([n]) => compute({ r, n, p }, "PCOR").vi);
+    pcorChkTrue("vi strictly decreasing as n grows",
+      viArr.every((v, i) => i === 0 || viArr[i-1] > v));
+  }
+
+  // --- PCOR 11: monotonicity in p ---
+  // Larger p → larger vi (each covariate consumes one df from the denominator).
+  // vi = (1−r²)² / (n−p−1); fixed r=0.4, n=100.
+  console.log("--- PCOR 11. Monotonicity in p ---");
+  {
+    const r = 0.4, n = 100, f = (1 - r*r)**2;
+    const pairs = [[0, f/99], [2, f/97], [5, f/94], [10, f/89]];
+    for (const [p, expVi] of pairs)
+      pcorChk(`p=${p}: vi = (0.84)²/${n-p-1}`, compute({ r, n, p }, "PCOR").vi, expVi);
+    // Structural: strictly increasing
+    const viArr = pairs.map(([p]) => compute({ r, n, p }, "PCOR").vi);
+    pcorChkTrue("vi strictly increasing as p grows",
+      viArr.every((v, i) => i === 0 || viArr[i-1] < v));
+  }
+
+  // --- PCOR 12: boundary n = p+3 (minimum valid) ---
+  // validate() requires n ≥ p+3.  At the boundary (n=p+3) the denominator
+  // n−p−1 = 2, so vi = (1−r²)²/2.  One below (n=p+2) fails validation → NaN.
+  console.log("--- PCOR 12. Boundary n = p+3 ---");
+  {
+    // r=0.4, p=3: minN=6; boundary vi = (1−0.16)²/2 = 0.7056/2 = 0.3528 (exact)
+    const sBound = compute({ r: 0.4, n: 6, p: 3 }, "PCOR");
+    pcorChk("n=p+3=6: yi = 0.4",          sBound.yi, 0.4);
+    pcorChk("n=p+3=6: vi = 0.7056/2",     sBound.vi, 0.7056 / 2);
+    pcorChkTrue("n=p+2=5 → NaN yi (below minN)",
+      !isFinite(compute({ r: 0.4, n: 5, p: 3 }, "PCOR").yi));
+    pcorChkTrue("n=p+2=5 → w=0",
+      compute({ r: 0.4, n: 5, p: 3 }, "PCOR").w === 0);
+  }
+
   console.log(pcorPass ? "\n✅ ALL PCOR UNIT TESTS PASSED" : "\n❌ SOME PCOR UNIT TESTS FAILED");
 
   // ===== ZPCOR UNIT TESTS =====
@@ -2427,6 +2511,11 @@ export function runTests() {
   //   5. Invalid inputs → NaN/w=0
   //   6. Back-transform: tanh(atanh(r)) = r (round-trip)
   //   7. Pooled meta() structural checks (k=3, back-transformed)
+  //   8. Additional yi spot-checks (r=0.3 and r=0.7, exact atanh values)
+  //   9. vi is independent of r (key difference from PCOR)
+  //  10. Monotonicity in n: larger n → smaller vi (fixed r, p)
+  //  11. Monotonicity in p: larger p → larger vi (fixed r, n)
+  //  12. Boundary n = p+4 (minimum valid; n=p+3 → NaN)
   // ================================================================
   let zpcorPass = true;
   console.log("\n===== ZPCOR UNIT TESTS =====\n");
@@ -2525,5 +2614,771 @@ export function runTests() {
     zpcorChkTrue("back-transformed RE ∈ (−1,1)", isFinite(reR) && Math.abs(reR) < 1);
   }
 
+  // --- ZPCOR 8: additional yi spot-checks ---
+  // yi = atanh(r) (exact); vi = 1/(n−p−3) = 1/45 for n=50, p=2 (independent of r).
+  //   r=0.3: yi = atanh(0.3) ≈ 0.30952, vi = 1/45  (exact)
+  //   r=0.7: yi = atanh(0.7) ≈ 0.86730, vi = 1/45  (exact)
+  console.log("--- ZPCOR 8. Additional yi spot-checks ---");
+  {
+    for (const r of [0.3, 0.7]) {
+      const s = compute({ r, n: 50, p: 2 }, "ZPCOR");
+      zpcorChk(`r=${r}: yi = atanh(${r})`, s.yi, Math.atanh(r));
+      zpcorChk(`r=${r}: vi = 1/45`,        s.vi, 1 / 45);
+    }
+  }
+
+  // --- ZPCOR 9: vi is independent of r ---
+  // vi = 1/(n−p−3) does not involve r at all. This is a key structural
+  // difference from PCOR (where vi = (1−r²)²/(n−p−1) does depend on r).
+  // Five r values, all give the same vi = 1/45.
+  console.log("--- ZPCOR 9. vi is independent of r ---");
+  {
+    const expVi = 1 / 45;   // n=50, p=2: n−p−3 = 45
+    for (const r of [0.1, 0.3, 0.5, 0.7, 0.9]) {
+      const s = compute({ r, n: 50, p: 2 }, "ZPCOR");
+      zpcorChk(`r=${r}: vi = 1/45`, s.vi, expVi);
+    }
+  }
+
+  // --- ZPCOR 10: monotonicity in n ---
+  // Larger n → smaller vi (more data, smaller sampling variance).
+  // vi = 1/(n−p−3); fixed r=0.4, p=2 → denominator = n−5.
+  console.log("--- ZPCOR 10. Monotonicity in n ---");
+  {
+    const pairs = [[30, 1/25], [50, 1/45], [100, 1/95], [200, 1/195]];
+    for (const [n, expVi] of pairs)
+      zpcorChk(`n=${n}: vi = 1/${n-5}`, compute({ r: 0.4, n, p: 2 }, "ZPCOR").vi, expVi);
+    const viArr = pairs.map(([n]) => compute({ r: 0.4, n, p: 2 }, "ZPCOR").vi);
+    zpcorChkTrue("vi strictly decreasing as n grows",
+      viArr.every((v, i) => i === 0 || viArr[i-1] > v));
+  }
+
+  // --- ZPCOR 11: monotonicity in p ---
+  // Larger p → larger vi (each covariate reduces the effective df).
+  // vi = 1/(n−p−3); fixed r=0.4, n=100 → denominator = 97−p.
+  console.log("--- ZPCOR 11. Monotonicity in p ---");
+  {
+    const pairs = [[0, 1/97], [2, 1/95], [5, 1/92], [10, 1/87]];
+    for (const [p, expVi] of pairs)
+      zpcorChk(`p=${p}: vi = 1/${100-p-3}`, compute({ r: 0.4, n: 100, p }, "ZPCOR").vi, expVi);
+    const viArr = pairs.map(([p]) => compute({ r: 0.4, n: 100, p }, "ZPCOR").vi);
+    zpcorChkTrue("vi strictly increasing as p grows",
+      viArr.every((v, i) => i === 0 || viArr[i-1] < v));
+  }
+
+  // --- ZPCOR 12: boundary n = p+4 (minimum valid) ---
+  // validate() requires n ≥ p+4. At the boundary (n=p+4) the denominator
+  // n−p−3 = 1, so vi = 1 exactly. One below (n=p+3) fails validation → NaN.
+  console.log("--- ZPCOR 12. Boundary n = p+4 ---");
+  {
+    // r=0.4, p=3: minN=7; boundary vi = 1/(7−3−3) = 1/1 = 1 (exact)
+    const sBound = compute({ r: 0.4, n: 7, p: 3 }, "ZPCOR");
+    zpcorChk("n=p+4=7: yi = atanh(0.4)", sBound.yi, Math.atanh(0.4));
+    zpcorChk("n=p+4=7: vi = 1 (exact)",  sBound.vi, 1);
+    zpcorChkTrue("n=p+3=6 → NaN yi (below minN)",
+      !isFinite(compute({ r: 0.4, n: 6, p: 3 }, "ZPCOR").yi));
+    zpcorChkTrue("n=p+3=6 → w=0",
+      compute({ r: 0.4, n: 6, p: 3 }, "ZPCOR").w === 0);
+  }
+
   console.log(zpcorPass ? "\n✅ ALL ZPCOR UNIT TESTS PASSED" : "\n❌ SOME ZPCOR UNIT TESTS FAILED");
+
+  // ===== PCOR / ZPCOR CONSISTENCY CROSS-CHECKS =====
+  // tanh(ZPCOR_RE) ≈ PCOR_RE because both estimate the same underlying
+  // partial-r population parameter.  The approximation is not exact because:
+  //   (a) PCOR and ZPCOR use different vi formulas, so studies receive
+  //       different weights under each model;
+  //   (b) Jensen's inequality: E[tanh(Z)] ≠ tanh(E[Z]) when there is
+  //       heterogeneity.
+  // The gap is largest when tau2 is large (heterogeneous dataset) and
+  // smallest when tau2 ≈ 0 (homogeneous dataset).
+  //
+  // FE is NOT tested here: on the z scale, large-r studies have large vi
+  // (1/(n-p-3) with small n), so they get very low FE weight; on the r
+  // scale those same studies have smaller vi and relatively more FE weight.
+  // The resulting tanh(ZPCOR_FE) vs PCOR_FE gap is ~0.14 — not an
+  // approximation failure but a reflection of genuinely different estimators.
+  console.log("\n===== PCOR / ZPCOR CONSISTENCY CROSS-CHECKS =====\n");
+  let crossPass = true;
+  const crossChk = (label, got, expected, tol) => {
+    const ok = Math.abs(got - expected) < tol;
+    if (!ok) { console.error(`  FAIL ${label}: got ${got.toFixed(6)}, expected ≈${expected.toFixed(6)}, tol=${tol}`); crossPass = false; }
+    else console.log(`  ok  ${label} (|diff|=${Math.abs(got-expected).toFixed(4)} < ${tol})`);
+  };
+
+  // Shared heterogeneous dataset (same as benchmarks.js Blocks 40–41)
+  const crossRaw = [
+    { label: "Study 1", r: 0.10, n: 300, p: 2 },
+    { label: "Study 2", r: 0.15, n: 250, p: 1 },
+    { label: "Study 3", r: 0.70, n:  50, p: 3 },
+    { label: "Study 4", r: 0.75, n:  40, p: 2 },
+    { label: "Study 5", r: 0.65, n:  45, p: 3 },
+  ];
+  const crossPCOR  = crossRaw.map(d => compute(d, "PCOR"));
+  const crossZPCOR = crossRaw.map(d => compute(d, "ZPCOR"));
+
+  // --- Heterogeneous dataset: REML RE ---
+  // tau2_PCOR≈0.097, tau2_ZPCOR≈0.162 — strong heterogeneity.
+  // Tolerance 0.05: approximation holds loosely (actual gap ≈ 0.034).
+  console.log("--- Heterogeneous dataset (REML) ---");
+  {
+    const mP = meta(crossPCOR,  "REML");
+    const mZ = meta(crossZPCOR, "REML");
+    crossChk("tanh(ZPCOR RE) ≈ PCOR RE", Math.tanh(mZ.RE), mP.RE, 0.05);
+  }
+
+  // --- Heterogeneous dataset: DL RE ---
+  // DL gives slightly different tau2 from REML but same consistency property.
+  console.log("--- Heterogeneous dataset (DL) ---");
+  {
+    const mP = meta(crossPCOR,  "DL");
+    const mZ = meta(crossZPCOR, "DL");
+    crossChk("tanh(ZPCOR RE) ≈ PCOR RE", Math.tanh(mZ.RE), mP.RE, 0.05);
+  }
+
+  // --- Homogeneous dataset: REML RE ---
+  // tau2≈0 for both types; Jensen's inequality bias vanishes and weights
+  // are nearly identical.  Tight tolerance 0.02 (actual gap ≈ 0.008).
+  console.log("--- Homogeneous dataset (DL, tau2=0) ---");
+  {
+    const homRaw = [
+      { label: "Study 1", r: 0.45, n:  80, p: 2 },
+      { label: "Study 2", r: 0.38, n:  65, p: 2 },
+      { label: "Study 3", r: 0.52, n: 110, p: 3 },
+      { label: "Study 4", r: 0.31, n:  90, p: 2 },
+      { label: "Study 5", r: 0.47, n: 130, p: 4 },
+    ];
+    const mP = meta(homRaw.map(d => compute(d, "PCOR")),  "DL");
+    const mZ = meta(homRaw.map(d => compute(d, "ZPCOR")), "DL");
+    // Both have tau2=0, so RE=FE; check against PCOR RE
+    crossChk("tanh(ZPCOR RE) ≈ PCOR RE (tau2=0)", Math.tanh(mZ.RE), mP.RE, 0.02);
+  }
+
+  // --- Sign consistency: all r negative → both RE estimates negative ---
+  console.log("--- Sign consistency: negative r ---");
+  {
+    const negRaw = crossRaw.map(d => ({ ...d, r: -d.r }));
+    const mP = meta(negRaw.map(d => compute(d, "PCOR")),  "REML");
+    const mZ = meta(negRaw.map(d => compute(d, "ZPCOR")), "REML");
+    const ok = mP.RE < 0 && mZ.RE < 0 && Math.tanh(mZ.RE) < 0;
+    if (!ok) { console.error("  FAIL sign consistency"); crossPass = false; }
+    else console.log("  ok  negated r → PCOR RE < 0, ZPCOR RE < 0, tanh(ZPCOR RE) < 0");
+    // The gap magnitude should be the same as the positive case
+    const mPPos = meta(crossPCOR,  "REML");
+    const mZPos = meta(crossZPCOR, "REML");
+    crossChk("gap symmetric under sign flip",
+      Math.abs(Math.tanh(mZ.RE) - mP.RE),
+      Math.abs(Math.tanh(mZPos.RE) - mPPos.RE),
+      0.001);
+  }
+
+  console.log(crossPass ? "\n✅ ALL CROSS-CHECKS PASSED" : "\n❌ SOME CROSS-CHECKS FAILED");
+
+  // ===== PUBLICATION BIAS BENCHMARKS =====
+  // End-to-end tests against externally derived expected values.
+  // Each entry has a `tests` object with sub-objects per function.
+  // Tolerances: abs 0.001 for most statistics; abs 0.01 for p-values;
+  //             integer equality for k0; abs 1 for rosenthal/orwin counts.
+  console.log("\n===== PUBLICATION BIAS BENCHMARKS =====\n");
+  let pubBiasPass = true;
+
+  function pbchk(name, val, expected, tol = 0.001) {
+    const ok = isFinite(val) && isFinite(expected) && Math.abs(val - expected) <= tol;
+    console.log(`  ${name}: ${round(val, 5)} (expected ${round(expected, 5)}) → ${ok ? "PASS" : "FAIL"}`);
+    if (!ok) pubBiasPass = false;
+  }
+  function pbchkTrue(name, cond) {
+    console.log(`  ${name} → ${cond ? "PASS" : "FAIL"}`);
+    if (!cond) pubBiasPass = false;
+  }
+
+  PUB_BIAS_BENCHMARKS.forEach(bm => {
+    console.log(`--- ${bm.name} ---`);
+
+    // Build studies array
+    const studies = bm.data.map(d => {
+      if (d.yi !== undefined && d.vi !== undefined) {
+        return { ...d, se: Math.sqrt(d.vi) };
+      }
+      const s = compute(d, bm.type, { hedgesCorrection: bm.correction === "hedges" });
+      return { ...d, yi: s.yi, vi: s.vi, se: s.se };
+    });
+
+    const exp = bm.tests;
+
+    if (exp.begg) {
+      const b = beggTest(studies);
+      if (exp.begg.tau   !== undefined) pbchk("begg.tau",   b.tau,   exp.begg.tau);
+      if (exp.begg.S     !== undefined) pbchk("begg.S",     b.S,     exp.begg.S, 0.5);
+      if (exp.begg.z     !== undefined) pbchk("begg.z",     b.z,     exp.begg.z);
+      if (exp.begg.p     !== undefined) pbchk("begg.p",     b.p,     exp.begg.p, 0.01);
+    }
+
+    if (exp.egger) {
+      const e = eggerTest(studies);
+      if (exp.egger.intercept !== undefined) pbchk("egger.intercept", e.intercept, exp.egger.intercept);
+      if (exp.egger.slope     !== undefined) pbchk("egger.slope",     e.slope,     exp.egger.slope);
+      if (exp.egger.se        !== undefined) pbchk("egger.se",        e.se,        exp.egger.se);
+      if (exp.egger.t         !== undefined) pbchk("egger.t",         e.t,         exp.egger.t);
+      if (exp.egger.df        !== undefined) pbchk("egger.df",        e.df,        exp.egger.df, 0);
+      if (exp.egger.p         !== undefined) pbchk("egger.p",         e.p,         exp.egger.p, 0.01);
+    }
+
+    if (exp.fatPet) {
+      const f = fatPetTest(studies);
+      if (exp.fatPet.intercept  !== undefined) pbchk("fatPet.intercept",  f.intercept,  exp.fatPet.intercept);
+      if (exp.fatPet.slope      !== undefined) pbchk("fatPet.slope",      f.slope,      exp.fatPet.slope);
+      if (exp.fatPet.interceptP !== undefined) pbchk("fatPet.interceptP", f.interceptP, exp.fatPet.interceptP, 0.01);
+      if (exp.fatPet.slopeP     !== undefined) pbchk("fatPet.slopeP",     f.slopeP,     exp.fatPet.slopeP,     0.01);
+    }
+
+    if (exp.failSafe) {
+      const f = failSafeN(studies);
+      if (exp.failSafe.rosenthal !== undefined) pbchk("failSafe.rosenthal", f.rosenthal, exp.failSafe.rosenthal, 1);
+      if (exp.failSafe.orwin    !== undefined) pbchk("failSafe.orwin",    f.orwin,    exp.failSafe.orwin,    1);
+    }
+
+    if (exp.harbord) {
+      const h = harbordTest(studies);
+      if (exp.harbord.intercept  !== undefined) pbchk("harbord.intercept",  h.intercept,  exp.harbord.intercept);
+      if (exp.harbord.interceptP !== undefined) pbchk("harbord.interceptP", h.interceptP, exp.harbord.interceptP, 0.01);
+    }
+
+    if (exp.peters) {
+      const p = petersTest(studies);
+      if (exp.peters.intercept  !== undefined) pbchk("peters.intercept",  p.intercept,  exp.peters.intercept);
+      if (exp.peters.interceptP !== undefined) pbchk("peters.interceptP", p.interceptP, exp.peters.interceptP, 0.01);
+    }
+
+    if (exp.trimFill) {
+      const tauM   = bm.tauMethod || "DL";
+      const filled = trimFill(studies, tauM);
+      const k0     = filled.length;
+      const adjustedRE = meta([...studies, ...filled], tauM).RE;
+      if (exp.trimFill.k0         !== undefined) pbchkTrue(`trimFill.k0 = ${exp.trimFill.k0}`, k0 === exp.trimFill.k0);
+      if (exp.trimFill.adjustedRE !== undefined) pbchk("trimFill.adjustedRE", adjustedRE, exp.trimFill.adjustedRE, 0.01);
+    }
+  });
+
+  console.log(pubBiasPass ? "\n✅ ALL PUB BIAS BENCHMARK TESTS PASSED" : "\n❌ SOME PUB BIAS BENCHMARK TESTS FAILED");
+
+  // ===== INFLUENCE / LOO BENCHMARKS =====
+  // Each entry's `expected` is an array of k objects, one per study, with the
+  // per-study fields produced by influenceDiagnostics().
+  // Numeric tolerances: abs 0.001 for continuous stats (RE_loo, hat, cookD,
+  // stdResidual, DFBETA); 5% relative for tau2_loo; abs 0.005 for deltaTau2.
+  // Boolean flags are checked for exact equality.
+  console.log("\n===== INFLUENCE / LOO BENCHMARKS =====\n");
+  let infBenchPass = true;
+
+  function ibchk(name, val, expected, tol = 0.001) {
+    const ok = isFinite(val) && isFinite(expected) && Math.abs(val - expected) <= tol;
+    console.log(`  ${name}: ${round(val, 5)} (expected ${round(expected, 5)}) → ${ok ? "PASS" : "FAIL"}`);
+    if (!ok) infBenchPass = false;
+  }
+  function ibchkTau(name, val, expected) {
+    const scale = Math.max(Math.abs(expected), 0.001);
+    const ok = isFinite(val) && Math.abs(val - expected) / scale < 0.05;
+    console.log(`  ${name}: ${round(val, 5)} (expected ${round(expected, 5)}) → ${ok ? "PASS" : "FAIL"}`);
+    if (!ok) infBenchPass = false;
+  }
+  function ibchkBool(name, val, expected) {
+    const ok = val === expected;
+    console.log(`  ${name}: ${val} (expected ${expected}) → ${ok ? "PASS" : "FAIL"}`);
+    if (!ok) infBenchPass = false;
+  }
+
+  INFLUENCE_BENCHMARKS.forEach(bm => {
+    console.log(`--- ${bm.name} (${bm.tauMethod || "DL"}) ---`);
+
+    const tauMethod = bm.tauMethod || "DL";
+    const studies = bm.data.map(d => {
+      if (d.yi !== undefined && d.vi !== undefined) return { ...d, se: Math.sqrt(d.vi) };
+      const s = compute(d, bm.type, { hedgesCorrection: bm.correction === "hedges" });
+      return { ...d, yi: s.yi, vi: s.vi, se: s.se };
+    });
+
+    const diag = influenceDiagnostics(studies, tauMethod);
+
+    bm.expected.forEach((exp, i) => {
+      const d   = diag[i];
+      const pfx = `  [${i}] ${exp.label || i}`;
+      if (exp.RE_loo      !== undefined) ibchk(`${pfx} RE_loo`,       d.RE_loo,       exp.RE_loo);
+      if (exp.tau2_loo    !== undefined) ibchkTau(`${pfx} tau2_loo`,   d.tau2_loo,     exp.tau2_loo);
+      if (exp.hat         !== undefined) ibchk(`${pfx} hat`,           d.hat,          exp.hat);
+      if (exp.cookD       !== undefined) ibchk(`${pfx} cookD`,         d.cookD,        exp.cookD);
+      if (exp.stdResidual !== undefined) ibchk(`${pfx} stdResidual`,   d.stdResidual,  exp.stdResidual);
+      if (exp.DFBETA      !== undefined) ibchk(`${pfx} DFBETA`,        d.DFBETA,       exp.DFBETA);
+      if (exp.deltaTau2   !== undefined) ibchk(`${pfx} deltaTau2`,     d.deltaTau2,    exp.deltaTau2, 0.005);
+      if (exp.outlier     !== undefined) ibchkBool(`${pfx} outlier`,   d.outlier,      exp.outlier);
+      if (exp.influential !== undefined) ibchkBool(`${pfx} influential`, d.influential, exp.influential);
+      if (exp.highLeverage !== undefined) ibchkBool(`${pfx} highLeverage`, d.highLeverage, exp.highLeverage);
+      if (exp.highCookD   !== undefined) ibchkBool(`${pfx} highCookD`, d.highCookD,    exp.highCookD);
+    });
+  });
+
+  console.log(infBenchPass ? "\n✅ ALL INFLUENCE BENCHMARK TESTS PASSED" : "\n❌ SOME INFLUENCE BENCHMARK TESTS FAILED");
+
+  // ===== leaveOneOut / baujat / pCurve / pUniform / estimatorComparison / subgroupAnalysis =====
+  // Smoke tests: verify return shape, structural invariants, and basic numerical sanity.
+  // Not exhaustive — benchmarks for these functions are a separate future phase.
+  console.log("\n===== UTILITY FUNCTION SMOKE TESTS =====\n");
+  let utilPass = true;
+
+  // Exact-equality or boolean check (prints the raw value for readability).
+  function uchk(name, got, expected) {
+    const ok = (got === expected);
+    console.log(`  ${name}: ${got} → ${ok ? "PASS" : "FAIL"}`);
+    if (!ok) utilPass = false;
+  }
+  // Absolute-tolerance numerical check.
+  function uchkApprox(name, got, expected, tol = 0.01) {
+    const ok = isFinite(got) && isFinite(expected) && Math.abs(got - expected) < tol;
+    console.log(`  ${name}: ${round(got, 4)} (exp ${round(expected, 4)}) → ${ok ? "PASS" : "FAIL"}`);
+    if (!ok) utilPass = false;
+  }
+
+  // Shared dataset — all 5 studies significant (|yi/se| > 1.96), 2 named groups.
+  // z-scores: A≈3.58, B=2.50, C≈3.79, D≈2.45, E≈3.18 — strongly right-skewed for pCurve.
+  const smokeS = [
+    { label: "A", yi: -0.8, vi: 0.05, se: Math.sqrt(0.05), group: "X" },
+    { label: "B", yi: -0.5, vi: 0.04, se: Math.sqrt(0.04), group: "X" },
+    { label: "C", yi: -1.2, vi: 0.10, se: Math.sqrt(0.10), group: "Y" },
+    { label: "D", yi: -0.6, vi: 0.06, se: Math.sqrt(0.06), group: "Y" },
+    { label: "E", yi: -0.9, vi: 0.08, se: Math.sqrt(0.08), group: "Y" },
+  ];
+  // Non-significant dataset — all |z| < 0.15 — for edge-case checks in pCurve/pUniform.
+  const noSigS = [
+    { label: "X", yi:  0.05, vi: 0.5, se: Math.sqrt(0.5) },
+    { label: "Y", yi:  0.10, vi: 0.5, se: Math.sqrt(0.5) },
+    { label: "Z", yi:  0.00, vi: 0.5, se: Math.sqrt(0.5) },
+  ];
+
+  // ---- leaveOneOut ----
+  console.log("--- leaveOneOut ---");
+  {
+    // k < 3 → rows is empty; full is still populated
+    const tiny = leaveOneOut(smokeS.slice(0, 2), "DL");
+    uchk("k<3: rows.length=0", tiny.rows.length, 0);
+    uchk("k<3: full.RE finite", isFinite(tiny.full.RE), true);
+
+    const loo = leaveOneOut(smokeS, "DL");
+    uchk("rows.length=k", loo.rows.length, smokeS.length);
+    uchk("full.RE finite", isFinite(loo.full.RE), true);
+
+    const r = loo.rows[0];
+    uchk("row.label preserved", r.label, "A");
+    uchk("row.lb < row.ub", r.lb < r.ub, true);
+    uchk("row.estimate finite", isFinite(r.estimate), true);
+    uchk("row.tau2 finite", isFinite(r.tau2), true);
+    uchk("row.pval finite", isFinite(r.pval), true);
+    uchk("row.significant is boolean", typeof r.significant === "boolean", true);
+
+    // Omitting the most extreme study (C: yi=−1.2) shifts pooled estimate toward 0
+    const looC = loo.rows.find(row => row.label === "C");
+    uchk("omit extreme study shifts RE toward 0", looC.estimate > loo.full.RE, true);
+  }
+
+  // ---- baujat ----
+  console.log("--- baujat ---");
+  {
+    // k < 2 → null
+    uchk("k=1 → null", baujat(smokeS.slice(0, 1)), null);
+
+    const bj = baujat(smokeS);
+    uchk("k matches input", bj.k, smokeS.length);
+    uchk("points.length=k", bj.points.length, smokeS.length);
+    uchk("muFE finite", isFinite(bj.muFE), true);
+    uchk("Q > 0", bj.Q > 0, true);
+    uchk("all x ≥ 0", bj.points.every(p => p.x >= 0), true);
+    uchk("all influence ≥ 0", bj.points.every(p => p.influence >= 0), true);
+
+    // x_i = w_i·(y_i − μ_FE)², so Σx_i = Q exactly
+    const sumX = bj.points.reduce((s, p) => s + p.x, 0);
+    uchk("Σx = Q", Math.abs(sumX - bj.Q) < 1e-9, true);
+
+    // muFE must equal FE from meta()
+    uchkApprox("muFE = meta FE", bj.muFE, meta(smokeS, "DL").FE);
+  }
+
+  // ---- pCurve ----
+  console.log("--- pCurve ---");
+  {
+    // No significant studies → k=0, verdict=insufficient
+    const pcNone = pCurve(noSigS);
+    uchk("no-sig k=0", pcNone.k, 0);
+    uchk("no-sig verdict=insufficient", pcNone.verdict, "insufficient");
+
+    const pc = pCurve(smokeS);
+    uchk("k=5 significant", pc.k, smokeS.length);
+    uchk("bins.length=5", pc.bins.length, 5);
+    uchk("expected0=0.20", pc.expected0, 0.20);
+    uchk("expected33.length=5", pc.expected33.length, 5);
+
+    // Proportions sum to 1
+    const propSum = pc.bins.reduce((s, b) => s + b.prop, 0);
+    uchk("bin props sum to 1", Math.abs(propSum - 1) < 1e-9, true);
+
+    uchk("rightSkewP in [0,1]", pc.rightSkewP >= 0 && pc.rightSkewP <= 1, true);
+    uchk("flatnessP in [0,1]", pc.flatnessP >= 0 && pc.flatnessP <= 1, true);
+    uchk("rightSkewZ finite", isFinite(pc.rightSkewZ), true);
+
+    const validVerdicts = ["evidential", "no-evidential", "inconclusive", "insufficient"];
+    uchk("verdict is valid string", validVerdicts.includes(pc.verdict), true);
+
+    // All p-values are very small (most in [0,0.01)) → strongly right-skewed → evidential
+    uchk("strongly right-skewed → evidential", pc.verdict, "evidential");
+  }
+
+  // ---- pUniform ----
+  console.log("--- pUniform ---");
+  {
+    // No significant studies → k=0, estimate=NaN
+    const puNone = pUniform(noSigS, null);
+    uchk("no-sig k=0", puNone.k, 0);
+    uchk("no-sig estimate=NaN", isNaN(puNone.estimate), true);
+
+    const m = meta(smokeS, "DL");
+    const pu = pUniform(smokeS, m);
+    uchk("k=5 significant", pu.k, smokeS.length);
+    uchk("estimate finite", isFinite(pu.estimate), true);
+    uchk("ciLow finite", isFinite(pu.ciLow), true);
+    uchk("ciHigh finite", isFinite(pu.ciHigh), true);
+    uchk("ciLow < estimate", pu.ciLow < pu.estimate, true);
+    uchk("estimate < ciHigh", pu.estimate < pu.ciHigh, true);
+    uchk("Z_sig finite", isFinite(pu.Z_sig), true);
+    uchk("Z_bias finite", isFinite(pu.Z_bias), true);
+    uchk("significantEffect is boolean", typeof pu.significantEffect === "boolean", true);
+    uchk("biasDetected is boolean", typeof pu.biasDetected === "boolean", true);
+
+    // All studies are clearly significant → significantEffect=true
+    uchk("all-sig data → significantEffect=true", pu.significantEffect, true);
+  }
+
+  // ---- estimatorComparison ----
+  console.log("--- estimatorComparison ---");
+  {
+    const ec = estimatorComparison(smokeS);
+    uchk("returns 12 entries", ec.length, 12);
+
+    const names = ec.map(e => e.method);
+    ["DL", "REML", "PM", "ML", "HS", "HE", "SJ"].forEach(n =>
+      uchk(`method ${n} present`, names.includes(n), true)
+    );
+
+    uchk("all estimates finite", ec.every(e => isFinite(e.estimate)), true);
+    uchk("all lb ≤ ub", ec.every(e => e.lb <= e.ub), true);
+    uchk("all tau2 ≥ 0", ec.every(e => e.tau2 >= 0), true);
+
+    // For this low-heterogeneity dataset all RE estimates cluster near the FE value
+    const ests = ec.map(e => e.estimate);
+    uchk("estimates cluster (range < 0.3)", Math.max(...ests) - Math.min(...ests) < 0.3, true);
+  }
+
+  // ---- subgroupAnalysis ----
+  console.log("--- subgroupAnalysis ---");
+  {
+    // No group property → null
+    uchk("no group → null", subgroupAnalysis(smokeS.map(s => ({ yi: s.yi, vi: s.vi }))), null);
+
+    // All same group → only 1 group → null
+    uchk("1 group → null", subgroupAnalysis(smokeS.map(s => ({ ...s, group: "all" }))), null);
+
+    // 2 groups: X (k=2), Y (k=3)
+    const sg = subgroupAnalysis(smokeS, "DL");
+    uchk("G=2", sg.G, 2);
+    uchk("df=G-1=1", sg.df, 1);
+    uchk("k=5", sg.k, smokeS.length);
+    uchk("Qbetween ≥ 0", sg.Qbetween >= 0, true);
+    uchk("p in [0,1]", sg.p >= 0 && sg.p <= 1, true);
+
+    const gX = sg.groups["X"], gY = sg.groups["Y"];
+    uchk("group X exists", gX !== undefined, true);
+    uchk("group Y exists", gY !== undefined, true);
+    uchk("group X k=2", gX.k, 2);
+    uchk("group Y k=3", gY.k, 3);
+    uchk("group X ci.lb < ci.ub", gX.ci.lb < gX.ci.ub, true);
+    uchk("group Y ci.lb < ci.ub", gY.ci.lb < gY.ci.ub, true);
+    uchk("group X estimate finite", isFinite(gX.y), true);
+    uchk("group Y estimate finite", isFinite(gY.y), true);
+  }
+
+  console.log(utilPass ? "\n✅ ALL UTILITY SMOKE TESTS PASSED" : "\n❌ SOME UTILITY SMOKE TESTS FAILED");
+
+  // ===== TRIM-AND-FILL UNIT TESTS =====
+  // Tests the Duval & Tweedie L0 estimator, mirror-image reflection, and edge cases.
+  console.log("\n===== TRIM-AND-FILL UNIT TESTS =====\n");
+  let tfPass = true;
+
+  function tfchk(name, got, expected) {
+    const ok = (got === expected);
+    console.log(`  ${name}: ${got} → ${ok ? "PASS" : "FAIL"}`);
+    if (!ok) tfPass = false;
+  }
+  function tfchkApprox(name, got, expected, tol = 0.001) {
+    const ok = isFinite(got) && isFinite(expected) && Math.abs(got - expected) < tol;
+    console.log(`  ${name}: ${round(got, 4)} (exp ${round(expected, 4)}) → ${ok ? "PASS" : "FAIL"}`);
+    if (!ok) tfPass = false;
+  }
+
+  // ---- k < 3: immediate empty return ----
+  // Code returns [] before any iteration when studies.length < 3.
+  console.log("--- k < 3 edge cases ---");
+  {
+    tfchk("k=0 → []", trimFill([]).length, 0);
+    tfchk("k=1 → []", trimFill([{ yi: 1, vi: 1 }]).length, 0);
+    tfchk("k=2 → []", trimFill([{ yi: 1, vi: 1 }, { yi: 2, vi: 1 }]).length, 0);
+  }
+
+  // ---- k0=0: no asymmetry ----
+  // With all deviations = 0, Tn = 0, L0 formula gives negative → max(0,·) = 0 → returns [].
+  console.log("--- k0=0: all equal yi ---");
+  {
+    const flat3 = [{ yi: 1, vi: 0.1 }, { yi: 1, vi: 0.1 }, { yi: 1, vi: 0.1 }];
+    tfchk("k=3, all yi=1 → k0=0, []", trimFill(flat3).length, 0);
+
+    const flat5 = Array.from({ length: 5 }, () => ({ yi: 0, vi: 1, label: "s" }));
+    tfchk("k=5, all yi=0 → k0=0, []", trimFill(flat5).length, 0);
+  }
+
+  // ---- maxIter=0: loop never runs, k0 stays 0 ----
+  console.log("--- maxIter=0 ---");
+  {
+    // Even a strongly asymmetric dataset returns [] when maxIter=0.
+    const asym = [
+      { label: "S1", yi: 0.0, vi: 0.04 }, { label: "S2", yi: 0.1, vi: 0.04 },
+      { label: "S3", yi: 1.5, vi: 0.04 }, { label: "S4", yi: 2.0, vi: 0.04 },
+      { label: "S5", yi: 2.5, vi: 0.04 },
+    ];
+    tfchk("maxIter=0 → k0=0 regardless of data", trimFill(asym, "DL", 0).length, 0);
+  }
+
+  // ---- asymmetric dataset: structural + quantitative invariants ----
+  // Dataset: yi=[0, 0.1, 1.5, 2.0, 2.5], vi=0.04 (equal weights).
+  // All effects are positive → strongly right-skewed.
+  //
+  // Convergence (manual derivation):
+  //   Initial RE = 1.22 (equal-vi mean).  L0 → k0=2 → trim → center↓ → L0 larger → ...
+  //   Converges at center=0, k0=5 (capped to 4 available right-side studies).
+  //   Mirrors: each filled_yi = 2·0 − orig_yi → filled_yi + orig_yi = 0 exactly.
+  //   Adjusted combined dataset is perfectly symmetric → adjusted RE = 0.
+  console.log("--- asymmetric dataset: structure and invariants ---");
+  {
+    const asym = [
+      { label: "S1", yi: 0.0, vi: 0.04 }, { label: "S2", yi: 0.1, vi: 0.04 },
+      { label: "S3", yi: 1.5, vi: 0.04 }, { label: "S4", yi: 2.0, vi: 0.04 },
+      { label: "S5", yi: 2.5, vi: 0.04 },
+    ];
+    const filled = trimFill(asym, "DL");
+
+    // Basic shape
+    tfchk("k0 > 0 for asymmetric data", filled.length > 0, true);
+
+    // Flags and metadata on every filled study
+    tfchk("filled.filled=true", filled.every(f => f.filled === true), true);
+    tfchk("vi preserved", filled.every(f => f.vi === 0.04), true);
+    tfchk("labels end with ' (filled)'", filled.every(f => f.label.endsWith(" (filled)")), true);
+
+    // Mirror-image: filled_yi = 2·center − orig_yi
+    // Since all filled labels are "<orig_label> (filled)", we can recover orig_yi.
+    // Then (filled_yi + orig_yi)/2 must equal the same center for every pair.
+    const centers = filled.map(f => {
+      const origLabel = f.label.replace(" (filled)", "");
+      const orig = asym.find(s => s.label === origLabel);
+      return orig != null ? (f.yi + orig.yi) : null;
+    });
+    tfchk("every filled label maps to an original study", centers.every(c => c !== null), true);
+
+    // All 2·center values must be identical (converged center is unique)
+    const twiceCenter = centers[0];
+    tfchk("all mirror pairs share the same center", centers.every(c => Math.abs(c - twiceCenter) < 1e-9), true);
+
+    // Converged center = 0 for this dataset (verified manually above)
+    tfchkApprox("converged center = 0", twiceCenter / 2, 0, 1e-9);
+
+    // REML method also converges with k0 > 0
+    const filledREML = trimFill(asym, "REML");
+    tfchk("REML method also produces k0 > 0", filledREML.length > 0, true);
+
+    // Adjusted RE should be less than original RE (fill is on the negative side)
+    const origRE  = meta(asym, "DL").RE;
+    const adjMeta = meta([...asym, ...filled], "DL");
+    tfchk("adjusted RE < original RE", adjMeta.RE < origRE, true);
+
+    // With center=0 and perfect symmetry, adjusted RE = 0
+    tfchkApprox("adjusted RE ≈ 0", adjMeta.RE, 0, 0.01);
+  }
+
+  // ---- BCG log-OR: k0=10, matches pub bias benchmark ----
+  // This reuses the existing PUB_BIAS_BENCHMARKS[0] data.
+  console.log("--- BCG log-OR: k0=10 ---");
+  {
+    const bm = PUB_BIAS_BENCHMARKS[0];
+    const studies = bm.data.map(d => {
+      const s = compute(d, bm.type);
+      return { ...d, yi: s.yi, vi: s.vi, se: s.se };
+    });
+    const filled = trimFill(studies, bm.tauMethod);
+
+    tfchk("BCG k0=10", filled.length, 10);
+
+    // All filled studies carry the filled flag and labelling
+    tfchk("BCG filled.filled=true", filled.every(f => f.filled === true), true);
+    tfchk("BCG labels end with ' (filled)'", filled.every(f => f.label.endsWith(" (filled)")), true);
+
+    // Adjusted RE matches the benchmark value (tol 0.01)
+    const adjRE = meta([...studies, ...filled], bm.tauMethod).RE;
+    tfchkApprox("BCG adjusted RE", adjRE, bm.tests.trimFill.adjustedRE, 0.01);
+  }
+
+  console.log(tfPass ? "\n✅ ALL TRIM-AND-FILL TESTS PASSED" : "\n❌ SOME TRIM-AND-FILL TESTS FAILED");
+
+  // ===== fCDF UNIT TESTS =====
+  // Tests the F-distribution CDF via analytically exact identities:
+  //   F(2,2): I_x(1,1) = x, where x = d1·f/(d1·f+d2) = f/(f+1)  →  fCDF(f,2,2) = f/(f+1)
+  //   F(1,2): I_x(1/2,1) = √x, where x = f/(f+2)                →  fCDF(f,1,2) = √(f/(f+2))
+  console.log("\n===== fCDF UNIT TESTS =====\n");
+  let fcdfPass = true;
+  const fcdfchk = (label, got, expected) => {
+    const ok = Math.abs(got - expected) < 1e-12;
+    if (!ok) { console.error(`  FAIL ${label}: got ${got}, expected ${expected}`); fcdfPass = false; }
+    else console.log(`  ok  ${label}`);
+  };
+
+  // F(2,2): fCDF(f,2,2) = f/(f+1)  (exact)
+  fcdfchk("fCDF(1,2,2) = 0.5",  fCDF(1, 2, 2), 1/2);
+  fcdfchk("fCDF(3,2,2) = 0.75", fCDF(3, 2, 2), 3/4);
+  fcdfchk("fCDF(9,2,2) = 0.9",  fCDF(9, 2, 2), 9/10);
+  fcdfchk("fCDF(4,2,2) = 0.8",  fCDF(4, 2, 2), 4/5);
+
+  // F(1,2): fCDF(f,1,2) = √(f/(f+2))  (exact)
+  fcdfchk("fCDF(1,1,2) = 1/√3", fCDF(1, 1, 2), Math.sqrt(1/3));
+  fcdfchk("fCDF(2,1,2) = 1/√2", fCDF(2, 1, 2), Math.sqrt(1/2));
+  fcdfchk("fCDF(7,1,2) = √(7/9) = √(7)/3", fCDF(7, 1, 2), Math.sqrt(7/9));
+
+  // Edge cases
+  fcdfchk("fCDF(0,1,1) = 0 (f=0)",   fCDF(0,  1, 1), 0);
+  fcdfchk("fCDF(-1,1,1) = 0 (f<0)",  fCDF(-1, 1, 1), 0);
+  const nanCheck = (label, got) => {
+    const ok = isNaN(got);
+    if (!ok) { console.error(`  FAIL ${label}: got ${got}, expected NaN`); fcdfPass = false; }
+    else console.log(`  ok  ${label}`);
+  };
+  nanCheck("fCDF(1,0,1) = NaN (d1=0)",         fCDF(1, 0, 1));
+  nanCheck("fCDF(1,1,0) = NaN (d2=0)",         fCDF(1, 1, 0));
+  nanCheck("fCDF(1,Inf,1) = NaN (d1=Infinity)", fCDF(1, Infinity, 1));
+
+  console.log(fcdfPass ? "\n✅ ALL fCDF TESTS PASSED" : "\n❌ SOME fCDF TESTS FAILED");
+
+  // ===== EGGER TEST UNIT TESTS =====
+  // Synthetic k=4 dataset where X=1/SE and Z=yi/SE are small integers,
+  // making all OLS intermediate quantities exact. See benchmark-data.md
+  // "Egger synthetic unit-test dataset" for the full derivation.
+  //
+  // Dataset:  yi=[-1,-1,-0.5,1], se=[0.5,1,0.5,1]
+  //   X = [2,1,2,1], Z = [-2,-1,-1,1]
+  //   meanX=1.5, meanZ=-0.75
+  //   slope = -1.5  (exact)
+  //   intercept = 1.5  (exact)
+  //   rss = 2.5  (exact), df = 2
+  //   se(intercept) = sqrt(3.125)  (exact)
+  //   t = 1.5/sqrt(3.125)  (exact)
+  //   p = 1 - |t|/sqrt(t^2+2)  (exact, closed form for df=2)
+  console.log("\n===== EGGER TEST UNIT TESTS =====\n");
+  let eggerPass = true;
+  const egchk = (label, got, expected, tol=1e-10) => {
+    const ok = Math.abs(got - expected) < tol;
+    if (!ok) { console.error(`  FAIL ${label}: got ${got}, expected ${expected}`); eggerPass = false; }
+    else console.log(`  ok  ${label}`);
+  };
+
+  const egS = [
+    { label: "S1", yi: -1.0, se: 0.5, vi: 0.25 },
+    { label: "S2", yi: -1.0, se: 1.0, vi: 1.00 },
+    { label: "S3", yi: -0.5, se: 0.5, vi: 0.25 },
+    { label: "S4", yi:  1.0, se: 1.0, vi: 1.00 },
+  ];
+  const EG_SLOPE      = -1.5;
+  const EG_INTERCEPT  =  1.5;
+  const EG_SE         = Math.sqrt(3.125);            // sqrt(1.25 * 2.5)
+  const EG_T          = 1.5 / Math.sqrt(3.125);      // intercept / se
+  const EG_DF         = 2;
+  const EG_P          = 1 - EG_T / Math.sqrt(EG_T**2 + EG_DF); // exact, df=2
+
+  const eg = eggerTest(egS);
+
+  egchk("slope     = -1.5 (exact)",          eg.slope,     EG_SLOPE);
+  egchk("intercept =  1.5 (exact)",          eg.intercept, EG_INTERCEPT);
+  egchk("se = sqrt(3.125) ≈ 1.76777",        eg.se,        EG_SE);
+  egchk("t  = 1.5/sqrt(3.125) ≈ 0.84853",   eg.t,         EG_T);
+  egchk("df = 2",                            eg.df,        EG_DF);
+  egchk("p  ≈ 0.48550 (df=2 exact)",         eg.p,         EG_P);
+
+  // Structural invariant: t = intercept / se
+  egchk("t = intercept/se (identity)",       eg.t, eg.intercept / eg.se);
+
+  // Edge cases
+  const egNaN = eggerTest([egS[0], egS[1]]);         // k=2 < 3
+  const egNaNOk = isNaN(egNaN.intercept) && isNaN(egNaN.slope) &&
+                  isNaN(egNaN.se) && isNaN(egNaN.t) && isNaN(egNaN.df) && isNaN(egNaN.p);
+  if (!egNaNOk) { console.error("  FAIL k<3 → all NaN"); eggerPass = false; }
+  else console.log("  ok  k<3 → all NaN (intercept, slope, se, t, df, p)");
+
+  const eg3 = eggerTest([egS[0], egS[1], egS[2]]);   // k=3, df=1, minimum valid
+  const eg3ok = isFinite(eg3.intercept) && isFinite(eg3.slope) &&
+                isFinite(eg3.se) && isFinite(eg3.t) && eg3.df === 1 && isFinite(eg3.p);
+  if (!eg3ok) { console.error("  FAIL k=3 not all finite"); eggerPass = false; }
+  else console.log("  ok  k=3 (df=1): all finite, df=1");
+
+  // Degenerate: all se identical → Var(X)=0 → slope and se are NaN/Inf
+  const egSameX = [
+    { label: "A", yi:  1.0, se: 1.0, vi: 1.0 },
+    { label: "B", yi: -1.0, se: 1.0, vi: 1.0 },
+    { label: "C", yi:  0.5, se: 1.0, vi: 1.0 },
+  ];
+  const egDeg = eggerTest(egSameX);
+  const egDegOk = !isFinite(egDeg.slope) || isNaN(egDeg.slope);
+  if (!egDegOk) { console.error(`  FAIL all-equal SE: slope should be non-finite, got ${egDeg.slope}`); eggerPass = false; }
+  else console.log("  ok  all-equal SE → slope non-finite (den=0)");
+
+  // Sign invariant: negating all yi flips sign of intercept and t, leaves p unchanged
+  const egNeg = eggerTest(egS.map(s => ({ ...s, yi: -s.yi })));
+  egchk("negated yi: intercept flips sign", egNeg.intercept, -EG_INTERCEPT);
+  egchk("negated yi: slope flips sign",     egNeg.slope,     -EG_SLOPE);
+  egchk("negated yi: t flips sign",         egNeg.t,         -EG_T);
+  egchk("negated yi: p unchanged",          egNeg.p,          EG_P);
+
+  // Degenerate: all yi identical (yi = c, varying SE)
+  // Z = yi/se = c/se = c·X  →  perfect collinearity with slope=c, intercept=0,
+  // rss=0, se=0, t=0/0=NaN, p=NaN.
+  // Reason: if all true effects are equal, the funnel is symmetric by construction;
+  // the test correctly signals that asymmetry is unquantifiable (0/0), not absent.
+  const egSameY = [
+    { label: "A", yi: 0.5, se: 0.2, vi: 0.04 },
+    { label: "B", yi: 0.5, se: 0.5, vi: 0.25 },
+    { label: "C", yi: 0.5, se: 0.8, vi: 0.64 },
+    { label: "D", yi: 0.5, se: 1.0, vi: 1.00 },
+  ];
+  const egSY = eggerTest(egSameY);
+  egchk("all yi=c: slope = c = 0.5 (exact)",   egSY.slope,     0.5);
+  egchk("all yi=c: intercept = 0 (exact)",      egSY.intercept, 0);
+  egchk("all yi=c: se = 0 (rss=0)",            egSY.se,        0);
+  egchk("all yi=c: df = k-2 = 2",              egSY.df,        2);
+  if (!isNaN(egSY.t) || !isNaN(egSY.p)) {
+    console.error(`  FAIL all yi=c: t and p should be NaN, got t=${egSY.t} p=${egSY.p}`);
+    eggerPass = false;
+  } else console.log("  ok  all yi=c: t=NaN, p=NaN (0/0, unquantifiable)");
+
+  // Special sub-case: all yi = 0 → Z=0 for all, slope=0, intercept=0
+  const egZeroY = [
+    { label: "A", yi: 0, se: 0.2, vi: 0.04 },
+    { label: "B", yi: 0, se: 0.5, vi: 0.25 },
+    { label: "C", yi: 0, se: 1.0, vi: 1.00 },
+  ];
+  const egZY = eggerTest(egZeroY);
+  egchk("all yi=0: slope = 0 (exact)",     egZY.slope,     0);
+  egchk("all yi=0: intercept = 0 (exact)", egZY.intercept, 0);
+  egchk("all yi=0: se = 0",               egZY.se,        0);
+
+  console.log(eggerPass ? "\n✅ ALL EGGER TESTS PASSED" : "\n❌ SOME EGGER TESTS FAILED");
 }

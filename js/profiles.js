@@ -215,14 +215,14 @@ export const effectProfiles = {
       if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
       const { m_pre, m_post, sd_pre, sd_post, n, r } = s;
       const corr = isFinite(r) ? r : 0.5;
-      const mean_change = m_post - m_pre;
-      const sd_change = Math.sqrt(sd_pre**2 + sd_post**2 - 2*corr*sd_pre*sd_post);
-      const d = mean_change / sd_change;
-      const df = n - 1;
-      const J = 1 - (3 / (4*df - 1));
-      const g = d * J;
-      const var_d = (1/n) + (d*d)/(2*n);
-      return { ...s, yi: g, vi: Math.max(var_d, MIN_VAR), se: Math.sqrt(Math.max(var_d, MIN_VAR)), w: 1 / Math.max(var_d, MIN_VAR), md: g, varMD: var_d };
+      const d    = (m_post - m_pre) / sd_pre;   // SMCR: pre-test SD standardiser
+      const df   = n - 1;
+      const J    = 1 - (3 / (4*df - 1));
+      const g    = d * J;
+      // Variance: correlation-adjusted SMCR formula (Morris & DeShon 2002)
+      const var_d = 2 * (1 - corr) / n + (d * d) / (2 * df);
+      const vi    = Math.max(J * J * var_d, MIN_VAR);
+      return { ...s, yi: g, vi, se: Math.sqrt(vi), w: 1 / vi, md: g, varMD: var_d };
     },
     transform:   (x) => x,
 

@@ -867,7 +867,7 @@ export function I2(corrected, tau2) {
 // ================= EGGER TEST =================
 export function eggerTest(studies){
   const k = studies.length;
-  if(k < 3) return { intercept: NaN, slope: NaN, p: NaN };
+  if(k < 3) return { intercept: NaN, slope: NaN, se: NaN, t: NaN, df: NaN, p: NaN };
   const Z = studies.map(d => d.yi / d.se);
   const X = studies.map(d => 1 / d.se);
   const meanX = X.reduce((a,b)=>a+b,0)/X.length, meanZ = Z.reduce((a,b)=>a+b,0)/Z.length;
@@ -878,10 +878,10 @@ export function eggerTest(studies){
   let rss=0;
   for(let i=0;i<k;i++){ rss += (Z[i] - (intercept + slope*X[i]))**2; }
   const df = k-2;
-  const seIntercept = Math.sqrt(rss/df) * Math.sqrt(1/k + (meanX*meanX)/den);
-  const t = intercept/seIntercept;
+  const se = Math.sqrt(rss/df) * Math.sqrt(1/k + (meanX*meanX)/den);
+  const t = intercept/se;
   const p = 2 * (1 - tCDF(Math.abs(t), df));
-  return { intercept, slope, p, t };
+  return { intercept, slope, se, t, df, p };
 }
 
 // ================= BEGG'S RANK CORRELATION TEST =================
