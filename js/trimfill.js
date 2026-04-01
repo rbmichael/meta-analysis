@@ -42,19 +42,27 @@ export function trimFill(studies, method = "DL", maxIter = 100) {
     return ranks;
   }
 
-  function estimateK0(studies, center) {
-    const d = studies.map(s => s.yi - center);
-    const ranks = assignRanks(d);
+  // Compute deviations, side direction, ranks, and sorted side entries — once
+  // per center value, shared by estimateK0 and the trim/mirror steps.
+  function computeSide(center) {
+    const deviations = studies.map((s, i) => ({ i, d: s.yi - center, s }));
+    const nRight = deviations.filter(s => s.d > 0).length;
+    const nLeft  = deviations.filter(s => s.d < 0).length;
+    const largerIsRight = nRight >= nLeft;
+    const ranks = assignRanks(deviations.map(s => s.d));
+    const sorted = deviations
+      .filter(s => largerIsRight ? s.d > 0 : s.d < 0)
+      .sort((a, b) => Math.abs(b.d) - Math.abs(a.d));
+    return { deviations, largerIsRight, ranks, sorted };
+  }
 
+  function estimateK0({ deviations, largerIsRight, ranks }) {
     // Always sum ranks for the larger side so that left-side asymmetry
     // is detected correctly (previously always summed the right side).
-    const nRight = d.filter(di => di > 0).length;
-    const nLeft  = d.filter(di => di < 0).length;
-    const largerIsRight = nRight >= nLeft;
-
     let Tn = 0;
-    d.forEach((di, i) => { if (largerIsRight ? di > 0 : di < 0) Tn += ranks[i]; });
-
+    deviations.forEach((s, i) => {
+      if (largerIsRight ? s.d > 0 : s.d < 0) Tn += ranks[i];
+    });
     // L0 formula (Duval & Tweedie 2000, eq. 5)
     const raw = (4 * Tn - k * (k + 1) / 2) / (2 * k - 1);
     return Math.max(0, Math.round(raw));
@@ -63,9 +71,10 @@ export function trimFill(studies, method = "DL", maxIter = 100) {
   // ---- iterative L0 ----
   let center = meta(studies, method).RE;
   let k0 = 0;
+  let side = computeSide(center);
 
   for (let iter = 0; iter < maxIter; iter++) {
-    const k0_new = estimateK0(studies, center);
+    const k0_new = estimateK0(side);
 
     if (k0_new === k0) break;   // converged
     k0 = k0_new;
@@ -74,37 +83,19 @@ export function trimFill(studies, method = "DL", maxIter = 100) {
 
     // Trim the k0 most extreme studies from the larger side,
     // then re-estimate the center from the trimmed set.
-    const deviations = studies.map((s, i) => ({ i, d: s.yi - center }));
-    const nRight = deviations.filter(s => s.d > 0).length;
-    const nLeft  = deviations.filter(s => s.d < 0).length;
-    const largerIsRight = nRight >= nLeft;
-
-    const toTrim = new Set(
-      deviations
-        .filter(s => largerIsRight ? s.d > 0 : s.d < 0)
-        .sort((a, b) => Math.abs(b.d) - Math.abs(a.d))
-        .slice(0, k0)
-        .map(s => s.i)
-    );
-
+    const toTrim = new Set(side.sorted.slice(0, k0).map(s => s.i));
     const trimmed = studies.filter((_, i) => !toTrim.has(i));
     if (trimmed.length < 1) break;
 
     center = meta(trimmed, method).RE;
+    side = computeSide(center);
   }
 
   if (k0 === 0) return [];
 
   // ---- build filled (mirror-image) studies ----
-  const deviations = studies.map((s, i) => ({ i, d: s.yi - center, s }));
-  const nRight = deviations.filter(s => s.d > 0).length;
-  const nLeft  = deviations.filter(s => s.d < 0).length;
-  const largerIsRight = nRight >= nLeft;
-
-  const toMirror = deviations
-    .filter(s => largerIsRight ? s.d > 0 : s.d < 0)
-    .sort((a, b) => Math.abs(b.d) - Math.abs(a.d))
-    .slice(0, k0);
+  // side already matches the final center — no recomputation needed.
+  const toMirror = side.sorted.slice(0, k0);
 
   return toMirror.map(({ s }) => {
     const yi = 2 * center - s.yi;
