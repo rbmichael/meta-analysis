@@ -478,9 +478,9 @@ export function tau2_HS(studies) {
   const k = studies.length;
   if (k <= 1) return 0;
   const w = studies.map(d => 1 / d.vi);
-  const W = w.reduce((a, b) => a + b, 0);
-  const ybar = studies.reduce((s, d, i) => s + w[i] * d.yi, 0) / W;
-  const Q = studies.reduce((s, d, i) => s + w[i] * (d.yi - ybar) ** 2, 0);
+  const W = w.reduce((acc, b) => acc + b, 0);
+  const ybar = studies.reduce((acc, d, i) => acc + w[i] * d.yi, 0) / W;
+  const Q = studies.reduce((acc, d, i) => acc + w[i] * (d.yi - ybar) ** 2, 0);
   return Math.max(0, (Q - (k - 1)) / W);
 }
 
@@ -539,9 +539,9 @@ export function tau2_HSk(studies) {
 export function tau2_HE(studies) {
   const k = studies.length;
   if (k <= 1) return 0;
-  const ybar = studies.reduce((s, d) => s + d.yi, 0) / k;
-  const SS   = studies.reduce((s, d) => s + (d.yi - ybar) ** 2, 0);
-  const meanV = studies.reduce((s, d) => s + d.vi, 0) / k;
+  const ybar = studies.reduce((acc, d) => acc + d.yi, 0) / k;
+  const SS   = studies.reduce((acc, d) => acc + (d.yi - ybar) ** 2, 0);
+  const meanV = studies.reduce((acc, d) => acc + d.vi, 0) / k;
   return Math.max(0, SS / (k - 1) - meanV);
 }
 
@@ -553,9 +553,9 @@ export function tau2_HE(studies) {
 export function tau2_SJ(studies, tol = REML_TOL, maxIter = 200) {
   const k = studies.length;
   if (k <= 1) return 0;
-  const ybar0 = studies.reduce((s, d) => s + d.yi, 0) / k;
+  const ybar0 = studies.reduce((acc, d) => acc + d.yi, 0) / k;
   // Seed: raw between-study variance (always > 0 unless all yi identical)
-  let tau2 = studies.reduce((s, d) => s + (d.yi - ybar0) ** 2, 0) / k;
+  let tau2 = studies.reduce((acc, d) => acc + (d.yi - ybar0) ** 2, 0) / k;
   if (tau2 === 0) return 0;
   for (let iter = 0; iter < maxIter; iter++) {
     let W = 0, Wmu = 0;
@@ -680,8 +680,8 @@ export function profileLikCI(studies, alpha = 0.05) {
 
   const tau2ml = tau2_ML(studies);
   const w      = studies.map(d => 1 / (d.vi + tau2ml));
-  const W      = w.reduce((a, b) => a + b, 0);
-  const muHat  = studies.reduce((s, d, i) => s + w[i] * d.yi, 0) / W;
+  const W      = w.reduce((acc, b) => acc + b, 0);
+  const muHat  = studies.reduce((acc, d, i) => acc + w[i] * d.yi, 0) / W;
   const lMax   = logLik(studies, muHat, tau2ml);
   const cutoff = chiSquareQuantile(1 - alpha, 1) / 2;  // ½ χ²_{1,1−α}
 
@@ -816,13 +816,13 @@ function genqCore(studies, weights) {
   const k = studies.length;
   if (k <= 1) return 0;
 
-  const A  = weights.reduce((s, a) => s + a, 0);
-  const ya = studies.reduce((s, d, i) => s + weights[i] * d.yi, 0) / A;
-  const Qa = studies.reduce((s, d, i) => s + weights[i] * (d.yi - ya) ** 2, 0);
+  const A  = weights.reduce((acc, a) => acc + a, 0);
+  const ya = studies.reduce((acc, d, i) => acc + weights[i] * d.yi, 0) / A;
+  const Qa = studies.reduce((acc, d, i) => acc + weights[i] * (d.yi - ya) ** 2, 0);
 
-  const sumAV  = studies.reduce((s, d, i) => s + weights[i] * d.vi, 0);
-  const sumA2V = studies.reduce((s, d, i) => s + weights[i] ** 2 * d.vi, 0);
-  const sumA2  = weights.reduce((s, a) => s + a ** 2, 0);
+  const sumAV  = studies.reduce((acc, d, i) => acc + weights[i] * d.vi, 0);
+  const sumA2V = studies.reduce((acc, d, i) => acc + weights[i] ** 2 * d.vi, 0);
+  const sumA2  = weights.reduce((acc, a) => acc + a ** 2, 0);
 
   const ba = sumAV - sumA2V / A;  // expected Q under homogeneity
   const ca = A    - sumA2  / A;   // slope
@@ -866,16 +866,16 @@ export function tau2_GENQ(studies, weights) {
 // Compute RE mean given tau²
 export function RE_mean(corrected, tau2) {
   const wRE = corrected.map(d => 1 / (d.vi + tau2));
-  const WRE = wRE.reduce((a,b)=>a+b,0);
-  return corrected.reduce((sum,d,i)=> sum + wRE[i]*d.yi,0)/WRE;
+  const WRE = wRE.reduce((acc, b) => acc + b, 0);
+  return corrected.reduce((acc, d, i) => acc + wRE[i]*d.yi,0)/WRE;
 }
 
 // -------------------------------
 // Compute FE mean
 export function FE_mean(corrected) {
   const wFE = corrected.map(d => 1 / d.vi);
-  const WFE = wFE.reduce((a,b)=>a+b,0);
-  return corrected.reduce((sum,d,i)=> sum + wFE[i]*d.yi,0)/WFE;
+  const WFE = wFE.reduce((acc, b) => acc + b, 0);
+  return corrected.reduce((acc, d, i) => acc + wFE[i]*d.yi,0)/WFE;
 }
 
 // -------------------------------
@@ -885,9 +885,9 @@ export function I2(corrected, tau2) {
   const k = corrected.length;
   if (k <= 1) return 0;
   const wFE = corrected.map(d => 1 / d.vi);
-  const W = wFE.reduce((a, b) => a + b, 0);
-  const mu = corrected.reduce((sum, d, i) => sum + wFE[i] * d.yi, 0) / W;
-  const Q = corrected.reduce((sum, d, i) => sum + wFE[i] * (d.yi - mu) ** 2, 0);
+  const W = wFE.reduce((acc, b) => acc + b, 0);
+  const mu = corrected.reduce((acc, d, i) => acc + wFE[i] * d.yi, 0) / W;
+  const Q = corrected.reduce((acc, d, i) => acc + wFE[i] * (d.yi - mu) ** 2, 0);
   return Math.max(0, Math.min(100, ((Q - (k - 1)) / Q) * 100));
 }
 
@@ -897,7 +897,7 @@ export function eggerTest(studies){
   if(k < 3) return { intercept: NaN, slope: NaN, se: NaN, t: NaN, df: NaN, p: NaN };
   const Z = studies.map(d => d.yi / d.se);
   const X = studies.map(d => 1 / d.se);
-  const meanX = X.reduce((a,b)=>a+b,0)/X.length, meanZ = Z.reduce((a,b)=>a+b,0)/Z.length;
+  const meanX = X.reduce((acc, b) => acc + b, 0)/X.length, meanZ = Z.reduce((acc, b) => acc + b, 0)/Z.length;
   let num=0, den=0;
   for(let i=0;i<k;i++){ num += (X[i]-meanX)*(Z[i]-meanZ); den += (X[i]-meanX)**2; }
   const slope = num/den;
@@ -927,8 +927,8 @@ export function beggTest(studies) {
 
   // Adjust effects for FE pooled estimate (Begg & Mazumdar 1994, eq. 2)
   const w0  = valid.map(s => 1 / s.vi);
-  const W   = w0.reduce((a, b) => a + b, 0);
-  const FE  = valid.reduce((s, d, i) => s + w0[i] * d.yi, 0) / W;
+  const W   = w0.reduce((acc, b) => acc + b, 0);
+  const FE  = valid.reduce((acc, d, i) => acc + w0[i] * d.yi, 0) / W;
   // Rank on raw yi: the FE centering and any linear offset cancel in every
   // pairwise sign(adj_i − adj_j), so adj[i] = yi[i] is equivalent.
   const adj = valid.map(s => s.yi);
@@ -1220,9 +1220,9 @@ export function failSafeN(studies, alpha = 0.05, trivial = 0.1) {
   if (k < 1) return { rosenthal: NaN, orwin: NaN, sumZ: NaN, z_crit: NaN, k: 0 };
 
   // One-sided z for each study: z = |yi| / se  (using study-level statistic)
-  const sumZ = valid.reduce((s, d) => {
+  const sumZ = valid.reduce((acc, d) => {
     const z = Math.abs(d.yi) / Math.sqrt(d.vi);
-    return s + z;
+    return acc + z;
   }, 0);
 
   // Critical z for the chosen alpha (two-tailed → one-sided z_α/2... but
@@ -1242,8 +1242,8 @@ export function failSafeN(studies, alpha = 0.05, trivial = 0.1) {
 
   // Orwin: uses FE pooled estimate (Orwin 1983 predates RE meta-analysis)
   const w0 = valid.map(s => 1 / s.vi);
-  const W  = w0.reduce((a, b) => a + b, 0);
-  const FE = valid.reduce((s, d, i) => s + w0[i] * d.yi, 0) / W;
+  const W  = w0.reduce((acc, b) => acc + b, 0);
+  const FE = valid.reduce((acc, d, i) => acc + w0[i] * d.yi, 0) / W;
   const orwin = Math.max(0, k * (Math.abs(FE) - Math.abs(trivial)) / Math.abs(trivial));
 
   return { rosenthal, orwin, sumZ, z_crit, k };
@@ -1258,7 +1258,7 @@ export function influenceDiagnostics(studies, method="DL", ciMethod="normal"){
   // Total RE weight W = Σ 1/(vi + τ²_full).
   // Computed directly from studies rather than via 1/seRE² because seRE
   // may be the KH-adjusted value (not equal to sqrt(1/W)) when ciMethod="KH".
-  const W = studies.reduce((s, d) => s + 1 / (d.vi + full.tau2), 0);
+  const W = studies.reduce((acc, d) => acc + 1 / (d.vi + full.tau2), 0);
 
   return studies.map((study, idx) => {
     const loo = studies.filter((_, i) => i !== idx);
@@ -1349,9 +1349,9 @@ export function subgroupAnalysis(studies, method="REML", ciMethod="normal") {
 // equals Q_FE when τ² = 0.
 function qProfile(tau2, studies) {
   const w  = studies.map(d => 1 / (d.vi + tau2));
-  const W  = w.reduce((a, b) => a + b, 0);
-  const mu = studies.reduce((s, d, i) => s + w[i] * d.yi, 0) / W;
-  return studies.reduce((s, d, i) => s + w[i] * (d.yi - mu) ** 2, 0);
+  const W  = w.reduce((acc, b) => acc + b, 0);
+  const mu = studies.reduce((acc, d, i) => acc + w[i] * d.yi, 0) / W;
+  return studies.reduce((acc, d, i) => acc + w[i] * (d.yi - mu) ** 2, 0);
 }
 
 // Q-profile 95% CI for τ², I², H² (Viechtbauer 2007).
@@ -1412,7 +1412,7 @@ export function heterogeneityCIs(studies, tau2, alpha = 0.05) {
 
   // --- I² and H² CIs ---
   // σ²_typical = (k-1) / Σ(1/vi)  [FE-weight-based typical sampling variance]
-  const sumWFE = studies.reduce((s, d) => s + 1 / d.vi, 0);
+  const sumWFE = studies.reduce((acc, d) => acc + 1 / d.vi, 0);
   const sigma2 = df / sumWFE;
 
   const toI2 = t => 100 * t / (t + sigma2);
@@ -1434,8 +1434,8 @@ export function meta(studies, method="DL", ciMethod="normal") {
 
   // ---------- FIXED EFFECT ----------
   const wFE = studies.map(d => 1 / Math.max(d.vi, MIN_VAR));
-  const W = wFE.reduce((a,b)=>a+b,0);
-  const FE = W > 0 ? studies.reduce((a,d,i)=>a+d.yi*wFE[i],0)/W : NaN;
+  const W = wFE.reduce((acc, b) => acc + b, 0);
+  const FE = W > 0 ? studies.reduce((acc, d, i) => acc + d.yi * wFE[i], 0)/W : NaN;
   const seFE = W > 0 ? Math.sqrt(1/W) : NaN;
 
   let Q = 0;
@@ -1459,15 +1459,15 @@ export function meta(studies, method="DL", ciMethod="normal") {
 	else if (method === "EBLUP")  tau2 = tau2_REML(studies, 1e-12, 500);   // alias: EBLUP = REML — see EBLUP block above tau2_GENQ
 	else if (method === "HSk")    tau2 = tau2_HSk(studies);                 // see tau2_HSk
 	else { // DL fallback
-		const sumW2 = wFE.reduce((a,w)=>a+w*w,0);
+		const sumW2 = wFE.reduce((acc, w) => acc + w * w, 0);
 		const C = W - (sumW2/W);
 		tau2 = C>0 ? Math.max(0, (Q-dfQ)/C) : 0;
 	}
 
   // ---------- RANDOM EFFECT ----------
   const wRE = studies.map(d => 1 / Math.max(d.vi + tau2, MIN_VAR));
-  const WRE = wRE.reduce((a,b)=>a+b,0);
-  const RE = WRE>0 ? studies.reduce((a,d,i)=>a+d.yi*wRE[i],0)/WRE : NaN;
+  const WRE = wRE.reduce((acc, b) => acc + b, 0);
+  const RE = WRE>0 ? studies.reduce((acc, d, i) => acc + d.yi * wRE[i], 0)/WRE : NaN;
   const seRE_base = WRE>0 ? Math.sqrt(1/WRE) : NaN;  // used for prediction interval
   let seRE = seRE_base;
 
@@ -1648,7 +1648,7 @@ export function wls(X, y, w) {
   }
 
   // --- beta = (X'WX)⁻¹ · X'Wy ---
-  const beta = inv.map(row => row.reduce((s, v, j) => s + v * XtWy[j], 0));
+  const beta = inv.map(row => row.reduce((acc, v, j) => acc + v * XtWy[j], 0));
 
   return { beta, vcov: inv, rankDeficient: false };
 }
@@ -1696,7 +1696,7 @@ function matInverse(A) {
 // ================= TAU² FOR META-REGRESSION =================
 
 function dot(a, b) {
-  return a.reduce((s, v, i) => s + v * b[i], 0);
+  return a.reduce((acc, v, i) => acc + v * b[i], 0);
 }
 
 function quadForm(A, x) {
@@ -1710,11 +1710,11 @@ function tau2Reg_DL(yi, vi, X) {
   const w0 = vi.map(v => 1 / v);
   const { beta, vcov, rankDeficient } = wls(X, yi, w0);
   if (rankDeficient) return 0;
-  const QE = yi.reduce((s, y, i) => {
+  const QE = yi.reduce((acc, y, i) => {
     const e = y - dot(X[i], beta);
-    return s + w0[i] * e * e;
+    return acc + w0[i] * e * e;
   }, 0);
-  const c = w0.reduce((s, wi, i) => s + wi * (1 - wi * quadForm(vcov, X[i])), 0);
+  const c = w0.reduce((acc, wi, i) => acc + wi * (1 - wi * quadForm(vcov, X[i])), 0);
   return c > 0 ? Math.max(0, (QE - df) / c) : 0;
 }
 
@@ -1755,11 +1755,11 @@ function tau2Reg_PM(yi, vi, X, tol = REML_TOL, maxIter = 100) {
     const w = vi.map(v => 1 / (v + tau2));
     const { beta, rankDeficient } = wls(X, yi, w);
     if (rankDeficient) break;
-    const QE = yi.reduce((s, y, i) => {
+    const QE = yi.reduce((acc, y, i) => {
       const e = y - dot(X[i], beta);
-      return s + w[i] * e * e;
+      return acc + w[i] * e * e;
     }, 0);
-    const sumW = w.reduce((a, b) => a + b, 0);
+    const sumW = w.reduce((acc, b) => acc + b, 0);
     const newTau2 = Math.max(0, tau2 + (QE - df) / sumW);
     if (Math.abs(newTau2 - tau2) < tol) return newTau2;
     tau2 = newTau2;
@@ -1775,8 +1775,8 @@ function tau2Reg_HS(yi, vi, X) {
   const w0 = vi.map(v => 1 / v);
   const { beta, rankDeficient } = wls(X, yi, w0);
   if (rankDeficient) return 0;
-  const QE  = yi.reduce((s, y, i) => s + w0[i] * (y - dot(X[i], beta)) ** 2, 0);
-  const sumW = w0.reduce((a, b) => a + b, 0);
+  const QE  = yi.reduce((acc, y, i) => acc + w0[i] * (y - dot(X[i], beta)) ** 2, 0);
+  const sumW = w0.reduce((acc, b) => acc + b, 0);
   return sumW > 0 ? Math.max(0, (QE - df) / sumW) : 0;
 }
 
@@ -1789,8 +1789,8 @@ function tau2Reg_HE(yi, vi, X) {
   const w1 = vi.map(() => 1);
   const { beta, rankDeficient } = wls(X, yi, w1);
   if (rankDeficient) return 0;
-  const SS   = yi.reduce((s, y, i) => s + (y - dot(X[i], beta)) ** 2, 0);
-  const meanV = vi.reduce((a, b) => a + b, 0) / k;
+  const SS   = yi.reduce((acc, y, i) => acc + (y - dot(X[i], beta)) ** 2, 0);
+  const meanV = vi.reduce((acc, b) => acc + b, 0) / k;
   return Math.max(0, SS / df - meanV);
 }
 
@@ -1802,14 +1802,14 @@ function tau2Reg_SJ(yi, vi, X, tol = REML_TOL, maxIter = 200) {
   const w1 = vi.map(() => 1);
   const { beta: beta0, rankDeficient } = wls(X, yi, w1);
   if (rankDeficient) return 0;
-  let tau2 = yi.reduce((s, y, i) => s + (y - dot(X[i], beta0)) ** 2, 0) / k;
+  let tau2 = yi.reduce((acc, y, i) => acc + (y - dot(X[i], beta0)) ** 2, 0) / k;
   if (tau2 === 0) return 0;
   for (let iter = 0; iter < maxIter; iter++) {
     const w  = vi.map(v => 1 / (v + tau2));
     const { beta, rankDeficient: rd } = wls(X, yi, w);
     if (rd) break;
-    const newTau2 = yi.reduce((s, y, i) => {
-      return s + vi[i] * (y - dot(X[i], beta)) ** 2 / (vi[i] + tau2);
+    const newTau2 = yi.reduce((acc, y, i) => {
+      return acc + vi[i] * (y - dot(X[i], beta)) ** 2 / (vi[i] + tau2);
     }, 0) / k;
     if (Math.abs(newTau2 - tau2) < tol) return Math.max(0, newTau2);
     tau2 = Math.max(0, newTau2);
@@ -1923,7 +1923,7 @@ export function metaRegression(studies, moderators = [], method = "REML", ciMeth
 
   // ---- residuals and QE ----
   const e   = yi.map((y, i) => y - dot(Xf[i], beta));
-  const QE  = e.reduce((s, ei, i) => s + w[i] * ei * ei, 0);
+  const QE  = e.reduce((acc, ei, i) => acc + w[i] * ei * ei, 0);
   const QEdf = kf - p;
   const QEp  = QEdf > 0 ? 1 - chiSquareCDF(QE, QEdf) : NaN;
 
@@ -1936,7 +1936,7 @@ export function metaRegression(studies, moderators = [], method = "REML", ciMeth
   const { vcov: vcov0, rankDeficient: rd0 } = wls(Xf, yi, w0);
   let I2 = 0;
   if (!rd0 && QEdf > 0) {
-    const c = w0.reduce((s, wi, i) => s + wi * (1 - wi * quadForm(vcov0, Xf[i])), 0);
+    const c = w0.reduce((acc, wi, i) => acc + wi * (1 - wi * quadForm(vcov0, Xf[i])), 0);
     if (c > 0) I2 = Math.max(0, tau2 / (tau2 + QEdf / c) * 100);
   }
 
@@ -1973,8 +1973,8 @@ export function metaRegression(studies, moderators = [], method = "REML", ciMeth
     const vcovMod = idx.map(r => idx.map(c => vcov[r][c]));
     const invMod  = matInverse(vcovMod);
     if (invMod !== null) {
-      const QMchi = betaMod.reduce((s, bi, r) =>
-        s + bi * invMod[r].reduce((ss, v, c) => ss + v * betaMod[c], 0), 0);
+      const QMchi = betaMod.reduce((acc, bi, r) =>
+        acc + bi * invMod[r].reduce((iacc, v, c) => iacc + v * betaMod[c], 0), 0);
       if (useKH) {
         QM  = QMchi / (s2 * QMdf);   // F-statistic
         QMp = 1 - fCDF(QM, QMdf, QEdf);
@@ -2185,7 +2185,7 @@ export function pCurve(studies) {
   let rightSkewZ = NaN, rightSkewP = NaN;
   if (k >= 1) {
     const pp0    = sig.map(d => d.p / 0.05);
-    const mean0  = pp0.reduce((a, b) => a + b, 0) / k;
+    const mean0  = pp0.reduce((acc, b) => acc + b, 0) / k;
     rightSkewZ   = (mean0 - 0.5) * Math.sqrt(12 * k);
     rightSkewP   = normalCDF(rightSkewZ);  // one-tailed left
   }
@@ -2195,7 +2195,7 @@ export function pCurve(studies) {
   let flatnessZ = NaN, flatnessP = NaN;
   if (k >= 1) {
     const pp33   = sig.map(d => pp33CDF(d.p));
-    const mean33 = pp33.reduce((a, b) => a + b, 0) / k;
+    const mean33 = pp33.reduce((acc, b) => acc + b, 0) / k;
     flatnessZ    = (mean33 - 0.5) * Math.sqrt(12 * k);
     flatnessP    = 1 - normalCDF(flatnessZ);  // one-tailed right
   }
@@ -2386,9 +2386,9 @@ export function baujat(studies) {
   if (valid.length < 2) return null;
 
   // ---- FE quantities ----
-  const W   = valid.reduce((s, d) => s + 1 / d.vi, 0);
-  const muFE = valid.reduce((s, d) => s + d.yi / d.vi, 0) / W;
-  const Q   = valid.reduce((s, d) => s + (d.yi - muFE) ** 2 / d.vi, 0);
+  const W   = valid.reduce((acc, d) => acc + 1 / d.vi, 0);
+  const muFE = valid.reduce((acc, d) => acc + d.yi / d.vi, 0) / W;
+  const Q   = valid.reduce((acc, d) => acc + (d.yi - muFE) ** 2 / d.vi, 0);
 
   // ---- Per-study coordinates ----
   const points = valid.map(s => {
