@@ -2061,7 +2061,30 @@ function runAnalysis() {
   caterpillarPlot.page = 0;
   cumForestPlot.page = 0;
 
-  const type = document.getElementById("effectType").value;
+  // ---- Cache DOM element references (avoids repeated getElementById lookups) ----
+  const elEffectType         = document.getElementById("effectType");
+  const elResults            = document.getElementById("results");
+  const elPubBiasStats       = document.getElementById("pubBiasStats");
+  const elInfluenceDiagTable = document.getElementById("influenceDiagTable");
+  const elSubgroupSection    = document.getElementById("subgroupSection");
+  const elSubgroupTable      = document.getElementById("subgroupTable");
+  const elTauMethod          = document.getElementById("tauMethod");
+  const elCiMethod           = document.getElementById("ciMethod");
+  const elUseTrimFill        = document.getElementById("useTrimFill");
+  const elUseTFAdjusted      = document.getElementById("useTFAdjusted");
+  const elBubblePlots        = document.getElementById("bubblePlots");
+  const elForestPageSize     = document.getElementById("forestPageSize");
+  const elBaujatPlotBlock    = document.getElementById("baujatPlotBlock");
+  const elCumulativeOrder    = document.getElementById("cumulativeOrder");
+  const elCumForestPageSize  = document.getElementById("cumulativeForestPageSize");
+  const elCumFunnelStep      = document.getElementById("cumulativeFunnelStep");
+  const elCumFunnelBlock     = document.getElementById("cumulativeFunnelBlock");
+  const elOrchardPlotBlock   = document.getElementById("orchardPlotBlock");
+  const elCatPageSize        = document.getElementById("caterpillarPageSize");
+  const elCaterpillarBlock   = document.getElementById("caterpillarPlotBlock");
+  const elRobSection         = document.getElementById("robSection");
+
+  const type = elEffectType.value;
   const profile = effectProfiles[type];
   if (!profile) return;
 
@@ -2142,10 +2165,10 @@ function runAnalysis() {
     _toggleResults.disabled = false;
   }
 
-  const method = document.getElementById("tauMethod")?.value || "DL";
-  const ciMethod = document.getElementById("ciMethod")?.value || "normal";
-  const useTF = document.getElementById("useTrimFill")?.checked;
-  const useTFAdjusted = document.getElementById("useTFAdjusted")?.checked;
+  const method = elTauMethod?.value || "DL";
+  const ciMethod = elCiMethod?.value || "normal";
+  const useTF = elUseTrimFill?.checked;
+  const useTFAdjusted = elUseTFAdjusted?.checked;
 
   let tf = [], all = studies;
   if (useTF) { tf = trimFill(studies, method); all = [...studies, ...tf]; }
@@ -2183,7 +2206,7 @@ function runAnalysis() {
     </div>`;
   }
 
-  document.getElementById("results").innerHTML = warningHTML + `
+  elResults.innerHTML = warningHTML + `
     <b>${profile.label} (FE):</b> ${fmt(FE_disp)} |
     <b>${profile.label} (RE):</b> ${fmt(RE_disp)}<br>
     ${useTF && mAdjusted ? `<b>RE (adjusted):</b> ${fmt(RE_adj_disp)}<br>` : ""}
@@ -2193,17 +2216,17 @@ function runAnalysis() {
     ${hBtn("het.pred")}Prediction interval (Higgins 2009, t<sub>${m.df > 0 ? m.df - 1 : "—"}</sub>): ${isFinite(pred_disp.lb) ? `[${fmt(pred_disp.lb)}, ${fmt(pred_disp.ub)}]` : "NA (k &lt; 3)"}
   `;
 
-  document.getElementById("pubBiasStats").innerHTML = `
+  elPubBiasStats.innerHTML = `
     &nbsp;&nbsp;${hBtn("bias.egger")}Egger: intercept=${isFinite(egger.intercept)?fmt(egger.intercept):"NA"} | p=${isFinite(egger.p)?fmt(egger.p):"NA (k<3)"}<br>
     &nbsp;&nbsp;${hBtn("bias.begg")}Begg: τ=${isFinite(begg.tau)?fmt(begg.tau):"NA"} | p=${isFinite(begg.p)?fmt(begg.p):"NA (k<3)"}<br>
     &nbsp;&nbsp;${hBtn("bias.fatpet")}FAT (bias): β₁=${isFinite(fatpet.slope)?fmt(fatpet.slope):"NA"} | p=${isFinite(fatpet.slopeP)?fmt(fatpet.slopeP):"NA (k<3)"} &nbsp;·&nbsp; PET (effect at SE→0): ${isFinite(fatpet.intercept)?fmt(profile.transform(fatpet.intercept)):"NA"} | p=${isFinite(fatpet.interceptP)?fmt(fatpet.interceptP):"NA (k<3)"}<br>
     &nbsp;&nbsp;${hBtn("bias.fsn")}Fail-safe N (Rosenthal): ${isFinite(fsn.rosenthal)?Math.round(fsn.rosenthal):"NA"} &nbsp;·&nbsp; Orwin (trivial=0.1): ${isFinite(fsn.orwin)?Math.round(fsn.orwin):"NA"}<br>
     <b>Trim &amp; Fill:</b>${hBtn("bias.trimfill")} ${useTF?"ON":"OFF"} (${tf.length} filled studies)
   `;
-  document.getElementById("influenceDiagTable").innerHTML = influenceHTML;
+  elInfluenceDiagTable.innerHTML = influenceHTML;
 
-  document.getElementById("subgroupSection").style.display = hasSubgroup ? "" : "none";
-  document.getElementById("subgroupTable").innerHTML = subgroupHTML;
+  elSubgroupSection.style.display = hasSubgroup ? "" : "none";
+  elSubgroupTable.innerHTML = subgroupHTML;
 
   renderStudyTable(all, m, profile);
   renderSensitivityPanel(studies, m, method, ciMethod, profile);
@@ -2220,7 +2243,7 @@ function runAnalysis() {
   renderRegressionPanel(reg ?? {}, method, ciMethod, kExcluded);
 
   // ---- Bubble plots (one per continuous moderator) ----
-  const bubbleContainer = document.getElementById("bubblePlots");
+  const bubbleContainer = elBubblePlots;
   bubbleContainer.innerHTML = "";
   if (reg && !reg.rankDeficient) {
     moderators
@@ -2252,7 +2275,7 @@ function runAnalysis() {
 
   // Reset to page 0 on every fresh run and cache args for nav re-renders.
   forestPlot.page = 0;
-  const rawPageSize  = document.getElementById("forestPageSize")?.value ?? "30";
+  const rawPageSize  = elForestPageSize?.value ?? "30";
   const pageSize     = rawPageSize === "Infinity" ? Infinity : +rawPageSize;
   const forestOpts   = { ciMethod, profile, pageSize, pooledDisplay: forestPlot.poolDisplay, theme: forestPlot.theme };
   forestPlot.args        = { studies: all, m, options: forestOpts };
@@ -2273,10 +2296,10 @@ function runAnalysis() {
   drawFunnel(...funnelPlot.args, { contours: funnelPlot.contours });
   drawInfluencePlot(influence);
   drawBaujatPlot(baujatResult, profile);
-  document.getElementById("baujatPlotBlock").style.display = baujatResult ? "" : "none";
+  elBaujatPlotBlock.style.display = baujatResult ? "" : "none";
 
   // ---- Cumulative meta-analysis ----
-  const cumulativeOrder = document.getElementById("cumulativeOrder")?.value || "input";
+  const cumulativeOrder = elCumulativeOrder?.value || "input";
   const cumulativeStudies = studies.slice(); // copy; studies already have yi/vi/label
   if (cumulativeOrder === "precision_desc") {
     cumulativeStudies.sort((a, b) => a.vi - b.vi);   // smallest vi (most precise) first
@@ -2290,7 +2313,7 @@ function runAnalysis() {
   // "input" order: no sort — preserves table order
   const cumResults = cumulativeMeta(cumulativeStudies, method, ciMethod);
   cumForestPlot.page = 0;
-  const rawCumPageSize = document.getElementById("cumulativeForestPageSize")?.value ?? "30";
+  const rawCumPageSize = elCumForestPageSize?.value ?? "30";
   const cumForestPageSize = rawCumPageSize === "Infinity" ? Infinity : +rawCumPageSize;
   cumForestPlot.args = { results: cumResults, profile, pageSize: cumForestPageSize };
   const { totalPages: cumForestPages } = drawCumulativeForest(cumResults, profile, { pageSize: cumForestPageSize, page: 0 });
@@ -2300,29 +2323,28 @@ function runAnalysis() {
   cumFunnelPlot.studies = cumulativeStudies;
   cumFunnelPlot.results = cumResults;
   cumFunnelPlot.profile = profile;
-  const _cfSlider = document.getElementById("cumulativeFunnelStep");
-  _cfSlider.max   = cumResults.length - 1;
-  _cfSlider.value = cumResults.length - 1;
+  elCumFunnelStep.max   = cumResults.length - 1;
+  elCumFunnelStep.value = cumResults.length - 1;
   _updateCumFunnelLabel(cumResults.length - 1);
   drawCumulativeFunnel(cumulativeStudies, cumResults, profile, cumResults.length - 1);
-  document.getElementById("cumulativeFunnelBlock").style.display = "";
+  elCumFunnelBlock.style.display = "";
 
   // ---- Orchard + caterpillar plots ----
   drawOrchardPlot(all, m, profile);
-  document.getElementById("orchardPlotBlock").style.display = "";
+  elOrchardPlotBlock.style.display = "";
   caterpillarPlot.page = 0;
-  const rawCatPageSize = document.getElementById("caterpillarPageSize")?.value ?? "30";
+  const rawCatPageSize = elCatPageSize?.value ?? "30";
   const catPageSize = rawCatPageSize === "Infinity" ? Infinity : +rawCatPageSize;
   caterpillarPlot.args = { studies: all, m, profile, pageSize: catPageSize };
   const { totalPages: catPages } = drawCaterpillarPlot(all, m, profile, { pageSize: catPageSize, page: 0 });
   renderCaterpillarNav(catPages);
-  document.getElementById("caterpillarPlotBlock").style.display = "";
+  elCaterpillarBlock.style.display = "";
 
   // ---- Risk-of-bias plots ----
   const hasRoB = _robDomains.length > 0 && studies.length > 0;
   drawRoBTrafficLight(studies, _robDomains, _robData);
   drawRoBSummary(studies, _robDomains, _robData);
-  document.getElementById("robSection").style.display = hasRoB ? "" : "none";
+  elRobSection.style.display = hasRoB ? "" : "none";
 
   updateValidationWarnings(studies, excluded, softWarnings);
   return true;
