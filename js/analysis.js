@@ -1062,8 +1062,8 @@ export function harbordTest(studies) {
     const E     = (a + b) * (a + c) / N;
     const V     = (a + b) * (c + d) * (a + c) * (b + d) / (N * N * (N - 1));
     const sqrtV = Math.sqrt(V);
-    ys.push((a - E) / sqrtV);   // z_i = (O − E) / √V
-    xs.push(sqrtV);              // x_i = √V
+    ys.push((a - E) / sqrtV);
+    xs.push(sqrtV);
   }
 
   const X  = xs.map(x => [1, x]);
@@ -1103,8 +1103,8 @@ export function petersTest(studies) {
   if (k < 3) return _pubBiasNaN(k - 2);
 
   const ys = valid.map(s => s.yi);
-  const xs = valid.map(s => 1 / getN(s));   // x_i = 1/N_i
-  const ws = valid.map(s => 1 / s.vi);      // w_i = 1/vi (inverse-variance)
+  const xs = valid.map(s => 1 / getN(s));
+  const ws = valid.map(s => 1 / s.vi);
 
   const X = xs.map(x => [1, x]);
   const { beta, vcov, rankDeficient } = wls(X, ys, ws);
@@ -1142,9 +1142,9 @@ export function deeksTest(studies) {
     const { a, b, c, d } = s;
     const N   = a + b + c + d;
     const ESS = 2 * (a + c) * (b + d) / N;
-    ys.push(Math.log((a * d) / (b * c)));   // log(DOR)
-    xs.push(1 / Math.sqrt(ESS));            // 1/√ESS
-    ws.push(ESS);                           // weight = ESS
+    ys.push(Math.log((a * d) / (b * c)));
+    xs.push(1 / Math.sqrt(ESS));
+    ws.push(ESS);
   }
 
   const X = xs.map(x => [1, x]);
@@ -1190,8 +1190,8 @@ export function rueckerTest(studies) {
     const p2  = c / n2;
     const se  = Math.sqrt(1 / (4 * n1) + 1 / (4 * n2));
     const y   = Math.asin(Math.sqrt(p1)) - Math.asin(Math.sqrt(p2));
-    ys.push(y / se);      // z_i = y_i / se_i
-    xs.push(1 / se);      // precision = 1/se_i
+    ys.push(y / se);
+    xs.push(1 / se);
   }
 
   const X  = xs.map(x => [1, x]);
