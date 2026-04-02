@@ -104,7 +104,7 @@ import { eggerTest, beggTest, fatPetTest, failSafeN, pCurve, pUniform, baujat, m
 import { fmt } from "./utils.js";
 import { effectProfiles, getProfile } from "./profiles.js";
 import { trimFill } from "./trimfill.js";
-import { drawForest, drawFunnel, drawBubble, drawInfluencePlot, drawCumulativeForest, drawCumulativeFunnel, drawPCurve, drawPUniform, drawOrchardPlot, drawCaterpillarPlot, drawBaujatPlot, drawRoBTrafficLight, drawRoBSummary } from "./plots.js";
+import { drawForest, drawFunnel, drawBubble, drawPartialResidualBubble, drawInfluencePlot, drawCumulativeForest, drawCumulativeFunnel, drawPCurve, drawPUniform, drawOrchardPlot, drawCaterpillarPlot, drawBaujatPlot, drawRoBTrafficLight, drawRoBSummary } from "./plots.js";
 import { exportSVG, exportPNG, exportTIFF } from "./export.js";
 import { buildReport, downloadHTML, openPrintPreview } from "./report.js";
 import { parseCSV, detectEffectType } from "./csv.js";
@@ -1371,18 +1371,55 @@ function regFmtP(p) {
 }
 
 function buildRegCoeffRows(reg) {
-  return reg.colNames.map((name, j) => {
+  const hasVif   = Array.isArray(reg.vif) && reg.vif.length === reg.p;
+  // Group header rows only when there are genuinely multiple moderators whose
+  // column indices are tracked in modTests.
+  const multiMod = moderators.length > 1
+    && Array.isArray(reg.modTests) && reg.modTests.length > 0;
+  const colCount = 8;  // Term + β + SE + stat + p + CI + VIF + stars
+
+  function vifCell(j) {
+    if (!hasVif || j === 0) return `<td class="reg-vif">—</td>`;
+    const v = reg.vif[j];
+    if (!isFinite(v)) return `<td class="reg-vif">—</td>`;
+    const cls = v > 10 ? "vif-high" : v > 5 ? "vif-mid" : "vif-ok";
+    return `<td class="reg-vif ${cls}">${v.toFixed(2)}</td>`;
+  }
+
+  function dataRow(j) {
     const [lo, hi] = reg.ci[j];
     return `<tr class="${j === 0 ? "reg-intercept" : ""}">
-      <td>${name}</td>
+      <td>${reg.colNames[j]}</td>
       <td>${fmt(reg.beta[j])}</td>
       <td>${fmt(reg.se[j])}</td>
       <td>${fmt(reg.zval[j])}</td>
       <td>${regFmtP(reg.pval[j])}</td>
       <td>[${fmt(lo)}, ${fmt(hi)}]</td>
+      ${vifCell(j)}
       <td>${regStars(reg.pval[j])}</td>
     </tr>`;
-  }).join("");
+  }
+
+  if (!multiMod) {
+    return reg.colNames.map((_, j) => dataRow(j)).join("");
+  }
+
+  // Multi-moderator: intercept first, then one labelled group per moderator.
+  let html = dataRow(0);
+  for (const mt of reg.modTests) {
+    if (mt.colIdxs.length === 0) continue;
+    const QMlabel = reg.QMdist === "F"
+      ? `F(${mt.QMdf},\u2009${reg.QEdf})`
+      : `χ²(${mt.QMdf})`;
+    const qmStr = isFinite(mt.QM)
+      ? ` &nbsp;·&nbsp; QM ${QMlabel} = ${fmt(mt.QM)}, p = ${regFmtP(mt.QMp)}`
+      : "";
+    html += `<tr class="reg-mod-group">
+      <td colspan="${colCount}"><span class="reg-mod-name">${mt.name}</span>${qmStr}</td>
+    </tr>`;
+    for (const j of mt.colIdxs) html += dataRow(j);
+  }
+  return html;
 }
 
 function buildRegFittedRows(reg) {
@@ -1408,11 +1445,24 @@ function renderRegressionPanel(reg, method, ciMethod, kExcluded = 0) {
   section.style.display = "";
 
   if (reg.rankDeficient) {
+    let msg;
+    if (reg.rankDeficientCause === "insufficient_k") {
+      const need = (reg.p ?? 2) + 1;
+      const have = reg.k ?? 0;
+      msg = `Regression needs more complete data: ${have} row${have === 1 ? "" : "s"} ` +
+            `ha${have === 1 ? "s" : "ve"} all moderator values filled in, ` +
+            `but at least ${need} ${need === 1 ? "is" : "are"} required (one per model parameter). ` +
+            `Rows with any blank moderator cell are excluded — fill in the missing values.` +
+            (kExcluded > 0 ? ` (${kExcluded} ${kExcluded === 1 ? "row" : "rows"} currently excluded)` : "");
+    } else {
+      msg = `Design matrix is rank-deficient — moderators appear perfectly collinear ` +
+            `(e.g. two continuous columns with proportional values, or two categorical columns with identical groupings).`;
+    }
     panel.innerHTML = `
       <div class="reg-header">
         <span class="reg-title">Meta-Regression</span>
       </div>
-      <div class="reg-body"><i>Design matrix is rank-deficient — check moderator coding.</i></div>`;
+      <div class="reg-body"><i>${msg}</i></div>`;
     return;
   }
 
@@ -1435,6 +1485,41 @@ function renderRegressionPanel(reg, method, ciMethod, kExcluded = 0) {
   const excludedWarning = kExcluded > 0
     ? `<div class="reg-note reg-warn">⚠ ${kExcluded} ${kExcluded === 1 ? "study" : "studies"} excluded from regression (missing moderator value${kExcluded === 1 ? "" : "s"}).</div>`
     : "";
+  const vifWarning = isFinite(reg.maxVIF) && reg.maxVIF > 10
+    ? `<div class="reg-note reg-warn">⚠ High collinearity detected (max VIF = ${reg.maxVIF.toFixed(1)}) — coefficient estimates may be unstable.</div>`
+    : "";
+
+  // Per-moderator test block — only rendered when there are 2+ moderators.
+  const modTestsBlock = moderators.length >= 2
+    && Array.isArray(reg.modTests) && reg.modTests.length > 0
+    ? `<details>
+        <summary>Per-moderator tests (${reg.modTests.length})</summary>
+        <table class="reg-table">
+          <thead><tr>
+            <th>Moderator</th>
+            <th>${reg.QMdist === "F" ? "F" : "QM"}</th>
+            <th>df</th>
+            <th>p</th>
+          </tr></thead>
+          <tbody>
+            ${reg.modTests.map(mt => {
+              if (mt.QMdf === 0) {
+                return `<tr><td>${mt.name}</td><td colspan="3"><i>degenerate (≤ 1 level)</i></td></tr>`;
+              }
+              const dfLabel = reg.QMdist === "F"
+                ? `F(${mt.QMdf},\u2009${reg.QEdf})`
+                : `χ²(${mt.QMdf})`;
+              return `<tr>
+                <td>${mt.name}</td>
+                <td>${fmt(mt.QM)}</td>
+                <td>${dfLabel}</td>
+                <td>${regFmtP(mt.QMp)}</td>
+              </tr>`;
+            }).join("")}
+          </tbody>
+        </table>
+      </details>`
+    : "";
 
   panel.innerHTML = `
     <div class="reg-header">
@@ -1448,15 +1533,16 @@ function renderRegressionPanel(reg, method, ciMethod, kExcluded = 0) {
       ${QMrow}
     </div>
     <div class="reg-body">
-      ${excludedWarning}${lowDfWarning}
+      ${excludedWarning}${lowDfWarning}${vifWarning}
       <table class="reg-table">
         <thead><tr>
           <th>Term</th><th>β</th><th>SE</th><th>${statLabel}</th>
-          <th>p</th><th>95% CI</th><th></th>
+          <th>p</th><th>95% CI</th><th>VIF</th><th></th>
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>
       <div class="reg-note">*** p &lt; .001 &nbsp;·&nbsp; ** p &lt; .01 &nbsp;·&nbsp; * p &lt; .05 &nbsp;·&nbsp; · p &lt; .10</div>
+      ${modTestsBlock}
       ${fittedRows ? `
       <details>
         <summary>Fitted values &amp; residuals (k = ${reg.k})</summary>
@@ -2141,7 +2227,7 @@ function runAnalysis() {
 
     // ---- Moderator values ----
     moderators.forEach(({ name, type }, modIdx) => {
-      const raw = (inputs[modOffset + modIdx]?.value ?? "").trim();
+      const raw = (inputs[modOffset + modIdx] ?? "").trim();
       study[name] = type === "continuous" ? (raw === "" ? NaN : +raw) : raw;
     });
 
@@ -2243,8 +2329,12 @@ function runAnalysis() {
   renderRegressionPanel(reg ?? {}, method, ciMethod, kExcluded);
 
   // ---- Bubble plots (one per continuous moderator) ----
+  // With a single moderator: raw yi vs x (drawBubble) and partial residuals are
+  // identical, so drawBubble is used.  With 2+ moderators: drawPartialResidualBubble
+  // removes other predictors' contributions, making each plot unambiguous.
   const bubbleContainer = elBubblePlots;
   bubbleContainer.innerHTML = "";
+  const usePartialBubble = moderators.length > 1;
   if (reg && !reg.rankDeficient) {
     moderators
       .filter(mod => mod.type === "continuous")
@@ -2255,7 +2345,11 @@ function runAnalysis() {
         // Wrap each bubble in a block-level div so export buttons sit above it.
         const wrap = document.createElement("div");
         bubbleContainer.appendChild(wrap);
-        drawBubble(reg.studiesUsed, reg, mod.name, idx, wrap);
+        if (usePartialBubble) {
+          drawPartialResidualBubble(reg.studiesUsed, reg, mod.name, idx, wrap);
+        } else {
+          drawBubble(reg.studiesUsed, reg, mod.name, idx, wrap);
+        }
 
         // Assign a stable id to the SVG that was just appended, then add buttons.
         const bubbleSvg = wrap.querySelector("svg");
@@ -2269,6 +2363,12 @@ function runAnalysis() {
             `<button class="export-btn" data-target="${svgId}" data-format="png">PNG</button>` +
             `<button class="export-btn" data-target="${svgId}" data-format="tiff">TIFF</button>`;
           wrap.insertBefore(exportDiv, bubbleSvg);
+        }
+        if (usePartialBubble) {
+          const note = document.createElement("p");
+          note.className = "reg-note";
+          note.textContent = "Partial residual plot — other predictors held at zero (residuals).";
+          wrap.appendChild(note);
         }
       });
   }

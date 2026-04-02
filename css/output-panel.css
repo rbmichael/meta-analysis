@@ -186,6 +186,28 @@
   margin-top: 8px;
 }
 
+/* Moderator group header rows in multi-moderator coefficient table */
+.reg-mod-group td {
+  background: var(--bg-th);
+  color: var(--fg-muted);
+  font-size: 0.75rem;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+}
+
+.reg-mod-name {
+  font-family: var(--font-mono);
+  color: var(--fg);
+  font-weight: 600;
+  margin-right: 2px;
+}
+
+/* VIF column color coding */
+.reg-vif { font-variant-numeric: tabular-nums; }
+.vif-ok  { color: var(--color-success); }
+.vif-mid { color: var(--color-warning); }
+.vif-high { color: var(--color-error); font-weight: 600; }
+
 /* ---- Study-level results table ---- */
 #studyTable {
   margin: 8px 0 16px;

@@ -432,6 +432,13 @@ function sectionRegression(reg, method, ciMethod) {
     return "";
   }
 
+  const hasVif = Array.isArray(reg.vif) && reg.vif.some(v => isFinite(v));
+  const vifCell = j => {
+    if (j === 0) return "<td>—</td>";
+    const v = reg.vif?.[j];
+    return `<td>${isFinite(v) ? fmt(v) : "—"}</td>`;
+  };
+
   const rows = reg.colNames.map((name, j) => {
     const [lo, hi] = reg.ci[j];
     const cls = j === 0 ? ' class="intercept"' : "";
@@ -443,8 +450,26 @@ function sectionRegression(reg, method, ciMethod) {
       <td>${fmtP(reg.pval[j])}</td>
       <td>[${fmt(lo)}, ${fmt(hi)}]</td>
       <td>${stars(reg.pval[j])}</td>
+      ${hasVif ? vifCell(j) : ""}
     </tr>`;
   }).join("");
+
+  const coefHeaders = ["Term", "β", "SE", esc(statLabel), "p", "95% CI", ""];
+  if (hasVif) coefHeaders.push("VIF");
+
+  const modTestsQMlabel = reg.QMdist === "F" ? "F" : "χ²";
+  const modTestsTable = reg.modTests && reg.modTests.length > 1
+    ? `<h3>Per-moderator omnibus tests</h3>
+  ${buildTable(
+    ["Moderator", `${esc(modTestsQMlabel)}`, "df", "p"],
+    reg.modTests.map(mt => `<tr>
+      <td>${esc(mt.name)}</td>
+      <td>${fmt(mt.QM)}</td>
+      <td>${mt.QMdf}</td>
+      <td>${fmtP(mt.QMp)}</td>
+    </tr>`)
+  )}`
+    : "";
 
   return `
 <section>
@@ -455,8 +480,9 @@ function sectionRegression(reg, method, ciMethod) {
     · QE(${reg.QEdf}) = ${fmt(reg.QE)}, p = ${fmtP(reg.QEp)}
     ${reg.p > 1 ? `· QM ${esc(QMlabel)} = ${fmt(reg.QM)}, p = ${fmtP(reg.QMp)}` : ""}
   </p>
-  ${buildTable(["Term", "β", "SE", esc(statLabel), "p", "95% CI", ""], rows)}
+  ${buildTable(coefHeaders, rows)}
   <p class="note">*** p &lt; .001 · ** p &lt; .01 · * p &lt; .05 · . p &lt; .10</p>
+  ${modTestsTable}
 </section>`;
 }
 

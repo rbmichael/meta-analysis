@@ -1561,6 +1561,9 @@ export function meta(studies, method="DL", ciMethod="normal") {
 //   X         — k×p row-major matrix (array of k rows, each a p-length array)
 //   colNames  — p column labels; first is always "intercept"
 //   refLevels — maps each categorical key to its (dropped) reference level
+//   modColMap — maps each moderator key to the column indices it occupies in X
+//               e.g. continuous "age" → [2], categorical "type" (3 levels) → [3,4]
+//               degenerate moderators (< 2 levels) map to []
 //   validMask — k booleans; true when all entries in that row are finite
 //   k, p      — matrix dimensions
 export function buildDesignMatrix(studies, moderators = []) {
@@ -1570,6 +1573,8 @@ export function buildDesignMatrix(studies, moderators = []) {
   const columns  = [Array(k).fill(1)];  // intercept
   const colNames = ["intercept"];
   const refLevels = {};
+  const modColMap = {};
+  let nextColIdx = 1;  // intercept occupies index 0
 
   for (const { key, type } of moderators) {
     const raw = studies.map(s => s[key]);
@@ -1577,20 +1582,26 @@ export function buildDesignMatrix(studies, moderators = []) {
     if (type === "categorical") {
       // Unique non-null levels, sorted so the reference is deterministic.
       const levels = [...new Set(raw.filter(v => v != null && v !== ""))].sort();
-      if (levels.length < 2) continue;  // degenerate — nothing to dummy-code
+      if (levels.length < 2) {
+        modColMap[key] = [];  // degenerate — no columns added
+        continue;
+      }
 
       refLevels[key] = levels[0];
+      modColMap[key] = [];
 
       for (const level of levels.slice(1)) {
         // Missing values become NaN so validMask catches them.
         columns.push(raw.map(v => (v == null || v === "") ? NaN : (v === level ? 1 : 0)));
         colNames.push(`${key}:${level}`);
+        modColMap[key].push(nextColIdx++);
       }
 
     } else {
       // Continuous: coerce to number; non-numeric (including undefined) → NaN.
       columns.push(raw.map(v => +v));
       colNames.push(key);
+      modColMap[key] = [nextColIdx++];
     }
   }
 
@@ -1602,7 +1613,7 @@ export function buildDesignMatrix(studies, moderators = []) {
   // A row is valid only when every entry is finite (no NaN / ±Infinity).
   const validMask = X.map(row => row.every(isFinite));
 
-  return { X, colNames, refLevels, validMask, k, p };
+  return { X, colNames, refLevels, modColMap, validMask, k, p };
 }
 
 // ================= WEIGHTED LEAST SQUARES =================
@@ -1874,9 +1885,20 @@ export function tau2_metaReg(yi, vi, X, method = "REML", tol = REML_TOL, maxIter
 //   QE         — residual heterogeneity statistic
 //   QEdf       — df for QE (k − p)
 //   QEp        — p-value for QE (chi-squared)
-//   QM         — omnibus test for moderators (Wald chi-sq or F)
+//   QM         — omnibus test for all moderators jointly (Wald chi-sq or F)
 //   QMdf       — df for QM (p − 1, i.e. excluding intercept)
 //   QMp        — p-value for QM
+//   modTests   — per-moderator omnibus tests (one entry per input moderator):
+//                  { name, colIdxs, QM, QMdf, QMp }
+//                Same chi-sq/F logic as the global QM but restricted to each
+//                moderator's own columns.  Identical to global QM when there is
+//                exactly one moderator.  QMdf = 0 for degenerate moderators.
+//   vif        — p-length array; vif[0] = NaN (intercept), vif[j] = VIF for
+//                column j.  VIF_j = 1/(1 − R²_j) where R²_j is from unweighted
+//                OLS of X[:,j] on all other columns.  NaN when the auxiliary
+//                regression is rank-deficient or the column is constant.
+//                VIF = 1 with a single predictor (no collinearity possible).
+//   maxVIF     — max of vif[1..p-1]; 0 when p ≤ 1; NaN entries excluded.
 //   I2         — residual I² (%)
 //   colNames   — column names matching beta
 //   k          — number of studies used
@@ -1887,7 +1909,7 @@ export function metaRegression(studies, moderators = [], method = "REML", ciMeth
   const valid = studies.filter(s => isFinite(s.yi) && isFinite(s.vi) && s.vi > 0);
   const k = valid.length;
 
-  const { X, colNames, validMask, p } = buildDesignMatrix(valid, moderators);
+  const { X, colNames, modColMap, validMask, p } = buildDesignMatrix(valid, moderators);
 
   // Further filter rows where all moderator values are finite
   const rows   = valid.filter((_, i) => validMask[i]);
@@ -1901,11 +1923,12 @@ export function metaRegression(studies, moderators = [], method = "REML", ciMeth
     zval: Array(p).fill(NaN), pval: Array(p).fill(NaN),
     ci: Array(p).fill([NaN, NaN]),
     tau2: NaN, QE: NaN, QEdf: kf - p, QEp: NaN,
-    QM: NaN, QMdf: p - 1, QMp: NaN, I2: NaN,
-    colNames, k: kf, p, rankDeficient: true
+    QM: NaN, QMdf: p - 1, QMp: NaN, modTests: [],
+    vif: Array(p).fill(NaN), maxVIF: NaN, I2: NaN,
+    colNames, k: kf, p, rankDeficient: true, rankDeficientCause: "collinear"
   };
 
-  if (kf < p + 1) return empty;
+  if (kf < p + 1) return { ...empty, rankDeficientCause: "insufficient_k" };
 
   // ---- tau² ----
   const tau2 = tau2_metaReg(yi, vi, Xf, method);
@@ -1985,6 +2008,67 @@ export function metaRegression(studies, moderators = [], method = "REML", ciMeth
     }
   }
 
+  // ---- Per-moderator omnibus tests ----
+  // One Wald test per input moderator, restricted to the columns that moderator
+  // contributed to the design matrix.  Same chi-sq / F logic as the global QM
+  // above.  When there is exactly one moderator, modTests[0] equals the global QM.
+  const modTests = moderators.map(({ key }) => {
+    const colIdxs = modColMap[key] ?? [];
+    const df = colIdxs.length;
+    if (df === 0) return { name: key, colIdxs, QM: NaN, QMdf: 0, QMp: NaN };
+
+    const betaMod = colIdxs.map(j => beta[j]);
+    const vcovMod = colIdxs.map(r => colIdxs.map(c => vcov[r][c]));
+    const invMod  = matInverse(vcovMod);
+    if (invMod === null) return { name: key, colIdxs, QM: NaN, QMdf: df, QMp: NaN };
+
+    const QMchi = betaMod.reduce((acc, bi, r) =>
+      acc + bi * invMod[r].reduce((iacc, v, c) => iacc + v * betaMod[c], 0), 0);
+
+    let modQM, modQMp;
+    if (useKH) {
+      modQM  = QMchi / (s2 * df);
+      modQMp = 1 - fCDF(modQM, df, QEdf);
+    } else {
+      modQM  = QMchi;
+      modQMp = 1 - chiSquareCDF(modQM, df);
+    }
+
+    return { name: key, colIdxs, QM: modQM, QMdf: df, QMp: modQMp };
+  });
+
+  // ---- Variance Inflation Factors ----
+  // VIF_j = 1 / (1 − R²_j), where R²_j is the coefficient of determination
+  // from an unweighted OLS regression of column j on all other columns of Xf.
+  // Only meaningful for non-intercept columns (j ≥ 1).
+  // With a single predictor (p = 2) the auxiliary regression has only an
+  // intercept, R² = 0, so VIF = 1 — no collinearity possible.
+  const vif = Array(p).fill(NaN);   // vif[0] remains NaN (intercept)
+  if (p > 1) {
+    const wOnes = Array(kf).fill(1);
+    for (let j = 1; j < p; j++) {
+      const yAux = Xf.map(row => row[j]);
+      // X_minus_j: every column of Xf except column j (keeps the intercept).
+      const XAux = Xf.map(row => row.filter((_, c) => c !== j));
+
+      const { beta: betaAux, rankDeficient: rdAux } = wls(XAux, yAux, wOnes);
+      if (rdAux) continue;  // vif[j] stays NaN
+
+      const meanY  = yAux.reduce((s, v) => s + v, 0) / kf;
+      const ssTot  = yAux.reduce((s, v) => s + (v - meanY) ** 2, 0);
+      if (ssTot < 1e-14) continue;  // constant column — VIF undefined
+
+      const ssRes = yAux.reduce((s, v, i) => {
+        const fit = XAux[i].reduce((acc, x, c) => acc + x * betaAux[c], 0);
+        return s + (v - fit) ** 2;
+      }, 0);
+
+      const r2  = Math.max(0, 1 - ssRes / ssTot);
+      vif[j] = r2 < 1 ? 1 / (1 - r2) : Infinity;
+    }
+  }
+  const maxVIF = vif.slice(1).reduce((mx, v) => isFinite(v) && v > mx ? v : mx, 0);
+
   const fitted      = Xf.map(xi => dot(xi, beta));
   const stdResiduals = e.map((ei, i) => ei / Math.sqrt(vi[i] + tau2));
 
@@ -1993,6 +2077,7 @@ export function metaRegression(studies, moderators = [], method = "REML", ciMeth
     tau2, tau2_0, R2,
     QE, QEdf, QEp,
     QM, QMdf, QMp, QMdist: useKH ? "F" : "chi2",
+    modTests, vif, maxVIF,
     I2, colNames, k: kf, p, rankDeficient: false, dist,
     fitted, residuals: e, stdResiduals,
     labels: rows.map(s => s.label || ""),

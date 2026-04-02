@@ -1430,3 +1430,159 @@ export const INFLUENCE_BENCHMARKS = [
   }
 
 ];
+
+// ================================================================
+// META-REGRESSION BENCHMARKS
+// BCG vaccine dat.bcg (13 studies) with additional moderators.
+// yi/vi are log-RR pre-computed values from BENCHMARKS[0].
+// year and ablat from metafor::dat.bcg; region coded NA/EU/AS.
+// Expected values verified against metafor rma.uni() and
+// independently cross-validated via verify_benchmarks.py.
+// ================================================================
+export const META_REGRESSION_BENCHMARKS = [
+
+  // ----------------------------------------------------------------
+  // MR-A: two continuous moderators (year + ablat), REML, normal CI
+  // ----------------------------------------------------------------
+  {
+    name: "BCG – year + ablat (REML, normal CI)",
+    moderators: [
+      { key: "year",  type: "continuous" },
+      { key: "ablat", type: "continuous" }
+    ],
+    tauMethod: "REML",
+    ciMethod:  "normal",
+    data: [
+      { label: "Aronson 1948",           yi: -0.8893113339202054, vi: 0.3255847650039614,    year: 1948, ablat: 44 },
+      { label: "Ferguson & Simes 1949",  yi: -1.5853886572014306, vi: 0.19458112139814387,   year: 1949, ablat: 55 },
+      { label: "Rosenthal 1960",         yi: -1.348073148299693,  vi: 0.41536796536796533,   year: 1960, ablat: 42 },
+      { label: "Hart & Sutherland 1977", yi: -1.4415511900213054, vi: 0.020010031902247573,  year: 1977, ablat: 52 },
+      { label: "Frimodt-Moller 1973",    yi: -0.2175473222112957, vi: 0.05121017216963086,   year: 1973, ablat: 13 },
+      { label: "Stein & Aronson 1953",   yi: -0.786115585818864,  vi: 0.0069056184559087574, year: 1953, ablat: 44 },
+      { label: "Vandiviere 1973",        yi: -1.6208982235983924, vi: 0.22301724757231517,   year: 1973, ablat: 19 },
+      { label: "TPT Madras 1980",        yi:  0.011952333523841173,vi: 0.00396157929781773,  year: 1980, ablat: 13 },
+      { label: "Coetzee & Berjak 1968",  yi: -0.4694176487381487, vi: 0.056434210463248966,  year: 1968, ablat: 27 },
+      { label: "Rosenthal 1961",         yi: -1.3713448034727846, vi: 0.07302479361302891,   year: 1961, ablat: 42 },
+      { label: "Comstock 1974",          yi: -0.33935882833839015,vi: 0.01241221397155972,   year: 1974, ablat: 18 },
+      { label: "Comstock & Webster 1969",yi:  0.4459134005713783, vi: 0.5325058452001528,    year: 1969, ablat: 33 },
+      { label: "Comstock 1976",          yi: -0.017313948216879493,vi: 0.0714046596839863,   year: 1976, ablat: 33 }
+    ],
+    expected: {
+      beta:  [-3.5454, 0.0019, -0.0280],
+      se:    [29.0956, 0.0147,  0.0102],
+      tau2:  0.1108,
+      QE:    12.2907,
+      QEdf:  10,
+      QEp:   0.2661,
+      QM:    12.2045,
+      QMdf:  2,
+      QMp:   0.0022,
+      I2:    71.97,
+      R2:    0.6463,
+      colNames: ["intercept", "year", "ablat"],
+      modTests: [
+        { name: "year",  QM: 0.0169, QMdf: 1, QMp: 0.8966 },
+        { name: "ablat", QM: 7.4917, QMdf: 1, QMp: 0.0062 }
+      ],
+      vif: [null, 1.7846, 1.7846]
+    },
+    citation: "Colditz et al. (1994) dat.bcg. Verified with metafor rma(mods=~year+ablat, method='REML')."
+  },
+
+  // ----------------------------------------------------------------
+  // MR-B: continuous + categorical moderator (ablat + region),
+  //        REML, normal CI.  Reference level for region = "AS".
+  // ----------------------------------------------------------------
+  {
+    name: "BCG – ablat + region (REML, normal CI)",
+    moderators: [
+      { key: "ablat",  type: "continuous"  },
+      { key: "region", type: "categorical" }
+    ],
+    tauMethod: "REML",
+    ciMethod:  "normal",
+    data: [
+      { label: "Aronson 1948",           yi: -0.8893113339202054, vi: 0.3255847650039614,    ablat: 44, region: "NA" },
+      { label: "Ferguson & Simes 1949",  yi: -1.5853886572014306, vi: 0.19458112139814387,   ablat: 55, region: "EU" },
+      { label: "Rosenthal 1960",         yi: -1.348073148299693,  vi: 0.41536796536796533,   ablat: 42, region: "AS" },
+      { label: "Hart & Sutherland 1977", yi: -1.4415511900213054, vi: 0.020010031902247573,  ablat: 52, region: "EU" },
+      { label: "Frimodt-Moller 1973",    yi: -0.2175473222112957, vi: 0.05121017216963086,   ablat: 13, region: "AS" },
+      { label: "Stein & Aronson 1953",   yi: -0.786115585818864,  vi: 0.0069056184559087574, ablat: 44, region: "NA" },
+      { label: "Vandiviere 1973",        yi: -1.6208982235983924, vi: 0.22301724757231517,   ablat: 19, region: "AS" },
+      { label: "TPT Madras 1980",        yi:  0.011952333523841173,vi: 0.00396157929781773,  ablat: 13, region: "AS" },
+      { label: "Coetzee & Berjak 1968",  yi: -0.4694176487381487, vi: 0.056434210463248966,  ablat: 27, region: "NA" },
+      { label: "Rosenthal 1961",         yi: -1.3713448034727846, vi: 0.07302479361302891,   ablat: 42, region: "NA" },
+      { label: "Comstock 1974",          yi: -0.33935882833839015,vi: 0.01241221397155972,   ablat: 18, region: "NA" },
+      { label: "Comstock & Webster 1969",yi:  0.4459134005713783, vi: 0.5325058452001528,    ablat: 33, region: "NA" },
+      { label: "Comstock 1976",          yi: -0.017313948216879493,vi: 0.0714046596839863,   ablat: 33, region: "NA" }
+    ],
+    expected: {
+      beta:  [ 0.1024, -0.0330, 0.1598, 0.4339],
+      se:    [ 0.3369,  0.0143, 0.6491, 0.3733],
+      tau2:  0.1239,
+      QE:    9.5924,
+      QEdf:  9,
+      QEp:   0.3845,
+      QM:    13.2389,
+      QMdf:  3,
+      QMp:   0.0041,
+      I2:    65.50,
+      R2:    0.6043,
+      colNames: ["intercept", "ablat", "region:EU", "region:NA"],
+      modTests: [
+        { name: "ablat",  QM: 5.3003, QMdf: 1, QMp: 0.0213 },
+        { name: "region", QM: 2.1225, QMdf: 2, QMp: 0.3460 }
+      ]
+    },
+    citation: "Colditz et al. (1994) dat.bcg. Verified with metafor rma(mods=~ablat+factor(region), method='REML')."
+  },
+
+  // ----------------------------------------------------------------
+  // MR-C: same as MR-B but with Knapp-Hartung CI (ciMethod="KH").
+  //        tau2 and QE are identical to MR-B; QM becomes an F-stat.
+  // ----------------------------------------------------------------
+  {
+    name: "BCG – ablat + region (REML, KH CI)",
+    moderators: [
+      { key: "ablat",  type: "continuous"  },
+      { key: "region", type: "categorical" }
+    ],
+    tauMethod: "REML",
+    ciMethod:  "KH",
+    data: [
+      { label: "Aronson 1948",           yi: -0.8893113339202054, vi: 0.3255847650039614,    ablat: 44, region: "NA" },
+      { label: "Ferguson & Simes 1949",  yi: -1.5853886572014306, vi: 0.19458112139814387,   ablat: 55, region: "EU" },
+      { label: "Rosenthal 1960",         yi: -1.348073148299693,  vi: 0.41536796536796533,   ablat: 42, region: "AS" },
+      { label: "Hart & Sutherland 1977", yi: -1.4415511900213054, vi: 0.020010031902247573,  ablat: 52, region: "EU" },
+      { label: "Frimodt-Moller 1973",    yi: -0.2175473222112957, vi: 0.05121017216963086,   ablat: 13, region: "AS" },
+      { label: "Stein & Aronson 1953",   yi: -0.786115585818864,  vi: 0.0069056184559087574, ablat: 44, region: "NA" },
+      { label: "Vandiviere 1973",        yi: -1.6208982235983924, vi: 0.22301724757231517,   ablat: 19, region: "AS" },
+      { label: "TPT Madras 1980",        yi:  0.011952333523841173,vi: 0.00396157929781773,  ablat: 13, region: "AS" },
+      { label: "Coetzee & Berjak 1968",  yi: -0.4694176487381487, vi: 0.056434210463248966,  ablat: 27, region: "NA" },
+      { label: "Rosenthal 1961",         yi: -1.3713448034727846, vi: 0.07302479361302891,   ablat: 42, region: "NA" },
+      { label: "Comstock 1974",          yi: -0.33935882833839015,vi: 0.01241221397155972,   ablat: 18, region: "NA" },
+      { label: "Comstock & Webster 1969",yi:  0.4459134005713783, vi: 0.5325058452001528,    ablat: 33, region: "NA" },
+      { label: "Comstock 1976",          yi: -0.017313948216879493,vi: 0.0714046596839863,   ablat: 33, region: "NA" }
+    ],
+    expected: {
+      beta:  [ 0.1024, -0.0330, 0.1598, 0.4339],
+      se:    [ 0.3478,  0.0148, 0.6701, 0.3854],
+      tau2:  0.1239,
+      QE:    9.5924,
+      QEdf:  9,
+      QEp:   0.3845,
+      QM:    4.1404,
+      QMdf:  3,
+      QMp:   0.0423,
+      I2:    65.50,
+      R2:    0.6043,
+      colNames: ["intercept", "ablat", "region:EU", "region:NA"],
+      modTests: [
+        { name: "ablat",  QM: 4.9729, QMdf: 1, QMp: 0.0527 },
+        { name: "region", QM: 0.9957, QMdf: 2, QMp: 0.4068 }
+      ]
+    },
+    citation: "Colditz et al. (1994) dat.bcg. Verified with metafor rma(mods=~ablat+factor(region), method='REML', test='knha')."
+  }
+
+];

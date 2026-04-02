@@ -1,7 +1,8 @@
 import { round, transformEffect, chiSquareCDF, chiSquareQuantile, parseCounts, bivariateNormalCDF, normalQuantile, fCDF } from "./utils.js";
-import { BENCHMARKS, PUB_BIAS_BENCHMARKS, INFLUENCE_BENCHMARKS } from "./benchmarks.js";
+import { BENCHMARKS, PUB_BIAS_BENCHMARKS, INFLUENCE_BENCHMARKS, META_REGRESSION_BENCHMARKS } from "./benchmarks.js";
 import { compute, meta, metaRegression, tau2_HS, tau2_HE, tau2_ML, tau2_SJ, beggTest, eggerTest, fatPetTest, failSafeN, heterogeneityCIs, cumulativeMeta, influenceDiagnostics, harbordTest, petersTest, deeksTest, rueckerTest, leaveOneOut, baujat, pCurve, pUniform, estimatorComparison, subgroupAnalysis } from "./analysis.js";
 import { trimFill } from "./trimfill.js";
+import { parseCSV } from "./csv.js";
 
 // Tolerances vary by field:
 //   FE, RE  — absolute 0.01   (pooled estimates are on a stable scale)
@@ -3174,4 +3175,195 @@ export function runTests() {
   egchk("all yi=0: se = 0",               egZY.se,        0);
 
   console.log(eggerPass ? "\n✅ ALL EGGER TESTS PASSED" : "\n❌ SOME EGGER TESTS FAILED");
+
+  // ===== META-REGRESSION BENCHMARKS =====
+  // Three entries: MR-A (year+ablat, normal CI), MR-B (ablat+region, normal CI),
+  // MR-C (ablat+region, KH CI).  Checks beta, se, tau2, QE, QM, I2, R2,
+  // per-moderator Wald tests, and (for MR-A) VIF values.
+  console.log("\n===== META-REGRESSION BENCHMARKS =====\n");
+  let mrBenchPass = true;
+  const { chk: mrchk, chkField: mrfield } = makeChk(() => { mrBenchPass = false; });
+
+  META_REGRESSION_BENCHMARKS.forEach(bm => {
+    const studies = bm.data.map(d => ({ ...d, se: Math.sqrt(d.vi) }));
+    const r = metaRegression(studies, bm.moderators, bm.tauMethod, bm.ciMethod);
+    const exp = bm.expected;
+
+    console.log(`--- ${bm.name} ---`);
+
+    // colNames
+    if (exp.colNames) {
+      const ok = exp.colNames.every((n, i) => r.colNames[i] === n);
+      if (!ok) { console.error(`  FAIL colNames: got ${JSON.stringify(r.colNames)}, expected ${JSON.stringify(exp.colNames)}`); mrBenchPass = false; }
+      else console.log(`  ok  colNames = ${JSON.stringify(r.colNames)}`);
+    }
+
+    // beta / se — abs 0.01 tolerance
+    exp.beta.forEach((b, j) => mrchk(`beta[${j}] (${r.colNames[j]})`, r.beta[j], b, 0.01));
+    exp.se.forEach((s, j) => mrchk(`se[${j}]   (${r.colNames[j]})`, r.se[j], s, 0.01));
+
+    // heterogeneity
+    mrfield("tau2", r.tau2, exp.tau2, "tau2");
+    mrchk("QE",  r.QE,  exp.QE,  0.01);
+    mrchk("QEp", r.QEp, exp.QEp, 0.01);
+    mrchk("QM",  r.QM,  exp.QM,  0.01);
+    mrchk("QMp", r.QMp, exp.QMp, 0.01);
+    mrfield("I2", r.I2, exp.I2, "I2");
+    mrchk("R2",  r.R2,  exp.R2,  0.01);
+
+    // per-moderator Wald tests
+    if (exp.modTests) {
+      exp.modTests.forEach((mt, idx) => {
+        const got = r.modTests[idx];
+        if (!got) { console.error(`  FAIL modTests[${idx}] missing`); mrBenchPass = false; return; }
+        mrchk(`modTests[${idx}] (${mt.name}) QM`,  got.QM,  mt.QM,  0.01);
+        mrchk(`modTests[${idx}] (${mt.name}) QMp`, got.QMp, mt.QMp, 0.01);
+        const dfOk = got.QMdf === mt.QMdf;
+        if (!dfOk) { console.error(`  FAIL modTests[${idx}] QMdf: got ${got.QMdf}, expected ${mt.QMdf}`); mrBenchPass = false; }
+        else console.log(`  ok  modTests[${idx}] (${mt.name}) QMdf = ${mt.QMdf}`);
+      });
+    }
+
+    // VIF (only checked for MR-A where values were verified)
+    if (exp.vif) {
+      exp.vif.forEach((v, j) => {
+        if (v === null) return; // intercept — VIF not defined
+        mrchk(`vif[${j}] (${r.colNames[j]})`, r.vif[j], v, 0.01);
+      });
+    }
+  });
+
+  console.log(mrBenchPass ? "\n✅ ALL META-REGRESSION BENCHMARK TESTS PASSED" : "\n❌ SOME META-REGRESSION BENCHMARK TESTS FAILED");
+
+  // ===== CSV IMPORT — MODERATOR DETECTION =====
+  // Verifies that parseCSV + the column-classification heuristic used by
+  // commitImport() (ui.js) produces the correct modSpec array when a CSV
+  // contains extra columns beyond the known effect-type inputs.
+  //
+  // The heuristic (mirrored here):
+  //   knownCols = { "study", "group", ...profile.inputs.map(toLower) }
+  //   modCols   = headers not in knownCols
+  //   type      = all non-empty values numeric → "continuous", else "categorical"
+  console.log("\n===== CSV IMPORT — MODERATOR DETECTION =====\n");
+  let csvPass = true;
+  const csvchk = (label, got, expected) => {
+    const ok = got === expected;
+    if (!ok) { console.error(`  FAIL ${label}: got ${JSON.stringify(got)}, expected ${JSON.stringify(expected)}`); csvPass = false; }
+    else console.log(`  ok  ${label}`);
+  };
+
+  // Helper: classify columns to modSpec given headers, rows, and known inputs.
+  function inferModSpec(headers, rows, profileInputs) {
+    const knownCols = new Set(["study", "group", ...profileInputs.map(c => c.toLowerCase())]);
+    const headerMap = {};
+    headers.forEach((h, idx) => { headerMap[h.toLowerCase()] = idx; });
+    return headers
+      .filter(h => !knownCols.has(h.toLowerCase()))
+      .map(col => {
+        const ci   = headerMap[col.toLowerCase()];
+        const vals = rows.map(r => r[ci] ?? "").filter(v => v.trim() !== "");
+        const type = vals.length > 0 && vals.every(v => !isNaN(v.trim())) ? "continuous" : "categorical";
+        return { key: col, type };
+      });
+  }
+
+  // ---- 3-extra-column CSV: two continuous + one categorical ----
+  // Profile inputs for GENERIC are ["yi", "vi"]; "study" and "group" are fixed.
+  // Extra columns: "year" (all numeric), "ablat" (all numeric), "region" (strings).
+  console.log("--- 3 extra columns: year (continuous), ablat (continuous), region (categorical) ---");
+  {
+    const csvText = [
+      "Study,yi,vi,Group,year,ablat,region",
+      "S1,-0.889,0.326,,1948,44,NA",
+      "S2,-1.585,0.195,,1949,55,EU",
+      "S3,-1.348,0.415,,1960,42,AS",
+    ].join("\n");
+
+    const { headers, rows } = parseCSV(csvText);
+    const profileInputs = ["yi", "vi"]; // GENERIC profile
+
+    csvchk("header count",  headers.length, 7);
+    csvchk("headers[0]",    headers[0], "Study");
+    csvchk("headers[4]",    headers[4], "year");
+    csvchk("headers[5]",    headers[5], "ablat");
+    csvchk("headers[6]",    headers[6], "region");
+    csvchk("row count",     rows.length, 3);
+
+    const modSpec = inferModSpec(headers, rows, profileInputs);
+
+    csvchk("modSpec.length", modSpec.length, 3);
+    csvchk("modSpec[0].key",  modSpec[0].key,  "year");
+    csvchk("modSpec[0].type", modSpec[0].type, "continuous");
+    csvchk("modSpec[1].key",  modSpec[1].key,  "ablat");
+    csvchk("modSpec[1].type", modSpec[1].type, "continuous");
+    csvchk("modSpec[2].key",  modSpec[2].key,  "region");
+    csvchk("modSpec[2].type", modSpec[2].type, "categorical");
+  }
+
+  // ---- Blank cells in a continuous column are tolerated ----
+  // Blank cells are filtered before the isNaN check, so a column with some
+  // blanks but otherwise all numeric is still typed "continuous".
+  console.log("--- continuous column with blank cells ---");
+  {
+    const csvText = [
+      "Study,yi,vi,dose",
+      "S1,0.1,0.01,10",
+      "S2,0.2,0.02,",
+      "S3,0.3,0.03,30",
+    ].join("\n");
+
+    const { headers, rows } = parseCSV(csvText);
+    const modSpec = inferModSpec(headers, rows, ["yi", "vi"]);
+
+    csvchk("blank-cell modSpec.length",       modSpec.length,    1);
+    csvchk("blank-cell modSpec[0].key",        modSpec[0].key,   "dose");
+    csvchk("blank-cell modSpec[0].type",       modSpec[0].type,  "continuous");
+  }
+
+  // ---- A column where every cell is blank → categorical (no numeric evidence) ----
+  console.log("--- all-blank column → categorical ---");
+  {
+    const csvText = [
+      "Study,yi,vi,notes",
+      "S1,0.1,0.01,",
+      "S2,0.2,0.02,",
+    ].join("\n");
+
+    const { headers, rows } = parseCSV(csvText);
+    const modSpec = inferModSpec(headers, rows, ["yi", "vi"]);
+
+    csvchk("all-blank modSpec[0].type", modSpec[0].type, "categorical");
+  }
+
+  // ---- Known columns (Study, Group, profile inputs) are excluded ----
+  console.log("--- known columns excluded from modSpec ---");
+  {
+    const csvText = [
+      "Study,yi,vi,Group,score",
+      "S1,0.1,0.01,A,5",
+      "S2,0.2,0.02,B,7",
+    ].join("\n");
+
+    const { headers, rows } = parseCSV(csvText);
+    const modSpec = inferModSpec(headers, rows, ["yi", "vi"]);
+
+    csvchk("known-cols excluded modSpec.length", modSpec.length, 1);
+    csvchk("known-cols excluded modSpec[0].key", modSpec[0].key, "score");
+  }
+
+  // ---- No extra columns → empty modSpec ----
+  console.log("--- no extra columns → empty modSpec ---");
+  {
+    const csvText = [
+      "Study,yi,vi,Group",
+      "S1,0.1,0.01,A",
+    ].join("\n");
+
+    const { headers, rows } = parseCSV(csvText);
+    const modSpec = inferModSpec(headers, rows, ["yi", "vi"]);
+
+    csvchk("no-extra modSpec.length", modSpec.length, 0);
+  }
+
+  console.log(csvPass ? "\n✅ ALL CSV IMPORT TESTS PASSED" : "\n❌ SOME CSV IMPORT TESTS FAILED");
 }
