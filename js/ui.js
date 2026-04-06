@@ -100,7 +100,7 @@
 //   ui.js calls init() on DOMContentLoaded, which populates dropdowns,
 //   restores any autosave draft, and attaches all event listeners.
 // =============================================================================
-import { eggerTest, beggTest, fatPetTest, failSafeN, pCurve, pUniform, baujat, meta, influenceDiagnostics, subgroupAnalysis, metaRegression, cumulativeMeta, leaveOneOut, estimatorComparison } from "./analysis.js";
+import { eggerTest, beggTest, fatPetTest, failSafeN, pCurve, pUniform, baujat, meta, influenceDiagnostics, subgroupAnalysis, metaRegression, cumulativeMeta, leaveOneOut, estimatorComparison, veveaHedges, SELECTION_PRESETS } from "./analysis.js";
 import { fmt } from "./utils.js";
 import { effectProfiles, getProfile } from "./profiles.js";
 import { trimFill } from "./trimfill.js";
@@ -685,6 +685,32 @@ trimFillCheckbox.addEventListener("change", () => {
   runAnalysis();
 });
 adjustedCheckbox.addEventListener("change", runAnalysis);
+
+// ---------------- SELECTION MODEL CONTROLS ----------------
+function syncSelControls() {
+  const mode   = document.getElementById("selMode").value;
+  const preset = document.getElementById("selPreset").value;
+  const presetRow  = document.getElementById("selPresetRow");
+  const customRow  = document.getElementById("selCustomRow");
+
+  const isSensitivity = mode === "sensitivity";
+  presetRow.style.display  = isSensitivity ? "" : "none";
+  // Show sides/cuts when MLE, or when sensitivity with custom preset
+  const showCustom = !isSensitivity || preset === "custom";
+  customRow.style.display  = showCustom ? "" : "none";
+
+  // When a named preset is selected, mirror its sides into the (hidden) selSides field
+  if (isSensitivity && preset !== "custom") {
+    const p = SELECTION_PRESETS[preset];
+    if (p) document.getElementById("selSides").value = String(p.sides);
+  }
+}
+
+document.getElementById("selMode").addEventListener("change", () => { syncSelControls(); runAnalysis(); });
+document.getElementById("selPreset").addEventListener("change", () => { syncSelControls(); runAnalysis(); });
+document.getElementById("selSides").addEventListener("change", runAnalysis);
+document.getElementById("selCuts").addEventListener("change", runAnalysis);
+syncSelControls();
 
 // ---------------- TABLE HEADER ----------------
 function updateTableHeaders() {
@@ -2028,6 +2054,119 @@ function renderPUniformPanel(puniform, m, profile) {
   drawPUniform(puniform, m, profile);
 }
 
+// ---------------- SELECTION MODEL PANEL ----------------
+function renderSelectionModelPanel(r, mode, profile) {
+  const panel = document.getElementById("selectionModelPanel");
+  if (!panel) return;
+
+  function fmtV(v) { return isFinite(v) ? fmt(v) : "—"; }
+  function fmtP(p) {
+    if (!isFinite(p)) return "—";
+    if (p < 0.001) return "< 0.001";
+    if (p < 0.01)  return "< 0.01";
+    return p.toFixed(3);
+  }
+  function fmtDisp(v) { return isFinite(v) ? fmt(profile.transform(v)) : "—"; }
+
+  // Not run (meta-regression active)
+  if (r === null) {
+    panel.innerHTML = `<p class="sel-note">Selection model not available when meta-regression is active.</p>`;
+    return;
+  }
+
+  // Insufficient k
+  if (r.error === "insufficient_k") {
+    panel.innerHTML = `<p class="sel-note">Insufficient studies: need at least ${r.minK} for ${r.K} intervals (have ${r.k}).</p>`;
+    return;
+  }
+
+  const K    = r.K;
+  const isMLE = mode === "mle";
+
+  // Warn if any interval is empty
+  const emptyIntervals = r.nPerInterval
+    .map((n, j) => n === 0 ? j : -1)
+    .filter(j => j >= 0);
+  const emptyWarn = emptyIntervals.length > 0
+    ? `<p class="sel-warn">⚠ Interval${emptyIntervals.length > 1 ? "s" : ""} ${emptyIntervals.map(j => j + 1).join(", ")} ha${emptyIntervals.length > 1 ? "ve" : "s"} 0 studies — weight fixed at ω = 1${isMLE ? " and excluded from optimisation" : ""}.</p>`
+    : "";
+
+  // Build cutpoint labels for column headers: (0, c₁], (c₁, c₂], …
+  const cuts = r.cuts;
+  const intervalLabels = cuts.map((c, j) => {
+    const lo = j === 0 ? "0" : cuts[j - 1];
+    return `(${lo},&nbsp;${c}]`;
+  });
+
+  // ---- ω rows ----
+  const omegaCells = r.omega.map((w, j) => {
+    const se  = isMLE && j > 0 && isFinite(r.se_omega[j]) ? ` ± ${fmtV(r.se_omega[j])}` : "";
+    const fix = !isMLE || j === 0 ? " (fixed)" : "";
+    return `<td>${fmtV(w)}${se}${fix}</td>`;
+  }).join("");
+
+  // ---- Studies per interval ----
+  const kCells = r.nPerInterval.map((n, j) => {
+    const warn = n === 0 ? ` class="sel-zero"` : "";
+    return `<td${warn}>${n}</td>`;
+  }).join("");
+
+  // ---- Adjusted vs unadjusted μ ----
+  const muAdj   = fmtDisp(r.mu);
+  const ciLo    = fmtDisp(r.mu - 1.96 * r.se_mu);
+  const ciHi    = fmtDisp(r.mu + 1.96 * r.se_mu);
+  const muUnadj = fmtDisp(r.RE_unsel);
+
+  // ---- LRT row (MLE only) ----
+  const lrtRow = isMLE
+    ? `<tr><td>LRT (H₀: no selection)</td><td colspan="${K}">χ²(${r.LRTdf}) = ${fmtV(r.LRT)}, p = ${fmtP(r.LRTp)}</td></tr>`
+    : "";
+
+  // ---- Convergence note (MLE only) ----
+  const convNote = isMLE && !r.converged
+    ? `<p class="sel-warn">⚠ Optimizer did not fully converge (gradient norm may be elevated). Results may be unreliable.</p>`
+    : "";
+
+  // ---- τ² ≈ 0 warning: selection model underidentified when heterogeneity is near zero ----
+  const tau2Warn = (r.tau2_unsel !== undefined && r.tau2_unsel < 0.01)
+    ? `<p class="sel-note">Note: Heterogeneity is near zero (τ² ≈ 0). The selection model may be underidentified and results unreliable.</p>`
+    : "";
+
+  const headerCells = intervalLabels.map(l => `<th>${l}</th>`).join("");
+
+  panel.innerHTML = `
+    ${emptyWarn}
+    ${tau2Warn}
+    <table class="sel-table">
+      <thead>
+        <tr>
+          <th>Quantity</th>
+          ${headerCells}
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Selection weight ω</td>
+          ${omegaCells}
+        </tr>
+        <tr>
+          <td>Studies per interval k</td>
+          ${kCells}
+        </tr>
+        <tr>
+          <td>Adjusted μ̂</td>
+          <td colspan="${K}">${muAdj} [${ciLo}, ${ciHi}] &nbsp;·&nbsp; unadjusted: ${muUnadj}</td>
+        </tr>
+        <tr>
+          <td>Adjusted τ²</td>
+          <td colspan="${K}">${fmtV(r.tau2)} &nbsp;·&nbsp; unadjusted: ${fmtV(r.tau2_unsel)}</td>
+        </tr>
+        ${lrtRow}
+      </tbody>
+    </table>
+    ${convNote}`;
+}
+
 function buildInfluenceHTML(influence) {
   const k    = influence.length;
   const rows = influence.map(d => {
@@ -2319,6 +2458,37 @@ function runAnalysis() {
   renderPCurvePanel(pcurve);
   renderPUniformPanel(puniform, m, profile);
 
+  // ---- Selection model (Vevea-Hedges) ----
+  // Skip when meta-regression moderators are active.
+  let selResult = null;
+  const selModeVal = document.getElementById("selMode").value;
+  if (moderators.length === 0) {
+    const selPreset = document.getElementById("selPreset").value;
+    const selSides  = parseInt(document.getElementById("selSides").value, 10);
+
+    let selCuts, selSidesEff, selOmegaFixed;
+
+    if (selModeVal === "sensitivity" && selPreset !== "custom") {
+      // Named preset — cuts, sides, and omega all come from the preset
+      const p      = SELECTION_PRESETS[selPreset];
+      selCuts      = p.cuts;
+      selSidesEff  = p.sides;
+      selOmegaFixed = p.omega;
+    } else {
+      // MLE or custom sensitivity — parse the cutpoints text field
+      const rawCuts = document.getElementById("selCuts").value
+        .split(",").map(s => parseFloat(s.trim())).filter(isFinite);
+      selCuts = rawCuts.length >= 2 && rawCuts[rawCuts.length - 1] === 1.0
+        ? rawCuts
+        : [...rawCuts.filter(c => c < 1), 1.0];
+      selSidesEff  = selSides;
+      selOmegaFixed = null;   // MLE: estimate weights; custom sensitivity: user must edit table
+    }
+
+    selResult = veveaHedges(studies, selCuts, selSidesEff, selOmegaFixed);
+  }
+  renderSelectionModelPanel(selResult, selModeVal, profile);
+
   // ---- Meta-regression ----
   // buildDesignMatrix expects { key, type }; ui state stores { name, type }.
   const modSpec = moderators.map(m => ({ key: m.name, type: m.type }));
@@ -2385,11 +2555,20 @@ function runAnalysis() {
   // Cache state for report export buttons.
   const baujatResult = baujat(studies);
 
+  // Resolve human-readable label for the report interpretation sentence.
+  const _selPreset = document.getElementById("selPreset").value;
+  const _selLabel  = selModeVal === "mle"
+    ? "MLE"
+    : _selPreset !== "custom"
+      ? (SELECTION_PRESETS[_selPreset]?.label ?? _selPreset)
+      : "Custom";
+
   appState.reportArgs = {
     studies: all, m, profile, reg,
     tf, egger, begg, fatpet, fsn, pcurve, puniform, baujatResult,
     influence, subgroup, method, ciMethod,
     useTF, mAdjusted,
+    sel: selResult, selMode: selModeVal, selLabel: _selLabel,
     forestOptions: { ...forestOpts, currentPage: forestPlot.page },
   };
   funnelPlot.args = [all, m, egger, profile];

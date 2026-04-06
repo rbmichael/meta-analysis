@@ -421,7 +421,42 @@
           </div>
         </details>
 
-        <!-- ── Section 9: Risk of Bias (collapsed, hidden until RoB data present) ── -->
+        <!-- ── Section 9: Selection Model (Vevea-Hedges) ── -->
+        <details class="results-section" id="selectionModelSection">
+          <summary class="results-section-header">Selection Model (Vevea-Hedges)</summary>
+          <div class="sel-model-controls">
+            <label class="inline">Mode:
+              <select id="selMode">
+                <option value="sensitivity">Sensitivity (fixed ω)</option>
+                <option value="mle">MLE (estimate weights)</option>
+              </select>
+            </label>
+            <label class="inline" id="selPresetRow">Weight scheme:
+              <select id="selPreset">
+                <option value="mild1">Mild (1-sided)</option>
+                <option value="moderate1">Moderate (1-sided)</option>
+                <option value="severe1">Severe (1-sided)</option>
+                <option value="mild2">Mild (2-sided)</option>
+                <option value="moderate2">Moderate (2-sided)</option>
+                <option value="custom">Custom…</option>
+              </select>
+            </label>
+            <span id="selCustomRow">
+              <label class="inline">Sides:
+                <select id="selSides">
+                  <option value="1">1-sided</option>
+                  <option value="2">2-sided</option>
+                </select>
+              </label>
+              <label class="inline">Cutpoints:
+                <input type="text" id="selCuts" value="0.025, 0.05, 0.10, 0.25, 0.50, 1.0" style="width:220px">
+              </label>
+            </span>
+          </div>
+          <div id="selectionModelPanel"></div>
+        </details>
+
+        <!-- ── Section 10: Risk of Bias (collapsed, hidden until RoB data present) ── -->
         <details class="results-section" id="robSection" style="display:none">
           <summary class="results-section-header">Risk of Bias</summary>
           <div class="plot-block" id="robTrafficLightBlock">

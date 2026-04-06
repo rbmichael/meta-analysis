@@ -281,6 +281,96 @@ function sectionPUniform(puniform, m, profile) {
 </section>`;
 }
 
+// sectionSelectionModel(sel, profile, selMode, selLabel) → HTML string
+// sel       — result object from veveaHedges() (or null if not run)
+// profile   — effect profile (for back-transform and label)
+// selMode   — "sensitivity" | "mle"
+// selLabel  — human-readable preset name (e.g. "Moderate (1-sided)") or "Custom" / "MLE"
+function sectionSelectionModel(sel, profile, selMode, selLabel) {
+  if (!sel || sel.error) return "";
+
+  const K     = sel.K;
+  const isMLE = selMode === "mle";
+
+  function fmtDisp(v) { return isFinite(v) ? fmt(profile.transform(v)) : "—"; }
+  function fmtV(v)    { return isFinite(v) ? fmt(v) : "—"; }
+
+  // ---- Cutpoint interval labels: (0, c₁], (c₁, c₂], … ----
+  const cuts = sel.cuts;
+  const intervalLabels = cuts.map((c, j) => {
+    const lo = j === 0 ? "0" : cuts[j - 1];
+    return `(${lo}, ${c}]`;
+  });
+  const headerCols = ["Quantity", ...intervalLabels].map(h => `<th>${h}</th>`).join("");
+
+  // ---- ω row ----
+  const omegaCells = sel.omega.map((w, j) => {
+    if (!isMLE || j === 0) return `<td>${fmtV(w)} (fixed)</td>`;
+    const se = isFinite(sel.se_omega[j]) ? ` ± ${fmtV(sel.se_omega[j])}` : "";
+    return `<td>${fmtV(w)}${se}</td>`;
+  }).join("");
+
+  // ---- Studies per interval row ----
+  const kCells = sel.nPerInterval.map((n, j) => {
+    const warn = n === 0 ? " class=\"flagged\"" : "";
+    return `<td${warn}>${n}</td>`;
+  }).join("");
+
+  // ---- Adjusted vs unadjusted μ ----
+  const muAdj   = fmtDisp(sel.mu);
+  const ciLo    = fmtDisp(sel.mu - 1.96 * sel.se_mu);
+  const ciHi    = fmtDisp(sel.mu + 1.96 * sel.se_mu);
+  const muUnadj = fmtDisp(sel.RE_unsel);
+
+  // ---- LRT row (MLE only) ----
+  const lrtRow = isMLE && isFinite(sel.LRT)
+    ? `<tr><td>LRT (H₀: no selection)</td><td colspan="${K}">χ²(${sel.LRTdf}) = ${fmtV(sel.LRT)}, p = ${fmtP(sel.LRTp)}</td></tr>`
+    : "";
+
+  // ---- Empty-interval warning ----
+  const empty = sel.nPerInterval.map((n, j) => n === 0 ? j + 1 : -1).filter(j => j > 0);
+  const emptyNote = empty.length > 0
+    ? `<p class="note"><strong>Warning:</strong> interval${empty.length > 1 ? "s" : ""} ${empty.join(", ")} ha${empty.length > 1 ? "ve" : "s"} 0 studies.</p>`
+    : "";
+
+  // ---- Convergence note ----
+  const convNote = isMLE && !sel.converged
+    ? `<p class="note"><strong>Note:</strong> Optimizer did not fully converge; results may be approximate.</p>`
+    : "";
+
+  // ---- Interpretation sentence ----
+  const direction = sel.mu > sel.RE_unsel ? "higher" : "lower";
+  const schemeText = isMLE ? "the estimated selection pattern" : `<em>${esc(selLabel)}</em> selection`;
+  const interpNote = `Under ${schemeText} the bias-corrected estimate is ${muAdj} [${ciLo}, ${ciHi}]`
+    + ` — ${direction} than the unadjusted RE estimate of ${muUnadj}.`
+    + (isMLE && isFinite(sel.LRTp) && sel.LRTp < 0.05
+        ? ` The LRT rejects the null of no selection (p = ${fmtP(sel.LRTp)}).`
+        : "");
+
+  const modeLabel = isMLE ? "MLE (estimated weights)" : `Sensitivity — ${esc(selLabel)}`;
+  const sidesLabel = sel.sides === 2 ? "two-sided" : "one-sided";
+
+  return `
+<section>
+  <h2>Selection Model (Vevea-Hedges, 1995)</h2>
+  <p class="meta-line">Mode: ${modeLabel} &nbsp;·&nbsp; p-values: ${sidesLabel} &nbsp;·&nbsp; k = ${sel.k}</p>
+  ${buildTable(
+    ["Quantity", ...intervalLabels],
+    [
+      `<tr><td>Selection weight ω</td>${omegaCells}</tr>`,
+      `<tr><td>Studies per interval</td>${kCells}</tr>`,
+      `<tr><td>Adjusted μ̂ [95% CI]</td><td colspan="${K}">${muAdj} [${ciLo}, ${ciHi}] &nbsp;·&nbsp; unadjusted: ${muUnadj}</td></tr>`,
+      `<tr><td>Adjusted τ²</td><td colspan="${K}">${fmtV(sel.tau2)} &nbsp;·&nbsp; unadjusted: ${fmtV(sel.tau2_unsel)}</td></tr>`,
+      ...(lrtRow ? [lrtRow] : []),
+    ],
+    { style: "width:100%" }
+  )}
+  ${emptyNote}
+  ${convNote}
+  <p class="note" style="margin-top:8px">${interpNote}</p>
+</section>`;
+}
+
 function sectionInfluence(influence, k) {
   if (!influence || !influence.length) return "";
 
@@ -686,6 +776,7 @@ export function buildReport(args) {
     studies, m, profile, reg, tf, influence, subgroup,
     method, ciMethod, useTF, forestOptions,
     pcurve, puniform,
+    sel, selMode, selLabel,
   } = args;
 
   const date  = new Date().toLocaleDateString(undefined, {
@@ -715,6 +806,7 @@ export function buildReport(args) {
     sectionSummary(args),
     sectionPubBias(args),
     sectionPUniform(puniform, m, profile),
+    sectionSelectionModel(sel ?? null, profile, selMode ?? "mle", selLabel ?? ""),
     sectionInfluence(influence, k),
     sectionSubgroup(subgroup, profile),
     sectionStudyTable(args),

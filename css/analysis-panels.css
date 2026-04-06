@@ -205,3 +205,62 @@
   accent-color: var(--accent);
   cursor: pointer;
 }
+
+/* ================================================================
+   SELECTION MODEL PANEL (Vevea-Hedges)
+   ================================================================ */
+
+.sel-model-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0 10px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 10px;
+}
+
+.sel-table {
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  margin: 6px 0 4px;
+  width: 100%;
+}
+
+.sel-table th,
+.sel-table td {
+  border: 1px solid var(--border);
+  padding: 4px 9px;
+  text-align: center;
+}
+
+.sel-table th {
+  background: var(--bg-subtle, #f5f5f5);
+  font-weight: 600;
+}
+
+.sel-table td:first-child {
+  text-align: left;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.sel-table td.sel-zero {
+  color: var(--danger, #c00);
+  font-weight: 600;
+}
+
+.sel-note,
+.sel-warn {
+  font-size: 0.85rem;
+  margin: 6px 0;
+}
+
+.sel-warn {
+  color: var(--danger, #c00);
+}
+
+.sel-note {
+  color: var(--fg-muted);
+  font-style: italic;
+}

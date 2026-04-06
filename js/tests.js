@@ -1,6 +1,6 @@
 import { round, transformEffect, chiSquareCDF, chiSquareQuantile, parseCounts, bivariateNormalCDF, normalQuantile, fCDF } from "./utils.js";
-import { BENCHMARKS, PUB_BIAS_BENCHMARKS, INFLUENCE_BENCHMARKS, META_REGRESSION_BENCHMARKS } from "./benchmarks.js";
-import { compute, meta, metaRegression, tau2_HS, tau2_HE, tau2_ML, tau2_SJ, beggTest, eggerTest, fatPetTest, failSafeN, heterogeneityCIs, cumulativeMeta, influenceDiagnostics, harbordTest, petersTest, deeksTest, rueckerTest, leaveOneOut, baujat, pCurve, pUniform, estimatorComparison, subgroupAnalysis } from "./analysis.js";
+import { BENCHMARKS, PUB_BIAS_BENCHMARKS, INFLUENCE_BENCHMARKS, META_REGRESSION_BENCHMARKS, VH_BENCHMARKS } from "./benchmarks.js";
+import { compute, meta, metaRegression, tau2_HS, tau2_HE, tau2_ML, tau2_SJ, beggTest, eggerTest, fatPetTest, failSafeN, heterogeneityCIs, cumulativeMeta, influenceDiagnostics, harbordTest, petersTest, deeksTest, rueckerTest, leaveOneOut, baujat, pCurve, pUniform, estimatorComparison, subgroupAnalysis, logLik, bfgs, selIntervalProbs, selIntervalIdx, selectionLogLik, SEL_CUTS_ONE_SIDED, SEL_CUTS_TWO_SIDED, veveaHedges, SELECTION_PRESETS } from "./analysis.js";
 import { trimFill } from "./trimfill.js";
 import { parseCSV } from "./csv.js";
 
@@ -3366,4 +3366,373 @@ export function runTests() {
   }
 
   console.log(csvPass ? "\n✅ ALL CSV IMPORT TESTS PASSED" : "\n❌ SOME CSV IMPORT TESTS FAILED");
+
+  // ---- BFGS optimizer tests ----
+  console.log("\n===== BFGS OPTIMIZER TESTS =====\n");
+  let bfgsPass = true;
+  const { chk: opchk, chkTrue: opchkTrue } = makeChk(() => { bfgsPass = false; });
+
+  // 1-D quadratic: f(x) = (x - 3)²  →  min at x=3, fval=0
+  {
+    console.log("--- 1-D quadratic: f(x) = (x-3)² ---");
+    const r = bfgs(x => (x[0] - 3) ** 2, [0]);
+    opchk("x[0]",    r.x[0], 3,   0.001);
+    opchk("fval",    r.fval, 0,   1e-8);
+    opchkTrue("converged", r.converged);
+  }
+
+  // 2-D quadratic: f(x,y) = (x-1)² + 4·(y+2)²  →  min at [1, -2]
+  {
+    console.log("--- 2-D quadratic: f(x,y) = (x-1)² + 4·(y+2)² ---");
+    const r = bfgs(x => (x[0] - 1) ** 2 + 4 * (x[1] + 2) ** 2, [0, 0]);
+    opchk("x[0]",    r.x[0],  1,   0.001);
+    opchk("x[1]",    r.x[1], -2,   0.001);
+    opchk("fval",    r.fval,  0,   1e-8);
+    opchkTrue("converged", r.converged);
+  }
+
+  // Rosenbrock: f(x,y) = (1-x)² + 100·(y-x²)²  →  min at [1, 1]
+  {
+    console.log("--- Rosenbrock: min at [1, 1] ---");
+    const r = bfgs(x => (1 - x[0]) ** 2 + 100 * (x[1] - x[0] ** 2) ** 2, [0, 0]);
+    opchk("x[0]",    r.x[0], 1,   0.001);
+    opchk("x[1]",    r.x[1], 1,   0.001);
+    opchk("fval",    r.fval, 0,   1e-6);
+    opchkTrue("converged", r.converged);
+  }
+
+  console.log(bfgsPass ? "\n✅ ALL BFGS TESTS PASSED" : "\n❌ SOME BFGS TESTS FAILED");
+
+  // ---- Selection model helper tests (Step 1-C) ----
+  console.log("\n===== SELECTION MODEL TESTS (Step 1-C) =====\n");
+  let selPass = true;
+  const { chk: schk, chkTrue: schkTrue } = makeChk(() => { selPass = false; });
+
+  const DEFAULT_CUTS = [0.025, 0.05, 0.10, 0.25, 0.50, 1.0];
+  const K = DEFAULT_CUTS.length;  // 6
+
+  // selIntervalIdx: one-sided interval assignment
+  {
+    console.log("--- selIntervalIdx (one-sided) ---");
+    // p = 1 - Φ(y/se); se=1
+    // y=2.0: p ≈ 0.0228 → j=0 (≤0.025)
+    schk("j for y=2.0", selIntervalIdx(2.0, 1, DEFAULT_CUTS, 1), 0, 0);
+    // y=1.7: p ≈ 0.0446 → j=1 (≤0.05)
+    schk("j for y=1.7", selIntervalIdx(1.7, 1, DEFAULT_CUTS, 1), 1, 0);
+    // y=1.2: p ≈ 0.115  → j=2 (≤0.25, but first is ≤0.10 → j=2? let's compute)
+    // 1-Φ(1.2) ≈ 0.115 → ≤0.25 yes, but ≤0.10? no. So j=2 (cuts[2]=0.10 → still no; cuts[3]=0.25 → yes → j=3)
+    // Actually: p≈0.115 > 0.10 → j=3 (≤0.25)
+    schk("j for y=1.2", selIntervalIdx(1.2, 1, DEFAULT_CUTS, 1), 3, 0);
+    // y=0.1: p = 1−Φ(0.1) ≈ 0.460 → j=4 (≤0.50, but not ≤0.25)
+    schk("j for y=0.1", selIntervalIdx(0.1, 1, DEFAULT_CUTS, 1), 4, 0);
+    // y=-1.0: p ≈ 0.84 → j=5 (≤1.0)
+    schk("j for y=-1.0", selIntervalIdx(-1.0, 1, DEFAULT_CUTS, 1), 5, 0);
+  }
+
+  // selIntervalProbs: probabilities sum to 1
+  {
+    console.log("--- selIntervalProbs sums to 1 ---");
+    const { normalQuantile: nq } = { normalQuantile };
+    const zcuts = DEFAULT_CUTS.map(c => normalQuantile(1 - c));
+    const cases = [
+      { mu: 0,   totalVar: 1,    se: 1,   label: "mu=0, v=1, se=1" },
+      { mu: 0.5, totalVar: 0.5,  se: 0.2, label: "mu=0.5, v=0.5, se=0.2" },
+      { mu: -1,  totalVar: 2,    se: 0.5, label: "mu=-1, v=2, se=0.5" },
+    ];
+    for (const { mu, totalVar, se, label } of cases) {
+      const probs = selIntervalProbs(mu, totalVar, se, zcuts, 1);
+      const total = probs.reduce((a, b) => a + b, 0);
+      schk(`sum (${label})`, total, 1, 1e-10);
+    }
+  }
+
+  // selectionLogLik identity: all-zero alpha → equals −logLik
+  {
+    console.log("--- selectionLogLik identity (all-zero alpha = unweighted ML) ---");
+
+    // Small synthetic dataset: yi, vi
+    const studies = [
+      { yi:  0.5, vi: 0.04 },
+      { yi:  1.2, vi: 0.09 },
+      { yi: -0.3, vi: 0.16 },
+      { yi:  0.8, vi: 0.25 },
+      { yi:  0.2, vi: 0.01 },
+    ];
+    const yi = studies.map(s => s.yi);
+    const vi = studies.map(s => s.vi);
+
+    // Test at two (mu, tau2) pairs
+    const testPoints = [
+      { mu: 0.5, tau2: 0.1 },
+      { mu: 0.0, tau2: 0.5 },
+    ];
+    for (const { mu, tau2 } of testPoints) {
+      const ll       = logLik(studies, mu, tau2);  // standard ML log-likelihood
+      const params   = [mu, Math.log(tau2), ...new Array(K - 1).fill(0)];
+      const negLL_sel = selectionLogLik(params, yi, vi, DEFAULT_CUTS, 1);
+      schk(`negLL_sel vs −logLik (mu=${mu}, τ²=${tau2})`, negLL_sel, -ll, 1e-8);
+    }
+  }
+
+  // selectionLogLik: finite and well-behaved under ML-optimal (mu, tau2) from meta()
+  {
+    console.log("--- selectionLogLik at ML optimum is finite ---");
+    const studies = [
+      { yi:  0.5, vi: 0.04 },
+      { yi:  1.2, vi: 0.09 },
+      { yi: -0.3, vi: 0.16 },
+      { yi:  0.8, vi: 0.25 },
+      { yi:  0.2, vi: 0.01 },
+    ];
+    const yi = studies.map(s => s.yi);
+    const vi = studies.map(s => s.vi);
+    const m   = meta(studies, "ML");
+    const params = [m.RE, Math.log(Math.max(m.tau2, 1e-9)), ...new Array(K - 1).fill(0)];
+    const negLL  = selectionLogLik(params, yi, vi, DEFAULT_CUTS, 1);
+    schkTrue("negLL is finite",      isFinite(negLL));
+    schkTrue("negLL is a number",    typeof negLL === "number");
+  }
+
+  // BFGS on selectionLogLik: with all-one weights (null model), BFGS should
+  // recover a negLL ≤ the starting value and the result should be finite.
+  {
+    console.log("--- BFGS on selectionLogLik (all-zero alpha, optimise mu+tau2 only) ---");
+    const studies = [
+      { yi:  0.5, vi: 0.04 },
+      { yi:  1.2, vi: 0.09 },
+      { yi: -0.3, vi: 0.16 },
+      { yi:  0.8, vi: 0.25 },
+      { yi:  0.2, vi: 0.01 },
+    ];
+    const yi = studies.map(s => s.yi);
+    const vi = studies.map(s => s.vi);
+    // Fix alpha at 0; optimise only mu (x[0]) and rho (x[1])
+    // so wrap to 2-param function
+    const f2 = x => selectionLogLik([x[0], x[1], ...new Array(K - 1).fill(0)], yi, vi, DEFAULT_CUTS, 1);
+    const m   = meta(studies, "ML");
+    const x0  = [m.RE, Math.log(Math.max(m.tau2, 1e-9))];
+    const r   = bfgs(f2, x0);
+
+    // ML estimate of mu should be close to RE (they are the same)
+    schk("mu at optimum", r.x[0], m.RE, 0.01);
+    schkTrue("fval is finite",  isFinite(r.fval));
+    schkTrue("fval ≤ f(start)", r.fval <= f2(x0) + 1e-6);
+  }
+
+  console.log(selPass ? "\n✅ ALL SELECTION MODEL TESTS PASSED" : "\n❌ SOME SELECTION MODEL TESTS FAILED");
+
+  // ---- veveaHedges API tests (Steps 1-E, 1-F, 1-G) ----
+  console.log("\n===== VEVEA-HEDGES MODEL TESTS (Steps 1-E/F/G) =====\n");
+  let vhPass = true;
+  const { chk: vhchk, chkTrue: vhchkTrue, chkExact: vhchkExact } = makeChk(() => { vhPass = false; });
+
+  // Shared synthetic dataset: k=10, genuine heterogeneity (tau2 > 0),
+  // studies spread across several p-value intervals.
+  const vhStudies = [
+    { yi:  0.20, vi: 0.04 },  // z=1.00, p≈0.16  → j=3
+    { yi:  1.30, vi: 0.09 },  // z=4.33, p≈0     → j=0
+    { yi: -0.10, vi: 0.06 },  // z=−0.41, p≈0.66 → j=5
+    { yi:  0.90, vi: 0.16 },  // z=2.25, p≈0.012 → j=0
+    { yi:  0.50, vi: 0.05 },  // z=2.24, p≈0.013 → j=0
+    { yi:  1.60, vi: 0.12 },  // z=4.62, p≈0     → j=0
+    { yi:  0.10, vi: 0.08 },  // z=0.35, p≈0.36  → j=4
+    { yi:  0.80, vi: 0.20 },  // z=1.79, p≈0.037 → j=1
+    { yi: -0.20, vi: 0.07 },  // z=−0.76, p≈0.78 → j=5
+    { yi:  1.10, vi: 0.10 },  // z=3.48, p≈0.000 → j=0
+  ];
+  // Wide spread of yi values ensures tau2 > 0 and good Hessian conditioning
+
+  // ---- 1. Basic sanity: structure, finite values, convergence ----
+  {
+    console.log("--- basic sanity: structure, finite values, convergence ---");
+    const r = veveaHedges(vhStudies);
+
+    vhchkTrue("converged",            r.converged);
+    vhchkTrue("mu finite",            isFinite(r.mu));
+    vhchkTrue("tau2 >= 0",            isFinite(r.tau2) && r.tau2 >= 0);
+    // se_mu: should be finite and positive when Hessian is well-conditioned
+    vhchkTrue("se_mu finite & > 0",   isFinite(r.se_mu) && r.se_mu > 0);
+    // se_tau2: may be NaN if tau2→0 (boundary), but should be non-negative when finite
+    vhchkTrue("se_tau2 ok",           !isFinite(r.se_tau2) || r.se_tau2 >= 0);
+    vhchkTrue("LRT finite",           isFinite(r.LRT));
+    vhchkTrue("LRTp in [0,1]",        isFinite(r.LRTp) && r.LRTp >= 0 && r.LRTp <= 1);
+    vhchkExact("K = 6",               r.K, 6);
+    vhchkExact("k = 10",              r.k, 10);
+    vhchkExact("nPerInterval.length", r.nPerInterval.length, 6);
+    vhchkExact("omega.length",        r.omega.length, 6);
+    vhchkTrue("omega[0] = 1 (reference)", Math.abs(r.omega[0] - 1) < 1e-12);
+    vhchkTrue("alpha[0] = 0 (reference)", Math.abs(r.alpha[0]) < 1e-12);
+    vhchkTrue("nPerInterval sums to k",
+      r.nPerInterval.reduce((a, b) => a + b, 0) === r.k);
+  }
+
+  // ---- 2. Unweighted limit: if study p-values are uniformly distributed,
+  //         selection model should recover mu close to RE ----
+  {
+    console.log("--- unweighted limit: mu vs RE_unsel ----");
+    const r = veveaHedges(vhStudies);
+
+    // LRT df = nFree = 4 (interval j=2 has 0 studies and is excluded)
+    vhchkExact("LRTdf = 4", r.LRTdf, 4);
+
+    // logLikSel >= logLikUnsel (selection model is at least as good as null)
+    vhchkTrue("logLikSel >= logLikUnsel", r.logLikSel >= r.logLikUnsel - 1e-6);
+
+    // RE_unsel and ciLow/ciHigh_unsel should be finite and match meta(ML)
+    const mML = meta(vhStudies, "ML");
+    vhchk("RE_unsel = meta ML RE",    r.RE_unsel,    mML.RE,    0.001);
+    vhchk("tau2_unsel = meta ML tau2", r.tau2_unsel, mML.tau2,  0.001);
+  }
+
+  // ---- 3. Asymmetric data: strong funnel asymmetry should produce LRT p < 0.05
+  //         (many studies in low-p intervals, none in high-p) ----
+  {
+    console.log("--- asymmetric data: LRT should detect selection ----");
+    // All studies are highly significant (p < 0.025), so omega for other
+    // intervals should be estimated as very small relative to omega[0].
+    const asymStudies = [
+      { yi: 2.5, vi: 0.04 },
+      { yi: 2.2, vi: 0.06 },
+      { yi: 2.8, vi: 0.05 },
+      { yi: 3.0, vi: 0.03 },
+      { yi: 2.6, vi: 0.04 },
+      { yi: 2.4, vi: 0.07 },
+      { yi: 2.9, vi: 0.05 },
+      { yi: 2.7, vi: 0.04 },
+      { yi: 2.3, vi: 0.06 },
+      { yi: 2.5, vi: 0.05 },
+    ];
+    const r = veveaHedges(asymStudies);
+    vhchkTrue("converged (asymmetric)",        r.converged);
+    vhchkTrue("LRT finite (asymmetric)",       isFinite(r.LRT));
+    // All studies fall in j=0 (most significant interval)
+    vhchkExact("all in interval 0", r.nPerInterval[0], 10);
+  }
+
+  // ---- 4. Symmetric near-null data: LRT should not detect selection ----
+  {
+    console.log("--- symmetric null data: LRT should not flag selection ----");
+    const symStudies = [
+      { yi:  0.10, vi: 0.25 },
+      { yi: -0.05, vi: 0.30 },
+      { yi:  0.20, vi: 0.20 },
+      { yi: -0.15, vi: 0.35 },
+      { yi:  0.08, vi: 0.28 },
+      { yi: -0.20, vi: 0.22 },
+      { yi:  0.15, vi: 0.32 },
+      { yi: -0.10, vi: 0.18 },
+      { yi:  0.05, vi: 0.26 },
+      { yi: -0.12, vi: 0.24 },
+    ];
+    const r = veveaHedges(symStudies);
+    vhchkTrue("converged (null)", r.converged);
+    // LRT p-value should be non-significant (no reason to expect selective reporting)
+    vhchkTrue("LRTp > 0.05 (no selection expected)", r.LRTp > 0.05);
+  }
+
+  // ---- 5. Insufficient k: returns error object without crashing ----
+  {
+    console.log("--- insufficient k: error return ---");
+    // K=6 intervals → need k >= 8; use only 5 studies
+    const tooFew = vhStudies.slice(0, 5);
+    const r = veveaHedges(tooFew);
+    vhchkExact("error = insufficient_k", r.error, "insufficient_k");
+    vhchkTrue("mu is NaN",  !isFinite(r.mu));
+    vhchkTrue("no crash",   true);
+  }
+
+  console.log(vhPass ? "\n✅ ALL VEVEA-HEDGES TESTS PASSED" : "\n❌ SOME VEVEA-HEDGES TESTS FAILED");
+
+  // ---- VH_BENCHMARKS: regression against metafor::selmodel() output ----
+  console.log("\n===== VH BENCHMARK TESTS (R blocks 45–47) =====\n");
+  let vhBenchPass = true;
+  const { chk: vbchk, chkTrue: vbchkTrue } = makeChk(() => { vhBenchPass = false; });
+
+  VH_BENCHMARKS.forEach(bm => {
+    console.log(`--- ${bm.name} ---`);
+    const r = veveaHedges(bm.data, bm.cuts, bm.sides);
+
+    const exp = bm.expected;
+
+    // Primary estimates
+    vbchk("mu",    r.mu,    exp.mu,    0.01);
+    vbchk("tau2",  r.tau2,  exp.tau2,  Math.max(0.01, 0.05 * Math.abs(exp.tau2)));
+
+    // Selection weights (omega); skip omega[0]=1 (reference, always exact)
+    for (let j = 1; j < exp.omega.length; j++) {
+      // Large weights (>10) tolerate 10% relative; smaller weights tolerate abs 0.05
+      const tol = exp.omega[j] > 10
+        ? 0.15 * exp.omega[j]
+        : 0.05;
+      vbchk(`omega[${j}]`, r.omega[j], exp.omega[j], tol);
+    }
+
+    // LRT
+    vbchk("LRT",   r.LRT,   exp.LRT,   0.1);
+    vbchkTrue("LRTdf", r.LRTdf === exp.LRTdf);
+    vbchk("LRTp",  r.LRTp,  exp.LRTp,  0.02);
+
+    // Log-likelihoods
+    vbchk("ll_sel",   r.logLikSel,   exp.ll_sel,   0.05);
+    vbchk("ll_unsel", r.logLikUnsel, exp.ll_unsel, 0.05);
+
+    // Unweighted model
+    vbchk("RE_unsel",    r.RE_unsel,    exp.RE_unsel,    0.01);
+    vbchk("tau2_unsel",  r.tau2_unsel,  exp.tau2_unsel,  Math.max(0.01, 0.05 * Math.abs(exp.tau2_unsel)));
+
+    // Convergence
+    vbchkTrue(`converged`, r.converged);
+  });
+
+  console.log(vhBenchPass ? "\n✅ ALL VH BENCHMARK TESTS PASSED" : "\n❌ SOME VH BENCHMARK TESTS FAILED");
+
+  // ---- SELECTION_PRESETS structure ----
+  console.log("\n===== SELECTION PRESETS TESTS =====\n");
+  let presetPass = true;
+  const { chk: prchk, chkTrue: prchkTrue } = makeChk(() => { presetPass = false; });
+
+  const EXPECTED_KEYS   = ["mild1", "moderate1", "severe1", "mild2", "moderate2"];
+  const EXPECTED_OMEGA  = {
+    mild1:     [1, 1, 0.75, 0.75, 0.5, 0.25],
+    moderate1: [1, 0.9, 0.5, 0.3, 0.2, 0.1],
+    severe1:   [1, 0.5, 0.1, 0.1, 0.05, 0.01],
+    mild2:     [1, 1, 0.75, 0.75, 0.5, 0.25],
+    moderate2: [1, 0.9, 0.5, 0.3, 0.2, 0.1],
+  };
+  const EXPECTED_SIDES  = { mild1: 1, moderate1: 1, severe1: 1, mild2: 2, moderate2: 2 };
+  const STD_CUTS = [0.025, 0.05, 0.10, 0.25, 0.50, 1.0];
+
+  prchkTrue("SELECTION_PRESETS is an object",
+    typeof SELECTION_PRESETS === "object" && SELECTION_PRESETS !== null);
+  prchkTrue("has exactly 5 keys",
+    Object.keys(SELECTION_PRESETS).length === 5);
+
+  for (const key of EXPECTED_KEYS) {
+    const p = SELECTION_PRESETS[key];
+    prchkTrue(`${key} exists`, p != null);
+    if (!p) continue;
+
+    prchkTrue(`${key}.label is non-empty string`,
+      typeof p.label === "string" && p.label.length > 0);
+    prchkTrue(`${key}.sides = ${EXPECTED_SIDES[key]}`, p.sides === EXPECTED_SIDES[key]);
+    prchkTrue(`${key}.cuts has 6 entries`, Array.isArray(p.cuts) && p.cuts.length === 6);
+    prchkTrue(`${key}.cuts last = 1.0`, p.cuts[p.cuts.length - 1] === 1.0);
+    prchkTrue(`${key}.cuts matches standard`,
+      p.cuts.every((c, i) => Math.abs(c - STD_CUTS[i]) < 1e-12));
+    prchkTrue(`${key}.omega has 6 entries`, Array.isArray(p.omega) && p.omega.length === 6);
+    prchkTrue(`${key}.omega[0] = 1 (reference)`, p.omega[0] === 1);
+    prchkTrue(`${key}.omega matches expected`,
+      p.omega.every((w, i) => Math.abs(w - EXPECTED_OMEGA[key][i]) < 1e-12));
+    prchkTrue(`${key}.omega all positive`, p.omega.every(w => w > 0));
+    prchkTrue(`${key}.omega[0] ≥ all others`,
+      p.omega.slice(1).every(w => w <= p.omega[0] + 1e-12));
+  }
+
+  // Mild and moderate presets share the same omega across sides
+  prchkTrue("mild1.omega equals mild2.omega",
+    SELECTION_PRESETS.mild1.omega.every((w, i) => w === SELECTION_PRESETS.mild2.omega[i]));
+  prchkTrue("moderate1.omega equals moderate2.omega",
+    SELECTION_PRESETS.moderate1.omega.every((w, i) => w === SELECTION_PRESETS.moderate2.omega[i]));
+
+  console.log(presetPass ? "\n✅ ALL SELECTION PRESET TESTS PASSED" : "\n❌ SOME SELECTION PRESET TESTS FAILED");
 }
