@@ -857,6 +857,15 @@ export function buildReport(args) {
     sectionPUniform(puniform, m, profile),
     sectionSelectionModel(sel ?? null, profile, selMode ?? "mle", selLabel ?? ""),
     sectionGosh(gosh ?? null, profile, goshXAxis ?? "I2"),
+    (() => {
+      const svg = liveSVG("profileLikTau2Plot");
+      return svg ? `
+<section class="plot-section">
+  <h2>Profile Likelihood for τ²</h2>
+  <div class="svg-wrap">${svg}</div>
+  <p class="note">95% CI from likelihood-ratio inversion (LRT). Note: the τ² CI in the summary table uses the Q-profile method (moment-based) and will differ.</p>
+</section>` : "";
+    })(),
     sectionInfluence(influence, k),
     sectionSubgroup(subgroup, profile),
     sectionStudyTable(args),

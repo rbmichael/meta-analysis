@@ -3015,3 +3015,185 @@ export function drawGoshPlot(result, profile, opts = {}) {
     .attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "9px")
     .text("n (subset size)");
 }
+
+// =============================================================================
+// drawProfileLikTau2(result, opts)
+// =============================================================================
+// Draws the profile log-likelihood curve for τ² produced by profileLikTau2().
+//
+// opts.xScale: "tau2" (default) — x-axis shows τ²
+//              "tau"            — x-axis shows τ = √τ²
+//
+// SVG target: #profileLikTau2Plot (500 × 380 px by default).
+// Elements (back-to-front):
+//   CI shaded band → threshold line → τ²_hat line → CI bound lines →
+//   profile curve → peak dot → axes → labels → title.
+// =============================================================================
+export function drawProfileLikTau2(result, opts = {}) {
+  const svg = clearAndSelectSVG("#profileLikTau2Plot");
+  if (!result || result.error) return;
+
+  const xScale = opts.xScale || "tau2";
+  const { grid, ll, tau2hat, lCritRel, ciLow, ciHigh, method, k } = result;
+
+  const margin = { top: 34, right: 24, bottom: 56, left: 66 };
+  const W  = +svg.attr("width")  || 500;
+  const H  = +svg.attr("height") || 380;
+  const iW = W - margin.left - margin.right;
+  const iH = H - margin.top  - margin.bottom;
+
+  // ---- Clip path so the curve doesn't bleed into margins ----
+  const clipId = "profileLikClip";
+  svg.append("defs").append("clipPath").attr("id", clipId)
+    .append("rect").attr("width", iW).attr("height", iH);
+
+  const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+
+  // ---- Transforms between τ²-space and display-space ----
+  const toX = xScale === "tau" ? (t2 => Math.sqrt(t2)) : (t2 => t2);
+  const gridMax = grid[grid.length - 1];
+  const xDomainMax = toX(gridMax);
+
+  // ---- Scales ----
+  const x = d3.scaleLinear().domain([0, xDomainMax]).range([0, iW]);
+
+  const llMin = d3.min(ll);
+  const y = d3.scaleLinear()
+    .domain([Math.min(llMin - 0.5, lCritRel - 0.5), 0.3])
+    .range([iH, 0]);
+
+  // ---- Gridlines ----
+  g.append("g")
+    .attr("class", "grid")
+    .call(d3.axisLeft(y).ticks(5).tickSize(-iW).tickFormat(""))
+    .selectAll("line")
+    .attr("stroke", "var(--border)")
+    .attr("stroke-dasharray", "2,3");
+  g.select(".grid .domain").remove();
+
+  // ---- 1. CI shaded band ----
+  const bandX1 = x(toX(ciLow));
+  const bandX2 = x(toX(ciHigh));
+  g.append("rect")
+    .attr("x", bandX1).attr("y", 0)
+    .attr("width",  Math.max(0, bandX2 - bandX1))
+    .attr("height", iH)
+    .attr("fill", "var(--accent)")
+    .attr("fill-opacity", 0.10);
+
+  // ---- 2. Horizontal threshold line (dashed) ----
+  const yCrit = y(lCritRel);
+  g.append("line")
+    .attr("x1", 0).attr("x2", iW)
+    .attr("y1", yCrit).attr("y2", yCrit)
+    .attr("stroke", "var(--fg-subtle)")
+    .attr("stroke-width", 1.2)
+    .attr("stroke-dasharray", "5,3");
+  g.append("text")
+    .attr("x", iW - 2).attr("y", yCrit - 4)
+    .attr("text-anchor", "end")
+    .attr("fill", "var(--fg-muted)")
+    .style("font-size", "9px")
+    .text("95% CI cutoff");
+
+  // ---- 3. Vertical τ²_hat line ----
+  const xHat = x(toX(tau2hat));
+  g.append("line")
+    .attr("x1", xHat).attr("x2", xHat)
+    .attr("y1", 0).attr("y2", iH)
+    .attr("stroke", "var(--accent)")
+    .attr("stroke-width", 1.2);
+  g.append("text")
+    .attr("x", xHat).attr("y", -6)
+    .attr("text-anchor", "middle")
+    .attr("fill", "var(--accent)")
+    .style("font-size", "9px")
+    .text(xScale === "tau"
+      ? `τ̂ = ${Math.sqrt(tau2hat).toPrecision(3)}`
+      : `τ̂² = ${tau2hat.toPrecision(3)}`);
+
+  // ---- 4. CI bound lines (dashed) ----
+  function drawCIBound(tau2val, label) {
+    const xb = x(toX(tau2val));
+    g.append("line")
+      .attr("x1", xb).attr("x2", xb)
+      .attr("y1", 0).attr("y2", iH)
+      .attr("stroke", "var(--fg-subtle)")
+      .attr("stroke-width", 1)
+      .attr("stroke-dasharray", "4,3");
+    g.append("text")
+      .attr("x", xb).attr("y", iH + 30)
+      .attr("text-anchor", "middle")
+      .attr("fill", "var(--fg-muted)")
+      .style("font-size", "8.5px")
+      .text(label);
+  }
+  if (ciLow > 0) drawCIBound(ciLow, toX(ciLow).toPrecision(3));
+  drawCIBound(ciHigh, toX(ciHigh).toPrecision(3));
+
+  // ---- 5. Profile curve (clipped) ----
+  const lineGen = d3.line()
+    .x((_, i) => x(toX(grid[i])))
+    .y((_, i) => y(ll[i]))
+    .defined((_, i) => isFinite(ll[i]));
+
+  g.append("g").attr("clip-path", `url(#${clipId})`)
+    .append("path")
+    .datum(ll)
+    .attr("fill", "none")
+    .attr("stroke", "var(--accent)")
+    .attr("stroke-width", 2)
+    .attr("d", lineGen);
+
+  // ---- 6. Peak dot ----
+  g.append("circle")
+    .attr("cx", xHat)
+    .attr("cy", y(0))
+    .attr("r", 4)
+    .attr("fill", "var(--accent)");
+
+  // ---- 7. Axes ----
+  const fmt = xScale === "tau"
+    ? d3.format(".3~g")
+    : d3.format(".3~g");
+
+  const axisX = g.append("g")
+    .attr("transform", `translate(0,${iH})`)
+    .call(d3.axisBottom(x).ticks(5).tickFormat(fmt));
+  styleAxis(axisX, "var(--border-hover)", "var(--fg-muted)", "10px");
+
+  const axisY = g.append("g")
+    .call(d3.axisLeft(y).ticks(5).tickFormat(d3.format(".2f")));
+  styleAxis(axisY, "var(--border-hover)", "var(--fg-muted)", "10px");
+
+  // ---- 8. Axis labels ----
+  const xLabel = xScale === "tau"
+    ? "τ (between-study SD)"
+    : "τ² (between-study variance)";
+  svg.append("text")
+    .attr("x", margin.left + iW / 2)
+    .attr("y", H - 8)
+    .attr("text-anchor", "middle")
+    .attr("fill", "var(--fg-muted)")
+    .style("font-size", "11px")
+    .text(xLabel);
+
+  svg.append("text")
+    .attr("transform", "rotate(-90)")
+    .attr("x", -(margin.top + iH / 2))
+    .attr("y", 14)
+    .attr("text-anchor", "middle")
+    .attr("fill", "var(--fg-muted)")
+    .style("font-size", "11px")
+    .text("Profile log-likelihood (relative)");
+
+  // ---- 9. Title ----
+  svg.append("text")
+    .attr("x", margin.left + iW / 2)
+    .attr("y", 14)
+    .attr("text-anchor", "middle")
+    .attr("fill", "var(--fg)")
+    .style("font-size", "11px")
+    .style("font-weight", "600")
+    .text(`Profile likelihood \u2014 \u03C4\u00B2 \u2014 ${method} \u2014 k\u202F=\u202F${k}`);
+}

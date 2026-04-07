@@ -100,11 +100,11 @@
 //   ui.js calls init() on DOMContentLoaded, which populates dropdowns,
 //   restores any autosave draft, and attaches all event listeners.
 // =============================================================================
-import { eggerTest, beggTest, fatPetTest, failSafeN, pCurve, pUniform, baujat, meta, influenceDiagnostics, subgroupAnalysis, metaRegression, cumulativeMeta, leaveOneOut, estimatorComparison, veveaHedges, SELECTION_PRESETS } from "./analysis.js";
+import { eggerTest, beggTest, fatPetTest, failSafeN, pCurve, pUniform, baujat, meta, influenceDiagnostics, subgroupAnalysis, metaRegression, cumulativeMeta, leaveOneOut, estimatorComparison, veveaHedges, SELECTION_PRESETS, profileLikTau2 } from "./analysis.js";
 import { fmt } from "./utils.js";
 import { effectProfiles, getProfile } from "./profiles.js";
 import { trimFill } from "./trimfill.js";
-import { drawForest, drawFunnel, drawBubble, drawPartialResidualBubble, drawInfluencePlot, drawCumulativeForest, drawCumulativeFunnel, drawPCurve, drawPUniform, drawOrchardPlot, drawCaterpillarPlot, drawBaujatPlot, drawRoBTrafficLight, drawRoBSummary, drawGoshPlot } from "./plots.js";
+import { drawForest, drawFunnel, drawBubble, drawPartialResidualBubble, drawInfluencePlot, drawCumulativeForest, drawCumulativeFunnel, drawPCurve, drawPUniform, drawOrchardPlot, drawCaterpillarPlot, drawBaujatPlot, drawRoBTrafficLight, drawRoBSummary, drawGoshPlot, drawProfileLikTau2 } from "./plots.js";
 import { goshCompute, GOSH_MAX_K } from "./gosh.js";
 import { exportSVG, exportPNG, exportTIFF } from "./export.js";
 import { buildReport, downloadHTML, openPrintPreview } from "./report.js";
@@ -718,6 +718,15 @@ syncSelControls();
 
 // ---------------- GOSH ----------------
 document.getElementById("goshRun").addEventListener("click", runGosh);
+
+// ---------------- PROFILE LIKELIHOOD SCALE TOGGLE ----------------
+document.getElementById("profileLikScale").addEventListener("change", () => {
+  if (appState.reportArgs?.profileLik) {
+    const xScale = document.getElementById("profileLikScale").value;
+    drawProfileLikTau2(appState.reportArgs.profileLik, { xScale });
+    appState.reportArgs.profileLikXScale = xScale;
+  }
+});
 
 // ---------------- TABLE HEADER ----------------
 function updateTableHeaders() {
@@ -2567,6 +2576,20 @@ function runAnalysis() {
 
   let m = meta(studies, method, ciMethod);
 
+  const profileLikResult =
+    (method === "ML" || method === "REML") && studies.length >= 2
+      ? profileLikTau2(studies, { method })
+      : null;
+
+  const elHetDiag = document.getElementById("hetDiagSection");
+  if (profileLikResult && !profileLikResult.error) {
+    elHetDiag.style.display = "";
+    const xScale = document.getElementById("profileLikScale")?.value || "tau2";
+    drawProfileLikTau2(profileLikResult, { xScale });
+  } else {
+    elHetDiag.style.display = "none";
+  }
+
   const egger   = eggerTest(studies);
   const begg    = beggTest(studies);
   const fatpet  = fatPetTest(studies);
@@ -2738,6 +2761,8 @@ function runAnalysis() {
     sel: selResult, selMode: selModeVal, selLabel: _selLabel,
     gosh: goshState.result,
     goshXAxis: document.getElementById("goshXAxis")?.value ?? "I2",
+    profileLik: profileLikResult,
+    profileLikXScale: document.getElementById("profileLikScale")?.value || "tau2",
     forestOptions: { ...forestOpts, currentPage: forestPlot.page },
   };
   funnelPlot.args = [all, m, egger, profile];

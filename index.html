@@ -264,7 +264,30 @@
           </div>
         </details>
 
-        <!-- ── Section 3: Publication Bias (collapsed) ── -->
+        <!-- ── Section 3: Heterogeneity Diagnostics (collapsed) ── -->
+        <details class="results-section" id="hetDiagSection" style="display:none">
+          <summary class="results-section-header">Heterogeneity Diagnostics</summary>
+          <div class="plot-block" id="profileLikTau2Block">
+            <p class="plot-label">Profile likelihood for τ²</p>
+            <div style="margin-bottom:6px">
+              <label class="inline">x-axis:
+                <select id="profileLikScale">
+                  <option value="tau2">τ² (variance)</option>
+                  <option value="tau">τ (SD)</option>
+                </select>
+              </label>
+            </div>
+            <div class="plot-export">
+              <button class="export-btn" data-target="profileLikTau2Plot" data-format="svg">SVG</button>
+              <button class="export-btn" data-target="profileLikTau2Plot" data-format="png">PNG</button>
+              <button class="export-btn" data-target="profileLikTau2Plot" data-format="tiff">TIFF</button>
+            </div>
+            <svg id="profileLikTau2Plot" width="500" height="380"></svg>
+            <p class="plot-label" style="font-weight:normal;font-size:0.82em;margin-top:4px">95% CI from likelihood-ratio inversion (LRT). Note: the τ² CI shown in the summary table uses the Q-profile method, which is moment-based and will differ.</p>
+          </div>
+        </details>
+
+        <!-- ── Section 4: Publication Bias (collapsed) ── -->
         <details class="results-section" id="pubBiasSection">
           <summary class="results-section-header">Publication Bias</summary>
           <div class="results-section-body">

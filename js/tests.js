@@ -1,6 +1,6 @@
 import { round, transformEffect, chiSquareCDF, chiSquareQuantile, parseCounts, bivariateNormalCDF, normalQuantile, fCDF } from "./utils.js";
 import { BENCHMARKS, PUB_BIAS_BENCHMARKS, INFLUENCE_BENCHMARKS, META_REGRESSION_BENCHMARKS, VH_BENCHMARKS } from "./benchmarks.js";
-import { compute, meta, metaRegression, tau2_HS, tau2_HE, tau2_ML, tau2_SJ, beggTest, eggerTest, fatPetTest, failSafeN, heterogeneityCIs, cumulativeMeta, influenceDiagnostics, harbordTest, petersTest, deeksTest, rueckerTest, leaveOneOut, baujat, pCurve, pUniform, estimatorComparison, subgroupAnalysis, logLik, bfgs, selIntervalProbs, selIntervalIdx, selectionLogLik, SEL_CUTS_ONE_SIDED, SEL_CUTS_TWO_SIDED, veveaHedges, SELECTION_PRESETS } from "./analysis.js";
+import { compute, meta, metaRegression, tau2_HS, tau2_HE, tau2_ML, tau2_SJ, beggTest, eggerTest, fatPetTest, failSafeN, heterogeneityCIs, cumulativeMeta, influenceDiagnostics, harbordTest, petersTest, deeksTest, rueckerTest, leaveOneOut, baujat, pCurve, pUniform, estimatorComparison, subgroupAnalysis, logLik, bfgs, selIntervalProbs, selIntervalIdx, selectionLogLik, SEL_CUTS_ONE_SIDED, SEL_CUTS_TWO_SIDED, veveaHedges, SELECTION_PRESETS, profileLikTau2, profileLikCI } from "./analysis.js";
 import { trimFill } from "./trimfill.js";
 import { parseCSV } from "./csv.js";
 import { goshCompute, GOSH_MAX_ENUM_K, GOSH_MAX_K, GOSH_DEFAULT_MAX_SUBSETS } from "./gosh.js";
@@ -3947,4 +3947,166 @@ export function runTests() {
   }
 
   console.log(goshPass ? "\n✅ ALL GOSH TESTS PASSED" : "\n❌ SOME GOSH TESTS FAILED");
+
+  // ===========================================================================
+  // PROFILE LIKELIHOOD τ² TESTS
+  // ===========================================================================
+  console.log("\n===== PROFILE LIKELIHOOD τ² TESTS =====\n");
+  let plPass = true;
+  const { chk: plChk, chkTrue: plChkTrue, chkExact: plChkExact } = makeChk(() => { plPass = false; });
+
+  // Shared datasets
+  // studiesPL: heterogeneous, k=4
+  const studiesPL = [
+    { yi: 0.1, vi: 0.04 },
+    { yi: 0.5, vi: 0.09 },
+    { yi: 0.9, vi: 0.04 },
+    { yi: 1.3, vi: 0.16 },
+  ];
+  // studiesHom: all yi equal → τ²_hat = 0
+  const studiesHom = [
+    { yi: 0.5, vi: 0.04 },
+    { yi: 0.5, vi: 0.09 },
+    { yi: 0.5, vi: 0.04 },
+    { yi: 0.5, vi: 0.16 },
+  ];
+  // studiesK2: k=2 edge case
+  const studiesK2 = [
+    { yi: 0.2, vi: 0.05 },
+    { yi: 0.8, vi: 0.10 },
+  ];
+
+  // ---- 1. Peak of shifted curve is at 0 ----
+  {
+    console.log("--- 1. peak at 0 ---");
+    const r = profileLikTau2(studiesPL, { method: "ML", nGrid: 200 });
+    plChkTrue("no error",             !r.error);
+    plChkTrue("all ll ≤ 1e-9",        Array.from(r.ll).every(v => v <= 1e-9));
+    plChkTrue("ll[0] ≤ 0",            r.ll[0] <= 0);
+    // Grid point nearest tau2hat should be within ~1e-3 of 0 (grid step ≈ hi/199)
+    const step = r.grid[1] - r.grid[0];
+    const nearPeak = Math.round(r.tau2hat / step);
+    const idx = Math.min(Math.max(nearPeak, 0), r.ll.length - 1);
+    plChkTrue("ll near tau2hat ≈ 0",  Math.abs(r.ll[idx]) < 0.05);
+  }
+
+  // ---- 2. Curve is non-increasing away from peak (unimodal) ----
+  {
+    console.log("--- 2. unimodal ---");
+    const r = profileLikTau2(studiesPL, { method: "REML", nGrid: 200 });
+    // Find argmax on grid
+    let peak = 0;
+    for (let i = 1; i < r.ll.length; i++) if (r.ll[i] > r.ll[peak]) peak = i;
+    // Left side: ll should be non-decreasing toward peak (allow 1e-10 float noise)
+    let monoViolL = 0;
+    for (let i = 1; i <= peak; i++) if (r.ll[i] < r.ll[i-1] - 1e-10) monoViolL++;
+    // Right side: ll should be non-increasing from peak
+    let monoViolR = 0;
+    for (let i = peak+1; i < r.ll.length; i++) if (r.ll[i] > r.ll[i-1] + 1e-10) monoViolR++;
+    plChkExact("no violations left of peak",  monoViolL, 0);
+    plChkExact("no violations right of peak", monoViolR, 0);
+  }
+
+  // ---- 3. CI bounds satisfy LR criterion ----
+  {
+    console.log("--- 3. CI bounds satisfy LR criterion ---");
+    // Use REML (ciLow > 0 for this dataset, so both bounds are interior)
+    const r = profileLikTau2(studiesPL, { method: "REML", nGrid: 200 });
+    plChkTrue("ciLow > 0 (REML, heterogeneous)", r.ciLow > 0);
+    // Evaluate the REML profile at each bound; should equal lCritRel within 1e-9
+    function evalREML(t) {
+      let W = 0, Wmu = 0;
+      for (const d of studiesPL) { const w = 1 / (d.vi + t); W += w; Wmu += w * d.yi; }
+      const mu = Wmu / W;
+      let ll = 0;
+      for (const d of studiesPL) { const w = 1 / (d.vi + t); ll -= 0.5 * (Math.log(d.vi + t) + w * (d.yi - mu) ** 2); }
+      ll -= 0.5 * Math.log(W);
+      return ll - r.lMax;
+    }
+    plChkTrue("ll(ciLow)  ≈ lCritRel",  Math.abs(evalREML(r.ciLow)  - r.lCritRel) < 1e-9);
+    plChkTrue("ll(ciHigh) ≈ lCritRel",  Math.abs(evalREML(r.ciHigh) - r.lCritRel) < 1e-9);
+    // ciLow < tau2hat < ciHigh
+    plChkTrue("ciLow < tau2hat",  r.ciLow  < r.tau2hat);
+    plChkTrue("tau2hat < ciHigh", r.tau2hat < r.ciHigh);
+  }
+
+  // ---- 4. Homogeneous data: ciLow = 0, tau2hat = 0 ----
+  {
+    console.log("--- 4. homogeneous data ---");
+    const r = profileLikTau2(studiesHom, { method: "REML", nGrid: 200 });
+    plChkTrue("no error",       !r.error);
+    plChkTrue("tau2hat = 0",    r.tau2hat === 0);
+    plChkExact("ciLow = 0",     r.ciLow,  0);
+    plChkTrue("ciHigh > 0",     r.ciHigh  > 0);
+  }
+
+  // ---- 5. Grid covers CI ----
+  {
+    console.log("--- 5. grid covers CI ---");
+    const r = profileLikTau2(studiesPL, { method: "ML", nGrid: 200 });
+    plChkExact("grid[0] = 0",         r.grid[0], 0);
+    plChkTrue ("grid[last] > ciHigh", r.grid[r.grid.length - 1] > r.ciHigh);
+    plChkExact("grid length = nGrid", r.ll.length, 200);
+  }
+
+  // ---- 6. Non-ML/REML method returns error ----
+  {
+    console.log("--- 6. unsupported method returns error ---");
+    const eDL = profileLikTau2(studiesPL, { method: "DL" });
+    plChkTrue("DL → error",  !!eDL.error);
+    const ePM = profileLikTau2(studiesPL, { method: "PM" });
+    plChkTrue("PM → error",  !!ePM.error);
+    const eHS = profileLikTau2(studiesPL, { method: "HS" });
+    plChkTrue("HS → error",  !!eHS.error);
+  }
+
+  // ---- 7. REML result differs from ML ----
+  {
+    console.log("--- 7. REML vs ML ---");
+    const rML   = profileLikTau2(studiesPL, { method: "ML"   });
+    const rREML = profileLikTau2(studiesPL, { method: "REML" });
+    plChkTrue("REML tau2hat > ML tau2hat", rREML.tau2hat > rML.tau2hat);
+    plChkExact("ML method field",   rML.method,   "ML");
+    plChkExact("REML method field", rREML.method, "REML");
+  }
+
+  // ---- 8. k = 2 edge case ----
+  {
+    console.log("--- 8. k=2 ---");
+    const r = profileLikTau2(studiesK2, { method: "REML", nGrid: 100 });
+    plChkTrue ("no error",           !r.error);
+    plChkExact("k = 2",              r.k, 2);
+    plChkTrue ("tau2hat finite",     isFinite(r.tau2hat));
+    plChkTrue ("ciHigh finite",      isFinite(r.ciHigh));
+    plChkTrue ("grid length = 100",  r.ll.length === 100);
+    plChkTrue ("all ll ≤ 1e-9",      Array.from(r.ll).every(v => v <= 1e-9));
+  }
+
+  // ---- 9. k < 2 returns error ----
+  {
+    console.log("--- 9. k<2 returns error ---");
+    const e1 = profileLikTau2([{ yi: 0, vi: 1 }]);
+    plChkTrue("k=1 → error", !!e1.error);
+    const e0 = profileLikTau2([]);
+    plChkTrue("k=0 → error", !!e0.error);
+  }
+
+  // ---- 10. Cross-check: tau2hat matches tau2_ML directly ----
+  {
+    console.log("--- 10. cross-check vs tau2_ML / profileLikCI ---");
+    const rML = profileLikTau2(studiesPL, { method: "ML" });
+    // tau2hat from profileLikTau2 should equal tau2_ML(studies) within float noise
+    plChk("tau2hat = tau2_ML", rML.tau2hat, tau2_ML(studiesPL), 1e-10);
+    // profileLikCI gives the mu CI; both functions use the same likelihood so
+    // the mu CI should be finite for this dataset
+    const muCI = profileLikCI(studiesPL);
+    plChkTrue("profileLikCI lower finite", isFinite(muCI[0]));
+    plChkTrue("profileLikCI upper finite", isFinite(muCI[1]));
+    // tau2hat > 0 for clearly heterogeneous data
+    plChkTrue("tau2hat > 0 (heterogeneous)", rML.tau2hat > 0);
+    // lCritRel ≈ −χ²(0.95,1)/2 ≈ −1.9207
+    plChk("lCritRel ≈ -1.9207", rML.lCritRel, -1.9207294103470494, 1e-10);
+  }
+
+  console.log(plPass ? "\n✅ ALL PROFILE LIKELIHOOD τ² TESTS PASSED" : "\n❌ SOME PROFILE LIKELIHOOD τ² TESTS FAILED");
 }

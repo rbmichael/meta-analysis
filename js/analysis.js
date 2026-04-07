@@ -722,6 +722,98 @@ export function profileLikCI(studies, alpha = 0.05) {
   return [findBound(-1), findBound(+1)];
 }
 
+// ================= PROFILE LIKELIHOOD FOR τ² =================
+// Computes the profile log-likelihood curve L_p(τ²) by substituting the
+// closed-form RE mean μ̂(τ²) = Σwᵢyᵢ / Σwᵢ (wᵢ = 1/(vᵢ+τ²)) at each τ².
+//
+// For ML:   L_p(τ²) = −½ Σ[log(vᵢ+τ²) + (yᵢ−μ̂)²/(vᵢ+τ²)]
+// For REML: L_p(τ²) = L_ML(τ²) − ½ log(Σwᵢ)
+//
+// The 95% CI for τ² is the set where 2(lMax − L_p(τ²)) ≤ χ²(1, 0.95),
+// found by bisection. The lower bound is clipped to 0.
+export function profileLikTau2(studies, opts = {}) {
+  const k      = studies.length;
+  const method = opts.method !== undefined ? opts.method : "REML";
+  const nGrid  = opts.nGrid  !== undefined ? opts.nGrid  : 200;
+  const alpha  = opts.alpha  !== undefined ? opts.alpha  : 0.05;
+
+  if (k < 2)
+    return { error: "Profile likelihood requires at least 2 studies (got " + k + ")" };
+  if (method !== "ML" && method !== "REML")
+    return { error: 'method must be "ML" or "REML" (got "' + method + '")' };
+
+  function evalProfile(tau2) {
+    let W = 0, Wmu = 0;
+    for (const d of studies) {
+      const w = 1 / (d.vi + tau2);
+      W   += w;
+      Wmu += w * d.yi;
+    }
+    const mu = Wmu / W;
+    let ll = logLik(studies, mu, tau2);
+    if (method === "REML") ll -= 0.5 * Math.log(W);
+    return ll;
+  }
+
+  const tau2hat = method === "REML" ? tau2_REML(studies) : tau2_ML(studies);
+  const lMax    = evalProfile(tau2hat);
+  const chi2thresh = chiSquareQuantile(1 - alpha, 1);
+  const lCrit   = lMax - chi2thresh / 2;
+
+  // ---- Find upper bracket: double from max(4*tau2hat, 0.5) until well below lCrit ----
+  let hi = Math.max(tau2hat * 4, 0.5);
+  while (evalProfile(hi) > lCrit - 4) hi *= 2;
+
+  // ---- CI lower bound ----
+  let ciLow;
+  if (evalProfile(0) >= lCrit) {
+    ciLow = 0;
+  } else {
+    // Bisect on [0, tau2hat]: find root of evalProfile(t) - lCrit = 0
+    let lo = 0, bhi = tau2hat;
+    for (let i = 0; i < BISECTION_ITERS; i++) {
+      const mid = (lo + bhi) / 2;
+      if (evalProfile(mid) >= lCrit) bhi = mid; else lo = mid;
+    }
+    ciLow = (lo + bhi) / 2;
+  }
+
+  // ---- CI upper bound: bisect on [tau2hat, hi] ----
+  let ciHigh;
+  {
+    let lo = tau2hat, bhi = hi;
+    for (let i = 0; i < BISECTION_ITERS; i++) {
+      const mid = (lo + bhi) / 2;
+      if (evalProfile(mid) >= lCrit) lo = mid; else bhi = mid;
+    }
+    ciHigh = (lo + bhi) / 2;
+  }
+
+  // ---- Build grid from 0 to hi, compute shifted log-likelihood ----
+  const grid = new Float64Array(nGrid);
+  const ll   = new Float64Array(nGrid);
+  const step = hi / (nGrid - 1);
+  for (let i = 0; i < nGrid; i++) {
+    const t  = i * step;
+    grid[i]  = t;
+    ll[i]    = evalProfile(t) - lMax;   // shifted so peak = 0
+  }
+
+  return {
+    grid,
+    ll,
+    tau2hat,
+    lMax,
+    lCrit,
+    lCritRel: lCrit - lMax,             // ≈ −1.921 for 95%
+    ciLow,
+    ciHigh,
+    method,
+    k,
+    alpha,
+  };
+}
+
 // ================= REML TAU² =================
 // General-purpose REML estimator. Works for any effect type — studies must
 // already have yi and vi set (as produced by compute()). Uses the DL
