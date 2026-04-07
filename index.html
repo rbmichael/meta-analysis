@@ -51,10 +51,10 @@
       <div class="settings-row">
         <input type="file" id="csvFile" accept=".csv" style="display:none">
         <button id="import">Import CSV</button>
-        <button id="export">Export CSV</button>
+        <button id="export">Export CSV</button><button class="help-btn" data-help="input.csv" title="Help">?</button>
         <input type="file" id="sessionFile" accept=".json" style="display:none">
         <button id="saveSession">Save Session</button>
-        <button id="loadSession">Load Session</button>
+        <button id="loadSession">Load Session</button><button class="help-btn" data-help="input.session" title="Help">?</button>
       </div>
       <div id="csvWarning"></div>
 
@@ -149,14 +149,14 @@
           <option value="continuous">Continuous</option>
           <option value="categorical">Categorical</option>
         </select>
-        <button id="addMod">+ Add</button>
+        <button id="addMod">+ Add</button><button class="help-btn" data-help="input.moderators" title="Help">?</button>
       </div>
 
       <!-- Risk-of-bias domain manager -->
       <div id="robManager">
         <strong>Risk-of-bias domains:</strong>
         <input type="text" id="robDomainInput" placeholder="Domain name" style="width:160px">
-        <button id="addRobDomain">+ Add</button>
+        <button id="addRobDomain">+ Add</button><button class="help-btn" data-help="input.rob" title="Help">?</button>
         <div id="robDomainTags"></div>
       </div>
 
@@ -268,7 +268,7 @@
         <details class="results-section" id="hetDiagSection" style="display:none">
           <summary class="results-section-header">Heterogeneity Diagnostics</summary>
           <div class="plot-block" id="profileLikTau2Block">
-            <p class="plot-label">Profile likelihood for τ²</p>
+            <p class="plot-label">Profile likelihood for τ²<button class="help-btn" data-help="diag.profileLik" title="Help">?</button></p>
             <div style="margin-bottom:6px">
               <label class="inline">x-axis:
                 <select id="profileLikScale">
@@ -481,25 +481,24 @@
 
         <!-- ── Section 10: GOSH Plot ── -->
         <details class="results-section" id="goshSection">
-          <summary class="results-section-header">GOSH Plot
-            <span class="section-controls">
-              <label class="inline">X-axis:
-                <select id="goshXAxis">
-                  <option value="I2">I²</option>
-                  <option value="Q">Q</option>
-                  <option value="n">n (subset size)</option>
-                </select>
-              </label>
-              <label class="inline">Max subsets:
-                <select id="goshMaxSubsets">
-                  <option value="10000">10 000</option>
-                  <option value="50000" selected>50 000</option>
-                  <option value="100000">100 000</option>
-                </select>
-              </label>
-              <button id="goshRun" class="run-btn">Compute</button>
-            </span>
-          </summary>
+          <summary class="results-section-header">GOSH Plot</summary>
+          <div style="margin-bottom:6px">
+            <label class="inline">X-axis:
+              <select id="goshXAxis">
+                <option value="I2">I²</option>
+                <option value="Q">Q</option>
+                <option value="n">n (subset size)</option>
+              </select>
+            </label>
+            <label class="inline">Max subsets:
+              <select id="goshMaxSubsets">
+                <option value="10000">10 000</option>
+                <option value="50000" selected>50 000</option>
+                <option value="100000">100 000</option>
+              </select>
+            </label>
+            <button id="goshRun" class="run-btn">Compute</button><button class="help-btn" data-help="diag.gosh" title="Help">?</button>
+          </div>
           <div id="goshProgress" hidden>
             <progress id="goshProgressBar" value="0" max="100" style="width:100%"></progress>
             <span id="goshProgressLabel"></span>
@@ -618,6 +617,7 @@
         <li><strong>CI methods:</strong> Normal/Wald, Knapp–Hartung, <em>t</em>-distribution, Profile Likelihood (REML or ML)</li>
         <li><strong>Statistics:</strong> Cochran's <em>Q</em>, <em>I</em>², <em>H</em>², τ², 95% prediction interval (Higgins 2009)</li>
         <li><strong>Confidence intervals on heterogeneity:</strong> Profile-likelihood CIs for τ², <em>I</em>², <em>H</em>²</li>
+        <li><strong>Profile likelihood plot for τ²:</strong> full likelihood surface with LRT-based 95% CI; available when τ² estimator is ML or REML</li>
       </ul>
 
       <!-- ---- Publication bias ---- -->
@@ -686,6 +686,8 @@
             <tr><td>RoB traffic light</td><td>Per-study, per-domain ratings as a colour-coded grid.</td></tr>
             <tr><td>RoB summary</td><td>Stacked bar chart of domain-level rating distributions.</td></tr>
             <tr><td>Bubble plots</td><td>Meta-regression fit per continuous moderator, bubbles sized by weight.</td></tr>
+            <tr><td>GOSH plot</td><td>Graphical display of study heterogeneity: I² and μ̂ for every non-empty subset of studies. Reveals influential studies and heterogeneity patterns invisible to leave-one-out. Enumerated exactly for k ≤ 15; random-sampled for k ≤ 30.</td></tr>
+            <tr><td>Profile likelihood (τ²)</td><td>Profile log-likelihood curve for τ² with a 95% CI from likelihood-ratio inversion (LRT). Available for ML and REML only. x-axis toggles between τ² and τ.</td></tr>
           </tbody>
         </table>
       </div>
@@ -719,9 +721,11 @@
         <li>Higgins JPT, Thompson SG, Spiegelhalter DJ (2009). A re-evaluation of random-effects meta-analysis. <em>J R Stat Soc A,</em> 172, 137–159.</li>
         <li>Knapp G, Hartung J (2003). Improved tests for a random effects meta-regression with a single covariate. <em>Stat Med,</em> 22, 2693–2710.</li>
         <li>Morris SB (2008). Estimating effect sizes from pretest-posttest-control group designs. <em>Org Res Methods,</em> 11, 364–386.</li>
+        <li>Olkin I, Dahabreh IJ, Trikalinos TA (2012). GOSH — a graphical display of study heterogeneity. <em>Res Synth Methods,</em> 3(3), 214–223.</li>
         <li>Paule RC, Mandel J (1982). Consensus values and weighting factors. <em>J Res Natl Bur Stand,</em> 87, 377–385.</li>
         <li>Simonsohn U, Nelson LD, Simmons JP (2014). P-curve: A key to the file-drawer. <em>J Exp Psychol Gen,</em> 143(2), 534–547.</li>
         <li>van Assen MALM, van Aert RCM, Wicherts JM (2015). Meta-analysis using effect size distributions of only statistically significant studies. <em>Psychol Methods,</em> 20(3), 293–309.</li>
+        <li>Vevea JL, Hedges LV (1995). A general linear model for estimating effect size in the presence of publication bias. <em>Psychometrika,</em> 60(3), 419–435.</li>
         <li>Viechtbauer W (2005). Bias and efficiency of meta-analytic variance estimators in the random-effects model. <em>J Educ Behav Stat,</em> 30, 261–293.</li>
         <li>Viechtbauer W (2010). Conducting meta-analyses in R with the metafor package. <em>J Stat Softw,</em> 36(3), 1–48.</li>
       </ol>

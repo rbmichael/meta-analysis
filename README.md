@@ -28,6 +28,7 @@ A browser-based meta-analysis tool. No installation, no server, no dependencies 
 - **CI methods:** Normal/Wald, Knapp-Hartung, *t*-distribution, Profile Likelihood (requires REML or ML)
 - **Heterogeneity statistics:** Cochran's *Q*, *I*², *H*², τ², 95% prediction interval (Higgins 2009, *t*\_{*k*−2})
 - **Confidence intervals on heterogeneity:** Profile-likelihood CIs for τ², *I*², *H*²
+- **Profile likelihood plot for τ²** — full likelihood surface with LRT-based 95% CI; x-axis toggles between τ² and τ; available for ML and REML only
 
 ### Publication bias
 
@@ -37,6 +38,7 @@ A browser-based meta-analysis tool. No installation, no server, no dependencies 
 - **Fail-safe N** — Rosenthal and Orwin estimators
 - **Trim-and-fill** (L0 estimator) — imputes missing studies and reports the adjusted pooled estimate
 - **Funnel plot** — standard or contour-enhanced (p-value regions at α = .10, .05, .01)
+- **Selection model (Vevea-Hedges)** — ω-weighted likelihood model for publication bias; MLE mode (k ≥ 8) estimates selection weights jointly with μ and τ²; fixed-ω sensitivity presets (Mild / Moderate / Severe, Vevea & Woods 2005) available from k ≥ 3
 
 ### P-value analyses
 
@@ -49,6 +51,7 @@ A browser-based meta-analysis tool. No installation, no server, no dependencies 
 - **Influence diagnostics table** — Cook's distance, DFBETA, hat values (*h*ᵢ), standardised residuals, Δτ²
 - **Influence plot** — per-study leverage and influence visualised
 - **Baujat plot** — heterogeneity contribution vs. overall influence; identifies problematic studies
+- **GOSH plot** — fixed-effects pooled estimate and I² for every non-empty subset of studies; exact enumeration for k ≤ 15, random-sampled for k ≤ 30 (default 50 000 subsets)
 - **Estimator comparison** — runs all 7 τ² estimators side-by-side for a given dataset
 - **Cumulative meta-analysis** — adds studies in user-selected order (input order, precision ascending/descending, effect size ascending/descending)
 
@@ -84,6 +87,8 @@ All plots export as SVG, PNG, or TIFF. Log-scale effect types label the axis in 
 | P-uniform* | Publication-bias-corrected effect size estimate. |
 | RoB traffic light | Per-study, per-domain risk-of-bias ratings as a colour-coded grid. |
 | RoB summary | Stacked bar chart showing domain-level rating distributions. |
+| GOSH plot | Fixed-effects μ̂ and I² for every non-empty subset of studies. Exact for k ≤ 15; sampled for k ≤ 30. |
+| Profile likelihood (τ²) | Profile log-likelihood curve for τ² with LRT-based 95% CI. x-axis toggles between τ² and τ. ML/REML only. |
 | Bubble plots | Meta-regression fit per continuous moderator, bubbles sized by weight. |
 
 ---
@@ -137,8 +142,10 @@ cd meta-analysis
 - Knapp G, Hartung J (2003). Improved tests for a random effects meta-regression with a single covariate. *Stat Med*, 22, 2693–2710.
 - Morris SB (2008). Estimating effect sizes from pretest-posttest-control group designs. *Org Res Methods*, 11, 364–386.
 - Paule RC, Mandel J (1982). Consensus values and weighting factors. *J Res Natl Bur Stand*, 87, 377–385.
+- Olkin I, Dahabreh IJ, Trikalinos TA (2012). GOSH — a graphical display of study heterogeneity. *Res Synth Methods*, 3(3), 214–223.
 - Simonsohn U, Nelson LD, Simmons JP (2014). P-curve: A key to the file-drawer. *J Exp Psychol Gen*, 143(2), 534–547.
 - van Assen MALM, van Aert RCM, Wicherts JM (2015). Meta-analysis using effect size distributions of only statistically significant studies. *Psychol Methods*, 20(3), 293–309.
+- Vevea JL, Hedges LV (1995). A general linear model for estimating effect size in the presence of publication bias. *Psychometrika*, 60(3), 419–435.
 - Viechtbauer W (2005). Bias and efficiency of meta-analytic variance estimators in the random-effects model. *J Educ Behav Stat*, 30, 261–293.
 - Viechtbauer W (2010). Conducting meta-analyses in R with the metafor package. *J Stat Softw*, 36(3), 1–48.
 

@@ -7,6 +7,48 @@
 export const HELP = {
 
   // ------------------------------------------------------------------ //
+  // Input pane                                                           //
+  // ------------------------------------------------------------------ //
+
+  "input.csv": {
+    title: "Import / Export CSV",
+    body:  "Import CSV: load study data from a comma- or tab-separated file. " +
+           "Column headers are matched automatically to the fields required by the selected effect type " +
+           "(e.g. m1, sd1, n1, m2, sd2, n2 for MD; a, b, c, d for OR). " +
+           "A label column is optional but recommended; a group column assigns studies to subgroups. " +
+           "A preview panel lets you review and remap columns before committing. " +
+           "Export CSV: download the current data table as a CSV file.",
+  },
+
+  "input.session": {
+    title: "Save / Load Session",
+    body:  "Save Session: serialises the full application state — data, effect type, " +
+           "τ² estimator, CI method, moderators, and RoB ratings — to a JSON file. " +
+           "Load Session: restores a previously saved session from that JSON file. " +
+           "Sessions are also auto-saved to browser localStorage; a recovery banner " +
+           "appears on next load if unsaved changes are detected.",
+  },
+
+  "input.moderators": {
+    title: "Moderators",
+    body:  "Study-level covariates used in meta-regression and subgroup analysis. " +
+           "Continuous moderators produce a bubble plot and a slope estimate (β) per unit increase. " +
+           "Categorical moderators are dummy-coded automatically (first level = reference). " +
+           "Multiple moderators may be added simultaneously. " +
+           "Enter a column name, select Continuous or Categorical, then click + Add. " +
+           "Values are entered in the moderator columns of the data table.",
+  },
+
+  "input.rob": {
+    title: "Risk-of-bias domains",
+    body:  "User-defined assessment domains (e.g. Randomisation, Blinding, Attrition). " +
+           "Each domain gets a Low / Some concerns / High / Not reported rating per study, " +
+           "entered in the RoB grid that appears below the data table once domains are added. " +
+           "Results are visualised as a per-study traffic light grid and a per-domain summary bar chart " +
+           "in the Risk of Bias section of the Results pane.",
+  },
+
+  // ------------------------------------------------------------------ //
   // Effect types                                                         //
   // ------------------------------------------------------------------ //
 
@@ -655,6 +697,111 @@ export const HELP = {
            "by side. If results differ substantially across estimators, the conclusion " +
            "is sensitive to the choice of heterogeneity estimation method. The " +
            "currently selected estimator is highlighted.",
+  },
+
+  // ------------------------------------------------------------------ //
+  // P-value analyses                                                     //
+  // ------------------------------------------------------------------ //
+
+  "bias.pcurve": {
+    title: "P-curve",
+    body:  "Examines the distribution of significant p-values (p < .05) across studies. " +
+           "A right-skewed distribution — most p-values near zero — indicates evidential value. " +
+           "A flat or left-skewed distribution suggests p-hacking or absence of a true effect. " +
+           "Two formal tests: right-skew test (H₀: no effect) and flatness test (H₃₃: ≤33% power). " +
+           "Only studies with p < .05 are included. " +
+           "Simonsohn, Nelson & Simmons (2014).",
+  },
+
+  "bias.puniform": {
+    title: "P-uniform*",
+    body:  "Estimates a publication-bias-corrected effect size by exploiting the uniformity " +
+           "of conditional p-value quantiles under the true effect. " +
+           "Reports a bias-corrected estimate with 95% CI, a significance test (H₀: δ = 0), " +
+           "and a publication-bias test comparing the conditional quantiles at the RE estimate " +
+           "to a uniform distribution. " +
+           "Requires at least 2 significant studies. " +
+           "van Assen, van Aert & Wicherts (2015); improved variant van Aert & van Assen (2021).",
+  },
+
+  // ------------------------------------------------------------------ //
+  // Selection model                                                      //
+  // ------------------------------------------------------------------ //
+
+  "sel.model": {
+    title: "Selection model (Vevea-Hedges)",
+    body:  "Models the publication process by assigning relative selection weights ω " +
+           "to studies based on their p-value interval. " +
+           "MLE mode estimates ω jointly with μ and τ² (requires k ≥ 8); " +
+           "fixed-ω sensitivity mode holds ω at Mild / Moderate / Severe presets " +
+           "(requires k ≥ 3). " +
+           "A μ substantially lower than the standard RE estimate indicates publication bias. " +
+           "Vevea & Hedges (1995); presets from Vevea & Woods (2005).",
+  },
+
+  // ------------------------------------------------------------------ //
+  // Diagnostics                                                          //
+  // ------------------------------------------------------------------ //
+
+  "diag.baujat": {
+    title: "Baujat plot",
+    body:  "Scatter plot of per-study heterogeneity contribution (x) versus overall " +
+           "influence on the pooled estimate (y). Studies in the upper-right quadrant " +
+           "simultaneously inflate Cochran's Q and shift the pooled estimate — the most " +
+           "important candidates for sensitivity analysis. Reference lines are drawn at " +
+           "the means of each axis. Introduced by Baujat et al. (2002).",
+  },
+
+  "diag.gosh": {
+    title: "GOSH plot",
+    body:  "Graphical Display of Study Heterogeneity (Olkin et al. 2012). " +
+           "Plots the fixed-effects pooled estimate and I² (or Q, or n) for every " +
+           "non-empty subset of the k studies. Fan-shaped or bimodal clusters reveal " +
+           "influential studies invisible to leave-one-out analysis. " +
+           "Enumerated exactly for k ≤ 15; random-sampled for k ≤ 30 (default 50 000 subsets). " +
+           "Click Compute to run; large k may take a few seconds.",
+  },
+
+  "diag.profileLik": {
+    title: "Profile likelihood for τ²",
+    body:  "Shows the profile log-likelihood curve for τ² (ML or REML). " +
+           "The 95% CI is the range where the curve exceeds the −1.921 threshold " +
+           "(likelihood-ratio inversion). " +
+           "This CI differs from the Q-profile CI in the summary table, which is " +
+           "moment-based and uses Cochran's Q rather than the full likelihood. " +
+           "The x-axis can be toggled between τ² (variance) and τ (SD). " +
+           "Only available for ML and REML estimators.",
+  },
+
+  "diag.metaregression": {
+    title: "Meta-regression",
+    body:  "Regresses study effect sizes on one or more study-level moderators " +
+           "(continuous or categorical) using weighted least squares with RE weights. " +
+           "Reports β coefficients with SEs, z/t statistics, p-values, and 95% CIs; " +
+           "Q_M (omnibus moderator test); Q_E (residual heterogeneity); " +
+           "R² (proportion of variance explained); and VIFs (collinearity). " +
+           "Bubble plots are generated per continuous moderator. " +
+           "Rule of thumb: ≥ 10 studies per predictor for adequate power.",
+  },
+
+  "diag.subgroup": {
+    title: "Subgroup analysis",
+    body:  "Fits a separate RE model within each study group (defined by the Group column). " +
+           "Reports the pooled estimate, τ², I², and 95% CI for each group. " +
+           "Q_between tests whether the mean effect differs across groups " +
+           "(χ² with G − 1 df, where G is the number of groups). " +
+           "Subgroup analyses should be pre-registered to control Type I error.",
+  },
+
+  "diag.influence": {
+    title: "Influence diagnostics",
+    body:  "Per-study diagnostics computed by leave-one-out re-analysis: " +
+           "standardised residual (|r| > 2 flags outliers), " +
+           "DFBETA (|DFBETA| > 1 flags disproportionate influence on the pooled estimate), " +
+           "hat value (leverage, h > 2/k), " +
+           "Cook's distance (D > 4/k), and Δτ² (change in heterogeneity on removal). " +
+           "The influence plot shows hat value vs. Cook's distance as a bubble chart. " +
+           "Viechtbauer & Cheung (2010).",
   },
 
 };

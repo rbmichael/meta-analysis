@@ -478,7 +478,13 @@ scale.</p>
 within μ ± τ (assuming normality), and it is used to construct the
 prediction interval.</p>
 <p>A τ of 0.2 for SMD data, for example, means that two-thirds of true
-effects in the population lie within 0.2 SMD units of the pooled mean.</p>`,
+effects in the population lie within 0.2 SMD units of the pooled mean.</p>
+<p>A profile likelihood plot for τ² — showing the full likelihood surface and
+an LRT-based 95% CI — is available under <strong>Heterogeneity
+Diagnostics</strong> when the τ² estimator is ML or REML. This CI differs
+from the Q-profile CI shown in the summary table, which is moment-based; see
+<a href="#guide-profile-lik-tau2">Profile likelihood for τ²</a> for
+details.</p>`,
         citations: [
           "Viechtbauer, W. (2005). Bias and efficiency of meta-analytic variance estimators in the random-effects model. <em>Journal of Educational and Behavioral Statistics, 30</em>(3), 261–293.",
         ],
@@ -768,8 +774,210 @@ estimate.</p>`,
           "Becker, B. J. (2005). Failsafe N or file-drawer number. In H. R. Rothstein, A. J. Sutton, & M. Borenstein (Eds.), <em>Publication bias in meta-analysis</em> (pp. 111–125). Wiley.",
         ],
       },
+
+      {
+        id: "guide-pcurve",
+        title: "P-curve",
+        body: `<p>P-curve (Simonsohn, Nelson &amp; Simmons, 2014) examines the distribution
+of statistically significant p-values (p &lt; .05) across studies. When studies
+test a true effect, significant p-values should be right-skewed — concentrated
+near zero. A flat or left-skewed distribution is consistent with p-hacking or
+the absence of a true effect.</p>
+<p><strong>What is plotted:</strong> The proportion of significant studies falling
+in each 0.01-wide bin (0–.01, .01–.02, …, .04–.05), with two reference lines:</p>
+<ul>
+  <li><strong>Null line (20%)</strong> — expected proportion under the null
+  hypothesis of no true effect (each bin equally likely).</li>
+  <li><strong>33%-power line</strong> — expected distribution if studies have 33%
+  power, used as the "low evidential value" benchmark.</li>
+</ul>
+<p><strong>Two formal tests:</strong></p>
+<ul>
+  <li><strong>Right-skew test</strong> (H₀: no effect) — tests whether p-values
+  cluster below their expected midpoint under the null. A significant result
+  (p &lt; .05) indicates right-skew and suggests evidential value.</li>
+  <li><strong>Flatness test</strong> (H₃₃: ≤33% power) — tests whether the
+  distribution is no flatter than expected at 33% power. A significant result
+  indicates the evidence base lacks evidential value.</li>
+</ul>
+<p><strong>Verdict logic:</strong> Evidential (right-skew p &lt; .05); No
+evidential value (flatness p &lt; .05); Inconclusive (neither); Insufficient
+(fewer than 3 significant studies).</p>
+<p><strong>Important limitation:</strong> P-curve uses only significant studies;
+studies with p ≥ .05 are excluded. If the literature is severely publication-biased,
+the curve may still appear right-skewed even when the effect is inflated. Use
+alongside other bias tests rather than in isolation.</p>`,
+        citations: [
+          "Simonsohn, U., Nelson, L. D., & Simmons, J. P. (2014). P-curve: A key to the file-drawer. <em>Journal of Experimental Psychology: General, 143</em>(2), 534–547.",
+          "Simonsohn, U., Simmons, J. P., & Nelson, L. D. (2015). Better p-curves: Making p-curve analysis more robust to errors, fraud, and ambitious p-hacking, a reply to Ulrich and Miller (2015). <em>Journal of Experimental Psychology: General, 144</em>(6), 1146–1152.",
+        ],
+      },
+
+      {
+        id: "guide-puniform",
+        title: "P-uniform*",
+        body: `<p>P-uniform* (van Assen, van Aert &amp; Wicherts, 2015; van Aert &amp; van
+Assen, 2021) estimates a publication-bias-corrected effect size by exploiting
+the fact that, conditional on statistical significance, the distribution of
+p-value quantiles should be uniform if the assumed effect equals the true
+effect.</p>
+<p><strong>Key quantities:</strong></p>
+<ul>
+  <li><strong>Estimate (δ*)</strong> — the effect size at which the mean conditional
+  quantile equals 0.5 (solved by bisection). This is the bias-corrected point
+  estimate.</li>
+  <li><strong>95% CI</strong> — the range of δ for which the sum of conditional
+  quantiles falls within the 95% normal interval around k/2.</li>
+  <li><strong>Significance test</strong> (H₀: δ = 0) — tests whether the
+  quantile distribution is consistent with a true effect of zero. Evidence
+  against H₀: left-skewed quantiles at δ = 0.</li>
+  <li><strong>Publication-bias test</strong> (H₀: no bias) — tests whether the
+  conditional quantiles computed at the RE estimate are uniformly distributed.
+  A significant result suggests the RE estimate is inflated by publication
+  bias.</li>
+</ul>
+<p><strong>Comparison with p-curve:</strong> Both methods use only significant
+studies and exploit the conditional distribution of p-values. P-uniform* also
+produces a corrected point estimate and CI; p-curve only tests for evidential
+value. P-uniform* is more sensitive to violations when study precision varies
+across studies.</p>
+<p><strong>Limitation:</strong> Like p-curve, it assumes publication bias
+operates entirely through p-value selection. Requires at least 2 significant
+studies.</p>`,
+        citations: [
+          "van Assen, M. A. L. M., van Aert, R. C. M., & Wicherts, J. M. (2015). Meta-analysis using effect size distributions of only statistically significant studies. <em>Psychological Methods, 20</em>(3), 293–309.",
+          "van Aert, R. C. M., & van Assen, M. A. L. M. (2021). Correcting for publication bias in a meta-analysis with the p-uniform* method. <em>Research Synthesis Methods, 14</em>(6), 1–19.",
+        ],
+      },
+
+      {
+        id: "guide-selection-model",
+        title: "Selection model (Vevea-Hedges)",
+        body: `<p>Selection models (Vevea &amp; Hedges, 1995) directly model the publication
+process by assuming studies are selected with probability proportional to a
+weight function ω(p) that depends on the study's p-value. Studies in the most
+significant interval (p ≤ .025 for one-sided) receive weight ω = 1; less
+significant studies receive relative weights ω &lt; 1.</p>
+<p><strong>Two modes:</strong></p>
+<ul>
+  <li><strong>MLE mode</strong> — the ω weights are estimated jointly with μ and
+  τ² by maximum likelihood (BFGS optimisation). A likelihood-ratio test (LRT)
+  compares the selection model to an unweighted RE model. Requires at least
+  k ≥ K + 2 studies, where K = 6 is the number of p-value intervals.</li>
+  <li><strong>Sensitivity / fixed-ω mode</strong> — ω is held fixed at a
+  pre-specified severity pattern and only μ and τ² are estimated. Follows the
+  Vevea &amp; Woods (2005) presets: Mild, Moderate, and Severe (both one-sided
+  and two-sided). Requires k ≥ 3.</li>
+</ul>
+<p><strong>P-value intervals (one-sided):</strong><br>
+p ≤ .025, .025–.05, .05–.10, .10–.25, .25–.50, .50–1.0</p>
+<p><strong>Interpretation:</strong> A substantially lower μ under the selection
+model than in the standard RE model is evidence of publication bias. The LRT
+tests whether assuming ω &lt; 1 for non-significant results significantly
+improves model fit over the unweighted RE model.</p>
+<p><strong>Limitations:</strong> The model assumes the same selection function
+operates across all studies and that p-values are the sole driver of publication
+decisions. With small k the ω parameters may not be well-identified; the
+fixed-ω sensitivity presets are more reliable in that case.</p>`,
+        citations: [
+          "Vevea, J. L., & Hedges, L. V. (1995). A general linear model for estimating effect size in the presence of publication bias. <em>Psychometrika, 60</em>(3), 419–435.",
+          "Vevea, J. L., & Woods, C. M. (2005). Publication bias in research synthesis: Sensitivity analysis using a priori weight functions. <em>Psychological Methods, 10</em>(4), 428–443.",
+        ],
+      },
     ],
   },
+
+  // ------------------------------------------------------------------ //
+  // Subgroup Analysis & Meta-regression                                  //
+  // ------------------------------------------------------------------ //
+  {
+    id: "subgroup-regression",
+    heading: "Subgroup Analysis & Meta-regression",
+    topics: [
+
+      {
+        id: "guide-subgroup",
+        title: "Subgroup analysis",
+        body: `<p>Subgroup analysis partitions studies into named groups (entered in the
+Group column of the data table) and fits a separate random-effects model
+within each group. It addresses the question: does the average effect
+differ across levels of a categorical study characteristic?</p>
+<p><strong>Between-group test:</strong> Cochran's Q is decomposed into
+within-group (Q<sub>within</sub>) and between-group (Q<sub>between</sub>)
+components. Q<sub>between</sub> follows a χ² distribution with G − 1
+degrees of freedom under the null of equal group means, where G is the
+number of groups.</p>
+<p><code>Q<sub>between</sub> = Q<sub>total</sub> − Σ Q<sub>g</sub></code><br>
+(computed on the pooled study set, not re-pooling within groups)</p>
+<p><strong>Interpretation:</strong> A significant Q<sub>between</sub>
+(p &lt; .05) suggests the subgroup variable moderates the effect. However,
+subgroup analyses are exploratory unless pre-registered; multiple comparisons
+across many categorical variables inflate the Type I error rate.</p>
+<p><strong>Limitation of assumed-common-τ² models:</strong> The
+implementation fits separate τ² values per subgroup (separate RE models).
+An alternative is to assume a common τ² across groups (as in
+meta-regression with a categorical predictor), which has higher power but
+requires the heterogeneity assumption to hold across groups.</p>`,
+        citations: [
+          "Borenstein, M., & Higgins, J. P. T. (2013). Meta-analysis and subgroups. <em>Prevention Science, 14</em>(2), 134–143.",
+          "Higgins, J. P. T., & Thompson, S. G. (2004). Controlling the risk of spurious findings from meta-regression. <em>Statistics in Medicine, 23</em>(11), 1663–1682.",
+        ],
+      },
+
+      {
+        id: "guide-metaregression",
+        title: "Meta-regression",
+        body: `<p>Meta-regression extends the random-effects model by including study-level
+covariates (moderators) as predictors of the true effect size. It addresses
+the question: does the average effect vary with a measurable study
+characteristic?</p>
+<p><strong>Model:</strong><br>
+<code>yᵢ = β₀ + β₁x₁ᵢ + … + βₚxₚᵢ + uᵢ + εᵢ</code><br>
+where uᵢ ~ N(0, τ²) is the residual between-study heterogeneity after
+accounting for moderators, and εᵢ ~ N(0, vᵢ) is within-study error.
+Coefficients are estimated by weighted least squares (WLS) using RE weights
+wᵢ = 1/(vᵢ + τ²), with τ² estimated by REML or the selected estimator.</p>
+<p><strong>Moderator types:</strong></p>
+<ul>
+  <li><strong>Continuous</strong> — entered as numeric values. The slope
+  β estimates the change in mean effect per unit increase in the moderator.
+  A bubble plot shows the regression line with study bubbles sized by
+  weight.</li>
+  <li><strong>Categorical</strong> — dummy-coded automatically (first
+  level = reference). Coefficients are mean differences from the reference
+  group.</li>
+</ul>
+<p><strong>Key output:</strong></p>
+<ul>
+  <li><strong>Q<sub>M</sub></strong> — omnibus test for all moderators
+  jointly (χ² with p − 1 df, where p is the number of predictors including
+  the intercept).</li>
+  <li><strong>Q<sub>E</sub></strong> — test of residual heterogeneity
+  (χ² with k − p df). A significant Q<sub>E</sub> means the moderators do
+  not fully explain the between-study variance.</li>
+  <li><strong>R²</strong> — proportion of the original between-study
+  variance explained by the moderators: (τ²₀ − τ²) / τ²₀. Negative values
+  are set to 0 (NaN when τ²₀ = 0).</li>
+  <li><strong>VIF</strong> — variance inflation factors; values &gt; 10
+  indicate collinearity among predictors.</li>
+</ul>
+<p><strong>Cautionary notes:</strong></p>
+<ul>
+  <li>Meta-regression has low power unless k is large (≥ 10 studies per
+  predictor is a common rule of thumb).</li>
+  <li>Ecological fallacy: a moderator significant at the study level does
+  not imply the same relationship within individual studies.</li>
+  <li>Without pre-registration, meta-regression is exploratory; results
+  should be clearly labelled as hypothesis-generating.</li>
+</ul>`,
+        citations: [
+          "Knapp, G., & Hartung, J. (2003). Improved tests for a random effects meta-regression with a single covariate. <em>Statistics in Medicine, 22</em>(17), 2693–2710.",
+          "Higgins, J. P. T., & Thompson, S. G. (2004). Controlling the risk of spurious findings from meta-regression. <em>Statistics in Medicine, 23</em>(11), 1663–1682.",
+          "Thompson, S. G., & Higgins, J. P. T. (2002). How should meta-regression analyses be undertaken and interpreted? <em>Statistics in Medicine, 21</em>(11), 1559–1573.",
+        ],
+      },
+    ],
+  },   // end "Subgroup Analysis & Meta-regression" section
 
   // ------------------------------------------------------------------ //
   // Plots & Diagnostics                                                  //
@@ -794,6 +1002,129 @@ substantial heterogeneity.</p>
 overall pooled estimates are shown separately.</p>`,
         citations: [
           "Lewis, S., & Clarke, M. (2001). Forest plots: Trying to see the wood and the trees. <em>BMJ, 322</em>(7300), 1479–1480.",
+        ],
+      },
+
+      {
+        id: "guide-influence",
+        title: "Influence diagnostics",
+        body: `<p>Quantitative per-study diagnostics that measure each study's impact on
+the pooled estimate, heterogeneity, and model fit. Computed by re-running
+the meta-analysis k times with one study removed each time (leave-one-out),
+then comparing the leave-one-out result to the full-dataset result.</p>
+<p><strong>Diagnostics reported:</strong></p>
+<ul>
+  <li><strong>RE (loo)</strong> — pooled estimate when the study is omitted.
+  Large deviations flag studies that anchor the conclusion.</li>
+  <li><strong>Standardised residual</strong> — (yᵢ − μ̂) / √(vᵢ + τ²).
+  Values with |r| &gt; 2 are flagged as potential outliers.</li>
+  <li><strong>DFBETA</strong> — standardised change in the RE estimate on
+  study removal: (μ̂_full − μ̂_loo) / SE_loo. |DFBETA| &gt; 1 flags
+  disproportionate influence on the point estimate.</li>
+  <li><strong>Hat value</strong> — h<sub>i</sub> = w<sub>i</sub> / Σw<sub>j</sub>,
+  the fraction of total RE weight held by the study. h<sub>i</sub> &gt; 2/k
+  flags high leverage.</li>
+  <li><strong>Cook's distance</strong> — D<sub>i</sub> = (μ̂_full − μ̂_loo)²
+  × Σw<sub>j</sub>. Measures the total shift of the pooled estimate on
+  removal, scaled by model precision. D<sub>i</sub> &gt; 4/k is a common
+  flag threshold (regression analogy).</li>
+  <li><strong>Δτ²</strong> — change in the between-study variance on study
+  removal. Negative values indicate the study inflates heterogeneity.</li>
+</ul>
+<p><strong>Influence plot:</strong> A bubble chart of hat value (x) vs.
+Cook's distance (y) per study, with bubble size proportional to weight.
+Studies in the upper-right region are simultaneously high-leverage and
+high-influence — the clearest candidates for sensitivity analysis.</p>
+<p><strong>Baujat plot:</strong> See the separate Baujat entry for a
+complementary visualisation of heterogeneity contribution vs. overall
+influence.</p>`,
+        citations: [
+          "Viechtbauer, W., & Cheung, M. W.-L. (2010). Outlier and influence diagnostics for meta-analysis. <em>Research Synthesis Methods, 1</em>(2), 112–125.",
+          "Cook, R. D. (1977). Detection of influential observation in linear regression. <em>Technometrics, 19</em>(1), 15–18.",
+        ],
+      },
+
+      {
+        id: "guide-baujat",
+        title: "Baujat plot",
+        body: `<p>A scatter plot that simultaneously displays two per-study diagnostics:</p>
+<ul>
+  <li><strong>x-axis</strong> — each study's contribution to Cochran's Q statistic
+  (heterogeneity influence)</li>
+  <li><strong>y-axis</strong> — each study's overall influence on the pooled estimate,
+  measured as the squared standardised change in the RE pooled estimate when that
+  study is removed</li>
+</ul>
+<p>Dashed reference lines at the means of each axis divide the plot into four
+quadrants. Studies in the upper-right quadrant simultaneously inflate heterogeneity
+and shift the pooled estimate — the most important candidates for sensitivity
+analysis.</p>
+<p>The plot is a quick visual screen before formal leave-one-out or Cook's-distance
+analysis. It does not replace quantitative influence diagnostics but is useful for
+communicating patterns to a broad audience.</p>`,
+        citations: [
+          "Baujat, B., Mahé, C., Pignon, J.-P., & Hill, C. (2002). A graphical method for exploring heterogeneity in meta-analyses: Application to a meta-analysis of 65 trials. <em>Statistics in Medicine, 21</em>(18), 2641–2652.",
+        ],
+      },
+
+      {
+        id: "guide-gosh",
+        title: "GOSH plot (Graphical Display of Study Heterogeneity)",
+        body: `<p>For every non-empty subset of the k studies the GOSH plot computes the
+fixed-effects pooled estimate μ̂ and I². Plotting μ̂ against I² (or Q, or subset
+size n) for all subsets creates a fingerprint of how heterogeneity is structured
+across the evidence base.</p>
+<p><strong>What to look for:</strong></p>
+<ul>
+  <li><strong>Fan-shaped or bimodal clusters</strong> indicate one or more studies
+  whose inclusion or exclusion fundamentally changes the pooled estimate or
+  heterogeneity — strong candidates for sensitivity analysis.</li>
+  <li><strong>A single compact cloud</strong> suggests the evidence base is consistent
+  and no single study dominates.</li>
+  <li><strong>Outlier subsets</strong> at extreme μ̂ or I² values usually trace back
+  to a single influential study; colour-coding by subset size (n) helps identify
+  which study is responsible.</li>
+</ul>
+<p><strong>Enumeration vs. sampling:</strong> For k ≤ 15 all 2<sup>k</sup> − 1
+subsets are computed exactly (at most 32 767). For k ≤ 30 a random sample of
+subsets is drawn (default 50 000); the sampling seed is fixed for reproducibility.
+k &gt; 30 is not supported.</p>
+<p><strong>Note:</strong> The GOSH plot uses fixed-effects pooling within each
+subset regardless of the main analysis model, because the between-study variance
+cannot be estimated reliably from small subsets.</p>`,
+        citations: [
+          "Olkin, I., Dahabreh, I. J., & Trikalinos, T. A. (2012). GOSH — a graphical display of study heterogeneity. <em>Research Synthesis Methods, 3</em>(3), 214–223.",
+          "Harbord, R. M., & Higgins, J. P. T. (2008). Meta-regression in Stata. <em>Stata Journal, 8</em>(4), 493–519.",
+        ],
+      },
+
+      {
+        id: "guide-profile-lik-tau2",
+        title: "Profile likelihood for τ²",
+        body: `<p>The profile log-likelihood for τ² is obtained by substituting the
+closed-form RE mean μ̂(τ²) = Σwᵢyᵢ / Σwᵢ (where wᵢ = 1/(vᵢ + τ²)) at each
+value of τ², so the curve is computed in a single O(k) pass per grid point
+with no inner optimisation required.</p>
+<p><strong>ML profile:</strong><br>
+<code>Lₚ(τ²) = −½ Σ[log(vᵢ+τ²) + wᵢ(yᵢ−μ̂)²]</code></p>
+<p><strong>REML profile</strong> adds one term to account for estimating μ:<br>
+<code>L_REML(τ²) = Lₚ(τ²) − ½ log(Σwᵢ)</code></p>
+<p>The curve is shifted so its peak is at 0; τ̂² appears as a vertical line at
+the maximum. The 95% confidence interval is the set of τ² values where the
+shifted curve exceeds −χ²(1, 0.95)/2 ≈ −1.921 (likelihood-ratio inversion).
+The lower CI bound is clipped to 0 when the profile at τ² = 0 lies above the
+threshold, which is common for datasets with low heterogeneity.</p>
+<p><strong>Difference from the Q-profile CI:</strong> The τ² CI in the summary
+table uses the Q-profile method, which inverts a χ² pivot based on Cochran's Q —
+a moment-based approach. The profile likelihood CI is derived from the full
+likelihood function. The two methods agree for large k but can differ noticeably
+when k is small. Neither uniformly dominates; the profile likelihood CI is
+generally preferred when ML or REML is used.</p>
+<p>Only available when the τ² estimator is ML or REML. The section is hidden for
+moment estimators (DL, PM, HS, etc.) that have no associated likelihood.</p>`,
+        citations: [
+          "Hardy, R. J., & Thompson, S. G. (1996). A likelihood approach to meta-analysis with random effects. <em>Statistics in Medicine, 15</em>(6), 619–629.",
+          "Viechtbauer, W. (2007). Confidence intervals for the amount of heterogeneity in meta-analysis. <em>Statistics in Medicine, 26</em>(1), 37–52.",
         ],
       },
 
@@ -949,6 +1280,17 @@ export const HELP_TO_GUIDE = {
   "cumorder.effect_desc":     "guide-cumulative",
   "sens.loo":         "guide-forest",
   "sens.estimator":   "guide-tau-overview",
+  "bias.pcurve":      "guide-pcurve",
+  "bias.puniform":    "guide-puniform",
+  "sel.model":        "guide-selection-model",
+  "diag.baujat":      "guide-baujat",
+  "diag.gosh":        "guide-gosh",
+  "diag.profileLik":  "guide-profile-lik-tau2",
+  "diag.influence":   "guide-influence",
+  "diag.subgroup":       "guide-subgroup",
+  "diag.metaregression": "guide-metaregression",
+  "input.moderators":    "guide-subgroup",
+  "input.rob":           "guide-rob",
 };
 
 // ------------------------------------------------------------------ //
