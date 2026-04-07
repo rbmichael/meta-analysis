@@ -61,6 +61,13 @@
 //     Fits ω_j weights via BFGS ML; returns corrected pooled estimate, τ²,
 //     selection weights with SEs (delta method), and an LRT vs no-selection.
 //
+//   bayesMeta(studies, opts)
+//     Conjugate normal-normal Bayesian random-effects model.  Prior: μ ~ N(μ₀, σ_μ²),
+//     τ ~ HalfNormal(σ_τ).  Posterior approximated by 1-D grid over τ (nGrid = 300);
+//     at each grid point the conditional posterior of μ is analytic (conjugate).
+//     Returns posterior mean and 95% credible interval for μ and τ, plus marginal
+//     density arrays for plotting.
+//
 // Dependencies: utils.js, constants.js, profiles.js
 // =============================================================================
 
@@ -811,6 +818,218 @@ export function profileLikTau2(studies, opts = {}) {
     method,
     k,
     alpha,
+  };
+}
+
+// ================= BAYESIAN META-ANALYSIS =================
+// Conjugate normal-normal random-effects model approximated by a 1-D grid
+// over τ.  Integrating μ out at each grid point is analytic (conjugate
+// normal prior), so no MCMC or 2-D quadrature is needed.
+//
+// Prior:    μ | μ₀, σ_μ  ~ N(μ₀, σ_μ²)
+//           τ             ~ HalfNormal(0, σ_τ)
+//
+// At each grid point τ_g the conditional posterior of μ is:
+//   p(μ | τ_g, y) = N(m_g, V_g)
+//   P_g = 1/σ_μ² + Σ 1/(vᵢ+τ_g²)
+//   m_g = [μ₀/σ_μ² + Σ yᵢ/(vᵢ+τ_g²)] / P_g
+//   V_g = 1 / P_g
+//
+// Log unnormalised grid weight:
+//   log w_g = logML_g + logPrior_g
+//   logML_g = ½[log(V_g) − log(σ_μ²) − Σ log(vᵢ+τ_g²)]
+//             − ½[Σ yᵢ²/(vᵢ+τ_g²) + μ₀²/σ_μ² − precYmu² · V_g]
+//   logPrior_g = −τ_g² / (2 σ_τ²)   (constants that cancel are dropped)
+//
+// The marginal posterior of μ is a mixture of Gaussians:
+//   p(μ | y) = Σ_g w_g · N(μ; m_g, V_g)
+export function bayesMeta(studies, opts = {}) {
+  const k         = studies.length;
+  const mu0       = opts.mu0       !== undefined ? opts.mu0       : 0;
+  const sigma_mu  = opts.sigma_mu  !== undefined ? opts.sigma_mu  : 1;
+  const sigma_tau = opts.sigma_tau !== undefined ? opts.sigma_tau : 0.5;
+  const nGrid     = opts.nGrid     !== undefined ? opts.nGrid     : 300;
+  const nMu       = opts.nMu       !== undefined ? opts.nMu       : 500;
+
+  if (k < 2)         return { error: "Bayesian meta-analysis requires at least 2 studies." };
+  if (sigma_mu  <= 0) return { error: "sigma_mu must be positive." };
+  if (sigma_tau <= 0) return { error: "sigma_tau must be positive." };
+
+  // ---- Inline DL τ estimate for grid sizing ----
+  const wFE   = studies.map(d => 1 / Math.max(d.vi, MIN_VAR));
+  const W     = wFE.reduce((s, w) => s + w, 0);
+  const FE    = studies.reduce((s, d, i) => s + d.yi * wFE[i], 0) / W;
+  const Q     = studies.reduce((s, d, i) => s + wFE[i] * (d.yi - FE) ** 2, 0);
+  const sumW2 = wFE.reduce((s, w) => s + w * w, 0);
+  const C     = W - sumW2 / W;
+  const tauDL = Math.sqrt(C > 0 ? Math.max(0, (Q - (k - 1)) / C) : 0);
+
+  // ---- Compute grid weights for a given tauMax ----
+  const computeGrid = (tauMax) => {
+    const dtau      = tauMax / (nGrid - 1);
+    const tauGrid   = new Float64Array(nGrid);
+    const condMeans = new Float64Array(nGrid);
+    const condVars  = new Float64Array(nGrid);
+    const logW      = new Float64Array(nGrid);
+
+    const precMu    = 1 / (sigma_mu * sigma_mu);
+    const mu0PrecMu = mu0 * precMu;
+    const logSigMu2 = Math.log(sigma_mu * sigma_mu);
+    const inv2SigTau2 = 1 / (2 * sigma_tau * sigma_tau);
+
+    for (let g = 0; g < nGrid; g++) {
+      const tau  = g * dtau;
+      const tau2 = tau * tau;
+      tauGrid[g] = tau;
+
+      let sumW = 0, sumWy = 0, sumWy2 = 0, sumLogV = 0;
+      for (const d of studies) {
+        const v  = d.vi + tau2;
+        const w  = 1 / v;
+        sumW    += w;
+        sumWy   += w * d.yi;
+        sumWy2  += w * d.yi * d.yi;
+        sumLogV += Math.log(v);
+      }
+
+      const Pg      = precMu + sumW;
+      const Vg      = 1 / Pg;
+      const precYmu = mu0PrecMu + sumWy;
+      const mg      = precYmu * Vg;
+
+      condMeans[g] = mg;
+      condVars[g]  = Vg;
+
+      // Log marginal likelihood (2π constants drop in normalisation)
+      const logML = 0.5 * (Math.log(Vg) - logSigMu2 - sumLogV)
+                    - 0.5 * (sumWy2 + mu0 * mu0 * precMu - precYmu * precYmu * Vg);
+
+      // Log half-normal prior on τ (constant terms drop in normalisation)
+      logW[g] = logML - tau2 * inv2SigTau2;
+    }
+
+    return { tauGrid, condMeans, condVars, logW, dtau };
+  };
+
+  // ---- Initial grid ----
+  let tauMax = Math.max(tauDL * 8, 3);
+  let { tauGrid, condMeans, condVars, logW, dtau } = computeGrid(tauMax);
+
+  // ---- Normalise via log-sum-exp ----
+  const normalise = (lw) => {
+    const lmax  = lw.reduce((m, v) => Math.max(m, v), -Infinity);
+    const raw   = lw.map(v => Math.exp(v - lmax));
+    const total = raw.reduce((s, v) => s + v, 0);
+    return new Float64Array(raw.map(v => v / total));
+  };
+
+  let tauWeights = normalise(logW);
+
+  // ---- Grid truncation check: double tauMax once if needed ----
+  const maxW = tauWeights.reduce((m, v) => Math.max(m, v), 0);
+  let grid_truncated = tauWeights[nGrid - 1] > 1e-4 * maxW;
+  if (grid_truncated) {
+    tauMax *= 2;
+    ({ tauGrid, condMeans, condVars, logW, dtau } = computeGrid(tauMax));
+    tauWeights = normalise(logW);
+    const maxW2 = tauWeights.reduce((m, v) => Math.max(m, v), 0);
+    grid_truncated = tauWeights[nGrid - 1] > 1e-4 * maxW2;
+  }
+
+  // ---- Marginal posterior of τ ----
+  let tauMean = 0, tauMeanSq = 0;
+  for (let g = 0; g < nGrid; g++) {
+    tauMean   += tauWeights[g] * tauGrid[g];
+    tauMeanSq += tauWeights[g] * tauGrid[g] * tauGrid[g];
+  }
+  const tauVar = Math.max(0, tauMeanSq - tauMean * tauMean);
+  const tauSD  = Math.sqrt(tauVar);
+
+  // τ CI by cumulative-weight interpolation
+  const tauCDF = new Float64Array(nGrid);
+  tauCDF[0] = 0;
+  for (let g = 1; g < nGrid; g++) tauCDF[g] = tauCDF[g - 1] + tauWeights[g];
+
+  const quantileTau = (p) => {
+    for (let g = 1; g < nGrid; g++) {
+      if (tauCDF[g] >= p) {
+        const frac = (p - tauCDF[g - 1]) / Math.max(tauCDF[g] - tauCDF[g - 1], 1e-300);
+        return tauGrid[g - 1] + frac * dtau;
+      }
+    }
+    return tauGrid[nGrid - 1];
+  };
+
+  const tauCI = [quantileTau(0.025), quantileTau(0.975)];
+
+  // ---- Marginal posterior of μ (law of total expectation / variance) ----
+  let muMean = 0, muMeanSq = 0, muMeanVar = 0;
+  for (let g = 0; g < nGrid; g++) {
+    muMean    += tauWeights[g] * condMeans[g];
+    muMeanSq  += tauWeights[g] * condMeans[g] * condMeans[g];
+    muMeanVar += tauWeights[g] * condVars[g];
+  }
+  // Var[μ|y] = E[Var[μ|τ,y]] + Var[E[μ|τ,y]]  (law of total variance)
+  const muVar = Math.max(0, muMeanVar + muMeanSq - muMean * muMean);
+  const muSD  = Math.sqrt(muVar);
+
+  // ---- μ density grid ----
+  const muLo   = muMean - 6 * Math.max(muSD, 1e-6);
+  const muHi   = muMean + 6 * Math.max(muSD, 1e-6);
+  const dMu    = (muHi - muLo) / (nMu - 1);
+  const muGrid = new Float64Array(nMu);
+  for (let j = 0; j < nMu; j++) muGrid[j] = muLo + j * dMu;
+
+  // Mixture density p(μ|y) = Σ_g w_g · N(μ; m_g, V_g)
+  const LOG_2PI   = Math.log(2 * Math.PI);
+  const muDensity = new Float64Array(nMu);
+  for (let j = 0; j < nMu; j++) {
+    const mu = muGrid[j];
+    let d = 0;
+    for (let g = 0; g < nGrid; g++) {
+      const Vg   = condVars[g];
+      const mg   = condMeans[g];
+      const logN = -0.5 * (LOG_2PI + Math.log(Vg) + (mu - mg) * (mu - mg) / Vg);
+      d += tauWeights[g] * Math.exp(logN);
+    }
+    muDensity[j] = d;
+  }
+
+  // Normalise muDensity (trapezoidal rule)
+  let integral = 0;
+  for (let j = 0; j < nMu; j++) {
+    integral += muDensity[j] * (j === 0 || j === nMu - 1 ? 0.5 : 1);
+  }
+  integral *= dMu;
+  if (integral > 0) for (let j = 0; j < nMu; j++) muDensity[j] /= integral;
+
+  // μ CI from mixture CDF (trapezoidal)
+  const muCDF = new Float64Array(nMu);
+  muCDF[0] = 0;
+  for (let j = 1; j < nMu; j++) {
+    muCDF[j] = muCDF[j - 1] + 0.5 * (muDensity[j - 1] + muDensity[j]) * dMu;
+  }
+
+  const quantileMu = (p) => {
+    for (let j = 1; j < nMu; j++) {
+      if (muCDF[j] >= p) {
+        const frac = (p - muCDF[j - 1]) / Math.max(muCDF[j] - muCDF[j - 1], 1e-300);
+        return muGrid[j - 1] + frac * dMu;
+      }
+    }
+    return muGrid[nMu - 1];
+  };
+
+  const muCI = [quantileMu(0.025), quantileMu(0.975)];
+
+  return {
+    mu0, sigma_mu, sigma_tau,
+    muMean, muSD, muCI,
+    tauMean, tauSD, tauCI,
+    tauGrid, tauWeights,
+    muGrid, muDensity,
+    grid_truncated,
+    k,
   };
 }
 

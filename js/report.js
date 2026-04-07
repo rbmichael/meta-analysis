@@ -826,6 +826,7 @@ export function buildReport(args) {
     pcurve, puniform,
     sel, selMode, selLabel,
     gosh, goshXAxis,
+    bayesResult, bayesReMean,
   } = args;
 
   const date  = new Date().toLocaleDateString(undefined, {
@@ -856,6 +857,27 @@ export function buildReport(args) {
     sectionPubBias(args),
     sectionPUniform(puniform, m, profile),
     sectionSelectionModel(sel ?? null, profile, selMode ?? "mle", selLabel ?? ""),
+    (() => {
+      if (!bayesResult || bayesResult.error) return "";
+      const svgMu  = liveSVG("bayesMuPlot");
+      const svgTau = liveSVG("bayesTauPlot");
+      if (!svgMu && !svgTau) return "";
+      const muDisp   = profile.transform(bayesResult.muMean);
+      const muCIDisp = bayesResult.muCI.map(v => profile.transform(v));
+      const reDisp   = isFinite(bayesReMean) ? profile.transform(bayesReMean) : NaN;
+      return `
+<section>
+  <h2>Bayesian Meta-Analysis</h2>
+  <p class="meta-line">Prior: \u03BC\u202F~\u202FN(${esc(bayesResult.mu0)},\u202F${esc(bayesResult.sigma_mu)}\u00B2)\u2003\u03C4\u202F~\u202FHalfNormal(${esc(bayesResult.sigma_tau)})\u2003k\u202F=\u202F${bayesResult.k} studies</p>
+  <table class="stats-table">
+    <tr><td>Posterior mean \u03BC</td><td>${fmt(muDisp)}</td><td>95% CrI [${fmt(muCIDisp[0])}, ${fmt(muCIDisp[1])}]</td></tr>
+    <tr><td>Posterior mean \u03C4</td><td>${fmt(bayesResult.tauMean)}</td><td>95% CrI [${fmt(bayesResult.tauCI[0])}, ${fmt(bayesResult.tauCI[1])}]</td></tr>
+    ${isFinite(reDisp) ? `<tr><td>Frequentist RE (comparison)</td><td>${fmt(reDisp)}</td><td></td></tr>` : ""}
+  </table>
+  ${svgMu  ? `<div class="svg-wrap">${svgMu}</div>`  : ""}
+  ${svgTau ? `<div class="svg-wrap">${svgTau}</div>` : ""}
+</section>`;
+    })(),
     sectionGosh(gosh ?? null, profile, goshXAxis ?? "I2"),
     (() => {
       const svg = liveSVG("profileLikTau2Plot");

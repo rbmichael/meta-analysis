@@ -1,6 +1,6 @@
 import { round, transformEffect, chiSquareCDF, chiSquareQuantile, parseCounts, bivariateNormalCDF, normalQuantile, fCDF } from "./utils.js";
 import { BENCHMARKS, PUB_BIAS_BENCHMARKS, INFLUENCE_BENCHMARKS, META_REGRESSION_BENCHMARKS, VH_BENCHMARKS } from "./benchmarks.js";
-import { compute, meta, metaRegression, tau2_HS, tau2_HE, tau2_ML, tau2_SJ, beggTest, eggerTest, fatPetTest, failSafeN, heterogeneityCIs, cumulativeMeta, influenceDiagnostics, harbordTest, petersTest, deeksTest, rueckerTest, leaveOneOut, baujat, pCurve, pUniform, estimatorComparison, subgroupAnalysis, logLik, bfgs, selIntervalProbs, selIntervalIdx, selectionLogLik, SEL_CUTS_ONE_SIDED, SEL_CUTS_TWO_SIDED, veveaHedges, SELECTION_PRESETS, profileLikTau2, profileLikCI } from "./analysis.js";
+import { compute, meta, metaRegression, tau2_HS, tau2_HE, tau2_ML, tau2_SJ, beggTest, eggerTest, fatPetTest, failSafeN, heterogeneityCIs, cumulativeMeta, influenceDiagnostics, harbordTest, petersTest, deeksTest, rueckerTest, leaveOneOut, baujat, pCurve, pUniform, estimatorComparison, subgroupAnalysis, logLik, bfgs, selIntervalProbs, selIntervalIdx, selectionLogLik, SEL_CUTS_ONE_SIDED, SEL_CUTS_TWO_SIDED, veveaHedges, SELECTION_PRESETS, profileLikTau2, profileLikCI, bayesMeta } from "./analysis.js";
 import { trimFill } from "./trimfill.js";
 import { parseCSV } from "./csv.js";
 import { goshCompute, GOSH_MAX_ENUM_K, GOSH_MAX_K, GOSH_DEFAULT_MAX_SUBSETS } from "./gosh.js";
@@ -4109,4 +4109,163 @@ export function runTests() {
   }
 
   console.log(plPass ? "\n✅ ALL PROFILE LIKELIHOOD τ² TESTS PASSED" : "\n❌ SOME PROFILE LIKELIHOOD τ² TESTS FAILED");
+
+  // ===========================================================================
+  // BAYESIAN META-ANALYSIS TESTS
+  // ===========================================================================
+  console.log("\n===== BAYESIAN META-ANALYSIS TESTS =====\n");
+  let bayPass = true;
+  const { chk: bayChk, chkTrue: bayChkTrue, chkExact: bayChkExact } = makeChk(() => { bayPass = false; });
+
+  // BCG vaccine data (BENCHMARKS[0]) — heterogeneous, k=13
+  const studiesBCG = [
+    { yi: -0.8893113339202054, vi: 0.3255847650039614  },
+    { yi: -1.5853886572014306, vi: 0.19458112139814387 },
+    { yi: -1.348073148299693,  vi: 0.41536796536796533 },
+    { yi: -1.4415511900213054, vi: 0.020010031902247573 },
+    { yi: -0.2175473222112957, vi: 0.05121017216963086 },
+    { yi: -0.786115585818864,  vi: 0.0069056184559087574 },
+    { yi: -1.6208982235983924, vi: 0.22301724757231517 },
+    { yi:  0.011952333523841173, vi: 0.00396157929781773 },
+    { yi: -0.4694176487381487, vi: 0.056434210463248966 },
+    { yi: -1.3713448034727846, vi: 0.07302479361302891 },
+    { yi: -0.33935882833839015, vi: 0.01241221397155972 },
+    { yi:  0.4459134005713783, vi: 0.5325058452001528  },
+    { yi: -0.017313948216879493, vi: 0.0714046596839863 },
+  ];
+  // Homogeneous data — all yi equal → posterior should concentrate τ near 0
+  const studiesHom4 = [
+    { yi: 0.5, vi: 0.04 },
+    { yi: 0.5, vi: 0.04 },
+    { yi: 0.5, vi: 0.04 },
+    { yi: 0.5, vi: 0.04 },
+  ];
+
+  // ---- 1. Error guard: k < 2 ----
+  {
+    console.log("--- 1. error guard k < 2 ---");
+    const r = bayesMeta([{ yi: 0, vi: 1 }]);
+    bayChkTrue("returns error object", !!r.error);
+  }
+
+  // ---- 2. Error guard: sigma_mu ≤ 0 ----
+  {
+    console.log("--- 2. error guard sigma_mu ≤ 0 ---");
+    const r = bayesMeta(studiesBCG, { sigma_mu: 0 });
+    bayChkTrue("returns error object", !!r.error);
+  }
+
+  // ---- 3. Error guard: sigma_tau ≤ 0 ----
+  {
+    console.log("--- 3. error guard sigma_tau ≤ 0 ---");
+    const r = bayesMeta(studiesBCG, { sigma_tau: -1 });
+    bayChkTrue("returns error object", !!r.error);
+  }
+
+  // ---- 4. Return fields present and finite ----
+  {
+    console.log("--- 4. return fields present and finite ---");
+    const r = bayesMeta(studiesBCG);
+    bayChkTrue("no error",           !r.error);
+    bayChkTrue("muMean finite",      isFinite(r.muMean));
+    bayChkTrue("muSD finite",        isFinite(r.muSD));
+    bayChkTrue("muCI[0] finite",     isFinite(r.muCI[0]));
+    bayChkTrue("muCI[1] finite",     isFinite(r.muCI[1]));
+    bayChkTrue("tauMean finite",     isFinite(r.tauMean));
+    bayChkTrue("tauSD finite",       isFinite(r.tauSD));
+    bayChkTrue("tauCI[0] finite",    isFinite(r.tauCI[0]));
+    bayChkTrue("tauCI[1] finite",    isFinite(r.tauCI[1]));
+    bayChkTrue("tauGrid present",    r.tauGrid instanceof Float64Array && r.tauGrid.length > 0);
+    bayChkTrue("tauWeights present", r.tauWeights instanceof Float64Array && r.tauWeights.length > 0);
+    bayChkTrue("muGrid present",     r.muGrid instanceof Float64Array && r.muGrid.length > 0);
+    bayChkTrue("muDensity present",  r.muDensity instanceof Float64Array && r.muDensity.length > 0);
+    bayChkExact("k correct",         r.k, 13);
+  }
+
+  // ---- 5. μ CI ordering: muCI[0] < muMean < muCI[1] ----
+  {
+    console.log("--- 5. muCI ordering ---");
+    const r = bayesMeta(studiesBCG);
+    bayChkTrue("muCI[0] < muMean", r.muCI[0] < r.muMean);
+    bayChkTrue("muMean < muCI[1]", r.muMean < r.muCI[1]);
+  }
+
+  // ---- 6. τ CI ordering and non-negativity ----
+  {
+    console.log("--- 6. tauCI ordering and non-negativity ---");
+    const r = bayesMeta(studiesBCG);
+    bayChkTrue("tauCI[0] >= 0",            r.tauCI[0] >= 0);
+    bayChkTrue("tauCI[0] <= tauMean",      r.tauCI[0] <= r.tauMean);
+    bayChkTrue("tauMean <= tauCI[1]",      r.tauMean  <= r.tauCI[1]);
+  }
+
+  // ---- 7. Diffuse prior → muMean ≈ RE estimate (within 0.05) ----
+  {
+    console.log("--- 7. diffuse prior converges to RE ---");
+    // REML RE for BCG ≈ -0.714 (from BENCHMARKS)
+    const reDL = meta(studiesBCG, "REML").RE;
+    const r    = bayesMeta(studiesBCG, { mu0: 0, sigma_mu: 100, sigma_tau: 100 });
+    bayChkTrue("no error", !r.error);
+    bayChk("muMean ≈ REML RE (diffuse prior)", r.muMean, reDL, 0.05);
+  }
+
+  // ---- 8. Tight prior pulls muMean toward μ₀ ----
+  {
+    console.log("--- 8. tight prior shrinks toward mu0 ---");
+    // BCG muMean with default prior ≈ -0.688; with mu0=0, sigma_mu=0.01 it should be >> -0.688
+    const rDefault = bayesMeta(studiesBCG);
+    const rTight   = bayesMeta(studiesBCG, { mu0: 0, sigma_mu: 0.01, sigma_tau: 0.5 });
+    bayChkTrue("tight prior pulls muMean closer to 0", Math.abs(rTight.muMean) < Math.abs(rDefault.muMean));
+  }
+
+  // ---- 9. Homogeneous data → tauMean < 0.3 ----
+  {
+    console.log("--- 9. homogeneous data: tauMean near 0 ---");
+    const r = bayesMeta(studiesHom4);
+    bayChkTrue("no error",         !r.error);
+    bayChkTrue("tauMean < 0.3",    r.tauMean < 0.3);
+    bayChkTrue("tauCI[0] < 0.1",   r.tauCI[0] < 0.1);
+  }
+
+  // ---- 10. muDensity integrates to ≈ 1 (trapezoidal rule) ----
+  {
+    console.log("--- 10. muDensity integrates to ≈ 1 ---");
+    const r  = bayesMeta(studiesBCG);
+    const nMu = r.muGrid.length;
+    const dMu = r.muGrid[1] - r.muGrid[0];
+    let integral = 0;
+    for (let j = 0; j < nMu; j++) {
+      integral += r.muDensity[j] * (j === 0 || j === nMu - 1 ? 0.5 : 1);
+    }
+    integral *= dMu;
+    bayChk("muDensity integral ≈ 1", integral, 1, 0.01);
+  }
+
+  // ---- 11. tauWeights sum to ≈ 1 ----
+  {
+    console.log("--- 11. tauWeights sum to 1 ---");
+    const r   = bayesMeta(studiesBCG);
+    const sum = r.tauWeights.reduce((s, v) => s + v, 0);
+    bayChk("sum of tauWeights", sum, 1, 1e-10);
+  }
+
+  // ---- 12. grid_truncated is false for BCG with default priors ----
+  {
+    console.log("--- 12. grid_truncated false for BCG default priors ---");
+    const r = bayesMeta(studiesBCG);
+    bayChkTrue("grid_truncated === false", r.grid_truncated === false);
+  }
+
+  // ---- 13. k=2 edge case runs without error ----
+  {
+    console.log("--- 13. k=2 edge case ---");
+    const r = bayesMeta([{ yi: 0.2, vi: 0.05 }, { yi: 0.8, vi: 0.10 }]);
+    bayChkTrue("no error",       !r.error);
+    bayChkTrue("muMean finite",  isFinite(r.muMean));
+    bayChkTrue("tauMean finite", isFinite(r.tauMean));
+    bayChkTrue("muCI[0] < muCI[1]", r.muCI[0] < r.muCI[1]);
+    bayChkTrue("tauCI[0] < tauCI[1]", r.tauCI[0] < r.tauCI[1]);
+  }
+
+  console.log(bayPass ? "\n✅ ALL BAYESIAN META-ANALYSIS TESTS PASSED" : "\n❌ SOME BAYESIAN META-ANALYSIS TESTS FAILED");
 }

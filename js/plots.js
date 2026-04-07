@@ -48,6 +48,17 @@
 //     Baujat diagnostic scatter (Baujat et al., 2002): x = contribution to Q,
 //     y = influence on FE pooled estimate.  Quadrant guides at mean x/y.
 //
+//   drawBayesTauPosterior(result, opts)
+//     Marginal posterior density of τ from bayesMeta().  Shaded 95% credible
+//     region; vertical dashed line at posterior mean.
+//     SVG target: #bayesTauPlot (500 × 340 px).
+//
+//   drawBayesMuPosterior(result, opts)
+//     Marginal posterior density of μ from bayesMeta() (mixture of normals).
+//     Shaded 95% credible region; dashed line at posterior mean; dotted line
+//     at frequentist RE estimate (opts.reMean) for comparison.
+//     SVG target: #bayesMuPlot (500 × 340 px).
+//
 // All plots use CSS custom properties (var(--fg), var(--accent), etc.) so
 // they respond automatically to light/dark theme switches.
 //
@@ -3196,4 +3207,286 @@ export function drawProfileLikTau2(result, opts = {}) {
     .style("font-size", "11px")
     .style("font-weight", "600")
     .text(`Profile likelihood \u2014 \u03C4\u00B2 \u2014 ${method} \u2014 k\u202F=\u202F${k}`);
+}
+
+// =============================================================================
+// drawBayesTauPosterior(result, opts)
+// =============================================================================
+// Marginal posterior density of τ from bayesMeta().
+// tauWeights are probability masses (sum to 1); dividing by Δτ gives density.
+// SVG target: #bayesTauPlot (500 × 340 px by default).
+// Elements (back-to-front):
+//   gridlines → 95% CrI shaded area → full density area (faint) →
+//   density curve → CI bound lines → posterior mean line → axes → labels → title
+// =============================================================================
+export function drawBayesTauPosterior(result, opts = {}) {
+  const svg = clearAndSelectSVG("#bayesTauPlot");
+  if (!result || result.error) return;
+
+  const { tauGrid, tauWeights, tauMean, tauCI, sigma_tau, k } = result;
+  const nGrid = tauGrid.length;
+  const dtau  = nGrid > 1 ? tauGrid[1] - tauGrid[0] : 1;
+
+  const margin = { top: 34, right: 24, bottom: 56, left: 66 };
+  const W  = +svg.attr("width")  || 500;
+  const H  = +svg.attr("height") || 340;
+  const iW = W - margin.left - margin.right;
+  const iH = H - margin.top  - margin.bottom;
+
+  const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+
+  // Convert probability masses → density
+  const density = new Float64Array(nGrid);
+  for (let i = 0; i < nGrid; i++) density[i] = tauWeights[i] / dtau;
+
+  const tauMax  = tauGrid[nGrid - 1];
+  const densMax = d3.max(density);
+
+  const x = d3.scaleLinear().domain([0, tauMax]).range([0, iW]);
+  const y = d3.scaleLinear().domain([0, densMax * 1.1]).range([iH, 0]);
+
+  // ---- Gridlines ----
+  g.append("g").attr("class", "grid")
+    .call(d3.axisLeft(y).ticks(4).tickSize(-iW).tickFormat(""))
+    .selectAll("line").attr("stroke", "var(--border)").attr("stroke-dasharray", "2,3");
+  g.select(".grid .domain").remove();
+
+  // ---- Helper: linearly interpolate density at arbitrary τ ----
+  const interpDens = (tau) => {
+    if (dtau <= 0) return 0;
+    const idx = Math.min(nGrid - 2, Math.max(0, Math.floor(tau / dtau)));
+    const frac = (tau - tauGrid[idx]) / dtau;
+    return density[idx] * (1 - frac) + density[idx + 1] * frac;
+  };
+
+  // ---- 1. 95% CrI shaded area ----
+  const ciPts = [[tauCI[0], interpDens(tauCI[0])]];
+  for (let i = 0; i < nGrid; i++) {
+    if (tauGrid[i] > tauCI[0] && tauGrid[i] < tauCI[1]) ciPts.push([tauGrid[i], density[i]]);
+  }
+  ciPts.push([tauCI[1], interpDens(tauCI[1])]);
+
+  g.append("path")
+    .datum(ciPts)
+    .attr("fill", "var(--accent)").attr("fill-opacity", 0.20).attr("stroke", "none")
+    .attr("d", d3.area().x(d => x(d[0])).y0(iH).y1(d => y(d[1])));
+
+  // ---- 2. Full density area (very light background fill) ----
+  const allPts = Array.from({ length: nGrid }, (_, i) => [tauGrid[i], density[i]]);
+
+  g.append("path")
+    .datum(allPts)
+    .attr("fill", "var(--accent)").attr("fill-opacity", 0.06).attr("stroke", "none")
+    .attr("d", d3.area().x(d => x(d[0])).y0(iH).y1(d => y(d[1])));
+
+  // ---- 3. Density curve ----
+  g.append("path")
+    .datum(allPts)
+    .attr("fill", "none").attr("stroke", "var(--accent)").attr("stroke-width", 2)
+    .attr("d", d3.line().x(d => x(d[0])).y(d => y(d[1])));
+
+  // ---- 4. CI bound tick lines ----
+  [tauCI[0], tauCI[1]].forEach(t => {
+    g.append("line")
+      .attr("x1", x(t)).attr("x2", x(t))
+      .attr("y1", 0).attr("y2", iH)
+      .attr("stroke", "var(--accent)").attr("stroke-width", 1)
+      .attr("stroke-dasharray", "3,3").attr("opacity", 0.7);
+  });
+
+  // ---- 5. Posterior mean line ----
+  const meanX    = x(tauMean);
+  const meanRight = meanX > iW * 0.6;
+  g.append("line")
+    .attr("x1", meanX).attr("x2", meanX)
+    .attr("y1", 0).attr("y2", iH)
+    .attr("stroke", "var(--accent)").attr("stroke-width", 2)
+    .attr("stroke-dasharray", "6,3");
+
+  g.append("text")
+    .attr("x", meanX + (meanRight ? -4 : 4))
+    .attr("y", 22)
+    .attr("text-anchor", meanRight ? "end" : "start")
+    .attr("fill", "var(--fg-muted)").style("font-size", "9px")
+    .text(`mean\u202F=\u202F${tauMean.toFixed(3)}`);
+
+  // ---- 6. Axes ----
+  const axisX = g.append("g").attr("transform", `translate(0,${iH})`)
+    .call(d3.axisBottom(x).ticks(5).tickFormat(d3.format(".2~g")));
+  styleAxis(axisX, "var(--border-hover)", "var(--fg-muted)", "10px");
+
+  const axisY = g.append("g")
+    .call(d3.axisLeft(y).ticks(4).tickFormat(d3.format(".2~g")));
+  styleAxis(axisY, "var(--border-hover)", "var(--fg-muted)", "10px");
+
+  // ---- 7. Axis labels ----
+  svg.append("text")
+    .attr("x", margin.left + iW / 2).attr("y", H - 8)
+    .attr("text-anchor", "middle").attr("fill", "var(--fg-muted)")
+    .style("font-size", "11px")
+    .text("\u03C4 (between-study SD)");
+
+  svg.append("text")
+    .attr("transform", "rotate(-90)")
+    .attr("x", -(margin.top + iH / 2)).attr("y", 14)
+    .attr("text-anchor", "middle").attr("fill", "var(--fg-muted)")
+    .style("font-size", "11px")
+    .text("Posterior density");
+
+  // ---- 8. Title ----
+  svg.append("text")
+    .attr("x", margin.left + iW / 2).attr("y", 14)
+    .attr("text-anchor", "middle").attr("fill", "var(--fg)")
+    .style("font-size", "11px").style("font-weight", "600")
+    .text(`Posterior of \u03C4 \u2014 HalfNormal(\u03C3_\u03C4\u202F=\u202F${sigma_tau}) \u2014 k\u202F=\u202F${k}`);
+}
+
+// =============================================================================
+// drawBayesMuPosterior(result, opts)
+// =============================================================================
+// Marginal posterior density of μ from bayesMeta() — a mixture of Gaussians
+// over the τ grid, pre-evaluated and stored in result.muDensity.
+// SVG target: #bayesMuPlot (500 × 340 px by default).
+// opts.reMean: frequentist RE estimate (analysis scale) for comparison line.
+// Elements (back-to-front):
+//   gridlines → 95% CrI shaded area → full density area (faint) →
+//   density curve → CI bound lines → posterior mean line →
+//   RE comparison line (if opts.reMean provided) → axes → labels → title
+// =============================================================================
+export function drawBayesMuPosterior(result, opts = {}) {
+  const svg = clearAndSelectSVG("#bayesMuPlot");
+  if (!result || result.error) return;
+
+  const { muGrid, muDensity, muMean, muCI, mu0, sigma_mu, k } = result;
+  const nMu   = muGrid.length;
+  const dMu   = nMu > 1 ? muGrid[1] - muGrid[0] : 1;
+  const muMin = muGrid[0];
+  const muMax = muGrid[nMu - 1];
+  const reMean = opts.reMean;
+
+  const margin = { top: 34, right: 24, bottom: 56, left: 66 };
+  const W  = +svg.attr("width")  || 500;
+  const H  = +svg.attr("height") || 340;
+  const iW = W - margin.left - margin.right;
+  const iH = H - margin.top  - margin.bottom;
+
+  const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+
+  const densMax = d3.max(muDensity);
+
+  const x = d3.scaleLinear().domain([muMin, muMax]).range([0, iW]);
+  const y = d3.scaleLinear().domain([0, densMax * 1.1]).range([iH, 0]);
+
+  // ---- Gridlines ----
+  g.append("g").attr("class", "grid")
+    .call(d3.axisLeft(y).ticks(4).tickSize(-iW).tickFormat(""))
+    .selectAll("line").attr("stroke", "var(--border)").attr("stroke-dasharray", "2,3");
+  g.select(".grid .domain").remove();
+
+  // ---- Helper: linearly interpolate muDensity at arbitrary μ ----
+  const interpDens = (mu) => {
+    if (dMu <= 0) return 0;
+    const idx = Math.min(nMu - 2, Math.max(0, Math.floor((mu - muMin) / dMu)));
+    const frac = (mu - muGrid[idx]) / dMu;
+    return muDensity[idx] * (1 - frac) + muDensity[idx + 1] * frac;
+  };
+
+  // ---- 1. 95% CrI shaded area ----
+  const ciPts = [[muCI[0], interpDens(muCI[0])]];
+  for (let j = 0; j < nMu; j++) {
+    if (muGrid[j] > muCI[0] && muGrid[j] < muCI[1]) ciPts.push([muGrid[j], muDensity[j]]);
+  }
+  ciPts.push([muCI[1], interpDens(muCI[1])]);
+
+  g.append("path")
+    .datum(ciPts)
+    .attr("fill", "var(--accent)").attr("fill-opacity", 0.20).attr("stroke", "none")
+    .attr("d", d3.area().x(d => x(d[0])).y0(iH).y1(d => y(d[1])));
+
+  // ---- 2. Full density area (very light background fill) ----
+  const allPts = Array.from({ length: nMu }, (_, j) => [muGrid[j], muDensity[j]]);
+
+  g.append("path")
+    .datum(allPts)
+    .attr("fill", "var(--accent)").attr("fill-opacity", 0.06).attr("stroke", "none")
+    .attr("d", d3.area().x(d => x(d[0])).y0(iH).y1(d => y(d[1])));
+
+  // ---- 3. Density curve ----
+  g.append("path")
+    .datum(allPts)
+    .attr("fill", "none").attr("stroke", "var(--accent)").attr("stroke-width", 2)
+    .attr("d", d3.line().x(d => x(d[0])).y(d => y(d[1])));
+
+  // ---- 4. CI bound tick lines ----
+  [muCI[0], muCI[1]].forEach(m => {
+    g.append("line")
+      .attr("x1", x(m)).attr("x2", x(m))
+      .attr("y1", 0).attr("y2", iH)
+      .attr("stroke", "var(--accent)").attr("stroke-width", 1)
+      .attr("stroke-dasharray", "3,3").attr("opacity", 0.7);
+  });
+
+  // ---- 5. Posterior mean line ----
+  const meanX     = x(muMean);
+  const meanRight = meanX > iW * 0.6;
+  g.append("line")
+    .attr("x1", meanX).attr("x2", meanX)
+    .attr("y1", 0).attr("y2", iH)
+    .attr("stroke", "var(--accent)").attr("stroke-width", 2)
+    .attr("stroke-dasharray", "6,3");
+
+  g.append("text")
+    .attr("x", meanX + (meanRight ? -4 : 4))
+    .attr("y", 22)
+    .attr("text-anchor", meanRight ? "end" : "start")
+    .attr("fill", "var(--fg-muted)").style("font-size", "9px")
+    .text(`posterior mean\u202F=\u202F${muMean.toFixed(3)}`);
+
+  // ---- 6. Frequentist RE comparison line (dotted) ----
+  if (reMean !== undefined && isFinite(reMean) && reMean >= muMin && reMean <= muMax) {
+    const reX     = x(reMean);
+    const reRight = reX > iW * 0.6;
+    g.append("line")
+      .attr("x1", reX).attr("x2", reX)
+      .attr("y1", 0).attr("y2", iH)
+      .attr("stroke", "var(--fg-muted)").attr("stroke-width", 1.5)
+      .attr("stroke-dasharray", "3,2");
+
+    g.append("text")
+      .attr("x", reX + (reRight ? -4 : 4))
+      .attr("y", 34)
+      .attr("text-anchor", reRight ? "end" : "start")
+      .attr("fill", "var(--fg-muted)").style("font-size", "9px")
+      .text(`RE\u202F=\u202F${reMean.toFixed(3)}`);
+  }
+
+  // ---- 7. Axes ----
+  const axisX = g.append("g").attr("transform", `translate(0,${iH})`)
+    .call(d3.axisBottom(x).ticks(5).tickFormat(d3.format(".3~g")));
+  styleAxis(axisX, "var(--border-hover)", "var(--fg-muted)", "10px");
+
+  const axisY = g.append("g")
+    .call(d3.axisLeft(y).ticks(4).tickFormat(d3.format(".2~g")));
+  styleAxis(axisY, "var(--border-hover)", "var(--fg-muted)", "10px");
+
+  // ---- 8. Axis labels ----
+  svg.append("text")
+    .attr("x", margin.left + iW / 2).attr("y", H - 8)
+    .attr("text-anchor", "middle").attr("fill", "var(--fg-muted)")
+    .style("font-size", "11px")
+    .text("\u03BC (pooled effect, analysis scale)");
+
+  svg.append("text")
+    .attr("transform", "rotate(-90)")
+    .attr("x", -(margin.top + iH / 2)).attr("y", 14)
+    .attr("text-anchor", "middle").attr("fill", "var(--fg-muted)")
+    .style("font-size", "11px")
+    .text("Posterior density");
+
+  // ---- 9. Title ----
+  svg.append("text")
+    .attr("x", margin.left + iW / 2).attr("y", 14)
+    .attr("text-anchor", "middle").attr("fill", "var(--fg)")
+    .style("font-size", "11px").style("font-weight", "600")
+    .text(`Posterior of \u03BC \u2014 N(\u03BC\u2080\u202F=\u202F${mu0},\u202F\u03C3_\u03BC\u202F=\u202F${sigma_mu}) \u2014 k\u202F=\u202F${k}`);
 }

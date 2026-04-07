@@ -804,4 +804,18 @@ export const HELP = {
            "Viechtbauer & Cheung (2010).",
   },
 
+  // Bayesian                                                            //
+  "bayes.model": {
+    title: "Bayesian meta-analysis",
+    body:  "Fits a conjugate normal-normal random-effects model using a grid " +
+           "approximation over τ (300 points). " +
+           "Prior on μ: N(μ₀, σ_μ²); prior on τ: HalfNormal(σ_τ). " +
+           "Because the prior on μ is conjugate given τ, the marginal " +
+           "posterior of μ is an analytic mixture of normals — no MCMC required. " +
+           "Outputs: posterior mean and 95% credible interval for μ (overall effect) " +
+           "and τ (heterogeneity SD), plus posterior density plots. " +
+           "With diffuse priors (σ_μ, σ_τ large) the posterior mean of μ " +
+           "approaches the REML random-effects estimate.",
+  },
+
 };

@@ -100,11 +100,11 @@
 //   ui.js calls init() on DOMContentLoaded, which populates dropdowns,
 //   restores any autosave draft, and attaches all event listeners.
 // =============================================================================
-import { eggerTest, beggTest, fatPetTest, failSafeN, pCurve, pUniform, baujat, meta, influenceDiagnostics, subgroupAnalysis, metaRegression, cumulativeMeta, leaveOneOut, estimatorComparison, veveaHedges, SELECTION_PRESETS, profileLikTau2 } from "./analysis.js";
+import { eggerTest, beggTest, fatPetTest, failSafeN, pCurve, pUniform, baujat, meta, influenceDiagnostics, subgroupAnalysis, metaRegression, cumulativeMeta, leaveOneOut, estimatorComparison, veveaHedges, SELECTION_PRESETS, profileLikTau2, bayesMeta } from "./analysis.js";
 import { fmt } from "./utils.js";
 import { effectProfiles, getProfile } from "./profiles.js";
 import { trimFill } from "./trimfill.js";
-import { drawForest, drawFunnel, drawBubble, drawPartialResidualBubble, drawInfluencePlot, drawCumulativeForest, drawCumulativeFunnel, drawPCurve, drawPUniform, drawOrchardPlot, drawCaterpillarPlot, drawBaujatPlot, drawRoBTrafficLight, drawRoBSummary, drawGoshPlot, drawProfileLikTau2 } from "./plots.js";
+import { drawForest, drawFunnel, drawBubble, drawPartialResidualBubble, drawInfluencePlot, drawCumulativeForest, drawCumulativeFunnel, drawPCurve, drawPUniform, drawOrchardPlot, drawCaterpillarPlot, drawBaujatPlot, drawRoBTrafficLight, drawRoBSummary, drawGoshPlot, drawProfileLikTau2, drawBayesTauPosterior, drawBayesMuPosterior } from "./plots.js";
 import { goshCompute, GOSH_MAX_K } from "./gosh.js";
 import { exportSVG, exportPNG, exportTIFF } from "./export.js";
 import { buildReport, downloadHTML, openPrintPreview } from "./report.js";
@@ -1647,6 +1647,12 @@ const goshState = {
   profile: null,   // profile used for last result (for axis transform)
 };
 
+const bayesState = {
+  studies: null,   // study array from the last runAnalysis() call
+  reMean:  NaN,    // RE pooled mean from the last runAnalysis() call
+  profile: null,   // effect-type profile from the last runAnalysis() call
+};
+
 document.getElementById("exportScale").addEventListener("change", e => {
   appState.exportScale = +e.target.value;
 });
@@ -2220,6 +2226,34 @@ function buildInfluenceHTML(influence) {
     <small style="color:#aaa;">Thresholds: Hat &gt; ${fmt(2/k)} (= 2/k); Cook's D &gt; ${fmt(4/k)} (= 4/k)</small>`;
 }
 
+function buildBayesSummaryHTML(result, profile, reMean) {
+  const muDisp   = profile.transform(result.muMean);
+  const muCIDisp = result.muCI.map(v => profile.transform(v));
+  return `
+    <table class="stats-table" style="margin-bottom:8px">
+      <tr>
+        <td>Posterior mean μ</td>
+        <td>${fmt(muDisp)}</td>
+        <td>95% CrI [${fmt(muCIDisp[0])}, ${fmt(muCIDisp[1])}]</td>
+      </tr>
+      <tr>
+        <td>Posterior mean τ</td>
+        <td>${fmt(result.tauMean)}</td>
+        <td>95% CrI [${fmt(result.tauCI[0])}, ${fmt(result.tauCI[1])}]</td>
+      </tr>
+      ${isFinite(reMean) ? `<tr>
+        <td>Frequentist RE (comparison)</td>
+        <td>${fmt(profile.transform(reMean))}</td>
+        <td></td>
+      </tr>` : ""}
+    </table>
+    <p style="font-size:0.82em;color:var(--fg-muted);margin:0 0 8px">
+      Prior: μ\u202F~\u202FN(${result.mu0},\u202F${result.sigma_mu}\u00B2)\u2003
+      τ\u202F~\u202FHalfNormal(${result.sigma_tau}).
+      Posterior via 1-D grid over τ (${result.k} studies).
+    </p>`;
+}
+
 function buildSubgroupHTML(subgroup, profile) {
   const rows = Object.entries(subgroup.groups).map(([g, r]) => {
     const isSingle = r.k === 1;
@@ -2389,6 +2423,33 @@ function runGosh() {
     onDone(result);
   }
 }
+
+// -----------------------------------------------------------------------------
+// runBayesUpdate()
+// -----------------------------------------------------------------------------
+// Re-runs only the Bayesian meta-analysis using the current prior inputs and
+// the studies / reMean cached in bayesState from the last runAnalysis() call.
+// Called by the "Update" button inside the Bayesian section.
+// -----------------------------------------------------------------------------
+function runBayesUpdate() {
+  if (!bayesState.studies || bayesState.studies.length < 2) return;
+  const mu0      = parseFloat(document.getElementById("bayesMu0")?.value)      || 0;
+  const sigmaMu  = Math.max(0.01, parseFloat(document.getElementById("bayesSigmaMu")?.value)  || 1);
+  const sigmaTau = Math.max(0.01, parseFloat(document.getElementById("bayesSigmaTau")?.value) || 0.5);
+  const result   = bayesMeta(bayesState.studies, { mu0, sigma_mu: sigmaMu, sigma_tau: sigmaTau });
+  if (result.error) return;
+  document.getElementById("bayesSummary").innerHTML =
+    buildBayesSummaryHTML(result, bayesState.profile, bayesState.reMean);
+  drawBayesMuPosterior(result, { reMean: bayesState.reMean });
+  drawBayesTauPosterior(result);
+  document.getElementById("bayesGridWarning").style.display =
+    result.grid_truncated ? "" : "none";
+  if (appState.reportArgs) {
+    appState.reportArgs = { ...appState.reportArgs, bayesResult: result };
+  }
+}
+
+document.getElementById("bayesUpdate").addEventListener("click", runBayesUpdate);
 
 // -----------------------------------------------------------------------------
 // runAnalysis() → boolean
@@ -2590,6 +2651,32 @@ function runAnalysis() {
     elHetDiag.style.display = "none";
   }
 
+  const elBayes      = document.getElementById("bayesSection");
+  const bayesMu0     = parseFloat(document.getElementById("bayesMu0")?.value)     || 0;
+  const bayesSigmaMu = Math.max(0.01, parseFloat(document.getElementById("bayesSigmaMu")?.value)  || 1);
+  const bayesSigmaTau = Math.max(0.01, parseFloat(document.getElementById("bayesSigmaTau")?.value) || 0.5);
+  let bayesResult = null;
+  if (studies.length >= 2) {
+    bayesState.studies = studies;
+    bayesState.reMean  = m.RE;
+    bayesState.profile = profile;
+    bayesResult = bayesMeta(studies, { mu0: bayesMu0, sigma_mu: bayesSigmaMu, sigma_tau: bayesSigmaTau });
+    if (!bayesResult.error) {
+      elBayes.style.display = "";
+      document.getElementById("bayesSummary").innerHTML =
+        buildBayesSummaryHTML(bayesResult, profile, m.RE);
+      drawBayesMuPosterior(bayesResult, { reMean: m.RE });
+      drawBayesTauPosterior(bayesResult);
+      document.getElementById("bayesGridWarning").style.display =
+        bayesResult.grid_truncated ? "" : "none";
+    } else {
+      elBayes.style.display = "none";
+    }
+  } else {
+    bayesState.studies = null;
+    elBayes.style.display = "none";
+  }
+
   const egger   = eggerTest(studies);
   const begg    = beggTest(studies);
   const fatpet  = fatPetTest(studies);
@@ -2763,6 +2850,7 @@ function runAnalysis() {
     goshXAxis: document.getElementById("goshXAxis")?.value ?? "I2",
     profileLik: profileLikResult,
     profileLikXScale: document.getElementById("profileLikScale")?.value || "tau2",
+    bayesResult, bayesReMean: m.RE,
     forestOptions: { ...forestOpts, currentPage: forestPlot.page },
   };
   funnelPlot.args = [all, m, egger, profile];

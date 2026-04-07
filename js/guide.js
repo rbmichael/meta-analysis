@@ -1207,6 +1207,64 @@ rating categories are user-defined.</p>`,
     ],
   },
 
+  {
+    id: "bayes-meta",
+    heading: "Bayesian Meta-Analysis",
+    topics: [
+
+      {
+        id: "guide-bayes-meta",
+        title: "Bayesian normal-normal model",
+        body: `<p>The Bayesian meta-analysis fits a <strong>conjugate
+normal-normal random-effects model</strong>:</p>
+<ul>
+  <li>Within-study: y<sub>i</sub> | θ<sub>i</sub> ~ N(θ<sub>i</sub>, v<sub>i</sub>)</li>
+  <li>Between-study: θ<sub>i</sub> | μ, τ ~ N(μ, τ²)</li>
+  <li>Prior on μ: N(μ₀, σ<sub>μ</sub>²) — conjugate, centred on <em>μ₀</em></li>
+  <li>Prior on τ: HalfNormal(σ<sub>τ</sub>) — weakly informative, keeps τ ≥ 0</li>
+</ul>
+<p><strong>Grid approximation:</strong> Because the prior on μ is conjugate
+given τ, the posterior of μ|τ is analytic — a normal distribution with
+mean m(τ) and variance V(τ) obtainable in closed form. Only a 1-D grid over
+τ (300 points) is required. Each grid weight is proportional to the marginal
+likelihood p(y|τ) multiplied by the half-normal prior on τ.</p>
+<p>The marginal posterior of μ is then a mixture of normals,
+Σ<sub>g</sub> w<sub>g</sub> N(μ; m<sub>g</sub>, V<sub>g</sub>), giving
+smooth posterior summaries without MCMC.</p>
+<p><strong>Prior inputs:</strong></p>
+<ul>
+  <li><em>μ₀</em> — prior mean for the overall effect (default 0)</li>
+  <li><em>σ<sub>μ</sub></em> — prior SD for the overall effect (default 1).
+    Smaller values regularise more strongly toward μ₀.</li>
+  <li><em>σ<sub>τ</sub></em> — scale of the HalfNormal prior on τ (default 0.5).
+    Values around 0.3–1 are conventional for log-ratio scales;
+    use a larger value for raw-mean-difference scales.</li>
+</ul>
+<p><strong>Outputs:</strong></p>
+<ul>
+  <li>Posterior mean and 95 % credible interval for μ (overall effect)</li>
+  <li>Posterior mean and 95 % credible interval for τ (heterogeneity SD)</li>
+  <li>Plots of the marginal posterior densities for μ and τ</li>
+</ul>
+<p><strong>Diffuse priors:</strong> Setting σ<sub>μ</sub> and σ<sub>τ</sub>
+to large values (e.g., 100) yields results close to the frequentist
+random-effects estimate. The posterior mean of μ will approach the REML
+pooled estimate when the prior is uninformative.</p>
+<p><strong>Interpretation:</strong> Credible intervals (CrI) have a direct
+probability interpretation — there is a 95 % posterior probability that μ
+lies within the reported interval, given the data and prior. This differs from
+the frequentist confidence interval, which is a statement about the procedure
+rather than the specific interval.</p>`,
+        citations: [
+          "Gelman, A., Carlin, J. B., Stern, H. S., Dunson, D. B., Vehtari, A., & Rubin, D. B. (2013). <em>Bayesian Data Analysis</em> (3rd ed.). CRC Press.",
+          "Higgins, J. P. T., & Whitehead, A. (1996). Borrowing strength from external trials in a meta-analysis. <em>Statistics in Medicine, 15</em>(24), 2733–2749.",
+          "Turner, R. M., Davey, J., Clarke, M. J., Thompson, S. G., & Higgins, J. P. T. (2012). Predicting the extent of heterogeneity in meta-analysis, using empirical data from the Cochrane Database of Systematic Reviews. <em>International Journal of Epidemiology, 41</em>(3), 818–827.",
+        ],
+      },
+
+    ],
+  },
+
 ];
 
 // ------------------------------------------------------------------ //
@@ -1291,6 +1349,7 @@ export const HELP_TO_GUIDE = {
   "diag.metaregression": "guide-metaregression",
   "input.moderators":    "guide-subgroup",
   "input.rob":           "guide-rob",
+  "bayes.model":         "guide-bayes-meta",
 };
 
 // ------------------------------------------------------------------ //
