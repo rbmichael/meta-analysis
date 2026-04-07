@@ -104,7 +104,8 @@ import { eggerTest, beggTest, fatPetTest, failSafeN, pCurve, pUniform, baujat, m
 import { fmt } from "./utils.js";
 import { effectProfiles, getProfile } from "./profiles.js";
 import { trimFill } from "./trimfill.js";
-import { drawForest, drawFunnel, drawBubble, drawPartialResidualBubble, drawInfluencePlot, drawCumulativeForest, drawCumulativeFunnel, drawPCurve, drawPUniform, drawOrchardPlot, drawCaterpillarPlot, drawBaujatPlot, drawRoBTrafficLight, drawRoBSummary } from "./plots.js";
+import { drawForest, drawFunnel, drawBubble, drawPartialResidualBubble, drawInfluencePlot, drawCumulativeForest, drawCumulativeFunnel, drawPCurve, drawPUniform, drawOrchardPlot, drawCaterpillarPlot, drawBaujatPlot, drawRoBTrafficLight, drawRoBSummary, drawGoshPlot } from "./plots.js";
+import { goshCompute, GOSH_MAX_K } from "./gosh.js";
 import { exportSVG, exportPNG, exportTIFF } from "./export.js";
 import { buildReport, downloadHTML, openPrintPreview } from "./report.js";
 import { parseCSV, detectEffectType } from "./csv.js";
@@ -617,6 +618,9 @@ function buildReportAndResync() {
   const args = {
     ...appState.reportArgs,
     forestOptions: { ...appState.reportArgs.forestOptions, currentPage: forestPlot.page },
+    // Use the live goshState so a re-run after the last analysis is captured.
+    gosh:     goshState.result ?? appState.reportArgs.gosh,
+    goshXAxis: document.getElementById("goshXAxis")?.value ?? appState.reportArgs.goshXAxis ?? "I2",
   };
   const html = buildReport(args);
   // Re-render the live forest at the current page and re-sync nav buttons.
@@ -711,6 +715,9 @@ document.getElementById("selPreset").addEventListener("change", () => { syncSelC
 document.getElementById("selSides").addEventListener("change", runAnalysis);
 document.getElementById("selCuts").addEventListener("change", runAnalysis);
 syncSelControls();
+
+// ---------------- GOSH ----------------
+document.getElementById("goshRun").addEventListener("click", runGosh);
 
 // ---------------- TABLE HEADER ----------------
 function updateTableHeaders() {
@@ -1625,6 +1632,12 @@ const cumFunnelPlot = {
   profile: null,            // effect-type profile
 };
 
+const goshState = {
+  worker:  null,   // active Worker instance (null when idle)
+  result:  null,   // last GoshResult from worker 'done' message
+  profile: null,   // profile used for last result (for axis transform)
+};
+
 document.getElementById("exportScale").addEventListener("change", e => {
   appState.exportScale = +e.target.value;
 });
@@ -2224,6 +2237,151 @@ function buildSubgroupHTML(subgroup, profile) {
 }
 
 // -----------------------------------------------------------------------------
+// renderGoshInfo(result, profile)
+// -----------------------------------------------------------------------------
+function renderGoshInfo(result, profile) {
+  const el = document.getElementById("goshInfo");
+  if (!el) return;
+  const { count, k, sampled } = result;
+  const sampleNote = sampled
+    ? ` (random sample of ${count.toLocaleString()} of ${(Math.pow(2, k) - 1).toLocaleString()} possible subsets)`
+    : ` (all ${count.toLocaleString()} non-empty subsets)`;
+  el.innerHTML = `<p class="gosh-info">GOSH plot: ${k} studies, fixed-effects model${sampleNote}.</p>`;
+}
+
+// -----------------------------------------------------------------------------
+// runGosh()
+// -----------------------------------------------------------------------------
+// Spins up a gosh.worker.js Web Worker (with chunked-setTimeout fallback for
+// file:// origins that block Workers) and renders the GOSH plot on completion.
+// Cancels any previously running Worker before starting a new one.
+// -----------------------------------------------------------------------------
+function runGosh() {
+  // ---- Read study data from current analysis state ----
+  const effectType = document.getElementById("effectType").value;
+  const profile    = getProfile(effectType);
+
+  // Collect valid studies from the input table, mirroring runAnalysis().
+  // Rows start at index 1 (index 0 is the header row).
+  const rows = document.querySelectorAll("#inputTable tr");
+  const studies = [];
+  for (let i = 1; i < rows.length; i++) {
+    const row    = rows[i];
+    if (!validateRow(row)) continue;
+    const inputs = [...row.querySelectorAll("input")].map(x => x.value);
+    const studyInput = { label: inputs[0] || `Row ${i}` };
+    profile.inputs.forEach((key, idx) => {
+      studyInput[key] = profile.rawInputs?.has(key) ? inputs[idx + 1] : +inputs[idx + 1];
+    });
+    const s = profile.compute(studyInput);
+    if (isFinite(s.yi) && isFinite(s.vi) && s.vi > 0) {
+      studies.push(s);
+    }
+  }
+
+  const k = studies.length;
+  const elInfo    = document.getElementById("goshInfo");
+  const elPlot    = document.getElementById("goshPlotBlock");
+  const elProg    = document.getElementById("goshProgress");
+  const elBar     = document.getElementById("goshProgressBar");
+  const elLabel   = document.getElementById("goshProgressLabel");
+  const elRun     = document.getElementById("goshRun");
+
+  if (k < 2) {
+    if (elInfo) elInfo.innerHTML = '<p class="gosh-info">GOSH requires at least 2 valid studies.</p>';
+    return;
+  }
+  if (k > GOSH_MAX_K) {
+    if (elInfo) elInfo.innerHTML = `<p class="gosh-info">GOSH supports at most ${GOSH_MAX_K} studies (${k} present).</p>`;
+    return;
+  }
+
+  // Cancel any running Worker
+  if (goshState.worker) {
+    goshState.worker.terminate();
+    goshState.worker = null;
+  }
+
+  const yi = studies.map(s => s.yi);
+  const vi = studies.map(s => s.vi);
+  const maxSubsets = parseInt(document.getElementById("goshMaxSubsets").value, 10);
+
+  // Show progress bar, hide old plot
+  if (elProg)  { elProg.hidden  = false; }
+  if (elPlot)  { elPlot.style.display = "none"; }
+  if (elInfo)  { elInfo.innerHTML = ""; }
+  if (elBar)   { elBar.value = 0; }
+  if (elLabel) { elLabel.textContent = "Starting…"; }
+  if (elRun)   { elRun.disabled = true; }
+
+  function onDone(result) {
+    goshState.result  = result;
+    goshState.profile = profile;
+    if (elProg)  { elProg.hidden = true; }
+    if (elPlot)  { elPlot.style.display = ""; }
+    if (elRun)   { elRun.disabled = false; }
+    const xAxis = document.getElementById("goshXAxis").value;
+    drawGoshPlot(result, profile, { xAxis });
+    renderGoshInfo(result, profile);
+  }
+
+  function onProgress(done, total) {
+    const pct = Math.round(done / total * 100);
+    if (elBar)   { elBar.value = pct; }
+    if (elLabel) { elLabel.textContent = `${done.toLocaleString()} / ${total.toLocaleString()} (${pct}%)`; }
+  }
+
+  function onError(msg) {
+    if (elProg)  { elProg.hidden = true; }
+    if (elInfo)  { elInfo.innerHTML = `<p class="gosh-info" style="color:var(--danger,red)">Error: ${msg}</p>`; }
+    if (elRun)   { elRun.disabled = false; }
+  }
+
+  // ---- Try Worker first ----
+  let workerOk = false;
+  try {
+    const workerUrl = new URL("./gosh.worker.js", import.meta.url).href;
+    const w = new Worker(workerUrl);
+    goshState.worker = w;
+    workerOk = true;
+
+    w.onmessage = function(e) {
+      const msg = e.data;
+      if (msg.type === "progress") {
+        onProgress(msg.done, msg.total);
+      } else if (msg.type === "done") {
+        goshState.worker = null;
+        onDone(msg);
+      } else if (msg.type === "error") {
+        goshState.worker = null;
+        onError(msg.message);
+      }
+    };
+    w.onerror = function(e) {
+      // Worker failed to load — most likely a file:// origin security restriction
+      // in Chrome.  Fall back to synchronous computation on the main thread.
+      // With GOSH_MAX_ENUM_K=15 the sync path handles ≤32 767 subsets in < 5 ms
+      // and up to maxSubsets sampled subsets (default 50 K) in < 20 ms, so there
+      // is no meaningful UI blocking.
+      goshState.worker = null;
+      const result = goshCompute(yi, vi, { maxSubsets });
+      if (result.error) { onError(result.error); return; }
+      onDone(result);
+    };
+    w.postMessage({ yi, vi, maxSubsets });
+  } catch (_) {
+    workerOk = false;
+  }
+
+  if (!workerOk) {
+    // ---- Fallback: synchronous computation on main thread ----
+    const result = goshCompute(yi, vi, { maxSubsets });
+    if (result.error) { onError(result.error); return; }
+    onDone(result);
+  }
+}
+
+// -----------------------------------------------------------------------------
 // runAnalysis() → boolean
 // -----------------------------------------------------------------------------
 // Master orchestration function. Reads the entire UI state, runs the full
@@ -2281,6 +2439,15 @@ function buildSubgroupHTML(subgroup, profile) {
 // -----------------------------------------------------------------------------
 function runAnalysis() {
   scheduleSave();
+  // Cancel any in-progress GOSH computation.
+  if (goshState.worker) {
+    goshState.worker.terminate();
+    goshState.worker = null;
+    const elRun = document.getElementById("goshRun");
+    if (elRun) elRun.disabled = false;
+    const elProg = document.getElementById("goshProgress");
+    if (elProg) elProg.hidden = true;
+  }
   // Reset accordion sections to their default open/closed states on each run.
   document.querySelectorAll(".results-section").forEach(d => d.removeAttribute("open"));
   caterpillarPlot.page = 0;
@@ -2569,6 +2736,8 @@ function runAnalysis() {
     influence, subgroup, method, ciMethod,
     useTF, mAdjusted,
     sel: selResult, selMode: selModeVal, selLabel: _selLabel,
+    gosh: goshState.result,
+    goshXAxis: document.getElementById("goshXAxis")?.value ?? "I2",
     forestOptions: { ...forestOpts, currentPage: forestPlot.page },
   };
   funnelPlot.args = [all, m, egger, profile];

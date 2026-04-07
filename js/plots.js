@@ -59,6 +59,14 @@
 //   paginate()          — slice an array to one page + return pagination metadata
 //   attachTooltip()     — wire mousemove/mouseout tooltip onto a D3 selection
 //
+//   drawGoshPlot(result, profile)
+//     GOSH scatter (Harbord & Higgins, 2008): x = I², y = FE pooled estimate
+//     on the display scale.  Points coloured by subset size n (Viridis).
+//     Rendering: SVG circles for count ≤ 5 000; ImageData-painted canvas
+//     embedded as <image> for larger datasets (zero-copy, ~50 ms for 1 M pts).
+//     Canvas mode shows a coordinate-readout tooltip; SVG mode shows per-point
+//     details (n, I², μ̂).
+//
 // Dependencies: utils.js (chiSquareCDF), constants.js (Z_95), D3 (global)
 // =============================================================================
 
@@ -2720,4 +2728,290 @@ export function drawRoBSummary(studies, domains, robData) {
       .text(label);
     lx += label === "Some concerns" ? 110 : 60;
   });
+}
+// ================= GOSH PLOT =================
+// Graphical Display of Study Heterogeneity (Harbord & Higgins, 2008).
+// x-axis : I² (0–100 %)
+// y-axis : FE pooled estimate on the display scale (profile.transform applied)
+// colour : subset size n, Viridis sequential scale (purple=small n, yellow=large n)
+//
+// Rendering strategy
+// ------------------
+//   count ≤ SVG_THRESHOLD (5 000) : D3 SVG circles — fully interactive, per-point
+//                                   tooltips showing n, I², μ̂.
+//   count >  SVG_THRESHOLD        : Raw-pixel ImageData written in O(count) time
+//                                   (~50 ms for 1 M subsets), embedded as <image>.
+//                                   Alpha compositing gives natural density shading.
+//                                   Tooltip shows axis coordinates at the cursor.
+//
+// Parameters
+//   result  — return value of goshCompute() from gosh.js
+//   profile — effect-type profile: { transform, label }; defaults to identity
+//
+// Maximum SVG circle points when rendering for a report (keeps file size small
+// and avoids embedding a rasterised PNG inside the exported HTML/SVG).
+const GOSH_SVG_REPORT_MAX = 3000;
+
+export function drawGoshPlot(result, profile, opts = {}) {
+  const svg = clearAndSelectSVG("#goshPlot");
+  if (!result || result.error || !result.count) return;
+
+  profile = profile || { transform: x => x, label: "Effect" };
+
+  const { mu: muArr, I2: I2Arr, Q: QArr, n: nArr, count, k, sampled } = result;
+  const xAxis     = opts.xAxis     || "I2";    // "I2" | "Q" | "n"
+  const forReport = opts.forReport || false;   // true → SVG circles only (no canvas PNG embed)
+
+  const W = +svg.attr("width")  || 520;
+  const H = +svg.attr("height") || 420;
+  const margin = { top: 34, right: 88, bottom: 56, left: 62 };
+  const iW = W - margin.left - margin.right;
+  const iH = H - margin.top  - margin.bottom;
+
+  const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+
+  // ---- Apply profile transform; find finite range ----
+  const muDisplay = new Float64Array(count);
+  let muMin = Infinity, muMax = -Infinity;
+  for (let i = 0; i < count; i++) {
+    const v = profile.transform(muArr[i]);
+    muDisplay[i] = isFinite(v) ? v : NaN;
+    if (isFinite(v)) {
+      if (v < muMin) muMin = v;
+      if (v > muMax) muMax = v;
+    }
+  }
+  if (!isFinite(muMin)) return;
+  const muPad = (muMax - muMin) * 0.08 || 0.5;
+
+  // ---- Derive x-axis values from selected axis ----
+  let xArr, xLabel;
+  if (xAxis === "Q") {
+    xArr   = QArr;
+    xLabel = "Q (Cochran's Q)";
+  } else if (xAxis === "n") {
+    xArr   = nArr;
+    xLabel = "n (subset size)";
+  } else {
+    xArr   = I2Arr;
+    xLabel = "I² (%)";
+  }
+
+  // ---- Scales ----
+  let xScale;
+  if (xAxis === "I2") {
+    // Fixed [-2, 102] so I²=0 points aren't clipped
+    xScale = d3.scaleLinear().domain([-2, 102]).range([0, iW]);
+  } else if (xAxis === "n") {
+    xScale = d3.scaleLinear().domain([0.5, k + 0.5]).range([0, iW]);
+  } else {
+    // Q: auto-range from data
+    let qMin = Infinity, qMax = -Infinity;
+    for (let i = 0; i < count; i++) {
+      if (xArr[i] < qMin) qMin = xArr[i];
+      if (xArr[i] > qMax) qMax = xArr[i];
+    }
+    const qPad = (qMax - qMin) * 0.05 || 1;
+    xScale = d3.scaleLinear().domain([qMin - qPad, qMax + qPad]).nice().range([0, iW]);
+  }
+
+  const yScale = d3.scaleLinear()
+    .domain([muMin - muPad, muMax + muPad])
+    .nice()
+    .range([iH, 0]);
+
+  // ---- Viridis colour scale: n = 1 (purple) … k (yellow) ----
+  const colorScale = d3.scaleSequential(d3.interpolateViridis).domain([1, k]);
+
+  // ---- Render points ----
+  const SVG_THRESHOLD = 5000;
+  // For reports: always SVG circles (no canvas PNG embed); stride-subsample if needed.
+  const useCanvas = count > SVG_THRESHOLD && !forReport;
+
+  if (useCanvas) {
+    // ======================== CANVAS PATH ========================
+    // Pre-compute n → [r, g, b] colour lookup (at most k ≤ 30 entries).
+    const nColor = new Array(k + 1);
+    for (let ni = 1; ni <= k; ni++) {
+      const c = d3.color(colorScale(ni));
+      nColor[ni] = [c.r, c.g, c.b];
+    }
+
+    // Adaptive per-point alpha: more points → lower alpha so overlapping
+    // points reveal density rather than saturating to solid fill.
+    const alphaInt = Math.max(12, Math.min(220, Math.round(4000 / Math.sqrt(count))));
+
+    // Write pixels directly into ImageData — O(count), no per-call fillRect overhead.
+    const canvas = document.createElement("canvas");
+    canvas.width  = iW;
+    canvas.height = iH;
+    const ctx     = canvas.getContext("2d");
+    const imgData = ctx.createImageData(iW, iH);
+    const pb      = imgData.data;  // Uint8ClampedArray, zeroed (transparent)
+
+    for (let i = 0; i < count; i++) {
+      const cx = xScale(xArr[i])      | 0;
+      const cy = yScale(muDisplay[i]) | 0;
+      if (cx < 0 || cx >= iW || cy < 0 || cy >= iH || !isFinite(muDisplay[i])) continue;
+      const off    = (cy * iW + cx) << 2;
+      const [rc, gc, bc] = nColor[nArr[i]];
+      const ia     = 255 - alphaInt;
+      pb[off]     = ((pb[off]     * ia) >> 8) + ((rc * alphaInt) >> 8);
+      pb[off + 1] = ((pb[off + 1] * ia) >> 8) + ((gc * alphaInt) >> 8);
+      pb[off + 2] = ((pb[off + 2] * ia) >> 8) + ((bc * alphaInt) >> 8);
+      pb[off + 3] = Math.min(255, pb[off + 3] + alphaInt);
+    }
+    ctx.putImageData(imgData, 0, 0);
+
+    // Embed the rasterised cloud as an SVG <image>.
+    g.append("image")
+      .attr("x", 0).attr("y", 0)
+      .attr("width", iW).attr("height", iH)
+      .attr("href", canvas.toDataURL("image/png"))
+      .attr("preserveAspectRatio", "none");
+
+    // Transparent overlay for coordinate-readout tooltip.
+    const tt = d3.select("#tooltip");
+    g.append("rect")
+      .attr("x", 0).attr("y", 0)
+      .attr("width", iW).attr("height", iH)
+      .attr("fill", "none")
+      .attr("pointer-events", "all")
+      .on("mousemove", (event) => {
+        const [mx, my] = d3.pointer(event);
+        const xval  = xScale.invert(mx);
+        const muval = yScale.invert(my);
+        const xStr  = xAxis === "I2"
+          ? `I² = ${xval.toFixed(1)} %`
+          : xAxis === "n"
+            ? `n = ${Math.round(xval)}`
+            : `Q = ${xval.toFixed(2)}`;
+        tt.style("opacity", 1)
+          .html(`${xStr}<br>${profile.label}: ${(+muval.toFixed(3))}`)
+          .style("left", (event.pageX + 12) + "px")
+          .style("top",  (event.pageY - 24) + "px");
+      })
+      .on("mouseout", () => tt.style("opacity", 0));
+
+  } else {
+    // ======================== SVG PATH ========================
+    // Build index array; subsample for report renders to keep SVG file size small.
+    let indices;
+    if (forReport && count > GOSH_SVG_REPORT_MAX) {
+      const stride = Math.ceil(count / GOSH_SVG_REPORT_MAX);
+      indices = [];
+      for (let i = 0; i < count; i += stride) indices.push(i);
+    } else {
+      indices = Array.from({ length: count }, (_, i) => i);
+    }
+
+    attachTooltip(
+      g.selectAll("circle")
+        .data(indices)
+        .enter().append("circle")
+        .attr("cx", i => xScale(xArr[i]))
+        .attr("cy", i => yScale(muDisplay[i]))
+        .attr("r", count <= 500 ? 4 : 3)
+        .attr("fill", i => colorScale(nArr[i]))
+        .attr("fill-opacity", 0.72)
+        .attr("stroke", "none"),
+      i => {
+        const xStr = xAxis === "I2"
+          ? `I² = ${I2Arr[i].toFixed(1)} %`
+          : xAxis === "n"
+            ? `n = ${nArr[i]}`
+            : `Q = ${QArr[i].toFixed(2)}`;
+        return `n = ${nArr[i]}<br>${xStr}<br>${profile.label}: ${(+muDisplay[i].toFixed(3))}`;
+      }
+    );
+  }
+
+  // ---- Axes ----
+  let xAxisGen;
+  if (xAxis === "I2") {
+    xAxisGen = d3.axisBottom(xScale).tickValues([0, 25, 50, 75, 100]).tickFormat(d => d + "%");
+  } else if (xAxis === "n") {
+    xAxisGen = d3.axisBottom(xScale).ticks(Math.min(k, 10)).tickFormat(d3.format("d"));
+  } else {
+    xAxisGen = d3.axisBottom(xScale).ticks(5).tickFormat(d3.format(".3~g"));
+  }
+  const axisX = g.append("g")
+    .attr("transform", `translate(0,${iH})`)
+    .call(xAxisGen);
+  styleAxis(axisX, "var(--border-hover)", "var(--fg-muted)", "10px");
+
+  const axisY = g.append("g")
+    .call(d3.axisLeft(yScale).ticks(5).tickFormat(d3.format(".3~g")));
+  styleAxis(axisY, "var(--border-hover)", "var(--fg-muted)", "10px");
+
+  // ---- Axis labels ----
+  svg.append("text")
+    .attr("x", margin.left + iW / 2).attr("y", H - 8)
+    .attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "11px")
+    .text(xLabel);
+
+  svg.append("text")
+    .attr("transform", "rotate(-90)")
+    .attr("x", -(margin.top + iH / 2)).attr("y", 14)
+    .attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "11px")
+    .text(profile.label);
+
+  // ---- Title ----
+  const subsetNote = sampled
+    ? `${count.toLocaleString()} sampled of 2^${k}−1`
+    : `all 2^${k}−1 = ${count.toLocaleString()}`;
+  svg.append("text")
+    .attr("x", margin.left + iW / 2).attr("y", 18)
+    .attr("text-anchor", "middle").attr("fill", "var(--fg)").style("font-size", "12px")
+    .text(`GOSH — k = ${k}  (${subsetNote} subsets)`);
+
+  // ---- Colour legend: vertical Viridis bar for n ----
+  const legH  = Math.min(iH * 0.65, 110);
+  const legW  = 11;
+  const legX  = iW + 20;
+  const legY  = (iH - legH) / 2;
+
+  const gradId = "gosh-n-grad";
+  const defs   = svg.append("defs");
+  const grad   = defs.append("linearGradient")
+    .attr("id", gradId)
+    .attr("x1", "0%").attr("y1", "100%")   // bottom = n=1 (purple)
+    .attr("x2", "0%").attr("y2", "0%");    // top    = n=k (yellow)
+
+  const stops = Math.min(k - 1, 8);
+  for (let s = 0; s <= stops; s++) {
+    const t = stops > 0 ? s / stops : 0;
+    grad.append("stop")
+      .attr("offset", (t * 100).toFixed(1) + "%")
+      .attr("stop-color", colorScale(1 + t * (k - 1)));
+  }
+
+  const lg = g.append("g").attr("transform", `translate(${legX},${legY})`);
+
+  lg.append("rect")
+    .attr("width", legW).attr("height", legH)
+    .attr("fill", `url(#${gradId})`)
+    .attr("stroke", "var(--border-hover)").attr("stroke-width", 0.5);
+
+  // Tick marks and labels: k (top), midpoint, 1 (bottom)
+  [
+    { y: 0,      label: k },
+    { y: legH/2, label: Math.round((k + 1) / 2) },
+    { y: legH,   label: 1 },
+  ].forEach(({ y, label }) => {
+    lg.append("line")
+      .attr("x1", legW).attr("x2", legW + 3).attr("y1", y).attr("y2", y)
+      .attr("stroke", "var(--fg-muted)").attr("stroke-width", 0.8);
+    lg.append("text")
+      .attr("x", legW + 5).attr("y", y)
+      .attr("dominant-baseline", "middle").attr("fill", "var(--fg-muted)").style("font-size", "9px")
+      .text(label);
+  });
+
+  // Rotated legend title
+  svg.append("text")
+    .attr("transform",
+      `rotate(-90) translate(${-(margin.top + legY + legH / 2)},${margin.left + legX + legW + 30})`)
+    .attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "9px")
+    .text("n (subset size)");
 }

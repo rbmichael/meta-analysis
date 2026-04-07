@@ -30,7 +30,7 @@
 //   constants.js Z_95
 //   export.js    resolveThemeVars(), hasEmbeddedBackground()
 
-import { drawForest } from "./plots.js";
+import { drawForest, drawGoshPlot } from "./plots.js";
 import { downloadBlob } from "./io.js";
 import { Z_95 } from "./constants.js";
 import { resolveThemeVars, hasEmbeddedBackground } from "./export.js";
@@ -771,12 +771,61 @@ export function openPrintPreview(htmlString) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// sectionGosh(goshResult, profile, xAxis) → HTML string
+// ---------------------------------------------------------------------------
+// goshResult  — GoshResult object from gosh.js (or null / undefined)
+// profile     — effect profile (for axis transform and label)
+// xAxis       — "I2" | "Q" | "n"  (the selected x-axis at report-build time)
+//
+// Re-renders the GOSH plot using SVG circles (forReport:true) so the report
+// contains clean vector output rather than an embedded canvas PNG.
+// The live #goshPlot element is restored to its screen render after serialization,
+// exactly as collectForestSVGs does for the forest plot.
+function sectionGosh(goshResult, profile, xAxis) {
+  if (!goshResult || goshResult.error) {
+    return `
+<section>
+  <h2>GOSH Plot</h2>
+  <p class="note">GOSH plot not computed — click <em>Compute</em> before generating report.</p>
+</section>`;
+  }
+
+  const { count, k, sampled } = goshResult;
+  const totalPossible = Math.pow(2, k) - 1;
+  const xAxisLabel = xAxis === "Q" ? "Q (Cochran's Q)" : xAxis === "n" ? "n (subset size)" : "I² (%)";
+
+  const sampleLine = sampled
+    ? `Random sample of ${count.toLocaleString()} subsets (of ${totalPossible.toLocaleString()} possible).`
+    : `All ${count.toLocaleString()} non-empty subsets enumerated exactly.`;
+
+  // Re-render into the live SVG using SVG circles (no canvas PNG embed).
+  drawGoshPlot(goshResult, profile, { xAxis, forReport: true });
+  const svgEl  = document.getElementById("goshPlot");
+  const svgStr = svgEl ? serializeSVG(svgEl) : "";
+  // Restore screen render (avoids a visible change if the user has the section open).
+  drawGoshPlot(goshResult, profile, { xAxis });
+
+  const svgBlock = svgStr
+    ? `<div class="svg-wrap">${svgStr}</div>`
+    : `<p class="note">Plot image not available.</p>`;
+
+  return `
+<section>
+  <h2>GOSH Plot (Graphical Display of Study Heterogeneity)</h2>
+  <p class="meta-line">k = ${k} studies &nbsp;·&nbsp; Fixed-effects model &nbsp;·&nbsp; x-axis: ${esc(xAxisLabel)}</p>
+  <p class="note">${esc(sampleLine)}</p>
+  ${svgBlock}
+</section>`;
+}
+
 export function buildReport(args) {
   const {
     studies, m, profile, reg, tf, influence, subgroup,
     method, ciMethod, useTF, forestOptions,
     pcurve, puniform,
     sel, selMode, selLabel,
+    gosh, goshXAxis,
   } = args;
 
   const date  = new Date().toLocaleDateString(undefined, {
@@ -807,6 +856,7 @@ export function buildReport(args) {
     sectionPubBias(args),
     sectionPUniform(puniform, m, profile),
     sectionSelectionModel(sel ?? null, profile, selMode ?? "mle", selLabel ?? ""),
+    sectionGosh(gosh ?? null, profile, goshXAxis ?? "I2"),
     sectionInfluence(influence, k),
     sectionSubgroup(subgroup, profile),
     sectionStudyTable(args),

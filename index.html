@@ -456,7 +456,44 @@
           <div id="selectionModelPanel"></div>
         </details>
 
-        <!-- ── Section 10: Risk of Bias (collapsed, hidden until RoB data present) ── -->
+        <!-- ── Section 10: GOSH Plot ── -->
+        <details class="results-section" id="goshSection">
+          <summary class="results-section-header">GOSH Plot
+            <span class="section-controls">
+              <label class="inline">X-axis:
+                <select id="goshXAxis">
+                  <option value="I2">I²</option>
+                  <option value="Q">Q</option>
+                  <option value="n">n (subset size)</option>
+                </select>
+              </label>
+              <label class="inline">Max subsets:
+                <select id="goshMaxSubsets">
+                  <option value="10000">10 000</option>
+                  <option value="50000" selected>50 000</option>
+                  <option value="100000">100 000</option>
+                </select>
+              </label>
+              <button id="goshRun" class="run-btn">Compute</button>
+            </span>
+          </summary>
+          <div id="goshProgress" hidden>
+            <progress id="goshProgressBar" value="0" max="100" style="width:100%"></progress>
+            <span id="goshProgressLabel"></span>
+          </div>
+          <div class="plot-block" id="goshPlotBlock" style="display:none">
+            <p class="plot-label">GOSH plot</p>
+            <div class="plot-export">
+              <button class="export-btn" data-target="goshPlot" data-format="svg">SVG</button>
+              <button class="export-btn" data-target="goshPlot" data-format="png">PNG</button>
+              <button class="export-btn" data-target="goshPlot" data-format="tiff">TIFF</button>
+            </div>
+            <svg id="goshPlot" width="520" height="420"></svg>
+          </div>
+          <div id="goshInfo"></div>
+        </details>
+
+        <!-- ── Section 11: Risk of Bias (collapsed, hidden until RoB data present) ── -->
         <details class="results-section" id="robSection" style="display:none">
           <summary class="results-section-header">Risk of Bias</summary>
           <div class="plot-block" id="robTrafficLightBlock">

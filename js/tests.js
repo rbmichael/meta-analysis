@@ -3,6 +3,7 @@ import { BENCHMARKS, PUB_BIAS_BENCHMARKS, INFLUENCE_BENCHMARKS, META_REGRESSION_
 import { compute, meta, metaRegression, tau2_HS, tau2_HE, tau2_ML, tau2_SJ, beggTest, eggerTest, fatPetTest, failSafeN, heterogeneityCIs, cumulativeMeta, influenceDiagnostics, harbordTest, petersTest, deeksTest, rueckerTest, leaveOneOut, baujat, pCurve, pUniform, estimatorComparison, subgroupAnalysis, logLik, bfgs, selIntervalProbs, selIntervalIdx, selectionLogLik, SEL_CUTS_ONE_SIDED, SEL_CUTS_TWO_SIDED, veveaHedges, SELECTION_PRESETS } from "./analysis.js";
 import { trimFill } from "./trimfill.js";
 import { parseCSV } from "./csv.js";
+import { goshCompute, GOSH_MAX_ENUM_K, GOSH_MAX_K, GOSH_DEFAULT_MAX_SUBSETS } from "./gosh.js";
 
 // Tolerances vary by field:
 //   FE, RE  — absolute 0.01   (pooled estimates are on a stable scale)
@@ -3735,4 +3736,215 @@ export function runTests() {
     SELECTION_PRESETS.moderate1.omega.every((w, i) => w === SELECTION_PRESETS.moderate2.omega[i]));
 
   console.log(presetPass ? "\n✅ ALL SELECTION PRESET TESTS PASSED" : "\n❌ SOME SELECTION PRESET TESTS FAILED");
+
+  // ---- GOSH computation tests ----
+  console.log("\n===== GOSH COMPUTATION TESTS =====\n");
+  let goshPass = true;
+  const { chk: gchk, chkTrue: gchkTrue, chkExact: gchkExact } = makeChk(() => { goshPass = false; });
+
+  // ---- 1. Error cases ----
+  {
+    console.log("--- error cases ---");
+    const e1 = goshCompute([1], [1]);
+    gchkTrue("k=1 returns error", typeof e1.error === "string");
+
+    const e2 = goshCompute(new Array(31).fill(0), new Array(31).fill(1));
+    gchkTrue("k=31 returns error", typeof e2.error === "string");
+
+    const e3 = goshCompute([0, 1, 2], [1, 1]);
+    gchkTrue("mismatched lengths returns error", typeof e3.error === "string");
+  }
+
+  // ---- 2. k=3 hand-verified: all 7 subsets ----
+  // yi=[0, 1, 2], vi=[1, 1, 1], wi=[1,1,1]
+  // Single-pass Q = Σwi*yi² − (Σwi*yi)²/Σwi
+  //
+  // mask 1 {0}:     mu=0,   Q=0,   n=1, I2=0
+  // mask 2 {1}:     mu=1,   Q=0,   n=1, I2=0
+  // mask 3 {0,1}:   mu=0.5, Q=0.5, n=2, I2=0   (Q<df=1: I2=0)
+  // mask 4 {2}:     mu=2,   Q=0,   n=1, I2=0
+  // mask 5 {0,2}:   mu=1,   Q=2,   n=2, I2=50
+  // mask 6 {1,2}:   mu=1.5, Q=0.5, n=2, I2=0
+  // mask 7 {0,1,2}: mu=1,   Q=2,   n=3, I2=0   (Q=df=2: I2=0)
+  {
+    console.log("--- k=3 exact values (all 7 subsets) ---");
+    const r = goshCompute([0, 1, 2], [1, 1, 1]);
+    gchkExact("count = 7",    r.count, 7);
+    gchkTrue ("sampled=false", r.sampled === false);
+    gchkExact("k = 3",        r.k, 3);
+
+    // mu
+    gchk("mu[0] {0}",     r.mu[0], 0,   1e-12);
+    gchk("mu[1] {1}",     r.mu[1], 1,   1e-12);
+    gchk("mu[2] {0,1}",   r.mu[2], 0.5, 1e-12);
+    gchk("mu[3] {2}",     r.mu[3], 2,   1e-12);
+    gchk("mu[4] {0,2}",   r.mu[4], 1,   1e-12);
+    gchk("mu[5] {1,2}",   r.mu[5], 1.5, 1e-12);
+    gchk("mu[6] {0,1,2}", r.mu[6], 1,   1e-12);
+
+    // I²
+    gchk("I2[0]", r.I2[0], 0,  1e-12);
+    gchk("I2[1]", r.I2[1], 0,  1e-12);
+    gchk("I2[2]", r.I2[2], 0,  1e-12);   // Q=0.5 < df=1 → 0
+    gchk("I2[3]", r.I2[3], 0,  1e-12);
+    gchk("I2[4]", r.I2[4], 50, 1e-10);   // (Q−df)/Q = (2−1)/2 = 50%
+    gchk("I2[5]", r.I2[5], 0,  1e-12);
+    gchk("I2[6]", r.I2[6], 0,  1e-12);   // Q=df=2 → exactly 0
+
+    // Q
+    gchk("Q[2] {0,1}",   r.Q[2], 0.5, 1e-12);
+    gchk("Q[4] {0,2}",   r.Q[4], 2,   1e-12);
+    gchk("Q[6] {0,1,2}", r.Q[6], 2,   1e-12);
+
+    // n (subset sizes)
+    gchkExact("n[0]", r.n[0], 1);
+    gchkExact("n[1]", r.n[1], 1);
+    gchkExact("n[2]", r.n[2], 2);
+    gchkExact("n[3]", r.n[3], 1);
+    gchkExact("n[4]", r.n[4], 2);
+    gchkExact("n[5]", r.n[5], 2);
+    gchkExact("n[6]", r.n[6], 3);
+  }
+
+  // ---- 3. n[mask−1] = popcount(mask) for k=4 (all 15 subsets) ----
+  {
+    console.log("--- n matches popcount for k=4 ---");
+    const popcount = m => { let c = 0; while (m) { c += m & 1; m >>>= 1; } return c; };
+    const r = goshCompute([0.1, 0.5, 0.9, 1.3], [0.04, 0.09, 0.04, 0.16]);
+    gchkExact("count = 15", r.count, 15);
+    let nOk = true;
+    for (let mask = 1; mask <= 15; mask++) {
+      if (r.n[mask - 1] !== popcount(mask)) { nOk = false; break; }
+    }
+    gchkTrue("n[mask−1] = popcount(mask) for all 15 subsets", nOk);
+  }
+
+  // ---- 4. Full-dataset entry matches meta("FE") ----
+  {
+    console.log("--- full-dataset entry consistent with meta() FE ---");
+    const studies = [
+      { yi: 0.2, vi: 0.04 },
+      { yi: 0.6, vi: 0.09 },
+      { yi: 1.0, vi: 0.16 },
+      { yi: 0.4, vi: 0.01 },
+      { yi: 0.8, vi: 0.25 },
+    ];
+    const yiArr = studies.map(s => s.yi);
+    const viArr = studies.map(s => s.vi);
+    const r   = goshCompute(yiArr, viArr);
+    const mFE = meta(studies, "FE");
+    // Full-dataset: last index = 2^k−2 (mask = 2^k−1)
+    const last = r.count - 1;
+    // mu is Float32Array: tolerance 1e-5 (Float32 unit of least precision ≈ 6e-8 × value,
+    // so ~2.5e-8 for values near 0.44; 1e-5 gives comfortable margin).
+    gchk("mu[last] ≈ FE",  r.mu[last], mFE.FE,  1e-5);
+    gchk("Q[last] ≈ FE Q", r.Q[last],  mFE.Q,   1e-10);  // Q is Float64Array
+    gchkExact("n[last] = k", r.n[last], studies.length);
+  }
+
+  // ---- 5. I² range and mu finiteness for k=6 (all 63 subsets) ----
+  {
+    console.log("--- I2 in [0,100] and mu finite for k=6 ---");
+    const r = goshCompute(
+      [0.1, 0.3, 0.6, 0.9, 1.2, 0.5],
+      [0.04, 0.09, 0.04, 0.16, 0.09, 0.01]
+    );
+    gchkExact("count = 63", r.count, 63);
+    gchkTrue("all I2 in [0,100]", Array.from(r.I2).every(v => v >= 0 && v <= 100));
+    gchkTrue("all mu finite",     Array.from(r.mu).every(v => isFinite(v)));
+    gchkTrue("all Q >= 0",        Array.from(r.Q).every(v => v >= 0));
+    gchkTrue("all n in [1,6]",    Array.from(r.n).every(v => v >= 1 && v <= 6));
+    // Single-study subsets (n=1) must have I2=0 and Q=0
+    const singleIdx = [];
+    for (let mask = 1; mask <= 63; mask++) {
+      if ((mask & (mask - 1)) === 0) singleIdx.push(mask - 1);  // power of 2 → single study
+    }
+    gchkTrue("I2=0 for n=1 subsets", singleIdx.every(i => r.I2[i] === 0));
+    gchkTrue("Q=0 for n=1 subsets",  singleIdx.every(i => r.Q[i]  === 0));
+  }
+
+  // ---- 6. I² formula: known high-heterogeneity pair ----
+  // yi=[0, 2], vi=[1, 1]: W=2, Wmu=2, Wmu2=4, Q=4−4/2=2, I2=(2−1)/2·100=50%
+  {
+    console.log("--- I2 formula: high-heterogeneity pair ---");
+    const r = goshCompute([0, 2], [1, 1]);
+    // mask 3 = {0,1} = full set, stored at index 2 (mask−1=2)
+    gchk("mu full pair", r.mu[2], 1,  1e-12);
+    gchk("Q full pair",  r.Q[2],  2,  1e-12);
+    gchk("I2 full pair", r.I2[2], 50, 1e-10);
+  }
+
+  // ---- 7a. min(2^k−1, maxSubsets): enumeration path ignores maxSubsets ----
+  // For k ≤ 20 the sampled flag is false, so count = 2^k−1 regardless of maxSubsets.
+  // This verifies the min() does not accidentally cap enumerated results.
+  {
+    console.log("--- min(2^k-1, maxSubsets): enum path ignores maxSubsets ---");
+    const r = goshCompute([0, 1, 2], [1, 1, 1], { maxSubsets: 1000 });
+    gchkExact("count = 7 (not 1000)",  r.count,   7);
+    gchkTrue ("sampled=false",         r.sampled === false);
+    // mu/I2 identical to the default run (seed/opts don't affect enumeration)
+    gchk("mu[4] same as default run",  r.mu[4], 1,  1e-12);
+    gchk("I2[4] same as default run",  r.I2[4], 50, 1e-10);
+  }
+
+  // ---- 7. Sampling boundary: k=15 enumerates, k=16 samples ----
+  {
+    console.log("--- sampling boundary: k=15 enumerates (2^15-1=32767), k=16 samples ---");
+    const yi15 = Array.from({ length: 15 }, (_, i) => i * 0.05);
+    const vi15 = Array.from({ length: 15 }, ()    => 0.04);
+    const r15  = goshCompute(yi15, vi15);
+    gchkExact("k=15 count = 32767",  r15.count,   32767);
+    gchkTrue ("k=15 sampled=false",  r15.sampled === false);
+
+    const yi16 = Array.from({ length: 16 }, (_, i) => i * 0.05);
+    const vi16 = Array.from({ length: 16 }, ()    => 0.04);
+    const r16  = goshCompute(yi16, vi16, { maxSubsets: 200, seed: 7 });
+    gchkTrue ("k=16 sampled=true",   r16.sampled === true);
+    gchkExact("k=16 count = 200",    r16.count,   200);
+    gchkExact("k=16 k field",        r16.k,       16);
+    gchkTrue ("k=16 all I2 ∈[0,100]", Array.from(r16.I2).every(v => v >= 0 && v <= 100));
+  }
+
+  // ---- 8 (was 7). Sampling: k=21, count=maxSubsets, sampled=true ----
+  {
+    console.log("--- sampling: k=21 ---");
+    const k21 = 21;
+    const yi21 = new Array(k21).fill(0).map((_, i) => i * 0.05);
+    const vi21 = new Array(k21).fill(0).map(() => 0.04 + Math.random() * 0.06);
+    const r = goshCompute(yi21, vi21, { maxSubsets: 500, seed: 42 });
+    gchkTrue ("sampled=true",      r.sampled === true);
+    gchkExact("count=500",         r.count, 500);
+    gchkExact("k=21",              r.k, 21);
+    gchkTrue ("all I2 in [0,100]", Array.from(r.I2).every(v => v >= 0 && v <= 100));
+    gchkTrue ("all mu finite",     Array.from(r.mu).every(v => isFinite(v)));
+    // Expected subset size ≈ k/2 = 10.5; check mean is in [8, 13]
+    const meanN = Array.from(r.n).reduce((a, b) => a + b, 0) / r.count;
+    gchkTrue("mean n ≈ k/2", meanN >= 8 && meanN <= 13);
+  }
+
+  // ---- 8. Sampling reproducibility (same seed → identical results) ----
+  {
+    console.log("--- sampling reproducibility ---");
+    const yi8 = [0.1, 0.3, 0.5, 0.7, 0.9, 1.1, 1.3, 1.5,
+                 0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 1.4, 1.6,
+                 0.15, 0.35, 0.55, 0.75, 0.95];
+    const vi8 = yi8.map(() => 0.04);
+    const r1 = goshCompute(yi8, vi8, { maxSubsets: 200, seed: 99 });
+    const r2 = goshCompute(yi8, vi8, { maxSubsets: 200, seed: 99 });
+    const r3 = goshCompute(yi8, vi8, { maxSubsets: 200, seed: 77 });
+    gchkTrue("same seed → same mu[0]",       r1.mu[0] === r2.mu[0]);
+    gchkTrue("same seed → same mu[99]",      r1.mu[99] === r2.mu[99]);
+    gchkTrue("different seed → different mu[0]", r1.mu[0] !== r3.mu[0]);
+  }
+
+  // ---- 9. Constants are exported and sane ----
+  {
+    console.log("--- exported constants ---");
+    gchkExact("GOSH_MAX_ENUM_K = 15",          GOSH_MAX_ENUM_K, 15);
+    gchkExact("GOSH_MAX_K = 30",               GOSH_MAX_K, 30);
+    gchkExact("GOSH_DEFAULT_MAX_SUBSETS = 50000", GOSH_DEFAULT_MAX_SUBSETS, 50_000);
+    gchkTrue ("GOSH_MAX_ENUM_K < GOSH_MAX_K",  GOSH_MAX_ENUM_K < GOSH_MAX_K);
+  }
+
+  console.log(goshPass ? "\n✅ ALL GOSH TESTS PASSED" : "\n❌ SOME GOSH TESTS FAILED");
 }
