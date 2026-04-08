@@ -1725,3 +1725,162 @@ export const VH_BENCHMARKS = [
   }
 
 ];
+
+// -----------------------------------------------------------------------
+// MH_BENCHMARKS — Mantel-Haenszel and Peto pooling (Phase 4)
+//
+// Dataset: BCG Vaccine (Colditz et al. 1994), 13 studies, same raw counts
+// as BENCHMARKS[1] (OR, DL).
+//
+// Ground truth: R metafor 4.8-0
+//   OR/RR/RD: rma.mh(ai=tpos, bi=tneg, ci=cpos, di=cneg, data=dat.bcg, measure=...)
+//   Peto:     rma.peto(ai=tpos, bi=tneg, ci=cpos, di=cneg, data=dat.bcg)
+//
+// Blocks MH-1 through MH-4 in generate.R reproduce these values.
+// -----------------------------------------------------------------------
+
+export const MH_BENCHMARKS = [
+
+  // ----------------------------------------------------------------
+  // MH-1: BCG Vaccine – OR (Mantel-Haenszel)
+  // rma.mh(..., measure="OR")
+  // OR_MH = exp(-0.4734110) = 0.6229
+  // ----------------------------------------------------------------
+  {
+    name: "BCG Vaccine – OR (Mantel-Haenszel)",
+    type: "OR",
+    method: "MH",
+    data: [
+      { label: "Aronson 1948",            a:   4, b:   119, c:  11, d:   128 },
+      { label: "Ferguson & Simes 1949",   a:   6, b:   300, c:  29, d:   274 },
+      { label: "Rosenthal 1960",          a:   3, b:   228, c:  11, d:   209 },
+      { label: "Hart & Sutherland 1977",  a:  62, b: 13536, c: 248, d: 12619 },
+      { label: "Frimodt-Moller 1973",     a:  33, b:  5036, c:  47, d:  5761 },
+      { label: "Stein & Aronson 1953",    a: 180, b:  1361, c: 372, d:  1079 },
+      { label: "Vandiviere 1973",         a:   8, b:  2537, c:  10, d:   619 },
+      { label: "TPT Madras 1980",         a: 505, b: 87886, c: 499, d: 87892 },
+      { label: "Coetzee & Berjak 1968",   a:  29, b:  7470, c:  45, d:  7232 },
+      { label: "Rosenthal 1961",          a:  17, b:  1699, c:  65, d:  1600 },
+      { label: "Comstock 1974",           a: 186, b: 50448, c: 141, d: 27197 },
+      { label: "Comstock & Webster 1969", a:   5, b:  2493, c:   3, d:  2338 },
+      { label: "Comstock 1976",           a:  27, b: 16886, c:  29, d: 17825 }
+    ],
+    expected: {
+      est:    -0.4734110,
+      se:      0.0410078,
+      ciLow:  -0.5537848,
+      ciHigh: -0.3930372,
+      OR:      0.6229,        // exp(est), rounded
+      Q:     163.94258,
+      I2:     92.68036
+    },
+    citation: "Colditz et al. (1994) JAMA 271:698–702. metafor rma.mh(measure='OR') R block MH-1."
+  },
+
+  // ----------------------------------------------------------------
+  // MH-2: BCG Vaccine – RR (Mantel-Haenszel)
+  // rma.mh(..., measure="RR")
+  // RR_MH = exp(-0.4537096) = 0.6353
+  // ----------------------------------------------------------------
+  {
+    name: "BCG Vaccine – RR (Mantel-Haenszel)",
+    type: "RR",
+    method: "MH",
+    data: [
+      { label: "Aronson 1948",            a:   4, b:   119, c:  11, d:   128 },
+      { label: "Ferguson & Simes 1949",   a:   6, b:   300, c:  29, d:   274 },
+      { label: "Rosenthal 1960",          a:   3, b:   228, c:  11, d:   209 },
+      { label: "Hart & Sutherland 1977",  a:  62, b: 13536, c: 248, d: 12619 },
+      { label: "Frimodt-Moller 1973",     a:  33, b:  5036, c:  47, d:  5761 },
+      { label: "Stein & Aronson 1953",    a: 180, b:  1361, c: 372, d:  1079 },
+      { label: "Vandiviere 1973",         a:   8, b:  2537, c:  10, d:   619 },
+      { label: "TPT Madras 1980",         a: 505, b: 87886, c: 499, d: 87892 },
+      { label: "Coetzee & Berjak 1968",   a:  29, b:  7470, c:  45, d:  7232 },
+      { label: "Rosenthal 1961",          a:  17, b:  1699, c:  65, d:  1600 },
+      { label: "Comstock 1974",           a: 186, b: 50448, c: 141, d: 27197 },
+      { label: "Comstock & Webster 1969", a:   5, b:  2493, c:   3, d:  2338 },
+      { label: "Comstock 1976",           a:  27, b: 16886, c:  29, d: 17825 }
+    ],
+    expected: {
+      est:    -0.4537096,
+      se:      0.0393374,
+      ciLow:  -0.5308094,
+      ciHigh: -0.3766098,
+      RR:      0.6353,        // exp(est), rounded
+      Q:     152.56755,
+      I2:     92.13463
+    },
+    citation: "Colditz et al. (1994) JAMA 271:698–702. metafor rma.mh(measure='RR') R block MH-2."
+  },
+
+  // ----------------------------------------------------------------
+  // MH-3: BCG Vaccine – RD (Mantel-Haenszel)
+  // rma.mh(..., measure="RD")
+  // ----------------------------------------------------------------
+  {
+    name: "BCG Vaccine – RD (Mantel-Haenszel)",
+    type: "RD",
+    method: "MH",
+    data: [
+      { label: "Aronson 1948",            a:   4, b:   119, c:  11, d:   128 },
+      { label: "Ferguson & Simes 1949",   a:   6, b:   300, c:  29, d:   274 },
+      { label: "Rosenthal 1960",          a:   3, b:   228, c:  11, d:   209 },
+      { label: "Hart & Sutherland 1977",  a:  62, b: 13536, c: 248, d: 12619 },
+      { label: "Frimodt-Moller 1973",     a:  33, b:  5036, c:  47, d:  5761 },
+      { label: "Stein & Aronson 1953",    a: 180, b:  1361, c: 372, d:  1079 },
+      { label: "Vandiviere 1973",         a:   8, b:  2537, c:  10, d:   619 },
+      { label: "TPT Madras 1980",         a: 505, b: 87886, c: 499, d: 87892 },
+      { label: "Coetzee & Berjak 1968",   a:  29, b:  7470, c:  45, d:  7232 },
+      { label: "Rosenthal 1961",          a:  17, b:  1699, c:  65, d:  1600 },
+      { label: "Comstock 1974",           a: 186, b: 50448, c: 141, d: 27197 },
+      { label: "Comstock & Webster 1969", a:   5, b:  2493, c:   3, d:  2338 },
+      { label: "Comstock 1976",           a:  27, b: 16886, c:  29, d: 17825 }
+    ],
+    expected: {
+      est:    -0.0032882,
+      se:      0.0002867,
+      ciLow:  -0.0038500,
+      ciHigh: -0.0027263,
+      Q:     386.77594,
+      I2:     96.89743
+    },
+    citation: "Colditz et al. (1994) JAMA 271:698–702. metafor rma.mh(measure='RD') R block MH-3."
+  },
+
+  // ----------------------------------------------------------------
+  // MH-4: BCG Vaccine – OR (Peto)
+  // rma.peto(ai=tpos, bi=tneg, ci=cpos, di=cneg, data=dat.bcg)
+  // OR_Peto = exp(-0.4744463) = 0.6222
+  // ----------------------------------------------------------------
+  {
+    name: "BCG Vaccine – OR (Peto)",
+    type: "OR",
+    method: "Peto",
+    data: [
+      { label: "Aronson 1948",            a:   4, b:   119, c:  11, d:   128 },
+      { label: "Ferguson & Simes 1949",   a:   6, b:   300, c:  29, d:   274 },
+      { label: "Rosenthal 1960",          a:   3, b:   228, c:  11, d:   209 },
+      { label: "Hart & Sutherland 1977",  a:  62, b: 13536, c: 248, d: 12619 },
+      { label: "Frimodt-Moller 1973",     a:  33, b:  5036, c:  47, d:  5761 },
+      { label: "Stein & Aronson 1953",    a: 180, b:  1361, c: 372, d:  1079 },
+      { label: "Vandiviere 1973",         a:   8, b:  2537, c:  10, d:   619 },
+      { label: "TPT Madras 1980",         a: 505, b: 87886, c: 499, d: 87892 },
+      { label: "Coetzee & Berjak 1968",   a:  29, b:  7470, c:  45, d:  7232 },
+      { label: "Rosenthal 1961",          a:  17, b:  1699, c:  65, d:  1600 },
+      { label: "Comstock 1974",           a: 186, b: 50448, c: 141, d: 27197 },
+      { label: "Comstock & Webster 1969", a:   5, b:  2493, c:   3, d:  2338 },
+      { label: "Comstock 1976",           a:  27, b: 16886, c:  29, d: 17825 }
+    ],
+    expected: {
+      est:    -0.4744463,
+      se:      0.0406591,
+      ciLow:  -0.5541366,
+      ciHigh: -0.3947560,
+      OR:      0.6222,        // exp(est), rounded
+      Q:     167.73017,
+      I2:     92.84565
+    },
+    citation: "Colditz et al. (1994) JAMA 271:698–702. metafor rma.peto() R block MH-4."
+  }
+
+];

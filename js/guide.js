@@ -595,6 +595,99 @@ the data contain outliers that inflate Q.</p>`,
   },
 
   // ------------------------------------------------------------------ //
+  // Pooling Methods                                                      //
+  // ------------------------------------------------------------------ //
+  {
+    id: "pooling-methods",
+    heading: "Pooling Methods",
+    topics: [
+
+      {
+        id: "guide-mantel-haenszel",
+        title: "Mantel-Haenszel and Peto pooling",
+        body: `<p>For 2×2 binary data (OR, RR, RD) the Mantel-Haenszel (M-H) and Peto methods
+are fixed-effects estimators that pool raw cell counts directly, without
+first converting each study to a log-scale effect size. They are standard
+in clinical and epidemiological meta-analysis and are routinely required
+by medical journal reviewers.</p>
+
+<p><strong>Key properties shared by both methods:</strong></p>
+<ul>
+  <li>Fixed-effects only — no between-study variance τ² is estimated.</li>
+  <li>Operate on raw 2×2 cell counts (a, b, c, d) rather than on
+      per-study log-OR / log-RR / RD.</li>
+  <li>Handle single-zero cells without a continuity correction, unlike
+      the standard log-scale profiles which add 0.5 to every cell.</li>
+</ul>
+
+<h4>Mantel-Haenszel pooling</h4>
+<p>Applicable to OR, RR, and RD. Each study contributes to a weighted
+numerator and denominator; the pooled estimate is their ratio (OR, RR)
+or weighted average (RD).</p>
+<p><strong>MH-OR</strong> (Mantel &amp; Haenszel 1959; variance: Robins et al. 1986):<br>
+<code>R_i = a_i d_i / N_i</code>,&ensp;
+<code>S_i = b_i c_i / N_i</code><br>
+<code>OR_MH = ΣR / ΣS</code></p>
+<p><strong>MH-RR</strong> (Greenland &amp; Robins 1985):<br>
+<code>R_i = a_i n₂ᵢ / N_i</code>,&ensp;
+<code>S_i = c_i n₁ᵢ / N_i</code><br>
+<code>RR_MH = ΣR / ΣS</code></p>
+<p><strong>MH-RD</strong> (Greenland &amp; Robins 1985; variance: Sato et al. 1989):<br>
+<code>w_i = n₁ᵢ n₂ᵢ / N_i</code>,&ensp;
+<code>RD_i = a_i/n₁ᵢ − c_i/n₂ᵢ</code><br>
+<code>RD_MH = Σ(wᵢ RD_i) / Σwᵢ</code></p>
+<p>Heterogeneity Q is computed from inverse-variance weights against the
+M-H estimate; I² is derived from Q in the usual way.</p>
+
+<h4>Peto OR</h4>
+<p>Applicable to OR only. A one-step estimator based on the difference
+between observed and expected cell counts under the null:</p>
+<p><code>E_i = n₁ᵢ (a_i+c_i) / N_i</code><br>
+<code>V_i = n₁ᵢ n₂ᵢ (a_i+c_i)(b_i+d_i) / [N_i²(N_i−1)]</code><br>
+<code>log OR_Peto = Σ(a_i − E_i) / ΣV_i</code></p>
+<p>Heterogeneity Q for Peto uses the hypergeometric weights V_i:
+<code>Q = Σ(a_i−E_i)²/V_i − (Σ(a_i−E_i))²/ΣV_i</code>.</p>
+
+<h4>When to prefer M-H or Peto over inverse-variance</h4>
+<ul>
+  <li><strong>Sparse data / rare events:</strong> M-H and Peto avoid the
+      finite-sample bias introduced by adding a continuity correction to
+      zero cells. Both give valid estimates even when some cells are zero.</li>
+  <li><strong>Small number of studies:</strong> M-H weights are less sensitive
+      to extreme studies than IV weights when τ² is near zero.</li>
+  <li><strong>Peto:</strong> most accurate when events are rare (&lt;10%
+      event rate) and arm sizes are balanced. Can be substantially biased
+      when events are common (&gt;20%) or arms are very unbalanced (n₁/n₂ &gt; 3);
+      in those cases prefer M-H or an IV random-effects model.</li>
+  <li><strong>Common events / high τ²:</strong> Inverse-variance random-effects
+      models (REML, DL, PM) are more efficient and model genuine
+      between-study heterogeneity explicitly.</li>
+</ul>
+
+<p>Because M-H and Peto are fixed-effects methods, the results panel
+omits the RE estimate, τ², and prediction interval when either is selected.
+Sensitivity analyses (leave-one-out, estimator comparison) fall back to
+DL inverse-variance weights and are labelled accordingly.</p>
+
+<p><strong>Cochrane Handbook guidance:</strong> For binary outcomes, M-H is
+the recommended default pooling method. Peto is reserved for rare-events
+settings with balanced arms. Inverse-variance RE models are preferred when
+τ² is substantial (I² &gt; 50%) regardless of event rate (Cochrane Handbook
+§10.4, §16.3).</p>`,
+        citations: [
+          "Mantel, N., & Haenszel, W. (1959). Statistical aspects of the analysis of data from retrospective studies of disease. <em>Journal of the National Cancer Institute, 22</em>(4), 719–748.",
+          "Greenland, S., & Robins, J. M. (1985). Estimation of a common effect parameter from sparse follow-up data. <em>Biometrics, 41</em>(1), 55–68.",
+          "Robins, J. M., Breslow, N., & Greenland, S. (1986). Estimators of the Mantel-Haenszel variance consistent in both sparse data and large-strata limiting models. <em>Biometrics, 42</em>(2), 311–323.",
+          "Yusuf, S., Peto, R., Lewis, J., Collins, R., & Sleight, P. (1985). Beta blockade during and after myocardial infarction: An overview of the randomized trials. <em>Progress in Cardiovascular Diseases, 27</em>(5), 335–371.",
+          "Sato, T., Greenland, S., & Robins, J. M. (1989). On the variance estimator for the Mantel-Haenszel risk difference. <em>Biometrics, 45</em>(4), 1323–1324.",
+          "Higgins, J. P. T., Thomas, J., Chandler, J., Cumpston, M., Li, T., Page, M. J., & Welch, V. A. (Eds.). (2023). <em>Cochrane Handbook for Systematic Reviews of Interventions</em> (version 6.4). Cochrane. §10.4 and §16.3.",
+        ],
+      },
+
+    ],
+  },
+
+  // ------------------------------------------------------------------ //
   // CI Methods                                                           //
   // ------------------------------------------------------------------ //
   {
@@ -1350,6 +1443,8 @@ export const HELP_TO_GUIDE = {
   "input.moderators":    "guide-subgroup",
   "input.rob":           "guide-rob",
   "bayes.model":         "guide-bayes-meta",
+  "tau.MH":              "guide-mantel-haenszel",
+  "tau.Peto":            "guide-mantel-haenszel",
 };
 
 // ------------------------------------------------------------------ //

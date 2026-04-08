@@ -449,6 +449,32 @@ export const HELP = {
            "Recommended over plain HS when k is small.",
   },
 
+  "tau.MH": {
+    title: "Mantel-Haenszel (MH)",
+    body:  "Fixed-effects pooling using Mantel-Haenszel weights derived directly from raw 2×2 " +
+           "cell counts (a, b, c, d). Available for OR, RR, and RD. " +
+           "No between-study variance τ² is estimated; the result is a fixed-effect estimate only. " +
+           "Unlike inverse-variance pooling, MH handles single-zero cells without a continuity " +
+           "correction and is more robust to sparse data. " +
+           "The Cochrane Handbook recommends MH as the default pooling method for binary outcomes. " +
+           "Variance formulas: Robins et al. (1986) for OR; Greenland & Robins (1985) for RR " +
+           "and RD (Sato et al. 1989 variance for RD).",
+  },
+
+  "tau.Peto": {
+    title: "Peto OR",
+    body:  "One-step fixed-effects log-OR estimator based on the sum of observed-minus-expected " +
+           "cell counts, weighted by their hypergeometric variance. OR only. " +
+           "No τ² is estimated. " +
+           "Best suited when events are rare (<10% event rate) and arm sizes are balanced; " +
+           "can be substantially biased when events are common (>20%) or arms are very " +
+           "unbalanced (n₁/n₂ > 3) — in those cases prefer Mantel-Haenszel or an " +
+           "inverse-variance random-effects model. " +
+           "Formula: log OR = Σ(aᵢ − Eᵢ) / ΣVᵢ where " +
+           "Eᵢ = n₁ᵢ(aᵢ+cᵢ)/Nᵢ and Vᵢ = n₁ᵢn₂ᵢ(aᵢ+cᵢ)(bᵢ+dᵢ) / [Nᵢ²(Nᵢ−1)]. " +
+           "Reference: Yusuf et al. (1985).",
+  },
+
   // ------------------------------------------------------------------ //
   // CI methods                                                           //
   // ------------------------------------------------------------------ //

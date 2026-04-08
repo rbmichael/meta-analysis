@@ -100,7 +100,7 @@
 //   ui.js calls init() on DOMContentLoaded, which populates dropdowns,
 //   restores any autosave draft, and attaches all event listeners.
 // =============================================================================
-import { eggerTest, beggTest, fatPetTest, failSafeN, pCurve, pUniform, baujat, meta, influenceDiagnostics, subgroupAnalysis, metaRegression, cumulativeMeta, leaveOneOut, estimatorComparison, veveaHedges, SELECTION_PRESETS, profileLikTau2, bayesMeta } from "./analysis.js";
+import { eggerTest, beggTest, fatPetTest, failSafeN, pCurve, pUniform, baujat, meta, metaMH, metaPeto, influenceDiagnostics, subgroupAnalysis, metaRegression, cumulativeMeta, leaveOneOut, estimatorComparison, veveaHedges, SELECTION_PRESETS, profileLikTau2, bayesMeta } from "./analysis.js";
 import { fmt } from "./utils.js";
 import { effectProfiles, getProfile } from "./profiles.js";
 import { trimFill } from "./trimfill.js";
@@ -661,6 +661,7 @@ document.addEventListener("click", e => {
 document.getElementById("effectType").addEventListener("change", () => {
   const type = document.getElementById("effectType").value;
   updateTableHeaders();
+  syncMHOptions(type);
 
   // Populate example data for testing
   populateExampleData(type);
@@ -668,7 +669,11 @@ document.getElementById("effectType").addEventListener("change", () => {
   runAnalysis();
 });
 
-document.getElementById("tauMethod").addEventListener("change", () => { syncPLAvailability(); runAnalysis(); });
+document.getElementById("tauMethod").addEventListener("change", () => {
+  const type = document.getElementById("effectType").value;
+  syncMHOptions(type);
+  runAnalysis();
+});
 document.getElementById("ciMethod").addEventListener("change", () => {
   const ciSel  = document.getElementById("ciMethod");
   const tauSel = document.getElementById("tauMethod");
@@ -1276,6 +1281,7 @@ async function loadSession(file) {
   }
 
   const { profile, savedStudies } = applySession(result.session);
+  syncMHOptions(document.getElementById("effectType").value);
 
   // Warn about any effect-input columns absent from the saved data.
   const missingCols = missingInputCols(profile.inputs, savedStudies);
@@ -1355,6 +1361,43 @@ function syncPLAvailability() {
   }
 }
 
+// MH is available for OR, RR, RD; Peto is available for OR only.
+// When MH or Peto is selected: lock CI method to "normal" and disable trim-and-fill.
+function syncMHOptions(type) {
+  const tauSel  = document.getElementById("tauMethod");
+  const ciSel   = document.getElementById("ciMethod");
+  const tfCheck = document.getElementById("useTrimFill");
+  const mhOpt   = tauSel.querySelector('option[value="MH"]');
+  const petoOpt = tauSel.querySelector('option[value="Peto"]');
+  if (!mhOpt || !petoOpt) return;
+
+  const mhTypes   = ["OR", "RR", "RD"];
+  const petoTypes = ["OR"];
+
+  mhOpt.disabled   = !mhTypes.includes(type);
+  petoOpt.disabled = !petoTypes.includes(type);
+
+  // If selected method is no longer valid for this type, reset to REML.
+  if (tauSel.value === "MH"   && mhOpt.disabled)   tauSel.value = "REML";
+  if (tauSel.value === "Peto" && petoOpt.disabled)  tauSel.value = "REML";
+
+  const isMHorPeto = tauSel.value === "MH" || tauSel.value === "Peto";
+
+  // Lock CI method to normal when MH/Peto is active; re-enable otherwise.
+  Array.from(ciSel.options).forEach(opt => {
+    opt.disabled = isMHorPeto && opt.value !== "normal";
+  });
+  if (isMHorPeto) ciSel.value = "normal";
+
+  // Disable trim-and-fill for MH/Peto (incompatible weighting).
+  if (tfCheck) {
+    tfCheck.disabled = isMHorPeto;
+    if (isMHorPeto) tfCheck.checked = false;
+  }
+
+  syncPLAvailability();
+}
+
 function init() {
   // Populate effect type dropdowns from profiles
   populateEffectTypeDropdowns();
@@ -1371,8 +1414,8 @@ function init() {
     populateExampleData("SMD");
   }
 
-  // Initialise PL availability based on default/restored τ² estimator.
-  syncPLAvailability();
+  // Initialise MH/Peto and PL availability based on default/restored settings.
+  syncMHOptions(document.getElementById("effectType").value);
 
   // Validate all rows
   document.querySelectorAll("#inputTable tr").forEach((row, i) => {
@@ -1873,7 +1916,7 @@ function buildEstimatorBody(estData, method, profile) {
     </table>
     <div class="sens-note">★ = currently selected estimator.</div>`;
 }
-function renderSensitivityPanel(studies, m, method, ciMethod, profile) {
+function renderSensitivityPanel(studies, m, method, ciMethod, profile, { isMHFallback = false } = {}) {
   const container = document.getElementById("sensitivityPanel");
   if (!container) return;
 
@@ -1893,7 +1936,12 @@ function renderSensitivityPanel(studies, m, method, ciMethod, profile) {
   // ---- Estimator comparison ----
   const estBody = buildEstimatorBody(estimatorComparison(studies, ciMethod), method, profile);
 
+  const ivNote = isMHFallback
+    ? `<p class="reg-note" style="margin:4px 0 8px">⚠ Leave-one-out and estimator comparison use inverse-variance (DL) weights — M-H/Peto per-fold pooling is not yet supported.</p>`
+    : "";
+
   container.innerHTML = `
+    ${ivNote}
     <details class="sens-block"${looOpen ? " open" : ""}>
       <summary class="sens-summary">
         Leave-one-out analysis ${hBtn("sens.loo")}
@@ -1923,7 +1971,8 @@ function renderStudyTable(studies, m, profile) {
   const container = document.getElementById("studyTable");
   if (!container) return;
 
-  const tau2   = isFinite(m.tau2) ? m.tau2 : 0;
+  // For MH/Peto use FE (τ²=0) weights; for RE use τ²-inflated weights.
+  const tau2   = (m.isMH || m.isPeto || !isFinite(m.tau2)) ? 0 : m.tau2;
   const real   = studies.filter(d => !d.filled);
   const totalW = real.reduce((s, d) => s + 1 / (d.vi + tau2), 0);
 
@@ -1949,8 +1998,8 @@ function renderStudyTable(studies, m, profile) {
     return { label: escapeHTML(d.label), ef, lo, hi, se: d.se, pct, filled: !!d.filled };
   });
 
-  // Pooled row values
-  const pooledEf = profile.transform(m.RE);
+  // Pooled row values — use FE for MH/Peto (RE is NaN)
+  const pooledEf = profile.transform(isFinite(m.RE) ? m.RE : m.FE);
   const pooledLo = profile.transform(m.ciLow);
   const pooledHi = profile.transform(m.ciHigh);
 
@@ -1962,6 +2011,7 @@ function renderStudyTable(studies, m, profile) {
   const effectTypeKey = Object.keys(effectProfiles).find(k => effectProfiles[k] === profile) ?? "";
   const effectHelpBtn = effectTypeKey ? hBtn("effect." + effectTypeKey) : "";
 
+  const weightLabel = (m.isMH || m.isPeto) ? "FE Weight" : `RE Weight ${hBtn("het.tau2")}`;
   const headerRow = `
     <tr>
       <th>Study</th>
@@ -1969,7 +2019,7 @@ function renderStudyTable(studies, m, profile) {
       <th>95% CI (low)</th>
       <th>95% CI (high)</th>
       <th>${seLabel}</th>
-      <th>RE Weight ${hBtn("het.tau2")}</th>
+      <th>${weightLabel}</th>
     </tr>`;
 
   const studyRows = rows.map(r => `
@@ -1982,13 +2032,15 @@ function renderStudyTable(studies, m, profile) {
       <td>${fmtPct(r.pct)}</td>
     </tr>`).join("");
 
+  const pooledLabel = m.isMH ? "Pooled (MH)" : m.isPeto ? "Pooled (Peto)" : "Pooled (RE)";
+  const pooledSE    = isFinite(m.seRE) ? m.seRE : m.seFE;
   const pooledRow = `
     <tr class="pooled-row">
-      <td>Pooled (RE)</td>
+      <td>${pooledLabel}</td>
       <td>${fmtVal(pooledEf)}</td>
       <td>${fmtVal(pooledLo)}</td>
       <td>${fmtVal(pooledHi)}</td>
-      <td>${fmtVal(m.seRE)}</td>
+      <td>${fmtVal(pooledSE)}</td>
       <td>100%</td>
     </tr>`;
 
@@ -2632,10 +2684,20 @@ function runAnalysis() {
   const useTF = elUseTrimFill?.checked;
   const useTFAdjusted = elUseTFAdjusted?.checked;
 
-  let tf = [], all = studies;
-  if (useTF) { tf = trimFill(studies, method); all = [...studies, ...tf]; }
+  const isMHorPeto = method === "MH" || method === "Peto";
 
-  let m = meta(studies, method, ciMethod);
+  let tf = [], all = studies;
+  if (useTF && !isMHorPeto) { tf = trimFill(studies, method); all = [...studies, ...tf]; }
+
+  let m;
+  if      (method === "MH"  ) m = metaMH(studies, type);
+  else if (method === "Peto") m = metaPeto(studies);
+  else                        m = meta(studies, method, ciMethod);
+
+  if (m.error) {
+    elResults.innerHTML = `<b style="color:var(--warn)">Error: ${m.error}</b>`;
+    return false;
+  }
 
   const profileLikResult =
     (method === "ML" || method === "REML") && studies.length >= 2
@@ -2656,16 +2718,17 @@ function runAnalysis() {
   const bayesSigmaMu = Math.max(0.01, parseFloat(document.getElementById("bayesSigmaMu")?.value)  || 1);
   const bayesSigmaTau = Math.max(0.01, parseFloat(document.getElementById("bayesSigmaTau")?.value) || 0.5);
   let bayesResult = null;
-  if (studies.length >= 2) {
+  if (studies.length >= 2 && !isMHorPeto) {
+    const reMeanRef = isFinite(m.RE) ? m.RE : m.FE;
     bayesState.studies = studies;
-    bayesState.reMean  = m.RE;
+    bayesState.reMean  = reMeanRef;
     bayesState.profile = profile;
     bayesResult = bayesMeta(studies, { mu0: bayesMu0, sigma_mu: bayesSigmaMu, sigma_tau: bayesSigmaTau });
     if (!bayesResult.error) {
       elBayes.style.display = "";
       document.getElementById("bayesSummary").innerHTML =
-        buildBayesSummaryHTML(bayesResult, profile, m.RE);
-      drawBayesMuPosterior(bayesResult, { reMean: m.RE });
+        buildBayesSummaryHTML(bayesResult, profile, reMeanRef);
+      drawBayesMuPosterior(bayesResult, { reMean: reMeanRef });
       drawBayesTauPosterior(bayesResult);
       document.getElementById("bayesGridWarning").style.display =
         bayesResult.grid_truncated ? "" : "none";
@@ -2708,7 +2771,13 @@ function runAnalysis() {
     </div>`;
   }
 
-  elResults.innerHTML = warningHTML + `
+  const methodLabel = m.isMH ? "MH" : m.isPeto ? "Peto" : "";
+  elResults.innerHTML = warningHTML + (isMHorPeto ? `
+    <b>${profile.label} (${methodLabel}):</b> ${fmt(FE_disp)}<br>
+    CI [${fmt(ci_disp.lb)}, ${fmt(ci_disp.ub)}]<br>
+    <small style="color:var(--muted)">Fixed-effect only — no τ², RE estimate, or prediction interval.</small><br>
+    ${hBtn("het.Q")}Q(${m.df})=${fmt(m.stat)} | p=${fmt(m.pval)} | ${hBtn("het.I2")}I²=${fmt(m.I2)}% [${fmt(m.I2CI[0])}%, ${fmt(m.I2CI[1])}%] | ${hBtn("het.H2")}H²-CI=[${fmt(m.H2CI[0])}, ${isFinite(m.H2CI[1])?fmt(m.H2CI[1]):"∞"}]
+  ` : `
     <b>${profile.label} (FE):</b> ${fmt(FE_disp)} |
     <b>${profile.label} (RE):</b> ${fmt(RE_disp)}<br>
     ${useTF && mAdjusted ? `<b>RE (adjusted):</b> ${fmt(RE_adj_disp)}<br>` : ""}
@@ -2716,7 +2785,7 @@ function runAnalysis() {
     ${hBtn("het.tau2")}τ²=${fmt(m.tau2)} [${fmt(m.tauCI[0])}, ${isFinite(m.tauCI[1])?fmt(m.tauCI[1]):"∞"}] | ${hBtn("het.I2")}I²=${fmt(m.I2)}% [${fmt(m.I2CI[0])}%, ${fmt(m.I2CI[1])}%] | ${hBtn("het.H2")}H²-CI=[${fmt(m.H2CI[0])}, ${isFinite(m.H2CI[1])?fmt(m.H2CI[1]):"∞"}]<br>
     ${hBtn("het.Q")}${m.dist}-stat=${fmt(m.stat)} | p=${fmt(m.pval)}<br>
     ${hBtn("het.pred")}Prediction interval (Higgins 2009, t<sub>${m.df > 0 ? m.df - 1 : "—"}</sub>): ${isFinite(pred_disp.lb) ? `[${fmt(pred_disp.lb)}, ${fmt(pred_disp.ub)}]` : "NA (k &lt; 3)"}
-  `;
+  `);
 
   elPubBiasStats.innerHTML = `
     &nbsp;&nbsp;${hBtn("bias.egger")}Egger: intercept=${isFinite(egger.intercept)?fmt(egger.intercept):"NA"} | p=${isFinite(egger.p)?fmt(egger.p):"NA (k<3)"}<br>
@@ -2728,10 +2797,13 @@ function runAnalysis() {
   elInfluenceDiagTable.innerHTML = influenceHTML;
 
   elSubgroupSection.style.display = hasSubgroup ? "" : "none";
-  elSubgroupTable.innerHTML = subgroupHTML;
+  elSubgroupTable.innerHTML = (hasSubgroup && isMHorPeto)
+    ? `<p class="reg-note" style="margin:4px 0 8px">⚠ Subgroup pooling uses inverse-variance (DL) weights — switch to DL or REML for M-H subgroup analysis.</p>` + subgroupHTML
+    : subgroupHTML;
 
   renderStudyTable(all, m, profile);
-  renderSensitivityPanel(studies, m, method, ciMethod, profile);
+  // MH/Peto can't run LOO; fall back to DL and don't pass MH/Peto m as precomputed.
+  renderSensitivityPanel(studies, isMHorPeto ? null : m, isMHorPeto ? "DL" : method, ciMethod, profile, { isMHFallback: isMHorPeto });
   renderPCurvePanel(pcurve);
   renderPUniformPanel(puniform, m, profile);
 
@@ -2825,8 +2897,12 @@ function runAnalysis() {
   const rawPageSize  = elForestPageSize?.value ?? "30";
   const pageSize     = rawPageSize === "Infinity" ? Infinity : +rawPageSize;
   const forestOpts   = { ciMethod, profile, pageSize, pooledDisplay: forestPlot.poolDisplay, theme: forestPlot.theme };
-  forestPlot.args        = { studies: all, m, options: forestOpts };
-  const { totalPages } = drawForest(all, m, { ...forestOpts, page: forestPlot.page });
+  // For MH/Peto, substitute FE into RE slots so drawForest draws one diamond.
+  const mForest = isMHorPeto
+    ? { ...m, RE: m.FE, seRE: m.seFE, tau2: 0, predLow: NaN, predHigh: NaN }
+    : m;
+  forestPlot.args        = { studies: all, m: mForest, options: forestOpts };
+  const { totalPages } = drawForest(all, mForest, { ...forestOpts, page: forestPlot.page });
   renderForestNav(totalPages);
 
   // Cache state for report export buttons.

@@ -1,6 +1,6 @@
 import { round, transformEffect, chiSquareCDF, chiSquareQuantile, parseCounts, bivariateNormalCDF, normalQuantile, fCDF } from "./utils.js";
-import { BENCHMARKS, PUB_BIAS_BENCHMARKS, INFLUENCE_BENCHMARKS, META_REGRESSION_BENCHMARKS, VH_BENCHMARKS } from "./benchmarks.js";
-import { compute, meta, metaRegression, tau2_HS, tau2_HE, tau2_ML, tau2_SJ, beggTest, eggerTest, fatPetTest, failSafeN, heterogeneityCIs, cumulativeMeta, influenceDiagnostics, harbordTest, petersTest, deeksTest, rueckerTest, leaveOneOut, baujat, pCurve, pUniform, estimatorComparison, subgroupAnalysis, logLik, bfgs, selIntervalProbs, selIntervalIdx, selectionLogLik, SEL_CUTS_ONE_SIDED, SEL_CUTS_TWO_SIDED, veveaHedges, SELECTION_PRESETS, profileLikTau2, profileLikCI, bayesMeta } from "./analysis.js";
+import { BENCHMARKS, PUB_BIAS_BENCHMARKS, INFLUENCE_BENCHMARKS, META_REGRESSION_BENCHMARKS, VH_BENCHMARKS, MH_BENCHMARKS } from "./benchmarks.js";
+import { compute, meta, metaMH, metaPeto, metaRegression, tau2_HS, tau2_HE, tau2_ML, tau2_SJ, beggTest, eggerTest, fatPetTest, failSafeN, heterogeneityCIs, cumulativeMeta, influenceDiagnostics, harbordTest, petersTest, deeksTest, rueckerTest, leaveOneOut, baujat, pCurve, pUniform, estimatorComparison, subgroupAnalysis, logLik, bfgs, selIntervalProbs, selIntervalIdx, selectionLogLik, SEL_CUTS_ONE_SIDED, SEL_CUTS_TWO_SIDED, veveaHedges, SELECTION_PRESETS, profileLikTau2, profileLikCI, bayesMeta } from "./analysis.js";
 import { trimFill } from "./trimfill.js";
 import { parseCSV } from "./csv.js";
 import { goshCompute, GOSH_MAX_ENUM_K, GOSH_MAX_K, GOSH_DEFAULT_MAX_SUBSETS } from "./gosh.js";
@@ -4268,4 +4268,192 @@ export function runTests() {
   }
 
   console.log(bayPass ? "\n✅ ALL BAYESIAN META-ANALYSIS TESTS PASSED" : "\n❌ SOME BAYESIAN META-ANALYSIS TESTS FAILED");
+
+  // =========================================================================
+  // MANTEL-HAENSZEL AND PETO TESTS
+  // =========================================================================
+  console.log("\n===== MANTEL-HAENSZEL AND PETO TESTS =====\n");
+  let mhPass = true;
+  const { chk: mhchk, chkTrue: mhchkTrue, chkNaN: mhchkNaN } = makeChk(() => { mhPass = false; });
+
+  // ---- Benchmark tests (R blocks MH-1 through MH-4) ----
+  MH_BENCHMARKS.forEach(bm => {
+    console.log(`--- ${bm.name} ---`);
+    const studies = bm.data.map(d => compute(d, bm.type));
+    const m = bm.method === "Peto" ? metaPeto(studies) : metaMH(studies, bm.type);
+
+    mhchkTrue("no error", !m.error);
+    mhchk("est",    m.FE,    bm.expected.est,    0.001);
+    mhchk("se",     m.seFE,  bm.expected.se,     0.001);
+    mhchk("ciLow",  m.ciLow, bm.expected.ciLow,  0.001);
+    mhchk("ciHigh", m.ciHigh,bm.expected.ciHigh, 0.001);
+    mhchk("Q",      m.Q,     bm.expected.Q,      0.01);
+    mhchk("I2",     m.I2,    bm.expected.I2,     0.2);
+    if (bm.method === "Peto") mhchkTrue("isPeto",  m.isPeto  === true);
+    else                      mhchkTrue("isMH",    m.isMH    === true);
+  });
+
+  // ---- Unit test 1: k < 2 → error ----
+  {
+    console.log("--- Unit 1: k < 2 returns error ---");
+    const r1 = metaMH([compute({ a: 4, b: 119, c: 11, d: 128 }, "OR")], "OR");
+    mhchkTrue("metaMH k=1 → error",  !!r1.error);
+    const r2 = metaPeto([compute({ a: 4, b: 119, c: 11, d: 128 }, "OR")]);
+    mhchkTrue("metaPeto k=1 → error", !!r2.error);
+  }
+
+  // ---- Unit test 2: metaMH with unsupported type → error ----
+  {
+    console.log("--- Unit 2: metaMH type='SMD' → error ---");
+    const smdStudies = [{ yi: 0.5, vi: 0.1 }, { yi: 0.3, vi: 0.2 }];
+    const r = metaMH(smdStudies, "SMD");
+    mhchkTrue("error returned",  !!r.error);
+    mhchkTrue("error mentions OR/RR/RD", r.error.includes("OR") && r.error.includes("RR"));
+  }
+
+  // ---- Unit test 3: metaPeto on studies without a/b/c/d → error ----
+  {
+    console.log("--- Unit 3: metaPeto on studies without raw counts → error ---");
+    const noCountStudies = [{ yi: 0.5, vi: 0.1 }, { yi: 0.3, vi: 0.2 }];
+    const r = metaPeto(noCountStudies);
+    mhchkTrue("error returned", !!r.error);
+  }
+
+  // ---- Unit test 4: OR MH with a=0 in one study — no NaN ----
+  {
+    console.log("--- Unit 4: OR MH with a=0 study handled (no NaN) ---");
+    const data = [
+      { a: 0, b: 100, c:  5, d:  95 },  // a=0 → R_i=0, still contributes to ΣS
+      { a: 5, b: 100, c: 10, d:  90 },
+      { a: 3, b:  50, c:  8, d:  42 },
+    ];
+    const studies = data.map(d => compute(d, "OR"));
+    const m = metaMH(studies, "OR");
+    mhchkTrue("no error",     !m.error);
+    mhchkTrue("FE finite",    isFinite(m.FE));
+    mhchkTrue("seFE finite",  isFinite(m.seFE));
+    mhchkTrue("Q finite",     isFinite(m.Q));
+  }
+
+  // ---- Unit test 5: OR MH with double-zero study — study excluded, rest pooled ----
+  {
+    console.log("--- Unit 5: OR MH double-zero study excluded ---");
+    const data = [
+      { a: 0, b: 100, c: 0, d: 100 },   // both arms zero events → R=S=0, excluded
+      { a: 5, b: 100, c: 10, d:  90 },
+      { a: 3, b:  50, c:  8, d:  42 },
+    ];
+    const studies = data.map(d => compute(d, "OR"));
+    const m = metaMH(studies, "OR");
+    mhchkTrue("no error",    !m.error);
+    mhchkTrue("FE finite",   isFinite(m.FE));
+    // Result should match the 2-study pool without the zero-zero study
+    const studies2 = data.slice(1).map(d => compute(d, "OR"));
+    const m2 = metaMH(studies2, "OR");
+    mhchkTrue("est matches 2-study pool", Math.abs(m.FE - m2.FE) < 1e-10);
+  }
+
+  // ---- Unit test 6: RR MH with all-zero-event study excluded ----
+  {
+    console.log("--- Unit 6: RR MH all-zero-event study excluded ---");
+    const data = [
+      { a: 0, b: 100, c: 0, d: 100 },   // a+c=0 → excluded for RR
+      { a: 5, b: 100, c: 10, d:  90 },
+      { a: 3, b:  50, c:  8, d:  42 },
+    ];
+    const studies = data.map(d => compute(d, "RR"));
+    const m = metaMH(studies, "RR");
+    mhchkTrue("no error",  !m.error);
+    mhchkTrue("FE finite", isFinite(m.FE));
+  }
+
+  // ---- Unit test 7: RD MH — balanced 2-study, known RD = 0.10 ----
+  {
+    console.log("--- Unit 7: RD MH known result (balanced arms, RD=0.10) ---");
+    // Study 1: n1=100, n2=100, a=20, b=80, c=10, d=90 → RD=0.10, w=50
+    // Study 2: n1=100, n2=100, a=30, b=70, c=20, d=80 → RD=0.10, w=50
+    // RD_MH = (50*0.10 + 50*0.10) / 100 = 0.10
+    const data = [
+      { a: 20, b: 80, c: 10, d: 90 },
+      { a: 30, b: 70, c: 20, d: 80 },
+    ];
+    const studies = data.map(d => compute(d, "RD"));
+    const m = metaMH(studies, "RD");
+    mhchkTrue("no error", !m.error);
+    mhchk("RD_MH = 0.10", m.FE, 0.10, 0.001);
+  }
+
+  // ---- Unit test 8: Peto OR on rare-events BCG data — est near IV log OR ----
+  {
+    console.log("--- Unit 8: Peto OR close to IV log OR for BCG data ---");
+    const bcgData = MH_BENCHMARKS[0].data;  // 13 BCG studies
+    const studies = bcgData.map(d => compute(d, "OR"));
+    const mPeto = metaPeto(studies);
+    const mIV   = meta(studies, "DL");
+    mhchkTrue("no error", !mPeto.error);
+    // Peto and IV log OR should be within 0.1 for this dataset
+    mhchkTrue("Peto est within 0.1 of IV FE", Math.abs(mPeto.FE - mIV.FE) < 0.1);
+  }
+
+  // ---- Unit test 9: MH OR and IV OR close for large balanced studies ----
+  {
+    console.log("--- Unit 9: MH OR close to IV log OR for large balanced studies ---");
+    // 5 large balanced studies, OR ≈ 0.5 (log OR ≈ -0.693)
+    const data = [
+      { a:  50, b:  950, c: 100, d:  900 },
+      { a:  40, b: 1960, c:  80, d: 1920 },
+      { a:  60, b: 2940, c: 120, d: 2880 },
+      { a:  30, b: 1470, c:  60, d: 1440 },
+      { a:  70, b: 3430, c: 140, d: 3360 },
+    ];
+    const studies = data.map(d => compute(d, "OR"));
+    const mMH = metaMH(studies, "OR");
+    const mIV = meta(studies, "DL");
+    mhchkTrue("no error", !mMH.error);
+    mhchkTrue("MH OR within 0.05 of IV FE", Math.abs(mMH.FE - mIV.FE) < 0.05);
+  }
+
+  // ---- Unit test 10: isMH flag ----
+  {
+    console.log("--- Unit 10: isMH flag on metaMH result ---");
+    const studies = MH_BENCHMARKS[0].data.map(d => compute(d, "OR"));
+    const m = metaMH(studies, "OR");
+    mhchkTrue("isMH === true",        m.isMH    === true);
+    mhchkTrue("isPeto === undefined",  m.isPeto  === undefined);
+  }
+
+  // ---- Unit test 11: isPeto flag ----
+  {
+    console.log("--- Unit 11: isPeto flag on metaPeto result ---");
+    const studies = MH_BENCHMARKS[3].data.map(d => compute(d, "OR"));
+    const m = metaPeto(studies);
+    mhchkTrue("isPeto === true",      m.isPeto  === true);
+    mhchkTrue("isMH === undefined",   m.isMH    === undefined);
+  }
+
+  // ---- Unit test 12: RE and tau2 are NaN ----
+  {
+    console.log("--- Unit 12: RE and tau2 are NaN for both methods ---");
+    const studies = MH_BENCHMARKS[0].data.map(d => compute(d, "OR"));
+    const mMH   = metaMH(studies, "OR");
+    const mPeto = metaPeto(studies);
+    mhchkNaN("metaMH RE",    mMH.RE);
+    mhchkNaN("metaMH tau2",  mMH.tau2);
+    mhchkNaN("metaPeto RE",  mPeto.RE);
+    mhchkNaN("metaPeto tau2",mPeto.tau2);
+  }
+
+  // ---- Unit test 13: Q and I2 are finite and non-negative ----
+  {
+    console.log("--- Unit 13: Q and I2 are finite and non-negative ---");
+    const studies = MH_BENCHMARKS[0].data.map(d => compute(d, "OR"));
+    const mMH   = metaMH(studies, "OR");
+    const mPeto = metaPeto(studies);
+    mhchkTrue("metaMH Q finite",     isFinite(mMH.Q) && mMH.Q >= 0);
+    mhchkTrue("metaMH I2 finite",    isFinite(mMH.I2) && mMH.I2 >= 0);
+    mhchkTrue("metaPeto Q finite",   isFinite(mPeto.Q) && mPeto.Q >= 0);
+    mhchkTrue("metaPeto I2 finite",  isFinite(mPeto.I2) && mPeto.I2 >= 0);
+  }
+
+  console.log(mhPass ? "\n✅ ALL MANTEL-HAENSZEL AND PETO TESTS PASSED" : "\n❌ SOME MANTEL-HAENSZEL AND PETO TESTS FAILED");
 }
