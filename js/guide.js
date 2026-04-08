@@ -684,6 +684,97 @@ settings with balanced arms. Inverse-variance RE models are preferred when
         ],
       },
 
+      {
+        id: "guide-cluster-robust",
+        title: "Cluster-Robust Standard Errors",
+        body: `<p>In education and psychology meta-analyses a single primary study often
+contributes <em>multiple</em> effect sizes — for example, several outcomes,
+subgroups, or follow-up time points. Treating those rows as independent
+inflates the effective sample size and underestimates standard errors, because
+within-study estimates share participants and thus share residual error.</p>
+
+<p>The <strong>sandwich (cluster-robust) variance estimator</strong> corrects
+for this dependency without requiring a full multivariate model. It replaces
+the model-based SE with one that accumulates squared within-cluster weighted
+residuals before combining them across clusters. The point estimate (pooled
+effect μ̂) is unchanged; only the uncertainty estimate is affected.</p>
+
+<h4>When clustering matters</h4>
+<ul>
+  <li>A single trial reports outcomes on multiple scales or subgroups and all
+      rows appear in the same meta-analysis.</li>
+  <li>Multiple papers from the same lab or cohort share participants.</li>
+  <li>A dataset is constructed by selecting several contrasts from each study.</li>
+</ul>
+<p>If every row comes from a genuinely independent study, the cluster column
+can be left blank and the usual model-based SE is used.</p>
+
+<h4>How the sandwich estimator works</h4>
+<p>Let <em>k</em> rows be grouped into <em>C</em> clusters. For a pooled-estimate
+model (intercept only, design matrix <strong>X</strong> = <strong>1</strong><sub>k</sub>):</p>
+<ol>
+  <li>Fit the RE model as usual with weights w<sub>i</sub> = 1/(v<sub>i</sub> + τ²)
+      to obtain μ̂ and residuals ê<sub>i</sub> = y<sub>i</sub> − μ̂.</li>
+  <li>For each cluster c, compute the score contribution
+      g<sub>c</sub> = Σ<sub>i∈c</sub> w<sub>i</sub> ê<sub>i</sub>.</li>
+  <li>Meat: B = Σ<sub>c</sub> g<sub>c</sub>².</li>
+  <li>Robust variance: V<sub>rob</sub> = B / W², where W = Σw<sub>i</sub>.</li>
+  <li>Apply the CR1 small-sample correction: multiply by C / (C − 1).</li>
+</ol>
+<p>For meta-regression with a <em>p</em>-column design matrix, the formula
+generalises to V<sub>rob</sub> = (X′WX)<sup>−1</sup> B (X′WX)<sup>−1</sup>
+with g<sub>c</sub> a <em>p</em>-vector and B = Σ<sub>c</sub> g<sub>c</sub> g<sub>c</sub>′,
+multiplied by the CR1 factor C / (C − p).</p>
+
+<h4>Confidence intervals and degrees of freedom</h4>
+<p>When the number of clusters C is small the t-distribution is used for the
+robust CI with df = C − p degrees of freedom (p = 1 for the pooled estimate,
+p = number of regression coefficients for meta-regression). For C ≥ 30 the
+standard normal critical value is used instead.</p>
+<p><strong>Recommendation:</strong> prefer at least C ≥ 10 clusters. With
+fewer clusters the t-correction may still under-cover; consider a sensitivity
+analysis using Satterthwaite-corrected df from the
+<code>clubSandwich</code> R package.</p>
+
+<h4>All-singletons (HC-robust) case</h4>
+<p>If every row has a distinct cluster ID the sandwich reduces to the HC1
+heteroscedasticity-robust variance estimator. This is still valid and
+slightly larger than the model-based SE when τ² &gt; 0. The results panel
+labels this case explicitly as "HC-robust, not cluster-robust."</p>
+
+<h4>Comparison with multivariate meta-analysis</h4>
+<p>The sandwich estimator is a <em>marginal</em> correction: it does not model
+the within-study covariance structure, so the point estimate is the same as
+the standard RE model. Multivariate meta-analysis models the covariance
+explicitly and can improve efficiency, but requires knowledge (or estimation)
+of the within-study correlation matrix, which is rarely reported. The sandwich
+approach requires no additional data and is robust to misspecification of the
+covariance structure — a useful default when within-study correlations are
+unknown.</p>
+
+<h4>Limitations</h4>
+<ul>
+  <li>The point estimate μ̂ is unchanged by clustering; only the SE is
+      corrected. If the clustering structure also biases the estimate
+      (e.g. severe imbalance in cluster sizes), a multivariate model is
+      more appropriate.</li>
+  <li>With very few clusters (C &lt; 10) the t-correction may not fully
+      restore nominal coverage; bootstrap methods or clubSandwich's
+      Satterthwaite df are preferable in that regime.</li>
+  <li>Not applicable to M-H/Peto methods, which do not use a WLS regression
+      model. A note is shown in the results panel when these methods are
+      selected alongside a cluster column.</li>
+  <li>Bayesian analysis uses the posterior distribution directly and does
+      not incorporate the sandwich correction.</li>
+</ul>`,
+        citations: [
+          "Hedges, L. V., Tipton, E., & Johnson, M. C. (2010). Robust variance estimation in meta-regression with dependent effect size estimates. <em>Research Synthesis Methods, 1</em>(1), 39–65.",
+          "Tipton, E. (2015). Small sample adjustments for robust variance estimation with meta-regression. <em>Psychological Methods, 20</em>(3), 375–393.",
+          "Pustejovsky, J. E. (2022). <em>clubSandwich: Cluster-robust (sandwich) variance estimators with small-sample corrections</em>. R package version 0.5.10. https://CRAN.R-project.org/package=clubSandwich",
+          "White, H. (1980). A heteroskedasticity-consistent covariance matrix estimator and a direct test for heteroskedasticity. <em>Econometrica, 48</em>(4), 817–838.",
+        ],
+      },
+
     ],
   },
 
@@ -1445,6 +1536,8 @@ export const HELP_TO_GUIDE = {
   "bayes.model":         "guide-bayes-meta",
   "tau.MH":              "guide-mantel-haenszel",
   "tau.Peto":            "guide-mantel-haenszel",
+  "cluster.id":          "guide-cluster-robust",
+  "cluster.robust":      "guide-cluster-robust",
 };
 
 // ------------------------------------------------------------------ //

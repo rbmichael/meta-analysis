@@ -100,7 +100,7 @@
 //   ui.js calls init() on DOMContentLoaded, which populates dropdowns,
 //   restores any autosave draft, and attaches all event listeners.
 // =============================================================================
-import { eggerTest, beggTest, fatPetTest, failSafeN, pCurve, pUniform, baujat, meta, metaMH, metaPeto, influenceDiagnostics, subgroupAnalysis, metaRegression, cumulativeMeta, leaveOneOut, estimatorComparison, veveaHedges, SELECTION_PRESETS, profileLikTau2, bayesMeta } from "./analysis.js";
+import { eggerTest, beggTest, fatPetTest, failSafeN, pCurve, pUniform, baujat, meta, metaMH, metaPeto, robustMeta, influenceDiagnostics, subgroupAnalysis, metaRegression, cumulativeMeta, leaveOneOut, estimatorComparison, veveaHedges, SELECTION_PRESETS, profileLikTau2, bayesMeta } from "./analysis.js";
 import { fmt } from "./utils.js";
 import { effectProfiles, getProfile } from "./profiles.js";
 import { trimFill } from "./trimfill.js";
@@ -760,6 +760,11 @@ function updateTableHeaders() {
   thGroup.textContent = "Group";
   headerRow.appendChild(thGroup);
 
+  // Cluster column
+  const thCluster = document.createElement("th");
+  thCluster.innerHTML = `Cluster ${hBtn("cluster.id")}`;
+  headerRow.appendChild(thCluster);
+
   // Moderator columns
   moderators.forEach(({ name }) => headerRow.appendChild(makeModTh(name)));
 
@@ -777,7 +782,7 @@ function addRow(values) {
 
   const table = document.getElementById("inputTable");
   const row = table.insertRow();
-  const v = values || ["", ...Array(profile.inputs.length).fill(""), ""]; // Study + effects + group
+  const v = values || ["", ...Array(profile.inputs.length).fill(""), "", ""]; // Study + effects + group + cluster
 
   // ---- Study column ----
   const cellStudy = row.insertCell();
@@ -801,8 +806,16 @@ function addRow(values) {
   groupInput.value = v[profile.inputs.length + 1] || "";
   groupCell.appendChild(groupInput);
 
-  // ---- Moderator columns ---- (values at indices after Group)
-  const modOffset = profile.inputs.length + 2;
+  // ---- Cluster column ---- (fixed index: 1 Study + p effects + 1 Group + 1 Cluster)
+  const clusterCell = row.insertCell();
+  const clusterInput = document.createElement("input");
+  clusterInput.className = "cluster";
+  clusterInput.placeholder = "e.g. 1";
+  clusterInput.value = v[profile.inputs.length + 2] || "";
+  clusterCell.appendChild(clusterInput);
+
+  // ---- Moderator columns ---- (values at indices after Cluster)
+  const modOffset = profile.inputs.length + 3;
   moderators.forEach(({ name, type }, modIdx) => {
     const td = makeModTd(name, type);
     const val = v[modOffset + modIdx];
@@ -860,10 +873,10 @@ function validateRow(row) {
     return true;
   }
 
-  // Build a study object from the effect-column inputs (skip label, group, moderators).
+  // Build a study object from the effect-column inputs (skip label, group, cluster, moderators).
   const studyObj = {};
   inputs.forEach((input, idx) => {
-    if (idx === 0 || input.classList.contains("group") || "mod" in input.dataset) return;
+    if (idx === 0 || input.classList.contains("group") || input.classList.contains("cluster") || "mod" in input.dataset) return;
     const key = profile.inputs[idx - 1];
     const val = input.value.trim();
     studyObj[key] = profile.rawInputs?.has(key) ? val : (val === "" || isNaN(val)) ? NaN : +val;
@@ -874,7 +887,7 @@ function validateRow(row) {
 
   // Mark individual inputs whose key has an error.
   inputs.forEach((input, idx) => {
-    if (idx === 0 || input.classList.contains("group") || "mod" in input.dataset) return;
+    if (idx === 0 || input.classList.contains("group") || input.classList.contains("cluster") || "mod" in input.dataset) return;
     const key = profile.inputs[idx - 1];
     if (errors[key]) input.classList.add("input-error");
   });
@@ -969,7 +982,7 @@ let _pendingImport = null;  // { parsed: { delimiter, headers, rows } }
 function classifyColumns(headers, type) {
   const profile   = effectProfiles[type];
   const required  = new Set(profile.inputs.map(i => i.toLowerCase()));
-  const structural = new Set(["study", "group"]);
+  const structural = new Set(["study", "group", "cluster"]);
   const lowerHdr  = new Set(headers.map(h => h.toLowerCase()));
 
   const matched    = profile.inputs.filter(i =>  lowerHdr.has(i.toLowerCase()));
@@ -1097,7 +1110,7 @@ function commitImport() {
   headers.forEach((h, idx) => { headerMap[h.toLowerCase()] = idx; });
 
   // Classify columns
-  const knownCols = new Set(["study", "group", ...profile.inputs.map(c => c.toLowerCase())]);
+  const knownCols = new Set(["study", "group", "cluster", ...profile.inputs.map(c => c.toLowerCase())]);
   const modCols   = headers.filter(h => !knownCols.has(h.toLowerCase()));
 
   // Infer moderator types and register them
@@ -1120,6 +1133,7 @@ function commitImport() {
     v.push(values[headerMap["study"]] ?? "");
     profile.inputs.forEach(col => v.push(values[headerMap[col.toLowerCase()]] ?? ""));
     v.push(values[headerMap["group"]] ?? "");
+    v.push(values[headerMap["cluster"]] ?? "");
     modCols.forEach(col => v.push(values[headerMap[col.toLowerCase()]] ?? ""));
     addRow(v);
   });
@@ -1174,23 +1188,24 @@ function gatherSessionState() {
   document.querySelectorAll("#inputTable tr").forEach((r, i) => {
     if (i === 0) return; // skip header
     const inputs = [...r.querySelectorAll("input")];
-    // inputs order: Study, ...profile.inputs, Group, ...moderators
+    // inputs order: Study, ...profile.inputs, Group, Cluster, ...moderators
     const study = inputs[0]?.value ?? "";
     const effectInputs = {};
     profile.inputs.forEach((col, idx) => {
       effectInputs[col] = inputs[idx + 1]?.value ?? "";
     });
-    const group = inputs[profile.inputs.length + 1]?.value ?? "";
+    const group   = inputs[profile.inputs.length + 1]?.value ?? "";
+    const cluster = inputs[profile.inputs.length + 2]?.value ?? "";
     const modValues = {};
     moderators.forEach((m, modIdx) => {
-      modValues[m.name] = inputs[profile.inputs.length + 2 + modIdx]?.value ?? "";
+      modValues[m.name] = inputs[profile.inputs.length + 3 + modIdx]?.value ?? "";
     });
 
     // Skip completely empty rows
-    const allVals = [study, ...Object.values(effectInputs), group, ...Object.values(modValues)];
+    const allVals = [study, ...Object.values(effectInputs), group, cluster, ...Object.values(modValues)];
     if (allVals.every(v => v === "")) return;
 
-    studies.push({ study, inputs: effectInputs, group, moderators: modValues });
+    studies.push({ study, inputs: effectInputs, group, cluster, moderators: modValues });
   });
 
   return buildSession(settings, savedModerators, studies, { domains: _robDomains, data: _robData });
@@ -1242,6 +1257,7 @@ function applySession(session) {
     v.push(row.study ?? "");
     profile.inputs.forEach(col => v.push(row.inputs?.[col] ?? ""));
     v.push(row.group ?? "");
+    v.push(row.cluster ?? "");
     moderators.forEach(m => v.push(row.moderators?.[m.name] ?? ""));
     addRow(v);
   });
@@ -1303,7 +1319,7 @@ function exportCSV() {
   const type    = document.getElementById("effectType").value;
   const profile = effectProfiles[type];
 
-  const headers = ["Study", ...profile.inputs, "Group", ...moderators.map(m => m.name)];
+  const headers = ["Study", ...profile.inputs, "Group", "Cluster", ...moderators.map(m => m.name)];
   const rows    = [];
 
   document.querySelectorAll("#inputTable tr").forEach((r, i) => {
@@ -1456,12 +1472,13 @@ function regFmtP(p) {
 }
 
 function buildRegCoeffRows(reg) {
-  const hasVif   = Array.isArray(reg.vif) && reg.vif.length === reg.p;
+  const hasVif    = Array.isArray(reg.vif) && reg.vif.length === reg.p;
+  const hasRobust = reg.isClustered && Array.isArray(reg.robustSE);
   // Group header rows only when there are genuinely multiple moderators whose
   // column indices are tracked in modTests.
   const multiMod = moderators.length > 1
     && Array.isArray(reg.modTests) && reg.modTests.length > 0;
-  const colCount = 8;  // Term + β + SE + stat + p + CI + VIF + stars
+  const colCount = 8 + (hasRobust ? 2 : 0);  // Term + β + SE + stat + p + CI + VIF + stars [+ Rob.SE + Rob.p]
 
   function vifCell(j) {
     if (!hasVif || j === 0) return `<td class="reg-vif">—</td>`;
@@ -1473,6 +1490,9 @@ function buildRegCoeffRows(reg) {
 
   function dataRow(j) {
     const [lo, hi] = reg.ci[j];
+    const robustCells = hasRobust
+      ? `<td>${fmt(reg.robustSE[j])}</td><td>${regFmtP(reg.robustP[j])}</td>`
+      : "";
     return `<tr class="${j === 0 ? "reg-intercept" : ""}">
       <td>${reg.colNames[j]}</td>
       <td>${fmt(reg.beta[j])}</td>
@@ -1482,6 +1502,7 @@ function buildRegCoeffRows(reg) {
       <td>[${fmt(lo)}, ${fmt(hi)}]</td>
       ${vifCell(j)}
       <td>${regStars(reg.pval[j])}</td>
+      ${robustCells}
     </tr>`;
   }
 
@@ -1573,6 +1594,11 @@ function renderRegressionPanel(reg, method, ciMethod, kExcluded = 0) {
   const vifWarning = isFinite(reg.maxVIF) && reg.maxVIF > 10
     ? `<div class="reg-note reg-warn">⚠ High collinearity detected (max VIF = ${reg.maxVIF.toFixed(1)}) — coefficient estimates may be unstable.</div>`
     : "";
+  const clusterRegNote = reg.isClustered
+    ? `<div class="reg-note" style="margin:2px 0 6px">Cluster-robust SEs active (C&nbsp;=&nbsp;${reg.clustersUsed} cluster${reg.clustersUsed === 1 ? "" : "s"}${reg.allSingletons ? " — all singletons (HC-robust)" : ""}).</div>`
+    : (reg.robustError
+      ? `<div class="reg-note reg-warn">⚠ Cluster-robust SE: ${reg.robustError}</div>`
+      : "");
 
   // Per-moderator test block — only rendered when there are 2+ moderators.
   const modTestsBlock = moderators.length >= 2
@@ -1606,6 +1632,10 @@ function renderRegressionPanel(reg, method, ciMethod, kExcluded = 0) {
       </details>`
     : "";
 
+  const robustHeaders = reg.isClustered
+    ? `<th>Rob.SE</th><th>Rob.p</th>`
+    : "";
+
   panel.innerHTML = `
     <div class="reg-header">
       <span class="reg-title">Meta-Regression</span>
@@ -1618,11 +1648,12 @@ function renderRegressionPanel(reg, method, ciMethod, kExcluded = 0) {
       ${QMrow}
     </div>
     <div class="reg-body">
-      ${excludedWarning}${lowDfWarning}${vifWarning}
+      ${clusterRegNote}${excludedWarning}${lowDfWarning}${vifWarning}
       <table class="reg-table">
         <thead><tr>
           <th>Term</th><th>β</th><th>SE</th><th>${statLabel}</th>
           <th>p</th><th>95% CI</th><th>VIF</th><th></th>
+          ${robustHeaders}
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>
@@ -2490,8 +2521,11 @@ function runBayesUpdate() {
   const sigmaTau = Math.max(0.01, parseFloat(document.getElementById("bayesSigmaTau")?.value) || 0.5);
   const result   = bayesMeta(bayesState.studies, { mu0, sigma_mu: sigmaMu, sigma_tau: sigmaTau });
   if (result.error) return;
+  const bayesUpdateClusterNote = bayesState.studies.some(s => s.cluster)
+    ? `<p class="reg-note" style="color:var(--muted);margin:0 0 6px">ℹ Bayesian analysis does not incorporate cluster-robust adjustment.</p>`
+    : "";
   document.getElementById("bayesSummary").innerHTML =
-    buildBayesSummaryHTML(result, bayesState.profile, bayesState.reMean);
+    bayesUpdateClusterNote + buildBayesSummaryHTML(result, bayesState.profile, bayesState.reMean);
   drawBayesMuPosterior(result, { reMean: bayesState.reMean });
   drawBayesTauPosterior(result);
   document.getElementById("bayesGridWarning").style.display =
@@ -2621,7 +2655,8 @@ function runAnalysis() {
 
     const isValid = validateRow(row);
 
-    const group = row.querySelector(".group")?.value.trim() || "";
+    const group   = row.querySelector(".group")?.value.trim() || "";
+    const cluster = row.querySelector(".cluster")?.value.trim() || "";
     const label = inputs[0] || `Row ${i}`;
 
     const studyInput = { label };
@@ -2651,7 +2686,8 @@ function runAnalysis() {
       continue;
     }
 
-    study.group = group;
+    study.group   = group;
+    study.cluster = cluster;
 
     // ---- Moderator values ----
     moderators.forEach(({ name, type }, modIdx) => {
@@ -2684,7 +2720,8 @@ function runAnalysis() {
   const useTF = elUseTrimFill?.checked;
   const useTFAdjusted = elUseTFAdjusted?.checked;
 
-  const isMHorPeto = method === "MH" || method === "Peto";
+  const isMHorPeto  = method === "MH" || method === "Peto";
+  const hasClusters = studies.some(s => s.cluster);
 
   let tf = [], all = studies;
   if (useTF && !isMHorPeto) { tf = trimFill(studies, method); all = [...studies, ...tf]; }
@@ -2692,6 +2729,7 @@ function runAnalysis() {
   let m;
   if      (method === "MH"  ) m = metaMH(studies, type);
   else if (method === "Peto") m = metaPeto(studies);
+  else if (hasClusters)       m = robustMeta(studies, method, ciMethod);
   else                        m = meta(studies, method, ciMethod);
 
   if (m.error) {
@@ -2726,8 +2764,11 @@ function runAnalysis() {
     bayesResult = bayesMeta(studies, { mu0: bayesMu0, sigma_mu: bayesSigmaMu, sigma_tau: bayesSigmaTau });
     if (!bayesResult.error) {
       elBayes.style.display = "";
+      const bayesClusterNote = hasClusters
+        ? `<p class="reg-note" style="color:var(--muted);margin:0 0 6px">ℹ Bayesian analysis does not incorporate cluster-robust adjustment.</p>`
+        : "";
       document.getElementById("bayesSummary").innerHTML =
-        buildBayesSummaryHTML(bayesResult, profile, reMeanRef);
+        bayesClusterNote + buildBayesSummaryHTML(bayesResult, profile, reMeanRef);
       drawBayesMuPosterior(bayesResult, { reMean: reMeanRef });
       drawBayesTauPosterior(bayesResult);
       document.getElementById("bayesGridWarning").style.display =
@@ -2772,7 +2813,27 @@ function runAnalysis() {
   }
 
   const methodLabel = m.isMH ? "MH" : m.isPeto ? "Peto" : "";
-  elResults.innerHTML = warningHTML + (isMHorPeto ? `
+
+  // Cluster-robust banner (shown at top of results when cluster IDs are present)
+  const clusterBanner = hasClusters
+    ? (isMHorPeto
+      ? `<div class="reg-note" style="color:var(--muted);margin:2px 0 6px">ℹ Cluster-robust SE is not available for M-H/Peto methods.</div>`
+      : (m.isClustered
+        ? `<div class="reg-note" style="margin:2px 0 6px">Cluster-robust SEs active (C&nbsp;=&nbsp;${m.clustersUsed} cluster${m.clustersUsed === 1 ? "" : "s"}${m.allSingletons ? " — all singletons (HC-robust)" : ""}).</div>`
+        : (m.robustError
+          ? `<div class="reg-note" style="color:var(--warn);margin:2px 0 6px">⚠ Cluster-robust SE: ${m.robustError}</div>`
+          : "")))
+    : "";
+
+  // Robust CI display (shown after regular CI when clustering succeeded)
+  const robust_ci_disp = m.isClustered
+    ? { lb: profile.transform(m.robustCiLow), ub: profile.transform(m.robustCiHigh) }
+    : null;
+  const robustCILine = m.isClustered
+    ? `${hBtn("cluster.robust")}Robust CI [${fmt(robust_ci_disp.lb)}, ${fmt(robust_ci_disp.ub)}] | SE=${fmt(m.robustSE)} | z=${fmt(m.robustStat)} | p=${fmt(m.robustPval)} (df=${m.robustDf})<br>`
+    : "";
+
+  elResults.innerHTML = warningHTML + clusterBanner + (isMHorPeto ? `
     <b>${profile.label} (${methodLabel}):</b> ${fmt(FE_disp)}<br>
     CI [${fmt(ci_disp.lb)}, ${fmt(ci_disp.ub)}]<br>
     <small style="color:var(--muted)">Fixed-effect only — no τ², RE estimate, or prediction interval.</small><br>
@@ -2781,16 +2842,19 @@ function runAnalysis() {
     <b>${profile.label} (FE):</b> ${fmt(FE_disp)} |
     <b>${profile.label} (RE):</b> ${fmt(RE_disp)}<br>
     ${useTF && mAdjusted ? `<b>RE (adjusted):</b> ${fmt(RE_adj_disp)}<br>` : ""}
-    CI [${fmt(ci_disp.lb)}, ${fmt(ci_disp.ub)}]<br>
-    ${hBtn("het.tau2")}τ²=${fmt(m.tau2)} [${fmt(m.tauCI[0])}, ${isFinite(m.tauCI[1])?fmt(m.tauCI[1]):"∞"}] | ${hBtn("het.I2")}I²=${fmt(m.I2)}% [${fmt(m.I2CI[0])}%, ${fmt(m.I2CI[1])}%] | ${hBtn("het.H2")}H²-CI=[${fmt(m.H2CI[0])}, ${isFinite(m.H2CI[1])?fmt(m.H2CI[1]):"∞"}]<br>
+    CI [${fmt(ci_disp.lb)}, ${fmt(ci_disp.ub)}]${m.isClustered ? ` | SE (model)=${fmt(m.seRE)}` : ""}<br>
+    ${robustCILine}${hBtn("het.tau2")}τ²=${fmt(m.tau2)} [${fmt(m.tauCI[0])}, ${isFinite(m.tauCI[1])?fmt(m.tauCI[1]):"∞"}] | ${hBtn("het.I2")}I²=${fmt(m.I2)}% [${fmt(m.I2CI[0])}%, ${fmt(m.I2CI[1])}%] | ${hBtn("het.H2")}H²-CI=[${fmt(m.H2CI[0])}, ${isFinite(m.H2CI[1])?fmt(m.H2CI[1]):"∞"}]<br>
     ${hBtn("het.Q")}${m.dist}-stat=${fmt(m.stat)} | p=${fmt(m.pval)}<br>
     ${hBtn("het.pred")}Prediction interval (Higgins 2009, t<sub>${m.df > 0 ? m.df - 1 : "—"}</sub>): ${isFinite(pred_disp.lb) ? `[${fmt(pred_disp.lb)}, ${fmt(pred_disp.ub)}]` : "NA (k &lt; 3)"}
   `);
 
+  const eggerRobustNote  = egger.clustersUsed  ? ` | p<sub>robust</sub>=${isFinite(egger.robustInterceptP)  ? fmt(egger.robustInterceptP)  : "—"}` : "";
+  const fatpetRobustNote = fatpet.clustersUsed ? ` | p<sub>FAT,rob</sub>=${isFinite(fatpet.robustSlopeP) ? fmt(fatpet.robustSlopeP) : "—"} · p<sub>PET,rob</sub>=${isFinite(fatpet.robustInterceptP) ? fmt(fatpet.robustInterceptP) : "—"}` : "";
+
   elPubBiasStats.innerHTML = `
-    &nbsp;&nbsp;${hBtn("bias.egger")}Egger: intercept=${isFinite(egger.intercept)?fmt(egger.intercept):"NA"} | p=${isFinite(egger.p)?fmt(egger.p):"NA (k<3)"}<br>
+    &nbsp;&nbsp;${hBtn("bias.egger")}Egger: intercept=${isFinite(egger.intercept)?fmt(egger.intercept):"NA"} | p=${isFinite(egger.p)?fmt(egger.p):"NA (k<3)"}${eggerRobustNote}<br>
     &nbsp;&nbsp;${hBtn("bias.begg")}Begg: τ=${isFinite(begg.tau)?fmt(begg.tau):"NA"} | p=${isFinite(begg.p)?fmt(begg.p):"NA (k<3)"}<br>
-    &nbsp;&nbsp;${hBtn("bias.fatpet")}FAT (bias): β₁=${isFinite(fatpet.slope)?fmt(fatpet.slope):"NA"} | p=${isFinite(fatpet.slopeP)?fmt(fatpet.slopeP):"NA (k<3)"} &nbsp;·&nbsp; PET (effect at SE→0): ${isFinite(fatpet.intercept)?fmt(profile.transform(fatpet.intercept)):"NA"} | p=${isFinite(fatpet.interceptP)?fmt(fatpet.interceptP):"NA (k<3)"}<br>
+    &nbsp;&nbsp;${hBtn("bias.fatpet")}FAT (bias): β₁=${isFinite(fatpet.slope)?fmt(fatpet.slope):"NA"} | p=${isFinite(fatpet.slopeP)?fmt(fatpet.slopeP):"NA (k<3)"} &nbsp;·&nbsp; PET (effect at SE→0): ${isFinite(fatpet.intercept)?fmt(profile.transform(fatpet.intercept)):"NA"} | p=${isFinite(fatpet.interceptP)?fmt(fatpet.interceptP):"NA (k<3)"}${fatpetRobustNote}<br>
     &nbsp;&nbsp;${hBtn("bias.fsn")}Fail-safe N (Rosenthal): ${isFinite(fsn.rosenthal)?Math.round(fsn.rosenthal):"NA"} &nbsp;·&nbsp; Orwin (trivial=0.1): ${isFinite(fsn.orwin)?Math.round(fsn.orwin):"NA"}<br>
     <b>Trim &amp; Fill:</b>${hBtn("bias.trimfill")} ${useTF?"ON":"OFF"} (${tf.length} filled studies)
   `;

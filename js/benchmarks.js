@@ -1884,3 +1884,91 @@ export const MH_BENCHMARKS = [
   }
 
 ];
+
+// =============================================================================
+// CLUSTER_BENCHMARKS — cluster-robust (sandwich) SE benchmarks
+//
+// Each entry drives one robustMeta() call.  Expected values are derived from
+// R metafor::rma() + clubSandwich::coef_test(vcov="CR1") using the CR1
+// correction factor (C/(C-1) for intercept-only, generalised to C/(C-p)).
+// CIs use df = C - p with a t distribution when df < 30 (matching analysis.js).
+// See generate.R blocks CL-1 through CL-3.
+// =============================================================================
+export const CLUSTER_BENCHMARKS = [
+  {
+    // CL-1. Synthetic 3-cluster, 6-study dataset (REML)
+    // 3 clusters of 2 studies each; positive τ².
+    // R: rma(yi, vi, method="REML") + coef_test(vcov="CR1", cluster=cluster)
+    name:   "Synthetic 3-cluster 6-study (REML)",
+    method: "REML",
+    data: [
+      { yi:  0.10, vi: 0.04, cluster: "1" },
+      { yi:  0.30, vi: 0.05, cluster: "1" },
+      { yi:  0.50, vi: 0.03, cluster: "2" },
+      { yi:  0.70, vi: 0.06, cluster: "2" },
+      { yi:  0.20, vi: 0.04, cluster: "3" },
+      { yi:  0.80, vi: 0.05, cluster: "3" }
+    ],
+    expected: {
+      RE:           0.4196624,
+      modelSE:      0.1104088,
+      tau2:         0.0293950,
+      robustSE:     0.1158033,
+      robustCiLow: -0.0785989,
+      robustCiHigh: 0.9179237,
+      clustersUsed: 3,
+      df:           2
+    }
+  },
+  {
+    // CL-2. 4-cluster, 8-study dataset with heterogeneous cluster sizes (DL)
+    // Cluster 1: 3 studies; clusters 2,3: 2 studies each; cluster 4: 1 (singleton).
+    // R: rma(yi, vi, method="DL") + coef_test(vcov="CR1", cluster=cluster)
+    name:   "4-cluster 8-study heterogeneous sizes (DL)",
+    method: "DL",
+    data: [
+      { yi:  0.20, vi: 0.020, cluster: "1" },
+      { yi:  0.40, vi: 0.030, cluster: "1" },
+      { yi:  0.60, vi: 0.025, cluster: "1" },
+      { yi: -0.10, vi: 0.040, cluster: "2" },
+      { yi:  0.30, vi: 0.035, cluster: "2" },
+      { yi:  0.80, vi: 0.020, cluster: "3" },
+      { yi:  0.50, vi: 0.030, cluster: "3" },
+      { yi:  0.15, vi: 0.050, cluster: "4" }
+    ],
+    expected: {
+      RE:           0.3748161,
+      modelSE:      0.1016798,
+      tau2:         0.0525036,
+      robustSE:     0.1168444,
+      robustCiLow:  0.0029652,
+      robustCiHigh: 0.7466670,
+      clustersUsed: 4,
+      df:           3
+    }
+  },
+  {
+    // CL-3. All-singletons: each study in its own cluster → HC-robust SE (REML)
+    // C = k = 5; df = C - 1 = 4; allSingletons = true.
+    // R: rma(yi, vi, method="REML") + coef_test(vcov="CR1", cluster=1:5)
+    name:   "All-singletons HC-robust (REML)",
+    method: "REML",
+    data: [
+      { yi: 0.10, vi: 0.04, cluster: "1" },
+      { yi: 0.30, vi: 0.05, cluster: "2" },
+      { yi: 0.50, vi: 0.03, cluster: "3" },
+      { yi: 0.70, vi: 0.06, cluster: "4" },
+      { yi: 0.20, vi: 0.04, cluster: "5" }
+    ],
+    expected: {
+      RE:           0.3490129,
+      modelSE:      0.1003876,
+      tau2:         0.0083402,
+      robustSE:     0.0999098,
+      robustCiLow:  0.0716189,
+      robustCiHigh: 0.6264069,
+      clustersUsed: 5,
+      df:           4
+    }
+  }
+];

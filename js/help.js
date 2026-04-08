@@ -830,6 +830,31 @@ export const HELP = {
            "Viechtbauer & Cheung (2010).",
   },
 
+  // Cluster-robust SE                                                   //
+  "cluster.id": {
+    title: "Cluster ID",
+    body:  "An optional study identifier used to form clusters of dependent effect sizes. " +
+           "Studies sharing the same non-blank Cluster ID are assumed correlated — " +
+           "for example, multiple outcomes or subgroups from the same primary study, " +
+           "or multiple papers from the same cohort. " +
+           "The Cluster ID does not affect the point estimate; it corrects the standard error " +
+           "using the sandwich (cluster-robust) variance estimator. " +
+           "Leave blank for independent studies. " +
+           "At least 2 clusters are required; 10 or more is recommended for reliable inference.",
+  },
+
+  "cluster.robust": {
+    title: "Cluster-robust SE",
+    body:  "The cluster-robust (sandwich) standard error accounts for dependence among effect sizes " +
+           "that share a Cluster ID. It replaces the model-based SE without changing the point estimate. " +
+           "The CR1 small-sample correction (C / (C − p)) is applied, and a t-distribution with " +
+           "df = C − p degrees of freedom is used for the confidence interval when C < 30. " +
+           "When every row has a distinct cluster ID the result is the HC1 " +
+           "heteroscedasticity-robust SE. " +
+           "Not available for M-H/Peto methods. " +
+           "Based on Hedges, Tipton & Johnson (2010).",
+  },
+
   // Bayesian                                                            //
   "bayes.model": {
     title: "Bayesian meta-analysis",

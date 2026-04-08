@@ -1,6 +1,6 @@
 import { round, transformEffect, chiSquareCDF, chiSquareQuantile, parseCounts, bivariateNormalCDF, normalQuantile, fCDF } from "./utils.js";
-import { BENCHMARKS, PUB_BIAS_BENCHMARKS, INFLUENCE_BENCHMARKS, META_REGRESSION_BENCHMARKS, VH_BENCHMARKS, MH_BENCHMARKS } from "./benchmarks.js";
-import { compute, meta, metaMH, metaPeto, metaRegression, tau2_HS, tau2_HE, tau2_ML, tau2_SJ, beggTest, eggerTest, fatPetTest, failSafeN, heterogeneityCIs, cumulativeMeta, influenceDiagnostics, harbordTest, petersTest, deeksTest, rueckerTest, leaveOneOut, baujat, pCurve, pUniform, estimatorComparison, subgroupAnalysis, logLik, bfgs, selIntervalProbs, selIntervalIdx, selectionLogLik, SEL_CUTS_ONE_SIDED, SEL_CUTS_TWO_SIDED, veveaHedges, SELECTION_PRESETS, profileLikTau2, profileLikCI, bayesMeta } from "./analysis.js";
+import { BENCHMARKS, PUB_BIAS_BENCHMARKS, INFLUENCE_BENCHMARKS, META_REGRESSION_BENCHMARKS, VH_BENCHMARKS, MH_BENCHMARKS, CLUSTER_BENCHMARKS } from "./benchmarks.js";
+import { compute, meta, metaMH, metaPeto, robustMeta, sandwichVar, robustWlsResult, metaRegression, tau2_HS, tau2_HE, tau2_ML, tau2_SJ, beggTest, eggerTest, fatPetTest, failSafeN, heterogeneityCIs, cumulativeMeta, influenceDiagnostics, harbordTest, petersTest, deeksTest, rueckerTest, leaveOneOut, baujat, pCurve, pUniform, estimatorComparison, subgroupAnalysis, logLik, bfgs, selIntervalProbs, selIntervalIdx, selectionLogLik, SEL_CUTS_ONE_SIDED, SEL_CUTS_TWO_SIDED, veveaHedges, SELECTION_PRESETS, profileLikTau2, profileLikCI, bayesMeta } from "./analysis.js";
 import { trimFill } from "./trimfill.js";
 import { parseCSV } from "./csv.js";
 import { goshCompute, GOSH_MAX_ENUM_K, GOSH_MAX_K, GOSH_DEFAULT_MAX_SUBSETS } from "./gosh.js";
@@ -4456,4 +4456,213 @@ export function runTests() {
   }
 
   console.log(mhPass ? "\n✅ ALL MANTEL-HAENSZEL AND PETO TESTS PASSED" : "\n❌ SOME MANTEL-HAENSZEL AND PETO TESTS FAILED");
+
+  // ===== CLUSTER-ROBUST SE TESTS =====
+  console.log("\n===== CLUSTER-ROBUST SE TESTS =====\n");
+  let clPass = true;
+  const { chk: clchk, chkTrue: clchkTrue, chkExact: clchkExact } = makeChk(() => { clPass = false; });
+
+  // ---- Benchmark tests (R blocks CL-1 through CL-3) ----
+  CLUSTER_BENCHMARKS.forEach(bm => {
+    console.log(`--- Benchmark: ${bm.name} ---`);
+    const studies = bm.data.map(d => ({
+      yi: d.yi, vi: d.vi, se: Math.sqrt(d.vi), cluster: d.cluster
+    }));
+    const m = robustMeta(studies, bm.method, "normal");
+    clchkTrue("no robustError",     !m.robustError);
+    clchkTrue("isClustered",        m.isClustered === true);
+    clchk("RE",           m.RE,           bm.expected.RE,           0.001);
+    clchk("robustSE",     m.robustSE,     bm.expected.robustSE,     0.001);
+    clchk("robustCiLow",  m.robustCiLow,  bm.expected.robustCiLow,  0.001);
+    clchk("robustCiHigh", m.robustCiHigh, bm.expected.robustCiHigh, 0.001);
+    clchkExact("clustersUsed", m.clustersUsed, bm.expected.clustersUsed);
+    clchkExact("df",           m.robustDf,     bm.expected.df);
+  });
+
+  // ---- Unit 1: No cluster IDs → plain meta() result, no robust fields ----
+  {
+    console.log("--- Unit 1: No cluster IDs → no clustering ---");
+    const studies = [
+      { yi: 0.5, vi: 0.04, se: 0.2 },
+      { yi: 0.3, vi: 0.05, se: Math.sqrt(0.05) },
+      { yi: 0.7, vi: 0.03, se: Math.sqrt(0.03) },
+    ];
+    const m = robustMeta(studies, "DL", "normal");
+    clchkTrue("isClustered not set",  m.isClustered === undefined);
+    clchkTrue("robustSE undefined",   m.robustSE    === undefined);
+    clchkTrue("RE is finite",         isFinite(m.RE));
+  }
+
+  // ---- Unit 2: All singletons → HC-robust, allSingletons = true ----
+  {
+    console.log("--- Unit 2: All singletons → allSingletons flag ---");
+    const studies = [
+      { yi: 0.5, vi: 0.04, se: 0.2,                cluster: "A" },
+      { yi: 0.3, vi: 0.05, se: Math.sqrt(0.05),    cluster: "B" },
+      { yi: 0.7, vi: 0.03, se: Math.sqrt(0.03),    cluster: "C" },
+    ];
+    const m = robustMeta(studies, "DL", "normal");
+    clchkTrue("isClustered true",     m.isClustered    === true);
+    clchkTrue("allSingletons true",   m.allSingletons  === true);
+    clchkTrue("clustersUsed = 3",     m.clustersUsed   === 3);
+    clchkTrue("robustSE > 0",         m.robustSE > 0 && isFinite(m.robustSE));
+  }
+
+  // ---- Unit 3: Manual scalar sandwich formula verification ----
+  // Equal weights, singleton clusters, known residuals.
+  // W=3, g_c = w_i*e_i, B = sum(g_c²), cr1 = C/(C-p) = 3/2
+  // V_rob = 1.5 * 0.06 / 9 = 0.01  →  SE_rob = 0.1
+  {
+    console.log("--- Unit 3: Manual scalar sandwich verification ---");
+    const X = [[1], [1], [1]];
+    const w = [1, 1, 1];
+    const residuals = [0.1, -0.2, 0.1];
+    const clusterIds = ["A", "B", "C"];
+    const rob = sandwichVar(X, w, residuals, clusterIds);
+    // B = 0.1² + (-0.2)² + 0.1² = 0.06; W=3; cr1=1.5; V_rob = 1.5*0.06/9 = 0.01
+    clchkTrue("no error",     !rob.error);
+    clchk("SE_rob = 0.1",     rob.SE_rob[0], 0.1, 1e-10);
+    clchkExact("df = 2",      rob.df, 2);
+    clchkExact("C = 3",       rob.C,  3);
+  }
+
+  // ---- Unit 4: C < 2 → error ----
+  {
+    console.log("--- Unit 4: C < 2 → error ---");
+    const X = [[1], [1], [1]];
+    const w = [1, 1, 1];
+    const res = [0.1, 0.2, 0.3];
+    // All in same cluster → C = 1
+    const rob = sandwichVar(X, w, res, ["A", "A", "A"]);
+    clchkTrue("C=1 → error", !!rob.error);
+    clchkTrue("error mentions clusters", typeof rob.error === "string");
+  }
+
+  // ---- Unit 5: C ≤ p → error ----
+  // p=2 parameters, C=2 clusters → C ≤ p
+  {
+    console.log("--- Unit 5: C ≤ p → error ---");
+    const X = [[1, 0.1], [1, 0.3], [1, 0.5], [1, 0.2]];
+    const w = [1, 1, 1, 1];
+    const res = [0.1, -0.1, 0.1, -0.1];
+    const clIds = ["A", "A", "B", "B"];   // C=2, p=2 → C ≤ p
+    const rob = sandwichVar(X, w, res, clIds);
+    clchkTrue("C=p → error", !!rob.error);
+  }
+
+  // ---- Unit 6: RE point estimate unchanged by clustering ----
+  {
+    console.log("--- Unit 6: RE unchanged by cluster-robust adjustment ---");
+    const bm = CLUSTER_BENCHMARKS[0];
+    const studies = bm.data.map(d => ({
+      yi: d.yi, vi: d.vi, se: Math.sqrt(d.vi), cluster: d.cluster
+    }));
+    const mPlain  = meta(studies, bm.method, "normal");
+    const mRobust = robustMeta(studies, bm.method, "normal");
+    clchk("RE unchanged", mRobust.RE, mPlain.RE, 1e-12);
+    clchk("tau2 unchanged", mRobust.tau2, mPlain.tau2, 1e-12);
+  }
+
+  // ---- Unit 7: robustSE > 0 and finite ----
+  {
+    console.log("--- Unit 7: robustSE positive and finite ---");
+    CLUSTER_BENCHMARKS.forEach(bm => {
+      const studies = bm.data.map(d => ({
+        yi: d.yi, vi: d.vi, se: Math.sqrt(d.vi), cluster: d.cluster
+      }));
+      const m = robustMeta(studies, bm.method, "normal");
+      clchkTrue(`${bm.name}: robustSE > 0`, m.robustSE > 0 && isFinite(m.robustSE));
+    });
+  }
+
+  // ---- Unit 8: df === C − p ----
+  {
+    console.log("--- Unit 8: df === C − p ---");
+    CLUSTER_BENCHMARKS.forEach(bm => {
+      const studies = bm.data.map(d => ({
+        yi: d.yi, vi: d.vi, se: Math.sqrt(d.vi), cluster: d.cluster
+      }));
+      const m = robustMeta(studies, bm.method, "normal");
+      const expectedDf = bm.expected.clustersUsed - 1;  // p = 1 for pooled estimate
+      clchkExact(`${bm.name}: df`, m.robustDf, expectedDf);
+    });
+  }
+
+  // ---- Unit 9: robustCiLow < RE < robustCiHigh ----
+  {
+    console.log("--- Unit 9: robustCiLow < RE < robustCiHigh ---");
+    CLUSTER_BENCHMARKS.forEach(bm => {
+      const studies = bm.data.map(d => ({
+        yi: d.yi, vi: d.vi, se: Math.sqrt(d.vi), cluster: d.cluster
+      }));
+      const m = robustMeta(studies, bm.method, "normal");
+      clchkTrue(`${bm.name}: CI straddles RE`,
+        m.robustCiLow < m.RE && m.RE < m.robustCiHigh);
+    });
+  }
+
+  // ---- Unit 10: MH/Peto — cluster property on studies does not affect result ----
+  {
+    console.log("--- Unit 10: Cluster property on studies does not affect MH/Peto ---");
+    const data = [
+      { a: 4, b: 119, c: 11, d: 128 },
+      { a: 6, b:  88, c: 29, d:  82 },
+      { a: 3, b: 139, c: 11, d: 128 },
+    ].map(d => compute(d, "OR"));
+    // Add cluster IDs directly to computed studies
+    const withCluster = data.map((s, i) => ({ ...s, cluster: String(i + 1) }));
+    const withoutCluster = data;
+    const mWith    = metaMH(withCluster,    "OR");
+    const mWithout = metaMH(withoutCluster, "OR");
+    clchkTrue("isMH unchanged",        mWith.isMH === true);
+    clchkTrue("isClustered not set",   mWith.isClustered === undefined);
+    clchk("FE unchanged",              mWith.FE, mWithout.FE, 1e-12);
+  }
+
+  // ---- Unit 11: robustWlsResult with p=3 returns SE array of length 3 ----
+  // Use C=4 clusters so C > p=3 passes the guard.
+  {
+    console.log("--- Unit 11: robustWlsResult p=3 → robustSE.length = 3 ---");
+    const X = [
+      [1, 0.1, 0.2], [1, 0.3, 0.4], [1, 0.5, 0.1],
+      [1, 0.2, 0.5], [1, 0.4, 0.3], [1, 0.1, 0.6],
+      [1, 0.6, 0.3], [1, 0.2, 0.1],
+    ];
+    const w = [10, 8, 12, 9, 11, 7, 10, 8];
+    const y = [0.5, 0.4, 0.6, 0.3, 0.5, 0.4, 0.7, 0.2];
+    const beta = [0.1, 0.2, 0.3];
+    const clIds = ["A", "A", "B", "B", "C", "C", "D", "D"];  // C=4 > p=3 ✓
+    const rob = robustWlsResult(X, w, y, beta, clIds);
+    clchkTrue("no error",             !rob.error);
+    clchkTrue("robustSE length 3",    Array.isArray(rob.robustSE) && rob.robustSE.length === 3);
+    clchkTrue("robustZ length 3",     Array.isArray(rob.robustZ)  && rob.robustZ.length  === 3);
+    clchkTrue("robustP length 3",     Array.isArray(rob.robustP)  && rob.robustP.length  === 3);
+    clchkTrue("robustCi length 3",    Array.isArray(rob.robustCi) && rob.robustCi.length === 3);
+  }
+
+  // ---- Unit 12: Residuals cancel within clusters → B ≈ 0 → SE ≈ 0 ----
+  // Cluster A: w=4, e=0.5 and w=4, e=-0.5 → g_A = 4*0.5 + 4*(-0.5) = 0
+  // Cluster B: w=5, e=0.4 and w=5, e=-0.4 → g_B = 5*0.4 + 5*(-0.4) = 0
+  {
+    console.log("--- Unit 12: Residuals cancel within clusters → SE ≈ 0 ---");
+    const X = [[1], [1], [1], [1]];
+    const w = [4, 4, 5, 5];
+    const residuals = [0.5, -0.5, 0.4, -0.4];
+    const clIds = ["A", "A", "B", "B"];
+    const rob = sandwichVar(X, w, residuals, clIds);
+    clchkTrue("no error",     !rob.error);
+    clchkTrue("SE_rob ≈ 0",   rob.SE_rob[0] < 1e-10);
+  }
+
+  // ---- Unit 13: Single cluster for all rows → C=1 → error ----
+  {
+    console.log("--- Unit 13: C=1 (single cluster) → error ---");
+    const X = [[1], [1], [1]];
+    const w = [1, 1, 1];
+    const res = [0.1, 0.2, 0.3];
+    const rob = sandwichVar(X, w, res, ["X", "X", "X"]);
+    clchkTrue("single cluster → error", !!rob.error);
+  }
+
+  console.log(clPass ? "\n✅ ALL CLUSTER-ROBUST SE TESTS PASSED" : "\n❌ SOME CLUSTER-ROBUST SE TESTS FAILED");
 }
