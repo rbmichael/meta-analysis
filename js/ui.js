@@ -108,6 +108,7 @@ import { drawForest, drawFunnel, drawBubble, drawPartialResidualBubble, drawInfl
 import { goshCompute, GOSH_MAX_K } from "./gosh.js";
 import { exportSVG, exportPNG, exportTIFF } from "./export.js";
 import { buildReport, downloadHTML, openPrintPreview } from "./report.js";
+import { buildDocx } from "./docx.js";
 import { parseCSV, detectEffectType } from "./csv.js";
 import { buildSession, serializeSession, parseSession, missingInputCols } from "./session.js";
 import { saveDraft, loadDraft, clearDraft } from "./autosave.js";
@@ -535,6 +536,9 @@ document.getElementById("caterpillarPageSize").addEventListener("change", () => 
     { pageSize: caterpillarPlot.args.pageSize, page: caterpillarPlot.page }
   );
   renderCaterpillarNav(totalPages);
+  if (appState.reportArgs?.caterpillarOptions) {
+    appState.reportArgs = { ...appState.reportArgs, caterpillarOptions: { ...appState.reportArgs.caterpillarOptions, pageSize: caterpillarPlot.args.pageSize, currentPage: 0 } };
+  }
 });
 
 document.getElementById("cumulativeForestPageSize").addEventListener("change", () => {
@@ -547,6 +551,9 @@ document.getElementById("cumulativeForestPageSize").addEventListener("change", (
     { pageSize: cumForestPlot.args.pageSize, page: cumForestPlot.page }
   );
   renderCumulativeForestNav(totalPages);
+  if (appState.reportArgs?.cumForestOptions) {
+    appState.reportArgs = { ...appState.reportArgs, cumForestOptions: { ...appState.reportArgs.cumForestOptions, pageSize: cumForestPlot.args.pageSize, currentPage: 0 } };
+  }
 });
 
 document.getElementById("forestPageSize").addEventListener("change", () => {
@@ -617,10 +624,17 @@ function buildReportAndResync() {
   // the correct page rather than always page 0 (which was the value at cache time).
   const args = {
     ...appState.reportArgs,
-    forestOptions: { ...appState.reportArgs.forestOptions, currentPage: forestPlot.page },
+    forestOptions:     { ...appState.reportArgs.forestOptions, currentPage: forestPlot.page },
+    cumForestOptions:  appState.reportArgs.cumForestOptions
+      ? { ...appState.reportArgs.cumForestOptions, currentPage: cumForestPlot.page }
+      : undefined,
+    caterpillarOptions: appState.reportArgs.caterpillarOptions
+      ? { ...appState.reportArgs.caterpillarOptions, currentPage: caterpillarPlot.page }
+      : undefined,
     // Use the live goshState so a re-run after the last analysis is captured.
     gosh:     goshState.result ?? appState.reportArgs.gosh,
     goshXAxis: document.getElementById("goshXAxis")?.value ?? appState.reportArgs.goshXAxis ?? "I2",
+    apaFormat: document.getElementById("reportAPA")?.checked ?? false,
   };
   const html = buildReport(args);
   // Re-render the live forest at the current page and re-sync nav buttons.
@@ -642,6 +656,36 @@ document.getElementById("exportReportHTML").addEventListener("click", () => {
 document.getElementById("exportReportPDF").addEventListener("click", () => {
   const html = buildReportAndResync();
   if (html) openPrintPreview(html);
+});
+
+document.getElementById("exportReportDOCX").addEventListener("click", async () => {
+  if (!appState.reportArgs) return;
+  const args = {
+    ...appState.reportArgs,
+    forestOptions:      { ...appState.reportArgs.forestOptions, currentPage: forestPlot.page },
+    cumForestOptions:   appState.reportArgs.cumForestOptions
+      ? { ...appState.reportArgs.cumForestOptions,   currentPage: cumForestPlot.page }
+      : undefined,
+    caterpillarOptions: appState.reportArgs.caterpillarOptions
+      ? { ...appState.reportArgs.caterpillarOptions, currentPage: caterpillarPlot.page }
+      : undefined,
+    gosh:     goshState.result ?? appState.reportArgs.gosh,
+    goshXAxis: document.getElementById("goshXAxis")?.value ?? appState.reportArgs.goshXAxis ?? "I2",
+    apaFormat: true,   // Word export is always APA
+  };
+  const btn = document.getElementById("exportReportDOCX");
+  btn.disabled = true;
+  btn.textContent = "Building\u2026";
+  try {
+    const blob = await buildDocx(args);
+    downloadBlob(blob, "meta-analysis-report.docx",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+  } catch (e) {
+    console.error("Export Word failed:", e);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Export Word";
+  }
 });
 
 // Single delegated listener covers all static plot-export buttons and any
@@ -2926,7 +2970,9 @@ function runAnalysis() {
         if (idx < 1) return;
 
         // Wrap each bubble in a block-level div so export buttons sit above it.
+        // data-moderator lets buildReport() attach per-moderator APA captions.
         const wrap = document.createElement("div");
+        wrap.dataset.moderator = mod.name;
         bubbleContainer.appendChild(wrap);
         if (usePartialBubble) {
           drawPartialResidualBubble(reg.studiesUsed, reg, mod.name, idx, wrap);
@@ -3019,6 +3065,7 @@ function runAnalysis() {
   cumForestPlot.args = { results: cumResults, profile, pageSize: cumForestPageSize };
   const { totalPages: cumForestPages } = drawCumulativeForest(cumResults, profile, { pageSize: cumForestPageSize, page: 0 });
   renderCumulativeForestNav(cumForestPages);
+  appState.reportArgs.cumForestOptions = { results: cumResults, profile, pageSize: cumForestPageSize, currentPage: 0 };
 
   // ---- Cumulative funnel plot ----
   cumFunnelPlot.studies = cumulativeStudies;
@@ -3040,6 +3087,7 @@ function runAnalysis() {
   const { totalPages: catPages } = drawCaterpillarPlot(all, m, profile, { pageSize: catPageSize, page: 0 });
   renderCaterpillarNav(catPages);
   elCaterpillarBlock.style.display = "";
+  appState.reportArgs.caterpillarOptions = { studies: all, m, profile, pageSize: catPageSize, currentPage: 0 };
 
   // ---- Risk-of-bias plots ----
   const hasRoB = _robDomains.length > 0 && studies.length > 0;

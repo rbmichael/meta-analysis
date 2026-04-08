@@ -30,7 +30,7 @@
 //   constants.js Z_95
 //   export.js    resolveThemeVars(), hasEmbeddedBackground()
 
-import { drawForest, drawGoshPlot } from "./plots.js";
+import { drawForest, drawGoshPlot, drawCumulativeForest, drawCaterpillarPlot } from "./plots.js";
 import { downloadBlob } from "./io.js";
 import { Z_95 } from "./constants.js";
 import { resolveThemeVars, hasEmbeddedBackground } from "./export.js";
@@ -110,6 +110,64 @@ function collectForestSVGs(studies, m, forestOptions) {
   return svgs;
 }
 
+// Render every cumulative-forest page to SVG strings (mirrors collectForestSVGs).
+function collectCumulativeForestSVGs(results, profile, options = {}) {
+  const svgEl = document.getElementById("cumulativePlot");
+  if (!svgEl) return [];
+  const svgs = [];
+  let totalPages = 1;
+  try {
+    ({ totalPages } = drawCumulativeForest(results, profile, { ...options, page: 0 }));
+    svgs.push(serializeSVG(svgEl));
+  } catch (e) {
+    console.error("collectCumulativeForestSVGs: failed to render page 0", e);
+    return [];
+  }
+  for (let p = 1; p < totalPages; p++) {
+    try {
+      drawCumulativeForest(results, profile, { ...options, page: p });
+      svgs.push(serializeSVG(svgEl));
+    } catch (e) {
+      console.error(`collectCumulativeForestSVGs: failed to render page ${p}`, e);
+    }
+  }
+  try {
+    drawCumulativeForest(results, profile, { ...options, page: options.currentPage ?? 0 });
+  } catch (e) {
+    console.error("collectCumulativeForestSVGs: failed to restore page", e);
+  }
+  return svgs;
+}
+
+// Render every caterpillar page to SVG strings (mirrors collectForestSVGs).
+function collectCaterpillarSVGs(studies, m, profile, options = {}) {
+  const svgEl = document.getElementById("caterpillarPlot");
+  if (!svgEl) return [];
+  const svgs = [];
+  let totalPages = 1;
+  try {
+    ({ totalPages } = drawCaterpillarPlot(studies, m, profile, { ...options, page: 0 }));
+    svgs.push(serializeSVG(svgEl));
+  } catch (e) {
+    console.error("collectCaterpillarSVGs: failed to render page 0", e);
+    return [];
+  }
+  for (let p = 1; p < totalPages; p++) {
+    try {
+      drawCaterpillarPlot(studies, m, profile, { ...options, page: p });
+      svgs.push(serializeSVG(svgEl));
+    } catch (e) {
+      console.error(`collectCaterpillarSVGs: failed to render page ${p}`, e);
+    }
+  }
+  try {
+    drawCaterpillarPlot(studies, m, profile, { ...options, page: options.currentPage ?? 0 });
+  } catch (e) {
+    console.error("collectCaterpillarSVGs: failed to restore page", e);
+  }
+  return svgs;
+}
+
 // ---------------------------------------------------------------------------
 // Formatting helpers
 // ---------------------------------------------------------------------------
@@ -120,6 +178,18 @@ function fmtP(p) {
   if (!isFinite(p)) return "—";
   if (p < 0.0001)   return "&lt;0.0001";
   return (+p).toFixed(4);
+}
+
+// APA 7th edition p-value: no leading zero, three decimal places, threshold < .001
+function fmtP_APA(p) {
+  if (!isFinite(p)) return "—";
+  if (p < 0.001)    return "&lt; .001";
+  return "= " + (+p).toFixed(3).replace(/^0\./, ".");
+}
+
+// APA CI string: "[x.xxx, x.xxx]" — both bounds pre-formatted by caller via fmt()
+function fmtCI_APA(lo, hi, d = 3) {
+  return `[${fmt(lo, d)}, ${fmt(hi, d)}]`;
 }
 
 function esc(s) {
@@ -146,6 +216,173 @@ function buildTable(headers, rows, { extraClass = "", style = "", tfoot = "" } =
   return `<table class="stat-table${cls}"${styl}>${head}${body}${foot}</table>`;
 }
 
+// buildTableAPA(tableNum, subtitle, headers, rows, note) → HTML string
+// APA 7th edition table: numbered bold title, italic subtitle, three horizontal
+// rules only (no vertical lines, no zebra), and a "Note." paragraph in tfoot.
+//   tableNum  number   — sequential table number (from nextTable() in buildReport)
+//   subtitle  string   — italic descriptor shown below the bold "Table N" line
+//   headers   string[] — header cell text (HTML-safe)
+//   rows      string[] — pre-built <tr>…</tr> strings (same format as buildTable)
+//   note      string   — content after "Note." in tfoot; omit or pass "" to skip
+function buildTableAPA(tableNum, subtitle, headers, rows, note = "") {
+  const head = `<thead><tr>${headers.map(h => `<th>${h}</th>`).join("")}</tr></thead>`;
+  const body = `<tbody>${rows.join("")}</tbody>`;
+  const foot = note
+    ? `<tfoot><tr><td colspan="${headers.length}"><span class="apa-note"><em>Note.</em> ${note}</span></td></tr></tfoot>`
+    : "";
+  return `
+<p class="apa-table-title">Table ${tableNum}</p>
+<p class="apa-table-subtitle">${esc(subtitle)}</p>
+<table class="apa-table">${head}${body}${foot}</table>`;
+}
+
+// buildFigureAPA(figNum, title, svgStrings, note) → HTML string
+// APA 7th edition figure: bold "Figure N" label, italic title, one SVG div
+// per page/panel, and an optional "Note." paragraph below the last panel.
+//   figNum     number   — sequential figure number (from nextFigure() in buildReport)
+//   title      string   — italic descriptive title (HTML-safe)
+//   svgStrings string[] — one serialised SVG string per page/panel
+//   note       string   — content after "Note."; omit or pass "" to skip
+function buildFigureAPA(figNum, title, svgStrings, note = "") {
+  const panels = svgStrings.filter(Boolean);
+  if (!panels.length) return "";
+  const noteBlock = note
+    ? `<p class="apa-figure-note"><em>Note.</em> ${note}</p>`
+    : "";
+  return `
+<p class="apa-figure-num">Figure ${figNum}</p>
+<p class="apa-figure-title">${esc(title)}</p>
+${panels.map(s => `<div class="svg-wrap">${s}</div>`).join("\n")}
+${noteBlock}`;
+}
+
+// ---------------------------------------------------------------------------
+// APA citation database (Feature B)
+// ---------------------------------------------------------------------------
+// Keys are short method identifiers used by collectCitations() and
+// sectionReferences().  Values are ready-to-insert HTML strings.
+
+export const CITATIONS = {
+  // ── Heterogeneity estimators ──────────────────────────────────────────────
+  DL: `DerSimonian, R., &amp; Laird, N. (1986). Meta-analysis in clinical trials. <em>Controlled Clinical Trials</em>, <em>7</em>(3), 177–188. <a href="https://doi.org/10.1016/0197-2456(86)90046-2">https://doi.org/10.1016/0197-2456(86)90046-2</a>`,
+
+  REML: `Viechtbauer, W. (2005). Bias and efficiency of meta-analytic variance estimators in the random-effects model. <em>Journal of Educational and Behavioral Statistics</em>, <em>30</em>(3), 261–293. <a href="https://doi.org/10.3102/10769986030003261">https://doi.org/10.3102/10769986030003261</a>`,
+
+  PM: `Paule, R. C., &amp; Mandel, J. (1982). Consensus values and weighting factors. <em>Journal of Research of the National Bureau of Standards</em>, <em>87</em>(5), 377–385.`,
+
+  EB: `Morris, C. N. (1983). Parametric empirical Bayes inference: Theory and applications. <em>Journal of the American Statistical Association</em>, <em>78</em>(381), 47–55.`,
+
+  // ML shares the Viechtbauer (2005) citation with REML
+  ML: `Viechtbauer, W. (2005). Bias and efficiency of meta-analytic variance estimators in the random-effects model. <em>Journal of Educational and Behavioral Statistics</em>, <em>30</em>(3), 261–293. <a href="https://doi.org/10.3102/10769986030003261">https://doi.org/10.3102/10769986030003261</a>`,
+
+  HE: `Hedges, L. V. (1983). A random effects model for effect sizes. <em>Psychological Bulletin</em>, <em>93</em>(2), 388–395.`,
+
+  SJ: `Sidik, K., &amp; Jonkman, J. N. (2005). Simple heterogeneity variance estimation for meta-analysis. <em>Journal of the Royal Statistical Society: Series C (Applied Statistics)</em>, <em>54</em>(2), 367–384.`,
+
+  HS: `Hunter, J. E., &amp; Schmidt, F. L. (2004). <em>Methods of meta-analysis</em> (2nd ed.). SAGE.`,
+
+  BM: `Biggerstaff, B. J., &amp; Tweedie, R. L. (1997). Incorporating variability in estimates of heterogeneity in the random effects model in meta-analysis. <em>Statistics in Medicine</em>, <em>16</em>(7), 753–768.`,
+
+  // ── CI methods ────────────────────────────────────────────────────────────
+  KH: `Knapp, G., &amp; Hartung, J. (2003). Improved tests for a random effects meta-regression with a single covariate. <em>Statistics in Medicine</em>, <em>22</em>(17), 2693–2710. <a href="https://doi.org/10.1002/sim.1482">https://doi.org/10.1002/sim.1482</a>`,
+
+  PL: `Hardy, R. J., &amp; Thompson, S. G. (1996). A likelihood approach to meta-analysis with random effects. <em>Statistics in Medicine</em>, <em>15</em>(6), 619–629.`,
+
+  // ── Heterogeneity statistics ──────────────────────────────────────────────
+  Q: `Cochran, W. G. (1954). The combination of estimates from different experiments. <em>Biometrics</em>, <em>10</em>(1), 101–129.`,
+
+  I2: `Higgins, J. P. T., Thompson, S. G., Deeks, J. J., &amp; Altman, D. G. (2003). Measuring inconsistency in meta-analyses. <em>BMJ</em>, <em>327</em>(7414), 557–560. <a href="https://doi.org/10.1136/bmj.327.7414.557">https://doi.org/10.1136/bmj.327.7414.557</a>`,
+
+  // ── Publication bias ──────────────────────────────────────────────────────
+  EGGER: `Egger, M., Smith, G. D., Schneider, M., &amp; Minder, C. (1997). Bias in meta-analysis detected by a simple, graphical test. <em>BMJ</em>, <em>315</em>(7109), 629–634. <a href="https://doi.org/10.1136/bmj.315.7109.629">https://doi.org/10.1136/bmj.315.7109.629</a>`,
+
+  BEGG: `Begg, C. B., &amp; Mazumdar, M. (1994). Operating characteristics of a rank correlation test for publication bias. <em>Biometrics</em>, <em>50</em>(4), 1088–1101. <a href="https://doi.org/10.2307/2533446">https://doi.org/10.2307/2533446</a>`,
+
+  FATPET: `Stanley, T. D. (2005). Beyond publication bias. <em>Journal of Economic Surveys</em>, <em>19</em>(3), 309–345. <a href="https://doi.org/10.1111/j.0950-0804.2005.00250.x">https://doi.org/10.1111/j.0950-0804.2005.00250.x</a>`,
+
+  FSN_R: `Rosenthal, R. (1979). The file drawer problem and tolerance for null results. <em>Psychological Bulletin</em>, <em>86</em>(3), 638–641. <a href="https://doi.org/10.1037/0033-2909.86.3.638">https://doi.org/10.1037/0033-2909.86.3.638</a>`,
+
+  FSN_O: `Orwin, R. G. (1983). A fail-safe N for effect size in meta-analysis. <em>Journal of Educational Statistics</em>, <em>8</em>(2), 157–159.`,
+
+  TF: `Duval, S., &amp; Tweedie, R. (2000a). Trim and fill: A simple funnel-plot–based method of testing and adjusting for publication bias in meta-analysis. <em>Biometrics</em>, <em>56</em>(2), 455–463. <a href="https://doi.org/10.1111/j.0006-341X.2000.00455.x">https://doi.org/10.1111/j.0006-341X.2000.00455.x</a><br>Duval, S., &amp; Tweedie, R. (2000b). A nonparametric "trim and fill" method of accounting for publication bias in meta-analysis. <em>Journal of the American Statistical Association</em>, <em>95</em>(449), 89–98.`,
+
+  PCURVE: `Simonsohn, U., Nelson, L. D., &amp; Simmons, J. P. (2014). P-curve: A key to the file-drawer. <em>Journal of Experimental Psychology: General</em>, <em>143</em>(2), 534–547. <a href="https://doi.org/10.1037/a0033242">https://doi.org/10.1037/a0033242</a>`,
+
+  PUNIF: `van Assen, M. A. L. M., van Aert, R. C. M., &amp; Wicherts, J. M. (2015). Meta-analysis using effect size distributions of only statistically significant studies. <em>Psychological Methods</em>, <em>20</em>(3), 293–309. <a href="https://doi.org/10.1037/met0000025">https://doi.org/10.1037/met0000025</a>`,
+
+  VH: `Vevea, J. L., &amp; Hedges, L. V. (1995). A general linear model for estimating effect size in the presence of publication bias. <em>Psychometrika</em>, <em>60</em>(3), 419–435. <a href="https://doi.org/10.1007/BF02294384">https://doi.org/10.1007/BF02294384</a>`,
+
+  // ── Meta-regression ───────────────────────────────────────────────────────
+  MREG: `Thompson, S. G., &amp; Sharp, S. J. (1999). Explaining heterogeneity in meta-analysis: A comparison of methods. <em>Statistics in Medicine</em>, <em>18</em>(20), 2693–2708.`,
+
+  // ── Influence diagnostics ─────────────────────────────────────────────────
+  INFL: `Viechtbauer, W., &amp; Cheung, M. W.-L. (2010). Outlier and influence diagnostics for meta-analysis. <em>Research Synthesis Methods</em>, <em>1</em>(2), 112–125. <a href="https://doi.org/10.1002/jrsm.11">https://doi.org/10.1002/jrsm.11</a>`,
+
+  // ── Bayesian ──────────────────────────────────────────────────────────────
+  BAYES: `Sutton, A. J., &amp; Abrams, K. R. (2001). Bayesian methods in meta-analysis and evidence synthesis. <em>Statistical Methods in Medical Research</em>, <em>10</em>(4), 277–303. <a href="https://doi.org/10.1177/096228020101000404">https://doi.org/10.1177/096228020101000404</a>`,
+};
+
+// collectCitations(args) → string[]
+// Inspects the report args and returns an ordered, de-duplicated array of
+// CITATIONS keys for every statistical method actually used in this analysis.
+// The canonical key order matches the plan (estimator → CI → Q/I² →
+// pub-bias → regression → influence → Bayesian).
+export function collectCitations(args) {
+  const {
+    method, ciMethod,
+    egger, begg, fatpet, fsn,
+    useTF, tf,
+    puniform, pcurve,
+    sel,
+    reg,
+    influence,
+    bayesResult,
+  } = args;
+
+  const keys = [];
+  const seen = new Set();
+  function add(key) {
+    if (key && !seen.has(key)) { seen.add(key); keys.push(key); }
+  }
+
+  // τ² estimator
+  const methodMap = {
+    DL: "DL", REML: "REML", PM: "PM", EB: "EB", ML: "ML",
+    HE: "HE", SJ: "SJ", HS: "HS", BM: "BM",
+  };
+  add(methodMap[method]);
+
+  // CI method
+  if (ciMethod === "KH") add("KH");
+  if (ciMethod === "PL") add("PL");
+
+  // Heterogeneity statistics — always present
+  add("Q");
+  add("I2");
+
+  // Publication bias tests
+  if (egger  && isFinite(egger.p))  add("EGGER");
+  if (begg   && isFinite(begg.p))   add("BEGG");
+  if (fatpet && isFinite(fatpet.p)) add("FATPET");
+  if (fsn    && isFinite(fsn.rosenthal)) add("FSN_R");
+  if (fsn    && isFinite(fsn.orwin))     add("FSN_O");
+  if (useTF  && tf && tf.length)    add("TF");
+  if (pcurve && pcurve.k >= 3)      add("PCURVE");
+  if (puniform && puniform.k >= 3)  add("PUNIF");
+  if (sel    && !sel.error)         add("VH");
+
+  // Meta-regression
+  if (reg && !reg.rankDeficient) add("MREG");
+
+  // Influence diagnostics
+  if (influence && influence.length) add("INFL");
+
+  // Bayesian
+  if (bayesResult && !bayesResult.error) add("BAYES");
+
+  return keys;
+}
+
 // ---------------------------------------------------------------------------
 // Section builders
 // ---------------------------------------------------------------------------
@@ -160,7 +397,8 @@ function buildTable(headers, rows, { extraClass = "", style = "", tfoot = "" } =
 // Trim-fill adjusted RE is included as an extra row when useTF and mAdjusted
 // are both truthy.
 function sectionSummary(args) {
-  const { m, profile, method, ciMethod, useTF, tf, mAdjusted, studies } = args;
+  const { m, profile, method, ciMethod, useTF, tf, mAdjusted, studies,
+          apaFormat = false, nextTable } = args;
 
   const k        = studies.filter(d => !d.filled).length;
   const FE_disp  = profile.transform(m.FE);
@@ -175,6 +413,43 @@ function sectionSummary(args) {
   const tauCI1   = fmt(m.tauCI[0]);
   const tauCI2   = isFinite(m.tauCI[1]) ? fmt(m.tauCI[1]) : "∞";
   const H2hi     = isFinite(m.H2CI[1])  ? fmt(m.H2CI[1])  : "∞";
+
+  if (apaFormat) {
+    const settingsProse = `<p class="meta-line">
+      Effect type: ${esc(profile.label)} &nbsp;·&nbsp;
+      τ² estimator: ${esc(method)} &nbsp;·&nbsp;
+      CI method: ${esc(ciLabel)} &nbsp;·&nbsp;
+      k = ${k}${tf.length > 0 ? ` + ${tf.length} imputed (trim &amp; fill)` : ""}
+    </p>`;
+
+    const statsRows = [
+      `<tr><td>${esc(profile.label)} — Fixed Effects (FE)</td><td>${fmt(FE_disp)}</td></tr>`,
+      `<tr><td>${esc(profile.label)} — Random Effects (RE)</td><td><strong>${fmt(RE_disp)}</strong></td></tr>`,
+      RE_adj !== null ? `<tr><td>RE (trim-and-fill adjusted)</td><td>${fmt(RE_adj)}</td></tr>` : "",
+      `<tr><td>95% CI</td><td>${fmtCI_APA(ci.lb, ci.ub)}</td></tr>`,
+      `<tr><td>95% Prediction interval (PI)</td><td>${fmtCI_APA(pred.lb, pred.ub)}</td></tr>`,
+      `<tr><td>τ²</td><td>${fmt(m.tau2)} [${tauCI1}, ${tauCI2}]</td></tr>`,
+      `<tr><td>I²</td><td>${fmt(m.I2)}% [${fmt(m.I2CI[0])}%, ${fmt(m.I2CI[1])}%]</td></tr>`,
+      `<tr><td>H²-CI</td><td>[${fmt(m.H2CI[0])}, ${H2hi}]</td></tr>`,
+      `<tr><td>Q (df = ${m.df})</td><td>${fmt(m.Q)}</td></tr>`,
+      `<tr><td>${esc(m.dist)}-statistic</td><td>${fmt(m.stat)}, p ${fmtP_APA(m.pval)}</td></tr>`,
+    ].filter(Boolean);
+
+    const statsTable = buildTableAPA(
+      nextTable(),
+      `Summary of Meta-Analysis Results (${esc(profile.label)})`,
+      ["Statistic", "Value"],
+      statsRows,
+      "FE = fixed effects; RE = random effects; CI = confidence interval; PI = prediction interval."
+    );
+
+    return `
+<section>
+  <h2>Summary</h2>
+  ${settingsProse}
+  ${statsTable}
+</section>`;
+  }
 
   const settingsTable = buildTable(
     ["Setting", "Value"],
@@ -220,9 +495,40 @@ function sectionSummary(args) {
 // status. PET estimate is back-transformed through profile.transform().
 // "NA (k < 3)" is shown for any test that requires at least 3 studies.
 function sectionPubBias(args) {
-  const { egger, begg, fatpet, fsn, useTF, tf, profile } = args;
+  const { egger, begg, fatpet, fsn, useTF, tf, profile,
+          apaFormat = false, nextTable } = args;
   const petEff = isFinite(fatpet.intercept)
     ? fmt(profile.transform(fatpet.intercept)) : "—";
+
+  const fsnProse = `
+  <p style="margin-top:10px">
+    Fail-safe N (Rosenthal): <strong>${isFinite(fsn.rosenthal) ? Math.round(fsn.rosenthal) : "—"}</strong>
+    &nbsp;·&nbsp;
+    Fail-safe N (Orwin, trivial = 0.1): <strong>${isFinite(fsn.orwin) ? Math.round(fsn.orwin) : "—"}</strong>
+  </p>
+  <p>Trim &amp; Fill: <strong>${useTF ? "ON" : "OFF"}</strong>${tf.length > 0 ? ` (${tf.length} filled)` : ""}</p>`;
+
+  if (apaFormat) {
+    const rows = [
+      `<tr><td>Egger's test (intercept)</td><td>${isFinite(egger.intercept) ? fmt(egger.intercept) : "—"}</td><td>${isFinite(egger.p) ? fmtP_APA(egger.p) : "NA (k &lt; 3)"}</td></tr>`,
+      `<tr><td>Begg's test (rank correlation τ)</td><td>${isFinite(begg.tau) ? fmt(begg.tau) : "—"}</td><td>${isFinite(begg.p) ? fmtP_APA(begg.p) : "NA (k &lt; 3)"}</td></tr>`,
+      `<tr><td>FAT — β₁ (bias)</td><td>${isFinite(fatpet.slope) ? fmt(fatpet.slope) : "—"}</td><td>${isFinite(fatpet.slopeP) ? fmtP_APA(fatpet.slopeP) : "NA (k &lt; 3)"}</td></tr>`,
+      `<tr><td>PET — effect at SE → 0</td><td>${petEff}</td><td>${isFinite(fatpet.interceptP) ? fmtP_APA(fatpet.interceptP) : "NA (k &lt; 3)"}</td></tr>`,
+    ];
+    const table = buildTableAPA(
+      nextTable(),
+      "Tests of Publication Bias",
+      ["Test", "Statistic", "p"],
+      rows,
+      "FAT = funnel asymmetry test; PET = precision-effect test. NA = fewer than 3 studies."
+    );
+    return `
+<section>
+  <h2>Publication Bias</h2>
+  ${table}
+  ${fsnProse}
+</section>`;
+  }
 
   const table = buildTable(
     ["Test", "Statistic", "p-value"],
@@ -238,16 +544,11 @@ function sectionPubBias(args) {
 <section>
   <h2>Publication Bias</h2>
   ${table}
-  <p style="margin-top:10px">
-    Fail-safe N (Rosenthal): <strong>${isFinite(fsn.rosenthal) ? Math.round(fsn.rosenthal) : "—"}</strong>
-    &nbsp;·&nbsp;
-    Fail-safe N (Orwin, trivial = 0.1): <strong>${isFinite(fsn.orwin) ? Math.round(fsn.orwin) : "—"}</strong>
-  </p>
-  <p>Trim &amp; Fill: <strong>${useTF ? "ON" : "OFF"}</strong>${tf.length > 0 ? ` (${tf.length} filled)` : ""}</p>
+  ${fsnProse}
 </section>`;
 }
 
-function sectionPUniform(puniform, m, profile) {
+function sectionPUniform(puniform, m, profile, apaFormat = false, nextTable) {
   if (!puniform || puniform.k < 3 || !isFinite(puniform.estimate)) return "";
 
   function fmtEst(v) { return isFinite(v) ? fmt(profile.transform(v)) : "—"; }
@@ -258,6 +559,27 @@ function sectionPUniform(puniform, m, profile) {
   const puEst  = fmtEst(puniform.estimate);
   const puLo   = fmtEst(puniform.ciLow);
   const puHi   = fmtEst(puniform.ciHigh);
+
+  const noteExtra = [
+    puniform.biasDetected      ? "Bias detected (p &lt; .05)." : "",
+    puniform.significantEffect ? "Significant effect after correction (p &lt; .05)." : "",
+  ].filter(Boolean).join(" ");
+
+  if (apaFormat) {
+    const rows = [
+      `<tr><td>RE (uncorrected)</td><td>${reEst}</td><td>${fmtCI_APA(reLo, reHi)}</td><td>${fmt(puniform.Z_bias)}</td><td>${fmtP_APA(puniform.p_bias)}</td></tr>`,
+      `<tr><td>P-uniform (bias-corrected)</td><td>${puEst}</td><td>${fmtCI_APA(puLo, puHi)}</td><td>${fmt(puniform.Z_sig)}</td><td>${fmtP_APA(puniform.p_sig)}</td></tr>`,
+    ];
+    const note = "RE row: bias test (H₀: RE = true effect); positive Z indicates overestimation. "
+      + "P-uniform row: significance test (H₀: δ = 0); negative Z indicates true positive effect. "
+      + `CI = confidence interval. ${noteExtra}`;
+    return `
+<section>
+  <h2>P-uniform (van Assen et al., 2015)</h2>
+  <p class="meta-line">${puniform.k} significant result${puniform.k !== 1 ? "s" : ""} (p &lt; .05) used &nbsp;·&nbsp; effect scale: ${esc(profile.label)}</p>
+  ${buildTableAPA(nextTable(), "P-uniform Bias-Corrected Estimates", ["Method", "Estimate", "95% CI", "Z", "p"], rows, note)}
+</section>`;
+  }
 
   const table = buildTable(
     ["Method", "Estimate", "95% CI", "Z", "p"],
@@ -281,12 +603,12 @@ function sectionPUniform(puniform, m, profile) {
 </section>`;
 }
 
-// sectionSelectionModel(sel, profile, selMode, selLabel) → HTML string
+// sectionSelectionModel(sel, profile, selMode, selLabel, apaFormat, nextTable) → HTML string
 // sel       — result object from veveaHedges() (or null if not run)
 // profile   — effect profile (for back-transform and label)
 // selMode   — "sensitivity" | "mle"
 // selLabel  — human-readable preset name (e.g. "Moderate (1-sided)") or "Custom" / "MLE"
-function sectionSelectionModel(sel, profile, selMode, selLabel) {
+function sectionSelectionModel(sel, profile, selMode, selLabel, apaFormat = false, nextTable) {
   if (!sel || sel.error) return "";
 
   const K     = sel.K;
@@ -301,7 +623,6 @@ function sectionSelectionModel(sel, profile, selMode, selLabel) {
     const lo = j === 0 ? "0" : cuts[j - 1];
     return `(${lo}, ${c}]`;
   });
-  const headerCols = ["Quantity", ...intervalLabels].map(h => `<th>${h}</th>`).join("");
 
   // ---- ω row ----
   const omegaCells = sel.omega.map((w, j) => {
@@ -322,56 +643,74 @@ function sectionSelectionModel(sel, profile, selMode, selLabel) {
   const ciHi    = fmtDisp(sel.mu + 1.96 * sel.se_mu);
   const muUnadj = fmtDisp(sel.RE_unsel);
 
-  // ---- LRT row (MLE only) ----
-  const lrtRow = isMLE && isFinite(sel.LRT)
-    ? `<tr><td>LRT (H₀: no selection)</td><td colspan="${K}">χ²(${sel.LRTdf}) = ${fmtV(sel.LRT)}, p = ${fmtP(sel.LRTp)}</td></tr>`
-    : "";
-
-  // ---- Empty-interval warning ----
-  const empty = sel.nPerInterval.map((n, j) => n === 0 ? j + 1 : -1).filter(j => j > 0);
-  const emptyNote = empty.length > 0
-    ? `<p class="note"><strong>Warning:</strong> interval${empty.length > 1 ? "s" : ""} ${empty.join(", ")} ha${empty.length > 1 ? "ve" : "s"} 0 studies.</p>`
-    : "";
-
-  // ---- Convergence note ----
-  const convNote = isMLE && !sel.converged
-    ? `<p class="note"><strong>Note:</strong> Optimizer did not fully converge; results may be approximate.</p>`
-    : "";
-
   // ---- Interpretation sentence ----
   const direction = sel.mu > sel.RE_unsel ? "higher" : "lower";
   const schemeText = isMLE ? "the estimated selection pattern" : `<em>${esc(selLabel)}</em> selection`;
+
+  const modeLabel  = isMLE ? "MLE (estimated weights)" : `Sensitivity — ${esc(selLabel)}`;
+  const sidesLabel = sel.sides === 2 ? "two-sided" : "one-sided";
+
+  // ---- Shared table rows ----
+  const lrtFmt = p => apaFormat ? fmtP_APA(p) : `= ${fmtP(p)}`;
+  const lrtRow = isMLE && isFinite(sel.LRT)
+    ? `<tr><td>LRT (H₀: no selection)</td><td colspan="${K}">χ²(${sel.LRTdf}) = ${fmtV(sel.LRT)}, p ${lrtFmt(sel.LRTp)}</td></tr>`
+    : "";
+
+  const tableRows = [
+    `<tr><td>Selection weight ω</td>${omegaCells}</tr>`,
+    `<tr><td>Studies per interval</td>${kCells}</tr>`,
+    `<tr><td>Adjusted μ̂ [95% CI]</td><td colspan="${K}">${muAdj} [${ciLo}, ${ciHi}] &nbsp;·&nbsp; unadjusted: ${muUnadj}</td></tr>`,
+    `<tr><td>Adjusted τ²</td><td colspan="${K}">${fmtV(sel.tau2)} &nbsp;·&nbsp; unadjusted: ${fmtV(sel.tau2_unsel)}</td></tr>`,
+    ...(lrtRow ? [lrtRow] : []),
+  ];
+
   const interpNote = `Under ${schemeText} the bias-corrected estimate is ${muAdj} [${ciLo}, ${ciHi}]`
     + ` — ${direction} than the unadjusted RE estimate of ${muUnadj}.`
     + (isMLE && isFinite(sel.LRTp) && sel.LRTp < 0.05
-        ? ` The LRT rejects the null of no selection (p = ${fmtP(sel.LRTp)}).`
+        ? ` The LRT rejects the null of no selection (p ${lrtFmt(sel.LRTp)}).`
         : "");
 
-  const modeLabel = isMLE ? "MLE (estimated weights)" : `Sensitivity — ${esc(selLabel)}`;
-  const sidesLabel = sel.sides === 2 ? "two-sided" : "one-sided";
+  if (apaFormat) {
+    const emptyWarning = (() => {
+      const empty = sel.nPerInterval.map((n, j) => n === 0 ? j + 1 : -1).filter(j => j > 0);
+      return empty.length > 0
+        ? ` Warning: interval${empty.length > 1 ? "s" : ""} ${empty.join(", ")} ha${empty.length > 1 ? "ve" : "s"} 0 studies.`
+        : "";
+    })();
+    const convWarning = isMLE && !sel.converged
+      ? " Optimizer did not fully converge; results may be approximate."
+      : "";
+    const note = `ω = selection weight; μ̂ = bias-corrected pooled estimate; CI = confidence interval; LRT = likelihood ratio test. ${interpNote}${emptyWarning}${convWarning}`;
+    return `
+<section>
+  <h2>Selection Model (Vevea-Hedges, 1995)</h2>
+  <p class="meta-line">Mode: ${modeLabel} &nbsp;·&nbsp; p-values: ${sidesLabel} &nbsp;·&nbsp; k = ${sel.k}</p>
+  ${buildTableAPA(nextTable(), "Vevea-Hedges Selection Model Results", ["Quantity", ...intervalLabels], tableRows, note)}
+</section>`;
+  }
+
+  const emptyNote = (() => {
+    const empty = sel.nPerInterval.map((n, j) => n === 0 ? j + 1 : -1).filter(j => j > 0);
+    return empty.length > 0
+      ? `<p class="note"><strong>Warning:</strong> interval${empty.length > 1 ? "s" : ""} ${empty.join(", ")} ha${empty.length > 1 ? "ve" : "s"} 0 studies.</p>`
+      : "";
+  })();
+  const convNote = isMLE && !sel.converged
+    ? `<p class="note"><strong>Note:</strong> Optimizer did not fully converge; results may be approximate.</p>`
+    : "";
 
   return `
 <section>
   <h2>Selection Model (Vevea-Hedges, 1995)</h2>
   <p class="meta-line">Mode: ${modeLabel} &nbsp;·&nbsp; p-values: ${sidesLabel} &nbsp;·&nbsp; k = ${sel.k}</p>
-  ${buildTable(
-    ["Quantity", ...intervalLabels],
-    [
-      `<tr><td>Selection weight ω</td>${omegaCells}</tr>`,
-      `<tr><td>Studies per interval</td>${kCells}</tr>`,
-      `<tr><td>Adjusted μ̂ [95% CI]</td><td colspan="${K}">${muAdj} [${ciLo}, ${ciHi}] &nbsp;·&nbsp; unadjusted: ${muUnadj}</td></tr>`,
-      `<tr><td>Adjusted τ²</td><td colspan="${K}">${fmtV(sel.tau2)} &nbsp;·&nbsp; unadjusted: ${fmtV(sel.tau2_unsel)}</td></tr>`,
-      ...(lrtRow ? [lrtRow] : []),
-    ],
-    { style: "width:100%" }
-  )}
+  ${buildTable(["Quantity", ...intervalLabels], tableRows, { style: "width:100%" })}
   ${emptyNote}
   ${convNote}
   <p class="note" style="margin-top:8px">${interpNote}</p>
 </section>`;
 }
 
-function sectionInfluence(influence, k) {
+function sectionInfluence(influence, k, apaFormat = false, nextTable) {
   if (!influence || !influence.length) return "";
 
   const thresh2k = fmt(2 / k);
@@ -396,7 +735,19 @@ function sectionInfluence(influence, k) {
       <td>${isFinite(d.cookD)       ? d.cookD.toFixed(3) : "—"}</td>
       <td>${flags}</td>
     </tr>`;
-  }).join("");
+  });
+
+  const headers = ["Study", "RE (LOO)", "Δτ²", "Std. Residual", "DFBETA", "Hat", "Cook's D", "Flag"];
+
+  if (apaFormat) {
+    const note = `LOO = leave-one-out; Std. Residual = standardised residual; DFBETA = influence on pooled estimate. `
+      + `Threshold: Hat &gt; ${thresh2k} (= 2/k); Cook's D &gt; ${thresh4k} (= 4/k). Flagged rows shown in italic.`;
+    return `
+<section>
+  <h2>Influence Diagnostics</h2>
+  ${buildTableAPA(nextTable(), "Leave-One-Out Influence Diagnostics", headers, rows, note)}
+</section>`;
+  }
 
   return `
 <section>
@@ -409,23 +760,38 @@ function sectionInfluence(influence, k) {
 </section>`;
 }
 
-function sectionSubgroup(subgroup, profile) {
+function sectionSubgroup(subgroup, profile, apaFormat = false, nextTable) {
   if (!subgroup || subgroup.G < 2) return "";
 
   const rows = Object.entries(subgroup.groups).map(([g, r]) => {
     const single   = r.k === 1;
     const y_disp   = profile.transform(r.y);
-    const ci_disp  = { lb: profile.transform(r.ci.lb), ub: profile.transform(r.ci.ub) };
+    const ci_lb    = profile.transform(r.ci.lb);
+    const ci_ub    = profile.transform(r.ci.ub);
+    const ciCell   = single ? "—"
+      : apaFormat  ? fmtCI_APA(ci_lb, ci_ub)
+      : `[${fmt(ci_lb)}, ${fmt(ci_ub)}]`;
     return `<tr>
       <td>${esc(g)}</td>
       <td>${r.k}</td>
       <td>${isFinite(y_disp) ? fmt(y_disp) : "—"}</td>
       <td>${single ? "—" : (isFinite(r.se)  ? fmt(r.se)  : "—")}</td>
-      <td>${single ? "—" : `[${fmt(ci_disp.lb)}, ${fmt(ci_disp.ub)}]`}</td>
+      <td>${ciCell}</td>
       <td>${single ? "—" : (isFinite(r.tau2) ? r.tau2.toFixed(3) : "0")}</td>
       <td>${single ? "—" : (isFinite(r.I2)   ? r.I2.toFixed(1)   : "0")}${single ? "" : "%"}</td>
     </tr>`;
-  }).join("");
+  });
+
+  if (apaFormat) {
+    const note = `CI = confidence interval. `
+      + `Q<sub>between</sub> = ${subgroup.Qbetween.toFixed(3)}, df = ${subgroup.df}, p ${fmtP_APA(subgroup.p)}.`;
+    return `
+<section>
+  <h2>Subgroup Analysis</h2>
+  ${buildTableAPA(nextTable(), `Subgroup Analysis Results (${esc(profile.label)})`,
+    ["Group", "k", "Effect size", "SE", "95% CI", "τ²", "I² (%)"], rows, note)}
+</section>`;
+  }
 
   return `
 <section>
@@ -440,7 +806,7 @@ function sectionSubgroup(subgroup, profile) {
 }
 
 function sectionStudyTable(args) {
-  const { studies, m, profile } = args;
+  const { studies, m, profile, apaFormat = false, nextTable } = args;
 
   const tau2   = isFinite(m.tau2) ? m.tau2 : 0;
   const real   = studies.filter(d => !d.filled);
@@ -461,6 +827,57 @@ function sectionStudyTable(args) {
   function fmtV(v)   { return isFinite(v) ? (+v).toFixed(3) : "—"; }
   function fmtPct(v) { return (v !== null && isFinite(v)) ? v.toFixed(1) + "%" : "—"; }
 
+  const pooledEf = profile.transform(m.RE);
+  const pooledLo = profile.transform(m.ciLow);
+  const pooledHi = profile.transform(m.ciHigh);
+
+  if (apaFormat) {
+    const rows = studies.map(d => {
+      const wi  = 1 / (d.vi + tau2);
+      const pct = d.filled ? null : wi / totalW * 100;
+      const ef  = profile.transform(d.yi);
+      const lo  = profile.transform(d.yi - Z_95 * d.se);
+      const hi  = profile.transform(d.yi + Z_95 * d.se);
+      const lbl = d.label.length > 40 ? d.label.slice(0, 39) + "\u2026" : d.label;
+      const cls = d.filled ? ' class="imputed"' : "";
+      return `<tr${cls}>
+        <td>${esc(lbl)}</td>
+        <td>${fmtV(ef)}</td>
+        <td>${fmtV(d.se)}</td>
+        <td>${fmtCI_APA(lo, hi)}</td>
+        <td>${fmtPct(pct)}</td>
+      </tr>`;
+    });
+
+    // Pooled row in tfoot uses the same 5-column layout
+    const tfootAPA = `<tr class="pooled">
+        <td>Pooled (RE)</td>
+        <td>${fmtV(pooledEf)}</td>
+        <td>${fmtV(m.seRE)}</td>
+        <td>${fmtCI_APA(pooledLo, pooledHi)}</td>
+        <td>100%</td>
+      </tr>`;
+
+    const note = `Effect size = ${esc(profile.label)}. SE = standard error. CI = confidence interval. `
+      + `RE weights shown. ${studies.some(d => d.filled) ? "Italic rows are trim-and-fill imputed studies." : ""}`;
+
+    // buildTableAPA doesn't support tfoot natively; embed pooled row manually
+    const head   = `<thead><tr>${["Study", `Effect size (${esc(profile.label)})`, esc(seLabel), "95% CI", "RE Weight (%)"].map(h => `<th>${h}</th>`).join("")}</tr></thead>`;
+    const body   = `<tbody>${rows.join("")}</tbody>`;
+    const foot   = `<tfoot>
+      ${tfootAPA}
+      <tr><td colspan="5"><span class="apa-note"><em>Note.</em> ${note}</span></td></tr>
+    </tfoot>`;
+
+    return `
+<section>
+  <h2>Study-Level Results</h2>
+  <p class="apa-table-title">Table ${nextTable()}</p>
+  <p class="apa-table-subtitle">Study-Level Effect Sizes and Weights</p>
+  <table class="apa-table">${head}${body}${foot}</table>
+</section>`;
+  }
+
   const rows = studies.map(d => {
     const wi  = 1 / (d.vi + tau2);
     const pct = d.filled ? null : wi / totalW * 100;
@@ -477,11 +894,7 @@ function sectionStudyTable(args) {
       <td>${fmtV(d.se)}</td>
       <td>${fmtPct(pct)}</td>
     </tr>`;
-  }).join("");
-
-  const pooledEf = profile.transform(m.RE);
-  const pooledLo = profile.transform(m.ciLow);
-  const pooledHi = profile.transform(m.ciHigh);
+  });
 
   const tfoot = `<tr class="pooled">
       <td>Pooled (RE)</td>
@@ -503,7 +916,7 @@ function sectionStudyTable(args) {
 </section>`;
 }
 
-function sectionRegression(reg, method, ciMethod) {
+function sectionRegression(reg, method, ciMethod, apaFormat = false, nextTable) {
   if (!reg || reg.rankDeficient || !reg.colNames) return "";
 
   const ciLabel   = ciMethod === "KH" ? "Knapp-Hartung" : "Normal CI";
@@ -514,6 +927,65 @@ function sectionRegression(reg, method, ciMethod) {
   const R2row = reg.p > 1 && isFinite(reg.R2)
     ? ` · R² = ${fmt(reg.R2 * 100)}%` : "";
 
+  const hasVif = Array.isArray(reg.vif) && reg.vif.some(v => isFinite(v));
+  const vifCell = j => {
+    if (j === 0) return "<td>—</td>";
+    const v = reg.vif?.[j];
+    return `<td>${isFinite(v) ? fmt(v) : "—"}</td>`;
+  };
+
+  const modTestsQMlabel = reg.QMdist === "F" ? "F" : "χ²";
+
+  if (apaFormat) {
+    const rows = reg.colNames.map((name, j) => {
+      const [lo, hi] = reg.ci[j];
+      const cls = j === 0 ? ' class="intercept"' : "";
+      return `<tr${cls}>
+        <td>${esc(name)}</td>
+        <td>${fmt(reg.beta[j])}</td>
+        <td>${fmt(reg.se[j])}</td>
+        <td>${fmt(reg.zval[j])}</td>
+        <td>${fmtP_APA(reg.pval[j])}</td>
+        <td>${fmtCI_APA(lo, hi)}</td>
+        ${hasVif ? vifCell(j) : ""}
+      </tr>`;
+    });
+
+    const coefHeaders = ["Predictor", "β", "SE", esc(statLabel), "p", "95% CI"];
+    if (hasVif) coefHeaders.push("VIF");
+
+    const coefNote = `β = unstandardised regression coefficient. SE = standard error. CI = confidence interval. `
+      + `QE(${reg.QEdf}) = ${fmt(reg.QE)}, p ${fmtP_APA(reg.QEp)}.`
+      + (reg.p > 1 ? ` QM ${esc(QMlabel)} = ${fmt(reg.QM)}, p ${fmtP_APA(reg.QMp)}.` : "")
+      + (reg.p > 1 && isFinite(reg.R2) ? ` R² = ${fmt(reg.R2 * 100)}%.` : "");
+
+    const coefTable = buildTableAPA(nextTable(), "Meta-Regression Coefficients", coefHeaders, rows, coefNote);
+
+    const modTestsTable = reg.modTests && reg.modTests.length > 1
+      ? `<h3>Per-moderator omnibus tests</h3>
+  ${buildTableAPA(
+    nextTable(),
+    "Per-Moderator Omnibus Tests",
+    ["Moderator", esc(modTestsQMlabel), "df", "p"],
+    reg.modTests.map(mt => `<tr>
+      <td>${esc(mt.name)}</td>
+      <td>${fmt(mt.QM)}</td>
+      <td>${mt.QMdf}</td>
+      <td>${fmtP_APA(mt.QMp)}</td>
+    </tr>`),
+    ""
+  )}`
+      : "";
+
+    return `
+<section>
+  <h2>Meta-Regression</h2>
+  <p class="meta-line">k = ${reg.k} · ${esc(method)} · ${esc(ciLabel)} · τ² = ${fmt(reg.tau2)} · I² = ${fmt(reg.I2)}%${R2row}</p>
+  ${coefTable}
+  ${modTestsTable}
+</section>`;
+  }
+
   function stars(p) {
     if (p < 0.001) return "***";
     if (p < 0.01)  return "**";
@@ -521,13 +993,6 @@ function sectionRegression(reg, method, ciMethod) {
     if (p < 0.10)  return ".";
     return "";
   }
-
-  const hasVif = Array.isArray(reg.vif) && reg.vif.some(v => isFinite(v));
-  const vifCell = j => {
-    if (j === 0) return "<td>—</td>";
-    const v = reg.vif?.[j];
-    return `<td>${isFinite(v) ? fmt(v) : "—"}</td>`;
-  };
 
   const rows = reg.colNames.map((name, j) => {
     const [lo, hi] = reg.ci[j];
@@ -542,12 +1007,11 @@ function sectionRegression(reg, method, ciMethod) {
       <td>${stars(reg.pval[j])}</td>
       ${hasVif ? vifCell(j) : ""}
     </tr>`;
-  }).join("");
+  });
 
   const coefHeaders = ["Term", "β", "SE", esc(statLabel), "p", "95% CI", ""];
   if (hasVif) coefHeaders.push("VIF");
 
-  const modTestsQMlabel = reg.QMdist === "F" ? "F" : "χ²";
   const modTestsTable = reg.modTests && reg.modTests.length > 1
     ? `<h3>Per-moderator omnibus tests</h3>
   ${buildTable(
@@ -576,9 +1040,20 @@ function sectionRegression(reg, method, ciMethod) {
 </section>`;
 }
 
-function sectionPlot(label, svgStrings) {
+function sectionPlot(label, svgStrings, apaFormat = false, nextFigure,
+                     apaTitle = "", apaNote = "") {
   const filled = svgStrings.filter(Boolean);
   if (!filled.length) return "";
+
+  if (apaFormat) {
+    const title = apaTitle || label;
+    return `
+<section class="plot-section">
+  <h2>${esc(label)}</h2>
+  ${buildFigureAPA(nextFigure(), title, filled, apaNote)}
+</section>`;
+  }
+
   return `
 <section class="plot-section">
   <h2>${esc(label)}</h2>
@@ -704,6 +1179,48 @@ function reportCSS() {
     .svg-wrap { margin-bottom: 12px; overflow-x: auto; }
     .svg-wrap svg { display: block; }
 
+    /* ---- APA table styles ---- */
+    .apa-table {
+      border-collapse: collapse;
+      font-size: 0.88em;
+      width: 100%;
+      max-width: 900px;
+    }
+    .apa-table thead th {
+      border-top: 2px solid ${v.bodyColor};
+      border-bottom: 1px solid ${v.bodyColor};
+      background: none;
+      color: ${v.tdColor};
+      font-weight: bold;
+      text-align: left;
+      padding: 4px 8px;
+    }
+    .apa-table td {
+      padding: 3px 8px;
+      border: none;
+      color: ${v.tdColor};
+    }
+    .apa-table tfoot td {
+      border-top: 2px solid ${v.bodyColor};
+      padding-top: 5px;
+    }
+    .apa-table .imputed td { color: ${v.imputedColor}; font-style: italic; }
+    .apa-table .pooled td  { color: ${v.pooledColor}; font-weight: bold; }
+    .apa-table .flagged td { font-style: italic; }
+    .apa-table .intercept td { color: ${v.interceptColor}; font-style: italic; }
+    .apa-table-title    { font-weight: bold; margin: 16px 0 2px 0; font-size: 0.88em; }
+    .apa-table-subtitle { font-style: italic; margin: 0 0 4px 0; font-size: 0.88em; }
+    .apa-note           { font-size: 0.82em; color: ${v.noteColor}; }
+    .apa-note em        { font-style: italic; }
+    .apa-figure-num     { font-weight: bold; font-size: 0.88em; margin: 16px 0 2px 0; }
+    .apa-figure-title   { font-style: italic; font-size: 0.88em; margin: 0 0 4px 0; }
+    .apa-figure-note    { font-size: 0.82em; color: ${v.noteColor}; margin-top: 4px; }
+    .apa-figure-note em { font-style: italic; }
+    .apa-references     { padding-left: 0; list-style: none; }
+    .apa-references li  { font-size: 0.85em; color: ${v.tdColor}; margin-bottom: 6px;
+                          padding-left: 2em; text-indent: -2em; }
+    .apa-references a   { color: inherit; }
+
     @media print {
       body { background: #fff; color: #000; padding: 12px 16px; }
       section { background: #fff; border-color: #ccc; page-break-inside: avoid; }
@@ -718,6 +1235,19 @@ function reportCSS() {
       .note { color: #888; }
       .plot-section { page-break-before: always; }
       .svg-wrap svg { max-width: 100%; height: auto; }
+      .apa-table thead th         { border-top-color: #000; border-bottom-color: #000; color: #000; }
+      .apa-table tfoot td         { border-top-color: #000; color: #444; }
+      .apa-table td               { color: #000; }
+      .apa-table .pooled td       { color: #6a5000; font-weight: bold; }
+      .apa-table .imputed td      { color: #666; }
+      .apa-table-title            { font-weight: bold; color: #000; }
+      .apa-table-subtitle         { font-style: italic; color: #000; }
+      .apa-note                   { color: #444; }
+      .apa-figure-num             { font-weight: bold; color: #000; }
+      .apa-figure-title           { font-style: italic; color: #000; }
+      .apa-figure-note            { color: #444; }
+      .apa-references li          { color: #000; }
+      .apa-references a           { color: #000; }
     }
   `;
 }
@@ -782,7 +1312,7 @@ export function openPrintPreview(htmlString) {
 // contains clean vector output rather than an embedded canvas PNG.
 // The live #goshPlot element is restored to its screen render after serialization,
 // exactly as collectForestSVGs does for the forest plot.
-function sectionGosh(goshResult, profile, xAxis) {
+function sectionGosh(goshResult, profile, xAxis, apaFormat = false, nextFigure) {
   if (!goshResult || goshResult.error) {
     return `
 <section>
@@ -806,16 +1336,55 @@ function sectionGosh(goshResult, profile, xAxis) {
   // Restore screen render (avoids a visible change if the user has the section open).
   drawGoshPlot(goshResult, profile, { xAxis });
 
-  const svgBlock = svgStr
-    ? `<div class="svg-wrap">${svgStr}</div>`
-    : `<p class="note">Plot image not available.</p>`;
+  if (!svgStr) {
+    return `
+<section>
+  <h2>GOSH Plot (Graphical Display of Study Heterogeneity)</h2>
+  <p class="meta-line">k = ${k} studies &nbsp;·&nbsp; Fixed-effects model &nbsp;·&nbsp; x-axis: ${esc(xAxisLabel)}</p>
+  <p class="note">Plot image not available.</p>
+</section>`;
+  }
+
+  const goshNote = `Each point represents one non-empty subset of studies. x-axis: ${esc(xAxisLabel)}. ${esc(sampleLine)} Fixed-effects model.`;
 
   return `
 <section>
   <h2>GOSH Plot (Graphical Display of Study Heterogeneity)</h2>
   <p class="meta-line">k = ${k} studies &nbsp;·&nbsp; Fixed-effects model &nbsp;·&nbsp; x-axis: ${esc(xAxisLabel)}</p>
   <p class="note">${esc(sampleLine)}</p>
-  ${svgBlock}
+  ${apaFormat
+    ? buildFigureAPA(nextFigure(),
+        `Graphical Display of Study Heterogeneity (GOSH) plot, k\u202F=\u202F${k} studies`,
+        [svgStr], goshNote)
+    : `<div class="svg-wrap">${svgStr}</div>`}
+</section>`;
+}
+
+// sectionReferences(citationKeys) → HTML string
+// Builds the APA References section from the keys returned by collectCitations().
+// Entries are sorted alphabetically by their text content (first-author surname)
+// as required by APA 7th edition, regardless of the order they were collected.
+function sectionReferences(citationKeys) {
+  if (!citationKeys.length) return "";
+  const items = citationKeys
+    .map(k => CITATIONS[k])
+    .filter(Boolean)
+    // De-duplicate by citation text (ML and REML share the same string).
+    .filter((ref, i, arr) => arr.indexOf(ref) === i)
+    // APA reference lists are sorted alphabetically by first-author surname.
+    .sort((a, b) => {
+      // Strip leading HTML tags to get the first plain-text character.
+      const plain = s => s.replace(/<[^>]+>/g, "");
+      return plain(a).localeCompare(plain(b));
+    })
+    .map(ref => `<li>${ref}</li>`)
+    .join("\n    ");
+  return `
+<section>
+  <h2>References</h2>
+  <ol class="apa-references">
+    ${items}
+  </ol>
 </section>`;
 }
 
@@ -823,11 +1392,22 @@ export function buildReport(args) {
   const {
     studies, m, profile, reg, tf, influence, subgroup,
     method, ciMethod, useTF, forestOptions,
+    cumForestOptions, caterpillarOptions,
     pcurve, puniform,
     sel, selMode, selLabel,
     gosh, goshXAxis,
     bayesResult, bayesReMean,
+    apaFormat = false,
   } = args;
+
+  // Sequential APA counters — tables and figures are numbered independently
+  // (APA 7th keeps separate Table N and Figure N sequences).
+  // Pass nextTable / nextFigure into section builders so numbering is
+  // automatic regardless of which sections are present.
+  let _tblN = 0;
+  function nextTable()  { return ++_tblN; }
+  let _figN = 0;
+  function nextFigure() { return ++_figN; }
 
   const date  = new Date().toLocaleDateString(undefined, {
     year: "numeric", month: "long", day: "numeric",
@@ -839,25 +1419,45 @@ export function buildReport(args) {
                 : "Normal CI";
 
   // Collect forest SVGs for every page; other plots read directly from DOM.
-  const forestSVGs   = forestOptions
+  const forestSVGs        = forestOptions
     ? collectForestSVGs(studies, m, forestOptions)
+    : [];
+  const cumForestSVGs     = cumForestOptions
+    ? collectCumulativeForestSVGs(cumForestOptions.results, cumForestOptions.profile ?? profile, cumForestOptions)
+    : [];
+  const caterpillarSVGs   = caterpillarOptions
+    ? collectCaterpillarSVGs(caterpillarOptions.studies ?? studies, caterpillarOptions.m ?? m, caterpillarOptions.profile ?? profile, caterpillarOptions)
     : [];
 
   function liveSVG(id) {
     const el = document.getElementById(id);
     return el ? serializeSVG(el) : "";
   }
+  // Collect bubble plot SVGs with their moderator names (set via data-moderator
+  // on the wrapper div in ui.js).  Falls back to unnamed SVG scan when the
+  // attribute is absent so older cached DOM states don't silently drop plots.
   const bubbleSVGs = (() => {
     const c = document.getElementById("bubblePlots");
-    return c ? Array.from(c.querySelectorAll("svg")).map(serializeSVG) : [];
+    if (!c) return [];
+    const named = Array.from(c.querySelectorAll("[data-moderator]"))
+      .map(el => ({ svg: serializeSVG(el.querySelector("svg")), moderator: el.dataset.moderator }))
+      .filter(b => b.svg);
+    if (named.length) return named;
+    return Array.from(c.querySelectorAll("svg"))
+      .map(el => ({ svg: serializeSVG(el), moderator: "" }))
+      .filter(b => b.svg);
   })();
 
+  // Augmented args passed to every section builder so they can read apaFormat
+  // and call nextTable() / nextFigure() to get the next sequential APA number.
+  const rArgs = { ...args, apaFormat, nextTable, nextFigure };
+
   const body = [
-    sectionSummary(args),
-    sectionPubBias(args),
-    sectionPUniform(puniform, m, profile),
-    sectionSelectionModel(sel ?? null, profile, selMode ?? "mle", selLabel ?? ""),
-    (() => {
+    sectionSummary(rArgs),
+    sectionPubBias(rArgs),
+    sectionPUniform(puniform, m, profile, apaFormat, nextTable),
+    sectionSelectionModel(sel ?? null, profile, selMode ?? "mle", selLabel ?? "", apaFormat, nextTable),
+    ((apaFormat, nextFigure) => {
       if (!bayesResult || bayesResult.error) return "";
       const svgMu  = liveSVG("bayesMuPlot");
       const svgTau = liveSVG("bayesTauPlot");
@@ -865,46 +1465,110 @@ export function buildReport(args) {
       const muDisp   = profile.transform(bayesResult.muMean);
       const muCIDisp = bayesResult.muCI.map(v => profile.transform(v));
       const reDisp   = isFinite(bayesReMean) ? profile.transform(bayesReMean) : NaN;
-      return `
-<section>
-  <h2>Bayesian Meta-Analysis</h2>
-  <p class="meta-line">Prior: \u03BC\u202F~\u202FN(${esc(bayesResult.mu0)},\u202F${esc(bayesResult.sigma_mu)}\u00B2)\u2003\u03C4\u202F~\u202FHalfNormal(${esc(bayesResult.sigma_tau)})\u2003k\u202F=\u202F${bayesResult.k} studies</p>
+      const priorLine = `Prior: \u03BC\u202F~\u202FN(${esc(bayesResult.mu0)},\u202F${esc(bayesResult.sigma_mu)}\u00B2)\u2003\u03C4\u202F~\u202FHalfNormal(${esc(bayesResult.sigma_tau)})\u2003k\u202F=\u202F${bayesResult.k} studies`;
+      const statsTable = `
   <table class="stats-table">
     <tr><td>Posterior mean \u03BC</td><td>${fmt(muDisp)}</td><td>95% CrI [${fmt(muCIDisp[0])}, ${fmt(muCIDisp[1])}]</td></tr>
     <tr><td>Posterior mean \u03C4</td><td>${fmt(bayesResult.tauMean)}</td><td>95% CrI [${fmt(bayesResult.tauCI[0])}, ${fmt(bayesResult.tauCI[1])}]</td></tr>
     ${isFinite(reDisp) ? `<tr><td>Frequentist RE (comparison)</td><td>${fmt(reDisp)}</td><td></td></tr>` : ""}
-  </table>
-  ${svgMu  ? `<div class="svg-wrap">${svgMu}</div>`  : ""}
-  ${svgTau ? `<div class="svg-wrap">${svgTau}</div>` : ""}
+  </table>`;
+      const bayesPriorNote = `Prior: \u03BC\u202F~\u202FN(${esc(bayesResult.mu0)},\u202F${esc(bayesResult.sigma_mu)}\u00B2); \u03C4\u202F~\u202FHalfNormal(${esc(bayesResult.sigma_tau)}). Vertical line\u202F=\u202Fposterior mean; shaded region\u202F=\u202F95% credible interval.`;
+      const plotsMu  = apaFormat && svgMu
+        ? buildFigureAPA(nextFigure(),
+            `Posterior distribution of pooled effect \u03BC (${esc(profile.label)})`,
+            [svgMu], bayesPriorNote)
+        : (svgMu  ? `<div class="svg-wrap">${svgMu}</div>`  : "");
+      const plotsTau = apaFormat && svgTau
+        ? buildFigureAPA(nextFigure(),
+            `Posterior distribution of between-study standard deviation \u03C4`,
+            [svgTau],
+            `Prior: \u03C4\u202F~\u202FHalfNormal(${esc(bayesResult.sigma_tau)}).`)
+        : (svgTau ? `<div class="svg-wrap">${svgTau}</div>` : "");
+      return `
+<section>
+  <h2>Bayesian Meta-Analysis</h2>
+  <p class="meta-line">${priorLine}</p>
+  ${statsTable}
+  ${plotsMu}
+  ${plotsTau}
 </section>`;
-    })(),
-    sectionGosh(gosh ?? null, profile, goshXAxis ?? "I2"),
-    (() => {
+    })(apaFormat, nextFigure),
+    sectionGosh(gosh ?? null, profile, goshXAxis ?? "I2", apaFormat, nextFigure),
+    ((apaFormat, nextFigure) => {
       const svg = liveSVG("profileLikTau2Plot");
-      return svg ? `
+      if (!svg) return "";
+      const note = `Shaded region\u202F=\u202F95% CI from likelihood-ratio inversion (LRT). The \u03C4\u00B2 CI in the summary table uses the Q-profile method (moment-based) and may differ.`;
+      return `
 <section class="plot-section">
   <h2>Profile Likelihood for τ²</h2>
-  <div class="svg-wrap">${svg}</div>
-  <p class="note">95% CI from likelihood-ratio inversion (LRT). Note: the τ² CI in the summary table uses the Q-profile method (moment-based) and will differ.</p>
-</section>` : "";
-    })(),
-    sectionInfluence(influence, k),
-    sectionSubgroup(subgroup, profile),
-    sectionStudyTable(args),
-    sectionRegression(reg, method, ciMethod),
-    sectionPlot("Forest Plot", forestSVGs),
-    sectionPlot("Funnel Plot",            [liveSVG("funnelPlot")]),
-    sectionPlot("Influence Plot",         [liveSVG("influencePlot")]),
-    sectionPlot("Baujat Plot",            [liveSVG("baujatPlot")]),
-    sectionPlot("Cumulative Forest Plot", [liveSVG("cumulativePlot")]),
-    sectionPlot("Cumulative Funnel Plot", [liveSVG("cumulativeFunnelPlot")]),
-    sectionPlot("P-curve",                [liveSVG("pCurvePlot")]),
-    sectionPlot("P-uniform",              [liveSVG("pUniformPlot")]),
-    sectionPlot("Orchard Plot",           [liveSVG("orchardPlot")]),
-    sectionPlot("Caterpillar Plot",       [liveSVG("caterpillarPlot")]),
-    sectionPlot("Risk-of-bias Traffic Light", [liveSVG("robTrafficLight")]),
-    sectionPlot("Risk-of-bias Summary",   [liveSVG("robSummary")]),
-    sectionPlot("Bubble Plots",           bubbleSVGs),
+  ${apaFormat
+    ? buildFigureAPA(nextFigure(), `Profile likelihood curve for \u03C4\u00B2`, [svg], note)
+    : `<div class="svg-wrap">${svg}</div>
+  <p class="note">95% CI from likelihood-ratio inversion (LRT). Note: the \u03C4\u00B2 CI in the summary table uses the Q-profile method (moment-based) and will differ.</p>`}
+</section>`;
+    })(apaFormat, nextFigure),
+    sectionInfluence(influence, k, apaFormat, nextTable),
+    sectionSubgroup(subgroup, profile, apaFormat, nextTable),
+    sectionStudyTable(rArgs),
+    sectionRegression(reg, method, ciMethod, apaFormat, nextTable),
+    sectionPlot("Forest Plot", forestSVGs, apaFormat, nextFigure,
+      `Forest plot of ${esc(profile.label)}, k\u202F=\u202F${k} studies`,
+      `RE\u202F=\u202Frandom effects. Error bars represent 95% ${esc(ciLabel)} CI. \u03C4\u00B2 estimated by ${esc(method)}. Diamond\u202F=\u202Fpooled estimate and 95% CI.`),
+    sectionPlot("Funnel Plot", [liveSVG("funnelPlot")], apaFormat, nextFigure,
+      `Funnel plot of ${esc(profile.label)} against standard error`,
+      `Each point\u202F=\u202Fone study. Asymmetry may indicate publication bias or between-study heterogeneity.`),
+    sectionPlot("Influence Plot", [liveSVG("influencePlot")], apaFormat, nextFigure,
+      `Influence diagnostics for k\u202F=\u202F${k} studies`,
+      `Left panel: standardised residuals. Right panel: leave-one-out (LOO) random-effects estimates with 95% CI.`),
+    sectionPlot("Baujat Plot", [liveSVG("baujatPlot")], apaFormat, nextFigure,
+      `Baujat plot of contribution to Q statistic against overall influence on the pooled estimate`,
+      ``),
+    sectionPlot("Cumulative Forest Plot", cumForestSVGs.length ? cumForestSVGs : [liveSVG("cumulativePlot")], apaFormat, nextFigure,
+      `Cumulative forest plot of ${esc(profile.label)}`,
+      `Studies added in dataset order. Effect and 95% CI shown at each cumulative step.`),
+    sectionPlot("Cumulative Funnel Plot", [liveSVG("cumulativeFunnelPlot")], apaFormat, nextFigure,
+      `Cumulative funnel plot of ${esc(profile.label)}`,
+      ``),
+    sectionPlot("P-curve", [liveSVG("pCurvePlot")], apaFormat, nextFigure,
+      `P-curve of statistically significant results (p\u202F&lt;\u202F.05)`,
+      `Simonsohn et al. (2014). Only studies with p\u202F&lt;\u202F.05 included.`),
+    sectionPlot("P-uniform", [liveSVG("pUniformPlot")], apaFormat, nextFigure,
+      `P-uniform plot (van Assen et al., 2015)`,
+      ``),
+    sectionPlot("Orchard Plot", [liveSVG("orchardPlot")], apaFormat, nextFigure,
+      `Orchard plot of ${esc(profile.label)}`,
+      `Points scaled by random-effects weight. Thick bar\u202F=\u202F95% CI; thin bar\u202F=\u202F95% prediction interval.`),
+    sectionPlot("Caterpillar Plot", caterpillarSVGs.length ? caterpillarSVGs : [liveSVG("caterpillarPlot")], apaFormat, nextFigure,
+      `Caterpillar plot of study-level ${esc(profile.label)}, sorted by effect size`,
+      `Error bars\u202F=\u202F95% CI.`),
+    sectionPlot("Risk-of-bias Traffic Light", [liveSVG("robTrafficLight")], apaFormat, nextFigure,
+      `Risk-of-bias traffic-light plot`,
+      ``),
+    sectionPlot("Risk-of-bias Summary", [liveSVG("robSummary")], apaFormat, nextFigure,
+      `Risk-of-bias summary plot`,
+      ``),
+    // Bubble plots: in APA mode one Figure per moderator; non-APA all in one section.
+    ...(apaFormat
+      ? bubbleSVGs.map(({ svg, moderator }) =>
+          sectionPlot(
+            moderator ? `Bubble Plot \u2014 ${esc(moderator)}` : "Bubble Plot",
+            [svg], apaFormat, nextFigure,
+            moderator
+              ? `Bubble plot of ${esc(moderator)} against ${esc(profile.label)}`
+              : `Bubble plot of meta-regression moderator against ${esc(profile.label)}`,
+            `Line\u202F=\u202Fmeta-regression fit. Point area proportional to random-effects weight.`
+          )
+        )
+      : [sectionPlot(
+          "Bubble Plots",
+          bubbleSVGs.map(b => b.svg),
+          apaFormat, nextFigure,
+          `Bubble plots of meta-regression moderators against ${esc(profile.label)}`,
+          `Line\u202F=\u202Fmeta-regression fit. Point area proportional to random-effects weight. One panel per moderator.`
+        )]
+    ),
+    // References section — APA mode only, always last.
+    ...(apaFormat ? [sectionReferences(collectCitations(rArgs))] : []),
   ].join("\n");
 
   return `<!DOCTYPE html>

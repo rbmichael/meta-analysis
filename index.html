@@ -19,6 +19,7 @@
   })();
 </script>
 <link rel="stylesheet" href="css/styles.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://d3js.org/d3.v7.min.js"></script>
 <script type="module" src="js/analysis.js"></script>
 <script type="module" src="js/trimfill.js"></script>
@@ -205,8 +206,12 @@
                 <option value="4">4× — high-res (384 dpi)</option>
               </select>
             </label>
+            <label class="export-scale-label" title="Format tables to APA 7th edition style (no vertical lines, merged CI columns, Note paragraphs)">
+              <input type="checkbox" id="reportAPA"> APA tables
+            </label>
             <button id="exportReportHTML" class="report-btn">Export HTML</button>
             <button id="exportReportPDF"  class="report-btn">Export PDF</button>
+            <button id="exportReportDOCX" class="report-btn">Export Word</button>
           </div>
         </div>
 
