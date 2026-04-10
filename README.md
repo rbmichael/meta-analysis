@@ -25,6 +25,7 @@ A browser-based meta-analysis tool. No installation, no server, no dependencies 
 ### Heterogeneity
 
 - **τ² estimators:** REML (default), DerSimonian-Laird, Paule-Mandel, Maximum Likelihood, Hunter-Schmidt, Hedges, Sidik-Jonkman
+- **Pooling methods:** Inverse-variance (default; RE and FE); **Mantel-Haenszel** (OR, RR, RD) and **Peto one-step** (OR only) — fixed-effects pooling that operates directly on cell counts and handles single-zero cells without a continuity correction
 - **CI methods:** Normal/Wald, Knapp-Hartung, *t*-distribution, Profile Likelihood (requires REML or ML)
 - **Heterogeneity statistics:** Cochran's *Q*, *I*², *H*², τ², 95% prediction interval (Higgins 2009, *t*\_{*k*−2})
 - **Confidence intervals on heterogeneity:** Profile-likelihood CIs for τ², *I*², *H*²
@@ -67,6 +68,10 @@ Studies can be assigned to named groups via the Group column. Pooled estimates a
 
 A built-in RoB assessment panel accepts user-defined domains and Low / Some concerns / High / Not reported ratings per study. Results are visualised as a traffic light plot (per-study) and a summary bar chart (per-domain).
 
+### Bayesian meta-analysis
+
+Conjugate normal-normal random-effects model fit via grid approximation (300 points over τ) — no MCMC, no external libraries. Prior on μ: N(μ₀, σ_μ²); prior on τ: HalfNormal(σ_τ). Because the prior on μ is conjugate given τ, the marginal posterior of μ is an analytic mixture of normals. Reports posterior mean and 95% credible interval for μ (overall effect) and τ (heterogeneity SD), plus posterior density plots for both parameters. Diffuse priors recover the REML random-effects estimate.
+
 ---
 
 ## Plots
@@ -99,6 +104,7 @@ All plots export as SVG, PNG, or TIFF. Log-scale effect types label the axis in 
 - **CSV import** — auto-detects delimiter and effect type from column headers; shows a preview panel with column-mapping controls before committing
 - **Session save / load** — full application state (data, settings, moderators, RoB ratings) serialised to JSON
 - **Auto-save** — drafts written to `localStorage`; a recovery banner appears on next load if unsaved changes exist
+- **Cluster ID column** — optional study identifier for dependent effect sizes (e.g. multiple outcomes or subgroups from the same trial); activates cluster-robust (sandwich) standard errors without changing the point estimate
 
 CSV column names match the input fields for each effect type (e.g. `m1,sd1,n1,m2,sd2,n2` for MD; `a,b,c,d` for OR). A `label` column is optional but recommended. A `group` column assigns studies to subgroups.
 
@@ -107,14 +113,17 @@ CSV column names match the input fields for each effect type (e.g. `m1,sd1,n1,m2
 ## Output and export
 
 - **HTML report** — self-contained document with all results tables and plots embedded as inline SVG
+- **Word (.docx)** — exports all results tables and plots to a Word document via OOXML/JSZip; no server required
 - **PDF** — print-to-PDF via the browser print dialog
 - **SVG / PNG / TIFF** — individual plot export from the plot toolbar
+- **APA tables** — checkbox to format all tables to APA 7th edition style (no vertical lines, merged CI columns, *Note* paragraphs); applies to both HTML and Word exports
 
 ---
 
 ## Interface
 
 - **Three-panel layout** — Input, Results, and Guide tabs
+- **Collapsible "More settings"** — advanced Input options (moderators, RoB domains, cluster ID, Bayesian priors) tucked behind a disclosure element to keep the default view uncluttered
 - **Collapsible results sections** — sections are collapsed by default; only core results and the forest plot are open on load, reducing visual overwhelm on large analyses
 - **Light and dark themes** — follows system preference by default; toggle available in the settings bar
 - **In-app methodology guide** — reference documentation for every statistical method in the tool, accessible from the Guide tab or via contextual help buttons (?) throughout the interface
@@ -137,6 +146,10 @@ cd meta-analysis
 
 - Borenstein M, Hedges LV, Higgins JPT, Rothstein HR (2009). *Introduction to Meta-Analysis*. Wiley.
 - DerSimonian R, Laird N (1986). Meta-analysis in clinical trials. *Controlled Clinical Trials*, 7, 177–188.
+- Gelman A, Carlin JB, Stern HS, Dunson DB, Vehtari A, Rubin DB (2013). *Bayesian Data Analysis* (3rd ed.). CRC Press.
+- Hedges LV, Tipton E, Johnson MC (2010). Robust variance estimation in meta-regression with dependent effect size estimates. *Res Synth Methods*, 1, 39–65.
+- Mantel N, Haenszel W (1959). Statistical aspects of the analysis of data from retrospective studies of disease. *J Natl Cancer Inst*, 22, 719–748.
+- Peto R, Pike MC, Armitage P, et al. (1976). Design and analysis of randomized clinical trials requiring prolonged observation of each patient. *Br J Cancer*, 34, 585–612.
 - Hedges LV, Olkin I (1985). *Statistical Methods for Meta-Analysis*. Academic Press.
 - Higgins JPT, Thompson SG, Spiegelhalter DJ (2009). A re-evaluation of random-effects meta-analysis. *J R Stat Soc A*, 172, 137–159.
 - Knapp G, Hartung J (2003). Improved tests for a random effects meta-regression with a single covariate. *Stat Med*, 22, 2693–2710.
