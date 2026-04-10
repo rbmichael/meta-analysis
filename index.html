@@ -687,6 +687,7 @@
       <h2>Heterogeneity</h2>
       <ul>
         <li><strong>τ² estimators:</strong> REML (default), DerSimonian–Laird, Paule–Mandel, Maximum Likelihood, Hunter–Schmidt, Hedges, Sidik–Jonkman, Generalised Q</li>
+        <li><strong>Pooling methods:</strong> Inverse-variance (default; RE and FE); Mantel–Haenszel (OR, RR, RD) and Peto one-step (OR only) — fixed-effects pooling that operates directly on cell counts and handles single-zero cells without a continuity correction</li>
         <li><strong>CI methods:</strong> Normal/Wald, Knapp–Hartung, <em>t</em>-distribution, Profile Likelihood (REML or ML)</li>
         <li><strong>Statistics:</strong> Cochran's <em>Q</em>, <em>I</em>², <em>H</em>², τ², 95% prediction interval (Higgins 2009)</li>
         <li><strong>Confidence intervals on heterogeneity:</strong> Profile-likelihood CIs for τ², <em>I</em>², <em>H</em>²</li>
@@ -702,6 +703,7 @@
         <li><strong>Fail-safe N</strong> — Rosenthal and Orwin estimators</li>
         <li><strong>Trim-and-fill</strong> (L0) — imputes missing studies and reports the adjusted pooled estimate</li>
         <li><strong>Funnel plot</strong> — standard or contour-enhanced (α = .10, .05, .01 regions)</li>
+        <li><strong>Selection model (Vevea–Hedges)</strong> — ω-weighted likelihood model; MLE mode (k ≥ 8) estimates selection weights jointly with μ and τ²; fixed-ω sensitivity presets (Mild / Moderate / Severe, Vevea &amp; Woods 2005) available from k ≥ 3</li>
       </ul>
 
       <!-- ---- P-value analyses ---- -->
@@ -739,6 +741,22 @@
       <p>User-defined RoB domains with Low / Some concerns / High / Not reported ratings per study.
       Visualised as a per-study traffic light grid and a per-domain summary bar chart.</p>
 
+      <!-- ---- Bayesian meta-analysis ---- -->
+      <h2>Bayesian meta-analysis</h2>
+      <p>Conjugate normal-normal random-effects model fit via grid approximation (300 points over τ) —
+      no MCMC, no external libraries. Prior on μ: N(μ₀, σ<sub>μ</sub>²); prior on τ: HalfNormal(σ<sub>τ</sub>).
+      Because the prior on μ is conjugate given τ, the marginal posterior of μ is an analytic mixture of
+      normals. Reports posterior mean and 95% credible interval for μ (overall effect) and τ (heterogeneity SD),
+      plus posterior density plots for both parameters. Diffuse priors recover the REML random-effects estimate.</p>
+
+      <!-- ---- Cluster-robust SE ---- -->
+      <h2>Cluster-robust standard errors</h2>
+      <p>When a single trial contributes multiple effect sizes (several outcomes, subgroups, or time points),
+      treating estimates as independent inflates the effective sample size. Assigning a <strong>Cluster ID</strong>
+      to dependent rows activates the sandwich (CR1) variance estimator, which corrects the SE and CI without
+      changing the point estimate. At least 2 clusters are required; 10 or more is recommended for reliable
+      inference. Not available with M-H or Peto methods. Based on Hedges, Tipton &amp; Johnson (2010).</p>
+
       <!-- ---- Plots ---- -->
       <h2>Plots</h2>
       <p>All plots export as SVG, PNG, or TIFF.</p>
@@ -761,6 +779,8 @@
             <tr><td>Bubble plots</td><td>Meta-regression fit per continuous moderator, bubbles sized by weight.</td></tr>
             <tr><td>GOSH plot</td><td>Graphical display of study heterogeneity: I² and μ̂ for every non-empty subset of studies. Reveals influential studies and heterogeneity patterns invisible to leave-one-out. Enumerated exactly for k ≤ 15; random-sampled for k ≤ 30.</td></tr>
             <tr><td>Profile likelihood (τ²)</td><td>Profile log-likelihood curve for τ² with a 95% CI from likelihood-ratio inversion (LRT). Available for ML and REML only. x-axis toggles between τ² and τ.</td></tr>
+            <tr><td>Bayesian posterior (μ)</td><td>Marginal posterior density of the overall effect μ with 95% credible interval shaded.</td></tr>
+            <tr><td>Bayesian posterior (τ)</td><td>Marginal posterior density of the heterogeneity SD τ with 95% credible interval shaded.</td></tr>
           </tbody>
         </table>
       </div>
@@ -772,6 +792,7 @@
         <li><strong>CSV import</strong> — auto-detects delimiter and effect type from column headers; preview panel with column-mapping controls before committing</li>
         <li><strong>Session save / load</strong> — full application state (data, settings, moderators, RoB ratings) serialised to JSON</li>
         <li><strong>Auto-save</strong> — drafts written to <code>localStorage</code>; a recovery banner appears on reload if unsaved changes exist</li>
+        <li><strong>Cluster ID column</strong> — optional study identifier for dependent effect sizes (e.g. multiple outcomes or subgroups from the same trial); activates cluster-robust standard errors</li>
       </ul>
       <p>CSV column names match the input fields for each effect type (e.g. <code>m1, sd1, n1, m2, sd2, n2</code>
       for MD; <code>a, b, c, d</code> for OR). A <code>label</code> column is optional but recommended.
@@ -781,8 +802,10 @@
       <h2>Export</h2>
       <ul>
         <li><strong>HTML report</strong> — self-contained document with all results tables and plots as inline SVG</li>
+        <li><strong>Word (.docx)</strong> — exports all results tables and plots to a Word document via OOXML/JSZip; no server required</li>
         <li><strong>PDF</strong> — via the browser's print dialog</li>
         <li><strong>SVG / PNG / TIFF</strong> — individual plot export from each plot's toolbar</li>
+        <li><strong>APA tables</strong> — checkbox to format all tables to APA 7th edition style (no vertical lines, merged CI columns, <em>Note</em> paragraphs); applies to both HTML and Word exports</li>
       </ul>
 
       <!-- ---- References ---- -->
@@ -790,15 +813,20 @@
       <ol class="about-refs">
         <li>Borenstein M, Hedges LV, Higgins JPT, Rothstein HR (2009). <em>Introduction to Meta-Analysis.</em> Wiley.</li>
         <li>DerSimonian R, Laird N (1986). Meta-analysis in clinical trials. <em>Controlled Clinical Trials,</em> 7, 177–188.</li>
+        <li>Gelman A, Carlin JB, Stern HS, Dunson DB, Vehtari A, Rubin DB (2013). <em>Bayesian Data Analysis</em> (3rd ed.). CRC Press.</li>
         <li>Hedges LV, Olkin I (1985). <em>Statistical Methods for Meta-Analysis.</em> Academic Press.</li>
+        <li>Hedges LV, Tipton E, Johnson MC (2010). Robust variance estimation in meta-regression with dependent effect size estimates. <em>Res Synth Methods,</em> 1, 39–65.</li>
         <li>Higgins JPT, Thompson SG, Spiegelhalter DJ (2009). A re-evaluation of random-effects meta-analysis. <em>J R Stat Soc A,</em> 172, 137–159.</li>
         <li>Knapp G, Hartung J (2003). Improved tests for a random effects meta-regression with a single covariate. <em>Stat Med,</em> 22, 2693–2710.</li>
+        <li>Mantel N, Haenszel W (1959). Statistical aspects of the analysis of data from retrospective studies of disease. <em>J Natl Cancer Inst,</em> 22, 719–748.</li>
         <li>Morris SB (2008). Estimating effect sizes from pretest-posttest-control group designs. <em>Org Res Methods,</em> 11, 364–386.</li>
         <li>Olkin I, Dahabreh IJ, Trikalinos TA (2012). GOSH — a graphical display of study heterogeneity. <em>Res Synth Methods,</em> 3(3), 214–223.</li>
         <li>Paule RC, Mandel J (1982). Consensus values and weighting factors. <em>J Res Natl Bur Stand,</em> 87, 377–385.</li>
+        <li>Peto R, Pike MC, Armitage P, et al. (1976). Design and analysis of randomized clinical trials requiring prolonged observation of each patient. <em>Br J Cancer,</em> 34, 585–612.</li>
         <li>Simonsohn U, Nelson LD, Simmons JP (2014). P-curve: A key to the file-drawer. <em>J Exp Psychol Gen,</em> 143(2), 534–547.</li>
         <li>van Assen MALM, van Aert RCM, Wicherts JM (2015). Meta-analysis using effect size distributions of only statistically significant studies. <em>Psychol Methods,</em> 20(3), 293–309.</li>
         <li>Vevea JL, Hedges LV (1995). A general linear model for estimating effect size in the presence of publication bias. <em>Psychometrika,</em> 60(3), 419–435.</li>
+        <li>Vevea JL, Woods CM (2005). Publication bias in research synthesis: Sensitivity analysis using a priori weight functions. <em>Psychol Methods,</em> 10(4), 428–443.</li>
         <li>Viechtbauer W (2005). Bias and efficiency of meta-analytic variance estimators in the random-effects model. <em>J Educ Behav Stat,</em> 30, 261–293.</li>
         <li>Viechtbauer W (2010). Conducting meta-analyses in R with the metafor package. <em>J Stat Softw,</em> 36(3), 1–48.</li>
       </ol>
