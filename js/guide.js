@@ -1317,9 +1317,9 @@ moment estimators (DL, PM, HS, etc.) that have no associated likelihood.</p>`,
         title: "Funnel plot (publication-bias diagnostic)",
         body: `<p>See the <strong>Publication Bias → Funnel plot</strong> section above for
 a full description. The funnel plot is the primary graphical tool for
-detecting small-study effects and publication bias. Contour-enhanced versions
-(not currently implemented) shade regions by significance level to help
-distinguish bias from heterogeneity.</p>`,
+detecting small-study effects and publication bias. Toggle between standard and
+contour-enhanced modes; contour-enhanced shades regions by significance level
+(α = .10, .05, .01) to help distinguish bias from genuine heterogeneity.</p>`,
         citations: [
           "Sterne, J. A. C., & Egger, M. (2001). Funnel plots for detecting bias in meta-analysis: Guidelines on choice of axis. <em>Journal of Clinical Epidemiology, 54</em>(10), 1046–1055.",
         ],
@@ -1362,7 +1362,11 @@ specified order). Useful for seeing how the pooled estimate and its
 precision evolved over time, and for detecting whether the evidence base
 had already converged before the most recent studies were conducted.</p>
 <p>Available ordering options: input order, most/least precise first,
-effect ascending/descending.</p>`,
+effect ascending/descending.</p>
+<p>A <strong>cumulative funnel plot</strong> is also generated, showing the
+funnel at each cumulative step. A slider controls which step is displayed,
+making it possible to observe how the funnel shape and any apparent asymmetry
+evolve as studies are added.</p>`,
         citations: [
           "Lau, J., Schmid, C. H., & Chalmers, T. C. (1995). Cumulative meta-analysis of clinical trials builds evidence for exemplary medical care. <em>Journal of Clinical Epidemiology, 48</em>(1), 45–57.",
         ],

@@ -3,9 +3,13 @@
    ================================================================ */
 
 #guideSection {
-  /* Escape the appLayout padding/max-width so the guide fills the viewport */
+  /* Escape the appLayout padding/max-width so the guide fills the viewport.
+     height: 100% = appLayout's content-box height (viewport minus full header
+     minus top+bottom padding). Adding 20px re-adds the top padding that the
+     negative margin-top already removed, so the section reaches exactly the
+     bottom of appLayout's padding box without triggering its overflow scroll. */
   margin: -20px -20px 0;
-  height: calc(100vh - 44px);
+  height: calc(100% + 20px);
   overflow: hidden;
 }
 
