@@ -8,13 +8,53 @@
   margin-bottom: 24px;
 }
 
+/* Input section fills remaining viewport so only the table scrolls */
+#inputSection {
+  /* border-box: max-height: 100% includes padding, so the section never
+     overflows appLayout's content area regardless of its own padding */
+  box-sizing: border-box;
+  max-height: 100%;
+  margin-bottom: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+#inputControls {
+  flex-shrink: 0;
+}
+
+#inputTableToolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  margin-top: 10px;
+}
+
+#inputTableWrap {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+  margin-top: 10px;
+}
+
 .section-title-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   border-bottom: 1px solid var(--border);
-  padding-bottom: 12px;
-  margin-bottom: 16px;
+  padding-bottom: 8px;
+  margin-bottom: 10px;
+}
+
+/* File-control buttons in the Input section title row */
+#inputFileControls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 
 /* When standalone (no row wrapper), title carries its own separator */
@@ -72,6 +112,48 @@
   background: var(--bg-surface-hover);
   color: var(--fg);
   border-color: var(--border-accent);
+}
+
+/* ---- Collapsible advanced settings ---- */
+.advanced-settings {
+  margin-bottom: 10px;
+}
+
+.advanced-settings > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+  list-style: none;
+  user-select: none;
+  padding: 2px 0;
+  margin-bottom: 2px;
+}
+
+.advanced-settings > summary::-webkit-details-marker { display: none; }
+
+.advanced-settings > summary::after {
+  content: '▾';
+  font-size: 0.85em;
+  transition: transform 0.15s ease;
+  display: inline-block;
+}
+
+.advanced-settings[open] > summary::after {
+  transform: rotate(-180deg);
+}
+
+.advanced-settings > summary:hover {
+  color: var(--fg);
+}
+
+.advanced-settings-body {
+  padding-top: 8px;
 }
 
 /* Settings dropdowns laid out in a horizontal row */
@@ -193,29 +275,28 @@
    APP SHELL — header + layout
    ================================================================ */
 
-/* ---- Fixed top bar ---- */
+/* ---- Top bar (flex child of body) ---- */
 #appHeader {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 44px;
   background: var(--bg-header);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border-bottom: 1px solid var(--border);
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 20px;
-  z-index: 100;
+  flex-direction: column;
   flex-shrink: 0;
-  gap: 12px;
+  /* z-index kept for help popovers / dropdowns that overlap the layout below */
+  position: relative;
+  z-index: 100;
 }
 
-@media (max-width: 480px) {
-  #appTitle { display: none; }
-  #appHeader { justify-content: center; }
+/* Row 1: title centred, theme toggle pinned right */
+#appHeaderTitle {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 44px;
+  padding: 0 20px;
 }
 
 #appTitle {
@@ -223,6 +304,27 @@
   font-weight: 500;
   letter-spacing: -0.01em;
   color: var(--fg-muted);
+  text-align: center;
+}
+
+#appHeaderTitle .theme-toggle-btn {
+  position: absolute;
+  right: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+/* Row 2: tabs centred */
+#appHeaderTabs {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 38px;
+  border-top: 1px solid var(--border);
+}
+
+@media (max-width: 480px) {
+  #appTitle { display: none; }
 }
 
 /* ---- View toggle (segmented control) ---- */
@@ -289,12 +391,15 @@
   vertical-align: middle;
 }
 
-/* ---- Single-column layout, sits below the fixed header ---- */
+/* ---- Single-column layout, fills remaining viewport below the header ---- */
 #appLayout {
-  margin-top: 44px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
   margin-left: auto;
   margin-right: auto;
   max-width: 1200px;
+  width: 100%;
   padding: 20px;
   box-sizing: border-box;
 }

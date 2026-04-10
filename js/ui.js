@@ -491,7 +491,7 @@ function showView(name) {
   _toggleResults.classList.toggle("active", name === "results");
   _toggleGuide.classList.toggle("active",   name === "guide");
   _toggleAbout.classList.toggle("active",   name === "about");
-  window.scrollTo(0, 0);
+  document.getElementById("appLayout").scrollTo(0, 0);
   if (name === "guide") renderGuide(document.getElementById("guidePanel"));
 }
 
