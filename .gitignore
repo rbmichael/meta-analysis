@@ -2,6 +2,7 @@
 __pycache__/
 benchmark-data.md
 CLAUDE.md
+CLAUDE.original.md
 generate.R
 run_tests.mjs
 verify_benchmarks.py
