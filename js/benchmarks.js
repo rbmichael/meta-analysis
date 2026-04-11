@@ -966,6 +966,62 @@ export const BENCHMARKS = [
   },
 
   // ----------------------------------------------------------------
+  // VR heterogeneous — 6 studies with strongly divergent SD ratios (REML)
+  // Designed so that τ²>0 exercises the heterogeneous-RE path.
+  // yi = log(sd1/sd2);  vi = 1/(2(n1−1)) + 1/(2(n2−1))
+  // Ground truth: metafor escalc("VR") + rma(method="REML"), R block 48.
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic Variability – VR heterogeneous (DL, τ²>0)",
+    type: "VR",
+    tauMethod: "DL",
+    data: [
+      { label: "Study 1", sd1: 2.0, n1: 50, sd2: 4.0, n2: 50 },
+      { label: "Study 2", sd1: 5.0, n1: 40, sd2: 2.0, n2: 40 },
+      { label: "Study 3", sd1: 3.0, n1: 60, sd2: 3.0, n2: 60 },
+      { label: "Study 4", sd1: 6.0, n1: 30, sd2: 1.5, n2: 30 },
+      { label: "Study 5", sd1: 1.5, n1: 45, sd2: 4.5, n2: 45 },
+      { label: "Study 6", sd1: 4.0, n1: 35, sd2: 2.0, n2: 35 }
+    ],
+    expected: {
+      yi:   [-0.6931, 0.9163, 0.0000, 1.3863, -1.0986, 0.6931],
+      FE:    0.068,
+      RE:    0.196,
+      tau2:  0.837,
+      I2:   97.23
+    },
+    citation: "Synthetic dataset. Designed to give τ²>0 with strongly divergent log(sd1/sd2) values. Verified via metafor escalc(\"VR\") + rma(method=\"DL\"), R block 48 in generate.R."
+  },
+
+  // ----------------------------------------------------------------
+  // CVR heterogeneous — 6 studies with strongly divergent CV ratios (DL)
+  // Designed so that τ²>0 exercises the heterogeneous-RE path.
+  // yi = log(cv1/cv2);  vi = 1/(2(n1−1)) + cv1²/n1 + 1/(2(n2−1)) + cv2²/n2
+  // Ground truth: metafor escalc("CVR") + rma(method="DL"), R block 49.
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic Variability – CVR heterogeneous (DL, τ²>0)",
+    type: "CVR",
+    tauMethod: "DL",
+    data: [
+      { label: "Study 1", m1: 20.0, sd1: 2.0, n1: 50, m2: 20.0, sd2: 6.0, n2: 50 },
+      { label: "Study 2", m1: 15.0, sd1: 6.0, n1: 40, m2: 15.0, sd2: 2.0, n2: 40 },
+      { label: "Study 3", m1: 25.0, sd1: 5.0, n1: 60, m2: 25.0, sd2: 5.0, n2: 60 },
+      { label: "Study 4", m1: 10.0, sd1: 4.0, n1: 35, m2: 10.0, sd2: 1.5, n2: 35 },
+      { label: "Study 5", m1: 30.0, sd1: 3.0, n1: 45, m2: 30.0, sd2: 9.0, n2: 45 },
+      { label: "Study 6", m1: 18.0, sd1: 7.0, n1: 55, m2: 18.0, sd2: 2.5, n2: 55 }
+    ],
+    expected: {
+      yi:   [-1.0986, 1.0986, 0.0000, 0.9808, -1.0986, 1.0296],
+      FE:    0.078,
+      RE:    0.150,
+      tau2:  1.039,
+      I2:   97.70
+    },
+    citation: "Synthetic dataset. Designed to give τ²>0 with strongly divergent log(cv1/cv2) values. Verified via metafor escalc(\"CVR\") + rma(method=\"DL\"), R block 49 in generate.R."
+  },
+
+  // ----------------------------------------------------------------
   // GOR — Synthetic 4-study 3-category ordinal dataset (DL)
   // Group 1 (treatment) skews toward higher categories;
   // Group 2 (control) skews toward lower categories.
