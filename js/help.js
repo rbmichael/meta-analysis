@@ -865,6 +865,8 @@ export const HELP = {
            "posterior of μ is an analytic mixture of normals — no MCMC required. " +
            "Outputs: posterior mean and 95% credible interval for μ (overall effect) " +
            "and τ (heterogeneity SD), plus posterior density plots. " +
+           "Defaults: μ₀ = 0, σ_μ = 1, σ_τ = 0.5. All three are adjustable under " +
+           "More settings → Bayesian priors. " +
            "With diffuse priors (σ_μ, σ_τ large) the posterior mean of μ " +
            "approaches the REML random-effects estimate.",
   },

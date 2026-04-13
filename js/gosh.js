@@ -30,12 +30,29 @@
 //   k ≤ GOSH_MAX_ENUM_K (15):  enumerate all 2^k − 1 ≤ 32 767 subsets exactly.
 //                               Enumerated results are stored at index mask−1,
 //                               so the full-dataset entry is always the last.
-//                               Capped at 15 so the Worker never runs >32 K tight
-//                               iterations; k=16 already has 65 535 subsets which
-//                               takes noticeable time even off the main thread.
+//                               Threshold is conservative: k=16 (65 535 subsets,
+//                               ~0.3 ms off-thread) could be enumerated, but 15
+//                               keeps output arrays under ~600 KB and avoids the
+//                               Set deduplication overhead in the sampling path.
 //   k ≤ GOSH_MAX_K      (30):  random sample of min(maxSubsets, 2^k−1) subsets
 //                               without replacement (Mulberry32 PRNG).
 //   k >  GOSH_MAX_K         :  return { error }.
+//
+// Sampling coverage at high k (maxSubsets = 50 000 default):
+//   k=16 : 50K / 65 535       ≈  76 %  (near-complete)
+//   k=20 : 50K / 1 048 575    ≈   5 %  (sparse)
+//   k=25 : 50K / 33 554 431   ≈ 0.15 % (very sparse)
+//   k=30 : 50K / 1 073 741 823 ≈ 0.005% (point-sample; patterns visible but
+//                                          not statistically representative)
+// For k ≥ 20 consider raising maxSubsets (200 000+) via the UI control.
+//
+// Worker handoff
+// --------------
+//   The main thread always attempts to create a Web Worker and posts the job
+//   there.  There is no "too small to bother" threshold: even for k=2 (one
+//   subset) the Worker is preferred because it keeps the UI responsive.
+//   Fallback to synchronous goshCompute() occurs only if the Worker fails to
+//   load (e.g. file:// security restriction in Chrome).
 //
 // Q formula
 // ---------

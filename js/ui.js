@@ -123,11 +123,14 @@ let _saveTimer = null;
 
 // scheduleSave()
 // Debounced autosave trigger. Resets the 1.2 s idle timer on every call; the
-// actual save only fires once the user stops making changes. Also serves as the
-// entry point that kicks off runAnalysis() — callers invoke scheduleSave()
-// rather than runAnalysis() directly so that rapid consecutive edits (e.g.
-// typing into a cell) coalesce into a single analysis run instead of
-// re-running on every keystroke.
+// actual save fires once the user pauses for 1.2 s. Does NOT call runAnalysis()
+// — analysis is triggered separately and immediately by the callers.
+//
+// Note: addRow() input listeners call runAnalysis() directly (per-keystroke)
+// then scheduleSave() for the deferred save. For k ≤ ~200 studies the
+// per-keystroke runAnalysis() is fast enough. For very large tables a debounce
+// on runAnalysis itself would improve responsiveness but would change the
+// "instant results" behaviour — out of scope for this audit.
 function scheduleSave() {
   clearTimeout(_saveTimer);
   _saveTimer = setTimeout(() => saveDraft(gatherSessionState()), 1200);
@@ -319,7 +322,7 @@ function makeModTd(name, type) {
   input.dataset.mod = name;
   input.style.width = "70px";
   input.placeholder = type === "categorical" ? "A/B/…" : "0";
-  input.addEventListener("input", runAnalysis);
+  input.addEventListener("input", () => { runAnalysis(); scheduleSave(); });
   td.appendChild(input);
   return td;
 }
@@ -682,9 +685,12 @@ document.getElementById("exportReportDOCX").addEventListener("click", async () =
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
   } catch (e) {
     console.error("Export Word failed:", e);
+    btn.textContent = "Export failed";
+    setTimeout(() => { btn.textContent = "Export Word"; }, 3000);
+    return;
   } finally {
     btn.disabled = false;
-    btn.textContent = "Export Word";
+    if (btn.textContent === "Building\u2026") btn.textContent = "Export Word";
   }
 });
 
@@ -1224,6 +1230,15 @@ function gatherSessionState() {
     cumulativeOrder: document.getElementById("cumulativeOrder").value,
     useTrimFill:     document.getElementById("useTrimFill").checked,
     useTFAdjusted:   document.getElementById("useTFAdjusted").checked,
+    // Bayesian priors
+    bayesMu0:        parseFloat(document.getElementById("bayesMu0")?.value)     ?? 0,
+    bayesSigmaMu:    parseFloat(document.getElementById("bayesSigmaMu")?.value) ?? 1,
+    bayesSigmaTau:   parseFloat(document.getElementById("bayesSigmaTau")?.value) ?? 0.5,
+    // Vevea-Hedges selection model
+    selMode:         document.getElementById("selMode")?.value   ?? "sensitivity",
+    selPreset:       document.getElementById("selPreset")?.value ?? "mild1",
+    selSides:        document.getElementById("selSides")?.value  ?? "1",
+    selCuts:         document.getElementById("selCuts")?.value   ?? "0.025, 0.05, 0.10, 0.25, 0.50, 1.0",
   };
 
   const savedModerators = moderators.map(m => ({ name: m.name, type: m.type }));
@@ -1281,6 +1296,27 @@ function applySession(session) {
     document.getElementById("cumulativeOrder").value = s.cumulativeOrder;
   if (typeof s.useTrimFill   === "boolean") document.getElementById("useTrimFill").checked   = s.useTrimFill;
   if (typeof s.useTFAdjusted === "boolean") document.getElementById("useTFAdjusted").checked = s.useTFAdjusted;
+
+  // Bayesian priors
+  if (isFinite(s.bayesMu0))    { const el = document.getElementById("bayesMu0");    if (el) el.value = s.bayesMu0; }
+  if (isFinite(s.bayesSigmaMu) && s.bayesSigmaMu > 0)  { const el = document.getElementById("bayesSigmaMu");  if (el) el.value = s.bayesSigmaMu; }
+  if (isFinite(s.bayesSigmaTau) && s.bayesSigmaTau > 0) { const el = document.getElementById("bayesSigmaTau"); if (el) el.value = s.bayesSigmaTau; }
+
+  // Vevea-Hedges selection model
+  if (s.selMode) {
+    const el = document.getElementById("selMode");
+    if (el && el.querySelector(`option[value="${s.selMode}"]`)) el.value = s.selMode;
+  }
+  if (s.selPreset) {
+    const el = document.getElementById("selPreset");
+    if (el && el.querySelector(`option[value="${s.selPreset}"]`)) el.value = s.selPreset;
+  }
+  if (s.selSides) {
+    const el = document.getElementById("selSides");
+    if (el && el.querySelector(`option[value="${s.selSides}"]`)) el.value = s.selSides;
+  }
+  if (s.selCuts) { const el = document.getElementById("selCuts"); if (el) el.value = s.selCuts; }
+  syncSelControls();
 
   // Rebuild moderators
   clearModerators();
@@ -2381,7 +2417,13 @@ function buildBayesSummaryHTML(result, profile, reMean) {
     </p>`;
 }
 
-function buildSubgroupHTML(subgroup, profile) {
+function buildSubgroupHTML(subgroup, profile, hasClusters) {
+  const noGroupWarn = subgroup.kNoGroup > 0
+    ? `<div class="reg-note reg-warn">⚠ ${subgroup.kNoGroup} ${subgroup.kNoGroup === 1 ? "study" : "studies"} excluded from subgroup analysis (no group label assigned).</div>`
+    : "";
+  const clusterNote = hasClusters
+    ? `<div class="reg-note" style="color:var(--muted);margin:2px 0 6px">ℹ Cluster-robust SE is not applied within subgroups.</div>`
+    : "";
   const rows = Object.entries(subgroup.groups).map(([g, r]) => {
     const isSingle = r.k === 1;
     const y_disp   = profile.transform(r.y);
@@ -2396,7 +2438,7 @@ function buildSubgroupHTML(subgroup, profile) {
       <td>${isSingle ? "NA" : isFinite(r.I2)   ? r.I2.toFixed(1)   : "0"}</td>
     </tr>`;
   }).join("");
-  return `<b>Subgroup analysis:</b><br>
+  return `${clusterNote}${noGroupWarn}<b>Subgroup analysis:</b><br>
     <table border="1">
       <tr><th>Group</th><th>k</th><th>Effect</th><th>SE</th><th>CI</th><th>τ²</th><th>I² (%)</th></tr>
       ${rows}
@@ -2528,12 +2570,35 @@ function runGosh() {
       }
     };
     w.onerror = function(e) {
-      // Worker failed to load — most likely a file:// origin security restriction
-      // in Chrome.  Fall back to synchronous computation on the main thread.
+      // Worker.onerror fires for two distinct cases:
+      //
+      // 1. Load failure (e.g. file:// security restriction in Chrome):
+      //    e.lineno === 0, e.filename === "".
+      //    Safe to fall back to synchronous computation — the inputs are valid
+      //    and the JS engine itself is fine.
+      //
+      // 2. Runtime exception inside the worker (uncaught throw, OOM when
+      //    allocating Float32Array/Set for large k, unexpected JS error):
+      //    e.lineno > 0, e.filename points to gosh.worker.js.
+      //    Falling back to synchronous is NOT safe — the same allocation that
+      //    crashed the worker will crash the main thread (and block the UI).
+      //    Surface the error to the user instead.
+      //
+      // Distinguishing the two: e.lineno is 0 for network/security load errors
+      // and non-zero for uncaught runtime exceptions.
+      goshState.worker = null;
+
+      if (e.lineno > 0) {
+        // Runtime crash inside the worker — do not attempt synchronous fallback.
+        const detail = e.message || "unknown error";
+        onError(`GOSH worker crashed (${detail}). Try reducing the number of studies or max subsets.`);
+        return;
+      }
+
+      // Load failure — fall back to synchronous computation on the main thread.
       // With GOSH_MAX_ENUM_K=15 the sync path handles ≤32 767 subsets in < 5 ms
       // and up to maxSubsets sampled subsets (default 50 K) in < 20 ms, so there
       // is no meaningful UI blocking.
-      goshState.worker = null;
       const result = goshCompute(yi, vi, { maxSubsets });
       if (result.error) { onError(result.error); return; }
       onDone(result);
@@ -2635,7 +2700,8 @@ document.getElementById("bayesUpdate").addEventListener("click", runBayesUpdate)
 //   DOM   — rewrites #results, #forestPlot, #funnelPlot, #influencePlot,
 //            #cumulativeForestPlot, #studyTable, #sensitivityPanel,
 //            #regressionPanel, #bubblePlots, forest nav buttons, stale banner
-//   State — forestPlot.args, appState.reportArgs, appState.hasRunOnce, forestPlot.page ← 0
+//   State — forestPlot.args, appState.reportArgs, appState.hasRunOnce
+//            forestPlot.page ← 0, caterpillarPlot.page ← 0, cumForestPlot.page ← 0
 // -----------------------------------------------------------------------------
 function runAnalysis() {
   scheduleSave();
@@ -2650,6 +2716,9 @@ function runAnalysis() {
   }
   // Reset accordion sections to their default open/closed states on each run.
   document.querySelectorAll(".results-section").forEach(d => d.removeAttribute("open"));
+  // Reset all paginated plots to page 0 unconditionally (including on early
+  // return paths below) so stale page state never outlives a run attempt.
+  forestPlot.page = 0;
   caterpillarPlot.page = 0;
   cumForestPlot.page = 0;
 
@@ -2675,6 +2744,8 @@ function runAnalysis() {
   const elCatPageSize        = document.getElementById("caterpillarPageSize");
   const elCaterpillarBlock   = document.getElementById("caterpillarPlotBlock");
   const elRobSection         = document.getElementById("robSection");
+  const elProfileLikScale    = document.getElementById("profileLikScale");
+  const elSelPreset          = document.getElementById("selPreset");
 
   const type = elEffectType.value;
   const profile = effectProfiles[type];
@@ -2789,7 +2860,7 @@ function runAnalysis() {
   const elHetDiag = document.getElementById("hetDiagSection");
   if (profileLikResult && !profileLikResult.error) {
     elHetDiag.style.display = "";
-    const xScale = document.getElementById("profileLikScale")?.value || "tau2";
+    const xScale = elProfileLikScale?.value || "tau2";
     drawProfileLikTau2(profileLikResult, { xScale });
   } else {
     elHetDiag.style.display = "none";
@@ -2836,7 +2907,7 @@ function runAnalysis() {
 
   const influenceHTML = buildInfluenceHTML(influence);
   const hasSubgroup   = subgroup && subgroup.G >= 2;
-  const subgroupHTML  = hasSubgroup ? buildSubgroupHTML(subgroup, profile) : "";
+  const subgroupHTML  = hasSubgroup ? buildSubgroupHTML(subgroup, profile, hasClusters) : "";
 
   // Adjusted RE
   let mAdjusted = null;
@@ -2885,7 +2956,7 @@ function runAnalysis() {
   ` : `
     <b>${profile.label} (FE):</b> ${fmt(FE_disp)} |
     <b>${profile.label} (RE):</b> ${fmt(RE_disp)}<br>
-    ${useTF && mAdjusted ? `<b>RE (adjusted):</b> ${fmt(RE_adj_disp)}<br>` : ""}
+    ${useTF && mAdjusted ? `<b>RE (adjusted):</b> ${fmt(RE_adj_disp)}${hasClusters ? ` <span style="color:var(--muted);font-size:0.85em">(cluster-robust not applied to imputed studies)</span>` : ""}<br>` : ""}
     CI [${fmt(ci_disp.lb)}, ${fmt(ci_disp.ub)}]${m.isClustered ? ` | SE (model)=${fmt(m.seRE)}` : ""}<br>
     ${robustCILine}${hBtn("het.tau2")}τ²=${fmt(m.tau2)} [${fmt(m.tauCI[0])}, ${isFinite(m.tauCI[1])?fmt(m.tauCI[1]):"∞"}] | ${hBtn("het.I2")}I²=${fmt(m.I2)}% [${fmt(m.I2CI[0])}%, ${fmt(m.I2CI[1])}%] | ${hBtn("het.H2")}H²-CI=[${fmt(m.H2CI[0])}, ${isFinite(m.H2CI[1])?fmt(m.H2CI[1]):"∞"}]<br>
     ${hBtn("het.Q")}${m.dist}-stat=${fmt(m.stat)} | p=${fmt(m.pval)}<br>
@@ -2920,7 +2991,7 @@ function runAnalysis() {
   let selResult = null;
   const selModeVal = document.getElementById("selMode").value;
   if (moderators.length === 0) {
-    const selPreset = document.getElementById("selPreset").value;
+    const selPreset = elSelPreset.value;
     const selSides  = parseInt(document.getElementById("selSides").value, 10);
 
     let selCuts, selSidesEff, selOmegaFixed;
@@ -3002,8 +3073,7 @@ function runAnalysis() {
       });
   }
 
-  // Reset to page 0 on every fresh run and cache args for nav re-renders.
-  forestPlot.page = 0;
+  // Cache args for nav re-renders (page already reset at top of runAnalysis).
   const rawPageSize  = elForestPageSize?.value ?? "30";
   const pageSize     = rawPageSize === "Infinity" ? Infinity : +rawPageSize;
   const forestOpts   = { ciMethod, profile, pageSize, pooledDisplay: forestPlot.poolDisplay, theme: forestPlot.theme };
@@ -3019,7 +3089,7 @@ function runAnalysis() {
   const baujatResult = baujat(studies);
 
   // Resolve human-readable label for the report interpretation sentence.
-  const _selPreset = document.getElementById("selPreset").value;
+  const _selPreset = elSelPreset.value;
   const _selLabel  = selModeVal === "mle"
     ? "MLE"
     : _selPreset !== "custom"
@@ -3035,7 +3105,7 @@ function runAnalysis() {
     gosh: goshState.result,
     goshXAxis: document.getElementById("goshXAxis")?.value ?? "I2",
     profileLik: profileLikResult,
-    profileLikXScale: document.getElementById("profileLikScale")?.value || "tau2",
+    profileLikXScale: elProfileLikScale?.value || "tau2",
     bayesResult, bayesReMean: m.RE,
     forestOptions: { ...forestOpts, currentPage: forestPlot.page },
   };

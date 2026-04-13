@@ -165,6 +165,7 @@ export const effectProfiles = {
     group:  "Continuous (two groups)",
     inputs: ["m1", "sd1", "n1", "m2", "sd2", "n2"],
     compute(s) {
+      if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
       const varMD = Math.max(s.sd1**2/s.n1 + s.sd2**2/s.n2, MIN_VAR);
       return { ...s, md: s.m1 - s.m2, varMD, se: Math.sqrt(varMD), w: 1/varMD, yi: s.m1 - s.m2, vi: varMD };
     },
@@ -185,6 +186,7 @@ export const effectProfiles = {
     group:  "Continuous (two groups)",
     inputs: ["m1", "sd1", "n1", "m2", "sd2", "n2"],
     compute(s) {
+      if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
       const g = hedgesG(s, { hedgesCorrection: true });
       return { ...s, md: g.es, varMD: g.var, se: Math.sqrt(g.var), w: 1/g.var, yi: g.es, vi: g.var };
     },
@@ -421,6 +423,8 @@ export const effectProfiles = {
       const cv1 = sd1 / m1;
       const cv2 = sd2 / m2;
       const yi  = Math.log(cv1 / cv2);
+      // Delta-method variance of log(CV) = 1/(2(n−1)) + CV²/n per group, summed.
+      // Nakagawa et al. (2015, Methods Ecol Evol 6:143–152, eq. 5).
       const vi  = Math.max(1 / (2 * (n1 - 1)) + cv1 ** 2 / n1 + 1 / (2 * (n2 - 1)) + cv2 ** 2 / n2, MIN_VAR);
       return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
     },
@@ -486,6 +490,9 @@ export const effectProfiles = {
       if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
       const { sd1, n1, sd2, n2 } = s;
       const yi = Math.log(sd1 / sd2);
+      // Var(log SD) ≈ 1/(2(n−1)) per group (chi-squared approximation for s²).
+      // Nakagawa et al. (2015, Methods Ecol Evol 6:143–152); Hedges & Olkin (1985, p. 86).
+      // CV²/n terms absent because VR does not normalise by the mean.
       const vi = Math.max(1 / (2 * (n1 - 1)) + 1 / (2 * (n2 - 1)), MIN_VAR);
       return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
     },
@@ -617,15 +624,19 @@ export const effectProfiles = {
 
     validate(s) {
       const errors = validateCells(s);
+      if (!Object.keys(errors).length) {
+        if (s.a + s.b === 0) errors.a = errors.b = "row-1 total (a+b) must be > 0";
+        if (s.c + s.d === 0) errors.c = errors.d = "row-2 total (c+d) must be > 0";
+      }
       return { valid: Object.keys(errors).length === 0, errors };
     },
 
     softWarnings(_s, _label) { return []; },
 
     exampleData: [
-      ["Study 1", 12,  8, 15, 10, "A"],
-      ["Study 2", 20, 10, 18, 12, "A"],
-      ["Study 3",  8,  7, 10,  9, "B"],
+      ["Study 1", 20,  5, 10, 15, "A"],
+      ["Study 2", 12, 18,  8, 22, "A"],
+      ["Study 3", 15,  5, 12, 18, "B"],
     ],
   },
 
@@ -931,11 +942,11 @@ export const effectProfiles = {
     softWarnings: (s, label) => softWarnProportion(s, label, true),
 
     exampleData: [
-      ["Study 1", 12,  80, ""],
-      ["Study 2", 25, 120, ""],
-      ["Study 3",  8,  60, ""],
-      ["Study 4", 40, 200, ""],
-      ["Study 5", 18, 100, ""],
+      ["Study 1", 15,  80, ""],
+      ["Study 2", 40, 120, ""],
+      ["Study 3",  5,  60, ""],
+      ["Study 4", 50, 200, ""],
+      ["Study 5", 30, 100, ""],
     ],
   },
 
@@ -960,11 +971,11 @@ export const effectProfiles = {
     softWarnings: softWarnProportion,
 
     exampleData: [
-      ["Study 1", 12,  80, ""],
-      ["Study 2", 25, 120, ""],
-      ["Study 3",  8,  60, ""],
-      ["Study 4", 40, 200, ""],
-      ["Study 5", 18, 100, ""],
+      ["Study 1", 15,  80, ""],
+      ["Study 2", 40, 120, ""],
+      ["Study 3",  5,  60, ""],
+      ["Study 4", 50, 200, ""],
+      ["Study 5", 30, 100, ""],
     ],
   },
 
@@ -989,11 +1000,11 @@ export const effectProfiles = {
     softWarnings: softWarnProportion,
 
     exampleData: [
-      ["Study 1", 12,  80, ""],
-      ["Study 2", 25, 120, ""],
-      ["Study 3",  8,  60, ""],
-      ["Study 4", 40, 200, ""],
-      ["Study 5", 18, 100, ""],
+      ["Study 1", 15,  80, ""],
+      ["Study 2", 40, 120, ""],
+      ["Study 3",  5,  60, ""],
+      ["Study 4", 50, 200, ""],
+      ["Study 5", 30, 100, ""],
     ],
   },
 
@@ -1017,11 +1028,11 @@ export const effectProfiles = {
     softWarnings: softWarnProportion,
 
     exampleData: [
-      ["Study 1", 12,  80, ""],
-      ["Study 2", 25, 120, ""],
-      ["Study 3",  8,  60, ""],
-      ["Study 4", 40, 200, ""],
-      ["Study 5", 18, 100, ""],
+      ["Study 1", 15,  80, ""],
+      ["Study 2", 40, 120, ""],
+      ["Study 3",  5,  60, ""],
+      ["Study 4", 50, 200, ""],
+      ["Study 5", 30, 100, ""],
     ],
   },
 
@@ -1044,11 +1055,11 @@ export const effectProfiles = {
     softWarnings: softWarnProportion,
 
     exampleData: [
-      ["Study 1", 12,  80, ""],
-      ["Study 2", 25, 120, ""],
-      ["Study 3",  8,  60, ""],
-      ["Study 4", 40, 200, ""],
-      ["Study 5", 18, 100, ""],
+      ["Study 1", 15,  80, ""],
+      ["Study 2", 40, 120, ""],
+      ["Study 3",  5,  60, ""],
+      ["Study 4", 50, 200, ""],
+      ["Study 5", 30, 100, ""],
     ],
   },
 

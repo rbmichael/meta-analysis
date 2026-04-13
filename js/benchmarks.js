@@ -35,6 +35,140 @@ export const BENCHMARKS = [
   },
 
   // ----------------------------------------------------------------
+  // GENERIC — BCG Vaccine, DLIT estimator
+  // Same 13-study dataset as above; tauMethod changed to DLIT.
+  // Expected values computed from tau2_DLIT() in analysis.js (JS engine).
+  // DLIT iterates the DL moment formula with RE-updated weights until
+  // convergence (tol=1e-10).  Produces lower τ² than plain DL for BCG.
+  // ----------------------------------------------------------------
+  {
+    name: "BCG Vaccine – GENERIC (log RR, DLIT)",
+    type: "GENERIC",
+    tauMethod: "DLIT",
+    data: [
+      { label: "Aronson 1948",           yi: -0.8893113339202054,  vi: 0.3255847650039614   },
+      { label: "Ferguson & Simes 1949",  yi: -1.5853886572014306,  vi: 0.19458112139814387  },
+      { label: "Rosenthal 1960",         yi: -1.348073148299693,   vi: 0.41536796536796533  },
+      { label: "Hart & Sutherland 1977", yi: -1.4415511900213054,  vi: 0.020010031902247573 },
+      { label: "Frimodt-Moller 1973",    yi: -0.2175473222112957,  vi: 0.05121017216963086  },
+      { label: "Stein & Aronson 1953",   yi: -0.786115585818864,   vi: 0.0069056184559087574},
+      { label: "Vandiviere 1973",        yi: -1.6208982235983924,  vi: 0.22301724757231517  },
+      { label: "TPT Madras 1980",        yi:  0.011952333523841173, vi: 0.00396157929781773 },
+      { label: "Coetzee & Berjak 1968",  yi: -0.4694176487381487,  vi: 0.056434210463248966 },
+      { label: "Rosenthal 1961",         yi: -1.3713448034727846,  vi: 0.07302479361302891  },
+      { label: "Comstock 1974",          yi: -0.33935882833839015, vi: 0.01241221397155972  },
+      { label: "Comstock & Webster 1969",yi:  0.4459134005713783,  vi: 0.5325058452001528   },
+      { label: "Comstock 1976",          yi: -0.017313948216879493,vi: 0.0714046596839863   }
+    ],
+    expected: {
+      FE:   -0.430,
+      RE:   -0.691,
+      tau2:  0.158,
+      I2:   92.12
+    },
+    citation: "Colditz et al. (1994) JAMA 271:698–702. Expected values from JS tau2_DLIT()."
+  },
+
+  // ----------------------------------------------------------------
+  // GENERIC — BCG Vaccine, HSk estimator
+  // Same dataset; tauMethod = HSk (HS * k/(k-1) small-sample correction).
+  // Expected values computed from tau2_HSk() in analysis.js.
+  // ----------------------------------------------------------------
+  {
+    name: "BCG Vaccine – GENERIC (log RR, HSk)",
+    type: "GENERIC",
+    tauMethod: "HSk",
+    data: [
+      { label: "Aronson 1948",           yi: -0.8893113339202054,  vi: 0.3255847650039614   },
+      { label: "Ferguson & Simes 1949",  yi: -1.5853886572014306,  vi: 0.19458112139814387  },
+      { label: "Rosenthal 1960",         yi: -1.348073148299693,   vi: 0.41536796536796533  },
+      { label: "Hart & Sutherland 1977", yi: -1.4415511900213054,  vi: 0.020010031902247573 },
+      { label: "Frimodt-Moller 1973",    yi: -0.2175473222112957,  vi: 0.05121017216963086  },
+      { label: "Stein & Aronson 1953",   yi: -0.786115585818864,   vi: 0.0069056184559087574},
+      { label: "Vandiviere 1973",        yi: -1.6208982235983924,  vi: 0.22301724757231517  },
+      { label: "TPT Madras 1980",        yi:  0.011952333523841173, vi: 0.00396157929781773 },
+      { label: "Coetzee & Berjak 1968",  yi: -0.4694176487381487,  vi: 0.056434210463248966 },
+      { label: "Rosenthal 1961",         yi: -1.3713448034727846,  vi: 0.07302479361302891  },
+      { label: "Comstock 1974",          yi: -0.33935882833839015, vi: 0.01241221397155972  },
+      { label: "Comstock & Webster 1969",yi:  0.4459134005713783,  vi: 0.5325058452001528   },
+      { label: "Comstock 1976",          yi: -0.017313948216879493,vi: 0.0714046596839863   }
+    ],
+    expected: {
+      FE:   -0.430,
+      RE:   -0.707,
+      tau2:  0.249,
+      I2:   92.12
+    },
+    citation: "Colditz et al. (1994) JAMA 271:698–702. Expected values from JS tau2_HSk()."
+  },
+
+  // ----------------------------------------------------------------
+  // GENERIC — BCG Vaccine, SQGENQ estimator
+  // Same dataset; tauMethod = SQGENQ (GENQ with sqrt(1/vi) weights).
+  // Expected values computed from tau2_SQGENQ() in analysis.js.
+  // ----------------------------------------------------------------
+  {
+    name: "BCG Vaccine – GENERIC (log RR, SQGENQ)",
+    type: "GENERIC",
+    tauMethod: "SQGENQ",
+    data: [
+      { label: "Aronson 1948",           yi: -0.8893113339202054,  vi: 0.3255847650039614   },
+      { label: "Ferguson & Simes 1949",  yi: -1.5853886572014306,  vi: 0.19458112139814387  },
+      { label: "Rosenthal 1960",         yi: -1.348073148299693,   vi: 0.41536796536796533  },
+      { label: "Hart & Sutherland 1977", yi: -1.4415511900213054,  vi: 0.020010031902247573 },
+      { label: "Frimodt-Moller 1973",    yi: -0.2175473222112957,  vi: 0.05121017216963086  },
+      { label: "Stein & Aronson 1953",   yi: -0.786115585818864,   vi: 0.0069056184559087574},
+      { label: "Vandiviere 1973",        yi: -1.6208982235983924,  vi: 0.22301724757231517  },
+      { label: "TPT Madras 1980",        yi:  0.011952333523841173, vi: 0.00396157929781773 },
+      { label: "Coetzee & Berjak 1968",  yi: -0.4694176487381487,  vi: 0.056434210463248966 },
+      { label: "Rosenthal 1961",         yi: -1.3713448034727846,  vi: 0.07302479361302891  },
+      { label: "Comstock 1974",          yi: -0.33935882833839015, vi: 0.01241221397155972  },
+      { label: "Comstock & Webster 1969",yi:  0.4459134005713783,  vi: 0.5325058452001528   },
+      { label: "Comstock 1976",          yi: -0.017313948216879493,vi: 0.0714046596839863   }
+    ],
+    expected: {
+      FE:   -0.430,
+      RE:   -0.715,
+      tau2:  0.315,
+      I2:   92.12
+    },
+    citation: "Colditz et al. (1994) JAMA 271:698–702. Expected values from JS tau2_SQGENQ()."
+  },
+
+  // ----------------------------------------------------------------
+  // GENERIC — BCG Vaccine, EBLUP estimator
+  // Same dataset; EBLUP aliases REML in analysis.js (Harville 1977).
+  // Expected values ≈ REML benchmark above (sub-0.001 difference).
+  // ----------------------------------------------------------------
+  {
+    name: "BCG Vaccine – GENERIC (log RR, EBLUP)",
+    type: "GENERIC",
+    tauMethod: "EBLUP",
+    data: [
+      { label: "Aronson 1948",           yi: -0.8893113339202054,  vi: 0.3255847650039614   },
+      { label: "Ferguson & Simes 1949",  yi: -1.5853886572014306,  vi: 0.19458112139814387  },
+      { label: "Rosenthal 1960",         yi: -1.348073148299693,   vi: 0.41536796536796533  },
+      { label: "Hart & Sutherland 1977", yi: -1.4415511900213054,  vi: 0.020010031902247573 },
+      { label: "Frimodt-Moller 1973",    yi: -0.2175473222112957,  vi: 0.05121017216963086  },
+      { label: "Stein & Aronson 1953",   yi: -0.786115585818864,   vi: 0.0069056184559087574},
+      { label: "Vandiviere 1973",        yi: -1.6208982235983924,  vi: 0.22301724757231517  },
+      { label: "TPT Madras 1980",        yi:  0.011952333523841173, vi: 0.00396157929781773 },
+      { label: "Coetzee & Berjak 1968",  yi: -0.4694176487381487,  vi: 0.056434210463248966 },
+      { label: "Rosenthal 1961",         yi: -1.3713448034727846,  vi: 0.07302479361302891  },
+      { label: "Comstock 1974",          yi: -0.33935882833839015, vi: 0.01241221397155972  },
+      { label: "Comstock & Webster 1969",yi:  0.4459134005713783,  vi: 0.5325058452001528   },
+      { label: "Comstock 1976",          yi: -0.017313948216879493,vi: 0.0714046596839863   }
+    ],
+    expected: {
+      FE:   -0.430,
+      RE:   -0.715,
+      tau2:  0.313,
+      I2:   92.12
+    },
+    citation: "Colditz et al. (1994) JAMA 271:698–702. EBLUP = REML (Harville 1977). Expected values from JS meta()."
+  },
+
+  // ----------------------------------------------------------------
   // OR — BCG Vaccine (dat.bcg, log odds ratio)
   // Same 13 studies as GENERIC benchmark above; raw 2x2 counts used here
   // to exercise the compute("OR") pipeline.
@@ -1542,7 +1676,7 @@ export const META_REGRESSION_BENCHMARKS = [
       ],
       vif: [null, 1.7846, 1.7846]
     },
-    citation: "Colditz et al. (1994) dat.bcg. Verified with metafor rma(mods=~year+ablat, method='REML')."
+    citation: "Colditz et al. (1994) dat.bcg. R-verified (metafor 4.8.0, generate.R block 42) for beta/se/tau2/QM/I2/R2/modTests. QE uses JS RE-weighted formula; metafor FE-weighted QE=28.3251 — see benchmark-data.md 'R-verification status'."
   },
 
   // ----------------------------------------------------------------
@@ -1590,7 +1724,7 @@ export const META_REGRESSION_BENCHMARKS = [
         { name: "region", QM: 2.1225, QMdf: 2, QMp: 0.3460 }
       ]
     },
-    citation: "Colditz et al. (1994) dat.bcg. Verified with metafor rma(mods=~ablat+factor(region), method='REML')."
+    citation: "Colditz et al. (1994) dat.bcg. R-verified (metafor 4.8.0, generate.R block 43) for beta/se/tau2/QM/I2/R2/modTests. QE uses JS RE-weighted formula; metafor FE-weighted QE=23.8904 — see benchmark-data.md 'R-verification status'."
   },
 
   // ----------------------------------------------------------------
@@ -1638,7 +1772,7 @@ export const META_REGRESSION_BENCHMARKS = [
         { name: "region", QM: 0.9957, QMdf: 2, QMp: 0.4068 }
       ]
     },
-    citation: "Colditz et al. (1994) dat.bcg. Verified with metafor rma(mods=~ablat+factor(region), method='REML', test='knha')."
+    citation: "Colditz et al. (1994) dat.bcg. R-verified (metafor 4.8.0, generate.R block 44) for beta/se/tau2/QM/I2/R2/modTests. QE uses JS RE-weighted formula; metafor FE-weighted QE=23.8904 — see benchmark-data.md 'R-verification status'."
   }
 
 ];
@@ -1694,7 +1828,7 @@ export const VH_BENCHMARKS = [
       RE_unsel:  -0.7111991,
       tau2_unsel: 0.2800282
     },
-    citation: "Colditz et al. (1994) dat.bcg. Verified with metafor selmodel() 4.8.0, R block 45."
+    citation: "Colditz et al. (1994) dat.bcg. R-verified (metafor 4.8.0, generate.R block 45) for mu/se/zval/pval/tau2/delta/LRT/LRTdf/LRTp. ll_sel/ll_unsel use JS reduced log-likelihood (differ from R by normalization constant ~11.95); LRT identical — see benchmark-data.md 'R-verification status'."
   },
 
   // ----------------------------------------------------------------
@@ -1737,7 +1871,7 @@ export const VH_BENCHMARKS = [
       RE_unsel:  -0.7111991,
       tau2_unsel: 0.2800282
     },
-    citation: "Colditz et al. (1994) dat.bcg. Verified with metafor selmodel() 4.8.0, R block 46."
+    citation: "Colditz et al. (1994) dat.bcg. R-verified (metafor 4.8.0, generate.R block 46) for mu/se/zval/pval/tau2/delta/LRT/LRTdf/LRTp. ll_sel/ll_unsel use JS reduced log-likelihood; LRT identical — see benchmark-data.md 'R-verification status'."
   },
 
   // ----------------------------------------------------------------
@@ -1830,7 +1964,7 @@ export const MH_BENCHMARKS = [
       Q:     163.94258,
       I2:     92.68036
     },
-    citation: "Colditz et al. (1994) JAMA 271:698–702. metafor rma.mh(measure='OR') R block MH-1."
+    citation: "Colditz et al. (1994) JAMA 271:698–702. R-verified (metafor 4.8.0, generate.R block MH-1) — all values match to 7 d.p."
   },
 
   // ----------------------------------------------------------------
@@ -1866,7 +2000,7 @@ export const MH_BENCHMARKS = [
       Q:     152.56755,
       I2:     92.13463
     },
-    citation: "Colditz et al. (1994) JAMA 271:698–702. metafor rma.mh(measure='RR') R block MH-2."
+    citation: "Colditz et al. (1994) JAMA 271:698–702. R-verified (metafor 4.8.0, generate.R block MH-2) — all values match to 7 d.p."
   },
 
   // ----------------------------------------------------------------
@@ -1900,7 +2034,7 @@ export const MH_BENCHMARKS = [
       Q:     386.77594,
       I2:     96.89743
     },
-    citation: "Colditz et al. (1994) JAMA 271:698–702. metafor rma.mh(measure='RD') R block MH-3."
+    citation: "Colditz et al. (1994) JAMA 271:698–702. R-verified (metafor 4.8.0, generate.R block MH-3) — all values match to 7 d.p."
   },
 
   // ----------------------------------------------------------------
@@ -1936,7 +2070,7 @@ export const MH_BENCHMARKS = [
       Q:     167.73017,
       I2:     92.84565
     },
-    citation: "Colditz et al. (1994) JAMA 271:698–702. metafor rma.peto() R block MH-4."
+    citation: "Colditz et al. (1994) JAMA 271:698–702. R-verified (metafor 4.8.0, generate.R block MH-4) — all values match to 7 d.p."
   }
 
 ];
@@ -1948,7 +2082,8 @@ export const MH_BENCHMARKS = [
 // R metafor::rma() + clubSandwich::coef_test(vcov="CR1") using the CR1
 // correction factor (C/(C-1) for intercept-only, generalised to C/(C-p)).
 // CIs use df = C - p with a t distribution when df < 30 (matching analysis.js).
-// See generate.R blocks CL-1 through CL-3.
+// R-verified (metafor 4.8.0 + clubSandwich, generate.R blocks CL-1 through CL-3)
+// — all values match to 7 d.p.
 // =============================================================================
 export const CLUSTER_BENCHMARKS = [
   {

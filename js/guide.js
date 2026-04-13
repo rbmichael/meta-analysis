@@ -1273,6 +1273,12 @@ across the evidence base.</p>
 subsets are computed exactly (at most 32 767). For k ≤ 30 a random sample of
 subsets is drawn (default 50 000); the sampling seed is fixed for reproducibility.
 k &gt; 30 is not supported.</p>
+<p><strong>Coverage warning for large k:</strong> At the default 50 000 subsets,
+sampling coverage drops steeply with k — approximately 5% at k = 20 and under
+0.01% at k = 30. Influential-study patterns remain visible in a random sample,
+but the plot becomes a sparse point cloud rather than a complete fingerprint.
+If k ≥ 20, consider raising "Max subsets" to 200 000 or more to improve
+coverage; computation runs off the main thread so the UI stays responsive.</p>
 <p><strong>Note:</strong> The GOSH plot uses fixed-effects pooling within each
 subset regardless of the main analysis model, because the between-study variance
 cannot be estimated reliably from small subsets.</p>`,
@@ -1434,10 +1440,20 @@ smooth posterior summaries without MCMC.</p>
   <li>Posterior mean and 95 % credible interval for τ (heterogeneity SD)</li>
   <li>Plots of the marginal posterior densities for μ and τ</li>
 </ul>
+<p><strong>Prior inputs</strong> are accessible under <em>More settings → Bayesian
+priors</em> in the Input tab.</p>
 <p><strong>Diffuse priors:</strong> Setting σ<sub>μ</sub> and σ<sub>τ</sub>
 to large values (e.g., 100) yields results close to the frequentist
 random-effects estimate. The posterior mean of μ will approach the REML
 pooled estimate when the prior is uninformative.</p>
+<p><strong>Prior sensitivity:</strong> Bayesian conclusions can depend on prior
+choices, especially with few studies or high heterogeneity. Recommended
+practice is to re-run the analysis with at least two prior specifications
+(e.g., the default σ<sub>τ</sub> = 0.5 and a more diffuse σ<sub>τ</sub> = 1 or
+2) and check whether the posterior mean and CrI change substantially. If
+results are robust across plausible priors, conclusions are more credible.
+Turner et al. (2012) provide empirically derived prior distributions for τ
+in medical research settings that can inform σ<sub>τ</sub> choice.</p>
 <p><strong>Interpretation:</strong> Credible intervals (CrI) have a direct
 probability interpretation — there is a 95 % posterior probability that μ
 lies within the reported interval, given the data and prior. This differs from

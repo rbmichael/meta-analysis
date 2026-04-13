@@ -78,6 +78,15 @@ function parseSVGDims(svgString) {
 }
 
 // Returns Promise<{blob, svgW, svgH}> or null on failure.
+//
+// scale=2: canvas is rendered at 2× CSS pixel dimensions for retina/high-DPI
+// quality. The PNG file therefore contains svgW*2 × svgH*2 pixels.
+//
+// IMPORTANT — scale does NOT affect the EMU display dimensions in the DOCX.
+// inlineImage() always uses svgW and svgH (1× CSS px), which maps correctly to
+// physical size via PX_EMU = 9525 (1 CSS px = 1/96 inch = 9525 EMU). The result
+// is a 192 dpi PNG rendered at a 96 dpi physical frame — exactly what Word and
+// PDF renderers need for retina-quality output. No downsampling occurs.
 async function svgStringToPng(svgString, scale = 2) {
   if (!svgString) return null;
   const { w: svgW, h: svgH } = parseSVGDims(svgString);
@@ -102,6 +111,16 @@ async function svgStringToPng(svgString, scale = 2) {
 // Hyperlink manager
 // ---------------------------------------------------------------------------
 
+// Deduplicating hyperlink rId registry.
+//
+// rId namespace in document.xml.rels:
+//   rId{n}      — images (1-based, assigned in imgReg build loop)
+//   rIdH{n}     — hyperlinks (assigned here; "H" infix prevents collision with images)
+//   rIdStyles, rIdSettings — fixed literal suffixes, no overlap with either above
+//
+// Deduplication: same URL submitted twice → same rIdH{n} returned both times.
+// The Map guarantees each URL appears exactly once in the rels file regardless
+// of how many times it is referenced in the document body.
 class HyperlinkManager {
   constructor() { this._map = new Map(); this._n = 0; }
   getId(url) {
@@ -157,11 +176,16 @@ function para(content, style) {
 // Convenience: paragraph with plain text.
 function paraText(text, style) { return para(run(text), style); }
 
-// Inline image paragraph. svgW/svgH are the original SVG pixel dimensions.
-// imgIdx is the 1-based document image counter (used for docPr id/name).
+// Inline image paragraph. svgW/svgH are the original SVG CSS pixel dimensions
+// (1× scale, not the 2× canvas used during rasterisation). imgIdx is the
+// 1-based document image counter (used for docPr id/name).
+//
+// PX_EMU = 9525: 1 CSS px = 1/96 inch; 1 inch = 914 400 EMU → 914400/96 = 9525.
+// MAX_CX = 5 486 400 EMU = 6 inches (standard body width for 1.25" margins on
+// US Letter). Images wider than this are scaled down proportionally.
 function inlineImage(rId, svgW, svgH, imgIdx) {
-  const MAX_CX  = 5486400; // 6 inches in EMU
-  const PX_EMU  = 9525;    // 1 CSS px at 96 dpi = 9525 EMU
+  const MAX_CX  = 5486400; // 6 inches in EMU (body width at 1.25" margins)
+  const PX_EMU  = 9525;    // 1 CSS px at 96 dpi = 914400/96 = 9525 EMU
   let cxEmu = Math.round(svgW * PX_EMU);
   let cyEmu = Math.round(svgH * PX_EMU);
   if (cxEmu > MAX_CX) { cyEmu = Math.round(cyEmu * MAX_CX / cxEmu); cxEmu = MAX_CX; }
@@ -322,33 +346,44 @@ function apaFigureDocx(figNum, title, imgs, note) {
 function docSummary(args, ctx) {
   const { m, profile, method, ciMethod, useTF, tf, mAdjusted, studies } = args;
   const k = studies.filter(d => !d.filled).length;
+  const isMHorPeto = m.isMH || m.isPeto;
   const FE_disp  = profile.transform(m.FE);
-  const RE_disp  = profile.transform(m.RE);
+  const RE_disp  = isMHorPeto ? null : profile.transform(m.RE);
   const ci       = { lb: profile.transform(m.ciLow),   ub: profile.transform(m.ciHigh) };
   const pred     = { lb: profile.transform(m.predLow), ub: profile.transform(m.predHigh) };
-  const RE_adj   = (useTF && mAdjusted) ? profile.transform(mAdjusted.RE) : null;
-  const tauCI1   = fmt(m.tauCI[0]);
-  const tauCI2   = isFinite(m.tauCI[1]) ? fmt(m.tauCI[1]) : "\u221E";
-  const H2hi     = isFinite(m.H2CI[1])  ? fmt(m.H2CI[1])  : "\u221E";
+  const RE_adj   = (!isMHorPeto && useTF && mAdjusted) ? profile.transform(mAdjusted.RE) : null;
+  const tauCI1   = fmt(m.tauCI?.[0]);
+  const tauCI2   = isFinite(m.tauCI?.[1]) ? fmt(m.tauCI[1]) : "\u221E";
+  const H2hi     = isFinite(m.H2CI?.[1])  ? fmt(m.H2CI[1])  : "\u221E";
   const ciLabel  = ciMethod === "KH" ? "Knapp-Hartung"
                  : ciMethod === "t"  ? "t-distribution"
                  : ciMethod === "PL" ? "Profile Likelihood"
                  : "Normal (z)";
+  const methodLabel = m.isMH ? "Mantel-Haenszel" : m.isPeto ? "Peto" : method;
 
-  const settings = `Effect type: ${profile.label}  \u00B7  \u03C4\u00B2 estimator: ${method}  \u00B7  CI method: ${ciLabel}  \u00B7  k\u202F=\u202F${k}${tf.length > 0 ? ` + ${tf.length} imputed (trim\u202F&\u202Ffill)` : ""}`;
+  const settings = `Effect type: ${profile.label}  \u00B7  Pooling: ${methodLabel}  \u00B7  CI method: ${ciLabel}  \u00B7  k\u202F=\u202F${k}${tf.length > 0 ? ` + ${tf.length} imputed (trim\u202F&\u202Ffill)` : ""}`;
 
   const rows = [
     [`${profile.label} \u2014 Fixed Effects (FE)`, fmt(FE_disp)],
-    [`${profile.label} \u2014 Random Effects (RE)`, fmt(RE_disp)],
+    ...(!isMHorPeto ? [[`${profile.label} \u2014 Random Effects (RE)`, fmt(RE_disp)]] : []),
     ...(RE_adj !== null ? [["RE (trim-and-fill adjusted)", fmt(RE_adj)]] : []),
     ["95% CI",                     fmtCI_APA(ci.lb, ci.ub)],
-    ["95% Prediction interval (PI)", fmtCI_APA(pred.lb, pred.ub)],
-    ["\u03C4\u00B2",              `${fmt(m.tau2)} [${tauCI1}, ${tauCI2}]`],
-    ["I\u00B2",                   `${fmt(m.I2)}% [${fmt(m.I2CI[0])}%, ${fmt(m.I2CI[1])}%]`],
-    ["H\u00B2-CI",                `[${fmt(m.H2CI[0])}, ${H2hi}]`],
+    ...(!isMHorPeto ? [["95% Prediction interval (PI)", fmtCI_APA(pred.lb, pred.ub)]] : []),
+    ...(!isMHorPeto ? [["\u03C4\u00B2", `${fmt(m.tau2)} [${tauCI1}, ${tauCI2}]`]] : []),
+    ["I\u00B2",                   `${fmt(m.I2)}% [${fmt(m.I2CI?.[0])}%, ${fmt(m.I2CI?.[1])}%]`],
+    ...(!isMHorPeto ? [["H\u00B2-CI", `[${fmt(m.H2CI?.[0])}, ${H2hi}]`]] : []),
     [`Q (df\u202F=\u202F${m.df})`, fmt(m.Q)],
-    [`${m.dist}-statistic`,       `${fmt(m.stat)}, p ${fmtP_APA(m.pval)}`],
+    ...(m.dist ? [[`${m.dist}-statistic`, `${fmt(m.stat)}, p ${fmtP_APA(m.pval)}`]] : []),
+    // Cluster-robust SE (shown when cluster IDs are present)
+    ...(m.isClustered ? [
+      [`Robust CI (C\u202F=\u202F${m.clustersUsed} clusters)`,
+       `${fmtCI_APA(profile.transform(m.robustCiLow), profile.transform(m.robustCiHigh))}  \u00B7  SE\u202F=\u202F${fmt(m.robustSE)}  \u00B7  z\u202F=\u202F${fmt(m.robustStat)}, p ${fmtP_APA(m.robustPval)}`],
+    ] : []),
   ];
+
+  const note = isMHorPeto
+    ? `Fixed-effect pooling (${methodLabel}) — RE estimate, \u03C4\u00B2, and prediction interval not applicable. FE = fixed effects; CI = confidence interval.`
+    : `FE = fixed effects; RE = random effects; CI = confidence interval; PI = prediction interval.${m.isClustered ? " Robust CI uses cluster-robust (sandwich) standard errors." : ""}`;
 
   return [
     paraText("Summary", "Heading1"),
@@ -357,7 +392,7 @@ function docSummary(args, ctx) {
       `Summary of Meta-Analysis Results (${profile.label})`,
       ["Statistic", "Value"],
       rows.map(([s, v]) => [run(s), run(v)]),
-      "FE = fixed effects; RE = random effects; CI = confidence interval; PI = prediction interval."),
+      note),
   ];
 }
 
@@ -773,7 +808,7 @@ export async function buildDocx(args) {
     forestOptions, cumForestOptions, caterpillarOptions,
     pcurve, puniform, sel, selMode, selLabel,
     gosh, goshXAxis,
-    bayesResult,
+    bayesResult, bayesReMean,
   } = args;
 
   // ── 1. Collect all SVG strings synchronously ────────────────────────────
@@ -915,10 +950,21 @@ export async function buildDocx(args) {
       if (!muImgs.length && !tauImgs.length) return [];
       const muDisp   = profile.transform(bayesResult.muMean);
       const muCIDisp = bayesResult.muCI.map(v => profile.transform(v));
-      const priorLine = `Prior: \u03BC\u202F~\u202FN(${bayesResult.mu0},\u202F${bayesResult.sigma_mu}\u00B2); \u03C4\u202F~\u202FHalfNormal(${bayesResult.sigma_tau}).`;
+      const reDisp   = isFinite(bayesReMean) ? profile.transform(bayesReMean) : NaN;
+      const priorLine = `Prior: \u03BC\u202F~\u202FN(${bayesResult.mu0},\u202F${bayesResult.sigma_mu}\u00B2)  \u00B7  \u03C4\u202F~\u202FHalfNormal(${bayesResult.sigma_tau})  \u00B7  k\u202F=\u202F${bayesResult.k} studies`;
+      const bayesRows = [
+        [`Posterior mean \u03BC`, `${fmt(muDisp)}  ·  95% CrI ${fmtCI_APA(muCIDisp[0], muCIDisp[1])}`],
+        [`Posterior mean \u03C4`, `${fmt(bayesResult.tauMean)}  ·  95% CrI ${fmtCI_APA(bayesResult.tauCI[0], bayesResult.tauCI[1])}`],
+        ...(isFinite(reDisp) ? [["Frequentist RE (comparison)", fmt(reDisp)]] : []),
+      ];
       const chunks = [
         paraText("Bayesian Meta-Analysis", "Heading1"),
-        paraText(`Posterior mean \u03BC\u202F=\u202F${fmt(muDisp)} [${fmt(muCIDisp[0])}, ${fmt(muCIDisp[1])}]  \u00B7  \u03C4\u202F=\u202F${fmt(bayesResult.tauMean)}  \u00B7  k\u202F=\u202F${bayesResult.k}`),
+        paraText(priorLine),
+        ...apaTableDocx(ctx.nextTable(),
+          `Bayesian Meta-Analysis Results (${profile.label})`,
+          ["Statistic", "Value"],
+          bayesRows.map(r => r.map(run)),
+          `CrI = credible interval. Posterior mean \u03BC on ${profile.label} scale. Frequentist RE shown for comparison only.`),
       ];
       if (muImgs.length)  chunks.push(...apaFigureDocx(ctx.nextFigure(), `Posterior distribution of pooled effect \u03BC (${profile.label})`, muImgs, priorLine));
       if (tauImgs.length) chunks.push(...apaFigureDocx(ctx.nextFigure(), "Posterior distribution of between-study standard deviation \u03C4", tauImgs, `Prior: \u03C4\u202F~\u202FHalfNormal(${bayesResult.sigma_tau}).`));

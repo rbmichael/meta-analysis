@@ -132,12 +132,35 @@ CSV column names match the input fields for each effect type (e.g. `m1,sd1,n1,m2
 
 ## Usage
 
-Open `index.html` in any modern browser. No build step, no package manager, no internet connection required after the page loads (fonts are fetched from Google Fonts on first load; all computation is local).
+> **Note:** The app uses ES modules (`type="module"` scripts). Browsers block ES module imports over the `file://` protocol due to CORS restrictions, so **double-clicking `index.html` will not work**. You must serve the files from a local web server.
 
+### Running locally
+
+**Option 1 — Python (no install):**
+```
+python -m http.server 8080
+# then open http://localhost:8080 in your browser
+```
+
+**Option 2 — Node.js:**
+```
+npx serve .
+# then open http://localhost:3000
+```
+
+**Option 3 — esbuild bundle (single-file, works offline without a server):**
+```
+npm install --save-dev esbuild
+npx esbuild js/ui.js --bundle --outfile=bundle.js --format=iife --global-name=App
+```
+Then replace the `<script type="module">` tags in `index.html` with `<script src="bundle.js"></script>`. The bundled file can be opened directly via `file://` because it contains no ES module imports.
+
+### Getting started
 ```
 git clone https://github.com/rbmichael/meta-analysis.git
 cd meta-analysis
-# open index.html in your browser
+python -m http.server 8080
+# open http://localhost:8080
 ```
 
 ---

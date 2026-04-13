@@ -589,7 +589,7 @@ function forestDrawStudyLabels(ctx, pageStudies, yPos, charW) {
   const { svg, L, T } = ctx;
   const maxChars = Math.floor((L.labelW - 8) / charW);
   pageStudies.forEach(d => {
-    const lbl = d.label.length > maxChars ? d.label.slice(0, maxChars - 1) + "\u2026" : d.label;
+    const lbl = d.label.length > maxChars ? d.label.slice(0, maxChars - 1) + "…" : d.label;
     svg.append("text")
       .attr("x", L.labelW - 8).attr("y", yPos[d.label] + 4)
       .attr("text-anchor", "end")
@@ -2154,7 +2154,7 @@ export function drawOrchardPlot(studies, m, profile) {
     .attr("text-anchor", "middle")
     .attr("fill", "var(--fg-muted)")
     .style("font-size", "11px")
-    .text(profile.label);
+    .text(profile.label + (profile.isLog ? " (log scale)" : ""));
 
   // ---- Heterogeneity annotation ----
   const hetParts = [];
@@ -2320,7 +2320,7 @@ export function drawCaterpillarPlot(studies, m, profile, options = {}) {
     .attr("text-anchor", "middle")
     .attr("fill", "var(--fg-muted)")
     .style("font-size", "11px")
-    .text(profile.label);
+    .text(profile.label + (profile.isLog ? " (log scale)" : ""));
 
   // ---- Heterogeneity + k annotation (top margin, clear of study rows) ----
   const pageNote = totalPages > 1 ? `  ·  page ${page + 1} of ${totalPages}` : "";

@@ -400,47 +400,54 @@ function sectionSummary(args) {
   const { m, profile, method, ciMethod, useTF, tf, mAdjusted, studies,
           apaFormat = false, nextTable } = args;
 
-  const k        = studies.filter(d => !d.filled).length;
-  const FE_disp  = profile.transform(m.FE);
-  const RE_disp  = profile.transform(m.RE);
-  const ci       = { lb: profile.transform(m.ciLow),   ub: profile.transform(m.ciHigh) };
-  const pred     = { lb: profile.transform(m.predLow), ub: profile.transform(m.predHigh) };
-  const RE_adj   = (useTF && mAdjusted) ? profile.transform(mAdjusted.RE) : null;
-  const ciLabel  = ciMethod === "KH" ? "Knapp-Hartung"
-                 : ciMethod === "t"  ? "t-distribution"
-                 : ciMethod === "PL" ? "Profile Likelihood"
-                 : "Normal (z)";
-  const tauCI1   = fmt(m.tauCI[0]);
-  const tauCI2   = isFinite(m.tauCI[1]) ? fmt(m.tauCI[1]) : "∞";
-  const H2hi     = isFinite(m.H2CI[1])  ? fmt(m.H2CI[1])  : "∞";
+  const k           = studies.filter(d => !d.filled).length;
+  const isMHorPeto  = m.isMH || m.isPeto;
+  const FE_disp     = profile.transform(m.FE);
+  const RE_disp     = isMHorPeto ? null : profile.transform(m.RE);
+  const ci          = { lb: profile.transform(m.ciLow),   ub: profile.transform(m.ciHigh) };
+  const pred        = { lb: profile.transform(m.predLow), ub: profile.transform(m.predHigh) };
+  const RE_adj      = (!isMHorPeto && useTF && mAdjusted) ? profile.transform(mAdjusted.RE) : null;
+  const methodLabel = m.isMH ? "Mantel-Haenszel" : m.isPeto ? "Peto" : method;
+  const ciLabel     = ciMethod === "KH" ? "Knapp-Hartung"
+                    : ciMethod === "t"  ? "t-distribution"
+                    : ciMethod === "PL" ? "Profile Likelihood"
+                    : "Normal (z)";
+  const tauCI1      = fmt(m.tauCI[0]);
+  const tauCI2      = isFinite(m.tauCI[1]) ? fmt(m.tauCI[1]) : "∞";
+  const H2hi        = isFinite(m.H2CI[1])  ? fmt(m.H2CI[1])  : "∞";
 
   if (apaFormat) {
     const settingsProse = `<p class="meta-line">
       Effect type: ${esc(profile.label)} &nbsp;·&nbsp;
-      τ² estimator: ${esc(method)} &nbsp;·&nbsp;
+      Pooling: ${esc(methodLabel)} &nbsp;·&nbsp;
       CI method: ${esc(ciLabel)} &nbsp;·&nbsp;
       k = ${k}${tf.length > 0 ? ` + ${tf.length} imputed (trim &amp; fill)` : ""}
     </p>`;
 
     const statsRows = [
       `<tr><td>${esc(profile.label)} — Fixed Effects (FE)</td><td>${fmt(FE_disp)}</td></tr>`,
-      `<tr><td>${esc(profile.label)} — Random Effects (RE)</td><td><strong>${fmt(RE_disp)}</strong></td></tr>`,
+      !isMHorPeto ? `<tr><td>${esc(profile.label)} — Random Effects (RE)</td><td><strong>${fmt(RE_disp)}</strong></td></tr>` : "",
       RE_adj !== null ? `<tr><td>RE (trim-and-fill adjusted)</td><td>${fmt(RE_adj)}</td></tr>` : "",
       `<tr><td>95% CI</td><td>${fmtCI_APA(ci.lb, ci.ub)}</td></tr>`,
-      `<tr><td>95% Prediction interval (PI)</td><td>${fmtCI_APA(pred.lb, pred.ub)}</td></tr>`,
-      `<tr><td>τ²</td><td>${fmt(m.tau2)} [${tauCI1}, ${tauCI2}]</td></tr>`,
+      !isMHorPeto ? `<tr><td>95% Prediction interval (PI)</td><td>${fmtCI_APA(pred.lb, pred.ub)}</td></tr>` : "",
+      !isMHorPeto ? `<tr><td>τ²</td><td>${fmt(m.tau2)} [${tauCI1}, ${tauCI2}]</td></tr>` : "",
       `<tr><td>I²</td><td>${fmt(m.I2)}% [${fmt(m.I2CI[0])}%, ${fmt(m.I2CI[1])}%]</td></tr>`,
-      `<tr><td>H²-CI</td><td>[${fmt(m.H2CI[0])}, ${H2hi}]</td></tr>`,
+      !isMHorPeto ? `<tr><td>H²-CI</td><td>[${fmt(m.H2CI[0])}, ${H2hi}]</td></tr>` : "",
       `<tr><td>Q (df = ${m.df})</td><td>${fmt(m.Q)}</td></tr>`,
-      `<tr><td>${esc(m.dist)}-statistic</td><td>${fmt(m.stat)}, p ${fmtP_APA(m.pval)}</td></tr>`,
+      m.dist ? `<tr><td>${esc(m.dist)}-statistic</td><td>${fmt(m.stat)}, p ${fmtP_APA(m.pval)}</td></tr>` : "",
+      m.isClustered ? `<tr><td>Robust CI (C = ${m.clustersUsed} clusters)</td><td>${fmtCI_APA(profile.transform(m.robustCiLow), profile.transform(m.robustCiHigh))} · SE = ${fmt(m.robustSE)} · z = ${fmt(m.robustStat)}, p ${fmtP_APA(m.robustPval)}</td></tr>` : "",
     ].filter(Boolean);
+
+    const tableNote = isMHorPeto
+      ? `Fixed-effect pooling (${esc(methodLabel)}) — RE estimate, τ², and prediction interval not applicable. FE = fixed effects; CI = confidence interval.`
+      : `FE = fixed effects; RE = random effects; CI = confidence interval; PI = prediction interval.${m.isClustered ? " Robust CI uses cluster-robust (sandwich) standard errors." : ""}`;
 
     const statsTable = buildTableAPA(
       nextTable(),
       `Summary of Meta-Analysis Results (${esc(profile.label)})`,
       ["Statistic", "Value"],
       statsRows,
-      "FE = fixed effects; RE = random effects; CI = confidence interval; PI = prediction interval."
+      tableNote
     );
 
     return `
@@ -455,7 +462,7 @@ function sectionSummary(args) {
     ["Setting", "Value"],
     [
       `<tr><td>Effect type</td><td>${esc(profile.label)}</td></tr>`,
-      `<tr><td>τ² estimator</td><td>${esc(method)}</td></tr>`,
+      `<tr><td>Pooling</td><td>${esc(methodLabel)}</td></tr>`,
       `<tr><td>CI method</td><td>${esc(ciLabel)}</td></tr>`,
       `<tr><td>Studies (k)</td><td>${k}${tf.length > 0 ? ` + ${tf.length} imputed (trim &amp; fill)` : ""}</td></tr>`,
     ]
@@ -465,15 +472,16 @@ function sectionSummary(args) {
     ["Statistic", "Value"],
     [
       `<tr><td>${esc(profile.label)} — Fixed Effects</td><td>${fmt(FE_disp)}</td></tr>`,
-      `<tr><td>${esc(profile.label)} — Random Effects</td><td><strong>${fmt(RE_disp)}</strong></td></tr>`,
+      !isMHorPeto ? `<tr><td>${esc(profile.label)} — Random Effects</td><td><strong>${fmt(RE_disp)}</strong></td></tr>` : "",
       RE_adj !== null ? `<tr><td>RE (trim-and-fill adjusted)</td><td>${fmt(RE_adj)}</td></tr>` : "",
       `<tr><td>95% CI</td><td>[${fmt(ci.lb)}, ${fmt(ci.ub)}]</td></tr>`,
-      `<tr><td>95% Prediction interval</td><td>[${fmt(pred.lb)}, ${fmt(pred.ub)}]</td></tr>`,
-      `<tr><td>τ²</td><td>${fmt(m.tau2)} [${tauCI1}, ${tauCI2}]</td></tr>`,
+      !isMHorPeto ? `<tr><td>95% Prediction interval</td><td>[${fmt(pred.lb)}, ${fmt(pred.ub)}]</td></tr>` : "",
+      !isMHorPeto ? `<tr><td>τ²</td><td>${fmt(m.tau2)} [${tauCI1}, ${tauCI2}]</td></tr>` : "",
       `<tr><td>I²</td><td>${fmt(m.I2)}% [${fmt(m.I2CI[0])}%, ${fmt(m.I2CI[1])}%]</td></tr>`,
-      `<tr><td>H²-CI</td><td>[${fmt(m.H2CI[0])}, ${H2hi}]</td></tr>`,
+      !isMHorPeto ? `<tr><td>H²-CI</td><td>[${fmt(m.H2CI[0])}, ${H2hi}]</td></tr>` : "",
       `<tr><td>Q (df = ${m.df})</td><td>${fmt(m.Q)}</td></tr>`,
-      `<tr><td>${esc(m.dist)}-statistic</td><td>${fmt(m.stat)}, p = ${fmtP(m.pval)}</td></tr>`,
+      m.dist ? `<tr><td>${esc(m.dist)}-statistic</td><td>${fmt(m.stat)}, p = ${fmtP(m.pval)}</td></tr>` : "",
+      m.isClustered ? `<tr><td>Robust CI (C = ${m.clustersUsed} clusters)</td><td>[${fmt(profile.transform(m.robustCiLow))}, ${fmt(profile.transform(m.robustCiHigh))}] · SE = ${fmt(m.robustSE)} · z = ${fmt(m.robustStat)}, p = ${fmtP(m.robustPval)}</td></tr>` : "",
     ].filter(Boolean),
     { style: "margin-top:14px" }
   );
@@ -1204,6 +1212,10 @@ function reportCSS() {
       border-top: 2px solid ${v.bodyColor};
       padding-top: 5px;
     }
+    /* Rule 3 (closing rule) when no tfoot present */
+    .apa-table:not(:has(tfoot)) > tbody > tr:last-child > td {
+      border-bottom: 2px solid ${v.bodyColor};
+    }
     .apa-table .imputed td { color: ${v.imputedColor}; font-style: italic; }
     .apa-table .pooled td  { color: ${v.pooledColor}; font-weight: bold; }
     .apa-table .flagged td { font-style: italic; }
@@ -1237,6 +1249,7 @@ function reportCSS() {
       .svg-wrap svg { max-width: 100%; height: auto; }
       .apa-table thead th         { border-top-color: #000; border-bottom-color: #000; color: #000; }
       .apa-table tfoot td         { border-top-color: #000; color: #444; }
+      .apa-table:not(:has(tfoot)) > tbody > tr:last-child > td { border-bottom-color: #000; }
       .apa-table td               { color: #000; }
       .apa-table .pooled td       { color: #6a5000; font-weight: bold; }
       .apa-table .imputed td      { color: #666; }

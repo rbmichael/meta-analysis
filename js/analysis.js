@@ -161,6 +161,16 @@ import { validateStudy } from "./profiles.js";
 //   Ratio of means  ROM              yi = log(m1/m2), delta-method vi
 //   MD fallback     (anything else)  Welch-style vi = sd1²/n1 + sd2²/n2
 // -----------------------------------------------------------------------------
+/**
+ * Compute per-study (yi, vi) for one study row using the named effect profile.
+ * Full parameter and return-value documentation in the block comment above.
+ * @param {Object}  s            - Raw study object; required fields vary by `type`.
+ * @param {string}  type         - Effect-type key (e.g. "SMD", "OR"); falsy = auto-detect.
+ * @param {Object}  [options={}] - Options forwarded to the profile (e.g. Hedges g flags).
+ * @returns {{ yi: number, vi: number, se: number, w: number } & Object}
+ *   Spread copy of `s` augmented with yi/vi/se/w.
+ *   Returns NaN yi/vi (w=0) on validation failure so meta() can skip the study.
+ */
 export function compute(s, type, options = {}) {
   if (!type) {
     if ("m1" in s && "m2" in s && "sd1" in s && "sd2" in s && "n1" in s && "n2" in s) {
@@ -1534,12 +1544,9 @@ export function beggTest(studies) {
   const k = valid.length;
   if (k < 3) return { tau: NaN, S: NaN, z: NaN, p: NaN };
 
-  // Adjust effects for FE pooled estimate (Begg & Mazumdar 1994, eq. 2)
-  const w0  = valid.map(s => 1 / s.vi);
-  const W   = w0.reduce((acc, b) => acc + b, 0);
-  const FE  = valid.reduce((acc, d, i) => acc + w0[i] * d.yi, 0) / W;
-  // Rank on raw yi: the FE centering and any linear offset cancel in every
-  // pairwise sign(adj_i − adj_j), so adj[i] = yi[i] is equivalent.
+  // Rank on raw yi. Begg & Mazumdar (1994, eq. 2) suggest FE-centering, but
+  // any common offset cancels in every pairwise sign(adjᵢ − adjⱼ), so
+  // adj[i] = yi[i] is equivalent and requires no weight computation.
   const adj = valid.map(s => s.yi);
 
   // Kendall S = Σ_{i<j} sign(adj_i − adj_j) · sign(vi_i − vi_j)
@@ -1879,6 +1886,15 @@ export function failSafeN(studies, alpha = 0.05, trivial = 0.1) {
 }
 
 // ================= INFLUENCE DIAGNOSTICS =================
+/**
+ * Leave-one-out influence diagnostics for a fitted meta-analysis.
+ * @param {{ yi: number, vi: number, label?: string }[]} studies
+ * @param {string} [method="DL"]       - τ² estimator (passed to meta()).
+ * @param {string} [ciMethod="normal"] - CI method (passed to meta()).
+ * @returns {{ label: string, RE: number, seRE: number, tau2: number, I2: number,
+ *             dfbeta: number, hat: number, cookD: number, r: number,
+ *             outlier: boolean, influential: boolean, deltaTau2: number }[]}
+ */
 export function influenceDiagnostics(studies, method="DL", ciMethod="normal"){
   const n = studies.length;
   if(n < 2) return [];
@@ -1931,6 +1947,7 @@ export function influenceDiagnostics(studies, method="DL", ciMethod="normal"){
 // ================= SUBGROUP =================
 export function subgroupAnalysis(studies, method="REML", ciMethod="normal") {
   const valid = studies.filter(s => s && isFinite(s.yi) && isFinite(s.vi) && s.group != null && s.group !== "");
+  const kNoGroup = studies.filter(s => s && isFinite(s.yi) && isFinite(s.vi) && (s.group == null || s.group === "")).length;
   if(valid.length < 2) return null;
   const groups = {};
   valid.forEach(s => { const g = String(s.group).trim(); if(!g) return; if(!groups[g]) groups[g]=[]; groups[g].push(s); });
@@ -1970,7 +1987,7 @@ export function subgroupAnalysis(studies, method="REML", ciMethod="normal") {
   if(!isFinite(Qbetween) || Qbetween < 0) Qbetween = 0;
   const df = groupNames.length - 1;
   const p = 1 - chiSquareCDF(Qbetween, df);
-  return { groups: results, Qbetween, df, p, k: valid.length, G: groupNames.length };
+  return { groups: results, Qbetween, df, p, k: valid.length, G: groupNames.length, kNoGroup };
 }
 
 // ================= Q-PROFILE HETEROGENEITY CIs =================
@@ -2040,7 +2057,14 @@ export function heterogeneityCIs(studies, tau2, alpha = 0.05) {
   }
 
   // --- I² and H² CIs ---
-  // σ²_typical = (k-1) / Σ(1/vi)  [FE-weight-based typical sampling variance]
+  // Convert τ²CI bounds to I²/H²CI using the τ²-based formula
+  // (Higgins & Thompson 2002, Stat Med 21:1539–1558, eq. 9 rearranged):
+  //   σ²_typical = (k−1) / Σ(1/vᵢ)   — "typical" within-study variance
+  //   I² = τ² / (τ² + σ²_typical) × 100 %
+  //   H² = τ² / σ²_typical + 1
+  // This τ²-based form is used here (not the Q-based formula used in meta())
+  // because the input is already a τ² value from the Q-profile inversion.
+  // The two formulas agree when τ² = τ²_DL; they diverge for REML/ML.
   const sumWFE = studies.reduce((acc, d) => acc + 1 / d.vi, 0);
   const sigma2 = df / sumWFE;
 
@@ -2055,6 +2079,18 @@ export function heterogeneityCIs(studies, tau2, alpha = 0.05) {
 }
 
 // ================ META-ANALYSIS ===============
+/**
+ * Fit fixed-effect and random-effects meta-analysis models.
+ * @param {{ yi: number, vi: number }[]} studies    - Per-study effect sizes and variances.
+ * @param {string} [method="DL"]       - τ² estimator: "DL","REML","PM","ML","HS","HE","SJ","GENQ","HSk","DLIT","SQGENQ","EBLUP".
+ * @param {string} [ciMethod="normal"] - CI method: "normal","t","kr","hksj".
+ * @returns {{ FE: number, seFE: number, RE: number, seRE: number,
+ *             tau2: number, Q: number, df: number, I2: number,
+ *             tauCI: number[], I2CI: number[], H2CI: number[],
+ *             predLow: number, predHigh: number,
+ *             ciLow: number, ciHigh: number,
+ *             crit: number, stat: number, pval: number, dist: string|null }}
+ */
 export function meta(studies, method="DL", ciMethod="normal") {
   const k = studies.length;
   if(k === 0){
@@ -2067,9 +2103,25 @@ export function meta(studies, method="DL", ciMethod="normal") {
   const FE = W > 0 ? studies.reduce((acc, d, i) => acc + d.yi * wFE[i], 0)/W : NaN;
   const seFE = W > 0 ? Math.sqrt(1/W) : NaN;
 
+  // Cochran's Q statistic (FE weights, Higgins & Thompson 2002, eq. 3):
+  //   Q = Σᵢ wᵢ (yᵢ − FE)²,  wᵢ = 1/vᵢ,  df = k − 1.
   let Q = 0;
   for(let i=0;i<k;i++){ Q += wFE[i]*Math.pow(studies[i].yi - FE,2); }
   const dfQ = k-1;
+
+  // I² — proportion of total variance due to between-study heterogeneity.
+  // Q-based formula (Higgins & Thompson 2002, Stat Med 21:1539–1558, eq. 9):
+  //   I² = max(0, (Q − (k−1)) / Q) × 100 %
+  // This is equivalent to τ²_DL / (τ²_DL + σ²_typical) when method = "DL",
+  // but is applied uniformly here regardless of the τ² estimator for
+  // consistency across methods.
+  //
+  // Note: metafor uses this Q-based formula for moment estimators (DL, HS, HE)
+  // but switches to the τ²-based formula I² = τ² / (τ² + σ²_typical) for
+  // likelihood estimators (REML, ML).  Using the Q-based formula throughout
+  // means I² is insensitive to the choice of τ² estimator — a deliberate
+  // trade-off.  The I²CI bounds in heterogeneityCIs() are τ²-based, so when
+  // τ² > 0 the point estimate and CI bounds may use different formulas.
   let I2 = 0;
   if(Q>dfQ && Q>0) I2 = ((Q-dfQ)/Q)*100;
   I2 = Math.max(0, Math.min(100,I2));
@@ -2246,17 +2298,17 @@ export function buildDesignMatrix(studies, moderators = []) {
 }
 
 // ================= WEIGHTED LEAST SQUARES =================
-// Fits y = X·beta by WLS with weights w = 1/(vi + tau²).
-// Called at every tau² iteration inside metaRegression, so kept lean.
-//
-// X    — k×p row-major design matrix (from buildDesignMatrix)
-// y    — k-length array of effect sizes
-// w    — k-length array of weights
-//
-// Returns:
-//   beta          — p-length coefficient vector
-//   vcov          — p×p variance-covariance matrix = (X'WX)⁻¹
-//   rankDeficient — true when X'WX is singular (results are NaN-filled)
+/**
+ * Weighted least squares: fit y = X·β with diagonal weight matrix W = diag(w).
+ * Called at every τ² iteration inside metaRegression, so kept lean.
+ * @param {number[][]} X - k×p row-major design matrix (from buildDesignMatrix).
+ * @param {number[]}   y - k-length array of effect sizes.
+ * @param {number[]}   w - k-length array of weights (typically 1/(vi + τ²)).
+ * @returns {{ beta: number[], vcov: number[][], rankDeficient: boolean }}
+ *   beta: p-length coefficient vector;
+ *   vcov: p×p variance-covariance matrix = (X'WX)⁻¹;
+ *   rankDeficient: true when X'WX is singular (all results NaN-filled).
+ */
 export function wls(X, y, w) {
   const k = X.length;
   const p = X[0].length;
@@ -2533,6 +2585,19 @@ export function tau2_metaReg(yi, vi, X, method = "REML", tol = REML_TOL, maxIter
 //   k          — number of studies used
 //   p          — number of parameters
 //   rankDeficient — true if design matrix was singular
+/**
+ * Fit a random-effects meta-regression model via WLS/REML.
+ * Full return-value documentation in the block comment above.
+ * @param {{ yi: number, vi: number, [key: string]: * }[]} studies
+ * @param {{ key: string, type: "continuous"|"categorical" }[]} [moderators=[]]
+ * @param {string} [method="REML"]     - τ² estimator: "REML","DL","PM","ML".
+ * @param {string} [ciMethod="normal"] - CI method: "normal","t","kr","hksj".
+ * @returns {{ beta: number[], se: number[], zval: number[], pval: number[],
+ *             ci: {lb: number, ub: number}[], tau2: number,
+ *             QE: number, QEp: number, QM: number, QMp: number,
+ *             I2: number, R2: number|null, vif: number[], maxVIF: number,
+ *             colNames: string[], k: number, p: number, rankDeficient: boolean }}
+ */
 export function metaRegression(studies, moderators = [], method = "REML", ciMethod = "normal") {
   // Filter to studies with finite yi and vi
   const valid = studies.filter(s => isFinite(s.yi) && isFinite(s.vi) && s.vi > 0);
@@ -2580,10 +2645,14 @@ export function metaRegression(studies, moderators = [], method = "REML", ciMeth
   const QEp  = QEdf > 0 ? 1 - chiSquareCDF(QE, QEdf) : NaN;
 
   // ---- I² (residual) ----
-  // Use tau2/(tau2 + typical_vi) so I² is consistent with tau2 (avoids I²=0
-  // when tau2>0, which happens with REML when QE≤QEdf).
-  // typical_vi = QEdf/c where c = Σw0ᵢ(1−hᵢ) is the FE-leverage-adjusted
-  // denominator (same as used in the DL estimator for regression).
+  // τ²-based formula (Higgins & Thompson 2002, eq. 9 rearranged):
+  //   I² = τ² / (τ² + σ²_typical) × 100 %
+  // where σ²_typical = QEdf / c  (leverage-adjusted typical within-study variance,
+  //   c = Σ(1/vᵢ)(1 − hᵢ), the FE hat-matrix diagonal adjustment).
+  // The τ²-based formula is used here — not the Q-based formula in meta() —
+  // because with REML the fitted τ² can be > 0 while QE ≤ QEdf (residual Q
+  // below its expectation), which would produce I² = 0 from the Q formula
+  // despite positive heterogeneity.
   const w0 = vi.map(v => 1 / v);
   const { vcov: vcov0, rankDeficient: rd0 } = wls(Xf, yi, w0);
   let I2 = 0;
@@ -2745,9 +2814,15 @@ export function metaRegression(studies, moderators = [], method = "REML", ciMeth
 //
 // Parameters:
 //   studies   — array already sorted into the desired accumulation order;
-//               each entry must have { yi, vi, label } set (post-compute)
+//               each entry must have { yi, vi, label } set (post-compute).
 //   method    — τ² estimator passed through to meta()
 //   ciMethod  — CI method passed through to meta()
+//
+// Sort responsibility: this function does NOT sort. The caller (ui.js,
+//   runAnalysis) sorts a copy of the studies array before calling here,
+//   supporting four orderings: precision_desc (most precise first),
+//   precision_asc, effect_asc, effect_desc, and "input" (table order).
+//   The chosen order determines which study is labelled "added" at each step.
 //
 // Returns an array of k objects:
 //   { k, addedLabel, RE, seRE, ciLow, ciHigh, tau2, I2 }
@@ -2889,11 +2964,10 @@ export function pCurve(studies) {
   });
 
   // ---- Step 3: find λ₃₃ (noncentrality for 33% power, two-tailed z-test) ----
-  // Solve: 1 − Φ(1.96 − λ) + Φ(−1.96 − λ) = 0.33 via bisection.
+  // Solve: 1 − Φ(Z_95 − λ) + Φ(−Z_95 − λ) = 0.33 via bisection.
   const POWER_33  = 0.33;
-  const Z_CRIT    = 1.96;
   function power(lambda) {
-    return (1 - normalCDF(Z_CRIT - lambda)) + normalCDF(-Z_CRIT - lambda);
+    return (1 - normalCDF(Z_95 - lambda)) + normalCDF(-Z_95 - lambda);
   }
   let lo33 = 0, hi33 = 10;
   for (let i = 0; i < BISECTION_ITERS; i++) {
@@ -3033,7 +3107,7 @@ export function pUniform(studies, m) {
   function qi(z, se, delta) {
     const lambda   = delta / se;
     const numer    = 1 - normalCDF(z    - lambda);
-    const denom    = Math.max(1 - normalCDF(1.96 - lambda), MIN_DENOM);
+    const denom    = Math.max(1 - normalCDF(Z_95 - lambda), MIN_DENOM);
     return numer / denom;
   }
 
@@ -3073,7 +3147,7 @@ export function pUniform(studies, m) {
   let estimate = NaN, ciLow = NaN, ciHigh = NaN;
   if (k >= 1) {
     const half    = k / 2;
-    const margin  = 1.96 * sdUnif;
+    const margin  = Z_95 * sdUnif;
     estimate = bisectDelta(half);
     ciLow    = bisectDelta(half - margin);
     ciHigh   = bisectDelta(half + margin);

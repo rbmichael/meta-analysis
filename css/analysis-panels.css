@@ -246,7 +246,7 @@
 }
 
 .sel-table td.sel-zero {
-  color: var(--danger, #c00);
+  color: var(--color-error);
   font-weight: 600;
 }
 
@@ -257,7 +257,7 @@
 }
 
 .sel-warn {
-  color: var(--danger, #c00);
+  color: var(--color-error);
 }
 
 .sel-note {

@@ -3,14 +3,19 @@
 //
 // Schema (version 1):
 //   version       — integer, bumped on breaking changes
-//   settings      — the six UI controls that govern analysis behaviour
+//   settings      — UI controls that govern analysis behaviour:
+//                     effectType, tauMethod, ciMethod, cumulativeOrder,
+//                     useTrimFill, useTFAdjusted,
+//                     bayesMu0, bayesSigmaMu, bayesSigmaTau  (Bayesian priors),
+//                     selMode, selPreset, selSides, selCuts   (selection model)
 //   moderators    — array of { name, type } objects
-//   studies       — array of { study, inputs: {col: value}, group, moderators: {name: value} }
+//   studies       — array of { study, inputs: {col: value}, group, cluster, moderators: {name: value} }
 
 export const SESSION_VERSION = 1;
 
 // Build a versioned session object from explicit plain-JS arguments.
-// settings        — { effectType, tauMethod, ciMethod, cumulativeOrder, useTrimFill, useTFAdjusted }
+// settings        — { effectType, tauMethod, ciMethod, cumulativeOrder, useTrimFill, useTFAdjusted,
+//                     bayesMu0, bayesSigmaMu, bayesSigmaTau, selMode, selPreset, selSides, selCuts }
 // savedModerators — array of { name, type }
 // studies         — array of { study, inputs, group, moderators }
 // rob             — { domains: string[], data: { [label]: { [domain]: string } } }

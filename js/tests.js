@@ -1,4 +1,5 @@
-import { round, transformEffect, chiSquareCDF, chiSquareQuantile, parseCounts, bivariateNormalCDF, normalQuantile, fCDF } from "./utils.js";
+import { round, transformEffect, chiSquareCDF, chiSquareQuantile, parseCounts, bivariateNormalCDF, normalQuantile, fCDF, normalCDF, tCDF } from "./utils.js";
+import { validateStudy } from "./profiles.js";
 import { BENCHMARKS, PUB_BIAS_BENCHMARKS, INFLUENCE_BENCHMARKS, META_REGRESSION_BENCHMARKS, VH_BENCHMARKS, MH_BENCHMARKS, CLUSTER_BENCHMARKS } from "./benchmarks.js";
 import { compute, meta, metaMH, metaPeto, robustMeta, sandwichVar, robustWlsResult, metaRegression, tau2_HS, tau2_HE, tau2_ML, tau2_SJ, beggTest, eggerTest, fatPetTest, failSafeN, heterogeneityCIs, cumulativeMeta, influenceDiagnostics, harbordTest, petersTest, deeksTest, rueckerTest, leaveOneOut, baujat, pCurve, pUniform, estimatorComparison, subgroupAnalysis, logLik, bfgs, selIntervalProbs, selIntervalIdx, selectionLogLik, SEL_CUTS_ONE_SIDED, SEL_CUTS_TWO_SIDED, veveaHedges, SELECTION_PRESETS, profileLikTau2, profileLikCI, bayesMeta } from "./analysis.js";
 import { trimFill } from "./trimfill.js";
@@ -421,6 +422,86 @@ export function runTests() {
 
   console.log(tauPass ? "\n✅ ALL TAU² UNIT TESTS PASSED" : "\n❌ SOME TAU² UNIT TESTS FAILED");
 
+  // ===== META() EDGE CASE UNIT TESTS =====
+  // Covers degenerate inputs that are not exercised by the benchmark suite:
+  //   k=1  — single study; CI/p-value degrade to NaN without crash
+  //   vi=0 — zero-variance study; MIN_VAR floor prevents division by zero
+  console.log("\n===== META() EDGE CASE UNIT TESTS =====\n");
+  let edgePass = true;
+  const { chk: echk, chkNaN: echkNaN, chkTrue: echkTrue } = makeChk(() => { edgePass = false; }, 1e-6);
+
+  // k=1: single study — point estimates defined, inference stats NaN
+  console.log("--- k=1: single study ---");
+  {
+    const s1 = [{ yi: 0.5, vi: 0.04, se: 0.2 }];
+    const m1 = meta(s1, "DL");
+    echk("FE = yi",     m1.FE,   0.5);
+    echk("RE = yi",     m1.RE,   0.5);
+    echk("tau2 = 0",    m1.tau2, 0);
+    echk("I2 = 0",      m1.I2,   0);
+    echkNaN("pval NaN",    m1.pval);
+    echkNaN("predLow NaN", m1.predLow);
+    echkTrue("ciLow finite",  isFinite(m1.ciLow));
+    echkTrue("ciHigh finite", isFinite(m1.ciHigh));
+    // heterogeneityCIs early-return path
+    echk("tauCI[0] = 0",  m1.tauCI[0], 0);
+    echkTrue("tauCI[1] NaN", !isFinite(m1.tauCI[1]));
+  }
+
+  // k=2: two studies — estimates and pval finite; prediction interval NaN (requires k≥3)
+  console.log("--- k=2: two-study meta-analysis ---");
+  {
+    // yi=[0.5,1.0], vi=[0.04,0.09]: DL τ²=0.06, FE≈0.654, RE≈0.700
+    const s2 = [{ yi: 0.5, vi: 0.04 }, { yi: 1.0, vi: 0.09 }];
+    const m2 = meta(s2, "DL");
+    echkTrue("k=2 FE finite",    isFinite(m2.FE));
+    echkTrue("k=2 RE finite",    isFinite(m2.RE));
+    echkTrue("k=2 tau2 >= 0",    m2.tau2 >= 0);
+    echkTrue("k=2 I2 >= 0",      m2.I2   >= 0);
+    echkTrue("k=2 pval finite",  isFinite(m2.pval));
+    echkTrue("k=2 ciLow finite", isFinite(m2.ciLow));
+    echk("k=2 FE ≈ 0.6538",     m2.FE,   0.6538, 1e-3);
+    echk("k=2 DL tau2 ≈ 0.060", m2.tau2, 0.060,  1e-3);
+    echkNaN("k=2 predLow NaN",   m2.predLow);   // predCrit = NaN for k < 3
+    echkNaN("k=2 predHigh NaN",  m2.predHigh);
+    // Homogeneous pair: Q=0 → tau2=0
+    const s2h = [{ yi: 0.5, vi: 0.04 }, { yi: 0.5, vi: 0.04 }];
+    const m2h = meta(s2h, "DL");
+    echk("k=2 hom tau2 = 0",    m2h.tau2, 0);
+    echk("k=2 hom Q = 0",       m2h.Q,    0);
+    echkTrue("k=2 hom pval finite", isFinite(m2h.pval));
+  }
+
+  // vi=0: validateStudy() must reject it; compute() must return NaN; meta() must not crash
+  console.log("--- vi=0: validateStudy guard ---");
+  {
+    // validateStudy rejects GENERIC study with vi=0
+    const badGeneric  = { yi: 1.0, vi: 0 };
+    const goodGeneric = { yi: 1.0, vi: 0.1 };
+    echkTrue("GENERIC vi=0 invalid",   !validateStudy(badGeneric,  "GENERIC").valid);
+    echkTrue("GENERIC vi=0.1 valid",    validateStudy(goodGeneric, "GENERIC").valid);
+
+    // compute() returns NaN for a GENERIC study with vi=0
+    const c0 = compute(badGeneric, "GENERIC");
+    echkTrue("compute GENERIC vi=0 → yi NaN", !isFinite(c0.yi));
+    echkTrue("compute GENERIC vi=0 → vi NaN", !isFinite(c0.vi));
+    echkTrue("compute GENERIC vi=0 → w = 0",  c0.w === 0);
+
+    // meta() with vi=0 study in raw array: MIN_VAR floor prevents crash
+    const s0 = [
+      { yi: 0.3, vi: 0,    se: 0 },
+      { yi: 0.5, vi: 0.04, se: 0.2 },
+      { yi: 0.7, vi: 0.09, se: 0.3 }
+    ];
+    const m0 = meta(s0, "DL");
+    echkTrue("meta vi=0 FE finite",   isFinite(m0.FE));
+    echkTrue("meta vi=0 RE finite",   isFinite(m0.RE));
+    echkTrue("meta vi=0 tau2 >= 0",   m0.tau2 >= 0);
+    echkTrue("meta vi=0 pval finite", isFinite(m0.pval));
+  }
+
+  console.log(edgePass ? "\n✅ ALL META() EDGE CASE TESTS PASSED" : "\n❌ SOME META() EDGE CASE TESTS FAILED");
+
   // ===== PUBLICATION BIAS UNIT TESTS =====
   console.log("\n===== PUBLICATION BIAS UNIT TESTS =====\n");
   let biasPass = true;
@@ -648,10 +729,11 @@ export function runTests() {
     bchkNaN("zero-cell study skipped → k=2 → NaN", deeksTest(s).intercept);
   }
 
-  // Structural: k=4 studies with spread ESS values → df=2, finite, p∈(0,1).
+  // Structural: k=4 studies with spread ESS values → df=2.
   // ESS: 11.7 (N=30), 37.3 (N=75), 99.0 (N=200), 149.3 (N=300).
-  // Wide ESS spread gives det(X'WX)≈184 vs ≈4 for equal-ESS designs,
-  // avoiding the near-singular normal equations from wi·xi²=1 identically.
+  // Expected values derived from deeksTest() — no R benchmark yet (Deeks/Ruecker
+  // have no R-verified entry; only Begg/Egger/FAT-PET/Harbord/Peters have benchmarks).
+  // intercept≈2.819, p≈0.0565 pinned here for regression detection.
   console.log("--- Deeks: structural (k=4) ---");
   {
     const s = [
@@ -662,8 +744,8 @@ export function runTests() {
     ];
     const d = deeksTest(s);
     bchkTrue("df = 2",           d.df === 2);
-    bchkTrue("intercept finite", isFinite(d.intercept));
-    bchkTrue("p ∈ (0,1)",        isFinite(d.interceptP) && d.interceptP > 0 && d.interceptP < 1);
+    bchk("intercept ≈ 2.819",    d.intercept,  2.819, 0.001);
+    bchk("p ≈ 0.0565",           d.interceptP, 0.0565, 0.001);
   }
 
   // ---- Rücker test ----
@@ -700,9 +782,10 @@ export function runTests() {
     bchkNaN("n1=0 study skipped → k=2 → NaN", rueckerTest(s).intercept);
   }
 
-  // Structural: k=4 studies with spread 1/se predictors → df=2, finite, p∈(0,1).
+  // Structural: k=4 studies with spread 1/se predictors → df=2.
   // 1/se values: 3.65 (n=5+10), 7.39 (n=25+30), 12.0 (n=60+90), 16.33 (n=100+200).
-  // Wide spread gives det(X'WX)≈364 vs ≈8.5 for the tightly clustered old design.
+  // Expected values derived from rueckerTest() — no R benchmark yet (same gap as Deeks).
+  // intercept≈-2.785, p≈0.1156 pinned here for regression detection.
   console.log("--- Rücker: structural (k=4) ---");
   {
     const s = [
@@ -712,9 +795,9 @@ export function runTests() {
       { a:80, b:20, c:60,  d:140 },
     ];
     const r = rueckerTest(s);
-    bchkTrue("df = 2",           r.df === 2);
-    bchkTrue("intercept finite", isFinite(r.intercept));
-    bchkTrue("p ∈ (0,1)",        isFinite(r.interceptP) && r.interceptP > 0 && r.interceptP < 1);
+    bchkTrue("df = 2",            r.df === 2);
+    bchk("intercept ≈ -2.785",    r.intercept,  -2.785, 0.001);
+    bchk("p ≈ 0.1156",            r.interceptP,  0.1156, 0.001);
   }
 
   console.log(biasPass ? "\n✅ ALL PUBLICATION BIAS TESTS PASSED" : "\n❌ SOME PUBLICATION BIAS TESTS FAILED");
@@ -2948,16 +3031,18 @@ export function runTests() {
     tfchk("maxIter=0 → k0=0 regardless of data", trimFill(asym, "DL", 0).length, 0);
   }
 
-  // ---- asymmetric dataset: structural + quantitative invariants ----
+  // ---- asymmetric dataset: structural + quantitative invariants (L > 0) ----
   // Dataset: yi=[0, 0.1, 1.5, 2.0, 2.5], vi=0.04 (equal weights).
   // All effects are positive → strongly right-skewed.
   //
   // Convergence (manual derivation):
-  //   Initial RE = 1.22 (equal-vi mean).  L0 → k0=2 → trim → center↓ → L0 larger → ...
-  //   Converges at center=0, k0=5 (capped to 4 available right-side studies).
+  //   Initial RE = 1.22 (equal-vi mean).  L0 → k0 grows → center shifts left → ...
+  //   Converges at center=0: 4 studies (S2–S5) lie to the right → k0=4 filled.
   //   Mirrors: each filled_yi = 2·0 − orig_yi → filled_yi + orig_yi = 0 exactly.
   //   Adjusted combined dataset is perfectly symmetric → adjusted RE = 0.
-  console.log("--- asymmetric dataset: structure and invariants ---");
+  // This is the non-trivial L>0 synthetic benchmark (self-derived, not R-verified).
+  // The R-verified L>0 benchmark is BCG k0=10 below.
+  console.log("--- asymmetric dataset: structure and invariants (L=4) ---");
   {
     const asym = [
       { label: "S1", yi: 0.0, vi: 0.04 }, { label: "S2", yi: 0.1, vi: 0.04 },
@@ -2966,8 +3051,8 @@ export function runTests() {
     ];
     const filled = trimFill(asym, "DL");
 
-    // Basic shape
-    tfchk("k0 > 0 for asymmetric data", filled.length > 0, true);
+    // Exact k0=4 (four studies right of converged center=0)
+    tfchk("k0 = 4 for asymmetric data", filled.length, 4);
 
     // Flags and metadata on every filled study
     tfchk("filled.filled=true", filled.every(f => f.filled === true), true);
@@ -2991,9 +3076,10 @@ export function runTests() {
     // Converged center = 0 for this dataset (verified manually above)
     tfchkApprox("converged center = 0", twiceCenter / 2, 0, 1e-9);
 
-    // REML method also converges with k0 > 0
+    // REML method also converges with k0 > 0 (exact count may differ from DL)
     const filledREML = trimFill(asym, "REML");
     tfchk("REML method also produces k0 > 0", filledREML.length > 0, true);
+    tfchk("REML k0 = 4", filledREML.length, 4);
 
     // Adjusted RE should be less than original RE (fill is on the negative side)
     const origRE  = meta(asym, "DL").RE;
@@ -3364,6 +3450,47 @@ export function runTests() {
     const modSpec = inferModSpec(headers, rows, ["yi", "vi"]);
 
     csvchk("no-extra modSpec.length", modSpec.length, 0);
+  }
+
+  // --- parseCSV edge cases ---
+  {
+    // 1. UTF-8 BOM (Excel default) — header must not begin with \uFEFF
+    const bomText = "\uFEFFstudy,yi,vi\nS1,0.1,0.01\n";
+    const { headers: bomH } = parseCSV(bomText);
+    csvchk("BOM: header[0]", bomH[0], "study");
+    csvchk("BOM: header[1]", bomH[1], "yi");
+
+    // 2. Quoted field with embedded comma
+    const commaText = 'study,label,yi,vi\nS1,"Smith, J.",0.1,0.01\nS2,"Doe, A.",0.2,0.02\n';
+    const { headers: ch, rows: cr } = parseCSV(commaText);
+    csvchk("embedded comma: header count", ch.length, 4);
+    csvchk("embedded comma: row[0][1]", cr[0][1], "Smith, J.");
+    csvchk("embedded comma: row[1][1]", cr[1][1], "Doe, A.");
+
+    // 3. Quoted field with embedded newline
+    const nlText = 'study,label,yi,vi\nS1,"line1\nline2",0.1,0.01\nS2,normal,0.2,0.02\n';
+    const { headers: nh, rows: nr } = parseCSV(nlText);
+    csvchk("embedded newline: header count", nh.length, 4);
+    csvchk("embedded newline: row[0][1]", nr[0][1], "line1\nline2");
+    csvchk("embedded newline: row count", nr.length, 2);
+    csvchk("embedded newline: row[1][2]", nr[1][2], "0.2");
+
+    // 4. Empty trailing rows (common in Excel exports)
+    const trailText = "study,yi,vi\nS1,0.1,0.01\nS2,0.2,0.02\n\n\n";
+    const { rows: tr } = parseCSV(trailText);
+    csvchk("trailing empty rows: row count", tr.length, 2);
+
+    // 5. CRLF line endings throughout (Windows)
+    const crlfText = "study,yi,vi\r\nS1,0.1,0.01\r\nS2,0.2,0.02\r\n";
+    const { headers: crlfH, rows: crlfR } = parseCSV(crlfText);
+    csvchk("CRLF: header count", crlfH.length, 3);
+    csvchk("CRLF: row count", crlfR.length, 2);
+    csvchk("CRLF: row[0][0]", crlfR[0][0], "S1");
+
+    // 6. Escaped double-quote inside quoted field ("")
+    const dqText = 'study,label,yi\nS1,"He said ""yes""",0.5\n';
+    const { rows: dqR } = parseCSV(dqText);
+    csvchk("escaped quote: row[0][1]", dqR[0][1], 'He said "yes"');
   }
 
   console.log(csvPass ? "\n✅ ALL CSV IMPORT TESTS PASSED" : "\n❌ SOME CSV IMPORT TESTS FAILED");
@@ -4666,3 +4793,99 @@ export function runTests() {
 
   console.log(clPass ? "\n✅ ALL CLUSTER-ROBUST SE TESTS PASSED" : "\n❌ SOME CLUSTER-ROBUST SE TESTS FAILED");
 }
+
+  // ===== normalCDF & tCDF UNIT TESTS =====
+  // normalCDF: A&S §26.2.17 rational polynomial, |ε| < 7.5×10⁻⁸.
+  // tCDF: exact regularized-beta relation; accuracy ~10⁻¹⁴.
+  //
+  // Exact tCDF values are derived from closed-form CDFs:
+  //   df=1 (Cauchy):  P(T ≤ x) = 0.5 + arctan(x) / π
+  //   df=2:           P(T ≤ x) = 0.5 + x / (2 · √(2 + x²))
+  //
+  // normalCDF reference values from scipy.stats.norm.cdf (15-digit precision).
+  console.log("\n===== normalCDF & tCDF UNIT TESTS =====\n");
+  let cdfPass = true;
+  const cdfchk = (label, got, expected, tol) => {
+    const ok = Math.abs(got - expected) < tol;
+    if (!ok) { console.error(`  FAIL ${label}: got ${got}, expected ${expected} (tol ${tol})`); cdfPass = false; }
+    else console.log(`  ok  ${label}`);
+  };
+  const cdfNaN = (label, got) => {
+    const ok = isNaN(got);
+    if (!ok) { console.error(`  FAIL ${label}: got ${got}, expected NaN`); cdfPass = false; }
+    else console.log(`  ok  ${label}`);
+  };
+
+  // ---- normalCDF: known values ----
+  // Φ(0) = 0.5 by symmetry. A&S §26.2.17 with 7-sig-fig coefficients achieves
+  // ~1.5×10⁻⁷ here (the A&S bound of 7.5×10⁻⁸ holds for x > 0 only).
+  cdfchk("Φ(0) ≈ 0.5 (within 2e-7)", normalCDF(0),    0.5,           2e-7);
+  // Φ(1.96) ≈ 0.9750021 (scipy: 0.9750021048517521)
+  cdfchk("Φ(1.96) ≈ 0.975002",      normalCDF(1.96),   0.9750021,     2e-7);
+  // Φ(-1.96): should equal 1 − Φ(1.96) by symmetry
+  cdfchk("Φ(−1.96) ≈ 0.024998",     normalCDF(-1.96),  0.0249979,     2e-7);
+  // Φ(1) ≈ 0.8413447 (scipy: 0.8413447460685429)
+  cdfchk("Φ(1) ≈ 0.841345",         normalCDF(1),      0.8413447,     2e-7);
+  // Φ(3) ≈ 0.9986501 (scipy: 0.9986501019683699)
+  cdfchk("Φ(3) ≈ 0.998650",         normalCDF(3),      0.9986501,     2e-7);
+  // Symmetry: Φ(x) + Φ(−x) = 1 for any finite x
+  cdfchk("Φ(2)+Φ(−2) = 1",         normalCDF(2) + normalCDF(-2), 1.0, 4e-7);
+  cdfchk("Φ(0.5)+Φ(−0.5) = 1",     normalCDF(0.5) + normalCDF(-0.5), 1.0, 4e-7);
+  // Tail behaviour: large |x| must not return NaN or be outside [0,1]
+  {
+    const big = normalCDF(40);
+    const ok = big >= 1 - 1e-10 && big <= 1;
+    if (!ok) { console.error(`  FAIL Φ(40) out of range: ${big}`); cdfPass = false; }
+    else console.log(`  ok  Φ(40) = 1 (underflow to 1)`);
+  }
+  {
+    const small = normalCDF(-40);
+    const ok = small >= 0 && small <= 1e-10;
+    if (!ok) { console.error(`  FAIL Φ(−40) out of range: ${small}`); cdfPass = false; }
+    else console.log(`  ok  Φ(−40) = 0 (underflow to 0)`);
+  }
+
+  // ---- tCDF: df=1 (Cauchy) closed-form P(T≤x) = 0.5 + atan(x)/π ----
+  // tol 1e-10 because regularizedBeta converges to ~1e-14.
+  cdfchk("tCDF(1, df=1) = 0.75 (Cauchy exact)",
+    tCDF(1, 1), 0.75, 1e-10);
+  cdfchk("tCDF(−1, df=1) = 0.25 (Cauchy exact)",
+    tCDF(-1, 1), 0.25, 1e-10);
+  cdfchk("tCDF(√3, df=1) = 5/6 (Cauchy exact)",
+    tCDF(Math.sqrt(3), 1), 5/6, 1e-10);
+  // tCDF(−x, df) = 1 − tCDF(x, df) — symmetry
+  cdfchk("tCDF(−√3, df=1) = 1/6 (Cauchy exact)",
+    tCDF(-Math.sqrt(3), 1), 1/6, 1e-10);
+
+  // ---- tCDF: df=2 closed-form P(T≤x) = 0.5 + x/(2·√(2+x²)) ----
+  const tcdf2 = x => 0.5 + x / (2 * Math.sqrt(2 + x * x));
+  cdfchk("tCDF(1, df=2) = 0.5 + 1/(2√3) (exact)",
+    tCDF(1, 2), tcdf2(1), 1e-10);
+  cdfchk("tCDF(2, df=2) = 0.5 + 1/√6 (exact)",
+    tCDF(2, 2), tcdf2(2), 1e-10);
+  cdfchk("tCDF(0, df=2) = 0.5 (exact)",
+    tCDF(0, 2), 0.5, 1e-10);
+  cdfchk("tCDF(−2, df=2) = 0.5 − 1/√6 (exact)",
+    tCDF(-2, 2), tcdf2(-2), 1e-10);
+
+  // ---- tCDF: table values for df=30 ----
+  // Standard t-table: t_{0.025, df=30} = 2.042 → tCDF(2.042, 30) ≈ 0.975.
+  // Tighter tol not applicable here because 2.042 is 3-decimal-place table value.
+  cdfchk("tCDF(2.042, df=30) ≈ 0.975 (t-table)",
+    tCDF(2.042, 30), 0.975, 1e-4);
+
+  // ---- tCDF: convergence to normalCDF as df → ∞ ----
+  // At df=1e6 the difference from Φ(1.96) should be < 1e-6.
+  cdfchk("tCDF(1.96, df=1e6) ≈ Φ(1.96) (large-df convergence)",
+    tCDF(1.96, 1e6), normalCDF(1.96), 1e-6);
+
+  // ---- tCDF: edge / degenerate inputs ----
+  cdfchk("tCDF(0, df=5) = 0.5 (exact symmetry)", tCDF(0, 5), 0.5, 1e-10);
+  cdfNaN("tCDF(NaN, 5) = NaN",       tCDF(NaN, 5));
+  cdfNaN("tCDF(1, NaN) = NaN",       tCDF(1, NaN));
+  cdfNaN("tCDF(1, 0) = NaN (df=0)",  tCDF(1, 0));
+  cdfNaN("tCDF(1, −1) = NaN (df<0)", tCDF(1, -1));
+  cdfNaN("tCDF(Inf, 5) = NaN",       tCDF(Infinity, 5));
+  cdfNaN("tCDF(−Inf, 5) = NaN",      tCDF(-Infinity, 5));
+
+  console.log(cdfPass ? "\n✅ ALL normalCDF & tCDF TESTS PASSED" : "\n❌ SOME normalCDF & tCDF TESTS FAILED");
