@@ -136,6 +136,20 @@ function scheduleSave() {
   _saveTimer = setTimeout(() => saveDraft(gatherSessionState()), 1200);
 }
 
+// Flush any pending debounced save immediately.
+// Called on beforeunload and visibilitychange so changes made in the last
+// 1.2 s before tab close/backgrounding are not lost.
+function flushSave() {
+  clearTimeout(_saveTimer);
+  _saveTimer = null;
+  saveDraft(gatherSessionState());
+}
+
+window.addEventListener("beforeunload", flushSave);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") flushSave();
+});
+
 // ---------------- SHARED HELPERS ----------------
 function escapeHTML(s) {
   return String(s)
