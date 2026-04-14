@@ -1661,9 +1661,9 @@ export const META_REGRESSION_BENCHMARKS = [
       beta:  [-3.5454, 0.0019, -0.0280],
       se:    [29.0956, 0.0147,  0.0102],
       tau2:  0.1108,
-      QE:    12.2907,
+      QE:    28.3251,
       QEdf:  10,
-      QEp:   0.2661,
+      QEp:   0.0016,
       QM:    12.2045,
       QMdf:  2,
       QMp:   0.0022,
@@ -1676,7 +1676,7 @@ export const META_REGRESSION_BENCHMARKS = [
       ],
       vif: [null, 1.7846, 1.7846]
     },
-    citation: "Colditz et al. (1994) dat.bcg. R-verified (metafor 4.8.0, generate.R block 42) for beta/se/tau2/QM/I2/R2/modTests. QE uses JS RE-weighted formula; metafor FE-weighted QE=28.3251 — see benchmark-data.md 'R-verification status'."
+    citation: "Colditz et al. (1994) dat.bcg. R-verified (metafor 4.8.0, generate.R block 42) for all fields including QE. QE uses FE weights (1/vi) with FE-fitted β, matching metafor convention (Thompson & Sharp 1999, Viechtbauer 2010)."
   },
 
   // ----------------------------------------------------------------
@@ -1710,9 +1710,9 @@ export const META_REGRESSION_BENCHMARKS = [
       beta:  [ 0.1024, -0.0330, 0.1598, 0.4339],
       se:    [ 0.3369,  0.0143, 0.6491, 0.3733],
       tau2:  0.1239,
-      QE:    9.5924,
+      QE:    23.8904,
       QEdf:  9,
-      QEp:   0.3845,
+      QEp:   0.0045,
       QM:    13.2389,
       QMdf:  3,
       QMp:   0.0041,
@@ -1724,7 +1724,7 @@ export const META_REGRESSION_BENCHMARKS = [
         { name: "region", QM: 2.1225, QMdf: 2, QMp: 0.3460 }
       ]
     },
-    citation: "Colditz et al. (1994) dat.bcg. R-verified (metafor 4.8.0, generate.R block 43) for beta/se/tau2/QM/I2/R2/modTests. QE uses JS RE-weighted formula; metafor FE-weighted QE=23.8904 — see benchmark-data.md 'R-verification status'."
+    citation: "Colditz et al. (1994) dat.bcg. R-verified (metafor 4.8.0, generate.R block 43) for all fields including QE. QE uses FE weights (1/vi) with FE-fitted β, matching metafor convention (Thompson & Sharp 1999, Viechtbauer 2010)."
   },
 
   // ----------------------------------------------------------------
@@ -1758,9 +1758,9 @@ export const META_REGRESSION_BENCHMARKS = [
       beta:  [ 0.1024, -0.0330, 0.1598, 0.4339],
       se:    [ 0.3478,  0.0148, 0.6701, 0.3854],
       tau2:  0.1239,
-      QE:    9.5924,
+      QE:    23.8904,
       QEdf:  9,
-      QEp:   0.3845,
+      QEp:   0.0045,
       QM:    4.1404,
       QMdf:  3,
       QMp:   0.0423,
@@ -1772,7 +1772,7 @@ export const META_REGRESSION_BENCHMARKS = [
         { name: "region", QM: 0.9957, QMdf: 2, QMp: 0.4068 }
       ]
     },
-    citation: "Colditz et al. (1994) dat.bcg. R-verified (metafor 4.8.0, generate.R block 44) for beta/se/tau2/QM/I2/R2/modTests. QE uses JS RE-weighted formula; metafor FE-weighted QE=23.8904 — see benchmark-data.md 'R-verification status'."
+    citation: "Colditz et al. (1994) dat.bcg. R-verified (metafor 4.8.0, generate.R block 44) for all fields including QE. QE uses FE weights (1/vi) with FE-fitted β, matching metafor convention. KH s² from RE residuals (Knapp & Hartung 2003, eq. 8)."
   }
 
 ];

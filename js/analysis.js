@@ -2925,10 +2925,19 @@ export function metaRegression(studies, moderators = [], method = "REML", ciMeth
   if (rankDeficient) return { ...empty, rankDeficient: true };
 
   // ---- residuals and QE ----
-  const e   = yi.map((y, i) => y - dot(Xf[i], beta));
-  const QE  = e.reduce((acc, ei, i) => acc + w[i] * ei * ei, 0);
+  // QE uses FE weights (1/vᵢ) with FE-estimated fitted values (β from FE-WLS).
+  // This matches metafor's convention and gives QE ~ χ²(k−p) under H₀: τ²=0
+  // with a null distribution that does not depend on τ².  Using RE weights or
+  // RE-fitted values is circular (τ² appears while testing τ²=0) and produces
+  // wrong p-values.  See Thompson & Sharp (1999), Viechtbauer (2010).
+  const w0  = vi.map(v => 1 / v);   // FE weights — also used below for I²
+  const { beta: betaFE, vcov: vcov0, rankDeficient: rd0 } = wls(Xf, yi, w0);
+  const QE  = !rd0 ? yi.reduce((acc, y, i) => {
+    const e = y - dot(Xf[i], betaFE);
+    return acc + w0[i] * e * e;
+  }, 0) : NaN;
   const QEdf = kf - p;
-  const QEp  = QEdf > 0 ? 1 - chiSquareCDF(QE, QEdf) : NaN;
+  const QEp  = QEdf > 0 && isFinite(QE) ? 1 - chiSquareCDF(QE, QEdf) : NaN;
 
   // ---- I² (residual) ----
   // τ²-based formula (Higgins & Thompson 2002, eq. 9 rearranged):
@@ -2939,8 +2948,7 @@ export function metaRegression(studies, moderators = [], method = "REML", ciMeth
   // because with REML the fitted τ² can be > 0 while QE ≤ QEdf (residual Q
   // below its expectation), which would produce I² = 0 from the Q formula
   // despite positive heterogeneity.
-  const w0 = vi.map(v => 1 / v);
-  const { vcov: vcov0, rankDeficient: rd0 } = wls(Xf, yi, w0);
+  // vcov0 (FE vcov) already computed above for QE; reuse here for I².
   let I2 = 0;
   if (!rd0 && QEdf > 0) {
     const c = w0.reduce((acc, wi, i) => acc + wi * (1 - wi * quadForm(vcov0, Xf[i])), 0);
@@ -2948,9 +2956,19 @@ export function metaRegression(studies, moderators = [], method = "REML", ciMeth
   }
 
   // ---- SE and CIs for beta ----
-  // s2: KH variance inflation factor (Knapp & Hartung 2003, eq. 8)
+  // s2: KH variance inflation factor (Knapp & Hartung 2003, eq. 8).
+  // Uses RE residuals (RE weights × RE-fitted values), NOT QE (which uses FE
+  // weights × FE-fitted values).  These are distinct quantities — QE tests
+  // residual heterogeneity while s2 scales the RE-WLS covariance matrix.
   const useKH = ciMethod === "KH" && kf > p && QEdf > 0;
-  const s2 = useKH ? Math.max(1, QE / QEdf) : 1;
+  let s2 = 1;
+  if (useKH) {
+    const rssRE = yi.reduce((acc, y, i) => {
+      const e = y - dot(Xf[i], beta);  // RE-WLS residuals
+      return acc + w[i] * e * e;       // RE weights
+    }, 0);
+    s2 = Math.max(1, rssRE / QEdf);
+  }
 
   let se, crit, zval, pval, ci, dist;
 
@@ -3054,7 +3072,8 @@ export function metaRegression(studies, moderators = [], method = "REML", ciMeth
   const maxVIF = vif.slice(1).reduce((mx, v) => isFinite(v) && v > mx ? v : mx, 0);
 
   const fitted      = Xf.map(xi => dot(xi, beta));
-  const stdResiduals = e.map((ei, i) => ei / Math.sqrt(vi[i] + tau2));
+  const eRE         = yi.map((y, i) => y - fitted[i]);
+  const stdResiduals = eRE.map((ei, i) => ei / Math.sqrt(vi[i] + tau2));
 
   // ---- Cluster-robust SEs for regression coefficients ----
   // Reads study.cluster from each study in rows (the filtered set used in the fit).
@@ -3082,7 +3101,7 @@ export function metaRegression(studies, moderators = [], method = "REML", ciMeth
     QM, QMdf, QMp, QMdist: useKH ? "F" : "chi2",
     modTests, vif, maxVIF,
     I2, colNames, k: kf, p, rankDeficient: false, dist,
-    fitted, residuals: e, stdResiduals,
+    fitted, residuals: eRE, stdResiduals,
     labels: rows.map(s => s.label || ""),
     studiesUsed: rows,   // exact set used in the fit (for bubble plot)
     yi, vi,    // pass through for display

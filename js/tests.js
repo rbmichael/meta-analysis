@@ -112,7 +112,7 @@ export function runTests() {
   const { chk } = makeChk(() => { regPass = false; });
 
   // 1. Intercept-only: beta[0] and tau2 must match meta() RE and tau2.
-  //    QE uses RE weights (1/(vi+tau2)), so QE < Q (which uses FE weights 1/vi).
+  //    QE uses FE weights (1/vi) with FE-fitted β — equals meta() Q statistic.
   {
     const s = [{ yi: 0, vi: 1 }, { yi: 1, vi: 1 }, { yi: 3, vi: 1 }];
     const m = meta(s, "DL");
@@ -120,7 +120,7 @@ export function runTests() {
     console.log("--- Intercept-only (k=3, DL) vs meta() ---");
     chk("beta[0] = RE",   r.beta[0], m.RE);
     chk("tau2",           r.tau2,    m.tau2);
-    chk("QE (RE-weighted)", r.QE,    2.0);   // = Σ(1/(vi+tau2))*(yi-RE)² ≠ FE Q
+    chk("QE (FE-weighted) = meta Q", r.QE, m.Q);   // intercept-only: QE_FE = Q_FE
   }
 
   // 2. Continuous moderator: perfect linear fit => slope=1, intercept=0, QE≈0.
