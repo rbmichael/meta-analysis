@@ -738,9 +738,7 @@ export function runTests() {
 
   // Structural: k=4 studies with spread ESS values → df=2.
   // ESS: 11.7 (N=30), 37.3 (N=75), 99.0 (N=200), 149.3 (N=300).
-  // Expected values derived from deeksTest() — no R benchmark yet (Deeks/Ruecker
-  // have no R-verified entry; only Begg/Egger/FAT-PET/Harbord/Peters have benchmarks).
-  // intercept≈2.819, p≈0.0565 pinned here for regression detection.
+  // R-verified via generate.R block DEEKS-1 (see PUB_BIAS_BENCHMARKS entry).
   console.log("--- Deeks: structural (k=4) ---");
   {
     const s = [
@@ -750,9 +748,11 @@ export function runTests() {
       { a:80, b:20, c:60,  d:140 },
     ];
     const d = deeksTest(s);
-    bchkTrue("df = 2",           d.df === 2);
-    bchk("intercept ≈ 2.819",    d.intercept,  2.819, 0.001);
-    bchk("p ≈ 0.0565",           d.interceptP, 0.0565, 0.001);
+    bchkTrue("df = 2",               d.df === 2);
+    bchk("intercept = 2.8191",       d.intercept,  2.8191,  0.0001);
+    bchk("interceptP = 0.0565",      d.interceptP, 0.0565,  0.0001);
+    bchk("slope = -10.6242",         d.slope,      -10.6242, 0.0001);
+    bchk("slopeP = 0.2206",          d.slopeP,     0.2206,  0.0001);
   }
 
   // ---- Rücker test ----
@@ -791,8 +791,7 @@ export function runTests() {
 
   // Structural: k=4 studies with spread 1/se predictors → df=2.
   // 1/se values: 3.65 (n=5+10), 7.39 (n=25+30), 12.0 (n=60+90), 16.33 (n=100+200).
-  // Expected values derived from rueckerTest() — no R benchmark yet (same gap as Deeks).
-  // intercept≈-2.785, p≈0.1156 pinned here for regression detection.
+  // R-verified via generate.R block RUECKER-1 (see PUB_BIAS_BENCHMARKS entry).
   console.log("--- Rücker: structural (k=4) ---");
   {
     const s = [
@@ -802,9 +801,11 @@ export function runTests() {
       { a:80, b:20, c:60,  d:140 },
     ];
     const r = rueckerTest(s);
-    bchkTrue("df = 2",            r.df === 2);
-    bchk("intercept ≈ -2.785",    r.intercept,  -2.785, 0.001);
-    bchk("p ≈ 0.1156",            r.interceptP,  0.1156, 0.001);
+    bchkTrue("df = 2",               r.df === 2);
+    bchk("intercept = -2.7853",      r.intercept,  -2.7853, 0.0001);
+    bchk("interceptP = 0.1156",      r.interceptP,  0.1156, 0.0001);
+    bchk("slope = 0.6562",           r.slope,        0.6562, 0.0001);
+    bchk("slopeP = 0.0203",          r.slopeP,       0.0203, 0.0001);
   }
 
   console.log(biasPass ? "\n✅ ALL PUBLICATION BIAS TESTS PASSED" : "\n❌ SOME PUBLICATION BIAS TESTS FAILED");
@@ -2887,6 +2888,25 @@ export function runTests() {
       const adjustedRE = meta([...studies, ...filled], tauM).RE;
       if (exp.trimFill.k0         !== undefined) pbchkTrue(`trimFill.k0 = ${exp.trimFill.k0}`, k0 === exp.trimFill.k0);
       if (exp.trimFill.adjustedRE !== undefined) pbchk("trimFill.adjustedRE", adjustedRE, exp.trimFill.adjustedRE, 0.01);
+    }
+
+    // Deeks and Rücker operate on raw {a,b,c,d} tables; studies has a/b/c/d
+    // from bm.data spread in (compute() adds yi/vi but leaves a/b/c/d intact).
+    if (exp.deeks) {
+      const dd = deeksTest(studies);
+      if (exp.deeks.intercept  !== undefined) pbchk("deeks.intercept",  dd.intercept,  exp.deeks.intercept,  0.001);
+      if (exp.deeks.interceptP !== undefined) pbchk("deeks.interceptP", dd.interceptP, exp.deeks.interceptP, 0.001);
+      if (exp.deeks.slope      !== undefined) pbchk("deeks.slope",      dd.slope,      exp.deeks.slope,      0.001);
+      if (exp.deeks.slopeP     !== undefined) pbchk("deeks.slopeP",     dd.slopeP,     exp.deeks.slopeP,     0.001);
+      if (exp.deeks.df         !== undefined) pbchkTrue(`deeks.df = ${exp.deeks.df}`, dd.df === exp.deeks.df);
+    }
+    if (exp.ruecker) {
+      const rr = rueckerTest(studies);
+      if (exp.ruecker.intercept  !== undefined) pbchk("ruecker.intercept",  rr.intercept,  exp.ruecker.intercept,  0.001);
+      if (exp.ruecker.interceptP !== undefined) pbchk("ruecker.interceptP", rr.interceptP, exp.ruecker.interceptP, 0.001);
+      if (exp.ruecker.slope      !== undefined) pbchk("ruecker.slope",      rr.slope,      exp.ruecker.slope,      0.001);
+      if (exp.ruecker.slopeP     !== undefined) pbchk("ruecker.slopeP",     rr.slopeP,     exp.ruecker.slopeP,     0.001);
+      if (exp.ruecker.df         !== undefined) pbchkTrue(`ruecker.df = ${exp.ruecker.df}`, rr.df === exp.ruecker.df);
     }
   });
 

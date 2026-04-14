@@ -1513,6 +1513,62 @@ export const PUB_BIAS_BENCHMARKS = [
       egger: { intercept: 1.917, slope: -0.286, se: 0.504, t: 3.804, df: 4, p: 0.019 },
     },
     citation: "Synthetic. Designed to produce a clearly significant Egger test (p=0.019). Verified against eggerTest() to floating-point precision."
+  },
+
+  // ----------------------------------------------------------------
+  // Synthetic 2×2 tables — Deeks test (k=4)
+  // Source: synthetic data with spread ESS values.
+  //
+  // Deeks (2005, J Clin Epidemiol 58:882-893):
+  //   WLS of log(DOR) on 1/√ESS_i with weights ESS_i; H₀: intercept = 0.
+  //   ESS:    [11.7333, 37.3333, 99.0,   149.3333]
+  //   logDOR: [-0.2513,  1.3863,  1.2040,   2.2336]
+  //   intercept = 2.8191, p = 0.0565 (marginal asymmetry, p < 0.10)
+  //
+  // R-verified: generate.R block DEEKS-1.
+  //   lm(log(DOR) ~ I(1/sqrt(ESS)), weights=ESS)
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic 2×2 tables – Deeks (k=4)",
+    type: "OR",
+    data: [
+      { a:  5, b: 15, c:  3, d:   7 },
+      { a: 20, b: 10, c: 15, d:  30 },
+      { a: 50, b: 30, c: 40, d:  80 },
+      { a: 80, b: 20, c: 60, d: 140 },
+    ],
+    tests: {
+      deeks: { intercept: 2.8191, interceptP: 0.0565, slope: -10.6242, slopeP: 0.2206, df: 2 },
+    },
+    citation: "Synthetic 2×2 tables, R-verified (base R lm(), generate.R block DEEKS-1). Deeks: WLS of log(DOR) on 1/sqrt(ESS) with weights ESS."
+  },
+
+  // ----------------------------------------------------------------
+  // Synthetic 2×2 tables — Rücker test (k=4)
+  // Source: synthetic data with spread 1/se precision values.
+  //
+  // Rücker (2008, Stat Med 27:4450-4465):
+  //   OLS of arcsine z_i on 1/se_i (uniform weights); H₀: intercept = 0.
+  //   1/se:   [3.6515, 7.3855, 12.0,  16.3299]
+  //   z_stat: [0.0,    1.9985,  4.0780,  8.6142]
+  //   intercept = -2.7853, p = 0.1156
+  //
+  // R-verified: generate.R block RUECKER-1.
+  //   lm(z ~ I(1/se))  (OLS, uniform weights)
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic 2×2 tables – Rücker (k=4)",
+    type: "OR",
+    data: [
+      { a:  2, b:  3, c:  4, d:   6 },
+      { a: 15, b: 10, c: 10, d:  20 },
+      { a: 40, b: 20, c: 30, d:  60 },
+      { a: 80, b: 20, c: 60, d: 140 },
+    ],
+    tests: {
+      ruecker: { intercept: -2.7853, interceptP: 0.1156, slope: 0.6562, slopeP: 0.0203, df: 2 },
+    },
+    citation: "Synthetic 2×2 tables, R-verified (base R lm(), generate.R block RUECKER-1). Rücker: OLS of arcsine z on 1/se (uniform weights)."
   }
 
 ];
