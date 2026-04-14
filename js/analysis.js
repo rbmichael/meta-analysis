@@ -1905,12 +1905,298 @@ export function influenceDiagnostics(studies, method="DL", ciMethod="normal"){
   // may be the KH-adjusted value (not equal to sqrt(1/W)) when ciMethod="KH".
   const W = studies.reduce((acc, d) => acc + 1 / (d.vi + full.tau2), 0);
 
+  // ---- Sufficient-statistics precomputation for moment-estimator fast paths ----
+  // Precomputing these sums once (O(k)) lets each per-study LOO τ²_loo be
+  // computed in O(1) by subtracting the removed study from each sum.
+  //
+  // DL / GENQ / HS / HSk / DLIT all use FE inverse-variance weights (wi = 1/vi):
+  //   dlSS.W_fe = Σwi      dlSS.WY  = Σwi·yi
+  //   dlSS.WY2  = Σwi·yi²  dlSS.W2  = Σwi²
+  //
+  // DL:    τ² = max(0, (Q − (k−1)) / c),  Q = WY2 − WY²/W_fe, c = W_fe − W2/W_fe
+  // GENQ:  identical to DL when default weights (aᵢ=1/vi) are used.
+  // HS:    τ² = max(0, (Q − (k−1)) / W_fe)   (c replaced by W_fe)
+  // HSk:   τ² = τ²_HS · k/(k−1)
+  // DLIT:  fixed-point DL with RE-updated weights; seeds from τ²_DL_loo.
+  //
+  // HE (unweighted moments):
+  //   heSS.SY = Σyi,  heSS.SY2 = Σyi²,  heSS.SV = Σvi
+  //   τ²_HE = max(0, (Σ(yi−ȳ)²/(k−1)) − mean(vi))
+  //
+  // SQGENQ (aᵢ = √(1/vi)):
+  //   sqSS.SA   = Σ√(1/vi),   sqSS.SAY = Σ√(1/vi)·yi,  sqSS.SAY2 = Σ√(1/vi)·yi²
+  //   sqSS.SsV  = Σ√vi,       sqSS.W_fe = Σ(1/vi)  [= sumA2 = ΣaᵢΣ]
+  //   τ²_SQGENQ from genqCore: Qa/ba/ca analogues after subtraction.
+
+  const DL_SS_METHODS = new Set(["DL", "GENQ", "HS", "HSk", "DLIT"]);
+
+  let dlSS = null;   // FE sums for DL/GENQ/HS/HSk/DLIT
+  let heSS = null;   // unweighted sums for HE
+  let sqSS = null;   // sqrt-weighted sums for SQGENQ
+
+  if (DL_SS_METHODS.has(method)) {
+    let W_fe = 0, WY = 0, WY2 = 0, W2 = 0;
+    for (const d of studies) {
+      const wi = 1 / d.vi;
+      W_fe += wi; WY += wi * d.yi; WY2 += wi * d.yi * d.yi; W2 += wi * wi;
+    }
+    dlSS = { W_fe, WY, WY2, W2 };
+  }
+
+  if (method === "HE") {
+    let SY = 0, SY2 = 0, SV = 0;
+    for (const d of studies) { SY += d.yi; SY2 += d.yi * d.yi; SV += d.vi; }
+    heSS = { SY, SY2, SV };
+  }
+
+  if (method === "SQGENQ") {
+    let SA = 0, SAY = 0, SAY2 = 0, SsV = 0, W_fe = 0;
+    for (const d of studies) {
+      const ai = Math.sqrt(1 / d.vi);
+      SA   += ai;
+      SAY  += ai * d.yi;
+      SAY2 += ai * d.yi * d.yi;
+      SsV  += Math.sqrt(d.vi);
+      W_fe += 1 / d.vi;   // sumA2 = Σaᵢ² = Σ(1/vi)
+    }
+    sqSS = { SA, SAY, SAY2, SsV, W_fe };
+  }
+
+  // REML / ML / EBLUP fast path: one-step Newton seed + warm-start refinement.
+  //
+  // At τ²_full (convergence), S(τ²_full; all k) = 0.  The LOO score at τ²_full is
+  //   S_loo_i(τ²_full) = −S_i(τ²_full)
+  // and the LOO information is
+  //   I_loo_i(τ²_full) = totalInfo − I_i(τ²_full).
+  //
+  // One-step Newton seed:
+  //   τ²_seed = max(0, τ²_full + S_i / (totalInfo − I_i))
+  // This is O(1) per study after an O(k) precompute.  Refinement from τ²_seed
+  // via Newton (inline j≠idx loops) converges in 1–3 iterations rather than the
+  // 50–100 iterations needed from the cold DL seed inside tau2_REML().
+  //
+  // Per-study contributions at τ²_full, wi = 1/(vi+τ²), hi = wi/W:
+  //   REML/EBLUP:  S_i = ri²/vi_τ² − (1−hi)/vi_τ,  I_i = (1−hi)/vi_τ²
+  //   ML:          S_i = ri²/vi_τ² − 1/vi_τ,         I_i = 1/vi_τ²
+
+  const LIKEL_METHODS = new Set(["REML", "ML", "EBLUP"]);
+  let likelSS = null;   // per-study { score_i, info_i } + totalInfo
+  if (LIKEL_METHODS.has(method) && ciMethod !== "PL") {
+    const tau2 = full.tau2;
+    const RE   = full.RE;
+    let totalInfo = 0;
+    const perStudy = studies.map(d => {
+      const vi_tau = d.vi + tau2;
+      const wi     = 1 / vi_tau;
+      const hi     = wi / W;   // W = Σ1/(vi+τ²_full) computed above the map
+      const ri     = d.yi - RE;
+      let score_i, info_i;
+      if (method === "ML") {
+        score_i = ri * ri / (vi_tau * vi_tau) - 1 / vi_tau;
+        info_i  = 1 / (vi_tau * vi_tau);
+      } else {  // REML (EBLUP aliases to REML in meta())
+        score_i = ri * ri / (vi_tau * vi_tau) - (1 - hi) / vi_tau;
+        info_i  = (1 - hi) / (vi_tau * vi_tau);
+      }
+      totalInfo += info_i;
+      return { score_i, info_i };
+    });
+    likelSS = { perStudy, totalInfo };
+  }
+
+  // Fast path: exact τ²_loo + O(k) RE_loo/seRE_loo per study, no meta(loo) call.
+  // Moment estimators: O(1) τ²_loo from sufficient-stat subtraction.
+  // REML/ML/EBLUP: O(1) seed + O(k×few_iters) Newton refinement (warm start).
+  // PL always falls back to meta(loo) (requires the full likelihood surface).
+  const FAST_PATH_METHODS = new Set([...DL_SS_METHODS, "HE", "SQGENQ", ...LIKEL_METHODS]);
+  const useFastPath = FAST_PATH_METHODS.has(method) && ciMethod !== "PL";
+
   return studies.map((study, idx) => {
-    const loo = studies.filter((_, i) => i !== idx);
-    const looMeta = meta(loo, method, ciMethod);
+    let tau2_loo, RE_loo, seRE_loo;
+
+    if (useFastPath) {
+      // ---- Moment-estimator fast path (Steps 2–3) -------------------------
+      // Compute τ²_loo in O(1) (O(k·iter) for DLIT) from precomputed sums.
+      const wi_fe = 1 / study.vi;   // FE weight of study i
+
+      if (method === "DL" || method === "GENQ") {
+        // DL formula (GENQ with default aᵢ=1/vi is identical):
+        //   τ² = max(0, (Q − (k−1)) / c),  Q = WY2 − WY²/W,  c = W − W2/W
+        const W_l   = dlSS.W_fe - wi_fe;
+        const WY_l  = dlSS.WY   - wi_fe * study.yi;
+        const WY2_l = dlSS.WY2  - wi_fe * study.yi * study.yi;
+        const W2_l  = dlSS.W2   - wi_fe * wi_fe;
+        const Q_l   = WY2_l - WY_l * WY_l / W_l;
+        const c_l   = W_l   - W2_l / W_l;
+        tau2_loo = c_l > 0 ? Math.max(0, (Q_l - (n - 2)) / c_l) : 0;
+
+      } else if (method === "HS") {
+        // HS:  τ² = max(0, (Q − (k−1)) / W_fe)  — denominator is W, not c.
+        const W_l   = dlSS.W_fe - wi_fe;
+        const WY_l  = dlSS.WY   - wi_fe * study.yi;
+        const WY2_l = dlSS.WY2  - wi_fe * study.yi * study.yi;
+        const Q_l   = WY2_l - WY_l * WY_l / W_l;
+        tau2_loo = W_l > 0 ? Math.max(0, (Q_l - (n - 2)) / W_l) : 0;
+
+      } else if (method === "HSk") {
+        // HSk:  τ²_HSk_loo = τ²_HS_loo · k_loo/(k_loo−1) = τ²_HS_loo·(n−1)/(n−2)
+        const W_l   = dlSS.W_fe - wi_fe;
+        const WY_l  = dlSS.WY   - wi_fe * study.yi;
+        const WY2_l = dlSS.WY2  - wi_fe * study.yi * study.yi;
+        const Q_l   = WY2_l - WY_l * WY_l / W_l;
+        const tau2_hs_l = W_l > 0 ? Math.max(0, (Q_l - (n - 2)) / W_l) : 0;
+        tau2_loo = n > 2 ? tau2_hs_l * (n - 1) / (n - 2) : 0;
+
+      } else if (method === "DLIT") {
+        // DLIT: seed from τ²_DL_loo (O(1)), then iterate the DLIT fixed-point
+        // formula using RE-updated weights.  No filter() allocation: index guard.
+        const W_l   = dlSS.W_fe - wi_fe;
+        const WY_l  = dlSS.WY   - wi_fe * study.yi;
+        const WY2_l = dlSS.WY2  - wi_fe * study.yi * study.yi;
+        const W2_l  = dlSS.W2   - wi_fe * wi_fe;
+        const Q_l   = WY2_l - WY_l * WY_l / W_l;
+        const c_l   = W_l   - W2_l / W_l;
+        let t2 = c_l > 0 ? Math.max(0, (Q_l - (n - 2)) / c_l) : 0;  // DL seed
+        for (let iter = 0; iter < 200; iter++) {
+          // Single O(k) pass using Q = WY2 − WY²/W identity (no second pass needed)
+          let Wit = 0, W2it = 0, Wmuit = 0, WY2it = 0;
+          for (let j = 0; j < n; j++) {
+            if (j === idx) continue;
+            const wj = 1 / (studies[j].vi + t2);
+            Wit += wj; W2it += wj * wj; Wmuit += wj * studies[j].yi;
+            WY2it += wj * studies[j].yi * studies[j].yi;
+          }
+          const Qit = WY2it - Wmuit * Wmuit / Wit;
+          const cit = Wit - W2it / Wit;
+          const newT2 = Math.max(0, (Qit - (n - 2)) / cit);
+          if (Math.abs(newT2 - t2) < REML_TOL) { t2 = newT2; break; }
+          t2 = newT2;
+        }
+        tau2_loo = t2;
+
+      } else if (method === "HE") {
+        // HE: τ² = max(0, SS/(k−1) − mean(vi))
+        //     SS = SY2 − SY²/k  (unweighted sum of squared deviations)
+        const k_l   = n - 1;
+        const SY_l  = heSS.SY  - study.yi;
+        const SY2_l = heSS.SY2 - study.yi * study.yi;
+        const SV_l  = heSS.SV  - study.vi;
+        const SS_l  = SY2_l - SY_l * SY_l / k_l;
+        tau2_loo = k_l > 1 ? Math.max(0, SS_l / (k_l - 1) - SV_l / k_l) : 0;
+
+      } else if (method === "SQGENQ") {
+        // SQGENQ: genqCore with aᵢ = √(1/vi).
+        // Sufficient-stat versions of genqCore quantities after removing study i:
+        //   A_l     = SA   − aᵢ                  [Σaⱼ for j≠i]
+        //   ya_l    = SAY_l / A_l                 [a-weighted mean]
+        //   Qa_l    = SAY2_l − SAY_l²/A_l         [a-weighted Q]
+        //   ba_l    = SsV_l − k_l / A_l           [Σaⱼvⱼ − Σaⱼ²vⱼ/A  = SsV_l − k_l/A_l]
+        //   ca_l    = A_l   − Wfe_l / A_l         [A − sumA2/A]
+        // where SsV_l = Σ√vⱼ (j≠i), Wfe_l = Σ(1/vⱼ) (j≠i), k_l = n−1.
+        const ai    = Math.sqrt(wi_fe);   // aᵢ = √(1/vi)
+        const k_l   = n - 1;
+        const A_l   = sqSS.SA   - ai;
+        const SAY_l = sqSS.SAY  - ai * study.yi;
+        const SAY2_l= sqSS.SAY2 - ai * study.yi * study.yi;
+        const SsV_l = sqSS.SsV  - Math.sqrt(study.vi);
+        const Wfe_l = sqSS.W_fe - wi_fe;
+        if (A_l <= 0) {
+          tau2_loo = 0;
+        } else {
+          const Qa_l = SAY2_l - SAY_l * SAY_l / A_l;
+          const ba_l = SsV_l  - k_l / A_l;
+          const ca_l = A_l    - Wfe_l / A_l;
+          tau2_loo = ca_l > 0 ? Math.max(0, (Qa_l - ba_l) / ca_l) : 0;
+        }
+
+      } else if (method === "REML" || method === "ML" || method === "EBLUP") {
+        // ---- REML / ML / EBLUP fast path (Step 4) --------------------------
+        // One-step Newton seed: τ²_seed = max(0, τ²_full + S_i / (totalInfo − I_i))
+        const { score_i, info_i } = likelSS.perStudy[idx];
+        const infoLoo = likelSS.totalInfo - info_i;
+        let t2 = infoLoo > 0
+          ? Math.max(0, full.tau2 + score_i / infoLoo)
+          : full.tau2;
+
+        // Newton refinement from t2 (warm start → typically 1–3 iters).
+        // Two O(k) passes per iteration: first for W/mu, then for score/info.
+        const isREML = method !== "ML";  // REML and EBLUP use (1−hi) correction
+        for (let iter = 0; iter < 100; iter++) {
+          let W_it = 0, Wmu_it = 0;
+          for (let j = 0; j < n; j++) {
+            if (j === idx) continue;
+            const wj = 1 / (studies[j].vi + t2);
+            W_it += wj; Wmu_it += wj * studies[j].yi;
+          }
+          if (W_it <= 0) break;
+          const mu_it = Wmu_it / W_it;
+          let sc = 0, inf_it = 0;
+          for (let j = 0; j < n; j++) {
+            if (j === idx) continue;
+            const vi_tau = studies[j].vi + t2;
+            const rj = studies[j].yi - mu_it;
+            if (isREML) {
+              const hj = 1 / (vi_tau * W_it);
+              sc      += rj * rj / (vi_tau * vi_tau) - (1 - hj) / vi_tau;
+              inf_it  += (1 - hj) / (vi_tau * vi_tau);
+            } else {
+              sc      += rj * rj / (vi_tau * vi_tau) - 1 / vi_tau;
+              inf_it  += 1 / (vi_tau * vi_tau);
+            }
+          }
+          if (inf_it <= 0) break;
+          let step = sc / inf_it;
+          let newT2 = t2 + step;
+          let sh = 0;
+          while (newT2 < 0 && sh++ < 20) { step /= 2; newT2 = t2 + step; }
+          newT2 = Math.max(0, newT2);
+          if (Math.abs(newT2 - t2) < REML_TOL) { t2 = newT2; break; }
+          t2 = newT2;
+        }
+        tau2_loo = t2;
+      }
+
+      // RE_loo and seRE_loo in O(k) via one RE-weighted pass at τ²_loo.
+      //   W_RE_l   = Σ_{j≠i} 1/(vj + τ²_loo)
+      //   WY_RE_l  = Σ_{j≠i} yj/(vj + τ²_loo)
+      //   WY2_RE_l = Σ_{j≠i} yj²/(vj + τ²_loo)   (needed for KH adjustment)
+      let W_RE_l = 0, WY_RE_l = 0, WY2_RE_l = 0;
+      for (let j = 0; j < n; j++) {
+        if (j === idx) continue;
+        const s  = studies[j];
+        const wj = 1 / Math.max(s.vi + tau2_loo, MIN_VAR);
+        W_RE_l   += wj;
+        WY_RE_l  += wj * s.yi;
+        WY2_RE_l += wj * s.yi * s.yi;
+      }
+
+      RE_loo = W_RE_l > 0 ? WY_RE_l / W_RE_l : NaN;
+
+      // seRE_loo depends on ciMethod:
+      //   KH:     seRE = sqrt(max(Σ w*(y-RE)², 0) / (df * W))
+      //           where Σ w*(y-RE)² = WY2 - WY²/W  (algebraic identity)
+      //           and df = k_loo - 1 = n - 2
+      //   normal / t:  seRE = 1 / sqrt(W_RE_l)  (t just changes the critical value)
+      const df_loo = n - 2;
+      if (ciMethod === "KH" && df_loo > 0) {
+        const sumKH = WY2_RE_l - WY_RE_l * WY_RE_l / W_RE_l;
+        seRE_loo = Math.sqrt(Math.max(sumKH, 0) / (df_loo * W_RE_l));
+      } else {
+        seRE_loo = W_RE_l > 0 ? Math.sqrt(1 / W_RE_l) : NaN;
+      }
+
+    } else {
+      // ---- Full meta(loo) for likelihood-based methods or ciMethod="PL" ----
+      const loo = studies.filter((_, i) => i !== idx);
+      const looMeta = meta(loo, method, ciMethod);
+      tau2_loo = looMeta.tau2;
+      RE_loo   = looMeta.RE;
+      seRE_loo = looMeta.seRE;
+    }
+
     const r = (study.yi - full.RE) / Math.sqrt(study.vi + full.tau2);
-    const dfbeta = (full.RE - looMeta.RE) / looMeta.seRE;
-    const deltaTau2 = full.tau2 - looMeta.tau2;
+    const dfbeta = (full.RE - RE_loo) / seRE_loo;
+    const deltaTau2 = full.tau2 - tau2_loo;
     const outlier = Math.abs(r) > 2;
     const influential = Math.abs(dfbeta) > 1;
 
@@ -1921,7 +2207,7 @@ export function influenceDiagnostics(studies, method="DL", ciMethod="normal"){
     // Cook's distance: D_i = (RE_full − RE_loo)² × W
     // Equivalent to (RE_full − RE_loo)² / Var(RE_full) where Var = 1/W.
     // Measures how far the pooled estimate moves (in SE units) on study removal.
-    const cookD = (full.RE - looMeta.RE) ** 2 * W;
+    const cookD = (full.RE - RE_loo) ** 2 * W;
 
     // Conventional flags (regression-analogy thresholds)
     const highLeverage = hat  > 2 / n;   // h_i > 2/k
@@ -1929,8 +2215,8 @@ export function influenceDiagnostics(studies, method="DL", ciMethod="normal"){
 
     return {
       label: study.label,
-      RE_loo: looMeta.RE,
-      tau2_loo: looMeta.tau2,
+      RE_loo,
+      tau2_loo,
       stdResidual: r,
       DFBETA: dfbeta,
       deltaTau2,
@@ -2860,19 +3146,236 @@ export function cumulativeMeta(studies, method = "DL", ciMethod = "normal") {
 export function leaveOneOut(studies, method = "DL", ciMethod = "normal", precomputedFull = null) {
   const full = precomputedFull ?? meta(studies, method, ciMethod);
   if (studies.length < 3) return { full, rows: [] };
+  const n = studies.length;
+
+  // RE weight sum — needed for REML/ML/EBLUP per-study score/info (likelSS).
+  const W_RE = studies.reduce((acc, d) => acc + 1 / (d.vi + full.tau2), 0);
+
+  // ---- Precompute sufficient statistics ----
+  // dlSS is always computed: FE Q_loo drives I² for every method,
+  // and also gives τ²_loo directly for DL-family estimators.
+  const DL_SS_METHODS = new Set(["DL", "GENQ", "HS", "HSk", "DLIT"]);
+  let dl_W_fe = 0, dl_WY = 0, dl_WY2 = 0, dl_W2 = 0;
+  for (const d of studies) {
+    const wi = 1 / d.vi;
+    dl_W_fe += wi; dl_WY += wi * d.yi; dl_WY2 += wi * d.yi * d.yi; dl_W2 += wi * wi;
+  }
+  const dlSS = { W_fe: dl_W_fe, WY: dl_WY, WY2: dl_WY2, W2: dl_W2 };
+
+  let heSS = null;
+  if (method === "HE") {
+    let SY = 0, SY2 = 0, SV = 0;
+    for (const d of studies) { SY += d.yi; SY2 += d.yi * d.yi; SV += d.vi; }
+    heSS = { SY, SY2, SV };
+  }
+
+  let sqSS = null;
+  if (method === "SQGENQ") {
+    let SA = 0, SAY = 0, SAY2 = 0, SsV = 0, W_fe = 0;
+    for (const d of studies) {
+      const ai = Math.sqrt(1 / d.vi);
+      SA += ai; SAY += ai * d.yi; SAY2 += ai * d.yi * d.yi;
+      SsV += Math.sqrt(d.vi); W_fe += 1 / d.vi;
+    }
+    sqSS = { SA, SAY, SAY2, SsV, W_fe };
+  }
+
+  const LIKEL_METHODS = new Set(["REML", "ML", "EBLUP"]);
+  let likelSS = null;
+  if (LIKEL_METHODS.has(method) && ciMethod !== "PL") {
+    const tau2 = full.tau2;
+    const RE   = full.RE;
+    let totalInfo = 0;
+    const perStudy = studies.map(d => {
+      const vi_tau = d.vi + tau2;
+      const wi     = 1 / vi_tau;
+      const hi     = wi / W_RE;
+      const ri     = d.yi - RE;
+      let score_i, info_i;
+      if (method === "ML") {
+        score_i = ri * ri / (vi_tau * vi_tau) - 1 / vi_tau;
+        info_i  = 1 / (vi_tau * vi_tau);
+      } else {
+        score_i = ri * ri / (vi_tau * vi_tau) - (1 - hi) / vi_tau;
+        info_i  = (1 - hi) / (vi_tau * vi_tau);
+      }
+      totalInfo += info_i;
+      return { score_i, info_i };
+    });
+    likelSS = { perStudy, totalInfo };
+  }
+
+  const FAST_PATH_METHODS = new Set([...DL_SS_METHODS, "HE", "SQGENQ", ...LIKEL_METHODS]);
+  const useFastPath = FAST_PATH_METHODS.has(method) && ciMethod !== "PL";
+
+  const df_loo  = n - 2;   // degrees of freedom for LOO set (k_loo - 1 = n - 2)
+  const crit_loo = (ciMethod === "KH" || ciMethod === "t") ? tCritical(df_loo) : Z_95;
+  const useT     = (ciMethod === "KH" || ciMethod === "t");
 
   const rows = studies.map((omitted, omitIdx) => {
-    const subset = studies.filter((_, i) => i !== omitIdx);
-    const m = meta(subset, method, ciMethod);
+    if (!useFastPath) {
+      // ---- Full meta(loo) fallback (PM, SJ, PL, or other non-fast methods) ----
+      const subset = studies.filter((_, i) => i !== omitIdx);
+      const m = meta(subset, method, ciMethod);
+      return {
+        label:       omitted.label ?? `Study ${omitIdx + 1}`,
+        estimate:    m.RE,
+        lb:          m.ciLow,
+        ub:          m.ciHigh,
+        tau2:        m.tau2,
+        i2:          m.I2,
+        pval:        m.pval,
+        significant: m.pval < 0.05,
+      };
+    }
+
+    // ---- Fast path (Steps 2–4) ----
+    // FE LOO sufficient stats — shared by τ²_loo (DL-family) and I²_loo (all methods).
+    const wi_fe   = 1 / omitted.vi;
+    const W_fe_l  = dlSS.W_fe - wi_fe;
+    const WY_fe_l = dlSS.WY   - wi_fe * omitted.yi;
+    const WY2_fe_l= dlSS.WY2  - wi_fe * omitted.yi * omitted.yi;
+    const W2_fe_l = dlSS.W2   - wi_fe * wi_fe;
+    const Q_fe_l  = W_fe_l > 0 ? WY2_fe_l - WY_fe_l * WY_fe_l / W_fe_l : 0;
+
+    // I²_loo: Q-based formula (matches meta() regardless of τ² estimator).
+    const i2_loo = (Q_fe_l > df_loo && Q_fe_l > 0)
+      ? Math.min(100, ((Q_fe_l - df_loo) / Q_fe_l) * 100) : 0;
+
+    // τ²_loo: method-specific O(1) or O(k·iter) computation.
+    let tau2_loo;
+
+    if (method === "DL" || method === "GENQ") {
+      const c_l = W_fe_l - W2_fe_l / W_fe_l;
+      tau2_loo = c_l > 0 ? Math.max(0, (Q_fe_l - df_loo) / c_l) : 0;
+
+    } else if (method === "HS") {
+      tau2_loo = W_fe_l > 0 ? Math.max(0, (Q_fe_l - df_loo) / W_fe_l) : 0;
+
+    } else if (method === "HSk") {
+      const tau2_hs_l = W_fe_l > 0 ? Math.max(0, (Q_fe_l - df_loo) / W_fe_l) : 0;
+      tau2_loo = df_loo > 0 ? tau2_hs_l * (n - 1) / df_loo : 0;
+
+    } else if (method === "DLIT") {
+      const c_l = W_fe_l - W2_fe_l / W_fe_l;
+      let t2 = c_l > 0 ? Math.max(0, (Q_fe_l - df_loo) / c_l) : 0;
+      for (let iter = 0; iter < 200; iter++) {
+        let Wit = 0, W2it = 0, Wmuit = 0, WY2it = 0;
+        for (let j = 0; j < n; j++) {
+          if (j === omitIdx) continue;
+          const wj = 1 / (studies[j].vi + t2);
+          Wit += wj; W2it += wj * wj; Wmuit += wj * studies[j].yi;
+          WY2it += wj * studies[j].yi * studies[j].yi;
+        }
+        const Qit = WY2it - Wmuit * Wmuit / Wit;
+        const cit = Wit - W2it / Wit;
+        const newT2 = Math.max(0, (Qit - df_loo) / cit);
+        if (Math.abs(newT2 - t2) < REML_TOL) { t2 = newT2; break; }
+        t2 = newT2;
+      }
+      tau2_loo = t2;
+
+    } else if (method === "HE") {
+      const k_l   = n - 1;
+      const SY_l  = heSS.SY  - omitted.yi;
+      const SY2_l = heSS.SY2 - omitted.yi * omitted.yi;
+      const SV_l  = heSS.SV  - omitted.vi;
+      const SS_l  = SY2_l - SY_l * SY_l / k_l;
+      tau2_loo = k_l > 1 ? Math.max(0, SS_l / (k_l - 1) - SV_l / k_l) : 0;
+
+    } else if (method === "SQGENQ") {
+      const ai    = Math.sqrt(wi_fe);
+      const k_l   = n - 1;
+      const A_l   = sqSS.SA   - ai;
+      const SAY_l = sqSS.SAY  - ai * omitted.yi;
+      const SAY2_l= sqSS.SAY2 - ai * omitted.yi * omitted.yi;
+      const SsV_l = sqSS.SsV  - Math.sqrt(omitted.vi);
+      const Wfe_l = sqSS.W_fe - wi_fe;
+      if (A_l <= 0) {
+        tau2_loo = 0;
+      } else {
+        const Qa_l = SAY2_l - SAY_l * SAY_l / A_l;
+        const ba_l = SsV_l  - k_l / A_l;
+        const ca_l = A_l    - Wfe_l / A_l;
+        tau2_loo = ca_l > 0 ? Math.max(0, (Qa_l - ba_l) / ca_l) : 0;
+      }
+
+    } else {
+      // REML / ML / EBLUP: one-step Newton seed + warm-start refinement.
+      const { score_i, info_i } = likelSS.perStudy[omitIdx];
+      const infoLoo = likelSS.totalInfo - info_i;
+      let t2 = infoLoo > 0
+        ? Math.max(0, full.tau2 + score_i / infoLoo)
+        : full.tau2;
+      const isREML = method !== "ML";
+      for (let iter = 0; iter < 100; iter++) {
+        let W_it = 0, Wmu_it = 0;
+        for (let j = 0; j < n; j++) {
+          if (j === omitIdx) continue;
+          const wj = 1 / (studies[j].vi + t2);
+          W_it += wj; Wmu_it += wj * studies[j].yi;
+        }
+        if (W_it <= 0) break;
+        const mu_it = Wmu_it / W_it;
+        let sc = 0, inf_it = 0;
+        for (let j = 0; j < n; j++) {
+          if (j === omitIdx) continue;
+          const vi_tau = studies[j].vi + t2;
+          const rj = studies[j].yi - mu_it;
+          if (isREML) {
+            const hj = 1 / (vi_tau * W_it);
+            sc     += rj * rj / (vi_tau * vi_tau) - (1 - hj) / vi_tau;
+            inf_it += (1 - hj) / (vi_tau * vi_tau);
+          } else {
+            sc     += rj * rj / (vi_tau * vi_tau) - 1 / vi_tau;
+            inf_it += 1 / (vi_tau * vi_tau);
+          }
+        }
+        if (inf_it <= 0) break;
+        let step = sc / inf_it;
+        let newT2 = t2 + step;
+        let sh = 0;
+        while (newT2 < 0 && sh++ < 20) { step /= 2; newT2 = t2 + step; }
+        newT2 = Math.max(0, newT2);
+        if (Math.abs(newT2 - t2) < REML_TOL) { t2 = newT2; break; }
+        t2 = newT2;
+      }
+      tau2_loo = t2;
+    }
+
+    // O(k) RE-weighted pass at τ²_loo → RE_loo, seRE_loo.
+    let W_RE_l = 0, WY_RE_l = 0, WY2_RE_l = 0;
+    for (let j = 0; j < n; j++) {
+      if (j === omitIdx) continue;
+      const wj = 1 / Math.max(studies[j].vi + tau2_loo, MIN_VAR);
+      W_RE_l += wj; WY_RE_l += wj * studies[j].yi; WY2_RE_l += wj * studies[j].yi * studies[j].yi;
+    }
+    const RE_loo = W_RE_l > 0 ? WY_RE_l / W_RE_l : NaN;
+    let seRE_loo;
+    if (ciMethod === "KH" && df_loo > 0) {
+      const sumKH = WY2_RE_l - WY_RE_l * WY_RE_l / W_RE_l;
+      seRE_loo = Math.sqrt(Math.max(sumKH, 0) / (df_loo * W_RE_l));
+    } else {
+      seRE_loo = W_RE_l > 0 ? Math.sqrt(1 / W_RE_l) : NaN;
+    }
+
+    // CI bounds and p-value.
+    const ciLow_loo  = RE_loo - crit_loo * seRE_loo;
+    const ciHigh_loo = RE_loo + crit_loo * seRE_loo;
+    const stat_loo   = RE_loo / seRE_loo;
+    const pval_loo   = useT
+      ? 2 * (1 - tCDF(Math.abs(stat_loo), df_loo))
+      : 2 * (1 - normalCDF(Math.abs(stat_loo)));
+
     return {
       label:       omitted.label ?? `Study ${omitIdx + 1}`,
-      estimate:    m.RE,
-      lb:          m.ciLow,
-      ub:          m.ciHigh,
-      tau2:        m.tau2,
-      i2:          m.I2,
-      pval:        m.pval,
-      significant: m.pval < 0.05,
+      estimate:    RE_loo,
+      lb:          ciLow_loo,
+      ub:          ciHigh_loo,
+      tau2:        tau2_loo,
+      i2:          i2_loo,
+      pval:        pval_loo,
+      significant: pval_loo < 0.05,
     };
   });
 

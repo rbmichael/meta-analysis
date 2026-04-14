@@ -158,8 +158,15 @@ export function runTests() {
   let intPass = true;
   const { chkField: ichk } = makeChk(() => { intPass = false; });
 
+  // Methods supported by tau2_metaReg (analysis.js). Moment-only estimators
+  // (DLIT, HSk, SQGENQ, EBLUP) and pooling-only methods (MH, Peto) have no
+  // regression variant — skip them here to avoid false failures from fallback.
+  const META_REG_METHODS = new Set(["DL","REML","PM","ML","HS","HE","SJ"]);
+
   BENCHMARKS.forEach(test => {
     const tauMethod = test.tauMethod || "REML";
+    if (!META_REG_METHODS.has(tauMethod)) return;
+
     const studies = test.data.map(d => {
       if (d.yi !== undefined && d.vi !== undefined) return { yi: d.yi, vi: d.vi, se: Math.sqrt(d.vi) };
       const s = compute(d, test.type, { hedgesCorrection: test.correction === "hedges" });
@@ -1261,6 +1268,114 @@ export function runTests() {
   }
 
   console.log(infPass ? "\n✅ ALL COOK'S D / HAT UNIT TESTS PASSED" : "\n❌ SOME COOK'S D / HAT UNIT TESTS FAILED");
+
+  // ===== FAST-PATH REGRESSION TESTS (Steps 2–4) =====
+  // Verify influenceDiagnostics() fast path matches meta(loo) directly, to
+  // within 1e-8, across five datasets.
+  // Covers moment estimators (DL, GENQ, HS, HSk, HE, SQGENQ, DLIT) and
+  // likelihood estimators (REML, ML, EBLUP) via warm-start Newton (Step 4).
+  // PM/SJ still use meta(loo) — sanity-checked at the end.
+  {
+    let fastPass = true;
+    const { chk: fchk }  = makeChk(() => { fastPass = false; }, 1e-8);
+    const { chk: fchkD } = makeChk(() => { fastPass = false; }, 1e-8);
+    console.log("\n===== FAST-PATH REGRESSION TESTS (Steps 2-4) =====\n");
+
+    const bcg = [
+      { yi: -0.8893113339202054, vi: 0.3255847650039614   },
+      { yi: -1.5853886572014306, vi: 0.19458112139814387  },
+      { yi: -1.348073148299693,  vi: 0.41536796536796533  },
+      { yi: -1.4415511900213054, vi: 0.020010031902247573 },
+      { yi: -0.2175473222112957, vi: 0.05121017216963086  },
+      { yi: -0.786115585818864,  vi: 0.0069056184559087574},
+      { yi: -1.6208982235983924, vi: 0.22301724757231517  },
+      { yi:  0.011952333523841173,vi: 0.00396157929781773 },
+      { yi: -0.4694176487381487, vi: 0.056434210463248966 },
+      { yi: -1.3713448034727846, vi: 0.07302479361302891  },
+      { yi: -0.33935882833839015,vi: 0.01241221397155972  },
+      { yi:  0.4459134005713783, vi: 0.5325058452001528   },
+      { yi: -0.017313948216879493,vi: 0.0714046596839863  },
+    ];
+
+    // Helper: run one method × dataset × ciMethod combination.
+    // chkFn is fchk or fchkD (different tolerance).
+    function checkMethod(methodName, ss, ciM, chkFn = fchk) {
+      const full = meta(ss, methodName, ciM);
+      const diag = influenceDiagnostics(ss, methodName, ciM);
+      diag.forEach((d, i) => {
+        const loo = ss.filter((_, j) => j !== i);
+        const ref = meta(loo, methodName, ciM);
+        chkFn(`[${i}] tau2_loo`, d.tau2_loo, ref.tau2);
+        chkFn(`[${i}] RE_loo`,   d.RE_loo,   ref.RE);
+        const dfbetaRef = (full.RE - ref.RE) / ref.seRE;
+        if (!isFinite(d.DFBETA) && !isFinite(dfbetaRef) && (isNaN(d.DFBETA) === isNaN(dfbetaRef))) {
+          console.log(`  [${i}] DFBETA: ${d.DFBETA}=${dfbetaRef} → PASS (non-finite match)`);
+        } else {
+          chkFn(`[${i}] DFBETA`, d.DFBETA, dfbetaRef);
+        }
+      });
+    }
+
+    const datasets = [
+      { name: "A (heterogeneous)", studies: sA },
+      { name: "B (homogeneous)",   studies: sB },
+      { name: "C (one outlier)",   studies: sC },
+      { name: "D (5-study)",       studies: sD },
+      { name: "BCG (13-study)",    studies: bcg },
+    ];
+
+    // DL + GENQ (identical) + HS + HSk: three ciMethods
+    for (const m of ["DL", "GENQ", "HS", "HSk"]) {
+      for (const { name, studies: ss } of datasets) {
+        for (const ciM of ["normal", "t", "KH"]) {
+          console.log(`--- ${m} / ${name} / "${ciM}" ---`);
+          checkMethod(m, ss, ciM);
+        }
+      }
+    }
+
+    // HE: normal only (KH degenerate on homogeneous data, same NaN handling)
+    for (const { name, studies: ss } of datasets) {
+      console.log(`--- HE / ${name} / "normal" ---`);
+      checkMethod("HE", ss, "normal");
+    }
+
+    // SQGENQ: normal only
+    for (const { name, studies: ss } of datasets) {
+      console.log(`--- SQGENQ / ${name} / "normal" ---`);
+      checkMethod("SQGENQ", ss, "normal");
+    }
+
+    // DLIT: normal only (iterative; tolerance same as DL since seeded from DL)
+    for (const { name, studies: ss } of datasets) {
+      console.log(`--- DLIT / ${name} / "normal" ---`);
+      checkMethod("DLIT", ss, "normal", fchkD);
+    }
+
+    // REML / ML / EBLUP: normal + KH (Step 4: warm-start Newton, exact to REML_TOL)
+    for (const m of ["REML", "ML", "EBLUP"]) {
+      for (const { name, studies: ss } of datasets) {
+        for (const ciM of ["normal", "KH"]) {
+          console.log(`--- ${m} / ${name} / "${ciM}" ---`);
+          checkMethod(m, ss, ciM);
+        }
+      }
+    }
+
+    // Remaining methods (PM, SJ) still use meta(loo) — sanity check
+    console.log("--- PM non-fast-path sanity ---");
+    const diagPM = influenceDiagnostics(sA, "PM");
+    diagPM.forEach((d, i) => {
+      const loo = sA.filter((_, j) => j !== i);
+      const ref = meta(loo, "PM");
+      fchk(`PM [${i}] tau2_loo`, d.tau2_loo, ref.tau2);
+      fchk(`PM [${i}] RE_loo`,   d.RE_loo,   ref.RE);
+    });
+
+    console.log(fastPass
+      ? "\n✅ ALL MOMENT-ESTIMATOR FAST-PATH REGRESSION TESTS PASSED"
+      : "\n❌ SOME MOMENT-ESTIMATOR FAST-PATH REGRESSION TESTS FAILED");
+  }
 
   // ===== ROM UNIT TESTS =====
   //
@@ -2865,6 +2980,77 @@ export function runTests() {
     // Omitting the most extreme study (C: yi=−1.2) shifts pooled estimate toward 0
     const looC = loo.rows.find(row => row.label === "C");
     uchk("omit extreme study shifts RE toward 0", looC.estimate > loo.full.RE, true);
+  }
+
+  // ---- leaveOneOut fast-path regression tests (Step 5) ----
+  // Verify that the fast path (moment + likelihood estimators) exactly matches
+  // calling meta(loo) directly for every output field: estimate, tau2, i2,
+  // lb, ub, pval.  Tolerance 1e-8 across all methods.
+  {
+    let looFPPass = true;
+    const { chk: lpchk } = makeChk(() => { looFPPass = false; }, 1e-8);
+    console.log("--- leaveOneOut fast-path regression ---");
+
+    const bcg13 = [
+      { yi: -0.8893113339202054, vi: 0.3255847650039614    },
+      { yi: -1.5853886572014306, vi: 0.19458112139814387   },
+      { yi: -1.348073148299693,  vi: 0.41536796536796533   },
+      { yi: -1.4415511900213054, vi: 0.020010031902247573  },
+      { yi: -0.2175473222112957, vi: 0.05121017216963086   },
+      { yi: -0.786115585818864,  vi: 0.0069056184559087574 },
+      { yi: -1.6208982235983924, vi: 0.22301724757231517   },
+      { yi:  0.011952333523841173, vi: 0.00396157929781773 },
+      { yi: -0.4694176487381487, vi: 0.056434210463248966  },
+      { yi: -1.3713448034727846, vi: 0.07302479361302891   },
+      { yi: -0.33935882833839015, vi: 0.01241221397155972  },
+      { yi:  0.4459134005713783, vi: 0.5325058452001528    },
+      { yi: -0.017313948216879493, vi: 0.0714046596839863  },
+    ];
+
+    const looDatasets = [
+      { name: "A",   ss: sA    },
+      { name: "D",   ss: sD    },
+      { name: "BCG", ss: bcg13 },
+    ];
+
+    const fastMethods = ["DL","GENQ","HS","HSk","HE","SQGENQ","DLIT","REML","ML","EBLUP"];
+
+    for (const { name, ss } of looDatasets) {
+      for (const m of fastMethods) {
+        for (const ciM of ["normal", "KH"]) {
+          const result = leaveOneOut(ss, m, ciM);
+          result.rows.forEach((row, i) => {
+            const loo = ss.filter((_, j) => j !== i);
+            const ref = meta(loo, m, ciM);
+            lpchk(`${m}/${name}/${ciM}[${i}] estimate`, row.estimate, ref.RE);
+            lpchk(`${m}/${name}/${ciM}[${i}] tau2`,     row.tau2,     ref.tau2);
+            lpchk(`${m}/${name}/${ciM}[${i}] i2`,       row.i2,       ref.I2);
+            lpchk(`${m}/${name}/${ciM}[${i}] lb`,       row.lb,       ref.ciLow);
+            lpchk(`${m}/${name}/${ciM}[${i}] ub`,       row.ub,       ref.ciHigh);
+            // pval: skip when both non-finite (degenerate KH/homogeneous case)
+            if (!isFinite(row.pval) && !isFinite(ref.pval)) {
+              /* both degenerate — pass */
+            } else {
+              lpchk(`${m}/${name}/${ciM}[${i}] pval`, row.pval, ref.pval);
+            }
+          });
+        }
+      }
+    }
+
+    // PM (meta(loo) fallback) — sanity: output should still match meta(loo)
+    const looRefPM = leaveOneOut(sA, "PM");
+    looRefPM.rows.forEach((row, i) => {
+      const loo = sA.filter((_, j) => j !== i);
+      const ref = meta(loo, "PM");
+      lpchk(`PM fallback[${i}] estimate`, row.estimate, ref.RE);
+      lpchk(`PM fallback[${i}] tau2`,     row.tau2,     ref.tau2);
+    });
+
+    if (!looFPPass) utilPass = false;
+    console.log(looFPPass
+      ? "  leaveOneOut fast-path: PASS"
+      : "  leaveOneOut fast-path: FAIL");
   }
 
   // ---- baujat ----
