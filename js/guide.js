@@ -1440,8 +1440,8 @@ smooth posterior summaries without MCMC.</p>
   <li>Posterior mean and 95 % credible interval for τ (heterogeneity SD)</li>
   <li>Plots of the marginal posterior densities for μ and τ</li>
 </ul>
-<p><strong>Prior inputs</strong> are accessible under <em>More settings → Bayesian
-priors</em> in the Input tab.</p>
+<p><strong>Prior inputs</strong> are accessible in the
+<em>Bayesian Meta-Analysis</em> section of the Results tab.</p>
 <p><strong>Diffuse priors:</strong> Setting σ<sub>μ</sub> and σ<sub>τ</sub>
 to large values (e.g., 100) yields results close to the frequentist
 random-effects estimate. The posterior mean of μ will approach the REML
