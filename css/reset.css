@@ -161,4 +161,17 @@ html::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); 
   #appLayout {
     padding: 60px 10px 20px;
   }
+
+  /* Touch-friendly tap targets */
+  button {
+    min-height: 44px;
+  }
+
+  /* Exempt small utility buttons from the min-height */
+  .help-btn,
+  .remove-btn,
+  .clear-btn,
+  .rob-domain-tag button {
+    min-height: auto;
+  }
 }

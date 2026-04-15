@@ -387,3 +387,38 @@ input[type="file"]::file-selector-button:hover {
 #addStudy {
   padding: 6px 14px;
 }
+
+/* ---- Row pending deletion (undo window active) ---- */
+tr.row-pending-delete td,
+tr.row-pending-delete input {
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+/* ---- Drag-to-reorder ---- */
+#inputTable tbody tr[draggable="true"] {
+  cursor: grab;
+}
+
+#inputTable tbody tr[draggable="true"]:active {
+  cursor: grabbing;
+}
+
+/* Inputs, buttons, and selects inside a draggable row keep their native cursor */
+#inputTable tbody tr[draggable="true"] input,
+#inputTable tbody tr[draggable="true"] button,
+#inputTable tbody tr[draggable="true"] select {
+  cursor: auto;
+}
+
+#inputTable tbody tr.row-dragging {
+  opacity: 0.4;
+}
+
+#inputTable tbody tr.drag-over-top {
+  box-shadow: inset 0 2px 0 0 var(--accent);
+}
+
+#inputTable tbody tr.drag-over-bottom {
+  box-shadow: inset 0 -2px 0 0 var(--accent);
+}

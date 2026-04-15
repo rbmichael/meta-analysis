@@ -775,6 +775,80 @@ unknown.</p>
         ],
       },
 
+      {
+        id: "guide-rve",
+        title: "RVE (Robust Variance Estimation)",
+        body: `<p><strong>Robust Variance Estimation (RVE)</strong> is a stand-alone pooled-effect
+estimator for dependent effect sizes, proposed by Hedges, Tipton & Johnson (2010).
+Unlike the cluster-robust SE (which post-hoc adjusts the standard error of a
+conventional RE estimate), RVE uses a different WLS estimator whose weights are
+derived from a working covariance model that explicitly represents the assumed
+within-cluster correlation.</p>
+
+<h4>Working covariance model</h4>
+<p>For cluster <em>i</em> containing studies <em>j</em>, the working variance-covariance
+matrix <strong>V</strong><sub>i</sub> has:</p>
+<ul>
+  <li>Diagonal: V<sub>i</sub>[j,j] = v<sub>j</sub> (sampling variance of study j)</li>
+  <li>Off-diagonal: V<sub>i</sub>[j,k] = ρ · √(v<sub>j</sub> · v<sub>k</sub>)</li>
+</ul>
+<p>where ρ is the assumed within-cluster correlation (default 0.80, adjustable in
+the RVE settings row). This is the <em>correlated effects</em> working model of
+Hedges et al. (2010). The estimator is consistent regardless of whether this
+model is correctly specified — the sandwich variance corrects for misspecification.</p>
+
+<h4>Point estimator</h4>
+<p>The Sherman-Morrison matrix-inversion identity gives a closed-form expression
+for V<sub>i</sub><sup>−1</sup>. For cluster <em>i</em> with <em>k</em><sub>i</sub>
+studies, define c<sub>i</sub> = (1 − ρ) + ρk<sub>i</sub> and w<sub>j</sub> = 1/v<sub>j</sub>:</p>
+<pre>A<sub>i</sub> = (W<sub>i</sub> − ρS<sub>i</sub>²/c<sub>i</sub>) / (1 − ρ)     W<sub>i</sub> = Σw<sub>j</sub>,  S<sub>i</sub> = Σ√w<sub>j</sub>
+b<sub>i</sub> = (WY<sub>i</sub> − ρS<sub>i</sub>·SY<sub>i</sub>/c<sub>i</sub>) / (1 − ρ)  WY<sub>i</sub> = Σw<sub>j</sub>y<sub>j</sub>, SY<sub>i</sub> = Σ√w<sub>j</sub>·y<sub>j</sub>
+β̂  = Σb<sub>i</sub> / ΣA<sub>i</sub></pre>
+<p>For meta-regression with <em>p</em> predictors, A<sub>i</sub> and b<sub>i</sub>
+generalise to a p×p matrix and p-vector respectively, solved by matrix inversion.</p>
+
+<h4>Sandwich (CR1) standard error</h4>
+<p>The residual score for cluster <em>i</em> is
+g<sub>i</sub> = (WXE<sub>i</sub> − ρ · S<sub>i</sub> · SE<sub>i</sub> / c<sub>i</sub>) / (1 − ρ),
+where e<sub>j</sub> = y<sub>j</sub> − β̂ are residuals. The CR1 sandwich variance is:</p>
+<pre>V̂(β̂) = m/(m−1) · Σg<sub>i</sub>² / (ΣA<sub>i</sub>)²</pre>
+<p>df = m − p; a t-distribution with these degrees of freedom is used for the CI.</p>
+
+<h4>Comparison with cluster-robust SE</h4>
+<table style="font-size:0.82rem;border-collapse:collapse;margin:8px 0">
+  <tr><th style="text-align:left;padding:3px 10px 3px 0;border-bottom:1px solid var(--border)">Feature</th>
+      <th style="padding:3px 10px;border-bottom:1px solid var(--border)">Cluster-robust SE</th>
+      <th style="padding:3px 10px;border-bottom:1px solid var(--border)">RVE</th></tr>
+  <tr><td style="padding:3px 10px 3px 0">Point estimate</td>
+      <td style="padding:3px 10px">RE model (τ²-weighted)</td>
+      <td style="padding:3px 10px">WLS with ρ-working weights</td></tr>
+  <tr><td style="padding:3px 10px 3px 0">SE</td>
+      <td style="padding:3px 10px">Post-hoc sandwich on RE</td>
+      <td style="padding:3px 10px">Sandwich on RVE estimator</td></tr>
+  <tr><td style="padding:3px 10px 3px 0">τ² required?</td>
+      <td style="padding:3px 10px">Yes (REML/DL etc.)</td>
+      <td style="padding:3px 10px">No</td></tr>
+  <tr><td style="padding:3px 10px 3px 0">User parameter</td>
+      <td style="padding:3px 10px">τ² method</td>
+      <td style="padding:3px 10px">ρ (working correlation)</td></tr>
+</table>
+
+<h4>Sensitivity to ρ</h4>
+<p>The point estimate and SE both depend on ρ. Hedges et al. (2010) recommend ρ = 0.80
+as a conservative default. Run the analysis at several values (e.g. 0.20, 0.50, 0.80)
+to assess sensitivity; if conclusions are stable across ρ, the choice is not critical.</p>
+
+<h4>Meta-regression with RVE</h4>
+<p>When moderator columns are present, RVE extends to meta-regression: the design
+matrix X includes an intercept and all active moderators, and df = m − p where
+p is the total number of coefficients. The results panel shows per-coefficient
+estimates, SEs, t-statistics, and p-values under the RVE model.</p>`,
+        citations: [
+          "Hedges, L. V., Tipton, E., & Johnson, M. C. (2010). Robust variance estimation in meta-regression with dependent effect size estimates. <em>Research Synthesis Methods, 1</em>(1), 39–65.",
+          "Tipton, E. (2015). Small sample adjustments for robust variance estimation with meta-regression. <em>Psychological Methods, 20</em>(3), 375–393.",
+        ],
+      },
+
     ],
   },
 
@@ -940,6 +1014,25 @@ FAT: H₀: β₁ = 0. PET: the intercept β₀ at SEᵢ = 0.</p>
 Closely related to Egger's test but uses unstandardised effect sizes.</p>`,
         citations: [
           "Stanley, T. D., & Doucouliagos, H. (2014). Meta-regression approximations to reduce publication selection bias. <em>Research Synthesis Methods, 5</em>(1), 60–78.",
+        ],
+      },
+
+      {
+        id: "guide-petpeese",
+        title: "PET-PEESE",
+        body: `<p>PET-PEESE is a two-stage bias-correction procedure. Stage 1 runs FAT-PET
+(WLS of effect on SE). If FAT is significant (p &lt; .10), Stage 2 — PEESE —
+replaces the predictor with variance (vᵢ):</p>
+<p><strong>PEESE formula:</strong><br>
+<code>yᵢ = γ₀ + γ₁·vᵢ + εᵢ</code> (WLS, weights = 1/vᵢ)<br>
+The intercept γ₀ is the bias-corrected effect at infinite precision (vᵢ → 0).</p>
+<p>Regressing on variance rather than SE reduces over-correction in moderately
+biased literatures. When FAT is non-significant (usePeese = false), the PET
+intercept is reported instead. The funnel plot shows the FAT-PET line (orange)
+and PEESE curve (green); the active estimate is highlighted.</p>`,
+        citations: [
+          "Stanley, T. D., & Doucouliagos, H. (2014). Meta-regression approximations to reduce publication selection bias. <em>Research Synthesis Methods, 5</em>(1), 60–78.",
+          "Stanley, T. D. (2008). Meta-regression methods for detecting and estimating empirical effects in the presence of publication selection. <em>Oxford Bulletin of Economics and Statistics, 70</em>(1), 103–127.",
         ],
       },
 
@@ -1531,6 +1624,7 @@ export const HELP_TO_GUIDE = {
   "bias.trimfill":    "guide-trimfill",
   "bias.fsn":         "guide-fsn",
   "bias.fatpet":      "guide-fatpet",
+  "bias.petpeese":    "guide-petpeese",
   "bias.harbord":     "guide-egger",
   "bias.peters":      "guide-egger",
   "bias.deeks":       "guide-egger",

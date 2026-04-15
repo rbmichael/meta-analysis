@@ -19,8 +19,12 @@
   })();
 </script>
 <link rel="stylesheet" href="css/styles.css">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-<script src="https://d3js.org/d3.v7.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"
+        integrity="sha512-XMVd28F1oH/O71fzwBnV7HucLxVwtxf26XV8P4wPk26EDxuGZ91N8bsOttmnomcCD3CS5ZMRL50H0GgOHvegtg=="
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"
+        integrity="sha512-vc58qvvBdrDR4etbxMdlTt4GBQk1qjvyORR2nrsPsFPyrs+/u5c3+1Ct6upOgdZoIl7eq6k3a1UPDSNAQi/32A=="
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script type="module" src="js/analysis.js"></script>
 <script type="module" src="js/trimfill.js"></script>
 <script type="module" src="js/plots.js"></script>
@@ -106,60 +110,159 @@
         <summary>More settings</summary>
         <div class="advanced-settings-body">
 
-          <!-- τ² method, CI method -->
-          <div class="settings-row">
-            <label>
-              <span>τ² estimator<button class="help-btn" data-help-select="tauMethod" data-help-prefix="tau." title="Help">?</button></span>
-              <select id="tauMethod">
-                <option value="REML" selected>REML</option>
-                <option value="DL">DerSimonian-Laird (DL)</option>
-                <option value="PM">Paule-Mandel (PM)</option>
-                <option value="ML">Maximum Likelihood (ML)</option>
-                <option value="HS">Hunter-Schmidt (HS)</option>
-                <option value="HE">Hedges (HE)</option>
-                <option value="SJ">Sidik-Jonkman (SJ)</option>
-                <option value="GENQ">Generalized Q (GENQ)</option>
-                <option value="DLIT">Iterated DL (DLIT)</option>
-                <option value="HSk">Hunter-Schmidt corrected (HSk)</option>
-                <option value="SQGENQ">Square-root GENQ (SQGENQ)</option>
-                <option value="EBLUP">EBLUP (= REML)</option>
-                <option value="MH">Mantel-Haenszel (MH)</option>
-                <option value="Peto">Peto OR</option>
-              </select>
-            </label>
+          <!-- Three-group settings bar -->
+          <div class="settings-groups">
 
-            <label>
-              <span>CI method<button class="help-btn" data-help-select="ciMethod" data-help-prefix="ci." title="Help">?</button></span>
-              <select id="ciMethod">
-                <option value="normal">Normal CI</option>
-                <option value="KH">Knapp-Hartung</option>
-                <option value="t">t-distribution</option>
-                <option value="PL">Profile Likelihood</option>
-              </select>
-            </label>
+            <!-- Group: Model -->
+            <div class="settings-group">
+              <span class="settings-group-label">Model</span>
+              <div class="settings-group-controls">
+                <label>
+                  <span>τ² estimator<button class="help-btn" data-help-select="tauMethod" data-help-prefix="tau." title="Help">?</button></span>
+                  <select id="tauMethod">
+                    <option value="REML" selected>REML</option>
+                    <option value="DL">DerSimonian-Laird (DL)</option>
+                    <option value="PM">Paule-Mandel (PM)</option>
+                    <option value="ML">Maximum Likelihood (ML)</option>
+                    <option value="HS">Hunter-Schmidt (HS)</option>
+                    <option value="HE">Hedges (HE)</option>
+                    <option value="SJ">Sidik-Jonkman (SJ)</option>
+                    <option value="GENQ">Generalized Q (GENQ)</option>
+                    <option value="DLIT">Iterated DL (DLIT)</option>
+                    <option value="HSk">Hunter-Schmidt corrected (HSk)</option>
+                    <option value="SQGENQ">Square-root GENQ (SQGENQ)</option>
+                    <option value="EBLUP">EBLUP (= REML)</option>
+                    <option value="MH">Mantel-Haenszel (MH)</option>
+                    <option value="Peto">Peto OR</option>
+                  </select>
+                </label>
+                <label>
+                  <span>CI method<button class="help-btn" data-help-select="ciMethod" data-help-prefix="ci." title="Help">?</button></span>
+                  <select id="ciMethod">
+                    <option value="normal">Normal CI</option>
+                    <option value="KH">Knapp-Hartung</option>
+                    <option value="t">t-distribution</option>
+                    <option value="PL">Profile Likelihood</option>
+                  </select>
+                </label>
+                <label>
+                  <span>CI width<button class="help-btn" data-help="ci.width" title="Help">?</button></span>
+                  <select id="ciLevel">
+                    <option value="90">90%</option>
+                    <option value="95" selected>95%</option>
+                    <option value="99">99%</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+
+            <div class="settings-group-sep" role="separator"></div>
+
+            <!-- Group: Analysis -->
+            <div class="settings-group">
+              <span class="settings-group-label">Analysis</span>
+              <div class="settings-group-controls">
+                <label>
+                  <span>Cumulative order<button class="help-btn" data-help-select="cumulativeOrder" data-help-prefix="cumorder." title="Help">?</button></span>
+                  <select id="cumulativeOrder">
+                    <option value="input">Input order</option>
+                    <option value="precision_desc">Most precise first</option>
+                    <option value="precision_asc">Least precise first</option>
+                    <option value="effect_asc">Effect ascending</option>
+                    <option value="effect_desc">Effect descending</option>
+                  </select>
+                </label>
+                <label class="inline">
+                  <input type="checkbox" id="useTrimFill">
+                  Trim-and-fill<button class="help-btn" data-help="bias.trimfill" title="Help">?</button>
+                </label>
+                <label class="inline">
+                  <input type="checkbox" id="useTFAdjusted">
+                  Show adjusted RE<button class="help-btn" data-help="bias.trimfill" title="Help">?</button>
+                </label>
+              </div>
+            </div>
+
+            <div class="settings-group-sep" role="separator"></div>
+
+            <!-- Group: Display -->
+            <div class="settings-group">
+              <span class="settings-group-label">Display</span>
+              <div class="settings-group-controls">
+                <label>
+                  <span>Forest style</span>
+                  <select id="forestTheme">
+                    <option value="default">App default</option>
+                    <option value="cochrane">Cochrane</option>
+                    <option value="jama">JAMA</option>
+                    <option value="bw">Black &amp; white</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+
+          </div><!-- /.settings-groups -->
+
+          <!-- Bayesian priors subsection -->
+          <div class="settings-subsection">
+            <span class="settings-group-label">Bayesian priors</span>
+            <div class="settings-subsection-controls">
+              <label class="inline">μ prior mean (μ₀):
+                <input type="number" id="bayesMu0" value="0" step="0.1">
+              </label>
+              <label class="inline">μ prior SD (σ_μ):
+                <input type="number" id="bayesSigmaMu" value="1" min="0.01" step="0.1">
+              </label>
+              <label class="inline">τ prior scale (σ_τ):
+                <input type="number" id="bayesSigmaTau" value="0.5" min="0.01" step="0.05">
+              </label>
+              <button id="bayesUpdate" class="run-btn">Update Bayes</button>
+            </div>
           </div>
 
-          <!-- Cumulative order, trim-and-fill -->
-          <div class="settings-row">
-            <label>
-              <span>Cumulative order<button class="help-btn" data-help-select="cumulativeOrder" data-help-prefix="cumorder." title="Help">?</button></span>
-              <select id="cumulativeOrder">
-                <option value="input">Input order</option>
-                <option value="precision_desc">Most precise first</option>
-                <option value="precision_asc">Least precise first</option>
-                <option value="effect_asc">Effect ascending</option>
-                <option value="effect_desc">Effect descending</option>
-              </select>
-            </label>
+          <!-- RVE (Robust Variance Estimation) subsection -->
+          <div class="settings-subsection" id="rveSettings" style="display:none">
+            <span class="settings-group-label">RVE (robust variance estimation)</span>
+            <div class="settings-subsection-controls">
+              <label class="inline">Assumed within-cluster correlation ρ:
+                <input type="range" id="rveRho" min="0" max="0.999" step="0.01" value="0.8" style="width:120px;vertical-align:middle">
+                <span id="rveRhoDisplay" style="font-variant-numeric:tabular-nums;min-width:2.5em;display:inline-block">0.80</span>
+              </label>
+            </div>
+          </div>
 
-            <label class="inline">
-              <input type="checkbox" id="useTrimFill">
-              Apply trim-and-fill<button class="help-btn" data-help="bias.trimfill" title="Help">?</button>
-            </label>
-            <label class="inline">
-              <input type="checkbox" id="useTFAdjusted">
-              Show adjusted RE after trim-and-fill<button class="help-btn" data-help="bias.trimfill" title="Help">?</button>
-            </label>
+          <!-- Selection model (Vevea-Hedges) subsection -->
+          <div class="settings-subsection">
+            <span class="settings-group-label">Selection model</span>
+            <div class="settings-subsection-controls">
+              <label class="inline">Mode:
+                <select id="selMode">
+                  <option value="sensitivity">Sensitivity (fixed ω)</option>
+                  <option value="mle">MLE (estimate weights)</option>
+                </select>
+              </label>
+              <label class="inline" id="selPresetRow">Weight scheme:
+                <select id="selPreset">
+                  <option value="mild1">Mild (1-sided)</option>
+                  <option value="moderate1">Moderate (1-sided)</option>
+                  <option value="severe1">Severe (1-sided)</option>
+                  <option value="mild2">Mild (2-sided)</option>
+                  <option value="moderate2">Moderate (2-sided)</option>
+                  <option value="custom">Custom…</option>
+                </select>
+              </label>
+              <span id="selCustomRow">
+                <label class="inline">Sides:
+                  <select id="selSides">
+                    <option value="1">1-sided</option>
+                    <option value="2">2-sided</option>
+                  </select>
+                </label>
+                <label class="inline">Cutpoints:
+                  <input type="text" id="selCuts" value="0.025, 0.05, 0.10, 0.25, 0.50, 1.0" style="width:220px">
+                </label>
+              </span>
+            </div>
           </div>
 
           <!-- Moderator manager -->
@@ -199,6 +302,7 @@
       <div id="inputTableToolbar">
         <button id="addStudy">Add Study</button>
         <button id="run">Run</button>
+        <button class="help-btn" data-help="keyboard.shortcuts" title="Keyboard shortcuts">⌨</button>
       </div>
       </div><!-- /#inputControls -->
 
@@ -275,15 +379,6 @@
                   <option value="Infinity">All</option>
                 </select>
               </label>
-              <label class="forest-theme-label" title="Visual style preset for the forest plot">
-                Style
-                <select id="forestTheme">
-                  <option value="default">App default</option>
-                  <option value="cochrane">Cochrane</option>
-                  <option value="jama">JAMA</option>
-                  <option value="bw">Black &amp; white</option>
-                </select>
-              </label>
             </div>
             <svg id="forestPlot" width="900" height="420"></svg>
             <div id="forestNav"></div>
@@ -325,19 +420,6 @@
         <details class="results-section" id="bayesSection" style="display:none">
           <summary class="results-section-header">Bayesian Meta-Analysis</summary>
 
-          <div style="margin-bottom:8px">
-            <label class="inline">μ prior mean (μ₀):
-              <input type="number" id="bayesMu0" value="0" step="0.1">
-            </label>
-            <label class="inline">μ prior SD (σ_μ):
-              <input type="number" id="bayesSigmaMu" value="1" min="0.01" step="0.1">
-            </label>
-            <label class="inline">τ prior scale (σ_τ):
-              <input type="number" id="bayesSigmaTau" value="0.5" min="0.01" step="0.05">
-            </label>
-            <button id="bayesUpdate" class="run-btn">Update</button>
-          </div>
-
           <div id="bayesSummary"></div>
 
           <div class="plot-block">
@@ -361,6 +443,14 @@
             <p id="bayesGridWarning" style="display:none;color:var(--color-warning);font-size:0.82em;margin-top:4px">
               ⚠ Posterior did not fully decay at the grid boundary — the τ credible interval upper bound may be underestimated. Consider increasing σ_τ.
             </p>
+          </div>
+        </details>
+
+        <!-- ── RVE section (collapsed, shown when cluster IDs present) ── -->
+        <details class="results-section" id="rveSection" style="display:none">
+          <summary class="results-section-header">RVE (Robust Variance Estimation)</summary>
+          <div class="results-section-body">
+            <div id="rveSummary"></div>
           </div>
         </details>
 
@@ -525,35 +615,6 @@
         <!-- ── Section 9: Selection Model (Vevea-Hedges) ── -->
         <details class="results-section" id="selectionModelSection">
           <summary class="results-section-header">Selection Model (Vevea-Hedges)</summary>
-          <div class="sel-model-controls">
-            <label class="inline">Mode:
-              <select id="selMode">
-                <option value="sensitivity">Sensitivity (fixed ω)</option>
-                <option value="mle">MLE (estimate weights)</option>
-              </select>
-            </label>
-            <label class="inline" id="selPresetRow">Weight scheme:
-              <select id="selPreset">
-                <option value="mild1">Mild (1-sided)</option>
-                <option value="moderate1">Moderate (1-sided)</option>
-                <option value="severe1">Severe (1-sided)</option>
-                <option value="mild2">Mild (2-sided)</option>
-                <option value="moderate2">Moderate (2-sided)</option>
-                <option value="custom">Custom…</option>
-              </select>
-            </label>
-            <span id="selCustomRow">
-              <label class="inline">Sides:
-                <select id="selSides">
-                  <option value="1">1-sided</option>
-                  <option value="2">2-sided</option>
-                </select>
-              </label>
-              <label class="inline">Cutpoints:
-                <input type="text" id="selCuts" value="0.025, 0.05, 0.10, 0.25, 0.50, 1.0" style="width:220px">
-              </label>
-            </span>
-          </div>
           <div id="selectionModelPanel"></div>
         </details>
 
@@ -580,6 +641,7 @@
           <div id="goshProgress" hidden>
             <progress id="goshProgressBar" value="0" max="100" style="width:100%"></progress>
             <span id="goshProgressLabel"></span>
+            <button id="goshCancel" style="margin-left:8px">Cancel</button>
           </div>
           <div class="plot-block" id="goshPlotBlock" style="display:none">
             <p class="plot-label">GOSH plot</p>
@@ -850,6 +912,16 @@
   </div>
   <p id="helpPopoverBody" class="help-popover-body"></p>
   <a id="helpPopoverGuideLink" class="help-popover-guide-link" href="#" style="display:none">More detail →</a>
+</div>
+
+<nav id="jumpPill" hidden aria-label="Jump to section">
+  <!-- buttons populated by ui.js after each run -->
+</nav>
+
+<div id="undoToast" hidden>
+  <span id="undoToastLabel">Study removed</span>
+  <button id="undoToastBtn">Undo</button>
+  <div class="undo-toast-bar"></div>
 </div>
 
 </body>

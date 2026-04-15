@@ -1,7 +1,7 @@
-import { round, transformEffect, chiSquareCDF, chiSquareQuantile, parseCounts, bivariateNormalCDF, normalQuantile, fCDF, normalCDF, tCDF } from "./utils.js";
+import { round, transformEffect, chiSquareCDF, chiSquareQuantile, parseCounts, bivariateNormalCDF, normalQuantile, tCritical, fCDF, normalCDF, tCDF } from "./utils.js";
 import { validateStudy } from "./profiles.js";
-import { BENCHMARKS, PUB_BIAS_BENCHMARKS, INFLUENCE_BENCHMARKS, META_REGRESSION_BENCHMARKS, VH_BENCHMARKS, MH_BENCHMARKS, CLUSTER_BENCHMARKS } from "./benchmarks.js";
-import { compute, meta, metaMH, metaPeto, robustMeta, sandwichVar, robustWlsResult, metaRegression, tau2_HS, tau2_HE, tau2_ML, tau2_SJ, beggTest, eggerTest, fatPetTest, failSafeN, heterogeneityCIs, cumulativeMeta, influenceDiagnostics, harbordTest, petersTest, deeksTest, rueckerTest, leaveOneOut, baujat, pCurve, pUniform, estimatorComparison, subgroupAnalysis, logLik, bfgs, selIntervalProbs, selIntervalIdx, selectionLogLik, SEL_CUTS_ONE_SIDED, SEL_CUTS_TWO_SIDED, veveaHedges, SELECTION_PRESETS, profileLikTau2, profileLikCI, bayesMeta } from "./analysis.js";
+import { BENCHMARKS, PUB_BIAS_BENCHMARKS, INFLUENCE_BENCHMARKS, META_REGRESSION_BENCHMARKS, VH_BENCHMARKS, MH_BENCHMARKS, CLUSTER_BENCHMARKS, RVE_BENCHMARKS } from "./benchmarks.js";
+import { compute, meta, metaMH, metaPeto, robustMeta, sandwichVar, robustWlsResult, metaRegression, tau2_HS, tau2_HE, tau2_ML, tau2_SJ, beggTest, eggerTest, fatPetTest, petPeeseTest, failSafeN, heterogeneityCIs, cumulativeMeta, influenceDiagnostics, harbordTest, petersTest, deeksTest, rueckerTest, leaveOneOut, baujat, pCurve, pUniform, estimatorComparison, subgroupAnalysis, logLik, bfgs, selIntervalProbs, selIntervalIdx, selectionLogLik, SEL_CUTS_ONE_SIDED, SEL_CUTS_TWO_SIDED, veveaHedges, SELECTION_PRESETS, profileLikTau2, profileLikCI, bayesMeta, rvePooled } from "./analysis.js";
 import { trimFill } from "./trimfill.js";
 import { parseCSV } from "./csv.js";
 import { goshCompute, GOSH_MAX_ENUM_K, GOSH_MAX_K, GOSH_DEFAULT_MAX_SUBSETS } from "./gosh.js";
@@ -1270,12 +1270,12 @@ export function runTests() {
 
   console.log(infPass ? "\n✅ ALL COOK'S D / HAT UNIT TESTS PASSED" : "\n❌ SOME COOK'S D / HAT UNIT TESTS FAILED");
 
-  // ===== FAST-PATH REGRESSION TESTS (Steps 2–4) =====
+  // ===== FAST-PATH REGRESSION TESTS (Steps 2–4 + PM/SJ warm-start) =====
   // Verify influenceDiagnostics() fast path matches meta(loo) directly, to
   // within 1e-8, across five datasets.
-  // Covers moment estimators (DL, GENQ, HS, HSk, HE, SQGENQ, DLIT) and
-  // likelihood estimators (REML, ML, EBLUP) via warm-start Newton (Step 4).
-  // PM/SJ still use meta(loo) — sanity-checked at the end.
+  // Covers moment estimators (DL, GENQ, HS, HSk, HE, SQGENQ, DLIT),
+  // likelihood estimators (REML, ML, EBLUP) via warm-start Newton (Step 4),
+  // and iterative estimators PM/SJ via warm-start fixed-point iteration.
   {
     let fastPass = true;
     const { chk: fchk }  = makeChk(() => { fastPass = false; }, 1e-8);
@@ -1363,15 +1363,15 @@ export function runTests() {
       }
     }
 
-    // Remaining methods (PM, SJ) still use meta(loo) — sanity check
-    console.log("--- PM non-fast-path sanity ---");
-    const diagPM = influenceDiagnostics(sA, "PM");
-    diagPM.forEach((d, i) => {
-      const loo = sA.filter((_, j) => j !== i);
-      const ref = meta(loo, "PM");
-      fchk(`PM [${i}] tau2_loo`, d.tau2_loo, ref.tau2);
-      fchk(`PM [${i}] RE_loo`,   d.RE_loo,   ref.RE);
-    });
+    // PM / SJ: now on the fast path (warm-start fixed-point iteration).
+    for (const m of ["PM", "SJ"]) {
+      for (const { name, studies: ss } of datasets) {
+        for (const ciM of ["normal", "KH"]) {
+          console.log(`--- ${m} / ${name} / "${ciM}" ---`);
+          checkMethod(m, ss, ciM);
+        }
+      }
+    }
 
     console.log(fastPass
       ? "\n✅ ALL MOMENT-ESTIMATOR FAST-PATH REGRESSION TESTS PASSED"
@@ -2863,6 +2863,25 @@ export function runTests() {
       if (exp.fatPet.slopeP     !== undefined) pbchk("fatPet.slopeP",     f.slopeP,     exp.fatPet.slopeP,     0.01);
     }
 
+    if (exp.petPeese) {
+      const pp = petPeeseTest(studies);
+      pbchkTrue("petPeese.usePeese", pp.usePeese === exp.petPeese.usePeese);
+      if (exp.petPeese.fat) {
+        const ef = exp.petPeese.fat;
+        if (ef.intercept  !== undefined) pbchk("petPeese.fat.intercept",  pp.fat.intercept,  ef.intercept);
+        if (ef.interceptP !== undefined) pbchk("petPeese.fat.interceptP", pp.fat.interceptP, ef.interceptP, 0.01);
+        if (ef.slope      !== undefined) pbchk("petPeese.fat.slope",      pp.fat.slope,      ef.slope);
+        if (ef.slopeP     !== undefined) pbchk("petPeese.fat.slopeP",     pp.fat.slopeP,     ef.slopeP,     0.01);
+      }
+      if (exp.petPeese.peese) {
+        const ep = exp.petPeese.peese;
+        if (ep.intercept  !== undefined) pbchk("petPeese.peese.intercept",  pp.peese.intercept,  ep.intercept);
+        if (ep.interceptP !== undefined) pbchk("petPeese.peese.interceptP", pp.peese.interceptP, ep.interceptP, 0.01);
+        if (ep.slope      !== undefined) pbchk("petPeese.peese.slope",      pp.peese.slope,      ep.slope);
+        if (ep.slopeP     !== undefined) pbchk("petPeese.peese.slopeP",     pp.peese.slopeP,     ep.slopeP,     0.01);
+      }
+    }
+
     if (exp.failSafe) {
       const f = failSafeN(studies);
       if (exp.failSafe.rosenthal !== undefined) pbchk("failSafe.rosenthal", f.rosenthal, exp.failSafe.rosenthal, 1);
@@ -3033,7 +3052,8 @@ export function runTests() {
       { name: "BCG", ss: bcg13 },
     ];
 
-    const fastMethods = ["DL","GENQ","HS","HSk","HE","SQGENQ","DLIT","REML","ML","EBLUP"];
+    // PM and SJ are now on the fast path (warm-start fixed-point iteration).
+    const fastMethods = ["DL","GENQ","HS","HSk","HE","SQGENQ","DLIT","REML","ML","EBLUP","PM","SJ"];
 
     for (const { name, ss } of looDatasets) {
       for (const m of fastMethods) {
@@ -3057,15 +3077,6 @@ export function runTests() {
         }
       }
     }
-
-    // PM (meta(loo) fallback) — sanity: output should still match meta(loo)
-    const looRefPM = leaveOneOut(sA, "PM");
-    looRefPM.rows.forEach((row, i) => {
-      const loo = sA.filter((_, j) => j !== i);
-      const ref = meta(loo, "PM");
-      lpchk(`PM fallback[${i}] estimate`, row.estimate, ref.RE);
-      lpchk(`PM fallback[${i}] tau2`,     row.tau2,     ref.tau2);
-    });
 
     if (!looFPPass) utilPass = false;
     console.log(looFPPass
@@ -4600,6 +4611,45 @@ export function runTests() {
     bayChkTrue("tauCI[0] < tauCI[1]", r.tauCI[0] < r.tauCI[1]);
   }
 
+  // ---- 14. Adaptive grid: minimum coarse grid (nGrid=100, nMu=200) vs fine
+  //          grid (nGrid=300, nMu=500) on BCG data.
+  //          muCI accurate to 0.005; tauCI accurate to 0.02
+  //          (coarser τ step → larger interpolation error on spread posteriors). ----
+  {
+    console.log("--- 14. adaptive grid accuracy vs fine grid (BCG) ---");
+    const rFine   = bayesMeta(studiesBCG, { nGrid: 300, nMu: 500 });
+    const rCoarse = bayesMeta(studiesBCG, { nGrid: 100, nMu: 200 });
+    bayChk("muCI[0]  coarse vs fine", rCoarse.muCI[0],  rFine.muCI[0],  0.005);
+    bayChk("muCI[1]  coarse vs fine", rCoarse.muCI[1],  rFine.muCI[1],  0.005);
+    bayChk("tauCI[0] coarse vs fine", rCoarse.tauCI[0], rFine.tauCI[0], 0.02);
+    bayChk("tauCI[1] coarse vs fine", rCoarse.tauCI[1], rFine.tauCI[1], 0.02);
+  }
+
+  // ---- 15. Adaptive grid sizes are correct for different k ----
+  {
+    console.log("--- 15. adaptive grid sizes by k ---");
+    // k=13 (BCG): 4500/13≈346 → clamped to 300; 100000/13≈7692 → clamped to 500
+    const rBCG = bayesMeta(studiesBCG);
+    bayChkExact("BCG (k=13) tauGrid.length = 300", rBCG.tauGrid.length, 300);
+    bayChkExact("BCG (k=13) muGrid.length  = 500", rBCG.muGrid.length,  500);
+
+    // k=50: 4500/50=90 → max(100,90)=100; 100000/50=2000 → min(500,2000)=500
+    const studies50 = Array.from({ length: 50 }, (_, i) => ({
+      yi: i % 2 === 0 ? 0.3 : -0.1,
+      vi: 0.04 + (i % 5) * 0.01,
+    }));
+    const r50 = bayesMeta(studies50);
+    bayChkExact("k=50 tauGrid.length = 100", r50.tauGrid.length, 100);
+    bayChkExact("k=50 muGrid.length  = 500", r50.muGrid.length,  500);
+
+    // Adaptive k=50 vs explicit fine grid: muCI and tauCI match within 0.005
+    const r50fine = bayesMeta(studies50, { nGrid: 300, nMu: 500 });
+    bayChk("k=50 adaptive muCI[0]  vs fine", r50.muCI[0],  r50fine.muCI[0],  0.005);
+    bayChk("k=50 adaptive muCI[1]  vs fine", r50.muCI[1],  r50fine.muCI[1],  0.005);
+    bayChk("k=50 adaptive tauCI[0] vs fine", r50.tauCI[0], r50fine.tauCI[0], 0.005);
+    bayChk("k=50 adaptive tauCI[1] vs fine", r50.tauCI[1], r50fine.tauCI[1], 0.005);
+  }
+
   console.log(bayPass ? "\n✅ ALL BAYESIAN META-ANALYSIS TESTS PASSED" : "\n❌ SOME BAYESIAN META-ANALYSIS TESTS FAILED");
 
   // =========================================================================
@@ -4998,6 +5048,263 @@ export function runTests() {
   }
 
   console.log(clPass ? "\n✅ ALL CLUSTER-ROBUST SE TESTS PASSED" : "\n❌ SOME CLUSTER-ROBUST SE TESTS FAILED");
+
+  // ===========================================================================
+  // CI WIDTH (alpha) UNIT TESTS
+  // Verifies that the alpha parameter propagates correctly through tCritical(),
+  // meta(), metaRegression(), and bayesMeta().
+  // ===========================================================================
+  console.log("\n===== CI WIDTH (alpha) UNIT TESTS =====\n");
+  let ciWidthPass = true;
+  const ciw = (label, ok) => {
+    if (!ok) { console.error(`  FAIL ${label}`); ciWidthPass = false; }
+    else console.log(`  ok  ${label}`);
+  };
+  const ciwChk = (label, got, expected, tol = 1e-4) => {
+    const ok = Math.abs(got - expected) < tol;
+    if (!ok) { console.error(`  FAIL ${label}: got ${got}, expected ${expected} (tol ${tol})`); ciWidthPass = false; }
+    else console.log(`  ok  ${label}`);
+  };
+
+  // ---- a. tCritical spot-checks from t-table ----
+  // df=10: t_{0.05, two-sided} = t_{0.95} ≈ 1.8125; t_{0.005, two-sided} ≈ 3.1693
+  ciwChk("tCritical(10, 0.10) ≈ 1.8125", tCritical(10, 0.10), 1.8125, 5e-4);
+  ciwChk("tCritical(10, 0.01) ≈ 3.1693", tCritical(10, 0.01), 3.1693, 5e-4);
+  // df=∞ → normalQuantile; tCritical(1e6, 0.05) ≈ 1.96
+  ciwChk("tCritical(1e6, 0.05) ≈ 1.96",  tCritical(1e6, 0.05), 1.96, 1e-3);
+  // monotonicity: larger alpha → smaller critical value
+  ciw("tCritical monotone in alpha (df=10)", tCritical(10, 0.01) > tCritical(10, 0.05) && tCritical(10, 0.05) > tCritical(10, 0.10));
+
+  // ---- b. meta() CI width scales with alpha ----
+  // BCG-like dataset from benchmark 1 (yi/vi pre-computed)
+  const ciw_studies = [
+    { yi: -0.8893, vi: 0.3240 }, { yi: -0.5390, vi: 0.0712 },
+    { yi: -0.4474, vi: 0.0681 }, { yi: -0.7861, vi: 0.1137 },
+    { yi: -0.9253, vi: 0.1123 }, { yi: -0.2098, vi: 0.1093 },
+    { yi: -0.5500, vi: 0.0428 }, { yi: -0.5765, vi: 0.1282 },
+    { yi: -0.5003, vi: 0.0590 }, { yi: -0.0880, vi: 0.0567 },
+    { yi: -0.3370, vi: 0.0600 }, { yi: -0.4443, vi: 0.0609 },
+    { yi: -0.7861, vi: 0.1137 },
+  ].map(d => ({ ...d, se: Math.sqrt(d.vi), w: 1 / d.vi }));
+
+  const m90 = meta(ciw_studies, "DL", "normal", 0.10);
+  const m95 = meta(ciw_studies, "DL", "normal", 0.05);
+  const m99 = meta(ciw_studies, "DL", "normal", 0.01);
+
+  // All three should give the same point estimate
+  ciwChk("meta RE identical across alpha", m90.RE, m95.RE, 1e-10);
+  // CI widths: 90% < 95% < 99%
+  const w90 = m90.ciHigh - m90.ciLow;
+  const w95 = m95.ciHigh - m95.ciLow;
+  const w99 = m99.ciHigh - m99.ciLow;
+  ciw("CI width: 90% < 95%", w90 < w95);
+  ciw("CI width: 95% < 99%", w95 < w99);
+  // 99% CI contains the 95% CI (lb99 < lb95 and ub99 > ub95)
+  ciw("99% CI lower < 95% CI lower", m99.ciLow < m95.ciLow);
+  ciw("99% CI upper > 95% CI upper", m99.ciHigh > m95.ciHigh);
+  // Exact width ratio: w99/w95 ≈ z_{0.005}/z_{0.025} = 2.576/1.960 ≈ 1.314
+  const zRatio = normalQuantile(0.995) / normalQuantile(0.975);
+  ciwChk("CI width ratio 99%/95% ≈ z_{0.005}/z_{0.025}", w99 / w95, zRatio, 1e-6);
+
+  // ---- c. metaRegression CI width scales with alpha ----
+  const ciw_reg_studies = ciw_studies.map((d, i) => ({ ...d, x: i + 1 }));
+  const ciw_mods = [{ key: "x", type: "continuous" }];
+  const reg90 = metaRegression(ciw_reg_studies, ciw_mods, "DL", "normal", 0.10);
+  const reg95 = metaRegression(ciw_reg_studies, ciw_mods, "DL", "normal", 0.05);
+  const reg99 = metaRegression(ciw_reg_studies, ciw_mods, "DL", "normal", 0.01);
+  // Intercept CI (index 0): 90% narrower than 95%, 95% narrower than 99%
+  // reg.ci is Array<[lo, hi]> per coefficient
+  const rw = r => r.ci[0][1] - r.ci[0][0];
+  ciw("regression CI width: 90% < 95%", rw(reg90) < rw(reg95));
+  ciw("regression CI width: 95% < 99%", rw(reg95) < rw(reg99));
+
+  // ---- d. bayesMeta credible interval width scales with alpha ----
+  const bayes90 = bayesMeta(ciw_studies, { alpha: 0.10 });
+  const bayes95 = bayesMeta(ciw_studies, { alpha: 0.05 });
+  const bayes99 = bayesMeta(ciw_studies, { alpha: 0.01 });
+  if (!bayes90.error && !bayes95.error && !bayes99.error) {
+    const bw = r => r.tauCI[1] - r.tauCI[0];
+    ciw("bayes tauCI width: 90% < 95%", bw(bayes90) < bw(bayes95));
+    ciw("bayes tauCI width: 95% < 99%", bw(bayes95) < bw(bayes99));
+    const muw = r => r.muCI[1] - r.muCI[0];
+    ciw("bayes muCI width: 90% < 95%",  muw(bayes90) < muw(bayes95));
+    ciw("bayes muCI width: 95% < 99%",  muw(bayes95) < muw(bayes99));
+  } else {
+    console.log("  (skip bayesMeta CI width tests — error in result)");
+  }
+
+  console.log(ciWidthPass ? "\n✅ ALL CI WIDTH TESTS PASSED" : "\n❌ SOME CI WIDTH TESTS FAILED");
+
+  // ===== RVE BENCHMARK TESTS (R blocks RVE-1 through RVE-3) =====
+  {
+    console.log("\n===== RVE BENCHMARK TESTS =====\n");
+    let rveBmPass = true;
+    const bchk = (label, got, exp, tol) => {
+      const ok = Math.abs(got - exp) <= tol;
+      if (!ok) { console.error(`  FAIL ${label}: got ${got}, expected ${exp} (tol ${tol})`); rveBmPass = false; }
+      else console.log(`  ok  ${label}`);
+    };
+    const bchkExact = (label, got, exp) => {
+      const ok = got === exp;
+      if (!ok) { console.error(`  FAIL ${label}: got ${got}, expected ${exp}`); rveBmPass = false; }
+      else console.log(`  ok  ${label}`);
+    };
+
+    RVE_BENCHMARKS.forEach(bm => {
+      console.log(`--- Benchmark: ${bm.name} ---`);
+      const r = rvePooled(bm.data, { rho: bm.rho, moderators: bm.moderators });
+
+      if (r.error) {
+        console.error(`  FAIL: unexpected error — ${r.error}`);
+        rveBmPass = false;
+        return;
+      }
+
+      bchkExact("df",       r.df,       bm.expected.df);
+      bchkExact("kCluster", r.kCluster, bm.expected.kCluster);
+      bchkExact("k",        r.k,        bm.expected.k);
+
+      if (bm.moderators.length === 0) {
+        // Intercept-only: test top-level fields + coefs[0]
+        bchk("est",    r.est,        bm.expected.est,    1e-6);
+        bchk("se",     r.se,         bm.expected.se,     1e-6);
+        bchk("ciLow",  r.ci[0],      bm.expected.ciLow,  1e-6);
+        bchk("ciHigh", r.ci[1],      bm.expected.ciHigh, 1e-6);
+        bchk("t",      r.t,          bm.expected.t,      1e-6);
+        bchk("p",      r.p,          bm.expected.p,      1e-6);
+      } else {
+        // Meta-regression: test coefs array
+        bchk("intercept est", r.coefs[0].est, bm.expected.interceptEst, 1e-6);
+        bchk("intercept se",  r.coefs[0].se,  bm.expected.interceptSe,  1e-6);
+        bchk("intercept t",   r.coefs[0].t,   bm.expected.interceptT,   1e-6);
+        bchk("intercept p",   r.coefs[0].p,   bm.expected.interceptP,   1e-6);
+        bchk("slope est",     r.coefs[1].est, bm.expected.slopeEst,     1e-6);
+        bchk("slope se",      r.coefs[1].se,  bm.expected.slopeSe,      1e-6);
+        bchk("slope t",       r.coefs[1].t,   bm.expected.slopeT,       1e-6);
+        bchk("slope p",       r.coefs[1].p,   bm.expected.slopeP,       1e-6);
+      }
+    });
+
+    console.log(rveBmPass ? "\n✅ ALL RVE BENCHMARK TESTS PASSED" : "\n❌ SOME RVE BENCHMARK TESTS FAILED");
+  }
+
+  // ===== RVE (rvePooled) UNIT TESTS =====
+  // Covers: error cases, intercept-only pooling, coefs array, ρ=0 FE
+  // equivalence, df = m−p, moderator regression, missing-value exclusion,
+  // collinearity error, singleton clusters, CI width ordering.
+  {
+    console.log("\n===== RVE (rvePooled) UNIT TESTS =====\n");
+    let rvePass = true;
+    const rvechk = (label, ok) => {
+      if (!ok) { console.error(`  FAIL ${label}`); rvePass = false; }
+      else console.log(`  ok  ${label}`);
+    };
+
+    // Simple 6-study dataset spread across 3 clusters (2 per cluster).
+    const s6 = [
+      { yi: 0.2, vi: 0.04, cluster: "A", x: 1.0 },
+      { yi: 0.4, vi: 0.09, cluster: "A", x: 2.0 },
+      { yi: 0.6, vi: 0.05, cluster: "B", x: 3.0 },
+      { yi: 0.3, vi: 0.06, cluster: "B", x: 4.0 },
+      { yi: 0.5, vi: 0.07, cluster: "C", x: 5.0 },
+      { yi: 0.1, vi: 0.10, cluster: "C", x: 6.0 },
+    ];
+
+    // --- Error cases ---
+    rvechk("rho=1 returns error",  rvePooled(s6, { rho: 1  }).error !== undefined);
+    rvechk("rho=-1 returns error", rvePooled(s6, { rho: -1 }).error !== undefined);
+    rvechk("rho=1.5 returns error",rvePooled(s6, { rho: 1.5}).error !== undefined);
+    rvechk("k<2 returns error",    rvePooled([s6[0]], {}).error !== undefined);
+    rvechk("m<2 returns error",    rvePooled(
+      [{ yi: 0.2, vi: 0.04, cluster: "X" }, { yi: 0.4, vi: 0.06, cluster: "X" }], {}
+    ).error !== undefined);
+    // Too many predictors for cluster count: 3 clusters, 3 predictors (intercept+2) → df=0
+    rvechk("m<=p returns error",   rvePooled(s6, { rho: 0.5, moderators: ["x", "x"] }).error !== undefined);
+
+    // --- Valid intercept-only result ---
+    const r = rvePooled(s6, { rho: 0.80 });
+    rvechk("no error on valid input", !r.error);
+    if (!r.error) {
+      rvechk("intercept-only: df = m−p = 2",  r.df === 2);
+      rvechk("kCluster = 3",                  r.kCluster === 3);
+      rvechk("k = 6",                          r.k === 6);
+      rvechk("se > 0",                         r.se > 0);
+      rvechk("ci is array[2]",  Array.isArray(r.ci) && r.ci.length === 2);
+      rvechk("ci[0] < est",     r.ci[0] < r.est);
+      rvechk("ci[1] > est",     r.ci[1] > r.est);
+      rvechk("rho stored = 0.80", Math.abs(r.rho - 0.80) < 1e-12);
+      rvechk("t = est/se",      Math.abs(r.t - r.est / r.se) < 1e-10);
+      rvechk("p in [0,1]",      r.p >= 0 && r.p <= 1);
+      rvechk("p finite",        isFinite(r.p));
+      // coefs array
+      rvechk("coefs length = 1",          Array.isArray(r.coefs) && r.coefs.length === 1);
+      rvechk("coefs[0].name = intercept", r.coefs[0].name === "intercept");
+      rvechk("coefs[0].est = r.est",      Math.abs(r.coefs[0].est - r.est) < 1e-12);
+      rvechk("coefs[0].se = r.se",        Math.abs(r.coefs[0].se  - r.se)  < 1e-12);
+    }
+
+    // At ρ=0 each study is independent → est matches FE pooled mean.
+    {
+      const feNum = s6.reduce((s, x) => s + x.yi / x.vi, 0);
+      const feDen = s6.reduce((s, x) => s + 1 / x.vi, 0);
+      const feEst = feNum / feDen;
+      const r0 = rvePooled(s6, { rho: 0 });
+      rvechk("ρ=0 est matches FE pooled (tol 1e-10)",
+        !r0.error && Math.abs(r0.est - feEst) < 1e-10);
+    }
+
+    // --- Singleton cluster fallback (no cluster property) ---
+    const sNoCluster = [
+      { yi: 0.1, vi: 0.04 },
+      { yi: 0.3, vi: 0.05 },
+      { yi: 0.5, vi: 0.06 },
+      { yi: 0.2, vi: 0.07 },
+    ];
+    const rSing = rvePooled(sNoCluster, { rho: 0.50 });
+    rvechk("no-cluster: no error",     !rSing.error);
+    rvechk("no-cluster: kCluster = 4", !rSing.error && rSing.kCluster === 4);
+    rvechk("no-cluster: df = 3",       !rSing.error && rSing.df === 3);
+
+    // --- CI width ordering ---
+    if (!r.error) {
+      const r90 = rvePooled(s6, { rho: 0.80, alpha: 0.10 });
+      const r99 = rvePooled(s6, { rho: 0.80, alpha: 0.01 });
+      if (!r90.error && !r99.error) {
+        const w = x => x.ci[1] - x.ci[0];
+        rvechk("CI width: 90% < 95%", w(r90) < w(r));
+        rvechk("CI width: 95% < 99%", w(r) < w(r99));
+      }
+    }
+
+    // --- RVE meta-regression (1 moderator) ---
+    const rMod = rvePooled(s6, { rho: 0.80, moderators: ["x"] });
+    rvechk("mod: no error",           !rMod.error);
+    if (!rMod.error) {
+      // df = m − p = 3 − 2 = 1
+      rvechk("mod: df = m−p = 1",     rMod.df === 1);
+      rvechk("mod: coefs length = 2", rMod.coefs.length === 2);
+      rvechk("mod: coefs[0].name = intercept", rMod.coefs[0].name === "intercept");
+      rvechk("mod: coefs[1].name = x",         rMod.coefs[1].name === "x");
+      rvechk("mod: coefs[1].se > 0",            rMod.coefs[1].se > 0);
+      rvechk("mod: top-level est = intercept",
+        Math.abs(rMod.est - rMod.coefs[0].est) < 1e-12);
+      // intercept-only and regression intercepts differ when covariate is not zero-centered
+      rvechk("mod: intercept differs from pooled-only est",
+        Math.abs(rMod.est - r.est) > 0.001);
+    }
+
+    // --- Missing moderator value → study excluded, k decreases ---
+    const s6missing = s6.map((s, i) => i === 2 ? { ...s, x: NaN } : s);
+    const rMiss = rvePooled(s6missing, { rho: 0.80, moderators: ["x"] });
+    rvechk("missing mod val: no error", !rMiss.error);
+    rvechk("missing mod val: k = 5",    !rMiss.error && rMiss.k === 5);
+
+    // --- Collinear moderators → singular error ---
+    const rCollin = rvePooled(s6, { rho: 0.80, moderators: ["x", "x"] });
+    rvechk("collinear moderators: returns error", rCollin.error !== undefined);
+
+    console.log(rvePass ? "\n✅ ALL RVE TESTS PASSED" : "\n❌ SOME RVE TESTS FAILED");
+  }
 }
 
   // ===== normalCDF & tCDF UNIT TESTS =====

@@ -41,10 +41,10 @@ export function fmt(value, digits = 3) {
 
 // ================= T CRITICAL =================
 // Two-tailed 95% critical value via bisection on tCDF.
-export function tCritical(df) {
-  if (!isFinite(df) || df <= 0) return Z_95;
+export function tCritical(df, alpha = 0.05) {
+  const target = 1 - alpha / 2;
+  if (!isFinite(df) || df <= 0) return normalQuantile(target);
 
-  const target = 0.975; // P(T <= t) = 0.975 for two-tailed 95%
   let lo = 0, hi = 20;  // t_{0.975,1} ≈ 12.706; 20 is a safe upper bound
 
   for (let i = 0; i < BISECTION_ITERS; i++) {

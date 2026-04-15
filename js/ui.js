@@ -100,7 +100,7 @@
 //   ui.js calls init() on DOMContentLoaded, which populates dropdowns,
 //   restores any autosave draft, and attaches all event listeners.
 // =============================================================================
-import { eggerTest, beggTest, fatPetTest, failSafeN, pCurve, pUniform, baujat, meta, metaMH, metaPeto, robustMeta, influenceDiagnostics, subgroupAnalysis, metaRegression, cumulativeMeta, leaveOneOut, estimatorComparison, veveaHedges, SELECTION_PRESETS, profileLikTau2, bayesMeta } from "./analysis.js";
+import { eggerTest, beggTest, fatPetTest, petPeeseTest, failSafeN, pCurve, pUniform, baujat, meta, metaMH, metaPeto, robustMeta, influenceDiagnostics, subgroupAnalysis, metaRegression, cumulativeMeta, leaveOneOut, estimatorComparison, veveaHedges, SELECTION_PRESETS, profileLikTau2, bayesMeta, rvePooled } from "./analysis.js";
 import { fmt } from "./utils.js";
 import { effectProfiles, getProfile } from "./profiles.js";
 import { trimFill } from "./trimfill.js";
@@ -124,16 +124,26 @@ let _saveTimer = null;
 // scheduleSave()
 // Debounced autosave trigger. Resets the 1.2 s idle timer on every call; the
 // actual save fires once the user pauses for 1.2 s. Does NOT call runAnalysis()
-// — analysis is triggered separately and immediately by the callers.
-//
-// Note: addRow() input listeners call runAnalysis() directly (per-keystroke)
-// then scheduleSave() for the deferred save. For k ≤ ~200 studies the
-// per-keystroke runAnalysis() is fast enough. For very large tables a debounce
-// on runAnalysis itself would improve responsiveness but would change the
-// "instant results" behaviour — out of scope for this audit.
+// — analysis is triggered separately by the callers.
 function scheduleSave() {
   clearTimeout(_saveTimer);
   _saveTimer = setTimeout(() => saveDraft(gatherSessionState()), 1200);
+}
+
+// ---------------- DEBOUNCED ANALYSIS ----------------
+
+let _analysisTimer  = null;
+let _analysisRunning = false;
+
+// scheduleAnalysis()
+// Debounced wrapper for runAnalysis(). Used by per-keystroke input listeners
+// in addRow() so that mid-word edits do not trigger a full re-run on every
+// character. 150 ms is imperceptible to users but eliminates redundant runs.
+// The Run button, settings dropdowns, and row add/delete call runAnalysis()
+// directly so they remain instant.
+function scheduleAnalysis() {
+  clearTimeout(_analysisTimer);
+  _analysisTimer = setTimeout(runAnalysis, 150);
 }
 
 // Flush any pending debounced save immediately.
@@ -308,7 +318,7 @@ function addModerator() {
   if (!name) return;
   doAddModerator(name, type);
   nameEl.value = "";
-  runAnalysis();
+  markStale();
 }
 
 function removeModerator(name) {
@@ -318,7 +328,7 @@ function removeModerator(name) {
     const cell = [...table.rows[i].cells].find(c => c.dataset.mod === name);
     if (cell) cell.remove();
   }
-  runAnalysis();
+  markStale();
 }
 
 function makeModTh(name) {
@@ -336,7 +346,7 @@ function makeModTd(name, type) {
   input.dataset.mod = name;
   input.style.width = "70px";
   input.placeholder = type === "categorical" ? "A/B/…" : "0";
-  input.addEventListener("input", () => { runAnalysis(); scheduleSave(); });
+  input.addEventListener("input", () => { markStale(); scheduleSave(); });
   td.appendChild(input);
   return td;
 }
@@ -484,7 +494,7 @@ _themeToggle.addEventListener("click", () => {
   localStorage.setItem("theme", next);
   _applyTheme(next);
   if (funnelPlot.args && funnelPlot.contours) {
-    drawFunnel(...funnelPlot.args, { contours: true });
+    drawFunnel(...funnelPlot.args, { contours: true, petpeese: funnelPlot.petpeese });
   }
 });
 
@@ -499,6 +509,16 @@ const _toggleResults = document.getElementById("toggleResults");
 const _toggleGuide   = document.getElementById("toggleGuide");
 const _toggleAbout   = document.getElementById("toggleAbout");
 
+const PERF_LOG = new URLSearchParams(location.search).has("perf");
+
+function getCiAlpha() {
+  const v = document.getElementById("ciLevel")?.value ?? "95";
+  return { "90": 0.10, "95": 0.05, "99": 0.01 }[v] ?? 0.05;
+}
+function getCiLabel() {
+  return (document.getElementById("ciLevel")?.value ?? "95") + "% CI";
+}
+
 function showView(name) {
   _inputSection.style.display  = name === "input"   ? "" : "none";
   _outputSection.style.display = name === "results" ? "" : "none";
@@ -510,6 +530,8 @@ function showView(name) {
   _toggleAbout.classList.toggle("active",   name === "about");
   document.getElementById("appLayout").scrollTo(0, 0);
   if (name === "guide") renderGuide(document.getElementById("guidePanel"));
+  // Hide jump pill when leaving results view (safe: getElementById avoids TDZ on module init)
+  if (name !== "results") document.getElementById("jumpPill")?.classList.remove("visible");
 }
 
 _toggleResults.disabled = true;
@@ -524,7 +546,7 @@ showView("input");
 
 // ---------------- INITIALIZE ----------------
 document.getElementById("addStudy").addEventListener("click", () => { addRow(); renderRoBDataGrid(); markStale(); });
-document.getElementById("run").addEventListener("click", () => { if (runAnalysis()) showView("results"); });
+document.getElementById("run").addEventListener("click", async () => { if (await runAnalysis()) showView("results"); });
 document.getElementById("import").addEventListener("click", () => document.getElementById("csvFile").click());
 document.getElementById("csvFile").addEventListener("change", e => { if (e.target.files[0]) previewCSV(e.target.files[0]); });
 document.getElementById("previewImport").addEventListener("click", commitImport);
@@ -536,7 +558,7 @@ document.getElementById("loadSession").addEventListener("click", () => document.
 document.getElementById("sessionFile").addEventListener("change", e => { if (e.target.files[0]) { loadSession(e.target.files[0]); e.target.value = ""; } });
 document.getElementById("addMod").addEventListener("click", addModerator);
 document.getElementById("modName").addEventListener("keydown", e => { if (e.key === "Enter") addModerator(); });
-document.getElementById("cumulativeOrder").addEventListener("change", runAnalysis);
+document.getElementById("cumulativeOrder").addEventListener("change", markStale);
 document.getElementById("cumulativeFunnelStep").addEventListener("input", e => {
   if (!cumFunnelPlot.studies) return;
   const step = +e.target.value;
@@ -588,6 +610,137 @@ document.getElementById("forestPageSize").addEventListener("change", () => {
   );
   renderForestNav(totalPages);
 });
+
+// ---------------- KEYBOARD SHORTCUTS ----------------
+// Ctrl/Cmd+Enter       — run analysis, switch to results
+// Ctrl/Cmd+Shift+C     — clear all study rows
+// Escape               — close help popover
+// ← / → (results view) — paginate forest plot
+document.addEventListener("keydown", e => {
+  const tag = (document.activeElement?.tagName ?? "").toUpperCase();
+  const inEditable = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT"
+    || document.activeElement?.isContentEditable;
+
+  // Ctrl/Cmd+Enter — run and show results
+  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key === "Enter") {
+    e.preventDefault();
+    runAnalysis().then(ok => { if (ok) showView("results"); });
+    return;
+  }
+
+  // Ctrl/Cmd+Shift+C — clear all study rows
+  if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "C" || e.key === "c")) {
+    e.preventDefault();
+    const table = document.getElementById("inputTable");
+    while (table.rows.length > 1) table.deleteRow(1);
+    addRow();
+    runAnalysis();
+    scheduleSave();
+    return;
+  }
+
+  // Escape — close help popover
+  if (e.key === "Escape") {
+    hideHelp();
+    return;
+  }
+
+  // Arrow keys — paginate forest plot (results view only, not in text inputs)
+  if (inEditable) return;
+  if (_outputSection.style.display === "none") return;
+
+  if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+    const btn = document.getElementById("forestNext");
+    if (btn && !btn.disabled) { e.preventDefault(); btn.click(); }
+  } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+    const btn = document.getElementById("forestPrev");
+    if (btn && !btn.disabled) { e.preventDefault(); btn.click(); }
+  }
+});
+
+// ---------------- JUMP PILL ----------------
+// Compact floating nav (bottom-right) that lists visible results panels.
+// Appears when the user scrolls the results view; auto-hides after 3 s.
+
+const _jumpPill  = document.getElementById("jumpPill");
+const _appLayout = document.getElementById("appLayout");
+let   _jumpHideTimer = null;
+
+function _buildJumpPill() {
+  if (!_jumpPill) return;
+  _jumpPill.innerHTML = "";
+  const panels = document.querySelectorAll(".results-section");
+  let count = 0;
+  panels.forEach(panel => {
+    if (panel.style.display === "none") return;
+    const summary = panel.querySelector("summary");
+    if (!summary) return;
+    // Read label text (exclude the .panel-run-at badge and the ::after chevron)
+    let label = "";
+    summary.childNodes.forEach(node => {
+      if (node.nodeType === Node.TEXT_NODE) label += node.textContent;
+      else if (node.nodeName !== "SPAN") label += node.textContent;  // skip badge
+    });
+    label = label.trim() || summary.textContent.trim();
+    const btn = document.createElement("button");
+    btn.className = "jump-pill-btn";
+    btn.textContent = label;
+    btn.title = label;
+    btn.addEventListener("click", () => {
+      panel.scrollIntoView({ behavior: "smooth", block: "start" });
+      _hidePillSoon(200);   // short delay so user sees the pill react
+    });
+    _jumpPill.appendChild(btn);
+    count++;
+  });
+  if (count === 0) {
+    _jumpPill.hidden = true;
+  } else {
+    _jumpPill.hidden = false;
+    _jumpPill.classList.remove("visible");  // start hidden until scroll
+  }
+}
+
+function _showPill() {
+  if (!_jumpPill || _jumpPill.hidden) return;
+  if (_outputSection.style.display === "none") return;
+  _jumpPill.classList.add("visible");
+  clearTimeout(_jumpHideTimer);
+  _jumpHideTimer = setTimeout(_hidePill, 3000);
+}
+
+function _hidePill() {
+  _jumpPill?.classList.remove("visible");
+}
+
+function _hidePillSoon(delay = 800) {
+  clearTimeout(_jumpHideTimer);
+  _jumpHideTimer = setTimeout(_hidePill, delay);
+}
+
+// Highlight the button for the panel nearest the top of the viewport
+function _updateJumpActive() {
+  if (!_jumpPill || !_jumpPill.classList.contains("visible")) return;
+  const panels = [...document.querySelectorAll(".results-section")]
+    .filter(p => p.style.display !== "none");
+  const scrollTop = _appLayout.scrollTop;
+  const layoutTop = _appLayout.getBoundingClientRect().top;
+  let bestIdx = 0, bestDist = Infinity;
+  panels.forEach((p, i) => {
+    const rect = p.getBoundingClientRect();
+    const dist = Math.abs(rect.top - layoutTop);
+    if (dist < bestDist) { bestDist = dist; bestIdx = i; }
+  });
+  const btns = _jumpPill.querySelectorAll(".jump-pill-btn");
+  btns.forEach((b, i) => b.classList.toggle("jump-active", i === bestIdx));
+}
+
+if (_appLayout) {
+  _appLayout.addEventListener("scroll", () => {
+    _showPill();
+    _updateJumpActive();
+  }, { passive: true });
+}
 
 // ---------------- DRAFT BANNER ----------------
 
@@ -730,13 +883,13 @@ document.getElementById("effectType").addEventListener("change", () => {
   // Populate example data for testing
   populateExampleData(type);
 
-  runAnalysis();
+  markStale();
 });
 
 document.getElementById("tauMethod").addEventListener("change", () => {
   const type = document.getElementById("effectType").value;
   syncMHOptions(type);
-  runAnalysis();
+  markStale();
 });
 document.getElementById("ciMethod").addEventListener("change", () => {
   const ciSel  = document.getElementById("ciMethod");
@@ -746,8 +899,9 @@ document.getElementById("ciMethod").addEventListener("change", () => {
     tauSel.value = "REML";
   }
   syncPLAvailability();
-  runAnalysis();
+  markStale();
 });
+document.getElementById("ciLevel").addEventListener("change", () => { scheduleAutosave(); markStale(); });
 
 const trimFillCheckbox = document.getElementById("useTrimFill");
 const adjustedCheckbox = document.getElementById("useTFAdjusted");
@@ -755,9 +909,9 @@ adjustedCheckbox.disabled = !trimFillCheckbox.checked;
 trimFillCheckbox.addEventListener("change", () => {
   adjustedCheckbox.disabled = !trimFillCheckbox.checked;
   if (!trimFillCheckbox.checked) adjustedCheckbox.checked = false;
-  runAnalysis();
+  markStale();
 });
-adjustedCheckbox.addEventListener("change", runAnalysis);
+adjustedCheckbox.addEventListener("change", markStale);
 
 // ---------------- SELECTION MODEL CONTROLS ----------------
 function syncSelControls() {
@@ -779,11 +933,23 @@ function syncSelControls() {
   }
 }
 
-document.getElementById("selMode").addEventListener("change", () => { syncSelControls(); runAnalysis(); });
-document.getElementById("selPreset").addEventListener("change", () => { syncSelControls(); runAnalysis(); });
-document.getElementById("selSides").addEventListener("change", runAnalysis);
-document.getElementById("selCuts").addEventListener("change", runAnalysis);
+document.getElementById("selMode").addEventListener("change", () => { syncSelControls(); markStale(); });
+document.getElementById("selPreset").addEventListener("change", () => { syncSelControls(); markStale(); });
+document.getElementById("selSides").addEventListener("change", markStale);
+document.getElementById("selCuts").addEventListener("change", markStale);
 syncSelControls();
+
+// ---------------- RVE ρ SLIDER ----------------
+{
+  const rveRhoSlider  = document.getElementById("rveRho");
+  const rveRhoDisplay = document.getElementById("rveRhoDisplay");
+  const syncRhoDisplay = () => {
+    rveRhoDisplay.textContent = parseFloat(rveRhoSlider.value).toFixed(2);
+  };
+  syncRhoDisplay();
+  rveRhoSlider.addEventListener("input",  syncRhoDisplay);
+  rveRhoSlider.addEventListener("change", markStale);
+}
 
 // ---------------- GOSH ----------------
 document.getElementById("goshRun").addEventListener("click", runGosh);
@@ -838,6 +1004,56 @@ function updateTableHeaders() {
   headerRow.appendChild(thActions);
 }
 
+// ---------------- DRAG-TO-REORDER ----------------
+let _dragRow        = null;  // the row being dragged
+let _dragPointerSrc = null;  // element where pointerdown fired (guard against input drags)
+
+function _rowPointerDown(e) { _dragPointerSrc = e.target; }
+
+function _rowDragStart(e) {
+  // Don't start a drag when the user clicked inside an input / button / select
+  if (_dragPointerSrc && _dragPointerSrc.matches("input, button, select, textarea")) {
+    e.preventDefault();
+    return;
+  }
+  _dragRow = this;
+  e.dataTransfer.effectAllowed = "move";
+  e.dataTransfer.setData("text/plain", ""); // required for Firefox
+  this.classList.add("row-dragging");
+}
+
+function _rowDragOver(e) {
+  if (!_dragRow || _dragRow === this) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = "move";
+  const rect = this.getBoundingClientRect();
+  const aboveMid = e.clientY < rect.top + rect.height / 2;
+  this.classList.toggle("drag-over-top",    aboveMid);
+  this.classList.toggle("drag-over-bottom", !aboveMid);
+}
+
+function _rowDragLeave() {
+  this.classList.remove("drag-over-top", "drag-over-bottom");
+}
+
+function _rowDrop(e) {
+  e.preventDefault();
+  if (!_dragRow || _dragRow === this) return;
+  const rect = this.getBoundingClientRect();
+  const insertBefore = e.clientY < rect.top + rect.height / 2;
+  this.parentNode.insertBefore(_dragRow, insertBefore ? this : this.nextSibling);
+  this.classList.remove("drag-over-top", "drag-over-bottom");
+  markStale();
+  scheduleSave();
+}
+
+function _rowDragEnd() {
+  _dragRow?.classList.remove("row-dragging");
+  document.querySelectorAll("#inputTable .drag-over-top, #inputTable .drag-over-bottom")
+    .forEach(r => r.classList.remove("drag-over-top", "drag-over-bottom"));
+  _dragRow = null;
+}
+
 // ---------------- ADD ROW ----------------
 function addRow(values) {
   const type = document.getElementById("effectType").value;
@@ -846,6 +1062,13 @@ function addRow(values) {
 
   const table = document.getElementById("inputTable");
   const row = table.insertRow();
+  row.draggable = true;
+  row.addEventListener("pointerdown", _rowPointerDown);
+  row.addEventListener("dragstart",   _rowDragStart);
+  row.addEventListener("dragover",    _rowDragOver);
+  row.addEventListener("dragleave",   _rowDragLeave);
+  row.addEventListener("drop",        _rowDrop);
+  row.addEventListener("dragend",     _rowDragEnd);
   const v = values || ["", ...Array(profile.inputs.length).fill(""), "", ""]; // Study + effects + group + cluster
 
   // ---- Study column ----
@@ -895,7 +1118,7 @@ function addRow(values) {
   row.querySelectorAll("input").forEach(input => {
     input.addEventListener("input", () => {
       validateRow(row);
-      runAnalysis();
+      markStale();
       scheduleSave();
     });
   });
@@ -904,22 +1127,89 @@ function addRow(values) {
   row.querySelector(".clear-btn").addEventListener("click", () => clearRow(row.querySelector(".clear-btn")));
 }
 
+// ---------------- UNDO DELETION ----------------
+// One pending deletion at a time.  The row stays in the DOM marked with
+// .row-pending-delete (excluded from analysis + session state) until the
+// 5-second window expires or the user clicks Undo.
+
+const _undoState = { timer: null, row: null, robKey: null };
+const _UNDO_MS   = 5000;
+
+function _commitPendingDelete() {
+  if (!_undoState.row) return;
+  clearTimeout(_undoState.timer);
+  if (_undoState.robKey) delete _robData[_undoState.robKey];
+  _undoState.row.remove();
+  _undoState.row    = null;
+  _undoState.robKey = null;
+  _undoState.timer  = null;
+  renderRoBDataGrid();
+  _hideUndoToast();
+}
+
+function _cancelPendingDelete() {
+  if (!_undoState.row) return;
+  clearTimeout(_undoState.timer);
+  _undoState.row.classList.remove("row-pending-delete");
+  _undoState.row    = null;
+  _undoState.robKey = null;
+  _undoState.timer  = null;
+  _hideUndoToast();
+  markStale();
+  scheduleSave();
+}
+
+function _showUndoToast(label) {
+  const toast = document.getElementById("undoToast");
+  const lbl   = document.getElementById("undoToastLabel");
+  const btn   = document.getElementById("undoToastBtn");
+  const bar   = toast?.querySelector(".undo-toast-bar");
+  if (!toast) return;
+
+  if (lbl) lbl.textContent = label ? `"${label}" removed` : "Study removed";
+
+  // Restart bar animation by cloning and replacing
+  if (bar) {
+    const newBar = bar.cloneNode(true);
+    bar.replaceWith(newBar);
+  }
+
+  btn.onclick = _cancelPendingDelete;
+  toast.hidden = false;
+}
+
+function _hideUndoToast() {
+  const toast = document.getElementById("undoToast");
+  if (toast) toast.hidden = true;
+}
+
 // ---------------- REMOVE & CLEAR ----------------
 function removeRow(btn) {
   const table = document.getElementById("inputTable");
-  if (table.rows.length <= 2) return;
-  const row = btn.closest("tr");
-  const label = row.querySelector("input")?.value?.trim();
-  if (label) delete _robData[label];
-  row.remove();
-  renderRoBDataGrid();
-  runAnalysis();
+  // Count non-pending rows (header counts as 1 non-data row).
+  const nonPending = [...table.rows].filter(r => !r.classList.contains("row-pending-delete")).length;
+  if (nonPending <= 2) return;  // keep at least 1 data row
+
+  // Commit any in-progress pending deletion before starting a new one.
+  _commitPendingDelete();
+
+  const row   = btn.closest("tr");
+  const label = row.querySelector("input")?.value?.trim() || "";
+
+  // Mark row as pending; exclude from analysis immediately.
+  row.classList.add("row-pending-delete");
+  _undoState.row    = row;
+  _undoState.robKey = label || null;
+  _undoState.timer  = setTimeout(_commitPendingDelete, _UNDO_MS);
+
+  _showUndoToast(label);
+  markStale();
   scheduleSave();
 }
 
 function clearRow(btn) {
   btn.closest("tr").querySelectorAll("input").forEach(input => input.value = "");
-  runAnalysis();
+  markStale();
 }
 
 // ---------------- VALIDATE ROW ----------------
@@ -1212,13 +1502,8 @@ function commitImport() {
   if (missingCols.length > 0) {
     warningDiv.textContent = `Warning: CSV is missing required columns: ${missingCols.join(", ")}`;
     warningDiv.style.display = "block";
-    // Stay on the input view so the warning is visible.
-    runAnalysis();
     return;
   }
-
-  runAnalysis();
-  showView("results");
 }
 
 function cancelImport() {
@@ -1241,6 +1526,7 @@ function gatherSessionState() {
     effectType:      type,
     tauMethod:       document.getElementById("tauMethod").value,
     ciMethod:        document.getElementById("ciMethod").value,
+    ciLevel:         document.getElementById("ciLevel").value,
     cumulativeOrder: document.getElementById("cumulativeOrder").value,
     useTrimFill:     document.getElementById("useTrimFill").checked,
     useTFAdjusted:   document.getElementById("useTFAdjusted").checked,
@@ -1260,6 +1546,7 @@ function gatherSessionState() {
   const studies = [];
   document.querySelectorAll("#inputTable tr").forEach((r, i) => {
     if (i === 0) return; // skip header
+    if (r.classList.contains("row-pending-delete")) return; // skip pending deletions
     const inputs = [...r.querySelectorAll("input")];
     // inputs order: Study, ...profile.inputs, Group, Cluster, ...moderators
     const study = inputs[0]?.value ?? "";
@@ -1306,6 +1593,8 @@ function applySession(session) {
     document.getElementById("tauMethod").value       = s.tauMethod;
   if (s.ciMethod        && document.getElementById("ciMethod").querySelector(`option[value="${s.ciMethod}"]`))
     document.getElementById("ciMethod").value        = s.ciMethod;
+  if (s.ciLevel         && document.getElementById("ciLevel").querySelector(`option[value="${s.ciLevel}"]`))
+    document.getElementById("ciLevel").value         = s.ciLevel;
   if (s.cumulativeOrder && document.getElementById("cumulativeOrder").querySelector(`option[value="${s.cumulativeOrder}"]`))
     document.getElementById("cumulativeOrder").value = s.cumulativeOrder;
   if (typeof s.useTrimFill   === "boolean") document.getElementById("useTrimFill").checked   = s.useTrimFill;
@@ -1398,13 +1687,8 @@ async function loadSession(file) {
   if (missingCols.length > 0) {
     warningDiv.textContent = `Warning: session is missing data for: ${missingCols.join(", ")}`;
     warningDiv.style.display = "block";
-    // Stay on the input view so the warning is visible.
-    runAnalysis();
     return;
   }
-
-  runAnalysis();
-  showView("results");
 }
 
 // ---------------- CSV EXPORT ----------------
@@ -1533,7 +1817,6 @@ function init() {
     validateRow(row);
   });
 
-  runAnalysis();
   if (new URLSearchParams(window.location.search).has("tests")) {
     import("./tests.js").then(({ runTests }) => runTests());
   }
@@ -1746,7 +2029,7 @@ function renderRegressionPanel(reg, method, ciMethod, kExcluded = 0) {
       <table class="reg-table">
         <thead><tr>
           <th>Term</th><th>β</th><th>SE</th><th>${statLabel}</th>
-          <th>p</th><th>95% CI</th><th>VIF</th><th></th>
+          <th>p</th><th>${getCiLabel()}</th><th>VIF</th><th></th>
           ${robustHeaders}
         </tr></thead>
         <tbody>${rows}</tbody>
@@ -1853,7 +2136,7 @@ document.querySelectorAll(".funnel-mode-btn").forEach(btn => {
     if (!funnelPlot.args) return;
     funnelPlot.contours = btn.dataset.mode === "contour";
     document.querySelectorAll(".funnel-mode-btn").forEach(b => b.classList.toggle("active", b === btn));
-    drawFunnel(...funnelPlot.args, { contours: funnelPlot.contours });
+    drawFunnel(...funnelPlot.args, { contours: funnelPlot.contours, petpeese: funnelPlot.petpeese });
   });
 });
 
@@ -1935,6 +2218,55 @@ const renderCumulativeForestNav = makeNavRenderer({
   ),
 });
 
+// ---------------- LAZY / DEFERRED PLOT RENDERING ----------------
+// Panels that start collapsed (all panels are reset to collapsed on every run)
+// need not be drawn immediately. drawIfVisible() skips the draw and stores a
+// deferred function instead.  When the user opens a panel, the stored function
+// fires once, then is discarded.
+//
+// Panels deferred: pubBiasSection, diagnosticSection, cumulativeSection,
+//                  altVizSection, robSection.
+// Not deferred:    forestSection (always visible div), studyTableSection
+//                  (HTML, not D3), sensitivitySection, regressionSection
+//                  (conditionally shown — defer adds complexity for little gain).
+
+const _deferredDraws = new Map();  // panel element → pending draw function
+
+function drawIfVisible(sectionId, drawFn) {
+  const panel = document.getElementById(sectionId);
+  if (!panel) { drawFn(); return; }
+
+  // <details>.open is true when open; non-details (div) should always draw.
+  const isOpen      = panel.tagName === "DETAILS" ? panel.open : true;
+  const isDisplayed = panel.style.display !== "none";
+
+  if (isOpen && isDisplayed) {
+    drawFn();
+    _deferredDraws.delete(panel);
+    delete panel.dataset.dirty;
+  } else {
+    _deferredDraws.set(panel, drawFn);
+    panel.dataset.dirty = "1";
+  }
+}
+
+// Wire one-time toggle listeners so deferred draws fire when a panel opens.
+// toggle does not bubble, so each panel gets its own listener.
+[
+  "pubBiasSection", "diagnosticSection", "cumulativeSection",
+  "altVizSection",  "robSection",
+].forEach(id => {
+  const panel = document.getElementById(id);
+  if (!panel) return;
+  panel.addEventListener("toggle", () => {
+    if (panel.open && _deferredDraws.has(panel)) {
+      _deferredDraws.get(panel)();
+      _deferredDraws.delete(panel);
+      delete panel.dataset.dirty;
+    }
+  });
+});
+
 // markStale()
 // Signals that the displayed results are out of date with the current inputs.
 // Shows the stale-results banner and adds the "stale" CSS class to the results
@@ -1972,8 +2304,8 @@ function buildLooBody(loo, fullSig, fullEst, profile) {
     <tr>
       <th>Study omitted</th>
       <th>Estimate</th>
-      <th>95% CI (low)</th>
-      <th>95% CI (high)</th>
+      <th>${getCiLabel()} (low)</th>
+      <th>${getCiLabel()} (high)</th>
       <th>I² (%)</th>
       <th>τ²</th>
       <th>p</th>
@@ -2031,8 +2363,8 @@ function buildEstimatorBody(estData, method, profile) {
         <tr>
           <th>τ² estimator</th>
           <th>Estimate</th>
-          <th>95% CI (low)</th>
-          <th>95% CI (high)</th>
+          <th>${getCiLabel()} (low)</th>
+          <th>${getCiLabel()} (high)</th>
           <th>τ²</th>
           <th>I² (%)</th>
         </tr>
@@ -2041,7 +2373,7 @@ function buildEstimatorBody(estData, method, profile) {
     </table>
     <div class="sens-note">★ = currently selected estimator.</div>`;
 }
-function renderSensitivityPanel(studies, m, method, ciMethod, profile, { isMHFallback = false } = {}) {
+function renderSensitivityPanel(studies, m, method, ciMethod, profile, { isMHFallback = false } = {}, alpha = 0.05) {
   const container = document.getElementById("sensitivityPanel");
   if (!container) return;
 
@@ -2053,7 +2385,7 @@ function renderSensitivityPanel(studies, m, method, ciMethod, profile, { isMHFal
 
   // ---- Leave-one-out ----
   // Pass the already-computed meta result to avoid rerunning meta() for the full set.
-  const loo     = leaveOneOut(studies, method, ciMethod, m);
+  const loo     = leaveOneOut(studies, method, ciMethod, m, alpha);
   const fullSig = loo.full.pval < 0.05;
   const fullEst = profile.transform(loo.full.RE);
   const looBody = buildLooBody(loo, fullSig, fullEst, profile);
@@ -2141,8 +2473,8 @@ function renderStudyTable(studies, m, profile) {
     <tr>
       <th>Study</th>
       <th>Effect ${effectHelpBtn}</th>
-      <th>95% CI (low)</th>
-      <th>95% CI (high)</th>
+      <th>${getCiLabel()} (low)</th>
+      <th>${getCiLabel()} (high)</th>
       <th>${seLabel}</th>
       <th>${weightLabel}</th>
     </tr>`;
@@ -2411,12 +2743,12 @@ function buildBayesSummaryHTML(result, profile, reMean) {
       <tr>
         <td>Posterior mean μ</td>
         <td>${fmt(muDisp)}</td>
-        <td>95% CrI [${fmt(muCIDisp[0])}, ${fmt(muCIDisp[1])}]</td>
+        <td>${getCiLabel().replace("CI","CrI")} [${fmt(muCIDisp[0])}, ${fmt(muCIDisp[1])}]</td>
       </tr>
       <tr>
         <td>Posterior mean τ</td>
         <td>${fmt(result.tauMean)}</td>
-        <td>95% CrI [${fmt(result.tauCI[0])}, ${fmt(result.tauCI[1])}]</td>
+        <td>${getCiLabel().replace("CI","CrI")} [${fmt(result.tauCI[0])}, ${fmt(result.tauCI[1])}]</td>
       </tr>
       ${isFinite(reMean) ? `<tr>
         <td>Frequentist RE (comparison)</td>
@@ -2512,6 +2844,7 @@ function runGosh() {
   const elBar     = document.getElementById("goshProgressBar");
   const elLabel   = document.getElementById("goshProgressLabel");
   const elRun     = document.getElementById("goshRun");
+  const elCancel  = document.getElementById("goshCancel");
 
   if (k < 2) {
     if (elInfo) elInfo.innerHTML = '<p class="gosh-info">GOSH requires at least 2 valid studies.</p>';
@@ -2532,20 +2865,26 @@ function runGosh() {
   const vi = studies.map(s => s.vi);
   const maxSubsets = parseInt(document.getElementById("goshMaxSubsets").value, 10);
 
+  function resetControls() {
+    if (elRun)    { elRun.disabled = false; }
+    if (elCancel) { elCancel.disabled = true; }
+  }
+
   // Show progress bar, hide old plot
-  if (elProg)  { elProg.hidden  = false; }
-  if (elPlot)  { elPlot.style.display = "none"; }
-  if (elInfo)  { elInfo.innerHTML = ""; }
-  if (elBar)   { elBar.value = 0; }
-  if (elLabel) { elLabel.textContent = "Starting…"; }
-  if (elRun)   { elRun.disabled = true; }
+  if (elProg)   { elProg.hidden  = false; }
+  if (elPlot)   { elPlot.style.display = "none"; }
+  if (elInfo)   { elInfo.innerHTML = ""; }
+  if (elBar)    { elBar.value = 0; }
+  if (elLabel)  { elLabel.textContent = "Starting…"; }
+  if (elRun)    { elRun.disabled = true; }
+  if (elCancel) { elCancel.disabled = false; }
 
   function onDone(result) {
     goshState.result  = result;
     goshState.profile = profile;
-    if (elProg)  { elProg.hidden = true; }
-    if (elPlot)  { elPlot.style.display = ""; }
-    if (elRun)   { elRun.disabled = false; }
+    if (elProg) { elProg.hidden = true; }
+    if (elPlot) { elPlot.style.display = ""; }
+    resetControls();
     const xAxis = document.getElementById("goshXAxis").value;
     drawGoshPlot(result, profile, { xAxis });
     renderGoshInfo(result, profile);
@@ -2558,9 +2897,22 @@ function runGosh() {
   }
 
   function onError(msg) {
-    if (elProg)  { elProg.hidden = true; }
-    if (elInfo)  { elInfo.innerHTML = `<p class="gosh-info" style="color:var(--danger,red)">Error: ${msg}</p>`; }
-    if (elRun)   { elRun.disabled = false; }
+    if (elProg) { elProg.hidden = true; }
+    if (elInfo) { elInfo.innerHTML = `<p class="gosh-info" style="color:var(--danger,red)">Error: ${msg}</p>`; }
+    resetControls();
+  }
+
+  // Cancel button — terminates the Worker and resets the UI
+  if (elCancel) {
+    elCancel.onclick = () => {
+      if (goshState.worker) {
+        goshState.worker.terminate();
+        goshState.worker = null;
+      }
+      if (elProg)  { elProg.hidden = true; }
+      if (elInfo)  { elInfo.innerHTML = '<p class="gosh-info">Cancelled.</p>'; }
+      resetControls();
+    };
   }
 
   // ---- Try Worker first ----
@@ -2717,16 +3069,25 @@ document.getElementById("bayesUpdate").addEventListener("click", runBayesUpdate)
 //   State — forestPlot.args, appState.reportArgs, appState.hasRunOnce
 //            forestPlot.page ← 0, caterpillarPlot.page ← 0, cumForestPlot.page ← 0
 // -----------------------------------------------------------------------------
-function runAnalysis() {
+async function runAnalysis() {
+  if (_analysisRunning) return false;
+  _analysisRunning = true;
+  const _runBtn = document.getElementById("run");
+  if (_runBtn) { _runBtn.disabled = true; _runBtn.textContent = "Running…"; }
+  await new Promise(r => setTimeout(r, 0)); // yield so browser paints button state
+  try {
+  performance.mark("runAnalysis:start");
   scheduleSave();
   // Cancel any in-progress GOSH computation.
   if (goshState.worker) {
     goshState.worker.terminate();
     goshState.worker = null;
-    const elRun = document.getElementById("goshRun");
-    if (elRun) elRun.disabled = false;
-    const elProg = document.getElementById("goshProgress");
-    if (elProg) elProg.hidden = true;
+    const elRun    = document.getElementById("goshRun");
+    const elCancel = document.getElementById("goshCancel");
+    const elProg   = document.getElementById("goshProgress");
+    if (elRun)    elRun.disabled    = false;
+    if (elCancel) elCancel.disabled = true;
+    if (elProg)   elProg.hidden     = true;
   }
   // Reset accordion sections to their default open/closed states on each run.
   document.querySelectorAll(".results-section").forEach(d => d.removeAttribute("open"));
@@ -2778,8 +3139,10 @@ function runAnalysis() {
   let softWarnings = [];
   let missingCorrelation = false; // <-- NEW
 
+  performance.mark("phase:parse:start");
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i];
+    if (row.classList.contains("row-pending-delete")) continue;
     const inputs = [...row.querySelectorAll("input")].map(x => x.value);
 
     const isValid = validateRow(row);
@@ -2826,12 +3189,14 @@ function runAnalysis() {
 
     studies.push(study);
   }
+  performance.measure("phase:parse", "phase:parse:start");
 
   if (!studies.length) {
     if (outputPlaceholder) {
       outputPlaceholder.style.display = "";
       outputPlaceholder.textContent = "No valid studies to analyse. Check the input table for errors.";
     }
+    performance.measure("runAnalysis", "runAnalysis:start");
     return false;
   }
 
@@ -2846,23 +3211,28 @@ function runAnalysis() {
 
   const method = elTauMethod?.value || "DL";
   const ciMethod = elCiMethod?.value || "normal";
+  const alpha = getCiAlpha();
   const useTF = elUseTrimFill?.checked;
   const useTFAdjusted = elUseTFAdjusted?.checked;
 
   const isMHorPeto  = method === "MH" || method === "Peto";
   const hasClusters = studies.some(s => s.cluster);
+  const rveRho      = parseFloat(document.getElementById("rveRho")?.value ?? 0.8);
 
+  performance.mark("phase:meta:start");
   let tf = [], all = studies;
   if (useTF && !isMHorPeto) { tf = trimFill(studies, method); all = [...studies, ...tf]; }
 
   let m;
-  if      (method === "MH"  ) m = metaMH(studies, type);
-  else if (method === "Peto") m = metaPeto(studies);
-  else if (hasClusters)       m = robustMeta(studies, method, ciMethod);
-  else                        m = meta(studies, method, ciMethod);
+  if      (method === "MH"  ) m = metaMH(studies, type, alpha);
+  else if (method === "Peto") m = metaPeto(studies, alpha);
+  else if (hasClusters)       m = robustMeta(studies, method, ciMethod, alpha);
+  else                        m = meta(studies, method, ciMethod, alpha);
+  performance.measure("phase:meta", "phase:meta:start");
 
   if (m.error) {
     elResults.innerHTML = `<b style="color:var(--warn)">Error: ${m.error}</b>`;
+    performance.measure("runAnalysis", "runAnalysis:start");
     return false;
   }
 
@@ -2885,12 +3255,13 @@ function runAnalysis() {
   const bayesSigmaMu = Math.max(0.01, parseFloat(document.getElementById("bayesSigmaMu")?.value)  || 1);
   const bayesSigmaTau = Math.max(0.01, parseFloat(document.getElementById("bayesSigmaTau")?.value) || 0.5);
   let bayesResult = null;
+  performance.mark("phase:bayes:start");
   if (studies.length >= 2 && !isMHorPeto) {
     const reMeanRef = isFinite(m.RE) ? m.RE : m.FE;
     bayesState.studies = studies;
     bayesState.reMean  = reMeanRef;
     bayesState.profile = profile;
-    bayesResult = bayesMeta(studies, { mu0: bayesMu0, sigma_mu: bayesSigmaMu, sigma_tau: bayesSigmaTau });
+    bayesResult = bayesMeta(studies, { mu0: bayesMu0, sigma_mu: bayesSigmaMu, sigma_tau: bayesSigmaTau, alpha });
     if (!bayesResult.error) {
       elBayes.style.display = "";
       const bayesClusterNote = hasClusters
@@ -2909,15 +3280,59 @@ function runAnalysis() {
     bayesState.studies = null;
     elBayes.style.display = "none";
   }
+  performance.measure("phase:bayes", "phase:bayes:start");
 
+  // ---- RVE (Robust Variance Estimation) ----
+  {
+    const elRve         = document.getElementById("rveSection");
+    const elRveSummary  = document.getElementById("rveSummary");
+    const elRveSettings = document.getElementById("rveSettings");
+    const showRve = hasClusters && !isMHorPeto;
+    if (elRveSettings) elRveSettings.style.display = showRve ? "" : "none";
+    if (elRve) {
+      if (showRve) {
+        elRve.style.display = "";
+        const rve = rvePooled(studies, { rho: rveRho, alpha });
+        if (rve.error) {
+          elRveSummary.innerHTML = `<p class="reg-note" style="color:var(--color-warning)">⚠ RVE: ${rve.error}</p>`;
+        } else {
+          const rveEst  = profile.transform(rve.est);
+          const rveLo   = profile.transform(rve.ci[0]);
+          const rveHi   = profile.transform(rve.ci[1]);
+          const reDisp  = profile.transform(m.RE);
+          const diffDir = rve.est > m.RE ? "higher" : rve.est < m.RE ? "lower" : "equal";
+          elRveSummary.innerHTML = `
+            <div style="font-size:0.8125rem;line-height:1.9;margin-bottom:8px">
+              ${hBtn("rve.model")}<b>RVE pooled estimate:</b> ${fmt(rveEst)}<br>
+              CI [${fmt(rveLo)}, ${fmt(rveHi)}] | SE=${fmt(rve.se)} | t(${rve.df})=${fmt(rve.t)} | p=${fmt(rve.p)}<br>
+              ρ=${rveRho.toFixed(2)} &nbsp;·&nbsp; m=${rve.kCluster} cluster${rve.kCluster === 1 ? "" : "s"} &nbsp;·&nbsp; k=${rve.k} studies<br>
+              <span style="color:var(--fg-muted);font-size:0.93em">RE (cluster-robust): ${fmt(reDisp)} &nbsp;·&nbsp; RVE estimate is ${diffDir}.</span>
+            </div>
+          `;
+        }
+      } else {
+        elRve.style.display = "none";
+      }
+    }
+  }
+
+  performance.mark("phase:pubbias:start");
   const egger   = eggerTest(studies);
   const begg    = beggTest(studies);
-  const fatpet  = fatPetTest(studies);
+  const petpeese = petPeeseTest(studies);
+  const fatpet   = petpeese.fat;
   const fsn     = failSafeN(studies);
   const pcurve   = pCurve(studies);
   const puniform = pUniform(studies, m);
-  const influence = influenceDiagnostics(studies, method, ciMethod);
-  const subgroup = subgroupAnalysis(studies, method, ciMethod);
+  performance.measure("phase:pubbias", "phase:pubbias:start");
+
+  performance.mark("phase:influence:start");
+  const influence = influenceDiagnostics(studies, method, ciMethod, alpha);
+  performance.measure("phase:influence", "phase:influence:start");
+
+  performance.mark("phase:subgroup:start");
+  const subgroup = subgroupAnalysis(studies, method, ciMethod, alpha);
+  performance.measure("phase:subgroup", "phase:subgroup:start");
 
   const influenceHTML = buildInfluenceHTML(influence);
   const hasSubgroup   = subgroup && subgroup.G >= 2;
@@ -2925,7 +3340,7 @@ function runAnalysis() {
 
   // Adjusted RE
   let mAdjusted = null;
-  if (useTF && useTFAdjusted && tf.length > 0) mAdjusted = meta([...studies,...tf], method, ciMethod);
+  if (useTF && useTFAdjusted && tf.length > 0) mAdjusted = meta([...studies,...tf], method, ciMethod, alpha);
 
   const FE_disp = profile.transform(m.FE);
   const RE_disp = profile.transform(m.RE);
@@ -2984,6 +3399,7 @@ function runAnalysis() {
     &nbsp;&nbsp;${hBtn("bias.egger")}Egger: intercept=${isFinite(egger.intercept)?fmt(egger.intercept):"NA"} | p=${isFinite(egger.p)?fmt(egger.p):"NA (k<3)"}${eggerRobustNote}<br>
     &nbsp;&nbsp;${hBtn("bias.begg")}Begg: τ=${isFinite(begg.tau)?fmt(begg.tau):"NA"} | p=${isFinite(begg.p)?fmt(begg.p):"NA (k<3)"}<br>
     &nbsp;&nbsp;${hBtn("bias.fatpet")}FAT (bias): β₁=${isFinite(fatpet.slope)?fmt(fatpet.slope):"NA"} | p=${isFinite(fatpet.slopeP)?fmt(fatpet.slopeP):"NA (k<3)"} &nbsp;·&nbsp; PET (effect at SE→0): ${isFinite(fatpet.intercept)?fmt(profile.transform(fatpet.intercept)):"NA"} | p=${isFinite(fatpet.interceptP)?fmt(fatpet.interceptP):"NA (k<3)"}${fatpetRobustNote}<br>
+    &nbsp;&nbsp;${hBtn("bias.petpeese")}${petpeese.usePeese?"<b>":""}PET-PEESE (corrected): ${(()=>{const src=petpeese.usePeese?petpeese.peese:petpeese.fat;return isFinite(src.intercept)?`${fmt(profile.transform(src.intercept))} [${petpeese.usePeese?"PEESE":"PET"}, p=${fmt(src.interceptP)}]`:"NA (k<3)";})()}${petpeese.usePeese?"</b>":""}<br>
     &nbsp;&nbsp;${hBtn("bias.fsn")}Fail-safe N (Rosenthal): ${isFinite(fsn.rosenthal)?Math.round(fsn.rosenthal):"NA"} &nbsp;·&nbsp; Orwin (trivial=0.1): ${isFinite(fsn.orwin)?Math.round(fsn.orwin):"NA"}<br>
     <b>Trim &amp; Fill:</b>${hBtn("bias.trimfill")} ${useTF?"ON":"OFF"} (${tf.length} filled studies)
   `;
@@ -2996,7 +3412,9 @@ function runAnalysis() {
 
   renderStudyTable(all, m, profile);
   // MH/Peto can't run LOO; fall back to DL and don't pass MH/Peto m as precomputed.
-  renderSensitivityPanel(studies, isMHorPeto ? null : m, isMHorPeto ? "DL" : method, ciMethod, profile, { isMHFallback: isMHorPeto });
+  performance.mark("phase:loo:start");
+  renderSensitivityPanel(studies, isMHorPeto ? null : m, isMHorPeto ? "DL" : method, ciMethod, profile, { isMHFallback: isMHorPeto }, alpha);
+  performance.measure("phase:loo", "phase:loo:start");
   renderPCurvePanel(pcurve);
   renderPUniformPanel(puniform, m, profile);
 
@@ -3034,9 +3452,11 @@ function runAnalysis() {
   // ---- Meta-regression ----
   // buildDesignMatrix expects { key, type }; ui state stores { name, type }.
   const modSpec = moderators.map(m => ({ key: m.name, type: m.type }));
+  performance.mark("phase:regression:start");
   const reg = moderators.length > 0
-    ? metaRegression(studies, modSpec, method, ciMethod)
+    ? metaRegression(studies, modSpec, method, ciMethod, alpha)
     : null;
+  performance.measure("phase:regression", "phase:regression:start");
   const kExcluded = reg ? studies.length - reg.k : 0;
   renderRegressionPanel(reg ?? {}, method, ciMethod, kExcluded);
 
@@ -3090,13 +3510,15 @@ function runAnalysis() {
   // Cache args for nav re-renders (page already reset at top of runAnalysis).
   const rawPageSize  = elForestPageSize?.value ?? "30";
   const pageSize     = rawPageSize === "Infinity" ? Infinity : +rawPageSize;
-  const forestOpts   = { ciMethod, profile, pageSize, pooledDisplay: forestPlot.poolDisplay, theme: forestPlot.theme };
+  const forestOpts   = { ciMethod, profile, pageSize, pooledDisplay: forestPlot.poolDisplay, theme: forestPlot.theme, alpha, ciLabel: getCiLabel() };
   // For MH/Peto, substitute FE into RE slots so drawForest draws one diamond.
   const mForest = isMHorPeto
     ? { ...m, RE: m.FE, seRE: m.seFE, tau2: 0, predLow: NaN, predHigh: NaN }
     : m;
   forestPlot.args        = { studies: all, m: mForest, options: forestOpts };
+  performance.mark("phase:plot:forest:start");
   const { totalPages } = drawForest(all, mForest, { ...forestOpts, page: forestPlot.page });
+  performance.measure("phase:plot:forest", "phase:plot:forest:start");
   renderForestNav(totalPages);
 
   // Cache state for report export buttons.
@@ -3112,8 +3534,9 @@ function runAnalysis() {
 
   appState.reportArgs = {
     studies: all, m, profile, reg,
-    tf, egger, begg, fatpet, fsn, pcurve, puniform, baujatResult,
+    tf, egger, begg, fatpet, petpeese, fsn, pcurve, puniform, baujatResult,
     influence, subgroup, method, ciMethod,
+    ciLevel: document.getElementById("ciLevel")?.value ?? "95",
     useTF, mAdjusted,
     sel: selResult, selMode: selModeVal, selLabel: _selLabel,
     gosh: goshState.result,
@@ -3124,10 +3547,19 @@ function runAnalysis() {
     forestOptions: { ...forestOpts, currentPage: forestPlot.page },
   };
   funnelPlot.args = [all, m, egger, profile];
-  drawFunnel(...funnelPlot.args, { contours: funnelPlot.contours });
-  drawInfluencePlot(influence);
-  drawBaujatPlot(baujatResult, profile);
+  funnelPlot.petpeese = petpeese;
+  drawIfVisible("pubBiasSection", () => {
+    performance.mark("phase:plot:funnel:start");
+    drawFunnel(...funnelPlot.args, { contours: funnelPlot.contours, petpeese: funnelPlot.petpeese });
+    performance.measure("phase:plot:funnel", "phase:plot:funnel:start");
+  });
   elBaujatPlotBlock.style.display = baujatResult ? "" : "none";
+  drawIfVisible("diagnosticSection", () => {
+    performance.mark("phase:plot:influence:start");
+    drawInfluencePlot(influence);
+    drawBaujatPlot(baujatResult, profile);
+    performance.measure("phase:plot:influence", "phase:plot:influence:start");
+  });
 
   // ---- Cumulative meta-analysis ----
   const cumulativeOrder = elCumulativeOrder?.value || "input";
@@ -3142,43 +3574,85 @@ function runAnalysis() {
     cumulativeStudies.sort((a, b) => b.yi - a.yi);
   }
   // "input" order: no sort — preserves table order
-  const cumResults = cumulativeMeta(cumulativeStudies, method, ciMethod);
+  performance.mark("phase:cumulative:start");
+  const cumResults = cumulativeMeta(cumulativeStudies, method, ciMethod, alpha);
+  performance.measure("phase:cumulative", "phase:cumulative:start");
   cumForestPlot.page = 0;
   const rawCumPageSize = elCumForestPageSize?.value ?? "30";
   const cumForestPageSize = rawCumPageSize === "Infinity" ? Infinity : +rawCumPageSize;
-  cumForestPlot.args = { results: cumResults, profile, pageSize: cumForestPageSize };
-  const { totalPages: cumForestPages } = drawCumulativeForest(cumResults, profile, { pageSize: cumForestPageSize, page: 0 });
-  renderCumulativeForestNav(cumForestPages);
-  appState.reportArgs.cumForestOptions = { results: cumResults, profile, pageSize: cumForestPageSize, currentPage: 0 };
+  cumForestPlot.args = { results: cumResults, profile, pageSize: cumForestPageSize, alpha, ciLabel: getCiLabel() };
+  appState.reportArgs.cumForestOptions = { results: cumResults, profile, pageSize: cumForestPageSize, currentPage: 0, alpha, ciLabel: getCiLabel() };
 
-  // ---- Cumulative funnel plot ----
+  // ---- Cumulative funnel plot — state setup (eager) ----
   cumFunnelPlot.studies = cumulativeStudies;
   cumFunnelPlot.results = cumResults;
   cumFunnelPlot.profile = profile;
   elCumFunnelStep.max   = cumResults.length - 1;
   elCumFunnelStep.value = cumResults.length - 1;
   _updateCumFunnelLabel(cumResults.length - 1);
-  drawCumulativeFunnel(cumulativeStudies, cumResults, profile, cumResults.length - 1);
   elCumFunnelBlock.style.display = "";
 
+  drawIfVisible("cumulativeSection", () => {
+    performance.mark("phase:plot:cumulative:start");
+    const { totalPages: cumForestPages } = drawCumulativeForest(cumResults, profile, { pageSize: cumForestPageSize, page: 0 });
+    renderCumulativeForestNav(cumForestPages);
+    drawCumulativeFunnel(cumulativeStudies, cumResults, profile, cumResults.length - 1);
+    performance.measure("phase:plot:cumulative", "phase:plot:cumulative:start");
+  });
+
   // ---- Orchard + caterpillar plots ----
-  drawOrchardPlot(all, m, profile);
   elOrchardPlotBlock.style.display = "";
   caterpillarPlot.page = 0;
   const rawCatPageSize = elCatPageSize?.value ?? "30";
   const catPageSize = rawCatPageSize === "Infinity" ? Infinity : +rawCatPageSize;
   caterpillarPlot.args = { studies: all, m, profile, pageSize: catPageSize };
-  const { totalPages: catPages } = drawCaterpillarPlot(all, m, profile, { pageSize: catPageSize, page: 0 });
-  renderCaterpillarNav(catPages);
   elCaterpillarBlock.style.display = "";
   appState.reportArgs.caterpillarOptions = { studies: all, m, profile, pageSize: catPageSize, currentPage: 0 };
 
+  drawIfVisible("altVizSection", () => {
+    performance.mark("phase:plot:orchard:start");
+    drawOrchardPlot(all, m, profile);
+    const { totalPages: catPages } = drawCaterpillarPlot(all, m, profile, { pageSize: catPageSize, page: 0 });
+    renderCaterpillarNav(catPages);
+    performance.measure("phase:plot:orchard", "phase:plot:orchard:start");
+  });
+
   // ---- Risk-of-bias plots ----
   const hasRoB = _robDomains.length > 0 && studies.length > 0;
-  drawRoBTrafficLight(studies, _robDomains, _robData);
-  drawRoBSummary(studies, _robDomains, _robData);
   elRobSection.style.display = hasRoB ? "" : "none";
+  if (hasRoB) {
+    drawIfVisible("robSection", () => {
+      drawRoBTrafficLight(studies, _robDomains, _robData);
+      drawRoBSummary(studies, _robDomains, _robData);
+    });
+  }
 
   updateValidationWarnings(studies, excluded, softWarnings);
+
+  // ---- Run-state timestamp badge on every results section ----
+  // Insert (or update) a <span class="panel-run-at"> inside each
+  // <summary> so users can see when each panel was last updated.
+  const ts = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  document.querySelectorAll(".results-section > summary").forEach(summary => {
+    let badge = summary.querySelector(".panel-run-at");
+    if (!badge) {
+      badge = document.createElement("span");
+      badge.className = "panel-run-at";
+      summary.appendChild(badge);
+    }
+    badge.textContent = ts;
+  });
+
+  _buildJumpPill();
+  performance.measure("runAnalysis", "runAnalysis:start");
+  if (PERF_LOG) {
+    const entries = performance.getEntriesByType("measure")
+      .filter(e => e.name.startsWith("phase:") || e.name === "runAnalysis");
+    console.table(entries.map(e => ({ name: e.name, ms: +e.duration.toFixed(2) })));
+  }
   return true;
+  } finally {
+    _analysisRunning = false;
+    if (_runBtn) { _runBtn.disabled = false; _runBtn.textContent = "Run"; }
+  }
 }

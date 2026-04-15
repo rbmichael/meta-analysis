@@ -344,7 +344,7 @@ function apaFigureDocx(figNum, title, imgs, note) {
 // ---------------------------------------------------------------------------
 
 function docSummary(args, ctx) {
-  const { m, profile, method, ciMethod, useTF, tf, mAdjusted, studies } = args;
+  const { m, profile, method, ciMethod, useTF, tf, mAdjusted, studies, widthCiLabel } = args;
   const k = studies.filter(d => !d.filled).length;
   const isMHorPeto = m.isMH || m.isPeto;
   const FE_disp  = profile.transform(m.FE);
@@ -367,7 +367,7 @@ function docSummary(args, ctx) {
     [`${profile.label} \u2014 Fixed Effects (FE)`, fmt(FE_disp)],
     ...(!isMHorPeto ? [[`${profile.label} \u2014 Random Effects (RE)`, fmt(RE_disp)]] : []),
     ...(RE_adj !== null ? [["RE (trim-and-fill adjusted)", fmt(RE_adj)]] : []),
-    ["95% CI",                     fmtCI_APA(ci.lb, ci.ub)],
+    [widthCiLabel,                 fmtCI_APA(ci.lb, ci.ub)],
     ...(!isMHorPeto ? [["95% Prediction interval (PI)", fmtCI_APA(pred.lb, pred.ub)]] : []),
     ...(!isMHorPeto ? [["\u03C4\u00B2", `${fmt(m.tau2)} [${tauCI1}, ${tauCI2}]`]] : []),
     ["I\u00B2",                   `${fmt(m.I2)}% [${fmt(m.I2CI?.[0])}%, ${fmt(m.I2CI?.[1])}%]`],
@@ -424,7 +424,7 @@ function docPubBias(args, ctx) {
 }
 
 function docPUniform(args, ctx) {
-  const { puniform, m, profile } = args;
+  const { puniform, m, profile, widthCiLabel } = args;
   if (!puniform || puniform.k < 3 || !isFinite(puniform.estimate)) return [];
 
   function tr(v) { return profile.transform(v); }
@@ -446,13 +446,13 @@ function docPUniform(args, ctx) {
     paraText("P-uniform (van Assen et al., 2015)", "Heading1"),
     paraText(`${puniform.k} significant result${puniform.k !== 1 ? "s" : ""} (p\u202F<\u202F.05) used  \u00B7  effect scale: ${profile.label}`),
     ...apaTableDocx(ctx.nextTable(), "P-uniform Bias-Corrected Estimates",
-      ["Method", "Estimate", "95% CI", "Z", "p"],
+      ["Method", "Estimate", widthCiLabel, "Z", "p"],
       rows.map(r => r.map(run)), note),
   ];
 }
 
 function docSelectionModel(args, ctx) {
-  const { sel, selMode, selLabel, profile } = args;
+  const { sel, selMode, selLabel, profile, widthCiLabel } = args;
   if (!sel || sel.error) return [];
 
   const isMLE = selMode === "mle";
@@ -474,7 +474,7 @@ function docSelectionModel(args, ctx) {
       return `${fmtV(w)}${se}`;
     })],
     ["Studies per interval", ...sel.nPerInterval.map(String)],
-    ["Adjusted \u03BC\u0302 [95% CI]", `${muAdj} [${ciLo}, ${ciHi}]  \u00B7  unadjusted: ${fmtDisp(sel.RE_unsel)}`],
+    [`Adjusted \u03BC\u0302 [${widthCiLabel}]`, `${muAdj} [${ciLo}, ${ciHi}]  \u00B7  unadjusted: ${fmtDisp(sel.RE_unsel)}`],
     ["Adjusted \u03C4\u00B2",          `${fmtV(sel.tau2)}  \u00B7  unadjusted: ${fmtV(sel.tau2_unsel)}`],
     ...(isMLE && isFinite(sel.LRT) ? [["LRT (H\u2080: no selection)", `\u03C7\u00B2(${sel.LRTdf})\u202F=\u202F${fmtV(sel.LRT)}, p ${fmtP_APA(sel.LRTp)}`]] : []),
   ];
@@ -528,10 +528,10 @@ function docInfluence(args, ctx) {
 }
 
 function docSubgroup(args, ctx) {
-  const { subgroup, profile } = args;
+  const { subgroup, profile, widthCiLabel } = args;
   if (!subgroup || subgroup.G < 2) return [];
 
-  const headers = ["Group", "k", "Effect size", "SE", "95% CI", "\u03C4\u00B2", "I\u00B2 (%)"];
+  const headers = ["Group", "k", "Effect size", "SE", widthCiLabel, "\u03C4\u00B2", "I\u00B2 (%)"];
 
   const rows = Object.entries(subgroup.groups).map(([g, r]) => {
     const single = r.k === 1;
@@ -557,7 +557,7 @@ function docSubgroup(args, ctx) {
 }
 
 function docStudyTable(args, ctx) {
-  const { studies, m, profile } = args;
+  const { studies, m, profile, widthCiLabel } = args;
   const tau2   = isFinite(m.tau2) ? m.tau2 : 0;
   const real   = studies.filter(d => !d.filled);
   const totalW = real.reduce((s, d) => s + 1 / (d.vi + tau2), 0);
@@ -573,7 +573,7 @@ function docStudyTable(args, ctx) {
   const pooledLo = profile.transform(m.ciLow);
   const pooledHi = profile.transform(m.ciHigh);
 
-  const headers = ["Study", `Effect size (${profile.label})`, seLabel, "95% CI", "RE Weight (%)"];
+  const headers = ["Study", `Effect size (${profile.label})`, seLabel, widthCiLabel, "RE Weight (%)"];
 
   const rows = studies.map(d => {
     const wi  = 1 / (d.vi + tau2);
@@ -598,7 +598,7 @@ function docStudyTable(args, ctx) {
 }
 
 function docRegression(args, ctx) {
-  const { reg, method, ciMethod } = args;
+  const { reg, method, ciMethod, widthCiLabel } = args;
   if (!reg || reg.rankDeficient || !reg.colNames) return [];
 
   const ciLabel   = ciMethod === "KH" ? "Knapp-Hartung" : "Normal CI";
@@ -606,7 +606,7 @@ function docRegression(args, ctx) {
   const QMlabel   = reg.QMdist === "F" ? `F(${reg.QMdf},\u202F${reg.QEdf})` : `\u03C7\u00B2(${reg.QMdf})`;
   const hasVif    = Array.isArray(reg.vif) && reg.vif.some(v => isFinite(v));
 
-  const coefHeaders = ["Predictor", "\u03B2", "SE", statLabel, "p", "95% CI"];
+  const coefHeaders = ["Predictor", "\u03B2", "SE", statLabel, "p", widthCiLabel];
   if (hasVif) coefHeaders.push("VIF");
 
   const coefRows = reg.colNames.map((name, j) => {
@@ -804,12 +804,18 @@ ${linkRels}
 export async function buildDocx(args) {
   const {
     studies, m, profile, reg, tf, influence, subgroup,
-    method, ciMethod, useTF, mAdjusted,
+    method, ciMethod, ciLevel, useTF, mAdjusted,
     forestOptions, cumForestOptions, caterpillarOptions,
     pcurve, puniform, sel, selMode, selLabel,
     gosh, goshXAxis,
     bayesResult, bayesReMean,
   } = args;
+
+  const widthCiLabel = (ciLevel ?? "95") + "% CI";
+  const widthCrLabel = (ciLevel ?? "95") + "% CrI";
+
+  // Augment args so section helpers can access CI width labels
+  const docArgs = { ...args, widthCiLabel, widthCrLabel };
 
   // ── 1. Collect all SVG strings synchronously ────────────────────────────
 
@@ -937,10 +943,10 @@ export async function buildDocx(args) {
     paraText(`Generated ${date}  \u00B7  k\u202F=\u202F${k}${tf.length > 0 ? ` + ${tf.length} imputed` : ""}  \u00B7  ${profile.label}  \u00B7  ${method}  \u00B7  ${ciLabel}`),
 
     // Statistical sections
-    ...docSummary(args, ctx),
-    ...docPubBias(args, ctx),
-    ...docPUniform(args, ctx),
-    ...docSelectionModel(args, ctx),
+    ...docSummary(docArgs, ctx),
+    ...docPubBias(docArgs, ctx),
+    ...docPUniform(docArgs, ctx),
+    ...docSelectionModel(docArgs, ctx),
 
     // Bayesian
     ...(() => {
@@ -953,8 +959,8 @@ export async function buildDocx(args) {
       const reDisp   = isFinite(bayesReMean) ? profile.transform(bayesReMean) : NaN;
       const priorLine = `Prior: \u03BC\u202F~\u202FN(${bayesResult.mu0},\u202F${bayesResult.sigma_mu}\u00B2)  \u00B7  \u03C4\u202F~\u202FHalfNormal(${bayesResult.sigma_tau})  \u00B7  k\u202F=\u202F${bayesResult.k} studies`;
       const bayesRows = [
-        [`Posterior mean \u03BC`, `${fmt(muDisp)}  ·  95% CrI ${fmtCI_APA(muCIDisp[0], muCIDisp[1])}`],
-        [`Posterior mean \u03C4`, `${fmt(bayesResult.tauMean)}  ·  95% CrI ${fmtCI_APA(bayesResult.tauCI[0], bayesResult.tauCI[1])}`],
+        [`Posterior mean \u03BC`, `${fmt(muDisp)}  ·  ${widthCrLabel} ${fmtCI_APA(muCIDisp[0], muCIDisp[1])}`],
+        [`Posterior mean \u03C4`, `${fmt(bayesResult.tauMean)}  ·  ${widthCrLabel} ${fmtCI_APA(bayesResult.tauCI[0], bayesResult.tauCI[1])}`],
         ...(isFinite(reDisp) ? [["Frequentist RE (comparison)", fmt(reDisp)]] : []),
       ];
       const chunks = [
@@ -978,20 +984,20 @@ export async function buildDocx(args) {
       return [
         paraText("Profile Likelihood for \u03C4\u00B2", "Heading1"),
         ...apaFigureDocx(ctx.nextFigure(), "Profile likelihood curve for \u03C4\u00B2", imgs,
-          "Shaded region = 95% CI from likelihood-ratio inversion (LRT)."),
+          `Shaded region = ${widthCiLabel} from likelihood-ratio inversion (LRT).`),
       ];
     })(),
 
     // Influence, subgroup, study table, regression
-    ...docInfluence(args, ctx),
-    ...docSubgroup(args, ctx),
-    ...docStudyTable(args, ctx),
-    ...docRegression(args, ctx),
+    ...docInfluence(docArgs, ctx),
+    ...docSubgroup(docArgs, ctx),
+    ...docStudyTable(docArgs, ctx),
+    ...docRegression(docArgs, ctx),
 
     // Plot figures
     ...figSection("Forest Plot", "forest",
       `Forest plot of ${profile.label}, k\u202F=\u202F${k} studies`,
-      `RE = random effects. Error bars = 95% ${ciLabel} CI. \u03C4\u00B2 estimated by ${method}. Diamond = pooled estimate and 95% CI.`),
+      `RE = random effects. Error bars = ${widthCiLabel} (${ciLabel}). \u03C4\u00B2 estimated by ${method}. Diamond = pooled estimate and ${widthCiLabel}.`),
 
     ...figSection("Funnel Plot", "funnel",
       `Funnel plot of ${profile.label} against standard error`,
@@ -999,14 +1005,14 @@ export async function buildDocx(args) {
 
     ...figSection("Influence Plot", "influence",
       `Influence diagnostics for k\u202F=\u202F${k} studies`,
-      "Left panel: standardised residuals. Right panel: leave-one-out (LOO) random-effects estimates with 95% CI."),
+      `Left panel: standardised residuals. Right panel: leave-one-out (LOO) random-effects estimates with ${widthCiLabel}.`),
 
     ...figSection("Baujat Plot", "baujat",
       "Baujat plot of contribution to Q statistic against overall influence on the pooled estimate", ""),
 
     ...figSection("Cumulative Forest Plot", "cumForest",
       `Cumulative forest plot of ${profile.label}`,
-      "Studies added in dataset order. Effect and 95% CI shown at each cumulative step."),
+      `Studies added in dataset order. Effect and ${widthCiLabel} shown at each cumulative step.`),
 
     ...figSection("Cumulative Funnel Plot", "cumFunnel", "Cumulative funnel plot", ""),
 
@@ -1018,11 +1024,11 @@ export async function buildDocx(args) {
 
     ...figSection("Orchard Plot", "orchard",
       `Orchard plot of ${profile.label}`,
-      "Points scaled by random-effects weight. Thick bar = 95% CI; thin bar = 95% prediction interval."),
+      `Points scaled by random-effects weight. Thick bar = ${widthCiLabel}; thin bar = ${(ciLevel ?? "95")}% prediction interval.`),
 
     ...figSection("Caterpillar Plot", "caterpillar",
       `Caterpillar plot of study-level ${profile.label}, sorted by effect size`,
-      "Error bars = 95% CI."),
+      `Error bars = ${widthCiLabel}.`),
 
     ...figSection("Risk-of-bias Traffic Light", "robTL", "Risk-of-bias traffic-light plot", ""),
     ...figSection("Risk-of-bias Summary",        "robSummary", "Risk-of-bias summary plot",  ""),

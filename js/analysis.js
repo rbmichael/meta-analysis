@@ -886,8 +886,13 @@ export function bayesMeta(studies, opts = {}) {
   const mu0       = opts.mu0       !== undefined ? opts.mu0       : 0;
   const sigma_mu  = opts.sigma_mu  !== undefined ? opts.sigma_mu  : 1;
   const sigma_tau = opts.sigma_tau !== undefined ? opts.sigma_tau : 0.5;
-  const nGrid     = opts.nGrid     !== undefined ? opts.nGrid     : 300;
-  const nMu       = opts.nMu       !== undefined ? opts.nMu       : 500;
+  const alpha     = opts.alpha     !== undefined ? opts.alpha     : 0.05;
+  // Grid density adapts to k: coarser grid for large k (smooth posterior).
+  // Manual overrides via opts.nGrid / opts.nMu are respected.
+  const nGrid = opts.nGrid !== undefined ? opts.nGrid
+    : Math.round(Math.max(100, Math.min(300, 4500 / k)));
+  const nMu   = opts.nMu   !== undefined ? opts.nMu
+    : Math.round(Math.max(200, Math.min(500, 100000 / k)));
 
   if (k < 2)         return { error: "Bayesian meta-analysis requires at least 2 studies." };
   if (sigma_mu  <= 0) return { error: "sigma_mu must be positive." };
@@ -998,7 +1003,8 @@ export function bayesMeta(studies, opts = {}) {
     return tauGrid[nGrid - 1];
   };
 
-  const tauCI = [quantileTau(0.025), quantileTau(0.975)];
+  const _blo = alpha / 2, _bhi = 1 - alpha / 2;
+  const tauCI = [quantileTau(_blo), quantileTau(_bhi)];
 
   // ---- Marginal posterior of μ (law of total expectation / variance) ----
   let muMean = 0, muMeanSq = 0, muMeanVar = 0;
@@ -1058,10 +1064,10 @@ export function bayesMeta(studies, opts = {}) {
     return muGrid[nMu - 1];
   };
 
-  const muCI = [quantileMu(0.025), quantileMu(0.975)];
+  const muCI = [quantileMu(_blo), quantileMu(_bhi)];
 
   return {
-    mu0, sigma_mu, sigma_tau,
+    mu0, sigma_mu, sigma_tau, alpha,
     muMean, muSD, muCI,
     tauMean, tauSD, tauCI,
     tauGrid, tauWeights,
@@ -1095,7 +1101,7 @@ export function bayesMeta(studies, opts = {}) {
 //         Var  = Σf / (Σw)²
 //
 // Q for heterogeneity: IV weights (1/vi) with M-H estimate as reference.
-export function metaMH(studies, type) {
+export function metaMH(studies, type, alpha = 0.05) {
   const k = studies.length;
   if (k < 2) return { error: "Mantel-Haenszel requires at least 2 studies." };
 
@@ -1210,17 +1216,18 @@ export function metaMH(studies, type) {
   const stat  = est / se;
   const pval  = 2 * (1 - normalCDF(Math.abs(stat)));
 
+  const mhCrit = normalQuantile(1 - alpha / 2);
   return {
     FE: est, seFE: se,
-    ciLow:   est - Z_95 * se,
-    ciHigh:  est + Z_95 * se,
+    ciLow:   est - mhCrit * se,
+    ciHigh:  est + mhCrit * se,
     RE: NaN, seRE: NaN, tau2: NaN,
     tauCI:   hetCI.tauCI,
     I2CI:    hetCI.I2CI,
     H2CI:    hetCI.H2CI,
     Q, df, I2,
     predLow: NaN, predHigh: NaN,
-    stat, pval, crit: Z_95, dist: "z",
+    stat, pval, crit: mhCrit, dist: "z",
     isMH: true, k,
   };
 }
@@ -1238,7 +1245,7 @@ export function metaMH(studies, type) {
 //   Var  = 1 / ΣV_i
 //
 // Q for heterogeneity: IV weights (1/vi) with Peto estimate as reference.
-export function metaPeto(studies) {
+export function metaPeto(studies, alpha = 0.05) {
   const k = studies.length;
   if (k < 2) return { error: "Peto OR requires at least 2 studies." };
   if (studies[0]?.a === undefined) {
@@ -1287,17 +1294,18 @@ export function metaPeto(studies) {
   const stat  = est / se;
   const pval  = 2 * (1 - normalCDF(Math.abs(stat)));
 
+  const petoCrit = normalQuantile(1 - alpha / 2);
   return {
     FE: est, seFE: se,
-    ciLow:   est - Z_95 * se,
-    ciHigh:  est + Z_95 * se,
+    ciLow:   est - petoCrit * se,
+    ciHigh:  est + petoCrit * se,
     RE: NaN, seRE: NaN, tau2: NaN,
     tauCI:   hetCI.tauCI,
     I2CI:    hetCI.I2CI,
     H2CI:    hetCI.H2CI,
     Q, df, I2,
     predLow: NaN, predHigh: NaN,
-    stat, pval, crit: Z_95, dist: "z",
+    stat, pval, crit: petoCrit, dist: "z",
     isPeto: true, k,
   };
 }
@@ -1666,6 +1674,39 @@ export function fatPetTest(studies) {
   return result;
 }
 
+// ================= PET-PEESE =================
+// Two-stage pub-bias correction (Stanley & Doucouliagos 2014, J Econ Surveys 28:103-121;
+// Stanley 2008, Oxford Bull Econ Stat 70:103-127).
+//
+// Stage 1 — FAT-PET (same WLS as fatPetTest):
+//   yᵢ = β₀ + β₁·SEᵢ + εᵢ,  wᵢ = 1/vᵢ
+//   If β₁ is significant (interceptP < 0.10) → evidence of bias → use PEESE.
+//
+// Stage 2 — PEESE (Precision-Effect Estimate with Standard Error):
+//   yᵢ = γ₀ + γ₁·vᵢ  + εᵢ,  wᵢ = 1/vᵢ
+//   γ₀ is the bias-corrected effect estimate (effect as vᵢ → 0).
+//
+// usePeese = (fat.interceptP < 0.10)
+//
+// Returns: { fat, peese, usePeese }
+//   fat/peese each have the same shape as _wlsFinish output.
+export function petPeeseTest(studies) {
+  const fat = fatPetTest(studies);
+  const valid = studies.filter(s => isFinite(s.yi) && isFinite(s.vi) && s.vi > 0);
+  const k = valid.length;
+  let peese = _pubBiasNaN(k - 2);
+  if (k >= 3 && !isNaN(fat.intercept)) {
+    const ys = valid.map(s => s.yi);
+    const xs = valid.map(s => s.vi);           // predictor is vᵢ, not SEᵢ
+    const ws = valid.map(s => 1 / s.vi);
+    const X  = xs.map(x => [1, x]);
+    const { beta, vcov, rankDeficient } = wls(X, ys, ws);
+    if (!rankDeficient) peese = _wlsFinish(beta, vcov, ys, xs, ws, k - 2);
+  }
+  const usePeese = isFinite(fat.interceptP) && fat.interceptP < 0.10;
+  return { fat, peese, usePeese };
+}
+
 // ================= HARBORD TEST =================
 // Harbord et al. (2006, Stat Med 25:3443-3457): modified Egger test for OR
 // studies that avoids the artefactual correlation between log(OR) and its SE.
@@ -1895,10 +1936,10 @@ export function failSafeN(studies, alpha = 0.05, trivial = 0.1) {
  *             dfbeta: number, hat: number, cookD: number, r: number,
  *             outlier: boolean, influential: boolean, deltaTau2: number }[]}
  */
-export function influenceDiagnostics(studies, method="DL", ciMethod="normal"){
+export function influenceDiagnostics(studies, method="DL", ciMethod="normal", alpha=0.05){
   const n = studies.length;
   if(n < 2) return [];
-  const full = meta(studies, method, ciMethod);
+  const full = meta(studies, method, ciMethod, alpha);
 
   // Total RE weight W = Σ 1/(vi + τ²_full).
   // Computed directly from studies rather than via 1/seRE² because seRE
@@ -1962,6 +2003,30 @@ export function influenceDiagnostics(studies, method="DL", ciMethod="normal"){
     sqSS = { SA, SAY, SAY2, SsV, W_fe };
   }
 
+  // PM fast-path: warm-start seed using exact Q_loo(τ²_full) in O(1).
+  // Uses the algebraic identity Q = WY2 − WY²/W with RE weights at τ²_full.
+  // Precompute WY_re = Σ wⱼyⱼ and WY2_re = Σ wⱼyⱼ² (W = Σwⱼ already in scope).
+  let pmSS = null;
+  if (method === "PM") {
+    const tau2 = full.tau2;
+    let WY_re = 0, WY2_re = 0;
+    for (const d of studies) {
+      const wi = 1 / (d.vi + tau2);
+      WY_re += wi * d.yi; WY2_re += wi * d.yi * d.yi;
+    }
+    pmSS = { WY_re, WY2_re };   // W (= Σwⱼ at τ²_full) is already in outer scope
+  }
+
+  // SJ fast-path: warm-start seed = (k·τ²_full − sjContrib_i) / (k−1).
+  // Relies on SJ convergence property: Σ vⱼ·rⱼ²/(vⱼ+τ²_SJ) = k·τ²_SJ
+  // where rⱼ = yⱼ − μ̂ (RE mean at τ²_full).  sjContrib_i is study i's share.
+  let sjSS = null;
+  if (method === "SJ") {
+    const tau2 = full.tau2, mu = full.RE;
+    const perStudy = studies.map(d => d.vi * (d.yi - mu) ** 2 / (d.vi + tau2));
+    sjSS = { totalSJ: n * tau2, perStudy };
+  }
+
   // REML / ML / EBLUP fast path: one-step Newton seed + warm-start refinement.
   //
   // At τ²_full (convergence), S(τ²_full; all k) = 0.  The LOO score at τ²_full is
@@ -2007,8 +2072,9 @@ export function influenceDiagnostics(studies, method="DL", ciMethod="normal"){
   // Fast path: exact τ²_loo + O(k) RE_loo/seRE_loo per study, no meta(loo) call.
   // Moment estimators: O(1) τ²_loo from sufficient-stat subtraction.
   // REML/ML/EBLUP: O(1) seed + O(k×few_iters) Newton refinement (warm start).
+  // PM/SJ: O(1) warm-start seed + O(k×few_iters) fixed-point iteration.
   // PL always falls back to meta(loo) (requires the full likelihood surface).
-  const FAST_PATH_METHODS = new Set([...DL_SS_METHODS, "HE", "SQGENQ", ...LIKEL_METHODS]);
+  const FAST_PATH_METHODS = new Set([...DL_SS_METHODS, "HE", "SQGENQ", ...LIKEL_METHODS, "PM", "SJ"]);
   const useFastPath = FAST_PATH_METHODS.has(method) && ciMethod !== "PL";
 
   return studies.map((study, idx) => {
@@ -2109,6 +2175,59 @@ export function influenceDiagnostics(studies, method="DL", ciMethod="normal"){
           tau2_loo = ca_l > 0 ? Math.max(0, (Qa_l - ba_l) / ca_l) : 0;
         }
 
+      } else if (method === "PM") {
+        // ---- PM fast path: warm-start fixed-point iteration ------------------
+        // Seed: one PM step at τ²_full using exact Q_loo(τ²_full).
+        // Q_loo(τ²_full) = WY2_l − WY_l²/W_l  (algebraic identity, O(1)).
+        const wi  = 1 / (study.vi + full.tau2);
+        const W_l = W - wi;
+        const WY_l  = pmSS.WY_re  - wi * study.yi;
+        const WY2_l = pmSS.WY2_re - wi * study.yi * study.yi;
+        const Q_PM_l = W_l > 0 ? WY2_l - WY_l * WY_l / W_l : 0;
+        let t2 = W_l > 0 ? Math.max(0, full.tau2 + (Q_PM_l - (n - 2)) / W_l) : full.tau2;
+        // Warm-start PM iteration to full convergence.
+        for (let iter = 0; iter < 100; iter++) {
+          let Wit = 0, WYit = 0, WY2it = 0;
+          for (let j = 0; j < n; j++) {
+            if (j === idx) continue;
+            const wj = 1 / (studies[j].vi + t2);
+            Wit += wj; WYit += wj * studies[j].yi; WY2it += wj * studies[j].yi * studies[j].yi;
+          }
+          if (Wit <= 0) break;
+          const Qit = WY2it - WYit * WYit / Wit;
+          const newT2 = Math.max(0, t2 + (Qit - (n - 2)) / Wit);
+          if (Math.abs(newT2 - t2) < REML_TOL) { t2 = newT2; break; }
+          t2 = newT2;
+        }
+        tau2_loo = t2;
+
+      } else if (method === "SJ") {
+        // ---- SJ fast path: warm-start fixed-point iteration ------------------
+        // Seed: (k·τ²_full − sjContrib_i) / (k−1).
+        // Relies on SJ convergence identity: Σ vⱼ·rⱼ²/(vⱼ+τ²) = k·τ²_full.
+        let t2 = Math.max(0, (sjSS.totalSJ - sjSS.perStudy[idx]) / (n - 1));
+        // Warm-start SJ iteration to full convergence (two O(k) passes per iter).
+        for (let iter = 0; iter < 200; iter++) {
+          let Wit = 0, WYit = 0;
+          for (let j = 0; j < n; j++) {
+            if (j === idx) continue;
+            const wj = 1 / (studies[j].vi + t2);
+            Wit += wj; WYit += wj * studies[j].yi;
+          }
+          if (Wit <= 0) break;
+          const mu_it = WYit / Wit;
+          let s = 0;
+          for (let j = 0; j < n; j++) {
+            if (j === idx) continue;
+            const rj = studies[j].yi - mu_it;
+            s += studies[j].vi * rj * rj / (studies[j].vi + t2);
+          }
+          const newT2 = Math.max(0, s / (n - 1));
+          if (Math.abs(newT2 - t2) < REML_TOL) { t2 = newT2; break; }
+          t2 = newT2;
+        }
+        tau2_loo = t2;
+
       } else if (method === "REML" || method === "ML" || method === "EBLUP") {
         // ---- REML / ML / EBLUP fast path (Step 4) --------------------------
         // One-step Newton seed: τ²_seed = max(0, τ²_full + S_i / (totalInfo − I_i))
@@ -2188,7 +2307,7 @@ export function influenceDiagnostics(studies, method="DL", ciMethod="normal"){
     } else {
       // ---- Full meta(loo) for likelihood-based methods or ciMethod="PL" ----
       const loo = studies.filter((_, i) => i !== idx);
-      const looMeta = meta(loo, method, ciMethod);
+      const looMeta = meta(loo, method, ciMethod, alpha);
       tau2_loo = looMeta.tau2;
       RE_loo   = looMeta.RE;
       seRE_loo = looMeta.seRE;
@@ -2231,7 +2350,7 @@ export function influenceDiagnostics(studies, method="DL", ciMethod="normal"){
 }
 
 // ================= SUBGROUP =================
-export function subgroupAnalysis(studies, method="REML", ciMethod="normal") {
+export function subgroupAnalysis(studies, method="REML", ciMethod="normal", alpha=0.05) {
   const valid = studies.filter(s => s && isFinite(s.yi) && isFinite(s.vi) && s.group != null && s.group !== "");
   const kNoGroup = studies.filter(s => s && isFinite(s.yi) && isFinite(s.vi) && (s.group == null || s.group === "")).length;
   if(valid.length < 2) return null;
@@ -2239,7 +2358,8 @@ export function subgroupAnalysis(studies, method="REML", ciMethod="normal") {
   valid.forEach(s => { const g = String(s.group).trim(); if(!g) return; if(!groups[g]) groups[g]=[]; groups[g].push(s); });
   const groupNames = Object.keys(groups);
   if(groupNames.length < 2) return null;
-  const overall = meta(valid, method, ciMethod);
+  const overall = meta(valid, method, ciMethod, alpha);
+  const sgCrit = normalQuantile(1 - alpha / 2);
   const results = {};
   let Qwithin_sum = 0;
   groupNames.forEach(g => {
@@ -2250,14 +2370,14 @@ export function subgroupAnalysis(studies, method="REML", ciMethod="normal") {
       res = {
         RE: s.yi,
         se: Math.sqrt(s.vi),
-        ciLow: s.yi - Z_95 * Math.sqrt(s.vi),
-        ciHigh: s.yi + Z_95 * Math.sqrt(s.vi),
+        ciLow: s.yi - sgCrit * Math.sqrt(s.vi),
+        ciHigh: s.yi + sgCrit * Math.sqrt(s.vi),
         tau2: 0,
         I2: 0,
         Q: 0
       };
     } else {
-      res = meta(groupStudies, method, ciMethod);
+      res = meta(groupStudies, method, ciMethod, alpha);
     }
     results[g] = {
       k: groupStudies.length,
@@ -2365,6 +2485,10 @@ export function heterogeneityCIs(studies, tau2, alpha = 0.05) {
 }
 
 // ================ META-ANALYSIS ===============
+// Shallow memo: WeakMap<studies[], Map<"method::ciMethod", result>>.
+// A WeakMap entry is GC'd automatically when the studies array is released
+// (i.e. after each runAnalysis() cycle), so no manual invalidation is needed.
+const _metaCache = new WeakMap();
 /**
  * Fit fixed-effect and random-effects meta-analysis models.
  * @param {{ yi: number, vi: number }[]} studies    - Per-study effect sizes and variances.
@@ -2377,7 +2501,12 @@ export function heterogeneityCIs(studies, tau2, alpha = 0.05) {
  *             ciLow: number, ciHigh: number,
  *             crit: number, stat: number, pval: number, dist: string|null }}
  */
-export function meta(studies, method="DL", ciMethod="normal") {
+export function meta(studies, method="DL", ciMethod="normal", alpha=0.05) {
+  // Cache check — same array reference + same method/ciMethod/alpha → return cached result.
+  const _cacheKey = `${method}::${ciMethod}::${alpha}`;
+  let _byMethod = _metaCache.get(studies);
+  if (_byMethod?.has(_cacheKey)) return _byMethod.get(_cacheKey);
+
   const k = studies.length;
   if(k === 0){
     return { FE: NaN, seFE: NaN, RE: NaN, seRE: NaN, tau2:0, Q:NaN, df:0, I2:0, predLow:NaN, predHigh:NaN, ciLow:NaN, ciHigh:NaN, crit:NaN, stat:NaN, pval:NaN, dist:null };
@@ -2452,7 +2581,7 @@ export function meta(studies, method="DL", ciMethod="normal") {
 	  const varKH = sum / (df * WRE);
 	  seRE = Math.sqrt(Math.max(varKH, 0));
 
-	  crit = tCritical(df);
+	  crit = tCritical(df, alpha);
 	  stat = RE / seRE;
 	  dist = "t";
 	  pval = 2 * (1 - tCDF(Math.abs(stat), df));
@@ -2461,14 +2590,14 @@ export function meta(studies, method="DL", ciMethod="normal") {
 	  // --- t-distribution (no variance adjustment) ---
 	  const df = k - 1;
 
-	  crit = tCritical(df);
+	  crit = tCritical(df, alpha);
 	  stat = RE / seRE;
 	  dist = "t";
 	  pval = 2 * (1 - tCDF(Math.abs(stat), df));
 
 	} else {
 	  // --- Normal (Wald) ---
-	  crit = Z_95;
+	  crit = normalQuantile(1 - alpha / 2);
 	  stat = RE / seRE;
 	  dist = "z";
 	  pval = k <= 1 ? NaN : 2 * (1 - normalCDF(Math.abs(stat)));
@@ -2477,10 +2606,10 @@ export function meta(studies, method="DL", ciMethod="normal") {
   // Prediction interval: Higgins et al. (2009), t_{k-2} quantile.
   // Requires k >= 3 (df = k-2 >= 1). Uses base seRE, not KH-adjusted.
   const predVar = seRE_base * seRE_base + tau2;
-  const predCrit = k >= 3 ? tCritical(k - 2) : NaN;
+  const predCrit = k >= 3 ? tCritical(k - 2, alpha) : NaN;
 
   // Q-profile CIs for τ², I², H²
-  const hetCI = heterogeneityCIs(studies, tau2);
+  const hetCI = heterogeneityCIs(studies, tau2, alpha);
 
   // CI bounds — overridden below for profile likelihood.
   let ciLow  = RE - crit * seRE;
@@ -2489,12 +2618,12 @@ export function meta(studies, method="DL", ciMethod="normal") {
   if (ciMethod === "PL" && k > 1) {
     // Profile likelihood CI: invert the LR test using ML internally.
     // Point estimate and p-value remain Wald-based.
-    const plCI = profileLikCI(studies);
+    const plCI = profileLikCI(studies, alpha);
     ciLow  = plCI[0];
     ciHigh = plCI[1];
   }
 
-  return {
+  const _result = {
     FE,
     seFE,
     RE,
@@ -2515,6 +2644,9 @@ export function meta(studies, method="DL", ciMethod="normal") {
     pval,
     dist
   };
+  if (!_byMethod) { _byMethod = new Map(); _metaCache.set(studies, _byMethod); }
+  _byMethod.set(_cacheKey, _result);
+  return _result;
 }
 
 // ================= META-REGRESSION DESIGN MATRIX =================
@@ -2884,7 +3016,7 @@ export function tau2_metaReg(yi, vi, X, method = "REML", tol = REML_TOL, maxIter
  *             I2: number, R2: number|null, vif: number[], maxVIF: number,
  *             colNames: string[], k: number, p: number, rankDeficient: boolean }}
  */
-export function metaRegression(studies, moderators = [], method = "REML", ciMethod = "normal") {
+export function metaRegression(studies, moderators = [], method = "REML", ciMethod = "normal", alpha = 0.05) {
   // Filter to studies with finite yi and vi
   const valid = studies.filter(s => isFinite(s.yi) && isFinite(s.vi) && s.vi > 0);
   const k = valid.length;
@@ -2974,14 +3106,14 @@ export function metaRegression(studies, moderators = [], method = "REML", ciMeth
 
   if (useKH) {
     se    = vcov.map((row, j) => Math.sqrt(Math.max(0, row[j]) * s2));
-    crit  = tCritical(QEdf);
+    crit  = tCritical(QEdf, alpha);
     dist  = "t";
     zval  = beta.map((b, j) => b / se[j]);
     pval  = zval.map(t => 2 * (1 - tCDF(Math.abs(t), QEdf)));
     ci    = beta.map((b, j) => [b - crit * se[j], b + crit * se[j]]);
   } else {
     se    = vcov.map((row, j) => Math.sqrt(Math.max(0, row[j])));
-    crit  = Z_95;
+    crit  = normalQuantile(1 - alpha / 2);
     dist  = "z";
     zval  = beta.map((b, j) => b / se[j]);
     pval  = zval.map(z => 2 * (1 - normalCDF(Math.abs(z))));
@@ -3134,10 +3266,10 @@ export function metaRegression(studies, moderators = [], method = "REML", ciMeth
 //
 // Note: for k = 1, meta() returns τ² = 0 and uses a normal CI with
 // crit = 1.96, matching the behaviour of a single-study analysis.
-export function cumulativeMeta(studies, method = "DL", ciMethod = "normal") {
+export function cumulativeMeta(studies, method = "DL", ciMethod = "normal", alpha = 0.05) {
   return studies.map((s, idx) => {
     const prefix = studies.slice(0, idx + 1);
-    const m = meta(prefix, method, ciMethod);
+    const m = meta(prefix, method, ciMethod, alpha);
     return {
       k:          idx + 1,
       addedLabel: s.label ?? `Study ${idx + 1}`,
@@ -3162,8 +3294,8 @@ export function cumulativeMeta(studies, method = "DL", ciMethod = "normal") {
 //   where `significant` reflects whether the leave-one-out result is
 //   statistically significant at p < 0.05.  The rendering layer can compare
 //   this against `full.pval < 0.05` to flag significance changes.
-export function leaveOneOut(studies, method = "DL", ciMethod = "normal", precomputedFull = null) {
-  const full = precomputedFull ?? meta(studies, method, ciMethod);
+export function leaveOneOut(studies, method = "DL", ciMethod = "normal", precomputedFull = null, alpha = 0.05) {
+  const full = precomputedFull ?? meta(studies, method, ciMethod, alpha);
   if (studies.length < 3) return { full, rows: [] };
   const n = studies.length;
 
@@ -3224,18 +3356,40 @@ export function leaveOneOut(studies, method = "DL", ciMethod = "normal", precomp
     likelSS = { perStudy, totalInfo };
   }
 
-  const FAST_PATH_METHODS = new Set([...DL_SS_METHODS, "HE", "SQGENQ", ...LIKEL_METHODS]);
+  // PM fast-path precompute: WY_re and WY2_re (RE weights at τ²_full).
+  // W_RE (= Σ wⱼ at τ²_full) is already computed above.
+  let pmSS = null;
+  if (method === "PM" && ciMethod !== "PL") {
+    const tau2 = full.tau2;
+    let WY_re = 0, WY2_re = 0;
+    for (const d of studies) {
+      const wi = 1 / (d.vi + tau2);
+      WY_re += wi * d.yi; WY2_re += wi * d.yi * d.yi;
+    }
+    pmSS = { WY_re, WY2_re };
+  }
+
+  // SJ fast-path precompute: per-study SJ contributions at τ²_full.
+  // Seed = (k·τ²_full − sjContrib_i) / (k−1).
+  let sjSS = null;
+  if (method === "SJ" && ciMethod !== "PL") {
+    const tau2 = full.tau2, mu = full.RE;
+    const perStudy = studies.map(d => d.vi * (d.yi - mu) ** 2 / (d.vi + tau2));
+    sjSS = { totalSJ: n * tau2, perStudy };
+  }
+
+  const FAST_PATH_METHODS = new Set([...DL_SS_METHODS, "HE", "SQGENQ", ...LIKEL_METHODS, "PM", "SJ"]);
   const useFastPath = FAST_PATH_METHODS.has(method) && ciMethod !== "PL";
 
   const df_loo  = n - 2;   // degrees of freedom for LOO set (k_loo - 1 = n - 2)
-  const crit_loo = (ciMethod === "KH" || ciMethod === "t") ? tCritical(df_loo) : Z_95;
+  const crit_loo = (ciMethod === "KH" || ciMethod === "t") ? tCritical(df_loo, alpha) : normalQuantile(1 - alpha / 2);
   const useT     = (ciMethod === "KH" || ciMethod === "t");
 
   const rows = studies.map((omitted, omitIdx) => {
     if (!useFastPath) {
-      // ---- Full meta(loo) fallback (PM, SJ, PL, or other non-fast methods) ----
+      // ---- Full meta(loo) fallback (PL ciMethod — requires profile-likelihood CI) ----
       const subset = studies.filter((_, i) => i !== omitIdx);
-      const m = meta(subset, method, ciMethod);
+      const m = meta(subset, method, ciMethod, alpha);
       return {
         label:       omitted.label ?? `Study ${omitIdx + 1}`,
         estimate:    m.RE,
@@ -3318,6 +3472,55 @@ export function leaveOneOut(studies, method = "DL", ciMethod = "normal", precomp
         const ca_l = A_l    - Wfe_l / A_l;
         tau2_loo = ca_l > 0 ? Math.max(0, (Qa_l - ba_l) / ca_l) : 0;
       }
+
+    } else if (method === "PM") {
+      // ---- PM fast path: warm-start fixed-point iteration --------------------
+      // Exact seed via Q_loo(τ²_full) = WY2_l − WY_l²/W_l  (O(1) with pmSS).
+      const wi  = 1 / (omitted.vi + full.tau2);
+      const W_l = W_RE - wi;
+      const WY_l  = pmSS.WY_re  - wi * omitted.yi;
+      const WY2_l = pmSS.WY2_re - wi * omitted.yi * omitted.yi;
+      const Q_PM_l = W_l > 0 ? WY2_l - WY_l * WY_l / W_l : 0;
+      let t2 = W_l > 0 ? Math.max(0, full.tau2 + (Q_PM_l - df_loo) / W_l) : full.tau2;
+      for (let iter = 0; iter < 100; iter++) {
+        let Wit = 0, WYit = 0, WY2it = 0;
+        for (let j = 0; j < n; j++) {
+          if (j === omitIdx) continue;
+          const wj = 1 / (studies[j].vi + t2);
+          Wit += wj; WYit += wj * studies[j].yi; WY2it += wj * studies[j].yi * studies[j].yi;
+        }
+        if (Wit <= 0) break;
+        const Qit = WY2it - WYit * WYit / Wit;
+        const newT2 = Math.max(0, t2 + (Qit - df_loo) / Wit);
+        if (Math.abs(newT2 - t2) < REML_TOL) { t2 = newT2; break; }
+        t2 = newT2;
+      }
+      tau2_loo = t2;
+
+    } else if (method === "SJ") {
+      // ---- SJ fast path: warm-start fixed-point iteration --------------------
+      // Seed: (k·τ²_full − sjContrib_i) / (k−1).
+      let t2 = Math.max(0, (sjSS.totalSJ - sjSS.perStudy[omitIdx]) / (n - 1));
+      for (let iter = 0; iter < 200; iter++) {
+        let Wit = 0, WYit = 0;
+        for (let j = 0; j < n; j++) {
+          if (j === omitIdx) continue;
+          const wj = 1 / (studies[j].vi + t2);
+          Wit += wj; WYit += wj * studies[j].yi;
+        }
+        if (Wit <= 0) break;
+        const mu_it = WYit / Wit;
+        let s = 0;
+        for (let j = 0; j < n; j++) {
+          if (j === omitIdx) continue;
+          const rj = studies[j].yi - mu_it;
+          s += studies[j].vi * rj * rj / (studies[j].vi + t2);
+        }
+        const newT2 = Math.max(0, s / (n - 1));
+        if (Math.abs(newT2 - t2) < REML_TOL) { t2 = newT2; break; }
+        t2 = newT2;
+      }
+      tau2_loo = t2;
 
     } else {
       // REML / ML / EBLUP: one-step Newton seed + warm-start refinement.
@@ -4536,8 +4739,8 @@ export function robustWlsResult(X, w, y, beta, clusterIds) {
 //     robustDf, clustersUsed, isClustered, allSingletons
 //   Falls back to plain meta() result when no studies carry a cluster ID.
 //   Adds robustError when sandwichVar fails (robust fields are then absent).
-export function robustMeta(studies, method, ciMethod) {
-  const m = meta(studies, method, ciMethod);
+export function robustMeta(studies, method, ciMethod, alpha = 0.05) {
+  const m = meta(studies, method, ciMethod, alpha);
 
   const clusterIds = studies.map(s => s.cluster?.trim() || null);
   if (clusterIds.every(id => !id)) return m;
@@ -4552,7 +4755,7 @@ export function robustMeta(studies, method, ciMethod) {
 
   const robSE = rob.SE_rob[0];
   const useT  = rob.df < 30;
-  const crit  = useT ? tCritical(rob.df) : Z_95;
+  const crit  = useT ? tCritical(rob.df, alpha) : normalQuantile(1 - alpha / 2);
   const robStat = m.RE / robSE;
   const robPval = useT
     ? 2 * (1 - tCDF(Math.abs(robStat), rob.df))
@@ -4570,4 +4773,170 @@ export function robustMeta(studies, method, ciMethod) {
     isClustered:  true,
     allSingletons: rob.allSingletons,
   };
+}
+
+// ================= ROBUST VARIANCE ESTIMATION (RVE) =================
+//
+// Model-based correction for dependent effect sizes.
+// Hedges, Tipton & Johnson (2010, Res Synth Methods 1(1):39–65).
+//
+// Working covariance model (block-diagonal across clusters):
+//   Vᵢ[j,j]  = vⱼ          (within-study variance — on diagonal)
+//   Vᵢ[j,k]  = ρ√(vⱼ·vₖ)  (off-diagonal, j≠k, same cluster)
+//
+// Vᵢ = (1−ρ)Dᵢ + ρ·dᵢdᵢ'  where dᵢⱼ = √vⱼ.  Sherman-Morrison gives
+//   Vᵢ⁻¹[j,k] = [wⱼδⱼₖ·cᵢ − ρ√(wⱼwₖ)] / ((1−ρ)·cᵢ)
+//   where wⱼ = 1/vⱼ and cᵢ = 1−ρ+ρkᵢ.
+//
+// For p predictors (intercept always included as column 0):
+//   Aᵢ = Xᵢ'Vᵢ⁻¹Xᵢ = (WXXᵢ − ρ/cᵢ · SXᵢ⊗SXᵢ) / (1−ρ)       p×p
+//   bᵢ = Xᵢ'Vᵢ⁻¹yᵢ = (WXYᵢ − ρ/cᵢ · SXᵢ·SYᵢ)  / (1−ρ)       p-vec
+//   β̂  = (ΣAᵢ)⁻¹ · Σbᵢ
+//
+// Sandwich SE (CR1 small-sample correction):
+//   gᵢ  = Xᵢ'Vᵢ⁻¹eᵢ = (WXEᵢ − ρ/cᵢ · SXᵢ·SEᵢ) / (1−ρ)
+//   V̂(β̂) = m/(m−1) · B⁻¹ · (Σgᵢgᵢ') · B⁻¹   where B = ΣAᵢ
+//   df = m − p,  t = β̂ⱼ/SE(β̂ⱼ),  p = two-tailed t-test
+//
+// Parameters
+// ----------
+//   studies     — [{yi, vi, cluster?, <mod>?}] — cluster absent/blank → singleton
+//   opts        — { rho: 0.80, alpha: 0.05, moderators: [] }
+//     moderators — array of study property names to use as covariates
+//                  (intercept is always included; studies missing a moderator
+//                   value are silently excluded)
+//
+// Returns
+// -------
+//   { est, se, ci: [lo, hi], df, t, p, coefs, rho, kCluster, k }
+//   coefs: [{ name, est, se, ci, t, p }] — one entry per coefficient
+//          (coefs[0] is always the intercept / pooled effect)
+//   or { error: string } on failure
+//
+export function rvePooled(studies, opts = {}) {
+  const rho        = opts.rho        ?? 0.80;
+  const alpha      = opts.alpha      ?? 0.05;
+  const moderators = opts.moderators ?? [];   // array of covariate names
+
+  if (rho <= -1 || rho >= 1) return { error: "ρ must be in (−1, 1)." };
+
+  const p    = 1 + moderators.length;  // intercept + moderators
+  const rho1 = 1 - rho;
+
+  // Filter to valid studies — finite yi/vi and all moderator values present.
+  const valid = studies.filter(s => {
+    if (!s || !isFinite(s.yi) || !isFinite(s.vi) || s.vi <= 0) return false;
+    for (const mod of moderators) if (!isFinite(s[mod])) return false;
+    return true;
+  });
+  const k = valid.length;
+  if (k < 2) return { error: "Need at least 2 valid studies." };
+
+  // Group studies by cluster; studies without a cluster ID are singletons.
+  const clusterMap = new Map();
+  valid.forEach((s, idx) => {
+    const id = (s.cluster !== null && s.cluster !== undefined && String(s.cluster).trim() !== "")
+      ? String(s.cluster).trim()
+      : `__s${idx}`;
+    if (!clusterMap.has(id)) clusterMap.set(id, []);
+    clusterMap.get(id).push(s);
+  });
+  const m = clusterMap.size;
+  if (m < 2) return { error: "Need at least 2 clusters for RVE." };
+
+  const df = m - p;
+  if (df < 1) return { error: `Too few clusters (m=${m}) for ${p} predictors; need m > p.` };
+
+  // Design vector for a study: [1, mod1, mod2, ...]
+  const xVec = s => [1, ...moderators.map(mod => s[mod])];
+
+  // --- First pass: accumulate B = ΣAᵢ (p×p) and b = Σbᵢ (p) ---
+  const B = Array.from({ length: p }, () => new Array(p).fill(0));
+  const bVec = new Array(p).fill(0);
+  const clList = [];   // [{SX, ci, clStudies}] for second pass
+
+  for (const clStudies of clusterMap.values()) {
+    const ki = clStudies.length;
+    const ci = rho1 + rho * ki;   // 1−ρ+ρkᵢ  (> 0 since ρ < 1)
+
+    // Per-cluster sums needed for Sherman-Morrison
+    const WXX = Array.from({ length: p }, () => new Array(p).fill(0));
+    const SX  = new Array(p).fill(0);
+    const WXY = new Array(p).fill(0);
+    let SY = 0;
+
+    for (const s of clStudies) {
+      const wj = 1 / s.vi;
+      const sj = Math.sqrt(wj);
+      const xj = xVec(s);
+      SY += sj * s.yi;
+      for (let r = 0; r < p; r++) {
+        SX[r]  += sj * xj[r];
+        WXY[r] += wj * xj[r] * s.yi;
+        for (let c = 0; c < p; c++) WXX[r][c] += wj * xj[r] * xj[c];
+      }
+    }
+
+    // Aᵢ and bᵢ via Sherman-Morrison
+    for (let r = 0; r < p; r++) {
+      bVec[r] += (WXY[r] - rho * SX[r] * SY / ci) / rho1;
+      for (let c = 0; c < p; c++) {
+        B[r][c] += (WXX[r][c] - rho * SX[r] * SX[c] / ci) / rho1;
+      }
+    }
+
+    clList.push({ SX, ci, clStudies });
+  }
+
+  // --- Solve β̂ = B⁻¹·b ---
+  const Binv = matInverse(B);
+  if (Binv === null) return { error: "Design matrix is singular (collinear moderators?)." };
+
+  const beta = Binv.map(row => row.reduce((acc, v, j) => acc + v * bVec[j], 0));
+
+  // --- Second pass: sandwich meat M = Σ gᵢgᵢ' ---
+  const Meat = Array.from({ length: p }, () => new Array(p).fill(0));
+
+  for (const { SX, ci, clStudies } of clList) {
+    const WXE = new Array(p).fill(0);
+    let SE = 0;
+    for (const s of clStudies) {
+      const wj = 1 / s.vi;
+      const sj = Math.sqrt(wj);
+      const xj = xVec(s);
+      const ej = s.yi - xj.reduce((acc, v, j) => acc + v * beta[j], 0);
+      SE += sj * ej;
+      for (let r = 0; r < p; r++) WXE[r] += wj * xj[r] * ej;
+    }
+    // gᵢ = (WXEᵢ − ρ/cᵢ · SXᵢ·SEᵢ) / (1−ρ)
+    const gi = WXE.map((v, r) => (v - rho * SX[r] * SE / ci) / rho1);
+    for (let r = 0; r < p; r++)
+      for (let c = 0; c < p; c++) Meat[r][c] += gi[r] * gi[c];
+  }
+
+  // --- Sandwich covariance: V̂(β̂) = m/(m−1) · B⁻¹ · Meat · B⁻¹ ---
+  const scale = m / (m - 1);
+  // BinvMeat = Binv · Meat (p×p)
+  const BinvMeat = Binv.map(row =>
+    new Array(p).fill(0).map((_, c) => row.reduce((acc, v, j) => acc + v * Meat[j][c], 0))
+  );
+  // Vhat = BinvMeat · Binv (p×p)
+  const Vhat = BinvMeat.map(row =>
+    new Array(p).fill(0).map((_, c) => row.reduce((acc, v, j) => acc + v * Binv[j][c], 0))
+  );
+
+  // --- Build per-coefficient results ---
+  const crit       = tCritical(df, alpha);
+  const coefNames  = ["intercept", ...moderators];
+  const coefs      = coefNames.map((name, i) => {
+    const est_i = beta[i];
+    const se_i  = Math.sqrt(Math.max(0, scale * Vhat[i][i]));
+    const t_i   = se_i > 0 ? est_i / se_i : NaN;
+    const p_i   = isFinite(t_i) ? 2 * (1 - tCDF(Math.abs(t_i), df)) : NaN;
+    return { name, est: est_i, se: se_i, ci: [est_i - crit * se_i, est_i + crit * se_i], t: t_i, p: p_i };
+  });
+
+  // Top-level fields mirror the intercept for backward compatibility.
+  const { est, se, ci, t, p: pval } = coefs[0];
+  return { est, se, ci, t, p: pval, df, coefs, rho, kCluster: m, k };
 }
