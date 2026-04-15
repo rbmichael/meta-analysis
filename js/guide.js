@@ -849,6 +849,97 @@ estimates, SEs, t-statistics, and p-values under the RVE model.</p>`,
         ],
       },
 
+      {
+        id: "guide-three-level",
+        title: "Three-Level Meta-Analysis",
+        body: `<p>The standard two-level random-effects model assumes all effect sizes are
+independent. When a single primary study contributes multiple effect sizes
+(e.g. several outcomes, time points, or subgroups), this assumption is violated
+and estimates of heterogeneity can be inflated. <strong>Three-level meta-analysis</strong>
+extends the model with an explicit variance component for within-study clustering,
+separating heterogeneity into two sources.</p>
+
+<h4>The three-level model</h4>
+<p>Let <em>y</em><sub>ij</sub> denote the <em>j</em>-th observed effect in cluster
+(study) <em>i</em>, and let <em>v</em><sub>ij</sub> be its known sampling variance.
+The model is:</p>
+<pre>y<sub>ij</sub> = μ + u<sub>i</sub> + e<sub>ij</sub> + ε<sub>ij</sub></pre>
+<ul>
+  <li><strong>μ</strong> — overall mean (the pooled estimate)</li>
+  <li><strong>u<sub>i</sub></strong> ~ N(0, σ²<sub>between</sub>) — cluster-level random effect
+      (level-3 variance: how much cluster means vary)</li>
+  <li><strong>e<sub>ij</sub></strong> ~ N(0, σ²<sub>within</sub>) — within-cluster random effect
+      (level-2 variance: how much true effects vary within a cluster)</li>
+  <li><strong>ε<sub>ij</sub></strong> ~ N(0, v<sub>ij</sub>) — sampling error (known)</li>
+</ul>
+<p>The marginal covariance matrix for cluster <em>i</em> with
+<em>k</em><sub>i</sub> studies is:</p>
+<pre>Σ<sub>i</sub> = diag(v<sub>ij</sub> + σ²<sub>within</sub>) + σ²<sub>between</sub> · 1·1ᵀ</pre>
+<p>This is a diagonal matrix plus a rank-1 update. The Sherman-Morrison identity
+gives a closed-form inverse, so no matrix operations are required.</p>
+
+<h4>Estimation (REML)</h4>
+<p>Both variance components (σ²<sub>within</sub>, σ²<sub>between</sub>) are
+estimated simultaneously by Restricted Maximum Likelihood (REML). The pooled
+mean μ is concentrated out analytically (REML concentrated likelihood), reducing
+optimisation to a 2-dimensional problem over (log σ²<sub>within</sub>,
+log σ²<sub>between</sub>). BFGS is used for optimisation.</p>
+<p>The pooled estimate μ̂ and its standard error then follow from the
+estimated components, and inference uses a standard normal (z) distribution.</p>
+
+<h4>Variance components and decomposed I²</h4>
+<p>Using a typical sampling variance v* = 1 / Σ(1/v<sub>ij</sub>):</p>
+<pre>I²<sub>within</sub>  = 100 · σ²<sub>within</sub>  / (σ²<sub>within</sub> + σ²<sub>between</sub> + v*)
+I²<sub>between</sub> = 100 · σ²<sub>between</sub> / (σ²<sub>within</sub> + σ²<sub>between</sub> + v*)</pre>
+<p>The remainder (100 − I²<sub>within</sub> − I²<sub>between</sub>) reflects
+sampling error. A dominant I²<sub>between</sub> means cluster-mean differences
+drive most heterogeneity; a dominant I²<sub>within</sub> means heterogeneity
+is mainly within clusters.</p>
+
+<h4>When to use three-level vs two-level</h4>
+<table style="font-size:0.82rem;border-collapse:collapse;margin:8px 0">
+  <tr><th style="text-align:left;padding:3px 10px 3px 0;border-bottom:1px solid var(--border)">Situation</th>
+      <th style="padding:3px 10px;border-bottom:1px solid var(--border)">Recommended model</th></tr>
+  <tr><td style="padding:3px 10px 3px 0">All effect sizes from independent studies</td>
+      <td style="padding:3px 10px">Two-level RE (standard)</td></tr>
+  <tr><td style="padding:3px 10px 3px 0">Multiple outcomes / time points per study; within-study correlation unknown</td>
+      <td style="padding:3px 10px">Three-level or RVE</td></tr>
+  <tr><td style="padding:3px 10px 3px 0">Multiple outcomes; within-study correlation known or estimable</td>
+      <td style="padding:3px 10px">Multivariate meta-analysis</td></tr>
+  <tr><td style="padding:3px 10px 3px 0">Correcting standard error only; point estimate unchanged</td>
+      <td style="padding:3px 10px">Cluster-robust SE</td></tr>
+</table>
+<p>Three-level and RVE both handle dependent effects without requiring knowledge
+of within-study correlations. Three-level explicitly models variance structure and
+decomposes heterogeneity; RVE uses a working covariance and a sandwich SE, and can
+accommodate meta-regression. Use three-level when the decomposition of I² is of
+substantive interest.</p>
+
+<h4>How to specify clusters</h4>
+<p>Enter a <strong>Cluster ID</strong> for each study row in the input table.
+Studies sharing the same non-blank Cluster ID are grouped into one cluster.
+Studies with blank Cluster IDs are treated as singletons (their own cluster).
+At least 3 studies in at least 2 clusters are required.</p>
+<p>The Three-Level section appears automatically in the Results panel when any
+study has a non-blank Cluster ID and the pooling method is not M-H/Peto.</p>
+
+<h4>Limitations</h4>
+<ul>
+  <li>Inference is based on the z-distribution; with few clusters (&lt; 10)
+      the t-distribution (as in RVE) may provide better small-sample coverage.</li>
+  <li>The model assumes equal within-cluster variance across all clusters
+      (homogeneous σ²<sub>within</sub>). Cluster-specific variances are not
+      estimated.</li>
+  <li>Not applicable to M-H/Peto pooling methods.</li>
+</ul>`,
+        citations: [
+          "Van den Noortgate, W., López-López, J. A., Marín-Martínez, F., & Sánchez-Meca, J. (2013). Three-level meta-analysis of dependent effect sizes. <em>Behavior Research Methods, 45</em>(2), 576–594.",
+          "Cheung, M. W.-L. (2014). Modeling dependent effect sizes with three-level meta-analyses: A structural equation modeling approach. <em>Psychological Methods, 19</em>(2), 211–229.",
+          "Konstantopoulos, S. (2011). Fixed effects and variance components estimation in three-level meta-analysis. <em>Research Synthesis Methods, 2</em>(1), 61–76.",
+          "Viechtbauer, W. (2010). Conducting meta-analyses in R with the metafor package. <em>Journal of Statistical Software, 36</em>(3), 1–48.",
+        ],
+      },
+
     ],
   },
 
@@ -1652,6 +1743,9 @@ export const HELP_TO_GUIDE = {
   "tau.Peto":            "guide-mantel-haenszel",
   "cluster.id":          "guide-cluster-robust",
   "cluster.robust":      "guide-cluster-robust",
+  "threelevel.model":    "guide-three-level",
+  "threelevel.tau2":     "guide-three-level",
+  "threelevel.I2":       "guide-three-level",
 };
 
 // ------------------------------------------------------------------ //

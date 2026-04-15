@@ -2326,3 +2326,98 @@ export const RVE_BENCHMARKS = [
     }
   }
 ];
+
+// =============================================================================
+// THREE_LEVEL_BENCHMARKS — meta3level() benchmarks
+//
+// Each entry drives one meta3level() call (method: "REML" unless noted).
+// Expected values are computed from the JS implementation and will be
+// cross-validated against metafor rma.mv(yi, vi, random=~1|cluster/study)
+// in generate.R blocks THREE-1 and THREE-2.
+//
+// Model: Σᵢ = diag(vᵢⱼ + σ²ᵤ) + σ²ₜ·1·1'
+// BFGS optimisation in log-τ² space; I² uses vi_typical = 1/Σ(1/vᵢ).
+// =============================================================================
+export const THREE_LEVEL_BENCHMARKS = [
+  {
+    // THREE-1. Synthetic 4-cluster × 3-study dataset (12 studies, REML).
+    // Cluster means: C1≈0.20, C2≈0.80, C3≈0.30, C4≈0.90.
+    // Equal vi = 0.005; within-cluster spread = 0.40 → both τ² components non-zero.
+    // Expected: tau2_within ≈ 0.035, tau2_between ≈ 0.110.
+    // R: rma.mv(yi, vi, random=~1|cluster/study, method="REML")
+    name:   "Synthetic 4-cluster × 3-study (REML)",
+    method: "REML",
+    data: [
+      { yi:  0.00, vi: 0.005, cluster: "C1" },
+      { yi:  0.40, vi: 0.005, cluster: "C1" },
+      { yi:  0.20, vi: 0.005, cluster: "C1" },
+      { yi:  0.60, vi: 0.005, cluster: "C2" },
+      { yi:  1.00, vi: 0.005, cluster: "C2" },
+      { yi:  0.80, vi: 0.005, cluster: "C2" },
+      { yi:  0.10, vi: 0.005, cluster: "C3" },
+      { yi:  0.50, vi: 0.005, cluster: "C3" },
+      { yi:  0.30, vi: 0.005, cluster: "C3" },
+      { yi:  0.70, vi: 0.005, cluster: "C4" },
+      { yi:  1.10, vi: 0.005, cluster: "C4" },
+      { yi:  0.90, vi: 0.005, cluster: "C4" },
+    ],
+    expected: {
+      mu:           0.5500000000,
+      se:           0.1755942285,
+      ciLow:        0.2058416360,
+      ciHigh:       0.8941583640,
+      z:            3.1322213988,
+      p:            0.0017350238,
+      tau2_within:  0.0349999998,
+      tau2_between: 0.1099999991,
+      I2_within:    24.06876794,
+      I2_between:   75.64469911,
+      Q:            286.0000000000,
+      df:           11,
+      k:            12,
+      kCluster:     4,
+      logLik:       7.6244283846,
+    },
+  },
+  {
+    // THREE-2. Synthetic 5-cluster dataset with unequal sizes and mixed vi (14 studies, REML).
+    // Sizes: A=3, B=2, C=4, D=2, E=3. Both τ² components non-zero.
+    // Expected: tau2_within ≈ 0.0782, tau2_between ≈ 0.0268.
+    // R: rma.mv(yi, vi, random=~1|cluster/study, method="REML")
+    name:   "Synthetic 5-cluster unequal sizes (REML)",
+    method: "REML",
+    data: [
+      { yi:  0.10, vi: 0.015, cluster: "A" },
+      { yi:  0.70, vi: 0.020, cluster: "A" },
+      { yi:  0.40, vi: 0.018, cluster: "A" },
+      { yi:  0.80, vi: 0.012, cluster: "B" },
+      { yi:  1.20, vi: 0.015, cluster: "B" },
+      { yi:  0.05, vi: 0.010, cluster: "C" },
+      { yi:  0.45, vi: 0.012, cluster: "C" },
+      { yi:  0.25, vi: 0.014, cluster: "C" },
+      { yi:  0.90, vi: 0.016, cluster: "C" },
+      { yi:  0.60, vi: 0.020, cluster: "D" },
+      { yi:  1.00, vi: 0.025, cluster: "D" },
+      { yi:  0.35, vi: 0.018, cluster: "E" },
+      { yi:  0.75, vi: 0.022, cluster: "E" },
+      { yi:  0.55, vi: 0.019, cluster: "E" },
+    ],
+    expected: {
+      mu:           0.5962687526,
+      se:           0.1112780917,
+      ciLow:        0.3781677003,
+      ciHigh:       0.8143698048,
+      z:            5.3583660826,
+      p:            0.0000000842,
+      tau2_within:  0.0782159239,
+      tau2_between: 0.0267937330,
+      I2_within:    73.68989191,
+      I2_between:   25.24329051,
+      Q:            101.3917859047,
+      df:           13,
+      k:            14,
+      kCluster:     5,
+      logLik:       6.4180830762,
+    },
+  },
+];

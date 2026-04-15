@@ -1,7 +1,7 @@
 import { round, transformEffect, chiSquareCDF, chiSquareQuantile, parseCounts, bivariateNormalCDF, normalQuantile, tCritical, fCDF, normalCDF, tCDF } from "./utils.js";
 import { validateStudy } from "./profiles.js";
-import { BENCHMARKS, PUB_BIAS_BENCHMARKS, INFLUENCE_BENCHMARKS, META_REGRESSION_BENCHMARKS, VH_BENCHMARKS, MH_BENCHMARKS, CLUSTER_BENCHMARKS, RVE_BENCHMARKS } from "./benchmarks.js";
-import { compute, meta, metaMH, metaPeto, robustMeta, sandwichVar, robustWlsResult, metaRegression, tau2_HS, tau2_HE, tau2_ML, tau2_SJ, beggTest, eggerTest, fatPetTest, petPeeseTest, failSafeN, heterogeneityCIs, cumulativeMeta, influenceDiagnostics, harbordTest, petersTest, deeksTest, rueckerTest, leaveOneOut, baujat, pCurve, pUniform, estimatorComparison, subgroupAnalysis, logLik, bfgs, selIntervalProbs, selIntervalIdx, selectionLogLik, SEL_CUTS_ONE_SIDED, SEL_CUTS_TWO_SIDED, veveaHedges, SELECTION_PRESETS, profileLikTau2, profileLikCI, bayesMeta, rvePooled } from "./analysis.js";
+import { BENCHMARKS, PUB_BIAS_BENCHMARKS, INFLUENCE_BENCHMARKS, META_REGRESSION_BENCHMARKS, VH_BENCHMARKS, MH_BENCHMARKS, CLUSTER_BENCHMARKS, RVE_BENCHMARKS, THREE_LEVEL_BENCHMARKS } from "./benchmarks.js";
+import { compute, meta, metaMH, metaPeto, robustMeta, sandwichVar, robustWlsResult, metaRegression, tau2_HS, tau2_HE, tau2_ML, tau2_SJ, beggTest, eggerTest, fatPetTest, petPeeseTest, failSafeN, heterogeneityCIs, cumulativeMeta, influenceDiagnostics, harbordTest, petersTest, deeksTest, rueckerTest, leaveOneOut, baujat, pCurve, pUniform, estimatorComparison, subgroupAnalysis, logLik, bfgs, selIntervalProbs, selIntervalIdx, selectionLogLik, SEL_CUTS_ONE_SIDED, SEL_CUTS_TWO_SIDED, veveaHedges, SELECTION_PRESETS, profileLikTau2, profileLikCI, bayesMeta, rvePooled, meta3level } from "./analysis.js";
 import { trimFill } from "./trimfill.js";
 import { parseCSV } from "./csv.js";
 import { goshCompute, GOSH_MAX_ENUM_K, GOSH_MAX_K, GOSH_DEFAULT_MAX_SUBSETS } from "./gosh.js";
@@ -5304,6 +5304,144 @@ export function runTests() {
     rvechk("collinear moderators: returns error", rCollin.error !== undefined);
 
     console.log(rvePass ? "\n✅ ALL RVE TESTS PASSED" : "\n❌ SOME RVE TESTS FAILED");
+  }
+
+  // ===== THREE-LEVEL BENCHMARK TESTS (R blocks THREE-1 through THREE-2) =====
+  {
+    console.log("\n===== THREE-LEVEL BENCHMARK TESTS =====\n");
+    let threeBmPass = true;
+    const bchk3 = (label, got, exp, tol) => {
+      const ok = Math.abs(got - exp) <= tol;
+      if (!ok) { console.error(`  FAIL ${label}: got ${got}, expected ${exp} (tol ${tol})`); threeBmPass = false; }
+      else console.log(`  ok  ${label}`);
+    };
+    const bchkExact3 = (label, got, exp) => {
+      const ok = got === exp;
+      if (!ok) { console.error(`  FAIL ${label}: got ${got}, expected ${exp}`); threeBmPass = false; }
+      else console.log(`  ok  ${label}`);
+    };
+
+    THREE_LEVEL_BENCHMARKS.forEach(bm => {
+      console.log(`--- Benchmark: ${bm.name} ---`);
+      const r = meta3level(bm.data, { method: bm.method });
+
+      if (r.error) {
+        console.error(`  FAIL: unexpected error — ${r.error}`);
+        threeBmPass = false;
+        return;
+      }
+
+      bchkExact3("convergence",  r.convergence,    true);
+      bchkExact3("k",            r.k,              bm.expected.k);
+      bchkExact3("kCluster",     r.kCluster,       bm.expected.kCluster);
+      bchkExact3("df",           r.df,             bm.expected.df);
+      bchk3("mu",           r.mu,           bm.expected.mu,           1e-4);
+      bchk3("se",           r.se,           bm.expected.se,           1e-4);
+      bchk3("ciLow",        r.ci[0],        bm.expected.ciLow,        1e-4);
+      bchk3("ciHigh",       r.ci[1],        bm.expected.ciHigh,       1e-4);
+      bchk3("z",            r.z,            bm.expected.z,            1e-4);
+      bchk3("p",            r.p,            bm.expected.p,            1e-6);
+      bchk3("tau2_within",  r.tau2_within,  bm.expected.tau2_within,  1e-4);
+      bchk3("tau2_between", r.tau2_between, bm.expected.tau2_between, 1e-4);
+      bchk3("I2_within",    r.I2_within,    bm.expected.I2_within,    1e-2);
+      bchk3("I2_between",   r.I2_between,   bm.expected.I2_between,   1e-2);
+      bchk3("Q",            r.Q,            bm.expected.Q,            1e-4);
+    });
+
+    console.log(threeBmPass ? "\n✅ ALL THREE-LEVEL BENCHMARK TESTS PASSED" : "\n❌ SOME THREE-LEVEL BENCHMARK TESTS FAILED");
+  }
+
+  // ===== THREE-LEVEL (meta3level) UNIT TESTS =====
+  {
+    console.log("\n===== THREE-LEVEL (meta3level) UNIT TESTS =====\n");
+    let threePass = true;
+    const t3chk = (label, ok) => {
+      if (!ok) { console.error(`  FAIL ${label}`); threePass = false; }
+      else console.log(`  ok  ${label}`);
+    };
+
+    // --- Error: too few studies ---
+    const r2 = meta3level([
+      { yi: 0.1, vi: 0.01, cluster: "A" },
+      { yi: 0.2, vi: 0.01, cluster: "B" },
+    ]);
+    t3chk("k=2 → error", r2.error !== undefined);
+
+    // --- Error: all studies in one cluster (m=1) ---
+    const rOneCluster = meta3level([
+      { yi: 0.1, vi: 0.01, cluster: "A" },
+      { yi: 0.2, vi: 0.01, cluster: "A" },
+      { yi: 0.3, vi: 0.01, cluster: "A" },
+    ]);
+    t3chk("m=1 → error", rOneCluster.error !== undefined);
+
+    // --- Error: invalid method ---
+    const rBadMethod = meta3level(
+      [{ yi: 0.1, vi: 0.01, cluster: "A" }, { yi: 0.2, vi: 0.01, cluster: "B" },
+       { yi: 0.3, vi: 0.01, cluster: "C" }],
+      { method: "DL" }
+    );
+    t3chk("invalid method → error", rBadMethod.error !== undefined);
+
+    // --- Singletons: each study in own cluster (m = k) ---
+    // No cluster field → each gets synthetic key; m = k = 4 ≥ 2, k = 4 ≥ 3.
+    const rSingletons = meta3level([
+      { yi: 0.1, vi: 0.01 },
+      { yi: 0.4, vi: 0.02 },
+      { yi: 0.7, vi: 0.015 },
+      { yi: 1.0, vi: 0.025 },
+    ]);
+    t3chk("singletons (no cluster field): no error", !rSingletons.error);
+    t3chk("singletons: k = 4",        !rSingletons.error && rSingletons.k        === 4);
+    t3chk("singletons: kCluster = 4", !rSingletons.error && rSingletons.kCluster === 4);
+    t3chk("singletons: df = 3",       !rSingletons.error && rSingletons.df       === 3);
+    t3chk("singletons: mu finite",    !rSingletons.error && isFinite(rSingletons.mu));
+    t3chk("singletons: se > 0",       !rSingletons.error && rSingletons.se > 0);
+
+    // --- Basic sanity: mu ≈ weighted mean, CI contains mu, p is in [0,1] ---
+    const rBasic = meta3level([
+      { yi: 0.3, vi: 0.01, cluster: "A" },
+      { yi: 0.5, vi: 0.02, cluster: "A" },
+      { yi: 0.8, vi: 0.015, cluster: "B" },
+      { yi: 0.6, vi: 0.010, cluster: "B" },
+      { yi: 1.0, vi: 0.020, cluster: "C" },
+    ]);
+    t3chk("basic: no error",          !rBasic.error);
+    t3chk("basic: ci[0] < mu",        !rBasic.error && rBasic.ci[0] < rBasic.mu);
+    t3chk("basic: ci[1] > mu",        !rBasic.error && rBasic.ci[1] > rBasic.mu);
+    t3chk("basic: p in [0,1]",        !rBasic.error && rBasic.p >= 0 && rBasic.p <= 1);
+    t3chk("basic: I2_within + I2_between ≤ 100",
+      !rBasic.error && (rBasic.I2_within + rBasic.I2_between) <= 100 + 1e-9);
+    t3chk("basic: tau2_within ≥ 0",   !rBasic.error && rBasic.tau2_within  >= 0);
+    t3chk("basic: tau2_between ≥ 0",  !rBasic.error && rBasic.tau2_between >= 0);
+    t3chk("basic: Q > 0",             !rBasic.error && rBasic.Q > 0);
+    t3chk("basic: df = k-1 = 4",      !rBasic.error && rBasic.df === 4);
+
+    // --- ML vs REML: both converge, estimates differ ---
+    const data5 = THREE_LEVEL_BENCHMARKS[0].data;
+    const rREML = meta3level(data5, { method: "REML" });
+    const rML   = meta3level(data5, { method: "ML"   });
+    t3chk("ML no error",       !rML.error);
+    t3chk("REML convergence",  !rREML.error && rREML.convergence);
+    t3chk("ML convergence",    !rML.error   && rML.convergence);
+    // Both methods return finite, non-negative τ² components
+    t3chk("REML tau2_within is finite non-negative",
+      !rREML.error && isFinite(rREML.tau2_within) && rREML.tau2_within >= 0);
+    t3chk("ML tau2_within is finite non-negative",
+      !rML.error   && isFinite(rML.tau2_within)   && rML.tau2_within   >= 0);
+
+    // --- CI width scales with alpha ---
+    const data3 = THREE_LEVEL_BENCHMARKS[1].data;
+    const r90 = meta3level(data3, { alpha: 0.10 });
+    const r95 = meta3level(data3, { alpha: 0.05 });
+    const r99 = meta3level(data3, { alpha: 0.01 });
+    if (!r90.error && !r95.error && !r99.error) {
+      const w = x => x.ci[1] - x.ci[0];
+      t3chk("CI width: 90% < 95%", w(r90) < w(r95));
+      t3chk("CI width: 95% < 99%", w(r95) < w(r99));
+    }
+
+    console.log(threePass ? "\n✅ ALL THREE-LEVEL TESTS PASSED" : "\n❌ SOME THREE-LEVEL TESTS FAILED");
   }
 }
 

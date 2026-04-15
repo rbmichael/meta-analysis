@@ -900,6 +900,52 @@ export const HELP = {
            "Adjust ρ in the RVE settings row; re-run fires automatically.",
   },
 
+  // Three-level meta-analysis                                           //
+  "threelevel.model": {
+    title: "Three-Level Meta-Analysis",
+    body:  "Extends the standard two-level random-effects model to handle clustered effect sizes " +
+           "(e.g. multiple outcomes or timepoints from the same study). " +
+           "The marginal covariance for cluster i is: " +
+           "Σᵢ = diag(vᵢⱼ + σ²_within) + σ²_between · 1·1ᵀ, " +
+           "where vᵢⱼ is the within-study sampling variance for the j-th effect in cluster i, " +
+           "σ²_within is the variance of true effects within a cluster (level 2), " +
+           "and σ²_between is the variance of cluster means (level 3). " +
+           "Both variance components are estimated simultaneously by REML via BFGS optimisation " +
+           "in log-τ² space. " +
+           "The pooled estimate μ is concentrated out analytically using the generalised " +
+           "weighted mean. " +
+           "Inference uses a standard normal (z) distribution. " +
+           "Requires at least 3 studies in at least 2 clusters. " +
+           "Based on Van den Noortgate et al. (2013, Behav Res Methods 45:576).",
+  },
+
+  "threelevel.tau2": {
+    title: "Variance components: σ²_within and σ²_between",
+    body:  "σ²_within (level-2 variance): variability of true effects within a cluster, " +
+           "over and above sampling error. " +
+           "A value near zero means effects within each cluster are homogeneous; " +
+           "a large value means effects within clusters vary substantially. " +
+           "σ²_between (level-3 variance): variability of cluster-mean true effects. " +
+           "A value near zero means clusters share a common mean; " +
+           "a large value means cluster means differ substantially. " +
+           "Both components are non-negative; REML estimation may return values very " +
+           "close to zero (boundary solution) when the data do not support that level of " +
+           "heterogeneity.",
+  },
+
+  "threelevel.I2": {
+    title: "Decomposed I²",
+    body:  "I²_within and I²_between partition total heterogeneity into its two components. " +
+           "Using a typical sampling variance v* = 1 / Σ(1/vᵢⱼ): " +
+           "I²_within  = 100 · σ²_within  / (σ²_within + σ²_between + v*), " +
+           "I²_between = 100 · σ²_between / (σ²_within + σ²_between + v*). " +
+           "The remainder (100 − I²_within − I²_between) reflects sampling error. " +
+           "A dominant I²_between indicates that the main source of heterogeneity is " +
+           "differences between clusters; a dominant I²_within indicates heterogeneity " +
+           "within clusters. " +
+           "Both values are on the percentage scale [0, 100].",
+  },
+
   // Keyboard shortcuts                                                  //
   "keyboard.shortcuts": {
     title: "Keyboard shortcuts",

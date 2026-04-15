@@ -100,7 +100,7 @@
 //   ui.js calls init() on DOMContentLoaded, which populates dropdowns,
 //   restores any autosave draft, and attaches all event listeners.
 // =============================================================================
-import { eggerTest, beggTest, fatPetTest, petPeeseTest, failSafeN, pCurve, pUniform, baujat, meta, metaMH, metaPeto, robustMeta, influenceDiagnostics, subgroupAnalysis, metaRegression, cumulativeMeta, leaveOneOut, estimatorComparison, veveaHedges, SELECTION_PRESETS, profileLikTau2, bayesMeta, rvePooled } from "./analysis.js";
+import { eggerTest, beggTest, fatPetTest, petPeeseTest, failSafeN, pCurve, pUniform, baujat, meta, metaMH, metaPeto, robustMeta, influenceDiagnostics, subgroupAnalysis, metaRegression, cumulativeMeta, leaveOneOut, estimatorComparison, veveaHedges, SELECTION_PRESETS, profileLikTau2, bayesMeta, rvePooled, meta3level } from "./analysis.js";
 import { fmt } from "./utils.js";
 import { effectProfiles, getProfile } from "./profiles.js";
 import { trimFill } from "./trimfill.js";
@@ -3312,6 +3312,38 @@ async function runAnalysis() {
         }
       } else {
         elRve.style.display = "none";
+      }
+    }
+  }
+
+  // ---- Three-Level Meta-Analysis ----
+  {
+    const elThree        = document.getElementById("threeLevelSection");
+    const elThreeSummary = document.getElementById("threeLevelSummary");
+    const showThree = hasClusters && !isMHorPeto;
+    if (elThree) {
+      if (showThree) {
+        elThree.style.display = "";
+        const tl = meta3level(studies, { method: "REML", alpha });
+        if (tl.error) {
+          elThreeSummary.innerHTML = `<p class="reg-note" style="color:var(--color-warning)">⚠ Three-level: ${tl.error}</p>`;
+        } else {
+          const muDisp  = profile.transform(tl.mu);
+          const ciLoDisp = profile.transform(tl.ci[0]);
+          const ciHiDisp = profile.transform(tl.ci[1]);
+          elThreeSummary.innerHTML = `
+            <div style="font-size:0.8125rem;line-height:1.9;margin-bottom:8px">
+              ${hBtn("threelevel.model")}<b>Three-level pooled estimate:</b> ${fmt(muDisp)}<br>
+              95% CI [${fmt(ciLoDisp)}, ${fmt(ciHiDisp)}] | SE=${fmt(tl.se)} | z=${fmt(tl.z)} | p=${fmt(tl.p)}<br>
+              m=${tl.kCluster} cluster${tl.kCluster === 1 ? "" : "s"} &nbsp;·&nbsp; k=${tl.k} studies &nbsp;·&nbsp; df=${tl.df}<br>
+              ${hBtn("threelevel.tau2")}σ²<sub>within</sub>=${fmt(tl.tau2_within)} &nbsp;·&nbsp; σ²<sub>between</sub>=${fmt(tl.tau2_between)}<br>
+              ${hBtn("threelevel.I2")}I²<sub>within</sub>=${fmt(tl.I2_within)}% &nbsp;·&nbsp; I²<sub>between</sub>=${fmt(tl.I2_between)}%<br>
+              ${hBtn("het.Q")}Q(${tl.df})=${fmt(tl.Q)} | method=REML
+            </div>
+          `;
+        }
+      } else {
+        elThree.style.display = "none";
       }
     }
   }

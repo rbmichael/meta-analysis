@@ -4940,3 +4940,172 @@ export function rvePooled(studies, opts = {}) {
   const { est, se, ci, t, p: pval } = coefs[0];
   return { est, se, ci, t, p: pval, df, coefs, rho, kCluster: m, k };
 }
+
+// =============================================================================
+// THREE-LEVEL META-ANALYSIS
+// =============================================================================
+//
+// Model: studies nested within clusters (e.g. multiple outcomes per paper).
+// Three variance components:
+//   σ²ₑ — within-study sampling variance (known: vᵢⱼ)
+//   σ²ᵤ — between-study-within-cluster (unknown, tau2_within)
+//   σ²ₜ — between-cluster (unknown, tau2_between)
+//
+// Marginal covariance for cluster i (kᵢ studies):
+//   Σᵢ = diag(vᵢⱼ + σ²ᵤ) + σ²ₜ · 1·1'
+//
+// Efficient inversion via Sherman-Morrison (rank-1 update of diagonal):
+//   |Σᵢ| = (∏ⱼ dᵢⱼ) · (1 + σ²ₜ·Sdᵢ)    where dᵢⱼ = vᵢⱼ+σ²ᵤ,  Sdᵢ = Σⱼ 1/dᵢⱼ
+//   1'·Σᵢ⁻¹·1   = Sdᵢ / denomᵢ            where denomᵢ = 1 + σ²ₜ·Sdᵢ
+//   1'·Σᵢ⁻¹·yᵢ  = (Σⱼ yᵢⱼ/dᵢⱼ) / denomᵢ
+//   r'·Σᵢ⁻¹·r   = Σⱼ rᵢⱼ²/dᵢⱼ − σ²ₜ·(Σⱼ rᵢⱼ/dᵢⱼ)² / denomᵢ
+//
+// Estimation by REML (default) or ML via BFGS in log-τ² space.
+// Pooled mean μ̂ = Σᵢ (1'·Σᵢ⁻¹·yᵢ) / Σᵢ (1'·Σᵢ⁻¹·1)
+// Var(μ̂) = 1 / Σᵢ (1'·Σᵢ⁻¹·1)
+//
+// References:
+//   Cheung (2014). Modeling Dependent Effect Sizes with Three-Level Meta-Analyses.
+//   Psychological Methods, 19(2), 211–229.
+//   Van den Noortgate et al. (2013). Three-level meta-analysis. Behav Res Methods.
+//
+// Returns: { mu, se, ci, z, p, tau2_within, tau2_between, I2_within, I2_between,
+//            Q, df, k, kCluster, logLik, convergence }
+//
+export function meta3level(studies, opts = {}) {
+  const method = opts.method ?? "REML";
+  const alpha  = opts.alpha  ?? 0.05;
+
+  if (method !== "REML" && method !== "ML")
+    return { error: `method must be "REML" or "ML" (got "${method}")` };
+  if (!Array.isArray(studies) || studies.length < 3)
+    return { error: "Three-level meta-analysis requires at least 3 studies" };
+
+  // Group studies by cluster; singletons get a unique synthetic key.
+  const clusterMap = new Map();
+  studies.forEach((s, i) => {
+    const key = (s.cluster != null && s.cluster !== "") ? String(s.cluster) : `__s${i}`;
+    if (!clusterMap.has(key)) clusterMap.set(key, []);
+    clusterMap.get(key).push(s);
+  });
+  const clusters = [...clusterMap.values()];
+  const m = clusters.length;
+  const k = studies.length;
+
+  if (m < 2) return { error: "Three-level meta-analysis requires at least 2 clusters" };
+
+  // ------------------------------------------------------------------
+  // Concentrated log-likelihood at (tau2u, tau2t).
+  // We marginalise out μ analytically, then return log L(τ²ᵤ, τ²ₜ | data).
+  // The constant −k/2·log(2π) is omitted (cancels in optimisation).
+  // ------------------------------------------------------------------
+  function evalLL(tau2u, tau2t) {
+    let W = 0, Wmu = 0, ll = 0;
+
+    for (const cl of clusters) {
+      let logdetD = 0, Sd = 0, Wyi = 0;
+      for (const s of cl) {
+        const dj = s.vi + tau2u;
+        logdetD += Math.log(dj);
+        Sd      += 1 / dj;
+        Wyi     += s.yi / dj;
+      }
+      const denom = 1 + tau2t * Sd;
+      if (denom <= 0) return -Infinity;
+      ll   -= 0.5 * (logdetD + Math.log(denom));
+      W    += Sd / denom;
+      Wmu  += Wyi / denom;
+    }
+
+    if (!isFinite(W) || W <= 0) return -Infinity;
+    const mu = Wmu / W;
+
+    // Quadratic form: Σᵢ rᵢ'·Σᵢ⁻¹·rᵢ
+    for (const cl of clusters) {
+      let Sd = 0, rD = 0, rDone = 0;
+      for (const s of cl) {
+        const dj = s.vi + tau2u;
+        const rj = s.yi - mu;
+        Sd    += 1 / dj;
+        rD    += rj * rj / dj;
+        rDone += rj / dj;
+      }
+      const denom = 1 + tau2t * Sd;
+      ll -= 0.5 * (rD - tau2t * rDone * rDone / denom);
+    }
+
+    // REML correction: subtract ½ log(Σᵢ 1'·Σᵢ⁻¹·1) = ½ log(W)
+    if (method === "REML") ll -= 0.5 * Math.log(W);
+
+    return isFinite(ll) ? ll : -Infinity;
+  }
+
+  // ------------------------------------------------------------------
+  // BFGS minimisation in log-τ² space: x = [log(τ²ᵤ), log(τ²ₜ)]
+  // ------------------------------------------------------------------
+  function negLL(x) {
+    const ll = evalLL(Math.exp(x[0]), Math.exp(x[1]));
+    return ll === -Infinity ? 1e10 : -ll;
+  }
+
+  // Starting values: simple DL τ² split equally between components
+  let W0 = 0, W02 = 0, Wmu0 = 0;
+  for (const s of studies) {
+    const w = 1 / s.vi;
+    W0 += w; W02 += w * w; Wmu0 += w * s.yi;
+  }
+  const muFE0  = Wmu0 / W0;
+  const Q0     = studies.reduce((a, s) => a + (s.yi - muFE0) ** 2 / s.vi, 0);
+  const c0     = W0 - W02 / W0;
+  const tau2DL = Math.max(0.01, (Q0 - (k - 1)) / c0);
+  const x0     = [Math.log(tau2DL / 2), Math.log(tau2DL / 2)];
+
+  const res   = bfgs(negLL, x0, { maxIter: 400, gtol: 1e-6 });
+  const tau2u = Math.max(0, Math.exp(res.x[0]));
+  const tau2t = Math.max(0, Math.exp(res.x[1]));
+
+  // ------------------------------------------------------------------
+  // Final pooled estimates at optimum (τ²ᵤ, τ²ₜ)
+  // ------------------------------------------------------------------
+  let W = 0, Wmu = 0;
+  for (const cl of clusters) {
+    let Sd = 0, Wyi = 0;
+    for (const s of cl) {
+      const dj = s.vi + tau2u;
+      Sd  += 1 / dj;
+      Wyi += s.yi / dj;
+    }
+    const denom = 1 + tau2t * Sd;
+    W   += Sd / denom;
+    Wmu += Wyi / denom;
+  }
+  const mu    = Wmu / W;
+  const se    = 1 / Math.sqrt(Math.max(MIN_VAR, W));
+  const zcrit = normalQuantile(1 - alpha / 2);
+  const ci    = [mu - zcrit * se, mu + zcrit * se];
+  const zval  = se > 0 ? mu / se : NaN;
+  const pval  = isFinite(zval) ? 2 * (1 - normalCDF(Math.abs(zval))) : NaN;
+
+  // ------------------------------------------------------------------
+  // Heterogeneity: Q (fixed-effects) and decomposed I²
+  // I² follows metafor convention: vi_typical = 1 / Σ(1/vᵢ)
+  //   I²_within  = τ²ᵤ / (τ²ᵤ + τ²ₜ + vi_typical)
+  //   I²_between = τ²ₜ / (τ²ᵤ + τ²ₜ + vi_typical)
+  // ------------------------------------------------------------------
+  const Q      = studies.reduce((a, s) => a + (s.yi - muFE0) ** 2 / s.vi, 0);
+  const vi_typ = 1 / W0;  // 1 / Σ(1/vi)
+  const tot    = tau2u + tau2t + vi_typ;
+  const I2_within  = tot > 0 ? 100 * tau2u / tot : 0;
+  const I2_between = tot > 0 ? 100 * tau2t / tot : 0;
+
+  return {
+    mu, se, ci, z: zval, p: pval,
+    tau2_within:  tau2u,
+    tau2_between: tau2t,
+    I2_within, I2_between,
+    Q, df: k - 1,
+    k, kCluster: m,
+    logLik: -res.fval,
+    convergence: res.converged,
+  };
+}
