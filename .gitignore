@@ -7,3 +7,7 @@ generate.R
 run_tests.mjs
 verify_benchmarks.py
 PLAN.txt
+PERF.md
+perf_k013_bcg.csv
+perf_k050.csv
+perf_k200.csv
