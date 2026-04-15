@@ -511,6 +511,19 @@ export const HELP = {
            "calibrated than Wald CIs when k is small, at the cost of extra computation.",
   },
 
+  "ci.width": {
+    title: "CI Width (confidence level)",
+    body:  "Sets the nominal coverage of all confidence intervals in the analysis: " +
+           "90%, 95% (default), or 99%. The critical value z_{α/2} (or t_{α/2} for " +
+           "Knapp-Hartung / t-distribution methods) is derived from the chosen level " +
+           "and applied consistently to pooled estimates, prediction intervals, " +
+           "leave-one-out estimates, subgroup CIs, meta-regression coefficients, " +
+           "and Bayesian credible intervals. Wider levels (99%) reduce false positives " +
+           "at the cost of wider intervals; narrower levels (90%) increase power but " +
+           "raise the risk of excluding the true value. The chosen level is reflected " +
+           "in all tables, forest plots, and exported reports.",
+  },
+
   // ------------------------------------------------------------------ //
   // Heterogeneity statistics                                             //
   // ------------------------------------------------------------------ //
@@ -610,6 +623,18 @@ export const HELP = {
            "The intercept from the Precision Effect Test (PET) estimates the effect " +
            "size corrected for small-study bias. Requires sufficient variation in " +
            "study precision to be informative.",
+  },
+
+  "bias.petpeese": {
+    title: "PET-PEESE",
+    body:  "Two-stage pub-bias correction (Stanley & Doucouliagos 2014). " +
+           "Stage 1 runs FAT-PET (WLS of effect on SE). " +
+           "If the FAT is significant (p < .10), Stage 2 — PEESE — replaces the predictor " +
+           "with variance (vᵢ) instead of SE: yᵢ = γ₀ + γ₁·vᵢ. " +
+           "The intercept γ₀ estimates the true effect at infinite precision (vᵢ → 0). " +
+           "PEESE is preferred when bias is present because regressing on variance " +
+           "reduces over-correction for moderately-biased literatures. " +
+           "The selected estimate is shown in bold; orange = FAT-PET line, green = PEESE curve on the funnel plot.",
   },
 
   "bias.harbord": {
@@ -853,6 +878,36 @@ export const HELP = {
            "heteroscedasticity-robust SE. " +
            "Not available for M-H/Peto methods. " +
            "Based on Hedges, Tipton & Johnson (2010).",
+  },
+
+  // RVE                                                                  //
+  "rve.model": {
+    title: "RVE (Robust Variance Estimation)",
+    body:  "The RVE pooled estimator (Hedges, Tipton & Johnson 2010) accounts for " +
+           "dependent effect sizes by constructing a working covariance matrix for " +
+           "each cluster: diagonal entries equal the sampling variance vⱼ; " +
+           "off-diagonal entries equal ρ·√(vⱼ·vₖ), where ρ is the assumed " +
+           "within-cluster correlation (default 0.80). " +
+           "Sherman-Morrison inversion gives the WLS point estimate β̂ without " +
+           "explicit matrix ops. " +
+           "The standard error is a sandwich (CR1) estimate that is valid regardless " +
+           "of whether the working covariance is correct: " +
+           "SE² = m/(m−1) · Σg²ᵢ / (ΣAᵢ)², where gᵢ are per-cluster score contributions. " +
+           "Degrees of freedom: df = m − p (m = clusters, p = predictors). " +
+           "Unlike the cluster-robust SE in the summary line above (which post-hoc " +
+           "adjusts a RE estimate), RVE uses a separate WLS estimator whose weights " +
+           "depend on ρ. " +
+           "Adjust ρ in the RVE settings row; re-run fires automatically.",
+  },
+
+  // Keyboard shortcuts                                                  //
+  "keyboard.shortcuts": {
+    title: "Keyboard shortcuts",
+    body:  "Ctrl+Enter (Cmd+Enter on Mac) — run analysis and switch to Results.\n" +
+           "Ctrl+Shift+C (Cmd+Shift+C) — clear all study rows.\n" +
+           "Escape — close this help popover.\n" +
+           "← / → arrow keys — navigate forest plot pages (when Results tab is active " +
+           "and focus is not in a text field).",
   },
 
   // Bayesian                                                            //

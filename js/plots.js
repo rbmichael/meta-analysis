@@ -81,7 +81,7 @@
 // Dependencies: utils.js (chiSquareCDF), constants.js (Z_95), D3 (global)
 // =============================================================================
 
-import { chiSquareCDF } from "./utils.js";
+import { chiSquareCDF, normalQuantile } from "./utils.js";
 import { Z_95 } from "./constants.js";
 import { FOREST_THEMES } from "./forestThemes.js";
 
@@ -105,6 +105,13 @@ function clearAndSelectSVG(selector) {
   const svg = d3.select(selector);
   svg.selectAll("*").remove();
   return svg;
+}
+
+// setSvgSize(sel, w, h)
+// Sets width, height, and viewBox on an SVG D3 selection so that the SVG
+// scales proportionally when CSS sets max-width: 100%.
+function setSvgSize(sel, w, h) {
+  return sel.attr("width", w).attr("height", h).attr("viewBox", `0 0 ${w} ${h}`);
 }
 
 // styleAxis(axisG, strokeColor, fillColor [, fontSize [, fontFamily]])
@@ -230,7 +237,7 @@ export function drawBubble(studies, reg, modName, modIdx, container) {
   const yScale = d3.scaleLinear().domain([yMin - yPad, yMax + yPad]).nice().range([iH, 0]);
 
   // ---- SVG ----
-  const svg = d3.select(container).append("svg").attr("width", W).attr("height", H);
+  const svg = setSvgSize(d3.select(container).append("svg"), W, H);
   const g   = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
 
   // Zero line
@@ -413,7 +420,7 @@ export function drawPartialResidualBubble(studies, reg, modName, modIdx, contain
   const yScale = d3.scaleLinear().domain([yMin - yPad, yMax + yPad]).nice().range([iH, 0]);
 
   // ---- SVG ----
-  const svg = d3.select(container).append("svg").attr("width", W).attr("height", H);
+  const svg = setSvgSize(d3.select(container).append("svg"), W, H);
   const g   = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
 
   // Zero line
@@ -551,7 +558,7 @@ export function drawPartialResidualBubble(studies, reg, modName, modIdx, contain
 // ── Forest plot sub-renderers ────────────────────────────────────────────────
 // All accept a render context: ctx = { svg, x, L, T, profile }
 
-function forestDrawStudyRows(ctx, pageStudies, studies, studyCrit, ciLabel, yPos) {
+function forestDrawStudyRows(ctx, pageStudies, studies, studyCrit, widthCiLabel, ciMethodLabel, yPos) {
   const { svg, x, L, T, profile } = ctx;
   const tooltip = d3.select("#tooltip");
   const wMax    = d3.max(studies, d => d.w);
@@ -560,7 +567,7 @@ function forestDrawStudyRows(ctx, pageStudies, studies, studyCrit, ciLabel, yPos
     .data(pageStudies).enter().append("line")
     .attr("x1", d => x(d.yi - studyCrit * d.se))
     .attr("x2", d => x(d.yi + studyCrit * d.se))
-    .attr("y1", d => yPos[d.label]).attr("y2", d => yPos[d.label])
+    .attr("y1", d => yPos.get(d)).attr("y2", d => yPos.get(d))
     .attr("stroke", d => d.filled ? T.fgMuted : T.fgSubtle)
     .attr("stroke-width", T.ciStrokeWidth);
 
@@ -568,7 +575,7 @@ function forestDrawStudyRows(ctx, pageStudies, studies, studyCrit, ciLabel, yPos
   svg.selectAll("rect")
     .data(pageStudies).enter().append("rect")
     .attr("x", d => x(d.yi) - Math.sqrt(d.w / wMax) * L.boxHalf * 2)
-    .attr("y", d => yPos[d.label] - L.boxHalf)
+    .attr("y", d => yPos.get(d) - L.boxHalf)
     .attr("width",  d => Math.sqrt(d.w / wMax) * L.boxHalf * 4)
     .attr("height", L.boxHalf * 2)
     .attr("fill",   d => d.filled ? "none"    : T.accent)
@@ -579,7 +586,7 @@ function forestDrawStudyRows(ctx, pageStudies, studies, studyCrit, ciLabel, yPos
       const hi_disp = profile.transform(d.yi + studyCrit * d.se);
       tooltip.style("opacity", 1)
         .html(`${d.label}<br>Effect: ${isFinite(ef_disp) ? ef_disp.toFixed(3) : "NA"}<br>` +
-              `CI (${ciLabel}): ${isFinite(lo_disp) ? lo_disp.toFixed(3) : "NA"} – ${isFinite(hi_disp) ? hi_disp.toFixed(3) : "NA"}`)
+              `${widthCiLabel} (${ciMethodLabel}): ${isFinite(lo_disp) ? lo_disp.toFixed(3) : "NA"} – ${isFinite(hi_disp) ? hi_disp.toFixed(3) : "NA"}`)
         .style("left", (e.pageX + 10) + "px").style("top", (e.pageY - 20) + "px");
     })
     .on("mouseout", () => tooltip.style("opacity", 0));
@@ -591,7 +598,7 @@ function forestDrawStudyLabels(ctx, pageStudies, yPos, charW) {
   pageStudies.forEach(d => {
     const lbl = d.label.length > maxChars ? d.label.slice(0, maxChars - 1) + "…" : d.label;
     svg.append("text")
-      .attr("x", L.labelW - 8).attr("y", yPos[d.label] + 4)
+      .attr("x", L.labelW - 8).attr("y", yPos.get(d) + 4)
       .attr("text-anchor", "end")
       .style("font-size", L.labelFontSize).style("font-family", T.fontFamily)
       .attr("fill", d.filled ? T.fgMuted : T.fg)
@@ -672,7 +679,7 @@ function forestDrawColumnHeaders(ctx, separators, hY) {
 }
 
 function forestDrawAnnotations(ctx, pageStudies, yPos, studies, studyCrit, m,
-                               showFE, showRE, showBoth, feCiLow, feCiHigh, hY) {
+                               showFE, showRE, showBoth, feCiLow, feCiHigh, hY, widthCiLabel) {
   const { svg, L, T, profile } = ctx;
   const efAnnotX     = L.annotX0 + 8;
   const wtAnnotX     = L.totalW - 6;
@@ -683,7 +690,7 @@ function forestDrawAnnotations(ctx, pageStudies, yPos, studies, studyCrit, m,
   svg.append("text")
     .attr("x", efAnnotX).attr("y", hY)
     .style("font-size", L.labelFontSize).style("font-family", T.fontFamily)
-    .attr("fill", T.fgMuted).text("Effect [95% CI]");
+    .attr("fill", T.fgMuted).text(`Effect [${widthCiLabel ?? "95% CI"}]`);
   svg.append("text")
     .attr("x", wtAnnotX).attr("y", hY).attr("text-anchor", "end")
     .style("font-size", L.labelFontSize).style("font-family", T.fontFamily)
@@ -691,7 +698,7 @@ function forestDrawAnnotations(ctx, pageStudies, yPos, studies, studyCrit, m,
 
   // Per-study annotation rows (page slice only)
   pageStudies.forEach(d => {
-    const rowMid = yPos[d.label] + 4;
+    const rowMid = yPos.get(d) + 4;
     const ef  = profile.transform(d.yi);
     const lo  = profile.transform(d.yi - studyCrit * d.se);
     const hi  = profile.transform(d.yi + studyCrit * d.se);
@@ -785,11 +792,13 @@ export function drawForest(studies, m, options = {}) {
   const showRE   = pooledDisplay === "RE"   || pooledDisplay === "Both";
   const showBoth = showFE && showRE;
 
-  const feCiLow  = isFinite(m.FE) ? m.FE - Z_95 * m.seFE : NaN;
-  const feCiHigh = isFinite(m.FE) ? m.FE + Z_95 * m.seFE : NaN;
-  const studyCrit = Z_95;  // individual study CIs always use Z_95 regardless of CI method
+  const alpha        = options.alpha    ?? 0.05;
+  const widthCiLabel = options.ciLabel  ?? "95% CI";
+  const studyCrit    = normalQuantile(1 - alpha / 2);
+  const feCiLow  = isFinite(m.FE) ? m.FE - studyCrit * m.seFE : NaN;
+  const feCiHigh = isFinite(m.FE) ? m.FE + studyCrit * m.seFE : NaN;
 
-  const ciLabel = {
+  const ciMethodLabel = {
     normal: "Normal (z)", t: "t-distribution", KH: "Knapp-Hartung", PL: "Profile Likelihood"
   }[ciMethod] || ciMethod;
 
@@ -818,8 +827,10 @@ export function drawForest(studies, m, options = {}) {
   L.sepH     = Math.max(14, L.rowH);
 
   // ----------- Y-POSITION MAP -----------
+  // Keyed on study object identity (Map), not label string, so duplicate or
+  // empty labels don't collide and overwrite each other.
   const hasGroups = studies.some(d => d.group && d.group.trim() !== "");
-  const yPos       = {};
+  const yPos       = new Map();
   const separators = [];
   let cursor = L.studyY0, prevGroup = null;
   pageStudies.forEach(d => {
@@ -828,7 +839,7 @@ export function drawForest(studies, m, options = {}) {
       separators.push({ y: cursor, group });
       cursor += L.sepH;
     }
-    yPos[d.label] = cursor + L.rowH / 2;
+    yPos.set(d, cursor + L.rowH / 2);
     cursor += L.rowH;
     prevGroup = hasGroups ? group : null;
   });
@@ -842,7 +853,7 @@ export function drawForest(studies, m, options = {}) {
   L.hetY       = showBoth ? L.studyY1 + 98 : L.studyY1 + 80;
   L.annotX0    = L.labelW + L.plotW;
 
-  svg.attr("width", L.totalW).attr("height", L.totalH);
+  setSvgSize(svg, L.totalW, L.totalH);
   if (T.bg && T.bg !== "transparent") {
     svg.insert("rect", ":first-child")
       .attr("width", L.totalW).attr("height", L.totalH).attr("fill", T.bg);
@@ -870,8 +881,8 @@ export function drawForest(studies, m, options = {}) {
     .attr("text-anchor", "middle").attr("fill", T.fgMuted)
     .style("font-size", L.titleFontSize).style("font-family", T.fontFamily)
     .text(showBoth
-      ? `Fixed-effect and Random-effects models (RE: ${ciLabel})`
-      : showFE ? "Fixed-effect model" : `Random-effects model (${ciLabel})`);
+      ? `Fixed-effect and Random-effects models (RE: ${ciMethodLabel})`
+      : showFE ? "Fixed-effect model" : `Random-effects model (${ciMethodLabel})`);
 
   // ----------- NULL REFERENCE LINE -----------
   const nullX = x(0);
@@ -882,7 +893,7 @@ export function drawForest(studies, m, options = {}) {
       .attr("stroke", T.border).attr("stroke-dasharray", T.nullLineDash);
   }
 
-  forestDrawStudyRows(ctx, pageStudies, studies, studyCrit, ciLabel, yPos);
+  forestDrawStudyRows(ctx, pageStudies, studies, studyCrit, widthCiLabel, ciMethodLabel, yPos);
 
   // ----------- AXIS -----------
   const axisG = svg.append("g")
@@ -933,7 +944,7 @@ export function drawForest(studies, m, options = {}) {
 
   const hY = L.headerH / 2 + 5;
   forestDrawColumnHeaders(ctx, separators, hY);
-  forestDrawAnnotations(ctx, pageStudies, yPos, studies, studyCrit, m, showFE, showRE, showBoth, feCiLow, feCiHigh, hY);
+  forestDrawAnnotations(ctx, pageStudies, yPos, studies, studyCrit, m, showFE, showRE, showBoth, feCiLow, feCiHigh, hY, widthCiLabel);
   forestDrawPredictionInterval(ctx, m, showRE);
   forestDrawHetSummary(ctx, m);
 
@@ -1000,6 +1011,47 @@ function funnelDrawEggerLine(svg, egger, studies, x, y, contours, isDark) {
     .attr("stroke-width", 2)
     .attr("stroke-dasharray", "4,2")
     .attr("d", d3.line().x(d => x(d.yi_hat)).y(d => y(d.se)));
+}
+
+// Draw FAT-PET line and PEESE curve on funnel plot.
+// FAT-PET is a straight line: yi = fat.intercept + fat.slope * se
+// PEESE is a parabola:        yi = peese.intercept + peese.slope * vi = peese.intercept + peese.slope * se²
+// The active estimate (usePeese → solid, inactive → dashed at lower opacity).
+function funnelDrawPeeseLines(svg, petpeese, studies, x, y, contours, isDark) {
+  const { fat, peese, usePeese } = petpeese;
+  const seMin = d3.min(studies, d => d.se);
+  const seMax = d3.max(studies, d => d.se);
+  if (seMin === seMax) return;
+  const pts = d3.range(0, 51).map(i => seMin + (i / 50) * (seMax - seMin));
+
+  const petColor   = contours ? (isDark ? "#cc9944" : "#996600") : "var(--color-warning)";
+  const peeseColor = contours ? (isDark ? "#44cc88" : "#007744") : "var(--color-success, #22aa66)";
+
+  // FAT-PET line
+  if (isFinite(fat.intercept) && isFinite(fat.slope)) {
+    const lineData = pts.map(se => ({ yi_hat: fat.intercept + fat.slope * se, se }));
+    svg.append("path")
+      .datum(lineData)
+      .attr("fill", "none")
+      .attr("stroke", petColor)
+      .attr("stroke-width", usePeese ? 1.5 : 2)
+      .attr("stroke-dasharray", usePeese ? "3,3" : "none")
+      .attr("opacity", usePeese ? 0.55 : 1)
+      .attr("d", d3.line().x(d => x(d.yi_hat)).y(d => y(d.se)));
+  }
+
+  // PEESE curve (parabola in se, i.e. linear in vi)
+  if (isFinite(peese.intercept) && isFinite(peese.slope)) {
+    const curveData = pts.map(se => ({ yi_hat: peese.intercept + peese.slope * se * se, se }));
+    svg.append("path")
+      .datum(curveData)
+      .attr("fill", "none")
+      .attr("stroke", peeseColor)
+      .attr("stroke-width", usePeese ? 2 : 1.5)
+      .attr("stroke-dasharray", usePeese ? "none" : "3,3")
+      .attr("opacity", usePeese ? 1 : 0.55)
+      .attr("d", d3.line().x(d => x(d.yi_hat)).y(d => y(d.se)));
+  }
 }
 
 function funnelDrawAxesAndLabels(svg, x, y, margin, W, H, iW, iH, profile, borderClr, fgColor) {
@@ -1105,7 +1157,7 @@ export function drawFunnel(studies, m, egger, profile, options = {}) {
   const W = 500, H = 400;
   const iW = W - margin.left - margin.right;   // 420
   const iH = H - margin.top  - margin.bottom;  // 328
-  svg.attr("width", W).attr("height", H);
+  setSvgSize(svg, W, H);
 
   const seMax = d3.max(studies, d => d.se);
 
@@ -1195,6 +1247,7 @@ export function drawFunnel(studies, m, egger, profile, options = {}) {
   funnelDrawFunnelArms(svg, x, y, seMax, xHalf, borderClr, m, contours, isDark);
   funnelDrawStudies(svg, studies, x, y, dotFill, dotStroke, dotFillImp, dotStrImp);
   funnelDrawEggerLine(svg, egger, studies, x, y, contours, isDark);
+  if (options.petpeese) funnelDrawPeeseLines(svg, options.petpeese, studies, x, y, contours, isDark);
   funnelDrawAxesAndLabels(svg, x, y, margin, W, H, iW, iH, profile, borderClr, fgColor);
   if (contours) funnelDrawLegend(svg, W, margin, BANDS, isDark);
 }
@@ -1344,7 +1397,7 @@ export function drawCumulativeForest(cumulativeResults, profile, options = {}) {
 
   const totalH = margin.top + pk * rowH + margin.bottom;
 
-  svg.attr("width", totalW).attr("height", totalH);
+  setSvgSize(svg, totalW, totalH);
 
   // X scale across all display-scale CI bounds (all rows, not just this page)
   const allX = rows.flatMap(r => [r.lo_disp, r.re_disp, r.hi_disp]).filter(isFinite);
@@ -1437,7 +1490,7 @@ export function drawCumulativeForest(cumulativeResults, profile, options = {}) {
         .attr("fill", "transparent"),
       () => `<b>After: ${r.addedLabel}</b> (k = ${r.k})<br>` +
             `RE = ${isFinite(r.re_disp)  ? r.re_disp.toFixed(3)  : "NA"}&nbsp; ` +
-            `CI [${isFinite(r.lo_disp) ? r.lo_disp.toFixed(3) : "NA"}, ` +
+            `${options.ciLabel ?? "95% CI"} [${isFinite(r.lo_disp) ? r.lo_disp.toFixed(3) : "NA"}, ` +
                 `${isFinite(r.hi_disp) ? r.hi_disp.toFixed(3) : "NA"}]<br>` +
             `τ² = ${isFinite(r.tau2) ? r.tau2.toFixed(3) : "NA"}&nbsp; ` +
             `I² = ${isFinite(r.I2)   ? r.I2.toFixed(1)   : "NA"}%`
@@ -1501,7 +1554,7 @@ export function drawCumulativeFunnel(cumulativeStudies, cumResults, profile, ste
   const W = 500, H = 420;
   const iW = W - margin.left - margin.right;
   const iH = H - margin.top  - margin.bottom;
-  svg.attr("width", W).attr("height", H);
+  setSvgSize(svg, W, H);
 
   const tooltip = d3.select("#tooltip");
 
@@ -2547,7 +2600,7 @@ export function drawRoBTrafficLight(studies, domains, robData) {
   const svgW     = Math.max(LEGEND_MIN_W, LEFT + d * CELL_W + 10);
   const svgH     = TOP + k * CELL_H + LEGEND_H + 10;
 
-  svg.attr("width", svgW).attr("height", svgH);
+  setSvgSize(svg, svgW, svgH);
 
   const tooltip = d3.select("#tooltip");
 
@@ -2656,7 +2709,7 @@ export function drawRoBSummary(studies, domains, robData) {
   const svgW = Math.max(LEFT + 320, LEFT + 300 + RIGHT);
   const svgH = TOP + d * (BAR_H + BAR_GAP) + LEGEND_H + 10;
 
-  svg.attr("width", svgW).attr("height", svgH);
+  setSvgSize(svg, svgW, svgH);
 
   const barW = svgW - LEFT - RIGHT;
   const xScale = d3.scaleLinear().domain([0, 1]).range([0, barW]);

@@ -1477,6 +1477,9 @@ export const PUB_BIAS_BENCHMARKS = [
       begg:     { tau: -0.128, S: -10, z: -0.549, p: 0.583 },
       egger:    { intercept: -2.345, slope: -0.157, p: 0.160 },
       fatPet:   { intercept: -0.157, interceptP: 0.521, slope: -2.345, slopeP: 0.160 },
+      petPeese: { usePeese: false,
+                  fat:   { intercept: -0.157, interceptP: 0.521, slope: -2.345, slopeP: 0.160 },
+                  peese: { intercept: -0.379, interceptP: 0.048, slope: -2.477, slopeP: 0.396 } },
       failSafe: { rosenthal: 656, orwin: 44 },
       harbord:  { intercept: -2.093, interceptP: 0.235 },
       peters:   { intercept: -0.357, interceptP: 0.045 },
@@ -1510,9 +1513,13 @@ export const PUB_BIAS_BENCHMARKS = [
       { label: "S6", yi:  0.5, vi: 0.1600 },
     ],
     tests: {
-      egger: { intercept: 1.917, slope: -0.286, se: 0.504, t: 3.804, df: 4, p: 0.019 },
+      egger:    { intercept: 1.917, slope: -0.286, se: 0.504, t: 3.804, df: 4, p: 0.019 },
+      fatPet:   { intercept: -0.286, interceptP: 0.092, slope: 1.917, slopeP: 0.019 },
+      petPeese: { usePeese: true,
+                  fat:   { intercept: -0.286, interceptP: 0.092, slope: 1.917, slopeP: 0.019 },
+                  peese: { intercept: -0.017, interceptP: 0.819, slope: 2.439, slopeP: 0.014 } },
     },
-    citation: "Synthetic. Designed to produce a clearly significant Egger test (p=0.019). Verified against eggerTest() to floating-point precision."
+    citation: "Synthetic. Designed to produce a clearly significant Egger test (p=0.019). Verified against eggerTest() and petPeeseTest() to floating-point precision."
   },
 
   // ----------------------------------------------------------------
@@ -1682,8 +1689,7 @@ export const INFLUENCE_BENCHMARKS = [
 // BCG vaccine dat.bcg (13 studies) with additional moderators.
 // yi/vi are log-RR pre-computed values from BENCHMARKS[0].
 // year and ablat from metafor::dat.bcg; region coded NA/EU/AS.
-// Expected values verified against metafor rma.uni() and
-// independently cross-validated via verify_benchmarks.py.
+// Expected values verified against metafor rma.uni().
 // ================================================================
 export const META_REGRESSION_BENCHMARKS = [
 
@@ -2216,6 +2222,107 @@ export const CLUSTER_BENCHMARKS = [
       robustCiHigh: 0.6264069,
       clustersUsed: 5,
       df:           4
+    }
+  }
+];
+
+// =============================================================================
+// RVE_BENCHMARKS — Robust Variance Estimation (rvePooled) benchmarks
+//
+// Each entry drives one rvePooled() call. Expected values are derived from the
+// closed-form Sherman-Morrison formula implemented in analysis.js (rvePooled).
+// The R reference implementation in generate.R blocks RVE-1 through RVE-3
+// manually computes the same formula for independent cross-validation.
+//
+// Working model: Vᵢ[j,j] = vⱼ, Vᵢ[j,k] = ρ·√(vⱼ·vₖ)  (no τ² term)
+// Sandwich SE: CR1 correction m/(m−1); df = m − p (p = num predictors)
+// =============================================================================
+export const RVE_BENCHMARKS = [
+  {
+    // RVE-1. 3-cluster, 6-study dataset (same data as CL-1), intercept-only, ρ=0.80
+    // m=3 clusters × 2 studies each; df = m−1 = 2.
+    name: "3-cluster 6-study intercept-only (rho=0.80)",
+    rho: 0.80,
+    moderators: [],
+    data: [
+      { yi:  0.10, vi: 0.04, cluster: "1" },
+      { yi:  0.30, vi: 0.05, cluster: "1" },
+      { yi:  0.50, vi: 0.03, cluster: "2" },
+      { yi:  0.70, vi: 0.06, cluster: "2" },
+      { yi:  0.20, vi: 0.04, cluster: "3" },
+      { yi:  0.80, vi: 0.05, cluster: "3" }
+    ],
+    expected: {
+      est:       0.3306479,
+      se:        0.0943900,
+      ciLow:    -0.0754793,
+      ciHigh:    0.7367751,
+      t:         3.5029985,
+      p:         0.0727160,
+      df:        2,
+      kCluster:  3,
+      k:         6
+    }
+  },
+  {
+    // RVE-2. 4-cluster, heterogeneous sizes, intercept-only, ρ=0.80
+    // Cluster 1: 3 studies; clusters 2,3: 2 studies; cluster 4: 1 singleton.
+    // m=4; df = m−1 = 3.
+    name: "4-cluster 8-study heterogeneous sizes intercept-only (rho=0.80)",
+    rho: 0.80,
+    moderators: [],
+    data: [
+      { yi:  0.20, vi: 0.020, cluster: "1" },
+      { yi:  0.40, vi: 0.030, cluster: "1" },
+      { yi:  0.60, vi: 0.025, cluster: "1" },
+      { yi: -0.10, vi: 0.040, cluster: "2" },
+      { yi:  0.30, vi: 0.035, cluster: "2" },
+      { yi:  0.80, vi: 0.020, cluster: "3" },
+      { yi:  0.50, vi: 0.030, cluster: "3" },
+      { yi:  0.15, vi: 0.050, cluster: "4" }
+    ],
+    expected: {
+      est:       0.4121062,
+      se:        0.1663767,
+      ciLow:    -0.1173786,
+      ciHigh:    0.9415911,
+      t:         2.4769471,
+      p:         0.0895116,
+      df:        3,
+      kCluster:  4,
+      k:         8
+    }
+  },
+  {
+    // RVE-3. 4-cluster, 8-study, meta-regression with 1 moderator, ρ=0.80
+    // m=4 clusters × 2 studies each; p=2 (intercept + x); df = m−p = 2.
+    name: "4-cluster 8-study meta-regression 1 moderator (rho=0.80)",
+    rho: 0.80,
+    moderators: ["x"],
+    data: [
+      { yi: 0.10, vi: 0.04, cluster: "1", x: 1 },
+      { yi: 0.30, vi: 0.05, cluster: "1", x: 2 },
+      { yi: 0.50, vi: 0.03, cluster: "2", x: 3 },
+      { yi: 0.70, vi: 0.06, cluster: "2", x: 4 },
+      { yi: 0.20, vi: 0.04, cluster: "3", x: 2 },
+      { yi: 0.80, vi: 0.05, cluster: "3", x: 5 },
+      { yi: 0.40, vi: 0.03, cluster: "4", x: 3 },
+      { yi: 0.60, vi: 0.04, cluster: "4", x: 6 }
+    ],
+    expected: {
+      // Intercept (effect at x=0)
+      interceptEst:  0.0115044,
+      interceptSe:   0.1241190,
+      interceptT:    0.0926885,
+      interceptP:    0.9345996,
+      // Slope (moderator x)
+      slopeEst:      0.1319970,
+      slopeSe:       0.0481388,
+      slopeT:        2.7420065,
+      slopeP:        0.1112452,
+      df:            2,
+      kCluster:      4,
+      k:             8
     }
   }
 ];

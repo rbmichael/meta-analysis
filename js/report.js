@@ -428,7 +428,7 @@ function sectionSummary(args) {
       `<tr><td>${esc(profile.label)} — Fixed Effects (FE)</td><td>${fmt(FE_disp)}</td></tr>`,
       !isMHorPeto ? `<tr><td>${esc(profile.label)} — Random Effects (RE)</td><td><strong>${fmt(RE_disp)}</strong></td></tr>` : "",
       RE_adj !== null ? `<tr><td>RE (trim-and-fill adjusted)</td><td>${fmt(RE_adj)}</td></tr>` : "",
-      `<tr><td>95% CI</td><td>${fmtCI_APA(ci.lb, ci.ub)}</td></tr>`,
+      `<tr><td>${widthCiLabel}</td><td>${fmtCI_APA(ci.lb, ci.ub)}</td></tr>`,
       !isMHorPeto ? `<tr><td>95% Prediction interval (PI)</td><td>${fmtCI_APA(pred.lb, pred.ub)}</td></tr>` : "",
       !isMHorPeto ? `<tr><td>τ²</td><td>${fmt(m.tau2)} [${tauCI1}, ${tauCI2}]</td></tr>` : "",
       `<tr><td>I²</td><td>${fmt(m.I2)}% [${fmt(m.I2CI[0])}%, ${fmt(m.I2CI[1])}%]</td></tr>`,
@@ -474,7 +474,7 @@ function sectionSummary(args) {
       `<tr><td>${esc(profile.label)} — Fixed Effects</td><td>${fmt(FE_disp)}</td></tr>`,
       !isMHorPeto ? `<tr><td>${esc(profile.label)} — Random Effects</td><td><strong>${fmt(RE_disp)}</strong></td></tr>` : "",
       RE_adj !== null ? `<tr><td>RE (trim-and-fill adjusted)</td><td>${fmt(RE_adj)}</td></tr>` : "",
-      `<tr><td>95% CI</td><td>[${fmt(ci.lb)}, ${fmt(ci.ub)}]</td></tr>`,
+      `<tr><td>${widthCiLabel}</td><td>[${fmt(ci.lb)}, ${fmt(ci.ub)}]</td></tr>`,
       !isMHorPeto ? `<tr><td>95% Prediction interval</td><td>[${fmt(pred.lb)}, ${fmt(pred.ub)}]</td></tr>` : "",
       !isMHorPeto ? `<tr><td>τ²</td><td>${fmt(m.tau2)} [${tauCI1}, ${tauCI2}]</td></tr>` : "",
       `<tr><td>I²</td><td>${fmt(m.I2)}% [${fmt(m.I2CI[0])}%, ${fmt(m.I2CI[1])}%]</td></tr>`,
@@ -585,12 +585,12 @@ function sectionPUniform(puniform, m, profile, apaFormat = false, nextTable) {
 <section>
   <h2>P-uniform (van Assen et al., 2015)</h2>
   <p class="meta-line">${puniform.k} significant result${puniform.k !== 1 ? "s" : ""} (p &lt; .05) used &nbsp;·&nbsp; effect scale: ${esc(profile.label)}</p>
-  ${buildTableAPA(nextTable(), "P-uniform Bias-Corrected Estimates", ["Method", "Estimate", "95% CI", "Z", "p"], rows, note)}
+  ${buildTableAPA(nextTable(), "P-uniform Bias-Corrected Estimates", ["Method", "Estimate", widthCiLabel, "Z", "p"], rows, note)}
 </section>`;
   }
 
   const table = buildTable(
-    ["Method", "Estimate", "95% CI", "Z", "p"],
+    ["Method", "Estimate", widthCiLabel, "Z", "p"],
     [
       `<tr><td>RE (uncorrected)</td><td>${reEst}</td><td>[${reLo}, ${reHi}]</td><td>${fmt(puniform.Z_bias)}</td><td>${fmtP(puniform.p_bias)}</td></tr>`,
       `<tr><td>P-uniform (bias-corrected)</td><td>${puEst}</td><td>[${puLo}, ${puHi}]</td><td>${fmt(puniform.Z_sig)}</td><td>${fmtP(puniform.p_sig)}</td></tr>`,
@@ -667,7 +667,7 @@ function sectionSelectionModel(sel, profile, selMode, selLabel, apaFormat = fals
   const tableRows = [
     `<tr><td>Selection weight ω</td>${omegaCells}</tr>`,
     `<tr><td>Studies per interval</td>${kCells}</tr>`,
-    `<tr><td>Adjusted μ̂ [95% CI]</td><td colspan="${K}">${muAdj} [${ciLo}, ${ciHi}] &nbsp;·&nbsp; unadjusted: ${muUnadj}</td></tr>`,
+    `<tr><td>Adjusted μ̂ [${widthCiLabel}]</td><td colspan="${K}">${muAdj} [${ciLo}, ${ciHi}] &nbsp;·&nbsp; unadjusted: ${muUnadj}</td></tr>`,
     `<tr><td>Adjusted τ²</td><td colspan="${K}">${fmtV(sel.tau2)} &nbsp;·&nbsp; unadjusted: ${fmtV(sel.tau2_unsel)}</td></tr>`,
     ...(lrtRow ? [lrtRow] : []),
   ];
@@ -797,14 +797,14 @@ function sectionSubgroup(subgroup, profile, apaFormat = false, nextTable) {
 <section>
   <h2>Subgroup Analysis</h2>
   ${buildTableAPA(nextTable(), `Subgroup Analysis Results (${esc(profile.label)})`,
-    ["Group", "k", "Effect size", "SE", "95% CI", "τ²", "I² (%)"], rows, note)}
+    ["Group", "k", "Effect size", "SE", widthCiLabel, "τ²", "I² (%)"], rows, note)}
 </section>`;
   }
 
   return `
 <section>
   <h2>Subgroup Analysis</h2>
-  ${buildTable(["Group", "k", "Effect", "SE", "95% CI", "τ²", "I²"], rows)}
+  ${buildTable(["Group", "k", "Effect", "SE", widthCiLabel, "τ²", "I²"], rows)}
   <p class="note">
     Q<sub>between</sub> = ${subgroup.Qbetween.toFixed(3)},
     df = ${subgroup.df},
@@ -870,7 +870,7 @@ function sectionStudyTable(args) {
       + `RE weights shown. ${studies.some(d => d.filled) ? "Italic rows are trim-and-fill imputed studies." : ""}`;
 
     // buildTableAPA doesn't support tfoot natively; embed pooled row manually
-    const head   = `<thead><tr>${["Study", `Effect size (${esc(profile.label)})`, esc(seLabel), "95% CI", "RE Weight (%)"].map(h => `<th>${h}</th>`).join("")}</tr></thead>`;
+    const head   = `<thead><tr>${["Study", `Effect size (${esc(profile.label)})`, esc(seLabel), widthCiLabel, "RE Weight (%)"].map(h => `<th>${h}</th>`).join("")}</tr></thead>`;
     const body   = `<tbody>${rows.join("")}</tbody>`;
     const foot   = `<tfoot>
       ${tfootAPA}
@@ -917,7 +917,7 @@ function sectionStudyTable(args) {
 <section>
   <h2>Study-Level Results</h2>
   ${buildTable(
-    ["Study", "Effect", "95% CI (low)", "95% CI (high)", esc(seLabel), "RE Weight"],
+    ["Study", "Effect", `${widthCiLabel} (low)`, `${widthCiLabel} (high)`, esc(seLabel), "RE Weight"],
     rows,
     { extraClass: "study-tbl", tfoot }
   )}
@@ -959,7 +959,7 @@ function sectionRegression(reg, method, ciMethod, apaFormat = false, nextTable) 
       </tr>`;
     });
 
-    const coefHeaders = ["Predictor", "β", "SE", esc(statLabel), "p", "95% CI"];
+    const coefHeaders = ["Predictor", "β", "SE", esc(statLabel), "p", widthCiLabel];
     if (hasVif) coefHeaders.push("VIF");
 
     const coefNote = `β = unstandardised regression coefficient. SE = standard error. CI = confidence interval. `
@@ -1017,7 +1017,7 @@ function sectionRegression(reg, method, ciMethod, apaFormat = false, nextTable) 
     </tr>`;
   });
 
-  const coefHeaders = ["Term", "β", "SE", esc(statLabel), "p", "95% CI", ""];
+  const coefHeaders = ["Term", "β", "SE", esc(statLabel), "p", "${widthCiLabel}", ""];
   if (hasVif) coefHeaders.push("VIF");
 
   const modTestsTable = reg.modTests && reg.modTests.length > 1
@@ -1411,7 +1411,11 @@ export function buildReport(args) {
     gosh, goshXAxis,
     bayesResult, bayesReMean,
     apaFormat = false,
+    ciLevel,
   } = args;
+
+  const widthCiLabel = (ciLevel ?? "95") + "% CI";
+  const widthCrLabel = (ciLevel ?? "95") + "% CrI";
 
   // Sequential APA counters — tables and figures are numbered independently
   // (APA 7th keeps separate Table N and Figure N sequences).
@@ -1481,8 +1485,8 @@ export function buildReport(args) {
       const priorLine = `Prior: \u03BC\u202F~\u202FN(${esc(bayesResult.mu0)},\u202F${esc(bayesResult.sigma_mu)}\u00B2)\u2003\u03C4\u202F~\u202FHalfNormal(${esc(bayesResult.sigma_tau)})\u2003k\u202F=\u202F${bayesResult.k} studies`;
       const statsTable = `
   <table class="stats-table">
-    <tr><td>Posterior mean \u03BC</td><td>${fmt(muDisp)}</td><td>95% CrI [${fmt(muCIDisp[0])}, ${fmt(muCIDisp[1])}]</td></tr>
-    <tr><td>Posterior mean \u03C4</td><td>${fmt(bayesResult.tauMean)}</td><td>95% CrI [${fmt(bayesResult.tauCI[0])}, ${fmt(bayesResult.tauCI[1])}]</td></tr>
+    <tr><td>Posterior mean \u03BC</td><td>${fmt(muDisp)}</td><td>${widthCrLabel} [${fmt(muCIDisp[0])}, ${fmt(muCIDisp[1])}]</td></tr>
+    <tr><td>Posterior mean \u03C4</td><td>${fmt(bayesResult.tauMean)}</td><td>${widthCrLabel} [${fmt(bayesResult.tauCI[0])}, ${fmt(bayesResult.tauCI[1])}]</td></tr>
     ${isFinite(reDisp) ? `<tr><td>Frequentist RE (comparison)</td><td>${fmt(reDisp)}</td><td></td></tr>` : ""}
   </table>`;
       const bayesPriorNote = `Prior: \u03BC\u202F~\u202FN(${esc(bayesResult.mu0)},\u202F${esc(bayesResult.sigma_mu)}\u00B2); \u03C4\u202F~\u202FHalfNormal(${esc(bayesResult.sigma_tau)}). Vertical line\u202F=\u202Fposterior mean; shaded region\u202F=\u202F95% credible interval.`;
@@ -1510,14 +1514,14 @@ export function buildReport(args) {
     ((apaFormat, nextFigure) => {
       const svg = liveSVG("profileLikTau2Plot");
       if (!svg) return "";
-      const note = `Shaded region\u202F=\u202F95% CI from likelihood-ratio inversion (LRT). The \u03C4\u00B2 CI in the summary table uses the Q-profile method (moment-based) and may differ.`;
+      const note = `Shaded region\u202F=\u202F${widthCiLabel} from likelihood-ratio inversion (LRT). The \u03C4\u00B2 CI in the summary table uses the Q-profile method (moment-based) and may differ.`;
       return `
 <section class="plot-section">
   <h2>Profile Likelihood for τ²</h2>
   ${apaFormat
     ? buildFigureAPA(nextFigure(), `Profile likelihood curve for \u03C4\u00B2`, [svg], note)
     : `<div class="svg-wrap">${svg}</div>
-  <p class="note">95% CI from likelihood-ratio inversion (LRT). Note: the \u03C4\u00B2 CI in the summary table uses the Q-profile method (moment-based) and will differ.</p>`}
+  <p class="note">${widthCiLabel} from likelihood-ratio inversion (LRT). Note: the \u03C4\u00B2 CI in the summary table uses the Q-profile method (moment-based) and will differ.</p>`}
 </section>`;
     })(apaFormat, nextFigure),
     sectionInfluence(influence, k, apaFormat, nextTable),
@@ -1526,19 +1530,19 @@ export function buildReport(args) {
     sectionRegression(reg, method, ciMethod, apaFormat, nextTable),
     sectionPlot("Forest Plot", forestSVGs, apaFormat, nextFigure,
       `Forest plot of ${esc(profile.label)}, k\u202F=\u202F${k} studies`,
-      `RE\u202F=\u202Frandom effects. Error bars represent 95% ${esc(ciLabel)} CI. \u03C4\u00B2 estimated by ${esc(method)}. Diamond\u202F=\u202Fpooled estimate and 95% CI.`),
+      `RE\u202F=\u202Frandom effects. Error bars represent 95% ${esc(ciLabel)} CI. \u03C4\u00B2 estimated by ${esc(method)}. Diamond\u202F=\u202Fpooled estimate and ${widthCiLabel}.`),
     sectionPlot("Funnel Plot", [liveSVG("funnelPlot")], apaFormat, nextFigure,
       `Funnel plot of ${esc(profile.label)} against standard error`,
       `Each point\u202F=\u202Fone study. Asymmetry may indicate publication bias or between-study heterogeneity.`),
     sectionPlot("Influence Plot", [liveSVG("influencePlot")], apaFormat, nextFigure,
       `Influence diagnostics for k\u202F=\u202F${k} studies`,
-      `Left panel: standardised residuals. Right panel: leave-one-out (LOO) random-effects estimates with 95% CI.`),
+      `Left panel: standardised residuals. Right panel: leave-one-out (LOO) random-effects estimates with ${widthCiLabel}.`),
     sectionPlot("Baujat Plot", [liveSVG("baujatPlot")], apaFormat, nextFigure,
       `Baujat plot of contribution to Q statistic against overall influence on the pooled estimate`,
       ``),
     sectionPlot("Cumulative Forest Plot", cumForestSVGs.length ? cumForestSVGs : [liveSVG("cumulativePlot")], apaFormat, nextFigure,
       `Cumulative forest plot of ${esc(profile.label)}`,
-      `Studies added in dataset order. Effect and 95% CI shown at each cumulative step.`),
+      `Studies added in dataset order. Effect and ${widthCiLabel} shown at each cumulative step.`),
     sectionPlot("Cumulative Funnel Plot", [liveSVG("cumulativeFunnelPlot")], apaFormat, nextFigure,
       `Cumulative funnel plot of ${esc(profile.label)}`,
       ``),
@@ -1550,10 +1554,10 @@ export function buildReport(args) {
       ``),
     sectionPlot("Orchard Plot", [liveSVG("orchardPlot")], apaFormat, nextFigure,
       `Orchard plot of ${esc(profile.label)}`,
-      `Points scaled by random-effects weight. Thick bar\u202F=\u202F95% CI; thin bar\u202F=\u202F95% prediction interval.`),
+      `Points scaled by random-effects weight. Thick bar\u202F=\u202F${widthCiLabel}; thin bar\u202F=\u202F95% prediction interval.`),
     sectionPlot("Caterpillar Plot", caterpillarSVGs.length ? caterpillarSVGs : [liveSVG("caterpillarPlot")], apaFormat, nextFigure,
       `Caterpillar plot of study-level ${esc(profile.label)}, sorted by effect size`,
-      `Error bars\u202F=\u202F95% CI.`),
+      `Error bars\u202F=\u202F${widthCiLabel}.`),
     sectionPlot("Risk-of-bias Traffic Light", [liveSVG("robTrafficLight")], apaFormat, nextFigure,
       `Risk-of-bias traffic-light plot`,
       ``),

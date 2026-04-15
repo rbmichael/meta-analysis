@@ -24,6 +24,20 @@
   max-width: 100%;
 }
 
+/* Scrollable wrapper for wide tables inside #results */
+.results-table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
+}
+
+/* Wide auto-generated tables that need horizontal scroll */
+#influenceDiagTable {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
+}
+
 #results th {
   background: var(--bg-th);
   color: var(--fg-muted);
@@ -62,7 +76,8 @@
   margin: 16px 0;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  overflow: hidden;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
   max-width: 900px;
   box-shadow: var(--shadow-sm);
 }
@@ -299,6 +314,13 @@
   list-style: none;
   user-select: none;
   outline: none;
+  /* Sticky within #appLayout scroll container */
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--bg-elevated);
+  /* Hairline below when content scrolls under it */
+  box-shadow: 0 1px 0 var(--border);
 }
 
 .results-section > summary::-webkit-details-marker {
@@ -331,4 +353,18 @@
 
 .results-section-body {
   padding-bottom: 8px;
+}
+
+/* Run-state timestamp badge — appears just left of the chevron */
+.panel-run-at {
+  margin-left: auto;
+  margin-right: 8px;
+  font-size: 0.72em;
+  font-weight: 400;
+  color: var(--fg-subtle, var(--fg-muted));
+  letter-spacing: 0;
+  text-transform: none;
+  opacity: 0.65;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
