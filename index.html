@@ -761,7 +761,7 @@
       <!-- ---- Heterogeneity ---- -->
       <h2>Heterogeneity</h2>
       <ul>
-        <li><strong>τ² estimators:</strong> REML (default), DerSimonian–Laird, Paule–Mandel, Maximum Likelihood, Hunter–Schmidt, Hedges, Sidik–Jonkman, Generalised Q</li>
+        <li><strong>τ² estimators:</strong> REML (default), DerSimonian–Laird (DL), Paule–Mandel, Maximum Likelihood, Hunter–Schmidt, Hedges, Sidik–Jonkman, Generalised Q (GENQ), Iterated DL (DLIT), Hunter–Schmidt corrected (HSk), Square-root GENQ (SQGENQ), EBLUP (= REML) — 12 options</li>
         <li><strong>Pooling methods:</strong> Inverse-variance (default; RE and FE); Mantel–Haenszel (OR, RR, RD) and Peto one-step (OR only) — fixed-effects pooling that operates directly on cell counts and handles single-zero cells without a continuity correction</li>
         <li><strong>CI methods:</strong> Normal/Wald, Knapp–Hartung, <em>t</em>-distribution, Profile Likelihood (REML or ML)</li>
         <li><strong>Statistics:</strong> Cochran's <em>Q</em>, <em>I</em>², <em>H</em>², τ², 95% prediction interval (Higgins 2009)</li>
@@ -774,7 +774,7 @@
       <ul>
         <li><strong>Egger's regression</strong> — intercept test for funnel plot asymmetry</li>
         <li><strong>Begg's rank correlation</strong> — Kendall's τ<sub>b</sub> with tie correction</li>
-        <li><strong>FAT-PET</strong> — funnel asymmetry test and precision-effect test</li>
+        <li><strong>FAT-PET / PET-PEESE</strong> — funnel asymmetry test and precision-effect test; when FAT detects bias (p &lt; .10) the two-stage PET-PEESE correction is applied and the PEESE intercept is highlighted as the corrected effect estimate; the PEESE regression line is overlaid on the contour-enhanced funnel plot (Stanley &amp; Doucouliagos, 2014)</li>
         <li><strong>Fail-safe N</strong> — Rosenthal and Orwin estimators</li>
         <li><strong>Trim-and-fill</strong> (L0) — imputes missing studies and reports the adjusted pooled estimate</li>
         <li><strong>Funnel plot</strong> — standard or contour-enhanced (α = .10, .05, .01 regions)</li>
@@ -824,13 +824,33 @@
       normals. Reports posterior mean and 95% credible interval for μ (overall effect) and τ (heterogeneity SD),
       plus posterior density plots for both parameters. Diffuse priors recover the REML random-effects estimate.</p>
 
-      <!-- ---- Cluster-robust SE ---- -->
-      <h2>Cluster-robust standard errors</h2>
-      <p>When a single trial contributes multiple effect sizes (several outcomes, subgroups, or time points),
-      treating estimates as independent inflates the effective sample size. Assigning a <strong>Cluster ID</strong>
-      to dependent rows activates the sandwich (CR1) variance estimator, which corrects the SE and CI without
-      changing the point estimate. At least 2 clusters are required; 10 or more is recommended for reliable
-      inference. Not available with M-H or Peto methods. Based on Hedges, Tipton &amp; Johnson (2010).</p>
+      <!-- ---- Dependent effect sizes ---- -->
+      <h2>Dependent effect sizes</h2>
+      <p>When a primary study contributes multiple effect sizes (different outcomes, subgroups, or time
+      points), assigning a <strong>Cluster ID</strong> activates three complementary analyses in the
+      results panel:</p>
+      <table class="stat-table" style="margin:8px 0 12px">
+        <thead><tr><th>Method</th><th>What changes</th><th>User parameter</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>Cluster-robust SE</strong></td>
+            <td>SE only (point estimate unchanged); sandwich CR1 correction on the RE estimate</td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td><strong>RVE</strong></td>
+            <td>Separate WLS estimator with a working covariance model; CR1 sandwich SE</td>
+            <td>ρ — within-cluster correlation (default 0.80)</td>
+          </tr>
+          <tr>
+            <td><strong>Three-level</strong></td>
+            <td>Explicit decomposition into σ²<sub>within</sub> and σ²<sub>between</sub>; REML via BFGS; decomposed I²</td>
+            <td>—</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>Not available with M-H or Peto pooling methods.
+      Based on Hedges, Tipton &amp; Johnson (2010) and Van den Noortgate et al. (2013).</p>
 
       <!-- ---- Plots ---- -->
       <h2>Plots</h2>
@@ -867,7 +887,7 @@
         <li><strong>CSV import</strong> — auto-detects delimiter and effect type from column headers; preview panel with column-mapping controls before committing</li>
         <li><strong>Session save / load</strong> — full application state (data, settings, moderators, RoB ratings) serialised to JSON</li>
         <li><strong>Auto-save</strong> — drafts written to <code>localStorage</code>; a recovery banner appears on reload if unsaved changes exist</li>
-        <li><strong>Cluster ID column</strong> — optional study identifier for dependent effect sizes (e.g. multiple outcomes or subgroups from the same trial); activates cluster-robust standard errors</li>
+        <li><strong>Cluster ID column</strong> — optional study identifier for dependent effect sizes (e.g. multiple outcomes or subgroups from the same trial); activates cluster-robust SE, RVE, and three-level meta-analysis sections in the results panel</li>
       </ul>
       <p>CSV column names match the input fields for each effect type (e.g. <code>m1, sd1, n1, m2, sd2, n2</code>
       for MD; <code>a, b, c, d</code> for OR). A <code>label</code> column is optional but recommended.
@@ -899,7 +919,9 @@
         <li>Paule RC, Mandel J (1982). Consensus values and weighting factors. <em>J Res Natl Bur Stand,</em> 87, 377–385.</li>
         <li>Peto R, Pike MC, Armitage P, et al. (1976). Design and analysis of randomized clinical trials requiring prolonged observation of each patient. <em>Br J Cancer,</em> 34, 585–612.</li>
         <li>Simonsohn U, Nelson LD, Simmons JP (2014). P-curve: A key to the file-drawer. <em>J Exp Psychol Gen,</em> 143(2), 534–547.</li>
+        <li>Stanley TD, Doucouliagos H (2014). Meta-regression approximations to reduce publication selection bias. <em>Res Synth Methods,</em> 5(1), 60–78.</li>
         <li>van Assen MALM, van Aert RCM, Wicherts JM (2015). Meta-analysis using effect size distributions of only statistically significant studies. <em>Psychol Methods,</em> 20(3), 293–309.</li>
+        <li>Van den Noortgate W, López-López JA, Marín-Martínez F, Sánchez-Meca J (2013). Three-level meta-analysis of dependent effect sizes. <em>Behav Res Methods,</em> 45(2), 576–594.</li>
         <li>Vevea JL, Hedges LV (1995). A general linear model for estimating effect size in the presence of publication bias. <em>Psychometrika,</em> 60(3), 419–435.</li>
         <li>Vevea JL, Woods CM (2005). Publication bias in research synthesis: Sensitivity analysis using a priori weight functions. <em>Psychol Methods,</em> 10(4), 428–443.</li>
         <li>Viechtbauer W (2005). Bias and efficiency of meta-analytic variance estimators in the random-effects model. <em>J Educ Behav Stat,</em> 30, 261–293.</li>
