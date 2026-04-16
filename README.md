@@ -24,7 +24,7 @@ A browser-based meta-analysis tool. No installation, no server, no dependencies 
 
 ### Heterogeneity
 
-- **τ² estimators:** REML (default), DerSimonian-Laird, Paule-Mandel, Maximum Likelihood, Hunter-Schmidt, Hedges, Sidik-Jonkman
+- **τ² estimators:** REML (default), DerSimonian-Laird (DL), Paule-Mandel, Maximum Likelihood, Hunter-Schmidt, Hedges, Sidik-Jonkman, Generalized Q (GENQ), Iterated DL (DLIT), Hunter-Schmidt corrected (HSk), Square-root GENQ (SQGENQ), EBLUP (= REML) — 12 options
 - **Pooling methods:** Inverse-variance (default; RE and FE); **Mantel-Haenszel** (OR, RR, RD) and **Peto one-step** (OR only) — fixed-effects pooling that operates directly on cell counts and handles single-zero cells without a continuity correction
 - **CI methods:** Normal/Wald, Knapp-Hartung, *t*-distribution, Profile Likelihood (requires REML or ML)
 - **Heterogeneity statistics:** Cochran's *Q*, *I*², *H*², τ², 95% prediction interval (Higgins 2009, *t*\_{*k*−2})
@@ -35,7 +35,7 @@ A browser-based meta-analysis tool. No installation, no server, no dependencies 
 
 - **Egger's regression** — intercept test for funnel plot asymmetry
 - **Begg's rank correlation** — Kendall's τ_b with tie correction
-- **FAT-PET** — funnel asymmetry test and precision-effect test
+- **FAT-PET / PET-PEESE** — funnel asymmetry test, precision-effect test, and the two-stage PET-PEESE correction (Stanley & Doucouliagos 2014); when FAT detects bias (p < .10) the PEESE intercept is highlighted as the corrected effect estimate; the PEESE regression line is overlaid on the contour-enhanced funnel plot
 - **Fail-safe N** — Rosenthal and Orwin estimators
 - **Trim-and-fill** (L0 estimator) — imputes missing studies and reports the adjusted pooled estimate
 - **Funnel plot** — standard or contour-enhanced (p-value regions at α = .10, .05, .01)
@@ -53,8 +53,20 @@ A browser-based meta-analysis tool. No installation, no server, no dependencies 
 - **Influence plot** — per-study leverage and influence visualised
 - **Baujat plot** — heterogeneity contribution vs. overall influence; identifies problematic studies
 - **GOSH plot** — fixed-effects pooled estimate and I² for every non-empty subset of studies; exact enumeration for k ≤ 15, random-sampled for k ≤ 30 (default 50 000 subsets)
-- **Estimator comparison** — runs all 7 τ² estimators side-by-side for a given dataset
+- **Estimator comparison** — runs all τ² estimators side-by-side for a given dataset
 - **Cumulative meta-analysis** — adds studies in user-selected order (input order, precision ascending/descending, effect size ascending/descending)
+
+### Dependent effect sizes
+
+When a primary study contributes multiple effect sizes (different outcomes, subgroups, or time points) three complementary approaches are available. All are activated automatically when a non-blank **Cluster ID** is entered for any row:
+
+| Method | What changes | User parameter |
+|---|---|---|
+| **Cluster-robust SE** | SE only (point estimate unchanged); sandwich CR1 correction on the RE estimate | — |
+| **RVE (Robust Variance Estimation)** | Separate WLS estimator using a working covariance model; CR1 sandwich SE | ρ — assumed within-cluster correlation (default 0.80) |
+| **Three-Level Meta-Analysis** | Explicit variance decomposition: σ²_within (level-2) and σ²_between (level-3); REML via BFGS | — |
+
+The three-level model fits the marginal covariance Σ<sub>i</sub> = diag(v<sub>ij</sub> + σ²<sub>within</sub>) + σ²<sub>between</sub>·**1**·**1**ᵀ per cluster and reports decomposed I²<sub>within</sub> and I²<sub>between</sub>.
 
 ### Meta-regression
 
@@ -104,7 +116,7 @@ All plots export as SVG, PNG, or TIFF. Log-scale effect types label the axis in 
 - **CSV import** — auto-detects delimiter and effect type from column headers; shows a preview panel with column-mapping controls before committing
 - **Session save / load** — full application state (data, settings, moderators, RoB ratings) serialised to JSON
 - **Auto-save** — drafts written to `localStorage`; a recovery banner appears on next load if unsaved changes exist
-- **Cluster ID column** — optional study identifier for dependent effect sizes (e.g. multiple outcomes or subgroups from the same trial); activates cluster-robust (sandwich) standard errors without changing the point estimate
+- **Cluster ID column** — optional study identifier for dependent effect sizes (e.g. multiple outcomes or subgroups from the same trial); activates cluster-robust SE, RVE, and three-level meta-analysis sections in the results panel
 
 CSV column names match the input fields for each effect type (e.g. `m1,sd1,n1,m2,sd2,n2` for MD; `a,b,c,d` for OR). A `label` column is optional but recommended. A `group` column assigns studies to subgroups.
 
@@ -180,6 +192,8 @@ python -m http.server 8080
 - Paule RC, Mandel J (1982). Consensus values and weighting factors. *J Res Natl Bur Stand*, 87, 377–385.
 - Olkin I, Dahabreh IJ, Trikalinos TA (2012). GOSH — a graphical display of study heterogeneity. *Res Synth Methods*, 3(3), 214–223.
 - Simonsohn U, Nelson LD, Simmons JP (2014). P-curve: A key to the file-drawer. *J Exp Psychol Gen*, 143(2), 534–547.
+- Stanley TD, Doucouliagos H (2014). Meta-regression approximations to reduce publication selection bias. *Res Synth Methods*, 5(1), 60–78.
+- Van den Noortgate W, López-López JA, Marín-Martínez F, Sánchez-Meca J (2013). Three-level meta-analysis of dependent effect sizes. *Behav Res Methods*, 45(2), 576–594.
 - van Assen MALM, van Aert RCM, Wicherts JM (2015). Meta-analysis using effect size distributions of only statistically significant studies. *Psychol Methods*, 20(3), 293–309.
 - Vevea JL, Hedges LV (1995). A general linear model for estimating effect size in the presence of publication bias. *Psychometrika*, 60(3), 419–435.
 - Viechtbauer W (2005). Bias and efficiency of meta-analytic variance estimators in the random-effects model. *J Educ Behav Stat*, 30, 261–293.
