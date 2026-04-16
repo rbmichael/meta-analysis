@@ -132,19 +132,7 @@ function scheduleSave() {
 
 // ---------------- DEBOUNCED ANALYSIS ----------------
 
-let _analysisTimer  = null;
 let _analysisRunning = false;
-
-// scheduleAnalysis()
-// Debounced wrapper for runAnalysis(). Used by per-keystroke input listeners
-// in addRow() so that mid-word edits do not trigger a full re-run on every
-// character. 150 ms is imperceptible to users but eliminates redundant runs.
-// The Run button, settings dropdowns, and row add/delete call runAnalysis()
-// directly so they remain instant.
-function scheduleAnalysis() {
-  clearTimeout(_analysisTimer);
-  _analysisTimer = setTimeout(runAnalysis, 150);
-}
 
 // Flush any pending debounced save immediately.
 // Called on beforeunload and visibilitychange so changes made in the last
@@ -3334,7 +3322,7 @@ async function runAnalysis() {
           elThreeSummary.innerHTML = `
             <div style="font-size:0.8125rem;line-height:1.9;margin-bottom:8px">
               ${hBtn("threelevel.model")}<b>Three-level pooled estimate:</b> ${fmt(muDisp)}<br>
-              95% CI [${fmt(ciLoDisp)}, ${fmt(ciHiDisp)}] | SE=${fmt(tl.se)} | z=${fmt(tl.z)} | p=${fmt(tl.p)}<br>
+              ${Math.round((1 - alpha) * 100)}% CI [${fmt(ciLoDisp)}, ${fmt(ciHiDisp)}] | SE=${fmt(tl.se)} | z=${fmt(tl.z)} | p=${fmt(tl.p)}<br>
               m=${tl.kCluster} cluster${tl.kCluster === 1 ? "" : "s"} &nbsp;·&nbsp; k=${tl.k} studies &nbsp;·&nbsp; df=${tl.df}<br>
               ${hBtn("threelevel.tau2")}σ²<sub>within</sub>=${fmt(tl.tau2_within)} &nbsp;·&nbsp; σ²<sub>between</sub>=${fmt(tl.tau2_between)}<br>
               ${hBtn("threelevel.I2")}I²<sub>within</sub>=${fmt(tl.I2_within)}% &nbsp;·&nbsp; I²<sub>between</sub>=${fmt(tl.I2_between)}%<br>
