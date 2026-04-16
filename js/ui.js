@@ -100,11 +100,11 @@
 //   ui.js calls init() on DOMContentLoaded, which populates dropdowns,
 //   restores any autosave draft, and attaches all event listeners.
 // =============================================================================
-import { eggerTest, beggTest, fatPetTest, petPeeseTest, failSafeN, pCurve, pUniform, baujat, meta, metaMH, metaPeto, robustMeta, influenceDiagnostics, subgroupAnalysis, metaRegression, cumulativeMeta, leaveOneOut, estimatorComparison, veveaHedges, SELECTION_PRESETS, profileLikTau2, bayesMeta, rvePooled, meta3level } from "./analysis.js";
+import { eggerTest, beggTest, fatPetTest, petPeeseTest, failSafeN, pCurve, pUniform, baujat, blupMeta, meta, metaMH, metaPeto, robustMeta, influenceDiagnostics, subgroupAnalysis, metaRegression, cumulativeMeta, leaveOneOut, estimatorComparison, veveaHedges, SELECTION_PRESETS, profileLikTau2, bayesMeta, rvePooled, meta3level } from "./analysis.js";
 import { fmt } from "./utils.js";
 import { effectProfiles, getProfile } from "./profiles.js";
 import { trimFill } from "./trimfill.js";
-import { drawForest, drawFunnel, drawBubble, drawPartialResidualBubble, drawInfluencePlot, drawCumulativeForest, drawCumulativeFunnel, drawPCurve, drawPUniform, drawOrchardPlot, drawCaterpillarPlot, drawBaujatPlot, drawLabbe, drawRoBTrafficLight, drawRoBSummary, drawGoshPlot, drawProfileLikTau2, drawBayesTauPosterior, drawBayesMuPosterior } from "./plots.js";
+import { drawForest, drawFunnel, drawBubble, drawPartialResidualBubble, drawInfluencePlot, drawCumulativeForest, drawCumulativeFunnel, drawPCurve, drawPUniform, drawOrchardPlot, drawCaterpillarPlot, drawBlupPlot, drawBaujatPlot, drawLabbe, drawRoBTrafficLight, drawRoBSummary, drawGoshPlot, drawProfileLikTau2, drawBayesTauPosterior, drawBayesMuPosterior } from "./plots.js";
 import { goshCompute, GOSH_MAX_K } from "./gosh.js";
 import { exportSVG, exportPNG, exportTIFF } from "./export.js";
 import { buildReport, downloadHTML, openPrintPreview } from "./report.js";
@@ -2064,6 +2064,13 @@ const caterpillarPlot = {
   args: null,               // { studies, m, profile, pageSize }
 };
 
+const blupPlot = {
+  page:   0,
+  result: null,             // blupMeta() return value
+  profile: null,
+  pageSize: 30,
+};
+
 const cumForestPlot = {
   page: 0,
   args: null,               // { results, profile, pageSize }
@@ -2190,6 +2197,17 @@ const renderCaterpillarNav = makeNavRenderer({
     caterpillarPlot.args.studies, caterpillarPlot.args.m, caterpillarPlot.args.profile,
     { pageSize: caterpillarPlot.args.pageSize, page: p }
   ),
+});
+
+const renderBlupNav = makeNavRenderer({
+  navId:   "blupNav",
+  prevId:  "blupPrev",
+  nextId:  "blupNext",
+  note:    k => `Sorted by observed effect across all ${k} studies`,
+  getKAll: () => blupPlot.result?.k ?? "?",
+  getPage: () => blupPlot.page,
+  setPage: p  => { blupPlot.page = p; },
+  redraw:  p  => drawBlupPlot(blupPlot.result, blupPlot.profile, { pageSize: blupPlot.pageSize, page: p }),
 });
 
 const renderCumulativeForestNav = makeNavRenderer({
@@ -3100,6 +3118,8 @@ async function runAnalysis() {
   const elForestPageSize     = document.getElementById("forestPageSize");
   const elBaujatPlotBlock    = document.getElementById("baujatPlotBlock");
   const elLabbeBlock         = document.getElementById("labbeBlock");
+  const elBlupBlock          = document.getElementById("blupBlock");
+  const elBlupNav            = document.getElementById("blupNav");
   const elCumulativeOrder    = document.getElementById("cumulativeOrder");
   const elCumForestPageSize  = document.getElementById("cumulativeForestPageSize");
   const elCumFunnelStep      = document.getElementById("cumulativeFunnelStep");
@@ -3576,11 +3596,24 @@ async function runAnalysis() {
   });
   const labbeTypes = ["OR", "RR", "RD"];
   const showLabbe  = labbeTypes.includes(type);
+
+  // BLUPs — only meaningful when τ² > 0 and k ≥ 2
+  const blupResult = (m && isFinite(m.tau2) && m.tau2 > 0 && studies.length >= 2)
+    ? blupMeta(studies, m) : null;
+  blupPlot.result  = blupResult;
+  blupPlot.profile = profile;
+  blupPlot.page    = 0;
+  elBlupBlock.style.display       = blupResult ? "" : "none";
+
   elBaujatPlotBlock.style.display = baujatResult ? "" : "none";
   elLabbeBlock.style.display      = showLabbe ? "" : "none";
   drawIfVisible("diagnosticSection", () => {
     performance.mark("phase:plot:influence:start");
     drawInfluencePlot(influence);
+    if (blupResult) {
+      const { totalPages } = drawBlupPlot(blupResult, profile, { pageSize: blupPlot.pageSize, page: 0 });
+      renderBlupNav(totalPages);
+    }
     drawBaujatPlot(baujatResult, profile);
     if (showLabbe) drawLabbe(studies, m, profile, type);
     performance.measure("phase:plot:influence", "phase:plot:influence:start");

@@ -794,6 +794,17 @@ export const HELP = {
   // Diagnostics                                                          //
   // ------------------------------------------------------------------ //
 
+  "diag.blup": {
+    title: "BLUPs (shrunken study estimates)",
+    body:  "Best Linear Unbiased Predictions (BLUPs) shrink each study's observed effect " +
+           "toward the pooled RE estimate μ̂ by a factor λᵢ = τ²/(τ²+vᵢ). Studies with " +
+           "large within-study variance (high vᵢ) are pulled strongly toward μ̂; precise " +
+           "studies barely move. The plot shows observed yi (gray) and BLUP (accent) per " +
+           "study, connected by a dashed shrinkage line. Hover a BLUP point to see the " +
+           "random effect û = BLUP − μ̂ and the shrinkage percentage λᵢ×100%. " +
+           "Only available when τ² > 0 (random-effects model with detected heterogeneity).",
+  },
+
   "diag.baujat": {
     title: "Baujat plot",
     body:  "Scatter plot of per-study heterogeneity contribution (x) versus overall " +

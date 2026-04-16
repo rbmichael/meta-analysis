@@ -512,6 +512,16 @@
             </div>
             <svg id="influencePlot" width="500" height="400"></svg>
           </div>
+          <div class="plot-block" id="blupBlock" style="display:none">
+            <p class="plot-label">BLUPs (shrunken study estimates)<button class="help-btn" data-help="diag.blup" title="Help">?</button></p>
+            <div class="plot-export">
+              <button class="export-btn" data-target="blupPlot" data-format="svg">SVG</button>
+              <button class="export-btn" data-target="blupPlot" data-format="png">PNG</button>
+              <button class="export-btn" data-target="blupPlot" data-format="tiff">TIFF</button>
+            </div>
+            <svg id="blupPlot" width="560" height="300"></svg>
+            <div id="blupNav"></div>
+          </div>
           <div class="plot-block" id="baujatPlotBlock" style="display:none">
             <p class="plot-label">Baujat plot</p>
             <div class="plot-export">

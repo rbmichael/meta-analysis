@@ -44,6 +44,11 @@
 //     SVG height resizes dynamically (16 px/study × page size).  Paginated.
 //     options: { pageSize, page }  Returns { totalPages }.
 //
+//   drawBlupPlot(result, profile, options)
+//     Dual caterpillar: each row shows observed yi (gray) and BLUP (accent)
+//     connected by a dashed shrinkage line.  Paginated; dynamic SVG height.
+//     options: { page, pageSize }.  Returns { totalPages }.
+//
 //   drawBaujatPlot(result, profile)
 //     Baujat diagnostic scatter (Baujat et al., 2002): x = contribution to Q,
 //     y = influence on FE pooled estimate.  Quadrant guides at mean x/y.
@@ -2414,6 +2419,202 @@ export function drawCaterpillarPlot(studies, m, profile, options = {}) {
         .text(grp.length > 14 ? grp.slice(0, 13) + "…" : grp);
     });
   }
+
+  return { totalPages };
+}
+
+// ================= BLUP PLOT =================
+// Dual caterpillar: each row shows observed yi (gray) and BLUP (accent)
+// connected by a dashed shrinkage line. Vertical dashed null line; solid
+// accent line at pooled μ̂_RE. Paginated; SVG height is dynamic.
+// result  — blupMeta() return value
+// profile — effect profile (transform, label, isTransformedScale)
+// options — { page, pageSize }
+// Returns { totalPages }.
+export function drawBlupPlot(result, profile, options = {}) {
+  const svg = clearAndSelectSVG("#blupPlot");
+  if (!result || !result.studies || result.studies.length === 0) return { totalPages: 1 };
+
+  profile = profile || { transform: x => x, label: "Effect" };
+
+  // Sort by observed yi descending
+  const sorted = result.studies.slice().sort((a, b) => b.yi - a.yi);
+
+  const { page, pageSize, totalPages, items: pageStudies } = paginate(sorted, options);
+  const pk = pageStudies.length;
+
+  const ROW_H = 18;
+  const W = +svg.attr("width") || 560;
+
+  const maxLabelLen = sorted.reduce((mx, s) => Math.max(mx, (s.label || "").length), 0);
+  const leftMargin  = Math.max(60, Math.min(180, Math.ceil(maxLabelLen * 6.5) + 14));
+  const margin = { top: 30, right: 24, bottom: 46, left: leftMargin };
+
+  const H = margin.top + pk * ROW_H + margin.bottom;
+  svg.attr("height", H);
+
+  const iW = W - margin.left - margin.right;
+  const iH = H - margin.top  - margin.bottom;
+
+  const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+
+  // X scale — covers observed CIs and BLUP CIs for all studies
+  const allVals = sorted.flatMap(s => [
+    s.yi - Z_95 * s.se_obs,
+    s.yi + Z_95 * s.se_obs,
+    s.ci_lb,
+    s.ci_ub,
+    result.mu,
+    0,
+  ]).filter(isFinite);
+  const xExt = Math.max(...allVals.map(Math.abs)) * 1.1 || 1;
+  const x = d3.scaleLinear().domain([-xExt, xExt]).range([0, iW]);
+
+  const tooltip = d3.select("#tooltip");
+
+  // Null reference line
+  g.append("line")
+    .attr("x1", x(0)).attr("x2", x(0))
+    .attr("y1", 0).attr("y2", iH)
+    .attr("stroke", "var(--border-hover)")
+    .attr("stroke-width", 1)
+    .attr("stroke-dasharray", "4,3");
+
+  // Pooled RE line
+  if (isFinite(result.mu)) {
+    g.append("line")
+      .attr("x1", x(result.mu)).attr("x2", x(result.mu))
+      .attr("y1", 0).attr("y2", iH)
+      .attr("stroke", "var(--accent)")
+      .attr("stroke-width", 1.2)
+      .attr("stroke-opacity", 0.55);
+  }
+
+  // Study rows
+  pageStudies.forEach((s, i) => {
+    const cy = i * ROW_H + ROW_H / 2;
+
+    // Observed CI (gray)
+    const obsLow  = s.yi - Z_95 * s.se_obs;
+    const obsHigh = s.yi + Z_95 * s.se_obs;
+    if (isFinite(obsLow) && isFinite(obsHigh)) {
+      g.append("line")
+        .attr("x1", x(obsLow)).attr("x2", x(obsHigh))
+        .attr("y1", cy).attr("y2", cy)
+        .attr("stroke", "var(--fg-subtle)")
+        .attr("stroke-width", 1.5)
+        .attr("opacity", 0.55);
+      g.append("circle")
+        .attr("cx", x(s.yi)).attr("cy", cy).attr("r", 3)
+        .attr("fill", "var(--fg-subtle)").attr("opacity", 0.7);
+    }
+
+    // Shrinkage connector (dashed, muted)
+    if (isFinite(s.blup) && isFinite(s.yi)) {
+      g.append("line")
+        .attr("x1", x(s.yi)).attr("x2", x(s.blup))
+        .attr("y1", cy).attr("y2", cy)
+        .attr("stroke", "var(--fg-muted)")
+        .attr("stroke-width", 0.8)
+        .attr("stroke-dasharray", "2,2")
+        .attr("opacity", 0.5);
+    }
+
+    // BLUP CI (accent)
+    if (isFinite(s.ci_lb) && isFinite(s.ci_ub)) {
+      g.append("line")
+        .attr("x1", x(s.ci_lb)).attr("x2", x(s.ci_ub))
+        .attr("y1", cy).attr("y2", cy)
+        .attr("stroke", "var(--accent)").attr("stroke-width", 2);
+      // End-tick caps
+      [s.ci_lb, s.ci_ub].forEach(v => {
+        g.append("line")
+          .attr("x1", x(v)).attr("x2", x(v))
+          .attr("y1", cy - 3).attr("y2", cy + 3)
+          .attr("stroke", "var(--accent)").attr("stroke-width", 1.5);
+      });
+    }
+
+    // BLUP point (with tooltip)
+    if (isFinite(s.blup)) {
+      const effDisplay = profile.transform(s.blup);
+      const obsDisplay = profile.transform(s.yi);
+      g.append("circle")
+        .attr("cx", x(s.blup)).attr("cy", cy).attr("r", 4)
+        .attr("fill", "var(--accent)")
+        .attr("stroke", "var(--bg-surface)").attr("stroke-width", 1)
+        .on("mousemove", (event) => {
+          tooltip.style("opacity", 1)
+            .html(
+              `<b>${s.label}</b>` +
+              `<br>Observed: ${isFinite(obsDisplay) ? (+obsDisplay.toFixed(3)) : "NA"}` +
+              `<br>BLUP: ${isFinite(effDisplay) ? (+effDisplay.toFixed(3)) : "NA"}` +
+              `<br>Random effect (û): ${(+s.ranef.toFixed(4))}` +
+              `<br>Shrinkage (λ): ${(+(s.lambda * 100).toFixed(1))}%`
+            )
+            .style("left", (event.pageX + 12) + "px")
+            .style("top",  (event.pageY - 24) + "px");
+        })
+        .on("mouseout", () => tooltip.style("opacity", 0));
+    }
+
+    // Study label
+    g.append("text")
+      .attr("x", -6).attr("y", cy + 4)
+      .attr("text-anchor", "end")
+      .attr("fill", "var(--fg-muted)").style("font-size", "10px")
+      .text((s.label || "").length > 18 ? (s.label || "").slice(0, 17) + "…" : (s.label || ""));
+  });
+
+  // X axis
+  const isTransformed = profile.isTransformedScale;
+  const xAxisG = g.append("g").attr("transform", `translate(0,${iH})`);
+  if (isTransformed) {
+    const ticks = x.ticks(6).filter(v => isFinite(profile.transform(v)));
+    xAxisG.call(
+      d3.axisBottom(x)
+        .tickValues(ticks)
+        .tickFormat(v => { const t = profile.transform(v); return isFinite(t) ? (+t.toFixed(2)).toString() : ""; })
+    );
+  } else {
+    xAxisG.call(d3.axisBottom(x).ticks(6).tickFormat(d3.format(".3~g")));
+  }
+  styleAxis(xAxisG, "var(--border-hover)", "var(--fg-muted)", "10px");
+
+  // Axis label
+  const xLabel = isTransformed
+    ? `${profile.label || "Effect"} (log scale)`
+    : (profile.label || "Effect size");
+  svg.append("text")
+    .attr("x", margin.left + iW / 2).attr("y", H - 4)
+    .attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "11px")
+    .text(xLabel);
+
+  // Title annotation
+  const tau2Str = isFinite(result.tau2) && result.tau2 > 0
+    ? `τ² = ${result.tau2.toFixed(4)}`
+    : "τ² = 0";
+  svg.append("text")
+    .attr("x", margin.left + iW / 2).attr("y", 16)
+    .attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "10px")
+    .text(`BLUPs  k = ${result.k}   ${tau2Str}`);
+
+  // Legend
+  const legY = H - 28;
+  const legX = margin.left + 4;
+  svg.append("line").attr("x1", legX).attr("x2", legX + 16).attr("y1", legY + 5).attr("y2", legY + 5)
+    .attr("stroke", "var(--fg-subtle)").attr("stroke-width", 1.5).attr("opacity", 0.7);
+  svg.append("circle").attr("cx", legX + 8).attr("cy", legY + 5).attr("r", 3)
+    .attr("fill", "var(--fg-subtle)").attr("opacity", 0.7);
+  svg.append("text").attr("x", legX + 20).attr("y", legY + 9)
+    .attr("fill", "var(--fg-muted)").style("font-size", "10px").text("Observed");
+
+  svg.append("line").attr("x1", legX + 82).attr("x2", legX + 98).attr("y1", legY + 5).attr("y2", legY + 5)
+    .attr("stroke", "var(--accent)").attr("stroke-width", 2);
+  svg.append("circle").attr("cx", legX + 90).attr("cy", legY + 5).attr("r", 4)
+    .attr("fill", "var(--accent)").attr("stroke", "var(--bg-surface)").attr("stroke-width", 1);
+  svg.append("text").attr("x", legX + 102).attr("y", legY + 9)
+    .attr("fill", "var(--fg-muted)").style("font-size", "10px").text("BLUP (shrunken)");
 
   return { totalPages };
 }

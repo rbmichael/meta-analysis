@@ -45,6 +45,11 @@
 //     influence on the FE pooled estimate (y).  All quantities are analytical
 //     (no iterative leave-one-out meta() calls required).
 //
+//   blupMeta(studies, m, alpha)
+//     Per-study BLUPs (Empirical Bayes shrunken estimates) under the RE model.
+//     Returns shrunken estimate, full-uncertainty SE/CI, random effect, and
+//     shrinkage weight λᵢ for each study.
+//
 //   bfgs(f, x0, opts)
 //     General-purpose BFGS minimizer with central-difference gradient and
 //     Armijo backtracking.  Returns { x, fval, gnorm, iters, converged }.
@@ -3945,6 +3950,89 @@ export function baujat(studies) {
   });
 
   return { points, muFE, Q, k: valid.length };
+}
+
+// ================= BLUPs =================
+// -----------------------------------------------------------------------------
+// blupMeta(studies, m, alpha) → result | null
+// -----------------------------------------------------------------------------
+// Computes per-study Best Linear Unbiased Predictions (BLUPs) under the
+// random-effects model (Raudenbush 1994; matches metafor::blup.rma.uni()).
+//
+// Each study's true effect θᵢ is estimated by shrinking the observed yᵢ
+// toward the pooled RE estimate μ̂:
+//
+//   λᵢ      = τ² / (τ² + vᵢ)                          (shrinkage weight)
+//   blup_i  = μ̂_RE + λᵢ · (yᵢ − μ̂_RE)                (shrunken estimate)
+//   ranef_i = blup_i − μ̂_RE = λᵢ · (yᵢ − μ̂_RE)       (random effect ûᵢ)
+//
+// Full uncertainty (accounts for estimation error in μ̂_RE):
+//   WRE          = Σ 1/(vᵢ + τ²)
+//   Var(blup_i)  = λᵢ·vᵢ + (vᵢ/(τ²+vᵢ))² · (1/WRE)
+//   se_blup_i    = √Var(blup_i)
+//
+// Conditional SE of the random effect (treating μ̂ as fixed):
+//   se_ranef_i   = √(λᵢ·vᵢ) = √(τ²·vᵢ/(τ²+vᵢ))
+//
+// Parameters
+// ----------
+//   studies  — array of study objects with finite yi, vi (already computed)
+//   m        — meta() result for the same studies/method (provides RE, tau2)
+//   alpha    — CI level (default 0.05 → 95% CI)
+//
+// Returns
+// -------
+//   {
+//     studies: [{
+//       label, yi, vi, se_obs,
+//       blup, se_blup, ci_lb, ci_ub,   // full-uncertainty BLUP CI
+//       ranef, se_ranef,                 // random effect and its cond. SE
+//       lambda,                          // shrinkage weight λᵢ ∈ [0,1]
+//       group,
+//     }],
+//     mu:   μ̂_RE,   // pooled RE estimate
+//     tau2: τ²,
+//     k:    number,
+//   }
+// Returns null when k < 2 or τ² is not finite.
+// -----------------------------------------------------------------------------
+export function blupMeta(studies, m, alpha = 0.05) {
+  const valid = studies.filter(s => isFinite(s.yi) && isFinite(s.vi) && s.vi > 0);
+  const k = valid.length;
+  if (k < 2 || !m || !isFinite(m.RE) || !isFinite(m.tau2) || m.tau2 <= 0) return null;
+
+  const { RE: mu, tau2 } = m;
+  const crit = normalQuantile(1 - alpha / 2);
+
+  // Total RE weight (needed for uncertainty in μ̂_RE)
+  const WRE = valid.reduce((acc, s) => acc + 1 / (s.vi + tau2), 0);
+  const varMu = WRE > 0 ? 1 / WRE : NaN; // Var(μ̂_RE)
+
+  const out = valid.map(s => {
+    const lambda     = tau2 / (tau2 + s.vi);           // shrinkage weight
+    const blup       = mu + lambda * (s.yi - mu);       // shrunken estimate
+    const varBlup    = lambda * s.vi + (s.vi / (tau2 + s.vi)) ** 2 * varMu;
+    const se_blup    = Math.sqrt(Math.max(varBlup, 0));
+    const ranef      = blup - mu;                        // = lambda*(yi - mu)
+    const se_ranef   = Math.sqrt(lambda * s.vi);         // conditional SE
+
+    return {
+      label:    s.label,
+      yi:       s.yi,
+      vi:       s.vi,
+      se_obs:   Math.sqrt(s.vi),
+      blup,
+      se_blup,
+      ci_lb:    blup - crit * se_blup,
+      ci_ub:    blup + crit * se_blup,
+      ranef,
+      se_ranef,
+      lambda,
+      group:    s.group ?? null,
+    };
+  });
+
+  return { studies: out, mu, tau2, k };
 }
 
 // =============================================================================

@@ -1413,6 +1413,41 @@ influence.</p>`,
       },
 
       {
+        id: "guide-blup",
+        title: "BLUPs (Empirical Bayes shrunken estimates)",
+        body: `<p>In a random-effects model the <em>Best Linear Unbiased Prediction</em>
+(BLUP) of the true effect in study <em>i</em> is:</p>
+<pre>λᵢ = τ² / (τ² + vᵢ)
+θ̂ᵢ = μ̂_RE + λᵢ · (yᵢ − μ̂_RE)</pre>
+<p>where τ² is the between-study variance, vᵢ the within-study variance, and
+μ̂_RE the pooled random-effects estimate.  λᵢ ∈ [0, 1] is the
+<strong>shrinkage weight</strong>: λᵢ → 0 when the study is noisy relative to τ²
+(full shrinkage to the mean); λᵢ → 1 when it is precise (stays near its
+observed value).</p>
+<p>The <strong>random effect</strong> ûᵢ = θ̂ᵢ − μ̂_RE = λᵢ(yᵢ − μ̂_RE) is the
+study's estimated deviation from the grand mean.</p>
+<p><strong>Uncertainty</strong> in the BLUP accounts for both the within-study sampling
+error and the estimation error in μ̂_RE:</p>
+<pre>Var(θ̂ᵢ) = λᵢ·vᵢ + (vᵢ/(τ²+vᵢ))² · Var(μ̂_RE)</pre>
+<p>The CIs in the plot are based on this full variance.</p>
+<p><strong>Reading the plot</strong></p>
+<ul>
+  <li>Gray segments: observed yi ± 1.96 · SE (unadjusted)</li>
+  <li>Accent segments: BLUP ± 1.96 · SE<sub>BLUP</sub> (shrunken)</li>
+  <li>Dashed lines connecting gray and accent points show the direction and
+  magnitude of shrinkage</li>
+  <li>All BLUP estimates are pulled toward the vertical accent line (μ̂_RE)</li>
+  <li>Studies with wider gray CIs (higher vᵢ) are shrunk more</li>
+</ul>
+<p>BLUPs are only shown when τ² > 0 (a pure fixed-effect model has τ² = 0 and
+all BLUPs collapse to μ̂_FE, which is uninformative).</p>`,
+        citations: [
+          "Raudenbush, S. W. (1994). Random effects models. In H. Cooper & L. V. Hedges (Eds.), <em>The Handbook of Research Synthesis</em>. Russell Sage Foundation.",
+          "Robinson, G. K. (1991). That BLUP is a good thing: The estimation of random effects. <em>Statistical Science, 6</em>(1), 15–32.",
+        ],
+      },
+
+      {
         id: "guide-baujat",
         title: "Baujat plot",
         body: `<p>A scatter plot that simultaneously displays two per-study diagnostics:</p>
@@ -1762,6 +1797,7 @@ export const HELP_TO_GUIDE = {
   "bias.pcurve":      "guide-pcurve",
   "bias.puniform":    "guide-puniform",
   "sel.model":        "guide-selection-model",
+  "diag.blup":        "guide-blup",
   "diag.baujat":      "guide-baujat",
   "diag.labbe":       "guide-labbe",
   "diag.gosh":        "guide-gosh",

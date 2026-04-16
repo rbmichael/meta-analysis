@@ -51,6 +51,7 @@ A browser-based meta-analysis tool. No installation, no server, no dependencies 
 - **Leave-one-out analysis** — flags studies whose omission would flip statistical significance
 - **Influence diagnostics table** — Cook's distance, DFBETA, hat values (*h*ᵢ), standardised residuals, Δτ²
 - **Influence plot** — per-study leverage and influence visualised
+- **BLUPs** — per-study Empirical Bayes shrunken estimates with CIs; visualises shrinkage toward μ̂ (shown when τ² > 0)
 - **Baujat plot** — heterogeneity contribution vs. overall influence; identifies problematic studies
 - **L'Abbé plot** — treatment vs. control event rate per study (binary outcomes: OR, RR, RD); reveals treatment × baseline-risk interactions
 - **GOSH plot** — fixed-effects pooled estimate and I² for every non-empty subset of studies; exact enumeration for k ≤ 15, random-sampled for k ≤ 30 (default 50 000 subsets)
@@ -96,6 +97,7 @@ All plots export as SVG, PNG, or TIFF. Log-scale effect types label the axis in 
 | Forest plot | Study CIs + pooled diamond(s). Toggle FE only, RE only, or both. Four visual themes (default, Cochrane, JAMA, black & white). Paginated for large datasets. |
 | Funnel plot | Effect vs. SE with Egger regression line. Toggle between standard and contour-enhanced modes. |
 | Influence plot | Per-study leverage and Cook's distance visualised as a bubble chart. |
+| BLUPs | Dual caterpillar: observed yi (gray) vs. shrunken BLUP (accent) per study. Shrinkage lines, hover tooltips. Only when τ² > 0. |
 | Baujat plot | Scatter of heterogeneity contribution vs. overall influence; quadrant guides at the mean. |
 | L'Abbé plot | Treatment vs. control event rate per study (binary outcomes). Reference diagonal = no effect; dashed curve = pooled RE estimate. |
 | Cumulative forest plot | Cumulative pooled estimate as studies are added in sequence. Paginated. |

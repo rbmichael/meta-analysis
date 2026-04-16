@@ -1,7 +1,7 @@
 import { round, transformEffect, chiSquareCDF, chiSquareQuantile, parseCounts, bivariateNormalCDF, normalQuantile, tCritical, fCDF, normalCDF, tCDF } from "./utils.js";
 import { validateStudy } from "./profiles.js";
 import { BENCHMARKS, PUB_BIAS_BENCHMARKS, INFLUENCE_BENCHMARKS, META_REGRESSION_BENCHMARKS, VH_BENCHMARKS, MH_BENCHMARKS, CLUSTER_BENCHMARKS, RVE_BENCHMARKS, THREE_LEVEL_BENCHMARKS } from "./benchmarks.js";
-import { compute, meta, metaMH, metaPeto, robustMeta, sandwichVar, robustWlsResult, metaRegression, tau2_HS, tau2_HE, tau2_ML, tau2_SJ, beggTest, eggerTest, fatPetTest, petPeeseTest, failSafeN, heterogeneityCIs, cumulativeMeta, influenceDiagnostics, harbordTest, petersTest, deeksTest, rueckerTest, leaveOneOut, baujat, pCurve, pUniform, estimatorComparison, subgroupAnalysis, logLik, bfgs, selIntervalProbs, selIntervalIdx, selectionLogLik, SEL_CUTS_ONE_SIDED, SEL_CUTS_TWO_SIDED, veveaHedges, SELECTION_PRESETS, profileLikTau2, profileLikCI, bayesMeta, rvePooled, meta3level } from "./analysis.js";
+import { compute, meta, metaMH, metaPeto, robustMeta, sandwichVar, robustWlsResult, metaRegression, tau2_HS, tau2_HE, tau2_ML, tau2_SJ, beggTest, eggerTest, fatPetTest, petPeeseTest, failSafeN, heterogeneityCIs, cumulativeMeta, influenceDiagnostics, harbordTest, petersTest, deeksTest, rueckerTest, leaveOneOut, baujat, blupMeta, pCurve, pUniform, estimatorComparison, subgroupAnalysis, logLik, bfgs, selIntervalProbs, selIntervalIdx, selectionLogLik, SEL_CUTS_ONE_SIDED, SEL_CUTS_TWO_SIDED, veveaHedges, SELECTION_PRESETS, profileLikTau2, profileLikCI, bayesMeta, rvePooled, meta3level } from "./analysis.js";
 import { trimFill } from "./trimfill.js";
 import { parseCSV } from "./csv.js";
 import { goshCompute, GOSH_MAX_ENUM_K, GOSH_MAX_K, GOSH_DEFAULT_MAX_SUBSETS } from "./gosh.js";
@@ -5447,6 +5447,97 @@ export function runTests() {
 
   // ===== normalCDF & tCDF UNIT TESTS =====
   // normalCDF: A&S §26.2.17 rational polynomial, |ε| < 7.5×10⁻⁸.
+  // =========================================================================
+  // BLUP BENCHMARK TESTS
+  // =========================================================================
+  // Expected values produced by metafor 4.8-0 blup.rma.uni() on the BCG
+  // Vaccine dataset (dat.bcg, REML). R code:
+  //   fit <- rma(yi=yi, vi=vi, method="REML")
+  //   blup(fit)   # pred, se, pi.lb (=ci_lb), pi.ub (=ci_ub)
+  //
+  // Note: metafor calls the CI bounds "pi.lb/pi.ub" in blup() output, but
+  // they are confidence intervals for the BLUP (pred ± 1.96*se), not
+  // prediction intervals for future studies.
+  //
+  // Verified: JS formula matches metafor to floating-point precision (~1e-16).
+  // See benchmark-data.md "BLUPs" section for derivation details.
+  // =========================================================================
+  console.log("\n===== BLUP BENCHMARK TESTS =====\n");
+  {
+    let blupPass = true;
+    const blupChk = (label, got, exp, tol = 1e-5) => {
+      const ok = Math.abs(got - exp) < tol;
+      if (!ok) { console.error(`  FAIL ${label}: got ${got.toFixed(7)}, exp ${exp.toFixed(7)}`); blupPass = false; }
+      else console.log(`  ok  ${label}`);
+    };
+
+    // BCG dataset (GENERIC, REML)
+    const bcgStudies = [
+      { label: "Aronson 1948",           yi: -0.8893113339202054,  vi: 0.3255847650039614    },
+      { label: "Ferguson & Simes 1949",  yi: -1.5853886572014306,  vi: 0.19458112139814387   },
+      { label: "Rosenthal 1960",         yi: -1.348073148299693,   vi: 0.41536796536796533   },
+      { label: "Hart & Sutherland 1977", yi: -1.4415511900213054,  vi: 0.020010031902247573  },
+      { label: "Frimodt-Moller 1973",    yi: -0.2175473222112957,  vi: 0.05121017216963086   },
+      { label: "Stein & Aronson 1953",   yi: -0.786115585818864,   vi: 0.0069056184559087574 },
+      { label: "Vandiviere 1973",        yi: -1.6208982235983924,  vi: 0.22301724757231517   },
+      { label: "TPT Madras 1980",        yi:  0.011952333523841173, vi: 0.00396157929781773  },
+      { label: "Coetzee & Berjak 1968",  yi: -0.4694176487381487,  vi: 0.056434210463248966  },
+      { label: "Rosenthal 1961",         yi: -1.3713448034727846,  vi: 0.07302479361302891   },
+      { label: "Comstock 1974",          yi: -0.33935882833839015, vi: 0.01241221397155972   },
+      { label: "Comstock & Webster 1969",yi:  0.4459134005713783,  vi: 0.5325058452001528    },
+      { label: "Comstock 1976",          yi: -0.017313948216879493,vi: 0.0714046596839863    },
+    ];
+    // Expected from metafor blup.rma.uni() — pred, se, pi.lb (ci_lb), pi.ub (ci_ub)
+    const blupExpected = [
+      { blup: -0.8002336, se: 0.4099300, ci_lb: -1.6036923, ci_ub:  0.0032252 },
+      { blup: -1.2517059, se: 0.3532269, ci_lb: -1.9440188, ci_ub: -0.5593930 },
+      { blup: -0.9869028, se: 0.4348320, ci_lb: -1.8391576, ci_ub: -0.1346480 },
+      { blup: -1.3978978, se: 0.1375677, ci_lb: -1.6675255, ci_ub: -1.1282701 },
+      { blup: -0.2873802, se: 0.2113116, ci_lb: -0.7015423, ci_ub:  0.1267820 },
+      { blup: -0.7845720, se: 0.0822898, ci_lb: -0.9458570, ci_ub: -0.6232870 },
+      { blup: -1.2439636, se: 0.3685919, ci_lb: -1.9663997, ci_ub: -0.5215274 },
+      { blup:  0.0028786, se: 0.0625875, ci_lb: -0.1197917, ci_ub:  0.1255490 },
+      { blup: -0.5068362, se: 0.2203910, ci_lb: -0.9387946, ci_ub: -0.0748777 },
+      { blup: -1.2471727, se: 0.2457117, ci_lb: -1.7287578, ci_ub: -0.7655876 },
+      { blup: -0.3536580, se: 0.1094814, ci_lb: -0.5682376, ci_ub: -0.1390784 },
+      { blup: -0.2847340, se: 0.4583010, ci_lb: -1.1829881, ci_ub:  0.6135201 },
+      { blup: -0.1467434, se: 0.2434395, ci_lb: -0.6238751, ci_ub:  0.3303883 },
+    ];
+
+    const bcgMeta = meta(bcgStudies, "REML", "normal");
+    const blupResult = blupMeta(bcgStudies, bcgMeta);
+
+    if (!blupResult || !blupResult.studies) {
+      console.error("  FAIL blupMeta returned null or missing studies");
+      blupPass = false;
+    } else {
+      blupChk("k = 13", blupResult.k, 13, 0.5);
+      blupChk("mu ≈ -0.71453", blupResult.mu, -0.7145323, 1e-5);
+      blupChk("tau2 ≈ 0.31324", blupResult.tau2, 0.3132433, 1e-4);
+
+      blupResult.studies.forEach((s, i) => {
+        const exp = blupExpected[i];
+        blupChk(`${s.label}: blup`,  s.blup,   exp.blup,  1e-5);
+        blupChk(`${s.label}: se`,    s.se_blup, exp.se,    1e-5);
+        blupChk(`${s.label}: ci_lb`, s.ci_lb,   exp.ci_lb, 1e-5);
+        blupChk(`${s.label}: ci_ub`, s.ci_ub,   exp.ci_ub, 1e-5);
+      });
+    }
+
+    // --- guard: tau2=0 → returns null ---
+    const zeroTauStudies = [
+      { label: "A", yi: 0.5, vi: 0.1 },
+      { label: "B", yi: 0.5, vi: 0.1 },
+    ];
+    const zeroMeta = meta(zeroTauStudies, "REML", "normal");
+    const zeroBlup = blupMeta(zeroTauStudies, { ...zeroMeta, tau2: 0 });
+    const guardOk = zeroBlup === null;
+    if (!guardOk) { console.error("  FAIL tau2=0 should return null"); blupPass = false; }
+    else console.log("  ok  tau2=0 returns null");
+
+    console.log(blupPass ? "\n✅ ALL BLUP BENCHMARK TESTS PASSED" : "\n❌ SOME BLUP BENCHMARK TESTS FAILED");
+  }
+
   // tCDF: exact regularized-beta relation; accuracy ~10⁻¹⁴.
   //
   // Exact tCDF values are derived from closed-form CDFs:
