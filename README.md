@@ -52,6 +52,7 @@ A browser-based meta-analysis tool. No installation, no server, no dependencies 
 - **Influence diagnostics table** — Cook's distance, DFBETA, hat values (*h*ᵢ), standardised residuals, Δτ²
 - **Influence plot** — per-study leverage and influence visualised
 - **Baujat plot** — heterogeneity contribution vs. overall influence; identifies problematic studies
+- **L'Abbé plot** — treatment vs. control event rate per study (binary outcomes: OR, RR, RD); reveals treatment × baseline-risk interactions
 - **GOSH plot** — fixed-effects pooled estimate and I² for every non-empty subset of studies; exact enumeration for k ≤ 15, random-sampled for k ≤ 30 (default 50 000 subsets)
 - **Estimator comparison** — runs all τ² estimators side-by-side for a given dataset
 - **Cumulative meta-analysis** — adds studies in user-selected order (input order, precision ascending/descending, effect size ascending/descending)
@@ -96,6 +97,7 @@ All plots export as SVG, PNG, or TIFF. Log-scale effect types label the axis in 
 | Funnel plot | Effect vs. SE with Egger regression line. Toggle between standard and contour-enhanced modes. |
 | Influence plot | Per-study leverage and Cook's distance visualised as a bubble chart. |
 | Baujat plot | Scatter of heterogeneity contribution vs. overall influence; quadrant guides at the mean. |
+| L'Abbé plot | Treatment vs. control event rate per study (binary outcomes). Reference diagonal = no effect; dashed curve = pooled RE estimate. |
 | Cumulative forest plot | Cumulative pooled estimate as studies are added in sequence. Paginated. |
 | Cumulative funnel plot | Funnel view at each cumulative step; slider-controlled. |
 | Orchard plot | Effect estimates as dots sized by precision, with RE diamond and 95% prediction interval. |

@@ -48,6 +48,12 @@
 //     Baujat diagnostic scatter (Baujat et al., 2002): x = contribution to Q,
 //     y = influence on FE pooled estimate.  Quadrant guides at mean x/y.
 //
+//   drawLabbe(studies, m, profile, type)
+//     L'Abbé plot for binary outcomes: x = control event rate c/(c+d),
+//     y = treatment event rate a/(a+b).  Bubble radius ∝ √N.  Reference
+//     diagonal y = x (no effect); dashed pooled-RE curve (OR/RR/RD).
+//     type = "OR" | "RR" | "RD".
+//
 //   drawBayesTauPosterior(result, opts)
 //     Marginal posterior density of τ from bayesMeta().  Shaded 95% credible
 //     region; vertical dashed line at posterior mean.
@@ -2565,6 +2571,228 @@ export function drawBaujatPlot(result, profile) {
         .text(grp.length > 10 ? grp.slice(0, 9) + "…" : grp);
     });
   }
+}
+
+// ── drawLabbe ────────────────────────────────────────────────────────────────
+// L'Abbé plot for binary outcomes (OR, RR, RD).
+// X axis: control event rate   c/(c+d)
+// Y axis: treatment event rate a/(a+b)
+// Bubble radius ∝ √N.  Reference diagonal y = x (no effect).
+// Pooled-estimate curve drawn for the RE estimate:
+//   OR  →  y = (OR·x) / (1 − x + OR·x)
+//   RR  →  y = RR·x   (capped at 1)
+//   RD  →  y = x + RD (capped at [0,1])
+// studies  — array of study objects with raw a, b, c, d and yi/vi
+// m        — meta() result (for pooled RE estimate)
+// profile  — effect profile (for transform())
+// type     — "OR" | "RR" | "RD"
+export function drawLabbe(studies, m, profile, type) {
+  const svg = clearAndSelectSVG("#labbePlot");
+  if (!studies || studies.length === 0) return;
+
+  // Only meaningful for studies with a/b/c/d cell counts.
+  const pts = studies
+    .filter(s => isFinite(s.a) && isFinite(s.b) && isFinite(s.c) && isFinite(s.d)
+                 && (s.a + s.b) > 0 && (s.c + s.d) > 0)
+    .map(s => ({
+      label: s.label,
+      group: s.group || "",
+      px: s.c / (s.c + s.d),            // control rate
+      py: s.a / (s.a + s.b),            // treatment rate
+      N:  s.a + s.b + s.c + s.d,
+      yi: s.yi,
+      vi: s.vi,
+    }));
+
+  if (pts.length === 0) return;
+
+  const W = +svg.attr("width")  || 500;
+  const H = +svg.attr("height") || 420;
+  const margin = { top: 30, right: 24, bottom: 60, left: 64 };
+  const iW = W - margin.left - margin.right;
+  const iH = H - margin.top  - margin.bottom;
+
+  const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+
+  const x = d3.scaleLinear().domain([0, 1]).range([0, iW]);
+  const y = d3.scaleLinear().domain([0, 1]).range([iH, 0]);
+
+  // Bubble radius proportional to √N, scaled so the largest bubble ≈ 14 px.
+  const maxN    = Math.max(...pts.map(p => p.N));
+  const rScale  = d3.scaleSqrt().domain([0, maxN]).range([0, 14]);
+
+  // ---- Reference diagonal: y = x (no treatment effect) ----
+  g.append("line")
+    .attr("x1", x(0)).attr("y1", y(0))
+    .attr("x2", x(1)).attr("y2", y(1))
+    .attr("stroke", "var(--fg-muted)")
+    .attr("stroke-width", 1)
+    .attr("stroke-dasharray", "4,3");
+
+  // ---- Pooled-estimate curve ----
+  const reMu = m && isFinite(m.RE) ? m.RE : null;
+  if (reMu !== null && profile) {
+    const reDisplay = profile.transform(reMu);
+    const nCurve = 120;
+    const curveData = [];
+
+    if (type === "OR" && isFinite(reDisplay) && reDisplay > 0) {
+      const OR = reDisplay;
+      for (let i = 0; i <= nCurve; i++) {
+        const cx = i / nCurve;
+        const cy = (OR * cx) / (1 - cx + OR * cx);
+        if (isFinite(cy) && cy >= 0 && cy <= 1) curveData.push([cx, cy]);
+      }
+    } else if (type === "RR" && isFinite(reDisplay) && reDisplay > 0) {
+      const RR = reDisplay;
+      for (let i = 0; i <= nCurve; i++) {
+        const cx = i / nCurve;
+        const cy = Math.min(RR * cx, 1);
+        curveData.push([cx, cy]);
+      }
+    } else if (type === "RD") {
+      const RD = reMu; // RD is already on display scale (no transform)
+      for (let i = 0; i <= nCurve; i++) {
+        const cx = i / nCurve;
+        const cy = Math.max(0, Math.min(1, cx + RD));
+        curveData.push([cx, cy]);
+      }
+    }
+
+    if (curveData.length > 1) {
+      const line = d3.line()
+        .x(d => x(d[0]))
+        .y(d => y(d[1]));
+      g.append("path")
+        .datum(curveData)
+        .attr("d", line)
+        .attr("fill", "none")
+        .attr("stroke", "var(--accent)")
+        .attr("stroke-width", 1.5)
+        .attr("stroke-dasharray", "6,3")
+        .attr("opacity", 0.7);
+    }
+  }
+
+  // ---- Group colours ----
+  const allGroups  = [...new Set(pts.map(p => p.group).filter(Boolean))];
+  const hasGroups  = allGroups.length > 1;
+  const pointColor = p => {
+    if (!hasGroups) return "var(--accent)";
+    const idx = allGroups.indexOf(p.group);
+    return idx >= 0 ? GROUP_COLORS[idx % GROUP_COLORS.length] : "var(--fg-subtle)";
+  };
+
+  // ---- Bubbles ----
+  const tooltip   = d3.select("#tooltip");
+  const showLabels = pts.length <= 20;
+
+  pts.forEach(p => {
+    const cx = x(p.px);
+    const cy = y(p.py);
+    const r  = Math.max(rScale(p.N), 3);
+    const color = pointColor(p);
+
+    g.append("circle")
+      .attr("cx", cx).attr("cy", cy)
+      .attr("r", r)
+      .attr("fill", color)
+      .attr("fill-opacity", 0.65)
+      .attr("stroke", "var(--bg-surface)")
+      .attr("stroke-width", 1)
+      .on("mousemove", (event) => {
+        const effVal = profile ? profile.transform(p.yi) : p.yi;
+        tooltip.style("opacity", 1)
+          .html(
+            `<b>${p.label}</b>` +
+            `<br>Control rate: ${(p.px * 100).toFixed(1)}%` +
+            `<br>Treatment rate: ${(p.py * 100).toFixed(1)}%` +
+            `<br>N: ${p.N}` +
+            (isFinite(effVal) ? `<br>Effect: ${(+effVal.toFixed(3))}` : "")
+          )
+          .style("left", (event.pageX + 12) + "px")
+          .style("top",  (event.pageY - 24) + "px");
+      })
+      .on("mouseout", () => tooltip.style("opacity", 0));
+
+    if (showLabels) {
+      const abbr = p.label.length > 9 ? p.label.slice(0, 8) + "…" : p.label;
+      g.append("text")
+        .attr("x", cx + r + 2)
+        .attr("y", cy + 4)
+        .attr("fill", "var(--fg-muted)")
+        .style("font-size", "9px")
+        .style("pointer-events", "none")
+        .text(abbr);
+    }
+  });
+
+  // ---- Axes ----
+  const axisX = g.append("g")
+    .attr("transform", `translate(0,${iH})`)
+    .call(d3.axisBottom(x).ticks(5).tickFormat(d3.format(".0%")));
+  styleAxis(axisX, "var(--border-hover)", "var(--fg-muted)", "10px");
+
+  const axisY = g.append("g")
+    .call(d3.axisLeft(y).ticks(5).tickFormat(d3.format(".0%")));
+  styleAxis(axisY, "var(--border-hover)", "var(--fg-muted)", "10px");
+
+  // ---- Axis labels ----
+  svg.append("text")
+    .attr("x", margin.left + iW / 2)
+    .attr("y", H - 10)
+    .attr("text-anchor", "middle")
+    .attr("fill", "var(--fg-muted)")
+    .style("font-size", "11px")
+    .text("Control event rate");
+
+  svg.append("text")
+    .attr("transform", "rotate(-90)")
+    .attr("x", -(margin.top + iH / 2))
+    .attr("y", 15)
+    .attr("text-anchor", "middle")
+    .attr("fill", "var(--fg-muted)")
+    .style("font-size", "11px")
+    .text("Treatment event rate");
+
+  // ---- Pooled-estimate label ----
+  if (reMu !== null && profile) {
+    const reDisplay = profile.transform(reMu);
+    if (isFinite(reDisplay)) {
+      const typeLabel = type === "OR" ? "OR" : type === "RR" ? "RR" : "RD";
+      g.append("text")
+        .attr("x", iW - 2).attr("y", 12)
+        .attr("text-anchor", "end")
+        .attr("fill", "var(--accent)")
+        .style("font-size", "10px")
+        .text(`RE ${typeLabel} = ${(+reDisplay.toFixed(3))}`);
+    }
+  }
+
+  // ---- Legend (groups) ----
+  if (hasGroups) {
+    allGroups.forEach((grp, gi) => {
+      const color = GROUP_COLORS[gi % GROUP_COLORS.length];
+      const lx = iW - 4;
+      const ly = gi * 16 + 26;
+      g.append("circle")
+        .attr("cx", lx - 80).attr("cy", ly + 5)
+        .attr("r", 5).attr("fill", color).attr("fill-opacity", 0.65);
+      g.append("text")
+        .attr("x", lx - 72).attr("y", ly + 9)
+        .attr("fill", "var(--fg-muted)")
+        .style("font-size", "10px")
+        .text(grp.length > 10 ? grp.slice(0, 9) + "…" : grp);
+    });
+  }
+
+  // ---- Reference annotation ----
+  g.append("text")
+    .attr("x", x(0.95)).attr("y", y(0.95) - 6)
+    .attr("text-anchor", "end")
+    .attr("fill", "var(--fg-muted)")
+    .style("font-size", "9px")
+    .text("no effect");
 }
 
 // ── drawRoBTrafficLight ──────────────────────────────────────────────────────

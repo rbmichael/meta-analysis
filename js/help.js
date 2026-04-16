@@ -803,6 +803,18 @@ export const HELP = {
            "the means of each axis. Introduced by Baujat et al. (2002).",
   },
 
+  "diag.labbe": {
+    title: "L'Abbé plot",
+    body:  "Scatter plot for binary outcomes (OR, RR, RD). Each study is plotted as a " +
+           "bubble (radius ∝ √N) with the control event rate on the x-axis and the " +
+           "treatment event rate on the y-axis. The solid diagonal y = x marks the line " +
+           "of no effect. The dashed curve shows the pooled random-effects estimate — an " +
+           "OR curve, an RR line (y = RR·x), or an RD shift (y = x + RD). Deviation from " +
+           "the diagonal indicates a treatment effect; curvature of the cloud away from a " +
+           "straight line indicates a treatment × baseline-risk interaction. " +
+           "Introduced by L'Abbé, Detsky, & O'Rourke (1987).",
+  },
+
   "diag.gosh": {
     title: "GOSH plot",
     body:  "Graphical Display of Study Heterogeneity (Olkin et al. 2012). " +

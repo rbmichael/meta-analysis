@@ -104,7 +104,7 @@ import { eggerTest, beggTest, fatPetTest, petPeeseTest, failSafeN, pCurve, pUnif
 import { fmt } from "./utils.js";
 import { effectProfiles, getProfile } from "./profiles.js";
 import { trimFill } from "./trimfill.js";
-import { drawForest, drawFunnel, drawBubble, drawPartialResidualBubble, drawInfluencePlot, drawCumulativeForest, drawCumulativeFunnel, drawPCurve, drawPUniform, drawOrchardPlot, drawCaterpillarPlot, drawBaujatPlot, drawRoBTrafficLight, drawRoBSummary, drawGoshPlot, drawProfileLikTau2, drawBayesTauPosterior, drawBayesMuPosterior } from "./plots.js";
+import { drawForest, drawFunnel, drawBubble, drawPartialResidualBubble, drawInfluencePlot, drawCumulativeForest, drawCumulativeFunnel, drawPCurve, drawPUniform, drawOrchardPlot, drawCaterpillarPlot, drawBaujatPlot, drawLabbe, drawRoBTrafficLight, drawRoBSummary, drawGoshPlot, drawProfileLikTau2, drawBayesTauPosterior, drawBayesMuPosterior } from "./plots.js";
 import { goshCompute, GOSH_MAX_K } from "./gosh.js";
 import { exportSVG, exportPNG, exportTIFF } from "./export.js";
 import { buildReport, downloadHTML, openPrintPreview } from "./report.js";
@@ -3099,6 +3099,7 @@ async function runAnalysis() {
   const elBubblePlots        = document.getElementById("bubblePlots");
   const elForestPageSize     = document.getElementById("forestPageSize");
   const elBaujatPlotBlock    = document.getElementById("baujatPlotBlock");
+  const elLabbeBlock         = document.getElementById("labbeBlock");
   const elCumulativeOrder    = document.getElementById("cumulativeOrder");
   const elCumForestPageSize  = document.getElementById("cumulativeForestPageSize");
   const elCumFunnelStep      = document.getElementById("cumulativeFunnelStep");
@@ -3573,11 +3574,15 @@ async function runAnalysis() {
     drawFunnel(...funnelPlot.args, { contours: funnelPlot.contours, petpeese: funnelPlot.petpeese });
     performance.measure("phase:plot:funnel", "phase:plot:funnel:start");
   });
+  const labbeTypes = ["OR", "RR", "RD"];
+  const showLabbe  = labbeTypes.includes(type);
   elBaujatPlotBlock.style.display = baujatResult ? "" : "none";
+  elLabbeBlock.style.display      = showLabbe ? "" : "none";
   drawIfVisible("diagnosticSection", () => {
     performance.mark("phase:plot:influence:start");
     drawInfluencePlot(influence);
     drawBaujatPlot(baujatResult, profile);
+    if (showLabbe) drawLabbe(studies, m, profile, type);
     performance.measure("phase:plot:influence", "phase:plot:influence:start");
   });
 

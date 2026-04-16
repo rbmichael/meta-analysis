@@ -1436,6 +1436,38 @@ communicating patterns to a broad audience.</p>`,
       },
 
       {
+        id: "guide-labbe",
+        title: "L'Abbé plot",
+        body: `<p>Available for binary outcomes (OR, RR, RD). Each study is plotted as a
+bubble with:</p>
+<ul>
+  <li><strong>x-axis</strong> — control-group event rate: c / (c + d)</li>
+  <li><strong>y-axis</strong> — treatment-group event rate: a / (a + b)</li>
+  <li><strong>bubble size</strong> — proportional to √N (total sample size)</li>
+</ul>
+<p>Two reference lines are drawn:</p>
+<ul>
+  <li>The <strong>solid diagonal</strong> y = x marks the line of no treatment effect
+  (equal event rates in both groups).</li>
+  <li>The <strong>dashed curve</strong> shows the pooled random-effects estimate:
+  for OR the isoOR curve y = (OR·x)/(1 − x + OR·x); for RR the line y = RR·x;
+  for RD the shift y = x + RD.</li>
+</ul>
+<p>Interpreting the plot:</p>
+<ul>
+  <li>Points above the diagonal indicate the treatment arm has a higher event rate
+  than control; points below indicate a protective effect.</li>
+  <li>If the cloud is curved rather than parallel to the pooled-estimate line,
+  a <em>treatment × baseline-risk interaction</em> may be present: the treatment
+  is more (or less) effective in higher-risk populations.</li>
+  <li>Colour indicates subgroup (when a group column is populated).</li>
+</ul>`,
+        citations: [
+          "L'Abbé, K. A., Detsky, A. S., & O'Rourke, K. (1987). Meta-analysis in clinical research. <em>Annals of Internal Medicine, 107</em>(2), 224–233.",
+        ],
+      },
+
+      {
         id: "guide-gosh",
         title: "GOSH plot (Graphical Display of Study Heterogeneity)",
         body: `<p>For every non-empty subset of the k studies the GOSH plot computes the
@@ -1731,6 +1763,7 @@ export const HELP_TO_GUIDE = {
   "bias.puniform":    "guide-puniform",
   "sel.model":        "guide-selection-model",
   "diag.baujat":      "guide-baujat",
+  "diag.labbe":       "guide-labbe",
   "diag.gosh":        "guide-gosh",
   "diag.profileLik":  "guide-profile-lik-tau2",
   "diag.influence":   "guide-influence",
