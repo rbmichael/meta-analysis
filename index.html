@@ -539,6 +539,15 @@
             </div>
             <svg id="baujatPlot" width="500" height="420"></svg>
           </div>
+          <div class="plot-block" id="qqPlotBlock" style="display:none">
+            <p class="plot-label">Normal Q-Q plot<button class="help-btn" data-help="diag.qqplot" title="Help">?</button></p>
+            <div class="plot-export">
+              <button class="export-btn" data-target="qqPlot" data-format="svg">SVG</button>
+              <button class="export-btn" data-target="qqPlot" data-format="png">PNG</button>
+              <button class="export-btn" data-target="qqPlot" data-format="tiff">TIFF</button>
+            </div>
+            <svg id="qqPlot" width="420" height="380"></svg>
+          </div>
           <div class="plot-block" id="labbeBlock" style="display:none">
             <p class="plot-label">L'Abbé plot<button class="help-btn" data-help="diag.labbe" title="Help">?</button></p>
             <div class="plot-export">
@@ -820,7 +829,10 @@
       <ul>
         <li><strong>Leave-one-out</strong> — flags studies whose omission would flip statistical significance</li>
         <li><strong>Influence diagnostics</strong> — Cook's distance, DFBETA, DFFITS, covariance ratio, hat values, standardised residuals, Δτ²</li>
-        <li><strong>Influence and Baujat plots</strong> — per-study leverage and heterogeneity contribution visualised</li>
+        <li><strong>Influence plot</strong> — per-study leverage and Cook's distance visualised as a bubble chart</li>
+        <li><strong>BLUPs</strong> — Empirical Bayes shrunken study estimates with CIs; shows shrinkage toward μ̂ (available when τ² > 0)</li>
+        <li><strong>Baujat plot</strong> — heterogeneity contribution vs. overall influence; identifies studies that simultaneously inflate Q and shift the pooled estimate</li>
+        <li><strong>Normal Q-Q plot</strong> — normal probability plot of standardised residuals; assesses the normality assumption of the RE distribution</li>
         <li><strong>Estimator comparison</strong> — runs all τ² estimators side-by-side on the current dataset</li>
         <li><strong>Cumulative meta-analysis</strong> — adds studies in user-selected order (input order, precision, or effect size)</li>
       </ul>
@@ -829,7 +841,9 @@
       <h2>Meta-regression</h2>
       <p>Continuous and categorical moderators; multiple moderators may be added simultaneously.
       Results include coefficients, standard errors, <em>z</em>/<em>t</em> statistics,
-      <em>p</em>-values, and <em>R</em>² (proportion of heterogeneity explained).
+      <em>p</em>-values, <em>R</em>² (proportion of heterogeneity explained), and model-fit
+      indices AIC, BIC, and log-likelihood (ML and REML conventions; matches metafor's
+      <code>AIC.rma()</code> / <code>BIC.rma()</code>).
       Bubble plots are generated per continuous moderator.</p>
 
       <!-- ---- Subgroup analysis ---- -->
@@ -889,7 +903,9 @@
             <tr><td>Forest plot</td><td>Study CIs + pooled diamond(s). Toggle FE / RE / both. Four visual themes. Paginated.</td></tr>
             <tr><td>Funnel plot</td><td>Effect vs. SE with Egger regression line. Standard or contour-enhanced (p-value regions).</td></tr>
             <tr><td>Influence plot</td><td>Per-study leverage and Cook's distance visualised as a bubble chart.</td></tr>
+            <tr><td>BLUPs</td><td>Dual caterpillar: observed <em>y</em><sub>i</sub> (gray) vs. shrunken BLUP (accent) per study. Shrinkage lines and hover tooltips. Only shown when τ² > 0.</td></tr>
             <tr><td>Baujat plot</td><td>Heterogeneity contribution vs. overall influence; quadrant guides at the mean.</td></tr>
+            <tr><td>Normal Q-Q plot</td><td>Normal probability plot of standardised residuals <em>z</em><sub>i</sub> = (<em>y</em><sub>i</sub> − μ̂) / √(<em>v</em><sub>i</sub> + τ²). Reference line through Q1/Q3. Orange points: |<em>z</em>| > 2.</td></tr>
             <tr><td>Cumulative forest plot</td><td>Cumulative pooled estimate as studies are added in sequence. Paginated.</td></tr>
             <tr><td>Cumulative funnel plot</td><td>Funnel at each cumulative step; slider-controlled.</td></tr>
             <tr><td>Orchard plot</td><td>Effect estimates as precision-sized dots with RE diamond and prediction interval.</td></tr>
@@ -933,9 +949,13 @@
       <!-- ---- References ---- -->
       <h2>Statistical references</h2>
       <ol class="about-refs">
+        <li>Akaike H (1974). A new look at the statistical model identification. <em>IEEE Trans Autom Control,</em> 19(6), 716–723.</li>
+        <li>Blom G (1958). <em>Statistical Estimates and Transformed Beta-Variables.</em> Wiley.</li>
         <li>Borenstein M, Hedges LV, Higgins JPT, Rothstein HR (2009). <em>Introduction to Meta-Analysis.</em> Wiley.</li>
+        <li>Burnham KP, Anderson DR (2002). <em>Model Selection and Multimodel Inference</em> (2nd ed.). Springer.</li>
         <li>DerSimonian R, Laird N (1986). Meta-analysis in clinical trials. <em>Controlled Clinical Trials,</em> 7, 177–188.</li>
         <li>Gelman A, Carlin JB, Stern HS, Dunson DB, Vehtari A, Rubin DB (2013). <em>Bayesian Data Analysis</em> (3rd ed.). CRC Press.</li>
+        <li>Harville DA (1977). Maximum likelihood approaches to variance component estimation and to related problems. <em>J Am Stat Assoc,</em> 72(358), 320–338.</li>
         <li>Hedges LV, Olkin I (1985). <em>Statistical Methods for Meta-Analysis.</em> Academic Press.</li>
         <li>Hedges LV, Tipton E, Johnson MC (2010). Robust variance estimation in meta-regression with dependent effect size estimates. <em>Res Synth Methods,</em> 1, 39–65.</li>
         <li>Higgins JPT, Thompson SG, Spiegelhalter DJ (2009). A re-evaluation of random-effects meta-analysis. <em>J R Stat Soc A,</em> 172, 137–159.</li>
@@ -945,6 +965,7 @@
         <li>Olkin I, Dahabreh IJ, Trikalinos TA (2012). GOSH — a graphical display of study heterogeneity. <em>Res Synth Methods,</em> 3(3), 214–223.</li>
         <li>Paule RC, Mandel J (1982). Consensus values and weighting factors. <em>J Res Natl Bur Stand,</em> 87, 377–385.</li>
         <li>Peto R, Pike MC, Armitage P, et al. (1976). Design and analysis of randomized clinical trials requiring prolonged observation of each patient. <em>Br J Cancer,</em> 34, 585–612.</li>
+        <li>Schwarz G (1978). Estimating the dimension of a model. <em>Ann Stat,</em> 6(2), 461–464.</li>
         <li>Simonsohn U, Nelson LD, Simmons JP (2014). P-curve: A key to the file-drawer. <em>J Exp Psychol Gen,</em> 143(2), 534–547.</li>
         <li>Stanley TD, Doucouliagos H (2014). Meta-regression approximations to reduce publication selection bias. <em>Res Synth Methods,</em> 5(1), 60–78.</li>
         <li>van Assen MALM, van Aert RCM, Wicherts JM (2015). Meta-analysis using effect size distributions of only statistically significant studies. <em>Psychol Methods,</em> 20(3), 293–309.</li>
@@ -953,6 +974,7 @@
         <li>Vevea JL, Woods CM (2005). Publication bias in research synthesis: Sensitivity analysis using a priori weight functions. <em>Psychol Methods,</em> 10(4), 428–443.</li>
         <li>Viechtbauer W (2005). Bias and efficiency of meta-analytic variance estimators in the random-effects model. <em>J Educ Behav Stat,</em> 30, 261–293.</li>
         <li>Viechtbauer W (2010). Conducting meta-analyses in R with the metafor package. <em>J Stat Softw,</em> 36(3), 1–48.</li>
+        <li>Viechtbauer W, Cheung MWL (2010). Outlier and influence diagnostics for meta-analysis. <em>Res Synth Methods,</em> 1(2), 112–125.</li>
       </ol>
 
     </article>

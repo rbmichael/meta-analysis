@@ -830,6 +830,7 @@ export async function buildDocx(args) {
   svgArrays.set("funnel",       [liveSVGString("funnelPlot")].filter(Boolean));
   svgArrays.set("influence",    [liveSVGString("influencePlot")].filter(Boolean));
   svgArrays.set("baujat",       [liveSVGString("baujatPlot")].filter(Boolean));
+  svgArrays.set("qqplot",       [liveSVGString("qqPlot")].filter(Boolean));
 
   svgArrays.set("cumForest",
     cumForestOptions
@@ -1009,6 +1010,10 @@ export async function buildDocx(args) {
 
     ...figSection("Baujat Plot", "baujat",
       "Baujat plot of contribution to Q statistic against overall influence on the pooled estimate", ""),
+
+    ...figSection("Normal Q-Q Plot", "qqplot",
+      "Normal Q-Q plot of internally standardised residuals from the random-effects model",
+      "Points near the reference line support the normality assumption. Orange points have |z| > 2."),
 
     ...figSection("Cumulative Forest Plot", "cumForest",
       `Cumulative forest plot of ${profile.label}`,

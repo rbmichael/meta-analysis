@@ -821,6 +821,18 @@ export const HELP = {
            "the means of each axis. Introduced by Baujat et al. (2002).",
   },
 
+  "diag.qqplot": {
+    title: "Normal Q-Q plot",
+    body:  "Normal probability plot of internally standardised residuals " +
+           "zᵢ = (yᵢ − μ̂_RE) / √(vᵢ + τ²) from the random-effects model. " +
+           "If the normality assumption holds, points should fall close to the " +
+           "reference line (fitted through the first and third quartiles, matching " +
+           "R's qqline convention). Points highlighted in orange have |z| > 2 and " +
+           "are potential outliers. Substantial departure from the line — especially " +
+           "heavy tails — suggests the normal random-effects assumption may be violated. " +
+           "Matches qqnorm.rma() in metafor.",
+  },
+
   "diag.labbe": {
     title: "L'Abbé plot",
     body:  "Scatter plot for binary outcomes (OR, RR, RD). Each study is plotted as a " +

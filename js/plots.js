@@ -3972,3 +3972,165 @@ export function drawBayesMuPosterior(result, opts = {}) {
     .style("font-size", "11px").style("font-weight", "600")
     .text(`Posterior of \u03BC \u2014 N(\u03BC\u2080\u202F=\u202F${mu0},\u202F\u03C3_\u03BC\u202F=\u202F${sigma_mu}) \u2014 k\u202F=\u202F${k}`);
 }
+
+// =============================================================================
+// drawQQPlot — Normal Q-Q plot of standardised residuals
+// =============================================================================
+// stdResiduals : number[]  — internally standardised residuals  zᵢ = (yᵢ−μ̂)/√(vᵢ+τ²)
+// labels       : string[]  — study labels (same order as stdResiduals)
+// opts         : { containerId? }   default containerId = "#qqPlot"
+//
+// Theoretical quantiles: Blom's formula  qᵢ = Φ⁻¹((i − 0.375) / (k + 0.25))
+// Reference line: fitted through (Q₁_theory, Q₁_sample) and (Q₃_theory, Q₃_sample),
+//   matching R's qqline() convention.
+// =============================================================================
+export function drawQQPlot(stdResiduals, labels, opts = {}) {
+  const containerId = opts.containerId || "#qqPlot";
+  const svg = clearAndSelectSVG(containerId);
+
+  const k = stdResiduals.length;
+  if (k < 3) return;
+
+  const W = +svg.attr("width")  || 420;
+  const H = +svg.attr("height") || 380;
+  const margin = { top: 30, right: 24, bottom: 56, left: 62 };
+  const iW = W - margin.left - margin.right;
+  const iH = H - margin.top  - margin.bottom;
+
+  // ---- 1. Compute theoretical quantiles (Blom's formula) ----
+  // Sort indices by residual value to pair with quantiles.
+  const order = Array.from({ length: k }, (_, i) => i)
+    .sort((a, b) => stdResiduals[a] - stdResiduals[b]);
+
+  const points = order.map((origIdx, rank) => {
+    const p = (rank + 1 - 0.375) / (k + 0.25);
+    return {
+      label:    (labels && labels[origIdx]) || String(origIdx + 1),
+      theory:   normalQuantile(p),
+      observed: stdResiduals[origIdx],
+    };
+  });
+
+  // ---- 2. Reference line: slope/intercept through Q1 and Q3 ----
+  // Theoretical Q1/Q3
+  const tQ1 = normalQuantile(0.25);
+  const tQ3 = normalQuantile(0.75);
+
+  // Sample Q1/Q3 from sorted residuals
+  function quantile(sorted, p) {
+    const h = (sorted.length - 1) * p;
+    const lo = Math.floor(h), hi = Math.ceil(h);
+    return sorted[lo] + (sorted[hi] - sorted[lo]) * (h - lo);
+  }
+  const sorted = points.map(p => p.observed);  // already sorted
+  const sQ1 = quantile(sorted, 0.25);
+  const sQ3 = quantile(sorted, 0.75);
+
+  const slope     = (sQ3 - sQ1) / (tQ3 - tQ1);
+  const intercept = sQ1 - slope * tQ1;
+
+  // ---- 3. Scales ----
+  const xPad = Math.max(0.3, (tQ3 - tQ1) * 0.2);
+  const yPad = Math.max(0.3, (sQ3 - sQ1) * 0.2);
+  const allTheory   = points.map(p => p.theory);
+  const allObserved = points.map(p => p.observed);
+
+  const xMin = Math.min(...allTheory)   - xPad;
+  const xMax = Math.max(...allTheory)   + xPad;
+  const yMin = Math.min(...allObserved, intercept + slope * xMin) - yPad;
+  const yMax = Math.max(...allObserved, intercept + slope * xMax) + yPad;
+
+  const x = d3.scaleLinear().domain([xMin, xMax]).range([0, iW]);
+  const y = d3.scaleLinear().domain([yMin, yMax]).range([iH, 0]);
+
+  const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+
+  // ---- 4. Zero guidelines ----
+  [[0, "x"], [0, "y"]].forEach(([val, axis]) => {
+    const x1 = axis === "x" ? x(val) : 0;
+    const x2 = axis === "x" ? x(val) : iW;
+    const y1 = axis === "y" ? y(val) : 0;
+    const y2 = axis === "y" ? y(val) : iH;
+    if (x1 < 0 || x1 > iW || y1 < 0 || y1 > iH) return; // out of range
+    g.append("line")
+      .attr("x1", x1).attr("x2", x2).attr("y1", y1).attr("y2", y2)
+      .attr("stroke", "var(--border)")
+      .attr("stroke-width", 1)
+      .attr("stroke-dasharray", "3,3");
+  });
+
+  // ---- 5. Reference line ----
+  const lineX1 = xMin, lineX2 = xMax;
+  const lineY1 = intercept + slope * lineX1;
+  const lineY2 = intercept + slope * lineX2;
+
+  g.append("line")
+    .attr("x1", x(lineX1)).attr("x2", x(lineX2))
+    .attr("y1", y(lineY1)).attr("y2", y(lineY2))
+    .attr("stroke", "var(--accent)")
+    .attr("stroke-width", 1.5)
+    .attr("stroke-dasharray", "6,3");
+
+  // ---- 6. Points ----
+  const tooltip = d3.select("#tooltip");
+
+  points.forEach(pt => {
+    const cx = x(pt.theory);
+    const cy = y(pt.observed);
+    const isOutlier = Math.abs(pt.observed) > 2;
+
+    g.append("circle")
+      .attr("cx", cx).attr("cy", cy)
+      .attr("r", 5)
+      .attr("fill", isOutlier ? "var(--color-warning)" : "var(--accent)")
+      .attr("fill-opacity", 0.80)
+      .attr("stroke", "var(--bg-surface)")
+      .attr("stroke-width", 1)
+      .on("mousemove", (event) => {
+        tooltip.style("opacity", 1)
+          .html(
+            `<b>${pt.label}</b>` +
+            `<br>Theoretical quantile: ${pt.theory.toFixed(3)}` +
+            `<br>Std. residual: ${pt.observed.toFixed(3)}` +
+            (isOutlier ? `<br><i>Potential outlier (|z| > 2)</i>` : "")
+          )
+          .style("left", (event.pageX + 12) + "px")
+          .style("top",  (event.pageY - 24) + "px");
+      })
+      .on("mouseout", () => tooltip.style("opacity", 0));
+  });
+
+  // ---- 7. Axes ----
+  const xAxis = d3.axisBottom(x).ticks(5).tickSize(4);
+  const yAxis = d3.axisLeft(y).ticks(5).tickSize(4);
+
+  const isDark = document.documentElement.classList.contains("dark");
+  const strokeColor = isDark ? "#aaa" : "#555";
+  const fillColor   = isDark ? "#ccc" : "#333";
+
+  const xAxisG = g.append("g").attr("transform", `translate(0,${iH})`).call(xAxis);
+  styleAxis(xAxisG, strokeColor, fillColor, 10, "sans-serif");
+  const yAxisG = g.append("g").call(yAxis);
+  styleAxis(yAxisG, strokeColor, fillColor, 10, "sans-serif");
+
+  // ---- 8. Axis labels ----
+  g.append("text")
+    .attr("x", iW / 2).attr("y", iH + 42)
+    .attr("text-anchor", "middle").attr("fill", "var(--fg-muted)")
+    .style("font-size", "11px")
+    .text("Theoretical quantiles");
+
+  g.append("text")
+    .attr("transform", "rotate(-90)")
+    .attr("x", -(iH / 2)).attr("y", -48)
+    .attr("text-anchor", "middle").attr("fill", "var(--fg-muted)")
+    .style("font-size", "11px")
+    .text("Standardised residuals");
+
+  // ---- 9. Title ----
+  svg.append("text")
+    .attr("x", margin.left + iW / 2).attr("y", 18)
+    .attr("text-anchor", "middle").attr("fill", "var(--fg)")
+    .style("font-size", "11px").style("font-weight", "600")
+    .text(`Normal Q-Q plot \u2014 k\u202F=\u202F${k}`);
+}

@@ -104,7 +104,7 @@ import { eggerTest, beggTest, fatPetTest, petPeeseTest, failSafeN, pCurve, pUnif
 import { fmt } from "./utils.js";
 import { effectProfiles, getProfile } from "./profiles.js";
 import { trimFill } from "./trimfill.js";
-import { drawForest, drawFunnel, drawBubble, drawPartialResidualBubble, drawInfluencePlot, drawCumulativeForest, drawCumulativeFunnel, drawPCurve, drawPUniform, drawOrchardPlot, drawCaterpillarPlot, drawBlupPlot, drawBaujatPlot, drawLabbe, drawRoBTrafficLight, drawRoBSummary, drawGoshPlot, drawProfileLikTau2, drawBayesTauPosterior, drawBayesMuPosterior } from "./plots.js";
+import { drawForest, drawFunnel, drawBubble, drawPartialResidualBubble, drawInfluencePlot, drawCumulativeForest, drawCumulativeFunnel, drawPCurve, drawPUniform, drawOrchardPlot, drawCaterpillarPlot, drawBlupPlot, drawBaujatPlot, drawLabbe, drawRoBTrafficLight, drawRoBSummary, drawGoshPlot, drawProfileLikTau2, drawBayesTauPosterior, drawBayesMuPosterior, drawQQPlot } from "./plots.js";
 import { goshCompute, GOSH_MAX_K } from "./gosh.js";
 import { exportSVG, exportPNG, exportTIFF } from "./export.js";
 import { buildReport, downloadHTML, openPrintPreview } from "./report.js";
@@ -3136,6 +3136,7 @@ async function runAnalysis() {
   const elBubblePlots        = document.getElementById("bubblePlots");
   const elForestPageSize     = document.getElementById("forestPageSize");
   const elBaujatPlotBlock    = document.getElementById("baujatPlotBlock");
+  const elQQPlotBlock        = document.getElementById("qqPlotBlock");
   const elLabbeBlock         = document.getElementById("labbeBlock");
   const elBlupBlock          = document.getElementById("blupBlock");
   const elBlupNav            = document.getElementById("blupNav");
@@ -3606,6 +3607,9 @@ async function runAnalysis() {
       ? (SELECTION_PRESETS[_selPreset]?.label ?? _selPreset)
       : "Custom";
 
+  const qqResiduals = influence.map(d => d.stdResidual).filter(isFinite);
+  const qqLabels    = influence.filter(d => isFinite(d.stdResidual)).map(d => d.label);
+
   appState.reportArgs = {
     studies: all, m, profile, reg,
     tf, egger, begg, fatpet, petpeese, fsn, pcurve, puniform, harbord, peters, deeks, ruecker, baujatResult,
@@ -3619,6 +3623,7 @@ async function runAnalysis() {
     profileLikXScale: elProfileLikScale?.value || "tau2",
     bayesResult, bayesReMean: m.RE,
     forestOptions: { ...forestOpts, currentPage: forestPlot.page },
+    qqResiduals, qqLabels,
   };
   funnelPlot.args = [all, m, egger, profile];
   funnelPlot.petpeese = petpeese;
@@ -3638,7 +3643,10 @@ async function runAnalysis() {
   blupPlot.page    = 0;
   elBlupBlock.style.display       = blupResult ? "" : "none";
 
+  const showQQ = qqResiduals.length >= 3;
+
   elBaujatPlotBlock.style.display = baujatResult ? "" : "none";
+  elQQPlotBlock.style.display     = showQQ ? "" : "none";
   elLabbeBlock.style.display      = showLabbe ? "" : "none";
   drawIfVisible("diagnosticSection", () => {
     performance.mark("phase:plot:influence:start");
@@ -3648,6 +3656,7 @@ async function runAnalysis() {
       renderBlupNav(totalPages);
     }
     drawBaujatPlot(baujatResult, profile);
+    if (showQQ) drawQQPlot(qqResiduals, qqLabels);
     if (showLabbe) drawLabbe(studies, m, profile, type);
     performance.measure("phase:plot:influence", "phase:plot:influence:start");
   });

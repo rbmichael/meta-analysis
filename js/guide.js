@@ -1659,6 +1659,62 @@ all BLUPs collapse to μ̂_FE, which is uninformative).</p>`,
       },
 
       {
+        id: "guide-qqplot",
+        title: "Normal Q-Q plot of standardised residuals",
+        body: `<p>The normal quantile-quantile (Q-Q) plot assesses whether the internally
+standardised residuals from the random-effects model follow a standard normal
+distribution — the key distributional assumption of the RE model.</p>
+
+<h4>Standardised residuals</h4>
+<p>For each study <em>i</em>:</p>
+<pre>  zᵢ = (yᵢ − μ̂_RE) / √(vᵢ + τ²)</pre>
+<p>Under the RE model, these should be approximately i.i.d. N(0, 1) if the
+model is correctly specified. The same residuals are reported in the Influence
+diagnostics table.</p>
+
+<h4>Constructing the plot</h4>
+<p>The residuals are sorted from smallest to largest. For the <em>i</em>-th
+sorted value (out of <em>k</em>), the corresponding theoretical normal quantile
+is computed using Blom's formula (the same formula used by R's
+<code>qqnorm()</code>):</p>
+<pre>  qᵢ = Φ⁻¹( (i − 0.375) / (k + 0.25) )</pre>
+<p>Each study appears as a point at (qᵢ, z₍ᵢ₎). Points are coloured
+orange when |z| > 2.</p>
+
+<h4>Reference line</h4>
+<p>The dashed reference line is fitted through the first and third quartile
+of both the theoretical and sample distributions — matching R's
+<code>qqline()</code> convention. Under perfect normality the line has slope 1
+and intercept 0; departure of the slope from 1 indicates scale misspecification,
+and a non-zero intercept indicates a location shift.</p>
+
+<h4>Interpretation</h4>
+<ul>
+  <li><strong>Points near the line</strong> — normality assumption is
+  plausible.</li>
+  <li><strong>S-shaped curve</strong> — lighter tails than normal (platykurtic);
+  common when studies are few or τ² is small.</li>
+  <li><strong>Inverted-S / heavy tails</strong> — heavier tails than normal
+  (leptokurtic); suggests outlying studies or model misspecification.</li>
+  <li><strong>Single extreme point</strong> — a single outlying study;
+  inspect the Influence table and consider a sensitivity analysis.</li>
+</ul>
+<p>With small <em>k</em> (< 10) even random samples from a normal distribution
+can look non-linear; interpret with caution and focus on gross departures.</p>
+
+<h4>Verification</h4>
+<p>Equivalent to <code>qqnorm(rstandard(res))</code> in metafor, where
+<code>res = rma(yi, vi, method = "REML")</code>. The standardised residuals
+match <code>rstandard.rma.uni()</code> to floating-point precision (verified
+in INFLUENCE_BENCHMARKS).</p>`,
+        citations: [
+          "Viechtbauer, W., & Cheung, M. W.-L. (2010). Outlier and influence diagnostics for meta-analysis. <em>Research Synthesis Methods, 1</em>(2), 112–125.",
+          "Viechtbauer, W. (2010). Conducting meta-analyses in R with the metafor package. <em>Journal of Statistical Software, 36</em>(3), 1–48.",
+          "Blom, G. (1958). <em>Statistical Estimates and Transformed Beta-Variables</em>. Wiley.",
+        ],
+      },
+
+      {
         id: "guide-baujat",
         title: "Baujat plot",
         body: `<p>A scatter plot that simultaneously displays two per-study diagnostics:</p>
@@ -2018,6 +2074,7 @@ export const HELP_TO_GUIDE = {
   "diag.covratio":    "guide-covratio",
   "diag.subgroup":       "guide-subgroup",
   "diag.metaregression": "guide-metaregression",
+  "diag.qqplot":         "guide-qqplot",
   "reg.aic":             "guide-aic-bic",
   "input.moderators":    "guide-subgroup",
   "input.rob":           "guide-rob",
