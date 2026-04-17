@@ -2020,6 +2020,7 @@ function renderRegressionPanel(reg, method, ciMethod, kExcluded = 0) {
       ${reg.p > 1 ? `&nbsp;·&nbsp; R² = ${isFinite(reg.R2) ? fmt(reg.R2 * 100) + "%" : "N/A"}` : ""}
       &nbsp;·&nbsp; QE(${reg.QEdf}) = ${fmt(reg.QE)}, p = ${regFmtP(reg.QEp)}
       ${QMrow}
+      <br><span style="color:var(--fg-muted);font-size:0.93em">${hBtn("reg.aic")}AIC&nbsp;=&nbsp;${fmt(reg.AIC)} &nbsp;·&nbsp; BIC&nbsp;=&nbsp;${fmt(reg.BIC)} &nbsp;·&nbsp; LL&nbsp;=&nbsp;${fmt(reg.LL)}&nbsp;&nbsp;<span style="font-size:0.9em;opacity:0.75">(${method}; compare ${method === "REML" ? "models with same predictors only" : "any nested models"})</span></span>
     </div>
     <div class="reg-body">
       ${clusterRegNote}${excludedWarning}${lowDfWarning}${vifWarning}
@@ -3159,7 +3160,7 @@ async function runAnalysis() {
   // Pre-compute the offset so moderator values can be read from the already-
   // collected inputs array rather than querying the DOM for each moderator
   // on every row.
-  const modOffset = profile.inputs.length + 2;
+  const modOffset = profile.inputs.length + 3; // label(1) + effects(p) + group(1) + cluster(1)
 
   let studies = [];
   let excluded = [];

@@ -1804,9 +1804,14 @@ export const META_REGRESSION_BENCHMARKS = [
         { name: "year",  QM: 0.0169, QMdf: 1, QMp: 0.8966 },
         { name: "ablat", QM: 7.4917, QMdf: 1, QMp: 0.0062 }
       ],
-      vif: [null, 1.7846, 1.7846]
+      vif: [null, 1.7846, 1.7846],
+      // AIC/BIC (REML): npar=p+1=4; BIC uses kBIC=k−p=10 (error contrasts)
+      // R: logLik(res)=-8.106874; AIC(res)=24.213748; BIC(res)=25.424088
+      LL:  -8.106874,
+      AIC: 24.213748,
+      BIC: 25.424088
     },
-    citation: "Colditz et al. (1994) dat.bcg. R-verified (metafor 4.8.0, generate.R block 42) for all fields including QE. QE uses FE weights (1/vi) with FE-fitted β, matching metafor convention (Thompson & Sharp 1999, Viechtbauer 2010)."
+    citation: "Colditz et al. (1994) dat.bcg. R-verified (metafor 4.8.0, generate.R block 42) for all fields including QE. QE uses FE weights (1/vi) with FE-fitted β, matching metafor convention (Thompson & Sharp 1999, Viechtbauer 2010). AIC/BIC verified against AIC()/BIC() in R."
   },
 
   // ----------------------------------------------------------------
@@ -1852,9 +1857,14 @@ export const META_REGRESSION_BENCHMARKS = [
       modTests: [
         { name: "ablat",  QM: 5.3003, QMdf: 1, QMp: 0.0213 },
         { name: "region", QM: 2.1225, QMdf: 2, QMp: 0.3460 }
-      ]
+      ],
+      // AIC/BIC (REML): npar=p+1=5; BIC uses kBIC=k−p=9 (error contrasts)
+      // R: logLik(res)=-6.767674; AIC(res)=23.535348; BIC(res)=24.521471
+      LL:  -6.767674,
+      AIC: 23.535348,
+      BIC: 24.521471
     },
-    citation: "Colditz et al. (1994) dat.bcg. R-verified (metafor 4.8.0, generate.R block 43) for all fields including QE. QE uses FE weights (1/vi) with FE-fitted β, matching metafor convention (Thompson & Sharp 1999, Viechtbauer 2010)."
+    citation: "Colditz et al. (1994) dat.bcg. R-verified (metafor 4.8.0, generate.R block 43) for all fields including QE. QE uses FE weights (1/vi) with FE-fitted β, matching metafor convention (Thompson & Sharp 1999, Viechtbauer 2010). AIC/BIC verified against AIC()/BIC() in R."
   },
 
   // ----------------------------------------------------------------
@@ -1900,9 +1910,13 @@ export const META_REGRESSION_BENCHMARKS = [
       modTests: [
         { name: "ablat",  QM: 4.9729, QMdf: 1, QMp: 0.0527 },
         { name: "region", QM: 0.9957, QMdf: 2, QMp: 0.4068 }
-      ]
+      ],
+      // AIC/BIC identical to MR-B (same tau2; KH only changes CIs, not ll)
+      LL:  -6.767674,
+      AIC: 23.535348,
+      BIC: 24.521471
     },
-    citation: "Colditz et al. (1994) dat.bcg. R-verified (metafor 4.8.0, generate.R block 44) for all fields including QE. QE uses FE weights (1/vi) with FE-fitted β, matching metafor convention. KH s² from RE residuals (Knapp & Hartung 2003, eq. 8)."
+    citation: "Colditz et al. (1994) dat.bcg. R-verified (metafor 4.8.0, generate.R block 44) for all fields including QE. QE uses FE weights (1/vi) with FE-fitted β, matching metafor convention. KH s² from RE residuals (Knapp & Hartung 2003, eq. 8). AIC/BIC identical to MR-B (REML tau2 unchanged by KH)."
   }
 
 ];

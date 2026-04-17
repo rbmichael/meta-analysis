@@ -76,7 +76,7 @@ The three-level model fits the marginal covariance Σ<sub>i</sub> = diag(v<sub>i
 
 ### Meta-regression
 
-Continuous and categorical moderators. Multiple moderators may be added simultaneously. Results include coefficients, standard errors, *z*/*t* statistics, *p*-values, and *R*² (proportion of heterogeneity explained). Bubble plots are generated per continuous moderator.
+Continuous and categorical moderators. Multiple moderators may be added simultaneously. Results include coefficients, standard errors, *z*/*t* statistics, *p*-values, *R*² (proportion of heterogeneity explained), and model-fit indices (AIC, BIC, log-likelihood) for comparing competing models. Bubble plots are generated per continuous moderator.
 
 ### Subgroup analysis
 

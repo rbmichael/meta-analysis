@@ -865,6 +865,22 @@ export const HELP = {
            "Rule of thumb: ≥ 10 studies per predictor for adequate power.",
   },
 
+  "reg.aic": {
+    title: "AIC / BIC (meta-regression)",
+    body:  "AIC (Akaike Information Criterion) and BIC (Bayesian Information Criterion) " +
+           "measure model fit penalised for complexity: AIC = −2·LL + 2·npar; " +
+           "BIC = −2·LL + npar·log(n). " +
+           "For meta-regression, npar = p + 1 (p fixed-effect coefficients + τ²). " +
+           "For ML, n = k (number of studies); " +
+           "for REML, n = k − p (error contrasts — the REML likelihood is defined " +
+           "over the k − p residual degrees of freedom after projecting out X). " +
+           "Lower AIC/BIC = better fit. Differences > 2 are considered meaningful; " +
+           "differences > 10 are decisive. " +
+           "REML AIC/BIC can only be compared across models with identical predictors; " +
+           "ML AIC/BIC can compare models with different numbers of predictors. " +
+           "LL is the method-appropriate log-likelihood at the fitted parameters.",
+  },
+
   "diag.subgroup": {
     title: "Subgroup analysis",
     body:  "Fits a separate RE model within each study group (defined by the Group column). " +

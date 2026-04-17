@@ -3599,6 +3599,11 @@ export function runTests() {
         mrchk(`vif[${j}] (${r.colNames[j]})`, r.vif[j], v, 0.01);
       });
     }
+
+    // AIC / BIC (R-verified)
+    if (exp.LL  !== undefined) mrchk("LL",  r.LL,  exp.LL,  0.001);
+    if (exp.AIC !== undefined) mrchk("AIC", r.AIC, exp.AIC, 0.001);
+    if (exp.BIC !== undefined) mrchk("BIC", r.BIC, exp.BIC, 0.001);
   });
 
   console.log(mrBenchPass ? "\n✅ ALL META-REGRESSION BENCHMARK TESTS PASSED" : "\n❌ SOME META-REGRESSION BENCHMARK TESTS FAILED");

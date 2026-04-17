@@ -1425,6 +1425,70 @@ wᵢ = 1/(vᵢ + τ²), with τ² estimated by REML or the selected estimator.</
           "Thompson, S. G., & Higgins, J. P. T. (2002). How should meta-regression analyses be undertaken and interpreted? <em>Statistics in Medicine, 21</em>(11), 1559–1573.",
         ],
       },
+
+      {
+        id: "guide-aic-bic",
+        title: "AIC / BIC for model comparison",
+        body: `<p>AIC and BIC are information criteria used to compare competing
+meta-regression models. Both reward fit (via the log-likelihood) and penalise
+complexity (via the number of parameters), but with different penalties.</p>
+
+<p><strong>Formulas:</strong></p>
+<ul>
+  <li><strong>AIC</strong> = −2·LL + 2·npar</li>
+  <li><strong>BIC</strong> = −2·LL + npar·log(n)</li>
+</ul>
+<p>where LL is the log-likelihood at the fitted parameters, npar = p + 1
+(p fixed-effect coefficients + 1 variance component τ²), and n is the
+effective sample size.</p>
+
+<p><strong>Effective sample size for BIC:</strong></p>
+<ul>
+  <li><strong>ML:</strong> n = k (number of studies). The ML likelihood
+  uses all k observations.</li>
+  <li><strong>REML:</strong> n = k − p (error contrasts). The REML
+  likelihood is defined over the k − p residual degrees of freedom
+  obtained after projecting out the p-dimensional column space of the
+  design matrix X. Using k − p produces BIC values that penalise
+  additional fixed-effect predictors more heavily when the sample is
+  small — appropriate because adding a predictor simultaneously reduces
+  the effective sample size for REML.</li>
+</ul>
+<p>This matches the convention in R's <code>metafor</code> package
+(metafor 4.8.0, <code>AIC.rma()</code> / <code>BIC.rma()</code>).</p>
+
+<p><strong>Log-likelihood (LL):</strong><br>
+For ML: LL<sub>ML</sub> = −½ Σ[log(2π) + log(vᵢ+τ²) + (yᵢ−ŷᵢ)²/(vᵢ+τ²)]<br>
+For REML: LL<sub>REML</sub> = LL<sub>ML</sub> + p/2·log(2π) + ½·log|X′X| − ½·log|X′WX|<br>
+where W = diag(1/(vᵢ+τ²)) (Harville 1977).</p>
+
+<p><strong>Interpreting differences:</strong></p>
+<ul>
+  <li>Lower AIC or BIC indicates a better balance of fit and parsimony.</li>
+  <li>A commonly used rule of thumb (Burnham &amp; Anderson 2002):
+    ΔAIC &lt; 2 = little evidence of difference; 4–7 = some evidence;
+    &gt; 10 = decisive.</li>
+  <li>BIC penalises complexity more than AIC when k &gt; 7 (since
+    log(k) &gt; 2 for k ≥ 8), so BIC more often favours the simpler model.</li>
+</ul>
+
+<p><strong>Which estimator to use for model comparison?</strong></p>
+<ul>
+  <li><strong>REML AIC/BIC</strong> — can only compare models with
+  <em>identical</em> fixed-effect predictors (same X matrix). Suitable
+  for comparing τ² estimators or checking model diagnostics.</li>
+  <li><strong>ML AIC/BIC</strong> — can compare models with different
+  numbers or types of predictors. Switch to method = "ML" in the τ²
+  estimator dropdown when performing formal model selection.</li>
+</ul>`,
+        citations: [
+          "Akaike, H. (1974). A new look at the statistical model identification. <em>IEEE Transactions on Automatic Control, 19</em>(6), 716–723.",
+          "Schwarz, G. (1978). Estimating the dimension of a model. <em>Annals of Statistics, 6</em>(2), 461–464.",
+          "Burnham, K. P., & Anderson, D. R. (2002). <em>Model selection and multimodel inference: A practical information-theoretic approach</em> (2nd ed.). Springer.",
+          "Harville, D. A. (1977). Maximum likelihood approaches to variance component estimation and to related problems. <em>Journal of the American Statistical Association, 72</em>(358), 320–338.",
+          "Viechtbauer, W. (2010). Conducting meta-analyses in R with the metafor package. <em>Journal of Statistical Software, 36</em>(3), 1–48.",
+        ],
+      },
     ],
   },   // end "Subgroup Analysis & Meta-regression" section
 
@@ -1954,6 +2018,7 @@ export const HELP_TO_GUIDE = {
   "diag.covratio":    "guide-covratio",
   "diag.subgroup":       "guide-subgroup",
   "diag.metaregression": "guide-metaregression",
+  "reg.aic":             "guide-aic-bic",
   "input.moderators":    "guide-subgroup",
   "input.rob":           "guide-rob",
   "bayes.model":         "guide-bayes-meta",

@@ -957,8 +957,10 @@ function sectionRegression(reg, method, ciMethod, apaFormat = false, nextTable) 
   const QMlabel   = reg.QMdist === "F"
     ? `F(${reg.QMdf}, ${reg.QEdf})`
     : `χ²(${reg.QMdf})`;
-  const R2row = reg.p > 1 && isFinite(reg.R2)
+  const R2row  = reg.p > 1 && isFinite(reg.R2)
     ? ` · R² = ${fmt(reg.R2 * 100)}%` : "";
+  const aicRow = isFinite(reg.AIC)
+    ? ` · AIC = ${fmt(reg.AIC)} · BIC = ${fmt(reg.BIC)} · LL = ${fmt(reg.LL)}` : "";
 
   const hasVif = Array.isArray(reg.vif) && reg.vif.some(v => isFinite(v));
   const vifCell = j => {
@@ -1013,7 +1015,7 @@ function sectionRegression(reg, method, ciMethod, apaFormat = false, nextTable) 
     return `
 <section>
   <h2>Meta-Regression</h2>
-  <p class="meta-line">k = ${reg.k} · ${esc(method)} · ${esc(ciLabel)} · τ² = ${fmt(reg.tau2)} · I² = ${fmt(reg.I2)}%${R2row}</p>
+  <p class="meta-line">k = ${reg.k} · ${esc(method)} · ${esc(ciLabel)} · τ² = ${fmt(reg.tau2)} · I² = ${fmt(reg.I2)}%${R2row}${aicRow}</p>
   ${coefTable}
   ${modTestsTable}
 </section>`;
@@ -1066,6 +1068,7 @@ function sectionRegression(reg, method, ciMethod, apaFormat = false, nextTable) 
     · τ² = ${fmt(reg.tau2)} · I² = ${fmt(reg.I2)}%${R2row}
     · QE(${reg.QEdf}) = ${fmt(reg.QE)}, p = ${fmtP(reg.QEp)}
     ${reg.p > 1 ? `· QM ${esc(QMlabel)} = ${fmt(reg.QM)}, p = ${fmtP(reg.QMp)}` : ""}
+    ${aicRow ? `<br><span style="font-size:0.93em">${aicRow.slice(3)}</span>` : ""}
   </p>
   ${buildTable(coefHeaders, rows)}
   <p class="note">*** p &lt; .001 · ** p &lt; .01 · * p &lt; .05 · . p &lt; .10</p>

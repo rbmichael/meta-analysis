@@ -2836,6 +2836,29 @@ function matInverse(A) {
   return M.map(row => row.slice(p));
 }
 
+// log|det(A)| via partial-pivoting Gaussian elimination.
+// A must be square and positive definite (used only for X'WX, which always is).
+// Returns -Infinity if the matrix is (near-)singular.
+function logDet(A) {
+  const n = A.length;
+  const M = A.map(row => row.slice());
+  let logd = 0;
+  for (let i = 0; i < n; i++) {
+    let maxVal = Math.abs(M[i][i]), maxRow = i;
+    for (let k = i + 1; k < n; k++) {
+      if (Math.abs(M[k][i]) > maxVal) { maxVal = Math.abs(M[k][i]); maxRow = k; }
+    }
+    if (maxRow !== i) [M[i], M[maxRow]] = [M[maxRow], M[i]];
+    if (Math.abs(M[i][i]) < 1e-15) return -Infinity;
+    logd += Math.log(Math.abs(M[i][i]));
+    for (let k = i + 1; k < n; k++) {
+      const f = M[k][i] / M[i][i];
+      for (let j = i; j < n; j++) M[k][j] -= f * M[i][j];
+    }
+  }
+  return logd;
+}
+
 // ================= TAU² FOR META-REGRESSION =================
 
 function dot(a, b) {
@@ -3259,6 +3282,47 @@ export function metaRegression(studies, moderators = [], method = "REML", ciMeth
     }
   }
 
+  // ---- Log-likelihood, AIC, BIC ----
+  //
+  // ML log-likelihood at the fitted (β̂, τ²):
+  //   LL_ML = −½ Σ [ log(2π) + log(vᵢ+τ²) + (yᵢ − xᵢ′β̂)² / (vᵢ+τ²) ]
+  //
+  // REML log-likelihood (fixed effects marginalised out):
+  //   LL_REML = LL_ML − ½ log(det(X′WX))   where W = diag(1/(vᵢ+τ²))
+  //
+  // Number of parameters (both ML and REML):
+  //   npar = p + 1  (p fixed-effect coefficients + 1 variance component τ²)
+  //
+  // Effective sample size for BIC:
+  //   ML:   k       (full number of studies)
+  //   REML: k − p   (REML likelihood is defined over k−p error contrasts after
+  //                  projecting out the p-dimensional column space of X)
+  //
+  // Matches metafor AIC.rma() / BIC.rma() conventions (verified 4.8-0).
+  // REML AIC/BIC can only be compared across models with identical fixed-effect
+  // structure; ML AIC/BIC can compare models differing in predictors or τ².
+  let LL_ML = 0;
+  for (let i = 0; i < kf; i++) {
+    const v = vi[i] + tau2;
+    LL_ML -= 0.5 * (Math.log(2 * Math.PI) + Math.log(v) + (yi[i] - fitted[i]) ** 2 / v);
+  }
+  // X′WX (W = diag(1/(vᵢ+τ²)) already in w[]) and X′X (unweighted) for REML correction.
+  // REML LL = ML LL + p/2·log(2π) + ½·log|X′X| − ½·log|X′WX|
+  // (Harville 1977; metafor 4.8.0 convention with REMLf = TRUE)
+  const XtWX = Xf[0].map((_, r) =>
+    Xf[0].map((_, c) => Xf.reduce((s, row, i) => s + w[i] * row[r] * row[c], 0))
+  );
+  const XtX = Xf[0].map((_, r) =>
+    Xf[0].map((_, c) => Xf.reduce((s, row) => s + row[r] * row[c], 0))
+  );
+  const LL_REML = LL_ML + 0.5 * p * Math.log(2 * Math.PI) + 0.5 * logDet(XtX) - 0.5 * logDet(XtWX);
+  const isREML  = method === "REML";
+  const LL      = isREML ? LL_REML : LL_ML;
+  const npar    = p + 1;                              // same for ML and REML
+  const kBIC    = isREML ? Math.max(kf - p, 1) : kf; // error contrasts for REML
+  const AIC     = -2 * LL + 2 * npar;
+  const BIC     = -2 * LL + npar * Math.log(kBIC);
+
   return {
     beta, se, zval, pval, ci, vcov, crit, s2,
     tau2, tau2_0, R2,
@@ -3270,6 +3334,8 @@ export function metaRegression(studies, moderators = [], method = "REML", ciMeth
     labels: rows.map(s => s.label || ""),
     studiesUsed: rows,   // exact set used in the fit (for bubble plot)
     yi, vi,    // pass through for display
+    // Model-fit indices
+    LL, LL_ML, LL_REML, AIC, BIC, npar, kBIC,
     // Cluster-robust fields (undefined when no clusters present)
     robustSE, robustZ, robustP, robustCi, robustDf,
     clustersUsed: robustC, allSingletons,
