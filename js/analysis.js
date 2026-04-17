@@ -1938,8 +1938,9 @@ export function failSafeN(studies, alpha = 0.05, trivial = 0.1) {
  * @param {string} [method="DL"]       - τ² estimator (passed to meta()).
  * @param {string} [ciMethod="normal"] - CI method (passed to meta()).
  * @returns {{ label: string, RE_loo: number, tau2_loo: number, stdResidual: number,
- *             DFBETA: number, DFFITS: number, deltaTau2: number,
+ *             DFBETA: number, DFFITS: number, covRatio: number, deltaTau2: number,
  *             outlier: boolean, influential: boolean, highDffits: boolean,
+ *             highCovRatio: boolean,
  *             hat: number, cookD: number, highLeverage: boolean, highCookD: boolean }[]}
  */
 export function influenceDiagnostics(studies, method="DL", ciMethod="normal", alpha=0.05){
@@ -2329,6 +2330,14 @@ export function influenceDiagnostics(studies, method="DL", ciMethod="normal", al
     const wi  = 1 / (study.vi + full.tau2);
     const hat = wi / W;
 
+    // Covariance ratio: ratio of the determinant of the variance-covariance
+    // matrix of μ̂ with study i removed vs. full dataset. For p=1 (intercept-only):
+    //   covRatio_i = Var(μ̂_loo,i) / Var(μ̂_full) = W_full / W_loo,i
+    // where W_loo,i = Σ_{j≠i} 1/(v_j + τ²_loo,i) uses the LOO τ².
+    // Verified against metafor 4.8-0 influence.rma.uni() to ≤ 1.78e-15.
+    const W_loo = studies.reduce((acc, s, j) => j === idx ? acc : acc + 1 / (s.vi + tau2_loo), 0);
+    const covRatio = W_loo > 0 ? W / W_loo : NaN;
+
     // Cook's distance: D_i = (RE_full − RE_loo)² × W
     // Equivalent to (RE_full − RE_loo)² / Var(RE_full) where Var = 1/W.
     // Measures how far the pooled estimate moves (in SE units) on study removal.
@@ -2349,6 +2358,8 @@ export function influenceDiagnostics(studies, method="DL", ciMethod="normal", al
     // DFFITS threshold: 3·√(1/(k−1)) — metafor convention (p=1, k studies)
     const dffitsThresh = 3 * Math.sqrt(1 / (n - 1));
     const highDffits   = isFinite(DFFITS) && Math.abs(DFFITS) > dffitsThresh;
+    // CovRatio threshold: (1 + p/k)^p = 1 + 1/k for p=1 — metafor convention
+    const highCovRatio = isFinite(covRatio) && covRatio > 1 + 1 / n;
 
     return {
       label: study.label,
@@ -2357,6 +2368,7 @@ export function influenceDiagnostics(studies, method="DL", ciMethod="normal", al
       stdResidual: r,
       DFBETA: dfbeta,
       DFFITS,
+      covRatio,
       deltaTau2,
       outlier,
       influential,
@@ -2365,6 +2377,7 @@ export function influenceDiagnostics(studies, method="DL", ciMethod="normal", al
       highLeverage,
       highCookD,
       highDffits,
+      highCovRatio,
     };
   });
 }

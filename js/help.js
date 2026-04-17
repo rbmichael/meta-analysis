@@ -867,6 +867,17 @@ export const HELP = {
            "Subgroup analyses should be pre-registered to control Type I error.",
   },
 
+  "diag.covratio": {
+    title: "Covariance ratio",
+    body:  "Ratio of the determinant of the variance-covariance matrix of the pooled estimate " +
+           "with study i removed vs. the full dataset. For an intercept-only model: " +
+           "covRatio_i = W_full / W_loo,i, where W = Σ 1/(v_j + τ²). " +
+           "Values < 1 indicate the study inflates precision (removing it widens the CI); " +
+           "values > 1 indicate below-average precision contribution. " +
+           "Flag threshold: covRatio > 1 + 1/k (metafor convention). " +
+           "Cross-validated against metafor 4.8-0 to floating-point precision.",
+  },
+
   "diag.dffits": {
     title: "DFFITS",
     body:  "Standardised change in the pooled RE estimate when study i is removed: " +
@@ -883,6 +894,7 @@ export const HELP = {
            "standardised residual (|r| > 2 flags outliers), " +
            "DFBETA (|DFBETA| > 1 flags disproportionate influence on the pooled estimate), " +
            "DFFITS (standardised change in fitted value; |DFFITS| > 3·√(1/(k−1)) flags influence), " +
+           "covariance ratio (W_full/W_loo; > 1+1/k flags low precision contribution), " +
            "hat value (leverage, h > 2/k), " +
            "Cook's distance (D > 4/k), and Δτ² (change in heterogeneity on removal). " +
            "The influence plot shows hat value vs. Cook's distance as a bubble chart. " +

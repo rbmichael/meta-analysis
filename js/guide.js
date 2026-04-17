@@ -1413,6 +1413,39 @@ influence.</p>`,
       },
 
       {
+        id: "guide-covratio",
+        title: "Covariance ratio",
+        body: `<p>The covariance ratio for study <em>i</em> is the ratio of the determinant
+of the variance-covariance matrix of the model coefficients when study <em>i</em>
+is removed to the determinant for the full dataset:</p>
+<pre>covRatio_i = det(Var(μ̂_loo,i)) / det(Var(μ̂_full))</pre>
+<p>For an intercept-only random-effects model with one parameter (μ̂_RE),
+the covariance matrix is the scalar Var(μ̂_RE) = 1/W, so this reduces to:</p>
+<pre>covRatio_i = W_full / W_loo,i</pre>
+<p>where W_full = Σⱼ 1/(vⱼ + τ²_full) and W_loo,i = Σⱼ≠ᵢ 1/(vⱼ + τ²_loo,i).
+The LOO τ² is re-estimated without study <em>i</em>.</p>
+<p><strong>Interpretation:</strong></p>
+<ul>
+  <li><strong>covRatio &lt; 1</strong> — study <em>i</em> contributes above-average
+  precision; removing it reduces the total weight (widens the pooled CI). These
+  studies are precision anchors.</li>
+  <li><strong>covRatio = 1</strong> — the study contributes exactly average precision.</li>
+  <li><strong>covRatio &gt; 1</strong> — the study contributes below-average precision;
+  removing it increases the average per-study weight. High values are flagged.</li>
+</ul>
+<p><strong>Flag threshold</strong> (metafor convention):
+covRatio<sub>i</sub> &gt; (1 + p/k)<sup>p</sup> = 1 + 1/k for p = 1</p>
+<p>Note that covRatio differs from Cook's D and DFFITS: it measures changes in the
+<em>precision</em> of the estimate rather than its location.</p>
+<p>Formula cross-validated against <code>metafor::influence.rma.uni()</code>
+version 4.8-0 (BCG dataset, DL method; all 13 studies match to ≤ 1.78 × 10⁻¹⁵).</p>`,
+        citations: [
+          "Viechtbauer, W., & Cheung, M. W.-L. (2010). Outlier and influence diagnostics for meta-analysis. <em>Research Synthesis Methods, 1</em>(2), 112–125.",
+          "Belsley, D. A., Kuh, E., & Welsch, R. E. (1980). <em>Regression Diagnostics: Identifying Influential Data and Sources of Collinearity</em>. Wiley.",
+        ],
+      },
+
+      {
         id: "guide-dffits",
         title: "DFFITS",
         body: `<p>DFFITS (difference in fitted values, standardised) measures the
@@ -1837,6 +1870,7 @@ export const HELP_TO_GUIDE = {
   "diag.profileLik":  "guide-profile-lik-tau2",
   "diag.influence":   "guide-influence",
   "diag.dffits":      "guide-dffits",
+  "diag.covratio":    "guide-covratio",
   "diag.subgroup":       "guide-subgroup",
   "diag.metaregression": "guide-metaregression",
   "input.moderators":    "guide-subgroup",

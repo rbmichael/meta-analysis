@@ -2964,12 +2964,14 @@ export function runTests() {
       if (exp.stdResidual !== undefined) ibchk(`${pfx} stdResidual`,   d.stdResidual,  exp.stdResidual);
       if (exp.DFBETA      !== undefined) ibchk(`${pfx} DFBETA`,        d.DFBETA,       exp.DFBETA);
       if (exp.DFFITS      !== undefined) ibchk(`${pfx} DFFITS`,        d.DFFITS,       exp.DFFITS);
+      if (exp.covRatio    !== undefined) ibchk(`${pfx} covRatio`,      d.covRatio,     exp.covRatio);
       if (exp.deltaTau2   !== undefined) ibchk(`${pfx} deltaTau2`,     d.deltaTau2,    exp.deltaTau2, 0.005);
       if (exp.outlier     !== undefined) ibchkBool(`${pfx} outlier`,   d.outlier,      exp.outlier);
       if (exp.influential !== undefined) ibchkBool(`${pfx} influential`, d.influential, exp.influential);
       if (exp.highLeverage !== undefined) ibchkBool(`${pfx} highLeverage`, d.highLeverage, exp.highLeverage);
       if (exp.highCookD   !== undefined) ibchkBool(`${pfx} highCookD`, d.highCookD,    exp.highCookD);
-      if (exp.highDffits  !== undefined) ibchkBool(`${pfx} highDffits`, d.highDffits,  exp.highDffits);
+      if (exp.highDffits  !== undefined) ibchkBool(`${pfx} highDffits`,   d.highDffits,   exp.highDffits);
+      if (exp.highCovRatio !== undefined) ibchkBool(`${pfx} highCovRatio`, d.highCovRatio, exp.highCovRatio);
     });
   });
 
