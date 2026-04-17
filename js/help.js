@@ -1009,6 +1009,66 @@ export const HELP = {
            "and focus is not in a text field).",
   },
 
+  // Plots                                                               //
+  "plot.forest": {
+    title: "Forest plot",
+    body:  "Each row shows one study's effect estimate (square, area ∝ weight) " +
+           "with its confidence interval. The pooled estimate is a diamond spanning its CI. " +
+           "A dashed prediction interval is shown when k ≥ 3, indicating where a new " +
+           "study's true effect is expected to fall with 95% probability.",
+  },
+
+  "plot.funnel": {
+    title: "Funnel plot",
+    body:  "Effect estimates plotted against their standard errors. Without bias, " +
+           "estimates scatter symmetrically inside an inverted funnel centred on the " +
+           "pooled estimate. Asymmetry is a sign of small-study effects or publication bias. " +
+           "Toggle to contour-enhanced mode to overlay significance-region shading " +
+           "(α = .10, .05, .01).",
+  },
+
+  "bayes.tau": {
+    title: "Posterior of τ",
+    body:  "Marginal posterior density of the between-study SD τ. " +
+           "Computed from the same 1-D grid approximation used for μ: " +
+           "each grid point weight is proportional to the marginal likelihood × HalfNormal(σ_τ) prior. " +
+           "The 95% credible interval is shaded. A spike near zero indicates " +
+           "the data are consistent with little heterogeneity.",
+  },
+
+  "plot.cumulative": {
+    title: "Cumulative meta-analysis",
+    body:  "Re-runs the analysis after each study is added in the chosen order. " +
+           "The cumulative forest plot tracks how the pooled estimate and CI evolved. " +
+           "The cumulative funnel plot (slider-controlled) shows the funnel shape " +
+           "at each step — useful for spotting when the evidence base converged.",
+  },
+
+  "plot.orchard": {
+    title: "Orchard plot",
+    body:  "Beeswarm-style display of study estimates, sized by precision (1/SE). " +
+           "The central point and horizontal bar show the pooled estimate and CI. " +
+           "Studies are jittered vertically to avoid overlap. Gives a richer " +
+           "visual sense of the effect-size distribution than a standard forest plot.",
+  },
+
+  "plot.caterpillar": {
+    title: "Caterpillar plot",
+    body:  "Studies sorted by effect size with 95% CIs as horizontal lines. " +
+           "Useful for spotting extreme studies and checking approximate normality " +
+           "of effects — a key assumption of the random-effects model. " +
+           "Studies whose CI excludes the null are colour-coded distinctly.",
+  },
+
+  "plot.rob": {
+    title: "Risk-of-bias plots",
+    body:  "Traffic light plot: study × domain grid with colour-coded ratings " +
+           "(Low / Some concerns / High / Not-reported). " +
+           "Summary bar chart: stacked horizontal bars per domain showing the " +
+           "percentage of studies at each rating level. Domains and rating " +
+           "categories are user-defined.",
+  },
+
   // Bayesian                                                            //
   "bayes.model": {
     title: "Bayesian meta-analysis",

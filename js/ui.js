@@ -1940,7 +1940,7 @@ function renderRegressionPanel(reg, method, ciMethod, kExcluded = 0) {
     }
     panel.innerHTML = `
       <div class="reg-header">
-        <span class="reg-title">Meta-Regression</span>
+        <span class="reg-title">Meta-Regression${hBtn("diag.metaregression")}</span>
       </div>
       <div class="reg-body"><i>${msg}</i></div>`;
     return;
@@ -2012,7 +2012,7 @@ function renderRegressionPanel(reg, method, ciMethod, kExcluded = 0) {
 
   panel.innerHTML = `
     <div class="reg-header">
-      <span class="reg-title">Meta-Regression</span>
+      <span class="reg-title">Meta-Regression${hBtn("diag.metaregression")}</span>
       <span class="reg-meta">k = ${reg.k} &nbsp;·&nbsp; ${method} &nbsp;·&nbsp; ${ciLabel}</span>
     </div>
     <div class="reg-het">
@@ -2622,13 +2622,13 @@ function renderSelectionModelPanel(r, mode, profile) {
 
   // Not run (meta-regression active)
   if (r === null) {
-    panel.innerHTML = `<p class="sel-note">Selection model not available when meta-regression is active.</p>`;
+    panel.innerHTML = `${hBtn("sel.model")}<p class="sel-note">Selection model not available when meta-regression is active.</p>`;
     return;
   }
 
   // Insufficient k
   if (r.error === "insufficient_k") {
-    panel.innerHTML = `<p class="sel-note">Insufficient studies: need at least ${r.minK} for ${r.K} intervals (have ${r.k}).</p>`;
+    panel.innerHTML = `${hBtn("sel.model")}<p class="sel-note">Insufficient studies: need at least ${r.minK} for ${r.K} intervals (have ${r.k}).</p>`;
     return;
   }
 
@@ -2687,7 +2687,7 @@ function renderSelectionModelPanel(r, mode, profile) {
   const headerCells = intervalLabels.map(l => `<th>${l}</th>`).join("");
 
   panel.innerHTML = `
-    ${emptyWarn}
+    ${hBtn("sel.model")}${emptyWarn}
     ${tau2Warn}
     <table class="sel-table">
       <thead>
@@ -2750,9 +2750,9 @@ function buildInfluenceHTML(influence) {
       <td${cookStyle}>${isFinite(d.cookD) ? d.cookD.toFixed(3) : "NA"}</td>
       <td>${flags}</td></tr>`;
   }).join("");
-  return `<b>Influence diagnostics:</b><br>
+  return `<b>Influence diagnostics:${hBtn("diag.influence")}</b><br>
     <table border="1">
-      <tr><th>Study</th><th>RE (LOO)</th><th>Δτ²</th><th>Std Residual</th><th>DFBETA</th><th>DFFITS</th><th>CovRatio</th><th>Hat</th><th>Cook's D</th><th>Flag</th></tr>
+      <tr><th>Study</th><th>RE (LOO)</th><th>Δτ²</th><th>Std Residual</th><th>DFBETA</th><th>DFFITS${hBtn("diag.dffits")}</th><th>CovRatio${hBtn("diag.covratio")}</th><th>Hat</th><th>Cook's D</th><th>Flag</th></tr>
       ${rows}
     </table>
     <small style="color:#aaa;">Thresholds: Hat &gt; ${fmt(2/k)} (= 2/k); Cook's D &gt; ${fmt(4/k)} (= 4/k); DFFITS &gt; ${fmt(dffitsThresh)} (= 3·√(1/(k−1))); CovRatio &gt; ${fmt(covRatioThresh)} (= 1+1/k)</small>`;
@@ -2807,7 +2807,7 @@ function buildSubgroupHTML(subgroup, profile, hasClusters) {
       <td>${isSingle ? "NA" : isFinite(r.I2)   ? r.I2.toFixed(1)   : "0"}</td>
     </tr>`;
   }).join("");
-  return `${clusterNote}${noGroupWarn}<b>Subgroup analysis:</b><br>
+  return `${clusterNote}${noGroupWarn}<b>Subgroup analysis:${hBtn("diag.subgroup")}</b><br>
     <table border="1">
       <tr><th>Group</th><th>k</th><th>Effect</th><th>SE</th><th>CI</th><th>τ²</th><th>I² (%)</th></tr>
       ${rows}

@@ -368,7 +368,7 @@
         <!-- ── Section 2: Forest plot (always open) ── -->
         <div id="forestSection">
           <div class="plot-block">
-            <p class="plot-label">Forest plot</p>
+            <p class="plot-label">Forest plot<button class="help-btn" data-help="plot.forest" title="Help">?</button></p>
             <div class="plot-export">
               <button class="export-btn" data-target="forestPlot" data-format="svg">SVG</button>
               <button class="export-btn" data-target="forestPlot" data-format="png">PNG</button>
@@ -441,7 +441,7 @@
           </div>
 
           <div class="plot-block">
-            <p class="plot-label">Posterior of τ (between-study SD)</p>
+            <p class="plot-label">Posterior of τ (between-study SD)<button class="help-btn" data-help="bayes.tau" title="Help">?</button></p>
             <div class="plot-export">
               <button class="export-btn" data-target="bayesTauPlot" data-format="svg">SVG</button>
               <button class="export-btn" data-target="bayesTauPlot" data-format="png">PNG</button>
@@ -477,7 +477,7 @@
             <div id="pubBiasStats"></div>
           </div>
           <div class="plot-block">
-            <p class="plot-label">Funnel plot</p>
+            <p class="plot-label">Funnel plot<button class="help-btn" data-help="plot.funnel" title="Help">?</button></p>
             <div class="plot-export">
               <button class="export-btn" data-target="funnelPlot" data-format="svg">SVG</button>
               <button class="export-btn" data-target="funnelPlot" data-format="png">PNG</button>
@@ -512,7 +512,7 @@
             <div id="influenceDiagTable"></div>
           </div>
           <div class="plot-block">
-            <p class="plot-label">Influence plot</p>
+            <p class="plot-label">Influence plot<button class="help-btn" data-help="diag.influence" title="Help">?</button></p>
             <div class="plot-export">
               <button class="export-btn" data-target="influencePlot" data-format="svg">SVG</button>
               <button class="export-btn" data-target="influencePlot" data-format="png">PNG</button>
@@ -531,7 +531,7 @@
             <div id="blupNav"></div>
           </div>
           <div class="plot-block" id="baujatPlotBlock" style="display:none">
-            <p class="plot-label">Baujat plot</p>
+            <p class="plot-label">Baujat plot<button class="help-btn" data-help="diag.baujat" title="Help">?</button></p>
             <div class="plot-export">
               <button class="export-btn" data-target="baujatPlot" data-format="svg">SVG</button>
               <button class="export-btn" data-target="baujatPlot" data-format="png">PNG</button>
@@ -554,7 +554,7 @@
         <details class="results-section" id="cumulativeSection">
           <summary class="results-section-header">Cumulative Analysis</summary>
           <div class="plot-block">
-            <p class="plot-label">Cumulative forest plot</p>
+            <p class="plot-label">Cumulative forest plot<button class="help-btn" data-help="plot.cumulative" title="Help">?</button></p>
             <div class="plot-export">
               <button class="export-btn" data-target="cumulativePlot" data-format="svg">SVG</button>
               <button class="export-btn" data-target="cumulativePlot" data-format="png">PNG</button>
@@ -573,7 +573,7 @@
             <div id="cumulativeForestNav"></div>
           </div>
           <div class="plot-block" id="cumulativeFunnelBlock" style="display:none">
-            <p class="plot-label">Cumulative funnel plot</p>
+            <p class="plot-label">Cumulative funnel plot<button class="help-btn" data-help="plot.cumulative" title="Help">?</button></p>
             <div class="plot-export">
               <button class="export-btn" data-target="cumulativeFunnelPlot" data-format="svg">SVG</button>
               <button class="export-btn" data-target="cumulativeFunnelPlot" data-format="png">PNG</button>
@@ -593,7 +593,7 @@
         <details class="results-section" id="altVizSection">
           <summary class="results-section-header">Alternative Visualisations</summary>
           <div class="plot-block" id="orchardPlotBlock" style="display:none">
-            <p class="plot-label">Orchard plot</p>
+            <p class="plot-label">Orchard plot<button class="help-btn" data-help="plot.orchard" title="Help">?</button></p>
             <div class="plot-export">
               <button class="export-btn" data-target="orchardPlot" data-format="svg">SVG</button>
               <button class="export-btn" data-target="orchardPlot" data-format="png">PNG</button>
@@ -602,7 +602,7 @@
             <svg id="orchardPlot" width="520" height="340"></svg>
           </div>
           <div class="plot-block" id="caterpillarPlotBlock" style="display:none">
-            <p class="plot-label">Caterpillar plot</p>
+            <p class="plot-label">Caterpillar plot<button class="help-btn" data-help="plot.caterpillar" title="Help">?</button></p>
             <div class="plot-export">
               <button class="export-btn" data-target="caterpillarPlot" data-format="svg">SVG</button>
               <button class="export-btn" data-target="caterpillarPlot" data-format="png">PNG</button>
@@ -627,7 +627,7 @@
           <summary class="results-section-header">P-value Analyses</summary>
           <div id="pCurvePanel"></div>
           <div class="plot-block" id="pCurvePlotBlock" style="display:none">
-            <p class="plot-label">P-curve</p>
+            <p class="plot-label">P-curve<button class="help-btn" data-help="bias.pcurve" title="Help">?</button></p>
             <div class="plot-export">
               <button class="export-btn" data-target="pCurvePlot" data-format="svg">SVG</button>
               <button class="export-btn" data-target="pCurvePlot" data-format="png">PNG</button>
@@ -637,7 +637,7 @@
           </div>
           <div id="pUniformPanel"></div>
           <div class="plot-block" id="pUniformPlotBlock" style="display:none">
-            <p class="plot-label">P-uniform</p>
+            <p class="plot-label">P-uniform<button class="help-btn" data-help="bias.puniform" title="Help">?</button></p>
             <div class="plot-export">
               <button class="export-btn" data-target="pUniformPlot" data-format="svg">SVG</button>
               <button class="export-btn" data-target="pUniformPlot" data-format="png">PNG</button>
@@ -692,7 +692,7 @@
 
         <!-- ── Section 11: Risk of Bias (collapsed, hidden until RoB data present) ── -->
         <details class="results-section" id="robSection" style="display:none">
-          <summary class="results-section-header">Risk of Bias</summary>
+          <summary class="results-section-header">Risk of Bias<button class="help-btn" data-help="plot.rob" title="Help">?</button></summary>
           <div class="plot-block" id="robTrafficLightBlock">
             <p class="plot-label">Risk-of-bias traffic light</p>
             <div class="plot-export">
@@ -803,7 +803,7 @@
         <li><strong>Begg's rank correlation</strong> — Kendall's τ<sub>b</sub> with tie correction</li>
         <li><strong>FAT-PET / PET-PEESE</strong> — funnel asymmetry test and precision-effect test; when FAT detects bias (p &lt; .10) the two-stage PET-PEESE correction is applied and the PEESE intercept is highlighted as the corrected effect estimate; the PEESE regression line is overlaid on the contour-enhanced funnel plot (Stanley &amp; Doucouliagos, 2014)</li>
         <li><strong>Fail-safe N</strong> — Rosenthal and Orwin estimators</li>
-        <li><strong>Trim-and-fill</strong> (L0) — imputes missing studies and reports the adjusted pooled estimate</li>
+        <li><strong>Trim-and-fill</strong> (L0, R0, Q0 estimators) — imputes missing studies and reports the adjusted pooled estimate; estimator selectable in the UI</li>
         <li><strong>Funnel plot</strong> — standard or contour-enhanced (α = .10, .05, .01 regions)</li>
         <li><strong>Selection model (Vevea–Hedges)</strong> — ω-weighted likelihood model; MLE mode (k ≥ 8) estimates selection weights jointly with μ and τ²; fixed-ω sensitivity presets (Mild / Moderate / Severe, Vevea &amp; Woods 2005) available from k ≥ 3</li>
       </ul>
@@ -819,7 +819,7 @@
       <h2>Sensitivity and influence</h2>
       <ul>
         <li><strong>Leave-one-out</strong> — flags studies whose omission would flip statistical significance</li>
-        <li><strong>Influence diagnostics</strong> — Cook's distance, DFBETA, hat values, standardised residuals, Δτ²</li>
+        <li><strong>Influence diagnostics</strong> — Cook's distance, DFBETA, DFFITS, covariance ratio, hat values, standardised residuals, Δτ²</li>
         <li><strong>Influence and Baujat plots</strong> — per-study leverage and heterogeneity contribution visualised</li>
         <li><strong>Estimator comparison</strong> — runs all τ² estimators side-by-side on the current dataset</li>
         <li><strong>Cumulative meta-analysis</strong> — adds studies in user-selected order (input order, precision, or effect size)</li>
