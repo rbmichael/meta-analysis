@@ -602,9 +602,16 @@ export const HELP = {
     title: "Trim-and-Fill",
     body:  "Iteratively removes ('trims') asymmetric outlier studies, estimates the " +
            "true effect centre, then imputes ('fills') the mirror-image missing studies. " +
-           "Produces an adjusted pooled estimate. Assumes asymmetry is caused solely " +
-           "by publication bias; may over-correct when asymmetry has other causes " +
-           "(e.g. heterogeneous populations, outliers, or between-study design differences).",
+           "Produces an adjusted pooled estimate. Three estimators for the number of " +
+           "missing studies (k₀): " +
+           "L0 (rank sum — default, most widely used); " +
+           "R0 (run test — based on the largest gap in the rank ordering, conservative); " +
+           "Q0 (chi-square approximation — can give larger k₀ than L0). " +
+           "All three use the same iteration structure; they only differ in how k₀ is " +
+           "derived from the signed ranks. " +
+           "Assumes asymmetry is caused solely by publication bias; may over-correct " +
+           "when asymmetry has other causes (heterogeneous populations, outliers, or " +
+           "between-study design differences).",
   },
 
   "bias.fsn": {

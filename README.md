@@ -37,7 +37,7 @@ A browser-based meta-analysis tool. No installation, no server, no dependencies 
 - **Begg's rank correlation** — Kendall's τ_b with tie correction
 - **FAT-PET / PET-PEESE** — funnel asymmetry test, precision-effect test, and the two-stage PET-PEESE correction (Stanley & Doucouliagos 2014); when FAT detects bias (p < .10) the PEESE intercept is highlighted as the corrected effect estimate; the PEESE regression line is overlaid on the contour-enhanced funnel plot
 - **Fail-safe N** — Rosenthal and Orwin estimators
-- **Trim-and-fill** (L0 estimator) — imputes missing studies and reports the adjusted pooled estimate
+- **Trim-and-fill** (L0, R0, Q0 estimators) — imputes missing studies and reports the adjusted pooled estimate; estimator selectable in the UI
 - **Funnel plot** — standard or contour-enhanced (p-value regions at α = .10, .05, .01)
 - **Selection model (Vevea-Hedges)** — ω-weighted likelihood model for publication bias; MLE mode (k ≥ 8) estimates selection weights jointly with μ and τ²; fixed-ω sensitivity presets (Mild / Moderate / Severe, Vevea & Woods 2005) available from k ≥ 3
 

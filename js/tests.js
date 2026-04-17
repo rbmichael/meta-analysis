@@ -3252,85 +3252,97 @@ export function runTests() {
     tfchk("maxIter=0 → k0=0 regardless of data", trimFill(asym, "DL", 0).length, 0);
   }
 
-  // ---- asymmetric dataset: structural + quantitative invariants (L > 0) ----
-  // Dataset: yi=[0, 0.1, 1.5, 2.0, 2.5], vi=0.04 (equal weights).
-  // All effects are positive → strongly right-skewed.
-  //
-  // Convergence (manual derivation):
-  //   Initial RE = 1.22 (equal-vi mean).  L0 → k0 grows → center shifts left → ...
-  //   Converges at center=0: 4 studies (S2–S5) lie to the right → k0=4 filled.
-  //   Mirrors: each filled_yi = 2·0 − orig_yi → filled_yi + orig_yi = 0 exactly.
-  //   Adjusted combined dataset is perfectly symmetric → adjusted RE = 0.
-  // This is the non-trivial L>0 synthetic benchmark (self-derived, not R-verified).
-  // The R-verified L>0 benchmark is BCG k0=10 below.
-  console.log("--- asymmetric dataset: structure and invariants (L=4) ---");
-  {
-    const asym = [
-      { label: "S1", yi: 0.0, vi: 0.04 }, { label: "S2", yi: 0.1, vi: 0.04 },
-      { label: "S3", yi: 1.5, vi: 0.04 }, { label: "S4", yi: 2.0, vi: 0.04 },
-      { label: "S5", yi: 2.5, vi: 0.04 },
-    ];
-    const filled = trimFill(asym, "DL");
-
-    // Exact k0=4 (four studies right of converged center=0)
-    tfchk("k0 = 4 for asymmetric data", filled.length, 4);
-
-    // Flags and metadata on every filled study
-    tfchk("filled.filled=true", filled.every(f => f.filled === true), true);
-    tfchk("vi preserved", filled.every(f => f.vi === 0.04), true);
-    tfchk("labels end with ' (filled)'", filled.every(f => f.label.endsWith(" (filled)")), true);
-
-    // Mirror-image: filled_yi = 2·center − orig_yi
-    // Since all filled labels are "<orig_label> (filled)", we can recover orig_yi.
-    // Then (filled_yi + orig_yi)/2 must equal the same center for every pair.
-    const centers = filled.map(f => {
-      const origLabel = f.label.replace(" (filled)", "");
-      const orig = asym.find(s => s.label === origLabel);
-      return orig != null ? (f.yi + orig.yi) : null;
-    });
-    tfchk("every filled label maps to an original study", centers.every(c => c !== null), true);
-
-    // All 2·center values must be identical (converged center is unique)
-    const twiceCenter = centers[0];
-    tfchk("all mirror pairs share the same center", centers.every(c => Math.abs(c - twiceCenter) < 1e-9), true);
-
-    // Converged center = 0 for this dataset (verified manually above)
-    tfchkApprox("converged center = 0", twiceCenter / 2, 0, 1e-9);
-
-    // REML method also converges with k0 > 0 (exact count may differ from DL)
-    const filledREML = trimFill(asym, "REML");
-    tfchk("REML method also produces k0 > 0", filledREML.length > 0, true);
-    tfchk("REML k0 = 4", filledREML.length, 4);
-
-    // Adjusted RE should be less than original RE (fill is on the negative side)
-    const origRE  = meta(asym, "DL").RE;
-    const adjMeta = meta([...asym, ...filled], "DL");
-    tfchk("adjusted RE < original RE", adjMeta.RE < origRE, true);
-
-    // With center=0 and perfect symmetry, adjusted RE = 0
-    tfchkApprox("adjusted RE ≈ 0", adjMeta.RE, 0, 0.01);
-  }
-
-  // ---- BCG log-OR: k0=10, matches pub bias benchmark ----
-  // This reuses the existing PUB_BIAS_BENCHMARKS[0] data.
-  console.log("--- BCG log-OR: k0=10 ---");
+  // ---- BCG log-OR DL: k0=0 (cross-validated against metafor 4.8-0) ----
+  // All three estimators give k0=0; trim-and-fill detects no asymmetry.
+  // Previous tests asserted k0=10, which was derived from an incorrect algorithm.
+  console.log("--- BCG log-OR DL: k0=0 (all estimators) ---");
   {
     const bm = PUB_BIAS_BENCHMARKS[0];
     const studies = bm.data.map(d => {
       const s = compute(d, bm.type);
       return { ...d, yi: s.yi, vi: s.vi, se: s.se };
     });
-    const filled = trimFill(studies, bm.tauMethod);
+    tfchk("BCG OR DL L0: k0=0", trimFill(studies, bm.tauMethod, "L0").length, 0);
+    tfchk("BCG OR DL R0: k0=0", trimFill(studies, bm.tauMethod, "R0").length, 0);
+    tfchk("BCG OR DL Q0: k0=0", trimFill(studies, bm.tauMethod, "Q0").length, 0);
+  }
 
-    tfchk("BCG k0=10", filled.length, 10);
+  // ---- BCG log-RR DL: L0=1, R0=0, Q0=1 (cross-validated against metafor 4.8-0) ----
+  // yi/vi from dat.bcg escalc("RR"). L0 and Q0 impute 1 study; R0 detects no gap.
+  console.log("--- BCG log-RR DL: L0=1, R0=0, Q0=1 ---");
+  {
+    const bcgRR = [
+      {label:"Aronson 1948",           yi:-0.8893113339202054, vi:0.3255847650039613},
+      {label:"Ferguson & Simes 1949",  yi:-1.5853886572014306, vi:0.1945811213981438},
+      {label:"Rosenthal et al 1960",   yi:-1.3480731482996933, vi:0.4153679653679654},
+      {label:"Hart & Sutherland 1977", yi:-1.4415511900213054, vi:0.0200100319022476},
+      {label:"Frimodt-Moller 1973",    yi:-0.2175473222112956, vi:0.0512101721696309},
+      {label:"Stein & Aronson 1953",   yi:-0.7861155858188640, vi:0.0069056184559088},
+      {label:"Vandiviere 1973",        yi:-1.6208982235983918, vi:0.2230172475723152},
+      {label:"TPT Madras 1980",        yi: 0.0119523335238405, vi:0.0039615792978177},
+      {label:"Coetzee & Berjak 1968",  yi:-0.4694176487381494, vi:0.0564342104632490},
+      {label:"Rosenthal et al 1961",   yi:-1.3713448034727844, vi:0.0730247936130289},
+      {label:"Comstock et al 1974",    yi:-0.3393588283383906, vi:0.0124122139715597},
+      {label:"Comstock & Webster 1969",yi: 0.4459134005713787, vi:0.5325058452001528},
+      {label:"Comstock et al 1976",    yi:-0.0173139482168798, vi:0.0714046596839863},
+    ];
+    const filledL0 = trimFill(bcgRR, "DL", "L0");
+    const filledR0 = trimFill(bcgRR, "DL", "R0");
+    const filledQ0 = trimFill(bcgRR, "DL", "Q0");
+    tfchk("BCG RR DL L0 k0=1", filledL0.length, 1);
+    tfchk("BCG RR DL R0 k0=0", filledR0.length, 0);
+    tfchk("BCG RR DL Q0 k0=1", filledQ0.length, 1);
+    // Filled study has correct flags
+    tfchk("L0 filled.filled=true", filledL0[0].filled, true);
+    tfchk("L0 label ends with (filled)", filledL0[0].label.endsWith(" (filled)"), true);
+    // Adjusted RE (L0, tol 0.001): metafor gives −0.656073
+    const adjL0 = meta([...bcgRR, ...filledL0], "DL").RE;
+    tfchkApprox("BCG RR DL L0 adjRE", adjL0, -0.6561, 0.001);
+  }
 
-    // All filled studies carry the filled flag and labelling
-    tfchk("BCG filled.filled=true", filled.every(f => f.filled === true), true);
-    tfchk("BCG labels end with ' (filled)'", filled.every(f => f.label.endsWith(" (filled)")), true);
-
-    // Adjusted RE matches the benchmark value (tol 0.01)
-    const adjRE = meta([...studies, ...filled], bm.tauMethod).RE;
-    tfchkApprox("BCG adjusted RE", adjRE, bm.tests.trimFill.adjustedRE, 0.01);
+  // ---- Mixed k=12 DL: L0=4, R0=3, Q0=6 (cross-validated against metafor 4.8-0) ----
+  // This dataset has clearly different k0 across estimators — ideal for testing all three.
+  // yi/vi from TrimFill_benchmarks in benchmarks.js; side="left" (right-excess).
+  // Expected adjRE: L0=−0.3688, R0=−0.3302, Q0=−0.4490.
+  console.log("--- mixed k=12 DL: L0=4, R0=3, Q0=6 ---");
+  {
+    const mixed = [
+      {label:"S1",  yi:-1.0, vi:0.30}, {label:"S2",  yi:-0.8, vi:0.20},
+      {label:"S3",  yi:-0.6, vi:0.40}, {label:"S4",  yi:-0.4, vi:0.10},
+      {label:"S5",  yi:-0.2, vi:0.15}, {label:"S6",  yi: 0.0, vi:0.20},
+      {label:"S7",  yi: 0.1, vi:0.50}, {label:"S8",  yi: 0.3, vi:0.60},
+      {label:"S9",  yi: 0.5, vi:0.80}, {label:"S10", yi: 0.8, vi:1.00},
+      {label:"S11", yi: 1.2, vi:1.20}, {label:"S12", yi: 1.8, vi:1.50},
+    ];
+    const fL0 = trimFill(mixed, "DL", "L0");
+    const fR0 = trimFill(mixed, "DL", "R0");
+    const fQ0 = trimFill(mixed, "DL", "Q0");
+    tfchk("mixed DL L0 k0=4", fL0.length, 4);
+    tfchk("mixed DL R0 k0=3", fR0.length, 3);
+    tfchk("mixed DL Q0 k0=6", fQ0.length, 6);
+    // Structural invariants on L0 fills
+    tfchk("filled.filled=true", fL0.every(f => f.filled === true), true);
+    tfchk("vi preserved", fL0.every(f => isFinite(f.vi) && f.vi > 0), true);
+    tfchk("labels end with ' (filled)'", fL0.every(f => f.label.endsWith(" (filled)")), true);
+    // Mirror invariant: filled_yi + orig_yi = 2·center → all same
+    const centers = fL0.map(f => {
+      const orig = mixed.find(s => s.label === f.label.replace(" (filled)", ""));
+      return orig != null ? (f.yi + orig.yi) : null;
+    });
+    tfchk("every filled label maps to an original", centers.every(c => c !== null), true);
+    tfchk("all pairs share the same center", centers.every(c => Math.abs(c - centers[0]) < 1e-9), true);
+    // Adjusted RE (tol 0.001): metafor gives L0=−0.3688, R0=−0.3302, Q0=−0.4490
+    const adjL0 = meta([...mixed, ...fL0], "DL").RE;
+    const adjR0 = meta([...mixed, ...fR0], "DL").RE;
+    const adjQ0 = meta([...mixed, ...fQ0], "DL").RE;
+    tfchkApprox("mixed DL L0 adjRE", adjL0, -0.3688, 0.001);
+    tfchkApprox("mixed DL R0 adjRE", adjR0, -0.3302, 0.001);
+    tfchkApprox("mixed DL Q0 adjRE", adjQ0, -0.4490, 0.001);
+    // Fill is on the negative side (adding studies with lower yi)
+    const origRE = meta(mixed, "DL").RE;
+    tfchk("L0 adjRE < origRE", adjL0 < origRE, true);
+    tfchk("R0 adjRE < origRE", adjR0 < origRE, true);
+    tfchk("Q0 adjRE < origRE", adjQ0 < origRE, true);
   }
 
   console.log(tfPass ? "\n✅ ALL TRIM-AND-FILL TESTS PASSED" : "\n❌ SOME TRIM-AND-FILL TESTS FAILED");

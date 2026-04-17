@@ -893,13 +893,17 @@ document.getElementById("ciLevel").addEventListener("change", () => { scheduleAu
 
 const trimFillCheckbox = document.getElementById("useTrimFill");
 const adjustedCheckbox = document.getElementById("useTFAdjusted");
+const tfEstimatorSelect = document.getElementById("tfEstimator");
 adjustedCheckbox.disabled = !trimFillCheckbox.checked;
+tfEstimatorSelect.disabled = !trimFillCheckbox.checked;
 trimFillCheckbox.addEventListener("change", () => {
   adjustedCheckbox.disabled = !trimFillCheckbox.checked;
+  tfEstimatorSelect.disabled = !trimFillCheckbox.checked;
   if (!trimFillCheckbox.checked) adjustedCheckbox.checked = false;
   markStale();
 });
 adjustedCheckbox.addEventListener("change", markStale);
+document.getElementById("tfEstimator").addEventListener("change", markStale);
 
 // ---------------- SELECTION MODEL CONTROLS ----------------
 function syncSelControls() {
@@ -1517,6 +1521,7 @@ function gatherSessionState() {
     ciLevel:         document.getElementById("ciLevel").value,
     cumulativeOrder: document.getElementById("cumulativeOrder").value,
     useTrimFill:     document.getElementById("useTrimFill").checked,
+    tfEstimator:     document.getElementById("tfEstimator").value,
     useTFAdjusted:   document.getElementById("useTFAdjusted").checked,
     // Bayesian priors
     bayesMu0:        parseFloat(document.getElementById("bayesMu0")?.value)     ?? 0,
@@ -1586,6 +1591,8 @@ function applySession(session) {
   if (s.cumulativeOrder && document.getElementById("cumulativeOrder").querySelector(`option[value="${s.cumulativeOrder}"]`))
     document.getElementById("cumulativeOrder").value = s.cumulativeOrder;
   if (typeof s.useTrimFill   === "boolean") document.getElementById("useTrimFill").checked   = s.useTrimFill;
+  if (s.tfEstimator && document.getElementById("tfEstimator").querySelector(`option[value="${s.tfEstimator}"]`))
+    document.getElementById("tfEstimator").value = s.tfEstimator;
   if (typeof s.useTFAdjusted === "boolean") document.getElementById("useTFAdjusted").checked = s.useTFAdjusted;
 
   // Bayesian priors
@@ -1775,6 +1782,8 @@ function syncMHOptions(type) {
   if (tfCheck) {
     tfCheck.disabled = isMHorPeto;
     if (isMHorPeto) tfCheck.checked = false;
+    const tfEst = document.getElementById("tfEstimator");
+    if (tfEst) tfEst.disabled = isMHorPeto || !tfCheck.checked;
   }
 
   syncPLAvailability();
@@ -3121,6 +3130,7 @@ async function runAnalysis() {
   const elTauMethod          = document.getElementById("tauMethod");
   const elCiMethod           = document.getElementById("ciMethod");
   const elUseTrimFill        = document.getElementById("useTrimFill");
+  const elTfEstimator        = document.getElementById("tfEstimator");
   const elUseTFAdjusted      = document.getElementById("useTFAdjusted");
   const elBubblePlots        = document.getElementById("bubblePlots");
   const elForestPageSize     = document.getElementById("forestPageSize");
@@ -3230,6 +3240,7 @@ async function runAnalysis() {
   const ciMethod = elCiMethod?.value || "normal";
   const alpha = getCiAlpha();
   const useTF = elUseTrimFill?.checked;
+  const tfEstimator = elTfEstimator?.value || "L0";
   const useTFAdjusted = elUseTFAdjusted?.checked;
 
   const isMHorPeto  = method === "MH" || method === "Peto";
@@ -3238,7 +3249,7 @@ async function runAnalysis() {
 
   performance.mark("phase:meta:start");
   let tf = [], all = studies;
-  if (useTF && !isMHorPeto) { tf = trimFill(studies, method); all = [...studies, ...tf]; }
+  if (useTF && !isMHorPeto) { tf = trimFill(studies, method, tfEstimator); all = [...studies, ...tf]; }
 
   let m;
   if      (method === "MH"  ) m = metaMH(studies, type, alpha);
@@ -3450,7 +3461,7 @@ async function runAnalysis() {
     &nbsp;&nbsp;${hBtn("bias.fatpet")}FAT (bias): β₁=${isFinite(fatpet.slope)?fmt(fatpet.slope):"NA"} | p=${isFinite(fatpet.slopeP)?fmt(fatpet.slopeP):"NA (k<3)"} &nbsp;·&nbsp; PET (effect at SE→0): ${isFinite(fatpet.intercept)?fmt(profile.transform(fatpet.intercept)):"NA"} | p=${isFinite(fatpet.interceptP)?fmt(fatpet.interceptP):"NA (k<3)"}${fatpetRobustNote}<br>
     &nbsp;&nbsp;${hBtn("bias.petpeese")}${petpeese.usePeese?"<b>":""}PET-PEESE (corrected): ${(()=>{const src=petpeese.usePeese?petpeese.peese:petpeese.fat;return isFinite(src.intercept)?`${fmt(profile.transform(src.intercept))} [${petpeese.usePeese?"PEESE":"PET"}, p=${fmt(src.interceptP)}]`:"NA (k<3)";})()}${petpeese.usePeese?"</b>":""}<br>
     &nbsp;&nbsp;${hBtn("bias.fsn")}Fail-safe N (Rosenthal): ${isFinite(fsn.rosenthal)?Math.round(fsn.rosenthal):"NA"} &nbsp;·&nbsp; Orwin (trivial=0.1): ${isFinite(fsn.orwin)?Math.round(fsn.orwin):"NA"}<br>
-    <b>Trim &amp; Fill:</b>${hBtn("bias.trimfill")} ${useTF?"ON":"OFF"} (${tf.length} filled studies)
+    <b>Trim &amp; Fill:</b>${hBtn("bias.trimfill")} ${useTF?"ON":"OFF"} (${useTF?tfEstimator+" estimator, ":""}${tf.length} filled studies)
   `;
   elInfluenceDiagTable.innerHTML = influenceHTML;
 

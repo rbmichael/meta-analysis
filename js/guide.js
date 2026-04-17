@@ -1082,6 +1082,24 @@ outliers. Also requires at least 10 studies.</p>`,
         body: `<p>Iteratively removes ('trims') asymmetric outlier studies from the funnel,
 estimates the true effect centre, then imputes ('fills') the mirror-image
 missing studies. Produces an adjusted pooled estimate.</p>
+<p><strong>Algorithm:</strong> The asymmetric side is detected by regressing yi on
+√vᵢ (a weighted Egger-type slope). Studies are sorted and k₀ are trimmed from
+the larger side each iteration until k₀ stabilises. Filled studies are
+mirror-images of the trimmed studies reflected across the converged centre.</p>
+<p><strong>Three estimators for k₀</strong> (number of missing studies):</p>
+<ul>
+  <li><strong>L0</strong> (default) — Rank sum statistic:<br>
+  Sᵣ = Σ positive signed ranks; k₀ = (4Sᵣ − k(k+1)) / (2k−1)</li>
+  <li><strong>R0</strong> — Run test / gap statistic:<br>
+  k₀ = (k − max rank on the smaller side) − 1.<br>
+  Conservative: detects asymmetry only when the top ranks are entirely on
+  one side with no gaps; often gives the smallest k₀.</li>
+  <li><strong>Q0</strong> — Chi-square approximation:<br>
+  k₀ = k − ½ − √(2k² − 4Sᵣ + ¼).<br>
+  Uses the same Sᵣ as L0 but a different inversion; tends to give larger k₀.</li>
+</ul>
+<p>L0 and Q0 typically agree when asymmetry is moderate; R0 is more conservative.
+All three are cross-validated against <code>metafor::trimfill()</code> 4.8-0.</p>
 <p><strong>Important caveat:</strong> Trim-and-fill assumes asymmetry is caused
 solely by publication bias. It may over-correct when asymmetry has other
 causes (heterogeneous populations, outliers, or between-study design
@@ -1089,6 +1107,7 @@ differences). The adjusted estimate should be treated as a sensitivity
 analysis, not as the primary estimate.</p>`,
         citations: [
           "Duval, S., & Tweedie, R. (2000). Trim and fill: A simple funnel-plot-based method of testing and adjusting for publication bias in meta-analysis. <em>Biometrics, 56</em>(2), 455–463.",
+          "Duval, S. (2005). The trim and fill method. In H. R. Rothstein, A. J. Sutton, & M. Borenstein (Eds.), <em>Publication Bias in Meta-Analysis: Prevention, Assessment and Adjustments</em>. Wiley.",
         ],
       },
 
