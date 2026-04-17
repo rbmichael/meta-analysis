@@ -312,6 +312,14 @@ export const CITATIONS = {
 
   VH: `Vevea, J. L., &amp; Hedges, L. V. (1995). A general linear model for estimating effect size in the presence of publication bias. <em>Psychometrika</em>, <em>60</em>(3), 419–435. <a href="https://doi.org/10.1007/BF02294384">https://doi.org/10.1007/BF02294384</a>`,
 
+  HARBORD: `Harbord, R. M., Egger, M., &amp; Sterne, J. A. C. (2006). A modified test for small-study effects in meta-analyses of controlled trials with binary endpoints. <em>Statistics in Medicine</em>, <em>25</em>(20), 3443–3457. <a href="https://doi.org/10.1002/sim.2380">https://doi.org/10.1002/sim.2380</a>`,
+
+  PETERS: `Peters, J. L., Sutton, A. J., Jones, D. R., Abrams, K. R., &amp; Rushton, L. (2006). Comparison of two methods to detect publication bias in meta-analysis. <em>JAMA</em>, <em>295</em>(6), 676–680. <a href="https://doi.org/10.1001/jama.295.6.676">https://doi.org/10.1001/jama.295.6.676</a>`,
+
+  DEEKS: `Deeks, J. J., Macaskill, P., &amp; Irwig, L. (2005). The performance of tests of publication bias and other sample size effects in systematic reviews of diagnostic test accuracy was assessed. <em>Journal of Clinical Epidemiology</em>, <em>58</em>(9), 882–893. <a href="https://doi.org/10.1016/j.jclinepi.2005.01.016">https://doi.org/10.1016/j.jclinepi.2005.01.016</a>`,
+
+  RUECKER: `Rücker, G., Schwarzer, G., &amp; Carpenter, J. (2008). Arcsine test for publication bias in meta-analyses with binary outcomes. <em>Statistics in Medicine</em>, <em>27</em>(19), 4450–4465. <a href="https://doi.org/10.1002/sim.3007">https://doi.org/10.1002/sim.3007</a>`,
+
   // ── Meta-regression ───────────────────────────────────────────────────────
   MREG: `Thompson, S. G., &amp; Sharp, S. J. (1999). Explaining heterogeneity in meta-analysis: A comparison of methods. <em>Statistics in Medicine</em>, <em>18</em>(20), 2693–2708.`,
 
@@ -331,6 +339,7 @@ export function collectCitations(args) {
   const {
     method, ciMethod,
     egger, begg, fatpet, fsn,
+    harbord, peters, deeks, ruecker,
     useTF, tf,
     puniform, pcurve,
     sel,
@@ -361,9 +370,13 @@ export function collectCitations(args) {
   add("I2");
 
   // Publication bias tests
-  if (egger  && isFinite(egger.p))  add("EGGER");
-  if (begg   && isFinite(begg.p))   add("BEGG");
-  if (fatpet && isFinite(fatpet.p)) add("FATPET");
+  if (egger   && isFinite(egger.p))             add("EGGER");
+  if (begg    && isFinite(begg.p))              add("BEGG");
+  if (fatpet  && isFinite(fatpet.p))            add("FATPET");
+  if (harbord && isFinite(harbord.interceptP))  add("HARBORD");
+  if (peters  && isFinite(peters.interceptP))   add("PETERS");
+  if (deeks   && isFinite(deeks.interceptP))    add("DEEKS");
+  if (ruecker && isFinite(ruecker.interceptP))  add("RUECKER");
   if (fsn    && isFinite(fsn.rosenthal)) add("FSN_R");
   if (fsn    && isFinite(fsn.orwin))     add("FSN_O");
   if (useTF  && tf && tf.length)    add("TF");
@@ -503,8 +516,8 @@ function sectionSummary(args) {
 // status. PET estimate is back-transformed through profile.transform().
 // "NA (k < 3)" is shown for any test that requires at least 3 studies.
 function sectionPubBias(args) {
-  const { egger, begg, fatpet, fsn, useTF, tf, profile,
-          apaFormat = false, nextTable } = args;
+  const { egger, begg, fatpet, fsn, harbord, peters, deeks, ruecker,
+          useTF, tf, profile, apaFormat = false, nextTable } = args;
   const petEff = isFinite(fatpet.intercept)
     ? fmt(profile.transform(fatpet.intercept)) : "—";
 
@@ -516,19 +529,27 @@ function sectionPubBias(args) {
   </p>
   <p>Trim &amp; Fill: <strong>${useTF ? "ON" : "OFF"}</strong>${tf.length > 0 ? ` (${tf.length} filled)` : ""}</p>`;
 
+  const naCell = (v, fmt2) => isFinite(v) ? fmt2(v) : "—";
+  const naP    = (v, fmt2) => isFinite(v) ? fmt2(v) : "NA";
+
   if (apaFormat) {
     const rows = [
-      `<tr><td>Egger's test (intercept)</td><td>${isFinite(egger.intercept) ? fmt(egger.intercept) : "—"}</td><td>${isFinite(egger.p) ? fmtP_APA(egger.p) : "NA (k &lt; 3)"}</td></tr>`,
-      `<tr><td>Begg's test (rank correlation τ)</td><td>${isFinite(begg.tau) ? fmt(begg.tau) : "—"}</td><td>${isFinite(begg.p) ? fmtP_APA(begg.p) : "NA (k &lt; 3)"}</td></tr>`,
-      `<tr><td>FAT — β₁ (bias)</td><td>${isFinite(fatpet.slope) ? fmt(fatpet.slope) : "—"}</td><td>${isFinite(fatpet.slopeP) ? fmtP_APA(fatpet.slopeP) : "NA (k &lt; 3)"}</td></tr>`,
-      `<tr><td>PET — effect at SE → 0</td><td>${petEff}</td><td>${isFinite(fatpet.interceptP) ? fmtP_APA(fatpet.interceptP) : "NA (k &lt; 3)"}</td></tr>`,
+      `<tr><td>Egger's test (intercept)</td><td>${naCell(egger.intercept, fmt)}</td><td>${naP(egger.p, fmtP_APA)}</td></tr>`,
+      `<tr><td>Begg's test (rank correlation τ)</td><td>${naCell(begg.tau, fmt)}</td><td>${naP(begg.p, fmtP_APA)}</td></tr>`,
+      `<tr><td>FAT — β₁ (bias)</td><td>${naCell(fatpet.slope, fmt)}</td><td>${naP(fatpet.slopeP, fmtP_APA)}</td></tr>`,
+      `<tr><td>PET — effect at SE → 0</td><td>${petEff}</td><td>${naP(fatpet.interceptP, fmtP_APA)}</td></tr>`,
+      `<tr><td>Harbord (intercept)</td><td>${naCell(harbord.intercept, fmt)}</td><td>${naP(harbord.interceptP, fmtP_APA)}</td></tr>`,
+      `<tr><td>Peters (intercept)</td><td>${naCell(peters.intercept, fmt)}</td><td>${naP(peters.interceptP, fmtP_APA)}</td></tr>`,
+      `<tr><td>Deeks (intercept)</td><td>${naCell(deeks.intercept, fmt)}</td><td>${naP(deeks.interceptP, fmtP_APA)}</td></tr>`,
+      `<tr><td>Rücker (intercept)</td><td>${naCell(ruecker.intercept, fmt)}</td><td>${naP(ruecker.interceptP, fmtP_APA)}</td></tr>`,
     ];
     const table = buildTableAPA(
       nextTable(),
       "Tests of Publication Bias",
       ["Test", "Statistic", "p"],
       rows,
-      "FAT = funnel asymmetry test; PET = precision-effect test. NA = fewer than 3 studies."
+      "FAT = funnel asymmetry test; PET = precision-effect test. " +
+      "Harbord, Peters, Deeks, and Rücker are binary-outcome variants of the Egger test; NA = fewer than 3 eligible studies or missing cell counts."
     );
     return `
 <section>
@@ -541,10 +562,14 @@ function sectionPubBias(args) {
   const table = buildTable(
     ["Test", "Statistic", "p-value"],
     [
-      `<tr><td>Egger (intercept)</td><td>${isFinite(egger.intercept) ? fmt(egger.intercept) : "—"}</td><td>${isFinite(egger.p) ? fmtP(egger.p) : "NA (k &lt; 3)"}</td></tr>`,
-      `<tr><td>Begg (rank correlation τ)</td><td>${isFinite(begg.tau) ? fmt(begg.tau) : "—"}</td><td>${isFinite(begg.p) ? fmtP(begg.p) : "NA (k &lt; 3)"}</td></tr>`,
-      `<tr><td>FAT — β₁ (bias)</td><td>${isFinite(fatpet.slope) ? fmt(fatpet.slope) : "—"}</td><td>${isFinite(fatpet.slopeP) ? fmtP(fatpet.slopeP) : "NA (k &lt; 3)"}</td></tr>`,
-      `<tr><td>PET — effect at SE → 0</td><td>${petEff}</td><td>${isFinite(fatpet.interceptP) ? fmtP(fatpet.interceptP) : "NA (k &lt; 3)"}</td></tr>`,
+      `<tr><td>Egger (intercept)</td><td>${naCell(egger.intercept, fmt)}</td><td>${naP(egger.p, fmtP)}</td></tr>`,
+      `<tr><td>Begg (rank correlation τ)</td><td>${naCell(begg.tau, fmt)}</td><td>${naP(begg.p, fmtP)}</td></tr>`,
+      `<tr><td>FAT — β₁ (bias)</td><td>${naCell(fatpet.slope, fmt)}</td><td>${naP(fatpet.slopeP, fmtP)}</td></tr>`,
+      `<tr><td>PET — effect at SE → 0</td><td>${petEff}</td><td>${naP(fatpet.interceptP, fmtP)}</td></tr>`,
+      `<tr><td>Harbord (binary OR/RR)</td><td>${naCell(harbord.intercept, fmt)}</td><td>${naP(harbord.interceptP, fmtP)}</td></tr>`,
+      `<tr><td>Peters (binary/sample-size)</td><td>${naCell(peters.intercept, fmt)}</td><td>${naP(peters.interceptP, fmtP)}</td></tr>`,
+      `<tr><td>Deeks (diagnostic DOR)</td><td>${naCell(deeks.intercept, fmt)}</td><td>${naP(deeks.interceptP, fmtP)}</td></tr>`,
+      `<tr><td>Rücker (arcsine)</td><td>${naCell(ruecker.intercept, fmt)}</td><td>${naP(ruecker.interceptP, fmtP)}</td></tr>`,
     ]
   );
 

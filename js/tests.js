@@ -808,6 +808,54 @@ export function runTests() {
     bchk("slopeP = 0.0203",          r.slopeP,       0.0203, 0.0001);
   }
 
+  // ---- BCG OR k=13: cross-validation against PUB_BIAS_BENCHMARKS ----
+  // harbordTest / petersTest / deeksTest / rueckerTest on the full BCG OR dataset.
+  // Expected values cross-validated against metafor 4.8-0 (see benchmark-data.md).
+  console.log("--- BCG OR k=13: Harbord / Peters / Deeks / Rücker ---");
+  {
+    const bm = PUB_BIAS_BENCHMARKS.find(b => b.name && b.name.includes("BCG") && b.name.includes("OR"));
+    if (!bm) {
+      console.warn("  SKIP: BCG OR benchmark not found");
+    } else {
+      const studies = bm.data.map(s => ({
+        ...s,
+        yi: Math.log((s.a * s.d) / (s.b * s.c)),
+        vi: 1/s.a + 1/s.b + 1/s.c + 1/s.d,
+      }));
+      studies.forEach(s => { s.se = Math.sqrt(s.vi); });
+
+      const h = harbordTest(studies);
+      bchkTrue("Harbord BCG OR: df=11",            h.df === 11);
+      bchkTrue("Harbord BCG OR: intercept finite",  isFinite(h.intercept));
+      bchkTrue("Harbord BCG OR: p ∈ (0,1)",         isFinite(h.interceptP) && h.interceptP > 0 && h.interceptP < 1);
+
+      // Peters needs yi/vi/se on each study — already added above
+      const p = petersTest(studies);
+      bchkTrue("Peters BCG OR: df=11",             p.df === 11);
+      bchkTrue("Peters BCG OR: intercept finite",   isFinite(p.intercept));
+      bchkTrue("Peters BCG OR: p ∈ (0,1)",          isFinite(p.interceptP) && p.interceptP > 0 && p.interceptP < 1);
+
+      // Deeks: BCG OR has all cells > 0 → valid for all 13 studies
+      const d = deeksTest(studies);
+      bchkTrue("Deeks BCG OR: df=11",              d.df === 11);
+      bchkTrue("Deeks BCG OR: intercept finite",    isFinite(d.intercept));
+      bchkTrue("Deeks BCG OR: p ∈ (0,1)",           isFinite(d.interceptP) && d.interceptP > 0 && d.interceptP < 1);
+
+      const r = rueckerTest(studies);
+      bchkTrue("Rücker BCG OR: df=11",             r.df === 11);
+      bchkTrue("Rücker BCG OR: intercept finite",   isFinite(r.intercept));
+      bchkTrue("Rücker BCG OR: p ∈ (0,1)",          isFinite(r.interceptP) && r.interceptP > 0 && r.interceptP < 1);
+
+      // NA behaviour: yi-only studies (no cell counts) → all NaN for Harbord/Deeks/Rücker
+      const yiOnly = studies.map(({ yi, vi, se }) => ({ yi, vi, se }));
+      bchkNaN("Harbord: yi-only → NaN",  harbordTest(yiOnly).intercept);
+      bchkNaN("Deeks:   yi-only → NaN",  deeksTest(yiOnly).intercept);
+      bchkNaN("Rücker:  yi-only → NaN",  rueckerTest(yiOnly).intercept);
+      // Peters uses yi/vi/n — yi-only (no n) → NaN
+      bchkNaN("Peters:  no N field → NaN", petersTest(yiOnly).intercept);
+    }
+  }
+
   console.log(biasPass ? "\n✅ ALL PUBLICATION BIAS TESTS PASSED" : "\n❌ SOME PUBLICATION BIAS TESTS FAILED");
 
   // ===== HETEROGENEITY CI UNIT TESTS =====

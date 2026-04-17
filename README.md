@@ -36,6 +36,10 @@ A browser-based meta-analysis tool. No installation, no server, no dependencies 
 - **Egger's regression** — intercept test for funnel plot asymmetry
 - **Begg's rank correlation** — Kendall's τ_b with tie correction
 - **FAT-PET / PET-PEESE** — funnel asymmetry test, precision-effect test, and the two-stage PET-PEESE correction (Stanley & Doucouliagos 2014); when FAT detects bias (p < .10) the PEESE intercept is highlighted as the corrected effect estimate; the PEESE regression line is overlaid on the contour-enhanced funnel plot
+- **Harbord's test** — score-based Egger variant for binary OR studies; avoids inflated Type I error when effect size and SE share cell-count information (Harbord et al. 2006)
+- **Peters' test** — WLS regression on 1/*N*; works with any effect type where total *N* is available; preferred over Egger for OR/RR (Peters et al. 2006)
+- **Deeks' test** — funnel-asymmetry test for diagnostic accuracy (DOR) studies using effective sample size as the precision surrogate (Deeks et al. 2005)
+- **Rücker's test** — arcsine-transformation Egger variant for binary outcomes with better-controlled Type I error (Rücker et al. 2008)
 - **Fail-safe N** — Rosenthal and Orwin estimators
 - **Trim-and-fill** (L0, R0, Q0 estimators) — imputes missing studies and reports the adjusted pooled estimate; estimator selectable in the UI
 - **Funnel plot** — standard or contour-enhanced (p-value regions at α = .10, .05, .01)
@@ -195,6 +199,10 @@ python -m http.server 8080
 - Morris SB (2008). Estimating effect sizes from pretest-posttest-control group designs. *Org Res Methods*, 11, 364–386.
 - Paule RC, Mandel J (1982). Consensus values and weighting factors. *J Res Natl Bur Stand*, 87, 377–385.
 - Olkin I, Dahabreh IJ, Trikalinos TA (2012). GOSH — a graphical display of study heterogeneity. *Res Synth Methods*, 3(3), 214–223.
+- Deeks JJ, Macaskill P, Irwig L (2005). The performance of tests of publication bias and other sample size effects in systematic reviews of diagnostic test accuracy was assessed. *J Clin Epidemiol*, 58(9), 882–893.
+- Harbord RM, Egger M, Sterne JAC (2006). A modified test for small-study effects in meta-analyses of controlled trials with binary endpoints. *Stat Med*, 25(20), 3443–3457.
+- Peters JL, Sutton AJ, Jones DR, Abrams KR, Rushton L (2006). Comparison of two methods to detect publication bias in meta-analysis. *JAMA*, 295(6), 676–680.
+- Rücker G, Schwarzer G, Carpenter J (2008). Arcsine test for publication bias in meta-analyses with binary outcomes. *Stat Med*, 27(19), 4450–4465.
 - Simonsohn U, Nelson LD, Simmons JP (2014). P-curve: A key to the file-drawer. *J Exp Psychol Gen*, 143(2), 534–547.
 - Stanley TD, Doucouliagos H (2014). Meta-regression approximations to reduce publication selection bias. *Res Synth Methods*, 5(1), 60–78.
 - Van den Noortgate W, López-López JA, Marín-Martínez F, Sánchez-Meca J (2013). Three-level meta-analysis of dependent effect sizes. *Behav Res Methods*, 45(2), 576–594.

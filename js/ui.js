@@ -100,7 +100,7 @@
 //   ui.js calls init() on DOMContentLoaded, which populates dropdowns,
 //   restores any autosave draft, and attaches all event listeners.
 // =============================================================================
-import { eggerTest, beggTest, fatPetTest, petPeeseTest, failSafeN, pCurve, pUniform, baujat, blupMeta, meta, metaMH, metaPeto, robustMeta, influenceDiagnostics, subgroupAnalysis, metaRegression, cumulativeMeta, leaveOneOut, estimatorComparison, veveaHedges, SELECTION_PRESETS, profileLikTau2, bayesMeta, rvePooled, meta3level } from "./analysis.js";
+import { eggerTest, beggTest, fatPetTest, petPeeseTest, failSafeN, pCurve, pUniform, baujat, blupMeta, meta, metaMH, metaPeto, robustMeta, influenceDiagnostics, subgroupAnalysis, metaRegression, cumulativeMeta, leaveOneOut, estimatorComparison, veveaHedges, SELECTION_PRESETS, profileLikTau2, bayesMeta, rvePooled, meta3level, harbordTest, petersTest, deeksTest, rueckerTest } from "./analysis.js";
 import { fmt } from "./utils.js";
 import { effectProfiles, getProfile } from "./profiles.js";
 import { trimFill } from "./trimfill.js";
@@ -3384,6 +3384,10 @@ async function runAnalysis() {
   const fsn     = failSafeN(studies);
   const pcurve   = pCurve(studies);
   const puniform = pUniform(studies, m);
+  const harbord  = harbordTest(studies);
+  const peters   = petersTest(studies);
+  const deeks    = deeksTest(studies);
+  const ruecker  = rueckerTest(studies);
   performance.measure("phase:pubbias", "phase:pubbias:start");
 
   performance.mark("phase:influence:start");
@@ -3462,6 +3466,15 @@ async function runAnalysis() {
     &nbsp;&nbsp;${hBtn("bias.petpeese")}${petpeese.usePeese?"<b>":""}PET-PEESE (corrected): ${(()=>{const src=petpeese.usePeese?petpeese.peese:petpeese.fat;return isFinite(src.intercept)?`${fmt(profile.transform(src.intercept))} [${petpeese.usePeese?"PEESE":"PET"}, p=${fmt(src.interceptP)}]`:"NA (k<3)";})()}${petpeese.usePeese?"</b>":""}<br>
     &nbsp;&nbsp;${hBtn("bias.fsn")}Fail-safe N (Rosenthal): ${isFinite(fsn.rosenthal)?Math.round(fsn.rosenthal):"NA"} &nbsp;·&nbsp; Orwin (trivial=0.1): ${isFinite(fsn.orwin)?Math.round(fsn.orwin):"NA"}<br>
     <b>Trim &amp; Fill:</b>${hBtn("bias.trimfill")} ${useTF?"ON":"OFF"} (${useTF?tfEstimator+" estimator, ":""}${tf.length} filled studies)
+    <details style="margin-top:4px">
+      <summary style="cursor:pointer;color:var(--fg-muted);font-size:0.9em">Additional regression tests (binary outcomes)</summary>
+      <div style="margin-top:4px">
+        &nbsp;&nbsp;${hBtn("bias.harbord")}Harbord: intercept=${isFinite(harbord.intercept)?fmt(harbord.intercept):"NA"} | p=${isFinite(harbord.interceptP)?fmt(harbord.interceptP):"NA (k&lt;3 or no 2×2 counts)"}<br>
+        &nbsp;&nbsp;${hBtn("bias.peters")}Peters: intercept=${isFinite(peters.intercept)?fmt(peters.intercept):"NA"} | p=${isFinite(peters.interceptP)?fmt(peters.interceptP):"NA (k&lt;3 or no sample sizes)"}<br>
+        &nbsp;&nbsp;${hBtn("bias.deeks")}Deeks: intercept=${isFinite(deeks.intercept)?fmt(deeks.intercept):"NA"} | p=${isFinite(deeks.interceptP)?fmt(deeks.interceptP):"NA (k&lt;3 or no 2×2 counts)"}<br>
+        &nbsp;&nbsp;${hBtn("bias.ruecker")}Rücker: intercept=${isFinite(ruecker.intercept)?fmt(ruecker.intercept):"NA"} | p=${isFinite(ruecker.interceptP)?fmt(ruecker.interceptP):"NA (k&lt;3 or no 2×2 counts)"}
+      </div>
+    </details>
   `;
   elInfluenceDiagTable.innerHTML = influenceHTML;
 
@@ -3594,7 +3607,7 @@ async function runAnalysis() {
 
   appState.reportArgs = {
     studies: all, m, profile, reg,
-    tf, egger, begg, fatpet, petpeese, fsn, pcurve, puniform, baujatResult,
+    tf, egger, begg, fatpet, petpeese, fsn, pcurve, puniform, harbord, peters, deeks, ruecker, baujatResult,
     influence, subgroup, method, ciMethod,
     ciLevel: document.getElementById("ciLevel")?.value ?? "95",
     useTF, mAdjusted,

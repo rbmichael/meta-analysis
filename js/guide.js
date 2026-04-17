@@ -1064,6 +1064,68 @@ Harbord's or Peters' test for binary outcomes.</p>
       },
 
       {
+        id: "guide-binary-bias",
+        title: "Binary-outcome regression tests (Harbord, Peters, Deeks, Rücker)",
+        body: `<p>The standard Egger test has inflated Type I error for binary outcomes
+(OR, RR) because the effect size and its standard error share variance
+components — both depend on the same cell counts. Four specialised alternatives
+address this.</p>
+
+<h4>Harbord's test (Harbord et al., 2006)</h4>
+<p>Score-based Egger variant for OR studies. For each 2×2 table (a, b, c, d),
+computes the expected events E<sub>i</sub> = (a+b)(a+c)/N and the
+hypergeometric variance V<sub>i</sub> = (a+b)(c+d)(a+c)(b+d) / (N²(N−1)),
+then runs OLS regression:</p>
+<p style="margin-left:1em"><code>z<sub>i</sub> = (a − E<sub>i</sub>) / √V<sub>i</sub> = α + β·√V<sub>i</sub> + ε<sub>i</sub></code></p>
+<p>H₀: α = 0. A significant non-zero intercept indicates small-study effects.
+Requires raw 2×2 cell counts.</p>
+
+<h4>Peters' test (Peters et al., 2006)</h4>
+<p>WLS regression of yᵢ on 1/N (inverse total sample size) with weights 1/vᵢ:</p>
+<p style="margin-left:1em"><code>yᵢ = α + β·(1/N<sub>i</sub>) + ε<sub>i</sub></code></p>
+<p>H₀: α = 0. Works with any effect type where N is available
+(from a+b+c+d, n1+n2, or n). Preferred over Egger for OR and RR because
+1/N is less correlated with yᵢ than 1/SE.</p>
+
+<h4>Deeks' test (Deeks et al., 2005)</h4>
+<p>Funnel-asymmetry test specifically for diagnostic accuracy (DOR) studies.
+Uses the effective sample size ESS<sub>i</sub> = 2(a+c)(b+d)/N as the precision
+surrogate, then runs weighted regression:</p>
+<p style="margin-left:1em"><code>log(DOR<sub>i</sub>) = α + β·(1/√ESS<sub>i</sub>) + ε<sub>i</sub></code></p>
+<p>with weights ESS<sub>i</sub>. H₀: α = 0. Requires all 2×2 cells > 0
+(zero cells make log DOR undefined). Not appropriate for therapeutic OR/RR.</p>
+
+<h4>Rücker's test (Rücker et al., 2008)</h4>
+<p>Arcsine-based Egger variant. Applies the variance-stabilising arcsine
+transformation to risk proportions, then runs OLS regression:</p>
+<p style="margin-left:1em">
+  y<sub>i</sub> = arcsin(√p<sub>1i</sub>) − arcsin(√p<sub>2i</sub>),&nbsp;
+  se<sub>i</sub> = √(1/(4n<sub>1i</sub>) + 1/(4n<sub>2i</sub>))<br>
+  <code>y<sub>i</sub>/se<sub>i</sub> = α + β·(1/se<sub>i</sub>) + ε<sub>i</sub></code>
+</p>
+<p>H₀: α = 0. Has better-controlled Type I error than Egger for binary outcomes
+because the arcsine risk difference and its SE depend on different aspects
+of the data than the log-OR. Requires raw 2×2 counts.</p>
+
+<h4>Choosing a test</h4>
+<ul>
+  <li><strong>Therapeutic OR/RR studies:</strong> Harbord or Peters (both outperform Egger)</li>
+  <li><strong>Diagnostic accuracy (DOR) studies:</strong> Deeks</li>
+  <li><strong>General binary outcome, any scale:</strong> Rücker</li>
+  <li><strong>Non-binary effect types:</strong> Egger or FAT-PET</li>
+</ul>
+<p>All tests require k ≥ 3 valid studies with the necessary cell or sample-size
+data. The intercept p-value is the primary result; the slope estimates the
+underlying effect size under the null of no bias.</p>`,
+        citations: [
+          "Harbord, R. M., Egger, M., & Sterne, J. A. C. (2006). A modified test for small-study effects in meta-analyses of controlled trials with binary endpoints. <em>Statistics in Medicine, 25</em>(20), 3443–3457.",
+          "Peters, J. L., Sutton, A. J., Jones, D. R., Abrams, K. R., & Rushton, L. (2006). Comparison of two methods to detect publication bias in meta-analysis. <em>JAMA, 295</em>(6), 676–680.",
+          "Deeks, J. J., Macaskill, P., & Irwig, L. (2005). The performance of tests of publication bias and other sample size effects in systematic reviews of diagnostic test accuracy was assessed. <em>Journal of Clinical Epidemiology, 58</em>(9), 882–893.",
+          "Rücker, G., Schwarzer, G., & Carpenter, J. (2008). Arcsine test for publication bias in meta-analyses with binary outcomes. <em>Statistics in Medicine, 27</em>(19), 4450–4465.",
+        ],
+      },
+
+      {
         id: "guide-begg",
         title: "Begg's test",
         body: `<p>Rank correlation (Kendall's τ) between standardised effect sizes and their
@@ -1868,10 +1930,10 @@ export const HELP_TO_GUIDE = {
   "bias.fsn":         "guide-fsn",
   "bias.fatpet":      "guide-fatpet",
   "bias.petpeese":    "guide-petpeese",
-  "bias.harbord":     "guide-egger",
-  "bias.peters":      "guide-egger",
-  "bias.deeks":       "guide-egger",
-  "bias.ruecker":     "guide-egger",
+  "bias.harbord":     "guide-binary-bias",
+  "bias.peters":      "guide-binary-bias",
+  "bias.deeks":       "guide-binary-bias",
+  "bias.ruecker":     "guide-binary-bias",
   "cumorder.input":           "guide-cumulative",
   "cumorder.precision_desc":  "guide-cumulative",
   "cumorder.precision_asc":   "guide-cumulative",

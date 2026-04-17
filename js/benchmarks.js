@@ -1445,14 +1445,18 @@ export const PUB_BIAS_BENCHMARKS = [
   // BCG Vaccine — publication bias (log OR, 13 studies)
   // Source: Colditz et al. (1994). dat.bcg in metafor.
   // Same 13 2×2 tables as the OR benchmarks above.
-  // Expected values derived analytically in _derive_pubias.py:
+  // Expected values — Begg/Egger/FAT-PET/Fail-safe: derived analytically
+  //   in _derive_pubias.py.
+  // Harbord/Peters: from _derive_pubias.py; R re-verification pending
+  //   (generate.R blocks PB-41/PB-42 — see benchmark-data.md).
+  // Deeks/Rücker: R verification pending (generate.R blocks PB-43/PB-44).
   //   Begg:     τ_b = −0.128, S = −10, z = −0.549, p = 0.583
   //   Egger:    intercept = −2.345 (bias), slope = −0.157, p = 0.160
   //   FAT-PET:  intercept = −0.157 (PET), slope = −2.345 (FAT), interceptP = 0.521, slopeP = 0.160
   //   Rosenthal fail-safe N ≈ 656, Orwin ≈ 44
   //   Harbord:  intercept = −2.093, interceptP = 0.235
   //   Peters:   intercept = −0.357, interceptP = 0.045
-  //   TrimFill (L₀, DL): k0 = 10, adjustedRE = 0.025
+  //   TrimFill (L₀/R₀/Q₀, DL): k0 = 0, adjustedRE = −0.747
   // ----------------------------------------------------------------
   {
     name: "BCG Vaccine – pub bias (log OR, DL, 13 studies)",
