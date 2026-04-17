@@ -40,6 +40,7 @@ A browser-based meta-analysis tool. No installation, no server, no dependencies 
 - **Peters' test** — WLS regression on 1/*N*; works with any effect type where total *N* is available; preferred over Egger for OR/RR (Peters et al. 2006)
 - **Deeks' test** — funnel-asymmetry test for diagnostic accuracy (DOR) studies using effective sample size as the precision surrogate (Deeks et al. 2005)
 - **Rücker's test** — arcsine-transformation Egger variant for binary outcomes with better-controlled Type I error (Rücker et al. 2008)
+- **Test of Excess Significance (TES)** — compares observed significant results (O) against expected given per-study power; χ² = (O−E)²/[E(1−E/k)]; p < .10 flags excess significance (Ioannidis & Trikalinos 2007)
 - **Fail-safe N** — Rosenthal and Orwin estimators
 - **Trim-and-fill** (L0, R0, Q0 estimators) — imputes missing studies and reports the adjusted pooled estimate; estimator selectable in the UI
 - **Funnel plot** — standard or contour-enhanced (p-value regions at α = .10, .05, .01)

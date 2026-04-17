@@ -18,7 +18,7 @@
 //     window.print().
 //
 // args shape (set by _reportArgs in ui.js):
-//   { studies, m, profile, reg, tf, egger, begg, fatpet, fsn,
+//   { studies, m, profile, reg, tf, egger, begg, fatpet, fsn, tes,
 //     influence, subgroup, method, ciMethod, useTF, mAdjusted,
 //     pcurve, puniform,
 //     forestOptions }   ← forestOptions = { ciMethod, profile, pageSize, theme }
@@ -306,6 +306,8 @@ export const CITATIONS = {
 
   TF: `Duval, S., &amp; Tweedie, R. (2000a). Trim and fill: A simple funnel-plot–based method of testing and adjusting for publication bias in meta-analysis. <em>Biometrics</em>, <em>56</em>(2), 455–463. <a href="https://doi.org/10.1111/j.0006-341X.2000.00455.x">https://doi.org/10.1111/j.0006-341X.2000.00455.x</a><br>Duval, S., &amp; Tweedie, R. (2000b). A nonparametric "trim and fill" method of accounting for publication bias in meta-analysis. <em>Journal of the American Statistical Association</em>, <em>95</em>(449), 89–98.`,
 
+  TES: `Ioannidis, J. P. A., &amp; Trikalinos, T. A. (2007). An exploratory test for an excess of significant findings. <em>Clinical Trials</em>, <em>4</em>(3), 245–253. <a href="https://doi.org/10.1177/1740774507079441">https://doi.org/10.1177/1740774507079441</a>`,
+
   PCURVE: `Simonsohn, U., Nelson, L. D., &amp; Simmons, J. P. (2014). P-curve: A key to the file-drawer. <em>Journal of Experimental Psychology: General</em>, <em>143</em>(2), 534–547. <a href="https://doi.org/10.1037/a0033242">https://doi.org/10.1037/a0033242</a>`,
 
   PUNIF: `van Assen, M. A. L. M., van Aert, R. C. M., &amp; Wicherts, J. M. (2015). Meta-analysis using effect size distributions of only statistically significant studies. <em>Psychological Methods</em>, <em>20</em>(3), 293–309. <a href="https://doi.org/10.1037/met0000025">https://doi.org/10.1037/met0000025</a>`,
@@ -379,6 +381,7 @@ export function collectCitations(args) {
   if (ruecker && isFinite(ruecker.interceptP))  add("RUECKER");
   if (fsn    && isFinite(fsn.rosenthal)) add("FSN_R");
   if (fsn    && isFinite(fsn.orwin))     add("FSN_O");
+  if (args.tes && isFinite(args.tes.chi2)) add("TES");
   if (useTF  && tf && tf.length)    add("TF");
   if (pcurve && pcurve.k >= 3)      add("PCURVE");
   if (puniform && puniform.k >= 3)  add("PUNIF");
@@ -516,7 +519,7 @@ function sectionSummary(args) {
 // status. PET estimate is back-transformed through profile.transform().
 // "NA (k < 3)" is shown for any test that requires at least 3 studies.
 function sectionPubBias(args) {
-  const { egger, begg, fatpet, fsn, harbord, peters, deeks, ruecker,
+  const { egger, begg, fatpet, fsn, tes, harbord, peters, deeks, ruecker,
           useTF, tf, profile, apaFormat = false, nextTable } = args;
   const petEff = isFinite(fatpet.intercept)
     ? fmt(profile.transform(fatpet.intercept)) : "—";
@@ -542,6 +545,9 @@ function sectionPubBias(args) {
       `<tr><td>Peters (intercept)</td><td>${naCell(peters.intercept, fmt)}</td><td>${naP(peters.interceptP, fmtP_APA)}</td></tr>`,
       `<tr><td>Deeks (intercept)</td><td>${naCell(deeks.intercept, fmt)}</td><td>${naP(deeks.interceptP, fmtP_APA)}</td></tr>`,
       `<tr><td>Rücker (intercept)</td><td>${naCell(ruecker.intercept, fmt)}</td><td>${naP(ruecker.interceptP, fmtP_APA)}</td></tr>`,
+      tes && isFinite(tes.chi2)
+        ? `<tr><td>TES — χ² (O=${tes.O}, E=${fmt(tes.E)})</td><td>${fmt(tes.chi2)}</td><td>${naP(tes.p, fmtP_APA)}</td></tr>`
+        : `<tr><td>TES (test of excess significance)</td><td>—</td><td>NA</td></tr>`,
     ];
     const table = buildTableAPA(
       nextTable(),
@@ -549,7 +555,7 @@ function sectionPubBias(args) {
       ["Test", "Statistic", "p"],
       rows,
       "FAT = funnel asymmetry test; PET = precision-effect test. " +
-      "Harbord, Peters, Deeks, and Rücker are binary-outcome variants of the Egger test; NA = fewer than 3 eligible studies or missing cell counts."
+      "Harbord, Peters, Deeks, and Rücker are binary-outcome variants of the Egger test; TES = test of excess significance (Ioannidis & Trikalinos, 2007); NA = fewer than 3 eligible studies or missing cell counts."
     );
     return `
 <section>
@@ -570,6 +576,9 @@ function sectionPubBias(args) {
       `<tr><td>Peters (binary/sample-size)</td><td>${naCell(peters.intercept, fmt)}</td><td>${naP(peters.interceptP, fmtP)}</td></tr>`,
       `<tr><td>Deeks (diagnostic DOR)</td><td>${naCell(deeks.intercept, fmt)}</td><td>${naP(deeks.interceptP, fmtP)}</td></tr>`,
       `<tr><td>Rücker (arcsine)</td><td>${naCell(ruecker.intercept, fmt)}</td><td>${naP(ruecker.interceptP, fmtP)}</td></tr>`,
+      tes && isFinite(tes.chi2)
+        ? `<tr><td>TES — χ² (O=${tes.O}, E=${fmt(tes.E)})</td><td>${fmt(tes.chi2)}</td><td>${naP(tes.p, fmtP)}</td></tr>`
+        : `<tr><td>TES (excess significance)</td><td>—</td><td>NA</td></tr>`,
     ]
   );
 

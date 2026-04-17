@@ -1931,6 +1931,55 @@ export function failSafeN(studies, alpha = 0.05, trivial = 0.1) {
   return { rosenthal, orwin, sumZ, z_crit, k };
 }
 
+// ================= TEST OF EXCESS SIGNIFICANCE (TES) =================
+/**
+ * Ioannidis & Trikalinos (2007) test of excess significance.
+ * Tests whether the observed number of statistically significant results
+ * exceeds what is expected given the per-study power under the true effect θ.
+ *
+ * θ defaults to the RE pooled estimate m.RE (passed as the second argument).
+ * Significance threshold is always α = 0.05 two-tailed (z_{0.025} ≈ 1.96).
+ *
+ * @param {{ yi: number, vi: number, label?: string }[]} studies
+ * @param {{ RE: number }}                                m   — fitted meta object
+ * @returns {{ O: number, E: number, Var: number, z: number, chi2: number,
+ *             p: number, k: number, theta: number,
+ *             powers: number[], sig: boolean[] }}
+ */
+export function tesTest(studies, m) {
+  const valid = studies.filter(s => isFinite(s.yi) && isFinite(s.vi) && s.vi > 0);
+  const k = valid.length;
+  const nan = { O: NaN, E: NaN, Var: NaN, z: NaN, chi2: NaN, p: NaN, k, theta: NaN, powers: [], sig: [] };
+  if (k < 2 || !m || !isFinite(m.RE)) return nan;
+
+  const theta = m.RE;
+  const z025  = normalQuantile(0.975);   // ≈ 1.959964
+
+  const powers = valid.map(s => {
+    const se = Math.sqrt(s.vi);
+    const ncp = Math.abs(theta) / se;
+    // Two-tailed power: Φ(ncp − z) + Φ(−z − ncp)
+    return normalCDF(ncp - z025) + normalCDF(-z025 - ncp);
+  });
+
+  const sig = valid.map(s => Math.abs(s.yi / Math.sqrt(s.vi)) > z025);
+
+  const O   = sig.reduce((n, b) => n + (b ? 1 : 0), 0);
+  const E   = powers.reduce((s, p) => s + p, 0);
+  // Binomial-approximation variance: E*(1-E/k)  — matches metafor tes()
+  const Var = E * (1 - E / k);
+
+  if (Var <= 0) return nan;
+
+  const z    = (O - E) / Math.sqrt(Var);
+  const chi2 = z * z;
+  // One-sided p for excess significance: p < 0.5 when O > E.
+  // pval = 1 − Φ(z); when O < E, z < 0 and p > 0.5 (no excess).
+  const p = 1 - normalCDF(z);
+
+  return { O, E, Var, z, chi2, p, k, theta, powers, sig };
+}
+
 // ================= INFLUENCE DIAGNOSTICS =================
 /**
  * Leave-one-out influence diagnostics for a fitted meta-analysis.

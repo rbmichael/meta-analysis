@@ -100,7 +100,7 @@
 //   ui.js calls init() on DOMContentLoaded, which populates dropdowns,
 //   restores any autosave draft, and attaches all event listeners.
 // =============================================================================
-import { eggerTest, beggTest, fatPetTest, petPeeseTest, failSafeN, pCurve, pUniform, baujat, blupMeta, meta, metaMH, metaPeto, robustMeta, influenceDiagnostics, subgroupAnalysis, metaRegression, cumulativeMeta, leaveOneOut, estimatorComparison, veveaHedges, SELECTION_PRESETS, profileLikTau2, bayesMeta, rvePooled, meta3level, harbordTest, petersTest, deeksTest, rueckerTest } from "./analysis.js";
+import { eggerTest, beggTest, fatPetTest, petPeeseTest, failSafeN, tesTest, pCurve, pUniform, baujat, blupMeta, meta, metaMH, metaPeto, robustMeta, influenceDiagnostics, subgroupAnalysis, metaRegression, cumulativeMeta, leaveOneOut, estimatorComparison, veveaHedges, SELECTION_PRESETS, profileLikTau2, bayesMeta, rvePooled, meta3level, harbordTest, petersTest, deeksTest, rueckerTest } from "./analysis.js";
 import { fmt } from "./utils.js";
 import { effectProfiles, getProfile } from "./profiles.js";
 import { trimFill } from "./trimfill.js";
@@ -3384,6 +3384,7 @@ async function runAnalysis() {
   const petpeese = petPeeseTest(studies);
   const fatpet   = petpeese.fat;
   const fsn     = failSafeN(studies);
+  const tes     = tesTest(studies, m);
   const pcurve   = pCurve(studies);
   const puniform = pUniform(studies, m);
   const harbord  = harbordTest(studies);
@@ -3467,6 +3468,7 @@ async function runAnalysis() {
     &nbsp;&nbsp;${hBtn("bias.fatpet")}FAT (bias): β₁=${isFinite(fatpet.slope)?fmt(fatpet.slope):"NA"} | p=${isFinite(fatpet.slopeP)?fmt(fatpet.slopeP):"NA (k<3)"} &nbsp;·&nbsp; PET (effect at SE→0): ${isFinite(fatpet.intercept)?fmt(profile.transform(fatpet.intercept)):"NA"} | p=${isFinite(fatpet.interceptP)?fmt(fatpet.interceptP):"NA (k<3)"}${fatpetRobustNote}<br>
     &nbsp;&nbsp;${hBtn("bias.petpeese")}${petpeese.usePeese?"<b>":""}PET-PEESE (corrected): ${(()=>{const src=petpeese.usePeese?petpeese.peese:petpeese.fat;return isFinite(src.intercept)?`${fmt(profile.transform(src.intercept))} [${petpeese.usePeese?"PEESE":"PET"}, p=${fmt(src.interceptP)}]`:"NA (k<3)";})()}${petpeese.usePeese?"</b>":""}<br>
     &nbsp;&nbsp;${hBtn("bias.fsn")}Fail-safe N (Rosenthal): ${isFinite(fsn.rosenthal)?Math.round(fsn.rosenthal):"NA"} &nbsp;·&nbsp; Orwin (trivial=0.1): ${isFinite(fsn.orwin)?Math.round(fsn.orwin):"NA"}<br>
+    &nbsp;&nbsp;${hBtn("bias.tes")}TES: O=${isFinite(tes.O)?tes.O:"NA"} | E=${isFinite(tes.E)?fmt(tes.E):"NA"} | χ²=${isFinite(tes.chi2)?fmt(tes.chi2):"NA (k<2)"} | p=${isFinite(tes.p)?fmt(tes.p):"NA (k<2)"}${isFinite(tes.p)&&tes.p<0.1?" <span style='color:var(--color-warning)'>⚠ excess</span>":""}<br>
     <b>Trim &amp; Fill:</b>${hBtn("bias.trimfill")} ${useTF?"ON":"OFF"} (${useTF?tfEstimator+" estimator, ":""}${tf.length} filled studies)
     <details style="margin-top:4px">
       <summary style="cursor:pointer;color:var(--fg-muted);font-size:0.9em">Additional regression tests (binary outcomes)</summary>
@@ -3612,7 +3614,7 @@ async function runAnalysis() {
 
   appState.reportArgs = {
     studies: all, m, profile, reg,
-    tf, egger, begg, fatpet, petpeese, fsn, pcurve, puniform, harbord, peters, deeks, ruecker, baujatResult,
+    tf, egger, begg, fatpet, petpeese, fsn, tes, pcurve, puniform, harbord, peters, deeks, ruecker, baujatResult,
     influence, subgroup, method, ciMethod,
     ciLevel: document.getElementById("ciLevel")?.value ?? "95",
     useTF, mAdjusted,

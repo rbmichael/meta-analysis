@@ -397,14 +397,19 @@ function docSummary(args, ctx) {
 }
 
 function docPubBias(args, ctx) {
-  const { egger, begg, fatpet, fsn, useTF, tf, profile } = args;
+  const { egger, begg, fatpet, fsn, tes, useTF, tf, profile } = args;
   const petEff = isFinite(fatpet?.intercept) ? fmt(profile.transform(fatpet.intercept)) : "\u2014";
+
+  const tesRow = tes && isFinite(tes.chi2)
+    ? [`TES \u2014 \u03C7\u00B2 (O=${tes.O}, E=${fmt(tes.E)})`, fmt(tes.chi2), fmtP_APA(tes.p)]
+    : ["TES (excess significance)", "\u2014", "NA"];
 
   const rows = [
     ["Egger\u2019s test (intercept)",          isFinite(egger?.intercept)   ? fmt(egger.intercept)   : "\u2014", isFinite(egger?.p)         ? fmtP_APA(egger.p)         : "NA (k < 3)"],
     ["Begg\u2019s test (rank correlation \u03C4)", isFinite(begg?.tau)      ? fmt(begg.tau)          : "\u2014", isFinite(begg?.p)          ? fmtP_APA(begg.p)          : "NA (k < 3)"],
     ["FAT \u2014 \u03B2\u2081 (bias)",         isFinite(fatpet?.slope)      ? fmt(fatpet.slope)      : "\u2014", isFinite(fatpet?.slopeP)   ? fmtP_APA(fatpet.slopeP)   : "NA (k < 3)"],
     ["PET \u2014 effect at SE \u2192 0",       petEff,                                                            isFinite(fatpet?.interceptP) ? fmtP_APA(fatpet.interceptP) : "NA (k < 3)"],
+    tesRow,
   ];
 
   const fsnLine = [
@@ -418,7 +423,7 @@ function docPubBias(args, ctx) {
     ...apaTableDocx(ctx.nextTable(), "Tests of Publication Bias",
       ["Test", "Statistic", "p"],
       rows.map(r => r.map(run)),
-      "FAT = funnel asymmetry test; PET = precision-effect test. NA = fewer than 3 studies."),
+      "FAT = funnel asymmetry test; PET = precision-effect test; TES = test of excess significance. NA = fewer than 3 studies."),
     paraText(fsnLine),
   ];
 }

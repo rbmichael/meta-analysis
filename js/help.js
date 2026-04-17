@@ -614,6 +614,18 @@ export const HELP = {
            "between-study design differences).",
   },
 
+  "bias.tes": {
+    title: "Test of Excess Significance (TES)",
+    body:  "Ioannidis & Trikalinos (2007). Tests whether the observed number of " +
+           "statistically significant results (O) exceeds the number expected (E) " +
+           "given the per-study power to detect the pooled effect θ = μ̂_RE.\n" +
+           "Per-study power: Φ(|θ|/SEᵢ − 1.96) + Φ(−1.96 − |θ|/SEᵢ). " +
+           "E = Σ powerᵢ. Test statistic: χ² = (O−E)² / [E(1−E/k)]. " +
+           "p < 0.10 indicates excess significance — a sign of selective reporting or " +
+           "inflated individual study estimates. " +
+           "Matched against metafor::tes() to ≤ 0.001.",
+  },
+
   "bias.fsn": {
     title: "Fail-Safe N (Rosenthal)",
     body:  "The number of unpublished null-result studies that would be needed to " +

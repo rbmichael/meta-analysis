@@ -1,7 +1,7 @@
 import { round, transformEffect, chiSquareCDF, chiSquareQuantile, parseCounts, bivariateNormalCDF, normalQuantile, tCritical, fCDF, normalCDF, tCDF } from "./utils.js";
 import { validateStudy } from "./profiles.js";
 import { BENCHMARKS, PUB_BIAS_BENCHMARKS, INFLUENCE_BENCHMARKS, META_REGRESSION_BENCHMARKS, VH_BENCHMARKS, MH_BENCHMARKS, CLUSTER_BENCHMARKS, RVE_BENCHMARKS, THREE_LEVEL_BENCHMARKS } from "./benchmarks.js";
-import { compute, meta, metaMH, metaPeto, robustMeta, sandwichVar, robustWlsResult, metaRegression, tau2_HS, tau2_HE, tau2_ML, tau2_SJ, beggTest, eggerTest, fatPetTest, petPeeseTest, failSafeN, heterogeneityCIs, cumulativeMeta, influenceDiagnostics, harbordTest, petersTest, deeksTest, rueckerTest, leaveOneOut, baujat, blupMeta, pCurve, pUniform, estimatorComparison, subgroupAnalysis, logLik, bfgs, selIntervalProbs, selIntervalIdx, selectionLogLik, SEL_CUTS_ONE_SIDED, SEL_CUTS_TWO_SIDED, veveaHedges, SELECTION_PRESETS, profileLikTau2, profileLikCI, bayesMeta, rvePooled, meta3level } from "./analysis.js";
+import { compute, meta, metaMH, metaPeto, robustMeta, sandwichVar, robustWlsResult, metaRegression, tau2_HS, tau2_HE, tau2_ML, tau2_SJ, beggTest, eggerTest, fatPetTest, petPeeseTest, failSafeN, tesTest, heterogeneityCIs, cumulativeMeta, influenceDiagnostics, harbordTest, petersTest, deeksTest, rueckerTest, leaveOneOut, baujat, blupMeta, pCurve, pUniform, estimatorComparison, subgroupAnalysis, logLik, bfgs, selIntervalProbs, selIntervalIdx, selectionLogLik, SEL_CUTS_ONE_SIDED, SEL_CUTS_TWO_SIDED, veveaHedges, SELECTION_PRESETS, profileLikTau2, profileLikCI, bayesMeta, rvePooled, meta3level } from "./analysis.js";
 import { trimFill } from "./trimfill.js";
 import { parseCSV } from "./csv.js";
 import { goshCompute, GOSH_MAX_ENUM_K, GOSH_MAX_K, GOSH_DEFAULT_MAX_SUBSETS } from "./gosh.js";
@@ -2974,6 +2974,15 @@ export function runTests() {
       if (exp.ruecker.slope      !== undefined) pbchk("ruecker.slope",      rr.slope,      exp.ruecker.slope,      0.001);
       if (exp.ruecker.slopeP     !== undefined) pbchk("ruecker.slopeP",     rr.slopeP,     exp.ruecker.slopeP,     0.001);
       if (exp.ruecker.df         !== undefined) pbchkTrue(`ruecker.df = ${exp.ruecker.df}`, rr.df === exp.ruecker.df);
+    }
+    if (exp.tes) {
+      const tauM = bm.tauMethod || "DL";
+      const m    = meta(studies, tauM);
+      const t    = tesTest(studies, m);
+      if (exp.tes.O    !== undefined) pbchkTrue(`tes.O = ${exp.tes.O}`, t.O === exp.tes.O);
+      if (exp.tes.E    !== undefined) pbchk("tes.E",    t.E,    exp.tes.E,    0.001);
+      if (exp.tes.chi2 !== undefined) pbchk("tes.chi2", t.chi2, exp.tes.chi2, 0.001);
+      if (exp.tes.p    !== undefined) pbchk("tes.p",    t.p,    exp.tes.p,    0.001);
     }
   });
 

@@ -1225,6 +1225,48 @@ estimate.</p>`,
       },
 
       {
+        id: "guide-tes",
+        title: "Test of Excess Significance (TES)",
+        body: `<p>Ioannidis &amp; Trikalinos (2007) test whether the number of statistically
+significant results observed across studies (O) exceeds the number expected (E)
+given the per-study power to detect the pooled effect θ = μ̂<sub>RE</sub>.</p>
+
+<h4>Per-study power</h4>
+<p>For each study with standard error SEᵢ, the two-tailed power to detect |θ|
+at α = 0.05 is:</p>
+<p style="margin-left:1em">
+  <code>powerᵢ = Φ(|θ|/SEᵢ − 1.96) + Φ(−1.96 − |θ|/SEᵢ)</code>
+</p>
+<p>where Φ is the standard normal CDF and 1.96 = Φ⁻¹(0.975).</p>
+
+<h4>Test statistic</h4>
+<p>E = Σ powerᵢ (expected significant results). O is counted from the
+individual study p-values (two-tailed, α = 0.05).</p>
+<p style="margin-left:1em">
+  <code>χ² = (O − E)² / [E(1 − E/k)]</code>
+</p>
+<p>The denominator uses a binomial approximation for the variance of O.
+p = 1 − Φ(z), always one-sided (O &gt; E is the direction of excess
+significance). When O &lt; E, the test is uninformative and p &gt; 0.50.</p>
+
+<h4>Interpretation</h4>
+<ul>
+  <li><strong>p &lt; 0.10:</strong> statistically significant excess — a warning
+  sign of selective reporting, p-hacking, or inflated individual study estimates.</li>
+  <li><strong>O &gt; E:</strong> more significant results than power predicts.</li>
+  <li><strong>High power studies:</strong> if E ≈ k, the test has little
+  discriminating ability.</li>
+</ul>
+<p>TES is a complement to funnel-plot methods: it focuses on the count of
+significant results rather than effect-size asymmetry. It tends to be sensitive
+when individual study samples are small (low power) and false-positivity is
+high. Matched against <code>metafor::tes()</code> to ≤ 0.001.</p>`,
+        citations: [
+          "Ioannidis, J. P. A., & Trikalinos, T. A. (2007). An exploratory test for an excess of significant findings. <em>Clinical Trials, 4</em>(3), 245–253.",
+        ],
+      },
+
+      {
         id: "guide-pcurve",
         title: "P-curve",
         body: `<p>P-curve (Simonsohn, Nelson &amp; Simmons, 2014) examines the distribution
@@ -2048,6 +2090,7 @@ export const HELP_TO_GUIDE = {
   "bias.begg":        "guide-begg",
   "bias.trimfill":    "guide-trimfill",
   "bias.fsn":         "guide-fsn",
+  "bias.tes":         "guide-tes",
   "bias.fatpet":      "guide-fatpet",
   "bias.petpeese":    "guide-petpeese",
   "bias.harbord":     "guide-binary-bias",
