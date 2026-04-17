@@ -2712,16 +2712,19 @@ function renderSelectionModelPanel(r, mode, profile) {
 
 function buildInfluenceHTML(influence) {
   const k    = influence.length;
+  const dffitsThresh = 3 * Math.sqrt(1 / Math.max(k - 1, 1));
   const rows = influence.map(d => {
-    const anyFlag  = d.outlier || d.influential || d.highLeverage || d.highCookD;
+    const anyFlag  = d.outlier || d.influential || d.highLeverage || d.highCookD || d.highDffits;
     const rowStyle = anyFlag ? "class='results-row-flagged'" : "";
-    const hatStyle  = d.highLeverage ? " style='color:orange;font-weight:bold;'" : "";
-    const cookStyle = d.highCookD    ? " style='color:orange;font-weight:bold;'" : "";
+    const hatStyle    = d.highLeverage ? " style='color:orange;font-weight:bold;'" : "";
+    const cookStyle   = d.highCookD    ? " style='color:orange;font-weight:bold;'" : "";
+    const dffitsStyle = d.highDffits   ? " style='color:orange;font-weight:bold;'" : "";
     const flags = [
       d.outlier      ? "Outlier"     : "",
       d.influential  ? "Influential" : "",
       d.highLeverage ? "Hi-Lev"      : "",
       d.highCookD    ? "Hi-Cook"     : "",
+      d.highDffits   ? "Hi-DFFITS"   : "",
     ].filter(Boolean).join(", ");
     return `<tr ${rowStyle}>
       <td>${d.label}</td>
@@ -2729,16 +2732,17 @@ function buildInfluenceHTML(influence) {
       <td>${isFinite(d.deltaTau2)   ? fmt(d.deltaTau2)   : "NA"}</td>
       <td>${isFinite(d.stdResidual) ? fmt(d.stdResidual) : "NA"}</td>
       <td>${isFinite(d.DFBETA)      ? fmt(d.DFBETA)      : "NA"}</td>
+      <td${dffitsStyle}>${isFinite(d.DFFITS)     ? fmt(d.DFFITS)      : "NA"}</td>
       <td${hatStyle}>${isFinite(d.hat)   ? d.hat.toFixed(3)   : "NA"}</td>
       <td${cookStyle}>${isFinite(d.cookD) ? d.cookD.toFixed(3) : "NA"}</td>
       <td>${flags}</td></tr>`;
   }).join("");
   return `<b>Influence diagnostics:</b><br>
     <table border="1">
-      <tr><th>Study</th><th>RE (LOO)</th><th>Δτ²</th><th>Std Residual</th><th>DFBETA</th><th>Hat</th><th>Cook's D</th><th>Flag</th></tr>
+      <tr><th>Study</th><th>RE (LOO)</th><th>Δτ²</th><th>Std Residual</th><th>DFBETA</th><th>DFFITS</th><th>Hat</th><th>Cook's D</th><th>Flag</th></tr>
       ${rows}
     </table>
-    <small style="color:#aaa;">Thresholds: Hat &gt; ${fmt(2/k)} (= 2/k); Cook's D &gt; ${fmt(4/k)} (= 4/k)</small>`;
+    <small style="color:#aaa;">Thresholds: Hat &gt; ${fmt(2/k)} (= 2/k); Cook's D &gt; ${fmt(4/k)} (= 4/k); DFFITS &gt; ${fmt(dffitsThresh)} (= 3·√(1/(k−1)))</small>`;
 }
 
 function buildBayesSummaryHTML(result, profile, reMean) {

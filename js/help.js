@@ -867,11 +867,22 @@ export const HELP = {
            "Subgroup analyses should be pre-registered to control Type I error.",
   },
 
+  "diag.dffits": {
+    title: "DFFITS",
+    body:  "Standardised change in the pooled RE estimate when study i is removed: " +
+           "DFFITS_i = (μ̂_full − μ̂_loo) / √(h_i · (τ²_loo + v_i)). " +
+           "The denominator is the leave-one-out SE of the fitted value, incorporating leverage. " +
+           "Flag threshold: |DFFITS| > 3·√(1/(k−1)). " +
+           "Complements DFBETA (divides by SE_loo) and Cook's D (uses full-model variance). " +
+           "Cross-validated against metafor 4.8-0 to floating-point precision.",
+  },
+
   "diag.influence": {
     title: "Influence diagnostics",
     body:  "Per-study diagnostics computed by leave-one-out re-analysis: " +
            "standardised residual (|r| > 2 flags outliers), " +
            "DFBETA (|DFBETA| > 1 flags disproportionate influence on the pooled estimate), " +
+           "DFFITS (standardised change in fitted value; |DFFITS| > 3·√(1/(k−1)) flags influence), " +
            "hat value (leverage, h > 2/k), " +
            "Cook's distance (D > 4/k), and Δτ² (change in heterogeneity on removal). " +
            "The influence plot shows hat value vs. Cook's distance as a bubble chart. " +

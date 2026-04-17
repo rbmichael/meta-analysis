@@ -1616,11 +1616,13 @@ export const INFLUENCE_BENCHMARKS = [
         cookD:        0.0176,
         stdResidual: -0.2778,
         DFBETA:      -0.1045,
+        DFFITS:      -0.1168,
         deltaTau2:   -0.0913,
         outlier:      false,
         influential:  false,
         highLeverage: false,
-        highCookD:    false
+        highCookD:    false,
+        highDffits:   false
       },
       {
         label:       "Study 2",
@@ -1630,11 +1632,13 @@ export const INFLUENCE_BENCHMARKS = [
         cookD:        0.1199,
         stdResidual:  0.5639,
         DFBETA:       0.2727,
+        DFFITS:       0.3048,
         deltaTau2:   -0.0898,
         outlier:      false,
         influential:  false,
         highLeverage: false,
-        highCookD:    false
+        highCookD:    false,
+        highDffits:   false
       },
       {
         label:       "Study 3",
@@ -1644,11 +1648,13 @@ export const INFLUENCE_BENCHMARKS = [
         cookD:        0.4390,
         stdResidual: -1.2159,
         DFBETA:      -0.6975,
+        DFFITS:      -0.7615,
         deltaTau2:    0.0843,
         outlier:      false,
         influential:  false,
         highLeverage: false,
-        highCookD:    false
+        highCookD:    false,
+        highDffits:   false
       },
       {
         label:       "Study 4",
@@ -1658,11 +1664,13 @@ export const INFLUENCE_BENCHMARKS = [
         cookD:        0.5507,
         stdResidual:  1.3674,
         DFBETA:       0.8799,
+        DFFITS:       1.0122,
         deltaTau2:    0.1427,
         outlier:      false,
         influential:  false,
         highLeverage: false,
-        highCookD:    false
+        highCookD:    false,
+        highDffits:   false
       },
       {
         label:       "Study 5",
@@ -1672,14 +1680,60 @@ export const INFLUENCE_BENCHMARKS = [
         cookD:        0.0770,
         stdResidual: -0.5351,
         DFBETA:      -0.2322,
+        DFFITS:      -0.2592,
         deltaTau2:   -0.0496,
         outlier:      false,
         influential:  false,
         highLeverage: false,
-        highCookD:    false
+        highCookD:    false,
+        highDffits:   false
       }
     ],
     citation: "Synthetic 5-study log-RR dataset (same as benchmarks 35–37). Expected values derived analytically (_derive_influence.py)."
+  },
+
+  // ----------------------------------------------------------------
+  // BCG vaccine dataset (dat.bcg, k=13), DL method — DFFITS benchmark.
+  // yi/vi are pre-computed log-RR escalc values from dat.bcg.
+  // Expected DFFITS cross-validated against metafor 4.8-0
+  // influence.rma.uni(); all 13 studies match to ≤ 3e-17.
+  // Threshold: 3·√(1/(k−1)) = 3·√(1/12) ≈ 0.866; no study flagged.
+  // ----------------------------------------------------------------
+  {
+    name: "BCG – log-RR DFFITS (DL, k=13)",
+    type: "GENERIC",
+    tauMethod: "DL",
+    data: [
+      { label: "Aronson 1948",            yi: -0.8893113339202054, vi: 0.3255847650039613 },
+      { label: "Ferguson & Simes 1949",   yi: -1.5853886572014306, vi: 0.1945811213981438 },
+      { label: "Rosenthal et al 1960",    yi: -1.3480731482996933, vi: 0.4153679653679654 },
+      { label: "Hart & Sutherland 1977",  yi: -1.4415511900213054, vi: 0.0200100319022476 },
+      { label: "Frimodt-Moller et al 1973", yi: -0.2175473222112956, vi: 0.0512101721696309 },
+      { label: "Stein & Aronson 1953",    yi: -0.7861155858188640, vi: 0.0069056184559088 },
+      { label: "Vandiviere et al 1973",   yi: -1.6208982235983918, vi: 0.2230172475723152 },
+      { label: "TPT Madras 1980",         yi:  0.0119523335238405, vi: 0.0039615792978177 },
+      { label: "Coetzee & Berjak 1968",   yi: -0.4694176487381494, vi: 0.0564342104632490 },
+      { label: "Rosenthal et al 1961",    yi: -1.3713448034727844, vi: 0.0730247936130289 },
+      { label: "Comstock et al 1974",     yi: -0.3393588283383906, vi: 0.0124122139715597 },
+      { label: "Comstock & Webster 1969", yi:  0.4459134005713787, vi: 0.5325058452001528 },
+      { label: "Comstock et al 1976",     yi: -0.0173139482168798, vi: 0.0714046596839863 }
+    ],
+    expected: [
+      { label: "Aronson 1948",            DFFITS: -0.0501725, highDffits: false },
+      { label: "Ferguson & Simes 1949",   DFFITS: -0.3363976, highDffits: false },
+      { label: "Rosenthal et al 1960",    DFFITS: -0.1638125, highDffits: false },
+      { label: "Hart & Sutherland 1977",  DFFITS: -0.6291024, highDffits: false },
+      { label: "Frimodt-Moller et al 1973", DFFITS: 0.2727445, highDffits: false },
+      { label: "Stein & Aronson 1953",    DFFITS: -0.0069973, highDffits: false },
+      { label: "Vandiviere et al 1973",   DFFITS: -0.3294041, highDffits: false },
+      { label: "TPT Madras 1980",         DFFITS:  0.5127745, highDffits: false },
+      { label: "Coetzee & Berjak 1968",   DFFITS:  0.1373670, highDffits: false },
+      { label: "Rosenthal et al 1961",    DFFITS: -0.3507962, highDffits: false },
+      { label: "Comstock et al 1974",     DFFITS:  0.2334335, highDffits: false },
+      { label: "Comstock & Webster 1969", DFFITS:  0.2566754, highDffits: false },
+      { label: "Comstock et al 1976",     DFFITS:  0.3583792, highDffits: false }
+    ],
+    citation: "metafor 4.8-0 influence.rma.uni(), dat.bcg, DL method. DFFITS cross-validated to ≤ 3e-17."
   }
 
 ];

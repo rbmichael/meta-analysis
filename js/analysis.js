@@ -1937,9 +1937,10 @@ export function failSafeN(studies, alpha = 0.05, trivial = 0.1) {
  * @param {{ yi: number, vi: number, label?: string }[]} studies
  * @param {string} [method="DL"]       - τ² estimator (passed to meta()).
  * @param {string} [ciMethod="normal"] - CI method (passed to meta()).
- * @returns {{ label: string, RE: number, seRE: number, tau2: number, I2: number,
- *             dfbeta: number, hat: number, cookD: number, r: number,
- *             outlier: boolean, influential: boolean, deltaTau2: number }[]}
+ * @returns {{ label: string, RE_loo: number, tau2_loo: number, stdResidual: number,
+ *             DFBETA: number, DFFITS: number, deltaTau2: number,
+ *             outlier: boolean, influential: boolean, highDffits: boolean,
+ *             hat: number, cookD: number, highLeverage: boolean, highCookD: boolean }[]}
  */
 export function influenceDiagnostics(studies, method="DL", ciMethod="normal", alpha=0.05){
   const n = studies.length;
@@ -2333,9 +2334,21 @@ export function influenceDiagnostics(studies, method="DL", ciMethod="normal", al
     // Measures how far the pooled estimate moves (in SE units) on study removal.
     const cookD = (full.RE - RE_loo) ** 2 * W;
 
-    // Conventional flags (regression-analogy thresholds)
+    // DFFITS: standardised change in fitted value on study removal.
+    // Formula from metafor influence.rma.uni() (s2w = 1 for RE models):
+    //   DFFITS_i = (μ̂ − μ̂_{−i}) / sqrt(h_i · (τ²_{−i} + v_i))
+    // Verified against metafor 4.8-0 to floating-point precision.
+    // Differs from DFBETA (which standardises by seRE_loo = 1/sqrt(W_loo));
+    // DFFITS also accounts for the leverage h_i and the LOO total study variance.
+    const dffitsVar = hat * (tau2_loo + study.vi);
+    const DFFITS = dffitsVar > 0 ? (full.RE - RE_loo) / Math.sqrt(dffitsVar) : NaN;
+
+    // Flagging thresholds (regression-analogy)
     const highLeverage = hat  > 2 / n;   // h_i > 2/k
     const highCookD    = cookD > 4 / n;  // D_i > 4/k
+    // DFFITS threshold: 3·√(1/(k−1)) — metafor convention (p=1, k studies)
+    const dffitsThresh = 3 * Math.sqrt(1 / (n - 1));
+    const highDffits   = isFinite(DFFITS) && Math.abs(DFFITS) > dffitsThresh;
 
     return {
       label: study.label,
@@ -2343,13 +2356,15 @@ export function influenceDiagnostics(studies, method="DL", ciMethod="normal", al
       tau2_loo,
       stdResidual: r,
       DFBETA: dfbeta,
+      DFFITS,
       deltaTau2,
       outlier,
       influential,
       hat,
       cookD,
       highLeverage,
-      highCookD
+      highCookD,
+      highDffits,
     };
   });
 }

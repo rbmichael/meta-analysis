@@ -1413,6 +1413,39 @@ influence.</p>`,
       },
 
       {
+        id: "guide-dffits",
+        title: "DFFITS",
+        body: `<p>DFFITS (difference in fitted values, standardised) measures the
+standardised change in the pooled random-effects estimate when study <em>i</em>
+is removed:</p>
+<pre>DFFITS_i = (μ̂_full − μ̂_loo,i) / √(h_i · (τ²_loo,i + v_i))</pre>
+<p>where h<sub>i</sub> = w<sub>i</sub> / Σw<sub>j</sub> is the hat value
+(leverage), τ²<sub>loo,i</sub> is the between-study variance re-estimated
+without study <em>i</em>, and v<sub>i</sub> is the within-study variance.
+The denominator is the leave-one-out standard error of the fitted value,
+so DFFITS is on the same scale as a standard normal deviate.</p>
+<p><strong>Relationship to other diagnostics:</strong></p>
+<ul>
+  <li><strong>DFBETA</strong> divides by SE<sub>loo</sub> (precision of the LOO
+  estimate) — sensitive to changes in the pooled estimate.</li>
+  <li><strong>DFFITS</strong> divides by the LOO SE of the <em>fitted value</em>,
+  incorporating leverage — more sensitive to high-leverage studies.</li>
+  <li><strong>Cook's D</strong> uses the full-model variance and is not
+  studentised — best for omnibus model-fit comparisons.</li>
+</ul>
+<p><strong>Flag threshold</strong> (metafor convention):
+|DFFITS<sub>i</sub>| &gt; 3 · √(1 / (k − 1))</p>
+<p>This equals the regression threshold 3√(p / (k − p)) with p = 1
+(intercept-only model). For k = 13 this is ≈ 0.87; for k = 5 it is ≈ 1.50.</p>
+<p>Formula cross-validated against <code>metafor::influence.rma.uni()</code>
+version 4.8-0 (BCG dataset, DL method; all 13 studies match to ≤ 3 × 10⁻¹⁷).</p>`,
+        citations: [
+          "Viechtbauer, W., & Cheung, M. W.-L. (2010). Outlier and influence diagnostics for meta-analysis. <em>Research Synthesis Methods, 1</em>(2), 112–125.",
+          "Belsley, D. A., Kuh, E., & Welsch, R. E. (1980). <em>Regression Diagnostics: Identifying Influential Data and Sources of Collinearity</em>. Wiley.",
+        ],
+      },
+
+      {
         id: "guide-blup",
         title: "BLUPs (Empirical Bayes shrunken estimates)",
         body: `<p>In a random-effects model the <em>Best Linear Unbiased Prediction</em>
@@ -1803,6 +1836,7 @@ export const HELP_TO_GUIDE = {
   "diag.gosh":        "guide-gosh",
   "diag.profileLik":  "guide-profile-lik-tau2",
   "diag.influence":   "guide-influence",
+  "diag.dffits":      "guide-dffits",
   "diag.subgroup":       "guide-subgroup",
   "diag.metaregression": "guide-metaregression",
   "input.moderators":    "guide-subgroup",

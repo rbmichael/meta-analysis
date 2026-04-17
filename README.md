@@ -49,7 +49,7 @@ A browser-based meta-analysis tool. No installation, no server, no dependencies 
 ### Sensitivity and influence
 
 - **Leave-one-out analysis** — flags studies whose omission would flip statistical significance
-- **Influence diagnostics table** — Cook's distance, DFBETA, hat values (*h*ᵢ), standardised residuals, Δτ²
+- **Influence diagnostics table** — Cook's distance, DFBETA, DFFITS, hat values (*h*ᵢ), standardised residuals, Δτ²
 - **Influence plot** — per-study leverage and influence visualised
 - **BLUPs** — per-study Empirical Bayes shrunken estimates with CIs; visualises shrinkage toward μ̂ (shown when τ² > 0)
 - **Baujat plot** — heterogeneity contribution vs. overall influence; identifies problematic studies
