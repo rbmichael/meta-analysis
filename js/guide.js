@@ -1900,6 +1900,71 @@ in INFLUENCE_BENCHMARKS).</p>`,
       },
 
       {
+        id: "guide-radial",
+        title: "Radial (Galbraith) plot",
+        body: `<p>The radial plot (also called the Galbraith plot) is a scatter plot designed to
+display study-level precision and standardised effects simultaneously, making
+outliers and heterogeneity visually apparent.</p>
+
+<h4>Axes</h4>
+<p>For each study <em>i</em> with effect estimate yᵢ and standard error seᵢ:</p>
+<pre>  x-axis:  xᵢ = 1/seᵢ   (precision)
+  y-axis:  yᵢ = yᵢ/seᵢ  (standardised effect, or z-score)</pre>
+<p>Larger, more precise studies plot further to the right; all studies should
+cluster near a line through the origin if the fixed-effect model is appropriate.</p>
+
+<h4>Regression line and ±2 band</h4>
+<p>Under the fixed-effect model the expected standardised effect is:</p>
+<pre>  E[yᵢ/seᵢ] = θ_FE · (1/seᵢ)</pre>
+<p>so the <strong>solid regression line</strong> through the origin has slope equal
+to the fixed-effect pooled estimate θ_FE (= Σwᵢyᵢ / Σwᵢ with wᵢ = 1/seᵢ²).</p>
+<p>The <strong>dashed ±2 lines</strong> are:</p>
+<pre>  y = θ_FE · x ± 2</pre>
+<p>A study outside this band has a standardised deviation from the FE line greater
+than 2, which is approximately a 95% reference interval under homogeneity.</p>
+
+<h4>Right-axis effect-size scale</h4>
+<p>The secondary axis on the right converts y back to the original effect-size
+scale. At the right edge of the plot (x = x_max), any y value corresponds to an
+effect θ = y / x_max. The right axis tick labels therefore show the effect size
+that each horizontal position represents for the most precise study in the
+sample.</p>
+
+<h4>Outlier highlighting</h4>
+<p>Studies with |yᵢ/seᵢ − θ_FE · xᵢ| > 2 are highlighted in orange. These
+studies deviate from the FE line by more than 2 standardised units and are
+candidates for sensitivity analysis. The count of outliers appears in the plot
+title.</p>
+
+<h4>Interpretation</h4>
+<ul>
+  <li><strong>Points near the regression line</strong> — consistent with the
+  fixed-effect model; little between-study heterogeneity.</li>
+  <li><strong>Wide vertical scatter</strong> — substantial heterogeneity; the
+  random-effects model is more appropriate.</li>
+  <li><strong>Orange points (outliers)</strong> — studies whose effects are
+  inconsistent with the overall FE estimate; investigate for methodological
+  differences.</li>
+  <li><strong>Funnel shape</strong> — expected: small studies (left) scatter
+  more than large studies (right).</li>
+</ul>
+<p>The radial plot is most useful for identifying specific outlying studies and
+for visualising the relationship between precision and effect size. It
+complements the funnel plot but is less affected by asymmetry due to publication
+bias (because both axes depend on seᵢ in the same direction).</p>
+
+<h4>Note on the regression line</h4>
+<p>The slope is the <em>fixed-effect</em> estimate regardless of which
+heterogeneity estimator is selected for the main analysis. This is intentional:
+the line serves as a reference for homogeneity, not as the primary pooled
+estimate.</p>`,
+        citations: [
+          "Galbraith, R. F. (1988). Graphical display of estimates having differing standard errors. <em>Technometrics, 30</em>(3), 271–281.",
+          "Galbraith, R. F. (1994). Some applications of radial plots. <em>Journal of the American Statistical Association, 89</em>(428), 1232–1242.",
+        ],
+      },
+
+      {
         id: "guide-baujat",
         title: "Baujat plot",
         body: `<p>A scatter plot that simultaneously displays two per-study diagnostics:</p>
@@ -2264,6 +2329,7 @@ export const HELP_TO_GUIDE = {
   "diag.locationscale":  "guide-location-scale",
   "input.scaleModerators": "guide-location-scale",
   "diag.qqplot":         "guide-qqplot",
+  "diag.radial":         "guide-radial",
   "reg.aic":             "guide-aic-bic",
   "input.moderators":    "guide-subgroup",
   "input.rob":           "guide-rob",

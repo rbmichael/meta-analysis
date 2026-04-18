@@ -580,6 +580,15 @@
             </div>
             <svg id="qqPlot" width="420" height="380"></svg>
           </div>
+          <div class="plot-block" id="radialPlotBlock" style="display:none">
+            <p class="plot-label">Radial (Galbraith) plot<button class="help-btn" data-help="diag.radial" title="Help">?</button></p>
+            <div class="plot-export">
+              <button class="export-btn" data-target="radialPlot" data-format="svg">SVG</button>
+              <button class="export-btn" data-target="radialPlot" data-format="png">PNG</button>
+              <button class="export-btn" data-target="radialPlot" data-format="tiff">TIFF</button>
+            </div>
+            <svg id="radialPlot" width="500" height="400"></svg>
+          </div>
           <div class="plot-block" id="labbeBlock" style="display:none">
             <p class="plot-label">L'Abbé plot<button class="help-btn" data-help="diag.labbe" title="Help">?</button></p>
             <div class="plot-export">
@@ -866,6 +875,7 @@
         <li><strong>BLUPs</strong> — Empirical Bayes shrunken study estimates with CIs; shows shrinkage toward μ̂ (available when τ² > 0)</li>
         <li><strong>Baujat plot</strong> — heterogeneity contribution vs. overall influence; identifies studies that simultaneously inflate Q and shift the pooled estimate</li>
         <li><strong>Normal Q-Q plot</strong> — normal probability plot of standardised residuals; assesses the normality assumption of the RE distribution</li>
+        <li><strong>Radial (Galbraith) plot</strong> — precision (1/seᵢ) vs. standardised effect (yᵢ/seᵢ); regression line through the origin has slope equal to the FE pooled estimate; dashed ±2 band flags outliers; right axis shows the effect-size scale</li>
         <li><strong>Estimator comparison</strong> — runs all τ² estimators side-by-side on the current dataset</li>
         <li><strong>Cumulative meta-analysis</strong> — adds studies in user-selected order (input order, precision, or effect size)</li>
       </ul>
@@ -960,6 +970,7 @@
             <tr><td>BLUPs</td><td>Dual caterpillar: observed <em>y</em><sub>i</sub> (gray) vs. shrunken BLUP (accent) per study. Shrinkage lines and hover tooltips. Only shown when τ² > 0.</td></tr>
             <tr><td>Baujat plot</td><td>Heterogeneity contribution vs. overall influence; quadrant guides at the mean.</td></tr>
             <tr><td>Normal Q-Q plot</td><td>Normal probability plot of standardised residuals <em>z</em><sub>i</sub> = (<em>y</em><sub>i</sub> − μ̂) / √(<em>v</em><sub>i</sub> + τ²). Reference line through Q1/Q3. Orange points: |<em>z</em>| > 2.</td></tr>
+            <tr><td>Radial (Galbraith) plot</td><td>Precision (1/seᵢ) vs. standardised effect (yᵢ/seᵢ). Solid line through origin with slope = FE pooled estimate; dashed ±2 band. Orange points: outliers (|yᵢ/seᵢ − θ·xᵢ| > 2). Right axis shows effect-size scale.</td></tr>
             <tr><td>Cumulative forest plot</td><td>Cumulative pooled estimate as studies are added in sequence. Paginated.</td></tr>
             <tr><td>Cumulative funnel plot</td><td>Funnel at each cumulative step; slider-controlled.</td></tr>
             <tr><td>Orchard plot</td><td>Effect estimates as precision-sized dots with RE diamond and prediction interval.</td></tr>
@@ -1008,6 +1019,7 @@
         <li>Borenstein M, Hedges LV, Higgins JPT, Rothstein HR (2009). <em>Introduction to Meta-Analysis.</em> Wiley.</li>
         <li>Burnham KP, Anderson DR (2002). <em>Model Selection and Multimodel Inference</em> (2nd ed.). Springer.</li>
         <li>DerSimonian R, Laird N (1986). Meta-analysis in clinical trials. <em>Controlled Clinical Trials,</em> 7, 177–188.</li>
+        <li>Galbraith RF (1988). Graphical display of estimates having differing standard errors. <em>Technometrics,</em> 30(3), 271–281.</li>
         <li>Gelman A, Carlin JB, Stern HS, Dunson DB, Vehtari A, Rubin DB (2013). <em>Bayesian Data Analysis</em> (3rd ed.). CRC Press.</li>
         <li>Harville DA (1977). Maximum likelihood approaches to variance component estimation and to related problems. <em>J Am Stat Assoc,</em> 72(358), 320–338.</li>
         <li>Hedges LV, Olkin I (1985). <em>Statistical Methods for Meta-Analysis.</em> Academic Press.</li>

@@ -59,6 +59,7 @@ A browser-based meta-analysis tool. No installation, no server, no dependencies 
 - **BLUPs** — per-study Empirical Bayes shrunken estimates with CIs; visualises shrinkage toward μ̂ (shown when τ² > 0)
 - **Baujat plot** — heterogeneity contribution vs. overall influence; identifies problematic studies
 - **Normal Q-Q plot** — normal probability plot of internally standardised residuals; assesses the normality assumption of the RE distribution
+- **Radial (Galbraith) plot** — precision (1/seᵢ) vs. standardised effect (yᵢ/seᵢ); regression line through origin has slope = FE pooled estimate; dashed ±2 band; orange outliers; right axis shows effect-size scale
 - **L'Abbé plot** — treatment vs. control event rate per study (binary outcomes: OR, RR, RD); reveals treatment × baseline-risk interactions
 - **GOSH plot** — fixed-effects pooled estimate and I² for every non-empty subset of studies; exact enumeration for k ≤ 15, random-sampled for k ≤ 30 (default 50 000 subsets)
 - **Estimator comparison** — runs all τ² estimators side-by-side for a given dataset
@@ -110,6 +111,7 @@ All plots export as SVG, PNG, or TIFF. Log-scale effect types label the axis in 
 | BLUPs | Dual caterpillar: observed yi (gray) vs. shrunken BLUP (accent) per study. Shrinkage lines, hover tooltips. Only when τ² > 0. |
 | Baujat plot | Scatter of heterogeneity contribution vs. overall influence; quadrant guides at the mean. |
 | Normal Q-Q plot | Normal probability plot of standardised residuals from the RE model. Reference line through Q1/Q3. Orange = potential outliers (|z| > 2). |
+| Radial (Galbraith) plot | Precision (1/seᵢ) vs. standardised effect (yᵢ/seᵢ). Solid line through origin: slope = FE pooled estimate. Dashed ±2 band. Orange = outliers. Right axis: effect-size scale. |
 | L'Abbé plot | Treatment vs. control event rate per study (binary outcomes). Reference diagonal = no effect; dashed curve = pooled RE estimate. |
 | Cumulative forest plot | Cumulative pooled estimate as studies are added in sequence. Paginated. |
 | Cumulative funnel plot | Funnel view at each cumulative step; slider-controlled. |
@@ -196,6 +198,7 @@ python -m http.server 8080
 
 - Borenstein M, Hedges LV, Higgins JPT, Rothstein HR (2009). *Introduction to Meta-Analysis*. Wiley.
 - DerSimonian R, Laird N (1986). Meta-analysis in clinical trials. *Controlled Clinical Trials*, 7, 177–188.
+- Galbraith RF (1988). Graphical display of estimates having differing standard errors. *Technometrics*, 30(3), 271–281.
 - Gelman A, Carlin JB, Stern HS, Dunson DB, Vehtari A, Rubin DB (2013). *Bayesian Data Analysis* (3rd ed.). CRC Press.
 - Hedges LV, Tipton E, Johnson MC (2010). Robust variance estimation in meta-regression with dependent effect size estimates. *Res Synth Methods*, 1, 39–65.
 - Mantel N, Haenszel W (1959). Statistical aspects of the analysis of data from retrospective studies of disease. *J Natl Cancer Inst*, 22, 719–748.

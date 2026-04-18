@@ -843,6 +843,16 @@ export const HELP = {
            "the means of each axis. Introduced by Baujat et al. (2002).",
   },
 
+  "diag.radial": {
+    title: "Radial (Galbraith) plot",
+    body:  "Plots each study as a point at (1/seᵢ, yᵢ/seᵢ) — precision on x, " +
+           "standardised effect on y. The solid line through the origin has slope equal " +
+           "to the fixed-effect pooled estimate; dashed ±2 lines mark approximate 95% " +
+           "limits under homogeneity. Studies outside the band (highlighted orange) are " +
+           "potential outliers. The right axis shows the corresponding effect-size scale " +
+           "at the rightmost precision. Introduced by Galbraith (1988).",
+  },
+
   "diag.qqplot": {
     title: "Normal Q-Q plot",
     body:  "Normal probability plot of internally standardised residuals " +

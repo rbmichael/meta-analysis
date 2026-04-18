@@ -104,7 +104,7 @@ import { eggerTest, beggTest, fatPetTest, petPeeseTest, failSafeN, tesTest, pCur
 import { fmt } from "./utils.js";
 import { effectProfiles, getProfile } from "./profiles.js";
 import { trimFill } from "./trimfill.js";
-import { drawForest, drawFunnel, drawBubble, drawPartialResidualBubble, drawInfluencePlot, drawCumulativeForest, drawCumulativeFunnel, drawPCurve, drawPUniform, drawOrchardPlot, drawCaterpillarPlot, drawBlupPlot, drawBaujatPlot, drawLabbe, drawRoBTrafficLight, drawRoBSummary, drawGoshPlot, drawProfileLikTau2, drawBayesTauPosterior, drawBayesMuPosterior, drawQQPlot } from "./plots.js";
+import { drawForest, drawFunnel, drawBubble, drawPartialResidualBubble, drawInfluencePlot, drawCumulativeForest, drawCumulativeFunnel, drawPCurve, drawPUniform, drawOrchardPlot, drawCaterpillarPlot, drawBlupPlot, drawBaujatPlot, drawLabbe, drawRoBTrafficLight, drawRoBSummary, drawGoshPlot, drawProfileLikTau2, drawBayesTauPosterior, drawBayesMuPosterior, drawQQPlot, drawRadialPlot } from "./plots.js";
 import { goshCompute, GOSH_MAX_K } from "./gosh.js";
 import { exportSVG, exportPNG, exportTIFF } from "./export.js";
 import { buildReport, downloadHTML, openPrintPreview } from "./report.js";
@@ -3349,6 +3349,7 @@ async function runAnalysis() {
   const elForestPageSize     = document.getElementById("forestPageSize");
   const elBaujatPlotBlock    = document.getElementById("baujatPlotBlock");
   const elQQPlotBlock        = document.getElementById("qqPlotBlock");
+  const elRadialPlotBlock    = document.getElementById("radialPlotBlock");
   const elLabbeBlock         = document.getElementById("labbeBlock");
   const elBlupBlock          = document.getElementById("blupBlock");
   const elBlupNav            = document.getElementById("blupNav");
@@ -3885,9 +3886,10 @@ async function runAnalysis() {
 
   const showQQ = qqResiduals.length >= 3;
 
-  elBaujatPlotBlock.style.display = baujatResult ? "" : "none";
-  elQQPlotBlock.style.display     = showQQ ? "" : "none";
-  elLabbeBlock.style.display      = showLabbe ? "" : "none";
+  elBaujatPlotBlock.style.display  = baujatResult ? "" : "none";
+  elQQPlotBlock.style.display      = showQQ ? "" : "none";
+  elRadialPlotBlock.style.display  = studies.length >= 2 && !isMHorPeto ? "" : "none";
+  elLabbeBlock.style.display       = showLabbe ? "" : "none";
   drawIfVisible("diagnosticSection", () => {
     performance.mark("phase:plot:influence:start");
     drawInfluencePlot(influence);
@@ -3897,6 +3899,7 @@ async function runAnalysis() {
     }
     drawBaujatPlot(baujatResult, profile);
     if (showQQ) drawQQPlot(qqResiduals, qqLabels);
+    if (studies.length >= 2 && !isMHorPeto) drawRadialPlot(studies, m, profile);
     if (showLabbe) drawLabbe(studies, m, profile, type);
     performance.measure("phase:plot:influence", "phase:plot:influence:start");
   });

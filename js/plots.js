@@ -4205,3 +4205,209 @@ export function drawQQPlot(stdResiduals, labels, opts = {}) {
     .style("font-size", "11px").style("font-weight", "600")
     .text(`Normal Q-Q plot \u2014 k\u202F=\u202F${k}`);
 }
+
+// ================= RADIAL (GALBRAITH) PLOT =================
+// Standardised effect (yᵢ/seᵢ) vs precision (1/seᵢ).
+// Regression line through origin has slope = FE pooled estimate.
+// Studies with |yᵢ/seᵢ − θ_FE·(1/seᵢ)| > 2 are highlighted as potential outliers.
+// Right axis: effect-size scale (θ = y/x at the right edge).
+//
+// Parameters:
+//   studies  — array with { yi, vi, label } (already filtered valid)
+//   m        — meta() result; m.FE used as the slope of the reference line
+//   profile  — effect profile (for back-transform labels on the right axis)
+//   opts     — { containerId: "#radialPlot" }
+export function drawRadialPlot(studies, m, profile, opts = {}) {
+  const containerId = opts.containerId || "#radialPlot";
+  const svg = clearAndSelectSVG(containerId);
+
+  const valid = studies.filter(s => isFinite(s.yi) && isFinite(s.vi) && s.vi > 0);
+  const k = valid.length;
+  if (k < 2) return;
+
+  const W = +svg.attr("width")  || 500;
+  const H = +svg.attr("height") || 400;
+  const margin = { top: 30, right: 80, bottom: 54, left: 60 };
+  const iW = W - margin.left - margin.right;
+  const iH = H - margin.top  - margin.bottom;
+
+  // ---- 1. Compute radial coordinates ----
+  const pts = valid.map(s => {
+    const se  = Math.sqrt(s.vi);
+    const xi  = 1 / se;
+    const yi  = s.yi / se;
+    return { xi, yi, label: s.label || "", se, raw: s.yi };
+  });
+
+  const theta = m.FE;    // FE pooled estimate = slope of regression line through origin
+  const isTransformed = profile && profile.isTransformedScale;
+  const fmt4 = v => isFinite(v) ? v.toFixed(4) : "—";
+
+  // Flag outliers: |yi − theta * xi| > 2  ↔  |standardised residual from line| > 2
+  pts.forEach(p => { p.outlier = Math.abs(p.yi - theta * p.xi) > 2; });
+
+  // ---- 2. Scales ----
+  const xMax = d3.max(pts, d => d.xi);
+  const xDom = [0, xMax * 1.08];
+
+  const yVals = pts.map(d => d.yi);
+  const lineYatXmax  = theta * xMax * 1.08;
+  const band2YatXmax = lineYatXmax + 2;
+  const band2YatXmin = theta * 0   + 2;   // at x=0, line=0, band=±2
+  const yAllExtent   = [
+    Math.min(...yVals, lineYatXmax - 2, -2.5),
+    Math.max(...yVals, lineYatXmax + 2,  2.5),
+  ];
+  const yPad  = (yAllExtent[1] - yAllExtent[0]) * 0.10;
+  const yDom  = [yAllExtent[0] - yPad, yAllExtent[1] + yPad];
+
+  const xScale = d3.scaleLinear().domain(xDom).range([0, iW]);
+  const yScale = d3.scaleLinear().domain(yDom).range([iH, 0]);
+
+  const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+
+  // ---- 3. Zero line (y = 0) ----
+  if (yDom[0] < 0 && yDom[1] > 0) {
+    g.append("line")
+      .attr("x1", 0).attr("x2", iW)
+      .attr("y1", yScale(0)).attr("y2", yScale(0))
+      .attr("stroke", "var(--border)").attr("stroke-dasharray", "3,3").attr("stroke-width", 1);
+  }
+
+  // ---- 4. ±2 band lines (dashed) ----
+  // y = theta*x ± 2; these are straight lines through (0, ±2)
+  [+2, -2].forEach(offset => {
+    const x0 = 0, y0 = theta * 0 + offset;
+    const x1 = xDom[1], y1 = theta * xDom[1] + offset;
+    // Clip to yDom
+    const px0 = xScale(x0), py0 = yScale(y0);
+    const px1 = xScale(x1), py1 = yScale(y1);
+    g.append("line")
+      .attr("x1", px0).attr("y1", py0)
+      .attr("x2", px1).attr("y2", py1)
+      .attr("stroke", "var(--border-hover)")
+      .attr("stroke-dasharray", "5,3")
+      .attr("stroke-width", 1.2);
+    // Label: "±2" at right edge (if in view)
+    const labelY = py1;
+    if (labelY >= 0 && labelY <= iH) {
+      g.append("text")
+        .attr("x", px1 + 4).attr("y", labelY + 4)
+        .attr("fill", "var(--fg-muted)").style("font-size", "10px")
+        .text(offset > 0 ? "+2" : "−2");
+    }
+  });
+
+  // ---- 5. FE reference line through origin ----
+  if (isFinite(theta)) {
+    const lx0 = 0,        ly0 = theta * 0;
+    const lx1 = xDom[1],  ly1 = theta * xDom[1];
+    g.append("line")
+      .attr("x1", xScale(lx0)).attr("y1", yScale(ly0))
+      .attr("x2", xScale(lx1)).attr("y2", yScale(ly1))
+      .attr("stroke", "var(--accent)").attr("stroke-width", 1.5);
+  }
+
+  // ---- 6. Points ----
+  attachTooltip(
+    g.selectAll("circle.radial-pt")
+      .data(pts)
+      .enter().append("circle")
+      .attr("class", "radial-pt")
+      .attr("cx", d => xScale(d.xi))
+      .attr("cy", d => yScale(d.yi))
+      .attr("r", 5)
+      .attr("fill", d => d.outlier ? "var(--color-warning)" : "var(--accent)")
+      .attr("fill-opacity", 0.82)
+      .attr("stroke", "var(--bg)")
+      .attr("stroke-width", 0.8),
+    d => {
+      const thetaHat = d.yi / d.xi;   // study-specific estimate = yi
+      const disp = isTransformed
+        ? `${fmt4(profile.transform(d.raw))} (raw: ${fmt4(d.raw)})`
+        : fmt4(d.raw);
+      return `<strong>${d.label || "Study"}</strong><br>` +
+        `y/SE = ${fmt4(d.yi)}<br>` +
+        `1/SE = ${fmt4(d.xi)}<br>` +
+        `Effect (yᵢ) = ${disp}<br>` +
+        (d.outlier ? `<span style="color:var(--color-warning)">⚠ Potential outlier (|residual| > 2)</span>` : "");
+    }
+  );
+
+  // ---- 7. Axes ----
+  const xAxis = d3.axisBottom(xScale).ticks(6);
+  const yAxis = d3.axisLeft(yScale).ticks(7);
+
+  g.append("g").attr("transform", `translate(0,${iH})`).call(xAxis)
+    .selectAll("text").style("font-size", "10px");
+  g.append("g").call(yAxis)
+    .selectAll("text").style("font-size", "10px");
+
+  // X-axis label
+  g.append("text")
+    .attr("x", iW / 2).attr("y", iH + 42)
+    .attr("text-anchor", "middle").attr("fill", "var(--fg)")
+    .style("font-size", "11px")
+    .text("Precision (1/SE)");
+
+  // Y-axis label
+  g.append("text")
+    .attr("transform", "rotate(-90)")
+    .attr("x", -iH / 2).attr("y", -46)
+    .attr("text-anchor", "middle").attr("fill", "var(--fg)")
+    .style("font-size", "11px")
+    .text("Standardised effect (y/SE)");
+
+  // ---- 8. Right axis: effect-size scale ----
+  // At x = x_max (right edge), the effect size for a given y is θ = y / x_max.
+  // Draw a secondary right axis with ticks at nice effect-size values.
+  const xRight = xDom[1];   // x value at the right edge
+  if (isFinite(xRight) && xRight > 0) {
+    // Determine effect-size range visible at the right edge
+    const thetaMin = yDom[0] / xRight;
+    const thetaMax = yDom[1] / xRight;
+
+    // Use D3 to pick nice tick values in [thetaMin, thetaMax]
+    const thetaScale = d3.scaleLinear().domain([thetaMin, thetaMax]);
+    const thetaTicks = thetaScale.ticks(6);
+
+    // Draw right-axis line
+    g.append("line")
+      .attr("x1", iW).attr("x2", iW)
+      .attr("y1", 0).attr("y2", iH)
+      .attr("stroke", "var(--border)").attr("stroke-width", 1);
+
+    thetaTicks.forEach(θ => {
+      const yPx = yScale(θ * xRight);
+      if (yPx < 0 || yPx > iH) return;
+      const dispTheta = isTransformed ? profile.transform(θ) : θ;
+      const label = isFinite(dispTheta) ? (+dispTheta.toFixed(3)).toString() : "";
+      g.append("line")
+        .attr("x1", iW).attr("x2", iW + 4)
+        .attr("y1", yPx).attr("y2", yPx)
+        .attr("stroke", "var(--border)").attr("stroke-width", 1);
+      g.append("text")
+        .attr("x", iW + 7).attr("y", yPx + 4)
+        .attr("fill", "var(--fg-muted)").style("font-size", "9px")
+        .text(label);
+    });
+
+    // Right-axis label
+    const axisLabel = isTransformed ? (profile.label || "Effect") : "Effect size (θ)";
+    g.append("text")
+      .attr("transform", "rotate(90)")
+      .attr("x", iH / 2).attr("y", -(iW + margin.right - 10))
+      .attr("text-anchor", "middle").attr("fill", "var(--fg-muted)")
+      .style("font-size", "10px")
+      .text(axisLabel);
+  }
+
+  // ---- 9. Title ----
+  const nOut = pts.filter(p => p.outlier).length;
+  const outNote = nOut > 0 ? ` \u2014 ${nOut} outlier${nOut > 1 ? "s" : ""}` : "";
+  svg.append("text")
+    .attr("x", margin.left + iW / 2).attr("y", 18)
+    .attr("text-anchor", "middle").attr("fill", "var(--fg)")
+    .style("font-size", "11px").style("font-weight", "600")
+    .text(`Radial (Galbraith) plot \u2014 k\u202F=\u202F${k}${outNote}`);
+}
