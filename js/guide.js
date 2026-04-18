@@ -355,6 +355,48 @@ overdispersion; consider negative-binomial models in that case.</p>`,
       },
 
       {
+        id: "guide-ird",
+        title: "Incidence Rate Difference (IRD / IRSD)",
+        body: `<p>Two-arm measures of the absolute difference in event rates between
+groups, as alternatives to the multiplicative Incidence Rate Ratio (IRR).</p>
+
+<p><strong>IRD — raw rate difference:</strong></p>
+<p><code>yi = x₁/t₁ − x₂/t₂</code></p>
+<p><code>vi = x₁/t₁² + x₂/t₂²</code> &ensp;(delta method under Poisson sampling)</p>
+<p>Results are on the original events-per-person-time scale, making them
+directly interpretable as an absolute risk reduction. No logarithm is taken,
+so no continuity correction is needed (unlike IRR). However, vi depends
+on the cell counts, so studies with very low rates have large variance and
+low weight.</p>
+
+<p><strong>IRSD — square-root variance-stabilised difference:</strong></p>
+<p><code>yi = √(x₁/t₁) − √(x₂/t₂)</code></p>
+<p><code>vi = 1/(4t₁) + 1/(4t₂)</code> &ensp;(delta method; independent of event counts)</p>
+<p>The square-root transformation stabilises the variance under Poisson sampling
+(analogous to the arcsine transform for proportions). Because vi depends only
+on person-time and not on event counts, studies with zero events remain
+informative. The back-transform to the original rate-difference scale is
+<code>(yi + √(x₂/t₂))² − x₂/t₂</code>, which is non-trivial; results are
+typically reported on the sqrt-rate scale.</p>
+
+<p><strong>When to use IRD:</strong> When absolute effects are the primary
+interest (e.g. number needed to treat). Events must be rare enough that
+vi is well-estimated from the data.</p>
+
+<p><strong>When to use IRSD:</strong> When some studies have very low event
+counts or zero events in one arm, as vi does not inflate to infinity.
+Also preferable when the analyst wishes to weight by precision on a
+variance-stabilised scale.</p>
+
+<p><strong>Inputs:</strong> x₁, t₁ (events and person-time, arm 1);
+x₂, t₂ (events and person-time, arm 2). Both t values must be strictly
+positive; event counts must be ≥ 0.</p>`,
+        citations: [
+          "Viechtbauer, W. (2010). Conducting meta-analyses in R with the metafor package. <em>Journal of Statistical Software, 36</em>(3), 1–48.",
+        ],
+      },
+
+      {
         id: "guide-ir",
         title: "Incidence Rate — log (IR)",
         body: `<p>Single-group incidence rate modelled on the log scale.
@@ -2430,6 +2472,8 @@ export const HELP_TO_GUIDE = {
   "effect.AS":        "guide-as",
   "effect.HR":        "guide-hr",
   "effect.IRR":       "guide-irr",
+  "effect.IRD":       "guide-ird",
+  "effect.IRSD":      "guide-ird",
   "effect.IR":        "guide-ir",
   "effect.MN":        "guide-mn",
   "effect.MNLN":      "guide-mnln",

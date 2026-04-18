@@ -220,6 +220,23 @@ export const HELP = {
            "Analysed on the log scale. Assumes events follow a Poisson process.",
   },
 
+  "effect.IRD": {
+    title: "Incidence Rate Difference (IRD)",
+    body:  "Absolute difference of two Poisson incidence rates: yi = x₁/t₁ − x₂/t₂; " +
+           "vi = x₁/t₁² + x₂/t₂² (delta method). " +
+           "Directly interpretable as an absolute risk reduction. " +
+           "Results are on the events-per-person-time scale. " +
+           "No log or continuity correction applied.",
+  },
+
+  "effect.IRSD": {
+    title: "Incidence Rate Difference — sqrt (IRSD)",
+    body:  "Variance-stabilising square-root transform of the rate difference: " +
+           "yi = √(x₁/t₁) − √(x₂/t₂); vi = 1/(4t₁) + 1/(4t₂). " +
+           "Variance is independent of event counts, so zero-event arms remain informative. " +
+           "Preferable over IRD when some studies have very low or zero event counts.",
+  },
+
   "effect.IR": {
     title: "Incidence Rate — log (IR)",
     body:  "Single-group incidence rate modelled on the log scale. " +

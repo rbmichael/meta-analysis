@@ -510,6 +510,28 @@ export function compute(s, type, options = {}) {
     return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
   }
 
+  // ================= INCIDENCE RATE DIFFERENCE =================
+  // Input: { x1, t1, x2, t2 }.
+  // yi = x1/t1 − x2/t2  (raw rate difference)
+  // vi = x1/t1² + x2/t2²  (delta method, Poisson sampling)
+  if (type === "IRD") {
+    const { x1, t1, x2, t2 } = s;
+    const yi = x1 / t1 - x2 / t2;
+    const vi = Math.max(x1 / (t1 * t1) + x2 / (t2 * t2), MIN_VAR);
+    return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
+  }
+
+  // ================= INCIDENCE RATE DIFFERENCE (sqrt) =================
+  // Input: { x1, t1, x2, t2 }.
+  // yi = sqrt(x1/t1) − sqrt(x2/t2)  (variance-stabilising transform)
+  // vi = 1/(4*t1) + 1/(4*t2)  (delta method; independent of xi)
+  if (type === "IRSD") {
+    const { x1, t1, x2, t2 } = s;
+    const yi = Math.sqrt(x1 / t1) - Math.sqrt(x2 / t2);
+    const vi = Math.max(1 / (4 * t1) + 1 / (4 * t2), MIN_VAR);
+    return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
+  }
+
   // ================= INCIDENCE RATE (single arm) =================
   // Input: { x, t } — events and person-time.
   // Continuity correction: if x = 0, use x = 0.5.

@@ -778,6 +778,112 @@ export const BENCHMARKS = [
   },
 
   // ----------------------------------------------------------------
+  // IRD — Heterogeneous 6-study dataset, DL (cross-validated vs metafor)
+  // escalc("IRD", x1i=..., x2i=..., t1i=..., t2i=...)
+  // x1=[5,40,2,60,8,100], t1=[200,1000,100,2000,300,5000]
+  // x2=[20,30,15,40,3,50], t2=[200,1000,100,2000,300,5000]
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic – IRD (incidence rate difference, DL)",
+    type: "IRD",
+    tauMethod: "DL",
+    data: [
+      { label: "Study 1", x1:  5, t1:  200, x2: 20, t2:  200 },
+      { label: "Study 2", x1: 40, t1: 1000, x2: 30, t2: 1000 },
+      { label: "Study 3", x1:  2, t1:  100, x2: 15, t2:  100 },
+      { label: "Study 4", x1: 60, t1: 2000, x2: 40, t2: 2000 },
+      { label: "Study 5", x1:  8, t1:  300, x2:  3, t2:  300 },
+      { label: "Study 6", x1: 100, t1: 5000, x2: 50, t2: 5000 },
+    ],
+    expected: {
+      // yi = x1/t1 − x2/t2; vi = x1/t1² + x2/t2² — verified in R
+      yi:   [-0.075, 0.01, -0.13, 0.01, 0.0166667, 0.01],
+      FE:    0.00929187,
+      RE:    0.00189442,
+      tau2:  0.0001777897,
+      I2:   78.5748,
+    },
+    citation: "Synthetic dataset; cross-validated with metafor escalc('IRD') + rma(method='DL').",
+  },
+
+  // ----------------------------------------------------------------
+  // IRD — REML (same data as IRD-1)
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic – IRD (incidence rate difference, REML)",
+    type: "IRD",
+    tauMethod: "REML",
+    data: [
+      { label: "Study 1", x1:  5, t1:  200, x2: 20, t2:  200 },
+      { label: "Study 2", x1: 40, t1: 1000, x2: 30, t2: 1000 },
+      { label: "Study 3", x1:  2, t1:  100, x2: 15, t2:  100 },
+      { label: "Study 4", x1: 60, t1: 2000, x2: 40, t2: 2000 },
+      { label: "Study 5", x1:  8, t1:  300, x2:  3, t2:  300 },
+      { label: "Study 6", x1: 100, t1: 5000, x2: 50, t2: 5000 },
+    ],
+    expected: {
+      // I2 is Q-based (JS convention); metafor REML uses τ²-based I2 = 97.70
+      FE:    0.00929187,
+      RE:   -0.01601237,
+      tau2:  0.002056329,
+      I2:   78.5748,  // Q-based
+    },
+    citation: "Synthetic dataset; cross-validated with metafor escalc('IRD') + rma(method='REML').",
+  },
+
+  // ----------------------------------------------------------------
+  // IRSD — Heterogeneous 6-study dataset, DL (cross-validated vs metafor)
+  // escalc("IRSD", ...) — sqrt variance-stabilising transform
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic – IRSD (sqrt incidence rate difference, DL)",
+    type: "IRSD",
+    tauMethod: "DL",
+    data: [
+      { label: "Study 1", x1:  5, t1:  200, x2: 20, t2:  200 },
+      { label: "Study 2", x1: 40, t1: 1000, x2: 30, t2: 1000 },
+      { label: "Study 3", x1:  2, t1:  100, x2: 15, t2:  100 },
+      { label: "Study 4", x1: 60, t1: 2000, x2: 40, t2: 2000 },
+      { label: "Study 5", x1:  8, t1:  300, x2:  3, t2:  300 },
+      { label: "Study 6", x1: 100, t1: 5000, x2: 50, t2: 5000 },
+    ],
+    expected: {
+      // yi = sqrt(x1/t1) − sqrt(x2/t2); vi = 1/(4t1) + 1/(4t2) — verified in R
+      yi:   [-0.1581139, 0.0267949, -0.2458770, 0.0317837, 0.0632993, 0.0414214],
+      FE:    0.03026145,
+      RE:   -0.00826508,
+      tau2:  0.002588462,
+      I2:   84.0654,
+    },
+    citation: "Synthetic dataset; cross-validated with metafor escalc('IRSD') + rma(method='DL').",
+  },
+
+  // ----------------------------------------------------------------
+  // IRSD — REML (same data as IRSD-1)
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic – IRSD (sqrt incidence rate difference, REML)",
+    type: "IRSD",
+    tauMethod: "REML",
+    data: [
+      { label: "Study 1", x1:  5, t1:  200, x2: 20, t2:  200 },
+      { label: "Study 2", x1: 40, t1: 1000, x2: 30, t2: 1000 },
+      { label: "Study 3", x1:  2, t1:  100, x2: 15, t2:  100 },
+      { label: "Study 4", x1: 60, t1: 2000, x2: 40, t2: 2000 },
+      { label: "Study 5", x1:  8, t1:  300, x2:  3, t2:  300 },
+      { label: "Study 6", x1: 100, t1: 5000, x2: 50, t2: 5000 },
+    ],
+    expected: {
+      // I2 is Q-based (JS convention); metafor REML uses τ²-based I2 = 96.01
+      FE:    0.03026145,
+      RE:   -0.02807825,
+      tau2:  0.01179224,
+      I2:   84.0654,  // Q-based
+    },
+    citation: "Synthetic dataset; cross-validated with metafor escalc('IRSD') + rma(method='REML').",
+  },
+
+  // ----------------------------------------------------------------
   // IR — Synthetic incidence rate dataset (hand-computed, DL)
   // yi = log(x/t),  vi = 1/x
   // 4 studies: x=[10,25,5,20], t=[200,300,400,250].

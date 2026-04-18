@@ -1282,6 +1282,89 @@ export const effectProfiles = {
   },
 
   // ------------------------------------------------------------------ //
+  // Threshold rationale for IRD (incidence rate difference):
+  //   vi = x1/t1² + x2/t2²  (delta method; Poisson sampling).
+  //   When both counts are 0, vi = 0 → excluded via MIN_VAR floor.
+  //   No ratio is taken, so no log-continuity correction is applied.
+  "IRD": {
+    label:  "Incidence Rate Difference",
+    group:  "Time-to-event / Rates",
+    inputs: ["x1", "t1", "x2", "t2"],
+    compute(s) {
+      if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+      const { x1, t1, x2, t2 } = s;
+      const yi = x1 / t1 - x2 / t2;
+      const vi = Math.max(x1 / (t1 * t1) + x2 / (t2 * t2), MIN_VAR);
+      return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
+    },
+    transform: (x) => x,
+
+    validate(s) {
+      const errors = {};
+      if (!isFinite(s.x1) || s.x1 < 0) errors.x1 = "x1 must be ≥ 0";
+      if (!isFinite(s.x2) || s.x2 < 0) errors.x2 = "x2 must be ≥ 0";
+      if (!isFinite(s.t1) || s.t1 <= 0) errors.t1 = "t1 must be > 0";
+      if (!isFinite(s.t2) || s.t2 <= 0) errors.t2 = "t2 must be > 0";
+      return { valid: Object.keys(errors).length === 0, errors };
+    },
+
+    softWarnings(s, label) {
+      const w = [];
+      if (isFinite(s.x1) && isFinite(s.x2) && s.x1 === 0 && s.x2 === 0)
+        w.push(`⚠️ ${label}: both event counts are zero — study contributes no information`);
+      return w;
+    },
+
+    exampleData: [
+      ["Study 1",  5, 200,  20, 200, ""],
+      ["Study 2", 40, 1000, 30, 1000, ""],
+      ["Study 3",  2, 100,  15, 100, ""],
+      ["Study 4", 60, 2000, 40, 2000, ""],
+      ["Study 5",  8, 300,   3, 300, ""],
+      ["Study 6", 100, 5000, 50, 5000, ""],
+    ],
+  },
+
+  // ------------------------------------------------------------------ //
+  // Threshold rationale for IRSD (square-root incidence rate difference):
+  //   Variance-stabilising transform for Poisson rates.
+  //   vi = 1/(4*t1) + 1/(4*t2) — independent of event counts (no zero
+  //   issue); studies with zero events remain informative.
+  "IRSD": {
+    label:  "Incidence Rate Difference (sqrt)",
+    group:  "Time-to-event / Rates",
+    inputs: ["x1", "t1", "x2", "t2"],
+    compute(s) {
+      if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+      const { x1, t1, x2, t2 } = s;
+      const yi = Math.sqrt(x1 / t1) - Math.sqrt(x2 / t2);
+      const vi = Math.max(1 / (4 * t1) + 1 / (4 * t2), MIN_VAR);
+      return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
+    },
+    transform: (x) => x,
+
+    validate(s) {
+      const errors = {};
+      if (!isFinite(s.x1) || s.x1 < 0) errors.x1 = "x1 must be ≥ 0";
+      if (!isFinite(s.x2) || s.x2 < 0) errors.x2 = "x2 must be ≥ 0";
+      if (!isFinite(s.t1) || s.t1 <= 0) errors.t1 = "t1 must be > 0";
+      if (!isFinite(s.t2) || s.t2 <= 0) errors.t2 = "t2 must be > 0";
+      return { valid: Object.keys(errors).length === 0, errors };
+    },
+
+    softWarnings(_s, _label) { return []; },
+
+    exampleData: [
+      ["Study 1",  5, 200,  20, 200, ""],
+      ["Study 2", 40, 1000, 30, 1000, ""],
+      ["Study 3",  2, 100,  15, 100, ""],
+      ["Study 4", 60, 2000, 40, 2000, ""],
+      ["Study 5",  8, 300,   3, 300, ""],
+      ["Study 6", 100, 5000, 50, 5000, ""],
+    ],
+  },
+
+  // ------------------------------------------------------------------ //
   // Threshold rationale for IR (single-arm incidence rate, log scale):
   //   zero events — vi = 1/x; at x = 0 this is infinite. x is replaced by 0.5
   //                 (consistent with Poisson continuity correction convention).

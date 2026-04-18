@@ -19,7 +19,7 @@ A browser-based meta-analysis tool. No installation, no server, no dependencies 
 | Binary outcomes | Odds Ratio (OR), Risk Ratio (RR), Risk Difference (RD), Arcsine-transformed Risk Difference (AS), Generalised Odds Ratio — ordinal (GOR) |
 | Correlations | Pearson *r* (COR), Bias-corrected *r* (UCOR), Fisher's *z* (ZCOR), Partial *r* (PCOR), Partial Fisher's *z* (ZPCOR), Phi (PHI), Tetrachoric (RTET) |
 | Proportions | Raw (PR), Log (PLN), Logit (PLO), Arcsine (PAS), Freeman-Tukey double arcsine (PFT) |
-| Time-to-event / Rates | Hazard Ratio (HR), Incidence Rate Ratio (IRR), Incidence Rate log (IR) |
+| Time-to-event / Rates | Hazard Ratio (HR), Incidence Rate Ratio (IRR), Incidence Rate Difference (IRD), Incidence Rate Difference sqrt (IRSD), Incidence Rate log (IR) |
 | Generic | Pre-computed *yᵢ* / *vᵢ* (GENERIC) |
 
 ### Heterogeneity
