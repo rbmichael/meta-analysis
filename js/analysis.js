@@ -104,7 +104,7 @@
 // Dependencies: utils.js, constants.js, profiles.js
 // =============================================================================
 
-import { tCritical, normalCDF, normalQuantile, tCDF, chiSquareCDF, chiSquareQuantile, fCDF, hedgesG, parseCounts, gorFromCounts, tetrachoricFromCounts } from "./utils.js";
+import { tCritical, normalCDF, normalQuantile, tCDF, chiSquareCDF, chiSquareQuantile, fCDF, hedgesG, parseCounts, gorFromCounts, tetrachoricFromCounts, hyperg2F1_ucor } from "./utils.js";
 import { MIN_VAR, REML_TOL, BISECTION_ITERS, Z_95 } from "./constants.js";
 import { validateStudy } from "./profiles.js";
 
@@ -377,7 +377,7 @@ export function compute(s, type, options = {}) {
   }
 
   // ================= CORRELATION =================
-  if (type === "COR" || type === "ZCOR") {
+  if (type === "COR" || type === "ZCOR" || type === "UCOR") {
     const { n } = s;
     const r = Math.max(-0.9999, Math.min(0.9999, s.r));  // clamp away from ±1 singularity
 
@@ -385,6 +385,14 @@ export function compute(s, type, options = {}) {
       // Raw correlation: yi = r, vi = (1−r²)²/(n−1)
       const vi = Math.max((1 - r * r) ** 2 / (n - 1), MIN_VAR);
       return { ...s, yi: r, vi, se: Math.sqrt(vi), w: 1 / vi };
+    }
+
+    if (type === "UCOR") {
+      // Bias-corrected correlation (Olkin & Pratt 1958)
+      // yi = r · ₂F₁(1/2,1/2;(n−2)/2;1−r²),  vi = (1−yi²)²/(n−1)
+      const yi = r * hyperg2F1_ucor((n - 2) / 2, 1 - r * r);
+      const vi = Math.max((1 - yi * yi) ** 2 / (n - 1), MIN_VAR);
+      return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
     }
 
     // ZCOR: Fisher's z-transform, vi = 1/(n−3)

@@ -492,6 +492,31 @@ export function tetrachoricFromCounts(a, b, c, d) {
   return { rho, var: Math.max(v, MIN_VAR) };
 }
 
+// ================= GAUSS HYPERGEOMETRIC (specialised for UCOR) =================
+/**
+ * Gauss hypergeometric function ₂F₁(1/2, 1/2; c; z) via convergent series.
+ *
+ * Used for the Olkin-Pratt bias-corrected correlation (UCOR):
+ *   c = (n − 2) / 2,  z = 1 − r²
+ *   r_uc = r · ₂F₁(1/2, 1/2; c; z)
+ *
+ * The series is:  Σ_{k≥0} [(1/2)_k]² / [(c)_k · k!] · z^k
+ * with recurrence  term_k = term_{k-1} · (k − ½)² / [(c + k − 1) · k] · z
+ *
+ * Converges absolutely for |z| < 1 (all valid correlations |r| > 0).
+ * Returns 1 when z = 0 (r = ±1).
+ */
+export function hyperg2F1_ucor(c, z) {
+  if (z === 0) return 1;
+  let sum = 1, term = 1;
+  for (let k = 1; k <= 500; k++) {
+    term *= (k - 0.5) * (k - 0.5) / ((c + k - 1) * k) * z;
+    sum += term;
+    if (Math.abs(term) < 1e-15 * Math.abs(sum)) break;
+  }
+  return sum;
+}
+
 // ================= EFFECT TRANSFORMS (PROFILE-AWARE) =================
 const _clamp01 = v => Math.min(1, Math.max(0, v));
 const _TRANSFORMS = {
@@ -501,7 +526,8 @@ const _TRANSFORMS = {
   // Identity — already on display scale
   RD: x => x, MD: x => x, SMD: x => x, SMDH: x => x,
   MD_paired: x => x, SMD_paired: x => x, SMCC: x => x, MN: x => x,
-  COR: x => x, PCOR: x => x, PHI: x => x, RTET: x => x,
+  COR: x => x, UCOR: x => x, PCOR: x => x, PHI: x => x, RTET: x => x,
+  AS: x => x,
   // Fisher's z → r
   ZCOR: Math.tanh, ZPCOR: Math.tanh,
   // Proportions → p ∈ [0, 1]

@@ -404,6 +404,50 @@ exceeds 0.5, the delta-method approximation is less accurate.</p>`,
       },
 
       {
+        id: "guide-ucor",
+        title: "Bias-corrected correlation (UCOR)",
+        body: `<p>The Pearson correlation r is a biased estimator of the true population
+correlation ρ, with expected value E[r] &lt; ρ for small samples. UCOR applies
+the exact Olkin-Pratt (1958) correction to remove this bias.</p>
+
+<h4>Formula</h4>
+<pre>  yi = r · ₂F₁(1/2, 1/2; (n−2)/2; 1−r²)
+  vi = (1 − yi²)² / (n − 1)</pre>
+<p>where ₂F₁ is the Gauss hypergeometric function. The variance is computed
+from the bias-corrected r (yi), not the raw r. Requires n ≥ 4.</p>
+
+<h4>How large is the bias?</h4>
+<p>The first-order approximation of the correction is
+<code>r_uc ≈ r · [1 + (1−r²) / (2(n−3))]</code>.
+For large n (≥ 50) and moderate |r| (0.2–0.7) the correction is typically
+&lt; 0.01; it becomes more important for small n or extreme ρ.</p>
+
+<h4>When to use</h4>
+<ul>
+  <li>Small-sample studies (n &lt; 30) where bias in r is non-trivial.</li>
+  <li>Sensitivity analysis alongside COR or ZCOR.</li>
+</ul>
+
+<h4>When to avoid</h4>
+<ul>
+  <li>When Fisher's z (ZCOR) is adequate — ZCOR is the standard for pooling
+  correlations and implicitly reduces bias through the z-scale variance
+  stabilisation. UCOR is appropriate when you specifically want results on
+  the r scale with bias correction.</li>
+  <li>Very large studies (n ≥ 200) where the correction is negligible.</li>
+</ul>
+
+<h4>Verification</h4>
+<p>Per-study yi and vi match metafor <code>escalc("UCOR")</code> to 6 decimal
+places (requires the gsl package in R). The exact hypergeometric series
+converges to machine precision for all valid |r| &gt; 0.</p>`,
+        citations: [
+          "Olkin, I., & Pratt, J. W. (1958). Unbiased estimation of certain correlation coefficients. <em>Annals of Mathematical Statistics, 29</em>(1), 201–211.",
+          "Viechtbauer, W. (2010). Conducting meta-analyses in R with the metafor package. <em>Journal of Statistical Software, 36</em>(3), 1–48.",
+        ],
+      },
+
+      {
         id: "guide-zcor",
         title: "Correlation — Fisher's z (ZCOR)",
         body: `<p>Pearson r after Fisher's r-to-z transformation. The variance
@@ -2321,6 +2365,7 @@ export const HELP_TO_GUIDE = {
   "effect.MN":        "guide-mn",
   "effect.MNLN":      "guide-mnln",
   "effect.COR":       "guide-zcor",
+  "effect.UCOR":      "guide-ucor",
   "effect.ZCOR":      "guide-zcor",
   "effect.PCOR":      "guide-zcor",
   "effect.ZPCOR":     "guide-zcor",

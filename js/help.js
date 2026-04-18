@@ -267,6 +267,15 @@ export const HELP = {
            "suboptimal. Prefer Fisher's z (ZCOR) unless r values are all small.",
   },
 
+  "effect.UCOR": {
+    title: "Bias-corrected correlation (UCOR)",
+    body:  "Applies the exact Olkin-Pratt (1958) bias correction to Pearson r. " +
+           "yi = r · ₂F₁(1/2,1/2;(n−2)/2;1−r²) via the Gauss hypergeometric function; " +
+           "vi = (1−yi²)²/(n−1). " +
+           "The correction is most important for small n (< 30) and large |ρ|. " +
+           "Matches metafor escalc('UCOR') to 6 decimal places. Requires n ≥ 4.",
+  },
+
   "effect.ZCOR": {
     title: "Correlation — Fisher's z (ZCOR)",
     body:  "Pearson r after Fisher's r-to-z transformation: z = 0.5 ln[(1+r)/(1−r)]. " +

@@ -40,7 +40,7 @@
 // Dependencies: utils.js, constants.js
 // =============================================================================
 
-import { hedgesG, parseCounts, gorFromCounts, tetrachoricFromCounts } from "./utils.js";
+import { hedgesG, parseCounts, gorFromCounts, tetrachoricFromCounts, hyperg2F1_ucor } from "./utils.js";
 import { MIN_VAR, Z_95 } from "./constants.js";
 
 // ---------------------------------------------------------------------------
@@ -709,6 +709,54 @@ export const effectProfiles = {
       const errors = {};
       if (!isFinite(s.r) || Math.abs(s.r) >= 1) errors.r = "r must be strictly between -1 and 1";
       if (!isFinite(s.n) || s.n < 3)            errors.n = "n must be ≥ 3";
+      return { valid: Object.keys(errors).length === 0, errors };
+    },
+
+    softWarnings(s, label) {
+      const w = [];
+      if (isFinite(s.n) && s.n < 10)
+        w.push(`⚠️ ${label}: small sample size (n < 10) — correlation estimate unreliable`);
+      if (isFinite(s.r) && Math.abs(s.r) > 0.9)
+        w.push(`⚠️ ${label}: |r| > 0.90 — variance estimate near boundary, interpret cautiously`);
+      return w;
+    },
+
+    exampleData: [
+      ["Study 1", 0.45,  62, ""],
+      ["Study 2", 0.56,  90, ""],
+      ["Study 3", 0.38,  45, ""],
+      ["Study 4", 0.61, 120, ""],
+      ["Study 5", 0.42,  75, ""],
+    ],
+  },
+
+  // ------------------------------------------------------------------ //
+  // UCOR — Bias-corrected correlation (Olkin & Pratt 1958)
+  //   yi = r · ₂F₁(1/2, 1/2; (n−2)/2; 1−r²)
+  //   vi = (1 − yi²)² / (n − 1)
+  //
+  // Corrects the downward bias of Pearson r as an estimator of ρ. The exact
+  // bias correction uses the Gauss hypergeometric function ₂F₁ with
+  // a = b = 1/2 and c = (n−2)/2 (matching metafor escalc("UCOR")).
+  // The variance uses the bias-corrected r (yi), not the raw r.
+  // Requires n ≥ 4 so that (n−2)/2 ≥ 1 (avoids c = 0 in ₂F₁).
+  "UCOR": {
+    label:  "Bias-corrected correlation",
+    group:  "Correlations",
+    inputs: ["r", "n"],
+    compute(s) {
+      if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+      const { r, n } = s;
+      const yi = r * hyperg2F1_ucor((n - 2) / 2, 1 - r * r);
+      const vi = Math.max((1 - yi * yi) ** 2 / (n - 1), MIN_VAR);
+      return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
+    },
+    transform: (x) => x,
+
+    validate(s) {
+      const errors = {};
+      if (!isFinite(s.r) || Math.abs(s.r) >= 1) errors.r = "r must be strictly between -1 and 1";
+      if (!isFinite(s.n) || s.n < 4)            errors.n = "n must be ≥ 4";
       return { valid: Object.keys(errors).length === 0, errors };
     },
 

@@ -1502,6 +1502,58 @@ export const BENCHMARKS = [
       I2:   95.57   // Q-based formula (same Q as DL); metafor reports 98.69 using τ²-based I²
     },
     citation: "Colditz et al. (1994) JAMA 271:698–702. dat.bcg in metafor. FE/RE/tau2 from metafor 4.8-0 escalc('AS') + rma(method='REML'). I2 uses JS Q-based formula (metafor uses τ²-based for REML)."
+  },
+
+  // ----------------------------------------------------------------
+  // UCOR — Bias-corrected correlation (Olkin & Pratt 1958)
+  // yi = r · ₂F₁(1/2, 1/2; (n−2)/2; 1−r²)
+  // vi = (1 − yi²)² / (n − 1)
+  // Expected values from: Rscript crossval_ucor.R (metafor 4.8-0 + gsl)
+  //   escalc("UCOR", ri=ri, ni=ni)
+  //   rma(yi, vi, method="DL") and rma(yi, vi, method="REML")
+  // ----------------------------------------------------------------
+  {
+    name: "Correlations – UCOR (DL)",
+    type: "UCOR",
+    tauMethod: "DL",
+    data: [
+      { label: "Study 1", r: 0.45, n:  62 },
+      { label: "Study 2", r: 0.56, n:  90 },
+      { label: "Study 3", r: 0.38, n:  45 },
+      { label: "Study 4", r: 0.61, n: 120 },
+      { label: "Study 5", r: 0.42, n:  75 },
+    ],
+    expected: {
+      // yi = r · ₂F₁(0.5,0.5;(n-2)/2;1-r²); vi = (1-yi²)²/(n-1)
+      // verified against metafor escalc("UCOR") to 6 dp
+      yi: [0.453082, 0.562223, 0.383956, 0.611642, 0.422431],
+      vi: [0.010354, 0.005255, 0.016520, 0.003292, 0.009121],
+      FE:   0.53377,
+      RE:   0.52135,
+      tau2: 0.002402,
+      I2:   25.13
+    },
+    citation: "Synthetic 5-study correlation dataset. Expected values from metafor 4.8-0 escalc('UCOR') + rma(method='DL') with gsl package."
+  },
+
+  {
+    name: "Correlations – UCOR (REML)",
+    type: "UCOR",
+    tauMethod: "REML",
+    data: [
+      { label: "Study 1", r: 0.45, n:  62 },
+      { label: "Study 2", r: 0.56, n:  90 },
+      { label: "Study 3", r: 0.38, n:  45 },
+      { label: "Study 4", r: 0.61, n: 120 },
+      { label: "Study 5", r: 0.42, n:  75 },
+    ],
+    expected: {
+      FE:   0.53377,
+      RE:   0.51908,
+      tau2: 0.003064,
+      I2:   25.13  // Q-based formula; metafor reports 29.98 using τ²-based I²
+    },
+    citation: "Synthetic 5-study correlation dataset. FE/RE/tau2 from metafor 4.8-0 escalc('UCOR') + rma(method='REML'). I2 uses JS Q-based formula."
   }
 
 ];
