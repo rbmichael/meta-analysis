@@ -3545,6 +3545,44 @@ export function metaRegression(studies, moderators = [], method = "REML", ciMeth
   };
 }
 
+// ================= MULTIPLE COMPARISON CORRECTION =================
+/**
+ * Adjust an array of p-values for multiple comparisons.
+ * @param {number[]} pvals  - raw p-values (length m)
+ * @param {string}   method - "none" | "bonferroni" | "holm"
+ * @returns {number[]} adjusted p-values (same length, each in [0,1])
+ */
+export function adjustPvals(pvals, method) {
+  const m = pvals.length;
+  if (!m || method === "none") return pvals.slice();
+
+  if (method === "bonferroni") {
+    return pvals.map(p => Math.min(1, isFinite(p) ? p * m : NaN));
+  }
+
+  if (method === "holm") {
+    // Step-down: sort by ascending p, multiply by decreasing factor, enforce monotonicity.
+    const order = pvals.map((_, i) => i).sort((a, b) => {
+      if (!isFinite(pvals[a]) && !isFinite(pvals[b])) return 0;
+      if (!isFinite(pvals[a])) return 1;
+      if (!isFinite(pvals[b])) return -1;
+      return pvals[a] - pvals[b];
+    });
+    const adj = new Array(m);
+    let runMax = 0;
+    for (let rank = 0; rank < m; rank++) {
+      const i = order[rank];
+      const raw = pvals[i];
+      const a = isFinite(raw) ? Math.min(1, raw * (m - rank)) : NaN;
+      if (isFinite(a)) runMax = Math.max(runMax, a);
+      adj[i] = isFinite(a) ? runMax : NaN;
+    }
+    return adj;
+  }
+
+  return pvals.slice();
+}
+
 // ================= LOCATION-SCALE MODEL =================
 /**
  * Location-scale meta-regression (rma.ls equivalent).

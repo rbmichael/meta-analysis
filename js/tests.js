@@ -1,7 +1,7 @@
 import { round, transformEffect, chiSquareCDF, chiSquareQuantile, parseCounts, bivariateNormalCDF, normalQuantile, tCritical, fCDF, normalCDF, tCDF } from "./utils.js";
 import { validateStudy } from "./profiles.js";
 import { BENCHMARKS, PUB_BIAS_BENCHMARKS, INFLUENCE_BENCHMARKS, META_REGRESSION_BENCHMARKS, VH_BENCHMARKS, MH_BENCHMARKS, CLUSTER_BENCHMARKS, RVE_BENCHMARKS, THREE_LEVEL_BENCHMARKS, LS_BENCHMARKS } from "./benchmarks.js";
-import { compute, meta, metaMH, metaPeto, robustMeta, sandwichVar, robustWlsResult, metaRegression, tau2_HS, tau2_HE, tau2_ML, tau2_SJ, beggTest, eggerTest, fatPetTest, petPeeseTest, failSafeN, tesTest, heterogeneityCIs, cumulativeMeta, influenceDiagnostics, harbordTest, petersTest, deeksTest, rueckerTest, leaveOneOut, baujat, blupMeta, pCurve, pUniform, estimatorComparison, subgroupAnalysis, logLik, bfgs, selIntervalProbs, selIntervalIdx, selectionLogLik, SEL_CUTS_ONE_SIDED, SEL_CUTS_TWO_SIDED, veveaHedges, SELECTION_PRESETS, profileLikTau2, profileLikCI, bayesMeta, rvePooled, meta3level, lsModel } from "./analysis.js";
+import { compute, meta, metaMH, metaPeto, robustMeta, sandwichVar, robustWlsResult, metaRegression, tau2_HS, tau2_HE, tau2_ML, tau2_SJ, beggTest, eggerTest, fatPetTest, petPeeseTest, failSafeN, tesTest, heterogeneityCIs, cumulativeMeta, influenceDiagnostics, harbordTest, petersTest, deeksTest, rueckerTest, leaveOneOut, baujat, blupMeta, pCurve, pUniform, estimatorComparison, subgroupAnalysis, logLik, bfgs, selIntervalProbs, selIntervalIdx, selectionLogLik, SEL_CUTS_ONE_SIDED, SEL_CUTS_TWO_SIDED, veveaHedges, SELECTION_PRESETS, profileLikTau2, profileLikCI, bayesMeta, rvePooled, meta3level, lsModel, adjustPvals } from "./analysis.js";
 import { trimFill } from "./trimfill.js";
 import { parseCSV } from "./csv.js";
 import { goshCompute, GOSH_MAX_ENUM_K, GOSH_MAX_K, GOSH_DEFAULT_MAX_SUBSETS } from "./gosh.js";
@@ -4792,6 +4792,106 @@ export function runTests() {
   }
 
   console.log(bayPass ? "\n✅ ALL BAYESIAN META-ANALYSIS TESTS PASSED" : "\n❌ SOME BAYESIAN META-ANALYSIS TESTS FAILED");
+
+  // =========================================================================
+  // MULTIPLE COMPARISON CORRECTION TESTS
+  // =========================================================================
+  console.log("\n===== MULTIPLE COMPARISON CORRECTION TESTS =====\n");
+  let mccPass = true;
+  const { chk: mccChk, chkTrue: mccChkTrue } = makeChk(() => { mccPass = false; }, 1e-10);
+
+  // Reference values from R: p.adjust(c(0.01, 0.04, 0.002, 0.15), method=...)
+  const rawPs4 = [0.01, 0.04, 0.002, 0.15];
+
+  // ---- 1. method="none" returns copy unchanged ----
+  {
+    console.log("--- 1. none: identity ---");
+    const adj = adjustPvals(rawPs4, "none");
+    rawPs4.forEach((p, i) => mccChk(`none[${i}]`, adj[i], p, 0));
+  }
+
+  // ---- 2. Bonferroni: min(1, m*p), m=4 ----
+  {
+    console.log("--- 2. bonferroni m=4 ---");
+    // R: p.adjust(c(0.01,0.04,0.002,0.15), method="bonferroni")
+    // = c(0.04, 0.16, 0.008, 0.60)
+    const adj = adjustPvals(rawPs4, "bonferroni");
+    mccChk("bonf[0]", adj[0], 0.04,  0);
+    mccChk("bonf[1]", adj[1], 0.16,  0);
+    mccChk("bonf[2]", adj[2], 0.008, 0);
+    mccChk("bonf[3]", adj[3], 0.60,  0);
+  }
+
+  // ---- 3. Holm, m=4 ----
+  {
+    console.log("--- 3. holm m=4 ---");
+    // R: p.adjust(c(0.01,0.04,0.002,0.15), method="holm")
+    // Sorted: 0.002(rank0), 0.01(rank1), 0.04(rank2), 0.15(rank3)
+    // raw adj: min(1, 0.002*4)=0.008, min(1,0.01*3)=0.03, min(1,0.04*2)=0.08, min(1,0.15*1)=0.15
+    // cummax: 0.008, 0.03, 0.08, 0.15
+    // → original index mapping: [0]=0.03, [1]=0.08, [2]=0.008, [3]=0.15
+    // R confirms: 0.030, 0.080, 0.008, 0.150
+    const adj = adjustPvals(rawPs4, "holm");
+    mccChk("holm[0]", adj[0], 0.030, 0);
+    mccChk("holm[1]", adj[1], 0.080, 0);
+    mccChk("holm[2]", adj[2], 0.008, 0);
+    mccChk("holm[3]", adj[3], 0.150, 0);
+  }
+
+  // ---- 4. Bonferroni caps at 1 ----
+  {
+    console.log("--- 4. bonferroni cap at 1 ---");
+    const adj = adjustPvals([0.4, 0.5, 0.6], "bonferroni");
+    mccChkTrue("cap at 1 [0]", adj[0] <= 1);
+    mccChkTrue("cap at 1 [1]", adj[1] <= 1);
+    mccChkTrue("cap at 1 [2]", adj[2] <= 1);
+  }
+
+  // ---- 5. Holm caps at 1 ----
+  {
+    console.log("--- 5. holm cap at 1 ---");
+    const adj = adjustPvals([0.4, 0.5, 0.6], "holm");
+    adj.forEach((p, i) => mccChkTrue(`holm cap [${i}] <= 1`, p <= 1));
+  }
+
+  // ---- 6. m=1 edge case: all methods return same p ----
+  {
+    console.log("--- 6. m=1 edge case ---");
+    const p1 = [0.03];
+    ["none", "bonferroni", "holm"].forEach(m => {
+      mccChk(`m=1 ${m}`, adjustPvals(p1, m)[0], 0.03, 0);
+    });
+  }
+
+  // ---- 7. Holm monotonicity: adjusted values are non-decreasing in sorted order ----
+  {
+    console.log("--- 7. holm monotonicity ---");
+    const ps = [0.12, 0.001, 0.05, 0.03, 0.2];
+    const adj = adjustPvals(ps, "holm");
+    const order = ps.map((_, i) => i).sort((a, b) => ps[a] - ps[b]);
+    for (let k = 1; k < order.length; k++) {
+      mccChkTrue(`holm monotone [${k-1}]≤[${k}]`, adj[order[k-1]] <= adj[order[k]] + 1e-12);
+    }
+  }
+
+  // ---- 8. Holm ≤ Bonferroni for each position ----
+  {
+    console.log("--- 8. holm ≤ bonferroni ---");
+    const ps = [0.01, 0.04, 0.002, 0.15, 0.08];
+    const holm = adjustPvals(ps, "holm");
+    const bonf = adjustPvals(ps, "bonferroni");
+    ps.forEach((_, i) => mccChkTrue(`holm[${i}] ≤ bonf[${i}]`, holm[i] <= bonf[i] + 1e-12));
+  }
+
+  // ---- 9. Empty array returns empty array ----
+  {
+    console.log("--- 9. empty array ---");
+    ["none", "bonferroni", "holm"].forEach(m => {
+      mccChkTrue(`empty ${m}`, adjustPvals([], m).length === 0);
+    });
+  }
+
+  console.log(mccPass ? "\n✅ ALL MULTIPLE COMPARISON CORRECTION TESTS PASSED" : "\n❌ SOME MULTIPLE COMPARISON CORRECTION TESTS FAILED");
 
   // =========================================================================
   // MANTEL-HAENSZEL AND PETO TESTS

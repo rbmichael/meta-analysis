@@ -83,6 +83,8 @@ Continuous and categorical moderators. Multiple moderators may be added simultan
 
 **Non-linear transforms** (Poly², Poly³, RCS 3–5 knots) are available via the moderator transform dropdown.
 
+**Multiple comparison correction** — Bonferroni or Holm adjustment of per-moderator omnibus QM p-values when m ≥ 2 moderators are tested simultaneously. Adjusted p-values displayed alongside raw values in the per-moderator tests table. Matches `p.adjust(method="bonferroni"/"holm")` in R (Holm, 1979).
+
 **Location-scale model** — add scale moderators (log τ² = Zγ) to model heterogeneity simultaneously with the mean effect. Each study gets its own τ̂²ᵢ = exp(Zᵢγ̂). Estimated by ML via profile likelihood. Equivalent to `rma(..., scale = ~ ..., method = "ML")` in metafor (Viechtbauer, 2021).
 
 ### Subgroup analysis
@@ -209,6 +211,7 @@ python -m http.server 8080
 - Harrell FE Jr (2015). *Regression Modeling Strategies* (2nd ed.). Springer.
 - Hedges LV, Olkin I (1985). *Statistical Methods for Meta-Analysis*. Academic Press.
 - Higgins JPT, Thompson SG, Spiegelhalter DJ (2009). A re-evaluation of random-effects meta-analysis. *J R Stat Soc A*, 172, 137–159.
+- Holm S (1979). A simple sequentially rejective multiple test procedure. *Scand J Stat*, 6(2), 65–70.
 - Ioannidis JPA, Trikalinos TA (2007). An exploratory test for an excess of significant findings. *Clin Trials*, 4(3), 245–253.
 - Jeffreys H (1961). *Theory of Probability* (3rd ed.). Oxford University Press.
 - Knapp G, Hartung J (2003). Improved tests for a random effects meta-regression with a single covariate. *Stat Med*, 22, 2693–2710.

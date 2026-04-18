@@ -153,6 +153,14 @@
                     <option value="99">99%</option>
                   </select>
                 </label>
+                <label>
+                  <span>MCC (regression)<button class="help-btn" data-help="reg.mcc" title="Help">?</button></span>
+                  <select id="mccMethod">
+                    <option value="none" selected>None</option>
+                    <option value="bonferroni">Bonferroni</option>
+                    <option value="holm">Holm</option>
+                  </select>
+                </label>
               </div>
             </div>
 
@@ -901,6 +909,12 @@
         and passing it via <code>mods</code> (Harrell, 2015).</li>
       </ul>
 
+      <p><strong>Multiple comparison correction</strong> — when m moderators are tested
+      simultaneously, Bonferroni (p<sub>adj</sub> = min(1, m·p)) or Holm (step-down, uniformly
+      more powerful than Bonferroni) correction is applied to the per-moderator omnibus QM
+      p-values. Adjusted p-values appear alongside raw values in the per-moderator tests table.
+      Matches R's <code>p.adjust(method="bonferroni"/"holm")</code>.</p>
+
       <p><strong>Location-scale model</strong> — add scale moderators (log τ² = Zγ) to
       model heterogeneity simultaneously with mean effects. Each study gets its own
       τ̂²ᵢ = exp(Zᵢγ̂). Estimated by ML via profile likelihood (BFGS optimizer).
@@ -1029,6 +1043,7 @@
         <li>Hedges LV, Olkin I (1985). <em>Statistical Methods for Meta-Analysis.</em> Academic Press.</li>
         <li>Hedges LV, Tipton E, Johnson MC (2010). Robust variance estimation in meta-regression with dependent effect size estimates. <em>Res Synth Methods,</em> 1, 39–65.</li>
         <li>Higgins JPT, Thompson SG, Spiegelhalter DJ (2009). A re-evaluation of random-effects meta-analysis. <em>J R Stat Soc A,</em> 172, 137–159.</li>
+        <li>Holm S (1979). A simple sequentially rejective multiple test procedure. <em>Scand J Stat,</em> 6(2), 65–70.</li>
         <li>Ioannidis JPA, Trikalinos TA (2007). An exploratory test for an excess of significant findings. <em>Clin Trials,</em> 4(3), 245–253.</li>
         <li>Jeffreys H (1961). <em>Theory of Probability</em> (3rd ed.). Oxford University Press.</li>
         <li>Knapp G, Hartung J (2003). Improved tests for a random effects meta-regression with a single covariate. <em>Stat Med,</em> 22, 2693–2710.</li>

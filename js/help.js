@@ -956,6 +956,18 @@ export const HELP = {
            "LL is the method-appropriate log-likelihood at the fitted parameters.",
   },
 
+  "reg.mcc": {
+    title: "Multiple comparison correction (regression)",
+    body:  "When a meta-regression includes m moderators, conducting m tests " +
+           "inflates the family-wise error rate. MCC adjusts the per-moderator " +
+           "omnibus QM p-values (one per moderator) to control this inflation. " +
+           "Bonferroni: p_adj = min(1, m · p) — simple, conservative, assumes independence. " +
+           "Holm: step-down procedure that sorts p-values and applies decreasing multipliers; " +
+           "always at least as powerful as Bonferroni. " +
+           "Adjusted p-values appear in the per-moderator tests table alongside raw values. " +
+           "With a single moderator (m = 1), all methods give the same result.",
+  },
+
   "diag.subgroup": {
     title: "Subgroup analysis",
     body:  "Fits a separate RE model within each study group (defined by the Group column). " +

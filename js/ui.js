@@ -100,7 +100,7 @@
 //   ui.js calls init() on DOMContentLoaded, which populates dropdowns,
 //   restores any autosave draft, and attaches all event listeners.
 // =============================================================================
-import { eggerTest, beggTest, fatPetTest, petPeeseTest, failSafeN, tesTest, pCurve, pUniform, baujat, blupMeta, meta, metaMH, metaPeto, robustMeta, influenceDiagnostics, subgroupAnalysis, metaRegression, cumulativeMeta, leaveOneOut, estimatorComparison, veveaHedges, SELECTION_PRESETS, profileLikTau2, bayesMeta, rvePooled, meta3level, harbordTest, petersTest, deeksTest, rueckerTest, lsModel } from "./analysis.js";
+import { eggerTest, beggTest, fatPetTest, petPeeseTest, failSafeN, tesTest, pCurve, pUniform, baujat, blupMeta, meta, metaMH, metaPeto, robustMeta, influenceDiagnostics, subgroupAnalysis, metaRegression, cumulativeMeta, leaveOneOut, estimatorComparison, veveaHedges, SELECTION_PRESETS, profileLikTau2, bayesMeta, rvePooled, meta3level, harbordTest, petersTest, deeksTest, rueckerTest, lsModel, adjustPvals } from "./analysis.js";
 import { fmt } from "./utils.js";
 import { effectProfiles, getProfile } from "./profiles.js";
 import { trimFill } from "./trimfill.js";
@@ -1899,7 +1899,7 @@ function regFmtP(p) {
   return cls ? `<span class="${cls}">${fmt(p)}</span>` : fmt(p);
 }
 
-function buildRegCoeffRows(reg) {
+function buildRegCoeffRows(reg, adjPs = null) {
   const hasVif    = Array.isArray(reg.vif) && reg.vif.length === reg.p;
   const hasRobust = reg.isClustered && Array.isArray(reg.robustSE);
   // Group header rows only when there are genuinely multiple moderators whose
@@ -1940,14 +1940,18 @@ function buildRegCoeffRows(reg) {
 
   // Multi-moderator: intercept first, then one labelled group per moderator.
   let html = dataRow(0);
-  for (const mt of reg.modTests) {
+  for (let mi = 0; mi < reg.modTests.length; mi++) {
+    const mt = reg.modTests[mi];
     if (mt.colIdxs.length === 0) continue;
     const QMlabel = reg.QMdist === "F"
       ? `F(${mt.QMdf},\u2009${reg.QEdf})`
       : `χ²(${mt.QMdf})`;
-    const qmStr = isFinite(mt.QM)
+    let qmStr = isFinite(mt.QM)
       ? ` &nbsp;·&nbsp; QM ${QMlabel} = ${fmt(mt.QM)}, p = ${regFmtP(mt.QMp)}`
       : "";
+    if (adjPs && adjPs[mi] !== undefined && isFinite(adjPs[mi]) && adjPs[mi] !== mt.QMp) {
+      qmStr += `, p (adj) = ${regFmtP(adjPs[mi])}`;
+    }
     html += `<tr class="reg-mod-group">
       <td colspan="${colCount}"><span class="reg-mod-name">${mt.name}</span>${qmStr}</td>
     </tr>`;
@@ -2168,7 +2172,12 @@ function renderRegressionPanel(reg, method, ciMethod, kExcluded = 0) {
     ? ` &nbsp;·&nbsp; QM ${QMlabel} = ${fmt(reg.QM)}, p = ${regFmtP(reg.QMp)}`
     : "";
 
-  const rows       = buildRegCoeffRows(reg);
+  const mccMethod = document.getElementById("mccMethod")?.value ?? "none";
+  const rawModPs  = Array.isArray(reg.modTests) ? reg.modTests.map(mt => mt.QMp) : [];
+  const adjModPs  = mccMethod !== "none" && rawModPs.length > 1
+    ? adjustPvals(rawModPs, mccMethod) : null;
+
+  const rows       = buildRegCoeffRows(reg, adjModPs);
   const fittedRows = buildRegFittedRows(reg);
 
   const lowDfWarning = reg.QEdf < 3
@@ -2187,34 +2196,43 @@ function renderRegressionPanel(reg, method, ciMethod, kExcluded = 0) {
       : "");
 
   // Per-moderator test block — only rendered when there are 2+ moderators.
+  const mccLabel = mccMethod === "bonferroni" ? "Bonferroni"
+                 : mccMethod === "holm"       ? "Holm"
+                 : "";
+  const hasAdjPs = adjModPs !== null && adjModPs.length > 0;
   const modTestsBlock = moderators.length >= 2
     && Array.isArray(reg.modTests) && reg.modTests.length > 0
     ? `<details>
-        <summary>Per-moderator tests (${reg.modTests.length})</summary>
+        <summary>Per-moderator tests (${reg.modTests.length}${hasAdjPs ? `, ${mccLabel} adj.` : ""})</summary>
         <table class="reg-table">
           <thead><tr>
             <th>Moderator</th>
             <th>${reg.QMdist === "F" ? "F" : "QM"}</th>
             <th>df</th>
             <th>p</th>
+            ${hasAdjPs ? `<th>p (${mccLabel})</th>` : ""}
           </tr></thead>
           <tbody>
-            ${reg.modTests.map(mt => {
+            ${reg.modTests.map((mt, mi) => {
               if (mt.QMdf === 0) {
-                return `<tr><td>${mt.name}</td><td colspan="3"><i>degenerate (≤ 1 level)</i></td></tr>`;
+                return `<tr><td>${mt.name}</td><td colspan="${hasAdjPs ? 4 : 3}"><i>degenerate (≤ 1 level)</i></td></tr>`;
               }
               const dfLabel = reg.QMdist === "F"
                 ? `F(${mt.QMdf},\u2009${reg.QEdf})`
                 : `χ²(${mt.QMdf})`;
+              const adjCell = hasAdjPs
+                ? `<td>${regFmtP(adjModPs[mi])}</td>` : "";
               return `<tr>
                 <td>${mt.name}</td>
                 <td>${fmt(mt.QM)}</td>
                 <td>${dfLabel}</td>
                 <td>${regFmtP(mt.QMp)}</td>
+                ${adjCell}
               </tr>`;
             }).join("")}
           </tbody>
         </table>
+        ${hasAdjPs ? `<div class="reg-note">${mccLabel} correction applied across m\u2009=\u2009${rawModPs.length} moderator tests.</div>` : ""}
       </details>`
     : "";
 

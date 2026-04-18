@@ -1777,6 +1777,49 @@ where W = diag(1/(vᵢ+τ²)) (Harville 1977).</p>
           "Viechtbauer, W. (2010). Conducting meta-analyses in R with the metafor package. <em>Journal of Statistical Software, 36</em>(3), 1–48.",
         ],
       },
+      {
+        id: "guide-mcc",
+        title: "Multiple comparison correction (Bonferroni / Holm)",
+        body: `<p>When a meta-regression includes <em>m</em> moderators, conducting
+<em>m</em> significance tests inflates the family-wise error rate (FWER): the
+probability that at least one null result is declared significant by chance.
+Multiple comparison correction (MCC) controls FWER by adjusting the per-moderator
+omnibus p-values. The adjustment applies to the per-moderator QM p-values
+(one per moderator input), not to individual coefficient-level p-values within
+a multi-level categorical moderator.</p>
+
+<p><strong>Bonferroni correction</strong> (most conservative):</p>
+<p style="text-align:center">p<sub>adj,i</sub> = min(1, m · p<sub>i</sub>)</p>
+<p>Guarantees FWER ≤ α regardless of dependency structure between tests.
+Easy to interpret but can be overly conservative when tests are correlated.</p>
+
+<p><strong>Holm correction</strong> (step-down, less conservative):</p>
+<ol>
+  <li>Sort the m p-values in ascending order: p<sub>(1)</sub> ≤ … ≤ p<sub>(m)</sub></li>
+  <li>Adjusted p<sub>(k)</sub> = min(1, p<sub>(k)</sub> · (m − k + 1))</li>
+  <li>Enforce monotonicity: replace each adjusted p<sub>(k)</sub> with the
+  running maximum of adjusted values up to rank k</li>
+</ol>
+<p>Holm controls FWER uniformly (without extra assumptions) and is
+always at least as powerful as Bonferroni. R's <code>p.adjust(method="holm")</code>
+uses the same algorithm.</p>
+
+<p><strong>When to use MCC:</strong></p>
+<ul>
+  <li>Use when the primary interest is whether <em>any</em> moderator is significant
+  and you want to limit false discoveries across the full set of tests.</li>
+  <li>With a single moderator (m = 1), all methods produce identical results.</li>
+  <li>If hypotheses are pre-registered and not exploratory, MCC may not be necessary;
+  if they are exploratory (many potential moderators), MCC is advisable.</li>
+</ul>
+<p>The correction is displayed in the per-moderator tests table alongside the
+unadjusted p-values. The unadjusted individual-coefficient p-values in the main
+coefficient table are not modified.</p>`,
+        citations: [
+          "Benjamini, Y., & Hochberg, Y. (1995). Controlling the false discovery rate: A practical and powerful approach to multiple testing. <em>Journal of the Royal Statistical Society, Series B, 57</em>(1), 289–300.",
+          "Holm, S. (1979). A simple sequentially rejective multiple test procedure. <em>Scandinavian Journal of Statistics, 6</em>(2), 65–70.",
+        ],
+      },
     ],
   },   // end "Subgroup Analysis & Meta-regression" section
 
@@ -2462,6 +2505,7 @@ export const HELP_TO_GUIDE = {
   "diag.qqplot":         "guide-qqplot",
   "diag.radial":         "guide-radial",
   "reg.aic":             "guide-aic-bic",
+  "reg.mcc":             "guide-mcc",
   "input.moderators":    "guide-subgroup",
   "input.rob":           "guide-rob",
   "bayes.model":         "guide-bayes-meta",
