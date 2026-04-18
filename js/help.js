@@ -39,6 +39,16 @@ export const HELP = {
            "Values are entered in the moderator columns of the data table.",
   },
 
+  "input.scaleModerators": {
+    title: "Scale moderators (log τ²)",
+    body:  "Variables that predict between-study heterogeneity τ² in a location-scale model. " +
+           "The scale model is log(τᵢ²) = Zᵢγ, so τᵢ² = exp(Zᵢγ) varies by study. " +
+           "Scale moderators must reference column names already present in the data table. " +
+           "Adding any scale moderator switches the analysis from standard meta-regression " +
+           "to the location-scale model (ML estimation). " +
+           "Implements metafor's rma.ls() (Viechtbauer, 2021).",
+  },
+
   "input.rob": {
     title: "Risk-of-bias domains",
     body:  "User-defined assessment domains (e.g. Randomisation, Blinding, Attrition). " +
@@ -887,6 +897,18 @@ export const HELP = {
            "R² (proportion of variance explained); and VIFs (collinearity). " +
            "Bubble plots are generated per continuous moderator. " +
            "Rule of thumb: ≥ 10 studies per predictor for adequate power.",
+  },
+
+  "diag.locationscale": {
+    title: "Location-scale model",
+    body:  "Fits separate moderator models for the mean effect (location: E[yᵢ] = Xᵢβ) " +
+           "and between-study heterogeneity (scale: log τᵢ² = Zᵢγ). " +
+           "Each study gets its own τ̂²ᵢ = exp(Zᵢγ̂) > 0. " +
+           "Estimated by ML via profile likelihood (BFGS); SEs for γ from the numerical Hessian. " +
+           "QM_loc: Wald test for location moderators. " +
+           "QM_scale: Wald test for scale moderators. " +
+           "LR test: likelihood ratio test comparing the full scale model vs intercept-only scale. " +
+           "Equivalent to metafor rma(..., scale = ~ ..., method = 'ML') (Viechtbauer, 2021).",
   },
 
   "reg.aic": {

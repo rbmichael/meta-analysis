@@ -80,6 +80,10 @@ The three-level model fits the marginal covariance Σ<sub>i</sub> = diag(v<sub>i
 
 Continuous and categorical moderators. Multiple moderators may be added simultaneously. Results include coefficients, standard errors, *z*/*t* statistics, *p*-values, *R*² (proportion of heterogeneity explained), and model-fit indices (AIC, BIC, log-likelihood) for comparing competing models. Bubble plots are generated per continuous moderator.
 
+**Non-linear transforms** (Poly², Poly³, RCS 3–5 knots) are available via the moderator transform dropdown.
+
+**Location-scale model** — add scale moderators (log τ² = Zγ) to model heterogeneity simultaneously with the mean effect. Each study gets its own τ̂²ᵢ = exp(Zᵢγ̂). Estimated by ML via profile likelihood. Equivalent to `rma(..., scale = ~ ..., method = "ML")` in metafor (Viechtbauer, 2021).
+
 ### Subgroup analysis
 
 Studies can be assigned to named groups via the Group column. Pooled estimates are reported within each subgroup alongside Q_between, degrees of freedom, and the between-group p-value.
@@ -217,6 +221,7 @@ python -m http.server 8080
 - Vevea JL, Hedges LV (1995). A general linear model for estimating effect size in the presence of publication bias. *Psychometrika*, 60(3), 419–435.
 - Viechtbauer W (2005). Bias and efficiency of meta-analytic variance estimators in the random-effects model. *J Educ Behav Stat*, 30, 261–293.
 - Viechtbauer W (2010). Conducting meta-analyses in R with the metafor package. *J Stat Softw*, 36(3), 1–48.
+- Viechtbauer W (2021). Location-scale models for meta-analytic data. *Res Synth Methods*, 12(5), 567–583.
 - Viechtbauer W, Cheung MWL (2010). Outlier and influence diagnostics for meta-analysis. *Res Synth Methods*, 1(2), 112–125.
 
 ---

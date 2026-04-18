@@ -1535,6 +1535,83 @@ or a likelihood ratio test (fitted models must be nested, same τ² method).</p>
       },
 
       {
+        id: "guide-location-scale",
+        title: "Location-scale model",
+        body: `<p>Standard meta-regression models only the <em>mean</em> effect
+(location): E[yᵢ] = Xᵢβ. The <strong>location-scale (LS) model</strong> fits
+separate moderators for both the mean <em>and</em> the between-study
+heterogeneity τ² simultaneously — answering "does covariate X predict not only
+the effect size but also its variability?"</p>
+
+<p><strong>Model formulation:</strong></p>
+<ul>
+  <li><strong>Location:</strong> E[yᵢ] = Xᵢβ — design matrix X with intercept
+  plus location moderators.</li>
+  <li><strong>Scale:</strong> log(τᵢ²) = Zᵢγ — design matrix Z with intercept
+  plus scale moderators. The log link guarantees τᵢ² = exp(Zᵢγ) > 0 for all
+  parameter values.</li>
+  <li><strong>Total variance:</strong> σᵢ² = vᵢ + τᵢ² (within-study + study-specific heterogeneity).</li>
+</ul>
+
+<p><strong>Estimation (ML):</strong><br>
+β is profiled out via weighted least squares at each γ:
+β̂(γ) = (X′W(γ)X)⁻¹ X′W(γ)y, where W(γ) = diag(1/σᵢ²). The profile
+log-likelihood over γ alone is then maximized by BFGS. Standard errors for
+γ come from the numerical Hessian of the profile log-likelihood; SEs for β
+come from (X′Ŵβ̂X)⁻¹.</p>
+
+<p><strong>Special cases:</strong></p>
+<ul>
+  <li>Intercept-only scale model (Z = [1]): τᵢ² = exp(γ₀) for all studies —
+  equivalent to standard random-effects meta-analysis estimated by ML.</li>
+  <li>Intercept-only scale + intercept-only location: equivalent to the classic
+  RE model with a single τ².</li>
+</ul>
+
+<p><strong>Output panels:</strong></p>
+<ul>
+  <li><strong>Location table:</strong> β coefficients with SEs, z, p, and CIs.
+  QM<sub>loc</sub> is the omnibus Wald test for location moderators (excluding
+  intercept).</li>
+  <li><strong>Scale table:</strong> γ coefficients with SEs, z, p, and CIs.
+  The intercept column also shows eˣ = exp(γ₀), the τ² when all scale
+  predictors are at zero. QM<sub>scale</sub> is the omnibus Wald test for scale
+  moderators (excluding intercept).</li>
+  <li><strong>LR test:</strong> Likelihood ratio test comparing the full scale
+  model vs an intercept-only scale model. χ²(q−1) under H₀, where q is the
+  number of scale parameters.</li>
+  <li><strong>Fitted values table:</strong> Shows study-specific τ̂²ᵢ = exp(Zᵢγ̂).</li>
+</ul>
+
+<p><strong>Interpretation:</strong><br>
+A significant scale coefficient γⱼ means moderator j predicts heterogeneity
+magnitude (studies with higher z-values have systematically larger or smaller
+τᵢ²). A non-significant γⱼ suggests the moderator doesn't explain between-study
+variance, even if it explains mean effects (a significant β).</p>
+
+<p><strong>How to use in the app:</strong></p>
+<ol>
+  <li>Add location moderators as usual in <em>Moderators</em>.</li>
+  <li>Add one or more variable names in <em>Scale moderators (log τ²)</em>.
+  The same column name is reused — no separate data entry needed.</li>
+  <li>Click <em>Run Analysis</em>. The Location-Scale Model panel replaces the
+  Meta-Regression panel.</li>
+</ol>
+
+<p><strong>Caution:</strong></p>
+<ul>
+  <li>The LS model uses ML (not REML) — comparable to metafor's <code>rma.ls()</code>.</li>
+  <li>Scale coefficients can be poorly identified with small k; inspect SEs and
+  check convergence before interpreting γ.</li>
+  <li>Removing all scale moderators restores the standard meta-regression fit.</li>
+</ul>`,
+        citations: [
+          "Viechtbauer, W. (2021). Location-scale models for meta-analytic data. <em>Research Synthesis Methods, 12</em>(5), 567–583.",
+          "Viechtbauer, W. (2010). Conducting meta-analyses in R with the metafor package. <em>Journal of Statistical Software, 36</em>(3), 1–48.",
+        ],
+      },
+
+      {
         id: "guide-aic-bic",
         title: "AIC / BIC for model comparison",
         body: `<p>AIC and BIC are information criteria used to compare competing
@@ -2184,6 +2261,8 @@ export const HELP_TO_GUIDE = {
   "diag.subgroup":       "guide-subgroup",
   "diag.metaregression": "guide-metaregression",
   "diag.nonlinear-reg":  "guide-nonlinear-reg",
+  "diag.locationscale":  "guide-location-scale",
+  "input.scaleModerators": "guide-location-scale",
   "diag.qqplot":         "guide-qqplot",
   "reg.aic":             "guide-aic-bic",
   "input.moderators":    "guide-subgroup",

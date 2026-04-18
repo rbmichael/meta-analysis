@@ -294,6 +294,28 @@
             <button id="addMod">+ Add</button><button class="help-btn" data-help="input.moderators" title="Help">?</button>
           </div>
 
+          <!-- Scale moderator manager (location-scale model) -->
+          <div id="scaleModManager">
+            <strong>Scale moderators (log τ²):</strong>
+            <input type="text" id="scaleModName" placeholder="Column name" style="width:110px">
+            <select id="scaleModType" onchange="document.getElementById('scaleModTransformWrap').style.display=this.value==='continuous'?'':'none'">
+              <option value="continuous">Continuous</option>
+              <option value="categorical">Categorical</option>
+            </select>
+            <span id="scaleModTransformWrap" title="Transform applied to this continuous scale moderator">
+              <select id="scaleModTransform">
+                <option value="linear">Linear</option>
+                <option value="poly2">Poly ²</option>
+                <option value="poly3">Poly ³</option>
+                <option value="rcs3">RCS (3 knots)</option>
+                <option value="rcs4">RCS (4 knots)</option>
+                <option value="rcs5">RCS (5 knots)</option>
+              </select>
+            </span>
+            <button id="addScaleMod">+ Add</button><button class="help-btn" data-help="input.scaleModerators" title="Help">?</button>
+            <div id="scaleModTags"></div>
+          </div>
+
           <!-- Risk-of-bias domain manager -->
           <div id="robManager">
             <strong>Risk-of-bias domains:</strong>
@@ -869,6 +891,15 @@
         and passing it via <code>mods</code> (Harrell, 2015).</li>
       </ul>
 
+      <p><strong>Location-scale model</strong> — add scale moderators (log τ² = Zγ) to
+      model heterogeneity simultaneously with mean effects. Each study gets its own
+      τ̂²ᵢ = exp(Zᵢγ̂). Estimated by ML via profile likelihood (BFGS optimizer).
+      Output includes separate coefficient tables for location (β) and scale (γ),
+      a Wald test per moderator, and a likelihood ratio test comparing the full scale
+      model against the intercept-only scale model. Equivalent to
+      <code>rma(..., scale = ~ ..., method = "ML")</code> in metafor
+      (Viechtbauer, 2021).</p>
+
       <!-- ---- Subgroup analysis ---- -->
       <h2>Subgroup analysis</h2>
       <p>Studies are assigned to named groups via the Group column. Pooled estimates are reported
@@ -998,6 +1029,7 @@
         <li>Vevea JL, Woods CM (2005). Publication bias in research synthesis: Sensitivity analysis using a priori weight functions. <em>Psychol Methods,</em> 10(4), 428–443.</li>
         <li>Viechtbauer W (2005). Bias and efficiency of meta-analytic variance estimators in the random-effects model. <em>J Educ Behav Stat,</em> 30, 261–293.</li>
         <li>Viechtbauer W (2010). Conducting meta-analyses in R with the metafor package. <em>J Stat Softw,</em> 36(3), 1–48.</li>
+        <li>Viechtbauer W (2021). Location-scale models for meta-analytic data. <em>Res Synth Methods,</em> 12(5), 567–583.</li>
         <li>Viechtbauer W, Cheung MWL (2010). Outlier and influence diagnostics for meta-analysis. <em>Res Synth Methods,</em> 1(2), 112–125.</li>
       </ol>
 

@@ -20,8 +20,8 @@ export const SESSION_VERSION = 1;
 // studies         — array of { study, inputs, group, moderators }
 // rob             — { domains: string[], data: { [label]: { [domain]: string } } }
 //                   Optional; omitted fields default to empty on load.
-export function buildSession(settings, savedModerators, studies, rob = { domains: [], data: {} }) {
-  return { version: SESSION_VERSION, settings, moderators: savedModerators, studies, rob };
+export function buildSession(settings, savedModerators, studies, rob = { domains: [], data: {} }, scaleModerators = []) {
+  return { version: SESSION_VERSION, settings, moderators: savedModerators, scaleModerators, studies, rob };
 }
 
 // Serialize a session object to a BOM-prefixed JSON string.

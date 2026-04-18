@@ -1965,7 +1965,7 @@ export const META_REGRESSION_BENCHMARKS = [
         { name: "ablat", QM: 16.9158, QMdf: 2, QMp: 0.0002 }
       ]
     },
-    citation: "Colditz et al. (1994) dat.bcg. R verification pending (generate.R block 48). Equivalent to metafor rma(mods = ~ ablat + I(ablat^2))."
+    citation: "Colditz et al. (1994) dat.bcg. R-verified (metafor 4.8.0, crossval_nonlinear.R block 48). Equivalent to metafor rma(mods = ~ ablat + I(ablat^2))."
   },
 
   // ----------------------------------------------------------------
@@ -2015,7 +2015,7 @@ export const META_REGRESSION_BENCHMARKS = [
         { name: "ablat", QM: 17.9533, QMdf: 2, QMp: 0.0001 }
       ]
     },
-    citation: "Colditz et al. (1994) dat.bcg. R verification pending (generate.R block 49). Harrell RCS formula with 3 knots at 10th/50th/90th pct of ablat (14, 33, 50.4)."
+    citation: "Colditz et al. (1994) dat.bcg. R-verified (metafor 4.8.0, crossval_nonlinear.R block 49). Harrell RCS formula with 3 knots at 10th/50th/90th pct of ablat (14, 33, 50.4). phi1 values and all statistics match metafor exactly."
   }
 
 ];
@@ -2600,5 +2600,138 @@ export const THREE_LEVEL_BENCHMARKS = [
       kCluster:     5,
       logLik:       6.4180830762,
     },
+  },
+];
+
+// LS_BENCHMARKS — Location-scale model (lsModel) benchmarks
+// All values R-verified (metafor 4.8.0, rma(..., scale=~..., method="ML")).
+// LL uses JS convention: omits -k/2·log(2π) constant.
+// JS LL = R_LL + k/2·log(2π).
+// R field names: b=location(beta), alpha=scale(gamma), va=vcov(gamma), vb=vcov(beta).
+// R QS = Wald test for scale moderators (= JS QM_scale); matches JS QM_scale exactly.
+// generate.R block: ## LS-A, ## LS-B, ## LS-C
+export const LS_BENCHMARKS = [
+
+  // ----------------------------------------------------------------
+  // LS-A: BCG data, intercept-only scale (= standard meta-analysis via ML)
+  // rma(yi, vi, scale = ~ 1, method="ML")
+  // ----------------------------------------------------------------
+  {
+    name: "LS-A: BCG data, intercept-only scale",
+    locMods:   [],
+    scaleMods: [],
+    data: [
+      { label: "Aronson 1948",            yi: -0.8893113339202054, vi: 0.3255847650039614,    ablat: 44 },
+      { label: "Ferguson & Simes 1949",   yi: -1.5853886572014306, vi: 0.19458112139814387,   ablat: 55 },
+      { label: "Rosenthal 1960",          yi: -1.348073148299693,  vi: 0.41536796536796533,   ablat: 42 },
+      { label: "Hart & Sutherland 1977",  yi: -1.4415511900213054, vi: 0.020010031902247573,  ablat: 52 },
+      { label: "Frimodt-Moller 1973",     yi: -0.2175473222112957, vi: 0.05121017216963086,   ablat: 13 },
+      { label: "Stein & Aronson 1953",    yi: -0.786115585818864,  vi: 0.0069056184559087574, ablat: 44 },
+      { label: "Vandiviere 1973",         yi: -1.6208982235983924, vi: 0.22301724757231517,   ablat: 19 },
+      { label: "TPT Madras 1980",         yi:  0.011952333523841173,vi: 0.00396157929781773,  ablat: 13 },
+      { label: "Coetzee & Berjak 1968",   yi: -0.4694176487381487, vi: 0.056434210463248966,  ablat: 27 },
+      { label: "Rosenthal 1961",          yi: -1.3713448034727846, vi: 0.07302479361302891,   ablat: 42 },
+      { label: "Comstock 1974",           yi: -0.33935882833839015,vi: 0.01241221397155972,   ablat: 18 },
+      { label: "Comstock & Webster 1969", yi:  0.4459134005713783, vi: 0.5325058452001528,    ablat: 33 },
+      { label: "Comstock 1976",           yi: -0.017313948216879493,vi: 0.0714046596839863,   ablat: 33 },
+    ],
+    expected: {
+      beta:      [-0.7111991],
+      se_beta:   [0.1718967],
+      gamma:     [-1.272866],
+      se_gamma:  [0.5230667],
+      tau2_mean: 0.2800279,
+      QE:        152.2330,
+      QEdf:      12,
+      LL:        -0.7188754,
+      k: 13, p: 1, q: 1,
+      locColNames:   ["intercept"],
+      scaleColNames: ["intercept"],
+    },
+    citation: "Colditz et al. (1994) dat.bcg. R-verified (metafor 4.8.0, rma(yi,vi,scale=~1,method='ML')). LL uses JS convention (omits -k/2·log(2π)).",
+  },
+
+  // ----------------------------------------------------------------
+  // LS-B: BCG data, intercept-only location + ablat scale
+  // rma(yi, vi, scale = ~ ablat, method="ML")
+  // ----------------------------------------------------------------
+  {
+    name: "LS-B: BCG data, ablat scale moderator",
+    locMods:   [],
+    scaleMods: [{ key: "ablat", type: "continuous" }],
+    data: [
+      { label: "Aronson 1948",            yi: -0.8893113339202054, vi: 0.3255847650039614,    ablat: 44 },
+      { label: "Ferguson & Simes 1949",   yi: -1.5853886572014306, vi: 0.19458112139814387,   ablat: 55 },
+      { label: "Rosenthal 1960",          yi: -1.348073148299693,  vi: 0.41536796536796533,   ablat: 42 },
+      { label: "Hart & Sutherland 1977",  yi: -1.4415511900213054, vi: 0.020010031902247573,  ablat: 52 },
+      { label: "Frimodt-Moller 1973",     yi: -0.2175473222112957, vi: 0.05121017216963086,   ablat: 13 },
+      { label: "Stein & Aronson 1953",    yi: -0.786115585818864,  vi: 0.0069056184559087574, ablat: 44 },
+      { label: "Vandiviere 1973",         yi: -1.6208982235983924, vi: 0.22301724757231517,   ablat: 19 },
+      { label: "TPT Madras 1980",         yi:  0.011952333523841173,vi: 0.00396157929781773,  ablat: 13 },
+      { label: "Coetzee & Berjak 1968",   yi: -0.4694176487381487, vi: 0.056434210463248966,  ablat: 27 },
+      { label: "Rosenthal 1961",          yi: -1.3713448034727846, vi: 0.07302479361302891,   ablat: 42 },
+      { label: "Comstock 1974",           yi: -0.33935882833839015,vi: 0.01241221397155972,   ablat: 18 },
+      { label: "Comstock & Webster 1969", yi:  0.4459134005713783, vi: 0.5325058452001528,    ablat: 33 },
+      { label: "Comstock 1976",           yi: -0.017313948216879493,vi: 0.0714046596839863,   ablat: 33 },
+    ],
+    expected: {
+      beta:      [-0.6875877],
+      se_beta:   [0.1712479],
+      gamma:     [-1.426868, 0.0046528],
+      se_gamma:  [3.150041, 0.0934749],
+      tau2_i:    [0.2945970, 0.3100670, 0.2918680, 0.3057690, 0.2550280, 0.2945970,
+                  0.2622480, 0.2550280, 0.2721930, 0.2918680, 0.2610300, 0.2798990, 0.2798990],
+      LL:        -0.7176281,
+      QM_scale:  0.0024776,
+      QM_scaleDf: 1,
+      k: 13, p: 1, q: 2,
+      locColNames:   ["intercept"],
+      scaleColNames: ["intercept", "ablat"],
+    },
+    citation: "Colditz et al. (1994) dat.bcg. R-verified (metafor 4.8.0, rma(yi,vi,scale=~ablat,method='ML')). QM_scale matches R QS (Wald test on scale moderators).",
+  },
+
+  // ----------------------------------------------------------------
+  // LS-C: BCG data, ablat location + ablat scale
+  // rma(yi, vi, mods = ~ ablat, scale = ~ ablat, method="ML")
+  // ----------------------------------------------------------------
+  {
+    name: "LS-C: BCG data, ablat location + ablat scale",
+    locMods:   [{ key: "ablat", type: "continuous" }],
+    scaleMods: [{ key: "ablat", type: "continuous" }],
+    data: [
+      { label: "Aronson 1948",            yi: -0.8893113339202054, vi: 0.3255847650039614,    ablat: 44 },
+      { label: "Ferguson & Simes 1949",   yi: -1.5853886572014306, vi: 0.19458112139814387,   ablat: 55 },
+      { label: "Rosenthal 1960",          yi: -1.348073148299693,  vi: 0.41536796536796533,   ablat: 42 },
+      { label: "Hart & Sutherland 1977",  yi: -1.4415511900213054, vi: 0.020010031902247573,  ablat: 52 },
+      { label: "Frimodt-Moller 1973",     yi: -0.2175473222112957, vi: 0.05121017216963086,   ablat: 13 },
+      { label: "Stein & Aronson 1953",    yi: -0.786115585818864,  vi: 0.0069056184559087574, ablat: 44 },
+      { label: "Vandiviere 1973",         yi: -1.6208982235983924, vi: 0.22301724757231517,   ablat: 19 },
+      { label: "TPT Madras 1980",         yi:  0.011952333523841173,vi: 0.00396157929781773,  ablat: 13 },
+      { label: "Coetzee & Berjak 1968",   yi: -0.4694176487381487, vi: 0.056434210463248966,  ablat: 27 },
+      { label: "Rosenthal 1961",          yi: -1.3713448034727846, vi: 0.07302479361302891,   ablat: 42 },
+      { label: "Comstock 1974",           yi: -0.33935882833839015,vi: 0.01241221397155972,   ablat: 18 },
+      { label: "Comstock & Webster 1969", yi:  0.4459134005713783, vi: 0.5325058452001528,    ablat: 33 },
+      { label: "Comstock 1976",           yi: -0.017313948216879493,vi: 0.0714046596839863,   ablat: 33 },
+    ],
+    expected: {
+      beta:      [0.304468, -0.0297727],
+      se_beta:   [0.1437904, 0.0049839],
+      gamma:     [-4.957491, 0.0385933],
+      se_gamma:  [3.267588, 0.0730426],
+      tau2_i:    [0.038412, 0.058727, 0.035559, 0.052306, 0.011611, 0.038412,
+                  0.014637, 0.011611, 0.019931, 0.035559, 0.014083, 0.025124, 0.025124],
+      QE:        30.73309,
+      QEdf:      11,
+      QM_loc:    35.68667,
+      QM_locDf:  1,
+      QM_scale:  0.2791713,
+      QM_scaleDf: 1,
+      LL:        4.406911,
+      k: 13, p: 2, q: 2,
+      locColNames:   ["intercept", "ablat"],
+      scaleColNames: ["intercept", "ablat"],
+    },
+    citation: "Colditz et al. (1994) dat.bcg. R-verified (metafor 4.8.0, rma(yi,vi,mods=~ablat,scale=~ablat,method='ML')). QM_loc and QM_scale are Wald tests matching R QM and QS respectively.",
   },
 ];

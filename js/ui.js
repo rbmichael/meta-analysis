@@ -100,7 +100,7 @@
 //   ui.js calls init() on DOMContentLoaded, which populates dropdowns,
 //   restores any autosave draft, and attaches all event listeners.
 // =============================================================================
-import { eggerTest, beggTest, fatPetTest, petPeeseTest, failSafeN, tesTest, pCurve, pUniform, baujat, blupMeta, meta, metaMH, metaPeto, robustMeta, influenceDiagnostics, subgroupAnalysis, metaRegression, cumulativeMeta, leaveOneOut, estimatorComparison, veveaHedges, SELECTION_PRESETS, profileLikTau2, bayesMeta, rvePooled, meta3level, harbordTest, petersTest, deeksTest, rueckerTest } from "./analysis.js";
+import { eggerTest, beggTest, fatPetTest, petPeeseTest, failSafeN, tesTest, pCurve, pUniform, baujat, blupMeta, meta, metaMH, metaPeto, robustMeta, influenceDiagnostics, subgroupAnalysis, metaRegression, cumulativeMeta, leaveOneOut, estimatorComparison, veveaHedges, SELECTION_PRESETS, profileLikTau2, bayesMeta, rvePooled, meta3level, harbordTest, petersTest, deeksTest, rueckerTest, lsModel } from "./analysis.js";
 import { fmt } from "./utils.js";
 import { effectProfiles, getProfile } from "./profiles.js";
 import { trimFill } from "./trimfill.js";
@@ -273,6 +273,7 @@ function hBtn(key) {
 
 // ---------------- MODERATOR STATE ----------------
 let moderators = []; // { name: string, type: "continuous"|"categorical", transform: string }
+let scaleModerators = []; // { name: string, type: "continuous"|"categorical", transform: string }
 
 // ---- Risk-of-bias state ----
 let _robDomains = [];  // string[] — ordered domain names
@@ -340,6 +341,46 @@ function makeModTd(name, type) {
   input.addEventListener("input", () => { markStale(); scheduleSave(); });
   td.appendChild(input);
   return td;
+}
+
+// ---- Scale moderator manager (location-scale model) ----
+
+function renderScaleModTags() {
+  const container = document.getElementById("scaleModTags");
+  if (!container) return;
+  container.innerHTML = "";
+  scaleModerators.forEach(({ name }) => {
+    const span = document.createElement("span");
+    span.className = "mod-tag";
+    span.innerHTML = `${name} <button class="remove-mod-btn" title="Remove scale moderator">×</button>`;
+    span.querySelector("button").addEventListener("click", () => removeScaleModerator(name));
+    container.appendChild(span);
+  });
+}
+
+function doAddScaleModerator(name, type, transform = "linear") {
+  if (!name || scaleModerators.some(m => m.name === name)) return;
+  scaleModerators.push({ name, type, transform });
+  renderScaleModTags();
+}
+
+function removeScaleModerator(name) {
+  scaleModerators = scaleModerators.filter(m => m.name !== name);
+  renderScaleModTags();
+  markStale();
+}
+
+function addScaleModerator() {
+  const nameEl = document.getElementById("scaleModName");
+  const name = nameEl.value.trim();
+  const type = document.getElementById("scaleModType").value;
+  const transform = type === "continuous"
+    ? (document.getElementById("scaleModTransform")?.value ?? "linear")
+    : "linear";
+  if (!name) return;
+  doAddScaleModerator(name, type, transform);
+  nameEl.value = "";
+  markStale();
 }
 
 // ---- Risk-of-bias domain manager ----
@@ -549,6 +590,8 @@ document.getElementById("loadSession").addEventListener("click", () => document.
 document.getElementById("sessionFile").addEventListener("change", e => { if (e.target.files[0]) { loadSession(e.target.files[0]); e.target.value = ""; } });
 document.getElementById("addMod").addEventListener("click", addModerator);
 document.getElementById("modName").addEventListener("keydown", e => { if (e.key === "Enter") addModerator(); });
+document.getElementById("addScaleMod").addEventListener("click", addScaleModerator);
+document.getElementById("scaleModName").addEventListener("keydown", e => { if (e.key === "Enter") addScaleModerator(); });
 document.getElementById("cumulativeOrder").addEventListener("change", markStale);
 document.getElementById("cumulativeFunnelStep").addEventListener("input", e => {
   if (!cumFunnelPlot.studies) return;
@@ -1538,6 +1581,7 @@ function gatherSessionState() {
   };
 
   const savedModerators = moderators.map(m => ({ name: m.name, type: m.type, transform: m.transform || "linear" }));
+  const savedScaleModerators = scaleModerators.map(m => ({ name: m.name, type: m.type, transform: m.transform || "linear" }));
 
   const studies = [];
   document.querySelectorAll("#inputTable tr").forEach((r, i) => {
@@ -1564,7 +1608,7 @@ function gatherSessionState() {
     studies.push({ study, inputs: effectInputs, group, cluster, moderators: modValues });
   });
 
-  return buildSession(settings, savedModerators, studies, { domains: _robDomains, data: _robData });
+  return buildSession(settings, savedModerators, studies, { domains: _robDomains, data: _robData }, savedScaleModerators);
 }
 
 // ---------------- SESSION SAVE ----------------
@@ -1579,7 +1623,7 @@ function saveSession() {
 // Returns { profile, savedStudies } so callers can inspect missing columns etc.
 
 function applySession(session) {
-  const { settings = {}, moderators: savedMods = [], studies: savedStudies = [], rob = {} } = session;
+  const { settings = {}, moderators: savedMods = [], scaleModerators: savedScaleMods = [], studies: savedStudies = [], rob = {} } = session;
 
   // Apply settings
   const s = settings;
@@ -1624,6 +1668,13 @@ function applySession(session) {
   savedMods.forEach(m => {
     if (m.name && (m.type === "continuous" || m.type === "categorical"))
       doAddModerator(m.name, m.type, m.transform || "linear");
+  });
+
+  // Rebuild scale moderators
+  scaleModerators = [];
+  savedScaleMods.forEach(m => {
+    if (m.name && (m.type === "continuous" || m.type === "categorical"))
+      doAddScaleModerator(m.name, m.type, m.transform || "linear");
   });
 
   // Rebuild table
@@ -1918,6 +1969,164 @@ function buildRegFittedRows(reg) {
       <td${flag}>${fmt(sr)}</td>
     </tr>`;
   }).join("");
+}
+
+// ---- Location-scale model panel ----
+function renderLocationScalePanel(ls, ciMethod, kExcluded = 0) {
+  const panel   = document.getElementById("regressionPanel");
+  const section = document.getElementById("regressionSection");
+  section.style.display = "";
+
+  if (ls.rankDeficient) {
+    const need = ls.p + ls.q + 1;
+    const have = ls.k ?? 0;
+    const msg  = ls.rankDeficientCause === "insufficient_k"
+      ? `Location-scale model needs more complete data: ${have} row${have === 1 ? "" : "s"} ` +
+        `ha${have === 1 ? "s" : "ve"} all values filled in, but at least ${need} are required.`
+      : `Design matrix is rank-deficient — moderators appear perfectly collinear.`;
+    panel.innerHTML = `
+      <div class="reg-header">
+        <span class="reg-title">Location-Scale Model${hBtn("diag.locationscale")}</span>
+      </div>
+      <div class="reg-body"><i>${msg}</i></div>`;
+    return;
+  }
+
+  const crit   = ls.crit;
+  const ciLbl  = getCiLabel();
+  const tau2min = Math.min(...ls.tau2_i);
+  const tau2max = Math.max(...ls.tau2_i);
+  const tau2rng = ls.q > 1
+    ? `τ²ᵢ range: [${fmt(tau2min)}, ${fmt(tau2max)}]`
+    : `τ² = ${fmt(ls.tau2_mean)}`;
+
+  // Location coefficient rows
+  function locRows() {
+    const multiMod = ls.p > 1 && Array.isArray(ls.locModTests) && ls.locModTests.length > 0;
+    function dataRow(j) {
+      const [lo, hi] = ls.ci_beta[j];
+      return `<tr class="${j === 0 ? "reg-intercept" : ""}">
+        <td>${ls.locColNames[j]}</td>
+        <td>${fmt(ls.beta[j])}</td>
+        <td>${fmt(ls.se_beta[j])}</td>
+        <td>${fmt(ls.zval_beta[j])}</td>
+        <td>${regFmtP(ls.pval_beta[j])}</td>
+        <td>[${fmt(lo)}, ${fmt(hi)}]</td>
+        <td>${regStars(ls.pval_beta[j])}</td>
+      </tr>`;
+    }
+    if (!multiMod) return ls.locColNames.map((_, j) => dataRow(j)).join("");
+    let html = dataRow(0);
+    for (const mt of ls.locModTests) {
+      if (!mt.colIdxs || mt.colIdxs.length === 0) continue;
+      const qmStr = isFinite(mt.QM)
+        ? ` &nbsp;·&nbsp; QM χ²(${mt.QMdf}) = ${fmt(mt.QM)}, p = ${regFmtP(mt.QMp)}`
+        : "";
+      html += `<tr class="reg-mod-group"><td colspan="7"><span class="reg-mod-name">${mt.name}</span>${qmStr}</td></tr>`;
+      for (const j of mt.colIdxs) html += dataRow(j);
+    }
+    return html;
+  }
+
+  // Scale coefficient rows (log τ² = Zγ)
+  function scaleRows() {
+    const multiMod = ls.q > 1 && Array.isArray(ls.scaleModTests) && ls.scaleModTests.length > 0;
+    function dataRow(j) {
+      const [lo, hi] = ls.ci_gamma[j];
+      const tau2val  = fmt(Math.exp(ls.gamma[j]));
+      return `<tr class="${j === 0 ? "reg-intercept" : ""}">
+        <td>${ls.scaleColNames[j]}</td>
+        <td>${fmt(ls.gamma[j])}</td>
+        <td>${fmt(ls.se_gamma[j])}</td>
+        <td>${fmt(ls.zval_gamma[j])}</td>
+        <td>${regFmtP(ls.pval_gamma[j])}</td>
+        <td>[${fmt(lo)}, ${fmt(hi)}]</td>
+        <td>${j === 0 ? `<span title="exp(γ₀) = τ²">eˣ=${tau2val}</span>` : regStars(ls.pval_gamma[j])}</td>
+      </tr>`;
+    }
+    if (!multiMod) return ls.scaleColNames.map((_, j) => dataRow(j)).join("");
+    let html = dataRow(0);
+    for (const mt of ls.scaleModTests) {
+      if (!mt.colIdxs || mt.colIdxs.length === 0) continue;
+      const qmStr = isFinite(mt.QM)
+        ? ` &nbsp;·&nbsp; QM χ²(${mt.QMdf}) = ${fmt(mt.QM)}, p = ${regFmtP(mt.QMp)}`
+        : "";
+      html += `<tr class="reg-mod-group"><td colspan="7"><span class="reg-mod-name">${mt.name}</span>${qmStr}</td></tr>`;
+      for (const j of mt.colIdxs) html += dataRow(j);
+    }
+    return html;
+  }
+
+  // Fitted values table with study-specific τ²ᵢ
+  function fittedRows() {
+    if (!ls.labels || !ls.fitted) return "";
+    return ls.labels.map((lbl, i) => `<tr>
+      <td>${lbl || i + 1}</td>
+      <td>${fmt(ls.yi[i])}</td>
+      <td>${fmt(ls.fitted[i])}</td>
+      <td>${fmt(ls.residuals[i])}</td>
+      <td>${fmt(ls.tau2_i[i])}</td>
+    </tr>`).join("");
+  }
+
+  const excWarn = kExcluded > 0
+    ? `<div class="reg-note reg-warn">⚠ ${kExcluded} ${kExcluded === 1 ? "study" : "studies"} excluded (missing moderator value${kExcluded === 1 ? "" : "s"}).</div>`
+    : "";
+
+  const QM_locRow = ls.p > 1 && isFinite(ls.QM_loc)
+    ? ` &nbsp;·&nbsp; QM<sub>loc</sub> χ²(${ls.QM_locDf}) = ${fmt(ls.QM_loc)}, p = ${regFmtP(ls.QM_locP)}`
+    : "";
+  const QM_scaleRow = ls.q > 1 && isFinite(ls.QM_scale)
+    ? ` &nbsp;·&nbsp; QM<sub>scale</sub> χ²(${ls.QM_scaleDf}) = ${fmt(ls.QM_scale)}, p = ${regFmtP(ls.QM_scaleP)}`
+    : "";
+  const lrRow = ls.q > 1 && isFinite(ls.LRchi2)
+    ? `<br><span style="color:var(--fg-muted);font-size:0.93em">LR test (scale mods): χ²(${ls.LRdf}) = ${fmt(ls.LRchi2)}, p = ${regFmtP(ls.LRp)}</span>`
+    : "";
+
+  const fRows = fittedRows();
+
+  panel.innerHTML = `
+    <div class="reg-header">
+      <span class="reg-title">Location-Scale Model${hBtn("diag.locationscale")}</span>
+      <span class="reg-meta">k = ${ls.k} &nbsp;·&nbsp; ML &nbsp;·&nbsp; Normal CI</span>
+    </div>
+    <div class="reg-het">
+      ${tau2rng} &nbsp;·&nbsp; I² = ${fmt(ls.I2)}%
+      &nbsp;·&nbsp; QE(${ls.QEdf}) = ${fmt(ls.QE)}, p = ${regFmtP(ls.QEp)}
+      ${QM_locRow}${QM_scaleRow}
+      ${lrRow}
+      <br><span style="color:var(--fg-muted);font-size:0.93em">LL = ${fmt(ls.LL)} (ML; log τ²ᵢ = Zᵢγ)</span>
+    </div>
+    <div class="reg-body">
+      ${excWarn}
+      <p style="margin:4px 0 2px;font-weight:600;font-size:0.95em">Location model — E[yᵢ] = Xᵢβ</p>
+      <table class="reg-table">
+        <thead><tr>
+          <th>Term</th><th>β</th><th>SE</th><th>z</th>
+          <th>p</th><th>${ciLbl}</th><th></th>
+        </tr></thead>
+        <tbody>${locRows()}</tbody>
+      </table>
+      <p style="margin:10px 0 2px;font-weight:600;font-size:0.95em">Scale model — log τ²ᵢ = Zᵢγ</p>
+      <table class="reg-table">
+        <thead><tr>
+          <th>Term</th><th>γ</th><th>SE</th><th>z</th>
+          <th>p</th><th>${ciLbl}</th><th></th>
+        </tr></thead>
+        <tbody>${scaleRows()}</tbody>
+      </table>
+      <div class="reg-note">*** p &lt; .001 &nbsp;·&nbsp; ** p &lt; .01 &nbsp;·&nbsp; * p &lt; .05 &nbsp;·&nbsp; · p &lt; .10 &nbsp;·&nbsp; eˣ: exponentiated intercept = τ² when all scale predictors = 0</div>
+      ${fRows ? `
+      <details>
+        <summary>Fitted values &amp; study-specific τ²ᵢ (k = ${ls.k})</summary>
+        <table class="reg-table">
+          <thead><tr>
+            <th>Study</th><th>yᵢ</th><th>ŷᵢ</th><th>eᵢ</th><th>τ²ᵢ</th>
+          </tr></thead>
+          <tbody>${fRows}</tbody>
+        </table>
+      </details>` : ""}
+    </div>`;
 }
 
 function renderRegressionPanel(reg, method, ciMethod, kExcluded = 0) {
@@ -3529,16 +3738,24 @@ async function runAnalysis() {
   }
   renderSelectionModelPanel(selResult, selModeVal, profile);
 
-  // ---- Meta-regression ----
+  // ---- Meta-regression / Location-scale model ----
   // buildDesignMatrix expects { key, type, transform }; ui state stores { name, type, transform }.
-  const modSpec = moderators.map(m => ({ key: m.name, type: m.type, transform: m.transform || "linear" }));
+  const modSpec      = moderators.map(m => ({ key: m.name, type: m.type, transform: m.transform || "linear" }));
+  const scaleModSpec = scaleModerators.map(m => ({ key: m.name, type: m.type, transform: m.transform || "linear" }));
   performance.mark("phase:regression:start");
-  const reg = moderators.length > 0
-    ? metaRegression(studies, modSpec, method, ciMethod, alpha)
-    : null;
+  let reg = null, ls = null;
+  if (scaleModerators.length > 0) {
+    ls = lsModel(studies, modSpec, scaleModSpec, { ciMethod, alpha });
+  } else if (moderators.length > 0) {
+    reg = metaRegression(studies, modSpec, method, ciMethod, alpha);
+  }
   performance.measure("phase:regression", "phase:regression:start");
-  const kExcluded = reg ? studies.length - reg.k : 0;
-  renderRegressionPanel(reg ?? {}, method, ciMethod, kExcluded);
+  const kExcluded = (reg ?? ls) ? studies.length - (reg ?? ls).k : 0;
+  if (ls) {
+    renderLocationScalePanel(ls, ciMethod, kExcluded);
+  } else {
+    renderRegressionPanel(reg ?? {}, method, ciMethod, kExcluded);
+  }
 
   // ---- Bubble plots (one per continuous moderator) ----
   // With a single moderator: raw yi vs x (drawBubble) and partial residuals are

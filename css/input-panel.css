@@ -288,6 +288,31 @@ input[type="file"]::file-selector-button:hover {
   color: var(--fg-muted);
 }
 
+.mod-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px 2px 10px;
+  background: var(--bg-th);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  font-size: 12px;
+  color: var(--fg);
+  margin: 2px 3px 2px 0;
+}
+
+.mod-tag button {
+  background: none;
+  border: none;
+  color: var(--fg-muted);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 1px;
+}
+
+.mod-tag button:hover { color: var(--fg); }
+
 .rob-domain-tag {
   display: inline-flex;
   align-items: center;

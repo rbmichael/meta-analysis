@@ -3510,6 +3510,270 @@ export function metaRegression(studies, moderators = [], method = "REML", ciMeth
   };
 }
 
+// ================= LOCATION-SCALE MODEL =================
+/**
+ * Location-scale meta-regression (rma.ls equivalent).
+ *
+ * Fits separate moderator models for:
+ *   Location (mean):  E[yᵢ] = Xᵢ β
+ *   Scale (log τ²):   log(τᵢ²) = Zᵢ γ  →  τᵢ² = exp(Zᵢ γ)
+ *
+ * Estimation: ML (not REML) — profile likelihood over γ with β profiled out.
+ *   β̂(γ) = (X'W(γ)X)⁻¹ X'W(γ) y,  wᵢ = 1/(vᵢ + exp(Zᵢγ))
+ *   LL(γ) = −½ Σ [ log(vᵢ + τᵢ²) + (yᵢ − Xᵢ β̂)²/(vᵢ + τᵢ²) ]
+ *
+ * @param {object[]} studies      - array of study objects with yi, vi
+ * @param {object[]} locMods      - location moderators { key, type, transform }
+ * @param {object[]} scaleMods    - scale moderators { key, type, transform }
+ * @param {object}   [opts]
+ *   ciMethod  "normal"|"t"  (default "normal")
+ *   alpha     confidence level (default 0.05)
+ * @returns structured result object
+ */
+export function lsModel(studies, locMods = [], scaleMods = [], opts = {}) {
+  const ciMethod = opts.ciMethod ?? "normal";
+  const alpha    = opts.alpha    ?? 0.05;
+
+  // ---- Filter valid studies ----
+  const valid = studies.filter(s => isFinite(s.yi) && isFinite(s.vi) && s.vi > 0);
+  const k = valid.length;
+
+  // ---- Build design matrices ----
+  const locDM   = buildDesignMatrix(valid, locMods);
+  const scaleDM = buildDesignMatrix(valid, scaleMods);
+
+  const validMask = locDM.validMask.map((v, i) => v && scaleDM.validMask[i]);
+  const rows   = valid.filter((_, i) => validMask[i]);
+  const Xloc   = locDM.X.filter((_, i) => validMask[i]);
+  const Zscale = scaleDM.X.filter((_, i) => validMask[i]);
+  const kf     = rows.length;
+  const yi     = rows.map(s => s.yi);
+  const vi     = rows.map(s => s.vi);
+  const p      = locDM.p;    // location parameters
+  const q      = scaleDM.p;  // scale parameters
+
+  const emptyResult = {
+    beta: Array(p).fill(NaN), se_beta: Array(p).fill(NaN),
+    zval_beta: Array(p).fill(NaN), pval_beta: Array(p).fill(NaN),
+    ci_beta: Array(p).fill([NaN, NaN]),
+    gamma: Array(q).fill(NaN), se_gamma: Array(q).fill(NaN),
+    zval_gamma: Array(q).fill(NaN), pval_gamma: Array(q).fill(NaN),
+    ci_gamma: Array(q).fill([NaN, NaN]),
+    tau2_i: Array(kf).fill(NaN),
+    QE: NaN, QEdf: kf - p, QEp: NaN,
+    QM_loc: NaN, QM_locDf: p - 1, QM_locP: NaN,
+    QM_scale: NaN, QM_scaleDf: q - 1, QM_scaleP: NaN,
+    LRchi2: NaN, LRdf: q - 1, LRp: NaN,
+    LL: NaN, LL0: NaN, I2: NaN,
+    locColNames: locDM.colNames, scaleColNames: scaleDM.colNames,
+    locColMap: locDM.modColMap, scaleColMap: scaleDM.modColMap,
+    locKnots: locDM.modKnots, scaleKnots: scaleDM.modKnots,
+    k: kf, p, q, rankDeficient: true, converged: false,
+    studiesUsed: rows, yi, vi,
+  };
+
+  if (kf < p + q) return { ...emptyResult, rankDeficientCause: "insufficient_k" };
+
+  // ---- Profile likelihood over γ ----
+  // Returns { beta, tau2_i, LL } for a given gamma vector.
+  function profileAt(gamma) {
+    const tau2_i = Zscale.map(z => Math.exp(dot(z, gamma)));
+    const w      = vi.map((v, i) => 1 / (v + tau2_i[i]));
+    const { beta, rankDeficient } = wls(Xloc, yi, w);
+    if (rankDeficient) return null;
+    const resid = yi.map((y, i) => y - dot(Xloc[i], beta));
+    const LL    = -0.5 * resid.reduce((acc, e, i) => {
+      return acc + Math.log(vi[i] + tau2_i[i]) + e * e * w[i];
+    }, 0);
+    return { beta, tau2_i, w, resid, LL };
+  }
+
+  // Objective: negative profile LL (minimise).
+  function negLL(gamma) {
+    const res = profileAt(gamma);
+    return res ? -res.LL : 1e10;
+  }
+
+  // ---- Starting point: γ₀ = [log(median vi), 0, 0, …] ----
+  const medVi  = vi.slice().sort((a, b) => a - b)[Math.floor(kf / 2)];
+  const gamma0 = Array(q).fill(0);
+  gamma0[0]    = Math.log(Math.max(medVi * 0.1, 1e-6));
+
+  // ---- Optimize ----
+  const opt = bfgs(negLL, gamma0, { maxIter: 600, gtol: 1e-7 });
+  const gamma_hat = opt.x;
+  const pr        = profileAt(gamma_hat);
+  if (!pr) return emptyResult;
+
+  const { beta, tau2_i, w, resid, LL } = pr;
+
+  // ---- SE for β: (X'W(γ̂)X)⁻¹ ----
+  const { vcov: vcov_beta, rankDeficient: rdBeta } = wls(Xloc, yi, w);
+  if (rdBeta) return emptyResult;
+
+  // ---- SE for γ: numerical Hessian of negLL at γ̂ ----
+  // Central-difference second-order partial derivatives.
+  const H_gamma = Array.from({ length: q }, () => Array(q).fill(0));
+  for (let j = 0; j < q; j++) {
+    for (let l = j; l < q; l++) {
+      const hj = Math.max(1e-4, 1e-4 * Math.abs(gamma_hat[j]));
+      const hl = Math.max(1e-4, 1e-4 * Math.abs(gamma_hat[l]));
+      let val;
+      if (j === l) {
+        // Second diagonal: (f(x+h) - 2f(x) + f(x-h)) / h²
+        const gp = gamma_hat.slice(); gp[j] += hj;
+        const gm = gamma_hat.slice(); gm[j] -= hj;
+        val = (negLL(gp) - 2 * negLL(gamma_hat) + negLL(gm)) / (hj * hj);
+      } else {
+        // Mixed partial: (f(x+hj,x+hl) - f(x+hj,x-hl) - f(x-hj,x+hl) + f(x-hj,x-hl)) / (4·hj·hl)
+        const gpp = gamma_hat.slice(); gpp[j] += hj; gpp[l] += hl;
+        const gpm = gamma_hat.slice(); gpm[j] += hj; gpm[l] -= hl;
+        const gmp = gamma_hat.slice(); gmp[j] -= hj; gmp[l] += hl;
+        const gmm = gamma_hat.slice(); gmm[j] -= hj; gmm[l] -= hl;
+        val = (negLL(gpp) - negLL(gpm) - negLL(gmp) + negLL(gmm)) / (4 * hj * hl);
+      }
+      H_gamma[j][l] = H_gamma[l][j] = val;
+    }
+  }
+
+  const vcov_gamma_raw = matInverse(H_gamma);
+  const vcov_gamma = vcov_gamma_raw ?? Array.from({ length: q }, () => Array(q).fill(NaN));
+  const rdGamma    = vcov_gamma_raw === null;
+
+  // ---- Inference for β ----
+  const crit = normalQuantile(1 - alpha / 2);
+  const se_beta  = vcov_beta.map((row, j) => Math.sqrt(Math.max(0, row[j])));
+  const zval_beta = beta.map((b, j) => b / se_beta[j]);
+  const pval_beta = zval_beta.map(z => 2 * (1 - normalCDF(Math.abs(z))));
+  const ci_beta   = beta.map((b, j) => [b - crit * se_beta[j], b + crit * se_beta[j]]);
+
+  // ---- Inference for γ ----
+  const se_gamma   = vcov_gamma.map((row, j) => Math.sqrt(Math.max(0, row[j])));
+  const zval_gamma = gamma_hat.map((g, j) => g / se_gamma[j]);
+  const pval_gamma = zval_gamma.map(z => 2 * (1 - normalCDF(Math.abs(z))));
+  const ci_gamma   = gamma_hat.map((g, j) => [g - crit * se_gamma[j], g + crit * se_gamma[j]]);
+
+  // ---- QE: residual heterogeneity (FE-based, same convention as metaRegression) ----
+  const w0  = vi.map(v => 1 / v);
+  const { beta: betaFE, rankDeficient: rdFE } = wls(Xloc, yi, w0);
+  const QE  = !rdFE ? yi.reduce((acc, y, i) => {
+    const e = y - dot(Xloc[i], betaFE);
+    return acc + w0[i] * e * e;
+  }, 0) : NaN;
+  const QEdf = kf - p;
+  const QEp  = QEdf > 0 && isFinite(QE) ? 1 - chiSquareCDF(QE, QEdf) : NaN;
+
+  // ---- QM for location moderators (Wald test on β[1..p-1]) ----
+  let QM_loc = NaN, QM_locDf = p - 1, QM_locP = NaN;
+  if (p > 1) {
+    const idx = Array.from({ length: p - 1 }, (_, i) => i + 1);
+    const bm  = idx.map(j => beta[j]);
+    const Vm  = idx.map(r => idx.map(c => vcov_beta[r][c]));
+    const iVm = matInverse(Vm);
+    if (iVm) {
+      QM_loc  = bm.reduce((acc, b, r) => acc + b * iVm[r].reduce((s, v, c) => s + v * bm[c], 0), 0);
+      QM_locP = 1 - chiSquareCDF(QM_loc, QM_locDf);
+    }
+  }
+
+  // ---- QM for scale moderators (Wald test on γ[1..q-1]) ----
+  let QM_scale = NaN, QM_scaleDf = q - 1, QM_scaleP = NaN;
+  if (q > 1 && !rdGamma) {
+    const idx = Array.from({ length: q - 1 }, (_, i) => i + 1);
+    const gm  = idx.map(j => gamma_hat[j]);
+    const Vgm = idx.map(r => idx.map(c => vcov_gamma[r][c]));
+    const iVgm = matInverse(Vgm);
+    if (iVgm) {
+      QM_scale  = gm.reduce((acc, g, r) => acc + g * iVgm[r].reduce((s, v, c) => s + v * gm[c], 0), 0);
+      QM_scaleP = 1 - chiSquareCDF(QM_scale, QM_scaleDf);
+    }
+  }
+
+  // ---- Likelihood ratio test for scale moderators ----
+  // Compare full model (q scale params) vs intercept-only scale model (1 scale param).
+  // The null model uses only the intercept of the scale matrix.
+  let LRchi2 = NaN, LRdf = q - 1, LRp = NaN, LL0 = NaN;
+  if (q > 1) {
+    // Negative profile LL for intercept-only scale model (gamma is a scalar).
+    function negLL0_fn(g1) {
+      const tau2_0 = Math.exp(g1[0]);
+      const w_0    = vi.map(v => 1 / (v + tau2_0));
+      const { beta: b0, rankDeficient: rd0 } = wls(Xloc, yi, w_0);
+      if (rd0) return 1e10;
+      const e0 = yi.map((y, i) => y - dot(Xloc[i], b0));
+      return 0.5 * e0.reduce((acc, e, i) => acc + Math.log(vi[i] + tau2_0) + e * e * w_0[i], 0);
+    }
+    const opt0  = bfgs(negLL0_fn, [gamma_hat[0]], { maxIter: 600, gtol: 1e-7 });
+    LL0    = -negLL0_fn(opt0.x);
+    LRchi2 = 2 * (LL - LL0);
+    LRp    = LRchi2 > 0 ? 1 - chiSquareCDF(LRchi2, LRdf) : 1;
+  }
+
+  // ---- I² (residual) using mean τ² ----
+  const tau2_mean = tau2_i.reduce((s, t) => s + t, 0) / kf;
+  const { vcov: vcov_FE } = !rdFE ? wls(Xloc, yi, w0) : { vcov: null };
+  const I2 = !rdFE && QEdf > 0 && vcov_FE ? (() => {
+    const c = w0.reduce((acc, wi, i) => acc + wi * (1 - wi * quadForm(vcov_FE, Xloc[i])), 0);
+    if (c <= 0) return 0;
+    return Math.max(0, tau2_mean / (tau2_mean + QEdf / c) * 100);
+  })() : 0;
+
+  // ---- Per-location-moderator Wald tests ----
+  const locModTests = locMods.map(({ key }) => {
+    const colIdxs = locDM.modColMap[key] ?? [];
+    const df = colIdxs.length;
+    if (df === 0) return { name: key, colIdxs, QM: NaN, QMdf: 0, QMp: NaN };
+    const bm  = colIdxs.map(j => beta[j]);
+    const Vm  = colIdxs.map(r => colIdxs.map(c => vcov_beta[r][c]));
+    const iVm = matInverse(Vm);
+    if (!iVm) return { name: key, QM: NaN, QMdf: df, QMp: NaN };
+    const QMchi = bm.reduce((acc, b, r) => acc + b * iVm[r].reduce((s, v, c) => s + v * bm[c], 0), 0);
+    return { name: key, colIdxs, QM: QMchi, QMdf: df, QMp: 1 - chiSquareCDF(QMchi, df) };
+  });
+
+  // ---- Per-scale-moderator Wald tests ----
+  const scaleModTests = scaleMods.map(({ key }) => {
+    const colIdxs = scaleDM.modColMap[key] ?? [];
+    const df = colIdxs.length;
+    if (df === 0 || rdGamma) return { name: key, colIdxs, QM: NaN, QMdf: 0, QMp: NaN };
+    const gm  = colIdxs.map(j => gamma_hat[j]);
+    const Vgm = colIdxs.map(r => colIdxs.map(c => vcov_gamma[r][c]));
+    const iVgm = matInverse(Vgm);
+    if (!iVgm) return { name: key, colIdxs, QM: NaN, QMdf: df, QMp: NaN };
+    const QMchi = gm.reduce((acc, g, r) => acc + g * iVgm[r].reduce((s, v, c) => s + v * gm[c], 0), 0);
+    return { name: key, colIdxs, QM: QMchi, QMdf: df, QMp: 1 - chiSquareCDF(QMchi, df) };
+  });
+
+  // ---- Fitted values and residuals ----
+  const fitted    = rows.map((_, i) => dot(Xloc[i], beta));
+  const residuals = yi.map((y, i) => y - fitted[i]);
+
+  return {
+    beta, se_beta, zval_beta, pval_beta, ci_beta,
+    gamma: gamma_hat, se_gamma, zval_gamma, pval_gamma, ci_gamma,
+    tau2_i, tau2_mean,
+    QE, QEdf, QEp,
+    QM_loc, QM_locDf, QM_locP,
+    QM_scale, QM_scaleDf, QM_scaleP,
+    LRchi2, LRdf, LRp,
+    LL, LL0, I2,
+    locColNames: locDM.colNames,
+    scaleColNames: scaleDM.colNames,
+    locColMap: locDM.modColMap,
+    scaleColMap: scaleDM.modColMap,
+    locKnots: locDM.modKnots,
+    scaleKnots: scaleDM.modKnots,
+    locModTests, scaleModTests,
+    k: kf, p, q,
+    rankDeficient: false, converged: opt.converged,
+    studiesUsed: rows,
+    fitted, residuals,
+    yi, vi,
+    labels: rows.map(s => s.label || ""),
+    crit, alpha,
+  };
+}
+
 // ================= CUMULATIVE META-ANALYSIS =================
 // Runs meta() on the first k studies for k = 1 … studies.length,
 // returning a sequence of pooled estimates in the chosen accumulation order.

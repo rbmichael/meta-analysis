@@ -1,7 +1,7 @@
 import { round, transformEffect, chiSquareCDF, chiSquareQuantile, parseCounts, bivariateNormalCDF, normalQuantile, tCritical, fCDF, normalCDF, tCDF } from "./utils.js";
 import { validateStudy } from "./profiles.js";
-import { BENCHMARKS, PUB_BIAS_BENCHMARKS, INFLUENCE_BENCHMARKS, META_REGRESSION_BENCHMARKS, VH_BENCHMARKS, MH_BENCHMARKS, CLUSTER_BENCHMARKS, RVE_BENCHMARKS, THREE_LEVEL_BENCHMARKS } from "./benchmarks.js";
-import { compute, meta, metaMH, metaPeto, robustMeta, sandwichVar, robustWlsResult, metaRegression, tau2_HS, tau2_HE, tau2_ML, tau2_SJ, beggTest, eggerTest, fatPetTest, petPeeseTest, failSafeN, tesTest, heterogeneityCIs, cumulativeMeta, influenceDiagnostics, harbordTest, petersTest, deeksTest, rueckerTest, leaveOneOut, baujat, blupMeta, pCurve, pUniform, estimatorComparison, subgroupAnalysis, logLik, bfgs, selIntervalProbs, selIntervalIdx, selectionLogLik, SEL_CUTS_ONE_SIDED, SEL_CUTS_TWO_SIDED, veveaHedges, SELECTION_PRESETS, profileLikTau2, profileLikCI, bayesMeta, rvePooled, meta3level } from "./analysis.js";
+import { BENCHMARKS, PUB_BIAS_BENCHMARKS, INFLUENCE_BENCHMARKS, META_REGRESSION_BENCHMARKS, VH_BENCHMARKS, MH_BENCHMARKS, CLUSTER_BENCHMARKS, RVE_BENCHMARKS, THREE_LEVEL_BENCHMARKS, LS_BENCHMARKS } from "./benchmarks.js";
+import { compute, meta, metaMH, metaPeto, robustMeta, sandwichVar, robustWlsResult, metaRegression, tau2_HS, tau2_HE, tau2_ML, tau2_SJ, beggTest, eggerTest, fatPetTest, petPeeseTest, failSafeN, tesTest, heterogeneityCIs, cumulativeMeta, influenceDiagnostics, harbordTest, petersTest, deeksTest, rueckerTest, leaveOneOut, baujat, blupMeta, pCurve, pUniform, estimatorComparison, subgroupAnalysis, logLik, bfgs, selIntervalProbs, selIntervalIdx, selectionLogLik, SEL_CUTS_ONE_SIDED, SEL_CUTS_TWO_SIDED, veveaHedges, SELECTION_PRESETS, profileLikTau2, profileLikCI, bayesMeta, rvePooled, meta3level, lsModel } from "./analysis.js";
 import { trimFill } from "./trimfill.js";
 import { parseCSV } from "./csv.js";
 import { goshCompute, GOSH_MAX_ENUM_K, GOSH_MAX_K, GOSH_DEFAULT_MAX_SUBSETS } from "./gosh.js";
@@ -5427,6 +5427,65 @@ export function runTests() {
     });
 
     console.log(threeBmPass ? "\n✅ ALL THREE-LEVEL BENCHMARK TESTS PASSED" : "\n❌ SOME THREE-LEVEL BENCHMARK TESTS FAILED");
+  }
+
+  // ===== LOCATION-SCALE (lsModel) BENCHMARK TESTS =====
+  {
+    console.log("\n===== LOCATION-SCALE (lsModel) BENCHMARK TESTS =====\n");
+    let lsBmPass = true;
+    const bchkLS = (label, got, exp, tol) => {
+      const ok = Math.abs(got - exp) <= tol;
+      if (!ok) { console.error(`  FAIL ${label}: got ${got}, expected ${exp} (tol ${tol})`); lsBmPass = false; }
+      else console.log(`  ok  ${label}`);
+    };
+    const bchkLSExact = (label, got, exp) => {
+      const ok = JSON.stringify(got) === JSON.stringify(exp);
+      if (!ok) { console.error(`  FAIL ${label}: got ${JSON.stringify(got)}, expected ${JSON.stringify(exp)}`); lsBmPass = false; }
+      else console.log(`  ok  ${label}`);
+    };
+
+    LS_BENCHMARKS.forEach(bm => {
+      console.log(`--- Benchmark: ${bm.name} ---`);
+      const r = lsModel(bm.data, bm.locMods, bm.scaleMods, {});
+
+      if (r.rankDeficient) {
+        console.error("  FAIL: unexpected rankDeficient");
+        lsBmPass = false;
+        return;
+      }
+
+      const ex = bm.expected;
+
+      // Location (beta)
+      ex.beta.forEach((b, j) => bchkLS(`beta[${j}]`, r.beta[j], b, 1e-4));
+      ex.se_beta.forEach((s, j) => bchkLS(`se_beta[${j}]`, r.se_beta[j], s, 1e-4));
+
+      // Scale (gamma)
+      ex.gamma.forEach((g, j) => bchkLS(`gamma[${j}]`, r.gamma[j], g, 1e-4));
+      ex.se_gamma.forEach((s, j) => bchkLS(`se_gamma[${j}]`, r.se_gamma[j], s, 1e-2));
+
+      // tau2
+      if (ex.tau2_mean !== undefined) bchkLS("tau2_mean", r.tau2_mean, ex.tau2_mean, 1e-4);
+      if (ex.tau2_i !== undefined)
+        ex.tau2_i.forEach((t, i) => bchkLS(`tau2_i[${i}]`, r.tau2_i[i], t, 1e-4));
+
+      // QE / QM
+      if (ex.QE !== undefined)    bchkLS("QE", r.QE, ex.QE, 1e-3);
+      if (ex.QM_loc !== undefined) bchkLS("QM_loc", r.QM_loc, ex.QM_loc, 1e-3);
+      if (ex.QM_scale !== undefined) bchkLS("QM_scale", r.QM_scale, ex.QM_scale, 1e-4);
+
+      // LL
+      bchkLS("LL", r.LL, ex.LL, 1e-4);
+
+      // Structural
+      bchkLSExact("k", r.k, ex.k);
+      bchkLSExact("p", r.p, ex.p);
+      bchkLSExact("q", r.q, ex.q);
+      if (ex.locColNames)   bchkLSExact("locColNames",   r.locColNames,   ex.locColNames);
+      if (ex.scaleColNames) bchkLSExact("scaleColNames", r.scaleColNames, ex.scaleColNames);
+    });
+
+    console.log(lsBmPass ? "\n✅ ALL LOCATION-SCALE BENCHMARK TESTS PASSED" : "\n❌ SOME LOCATION-SCALE BENCHMARK TESTS FAILED");
   }
 
   // ===== THREE-LEVEL (meta3level) UNIT TESTS =====
