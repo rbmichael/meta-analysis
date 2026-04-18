@@ -1469,6 +1469,72 @@ wᵢ = 1/(vᵢ + τ²), with τ² estimated by REML or the selected estimator.</
       },
 
       {
+        id: "guide-nonlinear-reg",
+        title: "Non-linear meta-regression",
+        body: `<p>Standard meta-regression assumes a linear relationship between a
+continuous moderator and the true effect. When the relationship may be curved,
+<strong>polynomial</strong> or <strong>restricted cubic spline (RCS)</strong>
+terms allow the fitted curve to flex while remaining fully estimable via the
+same WLS framework.</p>
+
+<p><strong>Polynomial terms</strong><br>
+Adding x² and x³ to the design matrix captures quadratic or cubic curvature:
+<code>ŷ = β₀ + β₁x + β₂x²</code> (quadratic) or
+<code>ŷ = β₀ + β₁x + β₂x² + β₃x³</code> (cubic).
+Select <em>Poly ²</em> or <em>Poly ³</em> from the transform menu when adding
+the moderator. These are equivalent to metafor's <code>I(x^2)</code> syntax.
+Because raw polynomial columns are correlated, VIF typically exceeds 5; this is
+expected and does not affect estimates.</p>
+
+<p><strong>Restricted cubic splines (RCS)</strong><br>
+RCS, also called natural splines, are piecewise cubic polynomials that are:
+(a) cubic between interior knots, (b) linear beyond the outermost knots
+(reducing extrapolation risk), and (c) constrained to join smoothly at knots.
+With <em>k</em> knots the model uses <em>k</em> − 1 total regression columns
+(one linear term plus <em>k</em> − 2 nonlinear terms).</p>
+
+<p><strong>RCS formula (Harrell, 2015, eq. 2.5):</strong><br>
+For knots t₁ &lt; … &lt; t<sub>k</sub>, the j-th nonlinear basis term is:</p>
+<pre>φⱼ(x) = (x − tⱼ)³₊ − [(t<sub>k</sub>−tⱼ)/(t<sub>k</sub>−t<sub>k-1</sub>)]·(x−t<sub>k-1</sub>)³₊
+                     + [(t<sub>k-1</sub>−tⱼ)/(t<sub>k</sub>−t<sub>k-1</sub>)]·(x−t<sub>k</sub>)³₊</pre>
+<p>where (u)₊ = max(u, 0)³.</p>
+
+<p><strong>Knot placement</strong><br>
+Knots are placed at Harrell's recommended percentiles of the observed moderator
+values:</p>
+<table style="font-size:0.9em;border-collapse:collapse">
+<tr><th style="padding:2px 8px">Knots</th><th style="padding:2px 8px">Percentiles</th></tr>
+<tr><td style="padding:2px 8px">3</td><td style="padding:2px 8px">10, 50, 90</td></tr>
+<tr><td style="padding:2px 8px">4</td><td style="padding:2px 8px">5, 35, 65, 95</td></tr>
+<tr><td style="padding:2px 8px">5</td><td style="padding:2px 8px">5, 27.5, 50, 72.5, 95</td></tr>
+</table>
+
+<p><strong>Interpreting the output</strong><br>
+The per-moderator Wald test (Q<sub>M</sub> with k−1 df) tests whether the
+moderator as a whole (linear + nonlinear terms combined) is significant.
+Individual coefficients for the nonlinear terms are not interpretable in
+isolation — examine the fitted curve in the bubble plot instead.</p>
+
+<p><strong>Model selection</strong><br>
+Compare the linear, quadratic, and spline models using AIC/BIC (lower = better)
+or a likelihood ratio test (fitted models must be nested, same τ² method).</p>
+
+<p><strong>Cautionary notes:</strong></p>
+<ul>
+  <li>Non-linear terms increase VIF (expected, not a bug).</li>
+  <li>With small k (e.g. &lt; 15 studies), cubic splines with 4–5 knots may
+  be near-collinear or poorly identified.</li>
+  <li>3-knot RCS is the recommended starting point for most meta-analyses.</li>
+  <li>Polynomial models of degree ≥ 3 can produce extreme extrapolation
+  outside the data range; the bubble plot shaded region shows the uncertainty.</li>
+</ul>`,
+        citations: [
+          "Harrell, F. E., Jr. (2015). <em>Regression Modeling Strategies</em> (2nd ed.). Springer. Chapter 2.",
+          "Stone, C. J., & Koo, C.-Y. (1985). Additive splines in statistics. <em>ASA Proceedings of the Statistical Computing Section, 45</em>, 45–48.",
+        ],
+      },
+
+      {
         id: "guide-aic-bic",
         title: "AIC / BIC for model comparison",
         body: `<p>AIC and BIC are information criteria used to compare competing
@@ -2117,6 +2183,7 @@ export const HELP_TO_GUIDE = {
   "diag.covratio":    "guide-covratio",
   "diag.subgroup":       "guide-subgroup",
   "diag.metaregression": "guide-metaregression",
+  "diag.nonlinear-reg":  "guide-nonlinear-reg",
   "diag.qqplot":         "guide-qqplot",
   "reg.aic":             "guide-aic-bic",
   "input.moderators":    "guide-subgroup",

@@ -1919,6 +1919,103 @@ export const META_REGRESSION_BENCHMARKS = [
       BIC: 24.521471
     },
     citation: "Colditz et al. (1994) dat.bcg. R-verified (metafor 4.8.0, generate.R block 44) for all fields including QE. QE uses FE weights (1/vi) with FE-fitted β, matching metafor convention. KH s² from RE residuals (Knapp & Hartung 2003, eq. 8). AIC/BIC identical to MR-B (REML tau2 unchanged by KH)."
+  },
+
+  // ----------------------------------------------------------------
+  // MR-D: polynomial (quadratic) moderator — ablat + ablat², REML
+  // Equivalent to metafor: rma(yi, vi, mods = ~ ablat + I(ablat^2), data=dat.bcg)
+  // R verification pending (generate.R block 48).
+  // ----------------------------------------------------------------
+  {
+    name: "BCG – ablat poly² (REML, normal CI)",
+    moderators: [
+      { key: "ablat", type: "continuous", transform: "poly2" }
+    ],
+    tauMethod: "REML",
+    ciMethod:  "normal",
+    data: [
+      { label: "Aronson 1948",           yi: -0.8893113339202054, vi: 0.3255847650039614,    ablat: 44 },
+      { label: "Ferguson & Simes 1949",  yi: -1.5853886572014306, vi: 0.19458112139814387,   ablat: 55 },
+      { label: "Rosenthal 1960",         yi: -1.348073148299693,  vi: 0.41536796536796533,   ablat: 42 },
+      { label: "Hart & Sutherland 1977", yi: -1.4415511900213054, vi: 0.020010031902247573,  ablat: 52 },
+      { label: "Frimodt-Moller 1973",    yi: -0.2175473222112957, vi: 0.05121017216963086,   ablat: 13 },
+      { label: "Stein & Aronson 1953",   yi: -0.786115585818864,  vi: 0.0069056184559087574, ablat: 44 },
+      { label: "Vandiviere 1973",        yi: -1.6208982235983924, vi: 0.22301724757231517,   ablat: 19 },
+      { label: "TPT Madras 1980",        yi:  0.011952333523841173,vi: 0.00396157929781773,  ablat: 13 },
+      { label: "Coetzee & Berjak 1968",  yi: -0.4694176487381487, vi: 0.056434210463248966,  ablat: 27 },
+      { label: "Rosenthal 1961",         yi: -1.3713448034727846, vi: 0.07302479361302891,   ablat: 42 },
+      { label: "Comstock 1974",          yi: -0.33935882833839015,vi: 0.01241221397155972,   ablat: 18 },
+      { label: "Comstock & Webster 1969",yi:  0.4459134005713783, vi: 0.5325058452001528,    ablat: 33 },
+      { label: "Comstock 1976",          yi: -0.017313948216879493,vi: 0.0714046596839863,   ablat: 33 }
+    ],
+    expected: {
+      beta:     [-0.3889, 0.0218, -0.0008],
+      se:       [ 0.6285, 0.0464,  0.0007],
+      tau2:     0.0806,
+      QE:       28.4961,
+      QEdf:     10,
+      QEp:      0.0015,
+      QM:       16.9158,
+      QMdf:     2,
+      QMp:      0.0002,
+      I2:       66.62,
+      R2:       0.7426,
+      colNames: ["intercept", "ablat", "ablat²"],
+      modTests: [
+        { name: "ablat", QM: 16.9158, QMdf: 2, QMp: 0.0002 }
+      ]
+    },
+    citation: "Colditz et al. (1994) dat.bcg. R verification pending (generate.R block 48). Equivalent to metafor rma(mods = ~ ablat + I(ablat^2))."
+  },
+
+  // ----------------------------------------------------------------
+  // MR-E: restricted cubic spline (3 knots) — ablat, REML
+  // Knots at 10th/50th/90th percentiles of ablat: [14, 33, 50.4]
+  // Equivalent to metafor: rma(yi, vi, mods = ~ ablat + phi1, data=dat.bcg)
+  //   where phi1 is the single RCS nonlinear term computed from Harrell's formula.
+  // R verification pending (generate.R block 49).
+  // ----------------------------------------------------------------
+  {
+    name: "BCG – ablat RCS (3 knots, REML, normal CI)",
+    moderators: [
+      { key: "ablat", type: "continuous", transform: "rcs3" }
+    ],
+    tauMethod: "REML",
+    ciMethod:  "normal",
+    data: [
+      { label: "Aronson 1948",           yi: -0.8893113339202054, vi: 0.3255847650039614,    ablat: 44 },
+      { label: "Ferguson & Simes 1949",  yi: -1.5853886572014306, vi: 0.19458112139814387,   ablat: 55 },
+      { label: "Rosenthal 1960",         yi: -1.348073148299693,  vi: 0.41536796536796533,   ablat: 42 },
+      { label: "Hart & Sutherland 1977", yi: -1.4415511900213054, vi: 0.020010031902247573,  ablat: 52 },
+      { label: "Frimodt-Moller 1973",    yi: -0.2175473222112957, vi: 0.05121017216963086,   ablat: 13 },
+      { label: "Stein & Aronson 1953",   yi: -0.786115585818864,  vi: 0.0069056184559087574, ablat: 44 },
+      { label: "Vandiviere 1973",        yi: -1.6208982235983924, vi: 0.22301724757231517,   ablat: 19 },
+      { label: "TPT Madras 1980",        yi:  0.011952333523841173,vi: 0.00396157929781773,  ablat: 13 },
+      { label: "Coetzee & Berjak 1968",  yi: -0.4694176487381487, vi: 0.056434210463248966,  ablat: 27 },
+      { label: "Rosenthal 1961",         yi: -1.3713448034727846, vi: 0.07302479361302891,   ablat: 42 },
+      { label: "Comstock 1974",          yi: -0.33935882833839015,vi: 0.01241221397155972,   ablat: 18 },
+      { label: "Comstock & Webster 1969",yi:  0.4459134005713783, vi: 0.5325058452001528,    ablat: 33 },
+      { label: "Comstock 1976",          yi: -0.017313948216879493,vi: 0.0714046596839863,   ablat: 33 }
+    ],
+    expected: {
+      // Knots at 10th/50th/90th percentiles of ablat: [14, 33, 50.4]
+      beta:     [-0.2099, -0.0029, -0.0000264],
+      se:       [ 0.4384,  0.0217,  0.0000206],
+      tau2:     0.0766,
+      QE:       27.9911,
+      QEdf:     10,
+      QEp:      0.0018,
+      QM:       17.9533,
+      QMdf:     2,
+      QMp:      0.0001,
+      I2:       65.96,
+      R2:       0.7555,
+      colNames: ["intercept", "ablat", "ablat_rcs1"],
+      modTests: [
+        { name: "ablat", QM: 17.9533, QMdf: 2, QMp: 0.0001 }
+      ]
+    },
+    citation: "Colditz et al. (1994) dat.bcg. R verification pending (generate.R block 49). Harrell RCS formula with 3 knots at 10th/50th/90th pct of ablat (14, 33, 50.4)."
   }
 
 ];

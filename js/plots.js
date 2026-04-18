@@ -95,6 +95,7 @@
 import { chiSquareCDF, normalQuantile } from "./utils.js";
 import { Z_95 } from "./constants.js";
 import { FOREST_THEMES } from "./forestThemes.js";
+import { rcsBasis } from "./analysis.js";
 
 // ── Shared D3 helpers ─────────────────────────────────────────────────────────
 
@@ -171,11 +172,31 @@ function attachTooltip(sel, htmlFn) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ---- Nonlinear moderator basis evaluator ----
+// Evaluates the design-matrix basis columns for one continuous moderator
+// at a given x value.  The return length matches modColMap[modName].length.
+//   linear  → [x]
+//   poly2   → [x, x²]
+//   poly3   → [x, x², x³]
+//   rcs3/4/5→ [x, φ₁(x), …]  (rcsBasis prepends only nonlinear terms; we add x)
+function evalModBasis(x, transform, knots) {
+  if (transform === "poly2") return [x, x * x];
+  if (transform === "poly3") return [x, x * x, x * x * x];
+  if (transform === "rcs3" || transform === "rcs4" || transform === "rcs5") {
+    return [x, ...rcsBasis(x, knots)];
+  }
+  return [x];  // linear (default)
+}
+
 // ================= BUBBLE PLOT =================
 // One bubble chart per continuous moderator.
 // Bubble radius ∝ √(RE weight).  Regression line is the marginal fit:
-// ŷ(x) = β₀ + β_j·x + Σ_{i≠j} β_i · wmean(X_i)   (other predictors at their weighted means).
-export function drawBubble(studies, reg, modName, modIdx, container) {
+// ŷ(x) = β₀ + Σ_j β_{colIdxs[j]}·basis_j(x) + Σ_{other} β_i·wmean(X_i)
+//
+// mod: { name, type, transform }  (from ui.js moderators state)
+export function drawBubble(studies, reg, mod, container) {
+  const modName = mod.name;
+  const transform = mod.transform || "linear";
   const W = 460, H = 340;
   const margin = { top: 34, right: 18, bottom: 52, left: 56 };
   const iW = W - margin.left - margin.right;
@@ -192,6 +213,11 @@ export function drawBubble(studies, reg, modName, modIdx, container) {
   const wMax  = Math.max(...wArr);
   const rMax  = 15;
 
+  // ---- Nonlinear setup ----
+  const colIdxs = (reg.modColMap && reg.modColMap[modName]) || [];
+  const knots   = reg.modKnots && reg.modKnots[modName];
+  const isLinear = transform === "linear" || colIdxs.length <= 1;
+
   // ---- Marginal line: hold every other predictor at its RE-weighted mean ----
   const { beta, colNames, vcov, crit, s2 } = reg;
 
@@ -203,32 +229,35 @@ export function drawBubble(studies, reg, modName, modIdx, container) {
     return valid.map(s => +s[col]);
   }
 
-  // wmeans[i] = weighted mean of column i (0 for intercept, 0 placeholder for modIdx).
-  // The vector l(x) used for SE: l = wmeans with l[modIdx] = x, l[0] = 1.
+  // wmeans[i] = weighted mean of column i.
+  // Skip intercept (always 1) and ALL focal moderator columns (set in seAt per x).
+  const colIdxSet = new Set(colIdxs);
   const wmeans = new Array(colNames.length).fill(0);
   wmeans[0] = 1;
 
   let intercept0 = beta[0];
   for (let i = 1; i < colNames.length; i++) {
-    if (i === modIdx) continue;
+    if (colIdxSet.has(i)) continue;  // focal moderator columns — handled per x
     const vals = colValues(colNames[i]);
     const wm   = vals.reduce((s, v, k) => s + wArr[k] * v, 0) / wSum;
     wmeans[i]  = wm;
     intercept0 += beta[i] * wm;
   }
-  const slope = beta[modIdx];
 
-  // seAt(x) → number
-  // Standard error of the regression line's fitted value at moderator value x.
-  // Uses the delta method: SE = √(l(x)ᵀ · Vcov · l(x) · s²), where l(x) is
-  // the predictor vector with all covariates held at their weighted means
-  // except the focal moderator, which is set to x.  Used to draw the shaded
-  // confidence band around the regression line in the bubble plot.
-  // Returns NaN when the variance-covariance matrix is unavailable.
+  // fitAt(x): fitted value of the marginal curve at x
+  // = intercept0 + Σ_j beta[colIdxs[j]] · basis[j](x)
+  function fitAt(x) {
+    if (!isFinite(intercept0)) return NaN;
+    const basis = evalModBasis(x, transform, knots);
+    return colIdxs.reduce((acc, ci, j) => acc + beta[ci] * basis[j], intercept0);
+  }
+
+  // seAt(x): delta-method SE of the marginal fitted value at x.
   function seAt(x) {
     if (!vcov) return NaN;
     const l = wmeans.slice();
-    l[modIdx] = x;
+    const basis = evalModBasis(x, transform, knots);
+    colIdxs.forEach((ci, j) => { l[ci] = basis[j]; });
     let q = 0;
     for (let r = 0; r < l.length; r++)
       for (let c = 0; c < l.length; c++)
@@ -260,10 +289,10 @@ export function drawBubble(studies, reg, modName, modIdx, container) {
       .attr("stroke", "var(--border-hover)").attr("stroke-dasharray", "4,2");
   }
 
-  // Prediction band + regression line (band drawn first, behind line)
-  if (isFinite(slope) && isFinite(intercept0)) {
+  // Prediction band + regression curve (band drawn first, behind curve)
+  if (colIdxs.length > 0 && isFinite(intercept0)) {
     const [xl, xr] = xScale.domain();
-    const nPts = 80;
+    const nPts = 120;
     const step = (xr - xl) / (nPts - 1);
     const pts  = Array.from({ length: nPts }, (_, i) => xl + i * step);
 
@@ -271,8 +300,8 @@ export function drawBubble(studies, reg, modName, modIdx, container) {
     if (vcov && isFinite(crit)) {
       const area = d3.area()
         .x(x  => xScale(x))
-        .y0(x => yScale(intercept0 + slope * x - crit * seAt(x)))
-        .y1(x => yScale(intercept0 + slope * x + crit * seAt(x)));
+        .y0(x => { const f = fitAt(x); return yScale(f - crit * seAt(x)); })
+        .y1(x => { const f = fitAt(x); return yScale(f + crit * seAt(x)); });
       g.append("path")
         .datum(pts)
         .attr("fill", "var(--accent-glow)")
@@ -280,11 +309,21 @@ export function drawBubble(studies, reg, modName, modIdx, container) {
         .attr("d", area);
     }
 
-    // Regression line
-    g.append("line")
-      .attr("x1", xScale(xl)).attr("y1", yScale(intercept0 + slope * xl))
-      .attr("x2", xScale(xr)).attr("y2", yScale(intercept0 + slope * xr))
-      .attr("stroke", "var(--accent)").attr("stroke-width", 2);
+    if (isLinear) {
+      // Straight line for linear moderators
+      g.append("line")
+        .attr("x1", xScale(xl)).attr("y1", yScale(fitAt(xl)))
+        .attr("x2", xScale(xr)).attr("y2", yScale(fitAt(xr)))
+        .attr("stroke", "var(--accent)").attr("stroke-width", 2);
+    } else {
+      // Smooth curve for nonlinear moderators
+      const line = d3.line().x(x => xScale(x)).y(x => yScale(fitAt(x)));
+      g.append("path")
+        .datum(pts)
+        .attr("fill", "none")
+        .attr("stroke", "var(--accent)").attr("stroke-width", 2)
+        .attr("d", line);
+    }
   }
 
   // Bubbles
@@ -299,7 +338,7 @@ export function drawBubble(studies, reg, modName, modIdx, container) {
     .attr("stroke", "var(--fg-subtle)")
     .attr("stroke-width", 1.2)
     .on("mousemove", (event, s) => {
-      const fitted = intercept0 + slope * s[modName];
+      const fitted = fitAt(s[modName]);
       tooltip.style("opacity", 1)
         .html(`<b>${s.label}</b><br>${modName}: ${s[modName]}<br>yi: ${s.yi.toFixed(3)}<br>ŷ: ${fitted.toFixed(3)}`)
         .style("left", (event.pageX + 12) + "px")
@@ -323,11 +362,15 @@ export function drawBubble(studies, reg, modName, modIdx, container) {
     .attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "12px")
     .text("Effect size (yi)");
 
-  // Title
+  // Title — for linear show β; for nonlinear show transform label
+  const linearBeta = () => isFinite(beta[colIdxs[0]]) ? beta[colIdxs[0]].toFixed(3) : "NA";
+  const titleSuffix = isLinear
+    ? `β = ${colIdxs.length ? linearBeta() : "NA"}`
+    : transform.startsWith("rcs") ? `RCS (${transform.slice(3)} knots)` : transform;
   svg.append("text")
     .attr("x", margin.left + iW / 2).attr("y", 16)
     .attr("text-anchor", "middle").attr("fill", "var(--fg)").style("font-size", "13px")
-    .text(`${modName}  (β = ${isFinite(slope) ? slope.toFixed(3) : "NA"})`);
+    .text(`${modName}  (${titleSuffix})`);
 }
 
 // ================= PARTIAL-RESIDUAL BUBBLE PLOT =================
@@ -347,7 +390,12 @@ export function drawBubble(studies, reg, modName, modIdx, container) {
 // slope β_j.  Confidence band uses the same delta-method seAt(x) as drawBubble
 // (SE of the marginal prediction at x with all other predictors at their
 // weighted means) — the band width is identical regardless of the y-shift.
-export function drawPartialResidualBubble(studies, reg, modName, modIdx, container) {
+// For nonlinear moderators the straight line is replaced by a smooth curve.
+//
+// mod: { name, type, transform }  (from ui.js moderators state)
+export function drawPartialResidualBubble(studies, reg, mod, container) {
+  const modName = mod.name;
+  const transform = mod.transform || "linear";
   const W = 460, H = 340;
   const margin = { top: 34, right: 18, bottom: 52, left: 56 };
   const iW = W - margin.left - margin.right;
@@ -362,32 +410,36 @@ export function drawPartialResidualBubble(studies, reg, modName, modIdx, contain
   const wMax = Math.max(...wArr);
   const rMax = 15;
 
+  // ---- Nonlinear setup ----
+  const colIdxs = (reg.modColMap && reg.modColMap[modName]) || [];
+  const knots   = reg.modKnots && reg.modKnots[modName];
+  const isLinear = transform === "linear" || colIdxs.length <= 1;
+
   const { beta, colNames, vcov, crit, s2 } = reg;
 
-  function colValues(col) {
-    if (col.includes(':')) {
-      const [key, level] = col.split(':');
-      return valid.map(s => s[key] === level ? 1 : 0);
-    }
-    return valid.map(s => +s[col]);
-  }
-
-  // wmeans: weighted mean of each column (intercept fixed at 1, focal col = 0
-  // placeholder).  Used identically to drawBubble for the seAt() SE band.
+  // wmeans: skip ALL focal moderator columns.
+  const colIdxSet = new Set(colIdxs);
   const wmeans = new Array(colNames.length).fill(0);
   wmeans[0] = 1;
   for (let i = 1; i < colNames.length; i++) {
-    if (i === modIdx) continue;
-    const vals = colValues(colNames[i]);
+    if (colIdxSet.has(i)) continue;
+    const col = colNames[i];
+    let vals;
+    if (col.includes(':')) {
+      const [key, level] = col.split(':');
+      vals = valid.map(s => s[key] === level ? 1 : 0);
+    } else {
+      vals = valid.map(s => +s[col]);
+    }
     wmeans[i] = vals.reduce((s, v, k) => s + wArr[k] * v, 0) / wSum;
   }
 
-  // seAt(x): delta-method SE of the marginal fitted value at moderator value x.
-  // Band width is the same as in drawBubble — only the line center differs.
+  // seAt(x): delta-method SE at moderator value x.
   function seAt(x) {
     if (!vcov) return NaN;
     const l = wmeans.slice();
-    l[modIdx] = x;
+    const basis = evalModBasis(x, transform, knots);
+    colIdxs.forEach((ci, j) => { l[ci] = basis[j]; });
     let q = 0;
     for (let r = 0; r < l.length; r++)
       for (let c = 0; c < l.length; c++)
@@ -396,30 +448,36 @@ export function drawPartialResidualBubble(studies, reg, modName, modIdx, contain
   }
 
   // ---- Partial residuals ----
-  // y*_i = y_i − β_0 − Σ_{l≠j, l≥1} β_l · X_{il}
-  const colValsCache = colNames.map((col, l) =>
-    (l === 0 || l === modIdx) ? null : colValues(col)
-  );
-  const partialY = valid.map((s, i) => {
-    let subtract = beta[0];  // intercept
-    for (let l = 1; l < colNames.length; l++) {
-      if (l === modIdx) continue;
-      subtract += beta[l] * colValsCache[l][i];
-    }
-    return s.yi - subtract;
+  // y*_i = residuals_i + focalContrib_i
+  //      = (y_i - fitted_i) + Σ_j beta[colIdxs[j]] · basis_j(x_i)
+  // This removes all other predictors' contributions, leaving only the
+  // focal moderator's contribution plus the residual.
+  // reg.residuals are the RE residuals (yi - Xf @ beta) for studiesUsed.
+  const residualsMap = new Map((reg.studiesUsed || []).map((s, i) => [s, reg.residuals[i]]));
+
+  function focalContrib(x) {
+    const basis = evalModBasis(x, transform, knots);
+    return colIdxs.reduce((acc, ci, j) => acc + beta[ci] * basis[j], 0);
+  }
+
+  const partialY = valid.map(s => {
+    const resid = residualsMap.get(s);
+    return (resid !== undefined ? resid : s.yi - beta[0]) + focalContrib(s[modName]);
   });
 
-  // Weighted centroid of (x, y*)
+  // Curve through partial residuals: at each x, the curve value is
+  // focalContrib(x) + yIntercept, where yIntercept shifts the curve to
+  // pass through the weighted centroid of (x, y*).
   const xVals  = valid.map(s => s[modName]);
   const xWMean = xVals.reduce((s, v, i) => s + wArr[i] * v, 0) / wSum;
   const yWMean = partialY.reduce((s, v, i) => s + wArr[i] * v, 0) / wSum;
-
-  // Line through centroid: y* = yWMean + β_j · (x − xWMean)
-  //                           = partialIntercept + β_j · x
-  const slope = beta[modIdx];
-  const partialIntercept = isFinite(yWMean) && isFinite(xWMean)
-    ? yWMean - slope * xWMean
+  const yIntercept = isFinite(yWMean) && isFinite(xWMean)
+    ? yWMean - focalContrib(xWMean)
     : NaN;
+
+  function partialFitAt(x) {
+    return isFinite(yIntercept) ? yIntercept + focalContrib(x) : NaN;
+  }
 
   // ---- Scales ----
   const [xMin, xMax] = d3.extent(xVals);
@@ -443,18 +501,18 @@ export function drawPartialResidualBubble(studies, reg, modName, modIdx, contain
       .attr("stroke", "var(--border-hover)").attr("stroke-dasharray", "4,2");
   }
 
-  // Prediction band + regression line
-  if (isFinite(slope) && isFinite(partialIntercept)) {
+  // Prediction band + regression curve
+  if (isFinite(yIntercept) && colIdxs.length > 0) {
     const [xl, xr] = xScale.domain();
-    const nPts = 80;
+    const nPts = 120;
     const step = (xr - xl) / (nPts - 1);
     const pts  = Array.from({ length: nPts }, (_, i) => xl + i * step);
 
     if (vcov && isFinite(crit)) {
       const area = d3.area()
         .x(x  => xScale(x))
-        .y0(x => yScale(partialIntercept + slope * x - crit * seAt(x)))
-        .y1(x => yScale(partialIntercept + slope * x + crit * seAt(x)));
+        .y0(x => { const f = partialFitAt(x); return yScale(f - crit * seAt(x)); })
+        .y1(x => { const f = partialFitAt(x); return yScale(f + crit * seAt(x)); });
       g.append("path")
         .datum(pts)
         .attr("fill", "var(--accent-glow)")
@@ -462,10 +520,19 @@ export function drawPartialResidualBubble(studies, reg, modName, modIdx, contain
         .attr("d", area);
     }
 
-    g.append("line")
-      .attr("x1", xScale(xl)).attr("y1", yScale(partialIntercept + slope * xl))
-      .attr("x2", xScale(xr)).attr("y2", yScale(partialIntercept + slope * xr))
-      .attr("stroke", "var(--accent)").attr("stroke-width", 2);
+    if (isLinear) {
+      g.append("line")
+        .attr("x1", xScale(xl)).attr("y1", yScale(partialFitAt(xl)))
+        .attr("x2", xScale(xr)).attr("y2", yScale(partialFitAt(xr)))
+        .attr("stroke", "var(--accent)").attr("stroke-width", 2);
+    } else {
+      const line = d3.line().x(x => xScale(x)).y(x => yScale(partialFitAt(x)));
+      g.append("path")
+        .datum(pts)
+        .attr("fill", "none")
+        .attr("stroke", "var(--accent)").attr("stroke-width", 2)
+        .attr("d", line);
+    }
   }
 
   // Bubbles
@@ -481,7 +548,7 @@ export function drawPartialResidualBubble(studies, reg, modName, modIdx, contain
     .attr("stroke-width", 1.2)
     .on("mousemove", (event, s) => {
       const i      = valid.indexOf(s);
-      const fitted = partialIntercept + slope * s[modName];
+      const fitted = partialFitAt(s[modName]);
       tooltip.style("opacity", 1)
         .html(`<b>${s.label}</b><br>${modName}: ${s[modName]}<br>y*: ${partialY[i].toFixed(3)}<br>ŷ: ${fitted.toFixed(3)}`)
         .style("left", (event.pageX + 12) + "px")
@@ -506,10 +573,14 @@ export function drawPartialResidualBubble(studies, reg, modName, modIdx, contain
     .text("Partial residual");
 
   // Title
+  const slope = isFinite(beta[colIdxs[0]]) ? beta[colIdxs[0]].toFixed(3) : "NA";
+  const titleSuffix = isLinear
+    ? `β = ${slope}, partial residual`
+    : (transform.startsWith("rcs") ? `RCS (${transform.slice(3)} knots)` : transform) + ", partial residual";
   svg.append("text")
     .attr("x", margin.left + iW / 2).attr("y", 16)
     .attr("text-anchor", "middle").attr("fill", "var(--fg)").style("font-size", "13px")
-    .text(`${modName}  (β = ${isFinite(slope) ? slope.toFixed(3) : "NA"}, partial residual)`);
+    .text(`${modName}  (${titleSuffix})`);
 }
 
 // -----------------------------------------------------------------------------

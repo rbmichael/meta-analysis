@@ -277,10 +277,20 @@
           <div id="moderatorManager">
             <strong>Moderators:</strong>
             <input type="text" id="modName" placeholder="Column name" style="width:110px">
-            <select id="modType">
+            <select id="modType" onchange="document.getElementById('modTransformWrap').style.display=this.value==='continuous'?'':'none'">
               <option value="continuous">Continuous</option>
               <option value="categorical">Categorical</option>
             </select>
+            <span id="modTransformWrap" title="Transform applied to this continuous moderator">
+              <select id="modTransform">
+                <option value="linear">Linear</option>
+                <option value="poly2">Poly ²</option>
+                <option value="poly3">Poly ³</option>
+                <option value="rcs3">RCS (3 knots)</option>
+                <option value="rcs4">RCS (4 knots)</option>
+                <option value="rcs5">RCS (5 knots)</option>
+              </select>
+            </span>
             <button id="addMod">+ Add</button><button class="help-btn" data-help="input.moderators" title="Help">?</button>
           </div>
 
@@ -846,6 +856,18 @@
       indices AIC, BIC, and log-likelihood (ML and REML conventions; matches metafor's
       <code>AIC.rma()</code> / <code>BIC.rma()</code>).
       Bubble plots are generated per continuous moderator.</p>
+      <p><strong>Non-linear transforms</strong> for continuous moderators are available via
+      the transform dropdown when adding a moderator:</p>
+      <ul>
+        <li><strong>Linear</strong> (default) — standard single-column predictor</li>
+        <li><strong>Poly ²</strong> — adds x² to the design matrix (quadratic curve)</li>
+        <li><strong>Poly ³</strong> — adds x² and x³ (cubic curve)</li>
+        <li><strong>RCS (3–5 knots)</strong> — restricted cubic spline; knots placed at
+        Harrell's recommended percentiles (10/50/90 for 3 knots, etc.). Produces a smooth
+        curve that is linear outside the outermost knots. The per-moderator Wald test covers
+        all spline columns jointly. Equivalent to constructing the basis manually in metafor
+        and passing it via <code>mods</code> (Harrell, 2015).</li>
+      </ul>
 
       <!-- ---- Subgroup analysis ---- -->
       <h2>Subgroup analysis</h2>

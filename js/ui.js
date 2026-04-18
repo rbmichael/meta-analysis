@@ -272,16 +272,16 @@ function hBtn(key) {
 }
 
 // ---------------- MODERATOR STATE ----------------
-let moderators = []; // { name: string, type: "continuous"|"categorical" }
+let moderators = []; // { name: string, type: "continuous"|"categorical", transform: string }
 
 // ---- Risk-of-bias state ----
 let _robDomains = [];  // string[] — ordered domain names
 let _robData    = {};  // { [studyLabel]: { [domain]: "Low"|"Some concerns"|"High"|"NI"|"" } }
 
 // Low-level: add one moderator to state + DOM (no form read, no runAnalysis call).
-function doAddModerator(name, type) {
+function doAddModerator(name, type, transform = "linear") {
   if (!name || moderators.some(m => m.name === name)) return;
-  moderators.push({ name, type });
+  moderators.push({ name, type, transform });
 
   const table = document.getElementById("inputTable");
   const headerRow = table.rows[0];
@@ -303,8 +303,11 @@ function addModerator() {
   const nameEl = document.getElementById("modName");
   const name = nameEl.value.trim();
   const type = document.getElementById("modType").value;
+  const transform = type === "continuous"
+    ? (document.getElementById("modTransform")?.value ?? "linear")
+    : "linear";
   if (!name) return;
-  doAddModerator(name, type);
+  doAddModerator(name, type, transform);
   nameEl.value = "";
   markStale();
 }
@@ -1465,7 +1468,7 @@ function commitImport() {
     const ci     = headerMap[col.toLowerCase()];
     const vals   = rows.map(r => r[ci] ?? "").filter(v => v.trim() !== "");
     const mtype  = vals.length > 0 && vals.every(v => !isNaN(v.trim())) ? "continuous" : "categorical";
-    moderators.push({ name: col, type: mtype });
+    moderators.push({ name: col, type: mtype, transform: "linear" });
   });
 
   // Apply detected effect type and rebuild table headers
@@ -1534,7 +1537,7 @@ function gatherSessionState() {
     selCuts:         document.getElementById("selCuts")?.value   ?? "0.025, 0.05, 0.10, 0.25, 0.50, 1.0",
   };
 
-  const savedModerators = moderators.map(m => ({ name: m.name, type: m.type }));
+  const savedModerators = moderators.map(m => ({ name: m.name, type: m.type, transform: m.transform || "linear" }));
 
   const studies = [];
   document.querySelectorAll("#inputTable tr").forEach((r, i) => {
@@ -1620,7 +1623,7 @@ function applySession(session) {
   clearModerators();
   savedMods.forEach(m => {
     if (m.name && (m.type === "continuous" || m.type === "categorical"))
-      doAddModerator(m.name, m.type);
+      doAddModerator(m.name, m.type, m.transform || "linear");
   });
 
   // Rebuild table
@@ -3527,8 +3530,8 @@ async function runAnalysis() {
   renderSelectionModelPanel(selResult, selModeVal, profile);
 
   // ---- Meta-regression ----
-  // buildDesignMatrix expects { key, type }; ui state stores { name, type }.
-  const modSpec = moderators.map(m => ({ key: m.name, type: m.type }));
+  // buildDesignMatrix expects { key, type, transform }; ui state stores { name, type, transform }.
+  const modSpec = moderators.map(m => ({ key: m.name, type: m.type, transform: m.transform || "linear" }));
   performance.mark("phase:regression:start");
   const reg = moderators.length > 0
     ? metaRegression(studies, modSpec, method, ciMethod, alpha)
@@ -3548,8 +3551,8 @@ async function runAnalysis() {
     moderators
       .filter(mod => mod.type === "continuous")
       .forEach((mod, i) => {
-        const idx = reg.colNames.indexOf(mod.name);
-        if (idx < 1) return;
+        const colIdxs = reg.modColMap && reg.modColMap[mod.name];
+        if (!colIdxs || colIdxs.length === 0) return;
 
         // Wrap each bubble in a block-level div so export buttons sit above it.
         // data-moderator lets buildReport() attach per-moderator APA captions.
@@ -3557,9 +3560,9 @@ async function runAnalysis() {
         wrap.dataset.moderator = mod.name;
         bubbleContainer.appendChild(wrap);
         if (usePartialBubble) {
-          drawPartialResidualBubble(reg.studiesUsed, reg, mod.name, idx, wrap);
+          drawPartialResidualBubble(reg.studiesUsed, reg, mod, wrap);
         } else {
-          drawBubble(reg.studiesUsed, reg, mod.name, idx, wrap);
+          drawBubble(reg.studiesUsed, reg, mod, wrap);
         }
 
         // Assign a stable id to the SVG that was just appended, then add buttons.

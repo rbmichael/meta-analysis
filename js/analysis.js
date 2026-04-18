@@ -2731,20 +2731,96 @@ export function meta(studies, method="DL", ciMethod="normal", alpha=0.05) {
   return _result;
 }
 
+// ================= RESTRICTED CUBIC SPLINE HELPERS =================
+/**
+ * Compute knot positions for a restricted cubic spline using Harrell's
+ * recommended percentile-based placement.
+ *   3 knots → {10, 50, 90}th percentiles
+ *   4 knots → {5, 35, 65, 95}th percentiles
+ *   5 knots → {5, 27.5, 50, 72.5, 95}th percentiles
+ * @param {number[]} values - array of predictor values (NaN entries ignored)
+ * @param {number}   nKnots - 3, 4, or 5
+ * @returns {number[]} sorted knot positions
+ */
+export function rcsKnots(values, nKnots) {
+  const pctMap = {
+    3: [10, 50, 90],
+    4: [5, 35, 65, 95],
+    5: [5, 27.5, 50, 72.5, 95],
+  };
+  const pcts = pctMap[nKnots];
+  if (!pcts) throw new Error(`rcsKnots: nKnots must be 3, 4, or 5; got ${nKnots}`);
+
+  const sorted = values.filter(isFinite).slice().sort((a, b) => a - b);
+  const n = sorted.length;
+  if (n === 0) return pcts.map(() => NaN);
+
+  return pcts.map(p => {
+    const idx = (p / 100) * (n - 1);
+    const lo  = Math.floor(idx);
+    const hi  = Math.ceil(idx);
+    return lo === hi ? sorted[lo] : sorted[lo] + (idx - lo) * (sorted[hi] - sorted[lo]);
+  });
+}
+
+/**
+ * Evaluate the restricted cubic spline (RCS) nonlinear basis columns for a
+ * single x value given a set of knots, using Harrell's formula.
+ *
+ * For k knots t[0]…t[k-1], produces k-2 nonlinear columns φ₁…φ_{k-2}:
+ *   φ_j(x) = (x − t_j)³₊
+ *             − (t_{k-1} − t_j)/(t_{k-1} − t_{k-2}) · (x − t_{k-2})³₊
+ *             + (t_{k-2} − t_j)/(t_{k-1} − t_{k-2}) · (x − t_{k-1})³₊
+ * for j = 0, 1, …, k-3.
+ *
+ * Note: the linear term (x itself) is NOT included here; buildDesignMatrix
+ * adds x as its own column and then appends the rcsBasis columns.
+ *
+ * @param {number}   x     - predictor value
+ * @param {number[]} knots - k knot positions (k = 3, 4, or 5)
+ * @returns {number[]} array of k-2 nonlinear basis values
+ */
+export function rcsBasis(x, knots) {
+  const k   = knots.length;          // total number of knots
+  const tk  = knots[k - 1];          // last knot
+  const tk1 = knots[k - 2];          // second-to-last knot
+  const denom = tk - tk1;
+
+  const pos3 = t => {
+    const d = x - t;
+    return d > 0 ? d * d * d : 0;
+  };
+
+  const result = [];
+  for (let j = 0; j <= k - 3; j++) {
+    const tj = knots[j];
+    const phi = pos3(tj)
+      - ((tk - tj) / denom) * pos3(tk1)
+      + ((tk1 - tj) / denom) * pos3(tk);
+    result.push(phi);
+  }
+  return result;
+}
+
 // ================= META-REGRESSION DESIGN MATRIX =================
 // Builds the k×p design matrix X for meta-regression.
 //
-// moderators: array of { key: string, type: "continuous" | "categorical" }
-//   key  — property name on each study object
-//   type — "continuous" (read as number) or "categorical" (dummy-coded)
+// moderators: array of { key: string, type: "continuous"|"categorical",
+//                        transform?: "linear"|"poly2"|"poly3"|"rcs3"|"rcs4"|"rcs5" }
+//   key       — property name on each study object
+//   type      — "continuous" (read as number) or "categorical" (dummy-coded)
+//   transform — nonlinear transform for continuous moderators (default "linear")
 //
 // Returns:
 //   X         — k×p row-major matrix (array of k rows, each a p-length array)
 //   colNames  — p column labels; first is always "intercept"
 //   refLevels — maps each categorical key to its (dropped) reference level
 //   modColMap — maps each moderator key to the column indices it occupies in X
-//               e.g. continuous "age" → [2], categorical "type" (3 levels) → [3,4]
+//               e.g. continuous "age" (linear) → [2]
+//                    continuous "age" (poly2)  → [2, 3]  (x, x²)
+//                    categorical "type" (3 lvl)→ [3, 4]
 //               degenerate moderators (< 2 levels) map to []
+//   modKnots  — maps moderator key to knot array (only set for rcs* transforms)
 //   validMask — k booleans; true when all entries in that row are finite
 //   k, p      — matrix dimensions
 export function buildDesignMatrix(studies, moderators = []) {
@@ -2755,9 +2831,10 @@ export function buildDesignMatrix(studies, moderators = []) {
   const colNames = ["intercept"];
   const refLevels = {};
   const modColMap = {};
+  const modKnots  = {};
   let nextColIdx = 1;  // intercept occupies index 0
 
-  for (const { key, type } of moderators) {
+  for (const { key, type, transform = "linear" } of moderators) {
     const raw = studies.map(s => s[key]);
 
     if (type === "categorical") {
@@ -2780,9 +2857,49 @@ export function buildDesignMatrix(studies, moderators = []) {
 
     } else {
       // Continuous: coerce to number; non-numeric (including undefined) → NaN.
-      columns.push(raw.map(v => +v));
-      colNames.push(key);
-      modColMap[key] = [nextColIdx++];
+      const xVals = raw.map(v => +v);
+
+      if (transform === "poly2") {
+        // x and x²
+        columns.push(xVals);
+        columns.push(xVals.map(v => v * v));
+        colNames.push(key, `${key}²`);
+        modColMap[key] = [nextColIdx, nextColIdx + 1];
+        nextColIdx += 2;
+
+      } else if (transform === "poly3") {
+        // x, x², x³
+        columns.push(xVals);
+        columns.push(xVals.map(v => v * v));
+        columns.push(xVals.map(v => v * v * v));
+        colNames.push(key, `${key}²`, `${key}³`);
+        modColMap[key] = [nextColIdx, nextColIdx + 1, nextColIdx + 2];
+        nextColIdx += 3;
+
+      } else if (transform === "rcs3" || transform === "rcs4" || transform === "rcs5") {
+        const nKnots = parseInt(transform.slice(3), 10);  // 3, 4, or 5
+        const knots  = rcsKnots(xVals, nKnots);
+        modKnots[key] = knots;
+
+        // Linear term
+        columns.push(xVals);
+        colNames.push(key);
+        modColMap[key] = [nextColIdx++];
+
+        // Nonlinear RCS terms (nKnots - 2 columns)
+        const nNL = nKnots - 2;
+        for (let j = 0; j < nNL; j++) {
+          columns.push(xVals.map(v => isFinite(v) ? rcsBasis(v, knots)[j] : NaN));
+          colNames.push(`${key}_rcs${j + 1}`);
+          modColMap[key].push(nextColIdx++);
+        }
+
+      } else {
+        // Default: linear
+        columns.push(xVals);
+        colNames.push(key);
+        modColMap[key] = [nextColIdx++];
+      }
     }
   }
 
@@ -2794,7 +2911,7 @@ export function buildDesignMatrix(studies, moderators = []) {
   // A row is valid only when every entry is finite (no NaN / ±Infinity).
   const validMask = X.map(row => row.every(isFinite));
 
-  return { X, colNames, refLevels, modColMap, validMask, k, p };
+  return { X, colNames, refLevels, modColMap, modKnots, validMask, k, p };
 }
 
 // ================= WEIGHTED LEAST SQUARES =================
@@ -3126,7 +3243,7 @@ export function metaRegression(studies, moderators = [], method = "REML", ciMeth
   const valid = studies.filter(s => isFinite(s.yi) && isFinite(s.vi) && s.vi > 0);
   const k = valid.length;
 
-  const { X, colNames, modColMap, validMask, p } = buildDesignMatrix(valid, moderators);
+  const { X, colNames, modColMap, modKnots, validMask, p } = buildDesignMatrix(valid, moderators);
 
   // Further filter rows where all moderator values are finite
   const rows   = valid.filter((_, i) => validMask[i]);
@@ -3142,7 +3259,7 @@ export function metaRegression(studies, moderators = [], method = "REML", ciMeth
     tau2: NaN, QE: NaN, QEdf: kf - p, QEp: NaN,
     QM: NaN, QMdf: p - 1, QMp: NaN, modTests: [],
     vif: Array(p).fill(NaN), maxVIF: NaN, I2: NaN,
-    colNames, k: kf, p, rankDeficient: true, rankDeficientCause: "collinear"
+    colNames, modColMap, modKnots, k: kf, p, rankDeficient: true, rankDeficientCause: "collinear"
   };
 
   if (kf < p + 1) return { ...empty, rankDeficientCause: "insufficient_k" };
@@ -3378,7 +3495,7 @@ export function metaRegression(studies, moderators = [], method = "REML", ciMeth
     QE, QEdf, QEp,
     QM, QMdf, QMp, QMdist: useKH ? "F" : "chi2",
     modTests, vif, maxVIF,
-    I2, colNames, k: kf, p, rankDeficient: false, dist,
+    I2, colNames, modColMap, modKnots, k: kf, p, rankDeficient: false, dist,
     fitted, residuals: eRE, stdResiduals,
     labels: rows.map(s => s.label || ""),
     studiesUsed: rows,   // exact set used in the fit (for bubble plot)
