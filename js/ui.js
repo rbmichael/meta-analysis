@@ -3757,18 +3757,36 @@ async function runAnalysis() {
     renderRegressionPanel(reg ?? {}, method, ciMethod, kExcluded);
   }
 
-  // ---- Bubble plots (one per continuous moderator) ----
+  // ---- Bubble plots (one per continuous location moderator) ----
   // With a single moderator: raw yi vs x (drawBubble) and partial residuals are
   // identical, so drawBubble is used.  With 2+ moderators: drawPartialResidualBubble
   // removes other predictors' contributions, making each plot unambiguous.
+  // For the LS model, adapt ls to the shape drawBubble/drawPartialResidualBubble expect.
   const bubbleContainer = elBubblePlots;
   bubbleContainer.innerHTML = "";
+
+  // Resolve the result object and moderator list to use for bubble plots.
+  // For LS, build a shim using the location model; field names differ from reg.
+  const bubbleResult = ls ? {
+    tau2:     ls.tau2_mean,
+    beta:     ls.beta,
+    colNames: ls.locColNames,
+    modColMap: ls.locColMap,
+    modKnots:  ls.locKnots,
+    vcov:     ls.vcov_beta,
+    crit:     ls.crit,
+    s2:       1,
+    fitted:   ls.fitted,
+    residuals: ls.residuals,
+    studiesUsed: ls.studiesUsed,
+    rankDeficient: ls.rankDeficient,
+  } : reg;
   const usePartialBubble = moderators.length > 1;
-  if (reg && !reg.rankDeficient) {
+  if (bubbleResult && !bubbleResult.rankDeficient) {
     moderators
       .filter(mod => mod.type === "continuous")
       .forEach((mod, i) => {
-        const colIdxs = reg.modColMap && reg.modColMap[mod.name];
+        const colIdxs = bubbleResult.modColMap && bubbleResult.modColMap[mod.name];
         if (!colIdxs || colIdxs.length === 0) return;
 
         // Wrap each bubble in a block-level div so export buttons sit above it.
@@ -3777,9 +3795,9 @@ async function runAnalysis() {
         wrap.dataset.moderator = mod.name;
         bubbleContainer.appendChild(wrap);
         if (usePartialBubble) {
-          drawPartialResidualBubble(reg.studiesUsed, reg, mod, wrap);
+          drawPartialResidualBubble(bubbleResult.studiesUsed, bubbleResult, mod, wrap);
         } else {
-          drawBubble(reg.studiesUsed, reg, mod, wrap);
+          drawBubble(bubbleResult.studiesUsed, bubbleResult, mod, wrap);
         }
 
         // Assign a stable id to the SVG that was just appended, then add buttons.

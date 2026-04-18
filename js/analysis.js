@@ -3752,6 +3752,7 @@ export function lsModel(studies, locMods = [], scaleMods = [], opts = {}) {
     beta, se_beta, zval_beta, pval_beta, ci_beta,
     gamma: gamma_hat, se_gamma, zval_gamma, pval_gamma, ci_gamma,
     tau2_i, tau2_mean,
+    vcov_beta,
     QE, QEdf, QEp,
     QM_loc, QM_locDf, QM_locP,
     QM_scale, QM_scaleDf, QM_scaleP,
