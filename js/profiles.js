@@ -641,6 +641,53 @@ export const effectProfiles = {
   },
 
   // ------------------------------------------------------------------ //
+  // AS — Arcsine-transformed Risk Difference
+  //   yi = arcsin(√p₁) − arcsin(√p₂)         where p₁ = a/(a+b), p₂ = c/(c+d)
+  //   vi = 1/(4·n₁) + 1/(4·n₂)               where n₁ = a+b, n₂ = c+d
+  //
+  // The double-arcsine transformation stabilises the variance of a proportion
+  // across the full [0,1] range (Freeman & Tukey 1950). Applying it to both
+  // arms and differencing gives an effect with (approximately) constant
+  // variance vi = 1/n₁ + 1/n₂ regardless of the true event rates.
+  //
+  // Values lie on the arcsine scale (roughly −π to π). No closed-form
+  // back-transform to the probability-difference scale exists for a
+  // difference of two arcsine-transformed values; results are reported on
+  // the arcsine scale directly. Reference: metafor escalc("AS").
+  "AS": {
+    label:  "Arcsine-transformed Risk Difference",
+    group:  "Binary outcomes",
+    inputs: ["a", "b", "c", "d"],
+    compute(s) {
+      if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+      const { a, b, c, d } = s;
+      const n1 = a + b, n2 = c + d;
+      const p1 = a / n1, p2 = c / n2;
+      const yi = Math.asin(Math.sqrt(p1)) - Math.asin(Math.sqrt(p2));
+      const vi = Math.max(1 / (4 * n1) + 1 / (4 * n2), MIN_VAR);
+      return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
+    },
+    transform: (x) => x,
+
+    validate(s) {
+      const errors = validateCells(s);
+      if (!Object.keys(errors).length) {
+        if (s.a + s.b === 0) errors.a = errors.b = "row-1 total (a+b) must be > 0";
+        if (s.c + s.d === 0) errors.c = errors.d = "row-2 total (c+d) must be > 0";
+      }
+      return { valid: Object.keys(errors).length === 0, errors };
+    },
+
+    softWarnings: softWarnBinaryCounts,
+
+    exampleData: [
+      ["Study 1", 20,  5, 10, 15, "A"],
+      ["Study 2", 12, 18,  8, 22, "A"],
+      ["Study 3", 15,  5, 12, 18, "B"],
+    ],
+  },
+
+  // ------------------------------------------------------------------ //
   // Threshold rationale shared by COR and ZCOR (Pearson correlation):
   //   n < 10   — The asymptotic normal approximation for r (or Fisher z) is
   //              poor with small n; bootstrap CIs are preferable below n = 10.

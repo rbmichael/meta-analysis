@@ -261,6 +261,65 @@ heterogeneity than ratio measures.</p>`,
       },
 
       {
+        id: "guide-as",
+        title: "Arcsine-transformed Risk Difference (AS)",
+        body: `<p>A variance-stabilising transformation of the risk difference that makes
+the sampling variance approximately constant across the full range of event
+rates.</p>
+
+<h4>Formula</h4>
+<p>For a 2×2 table with cells a (events, group 1), b (non-events, group 1),
+c (events, group 2), d (non-events, group 2):</p>
+<pre>  p₁ = a / (a+b),  n₁ = a + b
+  p₂ = c / (c+d),  n₂ = c + d
+
+  yi = arcsin(√p₁) − arcsin(√p₂)
+  vi = 1/(4·n₁) + 1/(4·n₂)</pre>
+<p>Note: this is the single-angle version (metafor <code>escalc("AS")</code>). Some
+textbooks define the transformation as <code>2·arcsin(√p)</code> with
+variance 1/n; both are equivalent up to a scaling factor of 2.</p>
+
+<h4>Why use the arcsine transformation?</h4>
+<p>The variance of a raw proportion p depends on the true event rate:
+var(p̂) = p(1−p)/n. Near 0 or 1 this approaches 0, making standard
+inverse-variance weighting unstable. The arcsine transformation is the
+variance-stabilising transformation for a binomial proportion: var(arcsin(√p̂)) ≈ 1/(4n),
+which is independent of p.</p>
+
+<h4>When to use</h4>
+<ul>
+  <li>Event rates vary widely across studies (some near 0 or 1) where the
+  delta-method approximation for RD breaks down.</li>
+  <li>You want a transformation with approximately equal variance regardless
+  of baseline risk.</li>
+</ul>
+
+<h4>When to avoid</h4>
+<ul>
+  <li>Results are difficult to communicate to clinical audiences — the arcsine
+  scale has no direct clinical interpretation.</li>
+  <li>Studies have very low event rates (&lt; 1%) or zero cells; the
+  Freeman-Tukey double-arcsine (PFT) may be preferred for single proportions
+  in that setting.</li>
+  <li>All event rates are moderate (10%–90%) and far from boundary — in that
+  range the variance-stabilisation advantage is minimal and plain RD is
+  preferable.</li>
+</ul>
+
+<h4>Back-transformation</h4>
+<p>No simple closed-form back-transform exists for the difference of two
+arcsine values. If clinical interpretation requires a risk difference, pooled
+results are often converted approximately using
+<code>sin²(μ̂_AS + arcsin(√p_ref)) − p_ref</code> for a specified reference
+risk p_ref, but this depends on the choice of reference and should be
+interpreted cautiously.</p>`,
+        citations: [
+          "Freeman, M. F., & Tukey, J. W. (1950). Transformations related to the angular and the square root. <em>Annals of Mathematical Statistics, 21</em>(4), 607–611.",
+          "Viechtbauer, W. (2010). Conducting meta-analyses in R with the metafor package. <em>Journal of Statistical Software, 36</em>(3), 1–48.",
+        ],
+      },
+
+      {
         id: "guide-hr",
         title: "Hazard Ratio (HR)",
         body: `<p>Ratio of instantaneous event rates between groups, typically from a Cox
@@ -2255,6 +2314,7 @@ export const HELP_TO_GUIDE = {
   "effect.OR":        "guide-or",
   "effect.RR":        "guide-rr",
   "effect.RD":        "guide-rd",
+  "effect.AS":        "guide-as",
   "effect.HR":        "guide-hr",
   "effect.IRR":       "guide-irr",
   "effect.IR":        "guide-ir",

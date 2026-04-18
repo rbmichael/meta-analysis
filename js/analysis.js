@@ -192,7 +192,7 @@ export function compute(s, type, options = {}) {
   if (!valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
 
 	// ================= BINARY DATA =================
-	if (type === "OR" || type === "RR" || type === "RD") {
+	if (type === "OR" || type === "RR" || type === "RD" || type === "AS") {
 	  let { a, b, c, d } = s;
 
 	  // optional continuity correction for OR/RR
@@ -216,6 +216,11 @@ export function compute(s, type, options = {}) {
 		const risk2 = c / (c + d);
 		yi = risk1 - risk2;
 		vi = (risk1*(1-risk1)/ (a+b)) + (risk2*(1-risk2)/ (c+d));
+	  } else if (type === "AS") {
+		// Arcsine-transformed Risk Difference (metafor escalc "AS")
+		const n1 = a + b, n2 = c + d;
+		yi = Math.asin(Math.sqrt(a / n1)) - Math.asin(Math.sqrt(c / n2));
+		vi = 1 / (4 * n1) + 1 / (4 * n2);
 	  }
 
 	  const safeVi = Math.max(vi, MIN_VAR);

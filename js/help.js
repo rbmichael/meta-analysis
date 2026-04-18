@@ -196,6 +196,16 @@ export const HELP = {
            "bounded by the baseline risk.",
   },
 
+  "effect.AS": {
+    title: "Arcsine-transformed Risk Difference (AS)",
+    body:  "Variance-stabilising transformation of the risk difference. " +
+           "yi = arcsin(√p₁) − arcsin(√p₂) with variance vi = 1/(4·n₁) + 1/(4·n₂). " +
+           "The transformation makes the sampling variance approximately constant " +
+           "across all event rates, avoiding instability near 0 or 1. " +
+           "Results are on the arcsine scale (no simple back-transform to RD). " +
+           "Equivalent to metafor escalc('AS').",
+  },
+
   "effect.HR": {
     title: "Hazard Ratio (HR)",
     body:  "Ratio of instantaneous event rates between groups, typically from a " +

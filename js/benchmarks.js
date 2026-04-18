@@ -1430,6 +1430,78 @@ export const BENCHMARKS = [
       ciHigh:  0.003
     },
     citation: "Synthetic 5-study log-RR dataset. PL CI: bounds from profile log-likelihood inversion (ML internally, cutoff = χ²_{1,0.95}/2 = 1.921)."
+  },
+
+  // ----------------------------------------------------------------
+  // AS — BCG Vaccine (dat.bcg, arcsine-transformed RD)
+  // yi = asin(sqrt(p1)) - asin(sqrt(p2))
+  // vi = 1/(4*n1) + 1/(4*n2)
+  // where p1=a/(a+b), p2=c/(c+d), n1=a+b, n2=c+d
+  // Expected values from: Rscript crossval_as.R (metafor 4.8-0)
+  //   escalc("AS", ai=tpos, bi=tneg, ci=cpos, di=cneg, data=dat.bcg)
+  //   rma(yi, vi, method="DL") and rma(yi, vi, method="REML")
+  // ----------------------------------------------------------------
+  {
+    name: "BCG Vaccine – AS (dat.bcg, DL)",
+    type: "AS",
+    tauMethod: "DL",
+    data: [
+      { label: "Aronson 1948",            a:   4, b:   119, c:  11, d:   128 },
+      { label: "Ferguson & Simes 1949",   a:   6, b:   300, c:  29, d:   274 },
+      { label: "Rosenthal 1960",          a:   3, b:   228, c:  11, d:   209 },
+      { label: "Hart & Sutherland 1977",  a:  62, b: 13536, c: 248, d: 12619 },
+      { label: "Frimodt-Moller 1973",     a:  33, b:  5036, c:  47, d:  5761 },
+      { label: "Stein & Aronson 1953",    a: 180, b:  1361, c: 372, d:  1079 },
+      { label: "Vandiviere 1973",         a:   8, b:  2537, c:  10, d:   619 },
+      { label: "TPT Madras 1980",         a: 505, b: 87886, c: 499, d: 87892 },
+      { label: "Coetzee & Berjak 1968",   a:  29, b:  7470, c:  45, d:  7232 },
+      { label: "Rosenthal 1961",          a:  17, b:  1699, c:  65, d:  1600 },
+      { label: "Comstock 1974",           a: 186, b: 50448, c: 141, d: 27197 },
+      { label: "Comstock & Webster 1969", a:   5, b:  2493, c:   3, d:  2338 },
+      { label: "Comstock 1976",           a:  27, b: 16886, c:  29, d: 17825 }
+    ],
+    expected: {
+      // asin(sqrt(a/(a+b))) - asin(sqrt(c/(c+d))) per study
+      // verified against metafor escalc("AS") to 5 dp
+      yi:   [-0.10384, -0.17404, -0.11131, -0.07171, -0.00931, -0.18213,
+             -0.07033,  0.00045, -0.01649, -0.09919, -0.01123,  0.00895, -0.00035],
+      // 1/(4*(a+b)) + 1/(4*(c+d)) per study
+      vi:   [0.003831, 0.001642, 0.002219, 0.0000378, 0.0000924, 0.000335,
+             0.000496, 0.00000566, 0.0000677, 0.000296, 0.0000141, 0.000207, 0.0000288],
+      FE:   -0.01184,
+      RE:   -0.05005,
+      tau2:  0.001084,
+      I2:   95.57
+    },
+    citation: "Colditz et al. (1994) JAMA 271:698–702. dat.bcg in metafor. Expected values from metafor 4.8-0 escalc('AS') + rma(method='DL')."
+  },
+
+  {
+    name: "BCG Vaccine – AS (dat.bcg, REML)",
+    type: "AS",
+    tauMethod: "REML",
+    data: [
+      { label: "Aronson 1948",            a:   4, b:   119, c:  11, d:   128 },
+      { label: "Ferguson & Simes 1949",   a:   6, b:   300, c:  29, d:   274 },
+      { label: "Rosenthal 1960",          a:   3, b:   228, c:  11, d:   209 },
+      { label: "Hart & Sutherland 1977",  a:  62, b: 13536, c: 248, d: 12619 },
+      { label: "Frimodt-Moller 1973",     a:  33, b:  5036, c:  47, d:  5761 },
+      { label: "Stein & Aronson 1953",    a: 180, b:  1361, c: 372, d:  1079 },
+      { label: "Vandiviere 1973",         a:   8, b:  2537, c:  10, d:   619 },
+      { label: "TPT Madras 1980",         a: 505, b: 87886, c: 499, d: 87892 },
+      { label: "Coetzee & Berjak 1968",   a:  29, b:  7470, c:  45, d:  7232 },
+      { label: "Rosenthal 1961",          a:  17, b:  1699, c:  65, d:  1600 },
+      { label: "Comstock 1974",           a: 186, b: 50448, c: 141, d: 27197 },
+      { label: "Comstock & Webster 1969", a:   5, b:  2493, c:   3, d:  2338 },
+      { label: "Comstock 1976",           a:  27, b: 16886, c:  29, d: 17825 }
+    ],
+    expected: {
+      FE:   -0.01184,
+      RE:   -0.05799,
+      tau2:  0.003775,
+      I2:   95.57   // Q-based formula (same Q as DL); metafor reports 98.69 using τ²-based I²
+    },
+    citation: "Colditz et al. (1994) JAMA 271:698–702. dat.bcg in metafor. FE/RE/tau2 from metafor 4.8-0 escalc('AS') + rma(method='REML'). I2 uses JS Q-based formula (metafor uses τ²-based for REML)."
   }
 
 ];
