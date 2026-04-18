@@ -2305,10 +2305,34 @@ smooth posterior summaries without MCMC.</p>
     Values around 0.3–1 are conventional for log-ratio scales;
     use a larger value for raw-mean-difference scales.</li>
 </ul>
+<p><strong>Bayes Factor BF<sub>10</sub>:</strong> The Bayes Factor quantifies
+evidence for H<sub>1</sub> (μ ≠ 0) relative to H<sub>0</sub> (μ = 0)
+without requiring a significance threshold. Computed via the
+<strong>Savage-Dickey density ratio</strong>:</p>
+<p style="text-align:center">BF<sub>10</sub> = p(μ=0 | H<sub>1</sub>) / p(μ=0 | y, H<sub>1</sub>)
+= prior density at 0 / posterior density at 0</p>
+<p>Jeffreys (1961) interpretation scale:</p>
+<table border="1" style="border-collapse:collapse;font-size:0.9em;margin:4px 0">
+  <tr><th style="padding:2px 6px">BF<sub>10</sub></th><th style="padding:2px 6px">Evidence for H<sub>1</sub></th></tr>
+  <tr><td>&gt; 100</td><td>Decisive</td></tr>
+  <tr><td>30 – 100</td><td>Very strong</td></tr>
+  <tr><td>10 – 30</td><td>Strong</td></tr>
+  <tr><td>3 – 10</td><td>Moderate</td></tr>
+  <tr><td>1 – 3</td><td>Anecdotal</td></tr>
+  <tr><td>&lt; 1</td><td>Supports H<sub>0</sub></td></tr>
+</table>
+<p>BF<sub>01</sub> = 1 / BF<sub>10</sub> measures support for H<sub>0</sub>.
+The log(BF<sub>10</sub>) is also reported on a natural-log scale.</p>
+<p>Note: BF<sub>10</sub> depends on the prior. A wider prior on μ
+(larger σ<sub>μ</sub>) penalises H<sub>1</sub> more heavily because
+the prior spreads probability mass away from the data, reducing
+BF<sub>10</sub>. Reporting σ<sub>μ</sub> alongside BF<sub>10</sub>
+ensures reproducibility.</p>
 <p><strong>Outputs:</strong></p>
 <ul>
   <li>Posterior mean and 95 % credible interval for μ (overall effect)</li>
   <li>Posterior mean and 95 % credible interval for τ (heterogeneity SD)</li>
+  <li>BF<sub>10</sub>, log(BF<sub>10</sub>), and Jeffreys-scale interpretation</li>
   <li>Plots of the marginal posterior densities for μ and τ</li>
 </ul>
 <p><strong>Prior inputs</strong> are accessible in the
@@ -2333,7 +2357,9 @@ rather than the specific interval.</p>`,
         citations: [
           "Gelman, A., Carlin, J. B., Stern, H. S., Dunson, D. B., Vehtari, A., & Rubin, D. B. (2013). <em>Bayesian Data Analysis</em> (3rd ed.). CRC Press.",
           "Higgins, J. P. T., & Whitehead, A. (1996). Borrowing strength from external trials in a meta-analysis. <em>Statistics in Medicine, 15</em>(24), 2733–2749.",
+          "Jeffreys, H. (1961). <em>Theory of Probability</em> (3rd ed.). Oxford University Press.",
           "Turner, R. M., Davey, J., Clarke, M. J., Thompson, S. G., & Higgins, J. P. T. (2012). Predicting the extent of heterogeneity in meta-analysis, using empirical data from the Cochrane Database of Systematic Reviews. <em>International Journal of Epidemiology, 41</em>(3), 818–827.",
+          "Wagenmakers, E.-J., Lodewyckx, T., Kuriyal, H., & Grasman, R. (2010). Bayesian hypothesis testing for psychologists: A tutorial on the Savage-Dickey method. <em>Cognitive Psychology, 60</em>(3), 158–189.",
         ],
       },
 

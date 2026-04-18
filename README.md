@@ -97,6 +97,8 @@ A built-in RoB assessment panel accepts user-defined domains and Low / Some conc
 
 Conjugate normal-normal random-effects model fit via grid approximation (300 points over τ) — no MCMC, no external libraries. Prior on μ: N(μ₀, σ_μ²); prior on τ: HalfNormal(σ_τ). Because the prior on μ is conjugate given τ, the marginal posterior of μ is an analytic mixture of normals. Reports posterior mean and 95% credible interval for μ (overall effect) and τ (heterogeneity SD), plus posterior density plots for both parameters. Diffuse priors recover the REML random-effects estimate.
 
+- **Bayes Factor BF₁₀** — Savage-Dickey density ratio testing H₁: μ ≠ 0 vs H₀: μ = 0. BF₁₀ = prior density(0) / posterior density(0). Reported alongside log(BF₁₀) and a Jeffreys (1961) verbal interpretation (Anecdotal / Moderate / Strong / Very strong / Decisive for H₁ or H₀).
+
 ---
 
 ## Plots
@@ -208,6 +210,7 @@ python -m http.server 8080
 - Hedges LV, Olkin I (1985). *Statistical Methods for Meta-Analysis*. Academic Press.
 - Higgins JPT, Thompson SG, Spiegelhalter DJ (2009). A re-evaluation of random-effects meta-analysis. *J R Stat Soc A*, 172, 137–159.
 - Ioannidis JPA, Trikalinos TA (2007). An exploratory test for an excess of significant findings. *Clin Trials*, 4(3), 245–253.
+- Jeffreys H (1961). *Theory of Probability* (3rd ed.). Oxford University Press.
 - Knapp G, Hartung J (2003). Improved tests for a random effects meta-regression with a single covariate. *Stat Med*, 22, 2693–2710.
 - Morris SB (2008). Estimating effect sizes from pretest-posttest-control group designs. *Org Res Methods*, 11, 364–386.
 - Paule RC, Mandel J (1982). Consensus values and weighting factors. *J Res Natl Bur Stand*, 87, 377–385.
@@ -227,6 +230,7 @@ python -m http.server 8080
 - Viechtbauer W (2010). Conducting meta-analyses in R with the metafor package. *J Stat Softw*, 36(3), 1–48.
 - Viechtbauer W (2021). Location-scale models for meta-analytic data. *Res Synth Methods*, 12(5), 567–583.
 - Viechtbauer W, Cheung MWL (2010). Outlier and influence diagnostics for meta-analysis. *Res Synth Methods*, 1(2), 112–125.
+- Wagenmakers EJ, Lodewyckx T, Kuriyal H, Grasman R (2010). Bayesian hypothesis testing for psychologists: A tutorial on the Savage-Dickey method. *Cogn Psychol*, 60(3), 158–189.
 
 ---
 

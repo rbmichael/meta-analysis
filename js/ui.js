@@ -2971,6 +2971,21 @@ function buildInfluenceHTML(influence) {
     <small style="color:#aaa;">Thresholds: Hat &gt; ${fmt(2/k)} (= 2/k); Cook's D &gt; ${fmt(4/k)} (= 4/k); DFFITS &gt; ${fmt(dffitsThresh)} (= 3·√(1/(k−1))); CovRatio &gt; ${fmt(covRatioThresh)} (= 1+1/k)</small>`;
 }
 
+// Jeffreys (1961) interpretation scale for BF₁₀
+function bayesInterpretation(BF10) {
+  if (!isFinite(BF10) || BF10 <= 0) return "";
+  const bf = BF10 >= 1 ? BF10 : 1 / BF10;
+  const dir = BF10 >= 1 ? "H\u2081" : "H\u2080";
+  let label;
+  if      (bf > 100) label = "Decisive";
+  else if (bf > 30)  label = "Very strong";
+  else if (bf > 10)  label = "Strong";
+  else if (bf > 3)   label = "Moderate";
+  else if (bf > 1)   label = "Anecdotal";
+  else               label = "No evidence";
+  return `${label} for ${dir}`;
+}
+
 function buildBayesSummaryHTML(result, profile, reMean) {
   const muDisp   = profile.transform(result.muMean);
   const muCIDisp = result.muCI.map(v => profile.transform(v));
@@ -2989,6 +3004,16 @@ function buildBayesSummaryHTML(result, profile, reMean) {
       ${isFinite(reMean) ? `<tr>
         <td>Frequentist RE (comparison)</td>
         <td>${fmt(profile.transform(reMean))}</td>
+        <td></td>
+      </tr>` : ""}
+      ${isFinite(result.BF10) ? `<tr>
+        <td>Bayes Factor BF\u2081\u2080 (H\u2081: \u03BC\u22600)</td>
+        <td>${result.BF10 >= 1000 ? result.BF10.toExponential(2) : result.BF10 < 0.001 ? result.BF10.toExponential(2) : result.BF10.toFixed(3)}</td>
+        <td>${bayesInterpretation(result.BF10)}</td>
+      </tr>
+      <tr>
+        <td>log(BF\u2081\u2080)</td>
+        <td>${result.logBF10.toFixed(3)}</td>
         <td></td>
       </tr>` : ""}
     </table>

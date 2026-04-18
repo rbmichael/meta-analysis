@@ -4728,6 +4728,69 @@ export function runTests() {
     bayChk("k=50 adaptive tauCI[1] vs fine", r50.tauCI[1], r50fine.tauCI[1], 0.005);
   }
 
+  // ---- 16. BF fields present and finite ----
+  {
+    console.log("--- 16. BF fields present and finite ---");
+    const r = bayesMeta(studiesBCG);
+    bayChkTrue("BF10 finite",    isFinite(r.BF10));
+    bayChkTrue("BF01 finite",    isFinite(r.BF01));
+    bayChkTrue("logBF10 finite", isFinite(r.logBF10));
+    bayChkTrue("BF10 > 0",       r.BF10 > 0);
+    bayChkTrue("BF01 > 0",       r.BF01 > 0);
+  }
+
+  // ---- 17. BF10 * BF01 ≈ 1 ----
+  {
+    console.log("--- 17. BF10 * BF01 ≈ 1 ---");
+    const r = bayesMeta(studiesBCG);
+    bayChk("BF10 * BF01", r.BF10 * r.BF01, 1, 1e-10);
+  }
+
+  // ---- 18. logBF10 = log(BF10) ----
+  {
+    console.log("--- 18. logBF10 = log(BF10) ---");
+    const r = bayesMeta(studiesBCG);
+    bayChk("logBF10 = log(BF10)", r.logBF10, Math.log(r.BF10), 1e-10);
+  }
+
+  // ---- 19. BCG data: clear negative effect → BF10 > 3 (moderate evidence) ----
+  {
+    console.log("--- 19. BCG clear effect → BF10 > 3 ---");
+    // BCG data has strong negative effect (log OR ≈ -0.7); prior N(0,1)
+    // Posterior concentrates away from 0 → BF10 should exceed 3
+    const r = bayesMeta(studiesBCG, { mu0: 0, sigma_mu: 1, sigma_tau: 0.5 });
+    bayChkTrue("no error",   !r.error);
+    bayChkTrue("BF10 > 3",   r.BF10 > 3);
+  }
+
+  // ---- 20. Null data (yi ≈ 0) → BF10 < 1 (evidence for H0) ----
+  {
+    console.log("--- 20. null data: BF10 < 1 ---");
+    // Studies centered exactly at 0: posterior stays near prior at 0 → BF10 near 1
+    // With tight null data, posterior at 0 > prior at 0 → BF10 < 1
+    const studiesNull = [
+      { yi:  0.01, vi: 0.01 },
+      { yi: -0.01, vi: 0.01 },
+      { yi:  0.02, vi: 0.01 },
+      { yi: -0.02, vi: 0.01 },
+      { yi:  0.00, vi: 0.01 },
+    ];
+    const r = bayesMeta(studiesNull, { mu0: 0, sigma_mu: 1, sigma_tau: 0.5 });
+    bayChkTrue("no error",   !r.error);
+    bayChkTrue("BF10 < 1",   r.BF10 < 1);
+  }
+
+  // ---- 21. Wider prior → smaller BF10 (prior at 0 shrinks as sigma_mu grows) ----
+  {
+    console.log("--- 21. wider prior → smaller BF10 ---");
+    // priorAt0 = 1 / (sqrt(2π) * sigma_mu) → shrinks as sigma_mu increases.
+    // With strong BCG data (k=13, data dominates), postAt0 barely changes.
+    // So BF10 = priorAt0 / postAt0 ∝ 1/sigma_mu: wider prior → smaller BF10.
+    const rNarrow = bayesMeta(studiesBCG, { mu0: 0, sigma_mu: 0.5,  sigma_tau: 0.5 });
+    const rWide   = bayesMeta(studiesBCG, { mu0: 0, sigma_mu: 2.0,  sigma_tau: 0.5 });
+    bayChkTrue("wider prior → smaller BF10", rWide.BF10 < rNarrow.BF10);
+  }
+
   console.log(bayPass ? "\n✅ ALL BAYESIAN META-ANALYSIS TESTS PASSED" : "\n❌ SOME BAYESIAN META-ANALYSIS TESTS FAILED");
 
   // =========================================================================

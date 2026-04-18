@@ -1084,6 +1084,27 @@ export function bayesMeta(studies, opts = {}) {
 
   const muCI = [quantileMu(_blo), quantileMu(_bhi)];
 
+  // ---- Savage-Dickey Bayes Factor BF₁₀ (H₁: μ≠0 vs H₀: μ=0) ----
+  // BF₁₀ = p(μ=0 | H₁) / p(μ=0 | y, H₁)
+  //       = prior_density(0) / posterior_density(0)
+  //
+  // Prior density at 0: N(0; mu0, sigma_mu²)
+  const priorAt0 = Math.exp(-0.5 * mu0 * mu0 / (sigma_mu * sigma_mu))
+                 / Math.sqrt(2 * Math.PI * sigma_mu * sigma_mu);
+
+  // Posterior mixture density at 0: Σ_g w_g · N(0; m_g, V_g)
+  let postAt0 = 0;
+  for (let g = 0; g < nGrid; g++) {
+    const mg = condMeans[g], Vg = condVars[g];
+    postAt0 += tauWeights[g]
+             * Math.exp(-0.5 * mg * mg / Vg)
+             / Math.sqrt(2 * Math.PI * Vg);
+  }
+
+  const BF10    = (priorAt0 > 0 && postAt0 > 0) ? priorAt0 / postAt0 : NaN;
+  const BF01    = isFinite(BF10) && BF10 > 0 ? 1 / BF10 : NaN;
+  const logBF10 = isFinite(BF10) && BF10 > 0 ? Math.log(BF10) : NaN;
+
   return {
     mu0, sigma_mu, sigma_tau, alpha,
     muMean, muSD, muCI,
@@ -1092,6 +1113,7 @@ export function bayesMeta(studies, opts = {}) {
     muGrid, muDensity,
     grid_truncated,
     k,
+    BF10, BF01, logBF10,
   };
 }
 

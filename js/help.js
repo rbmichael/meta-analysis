@@ -1168,8 +1168,9 @@ export const HELP = {
            "Prior on μ: N(μ₀, σ_μ²); prior on τ: HalfNormal(σ_τ). " +
            "Because the prior on μ is conjugate given τ, the marginal " +
            "posterior of μ is an analytic mixture of normals — no MCMC required. " +
-           "Outputs: posterior mean and 95% credible interval for μ (overall effect) " +
-           "and τ (heterogeneity SD), plus posterior density plots. " +
+           "Outputs: posterior mean and 95% credible interval for μ and τ; " +
+           "Bayes Factor BF₁₀ (Savage-Dickey ratio, H₁: μ≠0 vs H₀: μ=0) " +
+           "with Jeffreys-scale interpretation; posterior density plots. " +
            "Defaults: μ₀ = 0, σ_μ = 1, σ_τ = 0.5. All three are adjustable in the " +
            "Bayesian Meta-Analysis section of the Results tab. " +
            "With diffuse priors (σ_μ, σ_τ large) the posterior mean of μ " +
