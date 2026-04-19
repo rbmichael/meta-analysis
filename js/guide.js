@@ -2536,6 +2536,48 @@ rather than the specific interval.</p>`,
         ],
       },
 
+      {
+        id: "guide-prior-sensitivity",
+        title: "Prior Sensitivity Analysis",
+        body: `<p>Prior sensitivity analysis systematically checks how Bayesian
+conclusions change across a range of prior specifications. Because a
+single prior choice may not be universally defensible, running the same
+model under multiple plausible priors reveals whether the posterior is
+robust or prior-driven.</p>
+<p><strong>Grid:</strong> The analysis loops <code>bayesMeta()</code>
+over a 3 × 3 grid of prior pairs:</p>
+<ul>
+  <li>σ<sub>μ</sub> ∈ {0.5, 1, 2} — tight to diffuse prior on the
+      pooled effect</li>
+  <li>σ<sub>τ</sub> ∈ {0.25, 0.5, 1} — tight to diffuse prior on
+      between-study SD</li>
+</ul>
+<p>The prior mean μ₀ is taken from the current Bayesian prior settings.
+Each of the 9 combinations yields a posterior mean μ, credible interval,
+and Bayes Factor BF<sub>10</sub>.</p>
+<p><strong>Interpretation:</strong></p>
+<ul>
+  <li><strong>Robust</strong> — the posterior mean and CrI are stable
+      across the grid; conclusions do not depend on the prior choice.</li>
+  <li><strong>Prior-sensitive</strong> — the posterior mean shifts
+      substantially as the prior narrows; the data are insufficient to
+      overwhelm the prior. Interpret with caution and report the
+      sensitivity table alongside the primary Bayesian result.</li>
+</ul>
+<p><strong>Diffuse-prior check:</strong> With σ<sub>μ</sub> = 2 and
+σ<sub>τ</sub> = 1, the posterior mean should approach the frequentist
+REML estimate (shown in the main Bayesian table as a comparison row).
+Large disagreement may indicate prior-data conflict or a very small k.</p>
+<p><strong>How to run:</strong> The sensitivity table runs automatically
+alongside the main Bayesian analysis and appears immediately below the
+primary Bayesian results. It is also included in HTML and DOCX reports
+when exported.</p>`,
+        citations: [
+          "Gelman, A., Carlin, J. B., Stern, H. S., Dunson, D. B., Vehtari, A., & Rubin, D. B. (2013). <em>Bayesian Data Analysis</em> (3rd ed.). CRC Press.",
+          "Turner, R. M., Davey, J., Clarke, M. J., Thompson, S. G., & Higgins, J. P. T. (2012). Predicting the extent of heterogeneity in meta-analysis, using empirical data from the Cochrane Database of Systematic Reviews. <em>International Journal of Epidemiology, 41</em>(3), 818–827.",
+        ],
+      },
+
     ],
   },
 
@@ -2646,6 +2688,7 @@ export const HELP_TO_GUIDE = {
   "input.rob":           "guide-rob",
   "bayes.model":         "guide-bayes-meta",
   "bayes.tau":           "guide-bayes-meta",
+  "bayes.sensitivity":   "guide-prior-sensitivity",
   "plot.forest":         "guide-forest",
   "plot.funnel":         "guide-funnel-plot",
   "plot.cumulative":     "guide-cumulative",

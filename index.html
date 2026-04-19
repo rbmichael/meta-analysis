@@ -470,6 +470,10 @@
 
           <div id="bayesSummary"></div>
 
+          <div id="bayesSensitivitySection" style="display:none">
+            <div id="bayesSensitivity"></div>
+          </div>
+
           <div class="plot-block">
             <p class="plot-label">Posterior of μ (pooled effect)<button class="help-btn" data-help="bayes.model" title="Help">?</button></p>
             <div class="plot-export">
@@ -946,6 +950,11 @@
       H<sub>0</sub>: μ = 0 via the Savage-Dickey density ratio: BF<sub>10</sub> = prior density(0) /
       posterior density(0). Reported with log(BF<sub>10</sub>) and a Jeffreys (1961) verbal
       interpretation (Anecdotal / Moderate / Strong / Very strong / Decisive).</p>
+      <p><strong>Prior sensitivity analysis</strong> — loops the Bayesian model over a 3 × 3 grid of
+      (σ<sub>μ</sub>, σ<sub>τ</sub>) pairs ({0.5, 1, 2} × {0.25, 0.5, 1}, nine combinations) and
+      tabulates the posterior mean, credible interval, and BF<sub>10</sub> for each. Triggered by the
+      <em>Prior Sensitivity</em> button. Robust conclusions are stable across the grid; prior-sensitive
+      results indicate the posterior is informed by the prior and should be reported with caution.</p>
 
       <!-- ---- Dependent effect sizes ---- -->
       <h2>Dependent effect sizes</h2>

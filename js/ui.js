@@ -100,7 +100,7 @@
 //   ui.js calls init() on DOMContentLoaded, which populates dropdowns,
 //   restores any autosave draft, and attaches all event listeners.
 // =============================================================================
-import { eggerTest, beggTest, fatPetTest, petPeeseTest, failSafeN, tesTest, pCurve, pUniform, baujat, blupMeta, meta, metaMH, metaPeto, robustMeta, influenceDiagnostics, subgroupAnalysis, metaRegression, cumulativeMeta, leaveOneOut, estimatorComparison, veveaHedges, SELECTION_PRESETS, profileLikTau2, bayesMeta, rvePooled, meta3level, harbordTest, petersTest, deeksTest, rueckerTest, lsModel, adjustPvals } from "./analysis.js";
+import { eggerTest, beggTest, fatPetTest, petPeeseTest, failSafeN, tesTest, pCurve, pUniform, baujat, blupMeta, meta, metaMH, metaPeto, robustMeta, influenceDiagnostics, subgroupAnalysis, metaRegression, cumulativeMeta, leaveOneOut, estimatorComparison, veveaHedges, SELECTION_PRESETS, profileLikTau2, bayesMeta, priorSensitivity, rvePooled, meta3level, harbordTest, petersTest, deeksTest, rueckerTest, lsModel, adjustPvals } from "./analysis.js";
 import { fmt, normalQuantile } from "./utils.js";
 import { effectProfiles, getProfile } from "./profiles.js";
 import { trimFill } from "./trimfill.js";
@@ -3042,6 +3042,37 @@ function buildBayesSummaryHTML(result, profile, reMean) {
     </p>`;
 }
 
+function buildSensitivityHTML(rows, profile, ciLevel, currentSigmaMu, currentSigmaTau) {
+  const crLabel = (ciLevel ?? "95") + "% CrI";
+  const header = `<tr>
+    <th>σ_μ</th><th>σ_τ</th><th>Post. μ</th><th>${crLabel}</th><th>BF₁₀</th>
+  </tr>`;
+  const dataRows = rows.map(row => {
+    const isCurrent = row.sigma_mu === currentSigmaMu && row.sigma_tau === currentSigmaTau;
+    const muDisp   = profile.transform(row.muMean);
+    const muCIDisp = row.muCI.map(v => profile.transform(v));
+    const bf = row.BF10;
+    const bfStr = !isFinite(bf) ? "NA"
+      : bf >= 1000 ? bf.toExponential(2)
+      : bf < 0.001 ? bf.toExponential(2)
+      : bf.toFixed(3);
+    const style = isCurrent ? " style=\"font-weight:bold;background:var(--accent-subtle)\"" : "";
+    return `<tr${style}>
+      <td>${row.sigma_mu}</td>
+      <td>${row.sigma_tau}</td>
+      <td>${isFinite(muDisp) ? fmt(muDisp) : "NA"}</td>
+      <td>[${isFinite(muCIDisp[0]) ? fmt(muCIDisp[0]) : "NA"}, ${isFinite(muCIDisp[1]) ? fmt(muCIDisp[1]) : "NA"}]</td>
+      <td>${bfStr}</td>
+    </tr>`;
+  }).join("");
+  return `<b>Prior sensitivity analysis${hBtn("bayes.sensitivity")}</b>
+  <table border="1" style="margin:4px 0 8px">${header}${dataRows}</table>
+  <p style="font-size:0.82em;color:var(--fg-muted);margin:0 0 8px">
+    Grid: σ_μ ∈ {0.5, 1, 2}, σ_τ ∈ {0.25, 0.5, 1}. <strong>Bold row</strong> = current prior.
+    Diffuse priors (large σ_μ, σ_τ) approach the frequentist RE estimate.
+  </p>`;
+}
+
 function buildSubgroupHTML(subgroup, profile, hasClusters) {
   const noGroupWarn = subgroup.kNoGroup > 0
     ? `<div class="reg-note reg-warn">⚠ ${subgroup.kNoGroup} ${subgroup.kNoGroup === 1 ? "study" : "studies"} excluded from subgroup analysis (no group label assigned).</div>`
@@ -3287,9 +3318,31 @@ function runBayesUpdate() {
   if (appState.reportArgs) {
     appState.reportArgs = { ...appState.reportArgs, bayesResult: result };
   }
+  const ciLevel = document.getElementById("ciLevel")?.value ?? "95";
+  renderSensitivity(mu0, sigmaMu, sigmaTau, ciLevel);
 }
 
 document.getElementById("bayesUpdate").addEventListener("click", runBayesUpdate);
+
+// -----------------------------------------------------------------------------
+// renderSensitivity(mu0, sigmaMu, sigmaTau, ciLevel)
+// -----------------------------------------------------------------------------
+// Runs priorSensitivity() using the cached bayesState studies and renders the
+// result into the #bayesSensitivity collapsible section. Called automatically
+// from runBayesUpdate() and the Bayes block in runAnalysis().
+// -----------------------------------------------------------------------------
+function renderSensitivity(mu0, sigmaMu, sigmaTau, ciLevel) {
+  if (!bayesState.studies || bayesState.studies.length < 2) return;
+  const alpha = { "90": 0.10, "95": 0.05, "99": 0.01 }[ciLevel] ?? 0.05;
+  const rows = priorSensitivity(bayesState.studies, { mu0, alpha });
+  const el = document.getElementById("bayesSensitivity");
+  if (el) el.innerHTML = buildSensitivityHTML(rows, bayesState.profile, ciLevel, sigmaMu, sigmaTau);
+  const section = document.getElementById("bayesSensitivitySection");
+  if (section) section.style.display = "";
+  if (appState.reportArgs) {
+    appState.reportArgs = { ...appState.reportArgs, sensitivityRows: rows };
+  }
+}
 
 // -----------------------------------------------------------------------------
 // runAnalysis() → boolean
@@ -3559,12 +3612,17 @@ async function runAnalysis() {
       drawBayesTauPosterior(bayesResult);
       document.getElementById("bayesGridWarning").style.display =
         bayesResult.grid_truncated ? "" : "none";
+      renderSensitivity(bayesMu0, bayesSigmaMu, bayesSigmaTau, document.getElementById("ciLevel")?.value ?? "95");
     } else {
       elBayes.style.display = "none";
+      const elSensSection = document.getElementById("bayesSensitivitySection");
+      if (elSensSection) elSensSection.style.display = "none";
     }
   } else {
     bayesState.studies = null;
     elBayes.style.display = "none";
+    const elSensSection = document.getElementById("bayesSensitivitySection");
+    if (elSensSection) elSensSection.style.display = "none";
   }
   performance.measure("phase:bayes", "phase:bayes:start");
 
@@ -3910,6 +3968,7 @@ async function runAnalysis() {
     profileLik: profileLikResult,
     profileLikXScale: elProfileLikScale?.value || "tau2",
     bayesResult, bayesReMean: m.RE,
+    sensitivityRows: null,
     forestOptions: { ...forestOpts, currentPage: forestPlot.page },
     qqResiduals, qqLabels,
   };

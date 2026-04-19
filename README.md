@@ -100,6 +100,7 @@ A built-in RoB assessment panel accepts user-defined domains and Low / Some conc
 Conjugate normal-normal random-effects model fit via grid approximation (300 points over τ) — no MCMC, no external libraries. Prior on μ: N(μ₀, σ_μ²); prior on τ: HalfNormal(σ_τ). Because the prior on μ is conjugate given τ, the marginal posterior of μ is an analytic mixture of normals. Reports posterior mean and 95% credible interval for μ (overall effect) and τ (heterogeneity SD), plus posterior density plots for both parameters. Diffuse priors recover the REML random-effects estimate.
 
 - **Bayes Factor BF₁₀** — Savage-Dickey density ratio testing H₁: μ ≠ 0 vs H₀: μ = 0. BF₁₀ = prior density(0) / posterior density(0). Reported alongside log(BF₁₀) and a Jeffreys (1961) verbal interpretation (Anecdotal / Moderate / Strong / Very strong / Decisive for H₁ or H₀).
+- **Prior sensitivity analysis** — loops the Bayesian model over a 3 × 3 grid of (σ_μ, σ_τ) pairs ({0.5, 1, 2} × {0.25, 0.5, 1}, nine combinations) and tabulates the posterior mean μ, credible interval, and BF₁₀ for each. Triggered by the *Prior Sensitivity* button. Robust conclusions are stable across the grid.
 
 ---
 

@@ -1455,6 +1455,7 @@ export function buildReport(args) {
     sel, selMode, selLabel,
     gosh, goshXAxis,
     bayesResult, bayesReMean,
+    sensitivityRows,
     apaFormat = false,
     ciLevel,
   } = args;
@@ -1546,11 +1547,30 @@ export function buildReport(args) {
             [svgTau],
             `Prior: \u03C4\u202F~\u202FHalfNormal(${esc(bayesResult.sigma_tau)}).`)
         : (svgTau ? `<div class="svg-wrap">${svgTau}</div>` : "");
+      const sensitivityTable = (() => {
+        if (!sensitivityRows || !sensitivityRows.length) return "";
+        const crLabel = widthCrLabel;
+        const header = `<tr><th>σ_μ</th><th>σ_τ</th><th>Post. μ</th><th>${crLabel}</th><th>BF₁₀</th></tr>`;
+        const rows2 = sensitivityRows.map(row => {
+          const muDisp   = profile.transform(row.muMean);
+          const muCIDisp = row.muCI.map(v => profile.transform(v));
+          const bf = row.BF10;
+          const bfStr = !isFinite(bf) ? "NA"
+            : bf >= 1000 ? bf.toExponential(2)
+            : bf < 0.001 ? bf.toExponential(2)
+            : bf.toFixed(3);
+          return `<tr><td>${row.sigma_mu}</td><td>${row.sigma_tau}</td><td>${isFinite(muDisp) ? fmt(muDisp) : "NA"}</td><td>[${isFinite(muCIDisp[0]) ? fmt(muCIDisp[0]) : "NA"}, ${isFinite(muCIDisp[1]) ? fmt(muCIDisp[1]) : "NA"}]</td><td>${bfStr}</td></tr>`;
+        }).join("");
+        return `<h3>Prior Sensitivity Analysis</h3>
+  <table class="stats-table"><thead>${header}</thead><tbody>${rows2}</tbody></table>
+  <p class="note">Grid: σ_μ ∈ {0.5, 1, 2}, σ_τ ∈ {0.25, 0.5, 1}. Diffuse priors approach the frequentist RE estimate.</p>`;
+      })();
       return `
 <section>
   <h2>Bayesian Meta-Analysis</h2>
   <p class="meta-line">${priorLine}</p>
   ${statsTable}
+  ${sensitivityTable}
   ${plotsMu}
   ${plotsTau}
 </section>`;

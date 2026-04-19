@@ -820,6 +820,7 @@ export async function buildDocx(args) {
     pcurve, puniform, sel, selMode, selLabel,
     gosh, goshXAxis,
     bayesResult, bayesReMean,
+    sensitivityRows,
   } = args;
 
   const widthCiLabel = (ciLevel ?? "95") + "% CI";
@@ -986,6 +987,24 @@ export async function buildDocx(args) {
       ];
       if (muImgs.length)  chunks.push(...apaFigureDocx(ctx.nextFigure(), `Posterior distribution of pooled effect \u03BC (${profile.label})`, muImgs, priorLine));
       if (tauImgs.length) chunks.push(...apaFigureDocx(ctx.nextFigure(), "Posterior distribution of between-study standard deviation \u03C4", tauImgs, `Prior: \u03C4\u202F~\u202FHalfNormal(${bayesResult.sigma_tau}).`));
+      if (sensitivityRows && sensitivityRows.length) {
+        const sensRows = sensitivityRows.map(row => {
+          const muDisp2   = profile.transform(row.muMean);
+          const muCIDisp2 = row.muCI.map(v => profile.transform(v));
+          const bf = row.BF10;
+          const bfStr = !isFinite(bf) ? "NA"
+            : bf >= 1000 ? bf.toExponential(2)
+            : bf < 0.001 ? bf.toExponential(2)
+            : bf.toFixed(3);
+          const ciStr = `[${isFinite(muCIDisp2[0]) ? fmt(muCIDisp2[0]) : "NA"}, ${isFinite(muCIDisp2[1]) ? fmt(muCIDisp2[1]) : "NA"}]`;
+          return [run(String(row.sigma_mu)), run(String(row.sigma_tau)), run(isFinite(muDisp2) ? fmt(muDisp2) : "NA"), run(ciStr), run(bfStr)];
+        });
+        chunks.push(...apaTableDocx(ctx.nextTable(),
+          "Prior Sensitivity Analysis",
+          ["\u03C3_\u03BC", "\u03C3_\u03C4", "Post. \u03BC", `${widthCrLabel}`, "BF\u2081\u2080"],
+          sensRows,
+          "Grid: \u03C3_\u03BC \u2208 {0.5, 1, 2}, \u03C3_\u03C4 \u2208 {0.25, 0.5, 1}. Diffuse priors approach the frequentist RE estimate."));
+      }
       return chunks;
     })(),
 

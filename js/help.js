@@ -1225,6 +1225,17 @@ export const HELP = {
   },
 
   // Bayesian                                                            //
+  "bayes.sensitivity": {
+    title: "Prior sensitivity analysis",
+    body:  "Runs the Bayesian meta-analysis over a fixed 3×3 grid of prior combinations: " +
+           "σ_μ ∈ {0.5, 1, 2} and σ_τ ∈ {0.25, 0.5, 1} (9 combinations total). " +
+           "For each combination, the posterior mean μ, credible interval, and BF₁₀ are reported. " +
+           "Robust conclusions are stable across the grid. " +
+           "With diffuse priors (σ_μ = 2, σ_τ = 1) the posterior mean should approach the frequentist RE estimate. " +
+           "The current prior setting (from the Bayesian priors inputs above) is highlighted in bold. " +
+           "Runs automatically alongside the main Bayesian analysis.",
+  },
+
   "bayes.model": {
     title: "Bayesian meta-analysis",
     body:  "Fits a conjugate normal-normal random-effects model using a grid " +

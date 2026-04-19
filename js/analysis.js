@@ -1199,6 +1199,44 @@ export function bayesMeta(studies, opts = {}) {
 //         f_i  = n₁·n₂·(a·n₂ + c·n₁) / N³
 //         Var  = Σf / (Σw)²
 //
+// ---------------------------------------------------------------------------
+// priorSensitivity(studies, opts) → array of rows
+// ---------------------------------------------------------------------------
+// Runs bayesMeta() over a grid of (sigma_mu, sigma_tau) pairs and returns a
+// summary row for each combination. No new math — wraps bayesMeta().
+//
+// opts:
+//   mu0          — prior mean for μ (default 0)
+//   sigmaMuGrid  — array of σ_μ values (default [0.5, 1, 2])
+//   sigmaTauGrid — array of σ_τ values (default [0.25, 0.5, 1])
+//   alpha        — credible interval width (default 0.05)
+//
+// Returns: array of { sigma_mu, sigma_tau, muMean, muCI, BF10 }
+//   (one object per grid cell, ordered σ_τ outer / σ_μ inner)
+// ---------------------------------------------------------------------------
+export function priorSensitivity(studies, opts = {}) {
+  const {
+    mu0          = 0,
+    sigmaMuGrid  = [0.5, 1, 2],
+    sigmaTauGrid = [0.25, 0.5, 1],
+    alpha        = 0.05,
+  } = opts;
+  const rows = [];
+  for (const sigma_tau of sigmaTauGrid) {
+    for (const sigma_mu of sigmaMuGrid) {
+      const r = bayesMeta(studies, { mu0, sigma_mu, sigma_tau, alpha });
+      rows.push({
+        sigma_mu,
+        sigma_tau,
+        muMean: r.error ? NaN : r.muMean,
+        muCI:   r.error ? [NaN, NaN] : r.muCI,
+        BF10:   r.error ? NaN : r.BF10,
+      });
+    }
+  }
+  return rows;
+}
+
 // Q for heterogeneity: IV weights (1/vi) with M-H estimate as reference.
 export function metaMH(studies, type, alpha = 0.05) {
   const k = studies.length;

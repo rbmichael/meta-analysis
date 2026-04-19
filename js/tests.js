@@ -1,7 +1,7 @@
 import { round, transformEffect, chiSquareCDF, chiSquareQuantile, parseCounts, bivariateNormalCDF, normalQuantile, tCritical, fCDF, normalCDF, tCDF } from "./utils.js";
 import { validateStudy } from "./profiles.js";
 import { BENCHMARKS, PUB_BIAS_BENCHMARKS, INFLUENCE_BENCHMARKS, META_REGRESSION_BENCHMARKS, VH_BENCHMARKS, MH_BENCHMARKS, CLUSTER_BENCHMARKS, RVE_BENCHMARKS, THREE_LEVEL_BENCHMARKS, LS_BENCHMARKS } from "./benchmarks.js";
-import { compute, meta, metaMH, metaPeto, robustMeta, sandwichVar, robustWlsResult, metaRegression, tau2_HS, tau2_HE, tau2_ML, tau2_SJ, beggTest, eggerTest, fatPetTest, petPeeseTest, failSafeN, tesTest, heterogeneityCIs, cumulativeMeta, influenceDiagnostics, harbordTest, petersTest, deeksTest, rueckerTest, leaveOneOut, baujat, blupMeta, pCurve, pUniform, estimatorComparison, subgroupAnalysis, logLik, bfgs, selIntervalProbs, selIntervalIdx, selectionLogLik, SEL_CUTS_ONE_SIDED, SEL_CUTS_TWO_SIDED, veveaHedges, SELECTION_PRESETS, profileLikTau2, profileLikCI, bayesMeta, rvePooled, meta3level, lsModel, adjustPvals } from "./analysis.js";
+import { compute, meta, metaMH, metaPeto, robustMeta, sandwichVar, robustWlsResult, metaRegression, tau2_HS, tau2_HE, tau2_ML, tau2_SJ, beggTest, eggerTest, fatPetTest, petPeeseTest, failSafeN, tesTest, heterogeneityCIs, cumulativeMeta, influenceDiagnostics, harbordTest, petersTest, deeksTest, rueckerTest, leaveOneOut, baujat, blupMeta, pCurve, pUniform, estimatorComparison, subgroupAnalysis, logLik, bfgs, selIntervalProbs, selIntervalIdx, selectionLogLik, SEL_CUTS_ONE_SIDED, SEL_CUTS_TWO_SIDED, veveaHedges, SELECTION_PRESETS, profileLikTau2, profileLikCI, bayesMeta, priorSensitivity, rvePooled, meta3level, lsModel, adjustPvals } from "./analysis.js";
 import { trimFill } from "./trimfill.js";
 import { parseCSV } from "./csv.js";
 import { goshCompute, GOSH_MAX_ENUM_K, GOSH_MAX_K, GOSH_DEFAULT_MAX_SUBSETS } from "./gosh.js";
@@ -4792,6 +4792,67 @@ export function runTests() {
   }
 
   console.log(bayPass ? "\n✅ ALL BAYESIAN META-ANALYSIS TESTS PASSED" : "\n❌ SOME BAYESIAN META-ANALYSIS TESTS FAILED");
+
+  // =========================================================================
+  // PRIOR SENSITIVITY ANALYSIS TESTS
+  // =========================================================================
+  console.log("\n===== PRIOR SENSITIVITY ANALYSIS TESTS =====\n");
+  let sensPass = true;
+  const { chk: sensChk, chkTrue: sensChkTrue } = makeChk(() => { sensPass = false; }, 1e-10);
+
+  // Use the same BCG studies used in Bayesian tests (negative effect, k=5)
+  {
+    const studiesBCG5 = [
+      { yi: -0.8893, vi: 0.3197 },
+      { yi: -1.5854, vi: 0.2561 },
+      { yi: -1.3481, vi: 0.1380 },
+      { yi: -1.4416, vi: 0.0752 },
+      { yi: -0.2175, vi: 0.2031 },
+    ];
+    const rows = priorSensitivity(studiesBCG5);
+
+    // --- Shape: 9 rows, each with required keys ---
+    sensChkTrue("9 rows", rows.length === 9);
+    const requiredKeys = ["sigma_mu", "sigma_tau", "muMean", "muCI", "BF10"];
+    rows.forEach((r, i) => {
+      requiredKeys.forEach(k => sensChkTrue(`row ${i} has ${k}`, k in r));
+    });
+
+    // --- BF10 values are finite and positive ---
+    rows.forEach((r, i) => sensChkTrue(`row ${i} BF10 positive`, isFinite(r.BF10) && r.BF10 > 0));
+
+    // --- muMean always negative (BCG data has negative pooled effect) ---
+    rows.forEach((r, i) => sensChkTrue(`row ${i} muMean negative`, r.muMean < 0));
+
+    // --- muCI: [lb, ub] with lb < ub ---
+    rows.forEach((r, i) => sensChkTrue(`row ${i} CI lb < ub`, r.muCI[0] < r.muCI[1]));
+
+    // --- Diffuse prior (σ_μ=2, σ_τ=1) → muMean approaches REML estimate ---
+    // REML estimate from Bayesian test data (studiesBCG ≈ -0.714)
+    const reml = meta(studiesBCG5, "REML").RE;
+    const diffuseRow = rows.find(r => r.sigma_mu === 2 && r.sigma_tau === 1);
+    // Within 0.15 of REML (not exact due to finite grid but should be close)
+    sensChkTrue("diffuse prior approaches REML", Math.abs(diffuseRow.muMean - reml) < 0.15);
+
+    // --- Tight prior (σ_μ=0.5, σ_τ=0.25) → muMean closer to mu0=0 than diffuse ---
+    const tightRow = rows.find(r => r.sigma_mu === 0.5 && r.sigma_tau === 0.25);
+    // Tight prior shrinks toward 0, so |muMean| < |diffuse muMean|
+    sensChkTrue("tight prior shrinks toward mu0", Math.abs(tightRow.muMean) < Math.abs(diffuseRow.muMean));
+
+    // --- Grid covers all 9 (σ_μ, σ_τ) combinations ---
+    const combos = [[0.5,0.25],[0.5,0.5],[0.5,1],[1,0.25],[1,0.5],[1,1],[2,0.25],[2,0.5],[2,1]];
+    combos.forEach(([sm, st]) => {
+      const found = rows.find(r => r.sigma_mu === sm && r.sigma_tau === st);
+      sensChkTrue(`combo (${sm},${st}) present`, !!found);
+    });
+
+    // --- Custom grid option works ---
+    const custom = priorSensitivity(studiesBCG5, { sigmaMuGrid: [0.5, 2], sigmaTauGrid: [0.5] });
+    sensChkTrue("custom grid: 2 rows", custom.length === 2);
+    sensChkTrue("custom grid: both muMean finite", custom.every(r => isFinite(r.muMean)));
+  }
+
+  console.log(sensPass ? "\n✅ ALL PRIOR SENSITIVITY TESTS PASSED" : "\n❌ SOME PRIOR SENSITIVITY TESTS FAILED");
 
   // =========================================================================
   // MULTIPLE COMPARISON CORRECTION TESTS
