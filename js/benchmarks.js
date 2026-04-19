@@ -2247,8 +2247,10 @@ export const META_REGRESSION_BENCHMARKS = [
       R2:    0.6463,
       colNames: ["intercept", "year", "ablat"],
       modTests: [
-        { name: "year",  QM: 0.0169, QMdf: 1, QMp: 0.8966 },
-        { name: "ablat", QM: 7.4917, QMdf: 1, QMp: 0.0062 }
+        // lrt/lrtP always use ML internally regardless of model method
+        // R: anova(rma(yi~year+ablat,vi,data=dat.bcg,method="ML"), rma(yi~ablat,vi,data=dat.bcg,method="ML"))
+        { name: "year",  QM: 0.0169, QMdf: 1, QMp: 0.8966, lrt: 0.0791, lrtDf: 1, lrtP: 0.7785 },
+        { name: "ablat", QM: 7.4917, QMdf: 1, QMp: 0.0062, lrt: 7.1799, lrtDf: 1, lrtP: 0.0074 }
       ],
       vif: [null, 1.7846, 1.7846],
       // AIC/BIC (REML): npar=p+1=4; BIC uses kBIC=k−p=10 (error contrasts)
@@ -2460,6 +2462,58 @@ export const META_REGRESSION_BENCHMARKS = [
       ]
     },
     citation: "Colditz et al. (1994) dat.bcg. R-verified (metafor 4.8.0, crossval_nonlinear.R block 49). Harrell RCS formula with 3 knots at 10th/50th/90th pct of ablat (14, 33, 50.4). phi1 values and all statistics match metafor exactly."
+  },
+
+  // ----------------------------------------------------------------
+  // MR-D: BCG year + ablat (ML) — verifies LRT alongside Wald QM
+  // ----------------------------------------------------------------
+  {
+    name: "BCG – year + ablat (ML, normal CI) [LRT]",
+    moderators: [
+      { key: "year",  type: "continuous" },
+      { key: "ablat", type: "continuous" }
+    ],
+    tauMethod: "ML",
+    ciMethod:  "normal",
+    data: [
+      { label: "Aronson 1948",           yi: -0.8893113339202054, vi: 0.3255847650039614,    year: 1948, ablat: 44 },
+      { label: "Ferguson & Simes 1949",  yi: -1.5853886572014306, vi: 0.19458112139814387,   year: 1949, ablat: 55 },
+      { label: "Rosenthal 1960",         yi: -1.348073148299693,  vi: 0.41536796536796533,   year: 1960, ablat: 42 },
+      { label: "Hart & Sutherland 1977", yi: -1.4415511900213054, vi: 0.020010031902247573,  year: 1977, ablat: 52 },
+      { label: "Frimodt-Moller 1973",    yi: -0.2175473222112957, vi: 0.05121017216963086,   year: 1973, ablat: 13 },
+      { label: "Stein & Aronson 1953",   yi: -0.786115585818864,  vi: 0.0069056184559087574, year: 1953, ablat: 44 },
+      { label: "Vandiviere 1973",        yi: -1.6208982235983924, vi: 0.22301724757231517,   year: 1973, ablat: 19 },
+      { label: "TPT Madras 1980",        yi:  0.011952333523841173,vi: 0.00396157929781773,  year: 1980, ablat: 13 },
+      { label: "Coetzee & Berjak 1968",  yi: -0.4694176487381487, vi: 0.056434210463248966,  year: 1968, ablat: 27 },
+      { label: "Rosenthal 1961",         yi: -1.3713448034727846, vi: 0.07302479361302891,   year: 1961, ablat: 42 },
+      { label: "Comstock 1974",          yi: -0.33935882833839015,vi: 0.01241221397155972,   year: 1974, ablat: 18 },
+      { label: "Comstock & Webster 1969",yi:  0.4459134005713783, vi: 0.5325058452001528,    year: 1969, ablat: 33 },
+      { label: "Comstock 1976",          yi: -0.017313948216879493,vi: 0.0714046596839863,   year: 1976, ablat: 33 }
+    ],
+    expected: {
+      beta:  [6.6109, -0.0032, -0.0309],
+      se:    [18.1913, 0.0092,  0.0063],
+      tau2:  0.0269,
+      QE:    28.3251,
+      QEdf:  10,
+      QEp:   0.0016,
+      QM:    33.9382,
+      QMdf:  2,
+      QMp:   0.0000,
+      I2:    38.39,
+      R2:    0.9040,
+      colNames: ["intercept", "year", "ablat"],
+      modTests: [
+        // R: anova(rma(yi~year+ablat,vi,data=dat.bcg,method="ML"), rma(yi~ablat,vi,data=dat.bcg,method="ML"))
+        { name: "year",  QM: 0.1208, QMdf: 1, QMp: 0.7282, lrt: 0.0791, lrtDf: 1, lrtP: 0.7785 },
+        { name: "ablat", QM: 24.0799, QMdf: 1, QMp: 0.0000, lrt: 7.1799, lrtDf: 1, lrtP: 0.0074 }
+      ],
+      // R: logLik(rma(yi~year+ablat,vi,data=dat.bcg,method="ML"))
+      LL:  -7.6461,
+      AIC: 23.2922,
+      BIC: 25.5520
+    },
+    citation: "Colditz et al. (1994) dat.bcg. ML method; LRT values cross-validated via R anova.rma() (generate.R block MR-D)."
   }
 
 ];

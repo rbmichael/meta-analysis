@@ -900,6 +900,13 @@
       indices AIC, BIC, and log-likelihood (ML and REML conventions; matches metafor's
       <code>AIC.rma()</code> / <code>BIC.rma()</code>).
       Bubble plots are generated per continuous moderator.</p>
+      <p>When two or more moderators are present, the per-moderator tests panel shows
+      both a <strong>Wald QM</strong> statistic and a <strong>Likelihood Ratio Test
+      (LRT)</strong> for each moderator. LRT = 2·(LL<sub>ML,full</sub> −
+      LL<sub>ML,reduced</sub>) ~ χ²(df); the reduced model omits that moderator's
+      columns. LRT always uses ML estimation internally regardless of the τ² method
+      selected, since REML log-likelihoods cannot be compared across different
+      fixed-effect structures (Verbeke &amp; Molenberghs 2000).</p>
       <p><strong>Non-linear transforms</strong> for continuous moderators are available via
       the transform dropdown when adding a moderator:</p>
       <ul>

@@ -1013,19 +1013,22 @@ function sectionRegression(reg, method, ciMethod, apaFormat = false, nextTable) 
 
     const coefTable = buildTableAPA(nextTable(), "Meta-Regression Coefficients", coefHeaders, rows, coefNote);
 
+    const hasLRT_apa = reg.modTests && reg.modTests.some(mt => isFinite(mt.lrt));
     const modTestsTable = reg.modTests && reg.modTests.length > 1
       ? `<h3>Per-moderator omnibus tests</h3>
   ${buildTableAPA(
     nextTable(),
     "Per-Moderator Omnibus Tests",
-    ["Moderator", esc(modTestsQMlabel), "df", "p"],
+    ["Moderator", esc(modTestsQMlabel) + " (Wald)", ...(hasLRT_apa ? ["LRT χ²"] : []), "df", "p (Wald)", ...(hasLRT_apa ? ["p (LRT)"] : [])],
     reg.modTests.map(mt => `<tr>
       <td>${esc(mt.name)}</td>
       <td>${fmt(mt.QM)}</td>
+      ${hasLRT_apa ? `<td>${isFinite(mt.lrt) ? fmt(mt.lrt) : "NA"}</td>` : ""}
       <td>${mt.QMdf}</td>
       <td>${fmtP_APA(mt.QMp)}</td>
+      ${hasLRT_apa ? `<td>${isFinite(mt.lrtP) ? fmtP_APA(mt.lrtP) : "NA"}</td>` : ""}
     </tr>`),
-    ""
+    hasLRT_apa ? "LRT = Likelihood Ratio Test; uses ML estimation internally regardless of τ² method." : ""
   )}`
       : "";
 
@@ -1064,17 +1067,20 @@ function sectionRegression(reg, method, ciMethod, apaFormat = false, nextTable) 
   const coefHeaders = ["Term", "β", "SE", esc(statLabel), "p", "${widthCiLabel}", ""];
   if (hasVif) coefHeaders.push("VIF");
 
+  const hasLRT_std = reg.modTests && reg.modTests.some(mt => isFinite(mt.lrt));
   const modTestsTable = reg.modTests && reg.modTests.length > 1
     ? `<h3>Per-moderator omnibus tests</h3>
   ${buildTable(
-    ["Moderator", `${esc(modTestsQMlabel)}`, "df", "p"],
+    ["Moderator", `${esc(modTestsQMlabel)} (Wald)`, ...(hasLRT_std ? ["LRT χ²"] : []), "df", "p (Wald)", ...(hasLRT_std ? ["p (LRT)"] : [])],
     reg.modTests.map(mt => `<tr>
       <td>${esc(mt.name)}</td>
       <td>${fmt(mt.QM)}</td>
+      ${hasLRT_std ? `<td>${isFinite(mt.lrt) ? fmt(mt.lrt) : "NA"}</td>` : ""}
       <td>${mt.QMdf}</td>
       <td>${fmtP(mt.QMp)}</td>
+      ${hasLRT_std ? `<td>${isFinite(mt.lrtP) ? fmtP(mt.lrtP) : "NA"}</td>` : ""}
     </tr>`)
-  )}`
+  )}${hasLRT_std ? `\n  <p class="note">LRT\u202F=\u202FLikelihood Ratio Test; uses ML estimation internally.</p>` : ""}`
     : "";
 
   return `

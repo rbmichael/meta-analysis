@@ -642,12 +642,28 @@ function docRegression(args, ctx) {
 
   if (reg.modTests && reg.modTests.length > 1) {
     const modQlabel = reg.QMdist === "F" ? "F" : "\u03C7\u00B2";
+    const hasLRT_docx = reg.modTests.some(mt => isFinite(mt.lrt));
+    const modHeaders = [
+      "Moderator",
+      `${modQlabel} (Wald)`,
+      ...(hasLRT_docx ? ["LRT \u03C7\u00B2"] : []),
+      "df",
+      "p (Wald)",
+      ...(hasLRT_docx ? ["p (LRT)"] : []),
+    ];
+    const modRows = reg.modTests.map(mt => [
+      run(mt.name),
+      run(fmt(mt.QM)),
+      ...(hasLRT_docx ? [run(isFinite(mt.lrt) ? fmt(mt.lrt) : "NA")] : []),
+      run(String(mt.QMdf)),
+      run(fmtP_APA(mt.QMp)),
+      ...(hasLRT_docx ? [run(isFinite(mt.lrtP) ? fmtP_APA(mt.lrtP) : "NA")] : []),
+    ]);
     chunks.push(
       paraText("Per-moderator omnibus tests", "Heading2"),
       ...apaTableDocx(ctx.nextTable(), "Per-Moderator Omnibus Tests",
-        ["Moderator", modQlabel, "df", "p"],
-        reg.modTests.map(mt => [run(mt.name), run(fmt(mt.QM)), run(String(mt.QMdf)), run(fmtP_APA(mt.QMp))]),
-        ""),
+        modHeaders, modRows,
+        hasLRT_docx ? "LRT = Likelihood Ratio Test; uses ML estimation internally regardless of \u03C4\u00B2 method." : ""),
     );
   }
 

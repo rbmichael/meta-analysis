@@ -3604,6 +3604,48 @@ export function metaRegression(studies, moderators = [], method = "REML", ciMeth
     const v = vi[i] + tau2;
     LL_ML -= 0.5 * (Math.log(2 * Math.PI) + Math.log(v) + (yi[i] - fitted[i]) ** 2 / v);
   }
+
+  // ---- Per-moderator Likelihood Ratio Tests ----
+  // LRT = 2·(LL_ML_full − LL_ML_reduced) ~ χ²(df_mod) where reduced model
+  // omits the columns contributed by that moderator.  Must use ML for valid
+  // nested-model comparisons — REML LL cannot be compared across different
+  // fixed-effect structures (Verbeke & Molenberghs 2000).
+  //
+  // LL_ML is always evaluated at the ML estimates (beta_ML, tau2_ML), not at
+  // the current method's estimates, so LRT is valid even when method = "REML".
+  // Augments each modTest entry in-place with {lrt, lrtDf, lrtP}.
+  {
+    // --- ML fit of the full model (used as LRT baseline for all moderators) ---
+    const _mlFit = (X_) => {
+      const t2 = Math.max(0, tau2_metaReg(yi, vi, X_, "ML"));
+      const w_ = vi.map(v => 1 / (v + t2));
+      const { beta: b_, rankDeficient: rd_ } = wls(X_, yi, w_);
+      if (rd_ || !b_) return NaN;
+      let ll = 0;
+      for (let i = 0; i < kf; i++) {
+        const v = vi[i] + t2;
+        const fit = X_[i].reduce((acc, x, c) => acc + x * b_[c], 0);
+        ll -= 0.5 * (Math.log(2 * Math.PI) + Math.log(v) + (yi[i] - fit) ** 2 / v);
+      }
+      return ll;
+    };
+    const LL_ML_full = _mlFit(Xf);
+    for (const mt of modTests) {
+      if (mt.QMdf === 0 || mt.colIdxs.length === 0 || !isFinite(LL_ML_full)) {
+        mt.lrt = NaN; mt.lrtDf = 0; mt.lrtP = NaN;
+        continue;
+      }
+      // Reduced design matrix: drop the moderator's columns (keep intercept, col 0).
+      const dropSet = new Set(mt.colIdxs);
+      const Xr = Xf.map(row => row.filter((_, c) => !dropSet.has(c)));
+      const ll_red = _mlFit(Xr);
+      const lrtStat = 2 * (LL_ML_full - ll_red);
+      mt.lrt   = isFinite(lrtStat) ? Math.max(0, lrtStat) : NaN;
+      mt.lrtDf = mt.QMdf;  // columns dropped = same df as Wald test
+      mt.lrtP  = isFinite(mt.lrt) ? 1 - chiSquareCDF(mt.lrt, mt.lrtDf) : NaN;
+    }
+  }
+
   // X′WX (W = diag(1/(vᵢ+τ²)) already in w[]) and X′X (unweighted) for REML correction.
   // REML LL = ML LL + p/2·log(2π) + ½·log|X′X| − ½·log|X′WX|
   // (Harville 1977; metafor 4.8.0 convention with REMLf = TRUE)

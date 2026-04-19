@@ -3588,7 +3588,7 @@ export function runTests() {
     mrfield("I2", r.I2, exp.I2, "I2");
     mrchk("R2",  r.R2,  exp.R2,  0.01);
 
-    // per-moderator Wald tests
+    // per-moderator Wald tests + LRT
     if (exp.modTests) {
       exp.modTests.forEach((mt, idx) => {
         const got = r.modTests[idx];
@@ -3598,6 +3598,14 @@ export function runTests() {
         const dfOk = got.QMdf === mt.QMdf;
         if (!dfOk) { console.error(`  FAIL modTests[${idx}] QMdf: got ${got.QMdf}, expected ${mt.QMdf}`); mrBenchPass = false; }
         else console.log(`  ok  modTests[${idx}] (${mt.name}) QMdf = ${mt.QMdf}`);
+        // LRT fields (optional in expected; tolerance 0.01 stat, 0.02 p-value)
+        if (mt.lrt !== undefined) {
+          mrchk(`modTests[${idx}] (${mt.name}) LRT`,  got.lrt,  mt.lrt,  0.01);
+          mrchk(`modTests[${idx}] (${mt.name}) lrtP`, got.lrtP, mt.lrtP, 0.02);
+          const lrtDfOk = got.lrtDf === mt.lrtDf;
+          if (!lrtDfOk) { console.error(`  FAIL modTests[${idx}] lrtDf: got ${got.lrtDf}, expected ${mt.lrtDf}`); mrBenchPass = false; }
+          else console.log(`  ok  modTests[${idx}] (${mt.name}) lrtDf = ${mt.lrtDf}`);
+        }
       });
     }
 

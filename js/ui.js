@@ -2200,6 +2200,7 @@ function renderRegressionPanel(reg, method, ciMethod, kExcluded = 0) {
                  : mccMethod === "holm"       ? "Holm"
                  : "";
   const hasAdjPs = adjModPs !== null && adjModPs.length > 0;
+  const hasLRT = Array.isArray(reg.modTests) && reg.modTests.some(mt => isFinite(mt.lrt));
   const modTestsBlock = moderators.length >= 2
     && Array.isArray(reg.modTests) && reg.modTests.length > 0
     ? `<details>
@@ -2207,24 +2208,31 @@ function renderRegressionPanel(reg, method, ciMethod, kExcluded = 0) {
         <table class="reg-table">
           <thead><tr>
             <th>Moderator</th>
-            <th>${reg.QMdist === "F" ? "F" : "QM"}</th>
+            <th>${reg.QMdist === "F" ? "F" : "QM"} (Wald)</th>
+            ${hasLRT ? `<th>LRT χ²${hBtn("mreg.lrt")}</th>` : ""}
             <th>df</th>
-            <th>p</th>
+            <th>p (Wald)</th>
+            ${hasLRT ? `<th>p (LRT)</th>` : ""}
             ${hasAdjPs ? `<th>p (${mccLabel})</th>` : ""}
           </tr></thead>
           <tbody>
             ${reg.modTests.map((mt, mi) => {
               if (mt.QMdf === 0) {
-                return `<tr><td>${mt.name}</td><td colspan="${hasAdjPs ? 4 : 3}"><i>degenerate (≤ 1 level)</i></td></tr>`;
+                return `<tr><td>${mt.name}</td><td colspan="${(hasAdjPs ? 1 : 0) + (hasLRT ? 2 : 0) + 3}"><i>degenerate (≤ 1 level)</i></td></tr>`;
               }
               const dfLabel = reg.QMdist === "F"
                 ? `F(${mt.QMdf},\u2009${reg.QEdf})`
                 : `χ²(${mt.QMdf})`;
+              const lrtCells = hasLRT
+                ? `<td>${isFinite(mt.lrt) ? fmt(mt.lrt) : "NA"}</td>
+                   <td>${isFinite(mt.lrtP) ? regFmtP(mt.lrtP) : "NA"}</td>`
+                : "";
               const adjCell = hasAdjPs
                 ? `<td>${regFmtP(adjModPs[mi])}</td>` : "";
               return `<tr>
                 <td>${mt.name}</td>
                 <td>${fmt(mt.QM)}</td>
+                ${lrtCells}
                 <td>${dfLabel}</td>
                 <td>${regFmtP(mt.QMp)}</td>
                 ${adjCell}
@@ -2232,6 +2240,7 @@ function renderRegressionPanel(reg, method, ciMethod, kExcluded = 0) {
             }).join("")}
           </tbody>
         </table>
+        ${hasLRT ? `<div class="reg-note">LRT\u202F=\u202FLikelihood Ratio Test; uses ML estimation internally regardless of τ² method selected.</div>` : ""}
         ${hasAdjPs ? `<div class="reg-note">${mccLabel} correction applied across m\u2009=\u2009${rawModPs.length} moderator tests.</div>` : ""}
       </details>`
     : "";

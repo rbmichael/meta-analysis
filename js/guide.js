@@ -1684,6 +1684,20 @@ wᵢ = 1/(vᵢ + τ²), with τ² estimated by REML or the selected estimator.</
   are set to 0 (NaN when τ²₀ = 0).</li>
   <li><strong>VIF</strong> — variance inflation factors; values &gt; 10
   indicate collinearity among predictors.</li>
+  <li><strong>Per-moderator tests</strong> — when 2+ moderators are present,
+  each moderator is tested individually. Two complementary statistics are shown:
+  <ul>
+    <li><strong>Wald QM</strong> — based on the estimated coefficients and their
+    covariance matrix. Always available regardless of the τ² estimator.</li>
+    <li><strong>LRT χ²</strong> — Likelihood Ratio Test: the full model (ML) is
+    compared with a reduced model that omits that moderator's columns:
+    <code>LRT = 2·(LL<sub>ML,full</sub> − LL<sub>ML,reduced</sub>) ~ χ²(df)</code>.
+    LRT always uses ML internally regardless of the τ² method selected for
+    the main analysis (REML LL cannot be compared across different
+    fixed-effect structures). Wald and LRT are asymptotically equivalent
+    but can differ in small samples; LRT is generally preferred when k is
+    small because Wald tests can be anti-conservative.</li>
+  </ul></li>
 </ul>
 <p><strong>Cautionary notes:</strong></p>
 <ul>
@@ -2677,6 +2691,7 @@ export const HELP_TO_GUIDE = {
   "diag.covratio":    "guide-covratio",
   "diag.subgroup":       "guide-subgroup",
   "diag.metaregression": "guide-metaregression",
+  "mreg.lrt":            "guide-metaregression",
   "diag.nonlinear-reg":  "guide-nonlinear-reg",
   "diag.locationscale":  "guide-location-scale",
   "input.scaleModerators": "guide-location-scale",

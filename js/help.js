@@ -992,6 +992,19 @@ export const HELP = {
            "Equivalent to metafor rma(..., scale = ~ ..., method = 'ML') (Viechtbauer, 2021).",
   },
 
+  "mreg.lrt": {
+    title: "Likelihood Ratio Test (LRT) — meta-regression",
+    body:  "LRT = 2·(LL_ML_full − LL_ML_reduced) ~ χ²(df), where the reduced model " +
+           "omits that moderator's columns. Always uses ML estimation internally " +
+           "regardless of the τ² method selected for the main analysis — REML log-likelihoods " +
+           "cannot be compared across models with different fixed-effect structures. " +
+           "LRT and Wald QM test the same hypothesis and are asymptotically equivalent; " +
+           "LRT is generally preferred in small samples because Wald tests can be " +
+           "anti-conservative when the number of studies k is small. " +
+           "df = number of columns contributed by the moderator (1 for a continuous " +
+           "predictor; levels − 1 for a categorical predictor).",
+  },
+
   "reg.aic": {
     title: "AIC / BIC (meta-regression)",
     body:  "AIC (Akaike Information Criterion) and BIC (Bayesian Information Criterion) " +

@@ -83,6 +83,8 @@ Continuous and categorical moderators. Multiple moderators may be added simultan
 
 **Non-linear transforms** (Poly², Poly³, RCS 3–5 knots) are available via the moderator transform dropdown.
 
+**Per-moderator tests** — when 2+ moderators are present, each moderator is tested individually via both a **Wald QM** statistic and a **Likelihood Ratio Test (LRT)**. LRT = 2·(LL_ML,full − LL_ML,reduced) ~ χ²(df); always uses ML internally regardless of the selected τ² method, since REML log-likelihoods cannot be compared across different fixed-effect structures. LRT is generally preferred over Wald in small samples.
+
 **Multiple comparison correction** — Bonferroni or Holm adjustment of per-moderator omnibus QM p-values when m ≥ 2 moderators are tested simultaneously. Adjusted p-values displayed alongside raw values in the per-moderator tests table. Matches `p.adjust(method="bonferroni"/"holm")` in R (Holm, 1979).
 
 **Location-scale model** — add scale moderators (log τ² = Zγ) to model heterogeneity simultaneously with the mean effect. Each study gets its own τ̂²ᵢ = exp(Zᵢγ̂). Estimated by ML via profile likelihood. Equivalent to `rma(..., scale = ~ ..., method = "ML")` in metafor (Viechtbauer, 2021).
