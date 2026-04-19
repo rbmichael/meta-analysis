@@ -65,6 +65,36 @@ SMDH and SMD agree closely and SMD is more widely understood.</p>`,
       },
 
       {
+        id: "guide-smd1",
+        title: "Standardised Mean Difference — one sample (SMD1 / SMD1H)",
+        body: `<p>A one-sample standardised effect: a single group's mean compared to a
+known reference value (e.g. a population norm or test threshold), divided
+by the group's standard deviation, with Hedges' small-sample correction
+applied. SMD1H is the heteroscedastic variant that applies the J²
+correction to both variance terms.</p>
+<p><strong>Formula (both types):</strong><br>
+<code>d = (m − ref) / sd</code>&ensp;(raw one-sample Cohen's d)<br>
+<code>df = n − 1</code><br>
+<code>J = 1 − 3 / (4·df − 1)</code>&ensp;(Hedges' small-sample correction)<br>
+<code>yi = d · J</code>&ensp;(bias-corrected effect)</p>
+<p><strong>Variance:</strong><br>
+SMD1:&ensp;<code>vi = 1/n + yi² / (2·df)</code>&ensp;(1/n unscaled)<br>
+SMD1H:&ensp;<code>vi = J² · (1/n + d² / (2·df))</code>&ensp;(full J² scaling)</p>
+<p>For large <em>n</em>, J → 1 and SMD1 ≈ SMD1H. The two differ
+meaningfully when <em>n</em> &lt; 20. The default reference value is 0.</p>
+<p><strong>When to use:</strong> A single-group study is compared to an
+external norm or known standard (e.g. checking whether a clinical sample
+deviates from a healthy-population mean). No control group is available.</p>
+<p><strong>When to avoid:</strong> When a control group is present — use SMD
+or SMDH instead, which account for between-group variance. Avoid when the
+reference value is itself estimated with uncertainty.</p>`,
+        citations: [
+          "Hedges, L. V., & Olkin, I. (1985). <em>Statistical methods for meta-analysis</em>. Academic Press.",
+          "Viechtbauer, W. (2010). Conducting meta-analyses in R with the metafor package. <em>Journal of Statistical Software, 36</em>(3), 1–48.",
+        ],
+      },
+
+      {
         id: "guide-md",
         title: "Mean Difference (MD)",
         body: `<p>The raw arithmetic difference between two group means (μ₁ − μ₂).
@@ -315,6 +345,64 @@ risk p_ref, but this depends on the choice of reference and should be
 interpreted cautiously.</p>`,
         citations: [
           "Freeman, M. F., & Tukey, J. W. (1950). Transformations related to the angular and the square root. <em>Annals of Mathematical Statistics, 21</em>(4), 607–611.",
+          "Viechtbauer, W. (2010). Conducting meta-analyses in R with the metafor package. <em>Journal of Statistical Software, 36</em>(3), 1–48.",
+        ],
+      },
+
+      {
+        id: "guide-yuq",
+        title: "Yule's Q and Yule's Y",
+        body: `<p>Two association measures for 2×2 tables derived from the cross-product
+ratio (odds ratio). Both lie on [−1, +1] and are symmetric around 0 (no
+association). They pre-date the log-odds ratio but are still used in
+bibliometric, epidemiological, and psychological research.</p>
+
+<h4>Formulas</h4>
+<p>For a 2×2 table with cells a (events, group 1), b (non-events, group 1),
+c (events, group 2), d (non-events, group 2):</p>
+
+<p><strong>Yule's Q (YUQ):</strong></p>
+<pre>  yi = (a·d − b·c) / (a·d + b·c)
+  vi = (1 − Q²)² / 4 · (1/a + 1/b + 1/c + 1/d)</pre>
+
+<p><strong>Yule's Y — coefficient of colligation (YUY):</strong></p>
+<pre>  yi = (√(a·d) − √(b·c)) / (√(a·d) + √(b·c))
+  vi = (1 − Y²)² / 16 · (1/a + 1/b + 1/c + 1/d)</pre>
+
+<p>Q and Y are monotonically related: <code>Q = 2Y / (1 + Y²)</code>,
+so they convey identical rank-order information. Y compresses extreme values
+toward zero relative to Q, making it less sensitive to sampling variation when
+the true association is strong.</p>
+
+<h4>Relationship to the odds ratio</h4>
+<p>Let OR = a·d/(b·c). Then Q = (OR−1)/(OR+1) and Y = (√OR−1)/(√OR+1).
+Both are bounded transformations of the OR, removing the asymmetry that makes
+raw OR hard to pool directly.</p>
+
+<h4>When undefined</h4>
+<p>Q and Y are undefined when a·d + b·c = 0 (Q) or √(a·d) + √(b·c) = 0 (Y).
+This occurs only for fully degenerate tables (e.g. all events in one cell and
+zero everywhere else). Studies with a single zero cell are still estimable
+provided the denominator is positive; a warning is shown in that case.</p>
+
+<h4>When to use</h4>
+<ul>
+  <li>You want a bounded [−1, +1] effect measure that is symmetric and directly
+  interpretable as an association strength.</li>
+  <li>Following conventions in bibliometrics, historical epidemiology, or
+  pre-OR-era literature that reports Q or Y.</li>
+</ul>
+
+<h4>When to avoid</h4>
+<ul>
+  <li>When odds ratios or risk ratios are the primary quantity of interest —
+  prefer OR/RR for clinical communication.</li>
+  <li>When zero cells are common: consider adding a continuity correction or
+  switching to Peto OR or GLMM-based methods.</li>
+</ul>`,
+        citations: [
+          "Yule, G. U. (1900). On the association of attributes in statistics. <em>Philosophical Transactions of the Royal Society of London, Series A, 194</em>, 257–319.",
+          "Yule, G. U. (1912). On the methods of measuring association between two attributes. <em>Journal of the Royal Statistical Society, 75</em>(6), 579–642.",
           "Viechtbauer, W. (2010). Conducting meta-analyses in R with the metafor package. <em>Journal of Statistical Software, 36</em>(3), 1–48.",
         ],
       },
@@ -2459,6 +2547,8 @@ rather than the specific interval.</p>`,
 export const HELP_TO_GUIDE = {
   "effect.SMD":       "guide-smd",
   "effect.SMDH":      "guide-smdh",
+  "effect.SMD1":      "guide-smd1",
+  "effect.SMD1H":     "guide-smd1",
   "effect.MD":        "guide-md",
   "effect.MD_paired": "guide-md-paired",
   "effect.SMD_paired":"guide-smd-paired",
@@ -2470,6 +2560,8 @@ export const HELP_TO_GUIDE = {
   "effect.RR":        "guide-rr",
   "effect.RD":        "guide-rd",
   "effect.AS":        "guide-as",
+  "effect.YUQ":       "guide-yuq",
+  "effect.YUY":       "guide-yuq",
   "effect.HR":        "guide-hr",
   "effect.IRR":       "guide-irr",
   "effect.IRD":       "guide-ird",

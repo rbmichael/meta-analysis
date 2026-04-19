@@ -884,6 +884,220 @@ export const BENCHMARKS = [
   },
 
   // ----------------------------------------------------------------
+  // YUQ — dat.bcg first 5 studies (a=tpos,b=tneg,c=cpos,d=cneg), DL
+  // escalc("YUQ", ai=tpos, bi=tneg, ci=cpos, di=cneg, data=dat.bcg[1:5])
+  // rma(yi, vi, method="DL")
+  //   Study 1: a=4,   b=119,   c=11,  d=128
+  //   Study 2: a=6,   b=300,   c=29,  d=274
+  //   Study 3: a=3,   b=228,   c=11,  d=209
+  //   Study 4: a=62,  b=13536, c=248, d=12619
+  //   Study 5: a=33,  b=5036,  c=47,  d=5761
+  // ----------------------------------------------------------------
+  {
+    name: "dat.bcg (5 studies) – YUQ (Yule's Q, DL)",
+    type: "YUQ",
+    tauMethod: "DL",
+    data: [
+      { label: "Aronson 1948",     a:  4, b:   119, c:  11, d:   128 },
+      { label: "Ferguson & Simes", a:  6, b:   300, c:  29, d:   274 },
+      { label: "Rosenthal 1960",   a:  3, b:   228, c:  11, d:   209 },
+      { label: "Hart & Sutherland",a: 62, b: 13536, c: 248, d: 12619 },
+      { label: "Frimodt-Moller",   a: 33, b:  5036, c:  47, d:  5761 },
+    ],
+    expected: {
+      yi:   [-0.43767161, -0.68213457, -0.6, -0.62197624, -0.10913415],
+      FE:   -0.565524,
+      RE:   -0.491567,
+      tau2:  0.04995381,
+      I2:   79.2922,
+    },
+    citation: "dat.bcg (first 5 studies); cross-validated with metafor escalc('YUQ') + rma(method='DL').",
+  },
+
+  // ----------------------------------------------------------------
+  // YUQ — REML (same data as YUQ-1)
+  // ----------------------------------------------------------------
+  {
+    name: "dat.bcg (5 studies) – YUQ (Yule's Q, REML)",
+    type: "YUQ",
+    tauMethod: "REML",
+    data: [
+      { label: "Aronson 1948",     a:  4, b:   119, c:  11, d:   128 },
+      { label: "Ferguson & Simes", a:  6, b:   300, c:  29, d:   274 },
+      { label: "Rosenthal 1960",   a:  3, b:   228, c:  11, d:   209 },
+      { label: "Hart & Sutherland",a: 62, b: 13536, c: 248, d: 12619 },
+      { label: "Frimodt-Moller",   a: 33, b:  5036, c:  47, d:  5761 },
+    ],
+    expected: {
+      yi:   [-0.43767161, -0.68213457, -0.6, -0.62197624, -0.10913415],
+      FE:   -0.565524,
+      RE:   -0.4916644,
+      tau2:  0.048285,
+      I2:   79.2922,  // Q-based
+    },
+    citation: "dat.bcg (first 5 studies); cross-validated with metafor escalc('YUQ') + rma(method='REML').",
+  },
+
+  // ----------------------------------------------------------------
+  // YUY — dat.bcg first 5 studies, DL
+  // escalc("YUY", ai=tpos, bi=tneg, ci=cpos, di=cneg, data=dat.bcg[1:5])
+  // ----------------------------------------------------------------
+  {
+    name: "dat.bcg (5 studies) – YUY (Yule's Y, DL)",
+    type: "YUY",
+    tauMethod: "DL",
+    data: [
+      { label: "Aronson 1948",     a:  4, b:   119, c:  11, d:   128 },
+      { label: "Ferguson & Simes", a:  6, b:   300, c:  29, d:   274 },
+      { label: "Rosenthal 1960",   a:  3, b:   228, c:  11, d:   209 },
+      { label: "Hart & Sutherland",a: 62, b: 13536, c: 248, d: 12619 },
+      { label: "Frimodt-Moller",   a: 33, b:  5036, c:  47, d:  5761 },
+    ],
+    expected: {
+      yi:   [-0.23045841, -0.39401806, -0.33333333, -0.34882986, -0.05473053],
+      FE:   -0.2883224,
+      RE:   -0.2663702,
+      tau2:  0.02312507,
+      I2:   81.9081,
+    },
+    citation: "dat.bcg (first 5 studies); cross-validated with metafor escalc('YUY') + rma(method='DL').",
+  },
+
+  // ----------------------------------------------------------------
+  // YUY — REML (same data as YUY-1)
+  // ----------------------------------------------------------------
+  {
+    name: "dat.bcg (5 studies) – YUY (Yule's Y, REML)",
+    type: "YUY",
+    tauMethod: "REML",
+    data: [
+      { label: "Aronson 1948",     a:  4, b:   119, c:  11, d:   128 },
+      { label: "Ferguson & Simes", a:  6, b:   300, c:  29, d:   274 },
+      { label: "Rosenthal 1960",   a:  3, b:   228, c:  11, d:   209 },
+      { label: "Hart & Sutherland",a: 62, b: 13536, c: 248, d: 12619 },
+      { label: "Frimodt-Moller",   a: 33, b:  5036, c:  47, d:  5761 },
+    ],
+    expected: {
+      yi:   [-0.23045841, -0.39401806, -0.33333333, -0.34882986, -0.05473053],
+      FE:   -0.2883224,
+      RE:   -0.2652435,
+      tau2:  0.01754236,
+      I2:   81.9081,  // Q-based
+    },
+    citation: "dat.bcg (first 5 studies); cross-validated with metafor escalc('YUY') + rma(method='REML').",
+  },
+
+  // ----------------------------------------------------------------
+  // SMD1 — Synthetic 5-study one-sample SMD dataset, DL
+  // escalc("SMD1", mi=m, sdi=sd, ni=n, mu0i=0)
+  // rma(yi, vi, method="DL")
+  // m=[2.0,1.0,3.5,1.5,4.0], sd=[1.0,1.5,1.2,2.0,1.0], n=[30,25,40,35,20]
+  //   d: [2.0, 0.6667, 2.9167, 0.75, 4.0]
+  //   J: [0.97391, 0.96842, 0.98065, 0.97778, 0.96000]
+  //   yi = d*J: [1.94783, 0.64561, 2.86020, 0.73333, 3.84000]
+  //   vi_SMD1 = 1/n + yi²/(2*(n-1)):
+  //     [0.09875, 0.04868, 0.12988, 0.03648, 0.43804]
+  //   FE = 1.232,  tau2_DL = 1.055,  I2 = 92.73%,  RE_DL = 1.887
+  // Cross-validated with metafor escalc("SMD1") + rma(method="DL")
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic – SMD1 (one-sample SMD, DL)",
+    type: "SMD1",
+    tauMethod: "DL",
+    data: [
+      { label: "Study 1", m: 2.0, sd: 1.0, n: 30, ref: 0 },
+      { label: "Study 2", m: 1.0, sd: 1.5, n: 25, ref: 0 },
+      { label: "Study 3", m: 3.5, sd: 1.2, n: 40, ref: 0 },
+      { label: "Study 4", m: 1.5, sd: 2.0, n: 35, ref: 0 },
+      { label: "Study 5", m: 4.0, sd: 1.0, n: 20, ref: 0 },
+    ],
+    expected: {
+      yi:   [1.94783, 0.64561, 2.86020, 0.73333, 3.84000],
+      FE:   1.232,
+      RE:   1.887,
+      tau2: 1.055,
+      I2:   92.73,
+    },
+    citation: "Synthetic dataset; cross-validated with metafor escalc('SMD1') + rma(method='DL').",
+  },
+
+  // ----------------------------------------------------------------
+  // SMD1 — REML (same data as SMD1-1)
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic – SMD1 (one-sample SMD, REML)",
+    type: "SMD1",
+    tauMethod: "REML",
+    data: [
+      { label: "Study 1", m: 2.0, sd: 1.0, n: 30, ref: 0 },
+      { label: "Study 2", m: 1.0, sd: 1.5, n: 25, ref: 0 },
+      { label: "Study 3", m: 3.5, sd: 1.2, n: 40, ref: 0 },
+      { label: "Study 4", m: 1.5, sd: 2.0, n: 35, ref: 0 },
+      { label: "Study 5", m: 4.0, sd: 1.0, n: 20, ref: 0 },
+    ],
+    expected: {
+      yi:   [1.94783, 0.64561, 2.86020, 0.73333, 3.84000],
+      FE:   1.232,
+      RE:   1.921,
+      tau2: 1.615,
+      I2:   92.73,  // Q-based
+    },
+    citation: "Synthetic dataset; cross-validated with metafor escalc('SMD1') + rma(method='REML').",
+  },
+
+  // ----------------------------------------------------------------
+  // SMD1H — same dataset, DL
+  // escalc("SMD1H", mi=m, sdi=sd, ni=n, mu0i=0)
+  //   vi_SMD1H = J² * (1/n + d²/(2*(n-1))):
+  //     [0.09703, 0.04621, 0.12889, 0.03522, 0.43412]
+  //   FE = 1.220,  tau2_DL = 1.044,  I2 = 92.86%,  RE_DL = 1.886
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic – SMD1H (one-sample SMD heteroscedastic, DL)",
+    type: "SMD1H",
+    tauMethod: "DL",
+    data: [
+      { label: "Study 1", m: 2.0, sd: 1.0, n: 30, ref: 0 },
+      { label: "Study 2", m: 1.0, sd: 1.5, n: 25, ref: 0 },
+      { label: "Study 3", m: 3.5, sd: 1.2, n: 40, ref: 0 },
+      { label: "Study 4", m: 1.5, sd: 2.0, n: 35, ref: 0 },
+      { label: "Study 5", m: 4.0, sd: 1.0, n: 20, ref: 0 },
+    ],
+    expected: {
+      yi:   [1.94783, 0.64561, 2.86020, 0.73333, 3.84000],
+      FE:   1.220,
+      RE:   1.886,
+      tau2: 1.044,
+      I2:   92.86,
+    },
+    citation: "Synthetic dataset; cross-validated with metafor escalc('SMD1H') + rma(method='DL').",
+  },
+
+  // ----------------------------------------------------------------
+  // SMD1H — REML (same data as SMD1H-1)
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic – SMD1H (one-sample SMD heteroscedastic, REML)",
+    type: "SMD1H",
+    tauMethod: "REML",
+    data: [
+      { label: "Study 1", m: 2.0, sd: 1.0, n: 30, ref: 0 },
+      { label: "Study 2", m: 1.0, sd: 1.5, n: 25, ref: 0 },
+      { label: "Study 3", m: 3.5, sd: 1.2, n: 40, ref: 0 },
+      { label: "Study 4", m: 1.5, sd: 2.0, n: 35, ref: 0 },
+      { label: "Study 5", m: 4.0, sd: 1.0, n: 20, ref: 0 },
+    ],
+    expected: {
+      yi:   [1.94783, 0.64561, 2.86020, 0.73333, 3.84000],
+      FE:   1.220,
+      RE:   1.919,
+      tau2: 1.600,
+      I2:   92.86,  // Q-based
+    },
+    citation: "Synthetic dataset; cross-validated with metafor escalc('SMD1H') + rma(method='REML').",
+  },
+
+  // ----------------------------------------------------------------
   // IR — Synthetic incidence rate dataset (hand-computed, DL)
   // yi = log(x/t),  vi = 1/x
   // 4 studies: x=[10,25,5,20], t=[200,300,400,250].

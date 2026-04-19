@@ -688,6 +688,122 @@ export const effectProfiles = {
   },
 
   // ------------------------------------------------------------------ //
+  // YUQ — Yule's Q (Yule 1900)
+  //   yi = (a·d − b·c) / (a·d + b·c)
+  //   vi = (1 − Q²)² / 4 · (1/a + 1/b + 1/c + 1/d)
+  //
+  // Q is the cross-ratio measure of association for 2×2 tables, ranging from
+  // −1 (complete negative association) to +1 (complete positive association).
+  // Undefined when a·d + b·c = 0 (degenerate tables). No continuity correction
+  // is applied; studies with zero cells causing a·d=0 or b·c=0 individually
+  // are still estimable provided the denominator a·d+b·c > 0.
+  // Reference: metafor escalc("YUQ").
+  "YUQ": {
+    label:  "Yule's Q",
+    group:  "Binary outcomes",
+    inputs: ["a", "b", "c", "d"],
+    compute(s) {
+      if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+      const { a, b, c, d } = s;
+      const ad = a * d, bc = b * c;
+      const denom = ad + bc;
+      if (denom === 0) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+      const yi = (ad - bc) / denom;
+      const vi = Math.max(
+        (1 - yi * yi) ** 2 / 4 * (1/a + 1/b + 1/c + 1/d),
+        MIN_VAR
+      );
+      return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
+    },
+    transform: (x) => x,
+
+    validate(s) {
+      const errors = validateCells(s);
+      if (!Object.keys(errors).length) {
+        const { a, b, c, d } = s;
+        if (a * d + b * c === 0)
+          errors.a = "a·d + b·c = 0 — Yule's Q is undefined";
+        if (a + b + c + d === 0)
+          errors.a = "All cells are zero — no data";
+      }
+      return { valid: Object.keys(errors).length === 0, errors };
+    },
+
+    softWarnings(s, label) {
+      const w = [];
+      const { a, b, c, d } = s;
+      if ([a, b, c, d].some(v => v === 0))
+        w.push(`⚠️ ${label}: zero cell — Yule's Q may be undefined or unstable`);
+      return w;
+    },
+
+    exampleData: [
+      ["Study 1",  4, 119, 11, 128, "A"],
+      ["Study 2",  6, 300, 29, 274, "A"],
+      ["Study 3",  3, 228, 11, 209, "B"],
+      ["Study 4", 62, 13536, 248, 12619, "B"],
+      ["Study 5", 33, 5036, 47, 5761, "B"],
+    ],
+  },
+
+  // ------------------------------------------------------------------ //
+  // YUY — Yule's Y ("coefficient of colligation", Yule 1912)
+  //   yi = (√(a·d) − √(b·c)) / (√(a·d) + √(b·c))
+  //   vi = (1 − Y²)² / 16 · (1/a + 1/b + 1/c + 1/d)
+  //
+  // Y is a monotone transform of Q: Q = 2Y/(1+Y²). It compresses extreme
+  // values toward 0 relative to Q, making it less sensitive to sampling
+  // variation near ±1. Undefined when √(a·d)+√(b·c) = 0.
+  // Reference: metafor escalc("YUY").
+  "YUY": {
+    label:  "Yule's Y",
+    group:  "Binary outcomes",
+    inputs: ["a", "b", "c", "d"],
+    compute(s) {
+      if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+      const { a, b, c, d } = s;
+      const sqrtAD = Math.sqrt(a * d), sqrtBC = Math.sqrt(b * c);
+      const denom = sqrtAD + sqrtBC;
+      if (denom === 0) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+      const yi = (sqrtAD - sqrtBC) / denom;
+      const vi = Math.max(
+        (1 - yi * yi) ** 2 / 16 * (1/a + 1/b + 1/c + 1/d),
+        MIN_VAR
+      );
+      return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
+    },
+    transform: (x) => x,
+
+    validate(s) {
+      const errors = validateCells(s);
+      if (!Object.keys(errors).length) {
+        const { a, b, c, d } = s;
+        if (Math.sqrt(a * d) + Math.sqrt(b * c) === 0)
+          errors.a = "√(a·d) + √(b·c) = 0 — Yule's Y is undefined";
+        if (a + b + c + d === 0)
+          errors.a = "All cells are zero — no data";
+      }
+      return { valid: Object.keys(errors).length === 0, errors };
+    },
+
+    softWarnings(s, label) {
+      const w = [];
+      const { a, b, c, d } = s;
+      if ([a, b, c, d].some(v => v === 0))
+        w.push(`⚠️ ${label}: zero cell — Yule's Y may be undefined or unstable`);
+      return w;
+    },
+
+    exampleData: [
+      ["Study 1",  4, 119, 11, 128, "A"],
+      ["Study 2",  6, 300, 29, 274, "A"],
+      ["Study 3",  3, 228, 11, 209, "B"],
+      ["Study 4", 62, 13536, 248, 12619, "B"],
+      ["Study 5", 33, 5036, 47, 5761, "B"],
+    ],
+  },
+
+  // ------------------------------------------------------------------ //
   // Threshold rationale shared by COR and ZCOR (Pearson correlation):
   //   n < 10   — The asymptotic normal approximation for r (or Fisher z) is
   //              poor with small n; bootstrap CIs are preferable below n = 10.
@@ -1404,6 +1520,113 @@ export const effectProfiles = {
       ["Study 3",  9,  800, ""],
       ["Study 4", 22, 1500, ""],
       ["Study 5", 12,  900, ""],
+    ],
+  },
+
+  // ------------------------------------------------------------------ //
+  // SMD1 / SMD1H — One-sample standardized mean difference
+  //
+  // Inputs: m (sample mean), sd (standard deviation), n (sample size),
+  //         ref (reference value; default 0 when omitted or non-finite).
+  //
+  // Both types share the same point estimate:
+  //   d  = (m − ref) / sd          (raw Cohen's d, one-sample)
+  //   df = n − 1
+  //   J  = 1 − 3/(4·df − 1)        (Hedges' small-sample bias correction)
+  //   yi = d · J                   (bias-corrected one-sample SMD)
+  //
+  // Variance differs:
+  //   SMD1:  vi = 1/n + yi²/(2·df)            (J applied only to the d² term)
+  //   SMD1H: vi = J² · (1/n + d²/(2·df))      (J² applied to both terms)
+  //
+  // For large n (J→1) the two are equivalent. SMD1H is more consistent with
+  // the delta-method derivation (matches the SMDH analogy for two groups).
+  //
+  // References: Hedges & Olkin (1985); metafor escalc("SMD1") / escalc("SMD1H").
+  "SMD1": {
+    label:  "Standardized Mean Difference — one sample (SMD1)",
+    group:  "Continuous (single group)",
+    inputs: ["m", "sd", "n", "ref"],
+    compute(s) {
+      if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+      const { m, sd, n } = s;
+      const ref = isFinite(s.ref) ? s.ref : 0;
+      const d   = (m - ref) / sd;
+      const df  = n - 1;
+      const J   = 1 - 3 / (4 * df - 1);
+      const yi  = d * J;
+      const vi  = Math.max(1 / n + yi * yi / (2 * df), MIN_VAR);
+      return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
+    },
+    transform: (x) => x,
+
+    validate(s) {
+      const errors = {};
+      if (!isFinite(s.m))               errors.m  = "m must be numeric";
+      if (!isFinite(s.sd) || s.sd <= 0) errors.sd = "sd must be > 0";
+      if (!isFinite(s.n)  || s.n  <  2) errors.n  = "n must be ≥ 2";
+      // ref is optional; non-finite means use 0 (no error)
+      return { valid: Object.keys(errors).length === 0, errors };
+    },
+
+    softWarnings(s, label) {
+      const w = [];
+      if (isFinite(s.n) && s.n < 10)
+        w.push(`⚠️ ${label}: small sample size (n < 10) — Hedges' J correction is approximate`);
+      return w;
+    },
+
+    exampleData: [
+      ["Study 1", 2.0, 1.0, 30, 0, "A"],
+      ["Study 2", 1.0, 1.5, 25, 0, "A"],
+      ["Study 3", 3.5, 1.2, 40, 0, "B"],
+      ["Study 4", 1.5, 2.0, 35, 0, "B"],
+      ["Study 5", 4.0, 1.0, 20, 0, ""],
+    ],
+  },
+
+  // ------------------------------------------------------------------ //
+  "SMD1H": {
+    label:  "Standardized Mean Difference — one sample, heteroscedastic (SMD1H)",
+    group:  "Continuous (single group)",
+    inputs: ["m", "sd", "n", "ref"],
+    compute(s) {
+      if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+      const { m, sd, n } = s;
+      const ref  = isFinite(s.ref) ? s.ref : 0;
+      const d    = (m - ref) / sd;
+      const df   = n - 1;
+      const J    = 1 - 3 / (4 * df - 1);
+      const yi   = d * J;
+      const vi_d = 1 / n + d * d / (2 * df);
+      const vi   = Math.max(J * J * vi_d, MIN_VAR);
+      return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
+    },
+    transform: (x) => x,
+
+    validate(s) {
+      const errors = {};
+      if (!isFinite(s.m))               errors.m  = "m must be numeric";
+      if (!isFinite(s.sd) || s.sd <= 0) errors.sd = "sd must be > 0";
+      if (!isFinite(s.n)  || s.n  <  2) errors.n  = "n must be ≥ 2";
+      return { valid: Object.keys(errors).length === 0, errors };
+    },
+
+    softWarnings(s, label) {
+      const w = [];
+      if (isFinite(s.n) && s.n < 10)
+        w.push(`⚠️ ${label}: small sample size (n < 10) — Hedges' J correction is approximate`);
+      if (isFinite(s.n) && s.n >= 100)
+        w.push(`⚠️ ${label}: large n — SMD1 and SMD1H variance differ negligibly; SMD1 is conventional`);
+      return w;
+    },
+
+    exampleData: [
+      ["Study 1", 2.0, 1.0, 30, 0, "A"],
+      ["Study 2", 1.0, 1.5, 25, 0, "A"],
+      ["Study 3", 3.5, 1.2, 40, 0, "B"],
+      ["Study 4", 1.5, 2.0, 35, 0, "B"],
+      ["Study 5", 4.0, 1.0, 20, 0, ""],
     ],
   },
 

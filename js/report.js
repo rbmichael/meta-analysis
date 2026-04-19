@@ -33,6 +33,7 @@
 import { drawForest, drawGoshPlot, drawCumulativeForest, drawCaterpillarPlot } from "./plots.js";
 import { downloadBlob } from "./io.js";
 import { Z_95 } from "./constants.js";
+import { normalQuantile } from "./utils.js";
 import { resolveThemeVars, hasEmbeddedBackground } from "./export.js";
 
 // ---------------------------------------------------------------------------
@@ -414,7 +415,7 @@ export function collectCitations(args) {
 // are both truthy.
 function sectionSummary(args) {
   const { m, profile, method, ciMethod, useTF, tf, mAdjusted, studies,
-          apaFormat = false, nextTable } = args;
+          apaFormat = false, nextTable, ciLevel } = args;
 
   const k           = studies.filter(d => !d.filled).length;
   const isMHorPeto  = m.isMH || m.isPeto;
@@ -423,6 +424,9 @@ function sectionSummary(args) {
   const ci          = { lb: profile.transform(m.ciLow),   ub: profile.transform(m.ciHigh) };
   const pred        = { lb: profile.transform(m.predLow), ub: profile.transform(m.predHigh) };
   const RE_adj      = (!isMHorPeto && useTF && mAdjusted) ? profile.transform(mAdjusted.RE) : null;
+  const feAlpha     = { "90": 0.10, "95": 0.05, "99": 0.01 }[ciLevel] ?? 0.05;
+  const feZ         = normalQuantile(1 - feAlpha / 2);
+  const feCi        = { lb: profile.transform(m.FE - feZ * m.seFE), ub: profile.transform(m.FE + feZ * m.seFE) };
   const methodLabel = m.isMH ? "Mantel-Haenszel" : m.isPeto ? "Peto" : method;
   const ciLabel     = ciMethod === "KH" ? "Knapp-Hartung"
                     : ciMethod === "t"  ? "t-distribution"
@@ -442,9 +446,11 @@ function sectionSummary(args) {
 
     const statsRows = [
       `<tr><td>${esc(profile.label)} — Fixed Effects (FE)</td><td>${fmt(FE_disp)}</td></tr>`,
+      `<tr><td>FE ${widthCiLabel}</td><td>${fmtCI_APA(feCi.lb, feCi.ub)}</td></tr>`,
       !isMHorPeto ? `<tr><td>${esc(profile.label)} — Random Effects (RE)</td><td><strong>${fmt(RE_disp)}</strong></td></tr>` : "",
+      !isMHorPeto ? `<tr><td>RE ${widthCiLabel}</td><td>${fmtCI_APA(ci.lb, ci.ub)}</td></tr>` : "",
+      isMHorPeto  ? `<tr><td>${widthCiLabel}</td><td>${fmtCI_APA(ci.lb, ci.ub)}</td></tr>` : "",
       RE_adj !== null ? `<tr><td>RE (trim-and-fill adjusted)</td><td>${fmt(RE_adj)}</td></tr>` : "",
-      `<tr><td>${widthCiLabel}</td><td>${fmtCI_APA(ci.lb, ci.ub)}</td></tr>`,
       !isMHorPeto ? `<tr><td>95% Prediction interval (PI)</td><td>${fmtCI_APA(pred.lb, pred.ub)}</td></tr>` : "",
       !isMHorPeto ? `<tr><td>τ²</td><td>${fmt(m.tau2)} [${tauCI1}, ${tauCI2}]</td></tr>` : "",
       `<tr><td>I²</td><td>${fmt(m.I2)}% [${fmt(m.I2CI[0])}%, ${fmt(m.I2CI[1])}%]</td></tr>`,
@@ -488,9 +494,11 @@ function sectionSummary(args) {
     ["Statistic", "Value"],
     [
       `<tr><td>${esc(profile.label)} — Fixed Effects</td><td>${fmt(FE_disp)}</td></tr>`,
+      `<tr><td>FE ${widthCiLabel}</td><td>[${fmt(feCi.lb)}, ${fmt(feCi.ub)}]</td></tr>`,
       !isMHorPeto ? `<tr><td>${esc(profile.label)} — Random Effects</td><td><strong>${fmt(RE_disp)}</strong></td></tr>` : "",
+      !isMHorPeto ? `<tr><td>RE ${widthCiLabel}</td><td>[${fmt(ci.lb)}, ${fmt(ci.ub)}]</td></tr>` : "",
+      isMHorPeto  ? `<tr><td>${widthCiLabel}</td><td>[${fmt(ci.lb)}, ${fmt(ci.ub)}]</td></tr>` : "",
       RE_adj !== null ? `<tr><td>RE (trim-and-fill adjusted)</td><td>${fmt(RE_adj)}</td></tr>` : "",
-      `<tr><td>${widthCiLabel}</td><td>[${fmt(ci.lb)}, ${fmt(ci.ub)}]</td></tr>`,
       !isMHorPeto ? `<tr><td>95% Prediction interval</td><td>[${fmt(pred.lb)}, ${fmt(pred.ub)}]</td></tr>` : "",
       !isMHorPeto ? `<tr><td>τ²</td><td>${fmt(m.tau2)} [${tauCI1}, ${tauCI2}]</td></tr>` : "",
       `<tr><td>I²</td><td>${fmt(m.I2)}% [${fmt(m.I2CI[0])}%, ${fmt(m.I2CI[1])}%]</td></tr>`,

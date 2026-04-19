@@ -192,7 +192,8 @@ export function compute(s, type, options = {}) {
   if (!valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
 
 	// ================= BINARY DATA =================
-	if (type === "OR" || type === "RR" || type === "RD" || type === "AS") {
+	if (type === "OR" || type === "RR" || type === "RD" || type === "AS" ||
+	    type === "YUQ" || type === "YUY") {
 	  let { a, b, c, d } = s;
 
 	  // optional continuity correction for OR/RR
@@ -221,6 +222,20 @@ export function compute(s, type, options = {}) {
 		const n1 = a + b, n2 = c + d;
 		yi = Math.asin(Math.sqrt(a / n1)) - Math.asin(Math.sqrt(c / n2));
 		vi = 1 / (4 * n1) + 1 / (4 * n2);
+	  } else if (type === "YUQ") {
+		// Yule's Q (metafor escalc "YUQ")
+		const ad = a * d, bc = b * c;
+		const denom = ad + bc;
+		if (denom === 0) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+		yi = (ad - bc) / denom;
+		vi = (1 - yi * yi) ** 2 / 4 * (1/a + 1/b + 1/c + 1/d);
+	  } else if (type === "YUY") {
+		// Yule's Y (metafor escalc "YUY")
+		const sqrtAD = Math.sqrt(a * d), sqrtBC = Math.sqrt(b * c);
+		const denom = sqrtAD + sqrtBC;
+		if (denom === 0) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+		yi = (sqrtAD - sqrtBC) / denom;
+		vi = (1 - yi * yi) ** 2 / 16 * (1/a + 1/b + 1/c + 1/d);
 	  }
 
 	  const safeVi = Math.max(vi, MIN_VAR);
@@ -541,6 +556,28 @@ export function compute(s, type, options = {}) {
     const yi = Math.log(x / t);
     const vi = Math.max(1 / x, MIN_VAR);
     return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
+  }
+
+  // ================= ONE-SAMPLE SMD =================
+  // Input: { m, sd, n, ref }  — ref defaults to 0 if omitted or non-finite.
+  // SMD1:  vi = 1/n + yi²/(2·df)            (J only on d² term)
+  // SMD1H: vi = J² · (1/n + d²/(2·df))      (full J² correction; SMDH analogue)
+  if (type === "SMD1" || type === "SMD1H") {
+    const { m, sd, n } = s;
+    const ref = isFinite(s.ref) ? s.ref : 0;
+    const d   = (m - ref) / sd;
+    const df  = n - 1;
+    const J   = 1 - 3 / (4 * df - 1);
+    const yi  = d * J;
+    let vi;
+    if (type === "SMD1") {
+      vi = 1 / n + yi * yi / (2 * df);
+    } else {
+      // SMD1H: delta-method with full J² scaling (matches SMDH pattern)
+      vi = J * J * (1 / n + d * d / (2 * df));
+    }
+    const safeVi = Math.max(vi, MIN_VAR);
+    return { ...s, yi, vi: safeVi, se: Math.sqrt(safeVi), w: 1 / safeVi };
   }
 
 	// ================ GENERIC ===============

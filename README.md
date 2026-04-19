@@ -14,9 +14,9 @@ A browser-based meta-analysis tool. No installation, no server, no dependencies 
 |---|---|
 | Continuous (two groups) | Mean Difference (MD), Standardized Mean Difference — Hedges' *g* (SMD), SMD heteroscedastic (SMDH), Ratio of Means (ROM) |
 | Continuous (paired) | Mean Difference Paired (MD_paired), Standardized Mean Change — pre-SD (SMD_paired), Standardized Mean Change — change-score SD (SMCC) |
-| Continuous (single group) | Mean raw (MN), Mean log (MNLN) |
+| Continuous (single group) | One-sample SMD (SMD1), One-sample SMD heteroscedastic (SMD1H), Mean raw (MN), Mean log (MNLN) |
 | Variability | Coefficient of Variation Ratio (CVR), Variability Ratio (VR) |
-| Binary outcomes | Odds Ratio (OR), Risk Ratio (RR), Risk Difference (RD), Arcsine-transformed Risk Difference (AS), Generalised Odds Ratio — ordinal (GOR) |
+| Binary outcomes | Odds Ratio (OR), Risk Ratio (RR), Risk Difference (RD), Arcsine-transformed Risk Difference (AS), Yule's Q (YUQ), Yule's Y (YUY), Generalised Odds Ratio — ordinal (GOR) |
 | Correlations | Pearson *r* (COR), Bias-corrected *r* (UCOR), Fisher's *z* (ZCOR), Partial *r* (PCOR), Partial Fisher's *z* (ZPCOR), Phi (PHI), Tetrachoric (RTET) |
 | Proportions | Raw (PR), Log (PLN), Logit (PLO), Arcsine (PAS), Freeman-Tukey double arcsine (PFT) |
 | Time-to-event / Rates | Hazard Ratio (HR), Incidence Rate Ratio (IRR), Incidence Rate Difference (IRD), Incidence Rate Difference sqrt (IRSD), Incidence Rate log (IR) |
@@ -234,6 +234,8 @@ python -m http.server 8080
 - Viechtbauer W (2021). Location-scale models for meta-analytic data. *Res Synth Methods*, 12(5), 567–583.
 - Viechtbauer W, Cheung MWL (2010). Outlier and influence diagnostics for meta-analysis. *Res Synth Methods*, 1(2), 112–125.
 - Wagenmakers EJ, Lodewyckx T, Kuriyal H, Grasman R (2010). Bayesian hypothesis testing for psychologists: A tutorial on the Savage-Dickey method. *Cogn Psychol*, 60(3), 158–189.
+- Yule GU (1900). On the association of attributes in statistics. *Phil Trans R Soc Lond A*, 194, 257–319.
+- Yule GU (1912). On the methods of measuring association between two attributes. *J R Stat Soc*, 75(6), 579–642.
 
 ---
 

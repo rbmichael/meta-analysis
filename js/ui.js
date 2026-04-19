@@ -101,7 +101,7 @@
 //   restores any autosave draft, and attaches all event listeners.
 // =============================================================================
 import { eggerTest, beggTest, fatPetTest, petPeeseTest, failSafeN, tesTest, pCurve, pUniform, baujat, blupMeta, meta, metaMH, metaPeto, robustMeta, influenceDiagnostics, subgroupAnalysis, metaRegression, cumulativeMeta, leaveOneOut, estimatorComparison, veveaHedges, SELECTION_PRESETS, profileLikTau2, bayesMeta, rvePooled, meta3level, harbordTest, petersTest, deeksTest, rueckerTest, lsModel, adjustPvals } from "./analysis.js";
-import { fmt } from "./utils.js";
+import { fmt, normalQuantile } from "./utils.js";
 import { effectProfiles, getProfile } from "./profiles.js";
 import { trimFill } from "./trimfill.js";
 import { drawForest, drawFunnel, drawBubble, drawPartialResidualBubble, drawInfluencePlot, drawCumulativeForest, drawCumulativeFunnel, drawPCurve, drawPUniform, drawOrchardPlot, drawCaterpillarPlot, drawBlupPlot, drawBaujatPlot, drawLabbe, drawRoBTrafficLight, drawRoBSummary, drawGoshPlot, drawProfileLikTau2, drawBayesTauPosterior, drawBayesMuPosterior, drawQQPlot, drawRadialPlot } from "./plots.js";
@@ -3668,6 +3668,11 @@ async function runAnalysis() {
   const FE_disp = profile.transform(m.FE);
   const RE_disp = profile.transform(m.RE);
   const ci_disp   = { lb: profile.transform(m.ciLow),   ub: profile.transform(m.ciHigh) };
+  const feZ = normalQuantile(1 - alpha / 2);
+  const feCi_disp = {
+    lb: profile.transform(m.FE - feZ * m.seFE),
+    ub: profile.transform(m.FE + feZ * m.seFE),
+  };
   const pred_disp = { lb: profile.transform(m.predLow), ub: profile.transform(m.predHigh) };
   const RE_adj_disp = useTF && mAdjusted ? profile.transform(mAdjusted.RE) : null;
 
@@ -3700,16 +3705,15 @@ async function runAnalysis() {
     ? `${hBtn("cluster.robust")}Robust CI [${fmt(robust_ci_disp.lb)}, ${fmt(robust_ci_disp.ub)}] | SE=${fmt(m.robustSE)} | z=${fmt(m.robustStat)} | p=${fmt(m.robustPval)} (df=${m.robustDf})<br>`
     : "";
 
+  const ciLbl = getCiLabel();
   elResults.innerHTML = warningHTML + clusterBanner + (isMHorPeto ? `
-    <b>${profile.label} (${methodLabel}):</b> ${fmt(FE_disp)}<br>
-    CI [${fmt(ci_disp.lb)}, ${fmt(ci_disp.ub)}]<br>
+    <b>${profile.label} (${methodLabel}):</b> ${fmt(FE_disp)}, ${ciLbl} [${fmt(feCi_disp.lb)}, ${fmt(feCi_disp.ub)}]<br>
     <small style="color:var(--muted)">Fixed-effect only — no τ², RE estimate, or prediction interval.</small><br>
     ${hBtn("het.Q")}Q(${m.df})=${fmt(m.stat)} | p=${fmt(m.pval)} | ${hBtn("het.I2")}I²=${fmt(m.I2)}% [${fmt(m.I2CI[0])}%, ${fmt(m.I2CI[1])}%] | ${hBtn("het.H2")}H²-CI=[${fmt(m.H2CI[0])}, ${isFinite(m.H2CI[1])?fmt(m.H2CI[1]):"∞"}]
   ` : `
-    <b>${profile.label} (FE):</b> ${fmt(FE_disp)} |
-    <b>${profile.label} (RE):</b> ${fmt(RE_disp)}<br>
+    <b>${profile.label} (FE):</b> ${fmt(FE_disp)}, ${ciLbl} [${fmt(feCi_disp.lb)}, ${fmt(feCi_disp.ub)}] |
+    <b>${profile.label} (RE):</b> ${fmt(RE_disp)}, ${ciLbl} [${fmt(ci_disp.lb)}, ${fmt(ci_disp.ub)}]${m.isClustered ? ` | SE (model)=${fmt(m.seRE)}` : ""}<br>
     ${useTF && mAdjusted ? `<b>RE (adjusted):</b> ${fmt(RE_adj_disp)}${hasClusters ? ` <span style="color:var(--muted);font-size:0.85em">(cluster-robust not applied to imputed studies)</span>` : ""}<br>` : ""}
-    CI [${fmt(ci_disp.lb)}, ${fmt(ci_disp.ub)}]${m.isClustered ? ` | SE (model)=${fmt(m.seRE)}` : ""}<br>
     ${robustCILine}${hBtn("het.tau2")}τ²=${fmt(m.tau2)} [${fmt(m.tauCI[0])}, ${isFinite(m.tauCI[1])?fmt(m.tauCI[1]):"∞"}] | ${hBtn("het.I2")}I²=${fmt(m.I2)}% [${fmt(m.I2CI[0])}%, ${fmt(m.I2CI[1])}%] | ${hBtn("het.H2")}H²-CI=[${fmt(m.H2CI[0])}, ${isFinite(m.H2CI[1])?fmt(m.H2CI[1]):"∞"}]<br>
     ${hBtn("het.Q")}${m.dist}-stat=${fmt(m.stat)} | p=${fmt(m.pval)}<br>
     ${hBtn("het.pred")}Prediction interval (Higgins 2009, t<sub>${m.df > 0 ? m.df - 1 : "—"}</sub>): ${isFinite(pred_disp.lb) ? `[${fmt(pred_disp.lb)}, ${fmt(pred_disp.ub)}]` : "NA (k &lt; 3)"}

@@ -144,6 +144,25 @@ export const HELP = {
            "Reference: Bonett (2009), Psychological Methods.",
   },
 
+  "effect.SMD1": {
+    title: "Standardized Mean Difference — one sample (SMD1)",
+    body:  "Compares a single group's mean against a known reference value (default 0), " +
+           "standardized by the group SD with Hedges' J correction. " +
+           "d = (m − ref) / sd; yi = d · J; vi = 1/n + yi² / (2(n−1)). " +
+           "Use when studies report a single group measured against an external norm " +
+           "or established threshold with no control group. " +
+           "Corresponds to measure=\"SMD1\" in metafor.",
+  },
+
+  "effect.SMD1H": {
+    title: "Standardized Mean Difference — one sample, heteroscedastic (SMD1H)",
+    body:  "Same as SMD1 but with the full J² correction applied to both variance terms: " +
+           "vi = J² · (1/n + d² / (2(n−1))). " +
+           "SMD1 and SMD1H are identical for large n (J → 1) but differ for n < 20. " +
+           "Prefer SMD1H when consistency with the heteroscedastic two-group SMDH is desired. " +
+           "Corresponds to measure=\"SMD1H\" in metafor.",
+  },
+
   "effect.MD_paired": {
     title: "Mean Difference — Paired (MD paired)",
     body:  "Raw mean difference for pre/post or matched-pairs designs. " +
@@ -204,6 +223,22 @@ export const HELP = {
            "across all event rates, avoiding instability near 0 or 1. " +
            "Results are on the arcsine scale (no simple back-transform to RD). " +
            "Equivalent to metafor escalc('AS').",
+  },
+
+  "effect.YUQ": {
+    title: "Yule's Q (YUQ)",
+    body:  "Bounded association measure for 2×2 tables: yi = (a·d − b·c)/(a·d + b·c). " +
+           "Ranges from −1 to +1. Related to the odds ratio by Q = (OR−1)/(OR+1). " +
+           "Variance: vi = (1−Q²)²/4 · (1/a+1/b+1/c+1/d). " +
+           "Undefined when a·d + b·c = 0. Equivalent to metafor escalc('YUQ').",
+  },
+
+  "effect.YUY": {
+    title: "Yule's Y (YUY) — coefficient of colligation",
+    body:  "Bounded association measure for 2×2 tables: yi = (√(a·d)−√(b·c))/(√(a·d)+√(b·c)). " +
+           "Ranges from −1 to +1. Related to Q by Q = 2Y/(1+Y²). " +
+           "Variance: vi = (1−Y²)²/16 · (1/a+1/b+1/c+1/d). " +
+           "Compresses extreme values relative to Q. Equivalent to metafor escalc('YUY').",
   },
 
   "effect.HR": {

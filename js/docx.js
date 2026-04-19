@@ -17,6 +17,7 @@
 import { drawForest, drawCumulativeForest, drawCaterpillarPlot, drawGoshPlot } from "./plots.js";
 import { resolveThemeVars, hasEmbeddedBackground } from "./export.js";
 import { Z_95 } from "./constants.js";
+import { normalQuantile } from "./utils.js";
 import { CITATIONS, collectCitations } from "./report.js";
 
 // ---------------------------------------------------------------------------
@@ -344,7 +345,7 @@ function apaFigureDocx(figNum, title, imgs, note) {
 // ---------------------------------------------------------------------------
 
 function docSummary(args, ctx) {
-  const { m, profile, method, ciMethod, useTF, tf, mAdjusted, studies, widthCiLabel } = args;
+  const { m, profile, method, ciMethod, useTF, tf, mAdjusted, studies, widthCiLabel, ciLevel } = args;
   const k = studies.filter(d => !d.filled).length;
   const isMHorPeto = m.isMH || m.isPeto;
   const FE_disp  = profile.transform(m.FE);
@@ -352,6 +353,9 @@ function docSummary(args, ctx) {
   const ci       = { lb: profile.transform(m.ciLow),   ub: profile.transform(m.ciHigh) };
   const pred     = { lb: profile.transform(m.predLow), ub: profile.transform(m.predHigh) };
   const RE_adj   = (!isMHorPeto && useTF && mAdjusted) ? profile.transform(mAdjusted.RE) : null;
+  const feAlpha  = { "90": 0.10, "95": 0.05, "99": 0.01 }[ciLevel] ?? 0.05;
+  const feZ      = normalQuantile(1 - feAlpha / 2);
+  const feCi     = { lb: profile.transform(m.FE - feZ * m.seFE), ub: profile.transform(m.FE + feZ * m.seFE) };
   const tauCI1   = fmt(m.tauCI?.[0]);
   const tauCI2   = isFinite(m.tauCI?.[1]) ? fmt(m.tauCI[1]) : "\u221E";
   const H2hi     = isFinite(m.H2CI?.[1])  ? fmt(m.H2CI[1])  : "\u221E";
@@ -365,9 +369,11 @@ function docSummary(args, ctx) {
 
   const rows = [
     [`${profile.label} \u2014 Fixed Effects (FE)`, fmt(FE_disp)],
+    [`FE ${widthCiLabel}`,         fmtCI_APA(feCi.lb, feCi.ub)],
     ...(!isMHorPeto ? [[`${profile.label} \u2014 Random Effects (RE)`, fmt(RE_disp)]] : []),
+    ...(!isMHorPeto ? [[`RE ${widthCiLabel}`,       fmtCI_APA(ci.lb, ci.ub)]] : []),
+    ...(isMHorPeto  ? [[widthCiLabel,               fmtCI_APA(ci.lb, ci.ub)]] : []),
     ...(RE_adj !== null ? [["RE (trim-and-fill adjusted)", fmt(RE_adj)]] : []),
-    [widthCiLabel,                 fmtCI_APA(ci.lb, ci.ub)],
     ...(!isMHorPeto ? [["95% Prediction interval (PI)", fmtCI_APA(pred.lb, pred.ub)]] : []),
     ...(!isMHorPeto ? [["\u03C4\u00B2", `${fmt(m.tau2)} [${tauCI1}, ${tauCI2}]`]] : []),
     ["I\u00B2",                   `${fmt(m.I2)}% [${fmt(m.I2CI?.[0])}%, ${fmt(m.I2CI?.[1])}%]`],
