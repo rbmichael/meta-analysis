@@ -1500,6 +1500,60 @@ high. Matched against <code>metafor::tes()</code> to ≤ 0.001.</p>`,
       },
 
       {
+        id: "guide-hc",
+        title: "Henmi-Copas Bias-Robust CI",
+        body: `<p>Henmi &amp; Copas (2010) propose a confidence interval for the overall
+effect that is robust to potential publication bias. Unlike the standard
+random-effects CI (which assumes the observed studies are a representative
+sample), the Henmi-Copas CI accounts for the possibility that studies are
+selected on the basis of their statistical significance.</p>
+
+<h4>How it works</h4>
+<p>The method fixes τ² at the DerSimonian-Laird (DL) estimate and uses
+fixed-effect weights wᵢ = 1/vᵢ. The point estimate is the fixed-effect
+weighted mean μ̂<sub>FE</sub> — the same as the standard FE estimate.</p>
+<p>The CI half-width is u₀ × SE where:</p>
+<ul>
+  <li><strong>SE</strong> = √[(τ²W₂ + 1)/W₁] — the RE-adjusted standard error</li>
+  <li><strong>u₀ = SDR × t₀</strong> where SDR = √(1 + τ²W₂) and t₀ is solved
+  by numerical integration over the conditional distribution of the
+  heterogeneity statistic Q given the ratio R</li>
+  <li><strong>W₁ = Σwᵢ, W₂ = Σwᵢ²/W₁</strong></li>
+</ul>
+<p>t₀ is found by solving:</p>
+<p style="margin-left:1em">
+  <code>∫<sub>t₀</sub><sup>∞</sup> P(F ≤ f(r/t₀)) · φ(r) dr = α/2</code>
+</p>
+<p>where F ~ Gamma(shape, scale) with parameters that depend on the
+conditional moments of Q, φ is the standard normal density, and f is a
+monotone function of the ratio r/t₀. This integral is computed
+numerically (composite Simpson's rule).</p>
+
+<h4>Key properties</h4>
+<ul>
+  <li><strong>Always uses DL τ²</strong> regardless of the selected τ²
+  estimator — to match the method's original derivation.</li>
+  <li><strong>Centred at FE estimate</strong>, not the RE estimate.</li>
+  <li><strong>Wider than the standard RE CI</strong> when there is evidence
+  of small-study effects (funnel asymmetry); approximately equal when
+  the funnel is symmetric.</li>
+  <li>t₀ &lt; z<sub>α/2</sub> (= 1.96 for 95% CI) when bias is suspected;
+  the enlarged u₀ = SDR × t₀ compensates to widen the CI.</li>
+</ul>
+
+<h4>Interpretation</h4>
+<p>If the HC CI excludes zero but the standard RE CI also excludes zero,
+the result is robust to publication bias. If the HC CI includes zero
+while the RE CI excludes it, publication bias may explain the apparent
+effect. As a sensitivity analysis, it complements rather than replaces
+the standard RE analysis.</p>
+<p>Matched against <code>metafor::hc()</code> to ≤ 0.005.</p>`,
+        citations: [
+          "Henmi, M., & Copas, J. B. (2010). Confidence intervals for random effects meta-analysis and robustness to publication bias. <em>Statistics in Medicine, 29</em>(29), 2969–2983.",
+        ],
+      },
+
+      {
         id: "guide-pcurve",
         title: "P-curve",
         body: `<p>P-curve (Simonsohn, Nelson &amp; Simmons, 2014) examines the distribution
@@ -2667,6 +2721,7 @@ export const HELP_TO_GUIDE = {
   "bias.tes":         "guide-tes",
   "bias.fatpet":      "guide-fatpet",
   "bias.petpeese":    "guide-petpeese",
+  "bias.hc":          "guide-hc",
   "bias.harbord":     "guide-binary-bias",
   "bias.peters":      "guide-binary-bias",
   "bias.deeks":       "guide-binary-bias",

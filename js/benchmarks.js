@@ -1932,7 +1932,9 @@ export const PUB_BIAS_BENCHMARKS = [
       harbord:  { intercept: -2.093, interceptP: 0.235 },
       peters:   { intercept: -0.357, interceptP: 0.045 },
       trimFill: { k0: 0, adjustedRE: -0.747 },
-      tes:      { O: 8, E: 8.703, chi2: 0.172, p: 0.661 }
+      tes:      { O: 8, E: 8.703, chi2: 0.172, p: 0.661 },
+      // hc() from metafor: verified via generate.R block HC-1
+      hc:       { beta: -0.4361, tau2: 0.3663, t0: 0.3252, ciLb: -1.1910, ciUb: 0.3187 }
     },
     citation: "Colditz et al. (1994) JAMA 271:698–702. dat.bcg in metafor. Expected values derived analytically (_derive_pubias.py)."
   },
@@ -1968,6 +1970,8 @@ export const PUB_BIAS_BENCHMARKS = [
                   fat:   { intercept: -0.286, interceptP: 0.092, slope: 1.917, slopeP: 0.019 },
                   peese: { intercept: -0.017, interceptP: 0.819, slope: 2.439, slopeP: 0.014 } },
       tes:      { O: 0, E: 0.707, chi2: 0.802, p: 0.815 },
+      // hc() verified via generate.R block HC-2
+      hc:       { beta: 0.1436, tau2: 0.0278, t0: 1.6528, ciLb: -0.1760, ciUb: 0.4633 }
     },
     citation: "Synthetic. Designed to produce a clearly significant Egger test (p=0.019). Verified against eggerTest() and petPeeseTest() to floating-point precision."
   },

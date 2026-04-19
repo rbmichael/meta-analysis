@@ -695,6 +695,19 @@ export const HELP = {
            "between-study design differences).",
   },
 
+  "bias.hc": {
+    title: "Henmi-Copas Bias-Robust CI",
+    body:  "Henmi & Copas (2010). A confidence interval for the overall effect that is " +
+           "robust to potential publication bias. Always uses DL τ² and fixed-effect " +
+           "weights (wᵢ = 1/vᵢ); the point estimate is the FE weighted mean. " +
+           "The CI half-width is u₀ × SE where u₀ = SDR × t₀, and t₀ is solved " +
+           "by numerical integration over the conditional distribution of Q given R. " +
+           "Wider than the standard RE CI when small-study effects are present; " +
+           "similar when the funnel is symmetric. Use as a sensitivity analysis: if " +
+           "the HC CI excludes zero and the RE CI also excludes zero, the result is " +
+           "robust to publication bias. Matched against metafor::hc() to ≤ 0.005.",
+  },
+
   "bias.tes": {
     title: "Test of Excess Significance (TES)",
     body:  "Ioannidis & Trikalinos (2007). Tests whether the observed number of " +

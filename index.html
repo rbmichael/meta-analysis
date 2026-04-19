@@ -866,6 +866,7 @@
         <li><strong>FAT-PET / PET-PEESE</strong> — funnel asymmetry test and precision-effect test; when FAT detects bias (p &lt; .10) the two-stage PET-PEESE correction is applied and the PEESE intercept is highlighted as the corrected effect estimate; the PEESE regression line is overlaid on the contour-enhanced funnel plot (Stanley &amp; Doucouliagos, 2014)</li>
         <li><strong>Fail-safe N</strong> — Rosenthal and Orwin estimators</li>
         <li><strong>Test of Excess Significance (TES)</strong> — compares the observed number of significant results (O) against the expected (E = Σ power<sub>i</sub>) given per-study power to detect the pooled effect; χ² = (O − E)² / [E(1 − E/k)]; p &lt; .10 flags excess significance (Ioannidis &amp; Trikalinos, 2007)</li>
+        <li><strong>Henmi-Copas bias-robust CI</strong> — confidence interval robust to publication bias; always uses DL τ² and fixed-effect weights; centred on the FE estimate with half-width u₀ × SE, where u₀ = SDR × t₀ and t₀ is solved by numerical integration over the conditional distribution of Q given R; wider than the standard RE CI when small-study effects are present (Henmi &amp; Copas, 2010)</li>
         <li><strong>Trim-and-fill</strong> (L0, R0, Q0 estimators) — imputes missing studies and reports the adjusted pooled estimate; estimator selectable in the UI</li>
         <li><strong>Funnel plot</strong> — standard or contour-enhanced (α = .10, .05, .01 regions)</li>
         <li><strong>Selection model (Vevea–Hedges)</strong> — ω-weighted likelihood model; MLE mode (k ≥ 8) estimates selection weights jointly with μ and τ²; fixed-ω sensitivity presets (Mild / Moderate / Severe, Vevea &amp; Woods 2005) available from k ≥ 3</li>
@@ -1059,6 +1060,7 @@
         <li>Hedges LV, Olkin I (1985). <em>Statistical Methods for Meta-Analysis.</em> Academic Press.</li>
         <li>Hedges LV, Tipton E, Johnson MC (2010). Robust variance estimation in meta-regression with dependent effect size estimates. <em>Res Synth Methods,</em> 1, 39–65.</li>
         <li>Higgins JPT, Thompson SG, Spiegelhalter DJ (2009). A re-evaluation of random-effects meta-analysis. <em>J R Stat Soc A,</em> 172, 137–159.</li>
+        <li>Henmi M, Copas JB (2010). Confidence intervals for random effects meta-analysis and robustness to publication bias. <em>Stat Med,</em> 29(29), 2969–2983.</li>
         <li>Holm S (1979). A simple sequentially rejective multiple test procedure. <em>Scand J Stat,</em> 6(2), 65–70.</li>
         <li>Ioannidis JPA, Trikalinos TA (2007). An exploratory test for an excess of significant findings. <em>Clin Trials,</em> 4(3), 245–253.</li>
         <li>Jeffreys H (1961). <em>Theory of Probability</em> (3rd ed.). Oxford University Press.</li>

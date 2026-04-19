@@ -323,6 +323,8 @@ export const CITATIONS = {
 
   RUECKER: `Rücker, G., Schwarzer, G., &amp; Carpenter, J. (2008). Arcsine test for publication bias in meta-analyses with binary outcomes. <em>Statistics in Medicine</em>, <em>27</em>(19), 4450–4465. <a href="https://doi.org/10.1002/sim.3007">https://doi.org/10.1002/sim.3007</a>`,
 
+  HC: `Henmi, M., &amp; Copas, J. B. (2010). Confidence intervals for random effects meta-analysis and robustness to publication bias. <em>Statistics in Medicine</em>, <em>29</em>(29), 2969–2983. <a href="https://doi.org/10.1002/sim.4029">https://doi.org/10.1002/sim.4029</a>`,
+
   // ── Meta-regression ───────────────────────────────────────────────────────
   MREG: `Thompson, S. G., &amp; Sharp, S. J. (1999). Explaining heterogeneity in meta-analysis: A comparison of methods. <em>Statistics in Medicine</em>, <em>18</em>(20), 2693–2708.`,
 
@@ -383,6 +385,7 @@ export function collectCitations(args) {
   if (fsn    && isFinite(fsn.rosenthal)) add("FSN_R");
   if (fsn    && isFinite(fsn.orwin))     add("FSN_O");
   if (args.tes && isFinite(args.tes.chi2)) add("TES");
+  if (args.hc  && !args.hc.error)  add("HC");
   if (useTF  && tf && tf.length)    add("TF");
   if (pcurve && pcurve.k >= 3)      add("PCURVE");
   if (puniform && puniform.k >= 3)  add("PUNIF");
@@ -527,7 +530,7 @@ function sectionSummary(args) {
 // status. PET estimate is back-transformed through profile.transform().
 // "NA (k < 3)" is shown for any test that requires at least 3 studies.
 function sectionPubBias(args) {
-  const { egger, begg, fatpet, fsn, tes, harbord, peters, deeks, ruecker,
+  const { egger, begg, fatpet, fsn, tes, harbord, peters, deeks, ruecker, hc,
           useTF, tf, profile, apaFormat = false, nextTable } = args;
   const petEff = isFinite(fatpet.intercept)
     ? fmt(profile.transform(fatpet.intercept)) : "—";
@@ -543,6 +546,13 @@ function sectionPubBias(args) {
   const naCell = (v, fmt2) => isFinite(v) ? fmt2(v) : "—";
   const naP    = (v, fmt2) => isFinite(v) ? fmt2(v) : "NA";
 
+  const hcRow_apa = hc && !hc.error
+    ? `<tr><td>Henmi-Copas CI</td><td>${fmt(profile.transform(hc.beta))} [${fmt(profile.transform(hc.ci[0]))}, ${fmt(profile.transform(hc.ci[1]))}]</td><td>—</td></tr>`
+    : `<tr><td>Henmi-Copas CI</td><td>—</td><td>NA (k &lt; 3)</td></tr>`;
+  const hcRow_std = hc && !hc.error
+    ? `<tr><td>Henmi-Copas (bias-robust CI)</td><td>${fmt(profile.transform(hc.beta))} [${fmt(profile.transform(hc.ci[0]))}, ${fmt(profile.transform(hc.ci[1]))}]</td><td>—</td></tr>`
+    : `<tr><td>Henmi-Copas (bias-robust CI)</td><td>—</td><td>NA</td></tr>`;
+
   if (apaFormat) {
     const rows = [
       `<tr><td>Egger's test (intercept)</td><td>${naCell(egger.intercept, fmt)}</td><td>${naP(egger.p, fmtP_APA)}</td></tr>`,
@@ -556,6 +566,7 @@ function sectionPubBias(args) {
       tes && isFinite(tes.chi2)
         ? `<tr><td>TES — χ² (O=${tes.O}, E=${fmt(tes.E)})</td><td>${fmt(tes.chi2)}</td><td>${naP(tes.p, fmtP_APA)}</td></tr>`
         : `<tr><td>TES (test of excess significance)</td><td>—</td><td>NA</td></tr>`,
+      hcRow_apa,
     ];
     const table = buildTableAPA(
       nextTable(),
@@ -563,7 +574,8 @@ function sectionPubBias(args) {
       ["Test", "Statistic", "p"],
       rows,
       "FAT = funnel asymmetry test; PET = precision-effect test. " +
-      "Harbord, Peters, Deeks, and Rücker are binary-outcome variants of the Egger test; TES = test of excess significance (Ioannidis & Trikalinos, 2007); NA = fewer than 3 eligible studies or missing cell counts."
+      "Harbord, Peters, Deeks, and Rücker are binary-outcome variants of the Egger test; TES = test of excess significance (Ioannidis & Trikalinos, 2007); " +
+      "Henmi-Copas = bias-robust CI centred on FE estimate (DL τ²); NA = fewer than 3 eligible studies or missing cell counts."
     );
     return `
 <section>
@@ -582,11 +594,12 @@ function sectionPubBias(args) {
       `<tr><td>PET — effect at SE → 0</td><td>${petEff}</td><td>${naP(fatpet.interceptP, fmtP)}</td></tr>`,
       `<tr><td>Harbord (binary OR/RR)</td><td>${naCell(harbord.intercept, fmt)}</td><td>${naP(harbord.interceptP, fmtP)}</td></tr>`,
       `<tr><td>Peters (binary/sample-size)</td><td>${naCell(peters.intercept, fmt)}</td><td>${naP(peters.interceptP, fmtP)}</td></tr>`,
-      `<tr><td>Deeks (diagnostic DOR)</td><td>${naCell(deeks.intercept, fmt)}</td><td>${naP(deeks.interceptP, fmtP)}</td></tr>`,
+      `<tr><td>Deeks (diagnostic DOR)</td><td>${naCell(deeks.intercept, fmt)}</td><td>${naP(peters.interceptP, fmtP)}</td></tr>`,
       `<tr><td>Rücker (arcsine)</td><td>${naCell(ruecker.intercept, fmt)}</td><td>${naP(ruecker.interceptP, fmtP)}</td></tr>`,
       tes && isFinite(tes.chi2)
         ? `<tr><td>TES — χ² (O=${tes.O}, E=${fmt(tes.E)})</td><td>${fmt(tes.chi2)}</td><td>${naP(tes.p, fmtP)}</td></tr>`
         : `<tr><td>TES (excess significance)</td><td>—</td><td>NA</td></tr>`,
+      hcRow_std,
     ]
   );
 

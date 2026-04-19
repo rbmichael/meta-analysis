@@ -41,6 +41,7 @@ A browser-based meta-analysis tool. No installation, no server, no dependencies 
 - **Deeks' test** — funnel-asymmetry test for diagnostic accuracy (DOR) studies using effective sample size as the precision surrogate (Deeks et al. 2005)
 - **Rücker's test** — arcsine-transformation Egger variant for binary outcomes with better-controlled Type I error (Rücker et al. 2008)
 - **Test of Excess Significance (TES)** — compares observed significant results (O) against expected given per-study power; χ² = (O−E)²/[E(1−E/k)]; p < .10 flags excess significance (Ioannidis & Trikalinos 2007)
+- **Henmi-Copas bias-robust CI** — confidence interval robust to publication bias; always uses DL τ² and FE weights; centred on the FE estimate with CI width determined by numerical integration over the conditional distribution of Q; wider than the standard RE CI when small-study effects are present (Henmi & Copas 2010)
 - **Fail-safe N** — Rosenthal and Orwin estimators
 - **Trim-and-fill** (L0, R0, Q0 estimators) — imputes missing studies and reports the adjusted pooled estimate; estimator selectable in the UI
 - **Funnel plot** — standard or contour-enhanced (p-value regions at α = .10, .05, .01)
@@ -212,6 +213,7 @@ python -m http.server 8080
 - Peto R, Pike MC, Armitage P, et al. (1976). Design and analysis of randomized clinical trials requiring prolonged observation of each patient. *Br J Cancer*, 34, 585–612.
 - Harville DA (1977). Maximum likelihood approaches to variance component estimation and to related problems. *J Am Stat Assoc*, 72(358), 320–338.
 - Harrell FE Jr (2015). *Regression Modeling Strategies* (2nd ed.). Springer.
+- Henmi M, Copas JB (2010). Confidence intervals for random effects meta-analysis and robustness to publication bias. *Stat Med*, 29(29), 2969–2983.
 - Hedges LV, Olkin I (1985). *Statistical Methods for Meta-Analysis*. Academic Press.
 - Higgins JPT, Thompson SG, Spiegelhalter DJ (2009). A re-evaluation of random-effects meta-analysis. *J R Stat Soc A*, 172, 137–159.
 - Holm S (1979). A simple sequentially rejective multiple test procedure. *Scand J Stat*, 6(2), 65–70.

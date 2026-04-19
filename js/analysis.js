@@ -104,7 +104,7 @@
 // Dependencies: utils.js, constants.js, profiles.js
 // =============================================================================
 
-import { tCritical, normalCDF, normalQuantile, tCDF, chiSquareCDF, chiSquareQuantile, fCDF, hedgesG, parseCounts, gorFromCounts, tetrachoricFromCounts, hyperg2F1_ucor } from "./utils.js";
+import { tCritical, normalCDF, normalQuantile, tCDF, chiSquareCDF, chiSquareQuantile, fCDF, hedgesG, parseCounts, gorFromCounts, tetrachoricFromCounts, hyperg2F1_ucor, regularizedGammaP } from "./utils.js";
 import { MIN_VAR, REML_TOL, BISECTION_ITERS, Z_95 } from "./constants.js";
 import { validateStudy } from "./profiles.js";
 
@@ -2061,6 +2061,143 @@ export function failSafeN(studies, alpha = 0.05, trivial = 0.1) {
   const orwin = Math.max(0, k * (Math.abs(FE) - Math.abs(trivial)) / Math.abs(trivial));
 
   return { rosenthal, orwin, sumZ, z_crit, k };
+}
+
+// ================= HENMI-COPAS METHOD =================
+/**
+ * Henmi & Copas (2010) confidence interval robust to publication bias.
+ *
+ * Always uses DL tau² and FE weights (wi = 1/vi), matching metafor::hc().
+ * The CI is centred on the FE estimate but accounts for potential small-study
+ * bias by integrating over the conditional distribution of Q given the
+ * ratio R = (theta_hat - mu) / sqrt(vb).
+ *
+ * Algorithm: Henmi M & Copas JB (2010). Confidence intervals for random
+ *   effects meta-analysis and robustness to publication bias.
+ *   Statistics in Medicine, 29(29), 2969–2983.
+ *
+ * Ported from metafor::hc.rma.uni (original code by Henmi & Copas,
+ * modified by Michael Dewey).
+ *
+ * Returns: { beta, se, ci, tau2, t0, u0, k } or { error }
+ */
+export function henmiCopas(studies, alpha = 0.05) {
+  const valid = studies.filter(s => isFinite(s.yi) && isFinite(s.vi) && s.vi > 0);
+  const k = valid.length;
+  if (k < 3) return { error: "k < 3" };
+
+  const yi = valid.map(s => s.yi);
+  const vi = valid.map(s => s.vi);
+
+  // FE weights (NOT RE weights — metafor hc() uses wi = 1/vi)
+  const wi = vi.map(v => 1 / v);
+  const W1 = wi.reduce((s, w) => s + w, 0);
+  const W2 = wi.reduce((s, w) => s + w * w, 0) / W1;
+  const W3 = wi.reduce((s, w) => s + w * w * w, 0) / W1;
+  const W4 = wi.reduce((s, w) => s + w * w * w * w, 0) / W1;
+
+  // FE estimate and Q statistic
+  const beta = yi.reduce((s, y, i) => s + wi[i] * y, 0) / W1;
+  const Q    = yi.reduce((s, y, i) => s + wi[i] * (y - beta) ** 2, 0);
+
+  // DL tau² (always DL in HC, matching metafor)
+  const tau2 = Math.max(0, (Q - (k - 1)) / (W1 - W2));
+
+  // Variance of beta under RE model
+  const vb  = (tau2 * W2 + 1) / W1;
+  const se  = Math.sqrt(vb);
+
+  // Variance/SD of ratio R
+  const VR  = 1 + tau2 * W2;
+  const SDR = Math.sqrt(VR);
+
+  // Conditional mean of Q given R = r
+  const EQ = r =>
+    (k - 1) + tau2 * (W1 - W2) +
+    tau2 ** 2 * ((1 / VR ** 2) * r * r - 1 / VR) * (W3 - W2 ** 2);
+
+  // Conditional variance of Q given R = r
+  const VQ = r => {
+    const rsq      = r * r;
+    const recipvr2 = 1 / VR ** 2;
+    return (
+      2 * (k - 1) +
+      4 * tau2 * (W1 - W2) +
+      2 * tau2 ** 2 * (W1 * W2 - 2 * W3 + W2 ** 2) +
+      4 * tau2 ** 2 * (recipvr2 * rsq - 1 / VR) * (W3 - W2 ** 2) +
+      4 * tau2 ** 3 * (recipvr2 * rsq - 1 / VR) * (W4 - 2 * W2 * W3 + W2 ** 3) +
+      2 * tau2 ** 4 * (recipvr2 - 2 * (1 / VR ** 3) * rsq) * (W3 - W2 ** 2) ** 2
+    );
+  };
+
+  // Gamma distribution params (shape/scale) as functions of r
+  const shapeF = r => { const eq = EQ(r); const vq = VQ(r); return vq > 0 ? eq * eq / vq : NaN; };
+  const scaleF = r => { const eq = EQ(r); const vq = VQ(r); return eq > 0 ? vq / eq : NaN; };
+
+  // finv(f) = (W1/W2 − 1)·(f² − 1) + (k − 1)
+  const finv = f => (W1 / W2 - 1) * (f * f - 1) + (k - 1);
+
+  // pgamma(q, shape, scale) = regularizedGammaP(shape, q/scale)
+  const pgamma = (q, shape, scale) => {
+    if (!isFinite(q) || !isFinite(shape) || !isFinite(scale) || shape <= 0 || scale <= 0) {
+      return q <= 0 ? 0 : 1;
+    }
+    if (q <= 0) return 0;
+    return regularizedGammaP(shape, q / scale);
+  };
+
+  const SQRT2PI = Math.sqrt(2 * Math.PI);
+  const dnorm   = x => Math.exp(-0.5 * x * x) / SQRT2PI;
+
+  // Numerical integration ∫ₓ^∞ pgamma(finv(r/x), shape(SDR·r), scale(SDR·r))·φ(r) dr
+  // via composite Simpson's rule (N=400 panels). dnorm decays to ~0 by r≈7,
+  // so truncating at max(lo+0.01, 7) is safe for any practical x < 7.
+  const integrate = x => {
+    const lo = x;
+    const hi = Math.max(lo + 0.01, 7.0);
+    const N  = 400; // must be even
+    const h  = (hi - lo) / N;
+    let sum  = 0;
+    for (let i = 0; i <= N; i++) {
+      const r      = lo + i * h;
+      const rv     = SDR * r;
+      const fv     = finv(r / x);
+      const pg     = pgamma(fv, shapeF(rv), scaleF(rv));
+      const coeff  = (i === 0 || i === N) ? 1 : (i % 2 === 0 ? 2 : 4);
+      sum += coeff * pg * dnorm(r);
+    }
+    return (sum * h) / 3;
+  };
+
+  // Solve eqn(t0) = 0  where  eqn(x) = ∫ₓ^∞ (…) dr − α/2
+  // Root exists in (0, ∞); bracket: eqn(ε)≈0.5−α/2>0, eqn(large)<0.
+  const halfAlpha = alpha / 2;
+  const eqn = x => integrate(x) - halfAlpha;
+
+  let lo = 1e-4, hi = 10;
+  if (!isFinite(eqn(lo)) || !isFinite(eqn(hi)) || eqn(lo) < 0) {
+    return { error: "HC: failed to bracket root" };
+  }
+
+  let t0 = (lo + hi) / 2;
+  for (let iter = 0; iter < BISECTION_ITERS; iter++) {
+    t0 = (lo + hi) / 2;
+    const fmid = eqn(t0);
+    if (Math.abs(fmid) < 1e-12 || (hi - lo) < 1e-14) break;
+    if (fmid > 0) lo = t0; else hi = t0;
+  }
+
+  const u0 = SDR * t0;
+
+  return {
+    beta,
+    se,
+    ci:   [beta - u0 * se, beta + u0 * se],
+    tau2,
+    t0,
+    u0,
+    k,
+  };
 }
 
 // ================= TEST OF EXCESS SIGNIFICANCE (TES) =================

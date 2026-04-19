@@ -100,7 +100,7 @@
 //   ui.js calls init() on DOMContentLoaded, which populates dropdowns,
 //   restores any autosave draft, and attaches all event listeners.
 // =============================================================================
-import { eggerTest, beggTest, fatPetTest, petPeeseTest, failSafeN, tesTest, pCurve, pUniform, baujat, blupMeta, meta, metaMH, metaPeto, robustMeta, influenceDiagnostics, subgroupAnalysis, metaRegression, cumulativeMeta, leaveOneOut, estimatorComparison, veveaHedges, SELECTION_PRESETS, profileLikTau2, bayesMeta, priorSensitivity, rvePooled, meta3level, harbordTest, petersTest, deeksTest, rueckerTest, lsModel, adjustPvals } from "./analysis.js";
+import { eggerTest, beggTest, fatPetTest, petPeeseTest, failSafeN, tesTest, pCurve, pUniform, baujat, blupMeta, meta, metaMH, metaPeto, robustMeta, influenceDiagnostics, subgroupAnalysis, metaRegression, cumulativeMeta, leaveOneOut, estimatorComparison, veveaHedges, SELECTION_PRESETS, profileLikTau2, bayesMeta, priorSensitivity, rvePooled, meta3level, harbordTest, petersTest, deeksTest, rueckerTest, lsModel, adjustPvals, henmiCopas } from "./analysis.js";
 import { fmt, normalQuantile } from "./utils.js";
 import { effectProfiles, getProfile } from "./profiles.js";
 import { trimFill } from "./trimfill.js";
@@ -3714,6 +3714,7 @@ async function runAnalysis() {
   const peters   = petersTest(studies);
   const deeks    = deeksTest(studies);
   const ruecker  = rueckerTest(studies);
+  const hc      = henmiCopas(studies, alpha);
   performance.measure("phase:pubbias", "phase:pubbias:start");
 
   performance.mark("phase:influence:start");
@@ -3796,6 +3797,7 @@ async function runAnalysis() {
     &nbsp;&nbsp;${hBtn("bias.petpeese")}${petpeese.usePeese?"<b>":""}PET-PEESE (corrected): ${(()=>{const src=petpeese.usePeese?petpeese.peese:petpeese.fat;return isFinite(src.intercept)?`${fmt(profile.transform(src.intercept))} [${petpeese.usePeese?"PEESE":"PET"}, p=${fmt(src.interceptP)}]`:"NA (k<3)";})()}${petpeese.usePeese?"</b>":""}<br>
     &nbsp;&nbsp;${hBtn("bias.fsn")}Fail-safe N (Rosenthal): ${isFinite(fsn.rosenthal)?Math.round(fsn.rosenthal):"NA"} &nbsp;·&nbsp; Orwin (trivial=0.1): ${isFinite(fsn.orwin)?Math.round(fsn.orwin):"NA"}<br>
     &nbsp;&nbsp;${hBtn("bias.tes")}TES: O=${isFinite(tes.O)?tes.O:"NA"} | E=${isFinite(tes.E)?fmt(tes.E):"NA"} | χ²=${isFinite(tes.chi2)?fmt(tes.chi2):"NA (k<2)"} | p=${isFinite(tes.p)?fmt(tes.p):"NA (k<2)"}${isFinite(tes.p)&&tes.p<0.1?" <span style='color:var(--color-warning)'>⚠ excess</span>":""}<br>
+    &nbsp;&nbsp;${hBtn("bias.hc")}Henmi-Copas: ${hc.error ? `NA (${hc.error})` : `${fmt(profile.transform(hc.beta))} [${fmt(profile.transform(hc.ci[0]))}, ${fmt(profile.transform(hc.ci[1]))}] (DL τ²=${fmt(hc.tau2)}, t₀=${fmt(hc.t0)})`}<br>
     <b>Trim &amp; Fill:</b>${hBtn("bias.trimfill")} ${useTF?"ON":"OFF"} (${useTF?tfEstimator+" estimator, ":""}${tf.length} filled studies)
     <details style="margin-top:4px">
       <summary style="cursor:pointer;color:var(--fg-muted);font-size:0.9em">Additional regression tests (binary outcomes)</summary>
@@ -3967,7 +3969,7 @@ async function runAnalysis() {
 
   appState.reportArgs = {
     studies: all, m, profile, reg,
-    tf, egger, begg, fatpet, petpeese, fsn, tes, pcurve, puniform, harbord, peters, deeks, ruecker, baujatResult,
+    tf, egger, begg, fatpet, petpeese, fsn, tes, pcurve, puniform, harbord, peters, deeks, ruecker, hc, baujatResult,
     influence, subgroup, method, ciMethod,
     ciLevel: document.getElementById("ciLevel")?.value ?? "95",
     useTF, mAdjusted,
