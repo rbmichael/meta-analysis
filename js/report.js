@@ -419,6 +419,7 @@ export function collectCitations(args) {
 function sectionSummary(args) {
   const { m, profile, method, ciMethod, useTF, tf, mAdjusted, studies,
           apaFormat = false, nextTable, ciLevel } = args;
+  const widthCiLabel = (ciLevel ?? "95") + "% CI";
 
   const k           = studies.filter(d => !d.filled).length;
   const isMHorPeto  = m.isMH || m.isPeto;
@@ -611,7 +612,7 @@ function sectionPubBias(args) {
 </section>`;
 }
 
-function sectionPUniform(puniform, m, profile, apaFormat = false, nextTable) {
+function sectionPUniform(puniform, m, profile, apaFormat = false, nextTable, widthCiLabel = "95% CI") {
   if (!puniform || puniform.k < 3 || !isFinite(puniform.estimate)) return "";
 
   function fmtEst(v) { return isFinite(v) ? fmt(profile.transform(v)) : "—"; }
@@ -671,7 +672,7 @@ function sectionPUniform(puniform, m, profile, apaFormat = false, nextTable) {
 // profile   — effect profile (for back-transform and label)
 // selMode   — "sensitivity" | "mle"
 // selLabel  — human-readable preset name (e.g. "Moderate (1-sided)") or "Custom" / "MLE"
-function sectionSelectionModel(sel, profile, selMode, selLabel, apaFormat = false, nextTable) {
+function sectionSelectionModel(sel, profile, selMode, selLabel, apaFormat = false, nextTable, widthCiLabel = "95% CI") {
   if (!sel || sel.error) return "";
 
   const K     = sel.K;
@@ -823,7 +824,7 @@ function sectionInfluence(influence, k, apaFormat = false, nextTable) {
 </section>`;
 }
 
-function sectionSubgroup(subgroup, profile, apaFormat = false, nextTable) {
+function sectionSubgroup(subgroup, profile, apaFormat = false, nextTable, widthCiLabel = "95% CI") {
   if (!subgroup || subgroup.G < 2) return "";
 
   const rows = Object.entries(subgroup.groups).map(([g, r]) => {
@@ -869,7 +870,8 @@ function sectionSubgroup(subgroup, profile, apaFormat = false, nextTable) {
 }
 
 function sectionStudyTable(args) {
-  const { studies, m, profile, apaFormat = false, nextTable } = args;
+  const { studies, m, profile, apaFormat = false, nextTable, ciLevel } = args;
+  const widthCiLabel = (ciLevel ?? "95") + "% CI";
 
   const tau2   = isFinite(m.tau2) ? m.tau2 : 0;
   const real   = studies.filter(d => !d.filled);
@@ -979,7 +981,7 @@ function sectionStudyTable(args) {
 </section>`;
 }
 
-function sectionRegression(reg, method, ciMethod, apaFormat = false, nextTable) {
+function sectionRegression(reg, method, ciMethod, apaFormat = false, nextTable, widthCiLabel = "95% CI") {
   if (!reg || reg.rankDeficient || !reg.colNames) return "";
 
   const ciLabel   = ciMethod === "KH" ? "Knapp-Hartung" : "Normal CI";
@@ -1077,7 +1079,7 @@ function sectionRegression(reg, method, ciMethod, apaFormat = false, nextTable) 
     </tr>`;
   });
 
-  const coefHeaders = ["Term", "β", "SE", esc(statLabel), "p", "${widthCiLabel}", ""];
+  const coefHeaders = ["Term", "β", "SE", esc(statLabel), "p", widthCiLabel, ""];
   if (hasVif) coefHeaders.push("VIF");
 
   const hasLRT_std = reg.modTests && reg.modTests.some(mt => isFinite(mt.lrt));
@@ -1537,8 +1539,8 @@ export function buildReport(args) {
   const body = [
     sectionSummary(rArgs),
     sectionPubBias(rArgs),
-    sectionPUniform(puniform, m, profile, apaFormat, nextTable),
-    sectionSelectionModel(sel ?? null, profile, selMode ?? "mle", selLabel ?? "", apaFormat, nextTable),
+    sectionPUniform(puniform, m, profile, apaFormat, nextTable, widthCiLabel),
+    sectionSelectionModel(sel ?? null, profile, selMode ?? "mle", selLabel ?? "", apaFormat, nextTable, widthCiLabel),
     ((apaFormat, nextFigure) => {
       if (!bayesResult || bayesResult.error) return "";
       const svgMu  = liveSVG("bayesMuPlot");
@@ -1609,9 +1611,9 @@ export function buildReport(args) {
 </section>`;
     })(apaFormat, nextFigure),
     sectionInfluence(influence, k, apaFormat, nextTable),
-    sectionSubgroup(subgroup, profile, apaFormat, nextTable),
+    sectionSubgroup(subgroup, profile, apaFormat, nextTable, widthCiLabel),
     sectionStudyTable(rArgs),
-    sectionRegression(reg, method, ciMethod, apaFormat, nextTable),
+    sectionRegression(reg, method, ciMethod, apaFormat, nextTable, widthCiLabel),
     sectionPlot("Forest Plot", forestSVGs, apaFormat, nextFigure,
       `Forest plot of ${esc(profile.label)}, k\u202F=\u202F${k} studies`,
       `RE\u202F=\u202Frandom effects. Error bars represent 95% ${esc(ciLabel)} CI. \u03C4\u00B2 estimated by ${esc(method)}. Diamond\u202F=\u202Fpooled estimate and ${widthCiLabel}.`),
