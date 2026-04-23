@@ -1934,7 +1934,10 @@ export const PUB_BIAS_BENCHMARKS = [
       trimFill: { k0: 0, adjustedRE: -0.747 },
       tes:      { O: 8, E: 8.703, chi2: 0.172, p: 0.661 },
       // hc() from metafor: verified via generate.R block HC-1
-      hc:       { beta: -0.4361, tau2: 0.3663, t0: 0.3252, ciLb: -1.1910, ciUb: 0.3187 }
+      hc:       { beta: -0.4361, tau2: 0.3663, t0: 0.3252, ciLb: -1.1910, ciUb: 0.3187 },
+      // waapWls(): verified via generate.R block WAAP-1
+      // kAdequate=4 (Hart, Stein, TPT Madras, Comstock 1974); power≥80% vs wlsEst=−0.4361
+      waap:     { wlsEstimate: -0.4361, kAdequate: 4, estimate: -0.4015, se: 0.0457, z: -8.79, p: 0, ci: [-0.4910, -0.3119], fallback: false }
     },
     citation: "Colditz et al. (1994) JAMA 271:698–702. dat.bcg in metafor. Expected values derived analytically (_derive_pubias.py)."
   },
@@ -1971,7 +1974,10 @@ export const PUB_BIAS_BENCHMARKS = [
                   peese: { intercept: -0.017, interceptP: 0.819, slope: 2.439, slopeP: 0.014 } },
       tes:      { O: 0, E: 0.707, chi2: 0.802, p: 0.815 },
       // hc() verified via generate.R block HC-2
-      hc:       { beta: 0.1436, tau2: 0.0278, t0: 1.6528, ciLb: -0.1760, ciUb: 0.4633 }
+      hc:       { beta: 0.1436, tau2: 0.0278, t0: 1.6528, ciLb: -0.1760, ciUb: 0.4633 },
+      // waapWls(): verified via generate.R block WAAP-2
+      // kAdequate=0 (all studies underpowered vs wlsEst=0.1436) → fallback to full WLS
+      waap:     { wlsEstimate: 0.1436, kAdequate: 0, estimate: 0.1436, se: 0.1047, z: 1.371, p: 0.170, ci: [-0.0617, 0.3489], fallback: true }
     },
     citation: "Synthetic. Designed to produce a clearly significant Egger test (p=0.019). Verified against eggerTest() and petPeeseTest() to floating-point precision."
   },

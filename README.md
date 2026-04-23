@@ -41,6 +41,7 @@ A browser-based meta-analysis tool. No installation, no server, no dependencies 
 - **Deeks' test** — funnel-asymmetry test for diagnostic accuracy (DOR) studies using effective sample size as the precision surrogate (Deeks et al. 2005)
 - **Rücker's test** — arcsine-transformation Egger variant for binary outcomes with better-controlled Type I error (Rücker et al. 2008)
 - **Test of Excess Significance (TES)** — compares observed significant results (O) against expected given per-study power; χ² = (O−E)²/[E(1−E/k)]; p < .10 flags excess significance (Ioannidis & Trikalinos 2007)
+- **WAAP-WLS** — Weighted Average of Adequately Powered studies; restricts pooling to studies with ≥ 80% power to detect the FE estimate; fallback to full WLS if none qualify; a WAAP near zero with a large RE estimate is a sign of publication bias (Stanley & Doucouliagos 2015)
 - **Henmi-Copas bias-robust CI** — confidence interval robust to publication bias; always uses DL τ² and FE weights; centred on the FE estimate with CI width determined by numerical integration over the conditional distribution of Q; wider than the standard RE CI when small-study effects are present (Henmi & Copas 2010)
 - **Fail-safe N** — Rosenthal and Orwin estimators
 - **Trim-and-fill** (L0, R0, Q0 estimators) — imputes missing studies and reports the adjusted pooled estimate; estimator selectable in the UI
@@ -230,6 +231,7 @@ python -m http.server 8080
 - Rücker G, Schwarzer G, Carpenter J (2008). Arcsine test for publication bias in meta-analyses with binary outcomes. *Stat Med*, 27(19), 4450–4465.
 - Simonsohn U, Nelson LD, Simmons JP (2014). P-curve: A key to the file-drawer. *J Exp Psychol Gen*, 143(2), 534–547.
 - Stanley TD, Doucouliagos H (2014). Meta-regression approximations to reduce publication selection bias. *Res Synth Methods*, 5(1), 60–78.
+- Stanley TD, Doucouliagos H (2015). Neither fixed nor random: Weighted least squares meta-regression. *Res Synth Methods*, 6(1), 67–87.
 - Stone CJ, Koo C-Y (1985). Additive splines in statistics. *ASA Proceedings of the Statistical Computing Section*, 45–48.
 - Van den Noortgate W, López-López JA, Marín-Martínez F, Sánchez-Meca J (2013). Three-level meta-analysis of dependent effect sizes. *Behav Res Methods*, 45(2), 576–594.
 - van Assen MALM, van Aert RCM, Wicherts JM (2015). Meta-analysis using effect size distributions of only statistically significant studies. *Psychol Methods*, 20(3), 293–309.

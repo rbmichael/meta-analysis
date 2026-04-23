@@ -720,6 +720,18 @@ export const HELP = {
            "Matched against metafor::tes() to ≤ 0.001.",
   },
 
+  "bias.waap": {
+    title: "WAAP-WLS",
+    body:  "Stanley & Doucouliagos (2015). Weighted Average of Adequately Powered studies.\n" +
+           "Step 1: compute the fixed-effect (WLS) estimate θ̂_WLS using all studies.\n" +
+           "Step 2: keep only studies with power ≥ 80% to detect |θ̂_WLS|: " +
+           "powerᵢ = Φ(|θ̂_WLS|/SEᵢ − 1.96) + Φ(−1.96 − |θ̂_WLS|/SEᵢ).\n" +
+           "Step 3: re-run WLS on the adequate subset (fallback: all studies if none qualify).\n" +
+           "Interpretation: if WAAP ≈ 0 while RE is large, high-power studies support a " +
+           "weaker effect — a sign of publication bias inflating the pooled estimate. " +
+           "Verified against independent R implementation (generate.R WAAP-1/WAAP-2).",
+  },
+
   "bias.fsn": {
     title: "Fail-Safe N (Rosenthal)",
     body:  "The number of unpublished null-result studies that would be needed to " +

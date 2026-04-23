@@ -863,6 +863,7 @@
         <li><strong>FAT-PET / PET-PEESE</strong> — funnel asymmetry test and precision-effect test; when FAT detects bias (p &lt; .10) the two-stage PET-PEESE correction is applied and the PEESE intercept is highlighted as the corrected effect estimate; the PEESE regression line is overlaid on the contour-enhanced funnel plot (Stanley &amp; Doucouliagos, 2014)</li>
         <li><strong>Fail-safe N</strong> — Rosenthal and Orwin estimators</li>
         <li><strong>Test of Excess Significance (TES)</strong> — compares the observed number of significant results (O) against the expected (E = Σ power<sub>i</sub>) given per-study power to detect the pooled effect; χ² = (O − E)² / [E(1 − E/k)]; p &lt; .10 flags excess significance (Ioannidis &amp; Trikalinos, 2007)</li>
+        <li><strong>WAAP-WLS</strong> — Weighted Average of Adequately Powered studies; restricts pooling to studies with ≥ 80% power to detect the fixed-effect estimate; if no study qualifies, falls back to the full WLS estimate; a WAAP near zero with a large RE estimate suggests publication bias is inflating the pooled effect (Stanley &amp; Doucouliagos, 2015)</li>
         <li><strong>Henmi-Copas bias-robust CI</strong> — confidence interval robust to publication bias; always uses DL τ² and fixed-effect weights; centred on the FE estimate with half-width u₀ × SE, where u₀ = SDR × t₀ and t₀ is solved by numerical integration over the conditional distribution of Q given R; wider than the standard RE CI when small-study effects are present (Henmi &amp; Copas, 2010)</li>
         <li><strong>Trim-and-fill</strong> (L0, R0, Q0 estimators) — imputes missing studies and reports the adjusted pooled estimate; estimator selectable in the UI</li>
         <li><strong>Funnel plot</strong> — standard or contour-enhanced (α = .10, .05, .01 regions)</li>
@@ -1071,6 +1072,7 @@
         <li>Schwarz G (1978). Estimating the dimension of a model. <em>Ann Stat,</em> 6(2), 461–464.</li>
         <li>Simonsohn U, Nelson LD, Simmons JP (2014). P-curve: A key to the file-drawer. <em>J Exp Psychol Gen,</em> 143(2), 534–547.</li>
         <li>Stanley TD, Doucouliagos H (2014). Meta-regression approximations to reduce publication selection bias. <em>Res Synth Methods,</em> 5(1), 60–78.</li>
+        <li>Stanley TD, Doucouliagos H (2015). Neither fixed nor random: Weighted least squares meta-regression. <em>Res Synth Methods,</em> 6(1), 67–87.</li>
         <li>van Assen MALM, van Aert RCM, Wicherts JM (2015). Meta-analysis using effect size distributions of only statistically significant studies. <em>Psychol Methods,</em> 20(3), 293–309.</li>
         <li>Van den Noortgate W, López-López JA, Marín-Martínez F, Sánchez-Meca J (2013). Three-level meta-analysis of dependent effect sizes. <em>Behav Res Methods,</em> 45(2), 576–594.</li>
         <li>Vevea JL, Hedges LV (1995). A general linear model for estimating effect size in the presence of publication bias. <em>Psychometrika,</em> 60(3), 419–435.</li>

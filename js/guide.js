@@ -1500,6 +1500,51 @@ high. Matched against <code>metafor::tes()</code> to ≤ 0.001.</p>`,
       },
 
       {
+        id: "guide-waap-wls",
+        title: "WAAP-WLS",
+        body: `<p>WAAP-WLS (Weighted Average of Adequately Powered studies; Stanley &amp;
+Doucouliagos 2015) is a publication-bias–corrected point estimate that
+restricts pooling to studies with sufficient statistical power.</p>
+
+<h4>Algorithm</h4>
+<ol>
+  <li><strong>WLS estimate (θ̂<sub>WLS</sub>):</strong> compute the standard
+  fixed-effect (inverse-variance) pooled estimate using all k studies.</li>
+  <li><strong>Power screen:</strong> for each study, compute the two-tailed
+  power to detect |θ̂<sub>WLS</sub>| using the study's own standard error:
+  <p style="margin-left:1em">
+    <code>powerᵢ = Φ(|θ̂<sub>WLS</sub>|/SEᵢ − 1.96) + Φ(−1.96 − |θ̂<sub>WLS</sub>|/SEᵢ)</code>
+  </p>
+  Studies with power ≥ 80% are <em>adequately powered</em>.</li>
+  <li><strong>WAAP:</strong> run WLS on the adequately powered subset. If no
+  study clears 80%, fall back to the full WLS estimate (all studies).</li>
+</ol>
+
+<h4>Displayed values</h4>
+<ul>
+  <li><strong>Estimate [95% CI]:</strong> the WAAP point estimate and
+  Wald interval. When fallback applies, this equals the FE estimate.</li>
+  <li><strong>k<sub>adequate</sub>:</strong> number of studies retained after
+  the power filter. Shown as a fraction of k (e.g. "4/13").</li>
+  <li><strong>(fallback)</strong> label appears when kAdequate = 0.</li>
+</ul>
+
+<h4>Interpretation</h4>
+<p>A WAAP estimate close to zero while the RE estimate is large suggests
+publication bias is inflating the pooled effect: the high-power studies
+(which are harder to suppress) support a weaker effect. When kAdequate is
+small (1–2 studies), the WAAP interval will be wide.</p>
+<p>Limitation: the power screen uses the WLS estimate itself as the
+hypothesised effect — a circular dependency that may over-select studies
+in the presence of heterogeneity. WAAP-WLS works best for a fixed true
+effect with publication bias driven by significance thresholds.</p>
+<p>Verified against independent R implementation (generate.R block WAAP-1/2).</p>`,
+        citations: [
+          "Stanley, T. D., & Doucouliagos, H. (2015). Neither fixed nor random: Weighted least squares meta-regression. <em>Research Synthesis Methods, 6</em>(1), 67–87.",
+        ],
+      },
+
+      {
         id: "guide-hc",
         title: "Henmi-Copas Bias-Robust CI",
         body: `<p>Henmi &amp; Copas (2010) propose a confidence interval for the overall
@@ -2719,6 +2764,7 @@ export const HELP_TO_GUIDE = {
   "bias.trimfill":    "guide-trimfill",
   "bias.fsn":         "guide-fsn",
   "bias.tes":         "guide-tes",
+  "bias.waap":        "guide-waap-wls",
   "bias.fatpet":      "guide-fatpet",
   "bias.petpeese":    "guide-petpeese",
   "bias.hc":          "guide-hc",

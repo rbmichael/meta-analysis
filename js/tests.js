@@ -1,7 +1,7 @@
 import { round, transformEffect, chiSquareCDF, chiSquareQuantile, parseCounts, bivariateNormalCDF, normalQuantile, tCritical, fCDF, normalCDF, tCDF } from "./utils.js";
 import { validateStudy } from "./profiles.js";
 import { BENCHMARKS, PUB_BIAS_BENCHMARKS, INFLUENCE_BENCHMARKS, META_REGRESSION_BENCHMARKS, VH_BENCHMARKS, MH_BENCHMARKS, CLUSTER_BENCHMARKS, RVE_BENCHMARKS, THREE_LEVEL_BENCHMARKS, LS_BENCHMARKS } from "./benchmarks.js";
-import { compute, meta, metaMH, metaPeto, robustMeta, sandwichVar, robustWlsResult, metaRegression, tau2_HS, tau2_HE, tau2_ML, tau2_SJ, beggTest, eggerTest, fatPetTest, petPeeseTest, failSafeN, tesTest, heterogeneityCIs, cumulativeMeta, influenceDiagnostics, harbordTest, petersTest, deeksTest, rueckerTest, leaveOneOut, baujat, blupMeta, pCurve, pUniform, estimatorComparison, subgroupAnalysis, logLik, bfgs, selIntervalProbs, selIntervalIdx, selectionLogLik, SEL_CUTS_ONE_SIDED, SEL_CUTS_TWO_SIDED, veveaHedges, SELECTION_PRESETS, profileLikTau2, profileLikCI, bayesMeta, priorSensitivity, rvePooled, meta3level, lsModel, adjustPvals, henmiCopas } from "./analysis.js";
+import { compute, meta, metaMH, metaPeto, robustMeta, sandwichVar, robustWlsResult, metaRegression, tau2_HS, tau2_HE, tau2_ML, tau2_SJ, beggTest, eggerTest, fatPetTest, petPeeseTest, failSafeN, tesTest, heterogeneityCIs, cumulativeMeta, influenceDiagnostics, harbordTest, petersTest, deeksTest, rueckerTest, leaveOneOut, baujat, blupMeta, pCurve, pUniform, estimatorComparison, subgroupAnalysis, logLik, bfgs, selIntervalProbs, selIntervalIdx, selectionLogLik, SEL_CUTS_ONE_SIDED, SEL_CUTS_TWO_SIDED, veveaHedges, SELECTION_PRESETS, profileLikTau2, profileLikCI, bayesMeta, priorSensitivity, rvePooled, meta3level, lsModel, adjustPvals, henmiCopas, waapWls } from "./analysis.js";
 import { trimFill } from "./trimfill.js";
 import { parseCSV } from "./csv.js";
 import { goshCompute, GOSH_MAX_ENUM_K, GOSH_MAX_K, GOSH_DEFAULT_MAX_SUBSETS } from "./gosh.js";
@@ -2993,6 +2993,23 @@ export function runTests() {
         if (exp.hc.t0    !== undefined) pbchk("hc.t0",    h.t0,    exp.hc.t0,    0.005);
         if (exp.hc.ciLb  !== undefined) pbchk("hc.ci[0]", h.ci[0], exp.hc.ciLb,  0.005);
         if (exp.hc.ciUb  !== undefined) pbchk("hc.ci[1]", h.ci[1], exp.hc.ciUb,  0.005);
+      }
+    }
+    if (exp.waap) {
+      const w = waapWls(studies);
+      if (exp.waap.wlsEstimate !== undefined) pbchk("waap.wlsEstimate", w.wlsEstimate, exp.waap.wlsEstimate, 0.001);
+      if (exp.waap.kAdequate  !== undefined) pbchkTrue(`waap.kAdequate = ${exp.waap.kAdequate}`, w.kAdequate === exp.waap.kAdequate);
+      if (exp.waap.fallback   !== undefined) pbchkTrue(`waap.fallback = ${exp.waap.fallback}`,   w.fallback  === exp.waap.fallback);
+      if (exp.waap.estimate   !== undefined) pbchk("waap.estimate",   w.estimate,   exp.waap.estimate,   0.001);
+      if (exp.waap.se         !== undefined) pbchk("waap.se",         w.se,         exp.waap.se,         0.001);
+      if (exp.waap.z          !== undefined) pbchk("waap.z",          w.z,          exp.waap.z,          0.01);
+      if (exp.waap.p !== undefined) {
+        if (exp.waap.p === 0) { pbchkTrue("waap.p < 0.0001", w.p < 0.0001); }
+        else                  { pbchk("waap.p", w.p, exp.waap.p, 0.01); }
+      }
+      if (exp.waap.ci !== undefined) {
+        pbchk("waap.ci[0]", w.ci[0], exp.waap.ci[0], 0.001);
+        pbchk("waap.ci[1]", w.ci[1], exp.waap.ci[1], 0.001);
       }
     }
   });

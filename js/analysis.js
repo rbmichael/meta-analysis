@@ -2249,6 +2249,59 @@ export function tesTest(studies, m) {
   return { O, E, Var, z, chi2, p, k, theta, powers, sig };
 }
 
+// ================= WAAP-WLS =================
+/**
+ * Weighted Average of Adequately Powered studies (Stanley & Doucouliagos 2015).
+ *
+ * Algorithm:
+ *  1. Full WLS (FE precision weights wi = 1/vi) over all valid studies → μ̂_WLS.
+ *  2. For each study compute two-tailed power to detect |μ̂_WLS| at α = 0.05.
+ *  3. Keep studies with power ≥ 0.80 ("adequately powered").
+ *  4. WAAP = WLS restricted to that subset.
+ *     If no study qualifies (kAdequate = 0) fallback to the full WLS estimate.
+ *
+ * All estimates remain on the analysis scale (log scale for OR/RR/etc.);
+ * call profile.transform() in the UI layer for display.
+ *
+ * @param {{ yi: number, vi: number }[]} studies
+ * @returns {{ estimate, se, ci, z, p, k, kAdequate, wlsEstimate, fallback }}
+ */
+export function waapWls(studies) {
+  const valid = studies.filter(s => isFinite(s.yi) && isFinite(s.vi) && s.vi > 0);
+  const k     = valid.length;
+  const nan   = { estimate: NaN, se: NaN, ci: [NaN, NaN], z: NaN, p: NaN,
+                  k, kAdequate: 0, wlsEstimate: NaN, fallback: false };
+  if (k < 1) return nan;
+
+  const z025 = normalQuantile(0.975);   // ≈ 1.95996
+
+  // Step 1 — full WLS (intercept-only, weights wi = 1/vi)
+  const W      = valid.reduce((s, d) => s + 1 / d.vi, 0);
+  const wlsEst = valid.reduce((s, d) => s + d.yi / d.vi, 0) / W;
+
+  // Step 2 — per-study power to detect |wlsEst| at two-tailed α = 0.05
+  const adequate = valid.filter(d => {
+    const ncp   = Math.abs(wlsEst) / Math.sqrt(d.vi);
+    const power = normalCDF(ncp - z025) + normalCDF(-z025 - ncp);
+    return power >= 0.80;
+  });
+
+  const kAdequate = adequate.length;
+  const fallback  = kAdequate === 0;
+  const subset    = fallback ? valid : adequate;
+
+  // Step 3 — WLS on the adequate subset (or all studies if none qualify)
+  const Wa   = subset.reduce((s, d) => s + 1 / d.vi, 0);
+  const waap = subset.reduce((s, d) => s + d.yi / d.vi, 0) / Wa;
+  const se   = Math.sqrt(1 / Wa);
+
+  const z = waap / se;
+  const p = 2 * (1 - normalCDF(Math.abs(z)));
+  const ci = [waap - z025 * se, waap + z025 * se];
+
+  return { estimate: waap, se, ci, z, p, k, kAdequate, wlsEstimate: wlsEst, fallback };
+}
+
 // ================= INFLUENCE DIAGNOSTICS =================
 /**
  * Leave-one-out influence diagnostics for a fitted meta-analysis.

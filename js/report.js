@@ -529,7 +529,7 @@ function sectionSummary(args) {
 // status. PET estimate is back-transformed through profile.transform().
 // "NA (k < 3)" is shown for any test that requires at least 3 studies.
 function sectionPubBias(args) {
-  const { egger, begg, fatpet, fsn, tes, harbord, peters, deeks, ruecker, hc,
+  const { egger, begg, fatpet, fsn, tes, waap, harbord, peters, deeks, ruecker, hc,
           useTF, tf, profile, apaFormat = false, nextTable } = args;
   const petEff = isFinite(fatpet.intercept)
     ? fmt(profile.transform(fatpet.intercept)) : "—";
@@ -565,6 +565,9 @@ function sectionPubBias(args) {
       tes && isFinite(tes.chi2)
         ? `<tr><td>TES — χ² (O=${tes.O}, E=${fmt(tes.E)})</td><td>${fmt(tes.chi2)}</td><td>${naP(tes.p, fmtP_APA)}</td></tr>`
         : `<tr><td>TES (test of excess significance)</td><td>—</td><td>NA</td></tr>`,
+      waap && isFinite(waap.estimate)
+        ? `<tr><td>WAAP-WLS (k<sub>adequate</sub> = ${waap.kAdequate} of ${waap.k}${waap.fallback ? "; WLS fallback" : ""})</td><td>${fmt(profile.transform(waap.estimate))} [${fmt(profile.transform(waap.ci[0]))}, ${fmt(profile.transform(waap.ci[1]))}]</td><td>${naP(waap.p, fmtP_APA)}</td></tr>`
+        : `<tr><td>WAAP-WLS</td><td>—</td><td>NA</td></tr>`,
       hcRow_apa,
     ];
     const table = buildTableAPA(
@@ -574,6 +577,7 @@ function sectionPubBias(args) {
       rows,
       "FAT = funnel asymmetry test; PET = precision-effect test. " +
       "Harbord, Peters, Deeks, and Rücker are binary-outcome variants of the Egger test; TES = test of excess significance (Ioannidis & Trikalinos, 2007); " +
+      "WAAP-WLS = weighted average of adequately powered studies (Stanley & Doucouliagos, 2015); statistic is bias-corrected effect estimate [95% CI]; " +
       "Henmi-Copas = bias-robust CI centred on FE estimate (DL τ²); NA = fewer than 3 eligible studies or missing cell counts."
     );
     return `
@@ -598,6 +602,9 @@ function sectionPubBias(args) {
       tes && isFinite(tes.chi2)
         ? `<tr><td>TES — χ² (O=${tes.O}, E=${fmt(tes.E)})</td><td>${fmt(tes.chi2)}</td><td>${naP(tes.p, fmtP)}</td></tr>`
         : `<tr><td>TES (excess significance)</td><td>—</td><td>NA</td></tr>`,
+      waap && isFinite(waap.estimate)
+        ? `<tr><td>WAAP-WLS (k<sub>adequate</sub> = ${waap.kAdequate} of ${waap.k}${waap.fallback ? "; WLS fallback" : ""})</td><td>${fmt(profile.transform(waap.estimate))} [${fmt(profile.transform(waap.ci[0]))}, ${fmt(profile.transform(waap.ci[1]))}]</td><td>${naP(waap.p, fmtP)}</td></tr>`
+        : `<tr><td>WAAP-WLS</td><td>—</td><td>NA</td></tr>`,
       hcRow_std,
     ]
   );
