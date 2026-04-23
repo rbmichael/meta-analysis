@@ -34,7 +34,7 @@ import { drawForest, drawGoshPlot, drawCumulativeForest, drawCaterpillarPlot } f
 import { downloadBlob } from "./io.js";
 import { Z_95 } from "./constants.js";
 import { normalQuantile } from "./utils.js";
-import { resolveThemeVars, hasEmbeddedBackground } from "./export.js";
+import { resolveThemeVars, hasEmbeddedBackground, currentBgColour } from "./export.js";
 
 // ---------------------------------------------------------------------------
 // SVG serialization
@@ -60,9 +60,7 @@ function serializeSVG(svgEl) {
     const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
     bg.setAttribute("width",  "100%");
     bg.setAttribute("height", "100%");
-    bg.setAttribute("fill",
-      getComputedStyle(document.documentElement).getPropertyValue("--bg-base").trim() || "#121212"
-    );
+    bg.setAttribute("fill", currentBgColour());
     clone.insertBefore(bg, clone.firstChild);
   }
 
@@ -1283,7 +1281,7 @@ function reportCSS() {
       border-bottom: 2px solid ${v.bodyColor};
     }
     .apa-table .imputed td { color: ${v.imputedColor}; font-style: italic; }
-    .apa-table .pooled td  { color: ${v.pooledColor}; font-weight: bold; }
+    .apa-table .pooled td  { font-weight: bold; background: none !important; border-top: none; color: ${v.tdColor}; }
     .apa-table .flagged td { font-style: italic; }
     .apa-table .intercept td { color: ${v.interceptColor}; font-style: italic; }
     .apa-table-title    { font-weight: bold; margin: 16px 0 2px 0; font-size: 0.88em; }
@@ -1317,7 +1315,7 @@ function reportCSS() {
       .apa-table tfoot td         { border-top-color: #000; color: #444; }
       .apa-table:not(:has(tfoot)) > tbody > tr:last-child > td { border-bottom-color: #000; }
       .apa-table td               { color: #000; }
-      .apa-table .pooled td       { color: #6a5000; font-weight: bold; }
+      .apa-table .pooled td       { color: #000; font-weight: bold; background: none !important; border-top: none; }
       .apa-table .imputed td      { color: #666; }
       .apa-table-title            { font-weight: bold; color: #000; }
       .apa-table-subtitle         { font-style: italic; color: #000; }

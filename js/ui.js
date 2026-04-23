@@ -824,6 +824,8 @@ document.getElementById("draftStartFresh").addEventListener("click", () => {
 // access to renderForestNav.
 function buildReportAndResync() {
   if (!appState.reportArgs) return null;
+  // Ensure all lazily-deferred plots have been drawn before SVGs are serialised.
+  flushDeferredDraws();
   // Pass the live forestPlot.page so the restore inside collectForestSVGs lands on
   // the correct page rather than always page 0 (which was the value at cache time).
   const args = {
@@ -838,7 +840,7 @@ function buildReportAndResync() {
     // Use the live goshState so a re-run after the last analysis is captured.
     gosh:     goshState.result ?? appState.reportArgs.gosh,
     goshXAxis: document.getElementById("goshXAxis")?.value ?? appState.reportArgs.goshXAxis ?? "I2",
-    apaFormat: document.getElementById("reportAPA")?.checked ?? false,
+    apaFormat: true,
   };
   const html = buildReport(args);
   // Re-render the live forest at the current page and re-sync nav buttons.
@@ -864,6 +866,8 @@ document.getElementById("exportReportPDF").addEventListener("click", () => {
 
 document.getElementById("exportReportDOCX").addEventListener("click", async () => {
   if (!appState.reportArgs) return;
+  // Ensure all lazily-deferred plots have been drawn before SVGs are serialised.
+  flushDeferredDraws();
   const args = {
     ...appState.reportArgs,
     forestOptions:      { ...appState.reportArgs.forestOptions, currentPage: forestPlot.page },
@@ -2521,6 +2525,18 @@ function drawIfVisible(sectionId, drawFn) {
     }
   });
 });
+
+// flushDeferredDraws()
+// Force-executes every pending deferred draw function so that all plot SVGs are
+// populated before report / export serialisation reads them from the DOM.
+// Called by buildReportAndResync() and the DOCX export handler.
+function flushDeferredDraws() {
+  for (const [panel, drawFn] of _deferredDraws) {
+    try { drawFn(); } catch (e) { console.error("flushDeferredDraws: error in draw for", panel?.id, e); }
+    _deferredDraws.delete(panel);
+    delete panel.dataset.dirty;
+  }
+}
 
 // markStale()
 // Signals that the displayed results are out of date with the current inputs.

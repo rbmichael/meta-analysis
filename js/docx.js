@@ -15,7 +15,7 @@
 //   report.js    CITATIONS, collectCitations
 
 import { drawForest, drawCumulativeForest, drawCaterpillarPlot, drawGoshPlot } from "./plots.js";
-import { resolveThemeVars, hasEmbeddedBackground } from "./export.js";
+import { resolveThemeVars, hasEmbeddedBackground, currentBgColour } from "./export.js";
 import { Z_95 } from "./constants.js";
 import { normalQuantile } from "./utils.js";
 import { CITATIONS, collectCitations } from "./report.js";
@@ -37,8 +37,7 @@ function serializeSVG(svgEl) {
     const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
     bg.setAttribute("width",  "100%");
     bg.setAttribute("height", "100%");
-    bg.setAttribute("fill",
-      getComputedStyle(document.documentElement).getPropertyValue("--bg-base").trim() || "#121212");
+    bg.setAttribute("fill", currentBgColour());
     clone.insertBefore(bg, clone.firstChild);
   }
   return new XMLSerializer().serializeToString(clone);

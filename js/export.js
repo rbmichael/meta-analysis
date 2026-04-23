@@ -35,34 +35,62 @@
 import { downloadBlob, downloadBlobObject } from "./io.js";
 import { encodeTIFF } from "./tiff.js";
 
-// Derive the current page background colour from the app's active theme so
-// SVG exports match what the user sees (light or dark).
-function currentBgColour() {
-  return getComputedStyle(document.documentElement).getPropertyValue("--bg-base").trim() || "#121212";
-}
-
 // Regex that matches a single var(--token) reference (one level, no fallback).
 const VAR_RE = /var\(\s*(--[\w-]+)\s*\)/g;
+
+// resolveCSSColor(cssExpr) → string
+// Resolves a CSS expression (e.g. "var(--bg-base)", "light-dark(#fff,#000)") to
+// a concrete colour string by routing it through a temporary in-document element.
+//
+// WHY: CSS custom properties that use light-dark() are stored as their literal
+// declaration value.  getComputedStyle(root).getPropertyValue("--tok") therefore
+// returns "light-dark(#ffffff, #050506)" — not the resolved colour.  Setting
+// `color: var(--tok)` on a real element forces the browser to evaluate light-dark()
+// in the current color-scheme context and return a plain rgb() / rgba() value.
+//
+// The resolved colour is always valid in SVG presentation attributes and inline
+// styles, unlike the raw light-dark() token which SVG renderers do not evaluate.
+export function resolveCSSColor(cssExpr) {
+  const el = document.createElement("span");
+  el.style.cssText = "position:absolute;visibility:hidden;pointer-events:none";
+  document.body.appendChild(el);
+  el.style.color = cssExpr;
+  const resolved = getComputedStyle(el).color;  // always rgb() / rgba()
+  document.body.removeChild(el);
+  return resolved || "";
+}
+
+// Derive the current page background colour from the app's active theme so
+// SVG exports match what the user sees (light or dark).
+export function currentBgColour() {
+  return resolveCSSColor("var(--bg-base)") || "#121212";
+}
 
 // ----------- helpers (exported for report.js) -----------
 
 // resolveThemeVars(svgEl)
 // Walks every descendant of svgEl and replaces var(--xxx) references in
 // `fill` and `stroke` attributes, and in the fill/stroke/color properties of
-// any inline `style` attribute, with the computed value taken from the root
-// element's CSS custom properties.
+// any inline `style` attribute, with the computed colour value.
+//
+// Uses resolveCSSColor() per token so that light-dark() and other CSS functions
+// are evaluated correctly in the current color-scheme context.  Results are
+// cached by token name to avoid repeated DOM touches.
 //
 // Must be called on the *clone* (not the live SVG) so the live DOM is not
-// mutated.  Operates synchronously — getComputedStyle is called once and
-// cached for the entire walk.
+// mutated.
 export function resolveThemeVars(svgEl) {
-  const rootStyles = getComputedStyle(document.documentElement);
+  const cache = new Map();
+
+  function resolveToken(prop) {
+    if (cache.has(prop)) return cache.get(prop);
+    const val = resolveCSSColor(`var(${prop})`);
+    cache.set(prop, val);
+    return val;
+  }
 
   function resolveVal(val) {
-    return val.replace(VAR_RE, (_, prop) => {
-      const resolved = rootStyles.getPropertyValue(prop).trim();
-      return resolved || val;   // fall back to the original token if not found
-    });
+    return val.replace(VAR_RE, (orig, prop) => resolveToken(prop) || orig);
   }
 
   svgEl.querySelectorAll("*").forEach(el => {
