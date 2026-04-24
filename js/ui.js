@@ -107,8 +107,10 @@ import { trimFill } from "./trimfill.js";
 import { drawForest, drawFunnel, drawBubble, drawPartialResidualBubble, drawInfluencePlot, drawCumulativeForest, drawCumulativeFunnel, drawPCurve, drawPUniform, drawOrchardPlot, drawCaterpillarPlot, drawBlupPlot, drawBaujatPlot, drawLabbe, drawRoBTrafficLight, drawRoBSummary, drawGoshPlot, drawProfileLikTau2, drawBayesTauPosterior, drawBayesMuPosterior, drawQQPlot, drawRadialPlot } from "./plots.js";
 import { goshCompute, GOSH_MAX_K } from "./gosh.js";
 import { exportSVG, exportPNG, exportTIFF } from "./export.js";
-import { buildReport, downloadHTML, openPrintPreview } from "./report.js";
-import { buildDocx } from "./docx.js";
+// report.js (81 KB) and docx.js (51 KB) are loaded on first export click.
+let _reportMod, _docxMod;
+function getReport() { return (_reportMod ??= import("./report.js")); }
+function getDocx()   { return (_docxMod   ??= import("./docx.js")); }
 import { parseCSV, detectEffectType } from "./csv.js";
 import { buildSession, serializeSession, parseSession, missingInputCols } from "./session.js";
 import { saveDraft, loadDraft, clearDraft } from "./autosave.js";
@@ -824,10 +826,11 @@ document.getElementById("draftStartFresh").addEventListener("click", () => {
 // then restores the live view.  After it returns we re-render the live forest
 // at the currently-viewed page and re-sync the nav, because buildReport has no
 // access to renderForestNav.
-function buildReportAndResync() {
+async function buildReportAndResync() {
   if (!appState.reportArgs) return null;
   // Ensure all lazily-deferred plots have been drawn before SVGs are serialised.
   flushDeferredDraws();
+  const { buildReport, downloadHTML, openPrintPreview } = await getReport();
   // Pass the live forestPlot.page so the restore inside collectForestSVGs lands on
   // the correct page rather than always page 0 (which was the value at cache time).
   const args = {
@@ -853,17 +856,17 @@ function buildReportAndResync() {
     );
     renderForestNav(totalPages);
   }
-  return html;
+  return { html, downloadHTML, openPrintPreview };
 }
 
-document.getElementById("exportReportHTML").addEventListener("click", () => {
-  const html = buildReportAndResync();
-  if (html) downloadHTML(html);
+document.getElementById("exportReportHTML").addEventListener("click", async () => {
+  const result = await buildReportAndResync();
+  if (result) result.downloadHTML(result.html);
 });
 
-document.getElementById("exportReportPDF").addEventListener("click", () => {
-  const html = buildReportAndResync();
-  if (html) openPrintPreview(html);
+document.getElementById("exportReportPDF").addEventListener("click", async () => {
+  const result = await buildReportAndResync();
+  if (result) result.openPrintPreview(result.html);
 });
 
 document.getElementById("exportReportDOCX").addEventListener("click", async () => {
@@ -887,6 +890,7 @@ document.getElementById("exportReportDOCX").addEventListener("click", async () =
   btn.disabled = true;
   btn.textContent = "Building\u2026";
   try {
+    const { buildDocx } = await getDocx();
     const blob = await buildDocx(args);
     downloadBlob(blob, "meta-analysis-report.docx",
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
