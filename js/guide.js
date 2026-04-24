@@ -623,6 +623,37 @@ RBIS additionally takes p, the proportion of participants in group 1.</p>`,
       },
 
       {
+        id: "guide-r2",
+        title: "R² transformations (R2 / ZR2)",
+        body: `<p>Two effect types allow meta-analysis of explained variance (R²) from
+regression models:</p>
+
+<p><strong>R2</strong> — pools raw R² values directly on the [0, 1] scale.
+Variance uses the metafor "LS" (large-sample) formula:</p>
+<p style="margin-left:1.5em"><code>vi = 4R²(1−R²)² / n</code></p>
+<p>Because R² is bounded and its variance is not constant across the scale,
+pooling raw R² is most appropriate when effect sizes are moderate and sample
+sizes are large.</p>
+
+<p><strong>ZR2</strong> — applies the Fisher z-transformation to √R² before
+pooling, analogous to the ZCOR transformation for correlations. The
+transformation and its variance are:</p>
+<p style="margin-left:1.5em"><code>yi = atanh(√R²),  vi = 1/n</code></p>
+<p>The back-transformation is <code>R² = tanh(yi)²</code>. ZR2 is preferred over
+R2 for heterogeneous sets because it variance-stabilises the effect and
+linearises the scale. Note that vi = 1/n — not 1/(n−3) as with ZCOR —
+because the sampling distribution differs.</p>
+
+<p><strong>Inputs:</strong> Both types take r² (the raw R² value, 0–1) and n
+(total sample size). The number of predictors does not enter the default
+variance formula.</p>`,
+        citations: [
+          "Olkin, I., & Pratt, J. W. (1958). Unbiased estimation of certain correlation coefficients. <em>Annals of Mathematical Statistics, 29</em>(1), 201–211.",
+          "Viechtbauer, W. (2010). Conducting meta-analyses in R with the metafor package. <em>Journal of Statistical Software, 36</em>(3), 1–48.",
+        ],
+      },
+
+      {
         id: "guide-proportions",
         title: "Proportion measures (PR, PLN, PLO, PAS, PFT)",
         body: `<p>Five transformations are available for single-group event proportions:</p>
@@ -2859,6 +2890,8 @@ export const HELP_TO_GUIDE = {
   "effect.ZPCOR":     "guide-zcor",
   "effect.RPB":       "guide-rpb",
   "effect.RBIS":      "guide-rpb",
+  "effect.R2":        "guide-r2",
+  "effect.ZR2":       "guide-r2",
   "effect.PHI":       "guide-proportions",
   "effect.RTET":      "guide-proportions",
   "effect.PR":        "guide-proportions",

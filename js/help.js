@@ -384,6 +384,26 @@ export const HELP = {
            "Pooled on the raw scale — no back-transformation.",
   },
 
+  "effect.R2": {
+    title: "R² (R2)",
+    body:  "Pools raw R² values (explained variance from a regression model) on the [0, 1] scale. " +
+           "Variance uses the metafor 'LS' large-sample formula: vi = 4R²(1−R²)²/n. " +
+           "Inputs: r2 (R² value, 0 ≤ r² ≤ 1) and n (total sample size). " +
+           "The number of predictors does not enter the variance formula. " +
+           "Pooled on the raw scale — pooled estimate is an R². " +
+           "For heterogeneous sets consider ZR2 (Fisher z transformation of √R²).",
+  },
+
+  "effect.ZR2": {
+    title: "Fisher-z R² (ZR2)",
+    body:  "Applies the Fisher z-transformation to √R² before pooling, analogous to ZCOR for correlations. " +
+           "Transformation: yi = atanh(√R²); variance: vi = 1/n (not 1/(n−3) as for ZCOR). " +
+           "Back-transformation: R² = tanh(yi)². " +
+           "Inputs: r2 (R² value, 0 ≤ r² ≤ 1) and n (total sample size). " +
+           "Preferred over R2 when there is heterogeneity — variance-stabilises the scale and linearises effects. " +
+           "Pooled estimate displayed as R² after back-transformation.",
+  },
+
   "effect.PHI": {
     title: "Phi Coefficient (PHI)",
     body:  "Pearson correlation for two binary variables, computed from a 2×2 table: " +

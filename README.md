@@ -8,7 +8,7 @@ A browser-based meta-analysis tool. No installation, no server, no dependencies 
 
 ### Effect types
 
-33 effect measures across 9 categories:
+35 effect measures across 9 categories:
 
 | Category | Measures |
 |---|---|
@@ -17,7 +17,7 @@ A browser-based meta-analysis tool. No installation, no server, no dependencies 
 | Continuous (single group) | One-sample SMD (SMD1), One-sample SMD heteroscedastic (SMD1H), Mean raw (MN), Mean log (MNLN) |
 | Variability | Coefficient of Variation Ratio (CVR), Variability Ratio (VR) |
 | Binary outcomes | Odds Ratio (OR), Risk Ratio (RR), Risk Difference (RD), Arcsine-transformed Risk Difference (AS), Yule's Q (YUQ), Yule's Y (YUY), Generalised Odds Ratio — ordinal (GOR) |
-| Correlations | Pearson *r* (COR), Bias-corrected *r* (UCOR), Fisher's *z* (ZCOR), Partial *r* (PCOR), Partial Fisher's *z* (ZPCOR), Point-biserial (RPB), Biserial (RBIS), Phi (PHI), Tetrachoric (RTET) |
+| Correlations | Pearson *r* (COR), Bias-corrected *r* (UCOR), Fisher's *z* (ZCOR), Partial *r* (PCOR), Partial Fisher's *z* (ZPCOR), Point-biserial (RPB), Biserial (RBIS), R² (R2), Fisher-z R² (ZR2), Phi (PHI), Tetrachoric (RTET) |
 | Proportions | Raw (PR), Log (PLN), Logit (PLO), Arcsine (PAS), Freeman-Tukey double arcsine (PFT) |
 | Time-to-event / Rates | Hazard Ratio (HR), Incidence Rate Ratio (IRR), Incidence Rate Difference (IRD), Incidence Rate Difference sqrt (IRSD), Incidence Rate log (IR) |
 | Generic | Pre-computed *yᵢ* / *vᵢ* (GENERIC) |

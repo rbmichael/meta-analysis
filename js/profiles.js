@@ -1158,6 +1158,104 @@ export const effectProfiles = {
   },
 
   // ------------------------------------------------------------------ //
+  // R2 — Coefficient of determination (raw R² scale)
+  //   yi = R²  (the squared multiple correlation / coefficient of determination)
+  //   vi = 4 · R² · (1 − R²)² / n
+  //      (metafor escalc("R2") default "LS" formula)
+  //
+  //   Input: r2 (R² value, 0 ≤ r2 < 1), n (sample size)
+  //   Note: R² = 0 gives vi = 0; clamped to MIN_VAR.
+  //   R² does not convey sign (always ≥ 0). For bivariate case: r² = R².
+  // ------------------------------------------------------------------ //
+  "R2": {
+    label:  "R-squared (raw R²)",
+    group:  "Correlations",
+    inputs: ["r2", "n"],
+    compute(s) {
+      if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+      const { r2, n } = s;
+      const vi = Math.max(4 * r2 * (1 - r2) ** 2 / n, MIN_VAR);
+      return { ...s, yi: r2, vi, se: Math.sqrt(vi), w: 1 / vi };
+    },
+    transform: (x) => x,
+
+    validate(s) {
+      const errors = {};
+      if (!isFinite(s.r2) || s.r2 < 0 || s.r2 >= 1) errors.r2 = "R² must be ≥ 0 and < 1";
+      if (!isFinite(s.n)  || s.n < 3)                errors.n  = "n must be ≥ 3";
+      return { valid: Object.keys(errors).length === 0, errors };
+    },
+
+    softWarnings(s, label) {
+      const w = [];
+      if (isFinite(s.n) && s.n < 10)
+        w.push(`⚠️ ${label}: small sample size (n < 10) — R² estimate unreliable`);
+      if (isFinite(s.r2) && s.r2 > 0.95)
+        w.push(`⚠️ ${label}: R² > 0.95 — variance estimate near boundary, interpret cautiously`);
+      return w;
+    },
+
+    exampleData: [
+      ["Study 1", 0.25, 80,  ""],
+      ["Study 2", 0.22, 100, ""],
+      ["Study 3", 0.28, 60,  ""],
+      ["Study 4", 0.24, 120, ""],
+      ["Study 5", 0.26, 90,  ""],
+    ],
+  },
+
+  // ------------------------------------------------------------------ //
+  // ZR2 — Coefficient of determination (Fisher's z scale)
+  //   r  = √R²
+  //   yi = atanh(√R²)   (Fisher's z of the "equivalent correlation" √R²)
+  //   vi = 1 / n
+  //      (metafor escalc("ZR2") formula; does not include n−3 correction)
+  //   Back-transform: tanh(yi)²  → R²  (display axis in R² units)
+  //
+  //   More stable than raw R2 for pooling because the Fisher-z transformation
+  //   compresses large R² values and stabilises variance. Back-transform
+  //   squares the pooled z estimate to return to the R² scale.
+  // ------------------------------------------------------------------ //
+  "ZR2": {
+    label:  "R-squared (Fisher's z of √R²)",
+    group:  "Correlations",
+    isTransformedScale: true,
+    inputs: ["r2", "n"],
+    compute(s) {
+      if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+      const { r2, n } = s;
+      const yi = Math.atanh(Math.sqrt(r2));
+      const vi = Math.max(1 / n, MIN_VAR);
+      return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
+    },
+    transform: (x) => Math.tanh(x) ** 2,
+
+    validate(s) {
+      const errors = {};
+      if (!isFinite(s.r2) || s.r2 < 0 || s.r2 >= 1) errors.r2 = "R² must be ≥ 0 and < 1";
+      if (!isFinite(s.n)  || s.n < 3)                errors.n  = "n must be ≥ 3";
+      return { valid: Object.keys(errors).length === 0, errors };
+    },
+
+    softWarnings(s, label) {
+      const w = [];
+      if (isFinite(s.n) && s.n < 10)
+        w.push(`⚠️ ${label}: small sample size (n < 10) — R² estimate unreliable`);
+      if (isFinite(s.r2) && s.r2 > 0.95)
+        w.push(`⚠️ ${label}: R² > 0.95 — back-transform near boundary, interpret cautiously`);
+      return w;
+    },
+
+    exampleData: [
+      ["Study 1", 0.25, 80,  ""],
+      ["Study 2", 0.22, 100, ""],
+      ["Study 3", 0.28, 60,  ""],
+      ["Study 4", 0.24, 120, ""],
+      ["Study 5", 0.26, 90,  ""],
+    ],
+  },
+
+  // ------------------------------------------------------------------ //
   // Threshold rationale shared by PHI and RTET (2×2 cell-frequency correlations):
   //   zero cell  — φ and ρ_tet are near structural boundaries (±1) when any
   //                marginal frequency is zero; the variance approximation breaks down.

@@ -3035,6 +3035,113 @@ export function runTests() {
 
   console.log(rbisPass ? "\n✅ ALL RBIS UNIT TESTS PASSED" : "\n❌ SOME RBIS UNIT TESTS FAILED");
 
+  // ===== R2 UNIT TESTS =====
+  // R2: yi = R², vi = 4R²(1−R²)²/n  [metafor "LS" formula]
+  // ZR2: yi = atanh(√R²), vi = 1/n; back-transform tanh(yi)² → R²
+  let r2Pass = true;
+  const { chk: r2chk, chkTrue: r2chkTrue, chkField: r2chkField } = makeChk(() => { r2Pass = false; });
+
+  console.log("\n===== R2 UNIT TESTS =====\n");
+
+  // --- R2 1: formula spot-check ---
+  console.log("--- R2 1. Formula spot-check ---");
+  {
+    const r2 = 0.25, n = 80;
+    const s = compute({ r2, n }, "R2");
+    const viExpected = 4 * r2 * (1 - r2) ** 2 / n;
+    r2chk("yi = r2",            s.yi, r2);
+    r2chk("vi = 4R²(1-R²)²/n", s.vi, viExpected);
+    r2chk("se = √vi",           s.se, Math.sqrt(viExpected));
+    r2chkTrue("w = 1/vi",       Math.abs(s.w - 1 / viExpected) < 1e-10);
+  }
+
+  // --- R2 2: benchmark per-study yi/vi (R2-1) ---
+  console.log("--- R2 2. Benchmark per-study yi/vi ---");
+  {
+    const bm = BENCHMARKS.find(b => b.name.includes("R2 (raw R²"));
+    const expYi = bm.expected.yi;
+    const expVi = bm.expected.vi;
+    bm.data.forEach((d, i) => {
+      const s = compute({ r2: d.r2, n: d.n }, "R2");
+      r2chkField(`Study ${i+1} yi`, s.yi, expYi[i], "yi");
+      r2chkField(`Study ${i+1} vi`, s.vi, expVi[i], "yi");
+    });
+  }
+
+  // --- R2 3: validation ---
+  console.log("--- R2 3. Validation ---");
+  {
+    r2chkTrue("r2=0 → finite",  isFinite(compute({ r2: 0,   n: 50 }, "R2").yi));
+    r2chkTrue("r2=1 → w=0",     compute({ r2: 1,   n: 50 }, "R2").w === 0);
+    r2chkTrue("r2>1 → w=0",     compute({ r2: 1.1, n: 50 }, "R2").w === 0);
+    r2chkTrue("r2<0 → w=0",     compute({ r2: -0.1,n: 50 }, "R2").w === 0);
+    r2chkTrue("n=1 → w=0",      compute({ r2: 0.3, n:  1 }, "R2").w === 0);
+    r2chkTrue("r2=NaN → w=0",   compute({ r2: NaN, n: 50 }, "R2").w === 0);
+    r2chkTrue("valid → finite",  isFinite(compute({ r2: 0.3, n: 50 }, "R2").yi));
+  }
+
+  // ===== ZR2 UNIT TESTS =====
+  console.log("\n===== ZR2 UNIT TESTS =====\n");
+
+  // --- ZR2 1: formula spot-check ---
+  console.log("--- ZR2 1. Formula spot-check ---");
+  {
+    const r2 = 0.25, n = 80;
+    const s = compute({ r2, n }, "ZR2");
+    const yiExpected = Math.atanh(Math.sqrt(r2));
+    const viExpected = 1 / n;
+    r2chk("yi = atanh(√R²)", s.yi, yiExpected);
+    r2chk("vi = 1/n",        s.vi, viExpected);
+    r2chk("se = 1/√n",       s.se, Math.sqrt(viExpected));
+    r2chkTrue("w = n",       Math.abs(s.w - n) < 1e-10);
+  }
+
+  // --- ZR2 2: back-transform ---
+  console.log("--- ZR2 2. Back-transform tanh(yi)² → R² ---");
+  {
+    const cases = [0.04, 0.16, 0.25, 0.49];
+    cases.forEach(r2 => {
+      const s = compute({ r2, n: 100 }, "ZR2");
+      const backTransformed = Math.tanh(s.yi) ** 2;
+      r2chk(`tanh(atanh(√${r2}))² ≈ ${r2}`, backTransformed, r2);
+    });
+  }
+
+  // --- ZR2 3: benchmark per-study yi/vi (ZR2-1) ---
+  console.log("--- ZR2 3. Benchmark per-study yi/vi ---");
+  {
+    const bm = BENCHMARKS.find(b => b.name.includes("ZR2 (Fisher z"));
+    const expYi = bm.expected.yi;
+    const expVi = bm.expected.vi;
+    bm.data.forEach((d, i) => {
+      const s = compute({ r2: d.r2, n: d.n }, "ZR2");
+      r2chkField(`Study ${i+1} yi`, s.yi, expYi[i], "yi");
+      r2chkField(`Study ${i+1} vi`, s.vi, expVi[i], "yi");
+    });
+  }
+
+  // --- ZR2 4: validation ---
+  console.log("--- ZR2 4. Validation ---");
+  {
+    r2chkTrue("r2=0 → yi=0",    compute({ r2: 0,   n: 50 }, "ZR2").yi === 0);
+    r2chkTrue("r2>1 → w=0",     compute({ r2: 1.1, n: 50 }, "ZR2").w === 0);
+    r2chkTrue("r2<0 → w=0",     compute({ r2: -0.1,n: 50 }, "ZR2").w === 0);
+    r2chkTrue("n=1 → w=0",      compute({ r2: 0.3, n:  1 }, "ZR2").w === 0);
+    r2chkTrue("valid → finite",  isFinite(compute({ r2: 0.3, n: 50 }, "ZR2").yi));
+  }
+
+  // --- ZR2 5: yi > R2 yi (z-scale inflates small r towards larger values) ---
+  console.log("--- ZR2 5. ZR2 yi > R2 yi (transformation inflation) ---");
+  {
+    // atanh(√R²) > √R² > R² for 0 < R² < 1
+    const r2 = 0.25;
+    const sR2  = compute({ r2, n: 80 }, "R2");
+    const sZR2 = compute({ r2, n: 80 }, "ZR2");
+    r2chkTrue("ZR2 yi > R2 yi", sZR2.yi > sR2.yi);
+  }
+
+  console.log(r2Pass ? "\n✅ ALL R2/ZR2 UNIT TESTS PASSED" : "\n❌ SOME R2/ZR2 UNIT TESTS FAILED");
+
   // ===== PUBLICATION BIAS BENCHMARKS =====
   // End-to-end tests against externally derived expected values.
   // Each entry has a `tests` object with sub-objects per function.

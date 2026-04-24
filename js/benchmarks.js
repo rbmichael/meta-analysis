@@ -1487,6 +1487,118 @@ export const BENCHMARKS = [
   },
 
   // ----------------------------------------------------------------
+  // R2-1 — R-squared (raw), homogeneous (DL, τ²=0)
+  // yi = R²,  vi = 4R²(1−R²)²/n   [metafor escalc("R2") LS formula]
+  // τ²=0: Q < df for these similar R² values.
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic – R2 (raw R², DL)",
+    type: "R2",
+    tauMethod: "DL",
+    data: [
+      { label: "Study 1", r2: 0.25, n:  80 },
+      { label: "Study 2", r2: 0.22, n: 100 },
+      { label: "Study 3", r2: 0.28, n:  60 },
+      { label: "Study 4", r2: 0.24, n: 120 },
+      { label: "Study 5", r2: 0.26, n:  90 },
+    ],
+    expected: {
+      yi:   [0.250000, 0.220000, 0.280000, 0.240000, 0.260000],
+      vi:   [0.007031, 0.005354, 0.009677, 0.004621, 0.006328],
+      FE:    0.246,
+      RE:    0.246,
+      tau2:  0.000,
+      I2:    0.0,
+    },
+    citation: "Synthetic. Expected from metafor escalc('R2') + rma(method='DL'). Block R2-1 in generate.R.",
+  },
+
+  // ----------------------------------------------------------------
+  // R2-2 — R-squared (raw), heterogeneous (REML, τ²>0)
+  // Low R² in large-n, high R² in small-n.
+  // τ²=0.029 (REML), I2≈87.9%.
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic – R2 heterogeneous (REML, τ²>0)",
+    type: "R2",
+    tauMethod: "REML",
+    data: [
+      { label: "Study 1", r2: 0.04, n: 200 },
+      { label: "Study 2", r2: 0.09, n: 150 },
+      { label: "Study 3", r2: 0.49, n:  50 },
+      { label: "Study 4", r2: 0.36, n:  80 },
+      { label: "Study 5", r2: 0.25, n: 100 },
+    ],
+    expected: {
+      yi:   [0.040000, 0.090000, 0.490000, 0.360000, 0.250000],
+      vi:   [0.000737, 0.001987, 0.010196, 0.007373, 0.005625],
+      FE:    0.106,
+      RE:    0.229,
+      tau2:  0.0291,
+      I2:   87.9,
+    },
+    citation: "Synthetic. Expected from metafor escalc('R2') + rma(method='REML'). Block R2-2 in generate.R.",
+  },
+
+  // ----------------------------------------------------------------
+  // ZR2-1 — R-squared (Fisher z of √R²), homogeneous (DL, τ²=0)
+  // Same 5 studies as R2-1.
+  // yi = atanh(√R²), vi = 1/n.
+  // Back-transform: tanh(yi)² → R².
+  // τ²=0: same studies as R2-1 remain homogeneous on z scale.
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic – ZR2 (Fisher z of √R², DL)",
+    type: "ZR2",
+    tauMethod: "DL",
+    data: [
+      { label: "Study 1", r2: 0.25, n:  80 },
+      { label: "Study 2", r2: 0.22, n: 100 },
+      { label: "Study 3", r2: 0.28, n:  60 },
+      { label: "Study 4", r2: 0.24, n: 120 },
+      { label: "Study 5", r2: 0.26, n:  90 },
+    ],
+    expected: {
+      yi:   [0.549306, 0.508841, 0.588964, 0.535926, 0.562597],
+      vi:   [0.012500, 0.010000, 0.016667, 0.008333, 0.011111],
+      FE:    0.545,
+      RE:    0.545,
+      tau2:  0.000,
+      I2:    0.0,
+    },
+    citation: "Synthetic. Same studies as R2-1 on z scale. Expected from metafor escalc('ZR2') + rma(method='DL'). Block ZR2-1 in generate.R.",
+  },
+
+  // ----------------------------------------------------------------
+  // ZR2-2 — R-squared (Fisher z of √R²), heterogeneous (REML, τ²>0)
+  // Same 5 studies as R2-2.
+  // yi = atanh(√R²), vi = 1/n.
+  // Pooled z RE = 0.508 → tanh(0.508)² ≈ R² = 0.219.
+  // τ²=0.062 (REML), I2≈86.2%.
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic – ZR2 heterogeneous (REML, τ²>0)",
+    type: "ZR2",
+    tauMethod: "REML",
+    data: [
+      { label: "Study 1", r2: 0.04, n: 200 },
+      { label: "Study 2", r2: 0.09, n: 150 },
+      { label: "Study 3", r2: 0.49, n:  50 },
+      { label: "Study 4", r2: 0.36, n:  80 },
+      { label: "Study 5", r2: 0.25, n: 100 },
+    ],
+    expected: {
+      yi:   [0.202733, 0.309520, 0.867301, 0.693147, 0.549306],
+      vi:   [0.005000, 0.006667, 0.020000, 0.012500, 0.010000],
+      FE:    0.415,
+      RE:    0.508,
+      tau2:  0.0616,
+      I2:   86.2,
+    },
+    citation: "Synthetic. Same studies as R2-2 on z scale. Expected from metafor escalc('ZR2') + rma(method='REML'). Back-transform: tanh(RE)²≈0.219. Block ZR2-2 in generate.R.",
+  },
+
+  // ----------------------------------------------------------------
   // PHI — BCG Vaccine (dat.bcg, phi coefficient)
   // Same 13 studies as the OR/RR/RD benchmarks above.
   // phi = (a·d−b·c)/√((a+b)(c+d)(a+c)(b+d)),  vi = (1−φ²)²/(N−1)

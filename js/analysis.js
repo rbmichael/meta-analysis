@@ -472,6 +472,23 @@ export function compute(s, type, options = {}) {
     return { ...s, yi: r_bis, vi, se: Math.sqrt(vi), w: 1 / vi };
   }
 
+  // ================= R-SQUARED =================
+  // Input: { r2, n }  — coefficient of determination (0 ≤ r2 < 1), sample size
+  // R2:  yi = r2 (raw),         vi = 4·r2·(1−r2)²/n   [metafor escalc("R2") LS]
+  // ZR2: yi = atanh(√r2) (z),   vi = 1/n               [metafor escalc("ZR2")]
+  //      back-transform: tanh(yi)² → R²
+  if (type === "R2" || type === "ZR2") {
+    const { r2, n } = s;
+    if (type === "R2") {
+      const vi = Math.max(4 * r2 * (1 - r2) ** 2 / n, MIN_VAR);
+      return { ...s, yi: r2, vi, se: Math.sqrt(vi), w: 1 / vi };
+    }
+    // ZR2
+    const yi = Math.atanh(Math.sqrt(r2));
+    const vi = Math.max(1 / n, MIN_VAR);
+    return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
+  }
+
   // ================= PHI COEFFICIENT =================
   // yi = (ad−bc) / √((a+b)(c+d)(a+c)(b+d));  vi = (1−φ²)²/(N−1)
   if (type === "PHI") {
