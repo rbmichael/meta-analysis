@@ -742,6 +742,47 @@ the effect may not replicate in all settings.</p>`,
           "IntHout, J., Ioannidis, J. P. A., Rovers, M. M., & Goeman, J. J. (2016). Plea for routinely presenting prediction intervals in meta-analysis. <em>BMJ Open, 6</em>, e010247.",
         ],
       },
+
+      {
+        id: "guide-cles",
+        title: "Common Language Effect Size (CLES)",
+        body: `<p>The Common Language Effect Size (also called the CL statistic or probability of
+superiority) is the probability that a randomly selected individual from group 1
+scores higher than a randomly selected individual from group 2, assuming
+independent normal distributions with equal variance.</p>
+
+<h4>Formula</h4>
+<p style="margin-left:1em">
+  <code>CLES = Φ(d / √2)</code>
+</p>
+<p>where d is the pooled standardised mean difference (Hedges' <em>g</em> or Cohen's
+<em>d</em>) and Φ is the standard normal CDF.</p>
+
+<h4>Confidence interval</h4>
+<p>The CI for CLES is obtained by applying the same transformation to the lower
+and upper limits of the RE confidence interval for d:</p>
+<p style="margin-left:1em">
+  <code>[Φ(lb / √2), Φ(ub / √2)]</code>
+</p>
+
+<h4>Interpretation</h4>
+<ul>
+  <li><strong>CLES = 0.50:</strong> d = 0; no difference between groups.</li>
+  <li><strong>CLES &gt; 0.50:</strong> group 1 scores higher; CLES = 0.76 for d = 1.</li>
+  <li><strong>CLES &lt; 0.50:</strong> group 2 scores higher; CLES = 0.24 for d = −1.</li>
+  <li>Symmetry: CLES(−d) = 1 − CLES(d).</li>
+</ul>
+
+<h4>Applicability</h4>
+<p>Shown for standardised mean difference types: SMD, SMDH, SMD_paired,
+SMD1, SMD1H, and SMCC. Not shown for mean differences (MD), correlations,
+or ratio-scale effects. The formula assumes normality and equal within-group
+variances; these assumptions are inherited from the parent SMD effect size.</p>
+<p>Verified against R (<code>pnorm(RE / sqrt(2))</code>) to ≤ 0.001.</p>`,
+        citations: [
+          "McGraw, K. O., & Wong, S. P. (1992). A common language effect size statistic. <em>Psychological Bulletin, 111</em>(2), 361–365.",
+        ],
+      },
     ],
   },
 
@@ -2759,6 +2800,7 @@ export const HELP_TO_GUIDE = {
   "het.tau2":         "guide-tau2",
   "het.H2":           "guide-i2",
   "het.pred":         "guide-prediction-interval",
+  "pool.cles":        "guide-cles",
   "bias.egger":       "guide-egger",
   "bias.begg":        "guide-begg",
   "bias.trimfill":    "guide-trimfill",

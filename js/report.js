@@ -416,7 +416,7 @@ export function collectCitations(args) {
 // are both truthy.
 function sectionSummary(args) {
   const { m, profile, method, ciMethod, useTF, tf, mAdjusted, studies,
-          apaFormat = false, nextTable, ciLevel } = args;
+          cles = null, apaFormat = false, nextTable, ciLevel } = args;
   const widthCiLabel = (ciLevel ?? "95") + "% CI";
 
   const k           = studies.filter(d => !d.filled).length;
@@ -452,6 +452,7 @@ function sectionSummary(args) {
       !isMHorPeto ? `<tr><td>${esc(profile.label)} — Random Effects (RE)</td><td><strong>${fmt(RE_disp)}</strong></td></tr>` : "",
       !isMHorPeto ? `<tr><td>RE ${widthCiLabel}</td><td>${fmtCI_APA(ci.lb, ci.ub)}</td></tr>` : "",
       isMHorPeto  ? `<tr><td>${widthCiLabel}</td><td>${fmtCI_APA(ci.lb, ci.ub)}</td></tr>` : "",
+      cles        ? `<tr><td>CLES (RE)</td><td>${fmt(cles.estimate)} [${fmt(cles.ci[0])}, ${fmt(cles.ci[1])}]</td></tr>` : "",
       RE_adj !== null ? `<tr><td>RE (trim-and-fill adjusted)</td><td>${fmt(RE_adj)}</td></tr>` : "",
       !isMHorPeto ? `<tr><td>95% Prediction interval (PI)</td><td>${fmtCI_APA(pred.lb, pred.ub)}</td></tr>` : "",
       !isMHorPeto ? `<tr><td>τ²</td><td>${fmt(m.tau2)} [${tauCI1}, ${tauCI2}]</td></tr>` : "",
@@ -464,7 +465,7 @@ function sectionSummary(args) {
 
     const tableNote = isMHorPeto
       ? `Fixed-effect pooling (${esc(methodLabel)}) — RE estimate, τ², and prediction interval not applicable. FE = fixed effects; CI = confidence interval.`
-      : `FE = fixed effects; RE = random effects; CI = confidence interval; PI = prediction interval.${m.isClustered ? " Robust CI uses cluster-robust (sandwich) standard errors." : ""}`;
+      : `FE = fixed effects; RE = random effects; CI = confidence interval; PI = prediction interval.${cles ? " CLES = common language effect size = Φ(g/√2); probability that a randomly drawn score from group 1 exceeds group 2 (McGraw & Wong, 1992)." : ""}${m.isClustered ? " Robust CI uses cluster-robust (sandwich) standard errors." : ""}`;
 
     const statsTable = buildTableAPA(
       nextTable(),
@@ -500,6 +501,7 @@ function sectionSummary(args) {
       !isMHorPeto ? `<tr><td>${esc(profile.label)} — Random Effects</td><td><strong>${fmt(RE_disp)}</strong></td></tr>` : "",
       !isMHorPeto ? `<tr><td>RE ${widthCiLabel}</td><td>[${fmt(ci.lb)}, ${fmt(ci.ub)}]</td></tr>` : "",
       isMHorPeto  ? `<tr><td>${widthCiLabel}</td><td>[${fmt(ci.lb)}, ${fmt(ci.ub)}]</td></tr>` : "",
+      cles        ? `<tr><td>CLES (RE)</td><td>${fmt(cles.estimate)} [${fmt(cles.ci[0])}, ${fmt(cles.ci[1])}]</td></tr>` : "",
       RE_adj !== null ? `<tr><td>RE (trim-and-fill adjusted)</td><td>${fmt(RE_adj)}</td></tr>` : "",
       !isMHorPeto ? `<tr><td>95% Prediction interval</td><td>[${fmt(pred.lb)}, ${fmt(pred.ub)}]</td></tr>` : "",
       !isMHorPeto ? `<tr><td>τ²</td><td>${fmt(m.tau2)} [${tauCI1}, ${tauCI2}]</td></tr>` : "",

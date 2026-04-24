@@ -644,6 +644,18 @@ export const HELP = {
            "commonly reported.",
   },
 
+  "pool.cles": {
+    title: "Common Language Effect Size (CLES)",
+    body:  "CLES = Φ(d / √2) — the probability that a randomly drawn score from " +
+           "group 1 exceeds a randomly drawn score from group 2, assuming independent " +
+           "normal distributions with equal variance (McGraw & Wong, 1992).\n" +
+           "d = 0 → CLES = 0.50 (no difference); d = 1 → CLES ≈ 0.76; d = −1 → CLES ≈ 0.24.\n" +
+           "The 95% CI is obtained by applying the same transformation to the CI " +
+           "endpoints of the RE pooled d.\n" +
+           "Shown for standardised-mean-difference types only (SMD, SMDH, SMD_paired, " +
+           "SMD1, SMD1H, SMCC). Verified against R pnorm(RE/sqrt(2)) to ≤ 0.001.",
+  },
+
   "het.pred": {
     title: "Prediction interval",
     body:  "The prediction interval estimates the range within which the true " +

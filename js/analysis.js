@@ -2302,6 +2302,26 @@ export function waapWls(studies) {
   return { estimate: waap, se, ci, z, p, k, kAdequate, wlsEstimate: wlsEst, fallback };
 }
 
+/**
+ * Common Language Effect Size (CLES / CL statistic / AUC).
+ * P(X₁ > X₂) for two independent normal populations with equal variance
+ * and standardised mean difference d.
+ *
+ * CL = Φ(d / √2)        (McGraw & Wong 1992)
+ * CI: transform the d CI endpoints through the same function.
+ *
+ * @param {number} d   - pooled SMD (Hedges' g or Cohen's d, on analysis scale)
+ * @param {number[]} ci - [lower, upper] CI for d
+ * @returns {{ estimate: number, ci: number[] }}
+ */
+export function clES(d, ci) {
+  const transform = x => normalCDF(x / Math.SQRT2);
+  return {
+    estimate: transform(d),
+    ci: [transform(ci[0]), transform(ci[1])],
+  };
+}
+
 // ================= INFLUENCE DIAGNOSTICS =================
 /**
  * Leave-one-out influence diagnostics for a fitted meta-analysis.

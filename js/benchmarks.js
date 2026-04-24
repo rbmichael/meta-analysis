@@ -343,7 +343,10 @@ export const BENCHMARKS = [
       FE:   -0.788,
       RE:   -1.207,
       tau2:  1.009,
-      I2:   96.0
+      I2:   96.0,
+      // CLES = Φ(RE / √2); CI from Φ applied to normal-CI endpoints.
+      // R-verified: generate.R block CLES-1
+      cles: { estimate: 0.1966, ciLow: 0.0579, ciHigh: 0.4465 }
     },
     citation: "Normand (1999) Stat Med 18:321–359. dat.normand1999 in metafor. REML τ²=1.009 from metafor test suite."
   },

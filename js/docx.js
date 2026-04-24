@@ -344,7 +344,7 @@ function apaFigureDocx(figNum, title, imgs, note) {
 // ---------------------------------------------------------------------------
 
 function docSummary(args, ctx) {
-  const { m, profile, method, ciMethod, useTF, tf, mAdjusted, studies, widthCiLabel, ciLevel } = args;
+  const { m, profile, method, ciMethod, useTF, tf, mAdjusted, studies, cles = null, widthCiLabel, ciLevel } = args;
   const k = studies.filter(d => !d.filled).length;
   const isMHorPeto = m.isMH || m.isPeto;
   const FE_disp  = profile.transform(m.FE);
@@ -372,6 +372,7 @@ function docSummary(args, ctx) {
     ...(!isMHorPeto ? [[`${profile.label} \u2014 Random Effects (RE)`, fmt(RE_disp)]] : []),
     ...(!isMHorPeto ? [[`RE ${widthCiLabel}`,       fmtCI_APA(ci.lb, ci.ub)]] : []),
     ...(isMHorPeto  ? [[widthCiLabel,               fmtCI_APA(ci.lb, ci.ub)]] : []),
+    ...(cles        ? [["CLES (RE)",                `${fmt(cles.estimate)} [${fmt(cles.ci[0])}, ${fmt(cles.ci[1])}]`]] : []),
     ...(RE_adj !== null ? [["RE (trim-and-fill adjusted)", fmt(RE_adj)]] : []),
     ...(!isMHorPeto ? [["95% Prediction interval (PI)", fmtCI_APA(pred.lb, pred.ub)]] : []),
     ...(!isMHorPeto ? [["\u03C4\u00B2", `${fmt(m.tau2)} [${tauCI1}, ${tauCI2}]`]] : []),
@@ -388,7 +389,7 @@ function docSummary(args, ctx) {
 
   const note = isMHorPeto
     ? `Fixed-effect pooling (${methodLabel}) — RE estimate, \u03C4\u00B2, and prediction interval not applicable. FE = fixed effects; CI = confidence interval.`
-    : `FE = fixed effects; RE = random effects; CI = confidence interval; PI = prediction interval.${m.isClustered ? " Robust CI uses cluster-robust (sandwich) standard errors." : ""}`;
+    : `FE = fixed effects; RE = random effects; CI = confidence interval; PI = prediction interval.${cles ? " CLES = common language effect size = \u03A6(g/\u221A2); probability that a randomly drawn score from group 1 exceeds group 2 (McGraw & Wong, 1992)." : ""}${m.isClustered ? " Robust CI uses cluster-robust (sandwich) standard errors." : ""}`;
 
   return [
     paraText("Summary", "Heading1"),

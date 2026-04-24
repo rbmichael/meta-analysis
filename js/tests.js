@@ -1,7 +1,7 @@
 import { round, transformEffect, chiSquareCDF, chiSquareQuantile, parseCounts, bivariateNormalCDF, normalQuantile, tCritical, fCDF, normalCDF, tCDF } from "./utils.js";
 import { validateStudy } from "./profiles.js";
 import { BENCHMARKS, PUB_BIAS_BENCHMARKS, INFLUENCE_BENCHMARKS, META_REGRESSION_BENCHMARKS, VH_BENCHMARKS, MH_BENCHMARKS, CLUSTER_BENCHMARKS, RVE_BENCHMARKS, THREE_LEVEL_BENCHMARKS, LS_BENCHMARKS } from "./benchmarks.js";
-import { compute, meta, metaMH, metaPeto, robustMeta, sandwichVar, robustWlsResult, metaRegression, tau2_HS, tau2_HE, tau2_ML, tau2_SJ, beggTest, eggerTest, fatPetTest, petPeeseTest, failSafeN, tesTest, heterogeneityCIs, cumulativeMeta, influenceDiagnostics, harbordTest, petersTest, deeksTest, rueckerTest, leaveOneOut, baujat, blupMeta, pCurve, pUniform, estimatorComparison, subgroupAnalysis, logLik, bfgs, selIntervalProbs, selIntervalIdx, selectionLogLik, SEL_CUTS_ONE_SIDED, SEL_CUTS_TWO_SIDED, veveaHedges, SELECTION_PRESETS, profileLikTau2, profileLikCI, bayesMeta, priorSensitivity, rvePooled, meta3level, lsModel, adjustPvals, henmiCopas, waapWls } from "./analysis.js";
+import { compute, meta, metaMH, metaPeto, robustMeta, sandwichVar, robustWlsResult, metaRegression, tau2_HS, tau2_HE, tau2_ML, tau2_SJ, beggTest, eggerTest, fatPetTest, petPeeseTest, failSafeN, tesTest, heterogeneityCIs, cumulativeMeta, influenceDiagnostics, harbordTest, petersTest, deeksTest, rueckerTest, leaveOneOut, baujat, blupMeta, pCurve, pUniform, estimatorComparison, subgroupAnalysis, logLik, bfgs, selIntervalProbs, selIntervalIdx, selectionLogLik, SEL_CUTS_ONE_SIDED, SEL_CUTS_TWO_SIDED, veveaHedges, SELECTION_PRESETS, profileLikTau2, profileLikCI, bayesMeta, priorSensitivity, rvePooled, meta3level, lsModel, adjustPvals, henmiCopas, waapWls, clES } from "./analysis.js";
 import { trimFill } from "./trimfill.js";
 import { parseCSV } from "./csv.js";
 import { goshCompute, GOSH_MAX_ENUM_K, GOSH_MAX_K, GOSH_DEFAULT_MAX_SUBSETS } from "./gosh.js";
@@ -93,6 +93,14 @@ export function runTests() {
 
     if (test.expected.ciLow  !== undefined) check("ciLow",  m.ciLow,  test.expected.ciLow,  "FE");
     if (test.expected.ciHigh !== undefined) check("ciHigh", m.ciHigh, test.expected.ciHigh, "FE");
+
+    // CLES cross-check (SMD-family types only)
+    if (test.expected.cles) {
+      const clesResult = clES(m.RE, [m.ciLow, m.ciHigh]);
+      check("  cles.estimate", clesResult.estimate, test.expected.cles.estimate, "FE");
+      check("  cles.ci[0]",    clesResult.ci[0],    test.expected.cles.ciLow,    "FE");
+      check("  cles.ci[1]",    clesResult.ci[1],    test.expected.cles.ciHigh,   "FE");
+    }
 
     // Per-study yi checks (exercises the compute() pipeline for raw-data effect types)
     if (test.expected.yi) {
@@ -3015,6 +3023,57 @@ export function runTests() {
   });
 
   console.log(pubBiasPass ? "\n✅ ALL PUB BIAS BENCHMARK TESTS PASSED" : "\n❌ SOME PUB BIAS BENCHMARK TESTS FAILED");
+
+  // ===== CLES UNIT TESTS =====
+  // clES(d, ci) = { estimate: Φ(d/√2), ci: [Φ(lb/√2), Φ(ub/√2)] }
+  // Math verified against R: pnorm(d / sqrt(2))
+  // Benchmark CLES-1 verified via generate.R block CLES-1.
+  console.log("\n===== CLES UNIT TESTS =====\n");
+  let clesPass = true;
+  const { chk: ceschk, chkTrue: ceschkTrue } = makeChk(() => { clesPass = false; });
+
+  // --- Math invariants ---
+  console.log("--- Math invariants ---");
+  {
+    const r0 = clES(0, [-1, 1]);
+    ceschk("d=0 → estimate=0.5", r0.estimate, 0.5, 0.0001);
+    ceschk("d=0, lb  → ci[0]=Φ(-1/√2)", r0.ci[0], normalCDF(-1 / Math.SQRT2), 0.0001);
+    ceschk("d=0, ub  → ci[1]=Φ( 1/√2)", r0.ci[1], normalCDF( 1 / Math.SQRT2), 0.0001);
+
+    const r1 = clES(1, [0.5, 1.5]);
+    ceschk("d=1 → estimate=Φ(1/√2)≈0.760", r1.estimate, 0.76025, 0.0001);
+
+    const rn = clES(-1, [-1.5, -0.5]);
+    ceschk("d=-1 → estimate=1-Φ(1/√2)≈0.240", rn.estimate, 0.23975, 0.0001);
+    // Symmetry: clES(-d).estimate + clES(d).estimate = 1
+    ceschkTrue("symmetry: clES(d)+clES(-d)=1", Math.abs(r1.estimate + rn.estimate - 1) < 1e-9);
+
+    // CI bounds ordered correctly
+    ceschkTrue("ci[0] < ci[1] for positive d", r1.ci[0] < r1.ci[1]);
+    ceschkTrue("ci[0] < ci[1] for negative d", rn.ci[0] < rn.ci[1]);
+  }
+
+  // --- CLES-1: Normand 1999 SMD benchmark ---
+  // R-verified via generate.R block CLES-1.
+  console.log("--- CLES-1 (Normand SMD, REML, k=4) ---");
+  {
+    const bm = BENCHMARKS.find(b => b.name && b.name.includes("Normand") && b.type === "SMD");
+    if (!bm || !bm.expected.cles) {
+      console.warn("  SKIP: Normand SMD benchmark or cles field not found");
+    } else {
+      const studies = bm.data.map(d => {
+        const s = compute(d, bm.type, { hedgesCorrection: true });
+        return { ...d, yi: s.yi, vi: s.vi, se: s.se };
+      });
+      const m = meta(studies, bm.tauMethod || "REML");
+      const clesResult = clES(m.RE, [m.ciLow, m.ciHigh]);
+      ceschk("estimate", clesResult.estimate, bm.expected.cles.estimate, 0.001);
+      ceschk("ci[0]",    clesResult.ci[0],    bm.expected.cles.ciLow,    0.001);
+      ceschk("ci[1]",    clesResult.ci[1],    bm.expected.cles.ciHigh,   0.001);
+    }
+  }
+
+  console.log(clesPass ? "\n✅ ALL CLES TESTS PASSED" : "\n❌ SOME CLES TESTS FAILED");
 
   // ===== INFLUENCE / LOO BENCHMARKS =====
   // Each entry's `expected` is an array of k objects, one per study, with the

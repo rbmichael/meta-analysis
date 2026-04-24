@@ -27,6 +27,7 @@ A browser-based meta-analysis tool. No installation, no server, no dependencies 
 - **τ² estimators:** REML (default), DerSimonian-Laird (DL), Paule-Mandel, Maximum Likelihood, Hunter-Schmidt, Hedges, Sidik-Jonkman, Generalized Q (GENQ), Iterated DL (DLIT), Hunter-Schmidt corrected (HSk), Square-root GENQ (SQGENQ), EBLUP (= REML) — 12 options
 - **Pooling methods:** Inverse-variance (default; RE and FE); **Mantel-Haenszel** (OR, RR, RD) and **Peto one-step** (OR only) — fixed-effects pooling that operates directly on cell counts and handles single-zero cells without a continuity correction
 - **CI methods:** Normal/Wald, Knapp-Hartung, *t*-distribution, Profile Likelihood (requires REML or ML)
+- **Common Language Effect Size (CLES)** — shown for SMD-family types (SMD, SMDH, SMD_paired, SMD1, SMD1H, SMCC); CLES = Φ(d / √2) = probability that a randomly drawn score from group 1 exceeds group 2; 95% CI from the RE CI endpoints (McGraw & Wong 1992)
 - **Heterogeneity statistics:** Cochran's *Q*, *I*², *H*², τ², 95% prediction interval (Higgins 2009, *t*\_{*k*−2})
 - **Confidence intervals on heterogeneity:** Profile-likelihood CIs for τ², *I*², *H*²
 - **Profile likelihood plot for τ²** — full likelihood surface with LRT-based 95% CI; x-axis toggles between τ² and τ; available for ML and REML only
@@ -211,6 +212,7 @@ python -m http.server 8080
 - Gelman A, Carlin JB, Stern HS, Dunson DB, Vehtari A, Rubin DB (2013). *Bayesian Data Analysis* (3rd ed.). CRC Press.
 - Hedges LV, Tipton E, Johnson MC (2010). Robust variance estimation in meta-regression with dependent effect size estimates. *Res Synth Methods*, 1, 39–65.
 - Mantel N, Haenszel W (1959). Statistical aspects of the analysis of data from retrospective studies of disease. *J Natl Cancer Inst*, 22, 719–748.
+- McGraw KO, Wong SP (1992). A common language effect size statistic. *Psychol Bull*, 111(2), 361–365.
 - Peto R, Pike MC, Armitage P, et al. (1976). Design and analysis of randomized clinical trials requiring prolonged observation of each patient. *Br J Cancer*, 34, 585–612.
 - Harville DA (1977). Maximum likelihood approaches to variance component estimation and to related problems. *J Am Stat Assoc*, 72(358), 320–338.
 - Harrell FE Jr (2015). *Regression Modeling Strategies* (2nd ed.). Springer.
