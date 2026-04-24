@@ -156,11 +156,11 @@ export function tau2_HS(studies) {
 //
 // NOTE: Removed from the UI dropdown (rarely used in practice; inflates the
 // options list). Preserved here so it can be re-exposed if needed.
-export function tau2_DLIT(studies, tol = REML_TOL, maxIter = 200) {
+export function tau2_DLIT(studies, tol = REML_TOL, maxIter = 200, tau2Init = null) {
   const k = studies.length;
   if (k <= 1) return 0;
 
-  let tau2 = tau2_GENQ(studies);  // seed from DL (GENQ with aᵢ=1/vᵢ is DL)
+  let tau2 = tau2Init !== null ? Math.max(0, tau2Init) : tau2_GENQ(studies);  // seed from DL unless warm-started
 
   for (let iter = 0; iter < maxIter; iter++) {
     let W = 0, W2 = 0, Wmu = 0;
@@ -215,13 +215,18 @@ export function tau2_HE(studies) {
 // unweighted between-study variance instead of the Q statistic.
 // More robust than DL when k is small or within-study variances are
 // poorly estimated.
-export function tau2_SJ(studies, tol = REML_TOL, maxIter = 200) {
+export function tau2_SJ(studies, tol = REML_TOL, maxIter = 200, tau2Init = null) {
   const k = studies.length;
   if (k <= 1) return 0;
-  const ybar0 = studies.reduce((acc, d) => acc + d.yi, 0) / k;
-  // Seed: raw between-study variance (always > 0 unless all yi identical)
-  let tau2 = studies.reduce((acc, d) => acc + (d.yi - ybar0) ** 2, 0) / k;
-  if (tau2 === 0) return 0;
+  let tau2;
+  if (tau2Init !== null) {
+    tau2 = Math.max(0, tau2Init);
+  } else {
+    const ybar0 = studies.reduce((acc, d) => acc + d.yi, 0) / k;
+    // Seed: raw between-study variance (always > 0 unless all yi identical)
+    tau2 = studies.reduce((acc, d) => acc + (d.yi - ybar0) ** 2, 0) / k;
+    if (tau2 === 0) return 0;
+  }
   for (let iter = 0; iter < maxIter; iter++) {
     let W = 0, Wmu = 0;
     for (const d of studies) {
@@ -248,20 +253,25 @@ export function tau2_SJ(studies, tol = REML_TOL, maxIter = 200) {
 //   info  = Σ [1/(vᵢ+τ²)²]
 // ML is asymptotically unbiased but has greater downward bias than REML
 // in small samples. Useful when comparing nested models via LRT.
-export function tau2_ML(studies, tol = REML_TOL, maxIter = 100) {
+export function tau2_ML(studies, tol = REML_TOL, maxIter = 100, tau2Init = null) {
   const k = studies.length;
   if (k <= 1) return 0;
-  // Seed with DL estimate
-  let W0 = 0, W02 = 0, W0mu = 0;
-  for (const d of studies) {
-    const wi = 1 / d.vi;
-    W0 += wi; W02 += wi * wi; W0mu += wi * d.yi;
+  let tau2;
+  if (tau2Init !== null) {
+    tau2 = Math.max(0, tau2Init);
+  } else {
+    // Seed with DL estimate
+    let W0 = 0, W02 = 0, W0mu = 0;
+    for (const d of studies) {
+      const wi = 1 / d.vi;
+      W0 += wi; W02 += wi * wi; W0mu += wi * d.yi;
+    }
+    const ybar0 = W0mu / W0;
+    let Q0 = 0;
+    for (const d of studies) Q0 += (d.yi - ybar0) ** 2 / d.vi;
+    const c0 = W0 - W02 / W0;
+    tau2 = Math.max(0, (Q0 - (k - 1)) / c0);
   }
-  const ybar0 = W0mu / W0;
-  let Q0 = 0;
-  for (const d of studies) Q0 += (d.yi - ybar0) ** 2 / d.vi;
-  const c0 = W0 - W02 / W0;
-  let tau2 = Math.max(0, (Q0 - (k - 1)) / c0);
 
   for (let iter = 0; iter < maxIter; iter++) {
     let W = 0, Wmu = 0;
@@ -979,22 +989,27 @@ export function metaPeto(studies, alpha = 0.05) {
 // General-purpose REML estimator. Works for any effect type — studies must
 // already have yi and vi set (as produced by compute()). Uses the DL
 // estimator as the starting value and refines via Fisher scoring.
-export function tau2_REML(studies, tol = REML_TOL, maxIter = 100) {
+export function tau2_REML(studies, tol = REML_TOL, maxIter = 100, tau2Init = null) {
 
   const k = studies.length;
   if (k <= 1) return 0;
 
-  // --- 1️⃣ Initial tau² (DL / HE estimator) ---
-  let W0 = 0, W02 = 0, W0mu = 0;
-  for (const d of studies) {
-    const wi = 1 / d.vi;
-    W0 += wi; W02 += wi * wi; W0mu += wi * d.yi;
+  let tau2;
+  if (tau2Init !== null) {
+    tau2 = Math.max(0, tau2Init);
+  } else {
+    // --- 1️⃣ Initial tau² (DL seed) ---
+    let W0 = 0, W02 = 0, W0mu = 0;
+    for (const d of studies) {
+      const wi = 1 / d.vi;
+      W0 += wi; W02 += wi * wi; W0mu += wi * d.yi;
+    }
+    const ybar = W0mu / W0;
+    let Qseed = 0;
+    for (const d of studies) Qseed += (d.yi - ybar) ** 2 / d.vi;
+    const c = W0 - W02 / W0;
+    tau2 = Math.max(0, (Qseed - (k - 1)) / c);
   }
-  const ybar = W0mu / W0;
-  let Qseed = 0;
-  for (const d of studies) Qseed += (d.yi - ybar) ** 2 / d.vi;
-  const c = W0 - W02 / W0;
-  let tau2 = Math.max(0, (Qseed - (k - 1)) / c);
 
   // --- 2️⃣ Fisher scoring iteration ---
   for (let iter = 0; iter < maxIter; iter++) {
@@ -1038,11 +1053,11 @@ export function tau2_REML(studies, tol = REML_TOL, maxIter = 100) {
 }
 
 // ================= TAU² PAULE-MANDEL =================
-export function tau2_PM(studies, tol = REML_TOL, maxIter = 100) {
+export function tau2_PM(studies, tol = REML_TOL, maxIter = 100, tau2Init = null) {
   const k = studies.length;
   if (k <= 1) return 0;
 
-  let tau2 = 0;
+  let tau2 = tau2Init !== null ? Math.max(0, tau2Init) : 0;
 
   for (let iter = 0; iter < maxIter; iter++) {
     let W = 0, Wmu = 0;
@@ -1075,12 +1090,12 @@ export function tau2_PM(studies, tol = REML_TOL, maxIter = 100) {
 // same ratio, so both converge to the same fixed point Q(τ²) = k−1.
 // In practice EB and PM agree to within machine precision; small numerical
 // differences arise only from floating-point rounding in the convergence check.
-export function tau2_EB(studies, tol = REML_TOL, maxIter = 200) {
+export function tau2_EB(studies, tol = REML_TOL, maxIter = 200, tau2Init = null) {
   const k = studies.length;
   if (k <= 1) return 0;
 
   const df = k - 1;
-  let tau2 = 0;
+  let tau2 = tau2Init !== null ? Math.max(0, tau2Init) : 0;
 
   for (let iter = 0; iter < maxIter; iter++) {
     let W = 0, Wmu = 0;
@@ -1112,12 +1127,12 @@ export function tau2_EB(studies, tol = REML_TOL, maxIter = 200) {
 // Because the median of χ²(k−1) < k−1 for k > 2, the fixed-point update
 // τ² ← max(0, τ² + (Q − target) / W) drives τ² to a slightly larger value
 // than PM, giving a median-unbiased estimate under the RE model.
-export function tau2_PMM(studies, tol = REML_TOL, maxIter = 200) {
+export function tau2_PMM(studies, tol = REML_TOL, maxIter = 200, tau2Init = null) {
   const k = studies.length;
   if (k <= 1) return 0;
 
   const target = chiSquareQuantile(0.5, k - 1);
-  let tau2 = 0;
+  let tau2 = tau2Init !== null ? Math.max(0, tau2Init) : 0;
 
   for (let iter = 0; iter < maxIter; iter++) {
     let W = 0, Wmu = 0;
@@ -2617,7 +2632,7 @@ const _metaCache = new WeakMap();
  *             ciLow: number, ciHigh: number,
  *             crit: number, stat: number, pval: number, dist: string|null }}
  */
-export function meta(studies, method="DL", ciMethod="normal", alpha=0.05) {
+export function meta(studies, method="DL", ciMethod="normal", alpha=0.05, tau2Init=null) {
   // Cache check — same array reference + same method/ciMethod/alpha → return cached result.
   const _cacheKey = `${method}::${ciMethod}::${alpha}`;
   let _byMethod = _metaCache.get(studies);
@@ -2658,20 +2673,20 @@ export function meta(studies, method="DL", ciMethod="normal", alpha=0.05) {
   I2 = Math.max(0, Math.min(100,I2));
 
   let tau2 = 0;
-	if      (method === "REML") tau2 = tau2_REML(studies, 1e-12, 500);
-	else if (method === "PM")     tau2 = tau2_PM(studies);
-	else if (method === "EB")     tau2 = tau2_EB(studies);
-	else if (method === "PMM")    tau2 = tau2_PMM(studies);
-	else if (method === "GENQM")  tau2 = tau2_GENQM(studies);
-	else if (method === "ML")     tau2 = tau2_ML(studies);
+	if      (method === "REML") tau2 = tau2_REML(studies, 1e-12,    500, tau2Init);
+	else if (method === "PM")     tau2 = tau2_PM  (studies, REML_TOL, 100, tau2Init);
+	else if (method === "EB")     tau2 = tau2_EB  (studies, REML_TOL, 200, tau2Init);
+	else if (method === "PMM")    tau2 = tau2_PMM (studies, REML_TOL, 200, tau2Init);
+	else if (method === "GENQM")  tau2 = tau2_GENQM(studies);                          // bisection — tau2Init not applicable
+	else if (method === "ML")     tau2 = tau2_ML  (studies, REML_TOL, 100, tau2Init);
 	else if (method === "HS")     tau2 = tau2_HS(studies);
 	else if (method === "HE")     tau2 = tau2_HE(studies);
-	else if (method === "SJ")     tau2 = tau2_SJ(studies);
+	else if (method === "SJ")     tau2 = tau2_SJ  (studies, REML_TOL, 200, tau2Init);
 	else if (method === "GENQ")   tau2 = tau2_GENQ(studies);
 	// ---- Non-UI estimators: not in the dropdown but reachable via meta() and estimatorComparison() ----
-	else if (method === "SQGENQ") tau2 = tau2_SQGENQ(studies);              // see tau2_SQGENQ
-	else if (method === "DLIT")   tau2 = tau2_DLIT(studies);                // see tau2_DLIT
-	else if (method === "EBLUP")  tau2 = tau2_REML(studies, 1e-12, 500);   // alias: EBLUP = REML — see EBLUP block above tau2_GENQ
+	else if (method === "SQGENQ") tau2 = tau2_SQGENQ(studies);                         // see tau2_SQGENQ
+	else if (method === "DLIT")   tau2 = tau2_DLIT  (studies, REML_TOL, 200, tau2Init); // see tau2_DLIT
+	else if (method === "EBLUP")  tau2 = tau2_REML  (studies, 1e-12, 500, tau2Init);   // alias: EBLUP = REML — see EBLUP block above tau2_GENQ
 	else if (method === "HSk")    tau2 = tau2_HSk(studies);                 // see tau2_HSk
 	else { // DL fallback
 		const sumW2 = wFE.reduce((acc, w) => acc + w * w, 0);

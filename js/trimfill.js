@@ -95,8 +95,9 @@ export function trimFill(studies, method = "DL", estimator = "L0", maxIter = 100
   const stSorted  = sortedIdx.map(i => studies[i]);
 
   // ---- Iterative k0 estimation ----
-  let k0     = 0;
-  let center = 0;   // center in the flipped scale
+  let k0       = 0;
+  let center   = 0;   // center in the flipped scale
+  let tau2Warm = null; // warm-start seed: previous iteration's converged τ²
 
   for (let iter = 0; iter < maxIter; iter++) {
     const k0Prev = k0;
@@ -106,8 +107,13 @@ export function trimFill(studies, method = "DL", estimator = "L0", maxIter = 100
     const viTrim = viSorted.slice(0, k - k0);
     const trimStudies = yiTrim.map((yi, i) => ({ yi, vi: viTrim[i] }));
 
-    const m = meta(trimStudies, method);
+    // tau2Warm passes the previous iteration's converged τ² as the starting
+    // seed.  Between iterations only one study is removed/added, so the
+    // solution barely moves — typically 1–3 Newton/fixed-point steps suffice
+    // instead of the 50–100 cold-start iterations for REML/ML/PM/SJ.
+    const m = meta(trimStudies, method, "normal", 0.05, tau2Warm);
     if (!isFinite(m.RE)) break;
+    tau2Warm = m.tau2;   // capture for next iteration
     center = m.RE;
 
     // Signed ranks of ALL k studies from the converged center.
