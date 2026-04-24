@@ -456,6 +456,14 @@ export const HELP = {
            "Pair with Knapp-Hartung CIs for small k.",
   },
 
+  "tau.EB": {
+    title: "Empirical Bayes (EB)",
+    body:  "An iterative moment estimator (Morris 1983) that converges to the same " +
+           "fixed point as PM — Q(τ²) = k−1 — but uses a step scaled by k/(k−1). " +
+           "Numerically nearly identical to PM; included for comparability with " +
+           "software that reports EB explicitly.",
+  },
+
   "tau.PM": {
     title: "Paule-Mandel (PM)",
     body:  "An iterative moment estimator that solves for τ² such that the " +

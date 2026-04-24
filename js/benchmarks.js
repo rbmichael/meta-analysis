@@ -169,6 +169,41 @@ export const BENCHMARKS = [
   },
 
   // ----------------------------------------------------------------
+  // GENERIC — BCG Vaccine, EB estimator
+  // Morris (1983) Empirical Bayes: same RE-weighted fixed point as PM
+  // (Q(τ²) = k−1) but uses a step scaled by k/(k−1).  In practice EB and
+  // PM converge to almost identical τ²; differences are sub-0.001.
+  // Expected values from metafor rma(method="EB").
+  // ----------------------------------------------------------------
+  {
+    name: "BCG Vaccine – GENERIC (log RR, EB)",
+    type: "GENERIC",
+    tauMethod: "EB",
+    data: [
+      { label: "Aronson 1948",           yi: -0.8893113339202054,  vi: 0.3255847650039614   },
+      { label: "Ferguson & Simes 1949",  yi: -1.5853886572014306,  vi: 0.19458112139814387  },
+      { label: "Rosenthal 1960",         yi: -1.348073148299693,   vi: 0.41536796536796533  },
+      { label: "Hart & Sutherland 1977", yi: -1.4415511900213054,  vi: 0.020010031902247573 },
+      { label: "Frimodt-Moller 1973",    yi: -0.2175473222112957,  vi: 0.05121017216963086  },
+      { label: "Stein & Aronson 1953",   yi: -0.786115585818864,   vi: 0.0069056184559087574},
+      { label: "Vandiviere 1973",        yi: -1.6208982235983924,  vi: 0.22301724757231517  },
+      { label: "TPT Madras 1980",        yi:  0.011952333523841173, vi: 0.00396157929781773 },
+      { label: "Coetzee & Berjak 1968",  yi: -0.4694176487381487,  vi: 0.056434210463248966 },
+      { label: "Rosenthal 1961",         yi: -1.3713448034727846,  vi: 0.07302479361302891  },
+      { label: "Comstock 1974",          yi: -0.33935882833839015, vi: 0.01241221397155972  },
+      { label: "Comstock & Webster 1969",yi:  0.4459134005713783,  vi: 0.5325058452001528   },
+      { label: "Comstock 1976",          yi: -0.017313948216879493,vi: 0.0714046596839863   }
+    ],
+    expected: {
+      FE:   -0.430,
+      RE:   -0.715,
+      tau2:  0.318,
+      I2:   92.12
+    },
+    citation: "Colditz et al. (1994) JAMA 271:698–702. Expected values from metafor rma(method='EB'). Morris (1983)."
+  },
+
+  // ----------------------------------------------------------------
   // GENERIC — BCG Vaccine, PMM estimator
   // Paule-Mandel Median: finds τ² where Q(τ²) = χ²₀.₅(k−1) via fixed-point
   // iteration (same shape as PM but targeting the chi-square median rather

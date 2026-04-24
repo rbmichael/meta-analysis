@@ -123,6 +123,7 @@
                     <option value="REML" selected>REML</option>
                     <option value="DL">DerSimonian-Laird (DL)</option>
                     <option value="PM">Paule-Mandel (PM)</option>
+                    <option value="EB">Empirical Bayes (EB)</option>
                     <option value="PMM">Paule-Mandel Median (PMM)</option>
                     <option value="GENQM">Generalized Q Median (GENQM)</option>
                     <option value="ML">Maximum Likelihood (ML)</option>
@@ -849,7 +850,7 @@
       <!-- ---- Heterogeneity ---- -->
       <h2>Heterogeneity</h2>
       <ul>
-        <li><strong>τ² estimators:</strong> REML (default), DerSimonian–Laird (DL), Paule–Mandel (PM), Paule–Mandel Median (PMM), Generalised Q Median (GENQM), Maximum Likelihood, Hunter–Schmidt, Hedges, Sidik–Jonkman, Generalised Q (GENQ), Iterated DL (DLIT), Hunter–Schmidt corrected (HSk), Square-root GENQ (SQGENQ), EBLUP (= REML) — 14 options</li>
+        <li><strong>τ² estimators:</strong> REML (default), DerSimonian–Laird (DL), Paule–Mandel (PM), Empirical Bayes (EB), Paule–Mandel Median (PMM), Generalised Q Median (GENQM), Maximum Likelihood, Hunter–Schmidt, Hedges, Sidik–Jonkman, Generalised Q (GENQ), Iterated DL (DLIT), Hunter–Schmidt corrected (HSk), Square-root GENQ (SQGENQ), EBLUP (= REML) — 15 options</li>
         <li><strong>Pooling methods:</strong> Inverse-variance (default; RE and FE); Mantel–Haenszel (OR, RR, RD) and Peto one-step (OR only) — fixed-effects pooling that operates directly on cell counts and handles single-zero cells without a continuity correction</li>
         <li><strong>Common language effect size (CLES)</strong> — displayed alongside the RE pooled estimate for standardised mean difference types (SMD, SMDH, SMD_paired, SMD1, SMD1H, SMCC); CLES = Φ(d / √2), the probability that a randomly drawn score from group 1 exceeds group 2; 95% CI transformed from the RE CI (McGraw &amp; Wong, 1992)</li>
         <li><strong>CI methods:</strong> Normal/Wald, Knapp–Hartung, <em>t</em>-distribution, Profile Likelihood (REML or ML)</li>
@@ -1068,6 +1069,7 @@
         <li>Knapp G, Hartung J (2003). Improved tests for a random effects meta-regression with a single covariate. <em>Stat Med,</em> 22, 2693–2710.</li>
         <li>Mantel N, Haenszel W (1959). Statistical aspects of the analysis of data from retrospective studies of disease. <em>J Natl Cancer Inst,</em> 22, 719–748.</li>
         <li>McGraw KO, Wong SP (1992). A common language effect size statistic. <em>Psychol Bull,</em> 111(2), 361–365.</li>
+        <li>Morris CN (1983). Parametric empirical Bayes inference: Theory and applications. <em>J Am Stat Assoc,</em> 78(381), 47–55.</li>
         <li>Morris SB (2008). Estimating effect sizes from pretest-posttest-control group designs. <em>Org Res Methods,</em> 11, 364–386.</li>
         <li>Olkin I, Pratt JW (1958). Unbiased estimation of certain correlation coefficients. <em>Ann Math Stat,</em> 29(1), 201–211.</li>
         <li>Olkin I, Dahabreh IJ, Trikalinos TA (2012). GOSH — a graphical display of study heterogeneity. <em>Res Synth Methods,</em> 3(3), 214–223.</li>

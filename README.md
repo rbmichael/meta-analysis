@@ -24,7 +24,7 @@ A browser-based meta-analysis tool. No installation, no server, no dependencies 
 
 ### Heterogeneity
 
-- **τ² estimators:** REML (default), DerSimonian-Laird (DL), Paule-Mandel (PM), Paule-Mandel Median (PMM), Generalised Q Median (GENQM), Maximum Likelihood, Hunter-Schmidt, Hedges, Sidik-Jonkman, Generalized Q (GENQ), Iterated DL (DLIT), Hunter-Schmidt corrected (HSk), Square-root GENQ (SQGENQ), EBLUP (= REML) — 14 options
+- **τ² estimators:** REML (default), DerSimonian-Laird (DL), Paule-Mandel (PM), Empirical Bayes (EB), Paule-Mandel Median (PMM), Generalised Q Median (GENQM), Maximum Likelihood, Hunter-Schmidt, Hedges, Sidik-Jonkman, Generalized Q (GENQ), Iterated DL (DLIT), Hunter-Schmidt corrected (HSk), Square-root GENQ (SQGENQ), EBLUP (= REML) — 15 options
 - **Pooling methods:** Inverse-variance (default; RE and FE); **Mantel-Haenszel** (OR, RR, RD) and **Peto one-step** (OR only) — fixed-effects pooling that operates directly on cell counts and handles single-zero cells without a continuity correction
 - **CI methods:** Normal/Wald, Knapp-Hartung, *t*-distribution, Profile Likelihood (requires REML or ML)
 - **Common Language Effect Size (CLES)** — shown for SMD-family types (SMD, SMDH, SMD_paired, SMD1, SMD1H, SMCC); CLES = Φ(d / √2) = probability that a randomly drawn score from group 1 exceeds group 2; 95% CI from the RE CI endpoints (McGraw & Wong 1992)
@@ -223,6 +223,7 @@ python -m http.server 8080
 - Ioannidis JPA, Trikalinos TA (2007). An exploratory test for an excess of significant findings. *Clin Trials*, 4(3), 245–253.
 - Jeffreys H (1961). *Theory of Probability* (3rd ed.). Oxford University Press.
 - Knapp G, Hartung J (2003). Improved tests for a random effects meta-regression with a single covariate. *Stat Med*, 22, 2693–2710.
+- Morris CN (1983). Parametric empirical Bayes inference: Theory and applications. *J Am Stat Assoc*, 78(381), 47–55.
 - Morris SB (2008). Estimating effect sizes from pretest-posttest-control group designs. *Org Res Methods*, 11, 364–386.
 - Paule RC, Mandel J (1982). Consensus values and weighting factors. *J Res Natl Bur Stand*, 87, 377–385.
 - Olkin I, Pratt JW (1958). Unbiased estimation of certain correlation coefficients. *Ann Math Stat*, 29(1), 201–211.

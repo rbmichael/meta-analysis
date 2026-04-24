@@ -853,6 +853,21 @@ preferred when k &lt; 20.</p>`,
       },
 
       {
+        id: "guide-eb",
+        title: "Empirical Bayes (EB)",
+        body: `<p>An iterative moment estimator introduced by Morris (1983) in the
+empirical Bayes literature. Like PM, it iterates to find τ² such that the
+RE-weighted Q statistic satisfies Q(τ²) = k−1, but uses a scaled step:</p>
+<p style="margin-left:1.5em">adj = (Q(τ²) · k / (k−1) − k) / W,&nbsp;&nbsp;τ² ← max(0, τ² + adj)</p>
+<p>The scale factor k/(k−1) makes the step slightly larger than PM's, giving
+faster convergence to the same fixed point. Numerical results differ from PM
+by less than 0.001 on typical datasets.</p>`,
+        citations: [
+          "Morris, C. N. (1983). Parametric empirical Bayes inference: Theory and applications. <em>Journal of the American Statistical Association, 78</em>(381), 47–55.",
+        ],
+      },
+
+      {
         id: "guide-pm",
         title: "Paule-Mandel (PM)",
         body: `<p>An iterative moment estimator that solves for τ² such that the expected Q
@@ -2827,6 +2842,7 @@ export const HELP_TO_GUIDE = {
   "effect.GENERIC":   "guide-generic",
   "tau.DL":           "guide-dl",
   "tau.REML":         "guide-reml",
+  "tau.EB":           "guide-eb",
   "tau.PM":           "guide-pm",
   "tau.ML":           "guide-reml",
   "tau.HS":           "guide-tau-overview",

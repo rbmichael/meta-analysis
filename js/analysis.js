@@ -1537,6 +1537,44 @@ export function tau2_PM(studies, tol = REML_TOL, maxIter = 100) {
   return tau2;
 }
 
+// ================= EB (EMPIRICAL BAYES) TAU² =================
+// Morris (1983) Empirical Bayes estimator. Uses the same RE-weighted Q(τ²)
+// as PM but applies a scaled update step:
+//
+//   adj = (Q(τ²) · k/(k−1) − k) / W
+//   τ²  ← max(0, τ² + adj)
+//
+// The factor k/(k−1) makes the step larger than PM's (Q − (k−1))/W by the
+// same ratio, so both converge to the same fixed point Q(τ²) = k−1.
+// In practice EB and PM agree to within machine precision; small numerical
+// differences arise only from floating-point rounding in the convergence check.
+export function tau2_EB(studies, tol = REML_TOL, maxIter = 200) {
+  const k = studies.length;
+  if (k <= 1) return 0;
+
+  const df = k - 1;
+  let tau2 = 0;
+
+  for (let iter = 0; iter < maxIter; iter++) {
+    let W = 0, Wmu = 0;
+    for (const d of studies) {
+      const wi = 1 / (d.vi + tau2);
+      W += wi; Wmu += wi * d.yi;
+    }
+    const mu = Wmu / W;
+    let Q = 0;
+    for (const d of studies) {
+      const r = d.yi - mu;
+      Q += r * r / (d.vi + tau2);
+    }
+    const adj = (Q * k / df - k) / W;
+    const newTau2 = Math.max(0, tau2 + adj);
+    if (Math.abs(newTau2 - tau2) < tol) return newTau2;
+    tau2 = newTau2;
+  }
+  return tau2;
+}
+
 // ================= PMM (PAULE-MANDEL MEDIAN) TAU² =================
 // Median-unbiased variant of the PM estimator. Same fixed-point iteration
 // as PM but the target is the median of χ²(k−1) rather than its mean (k−1).
@@ -3090,6 +3128,7 @@ export function meta(studies, method="DL", ciMethod="normal", alpha=0.05) {
   let tau2 = 0;
 	if      (method === "REML") tau2 = tau2_REML(studies, 1e-12, 500);
 	else if (method === "PM")     tau2 = tau2_PM(studies);
+	else if (method === "EB")     tau2 = tau2_EB(studies);
 	else if (method === "PMM")    tau2 = tau2_PMM(studies);
 	else if (method === "GENQM")  tau2 = tau2_GENQM(studies);
 	else if (method === "ML")     tau2 = tau2_ML(studies);
@@ -4691,7 +4730,7 @@ export function leaveOneOut(studies, method = "DL", ciMethod = "normal", precomp
 // estimators documented above; they are included here so the comparison
 // panel can display a complete picture when all estimators are of interest.
 export function estimatorComparison(studies, ciMethod = "normal") {
-  const methods = ["DL", "REML", "PM", "PMM", "GENQM", "ML", "HS", "HE", "SJ", "GENQ", "SQGENQ", "DLIT", "EBLUP", "HSk"];
+  const methods = ["DL", "REML", "PM", "EB", "PMM", "GENQM", "ML", "HS", "HE", "SJ", "GENQ", "SQGENQ", "DLIT", "EBLUP", "HSk"];
   return methods.map(method => {
     const m = meta(studies, method, ciMethod);
     return {
