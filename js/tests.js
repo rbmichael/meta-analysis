@@ -3312,7 +3312,7 @@ export function runTests() {
   console.log("--- estimatorComparison ---");
   {
     const ec = estimatorComparison(smokeS);
-    uchk("returns 12 entries", ec.length, 12);
+    uchk("returns 14 entries", ec.length, 14);
 
     const names = ec.map(e => e.method);
     ["DL", "REML", "PM", "ML", "HS", "HE", "SJ"].forEach(n =>

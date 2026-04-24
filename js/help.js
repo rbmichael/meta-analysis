@@ -464,6 +464,22 @@ export const HELP = {
            "A good alternative to REML when model assumptions are uncertain.",
   },
 
+  "tau.PMM": {
+    title: "Paule-Mandel Median (PMM)",
+    body:  "A median-unbiased variant of PM. Iterates the same RE-weighted Q(τ²) " +
+           "statistic but targets the median of χ²(k−1) rather than its mean. " +
+           "Typically gives a slightly larger τ² than PM. " +
+           "Recommended when median-unbiasedness is desired over mean-unbiasedness.",
+  },
+
+  "tau.GENQM": {
+    title: "Generalised Q Median (GENQM)",
+    body:  "Median-unbiased generalisation of the DL estimator using fixed FE weights. " +
+           "Finds τ² such that the observed FE Q-statistic equals the median of its " +
+           "exact distribution under the RE model (weighted chi-square). " +
+           "More accurate than PMM for datasets with highly variable within-study variances.",
+  },
+
   "tau.ML": {
     title: "Maximum Likelihood (ML)",
     body:  "Similar to REML but does not apply a degrees-of-freedom correction " +

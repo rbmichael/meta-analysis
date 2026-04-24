@@ -865,6 +865,52 @@ the data contain outliers that inflate Q.</p>`,
           "Veroniki, A. A., et al. (2016). Methods to estimate the between-study variance. <em>Research Synthesis Methods, 7</em>(1), 55–79.",
         ],
       },
+
+      {
+        id: "guide-pmm",
+        title: "Paule-Mandel Median (PMM)",
+        body: `<p>A median-unbiased variant of the PM estimator. Uses the same RE-weighted
+Q(τ²) statistic as PM but sets the target to χ²₀.₅(k−1) — the median of
+the chi-square distribution — instead of its mean k−1.</p>
+
+<p>Because the chi-square median is slightly less than its mean, PMM typically
+produces a slightly larger τ² than PM. This property makes PMM median-unbiased:
+there is equal probability that the true heterogeneity lies above or below the
+estimate.</p>
+
+<p><strong>Implementation:</strong> fixed-point iteration
+τ² ← max(0, τ² + (Q(τ²) − χ²₀.₅(k−1)) / W). Converges in ≤ 50 iterations
+for typical datasets.</p>`,
+        citations: [
+          "Viechtbauer, W. (2005). Bias and efficiency of meta-analytic variance estimators in the random-effects model. <em>Journal of Educational and Behavioral Statistics, 30</em>(3), 261–293.",
+          "Veroniki, A. A., et al. (2016). Methods to estimate the between-study variance. <em>Research Synthesis Methods, 7</em>(1), 55–79.",
+        ],
+      },
+
+      {
+        id: "guide-genqm",
+        title: "Generalised Q Median (GENQM)",
+        body: `<p>Median-unbiased τ² estimator based on the generalised Q statistic with
+fixed inverse-variance weights aᵢ = 1/vᵢ. Finds the τ² such that the
+observed FE Q-statistic Q<sub>FE</sub> equals the median of its distribution
+under the random-effects model.</p>
+
+<p><strong>How it differs from PMM:</strong> PMM approximates the distribution of
+Q(τ²) as χ²(k−1). GENQM uses the true distribution, which is a weighted sum
+of chi-squares Σλᵢ(τ²) χ²(1), where λᵢ are eigenvalues of the matrix
+S(τ²)·P·S(τ²) (P = fixed FE projection, S = diag(√(vᵢ+τ²))). GENQM is
+therefore more accurate for datasets with highly variable within-study
+variances, at the cost of greater computation.</p>
+
+<p><strong>Implementation:</strong> eigenvalues are found via a secular-equation
+solver (O(k log k)); the median of the weighted chi-square distribution is
+approximated by a 2-moment scaled chi-square (Patnaik method). Typical
+accuracy: ~3–4 % of the exact value.</p>`,
+        citations: [
+          "Viechtbauer, W. (2007). Confidence intervals for the amount of heterogeneity. <em>Statistics in Medicine, 26</em>(1), 37–52.",
+          "Veroniki, A. A., et al. (2016). Methods to estimate the between-study variance. <em>Research Synthesis Methods, 7</em>(1), 55–79.",
+        ],
+      },
     ],
   },
 
@@ -2791,6 +2837,8 @@ export const HELP_TO_GUIDE = {
   "tau.DLIT":         "guide-dl",
   "tau.EBLUP":        "guide-reml",
   "tau.HSk":          "guide-tau-overview",
+  "tau.PMM":          "guide-pmm",
+  "tau.GENQM":        "guide-genqm",
   "ci.normal":        "guide-ci-normal",
   "ci.KH":            "guide-ci-kh",
   "ci.t":             "guide-ci-t",

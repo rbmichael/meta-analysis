@@ -24,7 +24,7 @@ A browser-based meta-analysis tool. No installation, no server, no dependencies 
 
 ### Heterogeneity
 
-- **τ² estimators:** REML (default), DerSimonian-Laird (DL), Paule-Mandel, Maximum Likelihood, Hunter-Schmidt, Hedges, Sidik-Jonkman, Generalized Q (GENQ), Iterated DL (DLIT), Hunter-Schmidt corrected (HSk), Square-root GENQ (SQGENQ), EBLUP (= REML) — 12 options
+- **τ² estimators:** REML (default), DerSimonian-Laird (DL), Paule-Mandel (PM), Paule-Mandel Median (PMM), Generalised Q Median (GENQM), Maximum Likelihood, Hunter-Schmidt, Hedges, Sidik-Jonkman, Generalized Q (GENQ), Iterated DL (DLIT), Hunter-Schmidt corrected (HSk), Square-root GENQ (SQGENQ), EBLUP (= REML) — 14 options
 - **Pooling methods:** Inverse-variance (default; RE and FE); **Mantel-Haenszel** (OR, RR, RD) and **Peto one-step** (OR only) — fixed-effects pooling that operates directly on cell counts and handles single-zero cells without a continuity correction
 - **CI methods:** Normal/Wald, Knapp-Hartung, *t*-distribution, Profile Likelihood (requires REML or ML)
 - **Common Language Effect Size (CLES)** — shown for SMD-family types (SMD, SMDH, SMD_paired, SMD1, SMD1H, SMCC); CLES = Φ(d / √2) = probability that a randomly drawn score from group 1 exceeds group 2; 95% CI from the RE CI endpoints (McGraw & Wong 1992)
@@ -239,6 +239,7 @@ python -m http.server 8080
 - van Assen MALM, van Aert RCM, Wicherts JM (2015). Meta-analysis using effect size distributions of only statistically significant studies. *Psychol Methods*, 20(3), 293–309.
 - Vevea JL, Hedges LV (1995). A general linear model for estimating effect size in the presence of publication bias. *Psychometrika*, 60(3), 419–435.
 - Viechtbauer W (2005). Bias and efficiency of meta-analytic variance estimators in the random-effects model. *J Educ Behav Stat*, 30, 261–293.
+- Viechtbauer W (2007). Confidence intervals for the amount of heterogeneity in meta-analysis. *Stat Med*, 26(1), 37–52.
 - Viechtbauer W (2010). Conducting meta-analyses in R with the metafor package. *J Stat Softw*, 36(3), 1–48.
 - Viechtbauer W (2021). Location-scale models for meta-analytic data. *Res Synth Methods*, 12(5), 567–583.
 - Viechtbauer W, Cheung MWL (2010). Outlier and influence diagnostics for meta-analysis. *Res Synth Methods*, 1(2), 112–125.

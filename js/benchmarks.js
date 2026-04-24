@@ -169,6 +169,82 @@ export const BENCHMARKS = [
   },
 
   // ----------------------------------------------------------------
+  // GENERIC — BCG Vaccine, PMM estimator
+  // Paule-Mandel Median: finds τ² where Q(τ²) = χ²₀.₅(k−1) via fixed-point
+  // iteration (same shape as PM but targeting the chi-square median rather
+  // than its mean k−1). Gives a median-unbiased τ² estimate.
+  // Expected values from metafor rma(method="PMM"). JS fixed-point converges
+  // to within <0.001 of metafor's uniroot result.
+  // ----------------------------------------------------------------
+  {
+    name: "BCG Vaccine – GENERIC (log RR, PMM)",
+    type: "GENERIC",
+    tauMethod: "PMM",
+    data: [
+      { label: "Aronson 1948",           yi: -0.8893113339202054,  vi: 0.3255847650039614   },
+      { label: "Ferguson & Simes 1949",  yi: -1.5853886572014306,  vi: 0.19458112139814387  },
+      { label: "Rosenthal 1960",         yi: -1.348073148299693,   vi: 0.41536796536796533  },
+      { label: "Hart & Sutherland 1977", yi: -1.4415511900213054,  vi: 0.020010031902247573 },
+      { label: "Frimodt-Moller 1973",    yi: -0.2175473222112957,  vi: 0.05121017216963086  },
+      { label: "Stein & Aronson 1953",   yi: -0.786115585818864,   vi: 0.0069056184559087574},
+      { label: "Vandiviere 1973",        yi: -1.6208982235983924,  vi: 0.22301724757231517  },
+      { label: "TPT Madras 1980",        yi:  0.011952333523841173, vi: 0.00396157929781773 },
+      { label: "Coetzee & Berjak 1968",  yi: -0.4694176487381487,  vi: 0.056434210463248966 },
+      { label: "Rosenthal 1961",         yi: -1.3713448034727846,  vi: 0.07302479361302891  },
+      { label: "Comstock 1974",          yi: -0.33935882833839015, vi: 0.01241221397155972  },
+      { label: "Comstock & Webster 1969",yi:  0.4459134005713783,  vi: 0.5325058452001528   },
+      { label: "Comstock 1976",          yi: -0.017313948216879493,vi: 0.0714046596839863   }
+    ],
+    expected: {
+      FE:   -0.430,
+      RE:   -0.717,
+      tau2:  0.343,
+      I2:   92.12
+    },
+    citation: "Colditz et al. (1994) JAMA 271:698–702. Expected values from metafor rma(method='PMM')."
+  },
+
+  // ----------------------------------------------------------------
+  // GENERIC — BCG Vaccine, GENQM estimator
+  // Generalised-Q Median: finds τ² such that the observed FE Q-statistic
+  // equals the median of its distribution under the RE model.
+  // The distribution Σλᵢ χ²(1) uses eigenvalues from the secular equation
+  // (rank-1 perturbed diagonal); the median is approximated via a 2-moment
+  // scaled chi-square (Patnaik/Satterthwaite), giving ~3–4% error vs the
+  // exact Farebrother CDF used by metafor. Expected tau2 is the exact metafor
+  // value; the JS approximation passes the 5% relative tau2 tolerance.
+  // RE estimate uses RE weights 1/(vᵢ+τ²) as in all other app estimators
+  // (metafor GENQM uses FE weights for the pooled estimate — different convention).
+  // ----------------------------------------------------------------
+  {
+    name: "BCG Vaccine – GENERIC (log RR, GENQM)",
+    type: "GENERIC",
+    tauMethod: "GENQM",
+    data: [
+      { label: "Aronson 1948",           yi: -0.8893113339202054,  vi: 0.3255847650039614   },
+      { label: "Ferguson & Simes 1949",  yi: -1.5853886572014306,  vi: 0.19458112139814387  },
+      { label: "Rosenthal 1960",         yi: -1.348073148299693,   vi: 0.41536796536796533  },
+      { label: "Hart & Sutherland 1977", yi: -1.4415511900213054,  vi: 0.020010031902247573 },
+      { label: "Frimodt-Moller 1973",    yi: -0.2175473222112957,  vi: 0.05121017216963086  },
+      { label: "Stein & Aronson 1953",   yi: -0.786115585818864,   vi: 0.0069056184559087574},
+      { label: "Vandiviere 1973",        yi: -1.6208982235983924,  vi: 0.22301724757231517  },
+      { label: "TPT Madras 1980",        yi:  0.011952333523841173, vi: 0.00396157929781773 },
+      { label: "Coetzee & Berjak 1968",  yi: -0.4694176487381487,  vi: 0.056434210463248966 },
+      { label: "Rosenthal 1961",         yi: -1.3713448034727846,  vi: 0.07302479361302891  },
+      { label: "Comstock 1974",          yi: -0.33935882833839015, vi: 0.01241221397155972  },
+      { label: "Comstock & Webster 1969",yi:  0.4459134005713783,  vi: 0.5325058452001528   },
+      { label: "Comstock 1976",          yi: -0.017313948216879493,vi: 0.0714046596839863   }
+    ],
+    expected: {
+      FE:   -0.430,
+      RE:   -0.719,
+      tau2:  0.383,
+      I2:   92.12
+    },
+    citation: "Colditz et al. (1994) JAMA 271:698–702. tau2 from metafor rma(method='GENQM', weights=1/vi). RE uses app convention (RE weights)."
+  },
+
+  // ----------------------------------------------------------------
   // OR — BCG Vaccine (dat.bcg, log odds ratio)
   // Same 13 studies as GENERIC benchmark above; raw 2x2 counts used here
   // to exercise the compute("OR") pipeline.

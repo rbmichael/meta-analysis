@@ -123,6 +123,8 @@
                     <option value="REML" selected>REML</option>
                     <option value="DL">DerSimonian-Laird (DL)</option>
                     <option value="PM">Paule-Mandel (PM)</option>
+                    <option value="PMM">Paule-Mandel Median (PMM)</option>
+                    <option value="GENQM">Generalized Q Median (GENQM)</option>
                     <option value="ML">Maximum Likelihood (ML)</option>
                     <option value="HS">Hunter-Schmidt (HS)</option>
                     <option value="HE">Hedges (HE)</option>
@@ -847,7 +849,7 @@
       <!-- ---- Heterogeneity ---- -->
       <h2>Heterogeneity</h2>
       <ul>
-        <li><strong>τ² estimators:</strong> REML (default), DerSimonian–Laird (DL), Paule–Mandel, Maximum Likelihood, Hunter–Schmidt, Hedges, Sidik–Jonkman, Generalised Q (GENQ), Iterated DL (DLIT), Hunter–Schmidt corrected (HSk), Square-root GENQ (SQGENQ), EBLUP (= REML) — 12 options</li>
+        <li><strong>τ² estimators:</strong> REML (default), DerSimonian–Laird (DL), Paule–Mandel (PM), Paule–Mandel Median (PMM), Generalised Q Median (GENQM), Maximum Likelihood, Hunter–Schmidt, Hedges, Sidik–Jonkman, Generalised Q (GENQ), Iterated DL (DLIT), Hunter–Schmidt corrected (HSk), Square-root GENQ (SQGENQ), EBLUP (= REML) — 14 options</li>
         <li><strong>Pooling methods:</strong> Inverse-variance (default; RE and FE); Mantel–Haenszel (OR, RR, RD) and Peto one-step (OR only) — fixed-effects pooling that operates directly on cell counts and handles single-zero cells without a continuity correction</li>
         <li><strong>Common language effect size (CLES)</strong> — displayed alongside the RE pooled estimate for standardised mean difference types (SMD, SMDH, SMD_paired, SMD1, SMD1H, SMCC); CLES = Φ(d / √2), the probability that a randomly drawn score from group 1 exceeds group 2; 95% CI transformed from the RE CI (McGraw &amp; Wong, 1992)</li>
         <li><strong>CI methods:</strong> Normal/Wald, Knapp–Hartung, <em>t</em>-distribution, Profile Likelihood (REML or ML)</li>
@@ -1080,6 +1082,7 @@
         <li>Vevea JL, Hedges LV (1995). A general linear model for estimating effect size in the presence of publication bias. <em>Psychometrika,</em> 60(3), 419–435.</li>
         <li>Vevea JL, Woods CM (2005). Publication bias in research synthesis: Sensitivity analysis using a priori weight functions. <em>Psychol Methods,</em> 10(4), 428–443.</li>
         <li>Viechtbauer W (2005). Bias and efficiency of meta-analytic variance estimators in the random-effects model. <em>J Educ Behav Stat,</em> 30, 261–293.</li>
+        <li>Viechtbauer W (2007). Confidence intervals for the amount of heterogeneity in meta-analysis. <em>Stat Med,</em> 26(1), 37–52.</li>
         <li>Viechtbauer W (2010). Conducting meta-analyses in R with the metafor package. <em>J Stat Softw,</em> 36(3), 1–48.</li>
         <li>Viechtbauer W (2021). Location-scale models for meta-analytic data. <em>Res Synth Methods,</em> 12(5), 567–583.</li>
         <li>Viechtbauer W, Cheung MWL (2010). Outlier and influence diagnostics for meta-analysis. <em>Res Synth Methods,</em> 1(2), 112–125.</li>
