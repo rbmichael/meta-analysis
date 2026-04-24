@@ -113,8 +113,11 @@ import { parseCSV, detectEffectType } from "./csv.js";
 import { buildSession, serializeSession, parseSession, missingInputCols } from "./session.js";
 import { saveDraft, loadDraft, clearDraft } from "./autosave.js";
 import { downloadBlob, readTextFile, serializeCSV } from "./io.js";
-import { HELP } from "./help.js";
-import { renderGuide, HELP_TO_GUIDE } from "./guide.js";
+// guide.js (166 KB) and help.js (76 KB) are loaded on first use so they don't
+// block startup. Both promises are cached after the first import.
+let _helpMod, _guideMod;
+function getHelp()  { return (_helpMod  ??= import("./help.js")); }
+function getGuide() { return (_guideMod ??= import("./guide.js")); }
 import { Z_95 } from "./constants.js";
 
 // ---------------- AUTOSAVE ----------------
@@ -165,9 +168,13 @@ const _helpBody    = document.getElementById("helpPopoverBody");
 
 const _helpGuideLink = document.getElementById("helpPopoverGuideLink");
 
-function showHelp(anchorEl, key) {
+async function showHelp(anchorEl, key) {
+  const [{ HELP }, { HELP_TO_GUIDE }] = await Promise.all([getHelp(), getGuide()]);
   const entry = HELP[key];
-  if (!entry) return;
+  if (!entry) {
+    console.warn(`showHelp: no HELP entry for key "${key}"`);
+    return;
+  }
 
   _helpTitle.textContent = entry.title;
   _helpBody.textContent  = entry.body;
@@ -233,37 +240,32 @@ document.addEventListener("pointerdown", e => {
 //   data-help="KEY"                          — fixed key
 //   data-help-select="selectId"
 //   data-help-prefix="prefix."              — key = prefix + select.value (resolved at click time)
-document.addEventListener("click", e => {
+document.addEventListener("click", async e => {
   const btn = e.target.closest(".help-btn");
   if (!btn) return;
   e.stopPropagation();
 
+  // Resolve the key synchronously (no await yet) so the toggle check runs
+  // before the module loads, avoiding a double-open on slow connections.
   let key;
   if (btn.dataset.helpSelect) {
     const sel    = document.getElementById(btn.dataset.helpSelect);
     const prefix = btn.dataset.helpPrefix ?? "";
     const value  = sel ? sel.value : "";
     key = prefix + value;
-    if (!HELP[key]) {
-      console.warn(`help-btn: no HELP entry for key "${key}" (select="${btn.dataset.helpSelect}", prefix="${prefix}", value="${value}")`);
-      return;
-    }
   } else {
     key = btn.dataset.help;
-    if (!HELP[key]) {
-      console.warn(`help-btn: no HELP entry for key "${key}"`);
-      return;
-    }
   }
 
   // Toggle: clicking the same button again closes the popover.
   if (_helpPopover.style.display !== "none" &&
       _helpPopover.dataset.activeKey === key) {
     hideHelp();
-  } else {
-    _helpPopover.dataset.activeKey = key;
-    showHelp(btn, key);
+    return;
   }
+
+  _helpPopover.dataset.activeKey = key;
+  await showHelp(btn, key);
 });
 
 // Convenience: inline help button for injected HTML strings.
@@ -561,7 +563,7 @@ function showView(name) {
   _toggleGuide.classList.toggle("active",   name === "guide");
   _toggleAbout.classList.toggle("active",   name === "about");
   document.getElementById("appLayout").scrollTo(0, 0);
-  if (name === "guide") renderGuide(document.getElementById("guidePanel"));
+  if (name === "guide") getGuide().then(({ renderGuide }) => renderGuide(document.getElementById("guidePanel")));
   // Hide jump pill when leaving results view (safe: getElementById avoids TDZ on module init)
   if (name !== "results") document.getElementById("jumpPill")?.classList.remove("visible");
 }
