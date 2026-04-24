@@ -8,7 +8,7 @@ A browser-based meta-analysis tool. No installation, no server, no dependencies 
 
 ### Effect types
 
-31 effect measures across 9 categories:
+33 effect measures across 9 categories:
 
 | Category | Measures |
 |---|---|
@@ -17,7 +17,7 @@ A browser-based meta-analysis tool. No installation, no server, no dependencies 
 | Continuous (single group) | One-sample SMD (SMD1), One-sample SMD heteroscedastic (SMD1H), Mean raw (MN), Mean log (MNLN) |
 | Variability | Coefficient of Variation Ratio (CVR), Variability Ratio (VR) |
 | Binary outcomes | Odds Ratio (OR), Risk Ratio (RR), Risk Difference (RD), Arcsine-transformed Risk Difference (AS), Yule's Q (YUQ), Yule's Y (YUY), Generalised Odds Ratio — ordinal (GOR) |
-| Correlations | Pearson *r* (COR), Bias-corrected *r* (UCOR), Fisher's *z* (ZCOR), Partial *r* (PCOR), Partial Fisher's *z* (ZPCOR), Phi (PHI), Tetrachoric (RTET) |
+| Correlations | Pearson *r* (COR), Bias-corrected *r* (UCOR), Fisher's *z* (ZCOR), Partial *r* (PCOR), Partial Fisher's *z* (ZPCOR), Point-biserial (RPB), Biserial (RBIS), Phi (PHI), Tetrachoric (RTET) |
 | Proportions | Raw (PR), Log (PLN), Logit (PLO), Arcsine (PAS), Freeman-Tukey double arcsine (PFT) |
 | Time-to-event / Rates | Hazard Ratio (HR), Incidence Rate Ratio (IRR), Incidence Rate Difference (IRD), Incidence Rate Difference sqrt (IRSD), Incidence Rate log (IR) |
 | Generic | Pre-computed *yᵢ* / *vᵢ* (GENERIC) |
@@ -222,6 +222,7 @@ python -m http.server 8080
 - Holm S (1979). A simple sequentially rejective multiple test procedure. *Scand J Stat*, 6(2), 65–70.
 - Ioannidis JPA, Trikalinos TA (2007). An exploratory test for an excess of significant findings. *Clin Trials*, 4(3), 245–253.
 - Jeffreys H (1961). *Theory of Probability* (3rd ed.). Oxford University Press.
+- Kraemer HC (1975). On estimation and hypothesis testing problems for correlation coefficients. *Psychometrika*, 40(4), 473–485.
 - Knapp G, Hartung J (2003). Improved tests for a random effects meta-regression with a single covariate. *Stat Med*, 22, 2693–2710.
 - Morris CN (1983). Parametric empirical Bayes inference: Theory and applications. *J Am Stat Assoc*, 78(381), 47–55.
 - Morris SB (2008). Estimating effect sizes from pretest-posttest-control group designs. *Org Res Methods*, 11, 364–386.

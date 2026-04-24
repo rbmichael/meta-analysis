@@ -40,7 +40,7 @@
 // Dependencies: utils.js, constants.js
 // =============================================================================
 
-import { hedgesG, parseCounts, gorFromCounts, tetrachoricFromCounts, hyperg2F1_ucor } from "./utils.js";
+import { hedgesG, parseCounts, gorFromCounts, tetrachoricFromCounts, hyperg2F1_ucor, normalQuantile } from "./utils.js";
 import { MIN_VAR, Z_95 } from "./constants.js";
 
 // ---------------------------------------------------------------------------
@@ -1025,6 +1025,135 @@ export const effectProfiles = {
       ["Study 3", 0.52, 110, 3, ""],
       ["Study 4", 0.31,  90, 2, ""],
       ["Study 5", 0.47, 130, 4, ""],
+    ],
+  },
+
+  // ------------------------------------------------------------------ //
+  // RPB — Point-biserial correlation
+  //   yi = r_pb  (the point-biserial correlation)
+  //   vi = (1−r²)³/(n−2) + r²(1−r²)²/(2n)
+  //      (metafor escalc("RPB") default "ST" formula, Kraemer 1975)
+  //
+  //   This is the standard correlation between a continuous variable and a
+  //   binary grouping variable. Computed from a t-test as r = t/√(t²+n−2).
+  //   Users enter the pre-computed r_pb and total n directly.
+  //
+  //   Threshold rationale:
+  //   n < 10   — asymptotic normal approximation is poor below n = 10.
+  //   |r| > 0.9 — variance near boundary; estimate increasingly unstable.
+  // ------------------------------------------------------------------ //
+  "RPB": {
+    label:  "Point-Biserial Correlation (r_pb)",
+    group:  "Correlations",
+    inputs: ["r", "n"],
+    compute(s) {
+      if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+      const { r, n } = s;
+      const r2 = r * r;
+      const vi = Math.max((1 - r2) ** 3 / (n - 2) + r2 * (1 - r2) ** 2 / (2 * n), MIN_VAR);
+      return { ...s, yi: r, vi, se: Math.sqrt(vi), w: 1 / vi };
+    },
+    transform: (x) => x,
+
+    validate(s) {
+      const errors = {};
+      if (!isFinite(s.r) || Math.abs(s.r) >= 1) errors.r = "r must be strictly between -1 and 1";
+      if (!isFinite(s.n) || s.n < 3)            errors.n = "n must be ≥ 3";
+      return { valid: Object.keys(errors).length === 0, errors };
+    },
+
+    softWarnings(s, label) {
+      const w = [];
+      if (isFinite(s.n) && s.n < 10)
+        w.push(`⚠️ ${label}: small sample size (n < 10) — correlation estimate unreliable`);
+      if (isFinite(s.r) && Math.abs(s.r) > 0.9)
+        w.push(`⚠️ ${label}: |r| > 0.90 — variance estimate near boundary, interpret cautiously`);
+      return w;
+    },
+
+    exampleData: [
+      ["Study 1", 0.435, 60, ""],
+      ["Study 2", 0.225, 50, ""],
+      ["Study 3", 0.330, 80, ""],
+      ["Study 4", 0.468, 70, ""],
+      ["Study 5", 0.396, 40, ""],
+    ],
+  },
+
+  // ------------------------------------------------------------------ //
+  // RBIS — Biserial correlation
+  //   Inputs: r_pb (point-biserial), n (total), p (proportion in group 1)
+  //   Conversion: z = Φ⁻¹(1−p); φ_z = φ(z); r_bis = √(p(1−p))/φ_z · r_pb
+  //   yi = r_bis
+  //   vi = 1/(n−1) · [ p(1−p)/φ_z² − (3/2 + (1−p·z/φ_z)(1+(1−p)·z/φ_z))·r̃²  + r̃⁴ ]
+  //      where r̃ = clamp(r_bis, −1, 1)  (metafor escalc("RBIS"))
+  //
+  //   The biserial correlation is the point-biserial rescaled to estimate
+  //   the correlation that would obtain if the dichotomous variable were
+  //   an underlying continuous normal variable. It is always larger in
+  //   magnitude than the corresponding r_pb (for a 50/50 split, r_bis ≈ 1.25 · r_pb).
+  //   For extreme splits (|p − 0.5| > 0.4) r_bis can exceed ±1, which
+  //   signals unreliable estimation.
+  //
+  //   Note: z = Φ⁻¹(1−p) = Φ⁻¹(p₂) (metafor convention: qnorm(p1, lower.tail=FALSE))
+  //         For p = 0.5 (equal groups): z = 0, φ_z = φ(0) ≈ 0.3989.
+  // ------------------------------------------------------------------ //
+  "RBIS": {
+    label:  "Biserial Correlation (r_bis)",
+    group:  "Correlations",
+    inputs: ["r", "n", "p"],
+    compute(s) {
+      if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+      const { r, n } = s;
+      const p1  = s.p;
+      const p2  = 1 - p1;
+      // z = Φ⁻¹(1−p1) = Φ⁻¹(p2)  [matches metafor's qnorm(p1, lower.tail=FALSE)]
+      const z   = normalQuantile(p2);
+      const phiZ = Math.exp(-0.5 * z * z) / Math.sqrt(2 * Math.PI);
+      const r_bis = Math.sqrt(p1 * p2) / phiZ * r;
+      const rt    = Math.max(-1, Math.min(1, r_bis));  // clamp for variance only
+      const vi  = Math.max(
+        1 / (n - 1) * (p1 * p2 / (phiZ * phiZ)
+          - (1.5 + (1 - p1 * z / phiZ) * (1 + p2 * z / phiZ)) * rt * rt
+          + rt ** 4),
+        MIN_VAR
+      );
+      return { ...s, yi: r_bis, vi, se: Math.sqrt(vi), w: 1 / vi };
+    },
+    transform: (x) => x,
+
+    validate(s) {
+      const errors = {};
+      if (!isFinite(s.r) || Math.abs(s.r) >= 1) errors.r = "r_pb must be strictly between -1 and 1";
+      if (!isFinite(s.n) || s.n < 3)            errors.n = "n must be ≥ 3";
+      if (!isFinite(s.p) || s.p <= 0 || s.p >= 1) errors.p = "p must be strictly between 0 and 1";
+      return { valid: Object.keys(errors).length === 0, errors };
+    },
+
+    softWarnings(s, label) {
+      const w = [];
+      if (isFinite(s.n) && s.n < 10)
+        w.push(`⚠️ ${label}: small sample size (n < 10) — biserial correlation unreliable`);
+      if (isFinite(s.r) && Math.abs(s.r) > 0.9)
+        w.push(`⚠️ ${label}: |r_pb| > 0.90 — biserial estimate near boundary, interpret cautiously`);
+      if (isFinite(s.p) && isFinite(s.r)) {
+        const z   = normalQuantile(1 - s.p);
+        const phi = Math.exp(-0.5 * z * z) / Math.sqrt(2 * Math.PI);
+        const r_bis = Math.sqrt(s.p * (1 - s.p)) / phi * s.r;
+        if (Math.abs(r_bis) > 1)
+          w.push(`⚠️ ${label}: |r_bis| > 1 — extreme group split; biserial correlation unreliable`);
+        else if (isFinite(s.p) && (s.p < 0.1 || s.p > 0.9))
+          w.push(`⚠️ ${label}: extreme group proportion (p = ${s.p.toFixed(2)}) — biserial estimate may be unstable`);
+      }
+      return w;
+    },
+
+    exampleData: [
+      ["Study 1", 0.435, 60, 0.50, ""],
+      ["Study 2", 0.225, 50, 0.50, ""],
+      ["Study 3", 0.330, 80, 0.50, ""],
+      ["Study 4", 0.468, 70, 0.50, ""],
+      ["Study 5", 0.396, 40, 0.50, ""],
     ],
   },
 

@@ -597,6 +597,32 @@ COR and ZCOR are nearly identical; either is acceptable.</p>`,
       },
 
       {
+        id: "guide-rpb",
+        title: "Point-biserial and biserial correlations (RPB / RBIS)",
+        body: `<p><strong>Point-biserial (RPB)</strong> is the Pearson correlation between a
+continuous variable and a binary grouping variable. Computed from an
+independent-samples t-test as r<sub>pb</sub> = t / √(t² + n−2). Unlike the standard
+COR formula, its variance uses the Kraemer (1975) "ST" estimator:</p>
+<p style="margin-left:1.5em"><code>vi = (1−r²)³/(n−2) + r²(1−r²)²/(2n)</code></p>
+<p>This is the default variance formula in metafor's <code>escalc("RPB")</code>.</p>
+
+<p><strong>Biserial (RBIS)</strong> converts r<sub>pb</sub> to an estimate of the
+correlation that would obtain if the dichotomous variable were underlying-continuous
+and normally distributed. The conversion requires the group proportion p₁ = n₁/n:</p>
+<p style="margin-left:1.5em"><code>r<sub>bis</sub> = √(p₁·p₂) / φ(z) · r<sub>pb</sub></code></p>
+<p>where z = Φ⁻¹(p₂) and φ is the standard normal PDF. For a 50/50 split,
+r<sub>bis</sub> ≈ 1.25 · r<sub>pb</sub>. For very unequal splits r<sub>bis</sub>
+can exceed ±1, which signals unreliable estimation.</p>
+
+<p><strong>Inputs:</strong> RPB takes r<sub>pb</sub> and n.
+RBIS additionally takes p, the proportion of participants in group 1.</p>`,
+        citations: [
+          "Kraemer, H. C. (1975). On estimation and hypothesis testing problems for correlation coefficients. <em>Psychometrika, 40</em>(4), 473–485.",
+          "Borenstein, M., Hedges, L. V., Higgins, J. P. T., & Rothstein, H. R. (2009). <em>Introduction to meta-analysis</em>. Wiley.",
+        ],
+      },
+
+      {
         id: "guide-proportions",
         title: "Proportion measures (PR, PLN, PLO, PAS, PFT)",
         body: `<p>Five transformations are available for single-group event proportions:</p>
@@ -2831,6 +2857,8 @@ export const HELP_TO_GUIDE = {
   "effect.ZCOR":      "guide-zcor",
   "effect.PCOR":      "guide-zcor",
   "effect.ZPCOR":     "guide-zcor",
+  "effect.RPB":       "guide-rpb",
+  "effect.RBIS":      "guide-rpb",
   "effect.PHI":       "guide-proportions",
   "effect.RTET":      "guide-proportions",
   "effect.PR":        "guide-proportions",

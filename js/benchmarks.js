@@ -1369,6 +1369,124 @@ export const BENCHMARKS = [
   },
 
   // ----------------------------------------------------------------
+  // RPB-1 — Point-biserial correlation, homogeneous (DL)
+  // 5 synthetic studies with equal group sizes (n1=n2).
+  // yi = r_pb,  vi = (1−r²)³/(n−2) + r²(1−r²)²/(2n)  [Kraemer 1975 "ST" formula]
+  // τ²=0 (Q < df for this dataset).
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic – RPB (point-biserial, DL)",
+    type: "RPB",
+    tauMethod: "DL",
+    data: [
+      { label: "Study 1", r: 0.435497, n: 60 },
+      { label: "Study 2", r: 0.225079, n: 50 },
+      { label: "Study 3", r: 0.329520, n: 80 },
+      { label: "Study 4", r: 0.467504, n: 70 },
+      { label: "Study 5", r: 0.396108, n: 40 },
+    ],
+    expected: {
+      // yi = r_pb (identity); vi = (1−r²)³/(n−2) + r²(1−r²)²/(2n)
+      yi:   [0.435497, 0.225079, 0.329520, 0.467504, 0.396108],
+      vi:   [0.010212, 0.018281, 0.009621, 0.007971, 0.017165],
+      FE:    0.388,
+      RE:    0.388,
+      tau2:  0.000,
+      I2:    0.0,
+    },
+    citation: "Synthetic dataset derived from 5 equal-group studies. Expected values from metafor escalc('RPB') + rma(method='DL'). Block RPB-1 in generate.R.",
+  },
+
+  // ----------------------------------------------------------------
+  // RPB-2 — Point-biserial correlation, heterogeneous (REML)
+  // Low r in large-n studies, high r in small-n studies.
+  // Same variance formula as RPB-1.
+  // τ²=0.038 (REML), I2≈84.6%: strongly heterogeneous.
+  // RE (0.321) > FE (0.228) because large RE weight assigned to
+  // imprecise small-n studies with high r.
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic – RPB heterogeneous (REML, τ²>0)",
+    type: "RPB",
+    tauMethod: "REML",
+    data: [
+      { label: "Study 1", r: 0.099834, n: 300 },
+      { label: "Study 2", r: 0.119618, n: 250 },
+      { label: "Study 3", r: 0.489494, n:  50 },
+      { label: "Study 4", r: 0.524222, n:  40 },
+      { label: "Study 5", r: 0.455383, n:  45 },
+    ],
+    expected: {
+      yi:   [0.099834, 0.119618, 0.489494, 0.524222, 0.455383],
+      vi:   [0.003273, 0.003889, 0.010545, 0.011843, 0.013028],
+      FE:    0.228,
+      RE:    0.321,
+      tau2:  0.0385,
+      I2:   84.6,
+    },
+    citation: "Synthetic. Designed to give τ²>0 with RE≠FE. Expected from metafor escalc('RPB') + rma(method='REML'). Block RPB-2 in generate.R.",
+  },
+
+  // ----------------------------------------------------------------
+  // RBIS-1 — Biserial correlation, homogeneous (DL), equal groups (p=0.5)
+  // Same 5 studies as RPB-1; p=0.5 so z=0, φ(z)=φ(0)≈0.3989.
+  // yi = r_bis = r_pb · √(0.25) / φ(0) ≈ 1.2533 · r_pb
+  // vi = 1/(n−1) · [p·(1−p)/φ²  − (3/2 + 1)·r̃²  + r̃⁴]
+  //   (simplifies for z=0 since (1−p·z/φ)·(1+p·z/φ) = 1)
+  // τ²=0 (Q < df for this dataset).
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic – RBIS (biserial, DL, p=0.5)",
+    type: "RBIS",
+    tauMethod: "DL",
+    data: [
+      { label: "Study 1", r: 0.435497, n: 60, p: 0.5 },
+      { label: "Study 2", r: 0.225079, n: 50, p: 0.5 },
+      { label: "Study 3", r: 0.329520, n: 80, p: 0.5 },
+      { label: "Study 4", r: 0.467504, n: 70, p: 0.5 },
+      { label: "Study 5", r: 0.396108, n: 40, p: 0.5 },
+    ],
+    expected: {
+      // yi = r_bis ≈ 1.2533 × r_pb (for p=0.5)
+      yi:   [0.545814, 0.282095, 0.412992, 0.585930, 0.496447],
+      vi:   [0.015505, 0.028126, 0.014854, 0.012034, 0.026036],
+      FE:    0.487,
+      RE:    0.487,
+      tau2:  0.000,
+      I2:    0.0,
+    },
+    citation: "Synthetic. Same studies as RPB-1 with p=0.5 (equal groups). Expected from metafor escalc('RBIS') + rma(method='DL'). Block RBIS-1 in generate.R.",
+  },
+
+  // ----------------------------------------------------------------
+  // RBIS-2 — Biserial correlation, heterogeneous (REML), unequal groups (p≈1/3)
+  // Same underlying effects as RPB-2 but with 1:2 group ratio (n1≈n/3).
+  // p1 ≈ 0.333 → z ≈ 0.431, φ(z) ≈ 0.365 → amplification ≈ 1.297.
+  // τ²=0.059 (REML), I2≈83.3%. Tests the full RBIS formula with z≠0.
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic – RBIS heterogeneous (REML, unequal groups)",
+    type: "RBIS",
+    tauMethod: "REML",
+    data: [
+      { label: "Study 1", r: 0.094176, n: 300, p: 0.3333 },
+      { label: "Study 2", r: 0.112755, n: 250, p: 0.332  },
+      { label: "Study 3", r: 0.469551, n:  50, p: 0.34   },
+      { label: "Study 4", r: 0.499546, n:  40, p: 0.325  },
+      { label: "Study 5", r: 0.434372, n:  45, p: 0.3333 },
+    ],
+    expected: {
+      yi:   [0.122099, 0.146271, 0.607053, 0.650084, 0.563161],
+      vi:   [0.005494, 0.006538, 0.017510, 0.019909, 0.021870],
+      FE:    0.282,
+      RE:    0.396,
+      tau2:  0.0588,
+      I2:   83.3,
+    },
+    citation: "Synthetic. Unequal-group version of RPB-2 (n1≈n/3). Tests RBIS formula with z≠0. Expected from metafor escalc('RBIS') + rma(method='REML'). Block RBIS-2 in generate.R.",
+  },
+
+  // ----------------------------------------------------------------
   // PHI — BCG Vaccine (dat.bcg, phi coefficient)
   // Same 13 studies as the OR/RR/RD benchmarks above.
   // phi = (a·d−b·c)/√((a+b)(c+d)(a+c)(b+d)),  vi = (1−φ²)²/(N−1)

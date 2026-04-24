@@ -436,6 +436,42 @@ export function compute(s, type, options = {}) {
     return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
   }
 
+  // ================= POINT-BISERIAL CORRELATION =================
+  // Input: { r, n }  — r_pb (point-biserial correlation), n (total sample size)
+  // yi = r_pb
+  // vi = (1−r²)³/(n−2) + r²(1−r²)²/(2n)   [Kraemer 1975, metafor "ST" formula]
+  if (type === "RPB") {
+    const { n } = s;
+    const r = Math.max(-0.9999, Math.min(0.9999, s.r));
+    const r2 = r * r;
+    const vi = Math.max((1 - r2) ** 3 / (n - 2) + r2 * (1 - r2) ** 2 / (2 * n), MIN_VAR);
+    return { ...s, yi: r, vi, se: Math.sqrt(vi), w: 1 / vi };
+  }
+
+  // ================= BISERIAL CORRELATION =================
+  // Input: { r, n, p }  — r_pb, total n, proportion in group 1 (p₁ = n₁/n)
+  // z = Φ⁻¹(1−p₁) = Φ⁻¹(p₂)  [metafor: qnorm(p1, lower.tail=FALSE)]
+  // yi  = r_bis = √(p₁·p₂) / φ(z) · r_pb
+  // vi  = 1/(n−1) · [p₁·p₂/φ² − (3/2 + (1−p₁z/φ)(1+p₂z/φ))·r̃²  + r̃⁴]
+  //       where r̃ = clamp(r_bis, −1, 1)  (metafor escalc "RBIS")
+  if (type === "RBIS") {
+    const { n } = s;
+    const r  = Math.max(-0.9999, Math.min(0.9999, s.r));
+    const p1 = s.p;
+    const p2 = 1 - p1;
+    const z    = normalQuantile(p2);  // Φ⁻¹(p₂) = Φ⁻¹(1−p₁)
+    const phiZ = Math.exp(-0.5 * z * z) / Math.sqrt(2 * Math.PI);
+    const r_bis = Math.sqrt(p1 * p2) / phiZ * r;
+    const rt    = Math.max(-1, Math.min(1, r_bis));
+    const vi = Math.max(
+      1 / (n - 1) * (p1 * p2 / (phiZ * phiZ)
+        - (1.5 + (1 - p1 * z / phiZ) * (1 + p2 * z / phiZ)) * rt * rt
+        + rt ** 4),
+      MIN_VAR
+    );
+    return { ...s, yi: r_bis, vi, se: Math.sqrt(vi), w: 1 / vi };
+  }
+
   // ================= PHI COEFFICIENT =================
   // yi = (ad−bc) / √((a+b)(c+d)(a+c)(b+d));  vi = (1−φ²)²/(N−1)
   if (type === "PHI") {

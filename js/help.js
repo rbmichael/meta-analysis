@@ -361,6 +361,29 @@ export const HELP = {
            "Results are back-transformed to r for display.",
   },
 
+  "effect.RPB": {
+    title: "Point-Biserial Correlation (RPB)",
+    body:  "Pearson correlation between a continuous variable and a binary grouping variable. " +
+           "Equivalent to r = t / √(t² + n − 2) from an independent-samples t-test. " +
+           "Inputs: r (point-biserial correlation), n (total sample size). " +
+           "Variance: vi = (1 − r²)³/(n − 2) + r²(1 − r²)²/(2n)  [Kraemer 1975, metafor 'ST' formula]. " +
+           "Note: the RPB variance formula differs from COR (which uses (1 − r²)²/(n − 1)); " +
+           "the RPB formula accounts for the binary nature of the grouping variable. " +
+           "Pooled on the raw scale — no back-transformation.",
+  },
+
+  "effect.RBIS": {
+    title: "Biserial Correlation (RBIS)",
+    body:  "Estimates the correlation that would hold between two underlying continuous variables " +
+           "if the dichotomous grouping variable were actually continuous and normally distributed. " +
+           "Always larger in magnitude than r_pb (by factor ≈ 1.25 at a 50/50 split). " +
+           "Inputs: r (point-biserial r_pb), n (total sample size), p (proportion in group 1 = n₁/n, 0 < p < 1). " +
+           "Conversion: r_bis = √(p·(1−p)) / φ(z) · r_pb, where z = Φ⁻¹(1−p) and φ is the normal PDF. " +
+           "For extreme splits (p < 0.1 or p > 0.9) the estimate can exceed ±1 and is unreliable. " +
+           "Variance from metafor escalc('RBIS'). " +
+           "Pooled on the raw scale — no back-transformation.",
+  },
+
   "effect.PHI": {
     title: "Phi Coefficient (PHI)",
     body:  "Pearson correlation for two binary variables, computed from a 2×2 table: " +

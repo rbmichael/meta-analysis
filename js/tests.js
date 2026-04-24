@@ -2870,6 +2870,171 @@ export function runTests() {
 
   console.log(crossPass ? "\n✅ ALL CROSS-CHECKS PASSED" : "\n❌ SOME CROSS-CHECKS FAILED");
 
+  // ===== RPB UNIT TESTS =====
+  // Verify: yi = r_pb; vi = (1−r²)³/(n−2) + r²(1−r²)²/(2n) [Kraemer 1975 ST]
+  // Invalid inputs produce NaN/w=0.
+  console.log("\n===== RPB UNIT TESTS =====\n");
+  let rpbPass = true;
+  const rpbChk = (label, got, exp, tol = 1e-6) => {
+    const ok = Math.abs(got - exp) < tol;
+    if (!ok) { console.error(`  FAIL ${label}: got ${got}, expected ${exp}`); rpbPass = false; }
+    else console.log(`  ok  ${label}`);
+  };
+  const rpbChkTrue = (label, cond) => {
+    if (!cond) { console.error(`  FAIL ${label}`); rpbPass = false; }
+    else console.log(`  ok  ${label}`);
+  };
+
+  // --- RPB 1: formula spot-check ---
+  console.log("--- RPB 1. Formula spot-check ---");
+  {
+    const r = 0.435497, n = 60;
+    const s = compute({ r, n }, "RPB");
+    rpbChk("yi = r",  s.yi, r);
+    const viExpected = (1-r*r)**3/(n-2) + r*r*(1-r*r)**2/(2*n);
+    rpbChk("vi = ST formula", s.vi, viExpected);
+    rpbChk("se = sqrt(vi)", s.se, Math.sqrt(s.vi), 1e-9);
+    rpbChk("w  = 1/vi",     s.w,  1 / s.vi,        1e-9);
+  }
+
+  // --- RPB 2: metafor RPB-1 benchmark spot-check ---
+  console.log("--- RPB 2. Benchmark per-study yi/vi ---");
+  {
+    const rpbData = [
+      { r: 0.435497, n: 60, expYi: 0.435497, expVi: 0.010212 },
+      { r: 0.225079, n: 50, expYi: 0.225079, expVi: 0.018281 },
+      { r: 0.329520, n: 80, expYi: 0.329520, expVi: 0.009621 },
+      { r: 0.467504, n: 70, expYi: 0.467504, expVi: 0.007971 },
+      { r: 0.396108, n: 40, expYi: 0.396108, expVi: 0.017165 },
+    ];
+    rpbData.forEach((d, i) => {
+      const s = compute({ r: d.r, n: d.n }, "RPB");
+      rpbChk(`study ${i+1} yi`, s.yi, d.expYi, 1e-5);
+      rpbChk(`study ${i+1} vi`, s.vi, d.expVi, 1e-5);
+    });
+  }
+
+  // --- RPB 3: validation ---
+  console.log("--- RPB 3. Validation ---");
+  {
+    rpbChkTrue("|r|=1 → w=0",    compute({ r: 1,     n: 30 }, "RPB").w === 0);
+    rpbChkTrue("|r|>1 → w=0",    compute({ r: 1.1,   n: 30 }, "RPB").w === 0);
+    rpbChkTrue("n=2 → w=0",      compute({ r: 0.3,   n:  2 }, "RPB").w === 0);
+    rpbChkTrue("r=NaN → w=0",    compute({ r: NaN,   n: 30 }, "RPB").w === 0);
+    rpbChkTrue("n=NaN → w=0",    compute({ r: 0.3,   n: NaN}, "RPB").w === 0);
+    rpbChkTrue("valid → finite", isFinite(compute({ r: 0.3, n: 30 }, "RPB").yi));
+  }
+
+  // --- RPB 4: small-r → vi ≈ (1-r²)²/(n-2) [dominant term] ---
+  console.log("--- RPB 4. Small-r limit ---");
+  {
+    const r = 0.01, n = 100;
+    const s = compute({ r, n }, "RPB");
+    const viSimple = (1-r*r)**2 / (n-2);
+    rpbChkTrue("small r: vi ≈ (1-r²)²/(n-2) to 1%",
+      Math.abs(s.vi - viSimple) / viSimple < 0.01);
+  }
+
+  console.log(rpbPass ? "\n✅ ALL RPB UNIT TESTS PASSED" : "\n❌ SOME RPB UNIT TESTS FAILED");
+
+  // ===== RBIS UNIT TESTS =====
+  // Verify: yi = r_bis = sqrt(p(1-p))/φ(z) · r_pb  (z = Φ⁻¹(1-p))
+  // vi uses metafor RBIS formula with clamped r_bis.
+  // Tests cover equal groups (p=0.5, z=0) and unequal groups.
+  console.log("\n===== RBIS UNIT TESTS =====\n");
+  let rbisPass = true;
+  const rbisChk = (label, got, exp, tol = 1e-5) => {
+    const ok = Math.abs(got - exp) < tol;
+    if (!ok) { console.error(`  FAIL ${label}: got ${got}, expected ${exp}`); rbisPass = false; }
+    else console.log(`  ok  ${label}`);
+  };
+  const rbisChkTrue = (label, cond) => {
+    if (!cond) { console.error(`  FAIL ${label}`); rbisPass = false; }
+    else console.log(`  ok  ${label}`);
+  };
+
+  // --- RBIS 1: equal groups (p=0.5) → z=0, scale factor ≈ 1.2533 ---
+  console.log("--- RBIS 1. Equal groups (p=0.5) ---");
+  {
+    const r = 0.435497, n = 60, p = 0.5;
+    const s = compute({ r, n, p }, "RBIS");
+    // For p=0.5: z=0, phi(0)=1/sqrt(2π)≈0.39894
+    const phi0 = 1 / Math.sqrt(2 * Math.PI);
+    const r_bis = Math.sqrt(0.25) / phi0 * r;  // ≈ 1.2533 * r
+    rbisChk("yi = r_bis", s.yi, r_bis);
+    rbisChk("yi ≈ 0.5458", s.yi, 0.545814, 1e-4);
+    // vi metafor formula: z=0 → (1-p*0/phi)*(1+p*0/phi) = 1
+    const viExp = 1/(n-1) * (0.25/phi0**2 - (1.5 + 1)*r_bis**2 + r_bis**4);
+    rbisChk("vi formula (z=0)", s.vi, viExp);
+    rbisChk("vi ≈ 0.01551", s.vi, 0.015505, 1e-4);
+  }
+
+  // --- RBIS 2: benchmark per-study yi/vi (p=0.5) ---
+  console.log("--- RBIS 2. Benchmark per-study yi/vi (p=0.5) ---");
+  {
+    const rbisData = [
+      { r: 0.435497, n: 60, p: 0.5, expYi: 0.545814, expVi: 0.015505 },
+      { r: 0.225079, n: 50, p: 0.5, expYi: 0.282095, expVi: 0.028126 },
+      { r: 0.329520, n: 80, p: 0.5, expYi: 0.412992, expVi: 0.014854 },
+      { r: 0.467504, n: 70, p: 0.5, expYi: 0.585930, expVi: 0.012034 },
+      { r: 0.396108, n: 40, p: 0.5, expYi: 0.496447, expVi: 0.026036 },
+    ];
+    rbisData.forEach((d, i) => {
+      const s = compute({ r: d.r, n: d.n, p: d.p }, "RBIS");
+      rbisChk(`study ${i+1} yi`, s.yi, d.expYi, 1e-4);
+      rbisChk(`study ${i+1} vi`, s.vi, d.expVi, 1e-4);
+    });
+  }
+
+  // --- RBIS 3: unequal groups (p≈1/3) ---
+  console.log("--- RBIS 3. Unequal groups (p≈1/3) ---");
+  {
+    const rbisDataIneq = [
+      { r: 0.094176, n: 300, p: 0.3333, expYi: 0.122099, expVi: 0.005494 },
+      { r: 0.112755, n: 250, p: 0.332,  expYi: 0.146271, expVi: 0.006538 },
+      { r: 0.469551, n:  50, p: 0.34,   expYi: 0.607053, expVi: 0.017510 },
+      { r: 0.499546, n:  40, p: 0.325,  expYi: 0.650084, expVi: 0.019909 },
+      { r: 0.434372, n:  45, p: 0.3333, expYi: 0.563161, expVi: 0.021870 },
+    ];
+    rbisDataIneq.forEach((d, i) => {
+      const s = compute({ r: d.r, n: d.n, p: d.p }, "RBIS");
+      rbisChk(`study ${i+1} yi`, s.yi, d.expYi, 1e-4);
+      rbisChk(`study ${i+1} vi`, s.vi, d.expVi, 1e-4);
+    });
+  }
+
+  // --- RBIS 4: r_bis > r_pb for same data (biserial always larger in magnitude) ---
+  console.log("--- RBIS 4. r_bis > r_pb (positive case) ---");
+  {
+    const r = 0.40;
+    const sRpb  = compute({ r, n: 80 }, "RPB");
+    const sRbis = compute({ r, n: 80, p: 0.5 }, "RBIS");
+    rbisChkTrue("r_bis > r_pb", sRbis.yi > sRpb.yi);
+    rbisChkTrue("both finite",  isFinite(sRbis.yi) && isFinite(sRbis.vi));
+  }
+
+  // --- RBIS 5: validation ---
+  console.log("--- RBIS 5. Validation ---");
+  {
+    rbisChkTrue("|r|=1 → w=0",   compute({ r: 1,   n: 30, p: 0.5 }, "RBIS").w === 0);
+    rbisChkTrue("n=2 → w=0",     compute({ r: 0.3, n:  2, p: 0.5 }, "RBIS").w === 0);
+    rbisChkTrue("p=0 → w=0",     compute({ r: 0.3, n: 30, p: 0   }, "RBIS").w === 0);
+    rbisChkTrue("p=1 → w=0",     compute({ r: 0.3, n: 30, p: 1   }, "RBIS").w === 0);
+    rbisChkTrue("p<0 → w=0",     compute({ r: 0.3, n: 30, p: -0.1}, "RBIS").w === 0);
+    rbisChkTrue("valid → finite", isFinite(compute({ r: 0.3, n: 30, p: 0.5 }, "RBIS").yi));
+  }
+
+  // --- RBIS 6: symmetry under negation ---
+  console.log("--- RBIS 6. yi negation symmetry ---");
+  {
+    const sPos = compute({ r: 0.35, n: 60, p: 0.5 }, "RBIS");
+    const sNeg = compute({ r: -0.35, n: 60, p: 0.5 }, "RBIS");
+    rbisChkTrue("yi symmetric", Math.abs(sPos.yi + sNeg.yi) < 1e-10);
+    rbisChkTrue("vi equal",     Math.abs(sPos.vi - sNeg.vi) < 1e-10);
+  }
+
+  console.log(rbisPass ? "\n✅ ALL RBIS UNIT TESTS PASSED" : "\n❌ SOME RBIS UNIT TESTS FAILED");
+
   // ===== PUBLICATION BIAS BENCHMARKS =====
   // End-to-end tests against externally derived expected values.
   // Each entry has a `tests` object with sub-objects per function.
