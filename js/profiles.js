@@ -33,9 +33,10 @@
 //
 // Exports
 // -------
-//   effectProfiles    The registry object (keyed by effect-type code).
-//   getProfile(type)  Convenience accessor; returns null for unknown types.
-//   validateStudy(s, type)  Calls profile.validate(s); used by analysis.js.
+//   effectProfiles        The registry object (keyed by effect-type code).
+//   getProfile(type)      Convenience accessor; returns null for unknown types.
+//   validateStudy(s, type)  Calls profile.validate(s).
+//   autoDetectType(s)     Infers type from field names when none is supplied.
 //
 // Dependencies: utils.js, constants.js
 // =============================================================================
@@ -1512,6 +1513,7 @@ export const effectProfiles = {
     group:  "Generic",
     inputs: ["yi", "vi"],
     compute(s) {
+      if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
       const vi = Math.max(s.vi, MIN_VAR);
       return { ...s, yi: s.yi, vi, se: Math.sqrt(vi), w: 1 / vi, md: s.yi, varMD: s.vi };
     },
@@ -2022,4 +2024,13 @@ export function getProfile(type) {
 
 export function validateStudy(s, type) {
   return getProfile(type)?.validate(s) ?? { valid: false, errors: {} };
+}
+
+// Auto-detects the effect type from the fields present in a study object.
+// Used by analysis.js compute() when no explicit type is supplied.
+// Returns null if the field pattern does not match any known auto-detection rule.
+export function autoDetectType(s) {
+  if ("m1" in s && "m2" in s && "sd1" in s && "sd2" in s && "n1" in s && "n2" in s) return "MD";
+  if ("a"  in s && "b"  in s && "c"  in s && "d"  in s) return "OR";
+  return null;
 }
