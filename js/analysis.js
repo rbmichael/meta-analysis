@@ -2200,14 +2200,19 @@ export function influenceDiagnostics(studies, method="DL", ciMethod="normal", al
 
       } else if (method === "DLIT") {
         // DLIT: seed from τ²_DL_loo (O(1)), then iterate the DLIT fixed-point
-        // formula using RE-updated weights.  No filter() allocation: index guard.
+        // formula using RE-updated weights.  The DL_loo seed (FE weights) is an
+        // upper bound on τ²_DLIT_loo, which means the iteration always descends
+        // monotonically toward the positive fixed point.  Seeding from τ²_full
+        // or a one-step RE estimate is NOT safe: it can place the start below
+        // the fixed point and cause convergence to τ²=0 for influential studies.
+        // No filter() allocation: index guard.
         const W_l   = dlSS.W_fe - wi_fe;
         const WY_l  = dlSS.WY   - wi_fe * study.yi;
         const WY2_l = dlSS.WY2  - wi_fe * study.yi * study.yi;
         const W2_l  = dlSS.W2   - wi_fe * wi_fe;
         const Q_l   = WY2_l - WY_l * WY_l / W_l;
         const c_l   = W_l   - W2_l / W_l;
-        let t2 = c_l > 0 ? Math.max(0, (Q_l - (n - 2)) / c_l) : 0;  // DL seed
+        let t2 = c_l > 0 ? Math.max(0, (Q_l - (n - 2)) / c_l) : 0;  // DL seed (upper bound)
         for (let iter = 0; iter < 200; iter++) {
           // Single O(k) pass using Q = WY2 − WY²/W identity (no second pass needed)
           let Wit = 0, W2it = 0, Wmuit = 0, WY2it = 0;
