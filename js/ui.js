@@ -2158,6 +2158,7 @@ function runGosh() {
   const elLabel   = document.getElementById("goshProgressLabel");
   const elRun     = document.getElementById("goshRun");
   const elCancel  = document.getElementById("goshCancel");
+  const elEmpty   = document.getElementById("goshEmptyState");
 
   if (k < 2) {
     if (elInfo) elInfo.innerHTML = '<p class="gosh-info">GOSH requires at least 2 valid studies.</p>';
@@ -2167,6 +2168,7 @@ function runGosh() {
     if (elInfo) elInfo.innerHTML = `<p class="gosh-info">GOSH supports at most ${GOSH_MAX_K} studies (${k} present).</p>`;
     return;
   }
+  if (elEmpty) elEmpty.hidden = true;
 
   // Cancel any running Worker
   if (goshState.worker) {

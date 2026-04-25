@@ -368,3 +368,20 @@
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+
+/* ---- Section empty-state message ---- */
+.section-empty-state {
+  margin: 6px 0 10px;
+  font-size: 0.8125rem;
+  color: var(--fg-muted);
+  line-height: 1.5;
+}
+
+.section-empty-state[hidden] { display: none; }
+
+/* ---- GOSH info line (error / cancelled / status messages) ---- */
+.gosh-info {
+  margin: 6px 0;
+  font-size: 0.8125rem;
+  color: var(--fg-muted);
+}
