@@ -2348,9 +2348,14 @@ function renderSensitivity(mu0, sigmaMu, sigmaTau, ciLevel) {
 async function runAnalysis() {
   if (_analysisRunning) return false;
   _analysisRunning = true;
-  const _runBtn = document.getElementById("run");
-  if (_runBtn) { _runBtn.disabled = true; _runBtn.innerHTML = "Running\u2026"; }
-  await new Promise(r => setTimeout(r, 0)); // yield so browser paints button state
+  const _runBtn     = document.getElementById("run");
+  const _runProgress = document.getElementById("runProgress");
+  if (_runBtn)     { _runBtn.disabled = true; _runBtn.innerHTML = "Running\u2026"; }
+  if (_runProgress) _runProgress.hidden = false;
+  // Double-rAF: first fires before paint, second fires after — guarantees the
+  // progress bar has been painted and its compositor layer promoted before the
+  // synchronous computation blocks the main thread.
+  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
   try {
   performance.mark("runAnalysis:start");
   scheduleSave();
@@ -3057,6 +3062,7 @@ async function runAnalysis() {
   return true;
   } finally {
     _analysisRunning = false;
-    if (_runBtn) { _runBtn.disabled = false; _runBtn.innerHTML = 'Run <kbd class="run-kbd">(Ctrl+Enter)</kbd>'; }
+    if (_runBtn)     { _runBtn.disabled = false; _runBtn.innerHTML = 'Run <kbd class="run-kbd">(Ctrl+Enter)</kbd>'; }
+    if (_runProgress) _runProgress.hidden = true;
   }
 }

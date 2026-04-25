@@ -436,6 +436,34 @@ input[type="file"]::file-selector-button:hover {
   padding: 6px 14px;
 }
 
+/* ---- Run progress bar (indeterminate shimmer) ---- */
+#runProgress {
+  position: relative;
+  height: 3px;
+  background: var(--accent-subtle);
+  overflow: hidden;
+  margin-top: 3px;
+}
+
+#runProgress[hidden] { display: none; }
+
+#runProgressBar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 40%;
+  height: 100%;
+  background: var(--accent);
+  border-radius: var(--radius-full);
+  will-change: transform;
+  animation: run-shimmer 1.1s ease-in-out infinite alternate;
+}
+
+@keyframes run-shimmer {
+  from { transform: translateX(0); }
+  to   { transform: translateX(150%); }
+}
+
 /* ---- Row pending deletion (undo window active) ---- */
 tr.row-pending-delete td,
 tr.row-pending-delete input {
