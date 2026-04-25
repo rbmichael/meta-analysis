@@ -312,6 +312,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  position: relative;
   width: 15px;
   height: 15px;
   padding: 0;
@@ -325,6 +326,13 @@
   border-radius: var(--radius-full);
   vertical-align: middle;
   flex-shrink: 0;
+}
+
+/* Expand tap target to ~35px without changing visual size */
+.help-btn::before {
+  content: "";
+  position: absolute;
+  inset: -10px;
 }
 
 .help-btn:hover {
