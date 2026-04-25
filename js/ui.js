@@ -2346,7 +2346,7 @@ async function runAnalysis() {
   if (_analysisRunning) return false;
   _analysisRunning = true;
   const _runBtn = document.getElementById("run");
-  if (_runBtn) { _runBtn.disabled = true; _runBtn.textContent = "Running…"; }
+  if (_runBtn) { _runBtn.disabled = true; _runBtn.innerHTML = "Running\u2026"; }
   await new Promise(r => setTimeout(r, 0)); // yield so browser paints button state
   try {
   performance.mark("runAnalysis:start");
@@ -3053,6 +3053,6 @@ async function runAnalysis() {
   return true;
   } finally {
     _analysisRunning = false;
-    if (_runBtn) { _runBtn.disabled = false; _runBtn.textContent = "Run"; }
+    if (_runBtn) { _runBtn.disabled = false; _runBtn.innerHTML = 'Run <kbd class="run-kbd">(Ctrl+Enter)</kbd>'; }
   }
 }

@@ -296,7 +296,7 @@ input[type="file"]::file-selector-button:hover {
   background: var(--bg-th);
   border: 1px solid var(--border);
   border-radius: 12px;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--fg);
   margin: 2px 3px 2px 0;
 }
@@ -306,7 +306,7 @@ input[type="file"]::file-selector-button:hover {
   border: none;
   color: var(--fg-muted);
   cursor: pointer;
-  font-size: 14px;
+  font-size: 15px;
   line-height: 1;
   padding: 0 1px;
 }
@@ -321,7 +321,7 @@ input[type="file"]::file-selector-button:hover {
   background: var(--bg-th);
   border: 1px solid var(--border);
   border-radius: 12px;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--fg);
 }
 
@@ -330,7 +330,7 @@ input[type="file"]::file-selector-button:hover {
   border: none;
   color: var(--fg-muted);
   cursor: pointer;
-  font-size: 14px;
+  font-size: 15px;
   line-height: 1;
   padding: 0 1px;
 }
@@ -348,7 +348,7 @@ input[type="file"]::file-selector-button:hover {
 
 #robDataGrid table {
   border-collapse: collapse;
-  font-size: 12px;
+  font-size: 13px;
   width: auto;
 }
 
@@ -364,7 +364,7 @@ input[type="file"]::file-selector-button:hover {
   font-weight: 500;
   text-align: center;
   color: var(--fg-muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .rob-study-label {
@@ -376,7 +376,7 @@ input[type="file"]::file-selector-button:hover {
 }
 
 #robDataGrid select {
-  font-size: 11px;
+  font-size: 12px;
   padding: 1px 2px;
   min-width: 110px;
   border: none;
@@ -406,6 +406,17 @@ input[type="file"]::file-selector-button:hover {
   border-color: var(--border-accent-strong);
   box-shadow: var(--shadow-btn-accent-hover);
   color: #fff;
+}
+
+/* kbd shortcut badge inside Run button */
+.run-kbd {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  font-weight: 400;
+  opacity: 0.75;
+  margin-left: 6px;
+  letter-spacing: 0;
+  vertical-align: middle;
 }
 
 /* ---- Secondary action: Add Study ---- */

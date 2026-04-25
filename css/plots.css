@@ -41,7 +41,7 @@
 .plot-block > svg .tick text,
 #bubblePlots svg .tick text {
   fill: var(--fg-muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 /* ---- Forest plot page navigation ---- */
