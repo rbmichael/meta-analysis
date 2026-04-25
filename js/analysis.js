@@ -456,6 +456,12 @@ export function meta(studies, method="DL", ciMethod="normal", alpha=0.05, tau2In
   let _byMethod = _metaCache.get(studies);
   if (_byMethod?.has(_cacheKey)) return _byMethod.get(_cacheKey);
 
+  const valid = studies.filter(s => isFinite(s.vi) && s.vi > 0 && isFinite(s.yi));
+  if (valid.length < studies.length) {
+    console.warn(`meta(): dropped ${studies.length - valid.length} study/studies with non-finite or non-positive vi/yi`);
+    studies = valid;
+  }
+
   const k = studies.length;
   if(k === 0){
     return { FE: NaN, seFE: NaN, RE: NaN, seRE: NaN, tau2:0, Q:NaN, df:0, I2:0, predLow:NaN, predHigh:NaN, ciLow:NaN, ciHigh:NaN, crit:NaN, stat:NaN, pval:NaN, dist:null };
