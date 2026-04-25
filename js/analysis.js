@@ -411,6 +411,33 @@ export function clES(d, ci) {
 // A WeakMap entry is GC'd automatically when the studies array is released
 // (i.e. after each runAnalysis() cycle), so no manual invalidation is needed.
 const _metaCache = new WeakMap();
+
+// Lookup table replacing the 15-branch if-chain in meta().
+// Each function receives (studies, wFE, W, Q, dfQ, tau2Init); most only use a subset.
+// DL is the default fallback (TAU2_FN[method] ?? TAU2_FN.DL).
+// EBLUP is an alias for REML — see legacy estimator notes in benchmark-data.md.
+const TAU2_FN = {
+  REML:   (s, _w, _W, _Q, _d, t0) => tau2_REML (s, 1e-12,    500, t0),
+  PM:     (s, _w, _W, _Q, _d, t0) => tau2_PM   (s, REML_TOL, 100, t0),
+  EB:     (s, _w, _W, _Q, _d, t0) => tau2_EB   (s, REML_TOL, 200, t0),
+  PMM:    (s, _w, _W, _Q, _d, t0) => tau2_PMM  (s, REML_TOL, 200, t0),
+  ML:     (s, _w, _W, _Q, _d, t0) => tau2_ML   (s, REML_TOL, 100, t0),
+  SJ:     (s, _w, _W, _Q, _d, t0) => tau2_SJ   (s, REML_TOL, 200, t0),
+  DLIT:   (s, _w, _W, _Q, _d, t0) => tau2_DLIT (s, REML_TOL, 200, t0),
+  EBLUP:  (s, _w, _W, _Q, _d, t0) => tau2_REML (s, 1e-12,    500, t0),  // alias for REML
+  GENQM:  (s)                      => tau2_GENQM(s),                      // bisection — tau2Init not applicable
+  HS:     (s)                      => tau2_HS   (s),
+  HE:     (s)                      => tau2_HE   (s),
+  GENQ:   (s)                      => tau2_GENQ (s),
+  SQGENQ: (s)                      => tau2_SQGENQ(s),
+  HSk:    (s)                      => tau2_HSk  (s),
+  DL:     (s, wFE, W, Q, dfQ)      => {
+    const sumW2 = wFE.reduce((acc, w) => acc + w * w, 0);
+    const C = W - (sumW2 / W);
+    return C > 0 ? Math.max(0, (Q - dfQ) / C) : 0;
+  },
+};
+
 /**
  * Fit fixed-effect and random-effects meta-analysis models.
  * @param {{ yi: number, vi: number }[]} studies    - Per-study effect sizes and variances.
@@ -463,27 +490,7 @@ export function meta(studies, method="DL", ciMethod="normal", alpha=0.05, tau2In
   if(Q>dfQ && Q>0) I2 = ((Q-dfQ)/Q)*100;
   I2 = Math.max(0, Math.min(100,I2));
 
-  let tau2 = 0;
-	if      (method === "REML") tau2 = tau2_REML(studies, 1e-12,    500, tau2Init);
-	else if (method === "PM")     tau2 = tau2_PM  (studies, REML_TOL, 100, tau2Init);
-	else if (method === "EB")     tau2 = tau2_EB  (studies, REML_TOL, 200, tau2Init);
-	else if (method === "PMM")    tau2 = tau2_PMM (studies, REML_TOL, 200, tau2Init);
-	else if (method === "GENQM")  tau2 = tau2_GENQM(studies);                          // bisection — tau2Init not applicable
-	else if (method === "ML")     tau2 = tau2_ML  (studies, REML_TOL, 100, tau2Init);
-	else if (method === "HS")     tau2 = tau2_HS(studies);
-	else if (method === "HE")     tau2 = tau2_HE(studies);
-	else if (method === "SJ")     tau2 = tau2_SJ  (studies, REML_TOL, 200, tau2Init);
-	else if (method === "GENQ")   tau2 = tau2_GENQ(studies);
-	// ---- Non-UI estimators: not in the dropdown but reachable via meta() and estimatorComparison() ----
-	else if (method === "SQGENQ") tau2 = tau2_SQGENQ(studies);                         // see tau2_SQGENQ
-	else if (method === "DLIT")   tau2 = tau2_DLIT  (studies, REML_TOL, 200, tau2Init); // see tau2_DLIT
-	else if (method === "EBLUP")  tau2 = tau2_REML  (studies, 1e-12, 500, tau2Init);   // alias: EBLUP = REML — see EBLUP block above tau2_GENQ
-	else if (method === "HSk")    tau2 = tau2_HSk(studies);                 // see tau2_HSk
-	else { // DL fallback
-		const sumW2 = wFE.reduce((acc, w) => acc + w * w, 0);
-		const C = W - (sumW2/W);
-		tau2 = C>0 ? Math.max(0, (Q-dfQ)/C) : 0;
-	}
+  const tau2 = (TAU2_FN[method] ?? TAU2_FN.DL)(studies, wFE, W, Q, dfQ, tau2Init);
 
   // ---------- RANDOM EFFECT ----------
   const wRE = studies.map(d => 1 / Math.max(d.vi + tau2, MIN_VAR));
