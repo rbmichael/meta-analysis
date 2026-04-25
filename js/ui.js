@@ -817,11 +817,31 @@ function showDraftBanner(savedAt) {
 
 function hideDraftBanner() {
   document.getElementById("draftBanner").style.display = "none";
+  _resetDiscardBtn();
 }
 
 document.getElementById("draftDismiss").addEventListener("click", hideDraftBanner);
 
+// Two-step confirmation state for the destructive "Discard draft" button.
+let _discardPending = false;
+
+function _resetDiscardBtn() {
+  const btn = document.getElementById("draftStartFresh");
+  if (btn) btn.textContent = "Discard draft";
+  _discardPending = false;
+}
+
 document.getElementById("draftStartFresh").addEventListener("click", () => {
+  if (!_discardPending) {
+    _discardPending = true;
+    const btn = document.getElementById("draftStartFresh");
+    btn.textContent = "Sure?";
+    // Auto-cancel after 4 s if user doesn't confirm.
+    setTimeout(_resetDiscardBtn, 4000);
+    return;
+  }
+  _discardPending = false;
+
   // Reset all settings controls to their HTML-defined defaults.
   const resetSel = id => {
     const el = document.getElementById(id); if (!el) return;
