@@ -597,8 +597,16 @@ document.getElementById("csvFile").addEventListener("change", e => { if (e.targe
 document.getElementById("previewImport").addEventListener("click", commitImport);
 document.getElementById("previewCancel").addEventListener("click", cancelImport);
 document.getElementById("previewEffectType").addEventListener("change", e => refreshPreviewUI(e.target.value));
-document.getElementById("export").addEventListener("click", exportCSV);
-document.getElementById("saveSession").addEventListener("click", saveSession);
+document.getElementById("export").addEventListener("click", e => {
+  const done = flashBtn(e.currentTarget, null, "Saved \u2713");
+  exportCSV();
+  done();
+});
+document.getElementById("saveSession").addEventListener("click", e => {
+  const done = flashBtn(e.currentTarget, null, "Saved \u2713");
+  saveSession();
+  done();
+});
 document.getElementById("loadSession").addEventListener("click", () => document.getElementById("sessionFile").click());
 document.getElementById("sessionFile").addEventListener("change", e => { if (e.target.files[0]) { loadSession(e.target.files[0]); e.target.value = ""; } });
 document.getElementById("addMod").addEventListener("click", addModerator);
@@ -857,6 +865,27 @@ document.getElementById("draftStartFresh").addEventListener("click", () => {
 
 // Draft restore is handled inside init() — see below.
 
+// ---------------- FLASH BUTTON HELPER ----------------
+// Briefly shows a working label, then a done label, then restores the original.
+// workingLabel: shown immediately + button disabled (pass null to skip)
+// doneLabel:    shown after the async work completes for durationMs
+// Returns a resolve function the caller invokes when the work is done.
+function flashBtn(btn, workingLabel, doneLabel, durationMs = 1500) {
+  const original = btn.textContent;
+  let resolve;
+  const promise = new Promise(r => { resolve = r; });
+  if (workingLabel) {
+    btn.disabled = true;
+    btn.textContent = workingLabel;
+  }
+  promise.then(() => {
+    btn.disabled = false;
+    btn.textContent = doneLabel;
+    setTimeout(() => { btn.textContent = original; }, durationMs);
+  });
+  return resolve;
+}
+
 // ---------------- PLOT EXPORT ----------------
 // ---------------- REPORT EXPORT BUTTONS ----------------
 // buildReport internally re-renders every forest page into a hidden element
@@ -896,9 +925,11 @@ async function buildReportAndResync() {
   return { html, downloadHTML, openPrintPreview };
 }
 
-document.getElementById("exportReportHTML").addEventListener("click", async () => {
+document.getElementById("exportReportHTML").addEventListener("click", async e => {
+  const done = flashBtn(e.currentTarget, "Building\u2026", "Saved \u2713");
   const result = await buildReportAndResync();
-  if (result) result.downloadHTML(result.html);
+  if (result) { result.downloadHTML(result.html); done(); }
+  else { e.currentTarget.disabled = false; e.currentTarget.textContent = e.currentTarget.textContent.replace("Building\u2026", "Export HTML"); }
 });
 
 document.getElementById("exportReportPDF").addEventListener("click", async () => {
@@ -924,21 +955,18 @@ document.getElementById("exportReportDOCX").addEventListener("click", async () =
     apaFormat: true,   // Word export is always APA
   };
   const btn = document.getElementById("exportReportDOCX");
-  btn.disabled = true;
-  btn.textContent = "Building\u2026";
+  const done = flashBtn(btn, "Building\u2026", "Saved \u2713");
   try {
     const { buildDocx } = await getDocx();
     const blob = await buildDocx(args);
     downloadBlob(blob, "meta-analysis-report.docx",
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+    done();
   } catch (e) {
     console.error("Export Word failed:", e);
+    btn.disabled = false;
     btn.textContent = "Export failed";
     setTimeout(() => { btn.textContent = "Export Word"; }, 3000);
-    return;
-  } finally {
-    btn.disabled = false;
-    if (btn.textContent === "Building\u2026") btn.textContent = "Export Word";
   }
 });
 
