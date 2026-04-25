@@ -97,17 +97,48 @@
         </div>
       </div>
 
-      <!-- Effect type: always visible -->
+      <!-- Primary settings: always visible -->
       <div class="settings-row">
         <label>
           <span>Effect type<button class="help-btn" data-help-select="effectType" data-help-prefix="effect." title="Help">?</button></span>
           <select id="effectType"></select>
         </label>
+        <label>
+          <span>τ² estimator<button class="help-btn" data-help-select="tauMethod" data-help-prefix="tau." title="Help">?</button></span>
+          <select id="tauMethod">
+            <option value="REML" selected>REML</option>
+            <option value="DL">DerSimonian-Laird (DL)</option>
+            <option value="PM">Paule-Mandel (PM)</option>
+            <option value="EB">Empirical Bayes (EB)</option>
+            <option value="PMM">Paule-Mandel Median (PMM)</option>
+            <option value="GENQM">Generalized Q Median (GENQM)</option>
+            <option value="ML">Maximum Likelihood (ML)</option>
+            <option value="HS">Hunter-Schmidt (HS)</option>
+            <option value="HE">Hedges (HE)</option>
+            <option value="SJ">Sidik-Jonkman (SJ)</option>
+            <option value="GENQ">Generalized Q (GENQ)</option>
+            <option value="DLIT">Iterated DL (DLIT)</option>
+            <option value="HSk">Hunter-Schmidt corrected (HSk)</option>
+            <option value="SQGENQ">Square-root GENQ (SQGENQ)</option>
+            <option value="EBLUP">EBLUP (= REML)</option>
+            <option value="MH">Mantel-Haenszel (MH)</option>
+            <option value="Peto">Peto OR</option>
+          </select>
+        </label>
+        <label>
+          <span>CI method<button class="help-btn" data-help-select="ciMethod" data-help-prefix="ci." title="Help">?</button></span>
+          <select id="ciMethod">
+            <option value="normal">Normal CI</option>
+            <option value="KH">Knapp-Hartung</option>
+            <option value="t">t-distribution</option>
+            <option value="PL">Profile Likelihood</option>
+          </select>
+        </label>
       </div>
 
       <!-- Collapsible advanced settings -->
       <details id="advancedSettings" class="advanced-settings">
-        <summary>More settings</summary>
+        <summary>Advanced settings</summary>
         <div class="advanced-settings-body">
 
           <!-- Three-group settings bar -->
@@ -117,37 +148,6 @@
             <div class="settings-group">
               <span class="settings-group-label">Model</span>
               <div class="settings-group-controls">
-                <label>
-                  <span>τ² estimator<button class="help-btn" data-help-select="tauMethod" data-help-prefix="tau." title="Help">?</button></span>
-                  <select id="tauMethod">
-                    <option value="REML" selected>REML</option>
-                    <option value="DL">DerSimonian-Laird (DL)</option>
-                    <option value="PM">Paule-Mandel (PM)</option>
-                    <option value="EB">Empirical Bayes (EB)</option>
-                    <option value="PMM">Paule-Mandel Median (PMM)</option>
-                    <option value="GENQM">Generalized Q Median (GENQM)</option>
-                    <option value="ML">Maximum Likelihood (ML)</option>
-                    <option value="HS">Hunter-Schmidt (HS)</option>
-                    <option value="HE">Hedges (HE)</option>
-                    <option value="SJ">Sidik-Jonkman (SJ)</option>
-                    <option value="GENQ">Generalized Q (GENQ)</option>
-                    <option value="DLIT">Iterated DL (DLIT)</option>
-                    <option value="HSk">Hunter-Schmidt corrected (HSk)</option>
-                    <option value="SQGENQ">Square-root GENQ (SQGENQ)</option>
-                    <option value="EBLUP">EBLUP (= REML)</option>
-                    <option value="MH">Mantel-Haenszel (MH)</option>
-                    <option value="Peto">Peto OR</option>
-                  </select>
-                </label>
-                <label>
-                  <span>CI method<button class="help-btn" data-help-select="ciMethod" data-help-prefix="ci." title="Help">?</button></span>
-                  <select id="ciMethod">
-                    <option value="normal">Normal CI</option>
-                    <option value="KH">Knapp-Hartung</option>
-                    <option value="t">t-distribution</option>
-                    <option value="PL">Profile Likelihood</option>
-                  </select>
-                </label>
                 <label>
                   <span>CI width<button class="help-btn" data-help="ci.width" title="Help">?</button></span>
                   <select id="ciLevel">
