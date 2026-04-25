@@ -1800,6 +1800,7 @@ function populateExampleData(type) {
 
 // ---------------- OUTPUT SECTION VISIBILITY ----------------
 const staleBanner       = document.getElementById("staleBanner");
+const inputStaleBadge   = document.getElementById("inputStaleBadge");
 const outputPlaceholder = document.getElementById("outputPlaceholder");
 
 // ---- Structured plot/app state objects ----
@@ -2056,6 +2057,7 @@ function markStale() {
   if (!appState.hasRunOnce) return;
   staleBanner.style.display = "block";
   _toggleResults.classList.add("stale");
+  if (inputStaleBadge) inputStaleBadge.hidden = false;
 }
 
 // -----------------------------------------------------------------------------
@@ -2483,6 +2485,7 @@ async function runAnalysis() {
   if (outputPlaceholder) outputPlaceholder.style.display = "none";
   staleBanner.style.display = "none";
   _toggleResults.classList.remove("stale");
+  if (inputStaleBadge) inputStaleBadge.hidden = true;
   if (!appState.hasRunOnce) {
     appState.hasRunOnce = true;
     _toggleResults.disabled = false;
