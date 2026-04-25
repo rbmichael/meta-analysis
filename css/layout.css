@@ -59,6 +59,16 @@
   flex-wrap: wrap;
 }
 
+/* Separator between the CSV pair and the Session pair */
+#inputFileControls .io-sep {
+  display: inline-block;
+  width: 0;
+  height: 18px;
+  border-left: 1px solid var(--border);
+  margin: 0 3px;
+  align-self: center;
+}
+
 /* When standalone (no row wrapper), title carries its own separator */
 .section-title {
   font-size: 0.6875rem;
