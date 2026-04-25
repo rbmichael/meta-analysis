@@ -814,6 +814,34 @@ function hideDraftBanner() {
 document.getElementById("draftDismiss").addEventListener("click", hideDraftBanner);
 
 document.getElementById("draftStartFresh").addEventListener("click", () => {
+  // Reset all settings controls to their HTML-defined defaults.
+  const resetSel = id => {
+    const el = document.getElementById(id); if (!el) return;
+    const i = [...el.options].findIndex(o => o.defaultSelected);
+    el.selectedIndex = i >= 0 ? i : 0;
+  };
+  const resetNum = id => { const el = document.getElementById(id); if (el) el.value = el.defaultValue; };
+  const resetChk = id => { const el = document.getElementById(id); if (el) el.checked = el.defaultChecked; };
+
+  resetSel("effectType"); resetSel("tauMethod"); resetSel("ciMethod");
+  resetSel("ciLevel");    resetSel("mccMethod"); resetSel("cumulativeOrder");
+  resetSel("tfEstimator"); resetSel("forestTheme");
+  resetSel("selMode");    resetSel("selPreset"); resetSel("selSides");
+  resetChk("useTrimFill"); resetChk("useTFAdjusted");
+  resetNum("bayesMu0"); resetNum("bayesSigmaMu"); resetNum("bayesSigmaTau");
+  resetNum("selCuts");
+  // RVE rho: reset value then fire input event so the block-scoped display updater runs.
+  const rveRhoEl = document.getElementById("rveRho");
+  if (rveRhoEl) { rveRhoEl.value = rveRhoEl.defaultValue; rveRhoEl.dispatchEvent(new Event("input")); }
+
+  // Sync dependent UI state.
+  adjustedCheckbox.disabled = !trimFillCheckbox.checked;
+  tfEstimatorSelect.disabled = !trimFillCheckbox.checked;
+  syncMHOptions(document.getElementById("effectType").value);
+  syncPLAvailability();
+  syncSelControls();
+
+  // Reset table and moderators.
   clearDraft();
   clearModerators();
   _robDomains = [];
@@ -954,7 +982,11 @@ document.getElementById("ciMethod").addEventListener("change", () => {
   syncPLAvailability();
   markStale();
 });
-document.getElementById("ciLevel").addEventListener("change", () => { scheduleAutosave(); markStale(); });
+document.getElementById("ciLevel").addEventListener("change", () => { scheduleSave(); markStale(); });
+document.getElementById("mccMethod").addEventListener("change", markStale);
+document.getElementById("bayesMu0").addEventListener("input", markStale);
+document.getElementById("bayesSigmaMu").addEventListener("input", markStale);
+document.getElementById("bayesSigmaTau").addEventListener("input", markStale);
 
 const trimFillCheckbox = document.getElementById("useTrimFill");
 const adjustedCheckbox = document.getElementById("useTFAdjusted");
@@ -2235,37 +2267,6 @@ function runGosh() {
   }
 }
 
-// -----------------------------------------------------------------------------
-// runBayesUpdate()
-// -----------------------------------------------------------------------------
-// Re-runs only the Bayesian meta-analysis using the current prior inputs and
-// the studies / reMean cached in bayesState from the last runAnalysis() call.
-// Called by the "Update" button inside the Bayesian section.
-// -----------------------------------------------------------------------------
-function runBayesUpdate() {
-  if (!bayesState.studies || bayesState.studies.length < 2) return;
-  const mu0      = parseFloat(document.getElementById("bayesMu0")?.value)      || 0;
-  const sigmaMu  = Math.max(0.01, parseFloat(document.getElementById("bayesSigmaMu")?.value)  || 1);
-  const sigmaTau = Math.max(0.01, parseFloat(document.getElementById("bayesSigmaTau")?.value) || 0.5);
-  const result   = bayesMeta(bayesState.studies, { mu0, sigma_mu: sigmaMu, sigma_tau: sigmaTau });
-  if (result.error) return;
-  const bayesUpdateClusterNote = bayesState.studies.some(s => s.cluster)
-    ? `<p class="reg-note" style="color:var(--muted);margin:0 0 6px">ℹ Bayesian analysis does not incorporate cluster-robust adjustment.</p>`
-    : "";
-  document.getElementById("bayesSummary").innerHTML =
-    bayesUpdateClusterNote + buildBayesSummaryHTML(result, bayesState.profile, bayesState.reMean);
-  drawBayesMuPosterior(result, { reMean: bayesState.reMean });
-  drawBayesTauPosterior(result);
-  document.getElementById("bayesGridWarning").style.display =
-    result.grid_truncated ? "" : "none";
-  if (appState.reportArgs) {
-    appState.reportArgs = { ...appState.reportArgs, bayesResult: result };
-  }
-  const ciLevel = document.getElementById("ciLevel")?.value ?? "95";
-  renderSensitivity(mu0, sigmaMu, sigmaTau, ciLevel);
-}
-
-document.getElementById("bayesUpdate").addEventListener("click", runBayesUpdate);
 
 // -----------------------------------------------------------------------------
 // renderSensitivity(mu0, sigmaMu, sigmaTau, ciLevel)
