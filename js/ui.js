@@ -1711,9 +1711,9 @@ function exportCSV() {
 // Group order for the effect type dropdown.
 const EFFECT_GROUP_ORDER = [
   "Continuous (two groups)",
+  "Variability",
   "Continuous (paired)",
   "Continuous (single group)",
-  "Variability",
   "Binary outcomes",
   "Correlations",
   "Proportions",
