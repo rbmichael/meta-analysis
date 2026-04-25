@@ -55,11 +55,9 @@
   box-shadow: none;
 }
 
-/* Study name column — left-aligned, monospace feel */
+/* Study name column — left-aligned */
 #inputTable td:first-child input {
   text-align: left;
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
 }
 
 /* Group column — slightly muted */
