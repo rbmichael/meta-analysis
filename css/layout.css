@@ -1,3 +1,24 @@
+/* ---- Skip-to-main link (visible only on keyboard focus) ---- */
+.skip-link {
+  position: absolute;
+  top: -100%;
+  left: 8px;
+  z-index: 9999;
+  padding: 6px 14px;
+  background: var(--bg-base);
+  color: var(--accent);
+  border: 2px solid var(--accent);
+  border-radius: var(--radius-sm);
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: none;
+}
+
+.skip-link:focus {
+  top: 8px;
+}
+
 /* ---- Input / Output sections ---- */
 .section {
   background: linear-gradient(160deg, var(--bg-th) 0%, var(--bg-row-alt) 100%);
