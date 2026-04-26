@@ -52,7 +52,7 @@ export function regStars(p) {
   if (p < 0.001) return `<span class="reg-sig-3">***</span>`;
   if (p < 0.01)  return `<span class="reg-sig-2">**</span>`;
   if (p < 0.05)  return `<span class="reg-sig-1">*</span>`;
-  if (p < 0.10)  return `<span style="color:#666">.</span>`;
+  if (p < 0.10)  return `<span style="color:var(--fg-muted)">.</span>`;
   return "";
 }
 
@@ -128,7 +128,7 @@ export function buildRegFittedRows(reg) {
   if (!reg.labels || !reg.fitted) return "";
   return reg.labels.map((lbl, i) => {
     const sr   = reg.stdResiduals[i];
-    const flag = Math.abs(sr) > Z_95 ? " style='color:#ff9f43'" : "";
+    const flag = Math.abs(sr) > Z_95 ? " style='color:var(--color-warning)'" : "";
     return `<tr>
       <td>${lbl || i + 1}</td>
       <td>${fmt(reg.yi[i])}</td>
@@ -873,10 +873,10 @@ export function buildInfluenceHTML(influence) {
   const rows = influence.map(d => {
     const anyFlag  = d.outlier || d.influential || d.highLeverage || d.highCookD || d.highDffits || d.highCovRatio;
     const rowStyle = anyFlag ? "class='results-row-flagged'" : "";
-    const hatStyle      = d.highLeverage  ? " style='color:orange;font-weight:bold;'" : "";
-    const cookStyle     = d.highCookD     ? " style='color:orange;font-weight:bold;'" : "";
-    const dffitsStyle   = d.highDffits    ? " style='color:orange;font-weight:bold;'" : "";
-    const covRatioStyle = d.highCovRatio  ? " style='color:orange;font-weight:bold;'" : "";
+    const hatStyle      = d.highLeverage  ? " style='color:var(--color-warning);font-weight:bold;'" : "";
+    const cookStyle     = d.highCookD     ? " style='color:var(--color-warning);font-weight:bold;'" : "";
+    const dffitsStyle   = d.highDffits    ? " style='color:var(--color-warning);font-weight:bold;'" : "";
+    const covRatioStyle = d.highCovRatio  ? " style='color:var(--color-warning);font-weight:bold;'" : "";
     const flags = [
       d.outlier      ? "Outlier"      : "",
       d.influential  ? "Influential"  : "",
@@ -902,7 +902,7 @@ export function buildInfluenceHTML(influence) {
       <tr><th>Study</th><th>RE (LOO)</th><th>Δτ²</th><th>Std Residual</th><th>DFBETA</th><th>DFFITS${hBtn("diag.dffits")}</th><th>CovRatio${hBtn("diag.covratio")}</th><th>Hat</th><th>Cook's D</th><th>Flag</th></tr>
       ${rows}
     </table>
-    <small style="color:#aaa;">Thresholds: Hat &gt; ${fmt(2/k)} (= 2/k); Cook's D &gt; ${fmt(4/k)} (= 4/k); DFFITS &gt; ${fmt(dffitsThresh)} (= 3·√(1/(k−1))); CovRatio &gt; ${fmt(covRatioThresh)} (= 1+1/k)</small>`;
+    <small style="color:var(--fg-muted);">Thresholds: Hat &gt; ${fmt(2/k)} (= 2/k); Cook's D &gt; ${fmt(4/k)} (= 4/k); DFFITS &gt; ${fmt(dffitsThresh)} (= 3·√(1/(k−1))); CovRatio &gt; ${fmt(covRatioThresh)} (= 1+1/k)</small>`;
 }
 
 // Jeffreys (1961) interpretation scale for BF₁₀

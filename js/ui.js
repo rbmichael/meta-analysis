@@ -2244,7 +2244,7 @@ function _renderAllResults(ctx) {
   const RE_adj_disp = useTF && mAdjusted ? profile.transform(mAdjusted.RE) : null;
 
   const warningHTML = missingCorrelation
-    ? `<div style="color: orange; font-weight: bold;">
+    ? `<div style="color:var(--color-warning);font-weight:bold;">
          ⚠️ Some paired studies are missing correlation (r). Assumed r = 0.5 for computation.
        </div>`
     : "";
@@ -2256,7 +2256,7 @@ function _renderAllResults(ctx) {
       : (m.isClustered
         ? `<div class="reg-note" style="margin:2px 0 6px">Cluster-robust SEs active (C&nbsp;=&nbsp;${m.clustersUsed} cluster${m.clustersUsed === 1 ? "" : "s"}${m.allSingletons ? " — all singletons (HC-robust)" : ""}).</div>`
         : (m.robustError
-          ? `<div class="reg-note" style="color:var(--warn);margin:2px 0 6px">⚠ Cluster-robust SE: ${escapeHTML(m.robustError)}</div>`
+          ? `<div class="reg-note" style="color:var(--color-warning);margin:2px 0 6px">⚠ Cluster-robust SE: ${escapeHTML(m.robustError)}</div>`
           : "")))
     : "";
 
@@ -2642,7 +2642,7 @@ async function runAnalysis() {
 
     if (m.error) {
       document.getElementById("results").innerHTML =
-        `<b style="color:var(--warn)">Error: ${escapeHTML(m.error)}</b>`;
+        `<b style="color:var(--color-warning)">Error: ${escapeHTML(m.error)}</b>`;
       performance.measure("runAnalysis", "runAnalysis:start");
       return false;
     }
