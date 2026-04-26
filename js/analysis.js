@@ -142,17 +142,11 @@ export function compute(s, type, options = {}) {
   return profile.compute(s);
 }
 
-// =============================================================================
-// tau2.js re-export (tau2_HS, tau2_DLIT, tau2_HSk, tau2_HE, tau2_SJ, tau2_ML,
-// logLik, tau2_REML, tau2_PM, tau2_EB, tau2_PMM, tau2_GENQM, tau2_SQGENQ,
-// tau2_GENQ, RE_mean, FE_mean, I2)
-// =============================================================================
+// τ² estimators and primitives (tau2.js) — export * kept: all names are τ² functions
 export * from "./tau2.js";
 
-// =============================================================================
-// bayes.js re-export (profileLikCI, profileLikTau2, bayesMeta, priorSensitivity)
-// =============================================================================
-export * from "./bayes.js";
+// Bayesian meta-analysis (bayes.js)
+export { profileLikCI, profileLikTau2, bayesMeta, priorSensitivity } from "./bayes.js";
 
 
 // Q for heterogeneity: IV weights (1/vi) with M-H estimate as reference.
@@ -366,25 +360,19 @@ export function metaPeto(studies, alpha = 0.05) {
 }
 
 
-// =============================================================================
-// pubbias.js re-export (eggerTest, beggTest, fatPetTest, petPeeseTest,
-// harbordTest, petersTest, deeksTest, rueckerTest, failSafeN, henmiCopas,
-// tesTest, waapWls)
-// =============================================================================
-export * from "./pubbias.js";
+// Publication bias tests (pubbias.js)
+export { eggerTest, beggTest, fatPetTest, petPeeseTest,
+         harbordTest, petersTest, deeksTest, rueckerTest,
+         failSafeN, henmiCopas, tesTest, waapWls } from "./pubbias.js";
 
-// =============================================================================
-// influence.js re-export (influenceDiagnostics, cumulativeMeta, leaveOneOut,
-// estimatorComparison, baujat, blupMeta)
-// =============================================================================
-export * from "./influence.js";
+// Sensitivity and influence (influence.js)
+export { influenceDiagnostics, leaveOneOut, cumulativeMeta,
+         estimatorComparison, baujat, blupMeta } from "./influence.js";
 
-// =============================================================================
-// regression.js re-export (subgroupAnalysis, heterogeneityCIs, buildDesignMatrix,
-// rcsKnots, rcsBasis, metaRegression, adjustPvals, lsModel, rvePooled,
-// meta3level, tau2_metaReg)
-// =============================================================================
-export * from "./regression.js";
+// Meta-regression and moderators (regression.js)
+export { subgroupAnalysis, heterogeneityCIs, rcsKnots, rcsBasis,
+         buildDesignMatrix, tau2_metaReg, metaRegression, adjustPvals,
+         lsModel, rvePooled, meta3level } from "./regression.js";
 
 /**
  * Common Language Effect Size (CLES / CL statistic / AUC).
@@ -698,12 +686,10 @@ export function logDet(A) {
   return logd;
 }
 
-// =============================================================================
-// selection.js re-export (pCurve, pUniform, bfgs, selIntervalProbs,
-// selIntervalIdx, selectionLogLik, SEL_CUTS_ONE_SIDED, SEL_CUTS_TWO_SIDED,
-// SELECTION_PRESETS, veveaHedges)
-// =============================================================================
-export * from "./selection.js";
+// Selection models and p-value methods (selection.js)
+export { pCurve, pUniform, veveaHedges, SELECTION_PRESETS,
+         SEL_CUTS_ONE_SIDED, SEL_CUTS_TWO_SIDED,
+         bfgs, selIntervalProbs, selIntervalIdx, selectionLogLik } from "./selection.js";
 
 // ================= SANDWICH (CLUSTER-ROBUST) VARIANCE ESTIMATOR =================
 // Computes the cluster-robust (sandwich) variance matrix for a WLS estimator.

@@ -4,7 +4,27 @@
 // Renders all SVG visualisations directly into named DOM elements.
 // Each function is stateless: it clears its target SVG, then redraws from
 // scratch using the data passed in.  No function in this file reads from the
-// DOM beyond the SVG container and the shared #tooltip element.
+// DOM beyond the named SVG containers; the tooltip element is injected via
+// setTooltipElement() so no "#tooltip" ID is hard-coded in plot functions.
+//
+// Standard signature
+// ------------------
+//   draw*(primaryData, pooledResult, profile, options = {})
+//
+//   Documented deviations (justified):
+//   • drawForest(studies, m, options)          — profile is inside options because
+//     the forest options bag (pageSize, page, theme, ciMethod, …) is cached as a
+//     single object and re-spread on every redraw; extracting profile would split
+//     that cache.
+//   • drawCumulativeForest(results, profile, options)  — no pooledResult positional arg.
+//   • drawCumulativeFunnel(studies, results, profile, stepIdx) — stepIdx is a
+//     scalar slider position, not optional config; kept positional for clarity.
+//   • drawBubble / drawPartialResidualBubble(studies, reg, mod, container) —
+//     multiple bubble plots coexist on the same page, each targeting a caller-
+//     supplied DOM container rather than a fixed SVG ID.
+//   • drawInfluencePlot / drawPCurve / drawPUniform / drawBaujatPlot /
+//     drawRoBTrafficLight / drawRoBSummary — single-argument or specialised
+//     data shapes; no meaningful profile or pooledResult parameter.
 //
 // Exports
 // -------
@@ -14,13 +34,14 @@
 //     options: { ciMethod, profile, pageSize, page, pooledDisplay }
 //     Returns { totalPages }.
 //
-//   drawFunnel(studies, m, egger, profile)
+//   drawFunnel(studies, m, profile, options)
 //     Funnel plot (effect vs. SE) with optional Egger regression line.
+//     options: { egger, contours, petpeese }
 //
-//   drawInfluencePlot(studies, influence)
+//   drawInfluencePlot(influence)
 //     Influence diagnostics plot (Cook's D, hat values, DFFITS per study).
 //
-//   drawCumulativeForest(steps, profile)
+//   drawCumulativeForest(results, profile, options)
 //     Cumulative forest plot: one row per cumulative step, showing how the
 //     pooled estimate evolves as studies are added in order.
 //
@@ -29,7 +50,7 @@
 //     time.  Axes are globally fixed (all studies) so the view is stable as
 //     the slider advances.  The newly added study is highlighted in accent.
 //
-//   drawBubble(studies, reg, modName, modIdx, container)
+//   drawBubble(studies, reg, mod, container)
 //     Bubble plot for a single continuous moderator in a meta-regression.
 //     Bubble radius ∝ √(RE weight); regression line is the marginal fit.
 //
@@ -53,22 +74,40 @@
 //     Baujat diagnostic scatter (Baujat et al., 2002): x = contribution to Q,
 //     y = influence on FE pooled estimate.  Quadrant guides at mean x/y.
 //
-//   drawLabbe(studies, m, profile, type)
+//   drawLabbe(studies, m, profile, options)
 //     L'Abbé plot for binary outcomes: x = control event rate c/(c+d),
 //     y = treatment event rate a/(a+b).  Bubble radius ∝ √N.  Reference
 //     diagonal y = x (no effect); dashed pooled-RE curve (OR/RR/RD).
-//     type = "OR" | "RR" | "RD".
+//     options: { type }  where type = "OR" | "RR" | "RD".
 //
-//   drawBayesTauPosterior(result, opts)
+//   drawBayesTauPosterior(result, options)
 //     Marginal posterior density of τ from bayesMeta().  Shaded 95% credible
 //     region; vertical dashed line at posterior mean.
 //     SVG target: #bayesTauPlot (500 × 340 px).
 //
-//   drawBayesMuPosterior(result, opts)
+//   drawBayesMuPosterior(result, options)
 //     Marginal posterior density of μ from bayesMeta() (mixture of normals).
 //     Shaded 95% credible region; dashed line at posterior mean; dotted line
-//     at frequentist RE estimate (opts.reMean) for comparison.
+//     at frequentist RE estimate (options.reMean) for comparison.
 //     SVG target: #bayesMuPlot (500 × 340 px).
+//
+//   drawGoshPlot(result, profile, options)
+//     GOSH scatter (Harbord & Higgins, 2008): x = I², y = FE pooled estimate
+//     on the display scale.  Points coloured by subset size n (Viridis).
+//     Rendering: SVG circles for count ≤ 5 000; ImageData-painted canvas
+//     embedded as <image> for larger datasets (zero-copy, ~50 ms for 1 M pts).
+//     Canvas mode shows a coordinate-readout tooltip; SVG mode shows per-point
+//     details (n, I², μ̂).
+//     options: { xAxis, forReport }
+//
+//   drawProfileLikTau2(result, options)
+//     options: { xScale }  "tau2" (default) or "tau"
+//
+//   drawQQPlot(stdResiduals, labels, options)
+//     options: { containerId }  default "#qqPlot"
+//
+//   drawRadialPlot(studies, m, profile, options)
+//     options: { containerId }  default "#radialPlot"
 //
 // All plots use CSS custom properties (var(--fg), var(--accent), etc.) so
 // they respond automatically to light/dark theme switches.
@@ -81,14 +120,6 @@
 //   paginate()          — slice an array to one page + return pagination metadata
 //   attachTooltip()     — wire mousemove/mouseout tooltip onto a D3 selection
 //
-//   drawGoshPlot(result, profile)
-//     GOSH scatter (Harbord & Higgins, 2008): x = I², y = FE pooled estimate
-//     on the display scale.  Points coloured by subset size n (Viridis).
-//     Rendering: SVG circles for count ≤ 5 000; ImageData-painted canvas
-//     embedded as <image> for larger datasets (zero-copy, ~50 ms for 1 M pts).
-//     Canvas mode shows a coordinate-readout tooltip; SVG mode shows per-point
-//     details (n, I², μ̂).
-//
 // Dependencies: utils.js (chiSquareCDF), constants.js (Z_95), D3 (global)
 // =============================================================================
 
@@ -96,6 +127,15 @@ import { chiSquareCDF, normalQuantile } from "./utils.js";
 import { Z_95 } from "./constants.js";
 import { FOREST_THEMES } from "./forestThemes.js";
 import { rcsBasis } from "./analysis.js";
+
+// ── Tooltip element (set once by ui.js on load) ───────────────────────────────
+// Decouples plot functions from the specific DOM ID "#tooltip".
+// All internal code calls selTooltip() instead of selTooltip().
+// d3.select(null) returns an empty selection — method calls on it are no-ops,
+// so plots degrade gracefully if setTooltipElement is never called.
+let _tooltipEl = null;
+export function setTooltipElement(el) { _tooltipEl = el; }
+function selTooltip() { return d3.select(_tooltipEl); }
 
 // ── Shared D3 helpers ─────────────────────────────────────────────────────────
 
@@ -159,7 +199,7 @@ function paginate(arr, options = {}) {
 // htmlFn(d) — called with the datum; returns the tooltip HTML string.
 // Returns `sel` for chaining.
 function attachTooltip(sel, htmlFn) {
-  const tt = d3.select("#tooltip");
+  const tt = selTooltip();
   return sel
     .on("mousemove", (event, d) => {
       tt.style("opacity", 1)
@@ -327,7 +367,7 @@ export function drawBubble(studies, reg, mod, container) {
   }
 
   // Bubbles
-  const tooltip = d3.select("#tooltip");
+  const tooltip = selTooltip();
   g.selectAll("circle")
     .data(valid)
     .enter().append("circle")
@@ -536,7 +576,7 @@ export function drawPartialResidualBubble(studies, reg, mod, container) {
   }
 
   // Bubbles
-  const tooltip = d3.select("#tooltip");
+  const tooltip = selTooltip();
   g.selectAll("circle")
     .data(valid)
     .enter().append("circle")
@@ -642,7 +682,7 @@ export function drawPartialResidualBubble(studies, reg, mod, container) {
 
 function forestDrawStudyRows(ctx, pageStudies, studies, studyCrit, widthCiLabel, ciMethodLabel, yPos) {
   const { svg, x, L, T, profile } = ctx;
-  const tooltip = d3.select("#tooltip");
+  const tooltip = selTooltip();
   const wMax    = d3.max(studies, d => d.w);
 
   svg.selectAll("line.ci")
@@ -1228,7 +1268,8 @@ function funnelDrawLegend(svg, W, margin, BANDS, isDark) {
 //   4. Egger line       — red dashed regression line when egger.slope is finite.
 //   5. Axes + labels    — bottom x (effect measure) and left y ("Standard Error").
 //   6. [contour mode] Legend — four colour swatches with p-value labels (Step 3).
-export function drawFunnel(studies, m, egger, profile, options = {}) {
+export function drawFunnel(studies, m, profile, options = {}) {
+  const egger = options.egger ?? null;
   profile = profile || { transform: x => x };
   const svg = clearAndSelectSVG("#funnelPlot");
 
@@ -1638,7 +1679,7 @@ export function drawCumulativeFunnel(cumulativeStudies, cumResults, profile, ste
   const iH = H - margin.top  - margin.bottom;
   setSvgSize(svg, W, H);
 
-  const tooltip = d3.select("#tooltip");
+  const tooltip = selTooltip();
 
   // ---- Global axes (all studies, fixed regardless of step) ----
   const seMax  = d3.max(cumulativeStudies, d => d.se);
@@ -2160,7 +2201,7 @@ export function drawOrchardPlot(studies, m, profile) {
   const xExtent = Math.max(...refs.filter(isFinite).map(Math.abs)) * 1.12 || 1;
   const x = d3.scaleLinear().domain([-xExtent, xExtent]).range([0, iW]);
 
-  const tooltip = d3.select("#tooltip");
+  const tooltip = selTooltip();
 
   // ---- Null reference line ----
   g.append("line")
@@ -2364,7 +2405,7 @@ export function drawCaterpillarPlot(studies, m, profile, options = {}) {
   const xExtent = Math.max(...refs.map(Math.abs)) * 1.08 || 1;
   const x = d3.scaleLinear().domain([-xExtent, xExtent]).range([0, iW]);
 
-  const tooltip = d3.select("#tooltip");
+  const tooltip = selTooltip();
 
   // ---- Null reference line (dashed) ----
   g.append("line")
@@ -2541,7 +2582,7 @@ export function drawBlupPlot(result, profile, options = {}) {
   const xExt = Math.max(...allVals.map(Math.abs)) * 1.1 || 1;
   const x = d3.scaleLinear().domain([-xExt, xExt]).range([0, iW]);
 
-  const tooltip = d3.select("#tooltip");
+  const tooltip = selTooltip();
 
   // Null reference line
   g.append("line")
@@ -2747,7 +2788,7 @@ export function drawBaujatPlot(result, profile) {
   });
 
   // ---- Points and labels ----
-  const tooltip = d3.select("#tooltip");
+  const tooltip = selTooltip();
   // Show inline labels only when k is small enough that they won't collide badly
   const showLabels = points.length <= 25;
 
@@ -2858,7 +2899,8 @@ export function drawBaujatPlot(result, profile) {
 // m        — meta() result (for pooled RE estimate)
 // profile  — effect profile (for transform())
 // type     — "OR" | "RR" | "RD"
-export function drawLabbe(studies, m, profile, type) {
+export function drawLabbe(studies, m, profile, options = {}) {
+  const type = options.type ?? "OR";
   const svg = clearAndSelectSVG("#labbePlot");
   if (!studies || studies.length === 0) return;
 
@@ -2956,7 +2998,7 @@ export function drawLabbe(studies, m, profile, type) {
   };
 
   // ---- Bubbles ----
-  const tooltip   = d3.select("#tooltip");
+  const tooltip   = selTooltip();
   const showLabels = pts.length <= 20;
 
   pts.forEach(p => {
@@ -3102,7 +3144,7 @@ export function drawRoBTrafficLight(studies, domains, robData) {
 
   setSvgSize(svg, svgW, svgH);
 
-  const tooltip = d3.select("#tooltip");
+  const tooltip = selTooltip();
 
   // ── Domain header labels (rotated −45°) ──
   domains.forEach((dom, di) => {
@@ -3245,15 +3287,15 @@ export function drawRoBSummary(studies, domains, robData) {
         .attr("fill", ROB_COLORS[rating])
         .attr("fill-opacity", 0.85)
         .on("mouseover", (event) => {
-          d3.select("#tooltip").style("opacity", 1)
+          selTooltip().style("opacity", 1)
             .html(`<strong>${dom}</strong><br>${rating}: ${counts[rating]} / ${total} (${Math.round(prop * 100)}%)`);
         })
         .on("mousemove", (event) => {
-          d3.select("#tooltip")
+          selTooltip()
             .style("left", (event.pageX + 12) + "px")
             .style("top",  (event.pageY - 28) + "px");
         })
-        .on("mouseout", () => d3.select("#tooltip").style("opacity", 0));
+        .on("mouseout", () => selTooltip().style("opacity", 0));
 
       // Percentage label inside bar (if wide enough)
       if (w >= 24) {
@@ -3316,15 +3358,15 @@ export function drawRoBSummary(studies, domains, robData) {
 // and avoids embedding a rasterised PNG inside the exported HTML/SVG).
 const GOSH_SVG_REPORT_MAX = 3000;
 
-export function drawGoshPlot(result, profile, opts = {}) {
+export function drawGoshPlot(result, profile, options = {}) {
   const svg = clearAndSelectSVG("#goshPlot");
   if (!result || result.error || !result.count) return;
 
   profile = profile || { transform: x => x, label: "Effect" };
 
   const { mu: muArr, I2: I2Arr, Q: QArr, n: nArr, count, k, sampled } = result;
-  const xAxis     = opts.xAxis     || "I2";    // "I2" | "Q" | "n"
-  const forReport = opts.forReport || false;   // true → SVG circles only (no canvas PNG embed)
+  const xAxis     = options.xAxis     || "I2";    // "I2" | "Q" | "n"
+  const forReport = options.forReport || false;   // true → SVG circles only (no canvas PNG embed)
 
   const W = +svg.attr("width")  || 520;
   const H = +svg.attr("height") || 420;
@@ -3435,7 +3477,7 @@ export function drawGoshPlot(result, profile, opts = {}) {
       .attr("preserveAspectRatio", "none");
 
     // Transparent overlay for coordinate-readout tooltip.
-    const tt = d3.select("#tooltip");
+    const tt = selTooltip();
     g.append("rect")
       .attr("x", 0).attr("y", 0)
       .attr("width", iW).attr("height", iH)
@@ -3581,23 +3623,23 @@ export function drawGoshPlot(result, profile, opts = {}) {
 }
 
 // =============================================================================
-// drawProfileLikTau2(result, opts)
+// drawProfileLikTau2(result, options)
 // =============================================================================
 // Draws the profile log-likelihood curve for τ² produced by profileLikTau2().
 //
-// opts.xScale: "tau2" (default) — x-axis shows τ²
-//              "tau"            — x-axis shows τ = √τ²
+// options.xScale: "tau2" (default) — x-axis shows τ²
+//                 "tau"            — x-axis shows τ = √τ²
 //
 // SVG target: #profileLikTau2Plot (500 × 380 px by default).
 // Elements (back-to-front):
 //   CI shaded band → threshold line → τ²_hat line → CI bound lines →
 //   profile curve → peak dot → axes → labels → title.
 // =============================================================================
-export function drawProfileLikTau2(result, opts = {}) {
+export function drawProfileLikTau2(result, options = {}) {
   const svg = clearAndSelectSVG("#profileLikTau2Plot");
   if (!result || result.error) return;
 
-  const xScale = opts.xScale || "tau2";
+  const xScale = options.xScale || "tau2";
   const { grid, ll, tau2hat, lCritRel, ciLow, ciHigh, method, k } = result;
 
   const margin = { top: 34, right: 24, bottom: 56, left: 66 };
@@ -3763,7 +3805,7 @@ export function drawProfileLikTau2(result, opts = {}) {
 }
 
 // =============================================================================
-// drawBayesTauPosterior(result, opts)
+// drawBayesTauPosterior(result, options)
 // =============================================================================
 // Marginal posterior density of τ from bayesMeta().
 // tauWeights are probability masses (sum to 1); dividing by Δτ gives density.
@@ -3772,7 +3814,7 @@ export function drawProfileLikTau2(result, opts = {}) {
 //   gridlines → 95% CrI shaded area → full density area (faint) →
 //   density curve → CI bound lines → posterior mean line → axes → labels → title
 // =============================================================================
-export function drawBayesTauPosterior(result, opts = {}) {
+export function drawBayesTauPosterior(result, options = {}) {
   const svg = clearAndSelectSVG("#bayesTauPlot");
   if (!result || result.error) return;
 
@@ -3895,18 +3937,18 @@ export function drawBayesTauPosterior(result, opts = {}) {
 }
 
 // =============================================================================
-// drawBayesMuPosterior(result, opts)
+// drawBayesMuPosterior(result, options)
 // =============================================================================
 // Marginal posterior density of μ from bayesMeta() — a mixture of Gaussians
 // over the τ grid, pre-evaluated and stored in result.muDensity.
 // SVG target: #bayesMuPlot (500 × 340 px by default).
-// opts.reMean: frequentist RE estimate (analysis scale) for comparison line.
+// options.reMean: frequentist RE estimate (analysis scale) for comparison line.
 // Elements (back-to-front):
 //   gridlines → 95% CrI shaded area → full density area (faint) →
 //   density curve → CI bound lines → posterior mean line →
-//   RE comparison line (if opts.reMean provided) → axes → labels → title
+//   RE comparison line (if options.reMean provided) → axes → labels → title
 // =============================================================================
-export function drawBayesMuPosterior(result, opts = {}) {
+export function drawBayesMuPosterior(result, options = {}) {
   const svg = clearAndSelectSVG("#bayesMuPlot");
   if (!result || result.error) return;
 
@@ -3915,7 +3957,7 @@ export function drawBayesMuPosterior(result, opts = {}) {
   const dMu   = nMu > 1 ? muGrid[1] - muGrid[0] : 1;
   const muMin = muGrid[0];
   const muMax = muGrid[nMu - 1];
-  const reMean = opts.reMean;
+  const reMean = options.reMean;
 
   const margin = { top: 34, right: 24, bottom: 56, left: 66 };
   const W  = +svg.attr("width")  || 500;
@@ -4049,14 +4091,14 @@ export function drawBayesMuPosterior(result, opts = {}) {
 // =============================================================================
 // stdResiduals : number[]  — internally standardised residuals  zᵢ = (yᵢ−μ̂)/√(vᵢ+τ²)
 // labels       : string[]  — study labels (same order as stdResiduals)
-// opts         : { containerId? }   default containerId = "#qqPlot"
+// options      : { containerId? }   default containerId = "#qqPlot"
 //
 // Theoretical quantiles: Blom's formula  qᵢ = Φ⁻¹((i − 0.375) / (k + 0.25))
 // Reference line: fitted through (Q₁_theory, Q₁_sample) and (Q₃_theory, Q₃_sample),
 //   matching R's qqline() convention.
 // =============================================================================
-export function drawQQPlot(stdResiduals, labels, opts = {}) {
-  const containerId = opts.containerId || "#qqPlot";
+export function drawQQPlot(stdResiduals, labels, options = {}) {
+  const containerId = options.containerId || "#qqPlot";
   const svg = clearAndSelectSVG(containerId);
 
   const k = stdResiduals.length;
@@ -4143,7 +4185,7 @@ export function drawQQPlot(stdResiduals, labels, opts = {}) {
     .attr("stroke-dasharray", "6,3");
 
   // ---- 6. Points ----
-  const tooltip = d3.select("#tooltip");
+  const tooltip = selTooltip();
 
   points.forEach(pt => {
     const cx = x(pt.theory);
@@ -4216,9 +4258,9 @@ export function drawQQPlot(stdResiduals, labels, opts = {}) {
 //   studies  — array with { yi, vi, label } (already filtered valid)
 //   m        — meta() result; m.FE used as the slope of the reference line
 //   profile  — effect profile (for back-transform labels on the right axis)
-//   opts     — { containerId: "#radialPlot" }
-export function drawRadialPlot(studies, m, profile, opts = {}) {
-  const containerId = opts.containerId || "#radialPlot";
+//   options  — { containerId: "#radialPlot" }
+export function drawRadialPlot(studies, m, profile, options = {}) {
+  const containerId = options.containerId || "#radialPlot";
   const svg = clearAndSelectSVG(containerId);
 
   const valid = studies.filter(s => isFinite(s.yi) && isFinite(s.vi) && s.vi > 0);

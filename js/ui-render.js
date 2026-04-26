@@ -14,17 +14,7 @@ import { Z_95 } from "./constants.js";
 import { leaveOneOut, estimatorComparison } from "./influence.js";
 import { adjustPvals } from "./regression.js";
 import { drawPCurve, drawPUniform } from "./plots.js";
-
-// Private copies of micro-helpers also present in ui.js.
-// Duplication is intentional: importing from ui.js would create a circular
-// dependency (ui.js imports from this file).
-function escapeHTML(s) {
-  return String(s)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
+import { escapeHTML } from "./utils-html.js";
 // Keep in sync with HELP_LABELS in ui.js.
 const _RENDER_HELP_LABELS = {
   "diag.locationscale":  "Location-scale model",
@@ -616,15 +606,6 @@ export function renderStudyTable(studies, m, profile) {
 
   // SE column header: label the scale when yi is stored on a transformed scale.
   const seLabel = profile.isTransformedScale ? "SE (transformed)" : "SE";
-
-  // Escape HTML to prevent injection from user-supplied study labels.
-  function escapeHTML(s) {
-    return String(s)
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;");
-  }
 
   // Build one row object per study
   const rows = studies.map(d => {

@@ -41,8 +41,12 @@
 // Module dependency graph  (A → B means A imports from B)
 // --------------------------------------------------------
 //   ui.js           → analysis.js, profiles.js, trimfill.js, plots.js,
-//                     report.js, csv.js, session.js, autosave.js,
-//                     export.js, io.js, help.js, utils.js
+//                     report.js, session.js, autosave.js,
+//                     export.js, io.js, help.js, utils.js,
+//                     ui-table.js, ui-render.js, ui-state.js
+//   ui-table.js     → profiles.js, ui-state.js, utils-html.js, csv.js, io.js
+//   ui-render.js    → analysis.js, plots.js, constants.js, utils-html.js
+//   ui-state.js     → profiles.js, session.js
 //   analysis.js     → utils.js, constants.js
 //   profiles.js     → utils.js, constants.js
 //   trimfill.js     → analysis.js
@@ -56,6 +60,7 @@
 //   io.js           (no imports — browser API wrappers)
 //   help.js         (no imports — static content object)
 //   constants.js    (no imports — numeric constants only)
+//   utils-html.js   (no imports — leaf module)
 //
 // Analysis pipeline  (triggered by runAnalysis() on every input change)
 // ----------------------------------------------------------------------
@@ -104,14 +109,13 @@ import { eggerTest, beggTest, fatPetTest, petPeeseTest, failSafeN, tesTest, waap
 import { fmt, normalQuantile } from "./utils.js";
 import { effectProfiles, getProfile } from "./profiles.js";
 import { trimFill } from "./trimfill.js";
-import { drawForest, drawFunnel, drawBubble, drawPartialResidualBubble, drawInfluencePlot, drawCumulativeForest, drawCumulativeFunnel, drawOrchardPlot, drawCaterpillarPlot, drawBlupPlot, drawBaujatPlot, drawLabbe, drawRoBTrafficLight, drawRoBSummary, drawGoshPlot, drawProfileLikTau2, drawBayesTauPosterior, drawBayesMuPosterior, drawQQPlot, drawRadialPlot } from "./plots.js";
+import { drawForest, drawFunnel, drawBubble, drawPartialResidualBubble, drawInfluencePlot, drawCumulativeForest, drawCumulativeFunnel, drawOrchardPlot, drawCaterpillarPlot, drawBlupPlot, drawBaujatPlot, drawLabbe, drawRoBTrafficLight, drawRoBSummary, drawGoshPlot, drawProfileLikTau2, drawBayesTauPosterior, drawBayesMuPosterior, drawQQPlot, drawRadialPlot, setTooltipElement } from "./plots.js";
 import { goshCompute, GOSH_MAX_K } from "./gosh.js";
 import { exportSVG, exportPNG, exportTIFF } from "./export.js";
 // report.js (81 KB) and docx.js (51 KB) are loaded on first export click.
 let _reportMod, _docxMod;
 function getReport() { return (_reportMod ??= import("./report.js")); }
 function getDocx()   { return (_docxMod   ??= import("./docx.js")); }
-import { parseCSV, detectEffectType } from "./csv.js";
 import { serializeSession, parseSession, missingInputCols } from "./session.js";
 import { saveDraft, loadDraft, clearDraft } from "./autosave.js";
 import { downloadBlob, readTextFile, serializeCSV } from "./io.js";
@@ -128,8 +132,12 @@ import { regStars, regFmtP, buildRegCoeffRows, buildRegFittedRows,
          buildInfluenceHTML, bayesInterpretation, buildBayesSummaryHTML,
          buildSensitivityHTML, buildSubgroupHTML, renderGoshInfo }
   from "./ui-render.js";
-import { validateRow, getSoftWarnings, gatherSessionState }
-  from "./ui-state.js";
+import { validateRow, gatherSessionState } from "./ui-state.js";
+import { initTable, moderators, doAddModerator, removeModerator, clearModerators,
+         updateTableHeaders, addRow, commitPendingDelete, removeRow, clearRow,
+         updateValidationWarnings, collectStudies,
+         refreshPreviewUI, previewCSV, commitImport, cancelImport }
+  from "./ui-table.js";
 
 // ---------------- AUTOSAVE ----------------
 
@@ -162,14 +170,7 @@ document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "hidden") flushSave();
 });
 
-// ---------------- SHARED HELPERS ----------------
-function escapeHTML(s) {
-  return String(s)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
+
 
 // ---------------- HELP POPOVER ----------------
 
@@ -368,33 +369,16 @@ document.querySelectorAll(".help-btn").forEach(btn => {
 });
 
 // ---------------- MODERATOR STATE ----------------
-let moderators = []; // { name: string, type: "continuous"|"categorical", transform: string }
+// moderators[] is owned by ui-table.js (imported above) — a live array mutated
+// in place by doAddModerator / removeModerator / clearModerators.
 let scaleModerators = []; // { name: string, type: "continuous"|"categorical", transform: string }
 
 // ---- Risk-of-bias state ----
 let _robDomains = [];  // string[] — ordered domain names
 let _robData    = {};  // { [studyLabel]: { [domain]: "Low"|"Some concerns"|"High"|"NI"|"" } }
 
-// Low-level: add one moderator to state + DOM (no form read, no runAnalysis call).
-function doAddModerator(name, type, transform = "linear") {
-  if (!name || moderators.some(m => m.name === name)) return;
-  moderators.push({ name, type, transform });
-
-  const table = document.getElementById("inputTable");
-  const headerRow = table.rows[0];
-  headerRow.insertBefore(makeModTh(name), headerRow.lastElementChild);
-
-  for (let i = 1; i < table.rows.length; i++) {
-    const row = table.rows[i];
-    row.insertBefore(makeModTd(name, type), row.lastElementChild);
-  }
-}
-
-// Reset all moderators — clears state and removes all data-mod DOM elements.
-function clearModerators() {
-  moderators = [];
-  document.querySelectorAll("[data-mod]").forEach(el => el.remove());
-}
+// doAddModerator / clearModerators / removeModerator / makeModTh / makeModTd
+// all live in ui-table.js (imported above).
 
 function addModerator() {
   const nameEl = document.getElementById("modName");
@@ -409,35 +393,6 @@ function addModerator() {
   markStale();
 }
 
-function removeModerator(name) {
-  moderators = moderators.filter(m => m.name !== name);
-  const table = document.getElementById("inputTable");
-  for (let i = 0; i < table.rows.length; i++) {
-    const cell = [...table.rows[i].cells].find(c => c.dataset.mod === name);
-    if (cell) cell.remove();
-  }
-  markStale();
-}
-
-function makeModTh(name) {
-  const th = document.createElement("th");
-  th.dataset.mod = name;
-  th.innerHTML = `${name} <button class="remove-mod-btn" data-mod="${name}" title="Remove moderator">×</button>`;
-  th.querySelector(".remove-mod-btn").addEventListener("click", () => removeModerator(name));
-  return th;
-}
-
-function makeModTd(name, type) {
-  const td = document.createElement("td");
-  td.dataset.mod = name;
-  const input = document.createElement("input");
-  input.dataset.mod = name;
-  input.style.width = "70px";
-  input.placeholder = type === "categorical" ? "A/B/…" : "0";
-  input.addEventListener("input", () => { markStale(); scheduleSave(); });
-  td.appendChild(input);
-  return td;
-}
 
 // ---- Scale moderator manager (location-scale model) ----
 
@@ -625,7 +580,7 @@ _themeToggle.addEventListener("click", () => {
   localStorage.setItem("theme", next);
   _applyTheme(next);
   if (funnelPlot.args && funnelPlot.contours) {
-    drawFunnel(...funnelPlot.args, { contours: true, petpeese: funnelPlot.petpeese });
+    drawFunnel(...funnelPlot.args, { egger: funnelPlot.egger, contours: true, petpeese: funnelPlot.petpeese });
   }
 });
 
@@ -680,7 +635,15 @@ document.getElementById("addStudy").addEventListener("click", () => { addRow(); 
 document.getElementById("run").addEventListener("click", async () => { if (await runAnalysis()) showView("results"); });
 document.getElementById("import").addEventListener("click", () => document.getElementById("csvFile").click());
 document.getElementById("csvFile").addEventListener("change", e => { if (e.target.files[0]) previewCSV(e.target.files[0]); });
-document.getElementById("previewImport").addEventListener("click", commitImport);
+document.getElementById("previewImport").addEventListener("click", () => {
+  const missingCols = commitImport();
+  syncMHOptions(document.getElementById("effectType").value);
+  if (missingCols.length > 0) {
+    const warningDiv = document.getElementById("csvWarning");
+    warningDiv.textContent = `Warning: CSV is missing required columns: ${missingCols.join(", ")}`;
+    warningDiv.style.display = "block";
+  }
+});
 document.getElementById("previewCancel").addEventListener("click", cancelImport);
 document.getElementById("previewEffectType").addEventListener("change", e => refreshPreviewUI(e.target.value));
 document.getElementById("export").addEventListener("click", e => {
@@ -1186,512 +1149,12 @@ document.getElementById("profileLikScale").addEventListener("change", () => {
   }
 });
 
-// ---------------- TABLE HEADER ----------------
-function updateTableHeaders() {
-  const type = document.getElementById("effectType").value;
-  const profile = effectProfiles[type];
-  if (!profile) return;
-
-  const table = document.getElementById("inputTable");
-  const headerRow = table.rows[0];
-  headerRow.innerHTML = "";
-
-	// Add Study column first
-	const thStudy = document.createElement("th");
-	thStudy.textContent = "Study";
-	headerRow.appendChild(thStudy);
-
-  // Add effect columns
-  profile.inputs.forEach(col => {
-    const th = document.createElement("th");
-    th.textContent = col;
-    headerRow.appendChild(th);
-  });
-
-  // Group column
-  const thGroup = document.createElement("th");
-  thGroup.textContent = "Group";
-  headerRow.appendChild(thGroup);
-
-  // Cluster column
-  const thCluster = document.createElement("th");
-  thCluster.innerHTML = `Cluster ${hBtn("cluster.id")}`;
-  headerRow.appendChild(thCluster);
-
-  // Moderator columns
-  moderators.forEach(({ name }) => headerRow.appendChild(makeModTh(name)));
-
-  // Actions column
-  const thActions = document.createElement("th");
-  thActions.textContent = "Actions";
-  headerRow.appendChild(thActions);
-}
-
-// ---------------- DRAG-TO-REORDER ----------------
-let _dragRow        = null;  // the row being dragged
-let _dragPointerSrc = null;  // element where pointerdown fired (guard against input drags)
-
-function _rowPointerDown(e) { _dragPointerSrc = e.target; }
-
-function _rowDragStart(e) {
-  // Don't start a drag when the user clicked inside an input / button / select
-  if (_dragPointerSrc && _dragPointerSrc.matches("input, button, select, textarea")) {
-    e.preventDefault();
-    return;
-  }
-  _dragRow = this;
-  e.dataTransfer.effectAllowed = "move";
-  e.dataTransfer.setData("text/plain", ""); // required for Firefox
-  this.classList.add("row-dragging");
-}
-
-function _rowDragOver(e) {
-  if (!_dragRow || _dragRow === this) return;
-  e.preventDefault();
-  e.dataTransfer.dropEffect = "move";
-  const rect = this.getBoundingClientRect();
-  const aboveMid = e.clientY < rect.top + rect.height / 2;
-  this.classList.toggle("drag-over-top",    aboveMid);
-  this.classList.toggle("drag-over-bottom", !aboveMid);
-}
-
-function _rowDragLeave() {
-  this.classList.remove("drag-over-top", "drag-over-bottom");
-}
-
-function _rowDrop(e) {
-  e.preventDefault();
-  if (!_dragRow || _dragRow === this) return;
-  const rect = this.getBoundingClientRect();
-  const insertBefore = e.clientY < rect.top + rect.height / 2;
-  this.parentNode.insertBefore(_dragRow, insertBefore ? this : this.nextSibling);
-  this.classList.remove("drag-over-top", "drag-over-bottom");
-  markStale();
-  scheduleSave();
-}
-
-function _rowDragEnd() {
-  _dragRow?.classList.remove("row-dragging");
-  document.querySelectorAll("#inputTable .drag-over-top, #inputTable .drag-over-bottom")
-    .forEach(r => r.classList.remove("drag-over-top", "drag-over-bottom"));
-  _dragRow = null;
-}
-
-// ---------------- ADD ROW ----------------
-function addRow(values) {
-  const type = document.getElementById("effectType").value;
-  const profile = effectProfiles[type];
-  if (!profile) return;
-
-  const table = document.getElementById("inputTable");
-  const row = table.insertRow();
-  row.draggable = true;
-  row.addEventListener("pointerdown", _rowPointerDown);
-  row.addEventListener("dragstart",   _rowDragStart);
-  row.addEventListener("dragover",    _rowDragOver);
-  row.addEventListener("dragleave",   _rowDragLeave);
-  row.addEventListener("drop",        _rowDrop);
-  row.addEventListener("dragend",     _rowDragEnd);
-  const v = values || ["", ...Array(profile.inputs.length).fill(""), "", ""]; // Study + effects + group + cluster
-
-  // ---- Study column ----
-  const cellStudy = row.insertCell();
-  const inputStudy = document.createElement("input");
-  inputStudy.value = v[0] || "";
-  cellStudy.appendChild(inputStudy);
-
-  // ---- Effect columns ----
-  profile.inputs.forEach((key, idx) => {
-    const cell = row.insertCell();
-    const input = document.createElement("input");
-    input.value = v[idx + 1] || "";
-    cell.appendChild(input);
-  });
-
-  // ---- Group column ---- (fixed index: 1 Study + p effects + 1 Group)
-  const groupCell = row.insertCell();
-  const groupInput = document.createElement("input");
-  groupInput.className = "group";
-  groupInput.placeholder = "e.g. A";
-  groupInput.value = v[profile.inputs.length + 1] || "";
-  groupCell.appendChild(groupInput);
-
-  // ---- Cluster column ---- (fixed index: 1 Study + p effects + 1 Group + 1 Cluster)
-  const clusterCell = row.insertCell();
-  const clusterInput = document.createElement("input");
-  clusterInput.className = "cluster";
-  clusterInput.placeholder = "e.g. 1";
-  clusterInput.value = v[profile.inputs.length + 2] || "";
-  clusterCell.appendChild(clusterInput);
-
-  // ---- Moderator columns ---- (values at indices after Cluster)
-  const modOffset = profile.inputs.length + 3;
-  moderators.forEach(({ name, type }, modIdx) => {
-    const td = makeModTd(name, type);
-    const val = v[modOffset + modIdx];
-    if (val !== undefined) td.querySelector("input").value = val;
-    row.appendChild(td);
-  });
-
-  // ---- Actions ----
-  const actionCell = row.insertCell();
-  actionCell.innerHTML = `<button class="remove-btn">✖</button> <button class="clear-btn">🧹</button>`;
-
-  // ---- Listeners ----
-  row.querySelectorAll("input").forEach(input => {
-    input.addEventListener("input", () => {
-      validateRow(row);
-      markStale();
-      scheduleSave();
-    });
-  });
-
-  row.querySelector(".remove-btn").addEventListener("click", () => removeRow(row.querySelector(".remove-btn")));
-  row.querySelector(".clear-btn").addEventListener("click", () => clearRow(row.querySelector(".clear-btn")));
-}
-
-// ---------------- UNDO DELETION ----------------
-// One pending deletion at a time.  The row stays in the DOM marked with
-// .row-pending-delete (excluded from analysis + session state) until the
-// 5-second window expires or the user clicks Undo.
-
-const _undoState = { timer: null, row: null, robKey: null };
-const _UNDO_MS   = 5000;
-
-function _commitPendingDelete() {
-  if (!_undoState.row) return;
-  clearTimeout(_undoState.timer);
-  if (_undoState.robKey) delete _robData[_undoState.robKey];
-  _undoState.row.remove();
-  _undoState.row    = null;
-  _undoState.robKey = null;
-  _undoState.timer  = null;
-  renderRoBDataGrid();
-  _hideUndoToast();
-}
-
-function _cancelPendingDelete() {
-  if (!_undoState.row) return;
-  clearTimeout(_undoState.timer);
-  _undoState.row.classList.remove("row-pending-delete");
-  _undoState.row    = null;
-  _undoState.robKey = null;
-  _undoState.timer  = null;
-  _hideUndoToast();
-  markStale();
-  scheduleSave();
-}
-
-function _showUndoToast(label) {
-  const toast = document.getElementById("undoToast");
-  const lbl   = document.getElementById("undoToastLabel");
-  const btn   = document.getElementById("undoToastBtn");
-  const bar   = toast?.querySelector(".undo-toast-bar");
-  if (!toast) return;
-
-  if (lbl) lbl.textContent = label ? `"${label}" removed` : "Study removed";
-
-  // Restart bar animation by cloning and replacing
-  if (bar) {
-    const newBar = bar.cloneNode(true);
-    bar.replaceWith(newBar);
-  }
-
-  btn.onclick = _cancelPendingDelete;
-  toast.hidden = false;
-}
-
-function _hideUndoToast() {
-  const toast = document.getElementById("undoToast");
-  if (toast) toast.hidden = true;
-}
-
-// ---------------- REMOVE & CLEAR ----------------
-function removeRow(btn) {
-  const table = document.getElementById("inputTable");
-  // Count non-pending rows (header counts as 1 non-data row).
-  const nonPending = [...table.rows].filter(r => !r.classList.contains("row-pending-delete")).length;
-  if (nonPending <= 2) return;  // keep at least 1 data row
-
-  // Commit any in-progress pending deletion before starting a new one.
-  _commitPendingDelete();
-
-  const row   = btn.closest("tr");
-  const label = row.querySelector("input")?.value?.trim() || "";
-
-  // Mark row as pending; exclude from analysis immediately.
-  row.classList.add("row-pending-delete");
-  _undoState.row    = row;
-  _undoState.robKey = label || null;
-  _undoState.timer  = setTimeout(_commitPendingDelete, _UNDO_MS);
-
-  _showUndoToast(label);
-  markStale();
-  scheduleSave();
-}
-
-function clearRow(btn) {
-  btn.closest("tr").querySelectorAll("input").forEach(input => input.value = "");
-  markStale();
-}
-
-// --------------- UPDATE VALIDATION WARNINGS (BELOW INPUT TABLE) -----------------
-function updateValidationWarnings(studies, excluded, softWarnings) {
-  const table = document.getElementById("inputTable");
-  const warningDiv = document.getElementById("validationWarnings");
-  const rows = [...table.rows].slice(1);
-
-  const messages = [];
-  const subgroupMap = {};
-
-  // ---------------- INPUT ERRORS ----------------
-  rows.forEach((row, idx) => {
-    const label = row.querySelector("input")?.value || `Row ${idx+1}`;
-    const errors = JSON.parse(row.dataset.validationErrors || "{}");
-
-    Object.entries(errors).forEach(([field, msg]) => {
-      messages.push(`❌ ${label}: ${msg}`);
-    });
-
-    const groupName = row.querySelector(".group")?.value.trim();
-    if (groupName) {
-      if (!subgroupMap[groupName]) subgroupMap[groupName] = [];
-      subgroupMap[groupName].push(label);
-    }
-  });
-
-  // ---------------- SUBGROUP WARNINGS ----------------
-  Object.entries(subgroupMap).forEach(([group, studiesInGroup]) => {
-    if (studiesInGroup.length < 2) {
-      messages.push(`⚠️ Subgroup "${group}" has <2 studies (${studiesInGroup.join(", ")})`);
-    }
-  });
-
-  // ---------------- EXCLUDED STUDIES ----------------
-  if (excluded.length > 0) {
-    excluded.forEach(e => {
-      messages.push(`⚠️ Excluded: ${e.label} (${e.reason})`);
-    });
-  }
-  
-  // ---------------- SOFT WARNINGS --------------------
-  softWarnings.forEach(w => messages.push(w));
-
-  // ---------------- ANALYSIS WARNINGS ----------------
-  const k = studies.length;
-
-  if (k === 0) {
-    messages.push("❌ No valid studies available for analysis");
-  } else {
-    if (k < 2) {
-      messages.push("⚠️ Fewer than 2 studies: meta-analysis not meaningful");
-    }
-    if (k < 3) {
-      messages.push("⚠️ Egger / Begg / FAT-PET tests require ≥ 3 studies");
-    }
-
-    // Check for extremely small variances (numerical instability)
-    const tinyVar = studies.some(s => s.vi < 1e-8);
-    if (tinyVar) {
-      messages.push("⚠️ One or more studies have extremely small variance (may inflate weights)");
-    }
-  }
-
-  // ---------------- RENDER ----------------
-  if (messages.length > 0) {
-    warningDiv.innerHTML = messages.map(m => `• ${m}`).join("<br>");
-  } else {
-    warningDiv.innerHTML = "";
-  }
-}
-
-// ---------------- CSV IMPORT — TWO-PHASE PREVIEW / COMMIT ----------------
-
-// Cached parsed CSV waiting for user confirmation.
-let _pendingImport = null;  // { parsed: { delimiter, headers, rows } }
-
-// Classify every CSV header against the chosen effect profile.
-// Returns { matched, missing, modCols, structural, confidence }.
-function classifyColumns(headers, type) {
-  const profile   = effectProfiles[type];
-  const required  = new Set(profile.inputs.map(i => i.toLowerCase()));
-  const structural = new Set(["study", "group", "cluster"]);
-  const lowerHdr  = new Set(headers.map(h => h.toLowerCase()));
-
-  const matched    = profile.inputs.filter(i =>  lowerHdr.has(i.toLowerCase()));
-  const missing    = profile.inputs.filter(i => !lowerHdr.has(i.toLowerCase()));
-  const modCols    = headers.filter(h => !required.has(h.toLowerCase()) && !structural.has(h.toLowerCase()));
-  const structCols = headers.filter(h =>  structural.has(h.toLowerCase()));
-
-  const score = profile.inputs.length > 0 ? matched.length / profile.inputs.length : 0;
-  const confidence = score === 1 ? "full" : score > 0 ? "partial" : "none";
-
-  return { matched, missing, modCols, structural: structCols, confidence };
-}
-
-// Rebuild the mapping chips and preview table for the currently-selected type.
-function refreshPreviewUI(type) {
-  if (!_pendingImport) return;
-  const { headers, rows } = _pendingImport.parsed;
-  const cls = classifyColumns(headers, type);
-
-  // Confidence pill — show "tied" when the auto-detected type is ambiguous and
-  // the user hasn't manually overridden the dropdown.
-  const confEl = document.getElementById("previewConfidence");
-  const isAutoDetected = _pendingImport.tied && type === _pendingImport.detectedType;
-  const displayConf = (isAutoDetected && cls.confidence === "full") ? "tied" : cls.confidence;
-  const otherTypes = (_pendingImport.tiedTypes ?? []).filter(t => t !== type);
-  const tiedMsg = otherTypes.length > 0
-    ? `⚠ ambiguous — also matches: ${otherTypes.join(", ")}`
-    : "⚠ ambiguous — multiple types match";
-  const confText = {
-    full:    "✓ all columns matched",
-    tied:    tiedMsg,
-    partial: "⚠ partial match",
-    none:    "✗ no columns matched",
-  };
-  confEl.textContent = confText[displayConf];
-  confEl.className = `badge-pill conf-${displayConf}`;
-
-  // Column mapping chips
-  const lowerMatched    = new Set(cls.matched.map(c => c.toLowerCase()));
-  const lowerStructural = new Set(cls.structural.map(c => c.toLowerCase()));
-
-  let chips = "";
-  cls.structural.forEach(c =>
-    chips += `<span class="badge-pill chip-ignored">${escapeHTML(c)}</span>`);
-  cls.matched.forEach(c =>
-    chips += `<span class="badge-pill chip-matched">✓ ${escapeHTML(c)}</span>`);
-  cls.missing.forEach(c =>
-    chips += `<span class="badge-pill chip-missing">✗ ${escapeHTML(c)}</span>`);
-  cls.modCols.forEach(c =>
-    chips += `<span class="badge-pill chip-moderator">~ ${escapeHTML(c)}</span>`);
-  document.getElementById("previewMapping").innerHTML = chips;
-
-  // Data preview table (first 5 rows)
-  function colClass(h) {
-    const hl = h.toLowerCase();
-    if (lowerStructural.has(hl)) return "";
-    if (lowerMatched.has(hl))    return "col-matched";
-    return "col-moderator";
-  }
-
-  let tbl = '<table class="preview-table"><thead><tr>';
-  headers.forEach(h => {
-    tbl += `<th class="${colClass(h)}">${escapeHTML(h)}</th>`;
-  });
-  tbl += "</tr></thead><tbody>";
-  rows.slice(0, 5).forEach(row => {
-    tbl += "<tr>";
-    row.forEach(cell => tbl += `<td>${escapeHTML(cell)}</td>`);
-    tbl += "</tr>";
-  });
-  tbl += "</tbody></table>";
-  document.getElementById("previewTable").innerHTML = tbl;
-}
-
-// Phase 1 — called when the user selects a file.
-// Parses the file and populates the preview panel without touching the table.
-async function previewCSV(file) {
-  const warningDiv = document.getElementById("csvWarning");
-  warningDiv.style.display = "none";
-
-  let text;
-  try { text = await readTextFile(file); }
-  catch {
-    warningDiv.textContent = "Could not read the selected file.";
-    warningDiv.style.display = "block";
-    return;
-  }
-
-  const parsed = parseCSV(text);
-
-  if (!parsed.headers.length) {
-    warningDiv.textContent = "The selected file appears to be empty.";
-    warningDiv.style.display = "block";
-    return;
-  }
-
-  // Detect effect type before storing so detectedType is available to refreshPreviewUI.
-  const currentType = document.getElementById("effectType").value;
-  const detection   = detectEffectType(parsed.headers, currentType, effectProfiles);
-
-  _pendingImport = { parsed, detectedType: detection.type, tied: detection.tied, tiedTypes: detection.tiedTypes ?? [] };
-
-  // Delimiter badge
-  const delimNames = { ",": "comma", ";": "semicolon", "\t": "tab" };
-  document.getElementById("previewDelimiter").textContent =
-    `delimiter: ${delimNames[parsed.delimiter] ?? parsed.delimiter}`;
-
-  document.getElementById("previewEffectType").value = detection.type;
-
-  refreshPreviewUI(detection.type);
-  document.getElementById("importPreview").style.display = "block";
-}
-
-// Phase 2 — called when the user clicks "Import" in the preview panel.
-// Commits the parsed data to the table and runs analysis.
-function commitImport() {
-  if (!_pendingImport) return;
-  const { headers, rows } = _pendingImport.parsed;
-
-  const type    = document.getElementById("previewEffectType").value;
-  const profile = effectProfiles[type];
-
-  // Build header → index map
-  const headerMap = {};
-  headers.forEach((h, idx) => { headerMap[h.toLowerCase()] = idx; });
-
-  // Classify columns
-  const knownCols = new Set(["study", "group", "cluster", ...profile.inputs.map(c => c.toLowerCase())]);
-  const modCols   = headers.filter(h => !knownCols.has(h.toLowerCase()));
-
-  // Infer moderator types and register them
-  clearModerators();
-  modCols.forEach(col => {
-    const ci     = headerMap[col.toLowerCase()];
-    const vals   = rows.map(r => r[ci] ?? "").filter(v => v.trim() !== "");
-    const mtype  = vals.length > 0 && vals.every(v => !isNaN(v.trim())) ? "continuous" : "categorical";
-    moderators.push({ name: col, type: mtype, transform: "linear" });
-  });
-
-  // Apply detected effect type and rebuild table headers
-  document.getElementById("effectType").value = type;
-  updateTableHeaders();
-  const table = document.getElementById("inputTable");
-  while (table.rows.length > 1) table.deleteRow(1);
-
-  rows.forEach(values => {
-    const v = [];
-    v.push(values[headerMap["study"]] ?? "");
-    profile.inputs.forEach(col => v.push(values[headerMap[col.toLowerCase()]] ?? ""));
-    v.push(values[headerMap["group"]] ?? "");
-    v.push(values[headerMap["cluster"]] ?? "");
-    modCols.forEach(col => v.push(values[headerMap[col.toLowerCase()]] ?? ""));
-    addRow(v);
-  });
-
-  // Dismiss the preview panel (also clears csvWarning).
-  cancelImport();
-
-  // Show a warning for any required column that was absent — must come after
-  // cancelImport() so the warning is not immediately cleared by it.
-  const warningDiv  = document.getElementById("csvWarning");
-  const missingCols = profile.inputs.filter(c => !(c.toLowerCase() in headerMap));
-  if (missingCols.length > 0) {
-    warningDiv.textContent = `Warning: CSV is missing required columns: ${missingCols.join(", ")}`;
-    warningDiv.style.display = "block";
-    return;
-  }
-}
-
-function cancelImport() {
-  _pendingImport = null;
-  document.getElementById("importPreview").style.display = "none";
-  document.getElementById("csvWarning").style.display = "none";
-  // Reset the file input so choosing the same file again fires the change event.
-  document.getElementById("csvFile").value = "";
-}
+// updateTableHeaders, drag handlers, addRow, undo deletion, removeRow, clearRow,
+// updateValidationWarnings: all moved to ui-table.js (R-5 refactor).
+
+// classifyColumns, refreshPreviewUI, previewCSV, commitImport, cancelImport
+// all moved to ui-table.js (R-5 refactor).
+// commitImport returns missing column names; caller shows the warning.
 
 // ---------------- SESSION SAVE ----------------
 
@@ -1926,6 +1389,17 @@ function syncMHOptions(type) {
 }
 
 function init() {
+  // Inject callbacks into ui-table.js (required before any table operations)
+  initTable({
+    markStale,
+    scheduleSave,
+    renderRoBDataGrid,
+    deleteRobEntry: key => { delete _robData[key]; },
+  });
+
+  // Wire the shared tooltip element into plots.js (removes "#tooltip" coupling)
+  setTooltipElement(document.getElementById("tooltip"));
+
   // Populate effect type dropdowns from profiles
   populateEffectTypeDropdowns();
 
@@ -2058,7 +1532,7 @@ document.querySelectorAll(".funnel-mode-btn").forEach(btn => {
     if (!funnelPlot.args) return;
     funnelPlot.contours = btn.dataset.mode === "contour";
     document.querySelectorAll(".funnel-mode-btn").forEach(b => b.classList.toggle("active", b === btn));
-    drawFunnel(...funnelPlot.args, { contours: funnelPlot.contours, petpeese: funnelPlot.petpeese });
+    drawFunnel(...funnelPlot.args, { egger: funnelPlot.egger, contours: funnelPlot.contours, petpeese: funnelPlot.petpeese });
   });
 });
 
@@ -2424,108 +1898,174 @@ function renderSensitivity(mu0, sigmaMu, sigmaTau, ciLevel) {
   }
 }
 
-// -----------------------------------------------------------------------------
-// runAnalysis() → boolean
-// -----------------------------------------------------------------------------
-// Master orchestration function. Reads the entire UI state, runs the full
-// statistical pipeline, and updates every output panel. Called on every
-// meaningful input change (via the debounced scheduleSave pathway).
+// =============================================================================
+// R-1 REFACTOR: runAnalysis() decomposed into focused named helpers
+// =============================================================================
+// Each helper is a pure computation function (no DOM writes) that receives an
+// `opts` bag and returns a results object.  runAnalysis() calls them in
+// sequence, collects results, then delegates all DOM writes to _renderAllResults().
 //
-// Parameters
-// ----------
-//   none — all inputs are read directly from the DOM
-//
-// Return value
-// ------------
-//   true  — analysis completed successfully (≥1 valid study)
-//   false — bailed out early; no valid studies after row validation
-//
-// Pipeline (in execution order)
-// ------------------------------
-//   1. Read effectType → look up effectProfile
-//   2. For each table row:
-//        a. validate row (hard check — invalid rows are excluded)
-//        b. parse raw inputs via profile.inputs field list
-//        c. detect missing correlation in paired designs (r defaults to 0.5)
-//        d. collect soft warnings (range / plausibility checks)
-//        e. call profile.compute() → { yi, vi, se, w, … }
-//        f. attach subgroup label and moderator values
-//   3. Guard: if studies[] is empty, show placeholder and return false
-//   4. Clear stale indicators; unlock results panel on first successful run
-//   5. Read τ² method, CI method, trim-fill flags
-//   6. Optionally run trimFill() → augmented `all` dataset
-//   7. meta()                → pooled FE/RE estimates, heterogeneity
-//   8. eggerTest()           → funnel asymmetry (regression-based)
-//   9. beggTest()            → rank-correlation bias test
-//  10. fatPetTest()          → FAT/PET regression
-//  11. failSafeN()           → Rosenthal + Orwin fail-safe N
-//  12. influenceDiagnostics()→ leave-one-out, DFBETA, hat, Cook's D
-//  13. subgroupAnalysis()    → per-group pooling + Q_between
-//  14. Back-transform estimates through profile.transform() for display
-//  15. Write results panel HTML
-//  16. renderStudyTable(), renderSensitivityPanel()
-//  17. metaRegression() → renderRegressionPanel() + drawBubble() per moderator
-//  18. drawForest()  (page 0) → renderForestNav()
-//       ↳ caches args in forestPlot.args for page-navigation re-renders
-//  19. Caches full state in appState.reportArgs for HTML-export buttons
-//  20. drawFunnel(), drawInfluencePlot()
-//  21. cumulativeMeta() → drawCumulativeForest()
-//  22. updateValidationWarnings()
-//  23. return true
-//
-// Side effects
-// ------------
-//   DOM   — rewrites #results, #forestPlot, #funnelPlot, #influencePlot,
-//            #cumulativeForestPlot, #studyTable, #sensitivityPanel,
-//            #regressionPanel, #bubblePlots, forest nav buttons, stale banner
-//   State — forestPlot.args, appState.reportArgs, appState.hasRunOnce
-//            forestPlot.page ← 0, caterpillarPlot.page ← 0, cumForestPlot.page ← 0
-// -----------------------------------------------------------------------------
-async function runAnalysis() {
-  if (_analysisRunning) return false;
-  _analysisRunning = true;
-  const _runBtn     = document.getElementById("run");
-  const _runProgress = document.getElementById("runProgress");
-  if (_runBtn)     { _runBtn.disabled = true; _runBtn.innerHTML = "Running\u2026"; }
-  if (_runProgress) _runProgress.hidden = false;
-  // Double-rAF: first fires before paint, second fires after — guarantees the
-  // progress bar has been painted and its compositor layer promoted before the
-  // synchronous computation blocks the main thread.
-  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
-  try {
-  performance.mark("runAnalysis:start");
-  scheduleSave();
-  // Cancel any in-progress GOSH computation.
-  if (goshState.worker) {
-    goshState.worker.terminate();
-    goshState.worker = null;
-    const elRun    = document.getElementById("goshRun");
-    const elCancel = document.getElementById("goshCancel");
-    const elProg   = document.getElementById("goshProgress");
-    if (elRun)    elRun.disabled    = false;
-    if (elCancel) elCancel.disabled = true;
-    if (elProg)   elProg.hidden     = true;
-  }
-  // Reset accordion sections to their default open/closed states on each run.
-  document.querySelectorAll(".results-section").forEach(d => d.removeAttribute("open"));
-  // Reset all paginated plots to page 0 unconditionally (including on early
-  // return paths below) so stale page state never outlives a run attempt.
-  forestPlot.page = 0;
-  caterpillarPlot.page = 0;
-  cumForestPlot.page = 0;
+// _runCoreMeta(studies, opts)        → { m, tf, all, profileLikResult, mAdjusted,
+//                                         rveResult, threeLevelResult }
+// _runBayesBatch(studies, m, opts)   → { bayesResult, reMeanRef }
+// _runPubBiasBatch(studies, m, opts) → { egger, begg, petpeese, fatpet, fsn, tes,
+//                                         waap, pcurve, puniform, harbord, peters,
+//                                         deeks, ruecker, hc, selResult }
+// _runSensitivityBatch(studies, m, opts) → { influence, baujatResult, blupResult,
+//                                             qqResiduals, qqLabels,
+//                                             cumResults, cumulativeStudies }
+// _runRegressionBatch(studies, m, opts)  → { subgroup, reg, ls }
+// _renderAllResults(ctx)             — writes all DOM / draws all plots
+// =============================================================================
 
-  // ---- Cache DOM element references (avoids repeated getElementById lookups) ----
-  const elEffectType         = document.getElementById("effectType");
+// ── Helper: core meta-analysis ────────────────────────────────────────────────
+function _runCoreMeta(studies, opts) {
+  const { method, ciMethod, alpha, type, useTF, tfEstimator, useTFAdjusted,
+          isMHorPeto, hasClusters, rveRho } = opts;
+
+  let tf = [], all = studies;
+  if (useTF && !isMHorPeto) {
+    tf  = trimFill(studies, method, tfEstimator);
+    all = [...studies, ...tf];
+  }
+
+  let m;
+  if      (method === "MH"  ) m = metaMH(studies, type, alpha);
+  else if (method === "Peto") m = metaPeto(studies, alpha);
+  else if (hasClusters)       m = robustMeta(studies, method, ciMethod, alpha);
+  else                        m = meta(studies, method, ciMethod, alpha);
+
+  if (m.error) return { m, tf, all, profileLikResult: null, mAdjusted: null, rveResult: null, threeLevelResult: null };
+
+  const profileLikResult =
+    (method === "ML" || method === "REML") && studies.length >= 2
+      ? profileLikTau2(studies, { method })
+      : null;
+
+  const mAdjusted = (useTF && useTFAdjusted && tf.length > 0)
+    ? meta([...studies, ...tf], method, ciMethod, alpha)
+    : null;
+
+  const rveResult = (hasClusters && !isMHorPeto)
+    ? rvePooled(studies, { rho: rveRho, alpha })
+    : null;
+
+  const threeLevelResult = (hasClusters && !isMHorPeto)
+    ? meta3level(studies, { method: "REML", alpha })
+    : null;
+
+  return { m, tf, all, profileLikResult, mAdjusted, rveResult, threeLevelResult };
+}
+
+// ── Helper: Bayesian batch ────────────────────────────────────────────────────
+function _runBayesBatch(studies, m, opts) {
+  const { bayesMu0, bayesSigmaMu, bayesSigmaTau, alpha, isMHorPeto } = opts;
+  if (studies.length < 2 || isMHorPeto) return { bayesResult: null, reMeanRef: NaN };
+  const reMeanRef  = isFinite(m.RE) ? m.RE : m.FE;
+  const bayesResult = bayesMeta(studies, { mu0: bayesMu0, sigma_mu: bayesSigmaMu, sigma_tau: bayesSigmaTau, alpha });
+  return { bayesResult, reMeanRef };
+}
+
+// ── Helper: publication bias batch ───────────────────────────────────────────
+function _runPubBiasBatch(studies, m, opts) {
+  const { alpha, selModeVal, selPreset, selSides, selCuts } = opts;
+
+  const egger    = eggerTest(studies);
+  const begg     = beggTest(studies);
+  const petpeese = petPeeseTest(studies);
+  const fatpet   = petpeese.fat;
+  const fsn      = failSafeN(studies);
+  const tes      = tesTest(studies, m);
+  const waap     = waapWls(studies);
+  const pcurve   = pCurve(studies);
+  const puniform = pUniform(studies, m);
+  const harbord  = harbordTest(studies);
+  const peters   = petersTest(studies);
+  const deeks    = deeksTest(studies);
+  const ruecker  = rueckerTest(studies);
+  const hc       = henmiCopas(studies, alpha);
+
+  // Selection model — skip when meta-regression moderators are active
+  let selResult = null;
+  if (moderators.length === 0) {
+    let selCutsEff, selSidesEff, selOmegaFixed;
+    if (selModeVal === "sensitivity" && selPreset !== "custom") {
+      const p       = SELECTION_PRESETS[selPreset];
+      selCutsEff    = p.cuts;
+      selSidesEff   = p.sides;
+      selOmegaFixed = p.omega;
+    } else {
+      selCutsEff    = selCuts;
+      selSidesEff   = selSides;
+      selOmegaFixed = null;
+    }
+    selResult = veveaHedges(studies, selCutsEff, selSidesEff, selOmegaFixed);
+  }
+
+  return { egger, begg, petpeese, fatpet, fsn, tes, waap, pcurve, puniform,
+           harbord, peters, deeks, ruecker, hc, selResult };
+}
+
+// ── Helper: sensitivity / influence / cumulative batch ───────────────────────
+function _runSensitivityBatch(studies, m, opts) {
+  const { method, ciMethod, alpha, cumulativeOrder } = opts;
+
+  const influence    = influenceDiagnostics(studies, method, ciMethod, alpha);
+  const baujatResult = baujat(studies);
+  const blupResult   = (m && isFinite(m.tau2) && m.tau2 > 0 && studies.length >= 2)
+    ? blupMeta(studies, m) : null;
+  const qqResiduals  = influence.map(d => d.stdResidual).filter(isFinite);
+  const qqLabels     = influence.filter(d => isFinite(d.stdResidual)).map(d => d.label);
+
+  const cumulativeStudies = studies.slice();
+  if      (cumulativeOrder === "precision_desc") cumulativeStudies.sort((a, b) => a.vi - b.vi);
+  else if (cumulativeOrder === "precision_asc")  cumulativeStudies.sort((a, b) => b.vi - a.vi);
+  else if (cumulativeOrder === "effect_asc")     cumulativeStudies.sort((a, b) => a.yi - b.yi);
+  else if (cumulativeOrder === "effect_desc")    cumulativeStudies.sort((a, b) => b.yi - a.yi);
+  // "input" order: no sort
+
+  const cumResults = cumulativeMeta(cumulativeStudies, method, ciMethod, alpha);
+
+  return { influence, baujatResult, blupResult, qqResiduals, qqLabels, cumResults, cumulativeStudies };
+}
+
+// ── Helper: meta-regression / subgroup batch ─────────────────────────────────
+function _runRegressionBatch(studies, m, opts) {
+  const { method, ciMethod, alpha, modSpec, scaleModSpec } = opts;
+
+  const subgroup = subgroupAnalysis(studies, method, ciMethod, alpha);
+  let reg = null, ls = null;
+  if (scaleModSpec.length > 0) {
+    ls = lsModel(studies, modSpec, scaleModSpec, { ciMethod, alpha });
+  } else if (modSpec.length > 0) {
+    reg = metaRegression(studies, modSpec, method, ciMethod, alpha);
+  }
+  return { subgroup, reg, ls };
+}
+
+// ── All DOM writes: renders every output panel from computed results ──────────
+function _renderAllResults(ctx) {
+  const {
+    type, profile, studies, excluded, softWarnings, missingCorrelation,
+    m, tf, all, profileLikResult, mAdjusted, rveResult, threeLevelResult,
+    bayesResult, reMeanRef,
+    egger, begg, petpeese, fatpet, fsn, tes, waap, pcurve, puniform,
+    harbord, peters, deeks, ruecker, hc, selResult,
+    influence, baujatResult, blupResult, qqResiduals, qqLabels,
+    cumResults, cumulativeStudies,
+    subgroup, reg, ls,
+    opts,
+  } = ctx;
+
+  const { method, ciMethod, alpha, isMHorPeto, hasClusters, useTF, tfEstimator,
+          useTFAdjusted, bayesMu0, bayesSigmaMu, bayesSigmaTau, selModeVal } = opts;
+
+  // ── DOM element refs ────────────────────────────────────────────────────────
   const elResults            = document.getElementById("results");
   const elPubBiasStats       = document.getElementById("pubBiasStats");
   const elInfluenceDiagTable = document.getElementById("influenceDiagTable");
   const elSubgroupSection    = document.getElementById("subgroupSection");
   const elSubgroupTable      = document.getElementById("subgroupTable");
-  const elTauMethod          = document.getElementById("tauMethod");
-  const elCiMethod           = document.getElementById("ciMethod");
-  const elUseTrimFill        = document.getElementById("useTrimFill");
-  const elTfEstimator        = document.getElementById("tfEstimator");
-  const elUseTFAdjusted      = document.getElementById("useTFAdjusted");
   const elBubblePlots        = document.getElementById("bubblePlots");
   const elForestPageSize     = document.getElementById("forestPageSize");
   const elBaujatPlotBlock    = document.getElementById("baujatPlotBlock");
@@ -2533,8 +2073,6 @@ async function runAnalysis() {
   const elRadialPlotBlock    = document.getElementById("radialPlotBlock");
   const elLabbeBlock         = document.getElementById("labbeBlock");
   const elBlupBlock          = document.getElementById("blupBlock");
-  const elBlupNav            = document.getElementById("blupNav");
-  const elCumulativeOrder    = document.getElementById("cumulativeOrder");
   const elCumForestPageSize  = document.getElementById("cumulativeForestPageSize");
   const elCumFunnelStep      = document.getElementById("cumulativeFunnelStep");
   const elCumFunnelBlock     = document.getElementById("cumulativeFunnelBlock");
@@ -2545,174 +2083,41 @@ async function runAnalysis() {
   const elProfileLikScale    = document.getElementById("profileLikScale");
   const elSelPreset          = document.getElementById("selPreset");
 
-  const type = elEffectType.value;
-  const profile = effectProfiles[type];
-  if (!profile) return;
-
-  const rows = document.querySelectorAll("#inputTable tr");
-
-  // Row inputs are ordered: [label, ...profile.inputs, group, ...moderators].
-  // Pre-compute the offset so moderator values can be read from the already-
-  // collected inputs array rather than querying the DOM for each moderator
-  // on every row.
-  const modOffset = profile.inputs.length + 3; // label(1) + effects(p) + group(1) + cluster(1)
-
-  let studies = [];
-  let excluded = [];
-  let softWarnings = [];
-  let missingCorrelation = false; // <-- NEW
-
-  performance.mark("phase:parse:start");
-  for (let i = 1; i < rows.length; i++) {
-    const row = rows[i];
-    if (row.classList.contains("row-pending-delete")) continue;
-    const inputs = [...row.querySelectorAll("input")].map(x => x.value);
-
-    const isValid = validateRow(row);
-
-    const group   = row.querySelector(".group")?.value.trim() || "";
-    const cluster = row.querySelector(".cluster")?.value.trim() || "";
-    const label = inputs[0] || `Row ${i}`;
-
-    const studyInput = { label };
-    profile.inputs.forEach((key, idx) => {
-      studyInput[key] = profile.rawInputs?.has(key) ? inputs[idx + 1] : +inputs[idx + 1];
-    });
-
-    // --- NEW: check for missing correlation in paired designs ---
-    if ((type === "MD_paired" || type === "SMD_paired") && !isFinite(studyInput.r)) {
-      missingCorrelation = true;
-      // Optionally, assume r = 0.5 for computation
-      studyInput.r = 0.5;
-    }
-
-    // Collect soft warnings regardless of validity
-    softWarnings.push(...getSoftWarnings(studyInput, type, label));
-
-    if (!isValid) {
-      excluded.push({ label, reason: "Invalid input" });
-      continue;
-    }
-
-    const study = profile.compute(studyInput);
-
-    if (!isFinite(study.yi) || !isFinite(study.vi)) {
-      excluded.push({ label, reason: "Computation failed (invalid effect size or variance)" });
-      continue;
-    }
-
-    study.group   = group;
-    study.cluster = cluster;
-
-    // ---- Moderator values ----
-    moderators.forEach(({ name, type }, modIdx) => {
-      const raw = (inputs[modOffset + modIdx] ?? "").trim();
-      study[name] = type === "continuous" ? (raw === "" ? NaN : +raw) : raw;
-    });
-
-    studies.push(study);
-  }
-  performance.measure("phase:parse", "phase:parse:start");
-
-  if (!studies.length) {
-    if (outputPlaceholder) {
-      outputPlaceholder.style.display = "";
-      outputPlaceholder.textContent = "No valid studies to analyse. Check the input table for errors.";
-    }
-    performance.measure("runAnalysis", "runAnalysis:start");
-    return false;
-  }
-
-  // Clear stale indicators and record first successful run.
-  if (outputPlaceholder) outputPlaceholder.style.display = "none";
-  staleBanner.style.display = "none";
-  _toggleResults.classList.remove("stale");
-  if (inputStaleBadge) inputStaleBadge.hidden = true;
-  if (!appState.hasRunOnce) {
-    appState.hasRunOnce = true;
-    _toggleResults.disabled = false;
-  }
-
-  const method = elTauMethod?.value || "DL";
-  const ciMethod = elCiMethod?.value || "normal";
-  const alpha = getCiAlpha();
-  const useTF = elUseTrimFill?.checked;
-  const tfEstimator = elTfEstimator?.value || "L0";
-  const useTFAdjusted = elUseTFAdjusted?.checked;
-
-  const isMHorPeto  = method === "MH" || method === "Peto";
-  const hasClusters = studies.some(s => s.cluster);
-  const rveRho      = parseFloat(document.getElementById("rveRho")?.value ?? 0.8);
-
-  performance.mark("phase:meta:start");
-  let tf = [], all = studies;
-  if (useTF && !isMHorPeto) { tf = trimFill(studies, method, tfEstimator); all = [...studies, ...tf]; }
-
-  let m;
-  if      (method === "MH"  ) m = metaMH(studies, type, alpha);
-  else if (method === "Peto") m = metaPeto(studies, alpha);
-  else if (hasClusters)       m = robustMeta(studies, method, ciMethod, alpha);
-  else                        m = meta(studies, method, ciMethod, alpha);
-  performance.measure("phase:meta", "phase:meta:start");
-
-  if (m.error) {
-    elResults.innerHTML = `<b style="color:var(--warn)">Error: ${m.error}</b>`;
-    performance.measure("runAnalysis", "runAnalysis:start");
-    return false;
-  }
-
-  const profileLikResult =
-    (method === "ML" || method === "REML") && studies.length >= 2
-      ? profileLikTau2(studies, { method })
-      : null;
-
+  // ── Profile likelihood ─────────────────────────────────────────────────────
   const elHetDiag = document.getElementById("hetDiagSection");
   if (profileLikResult && !profileLikResult.error) {
     elHetDiag.style.display = "";
-    const xScale = elProfileLikScale?.value || "tau2";
-    drawProfileLikTau2(profileLikResult, { xScale });
+    drawProfileLikTau2(profileLikResult, { xScale: elProfileLikScale?.value || "tau2" });
   } else {
     elHetDiag.style.display = "none";
   }
 
+  // ── Bayesian ───────────────────────────────────────────────────────────────
   const elBayes      = document.getElementById("bayesSection");
-  const bayesMu0     = parseFloat(document.getElementById("bayesMu0")?.value)     || 0;
-  const bayesSigmaMu = Math.max(0.01, parseFloat(document.getElementById("bayesSigmaMu")?.value)  || 1);
-  const bayesSigmaTau = Math.max(0.01, parseFloat(document.getElementById("bayesSigmaTau")?.value) || 0.5);
-  let bayesResult = null;
-  performance.mark("phase:bayes:start");
-  if (studies.length >= 2 && !isMHorPeto) {
-    const reMeanRef = isFinite(m.RE) ? m.RE : m.FE;
+  if (bayesResult && !bayesResult.error) {
     bayesState.studies = studies;
     bayesState.reMean  = reMeanRef;
     bayesState.profile = profile;
-    bayesResult = bayesMeta(studies, { mu0: bayesMu0, sigma_mu: bayesSigmaMu, sigma_tau: bayesSigmaTau, alpha });
-    if (!bayesResult.error) {
-      elBayes.style.display = "";
-      const bayesClusterNote = hasClusters
-        ? `<p class="reg-note" style="color:var(--muted);margin:0 0 6px">ℹ Bayesian analysis does not incorporate cluster-robust adjustment.</p>`
-        : "";
-      document.getElementById("bayesSummary").innerHTML =
-        bayesClusterNote + buildBayesSummaryHTML(bayesResult, profile, reMeanRef);
-      drawBayesMuPosterior(bayesResult, { reMean: reMeanRef });
-      drawBayesTauPosterior(bayesResult);
-      document.getElementById("bayesGridWarning").style.display =
-        bayesResult.grid_truncated ? "" : "none";
-      renderSensitivity(bayesMu0, bayesSigmaMu, bayesSigmaTau, document.getElementById("ciLevel")?.value ?? "95");
-    } else {
-      elBayes.style.display = "none";
-      const elSensSection = document.getElementById("bayesSensitivitySection");
-      if (elSensSection) elSensSection.style.display = "none";
-    }
+    elBayes.style.display = "";
+    const bayesClusterNote = hasClusters
+      ? `<p class="reg-note" style="color:var(--muted);margin:0 0 6px">ℹ Bayesian analysis does not incorporate cluster-robust adjustment.</p>`
+      : "";
+    document.getElementById("bayesSummary").innerHTML =
+      bayesClusterNote + buildBayesSummaryHTML(bayesResult, profile, reMeanRef);
+    drawBayesMuPosterior(bayesResult, { reMean: reMeanRef });
+    drawBayesTauPosterior(bayesResult);
+    document.getElementById("bayesGridWarning").style.display =
+      bayesResult.grid_truncated ? "" : "none";
+    const ciLevel = document.getElementById("ciLevel")?.value ?? "95";
+    renderSensitivity(bayesMu0, bayesSigmaMu, bayesSigmaTau, ciLevel);
   } else {
     bayesState.studies = null;
     elBayes.style.display = "none";
     const elSensSection = document.getElementById("bayesSensitivitySection");
     if (elSensSection) elSensSection.style.display = "none";
   }
-  performance.measure("phase:bayes", "phase:bayes:start");
 
-  // ---- RVE (Robust Variance Estimation) ----
+  // ── RVE ────────────────────────────────────────────────────────────────────
   {
     const elRve         = document.getElementById("rveSection");
     const elRveSummary  = document.getElementById("rveSummary");
@@ -2720,22 +2125,22 @@ async function runAnalysis() {
     const showRve = hasClusters && !isMHorPeto;
     if (elRveSettings) elRveSettings.style.display = showRve ? "" : "none";
     if (elRve) {
-      if (showRve) {
+      if (showRve && rveResult) {
         elRve.style.display = "";
-        const rve = rvePooled(studies, { rho: rveRho, alpha });
-        if (rve.error) {
-          elRveSummary.innerHTML = `<p class="reg-note" style="color:var(--color-warning)">⚠ RVE: ${rve.error}</p>`;
+        if (rveResult.error) {
+          elRveSummary.innerHTML = `<p class="reg-note" style="color:var(--color-warning)">⚠ RVE: ${rveResult.error}</p>`;
         } else {
-          const rveEst  = profile.transform(rve.est);
-          const rveLo   = profile.transform(rve.ci[0]);
-          const rveHi   = profile.transform(rve.ci[1]);
+          const rveEst  = profile.transform(rveResult.est);
+          const rveLo   = profile.transform(rveResult.ci[0]);
+          const rveHi   = profile.transform(rveResult.ci[1]);
           const reDisp  = profile.transform(m.RE);
-          const diffDir = rve.est > m.RE ? "higher" : rve.est < m.RE ? "lower" : "equal";
+          const diffDir = rveResult.est > m.RE ? "higher" : rveResult.est < m.RE ? "lower" : "equal";
+          const rveRho  = opts.rveRho;
           elRveSummary.innerHTML = `
             <div style="font-size:0.8125rem;line-height:1.9;margin-bottom:8px">
               ${hBtn("rve.model")}<b>RVE pooled estimate:</b> ${fmt(rveEst)}<br>
-              CI [${fmt(rveLo)}, ${fmt(rveHi)}] | SE=${fmt(rve.se)} | t(${rve.df})=${fmt(rve.t)} | p=${fmt(rve.p)}<br>
-              ρ=${rveRho.toFixed(2)} &nbsp;·&nbsp; m=${rve.kCluster} cluster${rve.kCluster === 1 ? "" : "s"} &nbsp;·&nbsp; k=${rve.k} studies<br>
+              CI [${fmt(rveLo)}, ${fmt(rveHi)}] | SE=${fmt(rveResult.se)} | t(${rveResult.df})=${fmt(rveResult.t)} | p=${fmt(rveResult.p)}<br>
+              ρ=${rveRho.toFixed(2)} &nbsp;·&nbsp; m=${rveResult.kCluster} cluster${rveResult.kCluster === 1 ? "" : "s"} &nbsp;·&nbsp; k=${rveResult.k} studies<br>
               <span style="color:var(--fg-muted);font-size:0.93em">RE (cluster-robust): ${fmt(reDisp)} &nbsp;·&nbsp; RVE estimate is ${diffDir}.</span>
             </div>
           `;
@@ -2746,19 +2151,19 @@ async function runAnalysis() {
     }
   }
 
-  // ---- Three-Level Meta-Analysis ----
+  // ── Three-level ────────────────────────────────────────────────────────────
   {
     const elThree        = document.getElementById("threeLevelSection");
     const elThreeSummary = document.getElementById("threeLevelSummary");
     const showThree = hasClusters && !isMHorPeto;
     if (elThree) {
-      if (showThree) {
+      if (showThree && threeLevelResult) {
         elThree.style.display = "";
-        const tl = meta3level(studies, { method: "REML", alpha });
-        if (tl.error) {
-          elThreeSummary.innerHTML = `<p class="reg-note" style="color:var(--color-warning)">⚠ Three-level: ${tl.error}</p>`;
+        if (threeLevelResult.error) {
+          elThreeSummary.innerHTML = `<p class="reg-note" style="color:var(--color-warning)">⚠ Three-level: ${threeLevelResult.error}</p>`;
         } else {
-          const muDisp  = profile.transform(tl.mu);
+          const tl = threeLevelResult;
+          const muDisp   = profile.transform(tl.mu);
           const ciLoDisp = profile.transform(tl.ci[0]);
           const ciHiDisp = profile.transform(tl.ci[1]);
           elThreeSummary.innerHTML = `
@@ -2778,61 +2183,22 @@ async function runAnalysis() {
     }
   }
 
-  performance.mark("phase:pubbias:start");
-  const egger   = eggerTest(studies);
-  const begg    = beggTest(studies);
-  const petpeese = petPeeseTest(studies);
-  const fatpet   = petpeese.fat;
-  const fsn     = failSafeN(studies);
-  const tes     = tesTest(studies, m);
-  const waap    = waapWls(studies);
-  const pcurve   = pCurve(studies);
-  const puniform = pUniform(studies, m);
-  const harbord  = harbordTest(studies);
-  const peters   = petersTest(studies);
-  const deeks    = deeksTest(studies);
-  const ruecker  = rueckerTest(studies);
-  const hc      = henmiCopas(studies, alpha);
-  performance.measure("phase:pubbias", "phase:pubbias:start");
-
-  performance.mark("phase:influence:start");
-  const influence = influenceDiagnostics(studies, method, ciMethod, alpha);
-  performance.measure("phase:influence", "phase:influence:start");
-
-  performance.mark("phase:subgroup:start");
-  const subgroup = subgroupAnalysis(studies, method, ciMethod, alpha);
-  performance.measure("phase:subgroup", "phase:subgroup:start");
-
-  const influenceHTML = buildInfluenceHTML(influence);
-  const hasSubgroup   = subgroup && subgroup.G >= 2;
-  const subgroupHTML  = hasSubgroup ? buildSubgroupHTML(subgroup, profile, hasClusters) : "";
-
-  // Adjusted RE
-  let mAdjusted = null;
-  if (useTF && useTFAdjusted && tf.length > 0) mAdjusted = meta([...studies,...tf], method, ciMethod, alpha);
-
-  const FE_disp = profile.transform(m.FE);
-  const RE_disp = profile.transform(m.RE);
-  const ci_disp   = { lb: profile.transform(m.ciLow),   ub: profile.transform(m.ciHigh) };
-  const feZ = normalQuantile(1 - alpha / 2);
-  const feCi_disp = {
-    lb: profile.transform(m.FE - feZ * m.seFE),
-    ub: profile.transform(m.FE + feZ * m.seFE),
-  };
-  const pred_disp = { lb: profile.transform(m.predLow), ub: profile.transform(m.predHigh) };
+  // ── Pooled estimate panel ─────────────────────────────────────────────────
+  const FE_disp    = profile.transform(m.FE);
+  const RE_disp    = profile.transform(m.RE);
+  const ci_disp    = { lb: profile.transform(m.ciLow),   ub: profile.transform(m.ciHigh) };
+  const feZ        = normalQuantile(1 - alpha / 2);
+  const feCi_disp  = { lb: profile.transform(m.FE - feZ * m.seFE), ub: profile.transform(m.FE + feZ * m.seFE) };
+  const pred_disp  = { lb: profile.transform(m.predLow), ub: profile.transform(m.predHigh) };
   const RE_adj_disp = useTF && mAdjusted ? profile.transform(mAdjusted.RE) : null;
 
-  // --- INSERT CORRELATION WARNING ---
-  let warningHTML = "";
-  if (missingCorrelation) {
-    warningHTML = `<div style="color: orange; font-weight: bold;">
-      ⚠️ Some paired studies are missing correlation (r). Assumed r = 0.5 for computation.
-    </div>`;
-  }
+  const warningHTML = missingCorrelation
+    ? `<div style="color: orange; font-weight: bold;">
+         ⚠️ Some paired studies are missing correlation (r). Assumed r = 0.5 for computation.
+       </div>`
+    : "";
 
   const methodLabel = m.isMH ? "MH" : m.isPeto ? "Peto" : "";
-
-  // Cluster-robust banner (shown at top of results when cluster IDs are present)
   const clusterBanner = hasClusters
     ? (isMHorPeto
       ? `<div class="reg-note" style="color:var(--muted);margin:2px 0 6px">ℹ Cluster-robust SE is not available for M-H/Peto methods.</div>`
@@ -2843,7 +2209,6 @@ async function runAnalysis() {
           : "")))
     : "";
 
-  // Robust CI display (shown after regular CI when clustering succeeded)
   const robust_ci_disp = m.isClustered
     ? { lb: profile.transform(m.robustCiLow), ub: profile.transform(m.robustCiHigh) }
     : null;
@@ -2871,6 +2236,7 @@ async function runAnalysis() {
     ${hBtn("het.pred")}Prediction interval (Higgins 2009, t<sub>${m.df > 0 ? m.df - 1 : "—"}</sub>): ${isFinite(pred_disp.lb) ? `[${fmt(pred_disp.lb)}, ${fmt(pred_disp.ub)}]` : "NA (k &lt; 3)"}
   `);
 
+  // ── Publication bias panel ─────────────────────────────────────────────────
   const eggerRobustNote  = egger.clustersUsed  ? ` | p<sub>robust</sub>=${isFinite(egger.robustInterceptP)  ? fmt(egger.robustInterceptP)  : "—"}` : "";
   const fatpetRobustNote = fatpet.clustersUsed ? ` | p<sub>FAT,rob</sub>=${isFinite(fatpet.robustSlopeP) ? fmt(fatpet.robustSlopeP) : "—"} · p<sub>PET,rob</sub>=${isFinite(fatpet.robustInterceptP) ? fmt(fatpet.robustInterceptP) : "—"}` : "";
 
@@ -2894,92 +2260,52 @@ async function runAnalysis() {
       </div>
     </details>
   `;
-  elInfluenceDiagTable.innerHTML = influenceHTML;
 
+  // ── Influence diagnostics + subgroup ──────────────────────────────────────
+  const influenceHTML = buildInfluenceHTML(influence);
+  const hasSubgroup   = subgroup && subgroup.G >= 2;
+  const subgroupHTML  = hasSubgroup ? buildSubgroupHTML(subgroup, profile, hasClusters) : "";
+
+  elInfluenceDiagTable.innerHTML = influenceHTML;
   elSubgroupSection.style.display = hasSubgroup ? "" : "none";
   elSubgroupTable.innerHTML = (hasSubgroup && isMHorPeto)
     ? `<p class="reg-note" style="margin:4px 0 8px">⚠ Subgroup pooling uses inverse-variance (DL) weights — switch to DL or REML for M-H subgroup analysis.</p>` + subgroupHTML
     : subgroupHTML;
 
   renderStudyTable(all, m, profile);
-  // MH/Peto can't run LOO; fall back to DL and don't pass MH/Peto m as precomputed.
-  performance.mark("phase:loo:start");
+
+  // ── Sensitivity panel (LOO) ───────────────────────────────────────────────
+  performance.mark("phase:loo:render:start");
   renderSensitivityPanel(studies, isMHorPeto ? null : m, isMHorPeto ? "DL" : method, ciMethod, profile, { isMHFallback: isMHorPeto }, alpha);
-  performance.measure("phase:loo", "phase:loo:start");
+  performance.measure("phase:loo:render", "phase:loo:render:start");
+
   renderPCurvePanel(pcurve);
   renderPUniformPanel(puniform, m, profile);
-
-  // ---- Selection model (Vevea-Hedges) ----
-  // Skip when meta-regression moderators are active.
-  let selResult = null;
-  const selModeVal = document.getElementById("selMode").value;
-  if (moderators.length === 0) {
-    const selPreset = elSelPreset.value;
-    const selSides  = parseInt(document.getElementById("selSides").value, 10);
-
-    let selCuts, selSidesEff, selOmegaFixed;
-
-    if (selModeVal === "sensitivity" && selPreset !== "custom") {
-      // Named preset — cuts, sides, and omega all come from the preset
-      const p      = SELECTION_PRESETS[selPreset];
-      selCuts      = p.cuts;
-      selSidesEff  = p.sides;
-      selOmegaFixed = p.omega;
-    } else {
-      // MLE or custom sensitivity — parse the cutpoints text field
-      const rawCuts = document.getElementById("selCuts").value
-        .split(",").map(s => parseFloat(s.trim())).filter(isFinite);
-      selCuts = rawCuts.length >= 2 && rawCuts[rawCuts.length - 1] === 1.0
-        ? rawCuts
-        : [...rawCuts.filter(c => c < 1), 1.0];
-      selSidesEff  = selSides;
-      selOmegaFixed = null;   // MLE: estimate weights; custom sensitivity: user must edit table
-    }
-
-    selResult = veveaHedges(studies, selCuts, selSidesEff, selOmegaFixed);
-  }
   renderSelectionModelPanel(selResult, selModeVal, profile);
 
-  // ---- Meta-regression / Location-scale model ----
-  // buildDesignMatrix expects { key, type, transform }; ui state stores { name, type, transform }.
-  const modSpec      = moderators.map(m => ({ key: m.name, type: m.type, transform: m.transform || "linear" }));
-  const scaleModSpec = scaleModerators.map(m => ({ key: m.name, type: m.type, transform: m.transform || "linear" }));
-  performance.mark("phase:regression:start");
-  let reg = null, ls = null;
-  if (scaleModerators.length > 0) {
-    ls = lsModel(studies, modSpec, scaleModSpec, { ciMethod, alpha });
-  } else if (moderators.length > 0) {
-    reg = metaRegression(studies, modSpec, method, ciMethod, alpha);
-  }
-  performance.measure("phase:regression", "phase:regression:start");
-  const kExcluded = (reg ?? ls) ? studies.length - (reg ?? ls).k : 0;
+  // ── Regression panel + bubble plots ───────────────────────────────────────
+  const modSpec      = opts.modSpec;
+  const scaleModSpec = opts.scaleModSpec;
+  const kExcluded    = (reg ?? ls) ? studies.length - (reg ?? ls).k : 0;
   if (ls) {
     renderLocationScalePanel(ls, ciMethod, kExcluded);
   } else {
     renderRegressionPanel(reg ?? {}, method, ciMethod, kExcluded, moderators);
   }
 
-  // ---- Bubble plots (one per continuous location moderator) ----
-  // With a single moderator: raw yi vs x (drawBubble) and partial residuals are
-  // identical, so drawBubble is used.  With 2+ moderators: drawPartialResidualBubble
-  // removes other predictors' contributions, making each plot unambiguous.
-  // For the LS model, adapt ls to the shape drawBubble/drawPartialResidualBubble expect.
   const bubbleContainer = elBubblePlots;
   bubbleContainer.innerHTML = "";
-
-  // Resolve the result object and moderator list to use for bubble plots.
-  // For LS, build a shim using the location model; field names differ from reg.
   const bubbleResult = ls ? {
-    tau2:     ls.tau2_mean,
-    beta:     ls.beta,
-    colNames: ls.locColNames,
-    modColMap: ls.locColMap,
-    modKnots:  ls.locKnots,
-    vcov:     ls.vcov_beta,
-    crit:     ls.crit,
-    s2:       1,
-    fitted:   ls.fitted,
-    residuals: ls.residuals,
+    tau2:        ls.tau2_mean,
+    beta:        ls.beta,
+    colNames:    ls.locColNames,
+    modColMap:   ls.locColMap,
+    modKnots:    ls.locKnots,
+    vcov:        ls.vcov_beta,
+    crit:        ls.crit,
+    s2:          1,
+    fitted:      ls.fitted,
+    residuals:   ls.residuals,
     studiesUsed: ls.studiesUsed,
     rankDeficient: ls.rankDeficient,
   } : reg;
@@ -2990,9 +2316,6 @@ async function runAnalysis() {
       .forEach((mod, i) => {
         const colIdxs = bubbleResult.modColMap && bubbleResult.modColMap[mod.name];
         if (!colIdxs || colIdxs.length === 0) return;
-
-        // Wrap each bubble in a block-level div so export buttons sit above it.
-        // data-moderator lets buildReport() attach per-moderator APA captions.
         const wrap = document.createElement("div");
         wrap.dataset.moderator = mod.name;
         bubbleContainer.appendChild(wrap);
@@ -3001,8 +2324,6 @@ async function runAnalysis() {
         } else {
           drawBubble(bubbleResult.studiesUsed, bubbleResult, mod, wrap);
         }
-
-        // Assign a stable id to the SVG that was just appended, then add buttons.
         const bubbleSvg = wrap.querySelector("svg");
         if (bubbleSvg) {
           const svgId = `bubblePlot_${i}`;
@@ -3024,24 +2345,20 @@ async function runAnalysis() {
       });
   }
 
-  // Cache args for nav re-renders (page already reset at top of runAnalysis).
-  const rawPageSize  = elForestPageSize?.value ?? "30";
-  const pageSize     = rawPageSize === "Infinity" ? Infinity : +rawPageSize;
-  const forestOpts   = { ciMethod, profile, pageSize, pooledDisplay: forestPlot.poolDisplay, theme: forestPlot.theme, alpha, ciLabel: getCiLabel() };
-  // For MH/Peto, substitute FE into RE slots so drawForest draws one diamond.
-  const mForest = isMHorPeto
+  // ── Forest plot ───────────────────────────────────────────────────────────
+  const rawPageSize = elForestPageSize?.value ?? "30";
+  const pageSize    = rawPageSize === "Infinity" ? Infinity : +rawPageSize;
+  const forestOpts  = { ciMethod, profile, pageSize, pooledDisplay: forestPlot.poolDisplay, theme: forestPlot.theme, alpha, ciLabel: getCiLabel() };
+  const mForest     = isMHorPeto
     ? { ...m, RE: m.FE, seRE: m.seFE, tau2: 0, predLow: NaN, predHigh: NaN }
     : m;
-  forestPlot.args        = { studies: all, m: mForest, options: forestOpts };
+  forestPlot.args = { studies: all, m: mForest, options: forestOpts };
   performance.mark("phase:plot:forest:start");
   const { totalPages } = drawForest(all, mForest, { ...forestOpts, page: forestPlot.page });
   performance.measure("phase:plot:forest", "phase:plot:forest:start");
   renderForestNav(totalPages);
 
-  // Cache state for report export buttons.
-  const baujatResult = baujat(studies);
-
-  // Resolve human-readable label for the report interpretation sentence.
+  // ── Report args cache ─────────────────────────────────────────────────────
   const _selPreset = elSelPreset.value;
   const _selLabel  = selModeVal === "mle"
     ? "MLE"
@@ -3049,12 +2366,10 @@ async function runAnalysis() {
       ? (SELECTION_PRESETS[_selPreset]?.label ?? _selPreset)
       : "Custom";
 
-  const qqResiduals = influence.map(d => d.stdResidual).filter(isFinite);
-  const qqLabels    = influence.filter(d => isFinite(d.stdResidual)).map(d => d.label);
-
   appState.reportArgs = {
     studies: all, m, profile, reg,
-    tf, egger, begg, fatpet, petpeese, fsn, tes, waap, cles, pcurve, puniform, harbord, peters, deeks, ruecker, hc, baujatResult,
+    tf, egger, begg, fatpet, petpeese, fsn, tes, waap, cles, pcurve, puniform,
+    harbord, peters, deeks, ruecker, hc, baujatResult,
     influence, subgroup, method, ciMethod,
     ciLevel: document.getElementById("ciLevel")?.value ?? "95",
     useTF, mAdjusted,
@@ -3068,67 +2383,51 @@ async function runAnalysis() {
     forestOptions: { ...forestOpts, currentPage: forestPlot.page },
     qqResiduals, qqLabels,
   };
-  funnelPlot.args = [all, m, egger, profile];
+
+  // ── Funnel plot ───────────────────────────────────────────────────────────
+  funnelPlot.args = [all, m, profile];
+  funnelPlot.egger = egger;
   funnelPlot.petpeese = petpeese;
   drawIfVisible("pubBiasSection", () => {
     performance.mark("phase:plot:funnel:start");
-    drawFunnel(...funnelPlot.args, { contours: funnelPlot.contours, petpeese: funnelPlot.petpeese });
+    drawFunnel(...funnelPlot.args, { egger: funnelPlot.egger, contours: funnelPlot.contours, petpeese: funnelPlot.petpeese });
     performance.measure("phase:plot:funnel", "phase:plot:funnel:start");
   });
-  const labbeTypes = ["OR", "RR", "RD"];
-  const showLabbe  = labbeTypes.includes(type);
 
-  // BLUPs — only meaningful when τ² > 0 and k ≥ 2
-  const blupResult = (m && isFinite(m.tau2) && m.tau2 > 0 && studies.length >= 2)
-    ? blupMeta(studies, m) : null;
+  // ── BLUPs, Baujat, QQ, Radial, L'Abbé ─────────────────────────────────────
+  const labbeTypes  = ["OR", "RR", "RD"];
+  const showLabbe   = labbeTypes.includes(type);
+  const showQQ      = qqResiduals.length >= 3;
+
   blupPlot.result  = blupResult;
   blupPlot.profile = profile;
   blupPlot.page    = 0;
-  elBlupBlock.style.display       = blupResult ? "" : "none";
+  elBlupBlock.style.display      = blupResult ? "" : "none";
+  elBaujatPlotBlock.style.display = baujatResult ? "" : "none";
+  elQQPlotBlock.style.display     = showQQ ? "" : "none";
+  elRadialPlotBlock.style.display = studies.length >= 2 && !isMHorPeto ? "" : "none";
+  elLabbeBlock.style.display      = showLabbe ? "" : "none";
 
-  const showQQ = qqResiduals.length >= 3;
-
-  elBaujatPlotBlock.style.display  = baujatResult ? "" : "none";
-  elQQPlotBlock.style.display      = showQQ ? "" : "none";
-  elRadialPlotBlock.style.display  = studies.length >= 2 && !isMHorPeto ? "" : "none";
-  elLabbeBlock.style.display       = showLabbe ? "" : "none";
   drawIfVisible("diagnosticSection", () => {
     performance.mark("phase:plot:influence:start");
     drawInfluencePlot(influence);
     if (blupResult) {
-      const { totalPages } = drawBlupPlot(blupResult, profile, { pageSize: blupPlot.pageSize, page: 0 });
-      renderBlupNav(totalPages);
+      const { totalPages: blupPages } = drawBlupPlot(blupResult, profile, { pageSize: blupPlot.pageSize, page: 0 });
+      renderBlupNav(blupPages);
     }
     drawBaujatPlot(baujatResult, profile);
-    if (showQQ) drawQQPlot(qqResiduals, qqLabels);
+    if (showQQ)  drawQQPlot(qqResiduals, qqLabels);
     if (studies.length >= 2 && !isMHorPeto) drawRadialPlot(studies, m, profile);
-    if (showLabbe) drawLabbe(studies, m, profile, type);
+    if (showLabbe) drawLabbe(studies, m, profile, { type });
     performance.measure("phase:plot:influence", "phase:plot:influence:start");
   });
 
-  // ---- Cumulative meta-analysis ----
-  const cumulativeOrder = elCumulativeOrder?.value || "input";
-  const cumulativeStudies = studies.slice(); // copy; studies already have yi/vi/label
-  if (cumulativeOrder === "precision_desc") {
-    cumulativeStudies.sort((a, b) => a.vi - b.vi);   // smallest vi (most precise) first
-  } else if (cumulativeOrder === "precision_asc") {
-    cumulativeStudies.sort((a, b) => b.vi - a.vi);   // largest vi (least precise) first
-  } else if (cumulativeOrder === "effect_asc") {
-    cumulativeStudies.sort((a, b) => a.yi - b.yi);
-  } else if (cumulativeOrder === "effect_desc") {
-    cumulativeStudies.sort((a, b) => b.yi - a.yi);
-  }
-  // "input" order: no sort — preserves table order
-  performance.mark("phase:cumulative:start");
-  const cumResults = cumulativeMeta(cumulativeStudies, method, ciMethod, alpha);
-  performance.measure("phase:cumulative", "phase:cumulative:start");
-  cumForestPlot.page = 0;
-  const rawCumPageSize = elCumForestPageSize?.value ?? "30";
+  // ── Cumulative meta-analysis ──────────────────────────────────────────────
+  const rawCumPageSize    = elCumForestPageSize?.value ?? "30";
   const cumForestPageSize = rawCumPageSize === "Infinity" ? Infinity : +rawCumPageSize;
-  cumForestPlot.args = { results: cumResults, profile, pageSize: cumForestPageSize, alpha, ciLabel: getCiLabel() };
+  cumForestPlot.args  = { results: cumResults, profile, pageSize: cumForestPageSize, alpha, ciLabel: getCiLabel() };
   appState.reportArgs.cumForestOptions = { results: cumResults, profile, pageSize: cumForestPageSize, currentPage: 0, alpha, ciLabel: getCiLabel() };
 
-  // ---- Cumulative funnel plot — state setup (eager) ----
   cumFunnelPlot.studies = cumulativeStudies;
   cumFunnelPlot.results = cumResults;
   cumFunnelPlot.profile = profile;
@@ -3145,11 +2444,11 @@ async function runAnalysis() {
     performance.measure("phase:plot:cumulative", "phase:plot:cumulative:start");
   });
 
-  // ---- Orchard + caterpillar plots ----
+  // ── Orchard + caterpillar plots ───────────────────────────────────────────
   elOrchardPlotBlock.style.display = "";
   caterpillarPlot.page = 0;
   const rawCatPageSize = elCatPageSize?.value ?? "30";
-  const catPageSize = rawCatPageSize === "Infinity" ? Infinity : +rawCatPageSize;
+  const catPageSize    = rawCatPageSize === "Infinity" ? Infinity : +rawCatPageSize;
   caterpillarPlot.args = { studies: all, m, profile, pageSize: catPageSize };
   elCaterpillarBlock.style.display = "";
   appState.reportArgs.caterpillarOptions = { studies: all, m, profile, pageSize: catPageSize, currentPage: 0 };
@@ -3162,7 +2461,7 @@ async function runAnalysis() {
     performance.measure("phase:plot:orchard", "phase:plot:orchard:start");
   });
 
-  // ---- Risk-of-bias plots ----
+  // ── Risk-of-bias plots ─────────────────────────────────────────────────────
   const hasRoB = _robDomains.length > 0 && studies.length > 0;
   elRobSection.style.display = hasRoB ? "" : "none";
   if (hasRoB) {
@@ -3172,11 +2471,9 @@ async function runAnalysis() {
     });
   }
 
+  // ── Validation warnings + run-state badges ────────────────────────────────
   updateValidationWarnings(studies, excluded, softWarnings);
 
-  // ---- Run-state timestamp badge on every results section ----
-  // Insert (or update) a <span class="panel-run-at"> inside each
-  // <summary> so users can see when each panel was last updated.
   const ts = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   document.querySelectorAll(".results-section > summary").forEach(summary => {
     let badge = summary.querySelector(".panel-run-at");
@@ -3189,13 +2486,154 @@ async function runAnalysis() {
   });
 
   _buildJumpPill();
-  performance.measure("runAnalysis", "runAnalysis:start");
-  if (PERF_LOG) {
-    const entries = performance.getEntriesByType("measure")
-      .filter(e => e.name.startsWith("phase:") || e.name === "runAnalysis");
-    console.table(entries.map(e => ({ name: e.name, ms: +e.duration.toFixed(2) })));
-  }
-  return true;
+}
+
+// ── Thin coordinator ──────────────────────────────────────────────────────────
+async function runAnalysis() {
+  if (_analysisRunning) return false;
+  _analysisRunning = true;
+  const _runBtn      = document.getElementById("run");
+  const _runProgress = document.getElementById("runProgress");
+  if (_runBtn)      { _runBtn.disabled = true; _runBtn.innerHTML = "Running\u2026"; }
+  if (_runProgress) _runProgress.hidden = false;
+  // Double-rAF: first fires before paint, second fires after — guarantees the
+  // progress bar has been painted before the synchronous computation blocks.
+  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+  try {
+    performance.mark("runAnalysis:start");
+    scheduleSave();
+
+    // Cancel any in-progress GOSH computation.
+    if (goshState.worker) {
+      goshState.worker.terminate();
+      goshState.worker = null;
+      const elRun    = document.getElementById("goshRun");
+      const elCancel = document.getElementById("goshCancel");
+      const elProg   = document.getElementById("goshProgress");
+      if (elRun)    elRun.disabled    = false;
+      if (elCancel) elCancel.disabled = true;
+      if (elProg)   elProg.hidden     = true;
+    }
+    document.querySelectorAll(".results-section").forEach(d => d.removeAttribute("open"));
+    forestPlot.page = 0;
+    caterpillarPlot.page = 0;
+    cumForestPlot.page = 0;
+
+    const type    = document.getElementById("effectType").value;
+    const profile = effectProfiles[type];
+    if (!profile) return;
+
+    // ── Phase 1: Parse input table ────────────────────────────────────────
+    performance.mark("phase:parse:start");
+    const { studies, excluded, softWarnings, missingCorrelation } = collectStudies(type);
+    performance.measure("phase:parse", "phase:parse:start");
+
+    if (!studies.length) {
+      if (outputPlaceholder) {
+        outputPlaceholder.style.display = "";
+        outputPlaceholder.textContent = "No valid studies to analyse. Check the input table for errors.";
+      }
+      performance.measure("runAnalysis", "runAnalysis:start");
+      return false;
+    }
+
+    // Clear stale indicators; unlock results panel on first successful run.
+    if (outputPlaceholder) outputPlaceholder.style.display = "none";
+    staleBanner.style.display = "none";
+    _toggleResults.classList.remove("stale");
+    if (inputStaleBadge) inputStaleBadge.hidden = true;
+    if (!appState.hasRunOnce) {
+      appState.hasRunOnce = true;
+      _toggleResults.disabled = false;
+    }
+
+    // ── Shared settings ───────────────────────────────────────────────────
+    const method        = document.getElementById("tauMethod")?.value   || "DL";
+    const ciMethod      = document.getElementById("ciMethod")?.value    || "normal";
+    const alpha         = getCiAlpha();
+    const useTF         = document.getElementById("useTrimFill")?.checked;
+    const tfEstimator   = document.getElementById("tfEstimator")?.value || "L0";
+    const useTFAdjusted = document.getElementById("useTFAdjusted")?.checked;
+    const isMHorPeto    = method === "MH" || method === "Peto";
+    const hasClusters   = studies.some(s => s.cluster);
+    const rveRho        = parseFloat(document.getElementById("rveRho")?.value ?? 0.8);
+    const modSpec       = moderators.map(mod => ({ key: mod.name, type: mod.type, transform: mod.transform || "linear" }));
+    const scaleModSpec  = scaleModerators.map(mod => ({ key: mod.name, type: mod.type, transform: mod.transform || "linear" }));
+    const cumulativeOrder = document.getElementById("cumulativeOrder")?.value || "input";
+
+    // Selection model settings (read up front so _runPubBiasBatch is pure)
+    const selModeVal = document.getElementById("selMode").value;
+    const selPreset  = document.getElementById("selPreset").value;
+    const selSides   = parseInt(document.getElementById("selSides").value, 10);
+    const rawSelCuts = document.getElementById("selCuts").value
+      .split(",").map(s => parseFloat(s.trim())).filter(isFinite);
+    const selCuts = rawSelCuts.length >= 2 && rawSelCuts[rawSelCuts.length - 1] === 1.0
+      ? rawSelCuts
+      : [...rawSelCuts.filter(c => c < 1), 1.0];
+
+    // Bayesian prior settings
+    const bayesMu0      = parseFloat(document.getElementById("bayesMu0")?.value)      || 0;
+    const bayesSigmaMu  = Math.max(0.01, parseFloat(document.getElementById("bayesSigmaMu")?.value)  || 1);
+    const bayesSigmaTau = Math.max(0.01, parseFloat(document.getElementById("bayesSigmaTau")?.value) || 0.5);
+
+    const opts = {
+      method, ciMethod, alpha, type, useTF, tfEstimator, useTFAdjusted,
+      isMHorPeto, hasClusters, rveRho, modSpec, scaleModSpec, cumulativeOrder,
+      selModeVal, selPreset, selSides, selCuts,
+      bayesMu0, bayesSigmaMu, bayesSigmaTau,
+    };
+
+    // ── Phase 2: Core meta-analysis ───────────────────────────────────────
+    performance.mark("phase:meta:start");
+    const coreMeta = _runCoreMeta(studies, opts);
+    performance.measure("phase:meta", "phase:meta:start");
+    const { m, tf, all, profileLikResult, mAdjusted, rveResult, threeLevelResult } = coreMeta;
+
+    if (m.error) {
+      document.getElementById("results").innerHTML =
+        `<b style="color:var(--warn)">Error: ${m.error}</b>`;
+      performance.measure("runAnalysis", "runAnalysis:start");
+      return false;
+    }
+
+    // ── Phase 3: Bayesian ─────────────────────────────────────────────────
+    performance.mark("phase:bayes:start");
+    const { bayesResult, reMeanRef } = _runBayesBatch(studies, m, opts);
+    performance.measure("phase:bayes", "phase:bayes:start");
+
+    // ── Phase 4: Publication bias ─────────────────────────────────────────
+    performance.mark("phase:pubbias:start");
+    const pubBias = _runPubBiasBatch(studies, m, opts);
+    performance.measure("phase:pubbias", "phase:pubbias:start");
+
+    // ── Phase 5: Sensitivity / influence / cumulative ─────────────────────
+    performance.mark("phase:loo:start");
+    const sensitivity = _runSensitivityBatch(studies, m, opts);
+    performance.measure("phase:loo", "phase:loo:start");
+
+    // ── Phase 6: Meta-regression / subgroup ───────────────────────────────
+    performance.mark("phase:regression:start");
+    const regression = _runRegressionBatch(studies, m, opts);
+    performance.measure("phase:regression", "phase:regression:start");
+
+    // ── Phase 7: Render all output panels ─────────────────────────────────
+    _renderAllResults({
+      type, profile, studies, excluded, softWarnings, missingCorrelation,
+      m, tf, all, profileLikResult, mAdjusted, rveResult, threeLevelResult,
+      bayesResult, reMeanRef,
+      ...pubBias,
+      ...sensitivity,
+      ...regression,
+      opts,
+    });
+
+    performance.measure("runAnalysis", "runAnalysis:start");
+    if (PERF_LOG) {
+      const entries = performance.getEntriesByType("measure")
+        .filter(e => e.name.startsWith("phase:") || e.name === "runAnalysis");
+      console.table(entries.map(e => ({ name: e.name, ms: +e.duration.toFixed(2) })));
+    }
+    return true;
   } finally {
     _analysisRunning = false;
     if (_runBtn)     { _runBtn.disabled = false; _runBtn.innerHTML = 'Run <kbd class="run-kbd">(Ctrl+Enter)</kbd>'; }
