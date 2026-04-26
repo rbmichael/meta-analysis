@@ -602,6 +602,8 @@ document.getElementById("robDomainInput").addEventListener("keydown", e => {
 
 // ---------------- THEME TOGGLE ----------------
 
+const THEMES = ["light", "dark"]; // extend here to add future themes
+
 const _themeToggle = document.getElementById("themeToggle");
 
 function _applyTheme(theme) {
@@ -618,7 +620,8 @@ _applyTheme(
 );
 
 _themeToggle.addEventListener("click", () => {
-  const next = document.documentElement.dataset.theme === "light" ? "dark" : "light";
+  const current = document.documentElement.dataset.theme;
+  const next = THEMES[(THEMES.indexOf(current) + 1) % THEMES.length];
   localStorage.setItem("theme", next);
   _applyTheme(next);
   if (funnelPlot.args && funnelPlot.contours) {
