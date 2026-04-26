@@ -117,7 +117,7 @@ export function buildRegCoeffRows(reg, adjPs = null, mods = []) {
       qmStr += `, p (adj) = ${regFmtP(adjPs[mi])}`;
     }
     html += `<tr class="reg-mod-group">
-      <td colspan="${colCount}"><span class="reg-mod-name">${mt.name}</span>${qmStr}</td>
+      <td colspan="${colCount}"><span class="reg-mod-name">${escapeHTML(mt.name)}</span>${qmStr}</td>
     </tr>`;
     for (const j of mt.colIdxs) html += dataRow(j);
   }
@@ -190,7 +190,7 @@ export function renderLocationScalePanel(ls, ciMethod, kExcluded = 0) {
       const qmStr = isFinite(mt.QM)
         ? ` &nbsp;·&nbsp; QM χ²(${mt.QMdf}) = ${fmt(mt.QM)}, p = ${regFmtP(mt.QMp)}`
         : "";
-      html += `<tr class="reg-mod-group"><td colspan="7"><span class="reg-mod-name">${mt.name}</span>${qmStr}</td></tr>`;
+      html += `<tr class="reg-mod-group"><td colspan="7"><span class="reg-mod-name">${escapeHTML(mt.name)}</span>${qmStr}</td></tr>`;
       for (const j of mt.colIdxs) html += dataRow(j);
     }
     return html;
@@ -219,7 +219,7 @@ export function renderLocationScalePanel(ls, ciMethod, kExcluded = 0) {
       const qmStr = isFinite(mt.QM)
         ? ` &nbsp;·&nbsp; QM χ²(${mt.QMdf}) = ${fmt(mt.QM)}, p = ${regFmtP(mt.QMp)}`
         : "";
-      html += `<tr class="reg-mod-group"><td colspan="7"><span class="reg-mod-name">${mt.name}</span>${qmStr}</td></tr>`;
+      html += `<tr class="reg-mod-group"><td colspan="7"><span class="reg-mod-name">${escapeHTML(mt.name)}</span>${qmStr}</td></tr>`;
       for (const j of mt.colIdxs) html += dataRow(j);
     }
     return html;
@@ -1001,7 +1001,7 @@ export function buildSubgroupHTML(subgroup, profile, hasClusters) {
     const y_disp   = profile.transform(r.y);
     const ci_disp  = { lb: profile.transform(r.ci.lb), ub: profile.transform(r.ci.ub) };
     return `<tr>
-      <td>${g}</td>
+      <td>${escapeHTML(g)}</td>
       <td>${r.k}</td>
       <td>${isFinite(y_disp) ? fmt(y_disp) : "NA"}</td>
       <td>${isSingle ? "NA" : isFinite(r.se)   ? fmt(r.se)         : "NA"}</td>
