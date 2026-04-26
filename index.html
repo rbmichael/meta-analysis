@@ -358,7 +358,7 @@
         <button class="help-btn" data-help="keyboard.shortcuts" title="Keyboard shortcuts">⌨</button>
         <span id="inputStaleBadge" hidden>Results out of date</span>
       </div>
-      <div id="runProgress" hidden><div id="runProgressBar"></div></div>
+      <div id="runProgress" role="progressbar" aria-label="Running analysis" aria-live="polite" hidden><div id="runProgressBar"></div></div>
       </div><!-- /#inputControls -->
 
       <!-- Data table -->
@@ -432,7 +432,7 @@
                 </select>
               </label>
             </div>
-            <svg id="forestPlot" width="900" height="420"></svg>
+            <svg id="forestPlot" role="img" aria-label="Forest plot" width="900" height="420"></svg>
             <div id="forestNav"></div>
           </div>
         </div>
@@ -463,7 +463,7 @@
               <button class="export-btn" data-target="profileLikTau2Plot" data-format="png">PNG</button>
               <button class="export-btn" data-target="profileLikTau2Plot" data-format="tiff">TIFF</button>
             </div>
-            <svg id="profileLikTau2Plot" width="500" height="380"></svg>
+            <svg id="profileLikTau2Plot" role="img" aria-label="Profile likelihood plot for τ²" width="500" height="380"></svg>
             <p class="plot-label" style="font-weight:normal;font-size:0.82em;margin-top:4px">95% CI from likelihood-ratio inversion (LRT). Note: the τ² CI shown in the summary table uses the Q-profile method, which is moment-based and will differ.</p>
           </div>
         </details>
@@ -485,7 +485,7 @@
               <button class="export-btn" data-target="bayesMuPlot" data-format="png">PNG</button>
               <button class="export-btn" data-target="bayesMuPlot" data-format="tiff">TIFF</button>
             </div>
-            <svg id="bayesMuPlot" width="500" height="340"></svg>
+            <svg id="bayesMuPlot" role="img" aria-label="Bayesian posterior for pooled effect (μ)" width="500" height="340"></svg>
           </div>
 
           <div class="plot-block">
@@ -495,7 +495,7 @@
               <button class="export-btn" data-target="bayesTauPlot" data-format="png">PNG</button>
               <button class="export-btn" data-target="bayesTauPlot" data-format="tiff">TIFF</button>
             </div>
-            <svg id="bayesTauPlot" width="500" height="340"></svg>
+            <svg id="bayesTauPlot" role="img" aria-label="Bayesian posterior for heterogeneity (τ)" width="500" height="340"></svg>
             <p id="bayesGridWarning" style="display:none;color:var(--color-warning);font-size:0.82em;margin-top:4px">
               ⚠ Posterior did not fully decay at the grid boundary — the τ credible interval upper bound may be underestimated. Consider increasing σ_τ.
             </p>
@@ -535,7 +535,7 @@
                 <button class="funnel-mode-btn"        data-mode="contour">Contour</button>
               </div>
             </div>
-            <svg id="funnelPlot" width="500" height="400"></svg>
+            <svg id="funnelPlot" role="img" aria-label="Funnel plot" width="500" height="400"></svg>
           </div>
         </details>
 
@@ -566,7 +566,7 @@
               <button class="export-btn" data-target="influencePlot" data-format="png">PNG</button>
               <button class="export-btn" data-target="influencePlot" data-format="tiff">TIFF</button>
             </div>
-            <svg id="influencePlot" width="500" height="400"></svg>
+            <svg id="influencePlot" role="img" aria-label="Influence diagnostics plot" width="500" height="400"></svg>
           </div>
           <div class="plot-block" id="blupBlock" style="display:none">
             <p class="plot-label">BLUPs (shrunken study estimates)<button class="help-btn" data-help="diag.blup" title="Help">?</button></p>
@@ -575,7 +575,7 @@
               <button class="export-btn" data-target="blupPlot" data-format="png">PNG</button>
               <button class="export-btn" data-target="blupPlot" data-format="tiff">TIFF</button>
             </div>
-            <svg id="blupPlot" width="560" height="300"></svg>
+            <svg id="blupPlot" role="img" aria-label="BLUP caterpillar plot" width="560" height="300"></svg>
             <div id="blupNav"></div>
           </div>
           <div class="plot-block" id="baujatPlotBlock" style="display:none">
@@ -585,7 +585,7 @@
               <button class="export-btn" data-target="baujatPlot" data-format="png">PNG</button>
               <button class="export-btn" data-target="baujatPlot" data-format="tiff">TIFF</button>
             </div>
-            <svg id="baujatPlot" width="500" height="420"></svg>
+            <svg id="baujatPlot" role="img" aria-label="Baujat plot" width="500" height="420"></svg>
           </div>
           <div class="plot-block" id="qqPlotBlock" style="display:none">
             <p class="plot-label">Normal Q-Q plot<button class="help-btn" data-help="diag.qqplot" title="Help">?</button></p>
@@ -594,7 +594,7 @@
               <button class="export-btn" data-target="qqPlot" data-format="png">PNG</button>
               <button class="export-btn" data-target="qqPlot" data-format="tiff">TIFF</button>
             </div>
-            <svg id="qqPlot" width="420" height="380"></svg>
+            <svg id="qqPlot" role="img" aria-label="Normal Q-Q plot of standardised residuals" width="420" height="380"></svg>
           </div>
           <div class="plot-block" id="radialPlotBlock" style="display:none">
             <p class="plot-label">Radial (Galbraith) plot<button class="help-btn" data-help="diag.radial" title="Help">?</button></p>
@@ -603,7 +603,7 @@
               <button class="export-btn" data-target="radialPlot" data-format="png">PNG</button>
               <button class="export-btn" data-target="radialPlot" data-format="tiff">TIFF</button>
             </div>
-            <svg id="radialPlot" width="500" height="400"></svg>
+            <svg id="radialPlot" role="img" aria-label="Radial (Galbraith) plot" width="500" height="400"></svg>
           </div>
           <div class="plot-block" id="labbeBlock" style="display:none">
             <p class="plot-label">L'Abbé plot<button class="help-btn" data-help="diag.labbe" title="Help">?</button></p>
@@ -612,7 +612,7 @@
               <button class="export-btn" data-target="labbePlot" data-format="png">PNG</button>
               <button class="export-btn" data-target="labbePlot" data-format="tiff">TIFF</button>
             </div>
-            <svg id="labbePlot" width="500" height="420"></svg>
+            <svg id="labbePlot" role="img" aria-label="L'Abbé plot" width="500" height="420"></svg>
           </div>
         </details>
 
@@ -635,7 +635,7 @@
                 </select>
               </label>
             </div>
-            <svg id="cumulativePlot" width="900" height="420"></svg>
+            <svg id="cumulativePlot" role="img" aria-label="Cumulative forest plot" width="900" height="420"></svg>
             <div id="cumulativeForestNav"></div>
           </div>
           <div class="plot-block" id="cumulativeFunnelBlock" style="display:none">
@@ -651,7 +651,7 @@
                      min="0" max="0" value="0" step="1"
                      aria-labelledby="cumulativeFunnelLabel">
             </div>
-            <svg id="cumulativeFunnelPlot" width="500" height="420"></svg>
+            <svg id="cumulativeFunnelPlot" role="img" aria-label="Cumulative funnel plot" width="500" height="420"></svg>
           </div>
         </details>
 
@@ -665,7 +665,7 @@
               <button class="export-btn" data-target="orchardPlot" data-format="png">PNG</button>
               <button class="export-btn" data-target="orchardPlot" data-format="tiff">TIFF</button>
             </div>
-            <svg id="orchardPlot" width="520" height="340"></svg>
+            <svg id="orchardPlot" role="img" aria-label="Orchard plot" width="520" height="340"></svg>
           </div>
           <div class="plot-block" id="caterpillarPlotBlock" style="display:none">
             <p class="plot-label">Caterpillar plot<button class="help-btn" data-help="plot.caterpillar" title="Help">?</button></p>
@@ -683,7 +683,7 @@
                 </select>
               </label>
             </div>
-            <svg id="caterpillarPlot" width="520" height="400"></svg>
+            <svg id="caterpillarPlot" role="img" aria-label="Caterpillar plot" width="520" height="400"></svg>
             <div id="caterpillarNav"></div>
           </div>
         </details>
@@ -699,7 +699,7 @@
               <button class="export-btn" data-target="pCurvePlot" data-format="png">PNG</button>
               <button class="export-btn" data-target="pCurvePlot" data-format="tiff">TIFF</button>
             </div>
-            <svg id="pCurvePlot" width="500" height="380"></svg>
+            <svg id="pCurvePlot" role="img" aria-label="P-curve plot" width="500" height="380"></svg>
           </div>
           <div id="pUniformPanel"></div>
           <div class="plot-block" id="pUniformPlotBlock" style="display:none">
@@ -709,7 +709,7 @@
               <button class="export-btn" data-target="pUniformPlot" data-format="png">PNG</button>
               <button class="export-btn" data-target="pUniformPlot" data-format="tiff">TIFF</button>
             </div>
-            <svg id="pUniformPlot" width="500" height="170"></svg>
+            <svg id="pUniformPlot" role="img" aria-label="P-uniform plot" width="500" height="170"></svg>
           </div>
         </details>
 
@@ -752,7 +752,7 @@
               <button class="export-btn" data-target="goshPlot" data-format="png">PNG</button>
               <button class="export-btn" data-target="goshPlot" data-format="tiff">TIFF</button>
             </div>
-            <svg id="goshPlot" width="520" height="420"></svg>
+            <svg id="goshPlot" role="img" aria-label="GOSH plot" width="520" height="420"></svg>
           </div>
           <div id="goshInfo"></div>
         </details>
@@ -767,7 +767,7 @@
               <button class="export-btn" data-target="robTrafficLight" data-format="png">PNG</button>
               <button class="export-btn" data-target="robTrafficLight" data-format="tiff">TIFF</button>
             </div>
-            <svg id="robTrafficLight" width="500" height="400"></svg>
+            <svg id="robTrafficLight" role="img" aria-label="Risk of bias traffic light" width="500" height="400"></svg>
           </div>
           <div class="plot-block" id="robSummaryBlock">
             <p class="plot-label">Risk-of-bias summary</p>
@@ -776,7 +776,7 @@
               <button class="export-btn" data-target="robSummary" data-format="png">PNG</button>
               <button class="export-btn" data-target="robSummary" data-format="tiff">TIFF</button>
             </div>
-            <svg id="robSummary" width="500" height="300"></svg>
+            <svg id="robSummary" role="img" aria-label="Risk of bias summary" width="500" height="300"></svg>
           </div>
         </details>
 
@@ -1114,10 +1114,10 @@
 
 <div class="tooltip" id="tooltip"></div>
 
-<div id="helpPopover" style="display:none">
+<div id="helpPopover" role="dialog" aria-modal="true" aria-labelledby="helpPopoverTitle" style="display:none">
   <div class="help-popover-header">
     <span id="helpPopoverTitle" class="help-popover-title"></span>
-    <button class="help-popover-close" onclick="document.getElementById('helpPopover').style.display='none';document.getElementById('helpPopover').dataset.activeKey='';">×</button>
+    <button class="help-popover-close" aria-label="Close">×</button>
   </div>
   <p id="helpPopoverBody" class="help-popover-body"></p>
   <a id="helpPopoverGuideLink" class="help-popover-guide-link" href="#" style="display:none">More detail →</a>

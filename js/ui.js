@@ -176,11 +176,34 @@ document.addEventListener("visibilitychange", () => {
 
 // ---------------- HELP POPOVER ----------------
 
-const _helpPopover = document.getElementById("helpPopover");
-const _helpTitle   = document.getElementById("helpPopoverTitle");
-const _helpBody    = document.getElementById("helpPopoverBody");
-
+const _helpPopover   = document.getElementById("helpPopover");
+const _helpTitle     = document.getElementById("helpPopoverTitle");
+const _helpBody      = document.getElementById("helpPopoverBody");
+const _helpClose     = _helpPopover.querySelector(".help-popover-close");
 const _helpGuideLink = document.getElementById("helpPopoverGuideLink");
+let   _helpOpener    = null;  // element that opened the popover; focus returns here on close
+
+_helpClose.addEventListener("click", () => {
+  _helpPopover.dataset.activeKey = "";
+  hideHelp();
+});
+
+// Focus trap: Tab/Shift+Tab cycles within the popover while it is open.
+_helpPopover.addEventListener("keydown", e => {
+  if (e.key !== "Tab") return;
+  // Collect currently visible focusable elements in DOM order.
+  const focusable = [_helpClose, _helpGuideLink].filter(
+    el => el && el.style.display !== "none"
+  );
+  if (focusable.length === 0) return;
+  const first = focusable[0];
+  const last  = focusable[focusable.length - 1];
+  if (e.shiftKey) {
+    if (document.activeElement === first) { e.preventDefault(); last.focus(); }
+  } else {
+    if (document.activeElement === last)  { e.preventDefault(); first.focus(); }
+  }
+});
 
 async function showHelp(anchorEl, key) {
   let HELP, HELP_TO_GUIDE;
@@ -217,7 +240,9 @@ async function showHelp(anchorEl, key) {
     _helpGuideLink.style.display = "none";
   }
 
+  _helpOpener = anchorEl;
   _helpPopover.style.display = "block";
+  _helpClose.focus();
 
   // Position below the anchor, clamped to viewport.
   const rect     = anchorEl.getBoundingClientRect();
@@ -244,6 +269,8 @@ async function showHelp(anchorEl, key) {
 
 function hideHelp() {
   _helpPopover.style.display = "none";
+  _helpOpener?.focus();
+  _helpOpener = null;
 }
 
 // Close on any click outside the popover, but not when clicking a help button

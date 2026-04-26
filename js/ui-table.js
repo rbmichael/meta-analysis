@@ -33,6 +33,23 @@ let _cb = {
  */
 export function initTable(callbacks) {
   _cb = { ..._cb, ...callbacks };
+
+  // Keyboard row reorder: Alt+Up / Alt+Down while any cell in a row is focused.
+  document.getElementById("inputTable").addEventListener("keydown", e => {
+    if (!e.altKey || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
+    const row = e.target.closest("tr");
+    if (!row || !row.draggable) return;   // only data rows have draggable=true
+    e.preventDefault();
+    if (e.key === "ArrowUp") {
+      const prev = row.previousElementSibling;
+      if (prev && prev.draggable) row.parentNode.insertBefore(row, prev);
+    } else {
+      const next = row.nextElementSibling;
+      if (next && next.draggable) row.parentNode.insertBefore(next, row);
+    }
+    _cb.markStale();
+    _cb.scheduleSave();
+  });
 }
 
 // =============================================================================
@@ -267,7 +284,7 @@ export function addRow(values) {
 
   // Actions
   const actionCell = row.insertCell();
-  actionCell.innerHTML = `<button class="remove-btn">✖</button> <button class="clear-btn">🧹</button>`;
+  actionCell.innerHTML = `<button class="remove-btn" aria-label="Remove study">✖</button> <button class="clear-btn" aria-label="Clear row">🧹</button>`;
 
   // Input listeners
   row.querySelectorAll("input").forEach(input => {

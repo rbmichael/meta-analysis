@@ -239,6 +239,7 @@ export function drawBubble(studies, reg, mod, container) {
   const transform = mod.transform || "linear";
   const W = 460, H = 340;
   const margin = { top: 34, right: 18, bottom: 52, left: 56 };
+  const _bubbleLabel = `Bubble plot for ${modName}`;
   const iW = W - margin.left - margin.right;
   const iH = H - margin.top - margin.bottom;
 
@@ -317,7 +318,9 @@ export function drawBubble(studies, reg, mod, container) {
   const yScale = d3.scaleLinear().domain([yMin - yPad, yMax + yPad]).nice().range([iH, 0]);
 
   // ---- SVG ----
-  const svg = setSvgSize(d3.select(container).append("svg"), W, H);
+  const svg = setSvgSize(d3.select(container).append("svg")
+    .attr("role", "img")
+    .attr("aria-label", _bubbleLabel), W, H);
   const g   = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
 
   // Zero line
@@ -436,6 +439,7 @@ export function drawBubble(studies, reg, mod, container) {
 export function drawPartialResidualBubble(studies, reg, mod, container) {
   const modName = mod.name;
   const transform = mod.transform || "linear";
+  const _partialLabel = `Partial-residual bubble plot for ${modName}`;
   const W = 460, H = 340;
   const margin = { top: 34, right: 18, bottom: 52, left: 56 };
   const iW = W - margin.left - margin.right;
@@ -529,7 +533,9 @@ export function drawPartialResidualBubble(studies, reg, mod, container) {
   const yScale = d3.scaleLinear().domain([yMin - yPad, yMax + yPad]).nice().range([iH, 0]);
 
   // ---- SVG ----
-  const svg = setSvgSize(d3.select(container).append("svg"), W, H);
+  const svg = setSvgSize(d3.select(container).append("svg")
+    .attr("role", "img")
+    .attr("aria-label", _partialLabel), W, H);
   const g   = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
 
   // Zero line
@@ -3470,11 +3476,14 @@ export function drawGoshPlot(result, profile, options = {}) {
     ctx.putImageData(imgData, 0, 0);
 
     // Embed the rasterised cloud as an SVG <image>.
-    g.append("image")
+    const goshImg = g.append("image")
       .attr("x", 0).attr("y", 0)
       .attr("width", iW).attr("height", iH)
       .attr("href", canvas.toDataURL("image/png"))
-      .attr("preserveAspectRatio", "none");
+      .attr("preserveAspectRatio", "none")
+      .attr("role", "img")
+      .attr("aria-label", `GOSH plot point cloud: ${count} subsets of ${k} studies`);
+    goshImg.append("title").text(`GOSH plot point cloud: ${count} subsets of ${k} studies`);
 
     // Transparent overlay for coordinate-readout tooltip.
     const tt = selTooltip();
