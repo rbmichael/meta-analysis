@@ -323,6 +323,12 @@
   box-shadow: 0 1px 0 var(--border);
 }
 
+.results-section > summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
+
 .results-section > summary::-webkit-details-marker {
   display: none;
 }
