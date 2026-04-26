@@ -113,17 +113,18 @@ import { drawForest, drawFunnel, drawBubble, drawPartialResidualBubble, drawInfl
 import { goshCompute, GOSH_MAX_K } from "./gosh.js";
 import { exportSVG, exportPNG, exportTIFF } from "./export.js";
 // report.js (81 KB) and docx.js (51 KB) are loaded on first export click.
-let _reportMod, _docxMod;
-function getReport() { return (_reportMod ??= import("./report.js")); }
-function getDocx()   { return (_docxMod   ??= import("./docx.js")); }
+// guide.js (166 KB) and help.js (76 KB) are loaded on first use so they don't
+// block startup.
+// Each getter caches the resolved promise. On rejection the cache is cleared so
+// the next call retries the import rather than re-throwing the stale failure.
+let _reportMod, _docxMod, _helpMod, _guideMod;
+function getReport() { return (_reportMod ??= import("./report.js").catch(e => { _reportMod = null; throw e; })); }
+function getDocx()   { return (_docxMod   ??= import("./docx.js"  ).catch(e => { _docxMod   = null; throw e; })); }
+function getHelp()   { return (_helpMod   ??= import("./help.js"  ).catch(e => { _helpMod   = null; throw e; })); }
+function getGuide()  { return (_guideMod  ??= import("./guide.js" ).catch(e => { _guideMod  = null; throw e; })); }
 import { serializeSession, parseSession, missingInputCols } from "./session.js";
 import { saveDraft, loadDraft, clearDraft } from "./autosave.js";
 import { downloadBlob, readTextFile, serializeCSV } from "./io.js";
-// guide.js (166 KB) and help.js (76 KB) are loaded on first use so they don't
-// block startup. Both promises are cached after the first import.
-let _helpMod, _guideMod;
-function getHelp()  { return (_helpMod  ??= import("./help.js")); }
-function getGuide() { return (_guideMod ??= import("./guide.js")); }
 import { Z_95 } from "./constants.js";
 import { regStars, regFmtP, buildRegCoeffRows, buildRegFittedRows,
          renderLocationScalePanel, renderRegressionPanel,
@@ -181,7 +182,13 @@ const _helpBody    = document.getElementById("helpPopoverBody");
 const _helpGuideLink = document.getElementById("helpPopoverGuideLink");
 
 async function showHelp(anchorEl, key) {
-  const [{ HELP }, { HELP_TO_GUIDE }] = await Promise.all([getHelp(), getGuide()]);
+  let HELP, HELP_TO_GUIDE;
+  try {
+    [{ HELP }, { HELP_TO_GUIDE }] = await Promise.all([getHelp(), getGuide()]);
+  } catch (err) {
+    console.error("showHelp: failed to load help/guide modules:", err);
+    return;
+  }
   const entry = HELP[key];
   if (!entry) {
     console.warn(`showHelp: no HELP entry for key "${key}"`);
@@ -995,15 +1002,31 @@ async function buildReportAndResync() {
 }
 
 document.getElementById("exportReportHTML").addEventListener("click", async e => {
-  const done = flashBtn(e.currentTarget, "Building\u2026", "Saved \u2713");
-  const result = await buildReportAndResync();
-  if (result) { result.downloadHTML(result.html); done(); }
-  else { e.currentTarget.disabled = false; e.currentTarget.textContent = e.currentTarget.textContent.replace("Building\u2026", "Export HTML"); }
+  const btn  = e.currentTarget;
+  const done = flashBtn(btn, "Building\u2026", "Saved \u2713");
+  try {
+    const result = await buildReportAndResync();
+    if (result) { result.downloadHTML(result.html); done(); }
+    else { btn.disabled = false; btn.textContent = "Export HTML"; }
+  } catch (err) {
+    console.error("Export HTML failed:", err);
+    btn.disabled = false;
+    btn.textContent = "Export failed";
+    setTimeout(() => { btn.textContent = "Export HTML"; }, 3000);
+  }
 });
 
-document.getElementById("exportReportPDF").addEventListener("click", async () => {
-  const result = await buildReportAndResync();
-  if (result) result.openPrintPreview(result.html);
+document.getElementById("exportReportPDF").addEventListener("click", async e => {
+  const btn  = e.currentTarget;
+  try {
+    const result = await buildReportAndResync();
+    if (result) result.openPrintPreview(result.html);
+  } catch (err) {
+    console.error("Export PDF failed:", err);
+    btn.disabled = false;
+    btn.textContent = "Export failed";
+    setTimeout(() => { btn.textContent = "Export PDF"; }, 3000);
+  }
 });
 
 document.getElementById("exportReportDOCX").addEventListener("click", async () => {
