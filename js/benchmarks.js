@@ -2225,7 +2225,7 @@ export const BENCHMARKS = [
 // ----------------------------------------------------------------
 // Publication bias + trim-and-fill benchmarks
 // Each entry has a `tests` object with named sub-objects per function.
-// Expected values derived in _derive_pubias.py and verified below.
+// Expected values derived in _derive_pubias.py and cross-verified against metafor (generate.R).
 // ----------------------------------------------------------------
 export const PUB_BIAS_BENCHMARKS = [
 
@@ -2234,10 +2234,9 @@ export const PUB_BIAS_BENCHMARKS = [
   // Source: Colditz et al. (1994). dat.bcg in metafor.
   // Same 13 2×2 tables as the OR benchmarks above.
   // Expected values — Begg/Egger/FAT-PET/Fail-safe: derived analytically
-  //   in _derive_pubias.py.
-  // Harbord/Peters: from _derive_pubias.py; R re-verification pending
-  //   (generate.R blocks PB-41/PB-42 — see benchmark-data.md).
-  // Deeks/Rücker: R verification pending (generate.R blocks PB-43/PB-44).
+  //   in _derive_pubias.py and cross-verified against metafor (generate.R PB-1–PB-6).
+  // Harbord/Peters: cross-verified against metafor (generate.R PB-5, PB-6).
+  // Deeks/Rücker: cross-verified against metafor (generate.R PB-8, PB-9).
   //   Begg:     τ_b = −0.128, S = −10, z = −0.549, p = 0.583
   //   Egger:    intercept = −2.345 (bias), slope = −0.157, p = 0.160
   //   FAT-PET:  intercept = −0.157 (PET), slope = −2.345 (FAT), interceptP = 0.521, slopeP = 0.160
@@ -2388,7 +2387,7 @@ export const PUB_BIAS_BENCHMARKS = [
 // Influence / LOO benchmarks (Phase 7)
 // Each entry's `expected` is a k-length array of per-study objects
 // matching the fields returned by influenceDiagnostics().
-// Expected values derived in _derive_influence.py (DL tau method).
+// Expected values derived in _derive_influence.py and cross-verified against metafor (generate.R INF-1, INF-2).
 // ----------------------------------------------------------------
 export const INFLUENCE_BENCHMARKS = [
 
@@ -2503,7 +2502,7 @@ export const INFLUENCE_BENCHMARKS = [
         highCovRatio:  true
       }
     ],
-    citation: "Synthetic 5-study log-RR dataset (same as benchmarks 35–37). Expected values derived analytically (_derive_influence.py)."
+    citation: "Synthetic 5-study log-RR dataset (same as benchmarks 35–37). Expected values cross-verified against metafor influence.rma.uni() (generate.R INF-2)."
   },
 
   // ----------------------------------------------------------------
@@ -2724,7 +2723,7 @@ export const META_REGRESSION_BENCHMARKS = [
   // ----------------------------------------------------------------
   // MR-D: polynomial (quadratic) moderator — ablat + ablat², REML
   // Equivalent to metafor: rma(yi, vi, mods = ~ ablat + I(ablat^2), data=dat.bcg)
-  // R verification pending (generate.R block 48).
+  // Cross-verified against metafor (generate.R block 48).
   // ----------------------------------------------------------------
   {
     name: "BCG – ablat poly² (REML, normal CI)",
@@ -2773,7 +2772,7 @@ export const META_REGRESSION_BENCHMARKS = [
   // Knots at 10th/50th/90th percentiles of ablat: [14, 33, 50.4]
   // Equivalent to metafor: rma(yi, vi, mods = ~ ablat + phi1, data=dat.bcg)
   //   where phi1 is the single RCS nonlinear term computed from Harrell's formula.
-  // R verification pending (generate.R block 49).
+  // Cross-verified against metafor (generate.R block 49).
   // ----------------------------------------------------------------
   {
     name: "BCG – ablat RCS (3 knots, REML, normal CI)",
