@@ -17,9 +17,9 @@
   --bg-header:        light-dark(rgba(245,245,248,0.85), rgba(5,5,6,0.85));
 
   /* Foreground */
-  --fg:               light-dark(#111113, #EDEDEF);
-  --fg-muted:         light-dark(#6b7180, #8A8F98);
-  --fg-subtle:        light-dark(rgba(0,0,0,0.55), rgba(255,255,255,0.60));
+  --fg:               light-dark(#0a0a0c, #F2F2F4);
+  --fg-muted:         light-dark(#525664, #9fa4ae);
+  --fg-subtle:        light-dark(rgba(0,0,0,0.62), rgba(255,255,255,0.68));
 
   /* Accent */
   --accent:           #5E6AD2;
