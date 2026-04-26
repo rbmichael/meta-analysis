@@ -596,7 +596,7 @@
 
 #undoToastBtn {
   background: var(--accent, #5e6ad2);
-  color: #fff;
+  color: var(--fg-on-accent);
   border: none;
   border-radius: var(--radius-sm);
   padding: 3px 10px;

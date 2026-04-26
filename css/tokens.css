@@ -62,6 +62,9 @@
   --fg-disabled:               light-dark(rgba(0,0,0,0.42),   rgba(255,255,255,0.28));
   --border-disabled:           light-dark(rgba(0,0,0,0.10),   rgba(255,255,255,0.05));
 
+  /* Foreground on accent/coloured backgrounds */
+  --fg-on-accent:              #ffffff;
+
   /* Accent button inner highlight */
   --btn-inner-highlight:       light-dark(rgba(255,255,255,0.70), rgba(255,255,255,0.10));
   --btn-inner-highlight-hover: light-dark(rgba(255,255,255,0.80), rgba(255,255,255,0.15));

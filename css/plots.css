@@ -116,7 +116,7 @@
 .forest-pool-btn.active,
 .funnel-mode-btn.active {
   background: var(--accent);
-  color: #fff;
+  color: var(--fg-on-accent);
   border-color: var(--accent);
   z-index: 1;
 }

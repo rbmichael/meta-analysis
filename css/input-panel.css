@@ -403,7 +403,7 @@ input[type="file"]::file-selector-button:hover {
 /* ---- Primary action: Run ---- */
 #run {
   background: var(--accent);
-  color: #fff;
+  color: var(--fg-on-accent);
   border-color: var(--border-accent-strong);
   box-shadow: var(--shadow-btn-accent);
   font-weight: 600;
@@ -415,7 +415,7 @@ input[type="file"]::file-selector-button:hover {
   background: var(--accent-bright);
   border-color: var(--border-accent-strong);
   box-shadow: var(--shadow-btn-accent-hover);
-  color: #fff;
+  color: var(--fg-on-accent);
 }
 
 /* kbd shortcut badge inside Run button */

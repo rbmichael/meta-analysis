@@ -141,7 +141,7 @@
   padding: 6px 20px;
   font-weight: 600;
   background: var(--accent);
-  color: #fff;
+  color: var(--fg-on-accent);
   border: 1px solid var(--border-accent-strong);
   margin: 0;
   box-shadow: var(--shadow-btn-accent);
