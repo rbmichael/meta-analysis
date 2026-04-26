@@ -25,8 +25,32 @@ function escapeHTML(s) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
 }
+// Keep in sync with HELP_LABELS in ui.js.
+const _RENDER_HELP_LABELS = {
+  "diag.locationscale":  "Location-scale model",
+  "diag.metaregression": "Meta-regression",
+  "mreg.lrt":            "Likelihood ratio test",
+  "reg.aic":             "Model fit statistics (AIC/BIC/LL)",
+  "sens.loo":            "Leave-one-out analysis",
+  "sens.estimator":      "Estimator comparison",
+  "het.tau2":            "τ² between-study variance",
+  "het.Q":               "Q heterogeneity statistic",
+  "het.I2":              "I² heterogeneity",
+  "het.H2":              "H² heterogeneity",
+  "sel.model":           "Selection model",
+  "diag.influence":      "Influence diagnostics",
+  "diag.dffits":         "DFFITS influence statistic",
+  "diag.covratio":       "CovRatio influence statistic",
+  "diag.subgroup":       "Subgroup analysis",
+  "bayes.sensitivity":   "Bayesian prior sensitivity",
+  "pool.cles":           "Common language effect size",
+  "cluster.robust":      "Robust confidence interval",
+};
 function hBtn(key) {
-  return `<button class="help-btn" data-help="${key}" title="Help">?</button>`;
+  const base  = key.replace(/\.$/, "").split(".")[0];
+  const label = _RENDER_HELP_LABELS[key] ?? _RENDER_HELP_LABELS[base] ?? key;
+  const aria  = label === key ? "Help" : `Help: ${label}`;
+  return `<button class="help-btn" data-help="${key}" aria-label="${aria}" title="Help">?</button>`;
 }
 function getCiLabel() {
   return (document.getElementById("ciLevel")?.value ?? "95") + "% CI";

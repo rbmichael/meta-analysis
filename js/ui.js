@@ -279,10 +279,93 @@ document.addEventListener("click", async e => {
   await showHelp(btn, key);
 });
 
+// Human-readable labels for help button aria-labels.
+// Keys match data-help values used in both static HTML and hBtn() calls.
+const HELP_LABELS = {
+  // Input panel
+  "input.csv":             "CSV import and export",
+  "input.session":         "Session save and load",
+  "input.moderators":      "Moderators",
+  "input.scaleModerators": "Location-scale model moderators",
+  "input.rob":             "Risk of bias",
+  "cluster.id":            "Cluster ID",
+  "keyboard.shortcuts":    "Keyboard shortcuts",
+  // Settings
+  "ci.width":              "Confidence interval width",
+  "reg.mcc":               "Multiple comparison correction",
+  "bias.trimfill":         "Trim-and-fill",
+  "bayes.model":           "Bayesian meta-analysis model",
+  "bayes.tau":             "Bayesian τ posterior",
+  "sel.model":             "Selection model",
+  // Effect / method selects (data-help-select prefixes resolve here)
+  "effect":                "Effect type",
+  "tau":                   "τ² estimator",
+  "ci":                    "CI method",
+  "cumorder":              "Cumulative order",
+  // Plots
+  "plot.forest":           "Forest plot",
+  "plot.funnel":           "Funnel plot",
+  "plot.cumulative":       "Cumulative analysis",
+  "plot.orchard":          "Orchard plot",
+  "plot.caterpillar":      "Caterpillar plot",
+  "plot.rob":              "Risk-of-bias plot",
+  // Diagnostics
+  "diag.profileLik":       "Profile likelihood",
+  "diag.influence":        "Influence diagnostics",
+  "diag.blup":             "BLUPs (shrunken estimates)",
+  "diag.baujat":           "Baujat plot",
+  "diag.qqplot":           "Normal Q-Q plot",
+  "diag.radial":           "Radial (Galbraith) plot",
+  "diag.labbe":            "L'Abbé plot",
+  "diag.gosh":             "GOSH plot",
+  "diag.locationscale":    "Location-scale model",
+  "diag.metaregression":   "Meta-regression",
+  "diag.dffits":           "DFFITS influence statistic",
+  "diag.covratio":         "CovRatio influence statistic",
+  "diag.subgroup":         "Subgroup analysis",
+  // Heterogeneity
+  "het.Q":                 "Q heterogeneity statistic",
+  "het.I2":                "I² heterogeneity",
+  "het.H2":                "H² heterogeneity",
+  "het.tau2":              "τ² between-study variance",
+  // Models
+  "rve.model":             "Robust variance estimation",
+  "cluster.robust":        "Robust confidence interval",
+  "threelevel.model":      "Three-level model",
+  "threelevel.tau2":       "Three-level variance components",
+  "threelevel.I2":         "Three-level I²",
+  "pool.cles":             "Common language effect size",
+  // Publication bias
+  "bias.pcurve":           "P-curve",
+  "bias.puniform":         "P-uniform",
+  "bayes.sensitivity":     "Bayesian prior sensitivity",
+  // Regression
+  "mreg.lrt":              "Likelihood ratio test",
+  "reg.aic":               "Model fit statistics (AIC/BIC/LL)",
+  "sens.loo":              "Leave-one-out analysis",
+  "sens.estimator":        "Estimator comparison",
+};
+
+// Derive aria-label text from a help key.
+// data-help-select buttons use a prefix (e.g. "effect.") — strip the dot.
+function _helpAriaLabel(key) {
+  const base = key.replace(/\.$/, "").split(".")[0];
+  return HELP_LABELS[key] ?? HELP_LABELS[base] ?? key;
+}
+
 // Convenience: inline help button for injected HTML strings.
 function hBtn(key) {
-  return `<button class="help-btn" data-help="${key}" title="Help">?</button>`;
+  const label = _helpAriaLabel(key);
+  return `<button class="help-btn" data-help="${key}" aria-label="Help: ${label}" title="Help">?</button>`;
 }
+
+// One-time pass: assign aria-labels to all static .help-btn elements in the DOM.
+document.querySelectorAll(".help-btn").forEach(btn => {
+  if (btn.hasAttribute("aria-label")) return;
+  const key  = btn.dataset.help ?? btn.dataset.helpPrefix?.replace(/\.$/, "") ?? "";
+  const label = _helpAriaLabel(key);
+  btn.setAttribute("aria-label", label === key ? "Help" : `Help: ${label}`);
+});
 
 // ---------------- MODERATOR STATE ----------------
 let moderators = []; // { name: string, type: "continuous"|"categorical", transform: string }
