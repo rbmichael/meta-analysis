@@ -31,6 +31,11 @@ th, td {
   text-align: center;
 }
 
+::placeholder {
+  color: var(--fg-muted);
+  opacity: 1;
+}
+
 input, select {
   width: 70px;
   background: var(--bg-elevated);
