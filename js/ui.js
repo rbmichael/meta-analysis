@@ -1608,7 +1608,7 @@ function makeNavRenderer(cfg) {
       `<button id="${cfg.nextId}" ${page >= totalPages - 1 ? "disabled" : ""}>Next &#8250;</button>` +
       `<span class="forest-nav-note">${cfg.note(cfg.getKAll())}</span>`;
 
-    document.getElementById(cfg.prevId).addEventListener("click", () => {
+    document.getElementById(cfg.prevId)?.addEventListener("click", () => {
       if (cfg.getPage() > 0) {
         cfg.setPage(cfg.getPage() - 1);
         const { totalPages: tp } = cfg.redraw(cfg.getPage());
@@ -1616,7 +1616,7 @@ function makeNavRenderer(cfg) {
       }
     });
 
-    document.getElementById(cfg.nextId).addEventListener("click", () => {
+    document.getElementById(cfg.nextId)?.addEventListener("click", () => {
       if (cfg.getPage() < totalPages - 1) {
         cfg.setPage(cfg.getPage() + 1);
         const { totalPages: tp } = cfg.redraw(cfg.getPage());
