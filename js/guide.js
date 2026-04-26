@@ -2097,7 +2097,7 @@ variance, even if it explains mean effects (a significant β).</p>
 <p><strong>How to use in the app:</strong></p>
 <ol>
   <li>Add location moderators as usual in <em>Moderators</em>.</li>
-  <li>Add one or more variable names in <em>Scale moderators (log τ²)</em>.
+  <li>Add one or more variable names in <em>Location-scale model moderators</em>.
   The same column name is reused — no separate data entry needed.</li>
   <li>Click <em>Run Analysis</em>. The Location-Scale Model panel replaces the
   Meta-Regression panel.</li>
@@ -2185,7 +2185,7 @@ where W = diag(1/(vᵢ+τ²)) (Harville 1977).</p>
         body: `<p>When a meta-regression includes <em>m</em> moderators, conducting
 <em>m</em> significance tests inflates the family-wise error rate (FWER): the
 probability that at least one null result is declared significant by chance.
-Multiple comparison correction (MCC) controls FWER by adjusting the per-moderator
+Multiple comparison correction controls FWER by adjusting the per-moderator
 omnibus p-values. The adjustment applies to the per-moderator QM p-values
 (one per moderator input), not to individual coefficient-level p-values within
 a multi-level categorical moderator.</p>
@@ -2206,7 +2206,7 @@ Easy to interpret but can be overly conservative when tests are correlated.</p>
 always at least as powerful as Bonferroni. R's <code>p.adjust(method="holm")</code>
 uses the same algorithm.</p>
 
-<p><strong>When to use MCC:</strong></p>
+<p><strong>When to use correction:</strong></p>
 <ul>
   <li>Use when the primary interest is whether <em>any</em> moderator is significant
   and you want to limit false discoveries across the full set of tests.</li>

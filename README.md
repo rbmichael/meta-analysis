@@ -8,7 +8,7 @@ A browser-based meta-analysis tool. No installation, no server, no dependencies 
 
 ### Effect types
 
-35 effect measures across 9 categories:
+42 effect measures across 9 categories:
 
 | Category | Measures |
 |---|---|
@@ -162,7 +162,7 @@ CSV column names match the input fields for each effect type (e.g. `m1,sd1,n1,m2
 ## Interface
 
 - **Three-panel layout** — Input, Results, and Guide tabs
-- **Collapsible "More settings"** — advanced Input options (moderators, RoB domains, cluster ID, Bayesian priors) tucked behind a disclosure element to keep the default view uncluttered
+- **Collapsible "Advanced settings"** — advanced Input options (moderators, RoB domains, cluster ID, Bayesian priors) tucked behind a disclosure element to keep the default view uncluttered
 - **Collapsible results sections** — sections are collapsed by default; only core results and the forest plot are open on load, reducing visual overwhelm on large analyses
 - **Light and dark themes** — follows system preference by default; toggle available in the settings bar
 - **In-app methodology guide** — reference documentation for every statistical method in the tool, accessible from the Guide tab or via contextual help buttons (?) throughout the interface
