@@ -139,7 +139,7 @@ All plots export as SVG, PNG, or TIFF. Log-scale effect types label the axis in 
 
 ## Data input
 
-- **Manual entry** — inline editable table; rows validate on input with per-field error highlighting
+- **Manual entry** — inline editable table; rows validate on input with per-field error highlighting; reorder rows by drag-and-drop or Alt+↑ / Alt+↓
 - **CSV import** — auto-detects delimiter and effect type from column headers; shows a preview panel with column-mapping controls before committing
 - **Session save / load** — full application state (data, settings, moderators, RoB ratings) serialised to JSON
 - **Auto-save** — drafts written to `localStorage`; a recovery banner appears on next load if unsaved changes exist

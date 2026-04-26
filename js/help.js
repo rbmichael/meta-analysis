@@ -1276,6 +1276,7 @@ export const HELP = {
     title: "Keyboard shortcuts",
     body:  "Ctrl+Enter (Cmd+Enter on Mac) — run analysis and switch to Results.\n" +
            "Ctrl+Shift+C (Cmd+Shift+C) — clear all study rows.\n" +
+           "Alt+↑ / Alt+↓ — move the focused row up or down.\n" +
            "Escape — close this help popover.\n" +
            "← / → arrow keys — navigate forest plot pages (when Results tab is active " +
            "and focus is not in a text field).",

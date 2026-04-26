@@ -2853,6 +2853,34 @@ when exported.</p>`,
     ],
   },
 
+  // ------------------------------------------------------------------ //
+  // Data Entry                                                          //
+  // ------------------------------------------------------------------ //
+  {
+    id: "data-entry",
+    heading: "Data Entry",
+    topics: [
+
+      {
+        id: "guide-keyboard-shortcuts",
+        title: "Keyboard shortcuts",
+        body: `<p>All shortcuts work while the Input tab is active.</p>
+<table border="1" style="border-collapse:collapse">
+  <thead><tr><th style="padding:4px 10px">Shortcut</th><th style="padding:4px 10px">Action</th></tr></thead>
+  <tbody>
+    <tr><td style="padding:3px 8px"><kbd>Ctrl+Enter</kbd> / <kbd>Cmd+Enter</kbd></td><td style="padding:3px 8px">Run analysis and switch to Results tab</td></tr>
+    <tr><td style="padding:3px 8px"><kbd>Ctrl+Shift+C</kbd> / <kbd>Cmd+Shift+C</kbd></td><td style="padding:3px 8px">Clear all study rows</td></tr>
+    <tr><td style="padding:3px 8px"><kbd>Alt+↑</kbd> / <kbd>Alt+↓</kbd></td><td style="padding:3px 8px">Move the focused row up or down (keyboard alternative to drag-reorder)</td></tr>
+    <tr><td style="padding:3px 8px"><kbd>←</kbd> / <kbd>→</kbd></td><td style="padding:3px 8px">Navigate forest plot pages (when Results tab is active and focus is not in a text field)</td></tr>
+    <tr><td style="padding:3px 8px"><kbd>Escape</kbd></td><td style="padding:3px 8px">Close the help popover</td></tr>
+  </tbody>
+</table>`,
+        citations: [],
+      },
+
+    ],
+  },
+
 ];
 
 // ------------------------------------------------------------------ //
@@ -2985,6 +3013,7 @@ export const HELP_TO_GUIDE = {
   "threelevel.model":    "guide-three-level",
   "threelevel.tau2":     "guide-three-level",
   "threelevel.I2":       "guide-three-level",
+  "keyboard.shortcuts":  "guide-keyboard-shortcuts",
 };
 
 // ------------------------------------------------------------------ //
