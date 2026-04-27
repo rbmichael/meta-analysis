@@ -1366,6 +1366,7 @@ const EFFECT_GROUP_ORDER = [
   "Correlations",
   "Proportions",
   "Time-to-event / Rates",
+  "Reliability",
   "Generic",
 ];
 

@@ -175,9 +175,11 @@ export const effectProfiles = {
     softWarnings:  softWarnTwoGroup,
 
     exampleData: [
-      ["Study1", 10, 2, 30, 8, 2, 28, "A"],
-      ["Study2", 12, 3, 32, 9, 3, 30, "A"],
-      ["Study3",  9, 2, 28, 7, 2, 25, "B"],
+      ["Study 1", 10, 2.0, 30,  8, 2.0, 28, "A"],
+      ["Study 2", 15, 3.5, 40,  9, 3.5, 38, "A"],
+      ["Study 3",  7, 1.5, 25,  6, 1.5, 23, "B"],
+      ["Study 4", 20, 5.0, 50,  9, 5.0, 48, "B"],
+      ["Study 5", 12, 2.5, 35, 10, 2.5, 33, ""],
     ],
   },
 
@@ -196,9 +198,11 @@ export const effectProfiles = {
     softWarnings:  softWarnTwoGroup,
 
     exampleData: [
-      ["Study1", 10, 2, 30, 8, 2, 28, "A"],
-      ["Study2", 12, 3, 32, 9, 3, 30, "A"],
-      ["Study3",  9, 2, 28, 7, 2, 25, "B"],
+      ["Study 1", 10, 2.0, 30,  8, 2.0, 28, "A"],
+      ["Study 2", 15, 3.5, 40,  9, 3.5, 38, "A"],
+      ["Study 3",  7, 1.5, 25,  6, 1.5, 23, "B"],
+      ["Study 4", 20, 5.0, 50,  9, 5.0, 48, "B"],
+      ["Study 5", 12, 2.5, 35, 10, 2.5, 33, ""],
     ],
   },
 
@@ -236,11 +240,11 @@ export const effectProfiles = {
     },
 
     exampleData: [
-      ["Study1", 10, 3.5, 30,  8,   1.2, 28, "A"],
-      ["Study2", 12, 4.1, 32,  9,   1.8, 30, "A"],
-      ["Study3",  9, 2.8, 28,  7,   1.0, 25, "B"],
-      ["Study4", 14, 5.0, 40, 10,   2.3, 38, "B"],
-      ["Study5", 11, 3.2, 35,  8.5, 1.5, 33, ""],
+      ["Study 1", 10, 3.5, 30,  8, 1.2, 28, "A"],
+      ["Study 2", 18, 5.0, 40,  9, 1.5, 38, "A"],
+      ["Study 3",  7, 2.0, 25,  6, 1.0, 23, "B"],
+      ["Study 4", 22, 6.0, 50,  8, 1.8, 48, "B"],
+      ["Study 5", 13, 2.5, 35, 11, 1.2, 33, ""],
     ],
   },
 
@@ -263,9 +267,11 @@ export const effectProfiles = {
     softWarnings(_s, _label) { return []; },
 
     exampleData: [
-      ["Study1", 10, 2, 8, 2, 30, 0.5, "A"],
-      ["Study2", 12, 3, 9, 3, 32, 0.6, "A"],
-      ["Study3",  9, 2, 7, 2, 28, 0.4, "B"],
+      ["Study 1", 10, 2.0,  8, 2.0, 30, 0.5, "A"],
+      ["Study 2", 15, 3.5,  9, 3.5, 40, 0.6, "A"],
+      ["Study 3",  8, 1.8,  7, 1.8, 25, 0.4, "B"],
+      ["Study 4", 20, 4.5,  8, 4.5, 50, 0.7, "B"],
+      ["Study 5", 12, 2.5, 11, 2.5, 35, 0.3, ""],
     ],
   },
 
@@ -293,9 +299,11 @@ export const effectProfiles = {
     softWarnings(_s, _label) { return []; },
 
     exampleData: [
-      ["Study1", 10, 2, 8, 2, 30, 0.5, "A"],
-      ["Study2", 12, 3, 9, 3, 32, 0.6, "A"],
-      ["Study3",  9, 2, 7, 2, 28, 0.4, "B"],
+      ["Study 1", 10, 2.0,  8, 2.0, 30, 0.5, "A"],
+      ["Study 2", 15, 3.5,  9, 3.5, 40, 0.6, "A"],
+      ["Study 3",  8, 1.8,  7, 1.8, 25, 0.4, "B"],
+      ["Study 4", 20, 4.5,  8, 4.5, 50, 0.7, "B"],
+      ["Study 5", 12, 2.5, 11, 2.5, 35, 0.3, ""],
     ],
   },
 
@@ -334,9 +342,11 @@ export const effectProfiles = {
     },
 
     exampleData: [
-      ["Study1", 10, 2, 8, 2, 30, 0.5, "A"],
-      ["Study2", 12, 3, 9, 3, 32, 0.6, "A"],
-      ["Study3",  9, 2, 7, 2, 28, 0.4, "B"],
+      ["Study 1", 10, 2.0,  8, 2.0, 30, 0.5, "A"],
+      ["Study 2", 15, 3.5,  9, 3.5, 40, 0.6, "A"],
+      ["Study 3",  8, 1.8,  7, 1.8, 25, 0.4, "B"],
+      ["Study 4", 20, 4.5,  8, 4.5, 50, 0.7, "B"],
+      ["Study 5", 12, 2.5, 11, 2.5, 35, 0.3, ""],
     ],
   },
 
@@ -466,11 +476,11 @@ export const effectProfiles = {
     },
 
     exampleData: [
-      ["Study 1", 25.0,  6.2, 40, 24.8, 3.5, 38, ""],
-      ["Study 2", 30.1,  9.0, 55, 29.7, 4.8, 52, ""],
-      ["Study 3", 18.5,  5.1, 30, 19.0, 3.0, 28, ""],
-      ["Study 4", 42.0, 11.5, 70, 40.5, 6.2, 68, ""],
-      ["Study 5", 22.3,  7.8, 45, 23.1, 4.9, 43, ""],
+      ["Study 1", 25, 10.0, 40, 25, 4.0, 38, ""],
+      ["Study 2", 30,  6.0, 55, 30, 5.5, 52, ""],
+      ["Study 3", 20,  8.0, 30, 20, 2.5, 28, ""],
+      ["Study 4", 40,  4.5, 70, 40, 7.0, 68, ""],
+      ["Study 5", 22, 12.0, 45, 22, 5.0, 43, ""],
     ],
   },
 
@@ -525,11 +535,11 @@ export const effectProfiles = {
     },
 
     exampleData: [
-      ["Study 1", 4.2, 40, 2.8, 38, ""],
-      ["Study 2", 5.5, 55, 3.2, 52, ""],
-      ["Study 3", 3.8, 30, 2.5, 28, ""],
-      ["Study 4", 6.1, 70, 4.0, 68, ""],
-      ["Study 5", 4.9, 45, 3.5, 43, ""],
+      ["Study 1", 2.2, 40, 2.0, 38, ""],
+      ["Study 2", 4.8, 55, 2.2, 52, ""],
+      ["Study 3", 1.5, 30, 1.4, 28, ""],
+      ["Study 4", 6.0, 70, 4.0, 68, ""],
+      ["Study 5", 3.2, 45, 2.8, 43, ""],
     ],
   },
 
@@ -567,9 +577,11 @@ export const effectProfiles = {
     softWarnings: softWarnBinaryCounts,
 
     exampleData: [
-      ["Study1", 12,  5,  8, 15, "A"],
-      ["Study2", 20, 10,  5, 25, "B"],
-      ["Study3", 10,  4,  6, 12, "B"],
+      ["Study 1", 30, 20, 10, 40, "A"],
+      ["Study 2", 15, 35, 25, 25, "A"],
+      ["Study 3", 40, 10, 28, 22, "B"],
+      ["Study 4",  8, 42, 15, 35, "B"],
+      ["Study 5", 25, 15, 18, 32, ""],
     ],
   },
 
@@ -601,9 +613,11 @@ export const effectProfiles = {
     softWarnings: softWarnBinaryCounts,
 
     exampleData: [
-      ["Study1", 12,  5,  8, 15, "A"],
-      ["Study2", 20, 10,  5, 25, "B"],
-      ["Study3", 10,  4,  6, 12, "B"],
+      ["Study 1", 30, 20, 10, 40, "A"],
+      ["Study 2", 15, 35, 25, 25, "A"],
+      ["Study 3", 40, 10, 28, 22, "B"],
+      ["Study 4",  8, 42, 15, 35, "B"],
+      ["Study 5", 25, 15, 18, 32, ""],
     ],
   },
 
@@ -976,11 +990,11 @@ export const effectProfiles = {
     },
 
     exampleData: [
-      ["Study 1", 0.45,  80, 2, ""],
-      ["Study 2", 0.38,  65, 2, ""],
-      ["Study 3", 0.52, 110, 3, ""],
-      ["Study 4", 0.31,  90, 2, ""],
-      ["Study 5", 0.47, 130, 4, ""],
+      ["Study 1", 0.10,  80, 2, ""],
+      ["Study 2", 0.45,  65, 2, ""],
+      ["Study 3", 0.62, 110, 3, ""],
+      ["Study 4", 0.28,  90, 2, ""],
+      ["Study 5", 0.55, 130, 4, ""],
     ],
   },
 
@@ -1021,11 +1035,11 @@ export const effectProfiles = {
     },
 
     exampleData: [
-      ["Study 1", 0.45,  80, 2, ""],
-      ["Study 2", 0.38,  65, 2, ""],
-      ["Study 3", 0.52, 110, 3, ""],
-      ["Study 4", 0.31,  90, 2, ""],
-      ["Study 5", 0.47, 130, 4, ""],
+      ["Study 1", 0.10,  80, 2, ""],
+      ["Study 2", 0.45,  65, 2, ""],
+      ["Study 3", 0.62, 110, 3, ""],
+      ["Study 4", 0.28,  90, 2, ""],
+      ["Study 5", 0.55, 130, 4, ""],
     ],
   },
 
@@ -1073,11 +1087,11 @@ export const effectProfiles = {
     },
 
     exampleData: [
-      ["Study 1", 0.435, 60, ""],
-      ["Study 2", 0.225, 50, ""],
-      ["Study 3", 0.330, 80, ""],
-      ["Study 4", 0.468, 70, ""],
-      ["Study 5", 0.396, 40, ""],
+      ["Study 1", 0.05,  60, ""],
+      ["Study 2", 0.30,  80, ""],
+      ["Study 3", 0.55,  50, ""],
+      ["Study 4", 0.20, 100, ""],
+      ["Study 5", 0.45,  70, ""],
     ],
   },
 
@@ -1150,11 +1164,11 @@ export const effectProfiles = {
     },
 
     exampleData: [
-      ["Study 1", 0.435, 60, 0.50, ""],
-      ["Study 2", 0.225, 50, 0.50, ""],
-      ["Study 3", 0.330, 80, 0.50, ""],
-      ["Study 4", 0.468, 70, 0.50, ""],
-      ["Study 5", 0.396, 40, 0.50, ""],
+      ["Study 1", 0.05,  60, 0.50, ""],
+      ["Study 2", 0.30,  80, 0.50, ""],
+      ["Study 3", 0.55,  50, 0.50, ""],
+      ["Study 4", 0.20, 100, 0.50, ""],
+      ["Study 5", 0.45,  70, 0.50, ""],
     ],
   },
 
@@ -1197,11 +1211,11 @@ export const effectProfiles = {
     },
 
     exampleData: [
-      ["Study 1", 0.25, 80,  ""],
-      ["Study 2", 0.22, 100, ""],
-      ["Study 3", 0.28, 60,  ""],
-      ["Study 4", 0.24, 120, ""],
-      ["Study 5", 0.26, 90,  ""],
+      ["Study 1", 0.05,  80, ""],
+      ["Study 2", 0.25, 100, ""],
+      ["Study 3", 0.50,  60, ""],
+      ["Study 4", 0.15, 120, ""],
+      ["Study 5", 0.35,  90, ""],
     ],
   },
 
@@ -1248,11 +1262,11 @@ export const effectProfiles = {
     },
 
     exampleData: [
-      ["Study 1", 0.25, 80,  ""],
-      ["Study 2", 0.22, 100, ""],
-      ["Study 3", 0.28, 60,  ""],
-      ["Study 4", 0.24, 120, ""],
-      ["Study 5", 0.26, 90,  ""],
+      ["Study 1", 0.05,  80, ""],
+      ["Study 2", 0.25, 100, ""],
+      ["Study 3", 0.50,  60, ""],
+      ["Study 4", 0.15, 120, ""],
+      ["Study 5", 0.35,  90, ""],
     ],
   },
 
@@ -1344,10 +1358,11 @@ export const effectProfiles = {
     },
 
     exampleData: [
-      ["Study 1", 40, 10, 10, 40, ""],
-      ["Study 2", 30, 15, 12, 43, ""],
-      ["Study 3", 25,  8,  9, 38, ""],
-      ["Study 4", 35, 12, 11, 42, ""],
+      ["Study 1", 45,  5, 10, 40, ""],
+      ["Study 2", 15, 25, 30, 30, ""],
+      ["Study 3", 35, 15,  8, 42, ""],
+      ["Study 4", 10, 30, 25, 35, ""],
+      ["Study 5", 30, 10, 20, 40, ""],
     ],
   },
 
@@ -1572,11 +1587,11 @@ export const effectProfiles = {
     softWarnings(_s, _label) { return []; },
 
     exampleData: [
-      ["Study 1", 0.72, 0.54, 0.96, ""],
-      ["Study 2", 0.85, 0.62, 1.17, ""],
-      ["Study 3", 0.61, 0.45, 0.83, ""],
-      ["Study 4", 0.78, 0.58, 1.05, ""],
-      ["Study 5", 0.69, 0.51, 0.93, ""],
+      ["Study 1", 0.40, 0.28, 0.57, ""],
+      ["Study 2", 0.75, 0.55, 1.02, ""],
+      ["Study 3", 0.95, 0.68, 1.33, ""],
+      ["Study 4", 0.55, 0.40, 0.75, ""],
+      ["Study 5", 0.82, 0.59, 1.14, ""],
     ],
   },
 
@@ -1618,11 +1633,11 @@ export const effectProfiles = {
     },
 
     exampleData: [
-      ["Study 1", 12, 1200, 20, 1000, ""],
-      ["Study 2", 25, 2500, 35, 2000, ""],
-      ["Study 3",  8,  800, 15,  900, ""],
-      ["Study 4", 18, 1800, 28, 1500, ""],
-      ["Study 5", 30, 3000, 42, 2800, ""],
+      ["Study 1",  5, 1000, 20, 1000, ""],
+      ["Study 2", 30, 2000, 25, 1000, ""],
+      ["Study 3", 12, 1500, 10, 1500, ""],
+      ["Study 4", 50, 5000, 30, 3000, ""],
+      ["Study 5",  8,  800, 15,  800, ""],
     ],
   },
 
@@ -1744,11 +1759,11 @@ export const effectProfiles = {
     },
 
     exampleData: [
-      ["Study 1", 15, 1000, ""],
-      ["Study 2", 28, 2500, ""],
-      ["Study 3",  9,  800, ""],
-      ["Study 4", 22, 1500, ""],
-      ["Study 5", 12,  900, ""],
+      ["Study 1",   5, 1000, ""],
+      ["Study 2",  40, 2000, ""],
+      ["Study 3",  12,  500, ""],
+      ["Study 4", 100, 10000, ""],
+      ["Study 5",   8,  400, ""],
     ],
   },
 
@@ -2009,9 +2024,160 @@ export const effectProfiles = {
     },
 
     exampleData: [
-      ["Study 1", "15,28,22,10", "10,20,30,15", ""],
-      ["Study 2", "20,35,18,7",  "12,25,32,11", ""],
-      ["Study 3", "18,30,20,8",  "9,22,28,16",  ""],
+      ["Study 1", "5,10,25,40",  "30,35,20,10", ""],
+      ["Study 2", "15,25,30,20", "20,30,25,15", ""],
+      ["Study 3", "25,35,20,10", "12,25,35,22", ""],
+      ["Study 4", "8,15,30,35",  "28,32,22,12", ""],
+      ["Study 5", "22,30,28,18", "18,28,30,20", ""],
+    ],
+  },
+
+  // ------------------------------------------------------------------ //
+  // ARAW — Cronbach's α (raw scale, Feldt 1965)
+  //   yi = α
+  //   vi = 2k²(1−α)² / (n(k−1))
+  // Source: Feldt, L. S. (1965). The approximate sampling distribution
+  //   of Kuder-Richardson reliability coefficient twenty.
+  //   Psychometrika, 30(3), 357–370.
+  // ------------------------------------------------------------------ //
+  "ARAW": {
+    label: "Cronbach's α (raw, ARAW)",
+    group: "Reliability",
+    inputs: ["alpha", "k", "n"],
+    compute(s) {
+      if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+      const { alpha, k, n } = s;
+      const yi = alpha;
+      const vi = Math.max(2 * k * k * (1 - alpha) ** 2 / (n * (k - 1)), MIN_VAR);
+      return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
+    },
+    transform: (x) => x,
+
+    validate(s) {
+      const errors = {};
+      if (!isFinite(s.alpha) || s.alpha <= 0 || s.alpha >= 1) errors.alpha = "α must be strictly between 0 and 1";
+      if (!isFinite(s.k)     || s.k     <  2)                 errors.k     = "k (items) must be ≥ 2";
+      if (!isFinite(s.n)     || s.n     <  2)                 errors.n     = "n must be ≥ 2";
+      return { valid: Object.keys(errors).length === 0, errors };
+    },
+
+    softWarnings(s, label) {
+      const w = [];
+      if (isFinite(s.n) && s.n < 30)
+        w.push(`⚠️ ${label}: small sample (n < 30) — delta-method variance may be unreliable`);
+      if (isFinite(s.alpha) && s.alpha < 0.5)
+        w.push(`⚠️ ${label}: low α (< 0.5) — reliability is weak; interpret cautiously`);
+      return w;
+    },
+
+    exampleData: [
+      ["Chen 2018",   0.60,  6, 120, ""],
+      ["Murphy 2020", 0.74, 10, 100, ""],
+      ["Zhao 2015",   0.82, 12, 200, ""],
+      ["Patel 2022",  0.88,  8, 150, ""],
+      ["Kim 2019",    0.70,  8,  90, ""],
+    ],
+  },
+
+  // ------------------------------------------------------------------ //
+  // ABT — Cronbach's α (log-transformed, Bonett 2002)
+  //   yi = ln(1−α)
+  //   vi = 2k / (n(k−1))
+  // Back-transform: α = 1 − exp(yi)
+  // Source: Bonett, D. G. (2002). Sample size requirements for estimating
+  //   intraclass correlations with desired precision.
+  //   Statistics in Medicine, 21(9), 1331–1335.
+  // ------------------------------------------------------------------ //
+  "ABT": {
+    label: "Cronbach's α (log transform, ABT)",
+    group: "Reliability",
+    isTransformedScale: true,
+    inputs: ["alpha", "k", "n"],
+    compute(s) {
+      if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+      const { alpha, k, n } = s;
+      const yi = Math.log(1 - alpha);
+      const vi = Math.max(2 * k / (n * (k - 1)), MIN_VAR);
+      return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
+    },
+    transform: (x) => 1 - Math.exp(x),
+
+    validate(s) {
+      const errors = {};
+      if (!isFinite(s.alpha) || s.alpha <= 0 || s.alpha >= 1) errors.alpha = "α must be strictly between 0 and 1";
+      if (!isFinite(s.k)     || s.k     <  2)                 errors.k     = "k (items) must be ≥ 2";
+      if (!isFinite(s.n)     || s.n     <  2)                 errors.n     = "n must be ≥ 2";
+      return { valid: Object.keys(errors).length === 0, errors };
+    },
+
+    softWarnings(s, label) {
+      const w = [];
+      if (isFinite(s.n) && s.n < 30)
+        w.push(`⚠️ ${label}: small sample (n < 30) — log transform may not fully stabilise variance`);
+      if (isFinite(s.alpha) && s.alpha < 0.5)
+        w.push(`⚠️ ${label}: low α (< 0.5) — reliability is weak; interpret cautiously`);
+      return w;
+    },
+
+    exampleData: [
+      ["Chen 2018",   0.60,  6, 120, ""],
+      ["Murphy 2020", 0.74, 10, 100, ""],
+      ["Zhao 2015",   0.82, 12, 200, ""],
+      ["Patel 2022",  0.88,  8, 150, ""],
+      ["Kim 2019",    0.70,  8,  90, ""],
+    ],
+  },
+
+  // ------------------------------------------------------------------ //
+  // AHW — Cronbach's α (cube-root transform, Hakstian & Whalen 1976)
+  //   u  = k/(k−1) · (1−α)
+  //   yi = u^(1/3)
+  //   vi = 2k² / (9n(k−1)) · u^(2/3)    [delta method from Feldt base]
+  // Note: back-transform to α requires k, so the forest plot displays the
+  // internal cube-root scale (analogous to Fisher's z for correlations).
+  // Source: Hakstian, A. R., & Whalen, T. E. (1976). A k-sample significance
+  //   test for independent alpha coefficients.
+  //   Psychometrika, 41(2), 219–231.
+  // ------------------------------------------------------------------ //
+  "AHW": {
+    label: "Cronbach's α (cube-root transform, AHW)",
+    group: "Reliability",
+    isTransformedScale: true,
+    inputs: ["alpha", "k", "n"],
+    compute(s) {
+      if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+      const { alpha, k, n } = s;
+      const u  = (k / (k - 1)) * (1 - alpha);
+      const yi = Math.cbrt(u);
+      const vi = Math.max(2 * k * k * yi * yi / (9 * n * (k - 1)), MIN_VAR);
+      return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
+    },
+    // Back-transform to α requires k (unavailable here); display on internal scale.
+    transform: (x) => x,
+
+    validate(s) {
+      const errors = {};
+      if (!isFinite(s.alpha) || s.alpha <= 0 || s.alpha >= 1) errors.alpha = "α must be strictly between 0 and 1";
+      if (!isFinite(s.k)     || s.k     <  2)                 errors.k     = "k (items) must be ≥ 2";
+      if (!isFinite(s.n)     || s.n     <  2)                 errors.n     = "n must be ≥ 2";
+      return { valid: Object.keys(errors).length === 0, errors };
+    },
+
+    softWarnings(s, label) {
+      const w = [];
+      if (isFinite(s.n) && s.n < 30)
+        w.push(`⚠️ ${label}: small sample (n < 30) — cube-root delta-method variance may be unreliable`);
+      if (isFinite(s.alpha) && s.alpha < 0.5)
+        w.push(`⚠️ ${label}: low α (< 0.5) — reliability is weak; interpret cautiously`);
+      return w;
+    },
+
+    exampleData: [
+      ["Chen 2018",   0.60,  6, 120, ""],
+      ["Murphy 2020", 0.74, 10, 100, ""],
+      ["Zhao 2015",   0.82, 12, 200, ""],
+      ["Patel 2022",  0.88,  8, 150, ""],
+      ["Kim 2019",    0.70,  8,  90, ""],
     ],
   },
 

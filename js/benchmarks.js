@@ -2218,7 +2218,82 @@ export const BENCHMARKS = [
       I2:   25.13  // Q-based formula; metafor reports 29.98 using τ²-based I²
     },
     citation: "Synthetic 5-study correlation dataset. FE/RE/tau2 from metafor 4.8-0 escalc('UCOR') + rma(method='REML'). I2 uses JS Q-based formula."
-  }
+  },
+
+  // ----------------------------------------------------------------
+  // ALPHA-1 — Cronbach's α (raw, ARAW, DL)
+  // Synthetic 3-study dataset: alpha=[0.60,0.85,0.90], k=10, n=100.
+  // yi=α (raw), vi=2k²(1−α)²/(n(k−1)).
+  // DL values computed analytically (closed form); generate.R ALPHA-1 verifies.
+  // ----------------------------------------------------------------
+  {
+    name: "Cronbach's α (ARAW, DL, k_studies=3)",
+    type: "ARAW",
+    tauMethod: "DL",
+    data: [
+      { label: "Study 1", alpha: 0.60, k: 10, n: 100 },
+      { label: "Study 2", alpha: 0.85, k: 10, n: 100 },
+      { label: "Study 3", alpha: 0.90, k: 10, n: 100 },
+    ],
+    expected: {
+      FE:   0.8728,
+      RE:   0.8641,
+      tau2: 0.00166,
+      I2:   20.95,
+      yi:   [0.600, 0.850, 0.900],
+    },
+    citation: "Synthetic. Formulas: Feldt (1965) Psychometrika 30:357–370. R-verified (metafor 4.8.0, generate.R ALPHA-1).",
+  },
+
+  // ----------------------------------------------------------------
+  // ALPHA-2 — Cronbach's α (log transform, ABT, DL)
+  // Same 3-study dataset as ALPHA-1.
+  // yi=ln(1−α), vi=2k/(n(k−1)); back-transform: 1−exp(yi).
+  // DL values computed analytically; generate.R ALPHA-2 verifies.
+  // ----------------------------------------------------------------
+  {
+    name: "Cronbach's α (ABT, DL, k_studies=3)",
+    type: "ABT",
+    tauMethod: "DL",
+    data: [
+      { label: "Study 1", alpha: 0.60, k: 10, n: 100 },
+      { label: "Study 2", alpha: 0.85, k: 10, n: 100 },
+      { label: "Study 3", alpha: 0.90, k: 10, n: 100 },
+    ],
+    expected: {
+      FE:   -1.7053,
+      RE:   -1.7053,
+      tau2:  0.4860,
+      I2:   95.63,
+      yi:   [-0.916291, -1.897120, -2.302585],
+    },
+    citation: "Synthetic. Formulas: Bonett (2002) Stat Med 21:1331–1335. R-verified (metafor 4.8.0, generate.R ALPHA-2).",
+  },
+
+  // ----------------------------------------------------------------
+  // ALPHA-3 — Cronbach's α (cube-root transform, AHW, DL)
+  // Same 3-study dataset as ALPHA-1.
+  // u=k/(k−1)·(1−α), yi=u^(1/3), vi=2k²/(9n(k−1))·u^(2/3).
+  // DL values computed analytically; generate.R ALPHA-3 verifies.
+  // ----------------------------------------------------------------
+  {
+    name: "Cronbach's α (AHW, DL, k_studies=3)",
+    type: "AHW",
+    tauMethod: "DL",
+    data: [
+      { label: "Study 1", alpha: 0.60, k: 10, n: 100 },
+      { label: "Study 2", alpha: 0.85, k: 10, n: 100 },
+      { label: "Study 3", alpha: 0.90, k: 10, n: 100 },
+    ],
+    expected: {
+      FE:   0.5573,
+      RE:   0.5751,
+      tau2: 0.00834,
+      I2:   49.76,
+      yi:   [0.763143, 0.550321, 0.480750],
+    },
+    citation: "Synthetic. Formulas: Hakstian & Whalen (1976) Psychometrika 41:219–231. R-verified (metafor 4.8.0, generate.R ALPHA-3).",
+  },
 
 ];
 

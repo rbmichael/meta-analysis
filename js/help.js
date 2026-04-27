@@ -478,6 +478,33 @@ export const HELP = {
            "No transformation is applied.",
   },
 
+  "effect.ARAW": {
+    title: "Cronbach's α — raw (ARAW)",
+    body:  "Meta-analysis of Cronbach's α on the raw (untransformed) scale. " +
+           "Inputs: α (observed reliability), k (number of items), n (sample size). " +
+           "Variance: 2k²(1−α)² / [n(k−1)] (Feldt, 1965). " +
+           "Best for moderate α (0.6–0.9) and large n; variance stabilisation is incomplete near 0 or 1. " +
+           "Consider ABT for a variance-stabilised alternative.",
+  },
+
+  "effect.ABT": {
+    title: "Cronbach's α — log transform (ABT)",
+    body:  "Meta-analysis of Cronbach's α using Bonett's (2002) log transformation: yi = ln(1−α). " +
+           "Inputs: α (observed reliability), k (number of items), n (sample size). " +
+           "Variance: 2k / [n(k−1)]. " +
+           "The pooled estimate is back-transformed to the α scale (1 − exp(RE)) for display. " +
+           "Generally preferred over ARAW for better variance stabilisation across the full range of α.",
+  },
+
+  "effect.AHW": {
+    title: "Cronbach's α — cube-root transform (AHW)",
+    body:  "Meta-analysis of Cronbach's α using Hakstian & Whalen's (1976) cube-root transformation: " +
+           "yi = [k/(k−1) · (1−α)]^(1/3). " +
+           "Inputs: α (observed reliability), k (number of items), n (sample size). " +
+           "Results are displayed on the internal cube-root scale (back-transform to α requires k, " +
+           "which may vary across studies). Similar properties to ABT.",
+  },
+
   // ------------------------------------------------------------------ //
   // τ² estimators                                                        //
   // ------------------------------------------------------------------ //

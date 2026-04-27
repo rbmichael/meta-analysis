@@ -8,7 +8,7 @@ A browser-based meta-analysis tool. No installation, no server, no dependencies 
 
 ### Effect types
 
-42 effect measures across 9 categories:
+45 effect measures across 10 categories:
 
 | Category | Measures |
 |---|---|
@@ -20,6 +20,7 @@ A browser-based meta-analysis tool. No installation, no server, no dependencies 
 | Correlations | Pearson *r* (COR), Bias-corrected *r* (UCOR), Fisher's *z* (ZCOR), Partial *r* (PCOR), Partial Fisher's *z* (ZPCOR), Point-biserial (RPB), Biserial (RBIS), R² (R2), Fisher-z R² (ZR2), Phi (PHI), Tetrachoric (RTET) |
 | Proportions | Raw (PR), Log (PLN), Logit (PLO), Arcsine (PAS), Freeman-Tukey double arcsine (PFT) |
 | Time-to-event / Rates | Hazard Ratio (HR), Incidence Rate Ratio (IRR), Incidence Rate Difference (IRD), Incidence Rate Difference sqrt (IRSD), Incidence Rate log (IR) |
+| Reliability | Cronbach's α raw (ARAW), log-transformed (ABT), cube-root-transformed (AHW) |
 | Generic | Pre-computed *yᵢ* / *vᵢ* (GENERIC) |
 
 ### Heterogeneity
@@ -206,10 +207,13 @@ python -m http.server 8080
 
 ## Statistical references
 
+- Bonett DG (2002). Sample size requirements for estimating intraclass correlations with desired precision. *Stat Med*, 21(9), 1331–1335.
 - Borenstein M, Hedges LV, Higgins JPT, Rothstein HR (2009). *Introduction to Meta-Analysis*. Wiley.
 - DerSimonian R, Laird N (1986). Meta-analysis in clinical trials. *Controlled Clinical Trials*, 7, 177–188.
+- Feldt LS (1965). The approximate sampling distribution of Kuder-Richardson reliability coefficient twenty. *Psychometrika*, 30(3), 357–370.
 - Galbraith RF (1988). Graphical display of estimates having differing standard errors. *Technometrics*, 30(3), 271–281.
 - Gelman A, Carlin JB, Stern HS, Dunson DB, Vehtari A, Rubin DB (2013). *Bayesian Data Analysis* (3rd ed.). CRC Press.
+- Hakstian AR, Whalen TE (1976). A k-sample significance test for independent alpha coefficients. *Psychometrika*, 41(2), 219–231.
 - Hedges LV, Tipton E, Johnson MC (2010). Robust variance estimation in meta-regression with dependent effect size estimates. *Res Synth Methods*, 1, 39–65.
 - Mantel N, Haenszel W (1959). Statistical aspects of the analysis of data from retrospective studies of disease. *J Natl Cancer Inst*, 22, 719–748.
 - McGraw KO, Wong SP (1992). A common language effect size statistic. *Psychol Bull*, 111(2), 361–365.

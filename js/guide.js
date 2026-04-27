@@ -2881,6 +2881,62 @@ when exported.</p>`,
     ],
   },
 
+  // ------------------------------------------------------------------ //
+  {
+    id: "reliability",
+    heading: "Reliability (Cronbach's α)",
+    topics: [
+      {
+        id: "guide-cronbach-alpha",
+        title: "Cronbach's α — ARAW, ABT, AHW",
+        body: `<p>Three variance-stabilising transformations for meta-analysing Cronbach's α (internal-consistency reliability). All require three inputs per study: <strong>α</strong> (observed reliability), <strong>k</strong> (number of scale items), and <strong>n</strong> (sample size).</p>
+
+<table border="1" style="border-collapse:collapse;margin:0.5em 0">
+  <thead><tr>
+    <th style="padding:4px 8px">Type</th>
+    <th style="padding:4px 8px">yi</th>
+    <th style="padding:4px 8px">vi</th>
+    <th style="padding:4px 8px">Display scale</th>
+  </tr></thead>
+  <tbody>
+    <tr>
+      <td style="padding:3px 8px"><strong>ARAW</strong></td>
+      <td style="padding:3px 8px">α (raw)</td>
+      <td style="padding:3px 8px">2k²(1−α)² / [n(k−1)]</td>
+      <td style="padding:3px 8px">α directly</td>
+    </tr>
+    <tr>
+      <td style="padding:3px 8px"><strong>ABT</strong></td>
+      <td style="padding:3px 8px">ln(1−α)</td>
+      <td style="padding:3px 8px">2k / [n(k−1)]</td>
+      <td style="padding:3px 8px">Back-transformed to α = 1 − e<sup>yi</sup></td>
+    </tr>
+    <tr>
+      <td style="padding:3px 8px"><strong>AHW</strong></td>
+      <td style="padding:3px 8px">[k/(k−1) · (1−α)]<sup>1/3</sup></td>
+      <td style="padding:3px 8px">2k² / [9n(k−1)] · u<sup>2/3</sup></td>
+      <td style="padding:3px 8px">Internal (cube-root) scale</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><strong>Choosing a transformation:</strong></p>
+<ul>
+  <li><strong>ARAW</strong> — simplest; works well for moderate α (0.6–0.9) and large n. Variance stabilisation is incomplete near 0 or 1.</li>
+  <li><strong>ABT</strong> — Bonett's (2002) log transform gives better variance stabilisation across a wide range of α values and is generally preferred over ARAW. The pooled estimate is back-transformed to the α scale for display.</li>
+  <li><strong>AHW</strong> — Hakstian &amp; Whalen's (1976) cube-root transform. Similar properties to ABT. Results are displayed on the internal cube-root scale (back-transform to α requires the study-level k, which varies across studies).</li>
+</ul>
+
+<p>All three implementations match metafor's <code>escalc(measure="ARAW"/"ABT"/"AHW")</code> formulas.</p>`,
+        citations: [
+          "Feldt, L. S. (1965). The approximate sampling distribution of Kuder-Richardson reliability coefficient twenty. <em>Psychometrika</em>, 30(3), 357–370.",
+          "Bonett, D. G. (2002). Sample size requirements for estimating intraclass correlations with desired precision. <em>Statistics in Medicine</em>, 21(9), 1331–1335.",
+          "Hakstian, A. R., &amp; Whalen, T. E. (1976). A k-sample significance test for independent alpha coefficients. <em>Psychometrika</em>, 41(2), 219–231.",
+        ],
+      },
+    ],
+  },
+
 ];
 
 // ------------------------------------------------------------------ //
@@ -3014,6 +3070,9 @@ export const HELP_TO_GUIDE = {
   "threelevel.tau2":     "guide-three-level",
   "threelevel.I2":       "guide-three-level",
   "keyboard.shortcuts":  "guide-keyboard-shortcuts",
+  "effect.ARAW":         "guide-cronbach-alpha",
+  "effect.ABT":          "guide-cronbach-alpha",
+  "effect.AHW":          "guide-cronbach-alpha",
 };
 
 // ------------------------------------------------------------------ //
