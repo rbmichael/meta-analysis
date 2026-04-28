@@ -172,35 +172,54 @@ CSV column names match the input fields for each effect type (e.g. `m1,sd1,n1,m2
 
 ## Usage
 
-> **Note:** The app uses ES modules (`type="module"` scripts). Browsers block ES module imports over the `file://` protocol due to CORS restrictions, so **double-clicking `index.html` will not work**. You must serve the files from a local web server.
+**Option 1 — Hosted (no setup):**
+Visit **https://rbmichael.github.io/meta-analysis/** in any modern browser. Nothing to install or configure.
 
-### Running locally
+---
 
-**Option 1 — Python (no install):**
-```
-python -m http.server 8080
-# then open http://localhost:8080 in your browser
-```
+**Option 2 — Run locally from source:**
 
-**Option 2 — Node.js:**
-```
-npx serve .
-# then open http://localhost:3000
-```
+> The app uses ES modules. Browsers block ES module imports over the `file://` protocol, so double-clicking `index.html` will not work — you need a local web server.
 
-**Option 3 — esbuild bundle (single-file, works offline without a server):**
-```
-npm install --save-dev esbuild
-npx esbuild js/ui.js --bundle --outfile=bundle.js --format=iife --global-name=App
-```
-Then replace the `<script type="module">` tags in `index.html` with `<script src="bundle.js"></script>`. The bundled file can be opened directly via `file://` because it contains no ES module imports.
+Clone the repository, then start a server from the project folder:
 
-### Getting started
-```
+```bash
 git clone https://github.com/rbmichael/meta-analysis.git
 cd meta-analysis
+```
+
+**Option 2a — Python:**
+```bash
 python -m http.server 8080
 # open http://localhost:8080
+```
+
+**Option 2b — Node.js:**
+```bash
+npx serve .
+# open http://localhost:3000
+```
+
+---
+
+**Option 3 — Fully offline (no server, no internet required):**
+
+The repository has an `offline` branch that contains a pre-built single-file bundle with all dependencies vendored locally. Once cloned, it works by opening `index.html` directly in a browser — no server or internet connection needed.
+
+```bash
+git clone https://github.com/rbmichael/meta-analysis.git
+cd meta-analysis
+git checkout offline
+# open index.html directly in your browser
+```
+
+To keep the offline branch up to date as the main branch changes:
+```bash
+git checkout offline
+git merge main
+npx esbuild js/ui.js --bundle --outfile=bundle.js --format=iife --global-name=App
+git add bundle.js
+git commit -m "Rebuild bundle after sync with main"
 ```
 
 ---
