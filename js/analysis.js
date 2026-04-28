@@ -371,7 +371,7 @@ export { influenceDiagnostics, leaveOneOut, cumulativeMeta,
 
 // Meta-regression and moderators (regression.js)
 export { subgroupAnalysis, heterogeneityCIs, rcsKnots, rcsBasis,
-         buildDesignMatrix, tau2_metaReg, metaRegression, adjustPvals,
+         buildDesignMatrix, tau2_metaReg, metaRegression, testContrast, adjustPvals,
          lsModel, rvePooled, meta3level } from "./regression.js";
 
 /**

@@ -942,6 +942,12 @@
       p-values. Adjusted p-values appear alongside raw values in the per-moderator tests table.
       Matches R's <code>p.adjust(method="bonferroni"/"holm")</code>.</p>
 
+      <p><strong>Custom contrasts</strong> — after running a meta-regression, expand the
+      <em>Custom contrasts</em> panel to test any linear combination of coefficients:
+      H₀: L·β = 0, where L is a weight vector you supply. SE = √(L′VL) using the full
+      variance–covariance matrix. Typical use: set +1 and −1 weights on two categorical
+      levels to directly compare them.</p>
+
       <p><strong>Location-scale model</strong> — add scale moderators (log τ² = Zγ) to
       model heterogeneity simultaneously with mean effects. Each study gets its own
       τ̂²ᵢ = exp(Zᵢγ̂). Estimated by ML via profile likelihood (BFGS optimizer).

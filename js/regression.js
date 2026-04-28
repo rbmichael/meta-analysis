@@ -856,6 +856,29 @@ export function metaRegression(studies, moderators = [], method = "REML", ciMeth
   };
 }
 
+// ================= CUSTOM CONTRAST =================
+/**
+ * testContrast(reg, L)
+ * Test an arbitrary linear combination L·β of meta-regression coefficients.
+ *
+ * @param {object}   reg  metaRegression() result (must not be rankDeficient)
+ * @param {number[]} L    contrast vector, length reg.p
+ * @returns {{ est: number, se: number, stat: number, p: number, ci: [number,number] }}
+ */
+export function testContrast(reg, L) {
+  const { beta, vcov, crit, dist, QEdf } = reg;
+  const est    = dot(L, beta);
+  const varEst = quadForm(vcov, L);          // L' V L
+  const se     = Math.sqrt(Math.max(0, varEst));
+  const stat   = se > 0 ? est / se : NaN;
+  const p      = !isFinite(stat) ? NaN
+    : dist === "t"
+    ? 2 * (1 - tCDF(Math.abs(stat), QEdf))
+    : 2 * (1 - normalCDF(Math.abs(stat)));
+  const ci = [est - crit * se, est + crit * se];
+  return { est, se, stat, p, ci };
+}
+
 // ================= MULTIPLE COMPARISON CORRECTION =================
 /**
  * Adjust an array of p-values for multiple comparisons.

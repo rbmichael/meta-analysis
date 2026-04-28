@@ -91,6 +91,8 @@ Continuous and categorical moderators. Multiple moderators may be added simultan
 
 **Multiple comparison correction** — Bonferroni or Holm adjustment of per-moderator omnibus QM p-values when m ≥ 2 moderators are tested simultaneously. Adjusted p-values displayed alongside raw values in the per-moderator tests table. Matches `p.adjust(method="bonferroni"/"holm")` in R (Holm, 1979).
 
+**Custom contrasts** — test any linear combination of coefficients H₀: L·β = 0, where L is a weight vector you supply (one weight per model term). SE = √(L′VL) using the full variance–covariance matrix. Typical use: set +1 and −1 on two categorical levels to directly compare them.
+
 **Location-scale model** — add scale moderators (log τ² = Zγ) to model heterogeneity simultaneously with the mean effect. Each study gets its own τ̂²ᵢ = exp(Zᵢγ̂). Estimated by ML via profile likelihood. Equivalent to `rma(..., scale = ~ ..., method = "ML")` in metafor (Viechtbauer, 2021).
 
 ### Subgroup analysis

@@ -1136,6 +1136,15 @@ export const HELP = {
            "predictor; levels − 1 for a categorical predictor).",
   },
 
+  "mreg.contrasts": {
+    title: "Custom contrasts",
+    body:  "Tests a linear combination L·β = 0, where L is a weight vector you supply " +
+           "and β is the full vector of regression coefficients. " +
+           "SE = √(L′VL) where V is the variance–covariance matrix of β̂. " +
+           "Typical use: set weight +1 for one categorical level and −1 for another " +
+           "to test whether they differ (rather than each vs. the reference category).",
+  },
+
   "reg.aic": {
     title: "AIC / BIC (meta-regression)",
     body:  "AIC (Akaike Information Criterion) and BIC (Bayesian Information Criterion) " +

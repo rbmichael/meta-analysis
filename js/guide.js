@@ -1974,6 +1974,52 @@ wᵢ = 1/(vᵢ + τ²), with τ² estimated by REML or the selected estimator.</
       },
 
       {
+        id: "guide-custom-contrasts",
+        title: "Custom contrasts",
+        body: `<p>A <strong>custom contrast</strong> tests whether a specified linear
+combination of regression coefficients differs from zero:</p>
+<p><code>H₀: L·β = 0</code></p>
+<p>where <strong>L</strong> is a weight vector you supply (one weight per model
+term, including the intercept). The test statistic is</p>
+<p><code>z = (L·β̂) / SE,    SE = √(L′VL)</code></p>
+<p>where V is the full variance–covariance matrix of β̂.</p>
+<p><strong>Common uses:</strong></p>
+<ul>
+  <li><strong>Compare two categorical levels</strong> — set the weight for
+  level A to 1 and for level B to −1 (both relative to the same reference).
+  This tests whether A and B differ, not just whether each differs from the
+  reference.</li>
+  <li><strong>Test a weighted average</strong> — e.g., weights [0, 0.5, 0.5]
+  on two slopes tests whether their average is zero.</li>
+  <li><strong>Test a specific value of a continuous moderator</strong> — set
+  the intercept weight to 1 and the slope weight to the moderator value of
+  interest (tests the fitted effect at that point).</li>
+</ul>
+<p><strong>How to use:</strong><br>
+After running a meta-regression, expand the <em>Custom contrasts</em> panel.
+Enter a weight for each listed term (terms not involved in the comparison
+should have weight 0), then click <em>Test contrast</em>. The reference level
+of any categorical moderator is not listed — its contribution is captured
+through the intercept.</p>
+<p><strong>Interpretation:</strong><br>
+The output shows the estimated contrast, its standard error, test statistic,
+two-tailed p-value, and confidence interval — all on the analysis scale (log
+scale for OR/RR/HR; raw scale for MD/r).</p>
+<p><strong>Cautionary notes:</strong></p>
+<ul>
+  <li>This is a post-hoc test. Multiplicity adjustment is not applied
+  automatically; apply Bonferroni or other corrections if testing many
+  contrasts.</li>
+  <li>The inference is valid only when the regression model is correctly
+  specified and the τ² estimator is consistent.</li>
+</ul>`,
+        citations: [
+          "Higgins, J. P. T., & Thompson, S. G. (2004). Controlling the risk of spurious findings from meta-regression. <em>Statistics in Medicine, 23</em>(11), 1663–1682.",
+          "Viechtbauer, W. (2010). Conducting meta-analyses in R with the metafor package. <em>Journal of Statistical Software, 36</em>(3), 1–48.",
+        ],
+      },
+
+      {
         id: "guide-nonlinear-reg",
         title: "Non-linear meta-regression",
         body: `<p>Standard meta-regression assumes a linear relationship between a
@@ -3044,6 +3090,7 @@ export const HELP_TO_GUIDE = {
   "diag.subgroup":       "guide-subgroup",
   "diag.metaregression": "guide-metaregression",
   "mreg.lrt":            "guide-metaregression",
+  "mreg.contrasts":      "guide-custom-contrasts",
   "diag.nonlinear-reg":  "guide-nonlinear-reg",
   "diag.locationscale":  "guide-location-scale",
   "input.scaleModerators": "guide-location-scale",

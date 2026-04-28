@@ -105,7 +105,7 @@
 //   ui.js calls init() on DOMContentLoaded, which populates dropdowns,
 //   restores any autosave draft, and attaches all event listeners.
 // =============================================================================
-import { eggerTest, beggTest, fatPetTest, petPeeseTest, failSafeN, tesTest, waapWls, clES, pCurve, pUniform, baujat, blupMeta, meta, metaMH, metaPeto, robustMeta, influenceDiagnostics, subgroupAnalysis, metaRegression, cumulativeMeta, veveaHedges, SELECTION_PRESETS, profileLikTau2, bayesMeta, priorSensitivity, rvePooled, meta3level, harbordTest, petersTest, deeksTest, rueckerTest, lsModel, henmiCopas } from "./analysis.js";
+import { eggerTest, beggTest, fatPetTest, petPeeseTest, failSafeN, tesTest, waapWls, clES, pCurve, pUniform, baujat, blupMeta, meta, metaMH, metaPeto, robustMeta, influenceDiagnostics, subgroupAnalysis, metaRegression, testContrast, cumulativeMeta, veveaHedges, SELECTION_PRESETS, profileLikTau2, bayesMeta, priorSensitivity, rvePooled, meta3level, harbordTest, petersTest, deeksTest, rueckerTest, lsModel, henmiCopas } from "./analysis.js";
 import { fmt, normalQuantile } from "./utils.js";
 import { escapeHTML } from "./utils-html.js";
 import { effectProfiles, getProfile } from "./profiles.js";
@@ -132,7 +132,8 @@ import { regStars, regFmtP, buildRegCoeffRows, buildRegFittedRows,
          TAU_METHOD_LABELS, renderSensitivityPanel, renderStudyTable,
          renderPCurvePanel, renderPUniformPanel, renderSelectionModelPanel,
          buildInfluenceHTML, bayesInterpretation, buildBayesSummaryHTML,
-         buildSensitivityHTML, buildSubgroupHTML, renderGoshInfo }
+         buildSensitivityHTML, buildSubgroupHTML, renderGoshInfo,
+         formatContrastResult }
   from "./ui-render.js";
 import { validateRow, gatherSessionState } from "./ui-state.js";
 import { initTable, moderators, doAddModerator, removeModerator, clearModerators,
@@ -144,6 +145,9 @@ import { initTable, moderators, doAddModerator, removeModerator, clearModerators
 // ---------------- AUTOSAVE ----------------
 
 let _saveTimer = null;
+
+// Last successful metaRegression result — referenced by the contrast test handler.
+let _lastReg = null;
 
 // scheduleSave()
 // Debounced autosave trigger. Resets the 1.2 s idle timer on every call; the
@@ -1088,6 +1092,19 @@ document.getElementById("exportReportDOCX").addEventListener("click", async () =
     btn.textContent = "Export failed";
     setTimeout(() => { btn.textContent = "Export Word"; }, 3000);
   }
+});
+
+// Delegated listener for custom contrast Test button (injected into results panel).
+document.addEventListener("click", e => {
+  const btn = e.target.closest(".contrast-test-btn");
+  if (!btn) return;
+  if (!_lastReg) return;
+  const section = btn.closest(".contrast-section");
+  if (!section) return;
+  const inputs = section.querySelectorAll(".contrast-weight");
+  const L = Array.from(inputs).map(inp => parseFloat(inp.value) || 0);
+  const result = testContrast(_lastReg, L);
+  section.querySelector(".contrast-result").innerHTML = formatContrastResult(result, _lastReg);
 });
 
 // Single delegated listener covers all static plot-export buttons and any
@@ -2340,8 +2357,10 @@ function _renderAllResults(ctx) {
   const scaleModSpec = opts.scaleModSpec;
   const kExcluded    = (reg ?? ls) ? studies.length - (reg ?? ls).k : 0;
   if (ls) {
+    _lastReg = null;
     renderLocationScalePanel(ls, ciMethod, kExcluded);
   } else {
+    _lastReg = (reg && !reg.rankDeficient) ? reg : null;
     renderRegressionPanel(reg ?? {}, method, ciMethod, kExcluded, moderators);
   }
 

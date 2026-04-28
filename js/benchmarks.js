@@ -3661,3 +3661,48 @@ export const LS_BENCHMARKS = [
     citation: "Colditz et al. (1994) dat.bcg. R-verified (metafor 4.8.0, rma(yi,vi,mods=~ablat,scale=~ablat,method='ML')). QM_loc and QM_scale are Wald tests matching R QM and QS respectively.",
   },
 ];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CONTRAST_BENCHMARKS
+// Each entry: { name, regResult (partial), L, expected }
+// regResult supplies only the fields testContrast() needs: beta, vcov, crit,
+// dist, QEdf.  Uses MR-B data (BCG; ablat + region; REML, normal CI).
+// ─────────────────────────────────────────────────────────────────────────────
+export const CONTRAST_BENCHMARKS = [
+  // -----------------------------------------------------------------------
+  // MR-CONTRAST-1 — region:EU vs region:NA
+  //   L = [0, 0, 1, -1]
+  //   est  = beta[region:EU] - beta[region:NA] = 0.1598 - 0.4339 = -0.2740
+  //   var  = vcov[2][2] + vcov[3][3] - 2*vcov[2][3]
+  //        = 0.42135388 + 0.13932588 - 2*0.17664826 = 0.20738324
+  //   se   = sqrt(0.20738324) = 0.45539350
+  //   z    = -0.2740 / 0.45539 = -0.60173
+  //   p    = 0.54736 (two-tailed normal)
+  //   CI   = est ± 1.959964 * se = [-1.16658, 0.61853]
+  //   R-verified (metafor 4.8.0, generate.R block MR-CONTRAST-1).
+  // -----------------------------------------------------------------------
+  {
+    name: "BCG – region:EU vs region:NA",
+    // Minimal reg object needed by testContrast()
+    reg: {
+      beta:  [ 0.1024, -0.0330,  0.1598,  0.4339],
+      vcov: [
+        [ 0.11349313, -0.00347749,  0.07058366,  0.00236991],
+        [-0.00347749,  0.00020588, -0.00742037, -0.00338192],
+        [ 0.07058366, -0.00742037,  0.42135388,  0.17664826],
+        [ 0.00236991, -0.00338192,  0.17664826,  0.13932588],
+      ],
+      crit:  1.959964,
+      dist:  "z",
+      QEdf:  9,
+    },
+    L: [0, 0, 1, -1],
+    expected: {
+      est:  -0.2740,
+      se:    0.4554,
+      stat: -0.6017,
+      p:     0.5474,
+      ci:   [-1.1666, 0.6185],
+    },
+  },
+];

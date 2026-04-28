@@ -48,6 +48,36 @@ function getCiLabel() {
 
 // ---------------- META-REGRESSION RESULTS PANEL ----------------
 
+/**
+ * formatContrastResult(result, reg)
+ * Returns an HTML string for the contrast test result row.
+ * @param {{ est, se, stat, p, ci }} result  from testContrast()
+ * @param {{ dist: string, QEdf: number }} reg  the regression result object
+ */
+export function formatContrastResult(result, reg) {
+  const { est, se, stat, p, ci } = result;
+  const statLabel = reg.dist === "t" ? `t(${reg.QEdf})` : "z";
+  const ciLabel   = getCiLabel();
+  if (!isFinite(est)) {
+    return `<div class="reg-note reg-warn" style="margin-top:6px">
+      ⚠ Contrast SE is zero — all weights may be zero or the contrast is not estimable.
+    </div>`;
+  }
+  return `
+    <table class="reg-table" style="margin-top:8px">
+      <thead><tr>
+        <th>Estimate</th><th>SE</th><th>${statLabel}</th><th>p</th><th>${ciLabel}</th>
+      </tr></thead>
+      <tbody><tr>
+        <td>${fmt(est)}</td>
+        <td>${fmt(se)}</td>
+        <td>${fmt(stat)}</td>
+        <td>${regFmtP(p)}</td>
+        <td>[${fmt(ci[0])}, ${fmt(ci[1])}]</td>
+      </tr></tbody>
+    </table>`;
+}
+
 export function regStars(p) {
   if (p < 0.001) return `<span class="reg-sig-3">***</span>`;
   if (p < 0.01)  return `<span class="reg-sig-2">**</span>`;
@@ -437,6 +467,29 @@ export function renderRegressionPanel(reg, method, ciMethod, kExcluded = 0, mods
       </table>
       <div class="reg-note">*** p &lt; .001 &nbsp;·&nbsp; ** p &lt; .01 &nbsp;·&nbsp; * p &lt; .05 &nbsp;·&nbsp; · p &lt; .10</div>
       ${modTestsBlock}
+      <details class="contrast-section">
+        <summary>Custom contrasts${hBtn("mreg.contrasts")}</summary>
+        <div class="reg-note" style="margin:4px 0 8px">
+          Enter a weight for each term, then click <em>Test</em>.
+          The test evaluates whether the linear combination L·β differs from zero.
+          Example: to compare two categorical levels, set their weights to 1 and −1.
+        </div>
+        <table class="reg-table">
+          <thead><tr><th>Term</th><th style="width:6em">Weight</th></tr></thead>
+          <tbody>
+            ${reg.colNames.map((name, i) => `
+              <tr>
+                <td>${name}</td>
+                <td><input type="number" class="contrast-weight" data-idx="${i}"
+                     value="0" step="any" style="width:5em"></td>
+              </tr>`).join("")}
+          </tbody>
+        </table>
+        <button class="btn-sm contrast-test-btn" type="button" style="margin-top:6px">
+          Test contrast
+        </button>
+        <div class="contrast-result"></div>
+      </details>
       ${fittedRows ? `
       <details>
         <summary>Fitted values &amp; residuals (k = ${reg.k})</summary>
