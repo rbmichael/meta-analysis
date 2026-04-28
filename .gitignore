@@ -13,3 +13,7 @@ perf_k050.csv
 perf_k200.csv
 perf_k400.csv
 ROADMAP.md
+node_modules/
+package.json
+package-lock.json
+OFFLINE.md

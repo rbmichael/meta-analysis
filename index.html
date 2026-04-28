@@ -4,9 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Free and Open-Source Meta-Analysis (FOSMA)</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600&display=swap" rel="stylesheet">
 <script>
   /* Anti-FOUC: resolve theme before first paint so dark↔light never flashes.
      Priority: localStorage > OS preference > light (default). */
@@ -19,17 +16,9 @@
   })();
 </script>
 <link rel="stylesheet" href="css/styles.css">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"
-        integrity="sha512-XMVd28F1oH/O71fzwBnV7HucLxVwtxf26XV8P4wPk26EDxuGZ91N8bsOttmnomcCD3CS5ZMRL50H0GgOHvegtg=="
-        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"
-        integrity="sha512-vc58qvvBdrDR4etbxMdlTt4GBQk1qjvyORR2nrsPsFPyrs+/u5c3+1Ct6upOgdZoIl7eq6k3a1UPDSNAQi/32A=="
-        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-<link rel="modulepreload" href="js/analysis.js">
-<link rel="modulepreload" href="js/plots.js">
-<link rel="modulepreload" href="js/profiles.js">
-<link rel="modulepreload" href="js/trimfill.js">
-<script type="module" src="js/ui.js"></script>
+<script src="lib/jszip.min.js"></script>
+<script src="lib/d3.min.js"></script>
+<script src="bundle.js" defer></script>
 </head>
 <body>
 <a class="skip-link" href="#appLayout">Skip to content</a>
