@@ -106,7 +106,7 @@
 //   restores any autosave draft, and attaches all event listeners.
 // =============================================================================
 import { eggerTest, beggTest, fatPetTest, petPeeseTest, failSafeN, tesTest, waapWls, clES, pCurve, pUniform, baujat, blupMeta, meta, metaMH, metaPeto, robustMeta, influenceDiagnostics, subgroupAnalysis, metaRegression, testContrast, cumulativeMeta, veveaHedges, SELECTION_PRESETS, profileLikTau2, bayesMeta, priorSensitivity, rvePooled, meta3level, harbordTest, petersTest, deeksTest, rueckerTest, lsModel, henmiCopas } from "./analysis.js";
-import { fmt, normalQuantile } from "./utils.js";
+import { fmt, normalQuantile, chiSquareCDF } from "./utils.js";
 import { escapeHTML } from "./utils-html.js";
 import { effectProfiles, getProfile } from "./profiles.js";
 import { trimFill } from "./trimfill.js";
@@ -2282,27 +2282,53 @@ function _renderAllResults(ctx) {
     ? { lb: profile.transform(m.robustCiLow), ub: profile.transform(m.robustCiHigh) }
     : null;
   const robustCILine = m.isClustered
-    ? `${hBtn("cluster.robust")}Robust CI [${fmt(robust_ci_disp.lb)}, ${fmt(robust_ci_disp.ub)}] | SE=${fmt(m.robustSE)} | z=${fmt(m.robustStat)} | p=${fmt(m.robustPval)} (df=${m.robustDf})<br>`
+    ? `Robust CI [${fmt(robust_ci_disp.lb)}, ${fmt(robust_ci_disp.ub)}] | SE=${fmt(m.robustSE)} | z=${fmt(m.robustStat)} | p=${fmt(m.robustPval)} (df=${m.robustDf})${hBtn("cluster.robust")}<br>`
     : "";
 
   const SMD_TYPES = new Set(["SMD","SMDH","SMD_paired","SMD1","SMD1H","SMCC"]);
   const cles = SMD_TYPES.has(type) ? clES(m.RE, [m.ciLow, m.ciHigh]) : null;
   const clesLine = cles
-    ? `${hBtn("pool.cles")}CLES: ${fmt(cles.estimate)} [${fmt(cles.ci[0])}, ${fmt(cles.ci[1])}]<br>`
+    ? `CLES: ${fmt(cles.estimate)} [${fmt(cles.ci[0])}, ${fmt(cles.ci[1])}]${hBtn("pool.cles")}<br>`
     : "";
 
   const ciLbl = getCiLabel();
   elResults.innerHTML = warningHTML + clusterBanner + (isMHorPeto ? `
-    <b>${profile.label} (${methodLabel}):</b> ${fmt(FE_disp)}, ${ciLbl} [${fmt(feCi_disp.lb)}, ${fmt(feCi_disp.ub)}]<br>
-    <small style="color:var(--muted)">Fixed-effect only — no τ², RE estimate, or prediction interval.</small><br>
-    ${hBtn("het.Q")}Q(${m.df})=${fmt(m.stat)} | p=${fmt(m.pval)} | ${hBtn("het.I2")}I²=${fmt(m.I2)}% [${fmt(m.I2CI[0])}%, ${fmt(m.I2CI[1])}%] | ${hBtn("het.H2")}H²-CI=[${fmt(m.H2CI[0])}, ${isFinite(m.H2CI[1])?fmt(m.H2CI[1]):"∞"}]
+    <div class="result-re-primary">
+      <span class="result-label">${profile.label} (${methodLabel})</span>
+      <span class="result-re-value">${fmt(FE_disp)}</span>
+      <span class="result-ci">${ciLbl} [${fmt(feCi_disp.lb)}, ${fmt(feCi_disp.ub)}]</span>
+    </div>
+    <div class="result-method-note">Fixed-effect only — no τ², RE estimate, or prediction interval.</div>
+    <div class="result-het-group">
+      <div class="result-section-label">Heterogeneity</div>
+      <div class="result-het-stats">I²=${fmt(m.I2)}% [${fmt(m.I2CI[0])}%, ${fmt(m.I2CI[1])}%]${hBtn("het.I2")} &nbsp;·&nbsp; H²-CI=[${fmt(m.H2CI[0])}, ${isFinite(m.H2CI[1])?fmt(m.H2CI[1]):"∞"}]${hBtn("het.H2")}</div>
+      <div class="result-het-stats result-het-test">Q(${m.df})=${fmt(m.stat)}, p=${fmt(m.pval)}${hBtn("het.Q")}</div>
+    </div>
   ` : `
-    <b>${profile.label} (FE):</b> ${fmt(FE_disp)}, ${ciLbl} [${fmt(feCi_disp.lb)}, ${fmt(feCi_disp.ub)}] |
-    <b>${profile.label} (RE):</b> ${fmt(RE_disp)}, ${ciLbl} [${fmt(ci_disp.lb)}, ${fmt(ci_disp.ub)}]${m.isClustered ? ` | SE (model)=${fmt(m.seRE)}` : ""}<br>
-    ${useTF && mAdjusted ? `<b>RE (adjusted):</b> ${fmt(RE_adj_disp)}${hasClusters ? ` <span style="color:var(--muted);font-size:0.85em">(cluster-robust not applied to imputed studies)</span>` : ""}<br>` : ""}
-    ${robustCILine}${clesLine}${hBtn("het.tau2")}τ²=${fmt(m.tau2)} [${fmt(m.tauCI[0])}, ${isFinite(m.tauCI[1])?fmt(m.tauCI[1]):"∞"}] | ${hBtn("het.I2")}I²=${fmt(m.I2)}% [${fmt(m.I2CI[0])}%, ${fmt(m.I2CI[1])}%] | ${hBtn("het.H2")}H²-CI=[${fmt(m.H2CI[0])}, ${isFinite(m.H2CI[1])?fmt(m.H2CI[1]):"∞"}]<br>
-    ${hBtn("het.Q")}${m.dist}-stat=${fmt(m.stat)} | p=${fmt(m.pval)}<br>
-    ${hBtn("het.pred")}Prediction interval (Higgins 2009, t<sub>${m.df > 0 ? m.df - 1 : "—"}</sub>): ${isFinite(pred_disp.lb) ? `[${fmt(pred_disp.lb)}, ${fmt(pred_disp.ub)}]` : "NA (k &lt; 3)"}
+    <div class="result-re-primary">
+      <span class="result-label">${profile.label} (RE)</span>
+      <span class="result-re-value">${fmt(RE_disp)}</span>
+      <span class="result-ci">${ciLbl} [${fmt(ci_disp.lb)}, ${fmt(ci_disp.ub)}]${m.isClustered ? ` &nbsp;<span class="result-se">SE (model) = ${fmt(m.seRE)}</span>` : ""}</span>
+    </div>
+    ${useTF && mAdjusted ? `<div class="result-re-adjusted">RE (adjusted): <b>${fmt(RE_adj_disp)}</b>${hasClusters ? ` <span class="result-note">(cluster-robust not applied to imputed studies)</span>` : ""}</div>` : ""}
+    <div class="result-stat-row">
+      <span class="result-row-label">Test of pooled effect</span>
+      <span class="result-stat-value">${m.dist}-stat = ${fmt(m.stat)}, p = ${fmt(m.pval)}</span>
+    </div>
+    <div class="result-stat-row">
+      <span class="result-row-label">Prediction interval</span>
+      <span class="result-stat-value">${isFinite(pred_disp.lb) ? `[${fmt(pred_disp.lb)}, ${fmt(pred_disp.ub)}]` : "NA (k &lt; 3)"}${hBtn("het.pred")}</span>
+    </div>
+    <div class="result-fe-secondary">
+      <span class="result-label">${profile.label} (FE)</span>
+      <span>${fmt(FE_disp)}</span>
+      <span class="result-ci">${ciLbl} [${fmt(feCi_disp.lb)}, ${fmt(feCi_disp.ub)}]</span>
+    </div>
+    ${robustCILine}${clesLine}<div class="result-het-group">
+      <div class="result-section-label">Heterogeneity</div>
+      <div class="result-het-stats">τ²=${fmt(m.tau2)} [${fmt(m.tauCI[0])}, ${isFinite(m.tauCI[1])?fmt(m.tauCI[1]):"∞"}]${hBtn("het.tau2")} &nbsp;·&nbsp; I²=${fmt(m.I2)}% [${fmt(m.I2CI[0])}%, ${fmt(m.I2CI[1])}%]${hBtn("het.I2")} &nbsp;·&nbsp; H²-CI=[${fmt(m.H2CI[0])}, ${isFinite(m.H2CI[1])?fmt(m.H2CI[1]):"∞"}]${hBtn("het.H2")}</div>
+      <div class="result-het-stats result-het-test">Q(${m.df})=${fmt(m.Q)}, p=${fmt(m.df > 0 ? 1 - chiSquareCDF(m.Q, m.df) : NaN)}${hBtn("het.Q")}</div>
+    </div>
   `);
 
   // ── Publication bias panel ─────────────────────────────────────────────────
