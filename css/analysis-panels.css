@@ -16,6 +16,7 @@
   background: var(--bg-elevated);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
   font-size: 0.8125rem;
   color: var(--fg-muted);
   margin-bottom: 6px;
@@ -83,6 +84,7 @@
   background: var(--bg-elevated);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
   font-size: 0.8125rem;
   color: var(--fg-muted);
   margin-bottom: 6px;

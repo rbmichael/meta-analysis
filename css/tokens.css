@@ -119,8 +119,9 @@
   --radius-full: 9999px;
 
   /* ── Typography ──────────────────────────────────────────── */
-  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
-  --font-mono: ui-monospace, "JetBrains Mono", "Fira Code", monospace;
+  --font-sans:    "Inter", system-ui, -apple-system, sans-serif;
+  --font-display: "Instrument Serif", Georgia, serif;
+  --font-mono:    ui-monospace, "JetBrains Mono", "Fira Code", monospace;
 
   /* ── Transitions ─────────────────────────────────────────── */
   --t-fast: 150ms ease-out;

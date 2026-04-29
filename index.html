@@ -6,7 +6,7 @@
 <title>Free and Open-Source Meta-Analysis (FOSMA)</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600&family=Instrument+Serif&display=swap" rel="stylesheet">
 <script>
   /* Anti-FOUC: resolve theme before first paint so dark↔light never flashes.
      Priority: localStorage > OS preference > light (default). */
@@ -37,7 +37,7 @@
 <!-- ===================== APP HEADER ===================== -->
 <header id="appHeader">
   <div id="appHeaderTitle">
-    <span id="appTitle">Free and Open-Source Meta-Analysis (FOSMA)</span>
+    <span id="appTitle"><span class="app-title-main">FOSMA</span><span class="app-title-sub">Free and Open-Source Meta-Analysis</span></span>
     <button id="themeToggle" class="theme-toggle-btn" title="Switch to light mode" aria-label="Toggle colour theme"></button>
   </div>
   <div id="appHeaderTabs">
@@ -354,6 +354,7 @@
 
       <div id="inputTableToolbar">
         <button id="addStudy">Add Study</button>
+        <span class="io-sep" role="separator" aria-hidden="true"></span>
         <button id="run" title="Run analysis (Ctrl+Enter)">Run <kbd class="run-kbd">(Ctrl+Enter)</kbd></button>
         <button class="help-btn" data-help="keyboard.shortcuts" title="Keyboard shortcuts">⌨</button>
         <span id="inputStaleBadge" hidden>Results out of date</span>

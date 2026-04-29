@@ -2112,6 +2112,13 @@ function _runRegressionBatch(studies, m, opts) {
   return { subgroup, reg, ls };
 }
 
+function _animateFresh(el) {
+  if (!el) return;
+  el.classList.remove("results-fresh");
+  void el.offsetWidth;
+  el.classList.add("results-fresh");
+}
+
 // ── All DOM writes: renders every output panel from computed results ──────────
 function _renderAllResults(ctx) {
   const {
@@ -2355,6 +2362,7 @@ function _renderAllResults(ctx) {
       </div>
     </details>
   `;
+  _animateFresh(elResults);
 
   // ── Influence diagnostics + subgroup ──────────────────────────────────────
   const influenceHTML = buildInfluenceHTML(influence);
@@ -2368,6 +2376,7 @@ function _renderAllResults(ctx) {
     : subgroupHTML;
 
   renderStudyTable(all, m, profile);
+  _animateFresh(document.getElementById("studyTable"));
 
   // ── Sensitivity panel (LOO) ───────────────────────────────────────────────
   performance.mark("phase:loo:render:start");
