@@ -80,8 +80,8 @@
   flex-wrap: wrap;
 }
 
-/* Separator between the CSV pair and the Session pair */
-#inputFileControls .io-sep {
+/* Vertical separator — reusable in any flex toolbar row */
+.io-sep {
   display: inline-block;
   width: 0;
   height: 18px;
@@ -94,7 +94,7 @@
 .section-title {
   font-size: 0.6875rem;
   font-weight: 600;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
   color: var(--fg-muted);
   margin: 0;
@@ -246,12 +246,11 @@
 }
 
 .settings-group-label {
-  font-size: 0.68rem;
+  font-size: 0.6875rem;
   font-weight: 600;
   letter-spacing: 0.07em;
   text-transform: uppercase;
   color: var(--fg-muted);
-  opacity: 0.75;
   user-select: none;
 }
 
@@ -453,11 +452,26 @@
 }
 
 #appTitle {
-  font-size: 0.875rem;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.5em;
+}
+
+.app-title-main {
+  font-family: var(--font-display);
+  font-size: 1.1875rem;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+  color: var(--fg);
+}
+
+.app-title-sub {
+  font-family: var(--font-sans);
+  font-size: 0.6875rem;
   font-weight: 500;
-  letter-spacing: -0.01em;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   color: var(--fg-muted);
-  text-align: center;
 }
 
 #appHeaderTitle .theme-toggle-btn {
@@ -614,12 +628,17 @@
   border-radius: 0 0 var(--radius-md) var(--radius-md);
   background: var(--accent, #5e6ad2);
   transform-origin: left;
-  animation: undo-shrink 5s linear forwards;
 }
 
-@keyframes undo-shrink {
-  from { transform: scaleX(1); }
-  to   { transform: scaleX(0); }
+@media (prefers-reduced-motion: no-preference) {
+  .undo-toast-bar {
+    animation: undo-shrink 5s linear forwards;
+  }
+
+  @keyframes undo-shrink {
+    from { transform: scaleX(1); }
+    to   { transform: scaleX(0); }
+  }
 }
 
 /* ---- Jump-to-section pill (fixed, bottom-right) ---- */
@@ -636,7 +655,6 @@
   display: flex;
   flex-direction: column;
   gap: 1px;
-  min-width: 130px;
   max-width: 180px;
   /* Shown/hidden via opacity + pointer-events so transitions work */
   opacity: 0;

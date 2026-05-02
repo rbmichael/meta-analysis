@@ -8,6 +8,7 @@ export const BENCHMARKS = [
   // ----------------------------------------------------------------
   {
     name: "BCG Vaccine – GENERIC (log RR, metafor exact)",
+    rBlock: "1",
     type: "GENERIC",
     tauMethod: "REML",
     data: [
@@ -290,6 +291,7 @@ export const BENCHMARKS = [
   // ----------------------------------------------------------------
   {
     name: "BCG Vaccine – OR (dat.bcg, DL)",
+    rBlock: "2",
     type: "OR",
     tauMethod: "DL",
     data: [
@@ -328,6 +330,7 @@ export const BENCHMARKS = [
   // ----------------------------------------------------------------
   {
     name: "BCG Vaccine – RR (dat.bcg, REML)",
+    rBlock: "3",
     type: "RR",
     tauMethod: "REML",
     data: [
@@ -368,6 +371,7 @@ export const BENCHMARKS = [
   // ----------------------------------------------------------------
   {
     name: "BCG Vaccine – RD (dat.bcg, DL)",
+    rBlock: "4",
     type: "RD",
     tauMethod: "DL",
     data: [
@@ -407,6 +411,7 @@ export const BENCHMARKS = [
   // ----------------------------------------------------------------
   {
     name: "Normand 1999 – MD (dat.normand1999, REML)",
+    rBlock: "5",
     type: "MD",
     tauMethod: "REML",
     data: [
@@ -439,6 +444,7 @@ export const BENCHMARKS = [
   // ----------------------------------------------------------------
   {
     name: "Normand 1999 – SMD Hedges' g, 4 studies (REML)",
+    rBlock: "6",
     type: "SMD",
     correction: "hedges",
     tauMethod: "REML",
@@ -472,6 +478,7 @@ export const BENCHMARKS = [
   // ----------------------------------------------------------------
   {
     name: "Morris 2008 – MD_paired (REML)",
+    rBlock: "7",
     type: "MD_paired",
     tauMethod: "REML",
     data: [
@@ -500,6 +507,7 @@ export const BENCHMARKS = [
   // ----------------------------------------------------------------
   {
     name: "Synthetic – ZCOR (Fisher's z, DL)",
+    rBlock: "13",
     type: "ZCOR",
     tauMethod: "DL",
     data: [
@@ -529,6 +537,7 @@ export const BENCHMARKS = [
   // ----------------------------------------------------------------
   {
     name: "Synthetic – COR (raw correlation, DL)",
+    rBlock: "14",
     type: "COR",
     tauMethod: "DL",
     data: [
@@ -560,6 +569,7 @@ export const BENCHMARKS = [
   // ----------------------------------------------------------------
   {
     name: "Morris 2008 – SMD_paired (DL)",
+    rBlock: "8",
     type: "SMD_paired",
     tauMethod: "DL",
     data: [
@@ -588,6 +598,7 @@ export const BENCHMARKS = [
   // ----------------------------------------------------------------
   {
     name: "Synthetic Proportion – PR (DL)",
+    rBlock: "9",
     type: "PR",
     tauMethod: "DL",
     data: [
@@ -613,6 +624,7 @@ export const BENCHMARKS = [
   // ----------------------------------------------------------------
   {
     name: "Synthetic Proportion – PLO (DL)",
+    rBlock: "10",
     type: "PLO",
     tauMethod: "DL",
     data: [
@@ -638,6 +650,7 @@ export const BENCHMARKS = [
   // ----------------------------------------------------------------
   {
     name: "Synthetic Proportion – PAS (DL)",
+    rBlock: "11",
     type: "PAS",
     tauMethod: "DL",
     data: [
@@ -663,6 +676,7 @@ export const BENCHMARKS = [
   // ----------------------------------------------------------------
   {
     name: "Synthetic Proportion – PFT (DL)",
+    rBlock: "12",
     type: "PFT",
     tauMethod: "DL",
     data: [
@@ -727,6 +741,7 @@ export const BENCHMARKS = [
   // ----------------------------------------------------------------
   {
     name: "Synthetic τ² test – HE (k=3, equal vi)",
+    rBlock: "16",
     type: "GENERIC",
     tauMethod: "HE",
     data: [
@@ -750,6 +765,7 @@ export const BENCHMARKS = [
   // ----------------------------------------------------------------
   {
     name: "Synthetic τ² test – ML (k=3, equal vi)",
+    rBlock: "17",
     type: "GENERIC",
     tauMethod: "ML",
     data: [
@@ -810,6 +826,7 @@ export const BENCHMARKS = [
   // ----------------------------------------------------------------
   {
     name: "Synthetic τ² test – PM (k=3, unequal vi)",
+    rBlock: "38",
     type: "GENERIC",
     tauMethod: "PM",
     data: [
@@ -840,6 +857,7 @@ export const BENCHMARKS = [
   // ----------------------------------------------------------------
   {
     name: "Synthetic – HR (log hazard ratio, DL)",
+    rBlock: "19",
     type: "HR",
     tauMethod: "DL",
     data: [
@@ -872,6 +890,7 @@ export const BENCHMARKS = [
   // ----------------------------------------------------------------
   {
     name: "Synthetic – IRR (incidence rate ratio, DL)",
+    rBlock: "20",
     type: "IRR",
     tauMethod: "DL",
     data: [
@@ -1152,8 +1171,8 @@ export const BENCHMARKS = [
     expected: {
       yi:   [1.94783, 0.64561, 2.86020, 0.73333, 3.84000],
       FE:   1.232,
-      RE:   1.921,
-      tau2: 1.615,
+      RE:   1.922,
+      tau2: 1.608,
       I2:   92.73,  // Q-based
     },
     citation: "Synthetic dataset; cross-validated with metafor escalc('SMD1') + rma(method='REML').",
@@ -1204,8 +1223,8 @@ export const BENCHMARKS = [
     expected: {
       yi:   [1.94783, 0.64561, 2.86020, 0.73333, 3.84000],
       FE:   1.220,
-      RE:   1.919,
-      tau2: 1.600,
+      RE:   1.922,
+      tau2: 1.611,
       I2:   92.86,  // Q-based
     },
     citation: "Synthetic dataset; cross-validated with metafor escalc('SMD1H') + rma(method='REML').",
@@ -1223,6 +1242,7 @@ export const BENCHMARKS = [
   // ----------------------------------------------------------------
   {
     name: "Synthetic – IR (incidence rate log, DL)",
+    rBlock: "21",
     type: "IR",
     tauMethod: "DL",
     data: [
@@ -1247,11 +1267,13 @@ export const BENCHMARKS = [
   // Same raw data as the MD benchmark above.
   // Standardiser: sdi = √((sd1²+sd2²)/2)  (average, not pooled).
   // d = (m1−m2)/sdi,  g = d·J,  J = 1−3/(4·df−1),  df = n1+n2−2
-  // vi = [(sd1²/n1 + sd2²/n2)/sdi² + d²/(2·df)] · J²
-  // Pooled FE analytically derived; RE/τ²/I² via REML (Python script).
+  // vi(g) = g²·(sd1⁴/(n1−1)+sd2⁴/(n2−1))/(8·sdi²²) + (sd1²/(n1−1)+sd2²/(n2−1))/sdi²
+  //   Bonett (2009) Eq. 7 delta-method formula; uses n−1 denominators.
+  // FE/RE/τ²/I² cross-validated against metafor escalc("SMDH") + rma(method="REML").
   // ----------------------------------------------------------------
   {
     name: "Normand 1999 – SMDH (heteroscedastic g, REML)",
+    rBlock: "22",
     type: "SMDH",
     tauMethod: "REML",
     data: [
@@ -1266,14 +1288,14 @@ export const BENCHMARKS = [
       { label: "Uppsala",            n1:  60, m1:  30, sd1: 27, n2:  52, m2:  23, sd2: 20 }
     ],
     expected: {
-      // g per study (sdi = avg-SD standardiser); verified by formula
+      // g per study (sdi = avg-SD standardiser); yi unchanged from old formula (same d·J)
       yi:   [-0.3553, -0.3465, -2.3018, -1.8880, -0.3993, 0.1742, 0.2726, -0.4494, 0.2926],
-      FE:   -0.411,
-      RE:   -0.538,
-      tau2:  0.782,
-      I2:   93.5
+      FE:   -0.394,
+      RE:   -0.532,
+      tau2:  0.769,
+      I2:   92.8
     },
-    citation: "Normand (1999) Stat Med 18:321–359. dat.normand1999 in metafor. REML values computed analytically (Python)."
+    citation: "Normand (1999) Stat Med 18:321–359. dat.normand1999 in metafor. Bonett (2009) Psychol Methods 14:43–53 Eq. 7 variance formula. Cross-validated against metafor escalc/rma."
   },
 
   // ----------------------------------------------------------------
@@ -1286,6 +1308,7 @@ export const BENCHMARKS = [
   // ----------------------------------------------------------------
   {
     name: "Normand 1999 – ROM (log ratio of means, REML)",
+    rBlock: "23",
     type: "ROM",
     tauMethod: "REML",
     data: [
@@ -1321,6 +1344,7 @@ export const BENCHMARKS = [
   // ----------------------------------------------------------------
   {
     name: "Morris 2008 – SMCC (change-score SD, DL)",
+    rBlock: "24",
     type: "SMCC",
     tauMethod: "DL",
     data: [
@@ -1333,12 +1357,12 @@ export const BENCHMARKS = [
     expected: {
       // g per study (sd_change standardiser), verified by formula
       yi:   [0.5417, 1.0198, 2.6635, 1.9096, 0.0765],
-      FE:    0.839,
-      RE:    1.038,
-      tau2:  0.373,
-      I2:   82.7
+      FE:    0.779,
+      RE:    1.003,
+      tau2:  0.3611,
+      I2:   81.7
     },
-    citation: "Morris (2008) Org Res Methods 11:364–386. SMCC formula: Borenstein et al. (2009). DL values computed analytically (Python)."
+    citation: "Morris (2008) Org Res Methods 11:364–386. SMCC formula: Morris (2008) Eq.17 / Borenstein et al. (2009) Table 4.5 — var(d)=1/n+d²/(2df). DL values from corrected formula."
   },
 
   // ----------------------------------------------------------------
@@ -1349,6 +1373,7 @@ export const BENCHMARKS = [
   // ----------------------------------------------------------------
   {
     name: "Synthetic Proportion – PLN (log, DL)",
+    rBlock: "25",
     type: "PLN",
     tauMethod: "DL",
     data: [
@@ -1601,15 +1626,16 @@ export const BENCHMARKS = [
   // ----------------------------------------------------------------
   // PHI — BCG Vaccine (dat.bcg, phi coefficient)
   // Same 13 studies as the OR/RR/RD benchmarks above.
-  // phi = (a·d−b·c)/√((a+b)(c+d)(a+c)(b+d)),  vi = (1−φ²)²/(N−1)
-  // Large N per study → small vi; phi values are small negative
-  // (BCG reduces TB → negative association in vaccinated/unvaccinated
-  // × TB+ / TB− table). τ² is small in absolute terms but I² is high
-  // because the per-study vi are also tiny for the large-n studies.
-  // All values computed analytically (DL).
+  // phi = (a·d−b·c)/√((a+b)(c+d)(a+c)(b+d))
+  // vi: Digby (1983) LS delta-method formula (metafor vtype="LS"):
+  //   vi = (1/N)·(1−φ² + φ·(1+φ²/2)·(π₁.−π₂.)·(π.₁−π.₂)/√(π₁.·π₂.·π.₁·π.₂)
+  //            − ¾·φ²·[(π₁.−π₂.)²/(π₁.·π₂.) + (π.₁−π.₂)²/(π.₁·π.₂)])
+  // Large N per study → small vi; phi values are small negative.
+  // All values cross-validated against metafor escalc("PHI") + rma(method="DL").
   // ----------------------------------------------------------------
   {
     name: "BCG Vaccine – PHI (phi coefficient, DL)",
+    rBlock: "26",
     type: "PHI",
     tauMethod: "DL",
     data: [
@@ -1628,15 +1654,15 @@ export const BENCHMARKS = [
       { label: "Comstock 1976",           a:  27, b: 16886, c:  29, d: 17825 }
     ],
     expected: {
-      // phi per study, verified by formula
+      // phi per study, unchanged (only vi formula changed)
       yi:   [-0.1001, -0.1635, -0.1067, -0.0684, -0.0092, -0.1798,
              -0.0677,  0.0005, -0.0164, -0.0947, -0.0110,  0.0089, -0.0003],
-      FE:   -0.012,
-      RE:   -0.048,
-      tau2:  0.001,
-      I2:   95.5
+      FE:   -0.013,
+      RE:   -0.051,
+      tau2:  0.0011,
+      I2:   96.0
     },
-    citation: "Colditz et al. (1994) JAMA 271:698–702. dat.bcg in metafor. DL values computed analytically (Python)."
+    citation: "Colditz et al. (1994) JAMA 271:698–702. dat.bcg in metafor. Digby (1983) Biometrics 39:849–851 LS variance. Cross-validated against metafor escalc/rma."
   },
 
   // ----------------------------------------------------------------
@@ -1649,6 +1675,7 @@ export const BENCHMARKS = [
   // ----------------------------------------------------------------
   {
     name: "Normand 1999 – MN (raw mean, specialist arm, REML)",
+    rBlock: "27",
     type: "MN",
     tauMethod: "REML",
     data: [
@@ -1681,6 +1708,7 @@ export const BENCHMARKS = [
   // ----------------------------------------------------------------
   {
     name: "Normand 1999 – MNLN (log mean, specialist arm, REML)",
+    rBlock: "28",
     type: "MNLN",
     tauMethod: "REML",
     data: [
@@ -1714,6 +1742,7 @@ export const BENCHMARKS = [
   // ----------------------------------------------------------------
   {
     name: "Synthetic Variability – CVR (log CV ratio, DL)",
+    rBlock: "29",
     type: "CVR",
     tauMethod: "DL",
     data: [
@@ -1743,6 +1772,7 @@ export const BENCHMARKS = [
   // ----------------------------------------------------------------
   {
     name: "Synthetic Variability – VR (log SD ratio, DL)",
+    rBlock: "30",
     type: "VR",
     tauMethod: "DL",
     data: [
@@ -1771,6 +1801,7 @@ export const BENCHMARKS = [
   // ----------------------------------------------------------------
   {
     name: "Synthetic Variability – VR heterogeneous (DL, τ²>0)",
+    rBlock: "48",
     type: "VR",
     tauMethod: "DL",
     data: [
@@ -1799,6 +1830,7 @@ export const BENCHMARKS = [
   // ----------------------------------------------------------------
   {
     name: "Synthetic Variability – CVR heterogeneous (DL, τ²>0)",
+    rBlock: "49",
     type: "CVR",
     tauMethod: "DL",
     data: [
@@ -1829,6 +1861,7 @@ export const BENCHMARKS = [
   // ----------------------------------------------------------------
   {
     name: "Synthetic – GOR (generalised odds ratio, DL)",
+    rBlock: "31",
     type: "GOR",
     tauMethod: "DL",
     data: [
@@ -1858,6 +1891,7 @@ export const BENCHMARKS = [
   // ----------------------------------------------------------------
   {
     name: "Synthetic – PCOR (raw partial correlation, DL)",
+    rBlock: "32",
     type: "PCOR",
     tauMethod: "DL",
     data: [
@@ -1888,6 +1922,7 @@ export const BENCHMARKS = [
   // ----------------------------------------------------------------
   {
     name: "Synthetic – ZPCOR (Fisher-z partial correlation, DL)",
+    rBlock: "33",
     type: "ZPCOR",
     tauMethod: "DL",
     data: [
@@ -1923,6 +1958,7 @@ export const BENCHMARKS = [
   // ----------------------------------------------------------------
   {
     name: "Synthetic – PCOR heterogeneous (REML, τ²>0)",
+    rBlock: "40",
     type: "PCOR",
     tauMethod: "REML",
     data: [
@@ -1954,6 +1990,7 @@ export const BENCHMARKS = [
   // ----------------------------------------------------------------
   {
     name: "Synthetic – ZPCOR heterogeneous (REML, τ²>0)",
+    rBlock: "41",
     type: "ZPCOR",
     tauMethod: "REML",
     data: [
@@ -1986,6 +2023,7 @@ export const BENCHMARKS = [
   // ----------------------------------------------------------------
   {
     name: "Synthetic – RTET (tetrachoric correlation, DL)",
+    rBlock: "34",
     type: "RTET",
     tauMethod: "DL",
     data: [
@@ -2018,6 +2056,7 @@ export const BENCHMARKS = [
   // ----------------------------------------------------------------
   {
     name: "Synthetic – log-RR ciMethod=KH (DL)",
+    rBlock: "35",
     type: "RR",
     tauMethod: "DL",
     ciMethod: "KH",
@@ -2046,6 +2085,7 @@ export const BENCHMARKS = [
   // ----------------------------------------------------------------
   {
     name: "Synthetic – log-RR ciMethod=t (DL)",
+    rBlock: "36",
     type: "RR",
     tauMethod: "DL",
     ciMethod: "t",
@@ -2074,6 +2114,7 @@ export const BENCHMARKS = [
   // ----------------------------------------------------------------
   {
     name: "Synthetic – log-RR ciMethod=PL (REML)",
+    rBlock: "37",
     type: "RR",
     tauMethod: "REML",
     ciMethod: "PL",
@@ -2322,6 +2363,7 @@ export const PUB_BIAS_BENCHMARKS = [
   // ----------------------------------------------------------------
   {
     name: "BCG Vaccine – pub bias (log OR, DL, 13 studies)",
+    rBlock: "PB",
     type: "OR",
     tauMethod: "DL",
     data: [
@@ -2375,6 +2417,7 @@ export const PUB_BIAS_BENCHMARKS = [
   // ----------------------------------------------------------------
   {
     name: "Synthetic asymmetric funnel (k=6)",
+    rBlock: "PB-synth",
     type: "GENERIC",
     data: [
       { label: "S1", yi: -0.1, vi: 0.0400 },
@@ -2476,6 +2519,7 @@ export const INFLUENCE_BENCHMARKS = [
   // ----------------------------------------------------------------
   {
     name: "Synthetic – log-RR influence diagnostics (DL)",
+    rBlock: "INF-Normand",
     type: "RR",
     tauMethod: "DL",
     data: [
@@ -2589,6 +2633,7 @@ export const INFLUENCE_BENCHMARKS = [
   // ----------------------------------------------------------------
   {
     name: "BCG – log-RR DFFITS (DL, k=13)",
+    rBlock: "INF-BCG",
     type: "GENERIC",
     tauMethod: "DL",
     data: [
@@ -2640,6 +2685,7 @@ export const META_REGRESSION_BENCHMARKS = [
   // ----------------------------------------------------------------
   {
     name: "BCG – year + ablat (REML, normal CI)",
+    rBlock: "MR-A",
     moderators: [
       { key: "year",  type: "continuous" },
       { key: "ablat", type: "continuous" }
@@ -2696,6 +2742,7 @@ export const META_REGRESSION_BENCHMARKS = [
   // ----------------------------------------------------------------
   {
     name: "BCG – ablat + region (REML, normal CI)",
+    rBlock: "MR-B",
     moderators: [
       { key: "ablat",  type: "continuous"  },
       { key: "region", type: "categorical" }
@@ -2749,6 +2796,7 @@ export const META_REGRESSION_BENCHMARKS = [
   // ----------------------------------------------------------------
   {
     name: "BCG – ablat + region (REML, KH CI)",
+    rBlock: "MR-C",
     moderators: [
       { key: "ablat",  type: "continuous"  },
       { key: "region", type: "categorical" }
@@ -2965,6 +3013,7 @@ export const VH_BENCHMARKS = [
   // ----------------------------------------------------------------
   {
     name: "BCG (OR) – two-sided, 5 steps [0.025,0.10,0.25,0.50,1.0]",
+    rBlock: "45",
     cuts: [0.025, 0.10, 0.25, 0.50, 1.0],
     sides: 2,
     data: [
@@ -3008,6 +3057,7 @@ export const VH_BENCHMARKS = [
   // ----------------------------------------------------------------
   {
     name: "BCG (OR) – two-sided, 3 steps [0.05,0.50,1.0]",
+    rBlock: "46",
     cuts: [0.05, 0.50, 1.0],
     sides: 2,
     data: [
@@ -3054,6 +3104,7 @@ export const VH_BENCHMARKS = [
   // ----------------------------------------------------------------
   {
     name: "Synthetic (positive effects) – one-sided, 4 steps [0.025,0.10,0.50,1.0]",
+    rBlock: "47",
     cuts: [0.025, 0.10, 0.50, 1.0],
     sides: 1,
     data: [
@@ -3107,6 +3158,7 @@ export const MH_BENCHMARKS = [
   // ----------------------------------------------------------------
   {
     name: "BCG Vaccine – OR (Mantel-Haenszel)",
+    rBlock: "MH-OR",
     type: "OR",
     method: "MH",
     data: [
@@ -3143,6 +3195,7 @@ export const MH_BENCHMARKS = [
   // ----------------------------------------------------------------
   {
     name: "BCG Vaccine – RR (Mantel-Haenszel)",
+    rBlock: "MH-RR",
     type: "RR",
     method: "MH",
     data: [
@@ -3178,6 +3231,7 @@ export const MH_BENCHMARKS = [
   // ----------------------------------------------------------------
   {
     name: "BCG Vaccine – RD (Mantel-Haenszel)",
+    rBlock: "MH-RD",
     type: "RD",
     method: "MH",
     data: [
@@ -3213,6 +3267,7 @@ export const MH_BENCHMARKS = [
   // ----------------------------------------------------------------
   {
     name: "BCG Vaccine – OR (Peto)",
+    rBlock: "MH-PETO",
     type: "OR",
     method: "Peto",
     data: [
@@ -3260,6 +3315,7 @@ export const CLUSTER_BENCHMARKS = [
     // 3 clusters of 2 studies each; positive τ².
     // R: rma(yi, vi, method="REML") + coef_test(vcov="CR1", cluster=cluster)
     name:   "Synthetic 3-cluster 6-study (REML)",
+    rBlock: "CL-1",
     method: "REML",
     data: [
       { yi:  0.10, vi: 0.04, cluster: "1" },
@@ -3285,6 +3341,7 @@ export const CLUSTER_BENCHMARKS = [
     // Cluster 1: 3 studies; clusters 2,3: 2 studies each; cluster 4: 1 (singleton).
     // R: rma(yi, vi, method="DL") + coef_test(vcov="CR1", cluster=cluster)
     name:   "4-cluster 8-study heterogeneous sizes (DL)",
+    rBlock: "CL-2",
     method: "DL",
     data: [
       { yi:  0.20, vi: 0.020, cluster: "1" },
@@ -3312,6 +3369,7 @@ export const CLUSTER_BENCHMARKS = [
     // C = k = 5; df = C - 1 = 4; allSingletons = true.
     // R: rma(yi, vi, method="REML") + coef_test(vcov="CR1", cluster=1:5)
     name:   "All-singletons HC-robust (REML)",
+    rBlock: "CL-3",
     method: "REML",
     data: [
       { yi: 0.10, vi: 0.04, cluster: "1" },
@@ -3349,6 +3407,7 @@ export const RVE_BENCHMARKS = [
     // RVE-1. 3-cluster, 6-study dataset (same data as CL-1), intercept-only, ρ=0.80
     // m=3 clusters × 2 studies each; df = m−1 = 2.
     name: "3-cluster 6-study intercept-only (rho=0.80)",
+    rBlock: "RVE-1",
     rho: 0.80,
     moderators: [],
     data: [
@@ -3376,6 +3435,7 @@ export const RVE_BENCHMARKS = [
     // Cluster 1: 3 studies; clusters 2,3: 2 studies; cluster 4: 1 singleton.
     // m=4; df = m−1 = 3.
     name: "4-cluster 8-study heterogeneous sizes intercept-only (rho=0.80)",
+    rBlock: "RVE-2",
     rho: 0.80,
     moderators: [],
     data: [
@@ -3404,6 +3464,7 @@ export const RVE_BENCHMARKS = [
     // RVE-3. 4-cluster, 8-study, meta-regression with 1 moderator, ρ=0.80
     // m=4 clusters × 2 studies each; p=2 (intercept + x); df = m−p = 2.
     name: "4-cluster 8-study meta-regression 1 moderator (rho=0.80)",
+    rBlock: "RVE-3",
     rho: 0.80,
     moderators: ["x"],
     data: [
@@ -3453,6 +3514,7 @@ export const THREE_LEVEL_BENCHMARKS = [
     // Expected: tau2_within ≈ 0.035, tau2_between ≈ 0.110.
     // R: rma.mv(yi, vi, random=~1|cluster/study, method="REML")
     name:   "Synthetic 4-cluster × 3-study (REML)",
+    rBlock: "THREE-1",
     method: "REML",
     data: [
       { yi:  0.00, vi: 0.005, cluster: "C1" },
@@ -3492,6 +3554,7 @@ export const THREE_LEVEL_BENCHMARKS = [
     // Expected: tau2_within ≈ 0.0782, tau2_between ≈ 0.0268.
     // R: rma.mv(yi, vi, random=~1|cluster/study, method="REML")
     name:   "Synthetic 5-cluster unequal sizes (REML)",
+    rBlock: "THREE-2",
     method: "REML",
     data: [
       { yi:  0.10, vi: 0.015, cluster: "A" },
@@ -3544,6 +3607,7 @@ export const LS_BENCHMARKS = [
   // ----------------------------------------------------------------
   {
     name: "LS-A: BCG data, intercept-only scale",
+    rBlock: "LS-A",
     locMods:   [],
     scaleMods: [],
     data: [
@@ -3583,6 +3647,7 @@ export const LS_BENCHMARKS = [
   // ----------------------------------------------------------------
   {
     name: "LS-B: BCG data, ablat scale moderator",
+    rBlock: "LS-B",
     locMods:   [],
     scaleMods: [{ key: "ablat", type: "continuous" }],
     data: [
@@ -3623,6 +3688,7 @@ export const LS_BENCHMARKS = [
   // ----------------------------------------------------------------
   {
     name: "LS-C: BCG data, ablat location + ablat scale",
+    rBlock: "LS-C",
     locMods:   [{ key: "ablat", type: "continuous" }],
     scaleMods: [{ key: "ablat", type: "continuous" }],
     data: [
@@ -3659,5 +3725,51 @@ export const LS_BENCHMARKS = [
       scaleColNames: ["intercept", "ablat"],
     },
     citation: "Colditz et al. (1994) dat.bcg. R-verified (metafor 4.8.0, rma(yi,vi,mods=~ablat,scale=~ablat,method='ML')). QM_loc and QM_scale are Wald tests matching R QM and QS respectively.",
+  },
+];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CONTRAST_BENCHMARKS
+// Each entry: { name, regResult (partial), L, expected }
+// regResult supplies only the fields testContrast() needs: beta, vcov, crit,
+// dist, QEdf.  Uses MR-B data (BCG; ablat + region; REML, normal CI).
+// ─────────────────────────────────────────────────────────────────────────────
+export const CONTRAST_BENCHMARKS = [
+  // -----------------------------------------------------------------------
+  // MR-CONTRAST-1 — region:EU vs region:NA
+  //   L = [0, 0, 1, -1]
+  //   est  = beta[region:EU] - beta[region:NA] = 0.1598 - 0.4339 = -0.2740
+  //   var  = vcov[2][2] + vcov[3][3] - 2*vcov[2][3]
+  //        = 0.42135388 + 0.13932588 - 2*0.17664826 = 0.20738324
+  //   se   = sqrt(0.20738324) = 0.45539350
+  //   z    = -0.2740 / 0.45539 = -0.60173
+  //   p    = 0.54736 (two-tailed normal)
+  //   CI   = est ± 1.959964 * se = [-1.16658, 0.61853]
+  //   R-verified (metafor 4.8.0, generate.R block MR-CONTRAST-1).
+  // -----------------------------------------------------------------------
+  {
+    name: "BCG – region:EU vs region:NA",
+    rBlock: "CONTRAST-1",
+    // Minimal reg object needed by testContrast()
+    reg: {
+      beta:  [ 0.1024, -0.0330,  0.1598,  0.4339],
+      vcov: [
+        [ 0.11349313, -0.00347749,  0.07058366,  0.00236991],
+        [-0.00347749,  0.00020588, -0.00742037, -0.00338192],
+        [ 0.07058366, -0.00742037,  0.42135388,  0.17664826],
+        [ 0.00236991, -0.00338192,  0.17664826,  0.13932588],
+      ],
+      crit:  1.959964,
+      dist:  "z",
+      QEdf:  9,
+    },
+    L: [0, 0, 1, -1],
+    expected: {
+      est:  -0.2740,
+      se:    0.4554,
+      stat: -0.6017,
+      p:     0.5474,
+      ci:   [-1.1666, 0.6185],
+    },
   },
 ];

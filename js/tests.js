@@ -1,7 +1,7 @@
 import { round, transformEffect, chiSquareCDF, chiSquareQuantile, parseCounts, bivariateNormalCDF, normalQuantile, tCritical, fCDF, normalCDF, tCDF } from "./utils.js";
 import { validateStudy } from "./profiles.js";
-import { BENCHMARKS, PUB_BIAS_BENCHMARKS, INFLUENCE_BENCHMARKS, META_REGRESSION_BENCHMARKS, VH_BENCHMARKS, MH_BENCHMARKS, CLUSTER_BENCHMARKS, RVE_BENCHMARKS, THREE_LEVEL_BENCHMARKS, LS_BENCHMARKS } from "./benchmarks.js";
-import { compute, meta, metaMH, metaPeto, robustMeta, sandwichVar, robustWlsResult, metaRegression, tau2_HS, tau2_HE, tau2_ML, tau2_SJ, beggTest, eggerTest, fatPetTest, petPeeseTest, failSafeN, tesTest, heterogeneityCIs, cumulativeMeta, influenceDiagnostics, harbordTest, petersTest, deeksTest, rueckerTest, leaveOneOut, baujat, blupMeta, pCurve, pUniform, estimatorComparison, subgroupAnalysis, logLik, bfgs, selIntervalProbs, selIntervalIdx, selectionLogLik, SEL_CUTS_ONE_SIDED, SEL_CUTS_TWO_SIDED, veveaHedges, SELECTION_PRESETS, profileLikTau2, profileLikCI, bayesMeta, priorSensitivity, rvePooled, meta3level, lsModel, adjustPvals, henmiCopas, waapWls, clES } from "./analysis.js";
+import { BENCHMARKS, PUB_BIAS_BENCHMARKS, INFLUENCE_BENCHMARKS, META_REGRESSION_BENCHMARKS, VH_BENCHMARKS, MH_BENCHMARKS, CLUSTER_BENCHMARKS, RVE_BENCHMARKS, THREE_LEVEL_BENCHMARKS, LS_BENCHMARKS, CONTRAST_BENCHMARKS } from "./benchmarks.js";
+import { compute, meta, metaMH, metaPeto, robustMeta, sandwichVar, robustWlsResult, metaRegression, testContrast, tau2_HS, tau2_HE, tau2_ML, tau2_SJ, beggTest, eggerTest, fatPetTest, petPeeseTest, failSafeN, tesTest, heterogeneityCIs, cumulativeMeta, influenceDiagnostics, harbordTest, petersTest, deeksTest, rueckerTest, leaveOneOut, baujat, blupMeta, pCurve, pUniform, estimatorComparison, subgroupAnalysis, logLik, bfgs, selIntervalProbs, selIntervalIdx, selectionLogLik, SEL_CUTS_ONE_SIDED, SEL_CUTS_TWO_SIDED, veveaHedges, SELECTION_PRESETS, profileLikTau2, profileLikCI, bayesMeta, priorSensitivity, rvePooled, meta3level, lsModel, adjustPvals, henmiCopas, waapWls, clES } from "./analysis.js";
 import { trimFill } from "./trimfill.js";
 import { parseCSV } from "./csv.js";
 import { goshCompute, GOSH_MAX_ENUM_K, GOSH_MAX_K, GOSH_DEFAULT_MAX_SUBSETS } from "./gosh.js";
@@ -1567,8 +1567,8 @@ export function runTests() {
     const d    = 2 / Math.sqrt(sdi2);            // 2/√5
     const J    = 1 - 3 / (4 * df - 1);          // 220/223
     const g    = d * J;
-    const vi_d = (9/30 + 1/28) / sdi2 + d**2 / (2*df);
-    const vi_g = vi_d * J**2;
+    // Bonett (2009) Eq. 7: vi of g directly, using n−1 denominators
+    const vi_g = g**2 * (81/29 + 1/27) / (8 * sdi2**2) + (9/29 + 1/27) / sdi2;
     smdhchk("yi = g",        s.yi, g);
     smdhchk("vi = vi_g",     s.vi, vi_g);
     smdhchk("se = √vi_g",    s.se, Math.sqrt(vi_g));
@@ -1611,8 +1611,8 @@ export function runTests() {
     const smdh = compute(args, "SMDH");
     const smd  = compute(args, "SMD");
     smdhchk("yi SMDH = yi SMD (sd1=sd2)", smdh.yi, smd.yi, 1e-9);
-    // variances differ slightly: SMD uses d²/(2·(n1+n2)) and skips J² on vi,
-    // SMDH uses d²/(2·df) and multiplies by J². With n≈30 this compounds to ~2–3%.
+    // Variances differ slightly: SMDH uses Bonett (2009) delta-method with n−1 denominators;
+    // SMD uses the standard pooled-SD formula. Difference is small (~2–3%) at n≈30.
     smdhchkTrue("vi SMDH ≈ vi SMD (within 5%)",
       isFinite(smdh.vi) && isFinite(smd.vi) &&
       Math.abs(smdh.vi - smd.vi) / smd.vi < 0.05);
@@ -1635,8 +1635,8 @@ export function runTests() {
     const m = meta(studies, "DL");
     smdhchk("FE   ≈ 0.885", m.FE,   0.885, 0.01);
     smdhchk("RE   ≈ 0.879", m.RE,   0.879, 0.01);
-    smdhchk("tau2 ≈ 0.031", m.tau2, 0.031, 0.003);
-    smdhchk("I2   ≈ 30%",   m.I2,   30.0,  1.0);
+    smdhchk("tau2 ≈ 0.023", m.tau2, 0.023, 0.003);
+    smdhchk("I2   ≈ 22%",   m.I2,   22.0,  1.5);
   }
 
   console.log(smdhPass ? "\n✅ ALL SMDH UNIT TESTS PASSED" : "\n❌ SOME SMDH UNIT TESTS FAILED");
@@ -2208,18 +2208,24 @@ export function runTests() {
   const { chk: phiChk, chkTrue: phiChkTrue } = makeChk(() => { phiPass = false; }, 1e-9);
 
   // --- PHI 1: formula spot-check ---
-  // a=30,b=10,c=10,d=50 → N=100
-  // phi = (30*50 - 10*10) / sqrt(40*60*40*60) = 1400/2400 = 7/12
-  // vi  = (1-(7/12)^2)^2 / 99 = (95/144)^2 / 99 = 9025/2052864
+  // a=30,b=10,c=10,d=50 → N=100, phi=7/12
+  // LS delta-method variance (Digby 1983; metafor vtype="LS"):
+  //   pi1.=0.4, pi2.=0.6, pi.1=0.4, pi.2=0.6
+  //   vi = (1/100)·(1−φ² + φ·(1+φ²/2)·(−0.2)·(−0.2)/0.24 − 0.75·φ²·(1/6+1/6))
   console.log("--- PHI 1. Formula spot-check ---");
   {
     const s      = compute({ a: 30, b: 10, c: 10, d: 50 }, "PHI");
     const phi_exp = 7 / 12;
-    const vi_exp  = (95 / 144) ** 2 / 99;
-    phiChk("φ = 7/12",        s.yi, phi_exp);
-    phiChk("vi = (95/144)²/99", s.vi, vi_exp);
-    phiChk("se = √vi",        s.se, Math.sqrt(vi_exp));
-    phiChk("w  = 1/vi",       s.w,  1 / vi_exp, 1e-6);
+    const pi1d=0.4, pi2d=0.6, pd1=0.4, pd2=0.6;
+    const vi_exp  = (1/100) * (
+      1 - phi_exp**2
+      + phi_exp*(1+phi_exp**2/2)*(pi1d-pi2d)*(pd1-pd2)/Math.sqrt(pi1d*pi2d*pd1*pd2)
+      - 0.75*phi_exp**2*((pi1d-pi2d)**2/(pi1d*pi2d)+(pd1-pd2)**2/(pd1*pd2))
+    );
+    phiChk("φ = 7/12",         s.yi, phi_exp);
+    phiChk("vi = LS formula",  s.vi, vi_exp);
+    phiChk("se = √vi",         s.se, Math.sqrt(vi_exp));
+    phiChk("w  = 1/vi",        s.w,  1 / vi_exp, 1e-6);
   }
 
   // --- PHI 2: sign antisymmetry (swap rows negates φ) ---
@@ -6170,6 +6176,31 @@ export function runTests() {
     }
 
     console.log(threePass ? "\n✅ ALL THREE-LEVEL TESTS PASSED" : "\n❌ SOME THREE-LEVEL TESTS FAILED");
+  }
+
+  // ===== CUSTOM CONTRAST BENCHMARKS =====
+  {
+    console.log("\n===== CUSTOM CONTRAST BENCHMARKS =====\n");
+    let contrastBmPass = true;
+    const bchkC = (label, got, expected, tol = 1e-3) => {
+      const ok = Math.abs(got - expected) < tol;
+      if (!ok) { console.error(`  FAIL ${label}: got ${got}, expected ${expected}`); contrastBmPass = false; }
+      else console.log(`  ok  ${label}`);
+    };
+
+    CONTRAST_BENCHMARKS.forEach(bm => {
+      console.log(`--- Benchmark: ${bm.name} ---`);
+      const r = testContrast(bm.reg, bm.L);
+      const ex = bm.expected;
+      bchkC("est",  r.est,    ex.est);
+      bchkC("se",   r.se,     ex.se);
+      bchkC("stat", r.stat,   ex.stat);
+      bchkC("p",    r.p,      ex.p);
+      bchkC("ci[0]", r.ci[0], ex.ci[0]);
+      bchkC("ci[1]", r.ci[1], ex.ci[1]);
+    });
+
+    console.log(contrastBmPass ? "\n✅ ALL CONTRAST BENCHMARK TESTS PASSED" : "\n❌ SOME CONTRAST BENCHMARK TESTS FAILED");
   }
 }
 

@@ -37,7 +37,6 @@ th, td {
 }
 
 input, select {
-  width: 70px;
   background: var(--bg-elevated);
   color: var(--fg);
   border: 1px solid var(--border-hover);
@@ -172,11 +171,14 @@ html::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); 
     min-height: 44px;
   }
 
-  /* Exempt small utility buttons from the min-height */
+  /* Exempt small utility / icon buttons from the touch-target min-height */
   .help-btn,
   .remove-btn,
   .clear-btn,
-  .rob-domain-tag button {
+  .mod-tag button,
+  .rob-domain-tag button,
+  .theme-toggle-btn,
+  .export-btn {
     min-height: auto;
   }
 }

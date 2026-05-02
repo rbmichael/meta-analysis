@@ -223,8 +223,12 @@ export const effectProfiles = {
       const d    = (m1 - m2) / sdi;
       const J    = 1 - 3 / (4 * df - 1);
       const g    = d * J;
-      const vi_d = (sd1 ** 2 / n1 + sd2 ** 2 / n2) / sdi2 + d ** 2 / (2 * df);
-      const vi_g = Math.max(vi_d * J ** 2, MIN_VAR);
+      // Bonett (2009) Eq. 7: variance of g using n−1 denominators (delta method).
+      const vi_g = Math.max(
+        g ** 2 * (sd1 ** 4 / (n1 - 1) + sd2 ** 4 / (n2 - 1)) / (8 * sdi2 ** 2) +
+        (sd1 ** 2 / (n1 - 1) + sd2 ** 2 / (n2 - 1)) / sdi2,
+        MIN_VAR
+      );
       return { ...s, md: g, varMD: vi_g, yi: g, vi: vi_g, se: Math.sqrt(vi_g), w: 1 / vi_g };
     },
     transform:   (x) => x,
@@ -325,9 +329,10 @@ export const effectProfiles = {
       const df   = n - 1;
       const J    = 1 - (3 / (4*df - 1));
       const g    = d * J;
-      // Variance: proper SMCC formula (Borenstein et al. 2009; Morris 2008)
-      // var(d) = 2(1−r)/n + d²/(2df);  var(g) = J²·var(d)
-      const var_d = 2 * (1 - corr) / n + (d * d) / (2 * df);
+      // Variance: SMCC formula (Morris 2008 Eq.17; Borenstein et al. 2009 Table 4.5)
+      // Standardiser is sd_change which already captures r, so first term is 1/n not 2(1−r)/n.
+      // var(d) = 1/n + d²/(2df);  var(g) = J²·var(d)
+      const var_d = 1 / n + (d * d) / (2 * df);
       const vi    = Math.max(J * J * var_d, MIN_VAR);
       return { ...s, yi: g, vi, se: Math.sqrt(vi), w: 1 / vi, md: g, varMD: var_d };
     },
@@ -1285,9 +1290,16 @@ export const effectProfiles = {
     compute(s) {
       if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
       const { a, b, c, d } = s;
-      const N   = a + b + c + d;
-      const phi = (a*d - b*c) / Math.sqrt((a+b)*(c+d)*(a+c)*(b+d));
-      const vi  = Math.max((1 - phi*phi)**2 / (N - 1), MIN_VAR);
+      const N    = a + b + c + d;
+      const phi  = (a*d - b*c) / Math.sqrt((a+b)*(c+d)*(a+c)*(b+d));
+      // Marginal proportions for LS delta-method variance (Digby 1983; metafor vtype="LS")
+      const pi1d = (a + b) / N,  pi2d = (c + d) / N;
+      const pd1  = (a + c) / N,  pd2  = (b + d) / N;
+      const vi   = Math.max((1 / N) * (
+        1 - phi ** 2
+        + phi * (1 + phi ** 2 / 2) * (pi1d - pi2d) * (pd1 - pd2) / Math.sqrt(pi1d * pi2d * pd1 * pd2)
+        - 0.75 * phi ** 2 * ((pi1d - pi2d) ** 2 / (pi1d * pi2d) + (pd1 - pd2) ** 2 / (pd1 * pd2))
+      ), MIN_VAR);
       return { ...s, yi: phi, vi, se: Math.sqrt(vi), w: 1 / vi };
     },
     transform: (x) => x,
