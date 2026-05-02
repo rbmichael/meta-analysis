@@ -158,7 +158,7 @@ CSV column names match the input fields for each effect type (e.g. `m1,sd1,n1,m2
 - **Word (.docx)** — exports all results tables and plots to a Word document via OOXML/JSZip; no server required
 - **PDF** — print-to-PDF via the browser print dialog
 - **SVG / PNG / TIFF** — individual plot export from the plot toolbar
-- **APA tables** — checkbox to format all tables to APA 7th edition style (no vertical lines, merged CI columns, *Note* paragraphs); applies to both HTML and Word exports
+- All tables use **APA 7th edition style** — no vertical lines, merged CI columns, *Note* paragraphs
 
 ---
 
@@ -230,40 +230,40 @@ git commit -m "Rebuild bundle after sync with main"
 
 - Bonett DG (2002). Sample size requirements for estimating intraclass correlations with desired precision. *Stat Med*, 21(9), 1331–1335.
 - Borenstein M, Hedges LV, Higgins JPT, Rothstein HR (2009). *Introduction to Meta-Analysis*. Wiley.
+- Deeks JJ, Macaskill P, Irwig L (2005). The performance of tests of publication bias and other sample size effects in systematic reviews of diagnostic test accuracy was assessed. *J Clin Epidemiol*, 58(9), 882–893.
 - DerSimonian R, Laird N (1986). Meta-analysis in clinical trials. *Controlled Clinical Trials*, 7, 177–188.
 - Feldt LS (1965). The approximate sampling distribution of Kuder-Richardson reliability coefficient twenty. *Psychometrika*, 30(3), 357–370.
 - Galbraith RF (1988). Graphical display of estimates having differing standard errors. *Technometrics*, 30(3), 271–281.
 - Gelman A, Carlin JB, Stern HS, Dunson DB, Vehtari A, Rubin DB (2013). *Bayesian Data Analysis* (3rd ed.). CRC Press.
 - Hakstian AR, Whalen TE (1976). A k-sample significance test for independent alpha coefficients. *Psychometrika*, 41(2), 219–231.
-- Hedges LV, Tipton E, Johnson MC (2010). Robust variance estimation in meta-regression with dependent effect size estimates. *Res Synth Methods*, 1, 39–65.
-- Mantel N, Haenszel W (1959). Statistical aspects of the analysis of data from retrospective studies of disease. *J Natl Cancer Inst*, 22, 719–748.
-- McGraw KO, Wong SP (1992). A common language effect size statistic. *Psychol Bull*, 111(2), 361–365.
-- Peto R, Pike MC, Armitage P, et al. (1976). Design and analysis of randomized clinical trials requiring prolonged observation of each patient. *Br J Cancer*, 34, 585–612.
-- Harville DA (1977). Maximum likelihood approaches to variance component estimation and to related problems. *J Am Stat Assoc*, 72(358), 320–338.
+- Harbord RM, Egger M, Sterne JAC (2006). A modified test for small-study effects in meta-analyses of controlled trials with binary endpoints. *Stat Med*, 25(20), 3443–3457.
 - Harrell FE Jr (2015). *Regression Modeling Strategies* (2nd ed.). Springer.
-- Henmi M, Copas JB (2010). Confidence intervals for random effects meta-analysis and robustness to publication bias. *Stat Med*, 29(29), 2969–2983.
+- Harville DA (1977). Maximum likelihood approaches to variance component estimation and to related problems. *J Am Stat Assoc*, 72(358), 320–338.
 - Hedges LV, Olkin I (1985). *Statistical Methods for Meta-Analysis*. Academic Press.
+- Hedges LV, Tipton E, Johnson MC (2010). Robust variance estimation in meta-regression with dependent effect size estimates. *Res Synth Methods*, 1, 39–65.
+- Henmi M, Copas JB (2010). Confidence intervals for random effects meta-analysis and robustness to publication bias. *Stat Med*, 29(29), 2969–2983.
 - Higgins JPT, Thompson SG, Spiegelhalter DJ (2009). A re-evaluation of random-effects meta-analysis. *J R Stat Soc A*, 172, 137–159.
 - Holm S (1979). A simple sequentially rejective multiple test procedure. *Scand J Stat*, 6(2), 65–70.
 - Ioannidis JPA, Trikalinos TA (2007). An exploratory test for an excess of significant findings. *Clin Trials*, 4(3), 245–253.
 - Jeffreys H (1961). *Theory of Probability* (3rd ed.). Oxford University Press.
-- Kraemer HC (1975). On estimation and hypothesis testing problems for correlation coefficients. *Psychometrika*, 40(4), 473–485.
 - Knapp G, Hartung J (2003). Improved tests for a random effects meta-regression with a single covariate. *Stat Med*, 22, 2693–2710.
+- Kraemer HC (1975). On estimation and hypothesis testing problems for correlation coefficients. *Psychometrika*, 40(4), 473–485.
+- Mantel N, Haenszel W (1959). Statistical aspects of the analysis of data from retrospective studies of disease. *J Natl Cancer Inst*, 22, 719–748.
+- McGraw KO, Wong SP (1992). A common language effect size statistic. *Psychol Bull*, 111(2), 361–365.
 - Morris CN (1983). Parametric empirical Bayes inference: Theory and applications. *J Am Stat Assoc*, 78(381), 47–55.
 - Morris SB (2008). Estimating effect sizes from pretest-posttest-control group designs. *Org Res Methods*, 11, 364–386.
-- Paule RC, Mandel J (1982). Consensus values and weighting factors. *J Res Natl Bur Stand*, 87, 377–385.
-- Olkin I, Pratt JW (1958). Unbiased estimation of certain correlation coefficients. *Ann Math Stat*, 29(1), 201–211.
 - Olkin I, Dahabreh IJ, Trikalinos TA (2012). GOSH — a graphical display of study heterogeneity. *Res Synth Methods*, 3(3), 214–223.
-- Deeks JJ, Macaskill P, Irwig L (2005). The performance of tests of publication bias and other sample size effects in systematic reviews of diagnostic test accuracy was assessed. *J Clin Epidemiol*, 58(9), 882–893.
-- Harbord RM, Egger M, Sterne JAC (2006). A modified test for small-study effects in meta-analyses of controlled trials with binary endpoints. *Stat Med*, 25(20), 3443–3457.
+- Olkin I, Pratt JW (1958). Unbiased estimation of certain correlation coefficients. *Ann Math Stat*, 29(1), 201–211.
+- Paule RC, Mandel J (1982). Consensus values and weighting factors. *J Res Natl Bur Stand*, 87, 377–385.
 - Peters JL, Sutton AJ, Jones DR, Abrams KR, Rushton L (2006). Comparison of two methods to detect publication bias in meta-analysis. *JAMA*, 295(6), 676–680.
+- Peto R, Pike MC, Armitage P, et al. (1976). Design and analysis of randomized clinical trials requiring prolonged observation of each patient. *Br J Cancer*, 34, 585–612.
 - Rücker G, Schwarzer G, Carpenter J (2008). Arcsine test for publication bias in meta-analyses with binary outcomes. *Stat Med*, 27(19), 4450–4465.
 - Simonsohn U, Nelson LD, Simmons JP (2014). P-curve: A key to the file-drawer. *J Exp Psychol Gen*, 143(2), 534–547.
 - Stanley TD, Doucouliagos H (2014). Meta-regression approximations to reduce publication selection bias. *Res Synth Methods*, 5(1), 60–78.
 - Stanley TD, Doucouliagos H (2015). Neither fixed nor random: Weighted least squares meta-regression. *Res Synth Methods*, 6(1), 67–87.
 - Stone CJ, Koo C-Y (1985). Additive splines in statistics. *ASA Proceedings of the Statistical Computing Section*, 45–48.
-- Van den Noortgate W, López-López JA, Marín-Martínez F, Sánchez-Meca J (2013). Three-level meta-analysis of dependent effect sizes. *Behav Res Methods*, 45(2), 576–594.
 - van Assen MALM, van Aert RCM, Wicherts JM (2015). Meta-analysis using effect size distributions of only statistically significant studies. *Psychol Methods*, 20(3), 293–309.
+- Van den Noortgate W, López-López JA, Marín-Martínez F, Sánchez-Meca J (2013). Three-level meta-analysis of dependent effect sizes. *Behav Res Methods*, 45(2), 576–594.
 - Vevea JL, Hedges LV (1995). A general linear model for estimating effect size in the presence of publication bias. *Psychometrika*, 60(3), 419–435.
 - Viechtbauer W (2005). Bias and efficiency of meta-analytic variance estimators in the random-effects model. *J Educ Behav Stat*, 30, 261–293.
 - Viechtbauer W (2007). Confidence intervals for the amount of heterogeneity in meta-analysis. *Stat Med*, 26(1), 37–52.
