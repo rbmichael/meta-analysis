@@ -936,8 +936,10 @@ var App = (() => {
             const d = (m1 - m2) / sdi;
             const J = 1 - 3 / (4 * df - 1);
             const g = d * J;
-            const vi_d = (sd1 ** 2 / n1 + sd2 ** 2 / n2) / sdi2 + d ** 2 / (2 * df);
-            const vi_g = Math.max(vi_d * J ** 2, MIN_VAR);
+            const vi_g = Math.max(
+              g ** 2 * (sd1 ** 4 / (n1 - 1) + sd2 ** 4 / (n2 - 1)) / (8 * sdi2 ** 2) + (sd1 ** 2 / (n1 - 1) + sd2 ** 2 / (n2 - 1)) / sdi2,
+              MIN_VAR
+            );
             return { ...s, md: g, varMD: vi_g, yi: g, vi: vi_g, se: Math.sqrt(vi_g), w: 1 / vi_g };
           },
           transform: (x) => x,
@@ -1030,7 +1032,7 @@ var App = (() => {
             const df = n - 1;
             const J = 1 - 3 / (4 * df - 1);
             const g = d * J;
-            const var_d = 2 * (1 - corr) / n + d * d / (2 * df);
+            const var_d = 1 / n + d * d / (2 * df);
             const vi = Math.max(J * J * var_d, MIN_VAR);
             return { ...s, yi: g, vi, se: Math.sqrt(vi), w: 1 / vi, md: g, varMD: var_d };
           },
@@ -1917,7 +1919,9 @@ var App = (() => {
             const { a, b, c, d } = s;
             const N = a + b + c + d;
             const phi = (a * d - b * c) / Math.sqrt((a + b) * (c + d) * (a + c) * (b + d));
-            const vi = Math.max((1 - phi * phi) ** 2 / (N - 1), MIN_VAR);
+            const pi1d = (a + b) / N, pi2d = (c + d) / N;
+            const pd1 = (a + c) / N, pd2 = (b + d) / N;
+            const vi = Math.max(1 / N * (1 - phi ** 2 + phi * (1 + phi ** 2 / 2) * (pi1d - pi2d) * (pd1 - pd2) / Math.sqrt(pi1d * pi2d * pd1 * pd2) - 0.75 * phi ** 2 * ((pi1d - pi2d) ** 2 / (pi1d * pi2d) + (pd1 - pd2) ** 2 / (pd1 * pd2))), MIN_VAR);
             return { ...s, yi: phi, vi, se: Math.sqrt(vi), w: 1 / vi };
           },
           transform: (x) => x,
@@ -4265,6 +4269,16 @@ var App = (() => {
       robustError,
       isClustered: robustSE !== void 0
     };
+  }
+  function testContrast(reg, L) {
+    const { beta, vcov, crit, dist, QEdf } = reg;
+    const est = dot(L, beta);
+    const varEst = quadForm(vcov, L);
+    const se = Math.sqrt(Math.max(0, varEst));
+    const stat = se > 0 ? est / se : NaN;
+    const p = !isFinite(stat) ? NaN : dist === "t" ? 2 * (1 - tCDF(Math.abs(stat), QEdf)) : 2 * (1 - normalCDF(Math.abs(stat)));
+    const ci = [est - crit * se, est + crit * se];
+    return { est, se, stat, p, ci };
   }
   function adjustPvals(pvals, method) {
     const m = pvals.length;
@@ -11911,6 +11925,10 @@ ${linkRels}
           title: "Likelihood Ratio Test (LRT) \u2014 meta-regression",
           body: "LRT = 2\xB7(LL_ML_full \u2212 LL_ML_reduced) ~ \u03C7\xB2(df), where the reduced model omits that moderator's columns. Always uses ML estimation internally regardless of the \u03C4\xB2 method selected for the main analysis \u2014 REML log-likelihoods cannot be compared across models with different fixed-effect structures. LRT and Wald QM test the same hypothesis and are asymptotically equivalent; LRT is generally preferred in small samples because Wald tests can be anti-conservative when the number of studies k is small. df = number of columns contributed by the moderator (1 for a continuous predictor; levels \u2212 1 for a categorical predictor)."
         },
+        "mreg.contrasts": {
+          title: "Custom contrasts",
+          body: "Tests a linear combination L\xB7\u03B2 = 0, where L is a weight vector you supply and \u03B2 is the full vector of regression coefficients. SE = \u221A(L\u2032VL) where V is the variance\u2013covariance matrix of \u03B2\u0302. Typical use: set weight +1 for one categorical level and \u22121 for another to test whether they differ (rather than each vs. the reference category)."
+        },
         "reg.aic": {
           title: "AIC / BIC (meta-regression)",
           body: "AIC (Akaike Information Criterion) and BIC (Bayesian Information Criterion) measure model fit penalised for complexity: AIC = \u22122\xB7LL + 2\xB7npar; BIC = \u22122\xB7LL + npar\xB7log(n). For meta-regression, npar = p + 1 (p fixed-effect coefficients + \u03C4\xB2). For ML, n = k (number of studies); for REML, n = k \u2212 p (error contrasts \u2014 the REML likelihood is defined over the k \u2212 p residual degrees of freedom after projecting out X). Lower AIC/BIC = better fit. Differences > 2 are considered meaningful; differences > 10 are decisive. REML AIC/BIC can only be compared across models with identical predictors; ML AIC/BIC can compare models with different numbers of predictors. LL is the method-appropriate log-likelihood at the fitted parameters."
@@ -13981,6 +13999,51 @@ w\u1D62 = 1/(v\u1D62 + \u03C4\xB2), with \u03C4\xB2 estimated by REML or the sel
               ]
             },
             {
+              id: "guide-custom-contrasts",
+              title: "Custom contrasts",
+              body: `<p>A <strong>custom contrast</strong> tests whether a specified linear
+combination of regression coefficients differs from zero:</p>
+<p><code>H\u2080: L\xB7\u03B2 = 0</code></p>
+<p>where <strong>L</strong> is a weight vector you supply (one weight per model
+term, including the intercept). The test statistic is</p>
+<p><code>z = (L\xB7\u03B2\u0302) / SE,    SE = \u221A(L\u2032VL)</code></p>
+<p>where V is the full variance\u2013covariance matrix of \u03B2\u0302.</p>
+<p><strong>Common uses:</strong></p>
+<ul>
+  <li><strong>Compare two categorical levels</strong> \u2014 set the weight for
+  level A to 1 and for level B to \u22121 (both relative to the same reference).
+  This tests whether A and B differ, not just whether each differs from the
+  reference.</li>
+  <li><strong>Test a weighted average</strong> \u2014 e.g., weights [0, 0.5, 0.5]
+  on two slopes tests whether their average is zero.</li>
+  <li><strong>Test a specific value of a continuous moderator</strong> \u2014 set
+  the intercept weight to 1 and the slope weight to the moderator value of
+  interest (tests the fitted effect at that point).</li>
+</ul>
+<p><strong>How to use:</strong><br>
+After running a meta-regression, expand the <em>Custom contrasts</em> panel.
+Enter a weight for each listed term (terms not involved in the comparison
+should have weight 0), then click <em>Test contrast</em>. The reference level
+of any categorical moderator is not listed \u2014 its contribution is captured
+through the intercept.</p>
+<p><strong>Interpretation:</strong><br>
+The output shows the estimated contrast, its standard error, test statistic,
+two-tailed p-value, and confidence interval \u2014 all on the analysis scale (log
+scale for OR/RR/HR; raw scale for MD/r).</p>
+<p><strong>Cautionary notes:</strong></p>
+<ul>
+  <li>This is a post-hoc test. Multiplicity adjustment is not applied
+  automatically; apply Bonferroni or other corrections if testing many
+  contrasts.</li>
+  <li>The inference is valid only when the regression model is correctly
+  specified and the \u03C4\xB2 estimator is consistent.</li>
+</ul>`,
+              citations: [
+                "Higgins, J. P. T., & Thompson, S. G. (2004). Controlling the risk of spurious findings from meta-regression. <em>Statistics in Medicine, 23</em>(11), 1663\u20131682.",
+                "Viechtbauer, W. (2010). Conducting meta-analyses in R with the metafor package. <em>Journal of Statistical Software, 36</em>(3), 1\u201348."
+              ]
+            },
+            {
               id: "guide-nonlinear-reg",
               title: "Non-linear meta-regression",
               body: `<p>Standard meta-regression assumes a linear relationship between a
@@ -15020,6 +15083,7 @@ when exported.</p>`,
         "diag.subgroup": "guide-subgroup",
         "diag.metaregression": "guide-metaregression",
         "mreg.lrt": "guide-metaregression",
+        "mreg.contrasts": "guide-custom-contrasts",
         "diag.nonlinear-reg": "guide-nonlinear-reg",
         "diag.locationscale": "guide-location-scale",
         "input.scaleModerators": "guide-location-scale",
@@ -15055,7 +15119,7 @@ when exported.</p>`,
   });
 
   // js/benchmarks.js
-  var BENCHMARKS, PUB_BIAS_BENCHMARKS, INFLUENCE_BENCHMARKS, META_REGRESSION_BENCHMARKS, VH_BENCHMARKS, MH_BENCHMARKS, CLUSTER_BENCHMARKS, RVE_BENCHMARKS, THREE_LEVEL_BENCHMARKS, LS_BENCHMARKS;
+  var BENCHMARKS, PUB_BIAS_BENCHMARKS, INFLUENCE_BENCHMARKS, META_REGRESSION_BENCHMARKS, VH_BENCHMARKS, MH_BENCHMARKS, CLUSTER_BENCHMARKS, RVE_BENCHMARKS, THREE_LEVEL_BENCHMARKS, LS_BENCHMARKS, CONTRAST_BENCHMARKS;
   var init_benchmarks = __esm({
     "js/benchmarks.js"() {
       BENCHMARKS = [
@@ -15066,6 +15130,7 @@ when exported.</p>`,
         // ----------------------------------------------------------------
         {
           name: "BCG Vaccine \u2013 GENERIC (log RR, metafor exact)",
+          rBlock: "1",
           type: "GENERIC",
           tauMethod: "REML",
           data: [
@@ -15340,6 +15405,7 @@ when exported.</p>`,
         // ----------------------------------------------------------------
         {
           name: "BCG Vaccine \u2013 OR (dat.bcg, DL)",
+          rBlock: "2",
           type: "OR",
           tauMethod: "DL",
           data: [
@@ -15390,6 +15456,7 @@ when exported.</p>`,
         // ----------------------------------------------------------------
         {
           name: "BCG Vaccine \u2013 RR (dat.bcg, REML)",
+          rBlock: "3",
           type: "RR",
           tauMethod: "REML",
           data: [
@@ -15442,6 +15509,7 @@ when exported.</p>`,
         // ----------------------------------------------------------------
         {
           name: "BCG Vaccine \u2013 RD (dat.bcg, DL)",
+          rBlock: "4",
           type: "RD",
           tauMethod: "DL",
           data: [
@@ -15493,6 +15561,7 @@ when exported.</p>`,
         // ----------------------------------------------------------------
         {
           name: "Normand 1999 \u2013 MD (dat.normand1999, REML)",
+          rBlock: "5",
           type: "MD",
           tauMethod: "REML",
           data: [
@@ -15524,6 +15593,7 @@ when exported.</p>`,
         // ----------------------------------------------------------------
         {
           name: "Normand 1999 \u2013 SMD Hedges' g, 4 studies (REML)",
+          rBlock: "6",
           type: "SMD",
           correction: "hedges",
           tauMethod: "REML",
@@ -15556,6 +15626,7 @@ when exported.</p>`,
         // ----------------------------------------------------------------
         {
           name: "Morris 2008 \u2013 MD_paired (REML)",
+          rBlock: "7",
           type: "MD_paired",
           tauMethod: "REML",
           data: [
@@ -15583,6 +15654,7 @@ when exported.</p>`,
         // ----------------------------------------------------------------
         {
           name: "Synthetic \u2013 ZCOR (Fisher's z, DL)",
+          rBlock: "13",
           type: "ZCOR",
           tauMethod: "DL",
           data: [
@@ -15611,6 +15683,7 @@ when exported.</p>`,
         // ----------------------------------------------------------------
         {
           name: "Synthetic \u2013 COR (raw correlation, DL)",
+          rBlock: "14",
           type: "COR",
           tauMethod: "DL",
           data: [
@@ -15641,6 +15714,7 @@ when exported.</p>`,
         // ----------------------------------------------------------------
         {
           name: "Morris 2008 \u2013 SMD_paired (DL)",
+          rBlock: "8",
           type: "SMD_paired",
           tauMethod: "DL",
           data: [
@@ -15668,6 +15742,7 @@ when exported.</p>`,
         // ----------------------------------------------------------------
         {
           name: "Synthetic Proportion \u2013 PR (DL)",
+          rBlock: "9",
           type: "PR",
           tauMethod: "DL",
           data: [
@@ -15692,6 +15767,7 @@ when exported.</p>`,
         // ----------------------------------------------------------------
         {
           name: "Synthetic Proportion \u2013 PLO (DL)",
+          rBlock: "10",
           type: "PLO",
           tauMethod: "DL",
           data: [
@@ -15716,6 +15792,7 @@ when exported.</p>`,
         // ----------------------------------------------------------------
         {
           name: "Synthetic Proportion \u2013 PAS (DL)",
+          rBlock: "11",
           type: "PAS",
           tauMethod: "DL",
           data: [
@@ -15740,6 +15817,7 @@ when exported.</p>`,
         // ----------------------------------------------------------------
         {
           name: "Synthetic Proportion \u2013 PFT (DL)",
+          rBlock: "12",
           type: "PFT",
           tauMethod: "DL",
           data: [
@@ -15802,6 +15880,7 @@ when exported.</p>`,
         // ----------------------------------------------------------------
         {
           name: "Synthetic \u03C4\xB2 test \u2013 HE (k=3, equal vi)",
+          rBlock: "16",
           type: "GENERIC",
           tauMethod: "HE",
           data: [
@@ -15825,6 +15904,7 @@ when exported.</p>`,
         // ----------------------------------------------------------------
         {
           name: "Synthetic \u03C4\xB2 test \u2013 ML (k=3, equal vi)",
+          rBlock: "17",
           type: "GENERIC",
           tauMethod: "ML",
           data: [
@@ -15885,6 +15965,7 @@ when exported.</p>`,
         // ----------------------------------------------------------------
         {
           name: "Synthetic \u03C4\xB2 test \u2013 PM (k=3, unequal vi)",
+          rBlock: "38",
           type: "GENERIC",
           tauMethod: "PM",
           data: [
@@ -15914,6 +15995,7 @@ when exported.</p>`,
         // ----------------------------------------------------------------
         {
           name: "Synthetic \u2013 HR (log hazard ratio, DL)",
+          rBlock: "19",
           type: "HR",
           tauMethod: "DL",
           data: [
@@ -15946,6 +16028,7 @@ when exported.</p>`,
         // ----------------------------------------------------------------
         {
           name: "Synthetic \u2013 IRR (incidence rate ratio, DL)",
+          rBlock: "20",
           type: "IRR",
           tauMethod: "DL",
           data: [
@@ -16220,8 +16303,8 @@ when exported.</p>`,
           expected: {
             yi: [1.94783, 0.64561, 2.8602, 0.73333, 3.84],
             FE: 1.232,
-            RE: 1.921,
-            tau2: 1.615,
+            RE: 1.922,
+            tau2: 1.608,
             I2: 92.73
             // Q-based
           },
@@ -16271,8 +16354,8 @@ when exported.</p>`,
           expected: {
             yi: [1.94783, 0.64561, 2.8602, 0.73333, 3.84],
             FE: 1.22,
-            RE: 1.919,
-            tau2: 1.6,
+            RE: 1.922,
+            tau2: 1.611,
             I2: 92.86
             // Q-based
           },
@@ -16290,6 +16373,7 @@ when exported.</p>`,
         // ----------------------------------------------------------------
         {
           name: "Synthetic \u2013 IR (incidence rate log, DL)",
+          rBlock: "21",
           type: "IR",
           tauMethod: "DL",
           data: [
@@ -16313,11 +16397,13 @@ when exported.</p>`,
         // Same raw data as the MD benchmark above.
         // Standardiser: sdi = √((sd1²+sd2²)/2)  (average, not pooled).
         // d = (m1−m2)/sdi,  g = d·J,  J = 1−3/(4·df−1),  df = n1+n2−2
-        // vi = [(sd1²/n1 + sd2²/n2)/sdi² + d²/(2·df)] · J²
-        // Pooled FE analytically derived; RE/τ²/I² via REML (Python script).
+        // vi(g) = g²·(sd1⁴/(n1−1)+sd2⁴/(n2−1))/(8·sdi²²) + (sd1²/(n1−1)+sd2²/(n2−1))/sdi²
+        //   Bonett (2009) Eq. 7 delta-method formula; uses n−1 denominators.
+        // FE/RE/τ²/I² cross-validated against metafor escalc("SMDH") + rma(method="REML").
         // ----------------------------------------------------------------
         {
           name: "Normand 1999 \u2013 SMDH (heteroscedastic g, REML)",
+          rBlock: "22",
           type: "SMDH",
           tauMethod: "REML",
           data: [
@@ -16332,14 +16418,14 @@ when exported.</p>`,
             { label: "Uppsala", n1: 60, m1: 30, sd1: 27, n2: 52, m2: 23, sd2: 20 }
           ],
           expected: {
-            // g per study (sdi = avg-SD standardiser); verified by formula
+            // g per study (sdi = avg-SD standardiser); yi unchanged from old formula (same d·J)
             yi: [-0.3553, -0.3465, -2.3018, -1.888, -0.3993, 0.1742, 0.2726, -0.4494, 0.2926],
-            FE: -0.411,
-            RE: -0.538,
-            tau2: 0.782,
-            I2: 93.5
+            FE: -0.394,
+            RE: -0.532,
+            tau2: 0.769,
+            I2: 92.8
           },
-          citation: "Normand (1999) Stat Med 18:321\u2013359. dat.normand1999 in metafor. REML values computed analytically (Python)."
+          citation: "Normand (1999) Stat Med 18:321\u2013359. dat.normand1999 in metafor. Bonett (2009) Psychol Methods 14:43\u201353 Eq. 7 variance formula. Cross-validated against metafor escalc/rma."
         },
         // ----------------------------------------------------------------
         // ROM — Normand 1999 (dat.normand1999, all 9 studies)
@@ -16351,6 +16437,7 @@ when exported.</p>`,
         // ----------------------------------------------------------------
         {
           name: "Normand 1999 \u2013 ROM (log ratio of means, REML)",
+          rBlock: "23",
           type: "ROM",
           tauMethod: "REML",
           data: [
@@ -16385,6 +16472,7 @@ when exported.</p>`,
         // ----------------------------------------------------------------
         {
           name: "Morris 2008 \u2013 SMCC (change-score SD, DL)",
+          rBlock: "24",
           type: "SMCC",
           tauMethod: "DL",
           data: [
@@ -16397,12 +16485,12 @@ when exported.</p>`,
           expected: {
             // g per study (sd_change standardiser), verified by formula
             yi: [0.5417, 1.0198, 2.6635, 1.9096, 0.0765],
-            FE: 0.839,
-            RE: 1.038,
-            tau2: 0.373,
-            I2: 82.7
+            FE: 0.779,
+            RE: 1.003,
+            tau2: 0.3611,
+            I2: 81.7
           },
-          citation: "Morris (2008) Org Res Methods 11:364\u2013386. SMCC formula: Borenstein et al. (2009). DL values computed analytically (Python)."
+          citation: "Morris (2008) Org Res Methods 11:364\u2013386. SMCC formula: Morris (2008) Eq.17 / Borenstein et al. (2009) Table 4.5 \u2014 var(d)=1/n+d\xB2/(2df). DL values from corrected formula."
         },
         // ----------------------------------------------------------------
         // PLN — Synthetic proportion dataset (log proportion)
@@ -16412,6 +16500,7 @@ when exported.</p>`,
         // ----------------------------------------------------------------
         {
           name: "Synthetic Proportion \u2013 PLN (log, DL)",
+          rBlock: "25",
           type: "PLN",
           tauMethod: "DL",
           data: [
@@ -16655,15 +16744,16 @@ when exported.</p>`,
         // ----------------------------------------------------------------
         // PHI — BCG Vaccine (dat.bcg, phi coefficient)
         // Same 13 studies as the OR/RR/RD benchmarks above.
-        // phi = (a·d−b·c)/√((a+b)(c+d)(a+c)(b+d)),  vi = (1−φ²)²/(N−1)
-        // Large N per study → small vi; phi values are small negative
-        // (BCG reduces TB → negative association in vaccinated/unvaccinated
-        // × TB+ / TB− table). τ² is small in absolute terms but I² is high
-        // because the per-study vi are also tiny for the large-n studies.
-        // All values computed analytically (DL).
+        // phi = (a·d−b·c)/√((a+b)(c+d)(a+c)(b+d))
+        // vi: Digby (1983) LS delta-method formula (metafor vtype="LS"):
+        //   vi = (1/N)·(1−φ² + φ·(1+φ²/2)·(π₁.−π₂.)·(π.₁−π.₂)/√(π₁.·π₂.·π.₁·π.₂)
+        //            − ¾·φ²·[(π₁.−π₂.)²/(π₁.·π₂.) + (π.₁−π.₂)²/(π.₁·π.₂)])
+        // Large N per study → small vi; phi values are small negative.
+        // All values cross-validated against metafor escalc("PHI") + rma(method="DL").
         // ----------------------------------------------------------------
         {
           name: "BCG Vaccine \u2013 PHI (phi coefficient, DL)",
+          rBlock: "26",
           type: "PHI",
           tauMethod: "DL",
           data: [
@@ -16682,7 +16772,7 @@ when exported.</p>`,
             { label: "Comstock 1976", a: 27, b: 16886, c: 29, d: 17825 }
           ],
           expected: {
-            // phi per study, verified by formula
+            // phi per study, unchanged (only vi formula changed)
             yi: [
               -0.1001,
               -0.1635,
@@ -16698,12 +16788,12 @@ when exported.</p>`,
               89e-4,
               -3e-4
             ],
-            FE: -0.012,
-            RE: -0.048,
-            tau2: 1e-3,
-            I2: 95.5
+            FE: -0.013,
+            RE: -0.051,
+            tau2: 11e-4,
+            I2: 96
           },
-          citation: "Colditz et al. (1994) JAMA 271:698\u2013702. dat.bcg in metafor. DL values computed analytically (Python)."
+          citation: "Colditz et al. (1994) JAMA 271:698\u2013702. dat.bcg in metafor. Digby (1983) Biometrics 39:849\u2013851 LS variance. Cross-validated against metafor escalc/rma."
         },
         // ----------------------------------------------------------------
         // MN — Normand 1999, specialist arm (single-group raw mean, REML)
@@ -16715,6 +16805,7 @@ when exported.</p>`,
         // ----------------------------------------------------------------
         {
           name: "Normand 1999 \u2013 MN (raw mean, specialist arm, REML)",
+          rBlock: "27",
           type: "MN",
           tauMethod: "REML",
           data: [
@@ -16746,6 +16837,7 @@ when exported.</p>`,
         // ----------------------------------------------------------------
         {
           name: "Normand 1999 \u2013 MNLN (log mean, specialist arm, REML)",
+          rBlock: "28",
           type: "MNLN",
           tauMethod: "REML",
           data: [
@@ -16778,6 +16870,7 @@ when exported.</p>`,
         // ----------------------------------------------------------------
         {
           name: "Synthetic Variability \u2013 CVR (log CV ratio, DL)",
+          rBlock: "29",
           type: "CVR",
           tauMethod: "DL",
           data: [
@@ -16806,6 +16899,7 @@ when exported.</p>`,
         // ----------------------------------------------------------------
         {
           name: "Synthetic Variability \u2013 VR (log SD ratio, DL)",
+          rBlock: "30",
           type: "VR",
           tauMethod: "DL",
           data: [
@@ -16833,6 +16927,7 @@ when exported.</p>`,
         // ----------------------------------------------------------------
         {
           name: "Synthetic Variability \u2013 VR heterogeneous (DL, \u03C4\xB2>0)",
+          rBlock: "48",
           type: "VR",
           tauMethod: "DL",
           data: [
@@ -16860,6 +16955,7 @@ when exported.</p>`,
         // ----------------------------------------------------------------
         {
           name: "Synthetic Variability \u2013 CVR heterogeneous (DL, \u03C4\xB2>0)",
+          rBlock: "49",
           type: "CVR",
           tauMethod: "DL",
           data: [
@@ -16889,6 +16985,7 @@ when exported.</p>`,
         // ----------------------------------------------------------------
         {
           name: "Synthetic \u2013 GOR (generalised odds ratio, DL)",
+          rBlock: "31",
           type: "GOR",
           tauMethod: "DL",
           data: [
@@ -16917,6 +17014,7 @@ when exported.</p>`,
         // ----------------------------------------------------------------
         {
           name: "Synthetic \u2013 PCOR (raw partial correlation, DL)",
+          rBlock: "32",
           type: "PCOR",
           tauMethod: "DL",
           data: [
@@ -16946,6 +17044,7 @@ when exported.</p>`,
         // ----------------------------------------------------------------
         {
           name: "Synthetic \u2013 ZPCOR (Fisher-z partial correlation, DL)",
+          rBlock: "33",
           type: "ZPCOR",
           tauMethod: "DL",
           data: [
@@ -16980,6 +17079,7 @@ when exported.</p>`,
         // ----------------------------------------------------------------
         {
           name: "Synthetic \u2013 PCOR heterogeneous (REML, \u03C4\xB2>0)",
+          rBlock: "40",
           type: "PCOR",
           tauMethod: "REML",
           data: [
@@ -17010,6 +17110,7 @@ when exported.</p>`,
         // ----------------------------------------------------------------
         {
           name: "Synthetic \u2013 ZPCOR heterogeneous (REML, \u03C4\xB2>0)",
+          rBlock: "41",
           type: "ZPCOR",
           tauMethod: "REML",
           data: [
@@ -17041,6 +17142,7 @@ when exported.</p>`,
         // ----------------------------------------------------------------
         {
           name: "Synthetic \u2013 RTET (tetrachoric correlation, DL)",
+          rBlock: "34",
           type: "RTET",
           tauMethod: "DL",
           data: [
@@ -17071,6 +17173,7 @@ when exported.</p>`,
         // ----------------------------------------------------------------
         {
           name: "Synthetic \u2013 log-RR ciMethod=KH (DL)",
+          rBlock: "35",
           type: "RR",
           tauMethod: "DL",
           ciMethod: "KH",
@@ -17098,6 +17201,7 @@ when exported.</p>`,
         // ----------------------------------------------------------------
         {
           name: "Synthetic \u2013 log-RR ciMethod=t (DL)",
+          rBlock: "36",
           type: "RR",
           tauMethod: "DL",
           ciMethod: "t",
@@ -17125,6 +17229,7 @@ when exported.</p>`,
         // ----------------------------------------------------------------
         {
           name: "Synthetic \u2013 log-RR ciMethod=PL (REML)",
+          rBlock: "37",
           type: "RR",
           tauMethod: "REML",
           ciMethod: "PL",
@@ -17386,6 +17491,7 @@ when exported.</p>`,
         // ----------------------------------------------------------------
         {
           name: "BCG Vaccine \u2013 pub bias (log OR, DL, 13 studies)",
+          rBlock: "PB",
           type: "OR",
           tauMethod: "DL",
           data: [
@@ -17440,6 +17546,7 @@ when exported.</p>`,
         // ----------------------------------------------------------------
         {
           name: "Synthetic asymmetric funnel (k=6)",
+          rBlock: "PB-synth",
           type: "GENERIC",
           data: [
             { label: "S1", yi: -0.1, vi: 0.04 },
@@ -17532,6 +17639,7 @@ when exported.</p>`,
         // ----------------------------------------------------------------
         {
           name: "Synthetic \u2013 log-RR influence diagnostics (DL)",
+          rBlock: "INF-Normand",
           type: "RR",
           tauMethod: "DL",
           data: [
@@ -17644,6 +17752,7 @@ when exported.</p>`,
         // ----------------------------------------------------------------
         {
           name: "BCG \u2013 log-RR DFFITS (DL, k=13)",
+          rBlock: "INF-BCG",
           type: "GENERIC",
           tauMethod: "DL",
           data: [
@@ -17685,6 +17794,7 @@ when exported.</p>`,
         // ----------------------------------------------------------------
         {
           name: "BCG \u2013 year + ablat (REML, normal CI)",
+          rBlock: "MR-A",
           moderators: [
             { key: "year", type: "continuous" },
             { key: "ablat", type: "continuous" }
@@ -17740,6 +17850,7 @@ when exported.</p>`,
         // ----------------------------------------------------------------
         {
           name: "BCG \u2013 ablat + region (REML, normal CI)",
+          rBlock: "MR-B",
           moderators: [
             { key: "ablat", type: "continuous" },
             { key: "region", type: "categorical" }
@@ -17792,6 +17903,7 @@ when exported.</p>`,
         // ----------------------------------------------------------------
         {
           name: "BCG \u2013 ablat + region (REML, KH CI)",
+          rBlock: "MR-C",
           moderators: [
             { key: "ablat", type: "continuous" },
             { key: "region", type: "categorical" }
@@ -17993,6 +18105,7 @@ when exported.</p>`,
         // ----------------------------------------------------------------
         {
           name: "BCG (OR) \u2013 two-sided, 5 steps [0.025,0.10,0.25,0.50,1.0]",
+          rBlock: "45",
           cuts: [0.025, 0.1, 0.25, 0.5, 1],
           sides: 2,
           data: [
@@ -18035,6 +18148,7 @@ when exported.</p>`,
         // ----------------------------------------------------------------
         {
           name: "BCG (OR) \u2013 two-sided, 3 steps [0.05,0.50,1.0]",
+          rBlock: "46",
           cuts: [0.05, 0.5, 1],
           sides: 2,
           data: [
@@ -18080,6 +18194,7 @@ when exported.</p>`,
         // ----------------------------------------------------------------
         {
           name: "Synthetic (positive effects) \u2013 one-sided, 4 steps [0.025,0.10,0.50,1.0]",
+          rBlock: "47",
           cuts: [0.025, 0.1, 0.5, 1],
           sides: 1,
           data: [
@@ -18130,6 +18245,7 @@ when exported.</p>`,
         // ----------------------------------------------------------------
         {
           name: "BCG Vaccine \u2013 OR (Mantel-Haenszel)",
+          rBlock: "MH-OR",
           type: "OR",
           method: "MH",
           data: [
@@ -18166,6 +18282,7 @@ when exported.</p>`,
         // ----------------------------------------------------------------
         {
           name: "BCG Vaccine \u2013 RR (Mantel-Haenszel)",
+          rBlock: "MH-RR",
           type: "RR",
           method: "MH",
           data: [
@@ -18201,6 +18318,7 @@ when exported.</p>`,
         // ----------------------------------------------------------------
         {
           name: "BCG Vaccine \u2013 RD (Mantel-Haenszel)",
+          rBlock: "MH-RD",
           type: "RD",
           method: "MH",
           data: [
@@ -18235,6 +18353,7 @@ when exported.</p>`,
         // ----------------------------------------------------------------
         {
           name: "BCG Vaccine \u2013 OR (Peto)",
+          rBlock: "MH-PETO",
           type: "OR",
           method: "Peto",
           data: [
@@ -18271,6 +18390,7 @@ when exported.</p>`,
           // 3 clusters of 2 studies each; positive τ².
           // R: rma(yi, vi, method="REML") + coef_test(vcov="CR1", cluster=cluster)
           name: "Synthetic 3-cluster 6-study (REML)",
+          rBlock: "CL-1",
           method: "REML",
           data: [
             { yi: 0.1, vi: 0.04, cluster: "1" },
@@ -18296,6 +18416,7 @@ when exported.</p>`,
           // Cluster 1: 3 studies; clusters 2,3: 2 studies each; cluster 4: 1 (singleton).
           // R: rma(yi, vi, method="DL") + coef_test(vcov="CR1", cluster=cluster)
           name: "4-cluster 8-study heterogeneous sizes (DL)",
+          rBlock: "CL-2",
           method: "DL",
           data: [
             { yi: 0.2, vi: 0.02, cluster: "1" },
@@ -18323,6 +18444,7 @@ when exported.</p>`,
           // C = k = 5; df = C - 1 = 4; allSingletons = true.
           // R: rma(yi, vi, method="REML") + coef_test(vcov="CR1", cluster=1:5)
           name: "All-singletons HC-robust (REML)",
+          rBlock: "CL-3",
           method: "REML",
           data: [
             { yi: 0.1, vi: 0.04, cluster: "1" },
@@ -18348,6 +18470,7 @@ when exported.</p>`,
           // RVE-1. 3-cluster, 6-study dataset (same data as CL-1), intercept-only, ρ=0.80
           // m=3 clusters × 2 studies each; df = m−1 = 2.
           name: "3-cluster 6-study intercept-only (rho=0.80)",
+          rBlock: "RVE-1",
           rho: 0.8,
           moderators: [],
           data: [
@@ -18375,6 +18498,7 @@ when exported.</p>`,
           // Cluster 1: 3 studies; clusters 2,3: 2 studies; cluster 4: 1 singleton.
           // m=4; df = m−1 = 3.
           name: "4-cluster 8-study heterogeneous sizes intercept-only (rho=0.80)",
+          rBlock: "RVE-2",
           rho: 0.8,
           moderators: [],
           data: [
@@ -18403,6 +18527,7 @@ when exported.</p>`,
           // RVE-3. 4-cluster, 8-study, meta-regression with 1 moderator, ρ=0.80
           // m=4 clusters × 2 studies each; p=2 (intercept + x); df = m−p = 2.
           name: "4-cluster 8-study meta-regression 1 moderator (rho=0.80)",
+          rBlock: "RVE-3",
           rho: 0.8,
           moderators: ["x"],
           data: [
@@ -18440,6 +18565,7 @@ when exported.</p>`,
           // Expected: tau2_within ≈ 0.035, tau2_between ≈ 0.110.
           // R: rma.mv(yi, vi, random=~1|cluster/study, method="REML")
           name: "Synthetic 4-cluster \xD7 3-study (REML)",
+          rBlock: "THREE-1",
           method: "REML",
           data: [
             { yi: 0, vi: 5e-3, cluster: "C1" },
@@ -18479,6 +18605,7 @@ when exported.</p>`,
           // Expected: tau2_within ≈ 0.0782, tau2_between ≈ 0.0268.
           // R: rma.mv(yi, vi, random=~1|cluster/study, method="REML")
           name: "Synthetic 5-cluster unequal sizes (REML)",
+          rBlock: "THREE-2",
           method: "REML",
           data: [
             { yi: 0.1, vi: 0.015, cluster: "A" },
@@ -18522,6 +18649,7 @@ when exported.</p>`,
         // ----------------------------------------------------------------
         {
           name: "LS-A: BCG data, intercept-only scale",
+          rBlock: "LS-A",
           locMods: [],
           scaleMods: [],
           data: [
@@ -18562,6 +18690,7 @@ when exported.</p>`,
         // ----------------------------------------------------------------
         {
           name: "LS-B: BCG data, ablat scale moderator",
+          rBlock: "LS-B",
           locMods: [],
           scaleMods: [{ key: "ablat", type: "continuous" }],
           data: [
@@ -18616,6 +18745,7 @@ when exported.</p>`,
         // ----------------------------------------------------------------
         {
           name: "LS-C: BCG data, ablat location + ablat scale",
+          rBlock: "LS-C",
           locMods: [{ key: "ablat", type: "continuous" }],
           scaleMods: [{ key: "ablat", type: "continuous" }],
           data: [
@@ -18667,6 +18797,45 @@ when exported.</p>`,
             scaleColNames: ["intercept", "ablat"]
           },
           citation: "Colditz et al. (1994) dat.bcg. R-verified (metafor 4.8.0, rma(yi,vi,mods=~ablat,scale=~ablat,method='ML')). QM_loc and QM_scale are Wald tests matching R QM and QS respectively."
+        }
+      ];
+      CONTRAST_BENCHMARKS = [
+        // -----------------------------------------------------------------------
+        // MR-CONTRAST-1 — region:EU vs region:NA
+        //   L = [0, 0, 1, -1]
+        //   est  = beta[region:EU] - beta[region:NA] = 0.1598 - 0.4339 = -0.2740
+        //   var  = vcov[2][2] + vcov[3][3] - 2*vcov[2][3]
+        //        = 0.42135388 + 0.13932588 - 2*0.17664826 = 0.20738324
+        //   se   = sqrt(0.20738324) = 0.45539350
+        //   z    = -0.2740 / 0.45539 = -0.60173
+        //   p    = 0.54736 (two-tailed normal)
+        //   CI   = est ± 1.959964 * se = [-1.16658, 0.61853]
+        //   R-verified (metafor 4.8.0, generate.R block MR-CONTRAST-1).
+        // -----------------------------------------------------------------------
+        {
+          name: "BCG \u2013 region:EU vs region:NA",
+          rBlock: "CONTRAST-1",
+          // Minimal reg object needed by testContrast()
+          reg: {
+            beta: [0.1024, -0.033, 0.1598, 0.4339],
+            vcov: [
+              [0.11349313, -347749e-8, 0.07058366, 236991e-8],
+              [-347749e-8, 20588e-8, -742037e-8, -338192e-8],
+              [0.07058366, -742037e-8, 0.42135388, 0.17664826],
+              [236991e-8, -338192e-8, 0.17664826, 0.13932588]
+            ],
+            crit: 1.959964,
+            dist: "z",
+            QEdf: 9
+          },
+          L: [0, 0, 1, -1],
+          expected: {
+            est: -0.274,
+            se: 0.4554,
+            stat: -0.6017,
+            p: 0.5474,
+            ci: [-1.1666, 0.6185]
+          }
         }
       ];
     }
@@ -19789,8 +19958,7 @@ when exported.</p>`,
       const d = 2 / Math.sqrt(sdi2);
       const J = 1 - 3 / (4 * df - 1);
       const g = d * J;
-      const vi_d = (9 / 30 + 1 / 28) / sdi2 + d ** 2 / (2 * df);
-      const vi_g = vi_d * J ** 2;
+      const vi_g = g ** 2 * (81 / 29 + 1 / 27) / (8 * sdi2 ** 2) + (9 / 29 + 1 / 27) / sdi2;
       smdhchk("yi = g", s.yi, g);
       smdhchk("vi = vi_g", s.vi, vi_g);
       smdhchk("se = \u221Avi_g", s.se, Math.sqrt(vi_g));
@@ -19840,8 +20008,8 @@ when exported.</p>`,
       const m = meta(studies, "DL");
       smdhchk("FE   \u2248 0.885", m.FE, 0.885, 0.01);
       smdhchk("RE   \u2248 0.879", m.RE, 0.879, 0.01);
-      smdhchk("tau2 \u2248 0.031", m.tau2, 0.031, 3e-3);
-      smdhchk("I2   \u2248 30%", m.I2, 30, 1);
+      smdhchk("tau2 \u2248 0.023", m.tau2, 0.023, 3e-3);
+      smdhchk("I2   \u2248 22%", m.I2, 22, 1.5);
     }
     console.log(smdhPass ? "\n\u2705 ALL SMDH UNIT TESTS PASSED" : "\n\u274C SOME SMDH UNIT TESTS FAILED");
     console.log("\n===== CVR UNIT TESTS =====\n");
@@ -20242,9 +20410,10 @@ when exported.</p>`,
     {
       const s = compute({ a: 30, b: 10, c: 10, d: 50 }, "PHI");
       const phi_exp = 7 / 12;
-      const vi_exp = (95 / 144) ** 2 / 99;
+      const pi1d = 0.4, pi2d = 0.6, pd1 = 0.4, pd2 = 0.6;
+      const vi_exp = 1 / 100 * (1 - phi_exp ** 2 + phi_exp * (1 + phi_exp ** 2 / 2) * (pi1d - pi2d) * (pd1 - pd2) / Math.sqrt(pi1d * pi2d * pd1 * pd2) - 0.75 * phi_exp ** 2 * ((pi1d - pi2d) ** 2 / (pi1d * pi2d) + (pd1 - pd2) ** 2 / (pd1 * pd2)));
       phiChk("\u03C6 = 7/12", s.yi, phi_exp);
-      phiChk("vi = (95/144)\xB2/99", s.vi, vi_exp);
+      phiChk("vi = LS formula", s.vi, vi_exp);
       phiChk("se = \u221Avi", s.se, Math.sqrt(vi_exp));
       phiChk("w  = 1/vi", s.w, 1 / vi_exp, 1e-6);
     }
@@ -23383,6 +23552,29 @@ when exported.</p>`,
       }
       console.log(threePass ? "\n\u2705 ALL THREE-LEVEL TESTS PASSED" : "\n\u274C SOME THREE-LEVEL TESTS FAILED");
     }
+    {
+      console.log("\n===== CUSTOM CONTRAST BENCHMARKS =====\n");
+      let contrastBmPass = true;
+      const bchkC = (label, got, expected, tol = 1e-3) => {
+        const ok = Math.abs(got - expected) < tol;
+        if (!ok) {
+          console.error(`  FAIL ${label}: got ${got}, expected ${expected}`);
+          contrastBmPass = false;
+        } else console.log(`  ok  ${label}`);
+      };
+      CONTRAST_BENCHMARKS.forEach((bm) => {
+        console.log(`--- Benchmark: ${bm.name} ---`);
+        const r = testContrast(bm.reg, bm.L);
+        const ex = bm.expected;
+        bchkC("est", r.est, ex.est);
+        bchkC("se", r.se, ex.se);
+        bchkC("stat", r.stat, ex.stat);
+        bchkC("p", r.p, ex.p);
+        bchkC("ci[0]", r.ci[0], ex.ci[0]);
+        bchkC("ci[1]", r.ci[1], ex.ci[1]);
+      });
+      console.log(contrastBmPass ? "\n\u2705 ALL CONTRAST BENCHMARK TESTS PASSED" : "\n\u274C SOME CONTRAST BENCHMARK TESTS FAILED");
+    }
   }
   var cdfPass, cdfchk, cdfNaN, tcdf2;
   var init_tests = __esm({
@@ -23687,6 +23879,29 @@ when exported.</p>`,
   function getCiLabel() {
     return (document.getElementById("ciLevel")?.value ?? "95") + "% CI";
   }
+  function formatContrastResult(result, reg) {
+    const { est, se, stat, p, ci } = result;
+    const statLabel = reg.dist === "t" ? `t(${reg.QEdf})` : "z";
+    const ciLabel = getCiLabel();
+    if (!isFinite(est)) {
+      return `<div class="reg-note reg-warn" style="margin-top:6px">
+      \u26A0 Contrast SE is zero \u2014 all weights may be zero or the contrast is not estimable.
+    </div>`;
+    }
+    return `
+    <table class="reg-table" style="margin-top:8px">
+      <thead><tr>
+        <th>Estimate</th><th>SE</th><th>${statLabel}</th><th>p</th><th>${ciLabel}</th>
+      </tr></thead>
+      <tbody><tr>
+        <td>${fmt(est)}</td>
+        <td>${fmt(se)}</td>
+        <td>${fmt(stat)}</td>
+        <td>${regFmtP(p)}</td>
+        <td>[${fmt(ci[0])}, ${fmt(ci[1])}]</td>
+      </tr></tbody>
+    </table>`;
+  }
   function regStars(p) {
     if (p < 1e-3) return `<span class="reg-sig-3">***</span>`;
     if (p < 0.01) return `<span class="reg-sig-2">**</span>`;
@@ -23987,6 +24202,29 @@ when exported.</p>`,
       </table>
       <div class="reg-note">*** p &lt; .001 &nbsp;\xB7&nbsp; ** p &lt; .01 &nbsp;\xB7&nbsp; * p &lt; .05 &nbsp;\xB7&nbsp; \xB7 p &lt; .10</div>
       ${modTestsBlock}
+      <details class="contrast-section">
+        <summary>Custom contrasts${hBtn("mreg.contrasts")}</summary>
+        <div class="reg-note" style="margin:4px 0 8px">
+          Enter a weight for each term, then click <em>Test</em>.
+          The test evaluates whether the linear combination L\xB7\u03B2 differs from zero.
+          Example: to compare two categorical levels, set their weights to 1 and \u22121.
+        </div>
+        <table class="reg-table">
+          <thead><tr><th>Term</th><th style="width:6em">Weight</th></tr></thead>
+          <tbody>
+            ${reg.colNames.map((name, i) => `
+              <tr>
+                <td>${name}</td>
+                <td><input type="number" class="contrast-weight" data-idx="${i}"
+                     value="0" step="any" style="width:5em"></td>
+              </tr>`).join("")}
+          </tbody>
+        </table>
+        <button class="btn-sm contrast-test-btn" type="button" style="margin-top:6px">
+          Test contrast
+        </button>
+        <div class="contrast-result"></div>
+      </details>
       ${fittedRows ? `
       <details>
         <summary>Fitted values &amp; residuals (k = ${reg.k})</summary>
@@ -25079,6 +25317,7 @@ when exported.</p>`,
     });
   }
   var _saveTimer = null;
+  var _lastReg = null;
   function scheduleSave() {
     clearTimeout(_saveTimer);
     _saveTimer = setTimeout(() => saveDraft(gatherSessionState(moderators, scaleModerators, { domains: _robDomains, data: _robData })), 1200);
@@ -25896,6 +26135,17 @@ when exported.</p>`,
         btn.textContent = "Export Word";
       }, 3e3);
     }
+  });
+  document.addEventListener("click", (e) => {
+    const btn = e.target.closest(".contrast-test-btn");
+    if (!btn) return;
+    if (!_lastReg) return;
+    const section = btn.closest(".contrast-section");
+    if (!section) return;
+    const inputs = section.querySelectorAll(".contrast-weight");
+    const L = Array.from(inputs).map((inp) => parseFloat(inp.value) || 0);
+    const result = testContrast(_lastReg, L);
+    section.querySelector(".contrast-result").innerHTML = formatContrastResult(result, _lastReg);
   });
   document.addEventListener("click", (e) => {
     const btn = e.target.closest(".export-btn");
@@ -26730,6 +26980,12 @@ when exported.</p>`,
     }
     return { subgroup, reg, ls };
   }
+  function _animateFresh(el) {
+    if (!el) return;
+    el.classList.remove("results-fresh");
+    void el.offsetWidth;
+    el.classList.add("results-fresh");
+  }
   function _renderAllResults(ctx) {
     const {
       type,
@@ -26910,22 +27166,48 @@ when exported.</p>`,
     const methodLabel = m.isMH ? "MH" : m.isPeto ? "Peto" : "";
     const clusterBanner = hasClusters ? isMHorPeto ? `<div class="reg-note" style="color:var(--muted);margin:2px 0 6px">\u2139 Cluster-robust SE is not available for M-H/Peto methods.</div>` : m.isClustered ? `<div class="reg-note" style="margin:2px 0 6px">Cluster-robust SEs active (C&nbsp;=&nbsp;${m.clustersUsed} cluster${m.clustersUsed === 1 ? "" : "s"}${m.allSingletons ? " \u2014 all singletons (HC-robust)" : ""}).</div>` : m.robustError ? `<div class="reg-note" style="color:var(--color-warning);margin:2px 0 6px">\u26A0 Cluster-robust SE: ${escapeHTML(m.robustError)}</div>` : "" : "";
     const robust_ci_disp = m.isClustered ? { lb: profile.transform(m.robustCiLow), ub: profile.transform(m.robustCiHigh) } : null;
-    const robustCILine = m.isClustered ? `${hBtn2("cluster.robust")}Robust CI [${fmt(robust_ci_disp.lb)}, ${fmt(robust_ci_disp.ub)}] | SE=${fmt(m.robustSE)} | z=${fmt(m.robustStat)} | p=${fmt(m.robustPval)} (df=${m.robustDf})<br>` : "";
+    const robustCILine = m.isClustered ? `Robust CI [${fmt(robust_ci_disp.lb)}, ${fmt(robust_ci_disp.ub)}] | SE=${fmt(m.robustSE)} | z=${fmt(m.robustStat)} | p=${fmt(m.robustPval)} (df=${m.robustDf})${hBtn2("cluster.robust")}<br>` : "";
     const SMD_TYPES = /* @__PURE__ */ new Set(["SMD", "SMDH", "SMD_paired", "SMD1", "SMD1H", "SMCC"]);
     const cles = SMD_TYPES.has(type) ? clES(m.RE, [m.ciLow, m.ciHigh]) : null;
-    const clesLine = cles ? `${hBtn2("pool.cles")}CLES: ${fmt(cles.estimate)} [${fmt(cles.ci[0])}, ${fmt(cles.ci[1])}]<br>` : "";
+    const clesLine = cles ? `CLES: ${fmt(cles.estimate)} [${fmt(cles.ci[0])}, ${fmt(cles.ci[1])}]${hBtn2("pool.cles")}<br>` : "";
     const ciLbl = getCiLabel2();
     elResults.innerHTML = warningHTML + clusterBanner + (isMHorPeto ? `
-    <b>${profile.label} (${methodLabel}):</b> ${fmt(FE_disp)}, ${ciLbl} [${fmt(feCi_disp.lb)}, ${fmt(feCi_disp.ub)}]<br>
-    <small style="color:var(--muted)">Fixed-effect only \u2014 no \u03C4\xB2, RE estimate, or prediction interval.</small><br>
-    ${hBtn2("het.Q")}Q(${m.df})=${fmt(m.stat)} | p=${fmt(m.pval)} | ${hBtn2("het.I2")}I\xB2=${fmt(m.I2)}% [${fmt(m.I2CI[0])}%, ${fmt(m.I2CI[1])}%] | ${hBtn2("het.H2")}H\xB2-CI=[${fmt(m.H2CI[0])}, ${isFinite(m.H2CI[1]) ? fmt(m.H2CI[1]) : "\u221E"}]
+    <div class="result-re-primary">
+      <span class="result-label">${profile.label} (${methodLabel})</span>
+      <span class="result-re-value">${fmt(FE_disp)}</span>
+      <span class="result-ci">${ciLbl} [${fmt(feCi_disp.lb)}, ${fmt(feCi_disp.ub)}]</span>
+    </div>
+    <div class="result-method-note">Fixed-effect only \u2014 no \u03C4\xB2, RE estimate, or prediction interval.</div>
+    <div class="result-het-group">
+      <div class="result-section-label">Heterogeneity</div>
+      <div class="result-het-stats">I\xB2=${fmt(m.I2)}% [${fmt(m.I2CI[0])}%, ${fmt(m.I2CI[1])}%]${hBtn2("het.I2")} &nbsp;\xB7&nbsp; H\xB2-CI=[${fmt(m.H2CI[0])}, ${isFinite(m.H2CI[1]) ? fmt(m.H2CI[1]) : "\u221E"}]${hBtn2("het.H2")}</div>
+      <div class="result-het-stats result-het-test">Q(${m.df})=${fmt(m.stat)}, p=${fmt(m.pval)}${hBtn2("het.Q")}</div>
+    </div>
   ` : `
-    <b>${profile.label} (FE):</b> ${fmt(FE_disp)}, ${ciLbl} [${fmt(feCi_disp.lb)}, ${fmt(feCi_disp.ub)}] |
-    <b>${profile.label} (RE):</b> ${fmt(RE_disp)}, ${ciLbl} [${fmt(ci_disp.lb)}, ${fmt(ci_disp.ub)}]${m.isClustered ? ` | SE (model)=${fmt(m.seRE)}` : ""}<br>
-    ${useTF && mAdjusted ? `<b>RE (adjusted):</b> ${fmt(RE_adj_disp)}${hasClusters ? ` <span style="color:var(--muted);font-size:0.85em">(cluster-robust not applied to imputed studies)</span>` : ""}<br>` : ""}
-    ${robustCILine}${clesLine}${hBtn2("het.tau2")}\u03C4\xB2=${fmt(m.tau2)} [${fmt(m.tauCI[0])}, ${isFinite(m.tauCI[1]) ? fmt(m.tauCI[1]) : "\u221E"}] | ${hBtn2("het.I2")}I\xB2=${fmt(m.I2)}% [${fmt(m.I2CI[0])}%, ${fmt(m.I2CI[1])}%] | ${hBtn2("het.H2")}H\xB2-CI=[${fmt(m.H2CI[0])}, ${isFinite(m.H2CI[1]) ? fmt(m.H2CI[1]) : "\u221E"}]<br>
-    ${hBtn2("het.Q")}${m.dist}-stat=${fmt(m.stat)} | p=${fmt(m.pval)}<br>
-    ${hBtn2("het.pred")}Prediction interval (Higgins 2009, t<sub>${m.df > 0 ? m.df - 1 : "\u2014"}</sub>): ${isFinite(pred_disp.lb) ? `[${fmt(pred_disp.lb)}, ${fmt(pred_disp.ub)}]` : "NA (k &lt; 3)"}
+    <div class="result-re-primary">
+      <span class="result-label">${profile.label} (RE)</span>
+      <span class="result-re-value">${fmt(RE_disp)}</span>
+      <span class="result-ci">${ciLbl} [${fmt(ci_disp.lb)}, ${fmt(ci_disp.ub)}]${m.isClustered ? ` &nbsp;<span class="result-se">SE (model) = ${fmt(m.seRE)}</span>` : ""}</span>
+    </div>
+    ${useTF && mAdjusted ? `<div class="result-re-adjusted">RE (adjusted): <b>${fmt(RE_adj_disp)}</b>${hasClusters ? ` <span class="result-note">(cluster-robust not applied to imputed studies)</span>` : ""}</div>` : ""}
+    <div class="result-stat-row">
+      <span class="result-row-label">Test of pooled effect</span>
+      <span class="result-stat-value">${m.dist}-stat = ${fmt(m.stat)}, p = ${fmt(m.pval)}</span>
+    </div>
+    <div class="result-stat-row">
+      <span class="result-row-label">Prediction interval</span>
+      <span class="result-stat-value">${isFinite(pred_disp.lb) ? `[${fmt(pred_disp.lb)}, ${fmt(pred_disp.ub)}]` : "NA (k &lt; 3)"}${hBtn2("het.pred")}</span>
+    </div>
+    <div class="result-fe-secondary">
+      <span class="result-label">${profile.label} (FE)</span>
+      <span>${fmt(FE_disp)}</span>
+      <span class="result-ci">${ciLbl} [${fmt(feCi_disp.lb)}, ${fmt(feCi_disp.ub)}]</span>
+    </div>
+    ${robustCILine}${clesLine}<div class="result-het-group">
+      <div class="result-section-label">Heterogeneity</div>
+      <div class="result-het-stats">\u03C4\xB2=${fmt(m.tau2)} [${fmt(m.tauCI[0])}, ${isFinite(m.tauCI[1]) ? fmt(m.tauCI[1]) : "\u221E"}]${hBtn2("het.tau2")} &nbsp;\xB7&nbsp; I\xB2=${fmt(m.I2)}% [${fmt(m.I2CI[0])}%, ${fmt(m.I2CI[1])}%]${hBtn2("het.I2")} &nbsp;\xB7&nbsp; H\xB2-CI=[${fmt(m.H2CI[0])}, ${isFinite(m.H2CI[1]) ? fmt(m.H2CI[1]) : "\u221E"}]${hBtn2("het.H2")}</div>
+      <div class="result-het-stats result-het-test">Q(${m.df})=${fmt(m.Q)}, p=${fmt(m.df > 0 ? 1 - chiSquareCDF(m.Q, m.df) : NaN)}${hBtn2("het.Q")}</div>
+    </div>
   `);
     const eggerRobustNote = egger.clustersUsed ? ` | p<sub>robust</sub>=${isFinite(egger.robustInterceptP) ? fmt(egger.robustInterceptP) : "\u2014"}` : "";
     const fatpetRobustNote = fatpet.clustersUsed ? ` | p<sub>FAT,rob</sub>=${isFinite(fatpet.robustSlopeP) ? fmt(fatpet.robustSlopeP) : "\u2014"} \xB7 p<sub>PET,rob</sub>=${isFinite(fatpet.robustInterceptP) ? fmt(fatpet.robustInterceptP) : "\u2014"}` : "";
@@ -26952,6 +27234,7 @@ when exported.</p>`,
       </div>
     </details>
   `;
+    _animateFresh(elResults);
     const influenceHTML = buildInfluenceHTML(influence);
     const hasSubgroup = subgroup && subgroup.G >= 2;
     const subgroupHTML = hasSubgroup ? buildSubgroupHTML(subgroup, profile, hasClusters) : "";
@@ -26959,6 +27242,7 @@ when exported.</p>`,
     elSubgroupSection.style.display = hasSubgroup ? "" : "none";
     elSubgroupTable.innerHTML = hasSubgroup && isMHorPeto ? `<p class="reg-note" style="margin:4px 0 8px">\u26A0 Subgroup pooling uses inverse-variance (DL) weights \u2014 switch to DL or REML for M-H subgroup analysis.</p>` + subgroupHTML : subgroupHTML;
     renderStudyTable(all, m, profile);
+    _animateFresh(document.getElementById("studyTable"));
     performance.mark("phase:loo:render:start");
     renderSensitivityPanel(studies, isMHorPeto ? null : m, isMHorPeto ? "DL" : method, ciMethod, profile, { isMHFallback: isMHorPeto }, alpha);
     performance.measure("phase:loo:render", "phase:loo:render:start");
@@ -26969,8 +27253,10 @@ when exported.</p>`,
     const scaleModSpec = opts.scaleModSpec;
     const kExcluded = reg ?? ls ? studies.length - (reg ?? ls).k : 0;
     if (ls) {
+      _lastReg = null;
       renderLocationScalePanel(ls, ciMethod, kExcluded);
     } else {
+      _lastReg = reg && !reg.rankDeficient ? reg : null;
       renderRegressionPanel(reg ?? {}, method, ciMethod, kExcluded, moderators);
     }
     const bubbleContainer = elBubblePlots;
