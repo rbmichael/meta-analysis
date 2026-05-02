@@ -1152,8 +1152,8 @@ export const BENCHMARKS = [
     expected: {
       yi:   [1.94783, 0.64561, 2.86020, 0.73333, 3.84000],
       FE:   1.232,
-      RE:   1.921,
-      tau2: 1.615,
+      RE:   1.922,
+      tau2: 1.608,
       I2:   92.73,  // Q-based
     },
     citation: "Synthetic dataset; cross-validated with metafor escalc('SMD1') + rma(method='REML').",
@@ -1204,8 +1204,8 @@ export const BENCHMARKS = [
     expected: {
       yi:   [1.94783, 0.64561, 2.86020, 0.73333, 3.84000],
       FE:   1.220,
-      RE:   1.919,
-      tau2: 1.600,
+      RE:   1.922,
+      tau2: 1.611,
       I2:   92.86,  // Q-based
     },
     citation: "Synthetic dataset; cross-validated with metafor escalc('SMD1H') + rma(method='REML').",
@@ -1247,8 +1247,9 @@ export const BENCHMARKS = [
   // Same raw data as the MD benchmark above.
   // Standardiser: sdi = √((sd1²+sd2²)/2)  (average, not pooled).
   // d = (m1−m2)/sdi,  g = d·J,  J = 1−3/(4·df−1),  df = n1+n2−2
-  // vi = [(sd1²/n1 + sd2²/n2)/sdi² + d²/(2·df)] · J²
-  // Pooled FE analytically derived; RE/τ²/I² via REML (Python script).
+  // vi(g) = g²·(sd1⁴/(n1−1)+sd2⁴/(n2−1))/(8·sdi²²) + (sd1²/(n1−1)+sd2²/(n2−1))/sdi²
+  //   Bonett (2009) Eq. 7 delta-method formula; uses n−1 denominators.
+  // FE/RE/τ²/I² cross-validated against metafor escalc("SMDH") + rma(method="REML").
   // ----------------------------------------------------------------
   {
     name: "Normand 1999 – SMDH (heteroscedastic g, REML)",
@@ -1266,14 +1267,14 @@ export const BENCHMARKS = [
       { label: "Uppsala",            n1:  60, m1:  30, sd1: 27, n2:  52, m2:  23, sd2: 20 }
     ],
     expected: {
-      // g per study (sdi = avg-SD standardiser); verified by formula
+      // g per study (sdi = avg-SD standardiser); yi unchanged from old formula (same d·J)
       yi:   [-0.3553, -0.3465, -2.3018, -1.8880, -0.3993, 0.1742, 0.2726, -0.4494, 0.2926],
-      FE:   -0.411,
-      RE:   -0.538,
-      tau2:  0.782,
-      I2:   93.5
+      FE:   -0.394,
+      RE:   -0.532,
+      tau2:  0.769,
+      I2:   92.8
     },
-    citation: "Normand (1999) Stat Med 18:321–359. dat.normand1999 in metafor. REML values computed analytically (Python)."
+    citation: "Normand (1999) Stat Med 18:321–359. dat.normand1999 in metafor. Bonett (2009) Psychol Methods 14:43–53 Eq. 7 variance formula. Cross-validated against metafor escalc/rma."
   },
 
   // ----------------------------------------------------------------
@@ -1333,12 +1334,12 @@ export const BENCHMARKS = [
     expected: {
       // g per study (sd_change standardiser), verified by formula
       yi:   [0.5417, 1.0198, 2.6635, 1.9096, 0.0765],
-      FE:    0.839,
-      RE:    1.038,
-      tau2:  0.373,
-      I2:   82.7
+      FE:    0.779,
+      RE:    1.003,
+      tau2:  0.3611,
+      I2:   81.7
     },
-    citation: "Morris (2008) Org Res Methods 11:364–386. SMCC formula: Borenstein et al. (2009). DL values computed analytically (Python)."
+    citation: "Morris (2008) Org Res Methods 11:364–386. SMCC formula: Morris (2008) Eq.17 / Borenstein et al. (2009) Table 4.5 — var(d)=1/n+d²/(2df). DL values from corrected formula."
   },
 
   // ----------------------------------------------------------------
@@ -1601,12 +1602,12 @@ export const BENCHMARKS = [
   // ----------------------------------------------------------------
   // PHI — BCG Vaccine (dat.bcg, phi coefficient)
   // Same 13 studies as the OR/RR/RD benchmarks above.
-  // phi = (a·d−b·c)/√((a+b)(c+d)(a+c)(b+d)),  vi = (1−φ²)²/(N−1)
-  // Large N per study → small vi; phi values are small negative
-  // (BCG reduces TB → negative association in vaccinated/unvaccinated
-  // × TB+ / TB− table). τ² is small in absolute terms but I² is high
-  // because the per-study vi are also tiny for the large-n studies.
-  // All values computed analytically (DL).
+  // phi = (a·d−b·c)/√((a+b)(c+d)(a+c)(b+d))
+  // vi: Digby (1983) LS delta-method formula (metafor vtype="LS"):
+  //   vi = (1/N)·(1−φ² + φ·(1+φ²/2)·(π₁.−π₂.)·(π.₁−π.₂)/√(π₁.·π₂.·π.₁·π.₂)
+  //            − ¾·φ²·[(π₁.−π₂.)²/(π₁.·π₂.) + (π.₁−π.₂)²/(π.₁·π.₂)])
+  // Large N per study → small vi; phi values are small negative.
+  // All values cross-validated against metafor escalc("PHI") + rma(method="DL").
   // ----------------------------------------------------------------
   {
     name: "BCG Vaccine – PHI (phi coefficient, DL)",
@@ -1628,15 +1629,15 @@ export const BENCHMARKS = [
       { label: "Comstock 1976",           a:  27, b: 16886, c:  29, d: 17825 }
     ],
     expected: {
-      // phi per study, verified by formula
+      // phi per study, unchanged (only vi formula changed)
       yi:   [-0.1001, -0.1635, -0.1067, -0.0684, -0.0092, -0.1798,
              -0.0677,  0.0005, -0.0164, -0.0947, -0.0110,  0.0089, -0.0003],
-      FE:   -0.012,
-      RE:   -0.048,
-      tau2:  0.001,
-      I2:   95.5
+      FE:   -0.013,
+      RE:   -0.051,
+      tau2:  0.0011,
+      I2:   96.0
     },
-    citation: "Colditz et al. (1994) JAMA 271:698–702. dat.bcg in metafor. DL values computed analytically (Python)."
+    citation: "Colditz et al. (1994) JAMA 271:698–702. dat.bcg in metafor. Digby (1983) Biometrics 39:849–851 LS variance. Cross-validated against metafor escalc/rma."
   },
 
   // ----------------------------------------------------------------
