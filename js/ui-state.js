@@ -56,7 +56,7 @@ export function getSoftWarnings(studyInput, type, label) {
 
 // Gather the current UI state into a versioned session object.
 // Schema is defined in session.js.
-export function gatherSessionState(mods, scaleMods, robState) {
+export function gatherSessionState(mods, scaleMods, ixs, robState) {
   const type    = document.getElementById("effectType").value;
   const profile = effectProfiles[type];
 
@@ -82,6 +82,7 @@ export function gatherSessionState(mods, scaleMods, robState) {
 
   const savedModerators = mods.map(m => ({ name: m.name, type: m.type, transform: m.transform || "linear" }));
   const savedScaleModerators = scaleMods.map(m => ({ name: m.name, type: m.type, transform: m.transform || "linear" }));
+  const savedInteractions = (ixs ?? []).map(ix => ({ name: ix.name, termA: ix.termA, termB: ix.termB }));
 
   const studies = [];
   document.querySelectorAll("#inputTable tr").forEach((r, i) => {
@@ -108,5 +109,5 @@ export function gatherSessionState(mods, scaleMods, robState) {
     studies.push({ study, inputs: effectInputs, group, cluster, moderators: modValues });
   });
 
-  return buildSession(settings, savedModerators, studies, robState, savedScaleModerators);
+  return buildSession(settings, savedModerators, studies, robState, savedScaleModerators, savedInteractions);
 }

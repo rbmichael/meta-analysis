@@ -137,6 +137,7 @@ import { regStars, regFmtP, buildRegCoeffRows, buildRegFittedRows,
   from "./ui-render.js";
 import { validateRow, gatherSessionState } from "./ui-state.js";
 import { initTable, moderators, doAddModerator, removeModerator, clearModerators,
+         interactions, doAddInteraction, removeInteraction, clearInteractions,
          updateTableHeaders, addRow, commitPendingDelete, removeRow, clearRow,
          updateValidationWarnings, collectStudies,
          refreshPreviewUI, previewCSV, commitImport, cancelImport }
@@ -155,7 +156,7 @@ let _lastReg = null;
 // — analysis is triggered separately by the callers.
 function scheduleSave() {
   clearTimeout(_saveTimer);
-  _saveTimer = setTimeout(() => saveDraft(gatherSessionState(moderators, scaleModerators, { domains: _robDomains, data: _robData })), 1200);
+  _saveTimer = setTimeout(() => saveDraft(gatherSessionState(moderators, scaleModerators, interactions, { domains: _robDomains, data: _robData })), 1200);
 }
 
 // ---------------- DEBOUNCED ANALYSIS ----------------
@@ -168,7 +169,7 @@ let _analysisRunning = false;
 function flushSave() {
   clearTimeout(_saveTimer);
   _saveTimer = null;
-  saveDraft(gatherSessionState(moderators, scaleModerators, { domains: _robDomains, data: _robData }));
+  saveDraft(gatherSessionState(moderators, scaleModerators, interactions, { domains: _robDomains, data: _robData }));
 }
 
 window.addEventListener("beforeunload", flushSave);
@@ -326,6 +327,7 @@ const HELP_LABELS = {
   "input.csv":             "CSV import and export",
   "input.session":         "Session save and load",
   "input.moderators":      "Moderators",
+  "input.interactions":    "Interaction terms",
   "input.scaleModerators": "Location-scale model moderators",
   "input.rob":             "Risk of bias",
   "cluster.id":            "Cluster ID",
@@ -429,6 +431,60 @@ function addModerator() {
   if (!name) return;
   doAddModerator(name, type, transform);
   nameEl.value = "";
+  refreshInteractionUI();
+  markStale();
+}
+
+// ---- Interaction term manager ----
+
+function refreshInteractionUI() {
+  const names = moderators.map(m => m.name);
+  const mgr = document.getElementById("interactionManager");
+  if (!mgr) return;
+  mgr.style.display = names.length >= 2 ? "" : "none";
+
+  const termA = document.getElementById("interactTermA");
+  const termB = document.getElementById("interactTermB");
+  if (!termA || !termB) return;
+
+  const prevA = termA.value;
+  const prevB = termB.value;
+  const opts = names.map(n => `<option value="${escapeHTML(n)}">${escapeHTML(n)}</option>`).join("");
+  termA.innerHTML = opts;
+  termB.innerHTML = opts;
+  if (names.includes(prevA)) termA.value = prevA;
+  if (names.includes(prevB) && prevB !== termA.value) termB.value = prevB;
+  // Ensure the two selects default to different moderators when possible.
+  if (termA.value === termB.value && names.length >= 2) {
+    termB.value = names.find(n => n !== termA.value) ?? names[0];
+  }
+
+  renderInteractionTags();
+}
+
+function renderInteractionTags() {
+  const container = document.getElementById("interactionTags");
+  if (!container) return;
+  container.innerHTML = "";
+  interactions.forEach(({ name, termA, termB }) => {
+    const span = document.createElement("span");
+    span.className = "mod-tag";
+    span.innerHTML = `${escapeHTML(termA)} × ${escapeHTML(termB)} <button class="remove-mod-btn" title="Remove interaction">×</button>`;
+    span.querySelector("button").addEventListener("click", () => {
+      removeInteraction(name);
+      renderInteractionTags();
+      markStale();
+    });
+    container.appendChild(span);
+  });
+}
+
+function addInteractionTerm() {
+  const termA = document.getElementById("interactTermA")?.value ?? "";
+  const termB = document.getElementById("interactTermB")?.value ?? "";
+  if (!termA || !termB || termA === termB) return;
+  doAddInteraction(termA, termB);
+  renderInteractionTags();
   markStale();
 }
 
@@ -699,6 +755,7 @@ document.getElementById("loadSession").addEventListener("click", () => document.
 document.getElementById("sessionFile").addEventListener("change", e => { if (e.target.files[0]) { loadSession(e.target.files[0]); e.target.value = ""; } });
 document.getElementById("addMod").addEventListener("click", addModerator);
 document.getElementById("modName").addEventListener("keydown", e => { if (e.key === "Enter") addModerator(); });
+document.getElementById("addInteraction").addEventListener("click", addInteractionTerm);
 document.getElementById("addScaleMod").addEventListener("click", addScaleModerator);
 document.getElementById("scaleModName").addEventListener("keydown", e => { if (e.key === "Enter") addScaleModerator(); });
 document.getElementById("cumulativeOrder").addEventListener("change", markStale);
@@ -1227,7 +1284,7 @@ document.getElementById("profileLikScale").addEventListener("change", () => {
 // ---------------- SESSION SAVE ----------------
 
 function saveSession() {
-  downloadBlob(serializeSession(gatherSessionState(moderators, scaleModerators, { domains: _robDomains, data: _robData })), "session.json", "application/json;charset=utf-8;");
+  downloadBlob(serializeSession(gatherSessionState(moderators, scaleModerators, interactions, { domains: _robDomains, data: _robData })), "session.json", "application/json;charset=utf-8;");
 }
 
 // ---------------- SESSION APPLY ----------------
@@ -1236,7 +1293,7 @@ function saveSession() {
 // Returns { profile, savedStudies } so callers can inspect missing columns etc.
 
 function applySession(session) {
-  const { settings = {}, moderators: savedMods = [], scaleModerators: savedScaleMods = [], studies: savedStudies = [], rob = {} } = session;
+  const { settings = {}, moderators: savedMods = [], scaleModerators: savedScaleMods = [], interactions: savedInteractions = [], studies: savedStudies = [], rob = {} } = session;
 
   // Apply settings
   const s = settings;
@@ -1289,6 +1346,13 @@ function applySession(session) {
     if (m.name && (m.type === "continuous" || m.type === "categorical"))
       doAddScaleModerator(m.name, m.type, m.transform || "linear");
   });
+
+  // Rebuild interaction terms (after moderators are restored)
+  clearInteractions();
+  savedInteractions.forEach(ix => {
+    if (ix.termA && ix.termB && ix.termA !== ix.termB) doAddInteraction(ix.termA, ix.termB);
+  });
+  refreshInteractionUI();
 
   // Rebuild table
   const type    = document.getElementById("effectType").value;
@@ -1464,6 +1528,7 @@ function init() {
     scheduleSave,
     renderRoBDataGrid,
     deleteRobEntry: key => { delete _robData[key]; },
+    onModeratorChanged: () => { refreshInteractionUI(); renderInteractionTags(); },
   });
 
   // Wire the shared tooltip element into plots.js (removes "#tooltip" coupling)
@@ -2100,14 +2165,14 @@ function _runSensitivityBatch(studies, m, opts) {
 
 // ── Helper: meta-regression / subgroup batch ─────────────────────────────────
 function _runRegressionBatch(studies, m, opts) {
-  const { method, ciMethod, alpha, modSpec, scaleModSpec } = opts;
+  const { method, ciMethod, alpha, modSpec, scaleModSpec, interactionSpec } = opts;
 
   const subgroup = subgroupAnalysis(studies, method, ciMethod, alpha);
   let reg = null, ls = null;
   if (scaleModSpec.length > 0) {
-    ls = lsModel(studies, modSpec, scaleModSpec, { ciMethod, alpha });
-  } else if (modSpec.length > 0) {
-    reg = metaRegression(studies, modSpec, method, ciMethod, alpha);
+    ls = lsModel(studies, modSpec, scaleModSpec, { ciMethod, alpha, locInteractions: interactionSpec });
+  } else if (modSpec.length > 0 || interactionSpec.length > 0) {
+    reg = metaRegression(studies, modSpec, method, ciMethod, alpha, interactionSpec);
   }
   return { subgroup, reg, ls };
 }
@@ -2396,7 +2461,9 @@ function _renderAllResults(ctx) {
     renderLocationScalePanel(ls, ciMethod, kExcluded);
   } else {
     _lastReg = (reg && !reg.rankDeficient) ? reg : null;
-    renderRegressionPanel(reg ?? {}, method, ciMethod, kExcluded, moderators);
+    // Pass moderators + interaction pseudo-entries so the panel sees the full term count.
+    const _allTermMods = [...moderators, ...interactions.map(ix => ({ name: ix.name }))];
+    renderRegressionPanel(reg ?? {}, method, ciMethod, kExcluded, _allTermMods);
   }
 
   const bubbleContainer = elBubblePlots;
@@ -2665,6 +2732,7 @@ async function runAnalysis() {
     const rveRho        = parseFloat(document.getElementById("rveRho")?.value ?? 0.8);
     const modSpec       = moderators.map(mod => ({ key: mod.name, type: mod.type, transform: mod.transform || "linear" }));
     const scaleModSpec  = scaleModerators.map(mod => ({ key: mod.name, type: mod.type, transform: mod.transform || "linear" }));
+    const interactionSpec = interactions.map(ix => ({ name: ix.name, termA: ix.termA, termB: ix.termB }));
     const cumulativeOrder = document.getElementById("cumulativeOrder")?.value || "input";
 
     // Selection model settings (read up front so _runPubBiasBatch is pure)
@@ -2684,7 +2752,7 @@ async function runAnalysis() {
 
     const opts = {
       method, ciMethod, alpha, type, useTF, tfEstimator, useTFAdjusted,
-      isMHorPeto, hasClusters, rveRho, modSpec, scaleModSpec, cumulativeOrder,
+      isMHorPeto, hasClusters, rveRho, modSpec, scaleModSpec, interactionSpec, cumulativeOrder,
       selModeVal, selPreset, selSides, selCuts,
       bayesMu0, bayesSigmaMu, bayesSigmaTau,
     };

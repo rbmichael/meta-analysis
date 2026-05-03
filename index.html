@@ -307,6 +307,16 @@
             <button id="addMod">+ Add</button><button class="help-btn" data-help="input.moderators" title="Help">?</button>
           </div>
 
+          <!-- Interaction term manager (shown when ≥2 moderators exist) -->
+          <div id="interactionManager" style="display:none">
+            <strong>Interaction terms:</strong>
+            <select id="interactTermA"></select>
+            <span style="margin:0 2px">×</span>
+            <select id="interactTermB"></select>
+            <button id="addInteraction">+ Add</button><button class="help-btn" data-help="input.interactions" title="Help">?</button>
+            <div id="interactionTags"></div>
+          </div>
+
           <!-- Scale moderator manager (location-scale model) -->
           <div id="scaleModManager">
             <strong>Location-scale model moderators:</strong>

@@ -18,10 +18,11 @@ import { readTextFile } from "./io.js";
 
 // ── Injected callbacks (set by initTable) ────────────────────────────────────
 let _cb = {
-  markStale:        () => {},
-  scheduleSave:     () => {},
-  renderRoBDataGrid: () => {},
-  deleteRobEntry:   (_key) => {},
+  markStale:            () => {},
+  scheduleSave:         () => {},
+  renderRoBDataGrid:    () => {},
+  deleteRobEntry:       (_key) => {},
+  onModeratorChanged:   () => {},  // called after any moderator add/remove
 };
 
 /**
@@ -106,18 +107,48 @@ export function doAddModerator(name, type, transform = "linear") {
 /** Remove a moderator from state and from every table row. */
 export function removeModerator(name) {
   moderators.splice(0, moderators.length, ...moderators.filter(m => m.name !== name));
+  // Remove any interaction terms that reference this moderator.
+  interactions.splice(0, interactions.length, ...interactions.filter(ix => ix.termA !== name && ix.termB !== name));
   const table = document.getElementById("inputTable");
   for (let i = 0; i < table.rows.length; i++) {
     const cell = [...table.rows[i].cells].find(c => c.dataset.mod === name);
     if (cell) cell.remove();
   }
+  _cb.onModeratorChanged();
   _cb.markStale();
 }
 
 /** Reset all moderators: clears state and removes all [data-mod] DOM elements. */
 export function clearModerators() {
   moderators.splice(0);
+  interactions.splice(0);
   document.querySelectorAll("[data-mod]").forEach(el => el.remove());
+}
+
+// =============================================================================
+// INTERACTION TERM STATE
+// Derived terms (A×B outer product) — no table column, computed at analysis time.
+// =============================================================================
+
+/** @type {{ name: string, termA: string, termB: string }[]} */
+export const interactions = [];
+
+/** Add an interaction between two existing moderators (no-op if already exists). */
+export function doAddInteraction(termA, termB) {
+  const name = `${termA}×${termB}`;
+  if (!termA || !termB || termA === termB) return;
+  if (interactions.some(ix => ix.name === name)) return;
+  interactions.push({ name, termA, termB });
+}
+
+/** Remove a single interaction by its composite name. */
+export function removeInteraction(name) {
+  interactions.splice(0, interactions.length, ...interactions.filter(ix => ix.name !== name));
+}
+
+/** Reset all interactions. */
+export function clearInteractions() {
+  interactions.splice(0);
 }
 
 // =============================================================================

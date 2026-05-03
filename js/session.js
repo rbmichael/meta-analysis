@@ -9,6 +9,7 @@
 //                     bayesMu0, bayesSigmaMu, bayesSigmaTau  (Bayesian priors),
 //                     selMode, selPreset, selSides, selCuts   (selection model)
 //   moderators    — array of { name, type } objects
+//   interactions  — array of { name, termA, termB } interaction term specs
 //   studies       — array of { study, inputs: {col: value}, group, cluster, moderators: {name: value} }
 
 export const SESSION_VERSION = 1;
@@ -20,8 +21,10 @@ export const SESSION_VERSION = 1;
 // studies         — array of { study, inputs, group, moderators }
 // rob             — { domains: string[], data: { [label]: { [domain]: string } } }
 //                   Optional; omitted fields default to empty on load.
-export function buildSession(settings, savedModerators, studies, rob = { domains: [], data: {} }, scaleModerators = []) {
-  return { version: SESSION_VERSION, settings, moderators: savedModerators, scaleModerators, studies, rob };
+// scaleModerators — array of { name, type }
+// interactions    — array of { name, termA, termB }
+export function buildSession(settings, savedModerators, studies, rob = { domains: [], data: {} }, scaleModerators = [], interactions = []) {
+  return { version: SESSION_VERSION, settings, moderators: savedModerators, scaleModerators, interactions, studies, rob };
 }
 
 // Serialize a session object to a BOM-prefixed JSON string.

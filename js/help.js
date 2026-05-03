@@ -39,6 +39,17 @@ export const HELP = {
            "Values are entered in the moderator columns of the data table.",
   },
 
+  "input.interactions": {
+    title: "Interaction terms",
+    body:  "An interaction term A×B tests whether the effect of A on the outcome differs across levels of B. " +
+           "Select two existing moderators and click + Add. No new data column is needed — values are computed as the outer product of the parent moderator columns. " +
+           "Continuous×continuous: one product column (x₁·x₂). " +
+           "Continuous×categorical (k levels): k−1 product columns. " +
+           "Categorical×categorical (j, k levels): (j−1)×(k−1) product columns. " +
+           "Each interaction receives its own Wald test and LRT in the per-term table. " +
+           "Caution: interaction tests have low power unless k is large; include main effects of both terms alongside any interaction.",
+  },
+
   "input.scaleModerators": {
     title: "Scale moderators (log τ²)",
     body:  "Variables that predict between-study heterogeneity τ² in a location-scale model. " +

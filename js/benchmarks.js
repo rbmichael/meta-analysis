@@ -3773,3 +3773,131 @@ export const CONTRAST_BENCHMARKS = [
     },
   },
 ];
+
+// =============================================================================
+// INTERACTION_BENCHMARKS — interaction term meta-regression
+//
+// Each entry drives a metaRegression() call with both moderators[] and
+// interactions[].  Expected values are R-verified against metafor (generate.R
+// blocks INT-1 and INT-2).
+//
+// Note: entries with expected === null are pending R cross-validation;
+// the test runner logs them as "PENDING" and does not fail on them.
+// =============================================================================
+export const INTERACTION_BENCHMARKS = [
+
+  // -----------------------------------------------------------------------
+  // INT-1: BCG – ablat (continuous) × region (categorical, ref = "AS")
+  // Model: yi ~ ablat + region + ablat:region
+  // 6 columns: intercept, ablat, region:EU, region:NA,
+  //            ablat×region:EU, ablat×region:NA
+  // R-verified: generate.R block INT-1
+  // -----------------------------------------------------------------------
+  {
+    name: "BCG – ablat × region interaction (REML, normal CI)",
+    rBlock: "INT-1",
+    moderators: [
+      { key: "ablat",  type: "continuous"  },
+      { key: "region", type: "categorical" }
+    ],
+    interactions: [
+      { name: "ablat×region", termA: "ablat", termB: "region" }
+    ],
+    tauMethod: "REML",
+    ciMethod:  "normal",
+    data: [
+      { label: "Aronson 1948",           yi: -0.8893113339202054, vi: 0.3255847650039614,    ablat: 44, region: "NA" },
+      { label: "Ferguson & Simes 1949",  yi: -1.5853886572014306, vi: 0.19458112139814387,   ablat: 55, region: "EU" },
+      { label: "Rosenthal 1960",         yi: -1.348073148299693,  vi: 0.41536796536796533,   ablat: 42, region: "AS" },
+      { label: "Hart & Sutherland 1977", yi: -1.4415511900213054, vi: 0.020010031902247573,  ablat: 52, region: "EU" },
+      { label: "Frimodt-Moller 1973",    yi: -0.2175473222112957, vi: 0.05121017216963086,   ablat: 13, region: "AS" },
+      { label: "Stein & Aronson 1953",   yi: -0.786115585818864,  vi: 0.0069056184559087574, ablat: 44, region: "NA" },
+      { label: "Vandiviere 1973",        yi: -1.6208982235983924, vi: 0.22301724757231517,   ablat: 19, region: "AS" },
+      { label: "TPT Madras 1980",        yi:  0.011952333523841173,vi: 0.00396157929781773,  ablat: 13, region: "AS" },
+      { label: "Coetzee & Berjak 1968",  yi: -0.4694176487381487, vi: 0.056434210463248966,  ablat: 27, region: "NA" },
+      { label: "Rosenthal 1961",         yi: -1.3713448034727846, vi: 0.07302479361302891,   ablat: 42, region: "NA" },
+      { label: "Comstock 1974",          yi: -0.33935882833839015,vi: 0.01241221397155972,   ablat: 18, region: "NA" },
+      { label: "Comstock & Webster 1969",yi:  0.4459134005713783, vi: 0.5325058452001528,    ablat: 33, region: "NA" },
+      { label: "Comstock 1976",          yi: -0.017313948216879493,vi: 0.0714046596839863,   ablat: 33, region: "NA" }
+    ],
+    expectedColNames: [
+      "intercept", "ablat", "region:EU", "region:NA",
+      "ablat×region:EU", "ablat×region:NA"
+    ],
+    expected: {
+      beta:  [ 0.3384, -0.0479,  0.7133,  0.0018,  0.0000,  0.0210],
+      se:    [ 0.5447,  0.0279, 12.7976,  0.8483,  0.2428,  0.0336],
+      tau2:  0.1544,
+      QE:    20.1679,
+      QEdf:  7,
+      QEp:   0.0052,
+      QM:    11.6853,
+      QMdf:  5,
+      QMp:   0.0394,
+      R2:    0.5070,
+      colNames: ["intercept", "ablat", "region:EU", "region:NA", "ablat×region:EU", "ablat×region:NA"],
+      // Per-term tests — Wald from REML fit; LRT partial (drop only the term's own columns)
+      modTests: [
+        { name: "ablat",        QM: 2.9544, QMdf: 1, QMp: 0.0856, lrt: 8.2985, lrtDf: 1, lrtP: 0.0040 },
+        { name: "region",       QM: 0.0031, QMdf: 2, QMp: 0.9984, lrt: 3.4417, lrtDf: 2, lrtP: 0.1789 },
+        { name: "ablat×region", QM: 0.3943, QMdf: 2, QMp: 0.8210, lrt: 3.7232, lrtDf: 2, lrtP: 0.1554 },
+      ],
+    },
+    citation: "BCG vaccine data (dat.bcg). Verified against metafor 4.8.0 (generate.R block INT-1). Wald QM from anova(btt=); partial LRT drops only the term's own columns (non-hierarchical, Type-III-style), matching JS implementation.",
+  },
+
+  // -----------------------------------------------------------------------
+  // INT-2: BCG – ablat (continuous) × year (continuous)
+  // Model: yi ~ ablat + year + ablat:year
+  // 4 columns: intercept, ablat, year, ablat×year
+  // R-verified: generate.R block INT-2
+  // -----------------------------------------------------------------------
+  {
+    name: "BCG – ablat × year interaction (REML, normal CI)",
+    rBlock: "INT-2",
+    moderators: [
+      { key: "ablat", type: "continuous" },
+      { key: "year",  type: "continuous" }
+    ],
+    interactions: [
+      { name: "ablat×year", termA: "ablat", termB: "year" }
+    ],
+    tauMethod: "REML",
+    ciMethod:  "normal",
+    data: [
+      { label: "Aronson 1948",           yi: -0.8893113339202054, vi: 0.3255847650039614,    ablat: 44, year: 1948 },
+      { label: "Ferguson & Simes 1949",  yi: -1.5853886572014306, vi: 0.19458112139814387,   ablat: 55, year: 1949 },
+      { label: "Rosenthal 1960",         yi: -1.348073148299693,  vi: 0.41536796536796533,   ablat: 42, year: 1960 },
+      { label: "Hart & Sutherland 1977", yi: -1.4415511900213054, vi: 0.020010031902247573,  ablat: 52, year: 1977 },
+      { label: "Frimodt-Moller 1973",    yi: -0.2175473222112957, vi: 0.05121017216963086,   ablat: 13, year: 1973 },
+      { label: "Stein & Aronson 1953",   yi: -0.786115585818864,  vi: 0.0069056184559087574, ablat: 44, year: 1953 },
+      { label: "Vandiviere 1973",        yi: -1.6208982235983924, vi: 0.22301724757231517,   ablat: 19, year: 1973 },
+      { label: "TPT Madras 1980",        yi:  0.011952333523841173,vi: 0.00396157929781773,  ablat: 13, year: 1980 },
+      { label: "Coetzee & Berjak 1968",  yi: -0.4694176487381487, vi: 0.056434210463248966,  ablat: 27, year: 1968 },
+      { label: "Rosenthal 1961",         yi: -1.3713448034727846, vi: 0.07302479361302891,   ablat: 42, year: 1961 },
+      { label: "Comstock 1974",          yi: -0.33935882833839015,vi: 0.01241221397155972,   ablat: 18, year: 1974 },
+      { label: "Comstock & Webster 1969",yi:  0.4459134005713783, vi: 0.5325058452001528,    ablat: 33, year: 1969 },
+      { label: "Comstock 1976",          yi: -0.017313948216879493,vi: 0.0714046596839863,   ablat: 33, year: 1976 }
+    ],
+    expectedColNames: ["intercept", "ablat", "year", "ablat×year"],
+    expected: {
+      beta:  [-30.2418,  0.5363,  0.0154, -0.0003],
+      se:    [127.3070,  2.7623,  0.0645,  0.0014],
+      tau2:  0.1432,
+      QE:    25.1699,
+      QEdf:  9,
+      QEp:   0.0028,
+      QM:    9.9224,
+      QMdf:  3,
+      QMp:   0.0192,
+      R2:    0.5427,
+      colNames: ["intercept", "ablat", "year", "ablat×year"],
+      modTests: [
+        { name: "ablat",    QM: 0.0377, QMdf: 1, QMp: 0.8461, lrt: 1.8841, lrtDf: 1, lrtP: 0.1699 },
+        { name: "year",     QM: 0.0572, QMdf: 1, QMp: 0.8110, lrt: 1.7277, lrtDf: 1, lrtP: 0.1887 },
+        { name: "ablat×year", QM: 0.0417, QMdf: 1, QMp: 0.8383, lrt: 1.9081, lrtDf: 1, lrtP: 0.1672 },
+      ],
+    },
+    citation: "BCG vaccine data (dat.bcg). Verified against metafor 4.8.0 (generate.R block INT-2). Wald QM from anova(btt=); partial LRT drops only the term's own columns, matching JS implementation.",
+  },
+];

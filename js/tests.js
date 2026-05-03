@@ -1,6 +1,6 @@
 import { round, transformEffect, chiSquareCDF, chiSquareQuantile, parseCounts, bivariateNormalCDF, normalQuantile, tCritical, fCDF, normalCDF, tCDF } from "./utils.js";
 import { validateStudy } from "./profiles.js";
-import { BENCHMARKS, PUB_BIAS_BENCHMARKS, INFLUENCE_BENCHMARKS, META_REGRESSION_BENCHMARKS, VH_BENCHMARKS, MH_BENCHMARKS, CLUSTER_BENCHMARKS, RVE_BENCHMARKS, THREE_LEVEL_BENCHMARKS, LS_BENCHMARKS, CONTRAST_BENCHMARKS } from "./benchmarks.js";
+import { BENCHMARKS, PUB_BIAS_BENCHMARKS, INFLUENCE_BENCHMARKS, META_REGRESSION_BENCHMARKS, VH_BENCHMARKS, MH_BENCHMARKS, CLUSTER_BENCHMARKS, RVE_BENCHMARKS, THREE_LEVEL_BENCHMARKS, LS_BENCHMARKS, CONTRAST_BENCHMARKS, INTERACTION_BENCHMARKS } from "./benchmarks.js";
 import { compute, meta, metaMH, metaPeto, robustMeta, sandwichVar, robustWlsResult, metaRegression, testContrast, tau2_HS, tau2_HE, tau2_ML, tau2_SJ, beggTest, eggerTest, fatPetTest, petPeeseTest, failSafeN, tesTest, heterogeneityCIs, cumulativeMeta, influenceDiagnostics, harbordTest, petersTest, deeksTest, rueckerTest, leaveOneOut, baujat, blupMeta, pCurve, pUniform, estimatorComparison, subgroupAnalysis, logLik, bfgs, selIntervalProbs, selIntervalIdx, selectionLogLik, SEL_CUTS_ONE_SIDED, SEL_CUTS_TWO_SIDED, veveaHedges, SELECTION_PRESETS, profileLikTau2, profileLikCI, bayesMeta, priorSensitivity, rvePooled, meta3level, lsModel, adjustPvals, henmiCopas, waapWls, clES } from "./analysis.js";
 import { trimFill } from "./trimfill.js";
 import { parseCSV } from "./csv.js";
@@ -3989,6 +3989,71 @@ export function runTests() {
   });
 
   console.log(mrBenchPass ? "\n✅ ALL META-REGRESSION BENCHMARK TESTS PASSED" : "\n❌ SOME META-REGRESSION BENCHMARK TESTS FAILED");
+
+  // ===== INTERACTION BENCHMARKS =====
+  console.log("\n===== INTERACTION BENCHMARKS =====\n");
+  let ixBenchPass = true;
+  const { chk: ixchk } = makeChk(() => { ixBenchPass = false; });
+
+  INTERACTION_BENCHMARKS.forEach(bm => {
+    const studies = bm.data.map(d => ({ ...d, se: Math.sqrt(d.vi) }));
+    const r = metaRegression(studies, bm.moderators, bm.tauMethod, bm.ciMethod, 0.05, bm.interactions ?? []);
+
+    console.log(`--- ${bm.name} ---`);
+
+    // Always verify column names (these do not require R cross-validation)
+    if (bm.expectedColNames) {
+      const ok = bm.expectedColNames.every((n, i) => r.colNames[i] === n);
+      if (!ok) {
+        console.error(`  FAIL colNames: got ${JSON.stringify(r.colNames)}, expected ${JSON.stringify(bm.expectedColNames)}`);
+        ixBenchPass = false;
+      } else {
+        console.log(`  ok  colNames = ${JSON.stringify(r.colNames)}`);
+      }
+    }
+
+    // Check interaction columns exist in modColMap
+    if (bm.interactions) {
+      bm.interactions.forEach(ix => {
+        const cols = r.modColMap[ix.name] ?? [];
+        if (cols.length === 0) {
+          console.error(`  FAIL modColMap["${ix.name}"] is empty — interaction columns not built`);
+          ixBenchPass = false;
+        } else {
+          console.log(`  ok  modColMap["${ix.name}"] = [${cols.join(", ")}]`);
+        }
+      });
+    }
+
+    if (!bm.expected) {
+      console.log(`  PENDING R cross-validation (generate.R block ${bm.rBlock}) — skipping numerical checks`);
+      return;
+    }
+
+    const exp = bm.expected;
+    exp.beta.forEach((b, j) => ixchk(`beta[${j}] (${r.colNames[j]})`, r.beta[j], b, 0.01));
+    exp.se.forEach((s, j)   => ixchk(`se[${j}]   (${r.colNames[j]})`, r.se[j],   s, 0.01));
+    ixchk("tau2", r.tau2, exp.tau2, exp.tau2 * 0.05 + 1e-6);
+    ixchk("QE",   r.QE,   exp.QE,   0.01);
+    ixchk("QEp",  r.QEp,  exp.QEp,  0.01);
+    ixchk("QM",   r.QM,   exp.QM,   0.01);
+    ixchk("QMp",  r.QMp,  exp.QMp,  0.01);
+    if (exp.R2 !== undefined) ixchk("R2", r.R2, exp.R2, 0.01);
+    if (exp.modTests) {
+      exp.modTests.forEach((mt, idx) => {
+        const got = r.modTests[idx];
+        if (!got) { console.error(`  FAIL modTests[${idx}] missing`); ixBenchPass = false; return; }
+        ixchk(`modTests[${idx}] (${mt.name}) QM`,  got.QM,  mt.QM,  0.01);
+        ixchk(`modTests[${idx}] (${mt.name}) QMp`, got.QMp, mt.QMp, 0.01);
+        if (mt.lrt !== undefined) {
+          ixchk(`modTests[${idx}] (${mt.name}) LRT`,  got.lrt,  mt.lrt,  0.01);
+          ixchk(`modTests[${idx}] (${mt.name}) lrtP`, got.lrtP, mt.lrtP, 0.02);
+        }
+      });
+    }
+  });
+
+  console.log(ixBenchPass ? "\n✅ ALL INTERACTION BENCHMARK TESTS PASSED" : "\n❌ SOME INTERACTION BENCHMARK TESTS FAILED");
 
   // ===== CSV IMPORT — MODERATOR DETECTION =====
   // Verifies that parseCSV + the column-classification heuristic used by

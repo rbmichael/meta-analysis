@@ -267,6 +267,44 @@ input[type="file"]::file-selector-button:hover {
   color: var(--fg-muted);
 }
 
+/* ---- Interaction term manager (shown when ≥2 moderators exist) ---- */
+#interactionManager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 0 14px;
+  border-top: 1px solid var(--border);
+  margin-top: 2px;
+}
+
+#interactionManager strong {
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+}
+
+/* ---- Scale moderator manager (location-scale model) ---- */
+#scaleModManager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 0 14px;
+  border-top: 1px solid var(--border);
+  margin-top: 2px;
+}
+
+#scaleModManager strong {
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+}
+
 /* ---- Risk-of-bias domain manager ---- */
 #robManager {
   display: flex;

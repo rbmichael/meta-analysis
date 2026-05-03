@@ -42,7 +42,10 @@
 }
 
 #inputControls {
-  flex-shrink: 0;
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 #inputTableToolbar {
@@ -59,7 +62,7 @@
   overflow-y: auto;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
-  min-height: 0;
+  min-height: 60px;
   margin-top: 10px;
 }
 

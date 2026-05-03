@@ -1974,6 +1974,43 @@ wᵢ = 1/(vᵢ + τ²), with τ² estimated by REML or the selected estimator.</
       },
 
       {
+        id: "guide-interactions",
+        title: "Interaction terms",
+        body: `<p>An <strong>interaction term</strong> A×B tests whether the slope of A differs
+across levels of B (or equivalently, whether B's effect differs across values of A).</p>
+<p><strong>How to add:</strong> once two or more moderators exist, the <em>Interaction
+terms</em> row appears below the Moderators row. Select two moderators from the
+dropdowns and click + Add. No extra data column is required — the columns are
+computed automatically as the outer product of the parent moderators' design-matrix
+columns.</p>
+<p><strong>Design matrix columns produced:</strong></p>
+<ul>
+  <li><strong>Continuous × continuous</strong> — one column: x₁ · x₂.
+    Coefficient β₃ in <code>y = β₀ + β₁x₁ + β₂x₂ + β₃(x₁·x₂)</code> is the
+    change in the slope of x₁ per unit increase in x₂.</li>
+  <li><strong>Continuous × categorical (k levels)</strong> — k−1 columns, one per
+    non-reference level. Each coefficient is the difference in slope between that
+    level and the reference level.</li>
+  <li><strong>Categorical × categorical (j, k levels)</strong> — (j−1)×(k−1)
+    columns.</li>
+</ul>
+<p><strong>Main effects must be included.</strong> An interaction is only
+interpretable alongside the main effects of both terms. The app includes them
+automatically when you add the interaction, but removing a main-effect moderator
+will also remove any interaction that references it.</p>
+<p><strong>Tests:</strong> each interaction term receives its own omnibus Wald test
+(Q<sub>M</sub>) and Likelihood Ratio Test in the per-term table, using the same
+logic as simple moderator tests.</p>
+<p><strong>Power caution:</strong> interaction tests require substantially more
+power than main-effect tests. With k &lt; 20 studies, interactions are usually
+underpowered and results are exploratory.</p>`,
+        citations: [
+          "Borenstein, M., Hedges, L. V., Higgins, J. P. T., & Rothstein, H. R. (2009). <em>Introduction to Meta-Analysis.</em> Wiley.",
+          "Higgins, J. P. T., & Thompson, S. G. (2004). Controlling the risk of spurious findings from meta-regression. <em>Statistics in Medicine, 23</em>(11), 1663–1682.",
+        ],
+      },
+
+      {
         id: "guide-custom-contrasts",
         title: "Custom contrasts",
         body: `<p>A <strong>custom contrast</strong> tests whether a specified linear
@@ -3099,6 +3136,7 @@ export const HELP_TO_GUIDE = {
   "reg.aic":             "guide-aic-bic",
   "reg.mcc":             "guide-mcc",
   "input.moderators":    "guide-subgroup",
+  "input.interactions":  "guide-interactions",
   "input.rob":           "guide-rob",
   "bayes.model":         "guide-bayes-meta",
   "bayes.tau":           "guide-bayes-meta",

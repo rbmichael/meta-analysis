@@ -226,6 +226,12 @@ export function rcsBasis(x, knots) {
 //   type      — "continuous" (read as number) or "categorical" (dummy-coded)
 //   transform — nonlinear transform for continuous moderators (default "linear")
 //
+// interactions: array of { name: string, termA: string, termB: string }
+//   name      — display name (e.g. "age×region"); used as key in modColMap
+//   termA/B   — keys of moderators already processed above; outer product of
+//               their columns is appended to the design matrix.
+//               Poly/RCS moderators: all basis columns participate in the product.
+//
 // Returns:
 //   X         — k×p row-major matrix (array of k rows, each a p-length array)
 //   colNames  — p column labels; first is always "intercept"
@@ -235,10 +241,11 @@ export function rcsBasis(x, knots) {
 //                    continuous "age" (poly2)  → [2, 3]  (x, x²)
 //                    categorical "type" (3 lvl)→ [3, 4]
 //               degenerate moderators (< 2 levels) map to []
+//               interaction "age×region"        → [5, 6]  (one per level pair)
 //   modKnots  — maps moderator key to knot array (only set for rcs* transforms)
 //   validMask — k booleans; true when all entries in that row are finite
 //   k, p      — matrix dimensions
-export function buildDesignMatrix(studies, moderators = []) {
+export function buildDesignMatrix(studies, moderators = [], interactions = []) {
   const k = studies.length;
 
   // Build column-by-column, then transpose to row-major at the end.
@@ -314,6 +321,23 @@ export function buildDesignMatrix(studies, moderators = []) {
         columns.push(xVals);
         colNames.push(key);
         modColMap[key] = [nextColIdx++];
+      }
+    }
+  }
+
+  // ---- Interaction terms (outer product of parent moderator columns) ----
+  for (const { name, termA, termB } of interactions) {
+    const colsA = modColMap[termA] ?? [];
+    const colsB = modColMap[termB] ?? [];
+    modColMap[name] = [];
+    if (colsA.length === 0 || colsB.length === 0) continue;
+    for (const ia of colsA) {
+      for (const ib of colsB) {
+        const ca = columns[ia], cb = columns[ib];
+        columns.push(ca.map((a, i) => a * cb[i]));
+        // Name each product column from its parent column names.
+        colNames.push(`${colNames[ia]}×${colNames[ib]}`);
+        modColMap[name].push(nextColIdx++);
       }
     }
   }
@@ -542,12 +566,12 @@ export function tau2_metaReg(yi, vi, X, method = "REML", tol = REML_TOL, maxIter
  *             I2: number, R2: number|null, vif: number[], maxVIF: number,
  *             colNames: string[], k: number, p: number, rankDeficient: boolean }}
  */
-export function metaRegression(studies, moderators = [], method = "REML", ciMethod = "normal", alpha = 0.05) {
+export function metaRegression(studies, moderators = [], method = "REML", ciMethod = "normal", alpha = 0.05, interactions = []) {
   // Filter to studies with finite yi and vi
   const valid = studies.filter(s => isFinite(s.yi) && isFinite(s.vi) && s.vi > 0);
   const k = valid.length;
 
-  const { X, colNames, modColMap, modKnots, validMask, p } = buildDesignMatrix(valid, moderators);
+  const { X, colNames, modColMap, modKnots, validMask, p } = buildDesignMatrix(valid, moderators, interactions);
 
   // Further filter rows where all moderator values are finite
   const rows   = valid.filter((_, i) => validMask[i]);
@@ -669,10 +693,15 @@ export function metaRegression(studies, moderators = [], method = "REML", ciMeth
   }
 
   // ---- Per-moderator omnibus tests ----
-  // One Wald test per input moderator, restricted to the columns that moderator
-  // contributed to the design matrix.  Same chi-sq / F logic as the global QM
-  // above.  When there is exactly one moderator, modTests[0] equals the global QM.
-  const modTests = moderators.map(({ key }) => {
+  // One Wald test per input moderator (and per interaction term), restricted to
+  // the columns that term contributed to the design matrix.  Same chi-sq / F
+  // logic as the global QM above.  When there is exactly one moderator (and no
+  // interactions), modTests[0] equals the global QM.
+  const _allTermKeys = [
+    ...moderators.map(m => m.key),
+    ...interactions.map(ix => ix.name),
+  ];
+  const modTests = _allTermKeys.map(key => {
     const colIdxs = modColMap[key] ?? [];
     const df = colIdxs.length;
     if (df === 0) return { name: key, colIdxs, QM: NaN, QMdf: 0, QMp: NaN };
@@ -788,8 +817,10 @@ export function metaRegression(studies, moderators = [], method = "REML", ciMeth
   // Augments each modTest entry in-place with {lrt, lrtDf, lrtP}.
   {
     // --- ML fit of the full model (used as LRT baseline for all moderators) ---
-    const _mlFit = (X_) => {
-      const t2 = Math.max(0, tau2_metaReg(yi, vi, X_, "ML"));
+    // Always checks tau2=0 (boundary) as well as the Fisher-scoring optimum,
+    // then returns the higher LL. This handles cases where the true ML estimate
+    // is at the boundary (tau2=0) but the iterative solver converges elsewhere.
+    const _llAt = (X_, t2) => {
       const w_ = vi.map(v => 1 / (v + t2));
       const { beta: b_, rankDeficient: rd_ } = wls(X_, yi, w_);
       if (rd_ || !b_) return NaN;
@@ -800,6 +831,13 @@ export function metaRegression(studies, moderators = [], method = "REML", ciMeth
         ll -= 0.5 * (Math.log(2 * Math.PI) + Math.log(v) + (yi[i] - fit) ** 2 / v);
       }
       return ll;
+    };
+    const _mlFit = (X_) => {
+      const t2_opt = Math.max(0, tau2_metaReg(yi, vi, X_, "ML"));
+      const ll_opt = _llAt(X_, t2_opt);
+      if (t2_opt === 0) return ll_opt;
+      const ll_bnd = _llAt(X_, 0);
+      return isFinite(ll_bnd) && ll_bnd > ll_opt ? ll_bnd : ll_opt;
     };
     const LL_ML_full = _mlFit(Xf);
     for (const mt of modTests) {
@@ -938,15 +976,16 @@ export function adjustPvals(pvals, method) {
  * @returns structured result object
  */
 export function lsModel(studies, locMods = [], scaleMods = [], opts = {}) {
-  const ciMethod = opts.ciMethod ?? "normal";
-  const alpha    = opts.alpha    ?? 0.05;
+  const ciMethod    = opts.ciMethod    ?? "normal";
+  const alpha       = opts.alpha       ?? 0.05;
+  const locInteractions = opts.locInteractions ?? [];
 
   // ---- Filter valid studies ----
   const valid = studies.filter(s => isFinite(s.yi) && isFinite(s.vi) && s.vi > 0);
   const k = valid.length;
 
   // ---- Build design matrices ----
-  const locDM   = buildDesignMatrix(valid, locMods);
+  const locDM   = buildDesignMatrix(valid, locMods, locInteractions);
   const scaleDM = buildDesignMatrix(valid, scaleMods);
 
   const validMask = locDM.validMask.map((v, i) => v && scaleDM.validMask[i]);
