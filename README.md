@@ -94,6 +94,8 @@ Continuous and categorical moderators. Multiple moderators may be added simultan
 
 **Custom contrasts** — test any linear combination of coefficients H₀: L·β = 0, where L is a weight vector you supply (one weight per model term). SE = √(L′VL) using the full variance–covariance matrix. Typical use: set +1 and −1 on two categorical levels to directly compare them.
 
+**Permutation tests** — after running meta-regression, click *Run permutation test* to compute non-parametric p-values for the omnibus Q_M and per-moderator Q_M statistics. Shuffles y_i labels across studies (v_i and τ² held fixed) to build an exact null distribution. Recommended when k < 20 where parametric χ²/F approximations may be anti-conservative (Higgins & Thompson, 2004). Runs in a Web Worker with progress bar; equivalent to `metafor::permutest(res, iter=999)`.
+
 **Location-scale model** — add scale moderators (log τ² = Zγ) to model heterogeneity simultaneously with the mean effect. Each study gets its own τ̂²ᵢ = exp(Zᵢγ̂). Estimated by ML via profile likelihood. Equivalent to `rma(..., scale = ~ ..., method = "ML")` in metafor (Viechtbauer, 2021).
 
 ### Subgroup analysis
@@ -244,6 +246,7 @@ git commit -m "Rebuild bundle after sync with main"
 - Hedges LV, Olkin I (1985). *Statistical Methods for Meta-Analysis*. Academic Press.
 - Hedges LV, Tipton E, Johnson MC (2010). Robust variance estimation in meta-regression with dependent effect size estimates. *Res Synth Methods*, 1, 39–65.
 - Henmi M, Copas JB (2010). Confidence intervals for random effects meta-analysis and robustness to publication bias. *Stat Med*, 29(29), 2969–2983.
+- Higgins JPT, Thompson SG (2004). Controlling the risk of spurious findings from meta-regression. *Stat Med*, 23(11), 1663–1682.
 - Higgins JPT, Thompson SG, Spiegelhalter DJ (2009). A re-evaluation of random-effects meta-analysis. *J R Stat Soc A*, 172, 137–159.
 - Holm S (1979). A simple sequentially rejective multiple test procedure. *Scand J Stat*, 6(2), 65–70.
 - Ioannidis JPA, Trikalinos TA (2007). An exploratory test for an excess of significant findings. *Clin Trials*, 4(3), 245–253.

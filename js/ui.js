@@ -112,6 +112,7 @@ import { effectProfiles, getProfile } from "./profiles.js";
 import { trimFill } from "./trimfill.js";
 import { drawForest, drawFunnel, drawBubble, drawPartialResidualBubble, drawInfluencePlot, drawCumulativeForest, drawCumulativeFunnel, drawOrchardPlot, drawCaterpillarPlot, drawBlupPlot, drawBaujatPlot, drawLabbe, drawRoBTrafficLight, drawRoBSummary, drawGoshPlot, drawProfileLikTau2, drawBayesTauPosterior, drawBayesMuPosterior, drawQQPlot, drawRadialPlot, setTooltipElement } from "./plots.js";
 import { goshCompute, GOSH_MAX_K } from "./gosh.js";
+import { permTestSync, permPval } from "./perm.js";
 import { exportSVG, exportPNG, exportTIFF } from "./export.js";
 // report.js (81 KB) and docx.js (51 KB) are loaded on first export click.
 // guide.js (166 KB) and help.js (76 KB) are loaded on first use so they don't
@@ -133,7 +134,7 @@ import { regStars, regFmtP, buildRegCoeffRows, buildRegFittedRows,
          renderPCurvePanel, renderPUniformPanel, renderSelectionModelPanel,
          buildInfluenceHTML, bayesInterpretation, buildBayesSummaryHTML,
          buildSensitivityHTML, buildSubgroupHTML, renderGoshInfo,
-         formatContrastResult }
+         formatContrastResult, renderPermResults }
   from "./ui-render.js";
 import { validateRow, gatherSessionState } from "./ui-state.js";
 import { initTable, moderators, doAddModerator, removeModerator, clearModerators,
@@ -1271,6 +1272,18 @@ syncSelControls();
 // ---------------- GOSH ----------------
 document.getElementById("goshRun").addEventListener("click", runGosh);
 
+// ---------------- PERMUTATION TEST ----------------
+document.getElementById("permRunBtn").addEventListener("click", _startPermTest);
+document.getElementById("permCancelBtn").addEventListener("click", () => {
+  if (permState.worker) { permState.worker.terminate(); permState.worker = null; }
+  const elProgress = document.getElementById("permProgress");
+  const elRun      = document.getElementById("permRunBtn");
+  const elCancel   = document.getElementById("permCancelBtn");
+  if (elProgress) elProgress.style.display = "none";
+  if (elRun)    elRun.style.display = "";
+  if (elCancel) elCancel.style.display = "none";
+});
+
 // ---------------- PROFILE LIKELIHOOD SCALE TOGGLE ----------------
 document.getElementById("profileLikScale").addEventListener("change", () => {
   if (appState.reportArgs?.profileLik) {
@@ -2023,6 +2036,135 @@ function runGosh() {
 
 
 // -----------------------------------------------------------------------------
+// Permutation test state and runner
+// -----------------------------------------------------------------------------
+const permState = { worker: null };
+
+function _clearPermResults() {
+  const el = document.getElementById("permResults");
+  if (el) el.innerHTML = "";
+  const prog = document.getElementById("permProgress");
+  if (prog) prog.style.display = "none";
+  const cancelBtn = document.getElementById("permCancelBtn");
+  if (cancelBtn) cancelBtn.style.display = "none";
+  const runBtn = document.getElementById("permRunBtn");
+  if (runBtn) runBtn.style.display = "";
+  if (permState.worker) { permState.worker.terminate(); permState.worker = null; }
+}
+
+function _startPermTest() {
+  if (!_lastReg || _lastReg.rankDeficient) return;
+  const reg = _lastReg;
+
+  const nPerm = parseInt(document.getElementById("permIter")?.value ?? "999", 10);
+  const seed  = 12345;
+
+  const elProgress = document.getElementById("permProgress");
+  const elBar      = document.getElementById("permProgressBar");
+  const elText     = document.getElementById("permProgressText");
+  const elRun      = document.getElementById("permRunBtn");
+  const elCancel   = document.getElementById("permCancelBtn");
+  const elResults  = document.getElementById("permResults");
+
+  if (elResults) elResults.innerHTML = "";
+  if (elProgress) elProgress.style.display = "";
+  if (elBar) { elBar.value = 0; elBar.max = 100; }
+  if (elText) elText.textContent = "0%";
+  if (elRun) elRun.style.display = "none";
+  if (elCancel) elCancel.style.display = "";
+
+  // Flatten design matrix to Float64Array for worker transfer
+  const k = reg.yi.length;
+  const p = reg.p;
+  const XTA = new Float64Array(k * p);
+  for (let i = 0; i < k; i++) for (let j = 0; j < p; j++) XTA[i * p + j] = reg.Xf[i][j];
+
+  // Per-moderator colIdxs
+  const modTests = Array.isArray(reg.modTests) ? reg.modTests : [];
+  const modColLens  = new Int32Array(modTests.map(mt => (mt.colIdxs ?? []).length));
+  const totalIdxs   = modColLens.reduce((s, v) => s + v, 0);
+  const modColIdxsTA = new Int32Array(totalIdxs);
+  let off = 0;
+  for (const mt of modTests) {
+    for (const idx of (mt.colIdxs ?? [])) modColIdxsTA[off++] = idx;
+  }
+
+  const onProgress = (done, total) => {
+    const pct = Math.round(done / total * 100);
+    if (elBar)  elBar.value = pct;
+    if (elText) elText.textContent = `${pct}%`;
+  };
+
+  const onDone = (result) => {
+    permState.worker = null;
+    if (elProgress) elProgress.style.display = "none";
+    if (elRun)    elRun.style.display = "";
+    if (elCancel) elCancel.style.display = "none";
+    renderPermResults(result, reg);
+  };
+
+  const onError = (msg) => {
+    permState.worker = null;
+    if (elProgress) elProgress.style.display = "none";
+    if (elRun)    elRun.style.display = "";
+    if (elCancel) elCancel.style.display = "none";
+    if (elResults) elResults.innerHTML = `<div class="reg-note reg-warn">⚠ Permutation error: ${escapeHTML(msg)}</div>`;
+  };
+
+  // Try Worker first
+  const yiTA = new Float64Array(reg.yi);
+  const viTA = new Float64Array(reg.vi);
+
+  let workerOk = false;
+  try {
+    const workerUrl = new URL("./perm.worker.js", import.meta.url).href;
+    const w = new Worker(workerUrl);
+    permState.worker = w;
+    workerOk = true;
+
+    w.onmessage = function (e) {
+      const msg = e.data;
+      if (msg.type === "progress") {
+        onProgress(msg.done, msg.total);
+      } else if (msg.type === "done") {
+        permState.worker = null;
+        onDone(msg);
+      } else if (msg.type === "error") {
+        permState.worker = null;
+        onError(msg.message);
+      }
+    };
+    w.onerror = function (e) {
+      permState.worker = null;
+      if (e.lineno > 0) {
+        onError(e.message || "Worker crashed");
+        return;
+      }
+      // file:// load failure — synchronous fallback
+      const result = permTestSync({ yi: reg.yi, vi: reg.vi, Xf: reg.Xf,
+        QM_obs: reg.QM, nPerm, seed, method: reg.method || 'REML', modTests });
+      if (result.error) { onError(result.error); return; }
+      onDone(result);
+    };
+    w.postMessage(
+      { yi: yiTA, vi: viTA, X: XTA, QM_obs: reg.QM, nPerm, seed, p, k,
+        method: reg.method || 'REML',
+        nMods: modTests.length, modColIdxs: modColIdxsTA, modColLens },
+      [yiTA.buffer, viTA.buffer, XTA.buffer]
+    );
+  } catch (_) {
+    workerOk = false;
+  }
+
+  if (!workerOk) {
+    const result = permTestSync({ yi: reg.yi, vi: reg.vi, Xf: reg.Xf,
+      QM_obs: reg.QM, nPerm, seed, method: reg.method || 'REML', modTests });
+    if (result.error) { onError(result.error); return; }
+    onDone(result);
+  }
+}
+
+// -----------------------------------------------------------------------------
 // renderSensitivity(mu0, sigmaMu, sigmaTau, ciLevel)
 // -----------------------------------------------------------------------------
 // Runs priorSensitivity() using the cached bayesState studies and renders the
@@ -2487,6 +2629,13 @@ function _renderAllResults(ctx) {
     // Pass moderators + interaction pseudo-entries so the panel sees the full term count.
     const _allTermMods = [...moderators, ...interactions.map(ix => ({ name: ix.name }))];
     renderRegressionPanel(reg ?? {}, method, ciMethod, kExcluded, _allTermMods);
+
+    // Show permutation controls when a valid regression result exists
+    const elPermSection = document.getElementById("permSection");
+    if (elPermSection) {
+      elPermSection.style.display = _lastReg ? "" : "none";
+      _clearPermResults();
+    }
   }
 
   const bubbleContainer = elBubblePlots;

@@ -880,9 +880,11 @@ export function metaRegression(studies, moderators = [], method = "REML", ciMeth
     QM, QMdf, QMp, QMdist: useKH ? "F" : "chi2",
     modTests, vif, maxVIF,
     I2, colNames, modColMap, modKnots, k: kf, p, rankDeficient: false, dist,
+    method,
     fitted, residuals: eRE, stdResiduals,
     labels: rows.map(s => s.label || ""),
     studiesUsed: rows,   // exact set used in the fit (for bubble plot)
+    Xf,        // filtered design matrix (k×p) — used by permutation worker
     yi, vi,    // pass through for display
     // Model-fit indices
     LL, LL_ML, LL_REML, AIC, BIC, npar, kBIC,

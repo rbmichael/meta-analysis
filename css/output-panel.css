@@ -537,3 +537,21 @@
   font-size: 0.8125rem;
   color: var(--fg-muted);
 }
+
+/* ---- Permutation test controls ---- */
+#permSection {
+  margin: 10px 0 4px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--border-color, #ddd);
+}
+.perm-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 0.875rem;
+}
+.perm-results-block {
+  margin: 8px 0 2px;
+  font-size: 0.875rem;
+}

@@ -371,6 +371,8 @@
         </div>
       </div>
 
+      </div><!-- /#inputControls -->
+
       <div id="inputTableToolbar">
         <button id="addStudy">Add Study</button>
         <span class="io-sep" role="separator" aria-hidden="true"></span>
@@ -379,7 +381,6 @@
         <span id="inputStaleBadge" hidden>Results out of date</span>
       </div>
       <div id="runProgress" role="progressbar" aria-label="Running analysis" aria-live="polite" hidden><div id="runProgressBar"></div></div>
-      </div><!-- /#inputControls -->
 
       <!-- Data table -->
       <div id="inputTableWrap">
@@ -804,6 +805,24 @@
         <details class="results-section" id="regressionSection" style="display:none">
           <summary class="results-section-header">Meta-regression</summary>
           <div id="regressionPanel"></div>
+          <!-- Permutation test controls (shown when a valid regression result exists) -->
+          <div id="permSection" style="display:none">
+            <div class="perm-controls">
+              <label for="permIter" data-help="perm.iter">Permutations:</label>
+              <select id="permIter">
+                <option value="99">99</option>
+                <option value="999" selected>999</option>
+                <option value="4999">4999</option>
+              </select>
+              <button id="permRunBtn" class="run-btn" data-help="perm.run">Run permutation test</button>
+              <button id="permCancelBtn" class="run-btn" style="display:none">Cancel</button>
+            </div>
+            <div id="permProgress" style="display:none">
+              <progress id="permProgressBar" value="0" max="100" style="width:180px;vertical-align:middle"></progress>
+              <span id="permProgressText" style="margin-left:6px;font-size:0.9em"></span>
+            </div>
+            <div id="permResults"></div>
+          </div>
           <div id="bubblePlots"></div>
         </details>
 
@@ -970,6 +989,15 @@
       p-values. Adjusted p-values appear alongside raw values in the per-moderator tests table.
       Matches R's <code>p.adjust(method="bonferroni"/"holm")</code>.</p>
 
+      <p><strong>Permutation tests</strong> — after running meta-regression, click
+      <em>Run permutation test</em> to compute non-parametric p-values for the omnibus
+      Q<sub>M</sub> and each per-moderator Q<sub>M</sub>. Labels y<sub>i</sub> are shuffled
+      across studies (v<sub>i</sub> and τ² held fixed) to build the null distribution.
+      Permutation p = (1 + #{Q<sub>M,perm</sub> ≥ Q<sub>M,obs</sub>}) / (nPerm + 1).
+      Recommended when k &lt; 20 and parametric approximations may be unreliable
+      (Higgins &amp; Thompson, 2004). Runs in a Web Worker with a live progress bar;
+      equivalent to <code>metafor::permutest(res, iter=999)</code>.</p>
+
       <p><strong>Custom contrasts</strong> — after running a meta-regression, expand the
       <em>Custom contrasts</em> panel to test any linear combination of coefficients:
       H₀: L·β = 0, where L is a weight vector you supply. SE = √(L′VL) using the full
@@ -1114,6 +1142,7 @@
         <li>Harville DA (1977). Maximum likelihood approaches to variance component estimation and to related problems. <em>J Am Stat Assoc,</em> 72(358), 320–338.</li>
         <li>Hedges LV, Olkin I (1985). <em>Statistical Methods for Meta-Analysis.</em> Academic Press.</li>
         <li>Hedges LV, Tipton E, Johnson MC (2010). Robust variance estimation in meta-regression with dependent effect size estimates. <em>Res Synth Methods,</em> 1, 39–65.</li>
+        <li>Higgins JPT, Thompson SG (2004). Controlling the risk of spurious findings from meta-regression. <em>Stat Med,</em> 23(11), 1663–1682.</li>
         <li>Higgins JPT, Thompson SG, Spiegelhalter DJ (2009). A re-evaluation of random-effects meta-analysis. <em>J R Stat Soc A,</em> 172, 137–159.</li>
         <li>Henmi M, Copas JB (2010). Confidence intervals for random effects meta-analysis and robustness to publication bias. <em>Stat Med,</em> 29(29), 2969–2983.</li>
         <li>Holm S (1979). A simple sequentially rejective multiple test procedure. <em>Scand J Stat,</em> 6(2), 65–70.</li>

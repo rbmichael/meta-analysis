@@ -2065,6 +2065,51 @@ wᵢ = 1/(vᵢ + τ²), with τ² estimated by REML or the selected estimator.</
       },
 
       {
+        id: "guide-permutation-test",
+        title: "Permutation tests (meta-regression)",
+        body: `<p>Permutation tests provide non-parametric p-values for the omnibus
+moderator test (Q<sub>M</sub>) in meta-regression. They are especially useful
+when the number of studies k is small (< 20), where the chi-square and F
+approximations used by the standard Wald test can be anti-conservative.</p>
+<p><strong>How it works:</strong></p>
+<ol>
+  <li>Fit the meta-regression model and record the observed Q<sub>M</sub>.</li>
+  <li>Shuffle the moderator values across studies (permuting rows of the design
+  matrix X) while keeping each study's effect size y<sub>i</sub> and sampling
+  variance v<sub>i</sub> together. Re-estimate τ² for the permuted data using
+  the same method as the original model, then refit WLS.</li>
+  <li>Repeat nPerm times to build the null distribution of Q<sub>M</sub> under
+  H₀: no moderator relationship.</li>
+  <li>Permutation p-value = #{Q<sub>M,perm</sub> ≥ Q<sub>M,obs</sub>} / nPerm
+  (the observed Q<sub>M</sub> is placed at position 0, so it always counts once).</li>
+</ol>
+<p><strong>Interpretation:</strong> The permutation p-value is exact (up to Monte
+Carlo error) for the null hypothesis that there is no relationship between the
+moderator and the true effects — regardless of sample size. A significant result
+(p < 0.05) means the observed Q<sub>M</sub> is unusually large relative to what
+would arise by chance under the null.</p>
+<p><strong>Limitations:</strong></p>
+<ul>
+  <li>Permuting moderator assignments assumes studies are exchangeable under the
+  null — the effect sizes and sampling variances remain paired, only the
+  moderator labels are shuffled.</li>
+  <li>Very small k (< 5) limits the minimum achievable p-value:
+  with k = 5 there are only 5! = 120 distinct permutations, so p < 0.01 is
+  impossible without ties.</li>
+  <li>Re-estimating τ² per permutation matches the default behaviour of
+  metafor's <code>permutest()</code> and gives exact inference under the
+  random-effects model.</li>
+</ul>
+<p>Per-moderator permutation p-values (shown when 2+ moderators) test each
+moderator's Q<sub>M</sub> contribution separately using the same permutation
+draws.</p>`,
+        citations: [
+          "Higgins, J. P. T., & Thompson, S. G. (2004). Controlling the risk of spurious findings from meta-regression. <em>Statistics in Medicine, 23</em>(11), 1663–1682.",
+          "Follmann, D. A., & Proschan, M. A. (1999). Valid inference in random effects meta-analysis. <em>Biometrics, 55</em>(3), 732–737.",
+        ],
+      },
+
+      {
         id: "guide-interactions",
         title: "Interaction terms",
         body: `<p>An <strong>interaction term</strong> A×B tests whether the slope of A differs
@@ -3223,6 +3268,8 @@ export const HELP_TO_GUIDE = {
   "diag.metaregression": "guide-metaregression",
   "mreg.lrt":            "guide-metaregression",
   "mreg.contrasts":      "guide-custom-contrasts",
+  "perm.run":            "guide-permutation-test",
+  "perm.iter":           "guide-permutation-test",
   "diag.nonlinear-reg":  "guide-nonlinear-reg",
   "diag.locationscale":  "guide-location-scale",
   "input.scaleModerators": "guide-location-scale",

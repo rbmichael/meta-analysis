@@ -1197,6 +1197,26 @@ export const HELP = {
            "predictor; levels − 1 for a categorical predictor).",
   },
 
+  "perm.run": {
+    title: "Permutation test",
+    body:  "Non-parametric test of the omnibus moderator effect (QM). " +
+           "Shuffles the observed effect sizes yi across studies while keeping sampling " +
+           "variances vi fixed, refits the WLS regression, and records the resulting QM statistic. " +
+           "Repeating this nPerm times builds a null distribution; the permutation p-value is " +
+           "(1 + #{QM_perm ≥ QM_obs}) / (nPerm + 1). " +
+           "τ² is fixed at the observed value (no re-estimation per permutation), " +
+           "matching metafor's permutest() default. " +
+           "Useful when k is small (< 20) and parametric χ² or F approximations are unreliable.",
+  },
+
+  "perm.iter": {
+    title: "Number of permutations",
+    body:  "Number of random label permutations used to build the null QM distribution. " +
+           "More permutations give a more precise p-value: with nPerm = 999 the Monte Carlo " +
+           "standard error of a p = 0.05 result is ≈ 0.007; with nPerm = 4999 it is ≈ 0.003. " +
+           "The minimum achievable p-value is 1/(nPerm + 1).",
+  },
+
   "mreg.contrasts": {
     title: "Custom contrasts",
     body:  "Tests a linear combination L·β = 0, where L is a weight vector you supply " +

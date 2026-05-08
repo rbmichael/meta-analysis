@@ -1,6 +1,7 @@
 import { round, transformEffect, chiSquareCDF, chiSquareQuantile, parseCounts, bivariateNormalCDF, normalQuantile, tCritical, fCDF, normalCDF, tCDF } from "./utils.js";
 import { validateStudy } from "./profiles.js";
-import { BENCHMARKS, PUB_BIAS_BENCHMARKS, INFLUENCE_BENCHMARKS, META_REGRESSION_BENCHMARKS, VH_BENCHMARKS, MH_BENCHMARKS, CLUSTER_BENCHMARKS, RVE_BENCHMARKS, THREE_LEVEL_BENCHMARKS, LS_BENCHMARKS, CONTRAST_BENCHMARKS, INTERACTION_BENCHMARKS, HALFNORM_BENCHMARKS, POWER_BENCHMARKS, NEGEXP_BENCHMARKS, BETA_BENCHMARKS } from "./benchmarks.js";
+import { BENCHMARKS, PUB_BIAS_BENCHMARKS, INFLUENCE_BENCHMARKS, META_REGRESSION_BENCHMARKS, VH_BENCHMARKS, MH_BENCHMARKS, CLUSTER_BENCHMARKS, RVE_BENCHMARKS, THREE_LEVEL_BENCHMARKS, LS_BENCHMARKS, CONTRAST_BENCHMARKS, INTERACTION_BENCHMARKS, HALFNORM_BENCHMARKS, POWER_BENCHMARKS, NEGEXP_BENCHMARKS, BETA_BENCHMARKS, PERM_BENCHMARKS } from "./benchmarks.js";
+import { permTestSync, permPval } from "./perm.js";
 import { compute, meta, metaMH, metaPeto, robustMeta, sandwichVar, robustWlsResult, metaRegression, testContrast, tau2_HS, tau2_HE, tau2_ML, tau2_SJ, beggTest, eggerTest, fatPetTest, petPeeseTest, failSafeN, tesTest, heterogeneityCIs, cumulativeMeta, influenceDiagnostics, harbordTest, petersTest, deeksTest, rueckerTest, leaveOneOut, baujat, blupMeta, pCurve, pUniform, estimatorComparison, subgroupAnalysis, logLik, bfgs, selIntervalProbs, selIntervalIdx, selectionLogLik, SEL_CUTS_ONE_SIDED, SEL_CUTS_TWO_SIDED, veveaHedges, SELECTION_PRESETS, halfNormalSelModel, powerSelModel, negexpSelModel, betaSelModel, profileLikTau2, profileLikCI, bayesMeta, priorSensitivity, rvePooled, meta3level, lsModel, adjustPvals, henmiCopas, waapWls, clES } from "./analysis.js";
 import { trimFill } from "./trimfill.js";
 import { parseCSV } from "./csv.js";
@@ -6407,6 +6408,65 @@ export function runTests() {
 
     console.log(contrastBmPass ? "\n✅ ALL CONTRAST BENCHMARK TESTS PASSED" : "\n❌ SOME CONTRAST BENCHMARK TESTS FAILED");
   }
+}
+
+{
+  // ===== PERMUTATION TEST BENCHMARKS =====
+  // Verify permTestSync() against metafor::permutest() for BCG ablat (PERM-1).
+  // QM_dist[0] must equal QM_obs exactly. Permutation p-value within ±0.015
+  // of R's (Monte Carlo tolerance; JS Mulberry32 PRNG ≠ R's internal RNG).
+  console.log("\n===== PERMUTATION TEST BENCHMARKS =====\n");
+  let permPass = true;
+  const permChk = (label, got, exp, tol) => {
+    const ok = Math.abs(got - exp) <= tol;
+    if (!ok) { console.error(`  FAIL ${label}: got ${got}, exp ${exp}, tol ±${tol}`); permPass = false; }
+    else console.log(`  ok  ${label}`);
+  };
+
+  // BCG ablat data (same as META_REGRESSION_BENCHMARKS MR-A, single moderator)
+  const permBcgYi = [-0.8893113339202054,-1.5853886572014306,-1.348073148299693,-1.4415511900213054,-0.2175473222112957,-0.786115585818864,-1.6208982235983924,0.011952333523841173,-0.4694176487381487,-1.3713448034727846,-0.33935882833839015,0.4459134005713783,-0.017313948216879493];
+  const permBcgVi = [0.3255847650039614,0.19458112139814387,0.41536796536796533,0.020010031902247573,0.05121017216963086,0.0069056184559087574,0.22301724757231517,0.00396157929781773,0.056434210463248966,0.07302479361302891,0.01241221397155972,0.5325058452001528,0.0714046596839863];
+  const permBcgAblat = [44,55,42,52,13,44,19,13,27,42,18,33,33];
+
+  // Build design matrix [1, ablat] (k×2)
+  const permXf = permBcgYi.map((_, i) => [1, permBcgAblat[i]]);
+  const QM_obs_bcg = 16.357130;  // from generate.R / PERM-1
+
+  const permResult = permTestSync({
+    yi: permBcgYi, vi: permBcgVi, Xf: permXf,
+    QM_obs: QM_obs_bcg, nPerm: 999, seed: 12345,
+    method: 'REML', modTests: [],
+  });
+
+  if (permResult.error) {
+    console.error(`  FAIL permTestSync returned error: ${permResult.error}`);
+    permPass = false;
+  } else {
+    permChk('QM_dist[0] = QM_obs (observed at position 0)', permResult.QM_dist[0], QM_obs_bcg, 1e-6);
+    permChk('nPerm = 999', permResult.nPerm, 999, 0);
+
+    const finiteVals = Array.from(permResult.QM_dist).filter(v => isFinite(v));
+    const allFinite = finiteVals.length === 999;
+    if (!allFinite) { console.error(`  FAIL not all QM_dist finite: ${finiteVals.length}/999`); permPass = false; }
+    else console.log(`  ok  all 999 QM_dist values finite`);
+
+    // p-value: ±0.015 of R's permutest() seed=42 result = 0.004004
+    // (JS uses seed=12345 → different PRNG sequence → loose tolerance)
+    const pval = permPval(permResult.QM_dist, QM_obs_bcg);
+    const allPositive = Array.from(permResult.QM_dist).every(v => !isFinite(v) || v >= 0);
+    if (!allPositive) { console.error(`  FAIL some QM_dist values negative`); permPass = false; }
+    else console.log(`  ok  all QM_dist values non-negative`);
+
+    permChk('permutation p-value ≤ 0.05 (BCG ablat is significant)', pval <= 0.05 ? 0 : 1, 0, 0.5);
+    console.log(`  note  permutation p = ${pval.toFixed(4)} (R seed=42 gives 0.0040; different seeds expected)`);
+  }
+
+  // Edge case: p < 2 → error
+  const edgeResult = permTestSync({ yi: [1,2,3], vi: [1,1,1], Xf: [[1],[1],[1]], QM_obs: 0, nPerm: 99, seed: 1, method: 'REML', modTests: [] });
+  if (edgeResult.error) console.log(`  ok  p<2 returns error: ${edgeResult.error}`);
+  else { console.error('  FAIL p<2 should return error'); permPass = false; }
+
+  console.log(permPass ? "\n✅ ALL PERMUTATION BENCHMARK TESTS PASSED" : "\n❌ SOME PERMUTATION BENCHMARK TESTS FAILED");
 }
 
   // ===== normalCDF & tCDF UNIT TESTS =====

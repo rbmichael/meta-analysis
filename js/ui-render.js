@@ -1215,6 +1215,73 @@ export function buildSubgroupHTML(subgroup, profile, hasClusters) {
 // -----------------------------------------------------------------------------
 // renderGoshInfo(result, profile)
 // -----------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// renderPermResults — render permutation test p-values into #permResults.
+// ---------------------------------------------------------------------------
+export function renderPermResults(permResult, reg) {
+  const el = document.getElementById("permResults");
+  if (!el) return;
+
+  const { QM_dist, modQM_dist, nPerm, nMods } = permResult;
+
+  function permPval(dist, observed) {
+    if (!isFinite(observed)) return NaN;
+    let exceeds = 0;
+    for (let i = 0; i < dist.length; i++) { if (dist[i] >= observed) exceeds++; }
+    return (1 + exceeds) / (dist.length + 1);
+  }
+  function fmtP(p) {
+    if (!isFinite(p)) return "NA";
+    if (p < 0.001) return "< .001";
+    return p.toFixed(3);
+  }
+
+  const omniP   = permPval(QM_dist, reg.QM);
+  const omniLabel = reg.QMdist === "F"
+    ? `F(${reg.QMdf}, ${reg.QEdf})`
+    : `χ²(${reg.QMdf})`;
+
+  let modRows = "";
+  if (nMods > 0 && Array.isArray(reg.modTests)) {
+    modRows = reg.modTests.map((mt, mi) => {
+      if (mt.QMdf === 0 || !mt.colIdxs || mt.colIdxs.length === 0)
+        return `<tr><td>${escapeHTML(mt.name)}</td><td colspan="2"><i>degenerate</i></td></tr>`;
+      const modDist = modQM_dist.subarray(mi, nPerm * nMods + mi).filter((_, idx) => idx % nMods === 0);
+      // Extract column mi from the nPerm×nMods matrix
+      const colDist = new Float64Array(nPerm);
+      for (let r = 0; r < nPerm; r++) colDist[r] = modQM_dist[r * nMods + mi];
+      const mp = permPval(colDist, mt.QM);
+      const dfLabel = reg.QMdist === "F"
+        ? `F(${mt.QMdf}, ${reg.QEdf})`
+        : `χ²(${mt.QMdf})`;
+      return `<tr>
+        <td>${escapeHTML(mt.name)}</td>
+        <td>${fmt(mt.QM)} (${dfLabel})</td>
+        <td><strong>${fmtP(mp)}</strong></td>
+      </tr>`;
+    }).join("");
+  }
+
+  const modTable = nMods > 1 && modRows
+    ? `<details style="margin-top:6px">
+        <summary style="cursor:pointer;color:var(--fg-muted)">Per-moderator permutation p-values</summary>
+        <table class="reg-table" style="margin-top:4px">
+          <thead><tr><th>Moderator</th><th>QM (${reg.QMdist ?? "χ²"})</th><th>Perm p</th></tr></thead>
+          <tbody>${modRows}</tbody>
+        </table>
+      </details>`
+    : "";
+
+  el.innerHTML = `
+    <div class="perm-results-block">
+      <strong>Permutation QM ${omniLabel} = ${fmt(reg.QM)}</strong>
+      &nbsp;&mdash;&nbsp;
+      permutation p = <strong>${fmtP(omniP)}</strong>
+      <span class="reg-note" style="display:inline;margin-left:8px">(${nPerm} permutations, τ² re-estimated per permutation)</span>
+    </div>
+    ${modTable}`;
+}
+
 export function renderGoshInfo(result, profile) {
   const el = document.getElementById("goshInfo");
   if (!el) return;

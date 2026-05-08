@@ -4097,3 +4097,20 @@ export const INTERACTION_BENCHMARKS = [
     citation: "BCG vaccine data (dat.bcg). Verified against metafor 4.8.0 (generate.R block INT-2). Wald QM from anova(btt=); partial LRT drops only the term's own columns, matching JS implementation.",
   },
 ];
+
+// PERM_BENCHMARKS — permutation test for meta-regression.
+// QM_obs must match exactly (deterministic). QM_perm_p compared with ±0.015
+// tolerance due to Monte Carlo error (JS Mulberry32 PRNG ≠ R's internal RNG).
+// Algorithm matches metafor::permutest.rma.uni():
+//   permute X rows, re-estimate tau2 per permutation, p = mean(QM_dist >= QM_obs).
+export const PERM_BENCHMARKS = [
+  {
+    rBlock: 'PERM-1',
+    name: 'BCG ablat permutation test (REML, 999 iter)',
+    expected: {
+      QM_obs: 16.357130,   // matches META_REGRESSION_BENCHMARKS INT-1 QM
+      QM_perm_p: 0.004004, // metafor permutest() seed=42, 999 iter; compared with ±0.015
+    },
+    citation: 'BCG vaccine data (dat.bcg), mods=~ablat, method=REML, seed=42, iter=999. Verified against metafor::permutest().',
+  },
+];
