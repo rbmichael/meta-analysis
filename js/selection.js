@@ -16,6 +16,10 @@
 //   SEL_CUTS_TWO_SIDED
 //   SELECTION_PRESETS
 //   veveaHedges(studies, cuts, sides, fixedOmega)
+//   halfNormalSelModel(studies, opts)
+//   powerSelModel(studies, opts)
+//   negexpSelModel(studies, opts)
+//   betaSelModel(studies, opts)
 //
 // Dependencies
 // ------------
@@ -643,6 +647,743 @@ function numericalHessian(f, x, fval) {
     }
   }
   return H;
+}
+
+// =============================================================================
+// GAUSS-HERMITE 20-POINT QUADRATURE
+// =============================================================================
+// Physicist's form: ∫ f(x) exp(−x²) dx ≈ Σ GH20_W[j] · f(GH20_X[j])
+//
+// To integrate a function against the standard normal density:
+//   ∫ f(z) φ(z) dz ≈ (1/√π) · Σ GH20_W[j] · f(GH20_X[j] · √2)
+//
+// Nodes/weights from scipy.special.roots_hermite(20); verified: Σ w = √π.
+const _GH20_X_POS = [
+  0.24534070830090113, 0.73747372854539436, 1.2340762153953230,
+  1.7385377121165858,  2.2549740020892756,  2.7888060584281306,
+  3.3478545673832163,  3.9447640401156251,  4.6036824495507445,
+  5.3874808900112353
+];
+const _GH20_W_POS = [
+  0.46224366960061100, 0.28667550536283512, 0.10901720602002330,
+  0.02481052088746526, 0.00324377334223786, 0.00022833863601635,
+  7.8025564785321e-6,  1.0860693707692800e-7, 4.3993409922732e-10,
+  2.2293936455342e-13
+];
+const _GH20_X = [..._GH20_X_POS.map(x => -x).reverse(), ..._GH20_X_POS];
+const _GH20_W = [..._GH20_W_POS.slice().reverse(), ..._GH20_W_POS];
+const _SQRT_PI = Math.sqrt(Math.PI);
+
+// 20-point Gauss-Legendre quadrature on [-1, 1].  Nodes/weights from
+// Abramowitz & Stegun table 25.4; Σ wⱼ = 2.
+const _GL20_X = [
+  -0.9931285991850949, -0.9639719272779138, -0.9122344282513259,
+  -0.8391169718222188, -0.7463062256567499, -0.6360536807265150,
+  -0.5108670019508271, -0.3737060887154195, -0.2277858511416451,
+  -0.0765265211334973,  0.0765265211334973,  0.2277858511416451,
+   0.3737060887154195,  0.5108670019508271,  0.6360536807265150,
+   0.7463062256567499,  0.8391169718222188,  0.9122344282513259,
+   0.9639719272779138,  0.9931285991850949
+];
+const _GL20_W = [
+  0.0176140071391521, 0.0406014298003869, 0.0626720483341091,
+  0.0832767415767048, 0.1019301198172404, 0.1181945319615184,
+  0.1316886384491766, 0.1420961093183820, 0.1491729864726037,
+  0.1527533871307258, 0.1527533871307258, 0.1491729864726037,
+  0.1420961093183820, 0.1316886384491766, 0.1181945319615184,
+  0.1019301198172404, 0.0832767415767048, 0.0626720483341091,
+  0.0406014298003869, 0.0176140071391521
+];
+
+// continuousNormConst — normalising constant for a continuous weight function.
+// Computes A_i = ∫ wFn(p(y)) · φ((y−μ)/σᵢ)/σᵢ dy via 20-point GH quadrature.
+//
+//   p(y) = 1 − Φ(y/seᵢ)         when sides = 1 (one-sided)
+//   p(y) = 2·(1 − Φ(|y|/seᵢ))   when sides = 2 (two-sided)
+//
+// Returns a positive scalar (≈ E[w(p(Y_i)) | μ, τ²+vᵢ]).
+function continuousNormConst(mu, tau2, vi, wFn, sides) {
+  const sigma_i = Math.sqrt(vi + tau2);
+  const se_i    = Math.sqrt(vi);
+  let sum = 0;
+  for (let j = 0; j < 20; j++) {
+    const y = mu + _GH20_X[j] * Math.SQRT2 * sigma_i;
+    const p = sides === 2
+      ? 2 * (1 - normalCDF(Math.abs(y) / se_i))
+      : 1 - normalCDF(y / se_i);
+    sum += _GH20_W[j] * wFn(p);
+  }
+  return sum / _SQRT_PI;
+}
+
+// betaNormConst — normalising constant for the beta weight w(p;a,b)=p^(a−1)·(1−p)^(b−1).
+//
+// Two-sided case: the integrand has an integrable singularity at y=0 (p→1,
+// (1−p)^(b−1)→∞ when b<1).  Near y=0: (1−p) ≈ K·y, p ≈ 1 with K=√(2/π)/seᵢ,
+// so the integrand behaves like (K·y)^(b−1)·φ(0;μ,σ), and
+//   ∫_0^ε (K·y)^(b−1) dy  = K^(b−1)·ε^b / b  → ∞  as b→0.
+// GL-20 on [0, δ] places its closest node at y ≈ 0.003·δ — too far from y=0
+// when b is small, so it misses the spike and computes A_i ≈ 0 instead of ∞.
+//
+// Fix: compute ±[0, ε] analytically via the incomplete beta series
+//   ∫_0^ε p^{a−1}·(1−p)^{b−1}·φ(y;μ,σ) dy  ≈  φ(0;μ,σ)/K · B_inc(K·ε; b, a)
+//   B_inc(x; p, q) = ∫_0^x t^{p−1}·(1−t)^{q−1} dt
+//                  = Σ_{k=0}^∞ (−1)^k·C(q−1,k)·x^{p+k}/(p+k)
+// then use GL-20 on [ε, δ] and the outer pieces where the integrand is smooth.
+// pval_min: lower bound for p-value clamping (1e-5 for beta to match metafor, 1e-15 otherwise)
+function betaNormConst(mu, tau2, vi, a, b, sides, pval_min = 1e-5) {
+  const sigma_i  = Math.sqrt(vi + tau2);
+  const se_i     = Math.sqrt(vi);
+  const inv_norm = 1 / (sigma_i * Math.SQRT2 * Math.sqrt(Math.PI));
+
+  function integrand(y) {
+    const p  = sides === 2
+      ? 2 * (1 - normalCDF(Math.abs(y) / se_i))
+      : 1 - normalCDF(y / se_i);
+    const pc = Math.max(pval_min, Math.min(1 - pval_min, p));
+    const w  = Math.pow(pc, a - 1) * Math.pow(1 - pc, b - 1);
+    if (!isFinite(w)) return 0;
+    const z  = (y - mu) / sigma_i;
+    return w * Math.exp(-0.5 * z * z) * inv_norm;
+  }
+
+  function glIntegral(lo, hi) {
+    const mid  = 0.5 * (lo + hi);
+    const half = 0.5 * (hi - lo);
+    let s = 0;
+    for (let j = 0; j < 20; j++) s += _GL20_W[j] * integrand(mid + half * _GL20_X[j]);
+    return s * half;
+  }
+
+  const y_lo = mu - 8 * sigma_i;
+  const y_hi = mu + 8 * sigma_i;
+
+  if (sides !== 2) {
+    return glIntegral(y_lo, y_hi);
+  }
+
+  // Analytical piece for ±[0, ε], ε = seᵢ/10.
+  // K·ε = √(2/π)/10 ≈ 0.0798 — a universal constant independent of seᵢ.
+  // Error of linear approximation (1−p) ≈ K·y at y=ε: < 0.3%.
+  const eps   = se_i / 10;
+  const delta = 6 * se_i;
+  const K     = Math.sqrt(2 / Math.PI) / se_i;
+  const x_inc = K * eps;     // ≈ 0.0798
+  const D0    = Math.exp(-0.5 * (mu / sigma_i) ** 2) * inv_norm;  // φ(0; μ, σᵢ)/σᵢ
+
+  // Incomplete beta series: B_inc(x; b, a) = Σ_{k≥0} (−1)^k·C(a−1,k)·x^{b+k}/(b+k)
+  let B_inc = 0, coeff = 1;
+  for (let k = 0; k < 80; k++) {
+    const contrib = Math.pow(x_inc, b + k) / (b + k);
+    B_inc += (k % 2 === 0 ? 1 : -1) * coeff * contrib;
+    const next = coeff * (a - 1 - k) / (k + 1);
+    if (!isFinite(next) || Math.abs(next * Math.pow(x_inc, b + k + 1)) < 1e-14 * Math.abs(B_inc) + 1e-300) break;
+    coeff = next;
+  }
+  if (!isFinite(B_inc) || B_inc < 0) B_inc = 0;
+
+  // Factor 2: both positive and negative halves are symmetric in |y|.
+  const analytical = 2 * D0 / K * B_inc;
+
+  // GL-20 on [ε, δ] and [−δ, −ε] (smooth, singularity not reached) plus outer pieces.
+  let numerical = 0;
+  if (delta > eps) numerical += glIntegral(eps, delta) + glIntegral(-delta, -eps);
+  if (y_lo < -delta) numerical += glIntegral(y_lo, -delta);
+  if (y_hi >  delta) numerical += glIntegral(delta, y_hi);
+
+  return analytical + numerical;
+}
+
+// =============================================================================
+// HALF-NORMAL SELECTION MODEL
+// =============================================================================
+// halfNormalSelModel(studies, opts)
+//
+// Fits a continuous selection model with a half-normal-inspired weight function:
+//   w(p; δ) = Φ(Φ⁻¹(1−p) · δ),   δ ≥ 0
+//
+// p is the one- or two-sided p-value of the observed effect.
+// z_p = Φ⁻¹(1−p) is the standard normal quantile (z-statistic for one-sided p).
+//
+// Interpretation:
+//   δ = 0   → w = Φ(0) = 0.5 for all p; after normalising, weights are equal
+//              (no selection; selection terms cancel, reduces to unweighted RE)
+//   δ > 0   → smaller p → larger z_p → Φ(z_p·δ) → 1  (significant results preferred)
+//   δ → ∞   → sharp threshold at p = 0.5 (only studies with p < 0.5 selected)
+//
+// This formulation is monotone decreasing in p: most significant studies (p→0)
+// always have the highest selection weight (w→1), giving positive publication bias
+// when δ > 0.
+//
+// BFGS is run over [μ, log(τ²+ε), log(δ+ε)] to enforce δ ≥ 0.
+//
+// NOTE: The exact formula may differ from metafor selmodel(type="halfnorm").
+// Cross-validate with generate.R block HN-1 and adjust if needed.
+//
+// Parameters estimated:
+//   μ   — pooled mean
+//   τ²  — between-study variance
+//   δ   — selection parameter (unrestricted)
+//
+// BFGS is run over [μ, log(τ²+ε), δ]; SEs from numerical Hessian (delta method).
+// LRT compares the selection model vs. the unweighted ML model (df = 1).
+//
+// Arguments:
+//   studies — array of { yi, vi } objects (invalid rows silently dropped)
+//   opts    — { sides: 1|2 (default 1) }
+//
+// Returns:
+//   mu, se_mu, zval_mu, pval_mu, ci_mu   — pooled estimate with inference
+//   tau2, se_tau2                          — between-study variance
+//   delta, se_delta                        — selection parameter
+//   logLikSel, logLikUnsel                 — log-likelihoods
+//   LRT, LRTdf, LRTp                       — likelihood ratio test (df = 1)
+//   RE_unsel, tau2_unsel, ciLow_unsel, ciHigh_unsel
+//   converged, iters, k, sides, weightFn: "halfnorm"
+//   error: "insufficient_k" if k < 4
+export function halfNormalSelModel(studies, opts = {}) {
+  const sides = opts.sides ?? 1;
+  const valid  = studies.filter(s => isFinite(s.yi) && isFinite(s.vi) && s.vi > 0);
+  const k      = valid.length;
+
+  if (k < 4) {
+    return { error: "insufficient_k", k, minK: 4, weightFn: "halfnorm" };
+  }
+
+  const yi = valid.map(s => s.yi);
+  const vi = valid.map(s => s.vi);
+
+  // Unweighted ML model — starting values and LRT baseline
+  const mUnsel      = meta(valid, "ML");
+  const logLikUnsel = logLik(valid, mUnsel.RE, mUnsel.tau2);
+
+  // Observed one-/two-sided p-values for each study
+  const pvals = yi.map((y, i) => {
+    const se_i = Math.sqrt(vi[i]);
+    const p    = sides === 2
+      ? 2 * (1 - normalCDF(Math.abs(y) / se_i))
+      : 1 - normalCDF(y / se_i);
+    return Math.max(1e-15, Math.min(1 - 1e-15, p));
+  });
+
+  // Weight function: w(p; δ) = Φ(Φ⁻¹(1−p) · δ), δ ≥ 0
+  // Parameterised as δ = exp(ρ) so BFGS is unconstrained.
+  function wFn(p, delta) {
+    const pc = Math.max(1e-15, Math.min(1 - 1e-15, p));
+    const zp = normalQuantile(1 - pc);   // z_p = Φ⁻¹(1−p)
+    return normalCDF(zp * delta);
+  }
+
+  // Negative log-likelihood (to minimise)
+  function nLL(params) {
+    const mu    = params[0];
+    const tau2  = Math.exp(params[1]);
+    const delta = Math.exp(params[2]);   // δ = exp(ρ) ≥ 0
+    const w = p => wFn(p, delta);
+    let ll = 0;
+    for (let i = 0; i < k; i++) {
+      const totalVar = vi[i] + tau2;
+      ll += 0.5 * (Math.log(totalVar) + (yi[i] - mu) ** 2 / totalVar);
+      const wi = wFn(pvals[i], delta);
+      if (wi <= 0) return Infinity;
+      ll -= Math.log(wi);
+      const c_i = continuousNormConst(mu, tau2, vi[i], w, sides);
+      if (c_i <= 0) return Infinity;
+      ll += Math.log(c_i);
+    }
+    return ll;
+  }
+
+  // Multi-start BFGS: try several δ₀ values (in log scale)
+  const mu0  = mUnsel.RE;
+  const rho0 = Math.log(Math.max(mUnsel.tau2, 1e-9));
+  const logDelta_inits = [Math.log(1e-3), Math.log(0.5), Math.log(1.0), Math.log(2.0)];
+  let result = null;
+  for (const ld0 of logDelta_inits) {
+    const r = bfgs(nLL, [mu0, rho0, ld0]);
+    if (result === null || r.fval < result.fval) result = r;
+  }
+
+  const [mu_fit, rho_fit, logDelta_fit] = result.x;
+  const mu    = mu_fit;
+  const tau2  = Math.exp(rho_fit);
+  const delta = Math.exp(logDelta_fit);
+  const logLikSel = -result.fval;
+
+  // Standard errors via numerical Hessian
+  const hess = numericalHessian(nLL, result.x, result.fval);
+  let inv = matInverse(hess);
+  if (inv === null) {
+    for (const lam of [1e-8, 1e-6, 1e-4, 1e-2, 1, 10]) {
+      const ridge = hess.map((row, ii) => row.map((v, jj) => ii === jj ? v + lam : v));
+      inv = matInverse(ridge);
+      if (inv !== null) break;
+    }
+  }
+
+  function getSE(j) {
+    if (inv !== null && inv[j][j] > 0) return Math.sqrt(inv[j][j]);
+    return hess[j][j] > 0 ? 1 / Math.sqrt(hess[j][j]) : NaN;
+  }
+
+  const se_mu       = getSE(0);
+  const se_rho      = getSE(1);
+  const se_logDelta = getSE(2);
+  const se_tau2     = isFinite(se_rho)      ? tau2  * se_rho      : NaN;
+  const se_delta    = isFinite(se_logDelta) ? delta * se_logDelta : NaN;
+
+  const zval_mu = mu / se_mu;
+  const pval_mu = 2 * (1 - normalCDF(Math.abs(zval_mu)));
+  const ci_mu   = [mu - Z_95 * se_mu, mu + Z_95 * se_mu];
+
+  const lrt_stat = 2 * (logLikSel - logLikUnsel);
+  const lrt_p    = lrt_stat > 0 ? 1 - chiSquareCDF(lrt_stat, 1) : 1;
+
+  return {
+    mu, se_mu, zval_mu, pval_mu, ci_mu,
+    tau2, se_tau2,
+    delta, se_delta,
+    logLikSel, logLikUnsel,
+    LRT: lrt_stat, LRTdf: 1, LRTp: lrt_p,
+    RE_unsel:     mUnsel.RE,
+    tau2_unsel:   mUnsel.tau2,
+    ciLow_unsel:  mUnsel.ciLow,
+    ciHigh_unsel: mUnsel.ciHigh,
+    converged: result.converged,
+    iters:     result.iters,
+    k, sides,
+    weightFn: "halfnorm",
+  };
+}
+
+// =============================================================================
+// POWER SELECTION MODEL
+// =============================================================================
+// powerSelModel(studies, opts)
+//
+// Fits a continuous selection model with a power weight function:
+//   w(p; δ) = (1 − p)^δ,   δ ≥ 0
+//
+// Interpretation:
+//   δ = 0   → w = 1 for all p; no selection (reduces to unweighted RE)
+//   δ > 0   → smaller p → larger (1−p) → higher selection weight
+//
+// BFGS is run over [μ, log(τ²+ε), log(δ+ε)] to enforce δ ≥ 0.
+// LRT compares the selection model vs. the unweighted ML model (df = 1).
+//
+// Arguments:
+//   studies — array of { yi, vi } objects (invalid rows silently dropped)
+//   opts    — { sides: 1|2 (default 1) }
+//
+// Returns:
+//   mu, se_mu, zval_mu, pval_mu, ci_mu   — pooled estimate with inference
+//   tau2, se_tau2                          — between-study variance
+//   delta, se_delta                        — selection parameter
+//   logLikSel, logLikUnsel                 — log-likelihoods
+//   LRT, LRTdf, LRTp                       — likelihood ratio test (df = 1)
+//   RE_unsel, tau2_unsel, ciLow_unsel, ciHigh_unsel
+//   converged, iters, k, sides, weightFn: "power"
+//   error: "insufficient_k" if k < 4
+export function powerSelModel(studies, opts = {}) {
+  const sides = opts.sides ?? 1;
+  const valid  = studies.filter(s => isFinite(s.yi) && isFinite(s.vi) && s.vi > 0);
+  const k      = valid.length;
+
+  if (k < 4) {
+    return { error: "insufficient_k", k, minK: 4, weightFn: "power" };
+  }
+
+  const yi = valid.map(s => s.yi);
+  const vi = valid.map(s => s.vi);
+
+  const mUnsel      = meta(valid, "ML");
+  const logLikUnsel = logLik(valid, mUnsel.RE, mUnsel.tau2);
+
+  const pvals = yi.map((y, i) => {
+    const se_i = Math.sqrt(vi[i]);
+    const p    = sides === 2
+      ? 2 * (1 - normalCDF(Math.abs(y) / se_i))
+      : 1 - normalCDF(y / se_i);
+    return Math.max(1e-15, Math.min(1 - 1e-15, p));
+  });
+
+  // Weight function: w(p; δ) = (1 − p)^δ, δ ≥ 0
+  function wFn(p, delta) {
+    const pc = Math.max(1e-15, Math.min(1 - 1e-15, p));
+    return Math.pow(1 - pc, delta);
+  }
+
+  function nLL(params) {
+    const mu    = params[0];
+    const tau2  = Math.exp(params[1]);
+    const delta = Math.exp(params[2]);
+    const w = p => wFn(p, delta);
+    let ll = 0;
+    for (let i = 0; i < k; i++) {
+      const totalVar = vi[i] + tau2;
+      ll += 0.5 * (Math.log(totalVar) + (yi[i] - mu) ** 2 / totalVar);
+      const wi = wFn(pvals[i], delta);
+      if (wi <= 0) return Infinity;
+      ll -= Math.log(wi);
+      const c_i = continuousNormConst(mu, tau2, vi[i], w, sides);
+      if (c_i <= 0) return Infinity;
+      ll += Math.log(c_i);
+    }
+    return ll;
+  }
+
+  const mu0  = mUnsel.RE;
+  const rho0 = Math.log(Math.max(mUnsel.tau2, 1e-9));
+  const logDelta_inits = [Math.log(1e-3), Math.log(0.5), Math.log(1.0), Math.log(2.0)];
+  let result = null;
+  for (const ld0 of logDelta_inits) {
+    const r = bfgs(nLL, [mu0, rho0, ld0]);
+    if (result === null || r.fval < result.fval) result = r;
+  }
+
+  const [mu_fit, rho_fit, logDelta_fit] = result.x;
+  const mu    = mu_fit;
+  const tau2  = Math.exp(rho_fit);
+  const delta = Math.exp(logDelta_fit);
+  const logLikSel = -result.fval;
+
+  const hess = numericalHessian(nLL, result.x, result.fval);
+  let inv = matInverse(hess);
+  if (inv === null) {
+    for (const lam of [1e-8, 1e-6, 1e-4, 1e-2, 1, 10]) {
+      const ridge = hess.map((row, ii) => row.map((v, jj) => ii === jj ? v + lam : v));
+      inv = matInverse(ridge);
+      if (inv !== null) break;
+    }
+  }
+
+  function getSE(j) {
+    if (inv !== null && inv[j][j] > 0) return Math.sqrt(inv[j][j]);
+    return hess[j][j] > 0 ? 1 / Math.sqrt(hess[j][j]) : NaN;
+  }
+
+  const se_mu       = getSE(0);
+  const se_rho      = getSE(1);
+  const se_logDelta = getSE(2);
+  const se_tau2     = isFinite(se_rho)      ? tau2  * se_rho      : NaN;
+  const se_delta    = isFinite(se_logDelta) ? delta * se_logDelta : NaN;
+
+  const zval_mu = mu / se_mu;
+  const pval_mu = 2 * (1 - normalCDF(Math.abs(zval_mu)));
+  const ci_mu   = [mu - Z_95 * se_mu, mu + Z_95 * se_mu];
+
+  const lrt_stat = 2 * (logLikSel - logLikUnsel);
+  const lrt_p    = lrt_stat > 0 ? 1 - chiSquareCDF(lrt_stat, 1) : 1;
+
+  return {
+    mu, se_mu, zval_mu, pval_mu, ci_mu,
+    tau2, se_tau2,
+    delta, se_delta,
+    logLikSel, logLikUnsel,
+    LRT: lrt_stat, LRTdf: 1, LRTp: lrt_p,
+    RE_unsel:     mUnsel.RE,
+    tau2_unsel:   mUnsel.tau2,
+    ciLow_unsel:  mUnsel.ciLow,
+    ciHigh_unsel: mUnsel.ciHigh,
+    converged: result.converged,
+    iters:     result.iters,
+    k, sides,
+    weightFn: "power",
+  };
+}
+
+// =============================================================================
+// NEGATIVE EXPONENTIAL SELECTION MODEL
+// =============================================================================
+// negexpSelModel(studies, opts)
+//
+// Fits a continuous selection model with a negative exponential weight function:
+//   w(p; δ) = exp(−δ · p),   δ ≥ 0
+//
+// Interpretation:
+//   δ = 0   → w = 1 for all p; no selection (reduces to unweighted RE)
+//   δ > 0   → smaller p → smaller −δ·p → exp closer to 1 → higher weight
+//
+// BFGS is run over [μ, log(τ²+ε), log(δ+ε)] to enforce δ ≥ 0.
+// LRT compares the selection model vs. the unweighted ML model (df = 1).
+//
+// Arguments:
+//   studies — array of { yi, vi } objects (invalid rows silently dropped)
+//   opts    — { sides: 1|2 (default 1) }
+//
+// Returns:
+//   mu, se_mu, zval_mu, pval_mu, ci_mu   — pooled estimate with inference
+//   tau2, se_tau2                          — between-study variance
+//   delta, se_delta                        — selection parameter
+//   logLikSel, logLikUnsel                 — log-likelihoods
+//   LRT, LRTdf, LRTp                       — likelihood ratio test (df = 1)
+//   RE_unsel, tau2_unsel, ciLow_unsel, ciHigh_unsel
+//   converged, iters, k, sides, weightFn: "negexp"
+//   error: "insufficient_k" if k < 4
+export function negexpSelModel(studies, opts = {}) {
+  const sides = opts.sides ?? 1;
+  const valid  = studies.filter(s => isFinite(s.yi) && isFinite(s.vi) && s.vi > 0);
+  const k      = valid.length;
+
+  if (k < 4) {
+    return { error: "insufficient_k", k, minK: 4, weightFn: "negexp" };
+  }
+
+  const yi = valid.map(s => s.yi);
+  const vi = valid.map(s => s.vi);
+
+  const mUnsel      = meta(valid, "ML");
+  const logLikUnsel = logLik(valid, mUnsel.RE, mUnsel.tau2);
+
+  const pvals = yi.map((y, i) => {
+    const se_i = Math.sqrt(vi[i]);
+    const p    = sides === 2
+      ? 2 * (1 - normalCDF(Math.abs(y) / se_i))
+      : 1 - normalCDF(y / se_i);
+    return Math.max(1e-15, Math.min(1 - 1e-15, p));
+  });
+
+  // Weight function: w(p; δ) = exp(−δ · p), δ ≥ 0
+  function wFn(p, delta) {
+    const pc = Math.max(1e-15, Math.min(1 - 1e-15, p));
+    return Math.exp(-delta * pc);
+  }
+
+  function nLL(params) {
+    const mu    = params[0];
+    const tau2  = Math.exp(params[1]);
+    const delta = Math.exp(params[2]);
+    const w = p => wFn(p, delta);
+    let ll = 0;
+    for (let i = 0; i < k; i++) {
+      const totalVar = vi[i] + tau2;
+      ll += 0.5 * (Math.log(totalVar) + (yi[i] - mu) ** 2 / totalVar);
+      const wi = wFn(pvals[i], delta);
+      if (wi <= 0) return Infinity;
+      ll -= Math.log(wi);
+      const c_i = continuousNormConst(mu, tau2, vi[i], w, sides);
+      if (c_i <= 0) return Infinity;
+      ll += Math.log(c_i);
+    }
+    return ll;
+  }
+
+  const mu0  = mUnsel.RE;
+  const rho0 = Math.log(Math.max(mUnsel.tau2, 1e-9));
+  const logDelta_inits = [Math.log(1e-3), Math.log(0.5), Math.log(1.0), Math.log(2.0)];
+  let result = null;
+  for (const ld0 of logDelta_inits) {
+    const r = bfgs(nLL, [mu0, rho0, ld0]);
+    if (result === null || r.fval < result.fval) result = r;
+  }
+
+  const [mu_fit, rho_fit, logDelta_fit] = result.x;
+  const mu    = mu_fit;
+  const tau2  = Math.exp(rho_fit);
+  const delta = Math.exp(logDelta_fit);
+  const logLikSel = -result.fval;
+
+  const hess = numericalHessian(nLL, result.x, result.fval);
+  let inv = matInverse(hess);
+  if (inv === null) {
+    for (const lam of [1e-8, 1e-6, 1e-4, 1e-2, 1, 10]) {
+      const ridge = hess.map((row, ii) => row.map((v, jj) => ii === jj ? v + lam : v));
+      inv = matInverse(ridge);
+      if (inv !== null) break;
+    }
+  }
+
+  function getSE(j) {
+    if (inv !== null && inv[j][j] > 0) return Math.sqrt(inv[j][j]);
+    return hess[j][j] > 0 ? 1 / Math.sqrt(hess[j][j]) : NaN;
+  }
+
+  const se_mu       = getSE(0);
+  const se_rho      = getSE(1);
+  const se_logDelta = getSE(2);
+  const se_tau2     = isFinite(se_rho)      ? tau2  * se_rho      : NaN;
+  const se_delta    = isFinite(se_logDelta) ? delta * se_logDelta : NaN;
+
+  const zval_mu = mu / se_mu;
+  const pval_mu = 2 * (1 - normalCDF(Math.abs(zval_mu)));
+  const ci_mu   = [mu - Z_95 * se_mu, mu + Z_95 * se_mu];
+
+  const lrt_stat = 2 * (logLikSel - logLikUnsel);
+  const lrt_p    = lrt_stat > 0 ? 1 - chiSquareCDF(lrt_stat, 1) : 1;
+
+  return {
+    mu, se_mu, zval_mu, pval_mu, ci_mu,
+    tau2, se_tau2,
+    delta, se_delta,
+    logLikSel, logLikUnsel,
+    LRT: lrt_stat, LRTdf: 1, LRTp: lrt_p,
+    RE_unsel:     mUnsel.RE,
+    tau2_unsel:   mUnsel.tau2,
+    ciLow_unsel:  mUnsel.ciLow,
+    ciHigh_unsel: mUnsel.ciHigh,
+    converged: result.converged,
+    iters:     result.iters,
+    k, sides,
+    weightFn: "negexp",
+  };
+}
+
+// =============================================================================
+// BETA SELECTION MODEL
+// =============================================================================
+// betaSelModel(studies, opts)
+//
+// Fits a continuous selection model with an unnormalised beta density weight:
+//   w(p; a, b) = p^(a−1) · (1−p)^(b−1),   a > 0, b > 0
+//
+// Interpretation:
+//   a = 1, b = 1   → w = 1 for all p; no selection (reduces to unweighted RE)
+//   a = 1, b > 1   → smaller p preferred (typical publication bias)
+//   a < 1, b = 1   → larger p preferred (rare/perverse selection)
+//   Most flexible shape among the four continuous weight models.
+//
+// BFGS is run over [μ, log(τ²+ε), log(a), log(b)] to enforce a, b > 0.
+// LRT compares the selection model vs. the unweighted ML model (df = 2).
+//
+// Arguments:
+//   studies — array of { yi, vi } objects (invalid rows silently dropped)
+//   opts    — { sides: 1|2 (default 1) }
+//
+// Returns:
+//   mu, se_mu, zval_mu, pval_mu, ci_mu   — pooled estimate with inference
+//   tau2, se_tau2                          — between-study variance
+//   a, se_a, b, se_b                       — beta shape parameters
+//   logLikSel, logLikUnsel                 — log-likelihoods
+//   LRT, LRTdf, LRTp                       — likelihood ratio test (df = 2)
+//   RE_unsel, tau2_unsel, ciLow_unsel, ciHigh_unsel
+//   converged, iters, k, sides, weightFn: "beta"
+//   error: "insufficient_k" if k < 4
+export function betaSelModel(studies, opts = {}) {
+  const sides = opts.sides ?? 1;
+  const valid  = studies.filter(s => isFinite(s.yi) && isFinite(s.vi) && s.vi > 0);
+  const k      = valid.length;
+
+  if (k < 4) {
+    return { error: "insufficient_k", k, minK: 4, weightFn: "beta" };
+  }
+
+  const yi = valid.map(s => s.yi);
+  const vi = valid.map(s => s.vi);
+
+  const mUnsel      = meta(valid, "ML");
+  const logLikUnsel = logLik(valid, mUnsel.RE, mUnsel.tau2);
+
+  // pval.min=1e-5: clamp both observed pvals and the normConst integral.
+  // Matches metafor's behavior for datasets where some studies have extreme
+  // p-values (< 1e-5 in double precision) — prevents degenerate a < 0.1
+  // solutions driven by (near-)zero p-values with a < 1.
+  const BETA_PMIN = 1e-5;
+  const pvals = yi.map((y, i) => {
+    const se_i = Math.sqrt(vi[i]);
+    const p    = sides === 2
+      ? 2 * (1 - normalCDF(Math.abs(y) / se_i))
+      : 1 - normalCDF(y / se_i);
+    return Math.max(BETA_PMIN, Math.min(1 - BETA_PMIN, p));
+  });
+
+  // Weight function: w(p; a, b) = p^(a-1) * (1-p)^(b-1), a > 0, b > 0
+  function wFn(p, a, b) {
+    const pc = Math.max(BETA_PMIN, Math.min(1 - BETA_PMIN, p));
+    return Math.pow(pc, a - 1) * Math.pow(1 - pc, b - 1);
+  }
+
+  function nLL(params) {
+    const mu   = params[0];
+    const tau2 = Math.exp(params[1]);
+    const a    = Math.exp(params[2]);
+    const b    = Math.exp(params[3]);
+    let ll = 0;
+    for (let i = 0; i < k; i++) {
+      const totalVar = vi[i] + tau2;
+      ll += 0.5 * (Math.log(totalVar) + (yi[i] - mu) ** 2 / totalVar);
+      const wi = wFn(pvals[i], a, b);
+      if (!(wi > 0) || !isFinite(wi)) return Infinity;
+      ll -= Math.log(wi);
+      const c_i = betaNormConst(mu, tau2, vi[i], a, b, sides, BETA_PMIN);
+      if (!(c_i > 0) || !isFinite(c_i)) return Infinity;
+      ll += Math.log(c_i);
+    }
+    return ll;
+  }
+
+  const mu0  = mUnsel.RE;
+  const rho0 = Math.log(Math.max(mUnsel.tau2, 1e-9));
+  // Multi-start: (log a, log b) pairs; include b<1 region where typical
+  // near-null solutions live, and b>1 region for typical publication bias
+  const abInits = [
+    [0,              0              ],  // a=1, b=1 — uniform
+    [0,              Math.log(2)    ],  // a=1, b=2 — mild selection
+    [0,              Math.log(4)    ],  // a=1, b=4 — strong selection
+    [Math.log(0.5),  Math.log(2)    ],  // a=0.5, b=2
+    [0,              Math.log(0.75) ],  // a=1, b=0.75 — typical near-null
+    [Math.log(1.2),  Math.log(0.75) ],  // a=1.2, b=0.75
+    [Math.log(0.8),  Math.log(0.8)  ],  // a=0.8, b=0.8
+    [0,              Math.log(0.5)  ],  // a=1, b=0.5
+  ];
+  let result = null;
+  for (const [la0, lb0] of abInits) {
+    const r = bfgs(nLL, [mu0, rho0, la0, lb0]);
+    if (result === null || r.fval < result.fval) result = r;
+  }
+
+  const [mu_fit, rho_fit, logA_fit, logB_fit] = result.x;
+  const mu   = mu_fit;
+  const tau2 = Math.exp(rho_fit);
+  const a    = Math.exp(logA_fit);
+  const b    = Math.exp(logB_fit);
+  const logLikSel = -result.fval;
+
+  const hess = numericalHessian(nLL, result.x, result.fval);
+  let inv = matInverse(hess);
+  if (inv === null) {
+    for (const lam of [1e-8, 1e-6, 1e-4, 1e-2, 1, 10]) {
+      const ridge = hess.map((row, ii) => row.map((v, jj) => ii === jj ? v + lam : v));
+      inv = matInverse(ridge);
+      if (inv !== null) break;
+    }
+  }
+
+  function getSE(j) {
+    if (inv !== null && inv[j][j] > 0) return Math.sqrt(inv[j][j]);
+    return hess[j][j] > 0 ? 1 / Math.sqrt(hess[j][j]) : NaN;
+  }
+
+  const se_mu   = getSE(0);
+  const se_rho  = getSE(1);
+  const se_logA = getSE(2);
+  const se_logB = getSE(3);
+  const se_tau2 = isFinite(se_rho)  ? tau2 * se_rho  : NaN;
+  const se_a    = isFinite(se_logA) ? a    * se_logA : NaN;
+  const se_b    = isFinite(se_logB) ? b    * se_logB : NaN;
+
+  const zval_mu = mu / se_mu;
+  const pval_mu = 2 * (1 - normalCDF(Math.abs(zval_mu)));
+  const ci_mu   = [mu - Z_95 * se_mu, mu + Z_95 * se_mu];
+
+  const lrt_stat = 2 * (logLikSel - logLikUnsel);
+  const lrt_p    = lrt_stat > 0 ? 1 - chiSquareCDF(lrt_stat, 2) : 1;
+
+  return {
+    mu, se_mu, zval_mu, pval_mu, ci_mu,
+    tau2, se_tau2,
+    a, se_a,
+    b, se_b,
+    logLikSel, logLikUnsel,
+    LRT: lrt_stat, LRTdf: 2, LRTp: lrt_p,
+    RE_unsel:     mUnsel.RE,
+    tau2_unsel:   mUnsel.tau2,
+    ciLow_unsel:  mUnsel.ciLow,
+    ciHigh_unsel: mUnsel.ciHigh,
+    converged: result.converged,
+    iters:     result.iters,
+    k, sides,
+    weightFn: "beta",
+  };
 }
 
 // =============================================================================

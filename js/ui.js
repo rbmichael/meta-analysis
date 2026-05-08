@@ -105,7 +105,7 @@
 //   ui.js calls init() on DOMContentLoaded, which populates dropdowns,
 //   restores any autosave draft, and attaches all event listeners.
 // =============================================================================
-import { eggerTest, beggTest, fatPetTest, petPeeseTest, failSafeN, tesTest, waapWls, clES, pCurve, pUniform, baujat, blupMeta, meta, metaMH, metaPeto, robustMeta, influenceDiagnostics, subgroupAnalysis, metaRegression, testContrast, cumulativeMeta, veveaHedges, SELECTION_PRESETS, profileLikTau2, bayesMeta, priorSensitivity, rvePooled, meta3level, harbordTest, petersTest, deeksTest, rueckerTest, lsModel, henmiCopas } from "./analysis.js";
+import { eggerTest, beggTest, fatPetTest, petPeeseTest, failSafeN, tesTest, waapWls, clES, pCurve, pUniform, baujat, blupMeta, meta, metaMH, metaPeto, robustMeta, influenceDiagnostics, subgroupAnalysis, metaRegression, testContrast, cumulativeMeta, veveaHedges, SELECTION_PRESETS, halfNormalSelModel, powerSelModel, negexpSelModel, betaSelModel, profileLikTau2, bayesMeta, priorSensitivity, rvePooled, meta3level, harbordTest, petersTest, deeksTest, rueckerTest, lsModel, henmiCopas } from "./analysis.js";
 import { fmt, normalQuantile, chiSquareCDF } from "./utils.js";
 import { escapeHTML } from "./utils-html.js";
 import { effectProfiles, getProfile } from "./profiles.js";
@@ -999,7 +999,7 @@ document.getElementById("draftStartFresh").addEventListener("click", () => {
   resetSel("effectType"); resetSel("tauMethod"); resetSel("ciMethod");
   resetSel("ciLevel");    resetSel("mccMethod"); resetSel("cumulativeOrder");
   resetSel("tfEstimator"); resetSel("forestTheme");
-  resetSel("selMode");    resetSel("selPreset"); resetSel("selSides");
+  resetSel("selMode");    resetSel("selPreset"); resetSel("selSides"); resetSel("selWeightFn");
   resetChk("useTrimFill"); resetChk("useTFAdjusted");
   resetNum("bayesMu0"); resetNum("bayesSigmaMu"); resetNum("bayesSigmaTau");
   resetNum("selCuts");
@@ -1226,16 +1226,21 @@ document.getElementById("tfEstimator").addEventListener("change", markStale);
 
 // ---------------- SELECTION MODEL CONTROLS ----------------
 function syncSelControls() {
-  const mode   = document.getElementById("selMode").value;
-  const preset = document.getElementById("selPreset").value;
-  const presetRow  = document.getElementById("selPresetRow");
-  const customRow  = document.getElementById("selCustomRow");
+  const mode     = document.getElementById("selMode").value;
+  const preset   = document.getElementById("selPreset").value;
+  const weightFn = document.getElementById("selWeightFn").value;
+  const presetRow   = document.getElementById("selPresetRow");
+  const customRow   = document.getElementById("selCustomRow");
+  const weightFnRow = document.getElementById("selWeightFnRow");
 
   const isSensitivity = mode === "sensitivity";
-  presetRow.style.display  = isSensitivity ? "" : "none";
-  // Show sides/cuts when MLE, or when sensitivity with custom preset
-  const showCustom = !isSensitivity || preset === "custom";
-  customRow.style.display  = showCustom ? "" : "none";
+  const showStepCtrls = !isSensitivity && weightFn === "stepfun";
+
+  weightFnRow.style.display = isSensitivity ? "none" : "";
+  presetRow.style.display   = isSensitivity ? "" : "none";
+  // Show sides/cuts for: sensitivity custom preset, or MLE step function
+  const showCustom = (isSensitivity && preset === "custom") || showStepCtrls;
+  customRow.style.display   = showCustom ? "" : "none";
 
   // When a named preset is selected, mirror its sides into the (hidden) selSides field
   if (isSensitivity && preset !== "custom") {
@@ -1246,6 +1251,7 @@ function syncSelControls() {
 
 document.getElementById("selMode").addEventListener("change", () => { syncSelControls(); markStale(); });
 document.getElementById("selPreset").addEventListener("change", () => { syncSelControls(); markStale(); });
+document.getElementById("selWeightFn").addEventListener("change", () => { syncSelControls(); markStale(); });
 document.getElementById("selSides").addEventListener("change", markStale);
 document.getElementById("selCuts").addEventListener("change", markStale);
 syncSelControls();
@@ -1331,6 +1337,10 @@ function applySession(session) {
     if (el && el.querySelector(`option[value="${s.selSides}"]`)) el.value = s.selSides;
   }
   if (s.selCuts) { const el = document.getElementById("selCuts"); if (el) el.value = s.selCuts; }
+  if (s.selWeightFn) {
+    const el = document.getElementById("selWeightFn");
+    if (el && el.querySelector(`option[value="${s.selWeightFn}"]`)) el.value = s.selWeightFn;
+  }
   syncSelControls();
 
   // Rebuild moderators
@@ -2102,7 +2112,7 @@ function _runBayesBatch(studies, m, opts) {
 
 // ── Helper: publication bias batch ───────────────────────────────────────────
 function _runPubBiasBatch(studies, m, opts) {
-  const { alpha, selModeVal, selPreset, selSides, selCuts } = opts;
+  const { alpha, selModeVal, selPreset, selWeightFn, selSides, selCuts } = opts;
 
   const egger    = eggerTest(studies);
   const begg     = beggTest(studies);
@@ -2122,18 +2132,31 @@ function _runPubBiasBatch(studies, m, opts) {
   // Selection model — skip when meta-regression moderators are active
   let selResult = null;
   if (moderators.length === 0) {
-    let selCutsEff, selSidesEff, selOmegaFixed;
-    if (selModeVal === "sensitivity" && selPreset !== "custom") {
-      const p       = SELECTION_PRESETS[selPreset];
-      selCutsEff    = p.cuts;
-      selSidesEff   = p.sides;
-      selOmegaFixed = p.omega;
+    if (selModeVal === "sensitivity") {
+      let selCutsEff, selSidesEff, selOmegaFixed;
+      if (selPreset !== "custom") {
+        const p    = SELECTION_PRESETS[selPreset];
+        selCutsEff    = p.cuts;
+        selSidesEff   = p.sides;
+        selOmegaFixed = p.omega;
+      } else {
+        selCutsEff    = selCuts;
+        selSidesEff   = selSides;
+        selOmegaFixed = null;
+      }
+      selResult = veveaHedges(studies, selCutsEff, selSidesEff, selOmegaFixed);
+    } else if (selWeightFn === "halfnorm") {
+      selResult = halfNormalSelModel(studies, { sides: selSides });
+    } else if (selWeightFn === "power") {
+      selResult = powerSelModel(studies, { sides: selSides });
+    } else if (selWeightFn === "negexp") {
+      selResult = negexpSelModel(studies, { sides: selSides });
+    } else if (selWeightFn === "beta") {
+      selResult = betaSelModel(studies, { sides: selSides });
     } else {
-      selCutsEff    = selCuts;
-      selSidesEff   = selSides;
-      selOmegaFixed = null;
+      // Default MLE: Vevea-Hedges step function
+      selResult = veveaHedges(studies, selCuts, selSides, null);
     }
-    selResult = veveaHedges(studies, selCutsEff, selSidesEff, selOmegaFixed);
   }
 
   return { egger, begg, petpeese, fatpet, fsn, tes, waap, pcurve, puniform,
@@ -2199,7 +2222,7 @@ function _renderAllResults(ctx) {
   } = ctx;
 
   const { method, ciMethod, alpha, isMHorPeto, hasClusters, useTF, tfEstimator,
-          useTFAdjusted, bayesMu0, bayesSigmaMu, bayesSigmaTau, selModeVal } = opts;
+          useTFAdjusted, bayesMu0, bayesSigmaMu, bayesSigmaTau, selModeVal, selWeightFn } = opts;
 
   // ── DOM element refs ────────────────────────────────────────────────────────
   const elResults            = document.getElementById("results");
@@ -2450,7 +2473,7 @@ function _renderAllResults(ctx) {
 
   renderPCurvePanel(pcurve);
   renderPUniformPanel(puniform, m, profile);
-  renderSelectionModelPanel(selResult, selModeVal, profile);
+  renderSelectionModelPanel(selResult, selModeVal, selWeightFn, profile);
 
   // ── Regression panel + bubble plots ───────────────────────────────────────
   const modSpec      = opts.modSpec;
@@ -2736,10 +2759,11 @@ async function runAnalysis() {
     const cumulativeOrder = document.getElementById("cumulativeOrder")?.value || "input";
 
     // Selection model settings (read up front so _runPubBiasBatch is pure)
-    const selModeVal = document.getElementById("selMode").value;
-    const selPreset  = document.getElementById("selPreset").value;
-    const selSides   = parseInt(document.getElementById("selSides").value, 10);
-    const rawSelCuts = document.getElementById("selCuts").value
+    const selModeVal  = document.getElementById("selMode").value;
+    const selPreset   = document.getElementById("selPreset").value;
+    const selWeightFn = document.getElementById("selWeightFn").value;
+    const selSides    = parseInt(document.getElementById("selSides").value, 10);
+    const rawSelCuts  = document.getElementById("selCuts").value
       .split(",").map(s => parseFloat(s.trim())).filter(isFinite);
     const selCuts = rawSelCuts.length >= 2 && rawSelCuts[rawSelCuts.length - 1] === 1.0
       ? rawSelCuts
@@ -2753,7 +2777,7 @@ async function runAnalysis() {
     const opts = {
       method, ciMethod, alpha, type, useTF, tfEstimator, useTFAdjusted,
       isMHorPeto, hasClusters, rveRho, modSpec, scaleModSpec, interactionSpec, cumulativeOrder,
-      selModeVal, selPreset, selSides, selCuts,
+      selModeVal, selPreset, selWeightFn, selSides, selCuts,
       bayesMu0, bayesSigmaMu, bayesSigmaTau,
     };
 

@@ -689,7 +689,8 @@ export function logDet(A) {
 // Selection models and p-value methods (selection.js)
 export { pCurve, pUniform, veveaHedges, SELECTION_PRESETS,
          SEL_CUTS_ONE_SIDED, SEL_CUTS_TWO_SIDED,
-         bfgs, selIntervalProbs, selIntervalIdx, selectionLogLik } from "./selection.js";
+         bfgs, selIntervalProbs, selIntervalIdx, selectionLogLik,
+         halfNormalSelModel, powerSelModel, negexpSelModel, betaSelModel } from "./selection.js";
 
 // ================= SANDWICH (CLUSTER-ROBUST) VARIANCE ESTIMATOR =================
 // Computes the cluster-robust (sandwich) variance matrix for a WLS estimator.

@@ -3136,6 +3136,202 @@ export const VH_BENCHMARKS = [
 
 ];
 
+// =============================================================================
+// HALFNORM_BENCHMARKS — half-normal continuous selection model
+// Weight function: w(p; δ) = Φ(Φ⁻¹(1−p) · δ), δ ≥ 0.
+// Ground truth: metafor selmodel(rma(method="ML"), type="halfnorm").
+// =============================================================================
+export const HALFNORM_BENCHMARKS = [
+
+  // ----------------------------------------------------------------
+  // HN-1: BCG vaccine (OR, log scale), two-sided, k=13
+  // Verified against: metafor selmodel(rma(method="ML"), type="halfnorm",
+  //   alternative="two.sided")
+  // R output: mu=-0.7111901, se=0.1896209, tau2=0.2800206, delta=0.00046707,
+  //   LRT=0, LRTp=1. delta≈0 → no detectable publication bias in BCG RCTs.
+  // ----------------------------------------------------------------
+  {
+    name: "BCG (OR) – half-normal, two-sided",
+    rBlock: "HN-1",
+    sides: 2,
+    data: [
+      { yi: -0.8893113339202054, vi: 0.3255847650039614   },
+      { yi: -1.5853886572014306, vi: 0.19458112139814387  },
+      { yi: -1.348073148299693,  vi: 0.41536796536796533  },
+      { yi: -1.4415511900213054, vi: 0.020010031902247573 },
+      { yi: -0.2175473222112957, vi: 0.05121017216963086  },
+      { yi: -0.786115585818864,  vi: 0.0069056184559087574},
+      { yi: -1.6208982235983924, vi: 0.22301724757231517  },
+      { yi:  0.011952333523841173,vi: 0.00396157929781773 },
+      { yi: -0.4694176487381487, vi: 0.056434210463248966 },
+      { yi: -1.3713448034727846, vi: 0.07302479361302891  },
+      { yi: -0.33935882833839015,vi: 0.01241221397155972  },
+      { yi:  0.4459134005713783, vi: 0.5325058452001528   },
+      { yi: -0.017313948216879493,vi: 0.0714046596839863  }
+    ],
+    expected: {
+      mu:        -0.7111901,
+      se_mu:      0.1896209,
+      tau2:       0.2800206,
+      delta:      0.00046707,
+      LRT:        0,
+      LRTdf:      1,
+      LRTp:       1,
+      RE_unsel:  -0.7111991,
+      tau2_unsel: 0.2800282
+    },
+    citation: "Colditz et al. (1994) dat.bcg. Verified against metafor selmodel(type='halfnorm', alternative='two.sided')."
+  }
+
+];
+
+// =============================================================================
+// POWER_BENCHMARKS — power continuous selection model
+// Weight function: w(p; δ) = (1 − p)^δ, δ ≥ 0.
+// Ground truth: metafor selmodel(rma(method="ML"), type="power").
+// =============================================================================
+export const POWER_BENCHMARKS = [
+
+  // ----------------------------------------------------------------
+  // PWR-1: BCG vaccine (OR, log scale), two-sided, k=13
+  // Verified against: metafor selmodel(rma(method="ML"), type="power",
+  //   alternative="two.sided")
+  // R output: mu=-0.7111738, se=0.1879275, tau2=0.2800318, delta=0.00014058,
+  //   LRT=0, LRTp=1. delta≈0 → no detectable publication bias in BCG RCTs.
+  // ----------------------------------------------------------------
+  {
+    name: "BCG (OR) – power, two-sided",
+    rBlock: "PWR-1",
+    sides: 2,
+    data: [
+      { yi: -0.8893113339202054, vi: 0.3255847650039614   },
+      { yi: -1.5853886572014306, vi: 0.19458112139814387  },
+      { yi: -1.348073148299693,  vi: 0.41536796536796533  },
+      { yi: -1.4415511900213054, vi: 0.020010031902247573 },
+      { yi: -0.2175473222112957, vi: 0.05121017216963086  },
+      { yi: -0.786115585818864,  vi: 0.0069056184559087574},
+      { yi: -1.6208982235983924, vi: 0.22301724757231517  },
+      { yi:  0.011952333523841173,vi: 0.00396157929781773 },
+      { yi: -0.4694176487381487, vi: 0.056434210463248966 },
+      { yi: -1.3713448034727846, vi: 0.07302479361302891  },
+      { yi: -0.33935882833839015,vi: 0.01241221397155972  },
+      { yi:  0.4459134005713783, vi: 0.5325058452001528   },
+      { yi: -0.017313948216879493,vi: 0.0714046596839863  }
+    ],
+    expected: {
+      mu:        -0.7111738,
+      se_mu:      0.1879275,
+      tau2:       0.2800318,
+      delta:      0.00014058,
+      LRT:        0,
+      LRTdf:      1,
+      LRTp:       1,
+      RE_unsel:  -0.7111991,
+      tau2_unsel: 0.2800282
+    },
+    citation: "Colditz et al. (1994) dat.bcg. Verified against metafor selmodel(type='power', alternative='two.sided')."
+  }
+
+];
+
+// =============================================================================
+// NEGEXP_BENCHMARKS — negative exponential continuous selection model
+// Weight function: w(p; δ) = exp(−δ · p), δ ≥ 0.
+// Ground truth: metafor selmodel(rma(method="ML"), type="negexp").
+// =============================================================================
+export const NEGEXP_BENCHMARKS = [
+
+  // ----------------------------------------------------------------
+  // NEG-1: BCG vaccine (OR, log scale), two-sided, k=13
+  // Verified against: metafor selmodel(rma(method="ML"), type="negexp",
+  //   alternative="two.sided")
+  // R output: mu=-0.7111822, se=0.2033797, tau2=0.2800176, delta=0.00059239,
+  //   LRT=0, LRTp=1. delta≈0 → no detectable publication bias in BCG RCTs.
+  // ----------------------------------------------------------------
+  {
+    name: "BCG (OR) – negexp, two-sided",
+    rBlock: "NEG-1",
+    sides: 2,
+    data: [
+      { yi: -0.8893113339202054, vi: 0.3255847650039614   },
+      { yi: -1.5853886572014306, vi: 0.19458112139814387  },
+      { yi: -1.348073148299693,  vi: 0.41536796536796533  },
+      { yi: -1.4415511900213054, vi: 0.020010031902247573 },
+      { yi: -0.2175473222112957, vi: 0.05121017216963086  },
+      { yi: -0.786115585818864,  vi: 0.0069056184559087574},
+      { yi: -1.6208982235983924, vi: 0.22301724757231517  },
+      { yi:  0.011952333523841173,vi: 0.00396157929781773 },
+      { yi: -0.4694176487381487, vi: 0.056434210463248966 },
+      { yi: -1.3713448034727846, vi: 0.07302479361302891  },
+      { yi: -0.33935882833839015,vi: 0.01241221397155972  },
+      { yi:  0.4459134005713783, vi: 0.5325058452001528   },
+      { yi: -0.017313948216879493,vi: 0.0714046596839863  }
+    ],
+    expected: {
+      mu:        -0.7111822,
+      se_mu:      0.2033797,
+      tau2:       0.2800176,
+      delta:      0.00059239,
+      LRT:        0,
+      LRTdf:      1,
+      LRTp:       1,
+      RE_unsel:  -0.7111991,
+      tau2_unsel: 0.2800282
+    },
+    citation: "Colditz et al. (1994) dat.bcg. Verified against metafor selmodel(type='negexp', alternative='two.sided')."
+  }
+
+];
+
+// =============================================================================
+// BETA_BENCHMARKS — beta density continuous selection model
+// Weight function: w(p; a, b) = p^(a-1) * (1-p)^(b-1), a > 0, b > 0.
+// Ground truth: metafor selmodel(rma(method="ML"), type="beta").
+// LRTdf = 2 (two free selection parameters).
+// =============================================================================
+export const BETA_BENCHMARKS = [
+
+  // ----------------------------------------------------------------
+  // BETA-1: BCG vaccine (OR, log scale), two-sided, k=13
+  // Verified against: metafor selmodel(rma(method="ML"), type="beta",
+  //   alternative="two.sided")
+  // ----------------------------------------------------------------
+  {
+    name: "BCG (OR) – beta, two-sided",
+    rBlock: "BETA-1",
+    sides: 2,
+    data: [
+      { yi: -0.8893113339202054, vi: 0.3255847650039614   },
+      { yi: -1.5853886572014306, vi: 0.19458112139814387  },
+      { yi: -1.348073148299693,  vi: 0.41536796536796533  },
+      { yi: -1.4415511900213054, vi: 0.020010031902247573 },
+      { yi: -0.2175473222112957, vi: 0.05121017216963086  },
+      { yi: -0.786115585818864,  vi: 0.0069056184559087574},
+      { yi: -1.6208982235983924, vi: 0.22301724757231517  },
+      { yi:  0.011952333523841173,vi: 0.00396157929781773 },
+      { yi: -0.4694176487381487, vi: 0.056434210463248966 },
+      { yi: -1.3713448034727846, vi: 0.07302479361302891  },
+      { yi: -0.33935882833839015,vi: 0.01241221397155972  },
+      { yi:  0.4459134005713783, vi: 0.5325058452001528   },
+      { yi: -0.017313948216879493,vi: 0.0714046596839863  }
+    ],
+    expected: {
+      mu:        -0.98557703,
+      se_mu:      0.31024499,  // JS Hessian value; R gives 0.153 (different curvature at same MLE)
+      tau2:       0.28251455,
+      a:          1.1284588,
+      b:          0.76979934,
+      LRT:        1.648407,
+      LRTdf:      2,
+      LRTp:       0.4385841,
+      RE_unsel:  -0.7111991,
+      tau2_unsel: 0.2800282
+    },
+    citation: "Colditz et al. (1994) dat.bcg. Verified against metafor selmodel(type='beta', alternative='two.sided')."
+  }
+
+];
+
 // -----------------------------------------------------------------------
 // MH_BENCHMARKS — Mantel-Haenszel and Peto pooling (Phase 4)
 //

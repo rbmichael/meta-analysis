@@ -1866,6 +1866,97 @@ fixed-ω sensitivity presets are more reliable in that case.</p>`,
           "Vevea, J. L., & Woods, C. M. (2005). Publication bias in research synthesis: Sensitivity analysis using a priori weight functions. <em>Psychological Methods, 10</em>(4), 428–443.",
         ],
       },
+
+      {
+        id: "guide-sel-halfnorm",
+        title: "Half-normal selection model",
+        body: `<p>The half-normal selection model (Andrews &amp; Kasy, 2019; implemented in
+metafor as <code>type="halfnorm"</code>) uses a continuous weight function based
+on the probit transform of the one- or two-sided p-value:</p>
+<p style="margin-left:1.5em"><em>w(p; δ) = exp(−δ · [Φ⁻¹(1−p)]² / 2)</em></p>
+<p>where δ ≥ 0 is estimated by maximum likelihood alongside μ and τ².</p>
+<ul>
+  <li><strong>δ = 0</strong> — no selection (reduces to standard RE).</li>
+  <li><strong>δ &gt; 0</strong> — exponentially less weight on non-significant
+  studies; the penalty grows with the probit distance from significance.</li>
+</ul>
+<p><strong>Normalising constant:</strong> Each study contributes a per-study
+integral A<sub>i</sub>(μ, τ², δ) = ∫ w(p(y)) · φ((y−μ)/σ<sub>i</sub>) / σ<sub>i</sub> dy
+computed by 20-point Gauss-Hermite quadrature.</p>
+<p><strong>Inference:</strong> A likelihood-ratio test (LRT) against the
+unweighted RE model (H₀: δ = 0) has χ²(1) distribution under the null. SE of
+δ̂ is from the numerical Hessian; 95% CI for μ̂ uses ±1.96 × SE.</p>
+<p><strong>Requires k ≥ 6.</strong></p>`,
+        citations: [
+          "Andrews, I., & Kasy, M. (2019). Identification of and correction for publication bias. <em>American Economic Review, 109</em>(8), 2766–2794.",
+          "Vevea, J. L., & Hedges, L. V. (1995). A general linear model for estimating effect size in the presence of publication bias. <em>Psychometrika, 60</em>(3), 419–435.",
+        ],
+      },
+
+      {
+        id: "guide-sel-power",
+        title: "Power selection model",
+        body: `<p>The power selection model uses a simple polynomial weight function:</p>
+<p style="margin-left:1.5em"><em>w(p; δ) = (1 − p)<sup>δ</sup></em></p>
+<p>where δ ≥ 0 is estimated jointly with μ and τ² by ML (metafor
+<code>type="power"</code>).</p>
+<ul>
+  <li><strong>δ = 0</strong> — uniform weight (no selection).</li>
+  <li><strong>δ &gt; 0</strong> — less weight on studies with larger p-values;
+  weight decreases as a power of (1 − p).</li>
+</ul>
+<p><strong>Interpretation:</strong> δ̂ reflects how steeply the probability of
+being observed falls as p increases. A LRT against the unweighted RE model
+(H₀: δ = 0) provides a formal test of selection. Requires k ≥ 6.</p>`,
+        citations: [
+          "Vevea, J. L., & Hedges, L. V. (1995). A general linear model for estimating effect size in the presence of publication bias. <em>Psychometrika, 60</em>(3), 419–435.",
+        ],
+      },
+
+      {
+        id: "guide-sel-negexp",
+        title: "Negative exponential selection model",
+        body: `<p>The negative exponential selection model uses an exponential weight
+function in p directly:</p>
+<p style="margin-left:1.5em"><em>w(p; δ) = e<sup>−δp</sup></em></p>
+<p>where δ ≥ 0 (metafor <code>type="negexp"</code>).</p>
+<ul>
+  <li><strong>δ = 0</strong> — uniform weight.</li>
+  <li><strong>δ &gt; 0</strong> — studies with small p-values (significant
+  results) are relatively more likely to be published; the penalty for large
+  p is exponential in p rather than in the probit of p (cf. half-normal).</li>
+</ul>
+<p>LRT against the unweighted RE model (H₀: δ = 0) has χ²(1) distribution.
+Requires k ≥ 6.</p>`,
+        citations: [
+          "Vevea, J. L., & Hedges, L. V. (1995). A general linear model for estimating effect size in the presence of publication bias. <em>Psychometrika, 60</em>(3), 419–435.",
+        ],
+      },
+
+      {
+        id: "guide-sel-beta",
+        title: "Beta selection model",
+        body: `<p>The beta selection model uses an unnormalised beta density as the weight
+function (metafor <code>type="beta"</code>):</p>
+<p style="margin-left:1.5em"><em>w(p; a, b) = p<sup>a−1</sup>(1−p)<sup>b−1</sup></em></p>
+<p>Both shape parameters a &gt; 0 and b &gt; 0 are estimated jointly with μ and
+τ² by ML. This is the most flexible of the four continuous weight functions and
+can represent a wider range of selection mechanisms.</p>
+<ul>
+  <li><strong>a = 1, b = 1</strong> — uniform weight (no selection).</li>
+  <li><strong>a = 1, b &gt; 1</strong> — weight decreases with p (power-type
+  selection favouring small p).</li>
+  <li><strong>a &gt; 1, b = 1</strong> — weight increases with p (unusual;
+  publication of null results preferred).</li>
+</ul>
+<p><strong>LRT</strong> against the unweighted RE model (H₀: a = 1, b = 1)
+has χ²(2) distribution (two free parameters). SE of â and b̂ from the
+numerical Hessian. Requires k ≥ 7 (two selection parameters).</p>`,
+        citations: [
+          "Vevea, J. L., & Hedges, L. V. (1995). A general linear model for estimating effect size in the presence of publication bias. <em>Psychometrika, 60</em>(3), 419–435.",
+        ],
+      },
+
     ],
   },
 
@@ -3116,6 +3207,10 @@ export const HELP_TO_GUIDE = {
   "bias.pcurve":      "guide-pcurve",
   "bias.puniform":    "guide-puniform",
   "sel.model":        "guide-selection-model",
+  "sel.halfnorm":     "guide-sel-halfnorm",
+  "sel.power":        "guide-sel-power",
+  "sel.negexp":       "guide-sel-negexp",
+  "sel.beta":         "guide-sel-beta",
   "diag.blup":        "guide-blup",
   "diag.baujat":      "guide-baujat",
   "diag.labbe":       "guide-labbe",

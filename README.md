@@ -48,7 +48,8 @@ A browser-based meta-analysis tool. No installation, no server, no dependencies 
 - **Fail-safe N** — Rosenthal and Orwin estimators
 - **Trim-and-fill** (L0, R0, Q0 estimators) — imputes missing studies and reports the adjusted pooled estimate; estimator selectable in the UI
 - **Funnel plot** — standard or contour-enhanced (p-value regions at α = .10, .05, .01)
-- **Selection model (Vevea-Hedges)** — ω-weighted likelihood model for publication bias; MLE mode (k ≥ 8) estimates selection weights jointly with μ and τ²; fixed-ω sensitivity presets (Mild / Moderate / Severe, Vevea & Woods 2005) available from k ≥ 3
+- **Selection model (Vevea-Hedges step function)** — ω-weighted likelihood model for publication bias; MLE mode (k ≥ 8) estimates selection weights jointly with μ and τ²; fixed-ω sensitivity presets (Mild / Moderate / Severe, Vevea & Woods 2005) available from k ≥ 3
+- **Continuous selection models** (k ≥ 6) — four smooth weight functions estimated by ML with LRT against unweighted RE: half-normal w(p; δ) = exp(−δ·[Φ⁻¹(1−p)]²/2) (Andrews & Kasy 2019), power (1−p)<sup>δ</sup>, negative exponential e<sup>−δp</sup>, beta p<sup>a−1</sup>(1−p)<sup>b−1</sup>
 
 ### P-value analyses
 
@@ -228,6 +229,7 @@ git commit -m "Rebuild bundle after sync with main"
 
 ## Statistical references
 
+- Andrews I, Kasy M (2019). Identification of and correction for publication bias. *Am Econ Rev*, 109(8), 2766–2794.
 - Bonett DG (2002). Sample size requirements for estimating intraclass correlations with desired precision. *Stat Med*, 21(9), 1331–1335.
 - Borenstein M, Hedges LV, Higgins JPT, Rothstein HR (2009). *Introduction to Meta-Analysis*. Wiley.
 - Deeks JJ, Macaskill P, Irwig L (2005). The performance of tests of publication bias and other sample size effects in systematic reviews of diagnostic test accuracy was assessed. *J Clin Epidemiol*, 58(9), 882–893.

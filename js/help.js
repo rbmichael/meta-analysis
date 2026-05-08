@@ -1032,6 +1032,56 @@ export const HELP = {
            "Vevea & Hedges (1995); presets from Vevea & Woods (2005).",
   },
 
+  "sel.halfnorm": {
+    title: "Half-normal selection model",
+    body:  "A continuous selection model where the probability of observing a study " +
+           "with p-value p is proportional to w(p; δ) = Φ(Φ⁻¹(1−p) · δ), where Φ is " +
+           "the standard normal CDF. " +
+           "δ = 0 gives uniform selection (reduces exactly to the RE model); " +
+           "δ > 0 gives progressively more weight to studies with smaller p-values. " +
+           "The selection-corrected μ̂ and τ² are obtained by MLE jointly with δ. " +
+           "The likelihood ratio test (H₀: δ = 0) tests for selective reporting. " +
+           "Normalising constants are computed by 20-point Gauss-Hermite quadrature. " +
+           "Requires k ≥ 6. Matches metafor selmodel(type='halfnorm').",
+  },
+
+  "sel.power": {
+    title: "Power selection model",
+    body:  "A continuous selection model where the probability of observing a study " +
+           "with p-value p is proportional to w(p; δ) = (1 − p)^δ. " +
+           "δ = 0 gives uniform selection (reduces exactly to the RE model); " +
+           "δ > 0 gives more weight to studies with smaller p-values. " +
+           "The selection-corrected μ̂ and τ² are obtained by MLE jointly with δ. " +
+           "The likelihood ratio test (H₀: δ = 0) tests for selective reporting. " +
+           "Normalising constants are computed by 20-point Gauss-Hermite quadrature. " +
+           "Requires k ≥ 6. Matches metafor selmodel(type='power').",
+  },
+
+  "sel.beta": {
+    title: "Beta selection model",
+    body:  "A continuous selection model using an unnormalised beta density as the weight: " +
+           "w(p; a, b) = p^(a−1) · (1−p)^(b−1), a > 0, b > 0. " +
+           "When a = b = 1 the weight is uniform (reduces exactly to the RE model). " +
+           "When a = 1 and b > 1 the model resembles power selection (small p preferred). " +
+           "The two-parameter shape allows flexible asymmetric selection patterns. " +
+           "The selection-corrected μ̂ and τ² are obtained by MLE jointly with a and b. " +
+           "The likelihood ratio test (H₀: a = b = 1) uses df = 2. " +
+           "Normalising constants are computed by 20-point Gauss-Hermite quadrature. " +
+           "Requires k ≥ 6. Matches metafor selmodel(type='beta').",
+  },
+
+  "sel.negexp": {
+    title: "Negative exponential selection model",
+    body:  "A continuous selection model where the probability of observing a study " +
+           "with p-value p is proportional to w(p; δ) = exp(−δ · p). " +
+           "δ = 0 gives uniform selection (reduces exactly to the RE model); " +
+           "δ > 0 gives more weight to studies with smaller p-values. " +
+           "The selection-corrected μ̂ and τ² are obtained by MLE jointly with δ. " +
+           "The likelihood ratio test (H₀: δ = 0) tests for selective reporting. " +
+           "Normalising constants are computed by 20-point Gauss-Hermite quadrature. " +
+           "Requires k ≥ 6. Matches metafor selmodel(type='negexp').",
+  },
+
   // ------------------------------------------------------------------ //
   // Diagnostics                                                          //
   // ------------------------------------------------------------------ //

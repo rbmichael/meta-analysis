@@ -262,6 +262,15 @@
                   <option value="mle">MLE (estimate weights)</option>
                 </select>
               </label>
+              <label class="inline" id="selWeightFnRow">Weight function:
+                <select id="selWeightFn">
+                  <option value="stepfun">Step function (Vevea-Hedges)</option>
+                  <option value="halfnorm">Half-normal</option>
+                  <option value="power">Power</option>
+                  <option value="negexp">Negative exponential</option>
+                  <option value="beta">Beta</option>
+                </select>
+              </label>
               <label class="inline" id="selPresetRow">Weight scheme:
                 <select id="selPreset">
                   <option value="mild1">Mild (1-sided)</option>
@@ -724,9 +733,9 @@
           </div>
         </details>
 
-        <!-- ── Section 9: Selection Model (Vevea-Hedges) ── -->
+        <!-- ── Section 9: Selection Model ── -->
         <details class="results-section" id="selectionModelSection">
-          <summary class="results-section-header">Selection Model (Vevea-Hedges)</summary>
+          <summary class="results-section-header">Selection Model</summary>
           <div id="selectionModelPanel"></div>
         </details>
 
@@ -895,7 +904,15 @@
         <li><strong>Henmi-Copas bias-robust CI</strong> — confidence interval robust to publication bias; always uses DL τ² and fixed-effect weights; centred on the FE estimate with half-width u₀ × SE, where u₀ = SDR × t₀ and t₀ is solved by numerical integration over the conditional distribution of Q given R; wider than the standard RE CI when small-study effects are present (Henmi &amp; Copas, 2010)</li>
         <li><strong>Trim-and-fill</strong> (L0, R0, Q0 estimators) — imputes missing studies and reports the adjusted pooled estimate; estimator selectable in the UI</li>
         <li><strong>Funnel plot</strong> — standard or contour-enhanced (α = .10, .05, .01 regions)</li>
-        <li><strong>Selection model (Vevea–Hedges)</strong> — ω-weighted likelihood model; MLE mode (k ≥ 8) estimates selection weights jointly with μ and τ²; fixed-ω sensitivity presets (Mild / Moderate / Severe, Vevea &amp; Woods 2005) available from k ≥ 3</li>
+        <li><strong>Selection model (Vevea–Hedges step function)</strong> — ω-weighted likelihood model; MLE mode (k ≥ 8) estimates selection weights jointly with μ and τ²; fixed-ω sensitivity presets (Mild / Moderate / Severe, Vevea &amp; Woods 2005) available from k ≥ 3</li>
+        <li><strong>Continuous selection models</strong> — four smooth weight functions estimated by ML alongside μ and τ²; LRT against unweighted RE model (requires k ≥ 6):
+          <ul>
+            <li><em>Half-normal</em> — w(p; δ) = exp(−δ·[Φ⁻¹(1−p)]²/2); matches Andrews &amp; Kasy (2019)</li>
+            <li><em>Power</em> — w(p; δ) = (1−p)<sup>δ</sup></li>
+            <li><em>Negative exponential</em> — w(p; δ) = e<sup>−δp</sup></li>
+            <li><em>Beta</em> — w(p; a, b) = p<sup>a−1</sup>(1−p)<sup>b−1</sup>; two free parameters, LRT χ²(2)</li>
+          </ul>
+        </li>
       </ul>
 
       <!-- ---- P-value analyses ---- -->
@@ -1082,6 +1099,7 @@
       <h2>Statistical references</h2>
       <ol class="about-refs">
         <li>Akaike H (1974). A new look at the statistical model identification. <em>IEEE Trans Autom Control,</em> 19(6), 716–723.</li>
+        <li>Andrews I, Kasy M (2019). Identification of and correction for publication bias. <em>Am Econ Rev,</em> 109(8), 2766–2794.</li>
         <li>Blom G (1958). <em>Statistical Estimates and Transformed Beta-Variables.</em> Wiley.</li>
         <li>Bonett DG (2002). Sample size requirements for estimating intraclass correlations with desired precision. <em>Stat Med,</em> 21(9), 1331–1335.</li>
         <li>Borenstein M, Hedges LV, Higgins JPT, Rothstein HR (2009). <em>Introduction to Meta-Analysis.</em> Wiley.</li>

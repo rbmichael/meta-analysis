@@ -28,6 +28,10 @@ const _RENDER_HELP_LABELS = {
   "het.I2":              "I² heterogeneity",
   "het.H2":              "H² heterogeneity",
   "sel.model":           "Selection model",
+  "sel.halfnorm":        "Half-normal selection model",
+  "sel.power":           "Power selection model",
+  "sel.negexp":          "Negative exponential selection model",
+  "sel.beta":            "Beta selection model",
   "diag.influence":      "Influence diagnostics",
   "diag.dffits":         "DFFITS influence statistic",
   "diag.covratio":       "CovRatio influence statistic",
@@ -807,7 +811,7 @@ export function renderPUniformPanel(puniform, m, profile) {
 }
 
 // ---------------- SELECTION MODEL PANEL ----------------
-export function renderSelectionModelPanel(r, mode, profile) {
+export function renderSelectionModelPanel(r, mode, weightFn, profile) {
   const panel = document.getElementById("selectionModelPanel");
   if (!panel) return;
 
@@ -826,9 +830,144 @@ export function renderSelectionModelPanel(r, mode, profile) {
     return;
   }
 
-  // Insufficient k
+  // Insufficient k (both step-function and continuous models)
   if (r.error === "insufficient_k") {
-    panel.innerHTML = `${hBtn("sel.model")}<p class="sel-note">Insufficient studies: need at least ${r.minK} for ${r.K} intervals (have ${r.k}).</p>`;
+    const need = r.minK ?? r.K + 2;
+    panel.innerHTML = `${hBtn("sel.model")}<p class="sel-note">Insufficient studies: need at least ${need} (have ${r.k}).</p>`;
+    return;
+  }
+
+  // ── Half-normal (and future continuous models) branch ──
+  if (r.weightFn === "halfnorm") {
+    const muAdj  = fmtDisp(r.mu);
+    const ciLo   = fmtDisp(r.ci_mu[0]);
+    const ciHi   = fmtDisp(r.ci_mu[1]);
+    const muUnadj = fmtDisp(r.RE_unsel);
+    const convNote = !r.converged
+      ? `<p class="sel-warn">⚠ Optimizer did not fully converge. Results may be unreliable.</p>`
+      : "";
+    const tau2Warn = (r.tau2_unsel !== undefined && r.tau2_unsel < 0.01)
+      ? `<p class="sel-note">Note: Heterogeneity near zero (τ² ≈ 0). Selection model may be underidentified.</p>`
+      : "";
+    const sidesLabel = r.sides === 2 ? "two-sided" : "one-sided";
+    panel.innerHTML = `
+      ${hBtn("sel.halfnorm")}${tau2Warn}
+      <p class="sel-note">Half-normal weight function · w(p; δ) = Φ(Φ⁻¹(1−p) · δ) · ${sidesLabel} p-values</p>
+      <table class="sel-table">
+        <thead><tr><th>Quantity</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td>Selection parameter δ̂</td>
+              <td>${fmtV(r.delta)}${isFinite(r.se_delta) ? ` ± ${fmtV(r.se_delta)}` : ""}</td></tr>
+          <tr><td>Adjusted μ̂ [95% CI]</td>
+              <td>${muAdj} [${ciLo}, ${ciHi}] &nbsp;·&nbsp; unadjusted: ${muUnadj}</td></tr>
+          <tr><td>Adjusted τ²</td>
+              <td>${fmtV(r.tau2)} &nbsp;·&nbsp; unadjusted: ${fmtV(r.tau2_unsel)}</td></tr>
+          <tr><td>LRT (H₀: δ = 0)</td>
+              <td>χ²(1) = ${fmtV(r.LRT)}, p = ${fmtP(r.LRTp)}</td></tr>
+        </tbody>
+      </table>
+      ${convNote}`;
+    return;
+  }
+
+  // ── Power branch ──
+  if (r.weightFn === "power") {
+    const muAdj  = fmtDisp(r.mu);
+    const ciLo   = fmtDisp(r.ci_mu[0]);
+    const ciHi   = fmtDisp(r.ci_mu[1]);
+    const muUnadj = fmtDisp(r.RE_unsel);
+    const convNote = !r.converged
+      ? `<p class="sel-warn">⚠ Optimizer did not fully converge. Results may be unreliable.</p>`
+      : "";
+    const tau2Warn = (r.tau2_unsel !== undefined && r.tau2_unsel < 0.01)
+      ? `<p class="sel-note">Note: Heterogeneity near zero (τ² ≈ 0). Selection model may be underidentified.</p>`
+      : "";
+    const sidesLabel = r.sides === 2 ? "two-sided" : "one-sided";
+    panel.innerHTML = `
+      ${hBtn("sel.power")}${tau2Warn}
+      <p class="sel-note">Power weight function · w(p; δ) = (1 − p)<sup>δ</sup> · ${sidesLabel} p-values</p>
+      <table class="sel-table">
+        <thead><tr><th>Quantity</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td>Selection parameter δ̂</td>
+              <td>${fmtV(r.delta)}${isFinite(r.se_delta) ? ` ± ${fmtV(r.se_delta)}` : ""}</td></tr>
+          <tr><td>Adjusted μ̂ [95% CI]</td>
+              <td>${muAdj} [${ciLo}, ${ciHi}] &nbsp;·&nbsp; unadjusted: ${muUnadj}</td></tr>
+          <tr><td>Adjusted τ²</td>
+              <td>${fmtV(r.tau2)} &nbsp;·&nbsp; unadjusted: ${fmtV(r.tau2_unsel)}</td></tr>
+          <tr><td>LRT (H₀: δ = 0)</td>
+              <td>χ²(1) = ${fmtV(r.LRT)}, p = ${fmtP(r.LRTp)}</td></tr>
+        </tbody>
+      </table>
+      ${convNote}`;
+    return;
+  }
+
+  // ── Negative exponential branch ──
+  if (r.weightFn === "negexp") {
+    const muAdj  = fmtDisp(r.mu);
+    const ciLo   = fmtDisp(r.ci_mu[0]);
+    const ciHi   = fmtDisp(r.ci_mu[1]);
+    const muUnadj = fmtDisp(r.RE_unsel);
+    const convNote = !r.converged
+      ? `<p class="sel-warn">⚠ Optimizer did not fully converge. Results may be unreliable.</p>`
+      : "";
+    const tau2Warn = (r.tau2_unsel !== undefined && r.tau2_unsel < 0.01)
+      ? `<p class="sel-note">Note: Heterogeneity near zero (τ² ≈ 0). Selection model may be underidentified.</p>`
+      : "";
+    const sidesLabel = r.sides === 2 ? "two-sided" : "one-sided";
+    panel.innerHTML = `
+      ${hBtn("sel.negexp")}${tau2Warn}
+      <p class="sel-note">Negative exponential weight function · w(p; δ) = e<sup>−δp</sup> · ${sidesLabel} p-values</p>
+      <table class="sel-table">
+        <thead><tr><th>Quantity</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td>Selection parameter δ̂</td>
+              <td>${fmtV(r.delta)}${isFinite(r.se_delta) ? ` ± ${fmtV(r.se_delta)}` : ""}</td></tr>
+          <tr><td>Adjusted μ̂ [95% CI]</td>
+              <td>${muAdj} [${ciLo}, ${ciHi}] &nbsp;·&nbsp; unadjusted: ${muUnadj}</td></tr>
+          <tr><td>Adjusted τ²</td>
+              <td>${fmtV(r.tau2)} &nbsp;·&nbsp; unadjusted: ${fmtV(r.tau2_unsel)}</td></tr>
+          <tr><td>LRT (H₀: δ = 0)</td>
+              <td>χ²(1) = ${fmtV(r.LRT)}, p = ${fmtP(r.LRTp)}</td></tr>
+        </tbody>
+      </table>
+      ${convNote}`;
+    return;
+  }
+
+  // ── Beta branch ──
+  if (r.weightFn === "beta") {
+    const muAdj   = fmtDisp(r.mu);
+    const ciLo    = fmtDisp(r.ci_mu[0]);
+    const ciHi    = fmtDisp(r.ci_mu[1]);
+    const muUnadj = fmtDisp(r.RE_unsel);
+    const convNote = !r.converged
+      ? `<p class="sel-warn">⚠ Optimizer did not fully converge. Results may be unreliable.</p>`
+      : "";
+    const tau2Warn = (r.tau2_unsel !== undefined && r.tau2_unsel < 0.01)
+      ? `<p class="sel-note">Note: Heterogeneity near zero (τ² ≈ 0). Selection model may be underidentified.</p>`
+      : "";
+    const sidesLabel = r.sides === 2 ? "two-sided" : "one-sided";
+    panel.innerHTML = `
+      ${hBtn("sel.beta")}${tau2Warn}
+      <p class="sel-note">Beta weight function · w(p; a, b) = p<sup>a−1</sup>(1−p)<sup>b−1</sup> · ${sidesLabel} p-values</p>
+      <table class="sel-table">
+        <thead><tr><th>Quantity</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td>Shape â</td>
+              <td>${fmtV(r.a)}${isFinite(r.se_a) ? ` ± ${fmtV(r.se_a)}` : ""}</td></tr>
+          <tr><td>Shape b̂</td>
+              <td>${fmtV(r.b)}${isFinite(r.se_b) ? ` ± ${fmtV(r.se_b)}` : ""}</td></tr>
+          <tr><td>Adjusted μ̂ [95% CI]</td>
+              <td>${muAdj} [${ciLo}, ${ciHi}] &nbsp;·&nbsp; unadjusted: ${muUnadj}</td></tr>
+          <tr><td>Adjusted τ²</td>
+              <td>${fmtV(r.tau2)} &nbsp;·&nbsp; unadjusted: ${fmtV(r.tau2_unsel)}</td></tr>
+          <tr><td>LRT (H₀: a = b = 1)</td>
+              <td>χ²(2) = ${fmtV(r.LRT)}, p = ${fmtP(r.LRTp)}</td></tr>
+        </tbody>
+      </table>
+      ${convNote}`;
     return;
   }
 

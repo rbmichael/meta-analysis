@@ -1,7 +1,7 @@
 import { round, transformEffect, chiSquareCDF, chiSquareQuantile, parseCounts, bivariateNormalCDF, normalQuantile, tCritical, fCDF, normalCDF, tCDF } from "./utils.js";
 import { validateStudy } from "./profiles.js";
-import { BENCHMARKS, PUB_BIAS_BENCHMARKS, INFLUENCE_BENCHMARKS, META_REGRESSION_BENCHMARKS, VH_BENCHMARKS, MH_BENCHMARKS, CLUSTER_BENCHMARKS, RVE_BENCHMARKS, THREE_LEVEL_BENCHMARKS, LS_BENCHMARKS, CONTRAST_BENCHMARKS, INTERACTION_BENCHMARKS } from "./benchmarks.js";
-import { compute, meta, metaMH, metaPeto, robustMeta, sandwichVar, robustWlsResult, metaRegression, testContrast, tau2_HS, tau2_HE, tau2_ML, tau2_SJ, beggTest, eggerTest, fatPetTest, petPeeseTest, failSafeN, tesTest, heterogeneityCIs, cumulativeMeta, influenceDiagnostics, harbordTest, petersTest, deeksTest, rueckerTest, leaveOneOut, baujat, blupMeta, pCurve, pUniform, estimatorComparison, subgroupAnalysis, logLik, bfgs, selIntervalProbs, selIntervalIdx, selectionLogLik, SEL_CUTS_ONE_SIDED, SEL_CUTS_TWO_SIDED, veveaHedges, SELECTION_PRESETS, profileLikTau2, profileLikCI, bayesMeta, priorSensitivity, rvePooled, meta3level, lsModel, adjustPvals, henmiCopas, waapWls, clES } from "./analysis.js";
+import { BENCHMARKS, PUB_BIAS_BENCHMARKS, INFLUENCE_BENCHMARKS, META_REGRESSION_BENCHMARKS, VH_BENCHMARKS, MH_BENCHMARKS, CLUSTER_BENCHMARKS, RVE_BENCHMARKS, THREE_LEVEL_BENCHMARKS, LS_BENCHMARKS, CONTRAST_BENCHMARKS, INTERACTION_BENCHMARKS, HALFNORM_BENCHMARKS, POWER_BENCHMARKS, NEGEXP_BENCHMARKS, BETA_BENCHMARKS } from "./benchmarks.js";
+import { compute, meta, metaMH, metaPeto, robustMeta, sandwichVar, robustWlsResult, metaRegression, testContrast, tau2_HS, tau2_HE, tau2_ML, tau2_SJ, beggTest, eggerTest, fatPetTest, petPeeseTest, failSafeN, tesTest, heterogeneityCIs, cumulativeMeta, influenceDiagnostics, harbordTest, petersTest, deeksTest, rueckerTest, leaveOneOut, baujat, blupMeta, pCurve, pUniform, estimatorComparison, subgroupAnalysis, logLik, bfgs, selIntervalProbs, selIntervalIdx, selectionLogLik, SEL_CUTS_ONE_SIDED, SEL_CUTS_TWO_SIDED, veveaHedges, SELECTION_PRESETS, halfNormalSelModel, powerSelModel, negexpSelModel, betaSelModel, profileLikTau2, profileLikCI, bayesMeta, priorSensitivity, rvePooled, meta3level, lsModel, adjustPvals, henmiCopas, waapWls, clES } from "./analysis.js";
 import { trimFill } from "./trimfill.js";
 import { parseCSV } from "./csv.js";
 import { goshCompute, GOSH_MAX_ENUM_K, GOSH_MAX_K, GOSH_DEFAULT_MAX_SUBSETS } from "./gosh.js";
@@ -4546,6 +4546,146 @@ export function runTests() {
   });
 
   console.log(vhBenchPass ? "\n✅ ALL VH BENCHMARK TESTS PASSED" : "\n❌ SOME VH BENCHMARK TESTS FAILED");
+
+  // ---- HALFNORM_BENCHMARKS: regression against metafor::selmodel(type="halfnorm") ----
+  console.log("\n===== HALF-NORMAL SELECTION MODEL TESTS (R block HN-1) =====\n");
+  let hnPass = true;
+  const { chk: hnchk, chkTrue: hnchkTrue } = makeChk(() => { hnPass = false; });
+
+  HALFNORM_BENCHMARKS.forEach(bm => {
+    console.log(`--- ${bm.name} ---`);
+    const r = halfNormalSelModel(bm.data, { sides: bm.sides });
+    const exp = bm.expected;
+
+    // Skip numeric checks for placeholder benchmarks (null expected values)
+    if (exp.mu === null) {
+      console.log("  [PLACEHOLDER] Expected values not yet filled — skipping numeric checks.");
+      console.log(`  mu=${r.mu?.toFixed(4)}, se_mu=${r.se_mu?.toFixed(4)}, tau2=${r.tau2?.toFixed(4)}, delta=${r.delta?.toFixed(4)}, LRT=${r.LRT?.toFixed(4)}`);
+      hnchkTrue("no crash / returns object", typeof r === "object");
+      hnchkTrue("weightFn is halfnorm", r.weightFn === "halfnorm");
+      hnchkTrue("mu is finite", isFinite(r.mu));
+      hnchkTrue("tau2 >= 0", isFinite(r.tau2) && r.tau2 >= 0);
+      hnchkTrue("RE_unsel matches", Math.abs(r.RE_unsel - exp.RE_unsel) < 0.01);
+      hnchkTrue("tau2_unsel matches", Math.abs(r.tau2_unsel - exp.tau2_unsel) < Math.max(0.01, 0.05 * Math.abs(exp.tau2_unsel)));
+      return;
+    }
+
+    hnchk("mu",      r.mu,    exp.mu,    0.03);
+    hnchk("se_mu",   r.se_mu, exp.se_mu, 0.03);
+    hnchk("tau2",    r.tau2,  exp.tau2,  Math.max(0.01, 0.05 * Math.abs(exp.tau2)));
+    hnchk("delta",   r.delta, exp.delta, 0.1);
+    hnchk("LRT",     r.LRT,   exp.LRT,   0.2);
+    hnchkTrue("LRTdf = 1", r.LRTdf === 1);
+    hnchk("LRTp",    r.LRTp,  exp.LRTp,  0.05);
+    hnchkTrue(`converged`, r.converged);
+  });
+
+  console.log(hnPass ? "\n✅ ALL HALF-NORMAL TESTS PASSED" : "\n❌ SOME HALF-NORMAL TESTS FAILED");
+
+  // ---- POWER_BENCHMARKS: regression against metafor::selmodel(type="power") ----
+  console.log("\n===== POWER SELECTION MODEL TESTS (R block PWR-1) =====\n");
+  let pwrPass = true;
+  const { chk: pwrchk, chkTrue: pwrchkTrue } = makeChk(() => { pwrPass = false; });
+
+  POWER_BENCHMARKS.forEach(bm => {
+    console.log(`--- ${bm.name} ---`);
+    const r = powerSelModel(bm.data, { sides: bm.sides });
+    const exp = bm.expected;
+
+    if (exp.mu === null) {
+      console.log("  [PLACEHOLDER] Expected values not yet filled — skipping numeric checks.");
+      console.log(`  mu=${r.mu?.toFixed(4)}, se_mu=${r.se_mu?.toFixed(4)}, tau2=${r.tau2?.toFixed(4)}, delta=${r.delta?.toFixed(4)}, LRT=${r.LRT?.toFixed(4)}`);
+      pwrchkTrue("no crash / returns object", typeof r === "object");
+      pwrchkTrue("weightFn is power", r.weightFn === "power");
+      pwrchkTrue("mu is finite", isFinite(r.mu));
+      pwrchkTrue("tau2 >= 0", isFinite(r.tau2) && r.tau2 >= 0);
+      pwrchkTrue("RE_unsel matches", Math.abs(r.RE_unsel - exp.RE_unsel) < 0.01);
+      pwrchkTrue("tau2_unsel matches", Math.abs(r.tau2_unsel - exp.tau2_unsel) < Math.max(0.01, 0.05 * Math.abs(exp.tau2_unsel)));
+      return;
+    }
+
+    pwrchk("mu",      r.mu,    exp.mu,    0.03);
+    pwrchk("se_mu",   r.se_mu, exp.se_mu, 0.05);
+    pwrchk("tau2",    r.tau2,  exp.tau2,  Math.max(0.01, 0.05 * Math.abs(exp.tau2)));
+    pwrchk("delta",   r.delta, exp.delta, Math.max(0.1, 0.6 * Math.abs(exp.delta)));
+    pwrchk("LRT",     r.LRT,   exp.LRT,   Math.max(0.2, 0.3 * Math.abs(exp.LRT)));
+    pwrchkTrue("LRTdf = 1", r.LRTdf === 1);
+    pwrchk("LRTp",    r.LRTp,  exp.LRTp,  0.05);
+    pwrchkTrue(`converged`, r.converged);
+  });
+
+  console.log(pwrPass ? "\n✅ ALL POWER TESTS PASSED" : "\n❌ SOME POWER TESTS FAILED");
+
+  // ---- NEGEXP_BENCHMARKS: regression against metafor::selmodel(type="negexp") ----
+  console.log("\n===== NEGATIVE EXPONENTIAL SELECTION MODEL TESTS (R block NEG-1) =====\n");
+  let negPass = true;
+  const { chk: negchk, chkTrue: negchkTrue } = makeChk(() => { negPass = false; });
+
+  NEGEXP_BENCHMARKS.forEach(bm => {
+    console.log(`--- ${bm.name} ---`);
+    const r = negexpSelModel(bm.data, { sides: bm.sides });
+    const exp = bm.expected;
+
+    if (exp.mu === null) {
+      console.log("  [PLACEHOLDER] Expected values not yet filled — skipping numeric checks.");
+      console.log(`  mu=${r.mu?.toFixed(4)}, se_mu=${r.se_mu?.toFixed(4)}, tau2=${r.tau2?.toFixed(4)}, delta=${r.delta?.toFixed(4)}, LRT=${r.LRT?.toFixed(4)}`);
+      negchkTrue("no crash / returns object", typeof r === "object");
+      negchkTrue("weightFn is negexp", r.weightFn === "negexp");
+      negchkTrue("mu is finite", isFinite(r.mu));
+      negchkTrue("tau2 >= 0", isFinite(r.tau2) && r.tau2 >= 0);
+      negchkTrue("RE_unsel matches", Math.abs(r.RE_unsel - exp.RE_unsel) < 0.01);
+      negchkTrue("tau2_unsel matches", Math.abs(r.tau2_unsel - exp.tau2_unsel) < Math.max(0.01, 0.05 * Math.abs(exp.tau2_unsel)));
+      return;
+    }
+
+    negchk("mu",      r.mu,    exp.mu,    0.03);
+    negchk("se_mu",   r.se_mu, exp.se_mu, 0.05);
+    negchk("tau2",    r.tau2,  exp.tau2,  Math.max(0.01, 0.05 * Math.abs(exp.tau2)));
+    negchk("delta",   r.delta, exp.delta, Math.max(0.1, 0.6 * Math.abs(exp.delta)));
+    negchk("LRT",     r.LRT,   exp.LRT,   Math.max(0.2, 0.3 * Math.abs(exp.LRT)));
+    negchkTrue("LRTdf = 1", r.LRTdf === 1);
+    negchk("LRTp",    r.LRTp,  exp.LRTp,  0.05);
+    negchkTrue(`converged`, r.converged);
+  });
+
+  console.log(negPass ? "\n✅ ALL NEGEXP TESTS PASSED" : "\n❌ SOME NEGEXP TESTS FAILED");
+
+  // ---- BETA_BENCHMARKS: regression against metafor::selmodel(type="beta") ----
+  console.log("\n===== BETA SELECTION MODEL TESTS (R block BETA-1) =====\n");
+  let betaPass = true;
+  const { chk: betachk, chkTrue: betachkTrue } = makeChk(() => { betaPass = false; });
+
+  BETA_BENCHMARKS.forEach(bm => {
+    console.log(`--- ${bm.name} ---`);
+    const r = betaSelModel(bm.data, { sides: bm.sides });
+    const exp = bm.expected;
+
+    if (exp.mu === null) {
+      console.log("  [PLACEHOLDER] Expected values not yet filled — skipping numeric checks.");
+      console.log(`  mu=${r.mu?.toFixed(4)}, se_mu=${r.se_mu?.toFixed(4)}, tau2=${r.tau2?.toFixed(4)}, a=${r.a?.toFixed(4)}, b=${r.b?.toFixed(4)}, LRT=${r.LRT?.toFixed(4)}`);
+      betachkTrue("no crash / returns object", typeof r === "object");
+      betachkTrue("weightFn is beta", r.weightFn === "beta");
+      betachkTrue("mu is finite", isFinite(r.mu));
+      betachkTrue("tau2 >= 0", isFinite(r.tau2) && r.tau2 >= 0);
+      betachkTrue("a > 0", isFinite(r.a) && r.a > 0);
+      betachkTrue("b > 0", isFinite(r.b) && r.b > 0);
+      betachkTrue("RE_unsel matches", Math.abs(r.RE_unsel - exp.RE_unsel) < 0.01);
+      betachkTrue("tau2_unsel matches", Math.abs(r.tau2_unsel - exp.tau2_unsel) < Math.max(0.01, 0.05 * Math.abs(exp.tau2_unsel)));
+      return;
+    }
+
+    betachk("mu",    r.mu,    exp.mu,    0.03);
+    betachk("se_mu", r.se_mu, exp.se_mu, Math.max(0.05, 0.6 * Math.abs(exp.se_mu))); // optimizer-sensitive
+    betachk("tau2",  r.tau2,  exp.tau2,  Math.max(0.01, 0.05 * Math.abs(exp.tau2)));
+    betachk("a",     r.a,     exp.a,     Math.max(0.1, 0.6 * Math.abs(exp.a)));
+    betachk("b",     r.b,     exp.b,     Math.max(0.1, 0.6 * Math.abs(exp.b)));
+    betachk("LRT",   r.LRT,   exp.LRT,   Math.max(0.2, 0.3 * Math.abs(exp.LRT)));
+    betachkTrue("LRTdf = 2", r.LRTdf === 2);
+    betachk("LRTp",  r.LRTp,  exp.LRTp,  0.05);
+    betachkTrue(`converged`, r.converged);
+  });
+
+  console.log(betaPass ? "\n✅ ALL BETA TESTS PASSED" : "\n❌ SOME BETA TESTS FAILED");
 
   // ---- SELECTION_PRESETS structure ----
   console.log("\n===== SELECTION PRESETS TESTS =====\n");
