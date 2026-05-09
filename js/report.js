@@ -1704,3 +1704,131 @@ export function buildReport(args) {
 </body>
 </html>`;
 }
+
+// ---------------------------------------------------------------------------
+// Multivariate report builder
+// ---------------------------------------------------------------------------
+
+// Collect MV forest SVGs from the DOM (either combined view or per-outcome panels).
+function collectMVForestSVGs(outcomeIds) {
+  const combined = document.getElementById("mvForestPlotCombined");
+  const combinedBlock = document.getElementById("mvForestCombinedBlock");
+  if (combinedBlock && combinedBlock.style.display !== "none" && combined) {
+    const s = serializeSVG(combined);
+    return s ? [s] : [];
+  }
+  const result = [];
+  for (let o = 0; o < outcomeIds.length; o++) {
+    const el = document.getElementById(`mvForestPlot-${o}`);
+    if (el) { const s = serializeSVG(el); if (s) result.push(s); }
+  }
+  return result;
+}
+
+export function buildMVReport({ res, alpha = 0.05, apaFormat = false }) {
+  const { beta, se, ci, z, pval, betaNames = [], tau2, rho_between,
+          outcomeIds, n, k, P, QM, df_QM, pQM, QE, df_QE, pQE,
+          logLik, AIC, BIC, AICc, struct, method, I2, convergence,
+          warnings: engineWarnings = [] } = res;
+  const hasMods = beta.length > P;
+  const ciPct   = Math.round((1 - alpha) * 100);
+  const date     = new Date().toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
+  let _tblN = 0, _figN = 0;
+  const nextTable  = () => ++_tblN;
+  const nextFigure = () => ++_figN;
+
+  const fP = p => !isFinite(p) ? "—" : p < 0.0001 ? p.toExponential(2) : (+p).toFixed(4);
+
+  // Pooled estimates table
+  const pooledHeaders = ["Outcome", "Estimate", "SE", `${ciPct}% CI`, "z", "p"];
+  const pooledRows = outcomeIds.map((id, o) => {
+    const [lo, hi] = ci[o];
+    return `<tr><td>${esc(String(id))}</td><td>${fmt(beta[o], 4)}</td><td>${fmt(se[o], 4)}</td>
+      <td>[${fmt(lo, 4)}, ${fmt(hi, 4)}]</td><td>${fmt(z[o], 3)}</td><td>${fP(pval[o])}</td></tr>`;
+  });
+
+  // Moderator table (if any)
+  let modHTML = "";
+  if (hasMods) {
+    const modHeaders = ["Coefficient", "Estimate", "SE", `${ciPct}% CI`, "z", "p"];
+    const modRows = beta.slice(P).map((b, i) => {
+      const j = P + i;
+      const [lo, hi] = ci[j];
+      return `<tr><td>${esc(betaNames[j] ?? `β${j}`)}</td><td>${fmt(b, 4)}</td><td>${fmt(se[j], 4)}</td>
+        <td>[${fmt(lo, 4)}, ${fmt(hi, 4)}]</td><td>${fmt(z[j], 3)}</td><td>${fP(pval[j])}</td></tr>`;
+    });
+    modHTML = apaFormat
+      ? buildTableAPA(nextTable(), "Meta-regression coefficients", modHeaders, modRows)
+      : `<h2>Moderator Effects</h2>${buildTable(modHeaders, modRows)}`;
+  }
+
+  // Heterogeneity table
+  const hetHeaders = struct === "CS"
+    ? ["Outcome", "τ²", "I²", "ρ (between)"]
+    : ["Outcome", "τ²", "I²"];
+  const hetRows = outcomeIds.map((id, o) => {
+    const rho = struct === "CS" ? `<td>${fmt(rho_between ?? 0, 4)}</td>` : "";
+    return `<tr><td>${esc(String(id))}</td><td>${fmt(tau2[o], 5)}</td>
+      <td>${isFinite(I2[o]) ? (+I2[o]).toFixed(1) + "%" : "—"}</td>${rho}</tr>`;
+  });
+
+  // Hypothesis tests table
+  const testHeaders = ["Test", "χ²", "df", "p"];
+  const testRows = [
+    ...(hasMods && isFinite(QM)
+      ? [`<tr><td>Omnibus test of moderators (Q<sub>M</sub>)</td><td>${fmt(QM, 3)}</td><td>${df_QM}</td><td>${fP(pQM)}</td></tr>`]
+      : []),
+    `<tr><td>Residual heterogeneity (Q<sub>E</sub>)</td><td>${fmt(QE, 3)}</td><td>${df_QE}</td><td>${fP(pQE)}</td></tr>`,
+  ];
+
+  // Collect forest SVGs
+  const forestSVGs = collectMVForestSVGs(outcomeIds);
+
+  const pooledHTML = apaFormat
+    ? buildTableAPA(nextTable(), `Pooled effect estimates per outcome (${method}, Ψ = ${struct})`, pooledHeaders, pooledRows)
+    : `<h2>Pooled Estimates</h2>${buildTable(pooledHeaders, pooledRows)}`;
+  const hetHTML = apaFormat
+    ? buildTableAPA(nextTable(), "Between-study heterogeneity", hetHeaders, hetRows)
+    : `<h2>Between-Study Heterogeneity</h2>${buildTable(hetHeaders, hetRows)}`;
+  const testHTML = apaFormat
+    ? buildTableAPA(nextTable(), "Hypothesis tests", testHeaders, testRows)
+    : `<h2>Hypothesis Tests</h2>${buildTable(testHeaders, testRows)}`;
+  const forestHTML = forestSVGs.length
+    ? (apaFormat
+        ? buildFigureAPA(nextFigure(), "Forest plot of multivariate meta-analysis results", forestSVGs)
+        : `<h2>Forest Plot</h2>${forestSVGs.map(s => `<div class="svg-wrap">${s}</div>`).join("\n")}`)
+    : "";
+
+  const fitLine = `k = ${k} · n = ${n} obs · P = ${P} outcomes`
+    + ` │ log-lik = ${fmt(logLik, 4)} · AIC = ${fmt(AIC, 2)} · BIC = ${fmt(BIC, 2)}`
+    + (isFinite(AICc) ? ` · AICc = ${fmt(AICc, 2)}` : "")
+    + ` │ ${esc(method)}, Ψ = ${esc(struct)}`;
+
+  const warnHTML = [
+    convergence === false ? `<p style="color:#c0392b"><strong>Warning:</strong> Optimizer did not fully converge — interpret results with caution.</p>` : "",
+    ...engineWarnings.map(w => `<p style="color:#c0392b">${esc(w)}</p>`),
+  ].filter(Boolean).join("");
+
+  const body = [
+    warnHTML, pooledHTML, modHTML, hetHTML, testHTML,
+    `<p class="report-meta" style="margin-top:8px">${fitLine}</p>`,
+    forestHTML,
+  ].filter(Boolean).join("\n");
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Multivariate Meta-Analysis Report</title>
+  <style>${reportCSS()}</style>
+</head>
+<body>
+  <h1>Multivariate Meta-Analysis Report</h1>
+  <p class="report-meta">Generated ${esc(date)}
+    &nbsp;·&nbsp; k = ${k} studies, P = ${P} outcomes
+    &nbsp;·&nbsp; ${esc(method)}, Ψ = ${esc(struct)}
+  </p>
+  <section class="report-section">${body}</section>
+</body>
+</html>`;
+}

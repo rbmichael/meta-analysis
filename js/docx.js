@@ -1134,3 +1134,176 @@ export async function buildDocx(args) {
 
   return zip.generateAsync({ type: "blob" });
 }
+
+// ---------------------------------------------------------------------------
+// Multivariate DOCX builder
+// ---------------------------------------------------------------------------
+
+export async function buildMVDocx({ res, rows = [], alpha = 0.05 }) {
+  const { beta, se, ci, z, pval, betaNames = [], tau2, rho_between,
+          outcomeIds, n, k, P, QM, df_QM, pQM, QE, df_QE, pQE,
+          logLik, AIC, BIC, AICc, struct, method, I2, convergence,
+          warnings: engineWarnings = [] } = res;
+  const hasMods = beta.length > P;
+  const ciPct   = Math.round((1 - alpha) * 100);
+  const fP      = p => !isFinite(p) ? "—" : p < 0.001 ? "< .001" : "= " + (+p).toFixed(3).replace(/^0\./, ".");
+
+  // Collect MV forest SVG strings from DOM
+  const forestSVGStrings = (() => {
+    const combined = document.getElementById("mvForestPlotCombined");
+    const combinedBlock = document.getElementById("mvForestCombinedBlock");
+    if (combinedBlock && combinedBlock.style.display !== "none" && combined) {
+      const s = serializeSVG(combined); return s ? [s] : [];
+    }
+    const result = [];
+    for (let o = 0; o < outcomeIds.length; o++) {
+      const el = document.getElementById(`mvForestPlot-${o}`);
+      if (el) { const s = serializeSVG(el); if (s) result.push(s); }
+    }
+    return result;
+  })();
+
+  // Convert SVGs to PNGs
+  const pngResults = await Promise.all(forestSVGStrings.map(s => svgStringToPng(s)));
+  let imgCounter = 0;
+  const forestImgs = pngResults.map(png => {
+    if (!png || !png.blob) return null;
+    imgCounter++;
+    return { ...png, rId: `rId${imgCounter}`, idx: imgCounter };
+  }).filter(Boolean);
+
+  // APA counters
+  let _tblN = 0, _figN = 0;
+  const nextTable  = () => ++_tblN;
+  const nextFigure = () => ++_figN;
+
+  // Pooled estimates table
+  const pooledHeaders = ["Outcome", "Estimate", "SE", `${ciPct}% CI`, "z", "p"];
+  const pooledRows = outcomeIds.map((id, o) => {
+    const [lo, hi] = ci[o];
+    return [run(String(id)), run(fmt(beta[o], 4)), run(fmt(se[o], 4)),
+            run(`[${fmt(lo, 4)}, ${fmt(hi, 4)}]`), run(fmt(z[o], 3)), run(fP(pval[o]))];
+  });
+
+  // Heterogeneity table
+  const hetHeaders = struct === "CS"
+    ? ["Outcome", "τ²", "I²", "ρ (between)"]
+    : ["Outcome", "τ²", "I²"];
+  const hetRows = outcomeIds.map((id, o) => {
+    const cells = [run(String(id)), run(fmt(tau2[o], 5)),
+                   run(isFinite(I2[o]) ? (+I2[o]).toFixed(1) + "%" : "—")];
+    if (struct === "CS") cells.push(run(fmt(rho_between ?? 0, 4)));
+    return cells;
+  });
+
+  // Tests table
+  const testHeaders = ["Test", "χ²", "df", "p"];
+  const testRows = [
+    ...(hasMods && isFinite(QM)
+      ? [[run("Omnibus test of moderators (QM)"), run(fmt(QM, 3)), run(String(df_QM)), run(fP(pQM))]]
+      : []),
+    [run("Residual heterogeneity (QE)"), run(fmt(QE, 3)), run(String(df_QE)), run(fP(pQE))],
+  ];
+
+  // Moderator table
+  let modChunks = [];
+  if (hasMods) {
+    const modHeaders = ["Coefficient", "Estimate", "SE", `${ciPct}% CI`, "z", "p"];
+    const modRows = beta.slice(P).map((b, i) => {
+      const j = P + i;
+      const [lo, hi] = ci[j];
+      return [run(betaNames[j] ?? `β${j}`), run(fmt(b, 4)), run(fmt(se[j], 4)),
+              run(`[${fmt(lo, 4)}, ${fmt(hi, 4)}]`), run(fmt(z[j], 3)), run(fP(pval[j]))];
+    });
+    modChunks = [...apaTableDocx(nextTable(), "Meta-regression coefficients", modHeaders, modRows), para("")];
+  }
+
+  const fitText = `k = ${k} · n = ${n} obs · P = ${P} outcomes`
+    + ` | log-lik = ${fmt(logLik, 4)} · AIC = ${fmt(AIC, 2)} · BIC = ${fmt(BIC, 2)}`
+    + (isFinite(AICc) ? ` · AICc = ${fmt(AICc, 2)}` : "")
+    + ` | ${method}, Ψ = ${struct}`;
+
+  // Individual Studies table
+  const zVal = normalQuantile(1 - alpha / 2);
+  const studyHeaders = ["Study", "Outcome", "yi", "vi", "SE", `${ciPct}% CI`];
+  const studyDocxRows = rows.map(r => {
+    const se_r = Math.sqrt(r.vi);
+    return [run(String(r.study_id)), run(String(r.outcome_id)),
+            run(fmt(r.yi, 4)), run(fmt(r.vi, 4)), run(fmt(se_r, 4)),
+            run(`[${fmt(r.yi - zVal * se_r, 4)}, ${fmt(r.yi + zVal * se_r, 4)}]`)];
+  });
+  const studyChunks = rows.length
+    ? [...apaTableDocx(nextTable(), "Individual study effect sizes", studyHeaders, studyDocxRows), para("")]
+    : [];
+
+  // RoB images
+  const robSVGStrings = (() => {
+    const result = [];
+    ["robTrafficLight", "robSummary"].forEach(id => {
+      const el = document.getElementById(id);
+      if (el && el.children.length > 0) { const s = serializeSVG(el); if (s) result.push(s); }
+    });
+    return result;
+  })();
+  const robPngResults = await Promise.all(robSVGStrings.map(s => svgStringToPng(s)));
+  const robImgs = robPngResults.map(png => {
+    if (!png || !png.blob) return null;
+    imgCounter++;
+    return { ...png, rId: `rId${imgCounter}`, idx: imgCounter };
+  }).filter(Boolean);
+  const robChunks = robImgs.length
+    ? [...robImgs.flatMap(img => apaFigureDocx(nextFigure(), "Risk of bias assessment", [img], "")), para("")]
+    : [];
+
+  // References
+  const linkMgr = new HyperlinkManager();
+  const mvCitationHTMLs = [
+    `Berkey, C. S., Hoaglin, D. C., Antczak-Bouckoms, A., Mosteller, F., &amp; Colditz, G. A. (1998). Meta-analysis of multiple outcomes by regression with random effects. <em>Statistics in Medicine</em>, <em>17</em>(22), 2537–2550.`,
+    `Cheung, M. W.-L. (2014). Modeling dependent effect sizes with three-level meta-analyses: a structural equation modeling approach. <em>Psychological Methods</em>, <em>19</em>(2), 211–229.`,
+    `Cochran, W. G. (1954). The combination of estimates from different experiments. <em>Biometrics</em>, <em>10</em>(1), 101–129.`,
+    `Higgins, J. P. T., Thompson, S. G., Deeks, J. J., &amp; Altman, D. G. (2003). Measuring inconsistency in meta-analyses. <em>BMJ</em>, <em>327</em>(7414), 557–560.`,
+    `Jackson, D., Riley, R., &amp; White, I. R. (2011). Multivariate meta-analysis: Potential and promise. <em>Statistics in Medicine</em>, <em>30</em>(20), 2481–2498.`,
+    `Riley, R. D., Abrams, K. R., Sutton, A. J., Lambert, P. C., &amp; Thompson, J. R. (2007). Bivariate random-effects meta-analysis and the estimation of between-study correlation. <em>BMC Medical Research Methodology</em>, <em>7</em>, 3.`,
+    `Viechtbauer, W. (2005). Bias and efficiency of meta-analytic variance estimators in the random-effects model. <em>Journal of Educational and Behavioral Statistics</em>, <em>30</em>(3), 261–293.`,
+  ];
+  const refChunks = [
+    paraText("References", "Heading1"),
+    ...mvCitationHTMLs.map(html =>
+      `<w:p><w:pPr><w:pStyle w:val="APAReference"/></w:pPr>${citationToRunXML(html, linkMgr)}</w:p>`
+    ),
+  ];
+
+  const allImgs = [...forestImgs, ...robImgs];
+
+  const bodyChunks = [
+    para(bold("Multivariate Meta-Analysis Report"), "Heading1"),
+    paraText(`Generated ${new Date().toLocaleDateString()} · k = ${k} studies, P = ${P} outcomes · ${method}, Ψ = ${struct}`, "APANote"),
+    ...(convergence === false ? [paraText("Warning: Optimizer did not fully converge — interpret results with caution.")] : []),
+    para(""),
+    ...apaTableDocx(nextTable(), `Pooled effect estimates per outcome (${method}, Ψ = ${struct})`, pooledHeaders, pooledRows),
+    para(""),
+    ...apaTableDocx(nextTable(), "Between-study heterogeneity", hetHeaders, hetRows),
+    para(""),
+    ...apaTableDocx(nextTable(), "Hypothesis tests", testHeaders, testRows),
+    para(""),
+    ...modChunks,
+    paraText(fitText, "APANote"),
+    para(""),
+    ...forestImgs.flatMap(img => apaFigureDocx(nextFigure(), "Forest plot of multivariate meta-analysis results", [img], "")),
+    para(""),
+    ...studyChunks,
+    ...robChunks,
+    ...refChunks,
+  ].filter(Boolean);
+
+  const zip = new window.JSZip();
+  zip.file("[Content_Types].xml", contentTypesXML(imgCounter));
+  zip.file("_rels/.rels",          rootRelsXML());
+  zip.file("word/document.xml",    wrapDocumentXML(bodyChunks.join("\n")));
+  zip.file("word/styles.xml",      stylesXML());
+  zip.file("word/settings.xml",    settingsXML());
+  zip.file("word/_rels/document.xml.rels", docRelsXML(imgCounter, linkMgr));
+  allImgs.forEach((img, i) => zip.file(`word/media/image${i + 1}.png`, img.blob));
+
+  return zip.generateAsync({ type: "blob" });
+}
