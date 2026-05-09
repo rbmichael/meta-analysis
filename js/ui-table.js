@@ -622,6 +622,9 @@ export function refreshPreviewUI(type) {
   });
   tbl += "</tbody></table>";
   document.getElementById("previewTable").innerHTML = tbl;
+
+  const mvHint = document.getElementById("previewMvHint");
+  if (mvHint) mvHint.style.display = _pendingImport.mvCandidate ? "" : "none";
 }
 
 /** Phase 1 — parse the file and show the preview panel without touching the table. */
@@ -648,11 +651,27 @@ export async function previewCSV(file) {
   const currentType = document.getElementById("effectType").value;
   const detection   = detectEffectType(parsed.headers, currentType, effectProfiles);
 
+  // Detect multivariate data: study_id/study + outcome_id/outcome + yi + vi
+  const lowerHdrs   = new Set(parsed.headers.map(h => h.toLowerCase()));
+  const hasStudyCol  = lowerHdrs.has("study_id") || lowerHdrs.has("study");
+  const hasOutcomeCol = lowerHdrs.has("outcome_id") || lowerHdrs.has("outcome");
+  const mvCandidate  = hasStudyCol && hasOutcomeCol && lowerHdrs.has("yi") && lowerHdrs.has("vi");
+  const mvHeaders    = mvCandidate ? {
+    studyCol:   parsed.headers.find(h => h.toLowerCase() === "study_id") ??
+                parsed.headers.find(h => h.toLowerCase() === "study"),
+    outcomeCol: parsed.headers.find(h => h.toLowerCase() === "outcome_id") ??
+                parsed.headers.find(h => h.toLowerCase() === "outcome"),
+    yiCol:      parsed.headers.find(h => h.toLowerCase() === "yi"),
+    viCol:      parsed.headers.find(h => h.toLowerCase() === "vi"),
+  } : null;
+
   _pendingImport = {
     parsed,
     detectedType: detection.type,
     tied:         detection.tied,
     tiedTypes:    detection.tiedTypes ?? [],
+    mvCandidate,
+    mvHeaders,
   };
 
   const delimNames = { ",": "comma", ";": "semicolon", "\t": "tab" };

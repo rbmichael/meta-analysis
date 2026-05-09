@@ -106,13 +106,14 @@
 //   restores any autosave draft, and attaches all event listeners.
 // =============================================================================
 import { eggerTest, beggTest, fatPetTest, petPeeseTest, failSafeN, tesTest, waapWls, clES, pCurve, pUniform, baujat, blupMeta, meta, metaMH, metaPeto, robustMeta, influenceDiagnostics, subgroupAnalysis, metaRegression, testContrast, cumulativeMeta, veveaHedges, SELECTION_PRESETS, halfNormalSelModel, powerSelModel, negexpSelModel, betaSelModel, profileLikTau2, bayesMeta, priorSensitivity, rvePooled, meta3level, harbordTest, petersTest, deeksTest, rueckerTest, lsModel, henmiCopas } from "./analysis.js";
-import { fmt, normalQuantile, chiSquareCDF } from "./utils.js";
+import { fmt, normalQuantile, normalCDF, chiSquareCDF, tCritical } from "./utils.js";
 import { escapeHTML } from "./utils-html.js";
 import { effectProfiles, getProfile } from "./profiles.js";
 import { trimFill } from "./trimfill.js";
 import { drawForest, drawFunnel, drawBubble, drawPartialResidualBubble, drawInfluencePlot, drawCumulativeForest, drawCumulativeFunnel, drawOrchardPlot, drawCaterpillarPlot, drawBlupPlot, drawBaujatPlot, drawLabbe, drawRoBTrafficLight, drawRoBSummary, drawGoshPlot, drawProfileLikTau2, drawBayesTauPosterior, drawBayesMuPosterior, drawQQPlot, drawRadialPlot, setTooltipElement } from "./plots.js";
 import { goshCompute, GOSH_MAX_K } from "./gosh.js";
 import { permTestSync, permPval } from "./perm.js";
+import { vcalc, mvMeta } from "./multivariate.js";
 import { exportSVG, exportPNG, exportTIFF } from "./export.js";
 // report.js (81 KB) and docx.js (51 KB) are loaded on first export click.
 // guide.js (166 KB) and help.js (76 KB) are loaded on first use so they don't
@@ -141,7 +142,7 @@ import { initTable, moderators, doAddModerator, removeModerator, clearModerators
          interactions, doAddInteraction, removeInteraction, clearInteractions,
          updateTableHeaders, addRow, commitPendingDelete, removeRow, clearRow,
          updateValidationWarnings, collectStudies,
-         refreshPreviewUI, previewCSV, commitImport, cancelImport }
+         refreshPreviewUI, previewCSV, commitImport, cancelImport, getPendingImport }
   from "./ui-table.js";
 
 // ---------------- AUTOSAVE ----------------
@@ -726,12 +727,1030 @@ _toggleAbout.addEventListener("click",   () => showView("about"));
 // Show input view by default; output hidden until first run switches to it.
 showView("input");
 
+// ---------------- MULTIVARIATE MODE ----------------
+
+let _mvMode = false;
+
+// Moderator list for multivariate mode (array of name strings).
+const _mvModerators = [];
+
+// Forest plot state for MV mode — persists across page/PI-toggle redraws.
+const _mvForestState = {
+  pageSize:     20,
+  pages:        [],    // current page index per outcome (separate mode)
+  combinedPage: 0,     // current page index (combined mode)
+  showPI:       false,
+  lastRes:      null,  // last mvMeta result
+  lastRows:     [],    // last collected rows
+  alpha:        0.05,
+  viewMode:     "separate", // "separate" | "combined"
+};
+
+function _applyModeToggle() {
+  const isMV = _mvMode;
+  document.getElementById("modeStandard").classList.toggle("active", !isMV);
+  document.getElementById("modeMultivariate").classList.toggle("active", isMV);
+  document.getElementById("standardSettings").style.display        = isMV ? "none" : "";
+  document.getElementById("advancedSettings").style.display        = isMV ? "none" : "";
+  document.getElementById("mvSettings").style.display              = isMV ? ""     : "none";
+  document.getElementById("inputTableWrap").style.display          = isMV ? "none" : "";
+  document.getElementById("addStudy").style.display                = isMV ? "none" : "";
+  document.getElementById("mvTableWrap").style.display             = isMV ? ""     : "none";
+  document.getElementById("mvAddRow").style.display                = isMV ? ""     : "none";
+}
+
+// ── MV moderator management ───────────────────────────────────────────────────
+
+function _renderMVModTags() {
+  const container = document.getElementById("mvModTags");
+  container.innerHTML = _mvModerators.map((name, i) =>
+    `<span class="mod-tag">` +
+    `<span>${escapeHTML(name)}</span>` +
+    `<button onclick="_mvRemoveMod(${i})" title="Remove">×</button>` +
+    `</span>`
+  ).join("");
+}
+
+// Exposed to inline onclick (inside tag HTML)
+window._mvRemoveMod = function(i) {
+  _mvModerators.splice(i, 1);
+  _renderMVModTags();
+  _rebuildMVTableHeaders();
+  markStale();
+};
+
+function _mvAddMod() {
+  const input = document.getElementById("mvModName");
+  const name = input.value.trim();
+  if (!name || _mvModerators.includes(name)) return;
+  _mvModerators.push(name);
+  input.value = "";
+  _renderMVModTags();
+  _rebuildMVTableHeaders();
+  markStale();
+}
+
+// ── MV table management ───────────────────────────────────────────────────────
+
+function _rebuildMVTableHeaders() {
+  const tr = document.getElementById("mvTableHead");
+  // Fixed columns + moderator columns + actions
+  tr.innerHTML =
+    "<th>Study ID</th><th>Outcome ID</th><th>Effect (y<sub>i</sub>)</th><th>Variance (v<sub>i</sub>)</th>" +
+    _mvModerators.map(m => `<th>${escapeHTML(m)}</th>`).join("") +
+    '<th class="col-actions">Actions</th>';
+  // Also rebuild each row's moderator cells if count changed
+  document.querySelectorAll("#mvTableBody tr").forEach(row => {
+    _syncMVRowMods(row);
+  });
+}
+
+function _syncMVRowMods(tr) {
+  // Ensure each row has exactly _mvModerators.length mod inputs after vi cell.
+  // Fixed cells: study_id(0), outcome_id(1), yi(2), vi(3), ...mods, actions(last)
+  const cells = tr.querySelectorAll("td");
+  const fixedCount = 4;
+  const currentModCount = cells.length - fixedCount - 1; // subtract actions td
+  if (currentModCount === _mvModerators.length) return;
+
+  const actionsTd = tr.lastElementChild;
+  // Remove excess mod tds
+  while (tr.querySelectorAll("td").length - 1 > fixedCount + _mvModerators.length) {
+    const tds = tr.querySelectorAll("td");
+    tr.removeChild(tds[tds.length - 2]); // remove last before actions
+  }
+  // Add missing mod tds
+  while (tr.querySelectorAll("td").length - 1 < fixedCount + _mvModerators.length) {
+    const td = document.createElement("td");
+    td.innerHTML = `<input type="number" step="any" class="mv-mod-cell" style="width:90px">`;
+    tr.insertBefore(td, actionsTd);
+  }
+}
+
+function _mvAddRow() {
+  const tbody = document.getElementById("mvTableBody");
+  const tr = document.createElement("tr");
+  const modCells = _mvModerators.map(() =>
+    `<td><input type="number" step="any" class="mv-mod-cell" style="width:90px"></td>`
+  ).join("");
+  tr.innerHTML =
+    `<td><input type="text"   class="mv-study-id"  style="width:90px" placeholder="Study"></td>` +
+    `<td><input type="text"   class="mv-outcome-id" style="width:80px" placeholder="Outcome"></td>` +
+    `<td><input type="number" class="mv-yi" step="any" style="width:90px"></td>` +
+    `<td><input type="number" class="mv-vi" step="any" min="0" style="width:90px"></td>` +
+    modCells +
+    `<td class="col-actions"><button class="del-btn" title="Remove row">×</button></td>`;
+  tr.querySelector(".del-btn").addEventListener("click", () => { tr.remove(); markStale(); });
+  tr.querySelectorAll("input").forEach(inp => inp.addEventListener("input", markStale));
+  tbody.appendChild(tr);
+  return tr;
+}
+
+function _collectMVRows() {
+  const rows = [];
+  document.querySelectorAll("#mvTableBody tr").forEach(tr => {
+    const study_id   = tr.querySelector(".mv-study-id")?.value.trim();
+    const outcome_id = tr.querySelector(".mv-outcome-id")?.value.trim();
+    const yi = parseFloat(tr.querySelector(".mv-yi")?.value);
+    const vi = parseFloat(tr.querySelector(".mv-vi")?.value);
+    if (!study_id || !outcome_id || !isFinite(yi) || !isFinite(vi) || vi <= 0) return;
+    const row = { study_id, outcome_id, yi, vi };
+    const modInputs = tr.querySelectorAll(".mv-mod-cell");
+    _mvModerators.forEach((name, i) => {
+      row[name] = parseFloat(modInputs[i]?.value);
+    });
+    rows.push(row);
+  });
+  return rows;
+}
+
+function _gatherMVState() {
+  const rows = [];
+  document.querySelectorAll("#mvTableBody tr").forEach(tr => {
+    const entry = {
+      study_id:   tr.querySelector(".mv-study-id")?.value  ?? "",
+      outcome_id: tr.querySelector(".mv-outcome-id")?.value ?? "",
+      yi: tr.querySelector(".mv-yi")?.value ?? "",
+      vi: tr.querySelector(".mv-vi")?.value ?? "",
+    };
+    _mvModerators.forEach((name, i) => {
+      const inputs = tr.querySelectorAll(".mv-mod");
+      entry[name] = inputs[i]?.value ?? "";
+    });
+    rows.push(entry);
+  });
+  return {
+    struct:     document.getElementById("mvStruct").value,
+    method:     document.getElementById("mvMethod").value,
+    rho:        parseFloat(document.getElementById("mvRho").value),
+    moderators: [..._mvModerators],
+    rows,
+  };
+}
+
+function _populateMVExample() {
+  // Berkey 1998 — 5 trials, 2 dental outcomes (AL and PD)
+  const exRows = [
+    { study_id: "Pihlstrom", outcome_id: "AL", yi: -0.30, vi: 0.0075 },
+    { study_id: "Pihlstrom", outcome_id: "PD", yi: -0.60, vi: 0.0057 },
+    { study_id: "Zinney",    outcome_id: "AL", yi:  0.10, vi: 0.0058 },
+    { study_id: "Zinney",    outcome_id: "PD", yi: -0.15, vi: 0.0048 },
+    { study_id: "Morrison",  outcome_id: "AL", yi:  0.40, vi: 0.0147 },
+    { study_id: "Morrison",  outcome_id: "PD", yi: -0.32, vi: 0.0091 },
+    { study_id: "Knowles",   outcome_id: "AL", yi:  0.32, vi: 0.0141 },
+    { study_id: "Knowles",   outcome_id: "PD", yi: -0.39, vi: 0.0069 },
+    { study_id: "Ramfjord",  outcome_id: "AL", yi: -0.29, vi: 0.0091 },
+    { study_id: "Ramfjord",  outcome_id: "PD", yi: -0.88, vi: 0.0062 },
+  ];
+  exRows.forEach(r => {
+    const tr = _mvAddRow();
+    tr.querySelector(".mv-study-id").value  = r.study_id;
+    tr.querySelector(".mv-outcome-id").value = r.outcome_id;
+    tr.querySelector(".mv-yi").value = r.yi;
+    tr.querySelector(".mv-vi").value = r.vi;
+  });
+}
+
+function _commitImportMV(parsed, mvHeaders) {
+  const { headers, rows } = parsed;
+  const headerMap = {};
+  headers.forEach((h, idx) => { headerMap[h.toLowerCase()] = idx; });
+
+  const { studyCol, outcomeCol, yiCol, viCol } = mvHeaders;
+  const knownCols = new Set([studyCol, outcomeCol, yiCol, viCol].map(c => c.toLowerCase()));
+  const modCols = headers.filter(h => !knownCols.has(h.toLowerCase()));
+
+  // Register MV moderators
+  _mvModerators.length = 0;
+  modCols.forEach(col => _mvModerators.push(col));
+  _renderMVModTags();
+  _rebuildMVTableHeaders();
+
+  // Clear and populate MV table
+  document.getElementById("mvTableBody").innerHTML = "";
+  rows.forEach(row => {
+    const tr = _mvAddRow();
+    tr.querySelector(".mv-study-id").value   = row[headerMap[studyCol.toLowerCase()]]  ?? "";
+    tr.querySelector(".mv-outcome-id").value = row[headerMap[outcomeCol.toLowerCase()]] ?? "";
+    tr.querySelector(".mv-yi").value         = row[headerMap[yiCol.toLowerCase()]]      ?? "";
+    tr.querySelector(".mv-vi").value         = row[headerMap[viCol.toLowerCase()]]      ?? "";
+    modCols.forEach((col, i) => {
+      const inputs = tr.querySelectorAll(".mv-mod");
+      if (inputs[i]) inputs[i].value = row[headerMap[col.toLowerCase()]] ?? "";
+    });
+  });
+  markStale();
+}
+
+// ── MV analysis & rendering ───────────────────────────────────────────────────
+
+function _runMVAnalysis() {
+  const rows = _collectMVRows();
+  const warningsEl = document.getElementById("mvValidationWarnings");
+  warningsEl.innerHTML = "";
+
+  if (!rows.length) {
+    warningsEl.innerHTML = '<p style="color:var(--color-warning)">No valid rows. Fill in Study ID, Outcome ID, y<sub>i</sub>, and v<sub>i</sub>.</p>';
+    return false;
+  }
+
+  const outcomeIds = [...new Set(rows.map(r => r.outcome_id))];
+  const studyIds   = [...new Set(rows.map(r => r.study_id))];
+  const warnings   = [];
+
+  if (outcomeIds.length < 2) { warningsEl.innerHTML = '<p style="color:var(--color-warning)">Multivariate meta-analysis requires ≥ 2 distinct outcome IDs. For a single outcome, use Standard mode.</p>'; return false; }
+  if (studyIds.length < 3)   { warningsEl.innerHTML = '<p style="color:var(--color-warning)">Multivariate meta-analysis requires ≥ 3 studies.</p>'; return false; }
+
+  // Warn: studies with only 1 outcome
+  const studyOutcomeCounts = {};
+  rows.forEach(r => { studyOutcomeCounts[r.study_id] = (studyOutcomeCounts[r.study_id] || new Set()); studyOutcomeCounts[r.study_id].add(r.outcome_id); });
+  const singleOutcomeStudies = Object.entries(studyOutcomeCounts).filter(([,s]) => s.size === 1).map(([id]) => id);
+  if (singleOutcomeStudies.length === studyIds.length)
+    warnings.push("All studies contribute only one outcome — within-study correlations cannot be estimated. Consider using Standard mode or checking that Study IDs correctly group multiple outcomes per study.");
+  else if (singleOutcomeStudies.length > 0)
+    warnings.push(`Studies with only one outcome (contribute no covariance): ${singleOutcomeStudies.map(escapeHTML).join(", ")}.`);
+
+  const struct = document.getElementById("mvStruct").value;
+  const method = document.getElementById("mvMethod").value;
+  const rho    = parseFloat(document.getElementById("mvRho").value);
+  const alpha  = getCiAlpha();
+  const mods   = _mvModerators.map(key => ({ key, type: "continuous" }));
+
+  // Warn UN + many outcomes
+  const nPsiPar = struct === "CS" ? 2 : struct === "Diag" ? outcomeIds.length : outcomeIds.length * (outcomeIds.length + 1) / 2;
+  if (struct === "UN" && outcomeIds.length > 5)
+    warnings.push(`UN structure with P = ${outcomeIds.length} outcomes requires ${nPsiPar} Ψ parameters — optimizer instability likely. Consider CS or Diag.`);
+
+  // Warn overparameterized
+  if (nPsiPar > studyIds.length / 3)
+    warnings.push(`Between-study covariance has ${nPsiPar} parameters but only ${studyIds.length} studies — model may be overparameterized.`);
+
+  if (warnings.length)
+    warningsEl.innerHTML = warnings.map(w => `<p style="color:var(--color-warning);margin:2px 0">⚠ ${w}</p>`).join("");
+
+  let V, res;
+  try {
+    V   = vcalc(rows, { rho });
+    res = mvMeta(rows, V, { struct, method, alpha, moderators: mods });
+  } catch (e) {
+    warningsEl.innerHTML += `<p style="color:var(--color-warning)">Error: ${escapeHTML(String(e))}</p>`;
+    return false;
+  }
+
+  if (res.error) {
+    warningsEl.innerHTML += `<p style="color:var(--color-warning)">Error: ${escapeHTML(res.error)}</p>`;
+    return false;
+  }
+
+  // Hide all collapsible result sections (they belong to standard mode)
+  document.querySelectorAll(".results-section").forEach(d => { d.removeAttribute("open"); d.style.display = "none"; });
+
+  // Swap forest areas: hide standard forest plot, show MV forest section
+  const _stdForestSection = document.getElementById("forestSection");
+  const _mvForestSection  = document.getElementById("mvForestSection");
+  if (_stdForestSection) _stdForestSection.style.display = "none";
+  if (_mvForestSection)  _mvForestSection.style.display  = "";
+
+  _renderMVResults(res, { alpha, rows });
+
+  // ── Individual Studies table ───────────────────────────────────────────────
+  const _studyTableSection = document.getElementById("studyTableSection");
+  const _studyTableEl      = document.getElementById("studyTable");
+  if (_studyTableSection && _studyTableEl) {
+    _studyTableSection.style.display = "";
+    _studyTableEl.innerHTML = _buildMVStudyTable(rows, alpha);
+  }
+
+  // ── RoB section (only when domains + data present) ────────────────────────
+  const _robSectionEl = document.getElementById("robSection");
+  if (_robSectionEl && _robDomains.length > 0 && rows.length > 0) {
+    _robSectionEl.style.display = "";
+    const robStudies = [...new Set(rows.map(r => r.study_id))].map(id => ({ label: id }));
+    drawIfVisible("robSection", () => {
+      drawRoBTrafficLight(robStudies, _robDomains, _robData);
+      drawRoBSummary(robStudies, _robDomains, _robData);
+    });
+  }
+
+  // Clear stale markers, unlock results panel
+  if (outputPlaceholder) outputPlaceholder.style.display = "none";
+  staleBanner.style.display = "none";
+  _toggleResults.classList.remove("stale");
+  if (inputStaleBadge) inputStaleBadge.hidden = true;
+  if (!appState.hasRunOnce) {
+    appState.hasRunOnce = true;
+    _toggleResults.disabled = false;
+  }
+  return true;
+}
+
+function _buildMVStudyTable(rows, alpha = 0.05) {
+  const z    = normalQuantile(1 - alpha / 2);
+  const ciPct = Math.round((1 - alpha) * 100);
+  function fv(v) { return isFinite(v) ? v.toFixed(4) : "—"; }
+
+  const bodyRows = rows.map(r => {
+    const se = Math.sqrt(r.vi);
+    return `<tr>
+      <td>${escapeHTML(String(r.study_id))}</td>
+      <td>${escapeHTML(String(r.outcome_id))}</td>
+      <td>${fv(r.yi)}</td>
+      <td>${fv(r.vi)}</td>
+      <td>${fv(se)}</td>
+      <td>[${fv(r.yi - z * se)},&nbsp;${fv(r.yi + z * se)}]</td>
+    </tr>`;
+  }).join("");
+
+  return `<table class="reg-table" style="width:100%">
+    <thead><tr>
+      <th>Study</th><th>Outcome</th>
+      <th>y<sub>i</sub></th><th>v<sub>i</sub></th>
+      <th>SE</th><th>${ciPct}% CI</th>
+    </tr></thead>
+    <tbody>${bodyRows}</tbody>
+  </table>`;
+}
+
+function _renderMVResults(res, { alpha, rows = [] } = {}) {
+  const { beta, se, ci, z, pval, betaNames, tau2, rho_between, Psi, corPsi, outcomeIds,
+          n, k, P, QM, df_QM, pQM, QE, df_QE, pQE, logLik, AIC, BIC, AICc,
+          struct, method, I2, convergence, warnings: engineWarnings = [] } = res;
+
+  alpha ??= 0.05;
+  const ciPct  = Math.round((1 - alpha) * 100);
+  const fmtP   = p => !isFinite(p) ? "—" : p < 0.0001 ? p.toExponential(2) : fmt(p, 4);
+  const stars  = p => p < 0.001 ? "***" : p < 0.01 ? "**" : p < 0.05 ? "*" : "";
+  const hasMods = beta.length > P;
+
+  // ── Engine warnings ────────────────────────────────────────────────────────
+  const warnHTML = (engineWarnings.length || convergence === false)
+    ? (convergence === false
+        ? `<p style="color:var(--color-warning);margin:2px 0">⚠ Optimizer did not fully converge — interpret results with caution.</p>`
+        : "") +
+      engineWarnings.map(w => `<p style="color:var(--color-warning);margin:2px 0">⚠ ${escapeHTML(w)}</p>`).join("")
+    : "";
+
+  // ── Intercept table (one row per outcome) ──────────────────────────────────
+  const interceptRows = beta.slice(0, P).map((b, o) => {
+    const [lo, hi] = ci[o];
+    return `<tr>
+      <td><strong>${escapeHTML(String(outcomeIds[o]))}</strong></td>
+      <td>${fmt(b, 4)}</td><td>${fmt(se[o], 4)}</td>
+      <td>[${fmt(lo, 4)}, ${fmt(hi, 4)}]</td>
+      <td>${fmt(z[o], 3)}</td>
+      <td>${fmtP(pval[o])}${stars(pval[o])}</td>
+    </tr>`;
+  }).join("");
+
+  const interceptTable = `
+    <h4 style="font-size:0.9em;margin:8px 0 4px">
+      Pooled effect per outcome<button class="help-btn" data-help="mv.model" title="Help">?</button>
+    </h4>
+    <table class="reg-table" style="margin-bottom:12px">
+      <thead><tr><th>Outcome</th><th>Estimate</th><th>SE</th>
+        <th>${ciPct}% CI</th><th>z</th><th>p</th></tr></thead>
+      <tbody>${interceptRows}</tbody>
+    </table>`;
+
+  // ── Moderator table ────────────────────────────────────────────────────────
+  let modTable = "";
+  if (hasMods) {
+    const modRows = beta.slice(P).map((b, i) => {
+      const j = P + i;
+      const [lo, hi] = ci[j];
+      return `<tr>
+        <td>${escapeHTML(betaNames[j])}</td>
+        <td>${fmt(b, 4)}</td><td>${fmt(se[j], 4)}</td>
+        <td>[${fmt(lo, 4)}, ${fmt(hi, 4)}]</td>
+        <td>${fmt(z[j], 3)}</td>
+        <td>${fmtP(pval[j])}${stars(pval[j])}</td>
+      </tr>`;
+    }).join("");
+    modTable = `
+      <h4 style="font-size:0.9em;margin:8px 0 4px">Moderator effects</h4>
+      <table class="reg-table" style="margin-bottom:12px">
+        <thead><tr><th>Coefficient</th><th>Estimate</th><th>SE</th>
+          <th>${ciPct}% CI</th><th>z</th><th>p</th></tr></thead>
+        <tbody>${modRows}</tbody>
+      </table>`;
+  }
+
+  // ── Between-study Ψ̂ ───────────────────────────────────────────────────────
+  let psiBlock = "";
+  if (struct === "CS") {
+    const i2rows = outcomeIds.map((id, o) =>
+      `<tr><td>${escapeHTML(String(id))}</td><td>${fmt(tau2[o], 5)}</td><td>${fmt(I2[o], 1)}%</td></tr>`
+    ).join("");
+    psiBlock = `<h4 style="font-size:0.9em;margin:8px 0 4px">Between-study heterogeneity (Ψ̂, CS)</h4>
+      <p style="font-size:0.875em;margin:2px 0">
+        Shared τ² = ${fmt(tau2[0], 5)},
+        ρ<sub>between</sub> = ${fmt(rho_between ?? 0, 4)}
+      </p>
+      <table class="reg-table" style="margin-bottom:8px">
+        <thead><tr><th>Outcome</th><th>τ²</th><th>I²</th></tr></thead>
+        <tbody>${i2rows}</tbody>
+      </table>`;
+  } else if (struct === "Diag") {
+    const i2rows = outcomeIds.map((id, o) =>
+      `<tr><td>${escapeHTML(String(id))}</td><td>${fmt(tau2[o], 5)}</td><td>${fmt(I2[o], 1)}%</td></tr>`
+    ).join("");
+    psiBlock = `<h4 style="font-size:0.9em;margin:8px 0 4px">Between-study heterogeneity (Ψ̂, Diagonal)</h4>
+      <table class="reg-table" style="margin-bottom:8px">
+        <thead><tr><th>Outcome</th><th>τ²</th><th>I²</th></tr></thead>
+        <tbody>${i2rows}</tbody>
+      </table>`;
+  } else { // UN
+    const hdr = outcomeIds.map(id => `<th>${escapeHTML(String(id))}</th>`).join("");
+    const psiRows = Psi.map((row, i) =>
+      `<tr><th>${escapeHTML(String(outcomeIds[i]))}</th>${row.map(v => `<td>${fmt(v, 5)}</td>`).join("")}</tr>`
+    ).join("");
+    const corRows = (corPsi || []).map((row, i) =>
+      `<tr><th>${escapeHTML(String(outcomeIds[i]))}</th>${row.map((v, j) =>
+        `<td ${i === j ? 'style="color:var(--fg-muted)"' : ""}>${fmt(v, 4)}</td>`
+      ).join("")}</tr>`
+    ).join("");
+    const i2rows = outcomeIds.map((id, o) =>
+      `<tr><td>${escapeHTML(String(id))}</td><td>${fmt(tau2[o], 5)}</td><td>${fmt(I2[o], 1)}%</td></tr>`
+    ).join("");
+    psiBlock = `<h4 style="font-size:0.9em;margin:8px 0 4px">Between-study covariance matrix Ψ̂ (Unstructured)</h4>
+      <table class="reg-table" style="margin-bottom:6px">
+        <thead><tr><th></th>${hdr}</tr></thead><tbody>${psiRows}</tbody>
+      </table>
+      <h4 style="font-size:0.9em;margin:6px 0 4px">Between-study correlations ρ̂</h4>
+      <table class="reg-table" style="margin-bottom:6px">
+        <thead><tr><th></th>${hdr}</tr></thead><tbody>${corRows}</tbody>
+      </table>
+      <table class="reg-table" style="margin-bottom:8px">
+        <thead><tr><th>Outcome</th><th>τ²</th><th>I²</th></tr></thead>
+        <tbody>${i2rows}</tbody>
+      </table>`;
+  }
+
+  // ── Hypothesis tests ───────────────────────────────────────────────────────
+  const testsBlock = `
+    <h4 style="font-size:0.9em;margin:8px 0 4px">Hypothesis tests</h4>
+    <table class="reg-table" style="margin-bottom:12px">
+      <thead><tr><th>Test</th><th>χ²</th><th>df</th><th>p</th></tr></thead>
+      <tbody>
+        ${hasMods && isFinite(QM)
+          ? `<tr><td>Omnibus test of moderators (Q<sub>M</sub>)</td><td>${fmt(QM, 3)}</td><td>${df_QM}</td><td>${fmtP(pQM)}</td></tr>`
+          : ""}
+        <tr><td>Residual heterogeneity (Q<sub>E</sub>)</td><td>${fmt(QE, 3)}</td><td>${df_QE}</td><td>${fmtP(pQE)}</td></tr>
+      </tbody>
+    </table>`;
+
+  // ── Fit stats ──────────────────────────────────────────────────────────────
+  const fitBlock = `<div style="font-size:0.82em;color:var(--fg-muted);margin:4px 0 14px;line-height:1.7">
+    k = ${k} studies &nbsp;·&nbsp; n = ${n} obs &nbsp;·&nbsp; P = ${P} outcomes
+    &nbsp;|&nbsp; log-lik = ${fmt(logLik, 4)}
+    &nbsp;·&nbsp; AIC = ${fmt(AIC, 2)} &nbsp;·&nbsp; BIC = ${fmt(BIC, 2)}
+    ${isFinite(AICc) ? `&nbsp;·&nbsp; AICc = ${fmt(AICc, 2)}` : ""}
+    &nbsp;|&nbsp; ${method}, Ψ = ${struct}
+    ${convergence === false ? `&nbsp;·&nbsp; <span style="color:var(--color-warning)">convergence uncertain</span>` : ""}
+  </div>`;
+
+  // Near-zero tau² boundary note
+  const boundaryOutcomes = outcomeIds.filter((_, o) => tau2[o] < 1e-6).map(id => escapeHTML(String(id)));
+  const boundaryNote = boundaryOutcomes.length
+    ? `<p style="color:var(--fg-muted);font-size:0.8em;margin:0 0 6px">ℹ τ² ≈ 0 for ${boundaryOutcomes.join(", ")} — estimate is at the boundary; no detectable between-study heterogeneity for these outcomes.</p>`
+    : "";
+
+  // Render summary into the shared #results div (same slot as standard analysis)
+  document.getElementById("results").innerHTML =
+    warnHTML + interceptTable + modTable + psiBlock + boundaryNote + testsBlock + fitBlock;
+
+  // ── Persist state for re-draws (page nav, PI toggle, page size) ──────────
+  _mvForestState.lastRes      = res;
+  _mvForestState.lastRows     = rows;
+  _mvForestState.alpha        = alpha;
+  _mvForestState.pages        = outcomeIds.map(() => 0);
+  _mvForestState.combinedPage = 0;
+
+  // ── Forest plots → #mvForestContainer ────────────────────────────────────
+  const mvForestContainer = document.getElementById("mvForestContainer");
+  if (!mvForestContainer) return;
+
+  const combinedBlock =
+    `<div id="mvForestCombinedBlock" style="display:none;margin-bottom:20px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+        <div class="plot-export">
+          <button class="export-btn" data-target="mvForestPlotCombined" data-format="svg">SVG</button>
+          <button class="export-btn" data-target="mvForestPlotCombined" data-format="png">PNG</button>
+          <button class="export-btn" data-target="mvForestPlotCombined" data-format="tiff">TIFF</button>
+        </div>
+      </div>
+      <svg id="mvForestPlotCombined" role="img" aria-label="Combined multivariate forest plot"
+        width="620" height="20" style="display:block"></svg>
+      <div id="mvForestNavCombined" class="forest-nav"></div>
+    </div>`;
+
+  const separateBlocks = outcomeIds.map((id, o) =>
+    `<div style="margin-bottom:20px" id="mvForestBlock-${o}">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+        <p class="plot-label" style="margin:0">${escapeHTML(String(id))}</p>
+        <div class="plot-export">
+          <button class="export-btn" data-target="mvForestPlot-${o}" data-format="svg">SVG</button>
+          <button class="export-btn" data-target="mvForestPlot-${o}" data-format="png">PNG</button>
+          <button class="export-btn" data-target="mvForestPlot-${o}" data-format="tiff">TIFF</button>
+        </div>
+      </div>
+      <svg id="mvForestPlot-${o}" role="img"
+        aria-label="Forest plot — ${escapeHTML(String(id))}"
+        width="620" height="20" style="display:block"></svg>
+      <div id="mvForestNav-${o}" class="forest-nav"></div>
+    </div>`
+  ).join("");
+
+  mvForestContainer.innerHTML = combinedBlock + separateBlocks;
+
+  _redrawAllMVForestPlots();
+}
+
+function _redrawAllMVForestPlots() {
+  const { lastRes: res, lastRows: rows, alpha, pages, pageSize, showPI, viewMode, combinedPage } = _mvForestState;
+  if (!res) return;
+  const { beta, ci, se, tau2, outcomeIds, k, P } = res;
+
+  const isCombined = viewMode === "combined";
+  const combinedBlockEl = document.getElementById("mvForestCombinedBlock");
+  if (combinedBlockEl) combinedBlockEl.style.display = isCombined ? "" : "none";
+  outcomeIds.forEach((_, o) => {
+    const block = document.getElementById(`mvForestBlock-${o}`);
+    if (block) block.style.display = isCombined ? "none" : "";
+  });
+
+  if (isCombined) {
+    const svgEl = document.getElementById("mvForestPlotCombined");
+    const navEl = document.getElementById("mvForestNavCombined");
+    if (!svgEl) return;
+    const allStudyIds = [...new Set(rows.map(r => String(r.study_id)))];
+    const { totalPages } = _drawMVForestCombined(svgEl, rows, res, alpha, {
+      page: combinedPage, pageSize, showPI,
+    });
+    _renderMVForestNavCombined(navEl, totalPages, allStudyIds.length);
+    return;
+  }
+
+  // Separate mode
+  const dfPred = Math.max(k - P - 1, 1);
+  outcomeIds.forEach((id, o) => {
+    const svgEl = document.getElementById(`mvForestPlot-${o}`);
+    const navEl = document.getElementById(`mvForestNav-${o}`);
+    if (!svgEl) return;
+    const outcomeRows = rows.filter(r => String(r.outcome_id) === String(id));
+    if (!outcomeRows.length) return;
+    const pooled = { est: beta[o], lo: ci[o][0], hi: ci[o][1] };
+    const piOpts = showPI ? {
+      lo: beta[o] - tCritical(dfPred, alpha) * Math.sqrt(tau2[o] + se[o] ** 2),
+      hi: beta[o] + tCritical(dfPred, alpha) * Math.sqrt(tau2[o] + se[o] ** 2),
+    } : null;
+    const { totalPages } = _drawMVForestPlot(svgEl, outcomeRows, pooled, String(id), alpha, {
+      page: pages[o] ?? 0, pageSize, pi: piOpts,
+    });
+    _renderMVForestNav(navEl, o, totalPages, outcomeRows.length);
+  });
+}
+
+function _renderMVForestNav(navEl, outcomeIdx, totalPages, kAll) {
+  if (!navEl) return;
+  if (totalPages <= 1) { navEl.innerHTML = ""; return; }
+  const page = _mvForestState.pages[outcomeIdx] ?? 0;
+  const prevId = `mvFPrev-${outcomeIdx}`;
+  const nextId = `mvFNext-${outcomeIdx}`;
+  navEl.innerHTML =
+    `<button id="${prevId}" ${page === 0 ? "disabled" : ""}>‹ Prev</button>` +
+    `<span>Page ${page + 1} of ${totalPages}</span>` +
+    `<button id="${nextId}" ${page >= totalPages - 1 ? "disabled" : ""}>Next ›</button>` +
+    `<span class="forest-nav-note">Pooled estimate includes all ${kAll} studies</span>`;
+  document.getElementById(prevId)?.addEventListener("click", () => {
+    if (_mvForestState.pages[outcomeIdx] > 0) {
+      _mvForestState.pages[outcomeIdx]--;
+      _redrawAllMVForestPlots();
+    }
+  });
+  document.getElementById(nextId)?.addEventListener("click", () => {
+    if (_mvForestState.pages[outcomeIdx] < totalPages - 1) {
+      _mvForestState.pages[outcomeIdx]++;
+      _redrawAllMVForestPlots();
+    }
+  });
+}
+
+function _drawMVForestPlot(svgEl, rows, pooled, label, alpha = 0.05, { page = 0, pageSize = Infinity, pi = null } = {}) {
+  if (typeof d3 === "undefined" || !rows.length) return;
+
+  const z = normalQuantile(1 - alpha / 2);
+
+  // Pagination
+  const ps = pageSize === Infinity ? rows.length : pageSize;
+  const totalPages = Math.max(1, Math.ceil(rows.length / ps));
+  const safePage   = Math.min(Math.max(0, page), totalPages - 1);
+  const pageRows   = rows.slice(safePage * ps, safePage * ps + ps);
+
+  // Layout — extra row when PI shown
+  const lW = 130, pW = 280, aW = 175;
+  const rowH = 20, headerH = 24, axisH = 26;
+  const ml = 6, mr = 6;
+  const nS = pageRows.length;
+  const piRows  = pi ? 1 : 0;
+  const totalW  = ml + lW + pW + aW + mr;
+  const totalH  = headerH + nS * rowH + 6 + rowH + (piRows ? rowH : 0) + axisH;
+
+  const svg = d3.select(svgEl)
+    .attr("width", totalW)
+    .attr("height", totalH);
+  svg.selectAll("*").remove();
+
+  // X scale — use all rows (not just page) so domain stays stable across pages
+  const seAll = rows.map(r => Math.sqrt(r.vi));
+  const xVals = rows.flatMap((r, i) => [r.yi - z * seAll[i], r.yi + z * seAll[i]])
+    .concat([pooled.lo, pooled.hi]);
+  if (pi) xVals.push(pi.lo, pi.hi);
+  const xMin = Math.min(...xVals), xMax = Math.max(...xVals);
+  const pad  = Math.max((xMax - xMin) * 0.12, 0.05);
+  const xScale = d3.scaleLinear()
+    .domain([xMin - pad, xMax + pad])
+    .range([0, pW]);
+
+  const plotG = svg.append("g").attr("transform", `translate(${ml + lW},${headerH})`);
+
+  // Zero reference line
+  const zeroLineH = nS * rowH + 6 + rowH + (piRows ? rowH : 0);
+  if (xScale.domain()[0] <= 0 && xScale.domain()[1] >= 0) {
+    plotG.append("line")
+      .attr("x1", xScale(0)).attr("x2", xScale(0))
+      .attr("y1", 0).attr("y2", zeroLineH)
+      .attr("stroke", "var(--border)").attr("stroke-dasharray", "3,3").attr("stroke-width", 1);
+  }
+
+  // Column headers
+  [
+    [ml + lW / 2,           "Study"],
+    [ml + lW + pW / 2,      label],
+    [ml + lW + pW + aW / 2, `Effect [${Math.round((1 - alpha) * 100)}% CI]`],
+  ].forEach(([x, text]) =>
+    svg.append("text")
+      .attr("x", x).attr("y", headerH - 6)
+      .attr("text-anchor", "middle")
+      .attr("fill", "var(--fg-muted)").attr("font-size", "10px")
+      .text(text)
+  );
+
+  // Study rows (current page only)
+  const wtsAll  = rows.map(r => 1 / r.vi);
+  const wMax    = Math.max(...wtsAll);
+  const sePageArr = pageRows.map(r => Math.sqrt(r.vi));
+
+  pageRows.forEach((row, i) => {
+    const y  = i * rowH + rowH / 2;
+    const se = sePageArr[i];
+    const lo = row.yi - z * se;
+    const hi = row.yi + z * se;
+    const wi = 1 / row.vi;
+    const bh = Math.max(2, Math.min(6, 5.5 * Math.sqrt(wi / wMax)));
+
+    plotG.append("line")
+      .attr("x1", xScale(Math.max(xScale.domain()[0], lo)))
+      .attr("x2", xScale(Math.min(xScale.domain()[1], hi)))
+      .attr("y1", y).attr("y2", y)
+      .attr("stroke", "var(--fg)").attr("stroke-width", 1);
+    plotG.append("rect")
+      .attr("x", xScale(row.yi) - bh).attr("y", y - bh)
+      .attr("width", bh * 2).attr("height", bh * 2)
+      .attr("fill", "var(--accent)");
+
+    svg.append("text")
+      .attr("x", ml + lW - 4).attr("y", headerH + y + 4)
+      .attr("text-anchor", "end")
+      .attr("fill", "var(--fg)").attr("font-size", "10px")
+      .text(String(row.study_id));
+
+    svg.append("text")
+      .attr("x", ml + lW + pW + 5).attr("y", headerH + y + 4)
+      .attr("text-anchor", "start")
+      .attr("fill", "var(--fg)").attr("font-size", "10px")
+      .text(`${fmt(row.yi, 3)} [${fmt(lo, 3)}, ${fmt(hi, 3)}]`);
+  });
+
+  // Separator
+  const sepY = nS * rowH + 4;
+  plotG.append("line")
+    .attr("x1", 0).attr("x2", pW)
+    .attr("y1", sepY).attr("y2", sepY)
+    .attr("stroke", "var(--border)").attr("stroke-width", 1);
+
+  // Pooled diamond
+  const dY   = sepY + rowH / 2;
+  const dLo  = xScale(Math.max(xScale.domain()[0], pooled.lo));
+  const dHi  = xScale(Math.min(xScale.domain()[1], pooled.hi));
+  const dMid = xScale(pooled.est);
+  const dH   = 7;
+  plotG.append("polygon")
+    .attr("points", `${dMid},${dY - dH} ${dHi},${dY} ${dMid},${dY + dH} ${dLo},${dY}`)
+    .attr("fill", "var(--accent)");
+
+  svg.append("text")
+    .attr("x", ml + lW - 4).attr("y", headerH + dY + 4)
+    .attr("text-anchor", "end")
+    .attr("fill", "var(--fg)").attr("font-size", "10px").attr("font-weight", "600")
+    .text("Pooled (MV)");
+  svg.append("text")
+    .attr("x", ml + lW + pW + 5).attr("y", headerH + dY + 4)
+    .attr("text-anchor", "start")
+    .attr("fill", "var(--fg)").attr("font-size", "10px").attr("font-weight", "600")
+    .text(`${fmt(pooled.est, 3)} [${fmt(pooled.lo, 3)}, ${fmt(pooled.hi, 3)}]`);
+
+  // Prediction interval row (below diamond, only when pi != null)
+  if (pi && isFinite(pi.lo) && isFinite(pi.hi)) {
+    const piY   = dY + rowH;
+    const piLoX = xScale(Math.max(xScale.domain()[0], pi.lo));
+    const piHiX = xScale(Math.min(xScale.domain()[1], pi.hi));
+    const piMid = xScale(pooled.est);
+    const piColor = "var(--fg-muted)";
+    // Dashed line + endcap ticks
+    plotG.append("line")
+      .attr("x1", piLoX).attr("x2", piHiX)
+      .attr("y1", piY).attr("y2", piY)
+      .attr("stroke", piColor).attr("stroke-width", 2).attr("stroke-dasharray", "6,3");
+    plotG.append("line").attr("x1", piLoX).attr("x2", piLoX)
+      .attr("y1", piY - 5).attr("y2", piY + 5)
+      .attr("stroke", piColor).attr("stroke-width", 2);
+    plotG.append("line").attr("x1", piHiX).attr("x2", piHiX)
+      .attr("y1", piY - 5).attr("y2", piY + 5)
+      .attr("stroke", piColor).attr("stroke-width", 2);
+    // Label
+    svg.append("text")
+      .attr("x", ml + lW - 4).attr("y", headerH + piY + 4)
+      .attr("text-anchor", "end")
+      .attr("fill", piColor).attr("font-size", "10px")
+      .text("Pred. interval");
+    svg.append("text")
+      .attr("x", ml + lW + pW + 5).attr("y", headerH + piY + 4)
+      .attr("text-anchor", "start")
+      .attr("fill", piColor).attr("font-size", "10px")
+      .text(`${fmt(pi.lo, 3)} to ${fmt(pi.hi, 3)}`);
+  }
+
+  // X-axis
+  const axisOffsetY = sepY + rowH + (piRows ? rowH : 0) + 2;
+  plotG.append("g")
+    .attr("transform", `translate(0,${axisOffsetY})`)
+    .call(d3.axisBottom(xScale).ticks(5).tickSize(3))
+    .call(g => g.select(".domain").attr("stroke", "var(--border)"))
+    .call(g => g.selectAll(".tick line").attr("stroke", "var(--border)"))
+    .call(g => g.selectAll(".tick text")
+      .attr("fill", "var(--fg-muted)").attr("font-size", "9px").attr("font-family", "inherit"));
+
+  return { totalPages };
+}
+
+function _renderMVForestNavCombined(navEl, totalPages, nStudies) {
+  if (!navEl) return;
+  if (totalPages <= 1) { navEl.innerHTML = ""; return; }
+  const page = _mvForestState.combinedPage;
+  navEl.innerHTML =
+    `<button id="mvFCPrev" ${page === 0 ? "disabled" : ""}>‹ Prev</button>` +
+    `<span>Page ${page + 1} of ${totalPages}</span>` +
+    `<button id="mvFCNext" ${page >= totalPages - 1 ? "disabled" : ""}>Next ›</button>` +
+    `<span class="forest-nav-note">Pooled estimates include all ${nStudies} studies</span>`;
+  document.getElementById("mvFCPrev")?.addEventListener("click", () => {
+    if (_mvForestState.combinedPage > 0) { _mvForestState.combinedPage--; _redrawAllMVForestPlots(); }
+  });
+  document.getElementById("mvFCNext")?.addEventListener("click", () => {
+    if (_mvForestState.combinedPage < totalPages - 1) { _mvForestState.combinedPage++; _redrawAllMVForestPlots(); }
+  });
+}
+
+function _drawMVForestCombined(svgEl, rows, res, alpha, { page = 0, pageSize = Infinity, showPI = false } = {}) {
+  if (typeof d3 === "undefined" || !rows.length || !res) return { totalPages: 1 };
+  const { beta, ci, se, tau2, outcomeIds, k, P } = res;
+  const z = normalQuantile(1 - alpha / 2);
+  const dfPred = Math.max(k - P - 1, 1);
+
+  // Unique study IDs for pagination
+  const allStudyIds = [...new Set(rows.map(r => String(r.study_id)))];
+  const ps = pageSize === Infinity ? allStudyIds.length : pageSize;
+  const totalPages = Math.max(1, Math.ceil(allStudyIds.length / ps));
+  const safePage = Math.min(Math.max(0, page), totalPages - 1);
+  const pageStudyIds = new Set(allStudyIds.slice(safePage * ps, safePage * ps + ps));
+
+  // Distinct colors per outcome (Tableau-10 palette, works on light + dark)
+  const palette = ["#4e79a7","#f28e2b","#e15759","#76b7b2","#59a14f","#edc948","#b07aa1","#ff9da7","#9c755f","#bab0ac"];
+
+  // X domain from all rows + all pooled CIs ± PI
+  const seAll = rows.map(r => Math.sqrt(r.vi));
+  const xVals = rows.flatMap((r, i) => [r.yi - z * seAll[i], r.yi + z * seAll[i]]);
+  outcomeIds.forEach((_, o) => {
+    xVals.push(ci[o][0], ci[o][1]);
+    if (showPI) {
+      const tc = tCritical(dfPred, alpha);
+      xVals.push(beta[o] - tc * Math.sqrt(tau2[o] + se[o] ** 2),
+                 beta[o] + tc * Math.sqrt(tau2[o] + se[o] ** 2));
+    }
+  });
+  const xMin = Math.min(...xVals), xMax = Math.max(...xVals);
+  const pad = Math.max((xMax - xMin) * 0.12, 0.05);
+
+  // Layout constants
+  const lW = 130, pW = 280, aW = 175;
+  const rowH = 20, headerH = 24, axisH = 26;
+  const groupHdrH = 22, sepH = 6, spacerH = 10;
+  const ml = 6, mr = 6;
+  const totalW = ml + lW + pW + aW + mr;
+
+  // Per-outcome page rows (pre-computed for height)
+  const perPageRows = outcomeIds.map(id =>
+    rows.filter(r => String(r.outcome_id) === String(id) && pageStudyIds.has(String(r.study_id)))
+  );
+  const groupH = (nS) => groupHdrH + nS * rowH + sepH + rowH + (showPI ? rowH : 0) + spacerH;
+  const totalGroupH = perPageRows.reduce((acc, pr) => acc + groupH(pr.length), 0);
+  const totalH = headerH + totalGroupH + axisH;
+
+  const svg = d3.select(svgEl).attr("width", totalW).attr("height", totalH);
+  svg.selectAll("*").remove();
+
+  const xScale = d3.scaleLinear().domain([xMin - pad, xMax + pad]).range([0, pW]);
+  const plotG = svg.append("g").attr("transform", `translate(${ml + lW},${headerH})`);
+
+  // Full-height zero reference line
+  if (xScale.domain()[0] <= 0 && xScale.domain()[1] >= 0) {
+    plotG.append("line")
+      .attr("x1", xScale(0)).attr("x2", xScale(0))
+      .attr("y1", 0).attr("y2", totalGroupH)
+      .attr("stroke", "var(--border)").attr("stroke-dasharray", "3,3").attr("stroke-width", 1);
+  }
+
+  // Column headers
+  [
+    [ml + lW / 2,           "Study"],
+    [ml + lW + pW / 2,      "Effect"],
+    [ml + lW + pW + aW / 2, `Effect [${Math.round((1 - alpha) * 100)}% CI]`],
+  ].forEach(([x, text]) =>
+    svg.append("text").attr("x", x).attr("y", headerH - 6)
+      .attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").attr("font-size", "10px").text(text)
+  );
+
+  let gy = 0; // y cursor in plotG coords
+
+  outcomeIds.forEach((id, o) => {
+    const color = palette[o % palette.length];
+    const pageRows = perPageRows[o];
+    const nS = pageRows.length;
+    const allOutcomeRows = rows.filter(r => String(r.outcome_id) === String(id));
+    const wMax = Math.max(...allOutcomeRows.map(r => 1 / r.vi), 1);
+
+    // Shaded group header band
+    svg.append("rect")
+      .attr("x", 0).attr("y", headerH + gy)
+      .attr("width", totalW).attr("height", groupHdrH)
+      .attr("fill", color).attr("opacity", 0.1);
+    svg.append("text")
+      .attr("x", ml + 5).attr("y", headerH + gy + groupHdrH - 6)
+      .attr("fill", color).attr("font-size", "10px").attr("font-weight", "700")
+      .text(escapeHTML(String(id)));
+    gy += groupHdrH;
+
+    // Study rows
+    pageRows.forEach((row, i) => {
+      const y = gy + i * rowH + rowH / 2;
+      const seSt = Math.sqrt(row.vi);
+      const lo = row.yi - z * seSt;
+      const hi = row.yi + z * seSt;
+      const wi = 1 / row.vi;
+      const bh = Math.max(2, Math.min(6, 5.5 * Math.sqrt(wi / wMax)));
+
+      plotG.append("line")
+        .attr("x1", xScale(Math.max(xScale.domain()[0], lo)))
+        .attr("x2", xScale(Math.min(xScale.domain()[1], hi)))
+        .attr("y1", y).attr("y2", y)
+        .attr("stroke", color).attr("stroke-width", 1);
+      plotG.append("rect")
+        .attr("x", xScale(row.yi) - bh).attr("y", y - bh)
+        .attr("width", bh * 2).attr("height", bh * 2)
+        .attr("fill", color);
+      svg.append("text")
+        .attr("x", ml + lW - 4).attr("y", headerH + y + 4)
+        .attr("text-anchor", "end").attr("fill", "var(--fg)").attr("font-size", "10px")
+        .text(String(row.study_id));
+      svg.append("text")
+        .attr("x", ml + lW + pW + 5).attr("y", headerH + y + 4)
+        .attr("text-anchor", "start").attr("fill", "var(--fg)").attr("font-size", "10px")
+        .text(`${fmt(row.yi, 3)} [${fmt(lo, 3)}, ${fmt(hi, 3)}]`);
+    });
+    gy += nS * rowH;
+
+    // Separator
+    plotG.append("line")
+      .attr("x1", 0).attr("x2", pW)
+      .attr("y1", gy + sepH / 2).attr("y2", gy + sepH / 2)
+      .attr("stroke", "var(--border)").attr("stroke-width", 1);
+    gy += sepH;
+
+    // Pooled diamond
+    const pooled = { est: beta[o], lo: ci[o][0], hi: ci[o][1] };
+    const dY = gy + rowH / 2;
+    const dMid = xScale(pooled.est);
+    const dLo  = xScale(Math.max(xScale.domain()[0], pooled.lo));
+    const dHi  = xScale(Math.min(xScale.domain()[1], pooled.hi));
+    const dH   = 7;
+    plotG.append("polygon")
+      .attr("points", `${dMid},${dY - dH} ${dHi},${dY} ${dMid},${dY + dH} ${dLo},${dY}`)
+      .attr("fill", color);
+    svg.append("text")
+      .attr("x", ml + lW - 4).attr("y", headerH + dY + 4)
+      .attr("text-anchor", "end").attr("fill", "var(--fg)").attr("font-size", "10px").attr("font-weight", "600")
+      .text("Pooled (MV)");
+    svg.append("text")
+      .attr("x", ml + lW + pW + 5).attr("y", headerH + dY + 4)
+      .attr("text-anchor", "start").attr("fill", "var(--fg)").attr("font-size", "10px").attr("font-weight", "600")
+      .text(`${fmt(pooled.est, 3)} [${fmt(pooled.lo, 3)}, ${fmt(pooled.hi, 3)}]`);
+    gy += rowH;
+
+    // Prediction interval
+    if (showPI) {
+      const tc = tCritical(dfPred, alpha);
+      const piLo = beta[o] - tc * Math.sqrt(tau2[o] + se[o] ** 2);
+      const piHi = beta[o] + tc * Math.sqrt(tau2[o] + se[o] ** 2);
+      const piY = gy + rowH / 2;
+      if (isFinite(piLo) && isFinite(piHi)) {
+        const piLoX = xScale(Math.max(xScale.domain()[0], piLo));
+        const piHiX = xScale(Math.min(xScale.domain()[1], piHi));
+        plotG.append("line")
+          .attr("x1", piLoX).attr("x2", piHiX).attr("y1", piY).attr("y2", piY)
+          .attr("stroke", color).attr("stroke-width", 2).attr("stroke-dasharray", "6,3").attr("opacity", 0.65);
+        plotG.append("line").attr("x1", piLoX).attr("x2", piLoX)
+          .attr("y1", piY - 5).attr("y2", piY + 5).attr("stroke", color).attr("stroke-width", 2).attr("opacity", 0.65);
+        plotG.append("line").attr("x1", piHiX).attr("x2", piHiX)
+          .attr("y1", piY - 5).attr("y2", piY + 5).attr("stroke", color).attr("stroke-width", 2).attr("opacity", 0.65);
+        svg.append("text")
+          .attr("x", ml + lW - 4).attr("y", headerH + piY + 4)
+          .attr("text-anchor", "end").attr("fill", "var(--fg-muted)").attr("font-size", "10px")
+          .text("Pred. interval");
+        svg.append("text")
+          .attr("x", ml + lW + pW + 5).attr("y", headerH + piY + 4)
+          .attr("text-anchor", "start").attr("fill", "var(--fg-muted)").attr("font-size", "10px")
+          .text(`${fmt(piLo, 3)} to ${fmt(piHi, 3)}`);
+      }
+      gy += rowH;
+    }
+
+    gy += spacerH;
+  });
+
+  // X-axis
+  plotG.append("g")
+    .attr("transform", `translate(0,${gy})`)
+    .call(d3.axisBottom(xScale).ticks(5).tickSize(3))
+    .call(g => g.select(".domain").attr("stroke", "var(--border)"))
+    .call(g => g.selectAll(".tick line").attr("stroke", "var(--border)"))
+    .call(g => g.selectAll(".tick text")
+      .attr("fill", "var(--fg-muted)").attr("font-size", "9px").attr("font-family", "inherit"));
+
+  return { totalPages };
+}
+
 // ---------------- INITIALIZE ----------------
+document.getElementById("modeStandard").addEventListener("click",     () => { _mvMode = false; _applyModeToggle(); markStale(); });
+document.getElementById("modeMultivariate").addEventListener("click", () => { _mvMode = true;  _applyModeToggle(); markStale(); });
+document.getElementById("mvAddRow").addEventListener("click", () => { _mvAddRow(); markStale(); });
+document.getElementById("mvAddMod").addEventListener("click", _mvAddMod);
+document.getElementById("mvModName").addEventListener("keydown", e => { if (e.key === "Enter") _mvAddMod(); });
+document.getElementById("mvForestPageSize").addEventListener("change", e => {
+  const raw = e.target.value;
+  _mvForestState.pageSize     = raw === "Infinity" ? Infinity : +raw;
+  _mvForestState.pages        = _mvForestState.pages.map(() => 0);
+  _mvForestState.combinedPage = 0;
+  _redrawAllMVForestPlots();
+});
+document.getElementById("mvForestView").addEventListener("change", e => {
+  _mvForestState.viewMode     = e.target.value;
+  _mvForestState.combinedPage = 0;
+  _redrawAllMVForestPlots();
+});
+document.getElementById("mvShowPI").addEventListener("change", e => {
+  _mvForestState.showPI = e.target.checked;
+  _redrawAllMVForestPlots();
+});
 document.getElementById("addStudy").addEventListener("click", () => { addRow(); renderRoBDataGrid(); markStale(); });
 document.getElementById("run").addEventListener("click", async () => { if (await runAnalysis()) showView("results"); });
 document.getElementById("import").addEventListener("click", () => document.getElementById("csvFile").click());
-document.getElementById("csvFile").addEventListener("change", e => { if (e.target.files[0]) previewCSV(e.target.files[0]); });
+document.getElementById("csvFile").addEventListener("change", async e => {
+  if (!e.target.files[0]) return;
+  await previewCSV(e.target.files[0]);
+  if (_mvMode) {
+    const pending = getPendingImport();
+    document.getElementById("previewImport").textContent =
+      pending?.mvCandidate ? "Import to MV Table" : "Import";
+  }
+});
 document.getElementById("previewImport").addEventListener("click", () => {
+  document.getElementById("previewImport").textContent = "Import";
+  const pending = getPendingImport();
+  if (pending?.mvCandidate && _mvMode) {
+    _commitImportMV(pending.parsed, pending.mvHeaders);
+    cancelImport();
+    return;
+  }
   const missingCols = commitImport();
   syncMHOptions(document.getElementById("effectType").value);
   if (missingCols.length > 0) {
@@ -740,7 +1759,10 @@ document.getElementById("previewImport").addEventListener("click", () => {
     warningDiv.style.display = "block";
   }
 });
-document.getElementById("previewCancel").addEventListener("click", cancelImport);
+document.getElementById("previewCancel").addEventListener("click", () => {
+  document.getElementById("previewImport").textContent = "Import";
+  cancelImport();
+});
 document.getElementById("previewEffectType").addEventListener("change", e => refreshPreviewUI(e.target.value));
 document.getElementById("export").addEventListener("click", e => {
   const done = flashBtn(e.currentTarget, null, "Saved \u2713");
@@ -1303,7 +2325,9 @@ document.getElementById("profileLikScale").addEventListener("change", () => {
 // ---------------- SESSION SAVE ----------------
 
 function saveSession() {
-  downloadBlob(serializeSession(gatherSessionState(moderators, scaleModerators, interactions, { domains: _robDomains, data: _robData })), "session.json", "application/json;charset=utf-8;");
+  const session = gatherSessionState(moderators, scaleModerators, interactions, { domains: _robDomains, data: _robData });
+  if (_mvMode) session.mv = _gatherMVState();
+  downloadBlob(serializeSession(session), "session.json", "application/json;charset=utf-8;");
 }
 
 // ---------------- SESSION APPLY ----------------
@@ -1400,6 +2424,39 @@ function applySession(session) {
   renderRoBDomainTags();
   renderRoBDataGrid();
 
+  // Restore MV mode
+  const mv = session.mv;
+  if (mv && typeof mv === "object") {
+    _mvMode = true;
+    _applyModeToggle();
+    if (mv.struct && document.getElementById("mvStruct").querySelector(`option[value="${mv.struct}"]`))
+      document.getElementById("mvStruct").value = mv.struct;
+    if (mv.method && document.getElementById("mvMethod").querySelector(`option[value="${mv.method}"]`))
+      document.getElementById("mvMethod").value = mv.method;
+    if (isFinite(mv.rho)) document.getElementById("mvRho").value = mv.rho;
+    _mvModerators.length = 0;
+    if (Array.isArray(mv.moderators)) mv.moderators.forEach(n => { if (n) _mvModerators.push(n); });
+    _renderMVModTags();
+    _rebuildMVTableHeaders();
+    document.getElementById("mvTableBody").innerHTML = "";
+    if (Array.isArray(mv.rows)) {
+      mv.rows.forEach(r => {
+        const tr = _mvAddRow();
+        if (r.study_id   !== undefined) tr.querySelector(".mv-study-id").value   = r.study_id;
+        if (r.outcome_id !== undefined) tr.querySelector(".mv-outcome-id").value = r.outcome_id;
+        if (r.yi         !== undefined) tr.querySelector(".mv-yi").value = r.yi;
+        if (r.vi         !== undefined) tr.querySelector(".mv-vi").value = r.vi;
+        _mvModerators.forEach((name, i) => {
+          const inputs = tr.querySelectorAll(".mv-mod");
+          if (inputs[i] && r[name] !== undefined) inputs[i].value = r[name];
+        });
+      });
+    }
+  } else {
+    _mvMode = false;
+    _applyModeToggle();
+  }
+
   return { profile, savedStudies };
 }
 
@@ -1443,6 +2500,22 @@ async function loadSession(file) {
 // ---------------- CSV EXPORT ----------------
 
 function exportCSV() {
+  if (_mvMode) {
+    const headers = ["study_id", "outcome_id", "yi", "vi", ..._mvModerators.map(n => n)];
+    const rows    = [];
+    document.querySelectorAll("#mvTableBody tr").forEach(r => {
+      const studyId   = r.querySelector(".mv-study-id")?.value  ?? "";
+      const outcomeId = r.querySelector(".mv-outcome-id")?.value ?? "";
+      const yi        = r.querySelector(".mv-yi")?.value         ?? "";
+      const vi        = r.querySelector(".mv-vi")?.value         ?? "";
+      const mods      = [...r.querySelectorAll(".mv-mod")].map(x => x.value);
+      const vals      = [studyId, outcomeId, yi, vi, ...mods];
+      if (vals.some(v => v !== "")) rows.push(vals);
+    });
+    downloadBlob(serializeCSV(headers, rows), "mv_meta_data.csv", "text/csv;charset=utf-8;");
+    return;
+  }
+
   const type    = document.getElementById("effectType").value;
   const profile = effectProfiles[type];
 
@@ -1574,6 +2647,9 @@ function init() {
 
   // Initialise MH/Peto and PL availability based on default/restored settings.
   syncMHOptions(document.getElementById("effectType").value);
+
+  // Populate MV example data (Berkey 1998: 5 trials, 2 outcomes)
+  _populateMVExample();
 
   // Validate all rows
   document.querySelectorAll("#inputTable tr").forEach((row, i) => {
@@ -2848,6 +3924,13 @@ async function runAnalysis() {
     performance.mark("runAnalysis:start");
     scheduleSave();
 
+    // Multivariate mode — separate pipeline
+    if (_mvMode) {
+      const ok = _runMVAnalysis();
+      performance.measure("runAnalysis", "runAnalysis:start");
+      return ok;
+    }
+
     // Cancel any in-progress GOSH computation.
     if (goshState.worker) {
       goshState.worker.terminate();
@@ -2859,7 +3942,12 @@ async function runAnalysis() {
       if (elCancel) elCancel.disabled = true;
       if (elProg)   elProg.hidden     = true;
     }
-    document.querySelectorAll(".results-section").forEach(d => d.removeAttribute("open"));
+    document.querySelectorAll(".results-section").forEach(d => { d.removeAttribute("open"); d.style.display = ""; });
+    // Restore standard forest area (may have been hidden by a prior MV run)
+    const _sf = document.getElementById("forestSection");
+    const _mf = document.getElementById("mvForestSection");
+    if (_sf) _sf.style.display = "";
+    if (_mf) _mf.style.display = "none";
     forestPlot.page = 0;
     caterpillarPlot.page = 0;
     cumForestPlot.page = 0;

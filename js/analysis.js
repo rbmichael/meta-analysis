@@ -148,6 +148,9 @@ export * from "./tau2.js";
 // Bayesian meta-analysis (bayes.js)
 export { profileLikCI, profileLikTau2, bayesMeta, priorSensitivity } from "./bayes.js";
 
+// Multivariate meta-analysis (multivariate.js)
+export { vcalc, mvMeta } from "./multivariate.js";
+
 
 // Q for heterogeneity: IV weights (1/vi) with M-H estimate as reference.
 export function metaMH(studies, type, alpha = 0.05) {

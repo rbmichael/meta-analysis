@@ -92,6 +92,11 @@
         <!-- First 5 data rows -->
         <div id="previewTable" class="preview-table-wrap"></div>
 
+        <!-- MV hint (shown when study_id/outcome_id/yi/vi detected) -->
+        <div id="previewMvHint" style="display:none;font-size:0.8125rem;color:var(--color-info);background:var(--accent-subtle);border:1px solid var(--border-accent);border-radius:var(--radius-md);padding:6px 12px;margin-bottom:8px">
+          ℹ Multivariate data detected (study_id / outcome_id / yi / vi). Switch to <strong>Multivariate</strong> mode before importing to populate the multivariate input table.
+        </div>
+
         <!-- Action buttons -->
         <div class="preview-actions">
           <button id="previewImport" class="preview-import-btn">Import</button>
@@ -99,8 +104,49 @@
         </div>
       </div>
 
+      <!-- Analysis mode tabs -->
+      <div id="analysisModeTabs" style="display:flex;gap:2px;background:var(--bg-pill);border:1px solid var(--border);border-radius:var(--radius-md);padding:3px;width:fit-content;margin-bottom:12px">
+        <button id="modeStandard"      class="toggle-btn active">Standard</button>
+        <button id="modeMultivariate"  class="toggle-btn">Multivariate</button>
+      </div>
+
+      <!-- Multivariate settings (hidden in standard mode) -->
+      <div id="mvSettings" style="display:none">
+        <div class="settings-row">
+          <label>
+            <span>Ψ structure<button class="help-btn" data-help="mv.struct" title="Help">?</button></span>
+            <select id="mvStruct">
+              <option value="CS">Compound symmetric (CS)</option>
+              <option value="Diag">Diagonal (Diag)</option>
+              <option value="UN">Unstructured (UN)</option>
+            </select>
+          </label>
+          <label>
+            <span>Estimation<button class="help-btn" data-help="mv.method" title="Help">?</button></span>
+            <select id="mvMethod">
+              <option value="REML" selected>REML</option>
+              <option value="ML">ML</option>
+            </select>
+          </label>
+          <label class="inline" style="align-self:flex-end;margin-bottom:6px">
+            Within-study correlation ρ<button class="help-btn" data-help="mv.rho" title="Help">?</button>:
+            <input type="number" id="mvRho" value="0.5" min="-0.999" max="0.999" step="0.05" style="width:70px">
+          </label>
+        </div>
+        <!-- MV moderator manager -->
+        <div class="settings-subsection" style="border-top:none;padding-top:0">
+          <div class="settings-subsection-controls">
+            <strong>Moderators:</strong>
+            <input type="text" id="mvModName" placeholder="Column name" style="width:120px">
+            <button id="mvAddMod">+ Add</button>
+            <p class="settings-hint" style="margin:0">Moderators are added as columns to the table.</p>
+          </div>
+          <div id="mvModTags"></div>
+        </div>
+      </div>
+
       <!-- Primary settings: always visible -->
-      <div class="settings-row">
+      <div class="settings-row" id="standardSettings">
         <label>
           <span>Effect type<button class="help-btn" data-help-select="effectType" data-help-prefix="effect." title="Help">?</button></span>
           <select id="effectType"></select>
@@ -375,6 +421,7 @@
 
       <div id="inputTableToolbar">
         <button id="addStudy">Add Study</button>
+        <button id="mvAddRow" style="display:none">Add Row</button>
         <span class="io-sep" role="separator" aria-hidden="true"></span>
         <button id="run" title="Run analysis (Ctrl+Enter)">Run <kbd class="run-kbd">(Ctrl+Enter)</kbd></button>
         <button class="help-btn" data-help="keyboard.shortcuts" title="Keyboard shortcuts">⌨</button>
@@ -396,6 +443,26 @@
 
       <div id="validationWarnings"></div>
       </div><!-- /#inputTableWrap -->
+
+      <!-- Multivariate input table (hidden in standard mode) -->
+      <div id="mvTableWrap" style="display:none">
+        <div id="mvTableScroll" style="overflow-x:auto">
+          <table id="mvTable">
+            <thead>
+              <tr id="mvTableHead">
+                <th>Study ID</th>
+                <th>Outcome ID</th>
+                <th>Effect (y<sub>i</sub>)</th>
+                <th>Variance (v<sub>i</sub>)</th>
+                <th class="col-actions">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="mvTableBody"></tbody>
+          </table>
+        </div>
+        <div id="mvValidationWarnings"></div>
+      </div>
+
     </div>
   <!-- =========== OUTPUT =========== -->
     <div id="outputSection">
@@ -455,6 +522,35 @@
             </div>
             <svg id="forestPlot" role="img" aria-label="Forest plot" width="900" height="420"></svg>
             <div id="forestNav"></div>
+          </div>
+        </div>
+
+        <!-- ── MV forest plots (shown instead of #forestSection in MV mode) ── -->
+        <div id="mvForestSection" style="display:none">
+          <div class="plot-block">
+            <div style="display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:6px">
+              <p class="plot-label" style="margin:0">Forest plots<button class="help-btn" data-help="mv.forest" title="Help">?</button></p>
+              <label class="inline" style="font-size:0.8125rem;font-weight:normal">
+                Studies per page
+                <select id="mvForestPageSize">
+                  <option value="20" selected>20</option>
+                  <option value="30">30</option>
+                  <option value="50">50</option>
+                  <option value="Infinity">All</option>
+                </select>
+              </label>
+              <label class="inline" style="font-size:0.8125rem;font-weight:normal">
+                View
+                <select id="mvForestView">
+                  <option value="separate" selected>Separate panels</option>
+                  <option value="combined">Combined</option>
+                </select>
+              </label>
+              <label class="inline" style="font-size:0.8125rem;font-weight:normal;gap:4px">
+                <input type="checkbox" id="mvShowPI"> Prediction interval
+              </label>
+            </div>
+            <div id="mvForestContainer"></div>
           </div>
         </div>
 
@@ -1069,6 +1165,25 @@
       <p>Not available with M-H or Peto pooling methods.
       Based on Hedges, Tipton &amp; Johnson (2010) and Van den Noortgate et al. (2013).</p>
 
+      <!-- ---- Multivariate meta-analysis ---- -->
+      <h2>Multivariate meta-analysis</h2>
+      <p>Switch to <strong>Multivariate</strong> mode to jointly synthesise <strong>P ≥ 2 correlated outcomes</strong>
+      observed within the same studies. Within-study covariance is imputed via <code>vcalc</code>
+      (V<sub>jk</sub> = ρ·√v<sub>j</sub>·√v<sub>k</sub>, constant-ρ assumption); between-study
+      heterogeneity is modelled through a P × P matrix Ψ.</p>
+      <table class="stat-table" style="margin:8px 0 12px">
+        <thead><tr><th>Ψ structure</th><th>Parameters</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><strong>CS</strong></td><td>2</td><td>Compound symmetry: shared τ² and between-study correlation ρ̂</td></tr>
+          <tr><td><strong>Diag</strong></td><td>P</td><td>Diagonal: independent τ²<sub>p</sub> per outcome; no between-study correlation</td></tr>
+          <tr><td><strong>UN</strong></td><td>P(P+1)/2</td><td>Unstructured: full Cholesky-parameterised Ψ; all correlations free</td></tr>
+        </tbody>
+      </table>
+      <p>Estimation by REML or ML via BFGS. Optional meta-regression adds common moderator slopes.
+      Reports per-outcome pooled estimates, the Ψ̂ matrix, per-outcome I², residual heterogeneity
+      Q<sub>E</sub>, omnibus moderator test Q<sub>M</sub>, AIC / BIC / log-likelihood, and per-outcome
+      forest plots. Based on Berkey et al. (1998) and Jackson, Riley &amp; White (2011).</p>
+
       <!-- ---- Plots ---- -->
       <h2>Plots</h2>
       <p>All plots export as SVG, PNG, or TIFF.</p>
@@ -1128,10 +1243,12 @@
       <ol class="about-refs">
         <li>Akaike H (1974). A new look at the statistical model identification. <em>IEEE Trans Autom Control,</em> 19(6), 716–723.</li>
         <li>Andrews I, Kasy M (2019). Identification of and correction for publication bias. <em>Am Econ Rev,</em> 109(8), 2766–2794.</li>
+        <li>Berkey CS, Hoaglin DC, Antczak-Bouckoms A, Mosteller F, Colditz GA (1998). Meta-analysis of multiple outcomes by regression with random effects. <em>Stat Med,</em> 17(22), 2537–2550.</li>
         <li>Blom G (1958). <em>Statistical Estimates and Transformed Beta-Variables.</em> Wiley.</li>
         <li>Bonett DG (2002). Sample size requirements for estimating intraclass correlations with desired precision. <em>Stat Med,</em> 21(9), 1331–1335.</li>
         <li>Borenstein M, Hedges LV, Higgins JPT, Rothstein HR (2009). <em>Introduction to Meta-Analysis.</em> Wiley.</li>
         <li>Burnham KP, Anderson DR (2002). <em>Model Selection and Multimodel Inference</em> (2nd ed.). Springer.</li>
+        <li>Cheung MWL (2014). Modeling dependent effect sizes with three-level meta-analyses: A structural equation modeling approach. <em>Psychol Methods,</em> 19(2), 211–229.</li>
         <li>Deeks JJ, Macaskill P, Irwig L (2005). The performance of tests of publication bias and other sample size effects in systematic reviews of diagnostic test accuracy was assessed. <em>J Clin Epidemiol,</em> 58(9), 882–893.</li>
         <li>DerSimonian R, Laird N (1986). Meta-analysis in clinical trials. <em>Controlled Clinical Trials,</em> 7, 177–188.</li>
         <li>Feldt LS (1965). The approximate sampling distribution of Kuder-Richardson reliability coefficient twenty. <em>Psychometrika,</em> 30(3), 357–370.</li>
@@ -1147,6 +1264,7 @@
         <li>Henmi M, Copas JB (2010). Confidence intervals for random effects meta-analysis and robustness to publication bias. <em>Stat Med,</em> 29(29), 2969–2983.</li>
         <li>Holm S (1979). A simple sequentially rejective multiple test procedure. <em>Scand J Stat,</em> 6(2), 65–70.</li>
         <li>Ioannidis JPA, Trikalinos TA (2007). An exploratory test for an excess of significant findings. <em>Clin Trials,</em> 4(3), 245–253.</li>
+        <li>Jackson D, Riley R, White IR (2011). Multivariate meta-analysis: Potential and promise. <em>Stat Med,</em> 30(20), 2333–2351.</li>
         <li>Jeffreys H (1961). <em>Theory of Probability</em> (3rd ed.). Oxford University Press.</li>
         <li>Kraemer HC (1975). On estimation and hypothesis testing problems for correlation coefficients. <em>Psychometrika,</em> 40(4), 473–485.</li>
         <li>Knapp G, Hartung J (2003). Improved tests for a random effects meta-regression with a single covariate. <em>Stat Med,</em> 22, 2693–2710.</li>
@@ -1159,6 +1277,7 @@
         <li>Paule RC, Mandel J (1982). Consensus values and weighting factors. <em>J Res Natl Bur Stand,</em> 87, 377–385.</li>
         <li>Peters JL, Sutton AJ, Jones DR, Abrams KR, Rushton L (2006). Comparison of two methods to detect publication bias in meta-analysis. <em>JAMA,</em> 295(6), 676–680.</li>
         <li>Peto R, Pike MC, Armitage P, et al. (1976). Design and analysis of randomized clinical trials requiring prolonged observation of each patient. <em>Br J Cancer,</em> 34, 585–612.</li>
+        <li>Riley RD, Abrams KR, Lambert PC, Sutton AJ, Thompson JR (2007). An evaluation of bivariate random-effects meta-analysis for the joint synthesis of two correlated outcomes. <em>Stat Med,</em> 26(1), 78–97.</li>
         <li>Rücker G, Schwarzer G, Carpenter J (2008). Arcsine test for publication bias in meta-analyses with binary outcomes. <em>Stat Med,</em> 27(19), 4450–4465.</li>
         <li>Schwarz G (1978). Estimating the dimension of a model. <em>Ann Stat,</em> 6(2), 461–464.</li>
         <li>Simonsohn U, Nelson LD, Simmons JP (2014). P-curve: A key to the file-drawer. <em>J Exp Psychol Gen,</em> 143(2), 534–547.</li>

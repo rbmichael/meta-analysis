@@ -4114,3 +4114,119 @@ export const PERM_BENCHMARKS = [
     citation: 'BCG vaccine data (dat.bcg), mods=~ablat, method=REML, seed=42, iter=999. Verified against metafor::permutest().',
   },
 ];
+
+// =============================================================================
+// MULTIVARIATE_BENCHMARKS
+// Berkey et al. (1998) periodontal data: 5 studies × 2 outcomes (PD, AL).
+// All R blocks use mods=~outcome-1 (intercept-per-outcome) to match JS design.
+// Factor levels: PD < AL forced in R to match JS encounter order (PD first).
+// Within-study rho=0.5 passed to vcalc() in both R and JS.
+//
+// Tolerances in diff_benchmarks.mjs:
+//   beta, se, QE, QM: ±0.03 (standard)
+//   tau2:             5% relative
+//   logLik:           ±0.1 (slight numerical divergence from Cholesky vs R's internal)
+//   rho:              NOT compared — boundary sensitivity (rho near -1 for some blocks)
+// =============================================================================
+
+// Shared dataset: Berkey et al. (1998), outcomes in encounter order (PD first, AL second).
+const _BERKEY98 = [
+  { yi:  0.470,  vi: 0.0275, study_id: 1, outcome_id: "PD" },
+  { yi: -0.320,  vi: 0.0135, study_id: 1, outcome_id: "AL" },
+  { yi:  0.397,  vi: 0.0162, study_id: 2, outcome_id: "PD" },
+  { yi: -0.240,  vi: 0.0119, study_id: 2, outcome_id: "AL" },
+  { yi:  0.133,  vi: 0.0033, study_id: 3, outcome_id: "PD" },
+  { yi: -0.050,  vi: 0.0040, study_id: 3, outcome_id: "AL" },
+  { yi:  0.165,  vi: 0.0030, study_id: 4, outcome_id: "PD" },
+  { yi:  0.068,  vi: 0.0015, study_id: 4, outcome_id: "AL" },
+  { yi:  0.349,  vi: 0.0051, study_id: 5, outcome_id: "PD" },
+  { yi:  0.016,  vi: 0.0019, study_id: 5, outcome_id: "AL" },
+];
+
+export const MULTIVARIATE_BENCHMARKS = [
+  {
+    rBlock: 'MV-1',
+    name: 'Berkey98: CS struct, REML',
+    struct: 'CS', method: 'REML', rho: 0.5,
+    data: _BERKEY98,
+    expected: {
+      // Outcome order: PD first (index 0), AL second (index 1)
+      beta:   [0.30051151,  -0.08373912],
+      se:     [0.07152062,   0.07470856],
+      tau2:    0.02103905,             // CS: single tau2 for both outcomes
+      rho_between: -0.89079784,
+      QM:     19.50663017, df_QM: 2, pQM:  0.0000581,
+      QE:     45.42745765, df_QE: 8, pQE:  3.1e-7,
+      logLik:  4.17833623,
+    },
+    citation: 'Berkey CS et al. (1998) Stat Med 17:2537. Verified against metafor rma.mv() (generate.R block MV-1).',
+  },
+  {
+    rBlock: 'MV-2',
+    name: 'Berkey98: CS struct, ML',
+    struct: 'CS', method: 'ML', rho: 0.5,
+    data: _BERKEY98,
+    expected: {
+      beta:   [0.29916662,  -0.07778336],
+      se:     [0.06614757,   0.06283262],
+      tau2:    0.0155314,
+      rho_between: -0.98810115,  // near boundary; not checked in diff
+      QM:     26.48921148, df_QM: 2, pQM: 0.00000177,
+      QE:     45.42745765, df_QE: 8, pQE: 3.1e-7,
+      logLik:  6.37260509,
+    },
+    citation: 'Berkey98, ML method. Verified against metafor rma.mv() (generate.R block MV-2). Note: rho near -1 boundary in this dataset with ML.',
+  },
+  {
+    rBlock: 'MV-3',
+    name: 'Berkey98 unbalanced: drop study-5 AL, CS, REML',
+    struct: 'CS', method: 'REML', rho: 0.5,
+    // Drop study 5 outcome AL → study 5 contributes PD only
+    data: _BERKEY98.filter(r => !(r.study_id === 5 && r.outcome_id === 'AL')),
+    expected: {
+      beta:   [0.29983673,  -0.12455229],
+      se:     [0.07454304,   0.07642340],
+      tau2:    0.0214332,
+      rho_between: -1,                // boundary; not checked in diff
+      QM:     18.96256661, df_QM: 2, pQM: 0.00007627,
+      QE:     45.14175345, df_QE: 7, pQE: 1.3e-7,
+      logLik:  4.01995119,
+    },
+    citation: 'Berkey98, study 5 AL removed (unbalanced design). Verified against metafor rma.mv() (generate.R block MV-3). Note: rho=-1 boundary solution.',
+  },
+  {
+    rBlock: 'MV-UN-1',
+    name: 'Berkey98: UN struct, REML',
+    struct: 'UN', method: 'REML', rho: 0.5,
+    data: _BERKEY98,
+    expected: {
+      // UN: separate tau2 per outcome; tau2[0]=PD, tau2[1]=AL
+      beta:   [0.29878084,  -0.08507446],
+      se:     [0.07338390,   0.07263252],
+      tau2:   [0.02009242,   0.02180710],  // array for UN
+      rho_between: -0.88800904,
+      QM:     19.92789836, df_QM: 2, pQM: 0.00004707,
+      QE:     45.42745765, df_QE: 8, pQE: 3.1e-7,
+      logLik:  4.18040362,
+    },
+    citation: 'Berkey98, UN Ψ structure. Canonical example from metafor vignettes. Verified against metafor rma.mv() (generate.R block MV-UN-1).',
+  },
+  {
+    rBlock: 'MV-4',
+    name: 'Berkey98: CS REML, common-slopes moderator (centred study index)',
+    struct: 'CS', method: 'REML', rho: 0.5,
+    slopes: 'common',
+    moderators: [{ key: 'x', type: 'continuous' }],
+    data: _BERKEY98.map((r, i) => ({ ...r, x: Math.floor(i / 2) + 1 - 3 })),  // x = study_index - 3
+    expected: {
+      // mods = ~outcome + x - 1 (common slope for centred study index)
+      beta:   [0.26345732, -0.11107843, 0.04548845],  // PD intercept, AL intercept, x slope
+      se:     [0.07056262,  0.06694841, 0.02436396],
+      tau2:   0.01666401,
+      QM:     30.24515956, df_QM: 3, pQM: 1.264e-6,
+      QE:     38.99416093, df_QE: 7, pQE: 1.85e-6,
+      logLik:  4.48699427,
+    },
+    citation: 'Berkey98 + centred study-index moderator, common slopes. Verified against metafor rma.mv(mods=~outcome+x-1) (generate.R block MV-4).',
+  },
+];

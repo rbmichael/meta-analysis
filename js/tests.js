@@ -2,7 +2,7 @@ import { round, transformEffect, chiSquareCDF, chiSquareQuantile, parseCounts, b
 import { validateStudy } from "./profiles.js";
 import { BENCHMARKS, PUB_BIAS_BENCHMARKS, INFLUENCE_BENCHMARKS, META_REGRESSION_BENCHMARKS, VH_BENCHMARKS, MH_BENCHMARKS, CLUSTER_BENCHMARKS, RVE_BENCHMARKS, THREE_LEVEL_BENCHMARKS, LS_BENCHMARKS, CONTRAST_BENCHMARKS, INTERACTION_BENCHMARKS, HALFNORM_BENCHMARKS, POWER_BENCHMARKS, NEGEXP_BENCHMARKS, BETA_BENCHMARKS, PERM_BENCHMARKS } from "./benchmarks.js";
 import { permTestSync, permPval } from "./perm.js";
-import { compute, meta, metaMH, metaPeto, robustMeta, sandwichVar, robustWlsResult, metaRegression, testContrast, tau2_HS, tau2_HE, tau2_ML, tau2_SJ, beggTest, eggerTest, fatPetTest, petPeeseTest, failSafeN, tesTest, heterogeneityCIs, cumulativeMeta, influenceDiagnostics, harbordTest, petersTest, deeksTest, rueckerTest, leaveOneOut, baujat, blupMeta, pCurve, pUniform, estimatorComparison, subgroupAnalysis, logLik, bfgs, selIntervalProbs, selIntervalIdx, selectionLogLik, SEL_CUTS_ONE_SIDED, SEL_CUTS_TWO_SIDED, veveaHedges, SELECTION_PRESETS, halfNormalSelModel, powerSelModel, negexpSelModel, betaSelModel, profileLikTau2, profileLikCI, bayesMeta, priorSensitivity, rvePooled, meta3level, lsModel, adjustPvals, henmiCopas, waapWls, clES } from "./analysis.js";
+import { compute, meta, metaMH, metaPeto, robustMeta, sandwichVar, robustWlsResult, metaRegression, testContrast, tau2_HS, tau2_HE, tau2_ML, tau2_SJ, beggTest, eggerTest, fatPetTest, petPeeseTest, failSafeN, tesTest, heterogeneityCIs, cumulativeMeta, influenceDiagnostics, harbordTest, petersTest, deeksTest, rueckerTest, leaveOneOut, baujat, blupMeta, pCurve, pUniform, estimatorComparison, subgroupAnalysis, logLik, bfgs, selIntervalProbs, selIntervalIdx, selectionLogLik, SEL_CUTS_ONE_SIDED, SEL_CUTS_TWO_SIDED, veveaHedges, SELECTION_PRESETS, halfNormalSelModel, powerSelModel, negexpSelModel, betaSelModel, profileLikTau2, profileLikCI, bayesMeta, priorSensitivity, rvePooled, meta3level, lsModel, adjustPvals, henmiCopas, waapWls, clES, vcalc, mvMeta } from "./analysis.js";
 import { trimFill } from "./trimfill.js";
 import { parseCSV } from "./csv.js";
 import { goshCompute, GOSH_MAX_ENUM_K, GOSH_MAX_K, GOSH_DEFAULT_MAX_SUBSETS } from "./gosh.js";
@@ -6467,6 +6467,438 @@ export function runTests() {
   else { console.error('  FAIL p<2 should return error'); permPass = false; }
 
   console.log(permPass ? "\n✅ ALL PERMUTATION BENCHMARK TESTS PASSED" : "\n❌ SOME PERMUTATION BENCHMARK TESTS FAILED");
+
+  // ===== vcalc UNIT TESTS =====
+  // Tests the block-diagonal within-study covariance builder for multivariate MA.
+  // Cross-validated against metafor::vcalc(vi, cluster=study_id, obs=outcome_id, rho=rho).
+  console.log("\n===== vcalc UNIT TESTS =====\n");
+  let vcalcPass = true;
+  const { chk: vchk, chkTrue: vchkTrue, chkExact: vchkExact } = makeChk(() => { vcalcPass = false; }, 1e-12);
+
+  // 1. Basic 2-outcome, 2-study balanced case (rho=0.5)
+  // Study S1: v1=0.04, v2=0.09  → cov = 0.5 * sqrt(0.04 * 0.09) = 0.5 * 0.06 = 0.03
+  // Study S2: v1=0.01, v2=0.16  → cov = 0.5 * sqrt(0.01 * 0.16) = 0.5 * 0.04 = 0.02
+  console.log("--- Basic balanced 2×2 (rho=0.5) ---");
+  {
+    const rows = [
+      { yi: 0.5, vi: 0.04, study_id: "S1", outcome_id: "anxiety"    },
+      { yi: 0.3, vi: 0.09, study_id: "S1", outcome_id: "depression" },
+      { yi: 0.4, vi: 0.01, study_id: "S2", outcome_id: "anxiety"    },
+      { yi: 0.2, vi: 0.16, study_id: "S2", outcome_id: "depression" },
+    ];
+    const V = vcalc(rows, { rho: 0.5 });
+
+    vchkExact("n = 4",          V.n,                  4);
+    vchkExact("blocks.length",  V.blocks.length,      2);
+    vchkExact("no warnings",    V.warnings.length,    0);
+
+    const b0 = V.blocks[0];
+    vchkExact("block0 studyId",          b0.studyId,             "S1");
+    vchkExact("block0 k",                b0.k,                   2);
+    vchk("block0 V[0][0] = vi_anxiety",  b0.matrix[0][0],        0.04);
+    vchk("block0 V[1][1] = vi_depress",  b0.matrix[1][1],        0.09);
+    vchk("block0 V[0][1] = cov",         b0.matrix[0][1],        0.03);
+    vchk("block0 V[1][0] symmetric",     b0.matrix[1][0],        0.03);
+
+    const b1 = V.blocks[1];
+    vchk("block1 V[0][0]",               b1.matrix[0][0],        0.01);
+    vchk("block1 V[1][1]",               b1.matrix[1][1],        0.16);
+    vchk("block1 V[0][1] = 0.02",        b1.matrix[0][1],        0.02);
+  }
+
+  // 2. rho=0 → diagonal V (off-diagonal = 0)
+  console.log("--- rho=0: diagonal V ---");
+  {
+    const rows = [
+      { yi: 0.5, vi: 0.04, study_id: "S1", outcome_id: "a" },
+      { yi: 0.3, vi: 0.09, study_id: "S1", outcome_id: "b" },
+    ];
+    const V = vcalc(rows, { rho: 0 });
+    vchk("off-diagonal = 0", V.blocks[0].matrix[0][1], 0);
+    vchk("off-diagonal = 0", V.blocks[0].matrix[1][0], 0);
+    vchkExact("no warnings", V.warnings.length, 0);
+  }
+
+  // 3. Singleton study (1 outcome) → 1×1 block = [[vi]]
+  console.log("--- Singleton study: 1×1 block ---");
+  {
+    const rows = [
+      { yi: 0.5, vi: 0.04, study_id: "S1", outcome_id: "a" },
+      { yi: 0.3, vi: 0.09, study_id: "S1", outcome_id: "b" },
+      { yi: 0.7, vi: 0.25, study_id: "S2", outcome_id: "a" },
+    ];
+    const V = vcalc(rows, { rho: 0.5 });
+    vchkExact("n = 3",                        V.n,                        3);
+    vchkExact("S2 block k = 1",               V.blocks[1].k,              1);
+    vchk("S2 V[0][0] = vi",                   V.blocks[1].matrix[0][0],   0.25);
+    vchkExact("S2 block has 1 outcomeId",      V.blocks[1].outcomeIds.length, 1);
+  }
+
+  // 4. Unbalanced design: S1 has 2 outcomes, S2 has 3 outcomes
+  console.log("--- Unbalanced design ---");
+  {
+    const rows = [
+      { yi: 0.1, vi: 0.01, study_id: "S1", outcome_id: "a" },
+      { yi: 0.2, vi: 0.04, study_id: "S1", outcome_id: "b" },
+      { yi: 0.3, vi: 0.09, study_id: "S2", outcome_id: "a" },
+      { yi: 0.4, vi: 0.16, study_id: "S2", outcome_id: "b" },
+      { yi: 0.5, vi: 0.25, study_id: "S2", outcome_id: "c" },
+    ];
+    const V = vcalc(rows, { rho: 0.3 });
+    vchkExact("n = 5",        V.n,                5);
+    vchkExact("S1 k = 2",     V.blocks[0].k,      2);
+    vchkExact("S2 k = 3",     V.blocks[1].k,      3);
+    // S2 3×3 matrix: V[0][2] = 0.3 * sqrt(0.09 * 0.25) = 0.3 * 0.15 = 0.045
+    vchk("S2 V[0][2] = 0.045", V.blocks[1].matrix[0][2], 0.045);
+    vchk("S2 V[2][0] symmetric", V.blocks[1].matrix[2][0], 0.045);
+  }
+
+  // 5. Duplicate outcome_id within same study → warning, first row kept
+  console.log("--- Duplicate outcome_id → warning ---");
+  {
+    const rows = [
+      { yi: 0.5, vi: 0.04, study_id: "S1", outcome_id: "a" },
+      { yi: 0.9, vi: 0.99, study_id: "S1", outcome_id: "a" },  // duplicate
+      { yi: 0.3, vi: 0.09, study_id: "S1", outcome_id: "b" },
+    ];
+    const V = vcalc(rows, { rho: 0.5 });
+    vchkTrue("warning issued",        V.warnings.length >= 1);
+    vchkExact("block k = 2 (dup removed)", V.blocks[0].k, 2);
+    // First occurrence kept: vi=0.04
+    vchk("first occurrence kept: V[0][0] = 0.04", V.blocks[0].matrix[0][0], 0.04);
+  }
+
+  // 6. rho >= 1 → warning issued (singular V)
+  console.log("--- rho=1 → singularity warning ---");
+  {
+    const rows = [
+      { yi: 0.5, vi: 0.04, study_id: "S1", outcome_id: "a" },
+      { yi: 0.3, vi: 0.04, study_id: "S1", outcome_id: "b" },
+    ];
+    const V = vcalc(rows, { rho: 1.0 });
+    vchkTrue("rho=1 warning", V.warnings.some(w => w.includes("rho=1")));
+    // Gershgorin: diagonal=0.04, off-diag sum=0.04 → not strictly dominant → singular warning
+    vchkTrue("singularity warning", V.warnings.some(w => w.includes("singular")));
+  }
+
+  // 7. studyIds and outcomeIds returned correctly
+  console.log("--- studyIds / outcomeIds ---");
+  {
+    const rows = [
+      { yi: 0.1, vi: 0.01, study_id: "B", outcome_id: "y1" },
+      { yi: 0.2, vi: 0.02, study_id: "A", outcome_id: "y2" },
+      { yi: 0.3, vi: 0.03, study_id: "B", outcome_id: "y2" },
+    ];
+    const V = vcalc(rows);
+    // studyIds in encounter order: B, A
+    vchkExact("studyIds[0] = B", V.studyIds[0], "B");
+    vchkExact("studyIds[1] = A", V.studyIds[1], "A");
+    vchkTrue("outcomeIds contains y1", V.outcomeIds.includes("y1"));
+    vchkTrue("outcomeIds contains y2", V.outcomeIds.includes("y2"));
+  }
+
+  // 8. Missing study_id / outcome_id → synthetic fallback IDs, no crash
+  console.log("--- Missing study_id / outcome_id → fallback ---");
+  {
+    const rows = [
+      { yi: 0.1, vi: 0.01 },
+      { yi: 0.2, vi: 0.02 },
+    ];
+    const V = vcalc(rows);
+    vchkExact("n = 2", V.n, 2);
+    vchkExact("2 singleton blocks", V.blocks.length, 2);
+  }
+
+  // 9. Symmetry: V[j][k] === V[k][j] for all blocks
+  console.log("--- Matrix symmetry ---");
+  {
+    const rows = [
+      { yi: 0.1, vi: 0.01, study_id: "S1", outcome_id: "a" },
+      { yi: 0.2, vi: 0.04, study_id: "S1", outcome_id: "b" },
+      { yi: 0.3, vi: 0.09, study_id: "S1", outcome_id: "c" },
+    ];
+    const V = vcalc(rows, { rho: 0.6 });
+    const m = V.blocks[0].matrix;
+    vchk("V[0][1] = V[1][0]", m[0][1], m[1][0]);
+    vchk("V[0][2] = V[2][0]", m[0][2], m[2][0]);
+    vchk("V[1][2] = V[2][1]", m[1][2], m[2][1]);
+  }
+
+  // 10. rho and type round-trip in return object
+  console.log("--- rho / type passthrough ---");
+  {
+    const rows = [{ yi: 0, vi: 0.1, study_id: "S1", outcome_id: "a" }];
+    const V = vcalc(rows, { rho: 0.7, type: "constant" });
+    vchkExact("rho passthrough",  V.rho,  0.7);
+    vchkExact("type passthrough", V.type, "constant");
+  }
+
+  console.log(vcalcPass ? "\n✅ ALL vcalc TESTS PASSED" : "\n❌ SOME vcalc TESTS FAILED");
+
+  // ===== mvMeta UNIT TESTS =====
+  // Balanced 2-outcome, 6-study synthetic dataset.
+  // Reference values computed analytically (CS struct, REML/ML).
+  // Cross-validation against metafor rma.mv() is in Step 4 benchmarks.
+  console.log("\n===== mvMeta UNIT TESTS =====\n");
+  let mvPass = true;
+  const { chk: mvchk, chkTrue: mvchkTrue, chkExact: mvchkExact, chkRel: mvchkRel } = makeChk(() => { mvPass = false; }, 1e-6);
+
+  // Shared dataset: 6 studies, 2 outcomes (A and B), rho=0.5 within-study
+  const mvRows = [
+    { yi: 0.40, vi: 0.04, study_id: "S1", outcome_id: "A" },
+    { yi: 0.20, vi: 0.09, study_id: "S1", outcome_id: "B" },
+    { yi: 0.55, vi: 0.05, study_id: "S2", outcome_id: "A" },
+    { yi: 0.35, vi: 0.06, study_id: "S2", outcome_id: "B" },
+    { yi: 0.30, vi: 0.03, study_id: "S3", outcome_id: "A" },
+    { yi: 0.10, vi: 0.07, study_id: "S3", outcome_id: "B" },
+    { yi: 0.60, vi: 0.08, study_id: "S4", outcome_id: "A" },
+    { yi: 0.45, vi: 0.04, study_id: "S4", outcome_id: "B" },
+    { yi: 0.50, vi: 0.02, study_id: "S5", outcome_id: "A" },
+    { yi: 0.25, vi: 0.05, study_id: "S5", outcome_id: "B" },
+    { yi: 0.35, vi: 0.06, study_id: "S6", outcome_id: "A" },
+    { yi: 0.15, vi: 0.08, study_id: "S6", outcome_id: "B" },
+  ];
+  const mvV = vcalc(mvRows, { rho: 0.5 });
+
+  // 1. Basic structural checks — CS REML
+  console.log("--- CS REML: structure ---");
+  {
+    const r = mvMeta(mvRows, mvV, { struct: "CS", method: "REML" });
+    mvchkTrue("no error",         !r.error);
+    mvchkExact("P = 2",           r.P, 2);
+    mvchkExact("k = 6",           r.k, 6);
+    mvchkExact("n = 12",          r.n, 12);
+    mvchkExact("outcomeIds[0]",   r.outcomeIds[0], "A");
+    mvchkExact("outcomeIds[1]",   r.outcomeIds[1], "B");
+    mvchkTrue("beta.length = 2",  Array.isArray(r.beta) && r.beta.length === 2);
+    mvchkTrue("se.length = 2",    Array.isArray(r.se) && r.se.length === 2);
+    mvchkTrue("ci.length = 2",    Array.isArray(r.ci) && r.ci.length === 2);
+    mvchkTrue("ci[0] has 2 vals", r.ci[0].length === 2);
+    mvchkTrue("z.length = 2",     Array.isArray(r.z) && r.z.length === 2);
+    mvchkTrue("pval.length = 2",  Array.isArray(r.pval) && r.pval.length === 2);
+    mvchkTrue("tau2.length = 2",  Array.isArray(r.tau2) && r.tau2.length === 2);
+    mvchkTrue("I2.length = 2",    Array.isArray(r.I2) && r.I2.length === 2);
+    mvchkTrue("Psi is 2×2",       Array.isArray(r.Psi) && r.Psi.length === 2 && r.Psi[0].length === 2);
+    mvchkTrue("rho_between defined", r.rho_between !== undefined);
+    mvchkTrue("convergence",      r.convergence);
+    mvchkTrue("logLik finite",    isFinite(r.logLik));
+    mvchkTrue("AIC finite",       isFinite(r.AIC));
+    mvchkTrue("BIC finite",       isFinite(r.BIC));
+    mvchkTrue("QE finite",        isFinite(r.QE));
+    mvchkTrue("pQE in (0,1)",     isFinite(r.pQE) && r.pQE >= 0 && r.pQE <= 1);
+  }
+
+  // 2. CS REML: numerical properties
+  console.log("--- CS REML: numerical properties ---");
+  {
+    const r = mvMeta(mvRows, mvV, { struct: "CS", method: "REML" });
+    // pooled estimates should be weighted averages of yi values per outcome
+    // A: yi=[0.40,0.55,0.30,0.60,0.50,0.35], B: yi=[0.20,0.35,0.10,0.45,0.25,0.15]
+    // RE estimates should be in the range of the data
+    mvchkTrue("beta[A] ∈ (0.2, 0.7)", r.beta[0] > 0.2 && r.beta[0] < 0.7);
+    mvchkTrue("beta[B] ∈ (0.0, 0.6)", r.beta[1] > 0.0 && r.beta[1] < 0.6);
+    mvchkTrue("beta[A] > beta[B]",    r.beta[0] > r.beta[1]);  // A consistently higher
+    mvchkTrue("se[A] > 0",            r.se[0] > 0);
+    mvchkTrue("se[B] > 0",            r.se[1] > 0);
+    mvchkTrue("CI[A]: lb < beta < ub", r.ci[0][0] < r.beta[0] && r.beta[0] < r.ci[0][1]);
+    mvchkTrue("CI[B]: lb < beta < ub", r.ci[1][0] < r.beta[1] && r.beta[1] < r.ci[1][1]);
+    mvchkTrue("tau2[A] >= 0",          r.tau2[0] >= 0);
+    mvchkTrue("tau2[B] >= 0",          r.tau2[1] >= 0);
+    mvchkTrue("I2[A] ∈ [0,100]",       r.I2[0] >= 0 && r.I2[0] <= 100);
+    mvchkTrue("I2[B] ∈ [0,100]",       r.I2[1] >= 0 && r.I2[1] <= 100);
+    mvchkTrue("z[A] = beta/se",        Math.abs(r.z[0] - r.beta[0] / r.se[0]) < 1e-10);
+    mvchkTrue("pval[A] ∈ (0,1)",       r.pval[0] > 0 && r.pval[0] < 1);
+    // CS: Psi diagonal entries equal (same tau2 for all outcomes)
+    mvchkTrue("CS Psi diagonal equal", Math.abs(r.Psi[0][0] - r.Psi[1][1]) < 1e-6);
+    mvchkTrue("|rho_between| < 1",     Math.abs(r.rho_between) < 1);
+    mvchkTrue("QE >= 0",               r.QE >= 0);
+    mvchkExact("df_QE = n - P",        r.df_QE, r.n - r.P);
+    // AIC < BIC for n=12 (since log(12) > 2)
+    mvchkTrue("BIC > AIC (n=12)",      r.BIC > r.AIC);
+  }
+
+  // 3. CS ML vs REML: both converge, tau2 ML <= REML (standard downward bias)
+  console.log("--- CS ML vs REML: tau2 comparison ---");
+  {
+    const rML   = mvMeta(mvRows, mvV, { struct: "CS", method: "ML" });
+    const rREML = mvMeta(mvRows, mvV, { struct: "CS", method: "REML" });
+    mvchkTrue("ML converged",   rML.convergence);
+    mvchkTrue("REML converged", rREML.convergence);
+    // REML log-likelihood should be >= ML log-likelihood (different objectives — don't compare directly)
+    // But tau2 REML >= ML is the standard result
+    mvchkTrue("tau2[A] REML >= ML",  rREML.tau2[0] >= rML.tau2[0] - 1e-6);
+    mvchkTrue("struct preserved ML",   rML.struct,   "CS");
+    mvchkTrue("struct preserved REML", rREML.struct, "CS");
+  }
+
+  // 4. Diag structure
+  console.log("--- Diag structure ---");
+  {
+    const r = mvMeta(mvRows, mvV, { struct: "Diag", method: "REML" });
+    mvchkTrue("no error",          !r.error);
+    mvchkTrue("convergence",       r.convergence);
+    mvchkTrue("beta[A] finite",    isFinite(r.beta[0]));
+    mvchkTrue("beta[B] finite",    isFinite(r.beta[1]));
+    mvchkTrue("rho_between undefined", r.rho_between === undefined);
+    // Diag: Psi off-diagonals = 0
+    mvchkTrue("Psi[0][1] = 0",     Math.abs(r.Psi[0][1]) < 1e-8);
+    mvchkTrue("tau2[A] >= 0",      r.tau2[0] >= 0);
+    mvchkTrue("tau2[B] >= 0",      r.tau2[1] >= 0);
+  }
+
+  // 5. UN structure
+  console.log("--- UN structure ---");
+  {
+    const r = mvMeta(mvRows, mvV, { struct: "UN", method: "REML" });
+    mvchkTrue("no error",       !r.error);
+    mvchkTrue("convergence",    r.convergence);
+    mvchkTrue("beta[A] finite", isFinite(r.beta[0]));
+    mvchkTrue("beta[B] finite", isFinite(r.beta[1]));
+    mvchkTrue("Psi symmetric",  Math.abs(r.Psi[0][1] - r.Psi[1][0]) < 1e-10);
+    mvchkTrue("Psi[0][0] >= 0", r.Psi[0][0] >= 0);
+    mvchkTrue("Psi[1][1] >= 0", r.Psi[1][1] >= 0);
+    // UN logLik should be >= CS logLik (UN is strictly more flexible — same or better fit)
+    const rCS = mvMeta(mvRows, mvV, { struct: "CS", method: "REML" });
+    mvchkTrue("UN logLik >= CS logLik", r.logLik >= rCS.logLik - 1e-6);
+  }
+
+  // 6. Intercept-only: CS estimates consistent with per-outcome univariate REML
+  // Multivariate pooled estimate should be close to univariate when rho~0 between studies
+  console.log("--- Consistency with univariate meta() ---");
+  {
+    const rMV = mvMeta(mvRows, mvV, { struct: "CS", method: "REML" });
+    // Univariate for outcome A only
+    const studiesA = mvRows.filter(r => r.outcome_id === "A");
+    const mvA = meta(studiesA, "REML");
+    // Estimates should be in same ballpark (won't be identical due to different model)
+    mvchkTrue("beta[A] near univariate RE",
+      Math.abs(rMV.beta[0] - mvA.RE) < 0.15);
+  }
+
+  // 7. Error conditions
+  console.log("--- Error conditions ---");
+  {
+    // P=1 → error
+    const rows1 = mvRows.filter(r => r.outcome_id === "A");
+    const V1 = vcalc(rows1, { rho: 0.5 });
+    mvchkTrue("P=1 → error", !!mvMeta(rows1, V1).error);
+
+    // k=2 → error
+    const rows2 = mvRows.filter(r => ["S1","S2"].includes(r.study_id));
+    const V2 = vcalc(rows2, { rho: 0.5 });
+    mvchkTrue("k=2 → error", !!mvMeta(rows2, V2).error);
+
+    // Bad struct → error
+    mvchkTrue("bad struct → error", !!mvMeta(mvRows, mvV, { struct: "HMMM" }).error);
+
+    // Bad method → error
+    mvchkTrue("bad method → error", !!mvMeta(mvRows, mvV, { method: "DL" }).error);
+  }
+
+  // 8. Unbalanced design: some studies missing outcome B
+  console.log("--- Unbalanced design ---");
+  {
+    const unbalRows = [
+      ...mvRows,
+      { yi: 0.45, vi: 0.05, study_id: "S7", outcome_id: "A" },  // only A
+    ];
+    const unbalV = vcalc(unbalRows, { rho: 0.5 });
+    const r = mvMeta(unbalRows, unbalV, { struct: "CS", method: "REML" });
+    mvchkTrue("unbalanced: no error", !r.error);
+    mvchkTrue("unbalanced: k = 7",    r.k === 7);
+    mvchkTrue("unbalanced: n = 13",   r.n === 13);
+    mvchkTrue("unbalanced: beta finite", isFinite(r.beta[0]) && isFinite(r.beta[1]));
+  }
+
+  // 9. QM omnibus test
+  console.log("--- QM omnibus test ---");
+  {
+    const r = mvMeta(mvRows, mvV, { struct: "CS", method: "REML" });
+    mvchkTrue("QM >= 0",           r.QM >= 0);
+    mvchkExact("df_QM = P",        r.df_QM, r.P);
+    mvchkTrue("pQM in (0,1)",      isFinite(r.pQM) && r.pQM >= 0 && r.pQM <= 1);
+    // For this dataset (clear non-zero effects), QM should be large → pQM small
+    mvchkTrue("pQM < 0.05",        r.pQM < 0.05);
+    // QM + QE ≈ yOy (can verify QE = yOy - QM is non-negative and QM > 0)
+    mvchkTrue("QM > 0",            r.QM > 0);
+    mvchkTrue("QE >= 0",           r.QE >= 0);
+  }
+
+  // 10. corPsi structure
+  console.log("--- corPsi structure ---");
+  {
+    const r = mvMeta(mvRows, mvV, { struct: "CS", method: "REML" });
+    mvchkTrue("corPsi is 2×2",        Array.isArray(r.corPsi) && r.corPsi.length === 2 && r.corPsi[0].length === 2);
+    mvchkTrue("corPsi[0][0] = 1",     Math.abs(r.corPsi[0][0] - 1) < 1e-12);
+    mvchkTrue("corPsi[1][1] = 1",     Math.abs(r.corPsi[1][1] - 1) < 1e-12);
+    mvchkTrue("corPsi symmetric",     Math.abs(r.corPsi[0][1] - r.corPsi[1][0]) < 1e-12);
+    // For CS, off-diagonal corPsi = rho_between
+    mvchkTrue("corPsi[0][1] = rho_between", Math.abs(r.corPsi[0][1] - r.rho_between) < 1e-8);
+    mvchkTrue("|corPsi[0][1]| < 1",   Math.abs(r.corPsi[0][1]) < 1);
+
+    // UN structure: corPsi still has 1s on diagonal
+    const rUN = mvMeta(mvRows, mvV, { struct: "UN", method: "REML" });
+    mvchkTrue("UN corPsi[0][0] = 1",  Math.abs(rUN.corPsi[0][0] - 1) < 1e-12);
+    mvchkTrue("UN corPsi[1][1] = 1",  Math.abs(rUN.corPsi[1][1] - 1) < 1e-12);
+    // UN Psi[0][1] and corPsi[0][1] consistent
+    const manualCorr = rUN.Psi[0][1] / Math.sqrt(rUN.Psi[0][0] * rUN.Psi[1][1]);
+    mvchkTrue("UN corPsi consistent with Psi", Math.abs(rUN.corPsi[0][1] - manualCorr) < 1e-10);
+  }
+
+  // 11. AICc
+  console.log("--- AICc ---");
+  {
+    const r = mvMeta(mvRows, mvV, { struct: "CS", method: "REML" });
+    mvchkTrue("AICc finite",      isFinite(r.AICc));
+    mvchkTrue("AICc >= AIC",      r.AICc >= r.AIC - 1e-12);  // correction is always non-negative
+    // For small n (n=12, nParams=2 REML), AICc > AIC
+    mvchkTrue("AICc > AIC (n=12, nParams=2)", r.AICc > r.AIC);
+    // AICc → AIC as n → ∞: correction = 2p(p+1)/(n-p-1) → 0
+    // For ML (nParams = P + nPsiPar = 2 + 2 = 4)
+    const rML = mvMeta(mvRows, mvV, { struct: "CS", method: "ML" });
+    mvchkTrue("ML AICc finite",   isFinite(rML.AICc));
+    mvchkTrue("ML AICc >= ML AIC", rML.AICc >= rML.AIC - 1e-12);
+  }
+
+  // 12. Meta-regression moderator
+  console.log("--- Moderator (common slopes) ---");
+  {
+    const modRows = mvRows.map((r, i) => ({ ...r, x: Math.floor(i / 2) + 1 }));
+    const modV    = vcalc(modRows, { rho: 0.5 });
+    const r = mvMeta(modRows, modV, {
+      struct: "CS", method: "REML",
+      moderators: [{ key: "x", type: "continuous" }],
+      slopes: "common",
+    });
+    mvchkTrue("mod: no error",          !r.error);
+    mvchkExact("mod: beta.length = 3",  r.beta.length, 3);
+    mvchkExact("mod: betaNames.length", r.betaNames.length, 3);
+    mvchkExact("mod: betaNames[2]",     r.betaNames[2], "x");
+    mvchkExact("mod: df_QM = 3",        r.df_QM, 3);
+    mvchkExact("mod: df_QE = n-3",      r.df_QE, r.n - 3);
+    mvchkTrue("mod: logLik finite",     isFinite(r.logLik));
+    mvchkTrue("mod: convergence",       r.convergence);
+  }
+
+  // 13. Meta-regression separate slopes
+  console.log("--- Moderator (separate slopes) ---");
+  {
+    const modRows = mvRows.map((r, i) => ({ ...r, x: Math.floor(i / 2) + 1 }));
+    const modV    = vcalc(modRows, { rho: 0.5 });
+    const r = mvMeta(modRows, modV, {
+      struct: "CS", method: "REML",
+      moderators: [{ key: "x", type: "continuous" }],
+      slopes: "separate",
+    });
+    mvchkTrue("sep: no error",          !r.error);
+    mvchkExact("sep: beta.length = 4",  r.beta.length, 4);
+    mvchkExact("sep: betaNames[2]",     r.betaNames[2], "A:x");
+    mvchkExact("sep: betaNames[3]",     r.betaNames[3], "B:x");
+    mvchkExact("sep: df_QM = 4",        r.df_QM, 4);
+    mvchkTrue("sep: logLik finite",     isFinite(r.logLik));
+  }
+
+  console.log(mvPass ? "\n✅ ALL mvMeta TESTS PASSED" : "\n❌ SOME mvMeta TESTS FAILED");
 }
 
   // ===== normalCDF & tCDF UNIT TESTS =====

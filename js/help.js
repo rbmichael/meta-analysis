@@ -1487,4 +1487,58 @@ export const HELP = {
            "approaches the REML random-effects estimate.",
   },
 
+  // ------------------------------------------------------------------ //
+  // Multivariate meta-analysis                                           //
+  // ------------------------------------------------------------------ //
+
+  "mv.model": {
+    title: "Multivariate Meta-Analysis",
+    body:  "Models multiple correlated outcomes from the same studies jointly. " +
+           "The marginal covariance Ω = V + ZΨZʹ decomposes into a known within-study " +
+           "block V (estimated via the assumed within-study correlation ρ) and an " +
+           "unknown between-study covariance Ψ estimated by REML or ML. " +
+           "Pooled effects (one per outcome) are obtained by generalised least squares. " +
+           "Continuous moderators may be included with common or separate slopes across outcomes. " +
+           "Switch to this mode using the Standard / Multivariate toggle above the data table.",
+  },
+
+  "mv.struct": {
+    title: "Ψ structure",
+    body:  "Determines how many parameters describe the between-study covariance matrix Ψ. " +
+           "CS (Compound Symmetric): all outcomes share one variance τ² and one correlation ρ — 2 parameters, most parsimonious. " +
+           "Diagonal: separate τ²ⱼ per outcome, zero between-study correlation — P parameters. " +
+           "Unstructured (UN): freely estimated P×P Cholesky Ψ — P(P+1)/2 parameters; requires many studies. " +
+           "Prefer CS when k is small relative to P; UN is appropriate only when k ≫ P.",
+  },
+
+  "mv.method": {
+    title: "Estimation method",
+    body:  "REML (Restricted Maximum Likelihood) estimates the between-study covariance matrix Ψ " +
+           "from the residual likelihood after profiling out the fixed effects — less biased than ML " +
+           "for variance components and the default choice. " +
+           "ML (Maximum Likelihood) estimates all parameters jointly; " +
+           "it underestimates variance components in small samples but is required when " +
+           "comparing models with different fixed-effect structures via likelihood-ratio tests.",
+  },
+
+  "mv.forest": {
+    title: "MV forest plot",
+    body:  "One forest plot per outcome. Each study's effect estimate (square, sized by inverse-variance weight) " +
+           "and 95% CI whisker are shown. The pooled multivariate estimate appears as a diamond below the separator. " +
+           "Prediction interval (optional): expected range for a new study's true effect, " +
+           "computed as β̂_p ± t_{k−P−1} · √(τ̂²_p + SE²_p). " +
+           "Studies per page: limits rows displayed per plot; the pooled diamond always uses all studies regardless of page.",
+  },
+
+  "mv.rho": {
+    title: "Within-study correlation ρ",
+    body:  "Assumed correlation between outcomes measured within the same study. " +
+           "Used by vcalc to impute the within-study covariance matrix V: " +
+           "Cov(yⱼ, yₖ) = ρ · √vⱼ · √vₖ for j ≠ k within the same study. " +
+           "This value is rarely reported in primary studies and must be assumed. " +
+           "ρ = 0 treats outcomes as independent within studies (conservative); " +
+           "ρ = 0.5 is a common default. " +
+           "Sensitivity to this assumption can be checked by re-running with ρ = 0 and ρ = 0.8.",
+  },
+
 };

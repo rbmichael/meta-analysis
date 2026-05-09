@@ -3156,12 +3156,110 @@ when exported.</p>`,
     ],
   },
 
+  // ------------------------------------------------------------------ //
+  // Multivariate Meta-Analysis                                           //
+  // ------------------------------------------------------------------ //
+  {
+    id: "multivariate-ma",
+    heading: "Multivariate Meta-Analysis",
+    topics: [
+
+      {
+        id: "guide-multivariate",
+        title: "Multivariate Meta-Analysis (known within-study covariance)",
+        body: `<p>Multivariate meta-analysis models multiple correlated outcomes from the same
+set of studies jointly, explicitly accounting for their within-study and between-study
+covariance. Treating correlated outcomes as independent (three-level or RVE) ignores
+the sign and magnitude of those correlations; the multivariate model estimates them
+from the data and produces correctly calibrated standard errors.</p>
+
+<p><strong>When to use:</strong> A study contributes two or more outcome types
+(e.g. pain and function, anxiety and depression, two laboratory endpoints) and the
+within-study covariance between those outcomes can be estimated from the reported
+data or assumed from the literature.</p>
+
+<p><strong>Model:</strong> Stack all observations from all studies into a single vector
+<em>y</em> (length ≤ k·P, where k = studies, P = outcomes). The marginal covariance is</p>
+<pre>  Ω = V + Z Ψ Zʹ</pre>
+<p>where <strong>V</strong> is a known block-diagonal sampling covariance matrix (one
+block per study), <strong>Z</strong> is the study indicator matrix, and <strong>Ψ</strong> is
+the unknown P×P between-study covariance matrix estimated from the data.</p>
+
+<p><strong>Estimation:</strong> REML (default) or ML via BFGS optimizer. REML is preferred
+because it accounts for uncertainty in the fixed effects when estimating Ψ; ML is
+required when comparing models with different fixed-effect structures (e.g. via LRT).</p>
+
+<p><strong>Ψ structures:</strong></p>
+<ul>
+  <li><strong>CS (Compound Symmetric):</strong> Ψ = τ²[(1−ρ)I + ρ11ʹ]. All outcomes share
+    a common variance τ² and a common between-study correlation ρ. Two parameters. The
+    most parsimonious and numerically stable choice; recommended when the number of studies
+    is small relative to the number of outcomes.</li>
+  <li><strong>Diagonal (Diag):</strong> Ψ = diag(τ²₁, …, τ²ₚ). Separate variances per
+    outcome but zero between-study correlation. P parameters. Useful when outcomes are
+    conceptually independent at the between-study level.</li>
+  <li><strong>Unstructured (UN):</strong> Ψ = LLʹ (Cholesky parameterisation, P(P+1)/2
+    parameters). Each variance and covariance is estimated freely. Most flexible but
+    requires many studies to estimate reliably; can produce near-singular Ψ with sparse data.</li>
+</ul>
+
+<p><strong>Within-study covariance (vcalc):</strong> When raw individual-level data are
+unavailable, the within-study covariance between outcomes j and k in study i is
+estimated as</p>
+<pre>  V_jk = ρ · √(v_j · v_k)</pre>
+<p>where ρ is an assumed within-study correlation (typically obtained from the
+literature or a sensitivity range) and v_j, v_k are the sampling variances. This is
+the constant-ρ approximation implemented by metafor's <code>vcalc()</code> function
+(Viechtbauer et al., 2021).</p>
+
+<p><strong>Fixed effects (β):</strong> The pooled effect for each outcome is estimated by
+generalised least squares: β̂ = (XʹΩ⁻¹X)⁻¹ XʹΩ⁻¹y, with standard errors from the
+diagonal of (XʹΩ⁻¹X)⁻¹.</p>
+
+<p><strong>Meta-regression:</strong> Continuous moderators may be added with either
+common slopes (one β per moderator, shared across all outcomes) or separate slopes
+(one β per moderator per outcome). In rma.mv() terms, common slopes correspond to
+<code>mods = ~ outcome + x - 1</code> and separate slopes to
+<code>mods = ~ outcome + outcome:x - 1</code>.</p>
+
+<p><strong>Heterogeneity statistics:</strong></p>
+<ul>
+  <li><strong>Q<sub>E</sub></strong> — residual Cochran Q, evaluated at Ψ = 0 (V-only).
+    Tests whether the observed spread of effects exceeds sampling error after accounting
+    for fixed effects. df = n − q (n = observations, q = fixed-effect parameters).</li>
+  <li><strong>I²</strong> — per-outcome I²: τ²_j / (τ²_j + median v_ij), generalising
+    Higgins' I² to the multivariate setting (Cheung, 2014).</li>
+  <li><strong>Q<sub>M</sub></strong> — omnibus Wald test of β = 0; χ²(q) where q is the
+    number of fixed-effect parameters. Shown only when moderators are present.</li>
+</ul>
+
+<p><strong>Caution on over-parameterisation:</strong> The UN structure requires
+P(P+1)/2 parameters to estimate Ψ. As a rough guideline, each variance parameter
+needs at least 3–5 studies to estimate reliably; the app will warn when the ratio
+is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
+        citations: [
+          "Berkey, C. S., Hoaglin, D. C., Antczak-Bouckoms, A., Mosteller, F., &amp; Colditz, G. A. (1998). Meta-analysis of multiple outcomes by regression with random effects. <em>Statistics in Medicine</em>, 17(22), 2537–2550.",
+          "Cheung, M. W.-L. (2014). Modeling dependent effect sizes with three-level meta-analyses: a structural equation modeling approach. <em>Psychological Methods</em>, 19(2), 211–229.",
+          "Jackson, D., Riley, R., &amp; White, I. R. (2011). Multivariate meta-analysis: Potential and promise. <em>Statistics in Medicine</em>, 30(20), 2481–2498.",
+          "Riley, R. D., Abrams, K. R., Sutton, A. J., Lambert, P. C., &amp; Thompson, J. R. (2007). Bivariate random-effects meta-analysis and the estimation of between-study correlation. <em>BMC Medical Research Methodology</em>, 7, 3.",
+          "Viechtbauer, W. (2010). Conducting meta-analyses in R with the metafor package. <em>Journal of Statistical Software</em>, 36(3), 1–48.",
+        ],
+      },
+
+    ],
+  },
+
 ];
 
 // ------------------------------------------------------------------ //
 // Cross-link map: help.js key → guide topic id                        //
 // ------------------------------------------------------------------ //
 export const HELP_TO_GUIDE = {
+  "mv.model":         "guide-multivariate",
+  "mv.struct":        "guide-multivariate",
+  "mv.forest":        "guide-multivariate",
+  "mv.method":        "guide-multivariate",
+  "mv.rho":           "guide-multivariate",
   "effect.SMD":       "guide-smd",
   "effect.SMDH":      "guide-smdh",
   "effect.SMD1":      "guide-smd1",

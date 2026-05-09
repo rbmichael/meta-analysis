@@ -82,6 +82,18 @@ When a primary study contributes multiple effect sizes (different outcomes, subg
 
 The three-level model fits the marginal covariance Σ<sub>i</sub> = diag(v<sub>ij</sub> + σ²<sub>within</sub>) + σ²<sub>between</sub>·**1**·**1**ᵀ per cluster and reports decomposed I²<sub>within</sub> and I²<sub>between</sub>.
 
+### Multivariate meta-analysis
+
+A dedicated **Multivariate** mode jointly synthesises P ≥ 2 correlated outcomes from the same studies. Within-study covariance is imputed via the constant-ρ `vcalc` formula (V_jk = ρ·√v_j·√v_k). Between-study heterogeneity is modelled through a P×P matrix Ψ with three structures:
+
+| Ψ structure | Parameters | Description |
+|---|---|---|
+| **CS** (compound symmetry) | 2 | Shared τ² and between-study correlation |
+| **Diag** (diagonal) | P | Independent τ²_p per outcome; zero between-study correlation |
+| **UN** (unstructured) | P(P+1)/2 | Full Cholesky-parameterised Ψ |
+
+Estimation by REML or ML via BFGS. Optional meta-regression adds common moderator slopes. Reports per-outcome pooled estimates, Ψ̂, per-outcome I², Q_E (residual heterogeneity), Q_M (omnibus moderator test), AIC/BIC, and per-outcome forest plots. Based on Berkey et al. (1998) and Jackson, Riley & White (2011).
+
 ### Meta-regression
 
 Continuous and categorical moderators. Multiple moderators may be added simultaneously. Results include coefficients, standard errors, *z*/*t* statistics, *p*-values, *R*² (proportion of heterogeneity explained), and model-fit indices (AIC, BIC, log-likelihood) for comparing competing models. Bubble plots are generated per continuous moderator.
@@ -232,8 +244,10 @@ git commit -m "Rebuild bundle after sync with main"
 ## Statistical references
 
 - Andrews I, Kasy M (2019). Identification of and correction for publication bias. *Am Econ Rev*, 109(8), 2766–2794.
+- Berkey CS, Hoaglin DC, Antczak-Bouckoms A, Mosteller F, Colditz GA (1998). Meta-analysis of multiple outcomes by regression with random effects. *Stat Med*, 17(22), 2537–2550.
 - Bonett DG (2002). Sample size requirements for estimating intraclass correlations with desired precision. *Stat Med*, 21(9), 1331–1335.
 - Borenstein M, Hedges LV, Higgins JPT, Rothstein HR (2009). *Introduction to Meta-Analysis*. Wiley.
+- Cheung MWL (2014). Modeling dependent effect sizes with three-level meta-analyses: A structural equation modeling approach. *Psychol Methods*, 19(2), 211–229.
 - Deeks JJ, Macaskill P, Irwig L (2005). The performance of tests of publication bias and other sample size effects in systematic reviews of diagnostic test accuracy was assessed. *J Clin Epidemiol*, 58(9), 882–893.
 - DerSimonian R, Laird N (1986). Meta-analysis in clinical trials. *Controlled Clinical Trials*, 7, 177–188.
 - Feldt LS (1965). The approximate sampling distribution of Kuder-Richardson reliability coefficient twenty. *Psychometrika*, 30(3), 357–370.
@@ -250,6 +264,7 @@ git commit -m "Rebuild bundle after sync with main"
 - Higgins JPT, Thompson SG, Spiegelhalter DJ (2009). A re-evaluation of random-effects meta-analysis. *J R Stat Soc A*, 172, 137–159.
 - Holm S (1979). A simple sequentially rejective multiple test procedure. *Scand J Stat*, 6(2), 65–70.
 - Ioannidis JPA, Trikalinos TA (2007). An exploratory test for an excess of significant findings. *Clin Trials*, 4(3), 245–253.
+- Jackson D, Riley R, White IR (2011). Multivariate meta-analysis: Potential and promise. *Stat Med*, 30(20), 2333–2351.
 - Jeffreys H (1961). *Theory of Probability* (3rd ed.). Oxford University Press.
 - Knapp G, Hartung J (2003). Improved tests for a random effects meta-regression with a single covariate. *Stat Med*, 22, 2693–2710.
 - Kraemer HC (1975). On estimation and hypothesis testing problems for correlation coefficients. *Psychometrika*, 40(4), 473–485.
@@ -262,6 +277,7 @@ git commit -m "Rebuild bundle after sync with main"
 - Paule RC, Mandel J (1982). Consensus values and weighting factors. *J Res Natl Bur Stand*, 87, 377–385.
 - Peters JL, Sutton AJ, Jones DR, Abrams KR, Rushton L (2006). Comparison of two methods to detect publication bias in meta-analysis. *JAMA*, 295(6), 676–680.
 - Peto R, Pike MC, Armitage P, et al. (1976). Design and analysis of randomized clinical trials requiring prolonged observation of each patient. *Br J Cancer*, 34, 585–612.
+- Riley RD, Abrams KR, Lambert PC, Sutton AJ, Thompson JR (2007). An evaluation of bivariate random-effects meta-analysis for the joint synthesis of two correlated outcomes. *Stat Med*, 26(1), 78–97.
 - Rücker G, Schwarzer G, Carpenter J (2008). Arcsine test for publication bias in meta-analyses with binary outcomes. *Stat Med*, 27(19), 4450–4465.
 - Simonsohn U, Nelson LD, Simmons JP (2014). P-curve: A key to the file-drawer. *J Exp Psychol Gen*, 143(2), 534–547.
 - Stanley TD, Doucouliagos H (2014). Meta-regression approximations to reduce publication selection bias. *Res Synth Methods*, 5(1), 60–78.
