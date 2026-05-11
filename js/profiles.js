@@ -44,6 +44,8 @@
 import { hedgesG, parseCounts, gorFromCounts, tetrachoricFromCounts, hyperg2F1_ucor, normalQuantile } from "./utils.js";
 import { MIN_VAR, Z_95 } from "./constants.js";
 
+function clampVi(x) { return x < MIN_VAR ? MIN_VAR : x; }
+
 // ---------------------------------------------------------------------------
 // Shared validation helpers — called from the profile objects below so that
 // common field-set checks are not duplicated across similar effect types.
@@ -167,7 +169,7 @@ export const effectProfiles = {
     inputs: ["m1", "sd1", "n1", "m2", "sd2", "n2"],
     compute(s) {
       if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
-      const varMD = Math.max(s.sd1**2/s.n1 + s.sd2**2/s.n2, MIN_VAR);
+      const varMD = clampVi(s.sd1**2/s.n1 + s.sd2**2/s.n2);
       return { ...s, md: s.m1 - s.m2, varMD, se: Math.sqrt(varMD), w: 1/varMD, yi: s.m1 - s.m2, vi: varMD };
     },
     transform:   (x) => x,
@@ -263,7 +265,7 @@ export const effectProfiles = {
       const corr = isFinite(r) ? r : 0.5;
       const md = m_post - m_pre;
       const varMD = (sd_pre**2 + sd_post**2 - 2*corr*sd_pre*sd_post) / n;
-      return { ...s, yi: md, vi: Math.max(varMD, MIN_VAR), se: Math.sqrt(Math.max(varMD, MIN_VAR)), w: 1 / Math.max(varMD, MIN_VAR), md, varMD };
+      return { ...s, yi: md, vi: clampVi(varMD), se: Math.sqrt(clampVi(varMD)), w: 1 / clampVi(varMD), md, varMD };
     },
     transform:   (x) => x,
 
@@ -294,7 +296,7 @@ export const effectProfiles = {
       const g    = d * J;
       // Variance: correlation-adjusted SMCR formula (Morris & DeShon 2002)
       const var_d = 2 * (1 - corr) / n + (d * d) / (2 * df);
-      const vi    = Math.max(J * J * var_d, MIN_VAR);
+      const vi    = clampVi(J * J * var_d);
       return { ...s, yi: g, vi, se: Math.sqrt(vi), w: 1 / vi, md: g, varMD: var_d };
     },
     transform:   (x) => x,
@@ -333,7 +335,7 @@ export const effectProfiles = {
       // Standardiser is sd_change which already captures r, so first term is 1/n not 2(1−r)/n.
       // var(d) = 1/n + d²/(2df);  var(g) = J²·var(d)
       const var_d = 1 / n + (d * d) / (2 * df);
-      const vi    = Math.max(J * J * var_d, MIN_VAR);
+      const vi    = clampVi(J * J * var_d);
       return { ...s, yi: g, vi, se: Math.sqrt(vi), w: 1 / vi, md: g, varMD: var_d };
     },
     transform: (x) => x,
@@ -373,7 +375,7 @@ export const effectProfiles = {
       if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
       const { m1, sd1, n1, m2, sd2, n2 } = s;
       const yi = Math.log(m1 / m2);
-      const vi = Math.max((sd1 ** 2) / (n1 * m1 ** 2) + (sd2 ** 2) / (n2 * m2 ** 2), MIN_VAR);
+      const vi = clampVi((sd1 ** 2) / (n1 * m1 ** 2) + (sd2 ** 2) / (n2 * m2 ** 2));
       return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
     },
     transform:   (x) => Math.exp(x),
@@ -441,7 +443,7 @@ export const effectProfiles = {
       const yi  = Math.log(cv1 / cv2);
       // Delta-method variance of log(CV) = 1/(2(n−1)) + CV²/n per group, summed.
       // Nakagawa et al. (2015, Methods Ecol Evol 6:143–152, eq. 5).
-      const vi  = Math.max(1 / (2 * (n1 - 1)) + cv1 ** 2 / n1 + 1 / (2 * (n2 - 1)) + cv2 ** 2 / n2, MIN_VAR);
+      const vi  = clampVi(1 / (2 * (n1 - 1)) + cv1 ** 2 / n1 + 1 / (2 * (n2 - 1)) + cv2 ** 2 / n2);
       return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
     },
     transform:   (x) => Math.exp(x),
@@ -509,7 +511,7 @@ export const effectProfiles = {
       // Var(log SD) ≈ 1/(2(n−1)) per group (chi-squared approximation for s²).
       // Nakagawa et al. (2015, Methods Ecol Evol 6:143–152); Hedges & Olkin (1985, p. 86).
       // CV²/n terms absent because VR does not normalise by the mean.
-      const vi = Math.max(1 / (2 * (n1 - 1)) + 1 / (2 * (n2 - 1)), MIN_VAR);
+      const vi = clampVi(1 / (2 * (n1 - 1)) + 1 / (2 * (n2 - 1)));
       return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
     },
     transform:   (x) => Math.exp(x),
@@ -567,7 +569,7 @@ export const effectProfiles = {
       let { a, b, c, d } = s;
       if (a === 0 || b === 0 || c === 0 || d === 0) { a += 0.5; b += 0.5; c += 0.5; d += 0.5; }
       const yi = Math.log((a*d)/(b*c));
-      const vi = Math.max(1/a + 1/b + 1/c + 1/d, MIN_VAR);
+      const vi = clampVi(1/a + 1/b + 1/c + 1/d);
       return { ...s, yi, vi, se: Math.sqrt(vi), w: 1/vi, md: yi, varMD: vi };
     },
     transform:   (x) => Math.exp(x),
@@ -603,7 +605,7 @@ export const effectProfiles = {
       if (a === 0 || b === 0 || c === 0 || d === 0) { a += 0.5; b += 0.5; c += 0.5; d += 0.5; }
       const risk1 = a/(a+b), risk2 = c/(c+d);
       const yi = Math.log(risk1/risk2);
-      const vi = Math.max((1/a - 1/(a+b)) + (1/c - 1/(c+d)), MIN_VAR);
+      const vi = clampVi((1/a - 1/(a+b)) + (1/c - 1/(c+d)));
       return { ...s, yi, vi, se: Math.sqrt(vi), w: 1/vi, md: yi, varMD: vi };
     },
     transform:   (x) => Math.exp(x),
@@ -637,7 +639,7 @@ export const effectProfiles = {
       const risk1 = a / (a + b);
       const risk2 = c / (c + d);
       const yi = risk1 - risk2;
-      const vi = Math.max((risk1*(1-risk1)/(a+b)) + (risk2*(1-risk2)/(c+d)), MIN_VAR);
+      const vi = clampVi((risk1*(1-risk1)/(a+b)) + (risk2*(1-risk2)/(c+d)));
       return { ...s, yi, vi, se: Math.sqrt(vi), w: 1/vi, md: yi, varMD: vi };
     },
     transform:   (x) => x,
@@ -684,7 +686,7 @@ export const effectProfiles = {
       const n1 = a + b, n2 = c + d;
       const p1 = a / n1, p2 = c / n2;
       const yi = Math.asin(Math.sqrt(p1)) - Math.asin(Math.sqrt(p2));
-      const vi = Math.max(1 / (4 * n1) + 1 / (4 * n2), MIN_VAR);
+      const vi = clampVi(1 / (4 * n1) + 1 / (4 * n2));
       return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
     },
     transform: (x) => x,
@@ -836,7 +838,7 @@ export const effectProfiles = {
     compute(s) {
       if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
       const { r, n } = s;
-      const vi = Math.max((1 - r * r) ** 2 / (n - 1), MIN_VAR);
+      const vi = clampVi((1 - r * r) ** 2 / (n - 1));
       return { ...s, yi: r, vi, se: Math.sqrt(vi), w: 1 / vi };
     },
     transform:   (x) => x,
@@ -884,7 +886,7 @@ export const effectProfiles = {
       if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
       const { r, n } = s;
       const yi = r * hyperg2F1_ucor((n - 2) / 2, 1 - r * r);
-      const vi = Math.max((1 - yi * yi) ** 2 / (n - 1), MIN_VAR);
+      const vi = clampVi((1 - yi * yi) ** 2 / (n - 1));
       return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
     },
     transform: (x) => x,
@@ -924,7 +926,7 @@ export const effectProfiles = {
       if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
       const { r, n } = s;
       const yi = Math.atanh(r);
-      const vi = Math.max(1 / (n - 3), MIN_VAR);
+      const vi = clampVi(1 / (n - 3));
       return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
     },
     transform:   (x) => Math.tanh(x),
@@ -969,7 +971,7 @@ export const effectProfiles = {
       if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
       const { r, n } = s;
       const p  = isFinite(s.p) ? s.p : 0;
-      const vi = Math.max((1 - r * r) ** 2 / (n - p - 1), MIN_VAR);
+      const vi = clampVi((1 - r * r) ** 2 / (n - p - 1));
       return { ...s, yi: r, vi, se: Math.sqrt(vi), w: 1 / vi };
     },
     transform: (x) => x,
@@ -1014,7 +1016,7 @@ export const effectProfiles = {
       const { r, n } = s;
       const p  = isFinite(s.p) ? s.p : 0;
       const yi = Math.atanh(r);
-      const vi = Math.max(1 / (n - p - 3), MIN_VAR);
+      const vi = clampVi(1 / (n - p - 3));
       return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
     },
     transform: (x) => Math.tanh(x),
@@ -1070,7 +1072,7 @@ export const effectProfiles = {
       if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
       const { r, n } = s;
       const r2 = r * r;
-      const vi = Math.max((1 - r2) ** 3 / (n - 2) + r2 * (1 - r2) ** 2 / (2 * n), MIN_VAR);
+      const vi = clampVi((1 - r2) ** 3 / (n - 2) + r2 * (1 - r2) ** 2 / (2 * n));
       return { ...s, yi: r, vi, se: Math.sqrt(vi), w: 1 / vi };
     },
     transform: (x) => x,
@@ -1194,7 +1196,7 @@ export const effectProfiles = {
     compute(s) {
       if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
       const { r2, n } = s;
-      const vi = Math.max(4 * r2 * (1 - r2) ** 2 / n, MIN_VAR);
+      const vi = clampVi(4 * r2 * (1 - r2) ** 2 / n);
       return { ...s, yi: r2, vi, se: Math.sqrt(vi), w: 1 / vi };
     },
     transform: (x) => x,
@@ -1245,7 +1247,7 @@ export const effectProfiles = {
       if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
       const { r2, n } = s;
       const yi = Math.atanh(Math.sqrt(r2));
-      const vi = Math.max(1 / n, MIN_VAR);
+      const vi = clampVi(1 / n);
       return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
     },
     transform: (x) => Math.tanh(x) ** 2,
@@ -1399,7 +1401,7 @@ export const effectProfiles = {
       const { x, n } = s;
       const p = x / n;
       const yi = p;
-      const vi = Math.max(p * (1 - p) / n, MIN_VAR);
+      const vi = clampVi(p * (1 - p) / n);
       return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
     },
     transform:   (x) => Math.min(1, Math.max(0, x)),
@@ -1428,7 +1430,7 @@ export const effectProfiles = {
       if (x === 0 || x === n) { x += 0.5; n += 1; }
       const p = x / n;
       const yi = Math.log(p);
-      const vi = Math.max((1 - p) / (n * p), MIN_VAR);
+      const vi = clampVi((1 - p) / (n * p));
       return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
     },
     transform:   (x) => Math.min(1, Math.max(0, Math.exp(x))),
@@ -1457,7 +1459,7 @@ export const effectProfiles = {
       if (x === 0 || x === n) { x += 0.5; n += 1; }
       const p = x / n;
       const yi = Math.log(p / (1 - p));
-      const vi = Math.max(1 / (n * p * (1 - p)), MIN_VAR);
+      const vi = clampVi(1 / (n * p * (1 - p)));
       return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
     },
     transform:   (x) => Math.min(1, Math.max(0, 1 / (1 + Math.exp(-x)))),
@@ -1485,7 +1487,7 @@ export const effectProfiles = {
       const { x, n } = s;
       const p = x / n;
       const yi = Math.asin(Math.sqrt(p));
-      const vi = Math.max(1 / (4 * n), MIN_VAR);
+      const vi = clampVi(1 / (4 * n));
       return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
     },
     transform:   (x) => Math.min(1, Math.max(0, Math.sin(x) ** 2)),
@@ -1512,7 +1514,7 @@ export const effectProfiles = {
       if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
       const { x, n } = s;
       const yi = Math.asin(Math.sqrt(x / (n + 1))) + Math.asin(Math.sqrt((x + 1) / (n + 1)));
-      const vi = Math.max(1 / (n + 0.5), MIN_VAR);
+      const vi = clampVi(1 / (n + 0.5));
       return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
     },
     transform:   (x) => Math.min(1, Math.max(0, Math.sin(x / 2) ** 2)),
@@ -1541,7 +1543,7 @@ export const effectProfiles = {
     inputs: ["yi", "vi"],
     compute(s) {
       if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
-      const vi = Math.max(s.vi, MIN_VAR);
+      const vi = clampVi(s.vi);
       return { ...s, yi: s.yi, vi, se: Math.sqrt(vi), w: 1 / vi, md: s.yi, varMD: s.vi };
     },
     transform:   (x) => x,
@@ -1581,7 +1583,7 @@ export const effectProfiles = {
       const { hr, ci_lo, ci_hi } = s;
       const yi = Math.log(hr);
       const se = (Math.log(ci_hi) - Math.log(ci_lo)) / (2 * Z_95);
-      const vi = Math.max(se * se, MIN_VAR);
+      const vi = clampVi(se * se);
       return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
     },
     transform:   (x) => Math.exp(x),
@@ -1623,7 +1625,7 @@ export const effectProfiles = {
       let { x1, t1, x2, t2 } = s;
       if (x1 === 0 || x2 === 0) { x1 += 0.5; x2 += 0.5; }
       const yi = Math.log(x1 / t1) - Math.log(x2 / t2);
-      const vi = Math.max(1 / x1 + 1 / x2, MIN_VAR);
+      const vi = clampVi(1 / x1 + 1 / x2);
       return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
     },
     transform:   (x) => Math.exp(x),
@@ -1666,7 +1668,7 @@ export const effectProfiles = {
       if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
       const { x1, t1, x2, t2 } = s;
       const yi = x1 / t1 - x2 / t2;
-      const vi = Math.max(x1 / (t1 * t1) + x2 / (t2 * t2), MIN_VAR);
+      const vi = clampVi(x1 / (t1 * t1) + x2 / (t2 * t2));
       return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
     },
     transform: (x) => x,
@@ -1710,7 +1712,7 @@ export const effectProfiles = {
       if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
       const { x1, t1, x2, t2 } = s;
       const yi = Math.sqrt(x1 / t1) - Math.sqrt(x2 / t2);
-      const vi = Math.max(1 / (4 * t1) + 1 / (4 * t2), MIN_VAR);
+      const vi = clampVi(1 / (4 * t1) + 1 / (4 * t2));
       return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
     },
     transform: (x) => x,
@@ -1751,7 +1753,7 @@ export const effectProfiles = {
       let { x, t } = s;
       if (x === 0) x = 0.5;
       const yi = Math.log(x / t);
-      const vi = Math.max(1 / x, MIN_VAR);
+      const vi = clampVi(1 / x);
       return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
     },
     transform:   (x) => Math.exp(x),
@@ -1811,7 +1813,7 @@ export const effectProfiles = {
       const df  = n - 1;
       const J   = 1 - 3 / (4 * df - 1);
       const yi  = d * J;
-      const vi  = Math.max(1 / n + yi * yi / (2 * df), MIN_VAR);
+      const vi  = clampVi(1 / n + yi * yi / (2 * df));
       return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
     },
     transform: (x) => x,
@@ -1855,7 +1857,7 @@ export const effectProfiles = {
       const J    = 1 - 3 / (4 * df - 1);
       const yi   = d * J;
       const vi_d = 1 / n + d * d / (2 * df);
-      const vi   = Math.max(J * J * vi_d, MIN_VAR);
+      const vi   = clampVi(J * J * vi_d);
       return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
     },
     transform: (x) => x,
@@ -1899,7 +1901,7 @@ export const effectProfiles = {
     inputs: ["m", "sd", "n"],
     compute(s) {
       if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
-      const vi = Math.max(s.sd ** 2 / s.n, MIN_VAR);
+      const vi = clampVi(s.sd ** 2 / s.n);
       return { ...s, yi: s.m, vi, se: Math.sqrt(vi), w: 1 / vi };
     },
     transform: (x) => x,
@@ -1944,7 +1946,7 @@ export const effectProfiles = {
     inputs: ["m", "sd", "n"],
     compute(s) {
       if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
-      const vi = Math.max(s.sd ** 2 / (s.n * s.m ** 2), MIN_VAR);
+      const vi = clampVi(s.sd ** 2 / (s.n * s.m ** 2));
       return { ...s, yi: Math.log(s.m), vi, se: Math.sqrt(vi), w: 1 / vi };
     },
     transform: (x) => Math.exp(x),
@@ -1995,7 +1997,7 @@ export const effectProfiles = {
       if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
       const { es, var: v } = gorFromCounts(parseCounts(s.counts1), parseCounts(s.counts2));
       if (!isFinite(es) || !isFinite(v)) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
-      const vi = Math.max(v, MIN_VAR);
+      const vi = clampVi(v);
       return { ...s, yi: es, vi, se: Math.sqrt(vi), w: 1 / vi };
     },
     transform: (x) => Math.exp(x),
@@ -2060,7 +2062,7 @@ export const effectProfiles = {
       if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
       const { alpha, k, n } = s;
       const yi = alpha;
-      const vi = Math.max(2 * k * k * (1 - alpha) ** 2 / (n * (k - 1)), MIN_VAR);
+      const vi = clampVi(2 * k * k * (1 - alpha) ** 2 / (n * (k - 1)));
       return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
     },
     transform: (x) => x,
@@ -2109,7 +2111,7 @@ export const effectProfiles = {
       if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
       const { alpha, k, n } = s;
       const yi = Math.log(1 - alpha);
-      const vi = Math.max(2 * k / (n * (k - 1)), MIN_VAR);
+      const vi = clampVi(2 * k / (n * (k - 1)));
       return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
     },
     transform: (x) => 1 - Math.exp(x),
@@ -2161,7 +2163,7 @@ export const effectProfiles = {
       const { alpha, k, n } = s;
       const u  = (k / (k - 1)) * (1 - alpha);
       const yi = Math.cbrt(u);
-      const vi = Math.max(2 * k * k * yi * yi / (9 * n * (k - 1)), MIN_VAR);
+      const vi = clampVi(2 * k * k * yi * yi / (9 * n * (k - 1)));
       return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
     },
     // Back-transform to α requires k (unavailable here); display on internal scale.

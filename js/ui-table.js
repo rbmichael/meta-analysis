@@ -318,11 +318,15 @@ export function addRow(values) {
   actionCell.innerHTML = `<button class="remove-btn" aria-label="Remove study">✖</button> <button class="clear-btn" aria-label="Clear row">🧹</button>`;
 
   // Input listeners
+  let _valTimer;
   row.querySelectorAll("input").forEach(input => {
     input.addEventListener("input", () => {
-      validateRow(row);
-      _cb.markStale();
-      _cb.scheduleSave();
+      clearTimeout(_valTimer);
+      _valTimer = setTimeout(() => {
+        validateRow(row);
+        _cb.markStale();
+        _cb.scheduleSave();
+      }, 150);
     });
   });
 

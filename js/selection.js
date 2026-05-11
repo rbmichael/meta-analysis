@@ -384,7 +384,7 @@ export function bfgs(f, x0, opts = {}) {
     let alpha    = 1.0;
     let xnew, fnew;
     let accepted = false;
-    for (let sh = 0; sh < 60; sh++) {
+    for (let sh = 0; sh < 20; sh++) {
       xnew = x.map((xi, j) => xi + alpha * d[j]);
       fnew = f(xnew);
       if (fnew <= fval + c1 * alpha * dg) { accepted = true; break; }

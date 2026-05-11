@@ -8,6 +8,16 @@
 import { chiSquareQuantile } from "./utils.js";
 import { REML_TOL } from "./constants.js";
 
+function iterate(seed, updateFn, maxIter = 200, tol = REML_TOL) {
+  let tau2 = seed;
+  for (let iter = 0; iter < maxIter; iter++) {
+    const newTau2 = updateFn(tau2);
+    if (Math.abs(newTau2 - tau2) < tol) return newTau2;
+    tau2 = newTau2;
+  }
+  return tau2;
+}
+
 // ================= HUNTER-SCHMIDT TAU² =================
 // Method-of-moments. Identical to DL except the denominator is Σwᵢ
 // rather than the bias-corrected c = Σwᵢ − Σwᵢ²/Σwᵢ.
@@ -32,10 +42,8 @@ export function tau2_HS(studies) {
 export function tau2_DLIT(studies, tol = REML_TOL, maxIter = 200, tau2Init = null) {
   const k = studies.length;
   if (k <= 1) return 0;
-
-  let tau2 = tau2Init !== null ? Math.max(0, tau2Init) : tau2_GENQ(studies);  // seed from DL unless warm-started
-
-  for (let iter = 0; iter < maxIter; iter++) {
+  const seed = tau2Init !== null ? Math.max(0, tau2Init) : tau2_GENQ(studies);
+  return iterate(seed, tau2 => {
     let W = 0, W2 = 0, Wmu = 0;
     for (const d of studies) {
       const wi = 1 / (d.vi + tau2);
@@ -48,12 +56,8 @@ export function tau2_DLIT(studies, tol = REML_TOL, maxIter = 200, tau2Init = nul
       Q += r * r / (d.vi + tau2);
     }
     const c = W - W2 / W;
-    const newTau2 = Math.max(0, (Q - (k - 1)) / c);
-    if (Math.abs(newTau2 - tau2) < tol) return newTau2;
-    tau2 = newTau2;
-  }
-
-  return tau2;
+    return Math.max(0, (Q - (k - 1)) / c);
+  }, maxIter, tol);
 }
 
 // ================= HUNTER-SCHMIDT (small-sample corrected) TAU² =================
@@ -256,10 +260,8 @@ export function tau2_REML(studies, tol = REML_TOL, maxIter = 100, tau2Init = nul
 export function tau2_PM(studies, tol = REML_TOL, maxIter = 100, tau2Init = null) {
   const k = studies.length;
   if (k <= 1) return 0;
-
-  let tau2 = tau2Init !== null ? Math.max(0, tau2Init) : 0;
-
-  for (let iter = 0; iter < maxIter; iter++) {
+  const seed = tau2Init !== null ? Math.max(0, tau2Init) : 0;
+  return iterate(seed, tau2 => {
     let W = 0, Wmu = 0;
     for (const d of studies) {
       const wi = 1 / (d.vi + tau2);
@@ -271,12 +273,8 @@ export function tau2_PM(studies, tol = REML_TOL, maxIter = 100, tau2Init = null)
       const r = d.yi - mu;
       Q += r * r / (d.vi + tau2);
     }
-    const newTau2 = Math.max(0, tau2 + (Q - (k - 1)) / W);
-    if (Math.abs(newTau2 - tau2) < tol) return newTau2;
-    tau2 = newTau2;
-  }
-
-  return tau2;
+    return Math.max(0, tau2 + (Q - (k - 1)) / W);
+  }, maxIter, tol);
 }
 
 // ================= EB (EMPIRICAL BAYES) TAU² =================
@@ -293,11 +291,9 @@ export function tau2_PM(studies, tol = REML_TOL, maxIter = 100, tau2Init = null)
 export function tau2_EB(studies, tol = REML_TOL, maxIter = 200, tau2Init = null) {
   const k = studies.length;
   if (k <= 1) return 0;
-
-  const df = k - 1;
-  let tau2 = tau2Init !== null ? Math.max(0, tau2Init) : 0;
-
-  for (let iter = 0; iter < maxIter; iter++) {
+  const df   = k - 1;
+  const seed = tau2Init !== null ? Math.max(0, tau2Init) : 0;
+  return iterate(seed, tau2 => {
     let W = 0, Wmu = 0;
     for (const d of studies) {
       const wi = 1 / (d.vi + tau2);
@@ -309,12 +305,8 @@ export function tau2_EB(studies, tol = REML_TOL, maxIter = 200, tau2Init = null)
       const r = d.yi - mu;
       Q += r * r / (d.vi + tau2);
     }
-    const adj = (Q * k / df - k) / W;
-    const newTau2 = Math.max(0, tau2 + adj);
-    if (Math.abs(newTau2 - tau2) < tol) return newTau2;
-    tau2 = newTau2;
-  }
-  return tau2;
+    return Math.max(0, tau2 + (Q * k / df - k) / W);
+  }, maxIter, tol);
 }
 
 // ================= PMM (PAULE-MANDEL MEDIAN) TAU² =================
@@ -330,11 +322,9 @@ export function tau2_EB(studies, tol = REML_TOL, maxIter = 200, tau2Init = null)
 export function tau2_PMM(studies, tol = REML_TOL, maxIter = 200, tau2Init = null) {
   const k = studies.length;
   if (k <= 1) return 0;
-
   const target = chiSquareQuantile(0.5, k - 1);
-  let tau2 = tau2Init !== null ? Math.max(0, tau2Init) : 0;
-
-  for (let iter = 0; iter < maxIter; iter++) {
+  const seed   = tau2Init !== null ? Math.max(0, tau2Init) : 0;
+  return iterate(seed, tau2 => {
     let W = 0, Wmu = 0;
     for (const d of studies) {
       const wi = 1 / (d.vi + tau2);
@@ -346,11 +336,8 @@ export function tau2_PMM(studies, tol = REML_TOL, maxIter = 200, tau2Init = null
       const r = d.yi - mu;
       Q += r * r / (d.vi + tau2);
     }
-    const newTau2 = Math.max(0, tau2 + (Q - target) / W);
-    if (Math.abs(newTau2 - tau2) < tol) return newTau2;
-    tau2 = newTau2;
-  }
-  return tau2;
+    return Math.max(0, tau2 + (Q - target) / W);
+  }, maxIter, tol);
 }
 
 // ================= GENQM (GENERALISED Q, MEDIAN-UNBIASED) TAU² =================
