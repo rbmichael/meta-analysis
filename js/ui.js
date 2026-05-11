@@ -968,7 +968,7 @@ function _runMVAnalysis() {
   if (singleOutcomeStudies.length === studyIds.length)
     warnings.push("All studies contribute only one outcome — within-study correlations cannot be estimated. Consider using Standard mode or checking that Study IDs correctly group multiple outcomes per study.");
   else if (singleOutcomeStudies.length > 0)
-    warnings.push(`Studies with only one outcome (contribute no covariance): ${singleOutcomeStudies.map(escapeHTML).join(", ")}.`);
+    warnings.push(`Studies with only one outcome (contribute no covariance): ${singleOutcomeStudies.join(", ")}.`);
 
   const struct = document.getElementById("mvStruct").value;
   const method = document.getElementById("mvMethod").value;
@@ -986,7 +986,7 @@ function _runMVAnalysis() {
     warnings.push(`Between-study covariance has ${nPsiPar} parameters but only ${studyIds.length} studies — model may be overparameterized.`);
 
   if (warnings.length)
-    warningsEl.innerHTML = warnings.map(w => `<p style="color:var(--color-warning);margin:2px 0">⚠ ${w}</p>`).join("");
+    warningsEl.innerHTML = warnings.map(w => `<p style="color:var(--color-warning);margin:2px 0">⚠ ${escapeHTML(w)}</p>`).join("");
 
   let V, res;
   try {
@@ -1739,7 +1739,14 @@ document.getElementById("run").addEventListener("click", async () => { if (await
 document.getElementById("import").addEventListener("click", () => document.getElementById("csvFile").click());
 document.getElementById("csvFile").addEventListener("change", async e => {
   if (!e.target.files[0]) return;
-  await previewCSV(e.target.files[0]);
+  try {
+    await previewCSV(e.target.files[0]);
+  } catch (err) {
+    const warn = document.getElementById("csvWarning");
+    warn.textContent = `Could not read file: ${err?.message ?? err}`;
+    warn.style.display = "block";
+    return;
+  }
   if (_mvMode) {
     const pending = getPendingImport();
     document.getElementById("previewImport").textContent =
