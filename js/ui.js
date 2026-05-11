@@ -146,6 +146,8 @@ import { initTable, moderators, doAddModerator, removeModerator, clearModerators
          registerDeleteCompanion, showUndoToast, hideUndoToast }
   from "./ui-table.js";
 
+const USE_EXAMPLES = new URLSearchParams(window.location.search).has("tests");
+
 // ---------------- AUTOSAVE ----------------
 
 let _saveTimer = null;
@@ -910,7 +912,7 @@ function _mvAddRow() {
   let _valTimer;
   tr.querySelectorAll("input").forEach(inp => inp.addEventListener("input", () => {
     clearTimeout(_valTimer);
-    _valTimer = setTimeout(() => { _validateMVRow(tr); markStale(); }, 150);
+    _valTimer = setTimeout(() => { _validateMVRow(tr); _updateMVValidationWarnings(); markStale(); }, 150);
   }));
   tbody.appendChild(tr);
   return tr;
@@ -1016,17 +1018,13 @@ function _commitImportMV(parsed, mvHeaders) {
 
 // ── MV analysis & rendering ───────────────────────────────────────────────────
 
-function _runMVAnalysis() {
+function _updateMVValidationWarnings() {
   const warningsEl = document.getElementById("mvValidationWarnings");
-  warningsEl.innerHTML = "";
-
-  // Validate all rows → CSS feedback; collect excluded info
   const msgs = [];
   document.querySelectorAll("#mvTableBody tr").forEach((tr, i) => {
     if (tr.classList.contains("row-pending-delete")) return;
-    _validateMVRow(tr);
     const allInputs = [...tr.querySelectorAll("input")];
-    if (allInputs.every(inp => inp.value.trim() === "")) return; // blank row
+    if (allInputs.every(inp => inp.value.trim() === "")) return;
     const studyId   = tr.querySelector(".mv-study-id")?.value.trim()  || `Row ${i + 1}`;
     const outcomeId = tr.querySelector(".mv-outcome-id")?.value.trim() || "";
     const label     = outcomeId ? `${studyId} / ${outcomeId}` : studyId;
@@ -1037,15 +1035,24 @@ function _runMVAnalysis() {
         !isFinite(yi) || !isFinite(vi) || vi <= 0)
       msgs.push(`⚠️ Excluded: ${escapeHTML(label)} (Invalid input)`);
   });
+  const rows = _collectMVRows();
+  if (!rows.length) msgs.push("❌ No valid rows — fill in Study ID, Outcome ID, y<sub>i</sub>, and v<sub>i</sub>.");
+  warningsEl.innerHTML = msgs.length > 0 ? msgs.map(m => `• ${m}`).join("<br>") : "";
+}
+
+function _runMVAnalysis() {
+  // Validate all rows → CSS feedback
+  document.querySelectorAll("#mvTableBody tr").forEach(tr => {
+    if (!tr.classList.contains("row-pending-delete")) _validateMVRow(tr);
+  });
+  _updateMVValidationWarnings();
 
   const rows = _collectMVRows();
+  const warningsEl = document.getElementById("mvValidationWarnings");
 
-  if (!rows.length) {
-    msgs.push("❌ No valid rows — fill in Study ID, Outcome ID, y<sub>i</sub>, and v<sub>i</sub>.");
-    warningsEl.innerHTML = msgs.map(m => `• ${m}`).join("<br>");
-    return false;
-  }
+  if (!rows.length) return false;
 
+  const msgs = [];
   const outcomeIds = [...new Set(rows.map(r => r.outcome_id))];
   const studyIds   = [...new Set(rows.map(r => r.study_id))];
 
@@ -3008,7 +3015,7 @@ function init() {
   syncMHOptions(document.getElementById("effectType").value);
 
   // Populate MV example data (Berkey 1998: 5 trials, 2 outcomes)
-  _populateMVExample();
+  if (USE_EXAMPLES) _populateMVExample(); else _mvAddRow();
 
   // Validate all rows
   document.querySelectorAll("#inputTable tr").forEach((row, i) => {
@@ -3027,7 +3034,11 @@ window.onload = init;
 function populateExampleData(type) {
   const table = document.getElementById("inputTable");
   while (table.rows.length > 1) table.deleteRow(1);
-  (getProfile(type)?.exampleData ?? []).forEach(row => addRow(row));
+  if (USE_EXAMPLES) {
+    (getProfile(type)?.exampleData ?? []).forEach(row => addRow(row));
+  } else {
+    addRow();
+  }
 }
 
 // ---------------- OUTPUT SECTION VISIBILITY ----------------

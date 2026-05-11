@@ -323,7 +323,9 @@ export function addRow(values) {
     input.addEventListener("input", () => {
       clearTimeout(_valTimer);
       _valTimer = setTimeout(() => {
-        validateRow(row);
+        const type = document.getElementById("effectType").value;
+        const { studies, excluded, softWarnings } = collectStudies(type);
+        updateValidationWarnings(studies, excluded, softWarnings);
         _cb.markStale();
         _cb.scheduleSave();
       }, 150);
