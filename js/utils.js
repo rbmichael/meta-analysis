@@ -417,6 +417,7 @@ export function normalQuantile(p) {
 //   Φ₂(h,k;ρ) = Φ(h)Φ(k) + ∫₀^ρ φ₂(h,k;t) dt
 // where φ₂(h,k;t) = exp(−(h²−2thk+k²)/(2(1−t²))) / (2π√(1−t²))
 // Integral evaluated by 20-point Gauss-Legendre on [0, ρ].
+// Nodes and weights: Abramowitz & Stegun (1964) Table 25.4.
 const _GL20_X = [
   -0.9931285991850949, -0.9639719272779138, -0.9122344282513259, -0.8391169718222188,
   -0.7463064833401189, -0.6360536807265150, -0.5108670019508271, -0.3737060887154195,
