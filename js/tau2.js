@@ -398,8 +398,9 @@ export function tau2_GENQM(studies, tol = REML_TOL, maxIter = 200) {
 
     const lams = [];
     for (let i = 0; i < k - 1; i++) {
-      const lo = ds[i + 1] + 1e-14;
-      const hi = ds[i]     - 1e-14;
+      const pad = Math.max(1e-14, Math.abs(ds[i]) * 1e-14);
+      const lo = ds[i + 1] + pad;
+      const hi = ds[i]     - pad;
       if (secular(lo) >= 0 || secular(hi) <= 0) continue; // degenerate interval
       let a = lo, b = hi;
       for (let j = 0; j < 64; j++) {

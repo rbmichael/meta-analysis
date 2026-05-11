@@ -292,15 +292,20 @@ export function bayesMeta(studies, opts = {}) {
 
   let tauWeights = normalise(logW);
 
-  // ---- Grid truncation check: double tauMax once if needed ----
-  const maxW = tauWeights.reduce((m, v) => Math.max(m, v), 0);
-  let grid_truncated = tauWeights[nGrid - 1] > 1e-4 * maxW;
-  if (grid_truncated) {
+  // ---- Grid truncation check: double tauMax up to 3 times if needed ----
+  let grid_truncated = false;
+  for (let _expand = 0; _expand < 3; _expand++) {
+    const maxW = tauWeights.reduce((m, v) => Math.max(m, v), 0);
+    if (tauWeights[nGrid - 1] <= 1e-4 * maxW) break;
     tauMax *= 2;
     ({ tauGrid, condMeans, condVars, logW, dtau } = computeGrid(tauMax));
     tauWeights = normalise(logW);
-    const maxW2 = tauWeights.reduce((m, v) => Math.max(m, v), 0);
-    grid_truncated = tauWeights[nGrid - 1] > 1e-4 * maxW2;
+    grid_truncated = true;   // at least one expansion occurred; flag for callers
+  }
+  // Final check: still truncated after expansions?
+  {
+    const maxW = tauWeights.reduce((m, v) => Math.max(m, v), 0);
+    grid_truncated = tauWeights[nGrid - 1] > 1e-4 * maxW;
   }
 
   // ---- Marginal posterior of τ ----

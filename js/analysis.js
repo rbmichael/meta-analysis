@@ -639,6 +639,11 @@ export function matInverse(A) {
     return aug;
   });
 
+  // Scale singularity threshold by the largest entry in A so tiny-valued
+  // matrices (e.g. scaled covariates) are not incorrectly flagged singular.
+  const matScale = A.reduce((m, row) => Math.max(m, ...row.map(Math.abs)), 0);
+  const singTol  = 1e-14 * Math.max(1, matScale);
+
   for (let col = 0; col < p; col++) {
     // Partial pivoting: swap in the row with the largest absolute value
     let pivotRow = col;
@@ -648,7 +653,7 @@ export function matInverse(A) {
     [M[col], M[pivotRow]] = [M[pivotRow], M[col]];
 
     const pivot = M[col][col];
-    if (Math.abs(pivot) < 1e-14) return null;   // singular or near-singular
+    if (Math.abs(pivot) < singTol) return null;   // singular or near-singular
 
     // Scale the pivot row so the leading entry becomes 1
     for (let j = col; j < 2 * p; j++) M[col][j] /= pivot;

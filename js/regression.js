@@ -170,12 +170,18 @@ export function rcsKnots(values, nKnots) {
   const n = sorted.length;
   if (n === 0) return pcts.map(() => NaN);
 
-  return pcts.map(p => {
+  const knots = pcts.map(p => {
     const idx = (p / 100) * (n - 1);
     const lo  = Math.floor(idx);
     const hi  = Math.ceil(idx);
     return lo === hi ? sorted[lo] : sorted[lo] + (idx - lo) * (sorted[hi] - sorted[lo]);
   });
+
+  // rcsBasis divides by (last knot − second-to-last knot); guard before caller hits NaN.
+  if (knots[nKnots - 1] === knots[nKnots - 2])
+    throw new Error(`RCS requires ${nKnots} distinct knot positions — moderator has too few unique values. Use fewer knots or a linear term.`);
+
+  return knots;
 }
 
 /**
