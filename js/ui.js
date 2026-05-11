@@ -142,7 +142,8 @@ import { initTable, moderators, doAddModerator, removeModerator, clearModerators
          interactions, doAddInteraction, removeInteraction, clearInteractions,
          updateTableHeaders, addRow, commitPendingDelete, removeRow, clearRow,
          updateValidationWarnings, collectStudies,
-         refreshPreviewUI, previewCSV, commitImport, cancelImport, getPendingImport }
+         refreshPreviewUI, previewCSV, commitImport, cancelImport, getPendingImport,
+         registerDeleteCompanion, showUndoToast, hideUndoToast }
   from "./ui-table.js";
 
 // ---------------- AUTOSAVE ----------------
@@ -792,6 +793,30 @@ function _mvAddMod() {
 
 // ── MV table management ───────────────────────────────────────────────────────
 
+const _mvUndoState = { timer: null, row: null };
+const _MV_UNDO_MS  = 5000;
+
+function _mvCommitPendingDelete() {
+  if (!_mvUndoState.row) return;
+  clearTimeout(_mvUndoState.timer);
+  _mvUndoState.row.remove();
+  _mvUndoState.row   = null;
+  _mvUndoState.timer = null;
+  hideUndoToast();
+}
+
+function _mvCancelPendingDelete() {
+  if (!_mvUndoState.row) return;
+  clearTimeout(_mvUndoState.timer);
+  _mvUndoState.row.classList.remove("row-pending-delete");
+  _mvUndoState.row   = null;
+  _mvUndoState.timer = null;
+  hideUndoToast();
+  markStale();
+}
+
+registerDeleteCompanion(_mvCommitPendingDelete);
+
 function _rebuildMVTableHeaders() {
   const tr = document.getElementById("mvTableHead");
   // Fixed columns + moderator columns + actions
@@ -822,26 +847,71 @@ function _syncMVRowMods(tr) {
   // Add missing mod tds
   while (tr.querySelectorAll("td").length - 1 < fixedCount + _mvModerators.length) {
     const td = document.createElement("td");
-    td.innerHTML = `<input type="number" step="any" class="mv-mod-cell" style="width:90px">`;
+    td.innerHTML = `<input type="text" class="mv-mod-cell" style="width:90px">`;
     tr.insertBefore(td, actionsTd);
   }
+}
+
+function _validateMVRow(tr) {
+  const yiInput = tr.querySelector(".mv-yi");
+  const viInput = tr.querySelector(".mv-vi");
+  [yiInput, viInput].forEach(inp => inp?.classList.remove("input-error"));
+  tr.classList.remove("row-error");
+
+  const allInputs = [...tr.querySelectorAll("input")];
+  if (allInputs.every(inp => inp.value.trim() === "")) return true; // blank row — no errors
+
+  let valid = true;
+  const yiVal = yiInput?.value.trim() ?? "";
+  const viVal = viInput?.value.trim() ?? "";
+
+  if (yiVal === "" || !isFinite(parseFloat(yiVal))) {
+    yiInput?.classList.add("input-error");
+    valid = false;
+  }
+  const viNum = parseFloat(viVal);
+  if (viVal === "" || !isFinite(viNum) || viNum <= 0) {
+    viInput?.classList.add("input-error");
+    valid = false;
+  }
+  tr.classList.toggle("row-error", !valid);
+  return valid;
 }
 
 function _mvAddRow() {
   const tbody = document.getElementById("mvTableBody");
   const tr = document.createElement("tr");
+  tr.draggable = true;
   const modCells = _mvModerators.map(() =>
-    `<td><input type="number" step="any" class="mv-mod-cell" style="width:90px"></td>`
+    `<td><input type="text" class="mv-mod-cell" style="width:90px"></td>`
   ).join("");
   tr.innerHTML =
-    `<td><input type="text"   class="mv-study-id"  style="width:90px" placeholder="Study"></td>` +
-    `<td><input type="text"   class="mv-outcome-id" style="width:80px" placeholder="Outcome"></td>` +
-    `<td><input type="number" class="mv-yi" step="any" style="width:90px"></td>` +
-    `<td><input type="number" class="mv-vi" step="any" min="0" style="width:90px"></td>` +
+    `<td><input type="text" class="mv-study-id"  style="width:90px" placeholder="Study"></td>` +
+    `<td><input type="text" class="mv-outcome-id" style="width:80px" placeholder="Outcome"></td>` +
+    `<td><input type="text" class="mv-yi" style="width:90px"></td>` +
+    `<td><input type="text" class="mv-vi" style="width:90px"></td>` +
     modCells +
-    `<td class="col-actions"><button class="del-btn" title="Remove row">×</button></td>`;
-  tr.querySelector(".del-btn").addEventListener("click", () => { tr.remove(); markStale(); });
-  tr.querySelectorAll("input").forEach(inp => inp.addEventListener("input", markStale));
+    `<td class="col-actions"><button class="remove-btn" aria-label="Remove study">✖</button> <button class="clear-btn" aria-label="Clear row">🧹</button></td>`;
+  tr.querySelector(".remove-btn").addEventListener("click", () => {
+    commitPendingDelete();
+    _mvCommitPendingDelete();
+    const label = tr.querySelector(".mv-study-id")?.value.trim() || "";
+    tr.classList.add("row-pending-delete");
+    _mvUndoState.row   = tr;
+    _mvUndoState.timer = setTimeout(_mvCommitPendingDelete, _MV_UNDO_MS);
+    showUndoToast(label, _mvCancelPendingDelete);
+    markStale();
+  });
+  tr.querySelector(".clear-btn").addEventListener("click", () => {
+    tr.querySelectorAll("input").forEach(inp => { inp.value = ""; });
+    _validateMVRow(tr);
+    markStale();
+  });
+  let _valTimer;
+  tr.querySelectorAll("input").forEach(inp => inp.addEventListener("input", () => {
+    clearTimeout(_valTimer);
+    _valTimer = setTimeout(() => { _validateMVRow(tr); markStale(); }, 150);
+  }));
   tbody.appendChild(tr);
   return tr;
 }
@@ -849,6 +919,7 @@ function _mvAddRow() {
 function _collectMVRows() {
   const rows = [];
   document.querySelectorAll("#mvTableBody tr").forEach(tr => {
+    if (tr.classList.contains("row-pending-delete")) return;
     const study_id   = tr.querySelector(".mv-study-id")?.value.trim();
     const outcome_id = tr.querySelector(".mv-outcome-id")?.value.trim();
     const yi = parseFloat(tr.querySelector(".mv-yi")?.value);
@@ -867,6 +938,7 @@ function _collectMVRows() {
 function _gatherMVState() {
   const rows = [];
   document.querySelectorAll("#mvTableBody tr").forEach(tr => {
+    if (tr.classList.contains("row-pending-delete")) return;
     const entry = {
       study_id:   tr.querySelector(".mv-study-id")?.value  ?? "",
       outcome_id: tr.querySelector(".mv-outcome-id")?.value ?? "",
@@ -945,30 +1017,57 @@ function _commitImportMV(parsed, mvHeaders) {
 // ── MV analysis & rendering ───────────────────────────────────────────────────
 
 function _runMVAnalysis() {
-  const rows = _collectMVRows();
   const warningsEl = document.getElementById("mvValidationWarnings");
   warningsEl.innerHTML = "";
 
+  // Validate all rows → CSS feedback; collect excluded info
+  const msgs = [];
+  document.querySelectorAll("#mvTableBody tr").forEach((tr, i) => {
+    if (tr.classList.contains("row-pending-delete")) return;
+    _validateMVRow(tr);
+    const allInputs = [...tr.querySelectorAll("input")];
+    if (allInputs.every(inp => inp.value.trim() === "")) return; // blank row
+    const studyId   = tr.querySelector(".mv-study-id")?.value.trim()  || `Row ${i + 1}`;
+    const outcomeId = tr.querySelector(".mv-outcome-id")?.value.trim() || "";
+    const label     = outcomeId ? `${studyId} / ${outcomeId}` : studyId;
+    const yi = parseFloat(tr.querySelector(".mv-yi")?.value);
+    const vi = parseFloat(tr.querySelector(".mv-vi")?.value);
+    if (!tr.querySelector(".mv-study-id")?.value.trim() ||
+        !tr.querySelector(".mv-outcome-id")?.value.trim() ||
+        !isFinite(yi) || !isFinite(vi) || vi <= 0)
+      msgs.push(`⚠️ Excluded: ${escapeHTML(label)} (Invalid input)`);
+  });
+
+  const rows = _collectMVRows();
+
   if (!rows.length) {
-    warningsEl.innerHTML = '<p style="color:var(--color-warning)">No valid rows. Fill in Study ID, Outcome ID, y<sub>i</sub>, and v<sub>i</sub>.</p>';
+    msgs.push("❌ No valid rows — fill in Study ID, Outcome ID, y<sub>i</sub>, and v<sub>i</sub>.");
+    warningsEl.innerHTML = msgs.map(m => `• ${m}`).join("<br>");
     return false;
   }
 
   const outcomeIds = [...new Set(rows.map(r => r.outcome_id))];
   const studyIds   = [...new Set(rows.map(r => r.study_id))];
-  const warnings   = [];
 
-  if (outcomeIds.length < 2) { warningsEl.innerHTML = '<p style="color:var(--color-warning)">Multivariate meta-analysis requires ≥ 2 distinct outcome IDs. For a single outcome, use Standard mode.</p>'; return false; }
-  if (studyIds.length < 3)   { warningsEl.innerHTML = '<p style="color:var(--color-warning)">Multivariate meta-analysis requires ≥ 3 studies.</p>'; return false; }
+  if (outcomeIds.length < 2) {
+    msgs.push("❌ Requires ≥ 2 distinct outcome IDs. For a single outcome, use Standard mode.");
+    warningsEl.innerHTML = msgs.map(m => `• ${m}`).join("<br>");
+    return false;
+  }
+  if (studyIds.length < 3) {
+    msgs.push("❌ Requires ≥ 3 studies.");
+    warningsEl.innerHTML = msgs.map(m => `• ${m}`).join("<br>");
+    return false;
+  }
 
   // Warn: studies with only 1 outcome
   const studyOutcomeCounts = {};
   rows.forEach(r => { studyOutcomeCounts[r.study_id] = (studyOutcomeCounts[r.study_id] || new Set()); studyOutcomeCounts[r.study_id].add(r.outcome_id); });
   const singleOutcomeStudies = Object.entries(studyOutcomeCounts).filter(([,s]) => s.size === 1).map(([id]) => id);
   if (singleOutcomeStudies.length === studyIds.length)
-    warnings.push("All studies contribute only one outcome — within-study correlations cannot be estimated. Consider using Standard mode or checking that Study IDs correctly group multiple outcomes per study.");
+    msgs.push("⚠️ All studies contribute only one outcome — within-study correlations cannot be estimated. Consider using Standard mode or checking that Study IDs correctly group multiple outcomes per study.");
   else if (singleOutcomeStudies.length > 0)
-    warnings.push(`Studies with only one outcome (contribute no covariance): ${singleOutcomeStudies.join(", ")}.`);
+    msgs.push(`⚠️ Studies with only one outcome (contribute no covariance): ${singleOutcomeStudies.map(escapeHTML).join(", ")}.`);
 
   const struct = document.getElementById("mvStruct").value;
   const method = document.getElementById("mvMethod").value;
@@ -979,26 +1078,25 @@ function _runMVAnalysis() {
   // Warn UN + many outcomes
   const nPsiPar = struct === "CS" ? 2 : struct === "Diag" ? outcomeIds.length : outcomeIds.length * (outcomeIds.length + 1) / 2;
   if (struct === "UN" && outcomeIds.length > 5)
-    warnings.push(`UN structure with P = ${outcomeIds.length} outcomes requires ${nPsiPar} Ψ parameters — optimizer instability likely. Consider CS or Diag.`);
+    msgs.push(`⚠️ UN structure with P = ${outcomeIds.length} outcomes requires ${nPsiPar} Ψ parameters — optimizer instability likely. Consider CS or Diag.`);
 
   // Warn overparameterized
   if (nPsiPar > studyIds.length / 3)
-    warnings.push(`Between-study covariance has ${nPsiPar} parameters but only ${studyIds.length} studies — model may be overparameterized.`);
+    msgs.push(`⚠️ Between-study covariance has ${nPsiPar} parameters but only ${studyIds.length} studies — model may be overparameterized.`);
 
-  if (warnings.length)
-    warningsEl.innerHTML = warnings.map(w => `<p style="color:var(--color-warning);margin:2px 0">⚠ ${escapeHTML(w)}</p>`).join("");
+  warningsEl.innerHTML = msgs.length ? msgs.map(m => `• ${m}`).join("<br>") : "";
 
   let V, res;
   try {
     V   = vcalc(rows, { rho });
     res = mvMeta(rows, V, { struct, method, alpha, moderators: mods });
   } catch (e) {
-    warningsEl.innerHTML += `<p style="color:var(--color-warning)">Error: ${escapeHTML(String(e))}</p>`;
+    warningsEl.innerHTML += (warningsEl.innerHTML ? "<br>" : "") + `• ❌ Error: ${escapeHTML(String(e))}`;
     return false;
   }
 
   if (res.error) {
-    warningsEl.innerHTML += `<p style="color:var(--color-warning)">Error: ${escapeHTML(res.error)}</p>`;
+    warningsEl.innerHTML += (warningsEl.innerHTML ? "<br>" : "") + `• ❌ Error: ${escapeHTML(res.error)}`;
     return false;
   }
 
@@ -1716,6 +1814,20 @@ function _drawMVForestCombined(svgEl, rows, res, alpha, { page = 0, pageSize = I
 document.getElementById("modeStandard").addEventListener("click",     () => { _mvMode = false; _applyModeToggle(); markStale(); });
 document.getElementById("modeMultivariate").addEventListener("click", () => { _mvMode = true;  _applyModeToggle(); markStale(); });
 document.getElementById("mvAddRow").addEventListener("click", () => { _mvAddRow(); markStale(); });
+document.getElementById("mvTableBody").addEventListener("keydown", e => {
+  if (!e.altKey || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
+  const row = e.target.closest("tr");
+  if (!row || !row.draggable) return;
+  e.preventDefault();
+  if (e.key === "ArrowUp") {
+    const prev = row.previousElementSibling;
+    if (prev && prev.draggable) row.parentNode.insertBefore(row, prev);
+  } else {
+    const next = row.nextElementSibling;
+    if (next && next.draggable) row.parentNode.insertBefore(next, row);
+  }
+  markStale();
+});
 document.getElementById("mvAddMod").addEventListener("click", _mvAddMod);
 document.getElementById("mvModName").addEventListener("keydown", e => { if (e.key === "Enter") _mvAddMod(); });
 document.getElementById("mvForestPageSize").addEventListener("change", e => {

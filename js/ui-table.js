@@ -344,6 +344,9 @@ export function addRow(values) {
 const _undoState = { timer: null, row: null, robKey: null };
 const _UNDO_MS   = 5000;
 
+let _companionCommit = null;
+export function registerDeleteCompanion(fn) { _companionCommit = fn; }
+
 export function commitPendingDelete() {
   if (!_undoState.row) return;
   clearTimeout(_undoState.timer);
@@ -353,7 +356,8 @@ export function commitPendingDelete() {
   _undoState.robKey = null;
   _undoState.timer  = null;
   _cb.renderRoBDataGrid();
-  _hideUndoToast();
+  hideUndoToast();
+  _companionCommit?.();
 }
 
 function _cancelPendingDelete() {
@@ -363,12 +367,12 @@ function _cancelPendingDelete() {
   _undoState.row    = null;
   _undoState.robKey = null;
   _undoState.timer  = null;
-  _hideUndoToast();
+  hideUndoToast();
   _cb.markStale();
   _cb.scheduleSave();
 }
 
-function _showUndoToast(label) {
+export function showUndoToast(label, undoFn) {
   const toast = document.getElementById("undoToast");
   const lbl   = document.getElementById("undoToastLabel");
   const btn   = document.getElementById("undoToastBtn");
@@ -376,11 +380,11 @@ function _showUndoToast(label) {
   if (!toast) return;
   if (lbl) lbl.textContent = label ? `"${label}" removed` : "Study removed";
   if (bar) { const newBar = bar.cloneNode(true); bar.replaceWith(newBar); }
-  btn.onclick = _cancelPendingDelete;
+  btn.onclick = undoFn;
   toast.hidden = false;
 }
 
-function _hideUndoToast() {
+export function hideUndoToast() {
   const toast = document.getElementById("undoToast");
   if (toast) toast.hidden = true;
 }
@@ -404,7 +408,7 @@ export function removeRow(btn) {
   _undoState.robKey = label || null;
   _undoState.timer  = setTimeout(commitPendingDelete, _UNDO_MS);
 
-  _showUndoToast(label);
+  showUndoToast(label, _cancelPendingDelete);
   _cb.markStale();
   _cb.scheduleSave();
 }
