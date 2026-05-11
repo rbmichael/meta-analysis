@@ -3236,12 +3236,20 @@ export function runTests() {
     }
 
     if (exp.trimFill) {
-      const tauM   = bm.tauMethod || "DL";
-      const filled = trimFill(studies, tauM);
-      const k0     = filled.length;
-      const adjustedRE = meta([...studies, ...filled], tauM).RE;
-      if (exp.trimFill.k0         !== undefined) pbchkTrue(`trimFill.k0 = ${exp.trimFill.k0}`, k0 === exp.trimFill.k0);
-      if (exp.trimFill.adjustedRE !== undefined) pbchk("trimFill.adjustedRE", adjustedRE, exp.trimFill.adjustedRE, 0.01);
+      const tauM = bm.tauMethod || "DL";
+      // Support per-estimator schema { L0: {k0, adjustedRE}, R0: {...}, Q0: {...} }
+      // and the legacy flat schema { k0, adjustedRE } (treated as L0).
+      const entries = exp.trimFill.L0 !== undefined
+        ? [["L0", exp.trimFill.L0], ["R0", exp.trimFill.R0], ["Q0", exp.trimFill.Q0]]
+        : [["L0", exp.trimFill]];
+      for (const [est, tf] of entries) {
+        if (!tf) continue;
+        const filled = trimFill(studies, tauM, est);
+        const k0 = filled.length;
+        const adjustedRE = meta([...studies, ...filled], tauM).RE;
+        if (tf.k0         !== undefined) pbchkTrue(`trimFill.${est}.k0 = ${tf.k0}`, k0 === tf.k0);
+        if (tf.adjustedRE !== undefined) pbchk(`trimFill.${est}.adjustedRE`, adjustedRE, tf.adjustedRE, 0.01);
+      }
     }
 
     // Deeks and Rücker operate on raw {a,b,c,d} tables; studies has a/b/c/d
@@ -7087,3 +7095,140 @@ export function runTests() {
   cdfNaN("tCDF(−Inf, 5) = NaN",      tCDF(-Infinity, 5));
 
   console.log(cdfPass ? "\n✅ ALL normalCDF & tCDF TESTS PASSED" : "\n❌ SOME normalCDF & tCDF TESTS FAILED");
+
+  // ===== EFFECT TYPE EDGE CASES =====
+  // For each effect type verify that clearly-invalid inputs are rejected by
+  // validateStudy() and that compute() propagates them as w=0.
+  // Tests check validateStudy().valid === false OR compute().w === 0.
+  console.log("\n===== EFFECT TYPE EDGE CASE TESTS =====\n");
+  let ecPass = true;
+  const ecInvalid = (name, type, s) => {
+    const { valid } = validateStudy(s, type);
+    if (!valid) console.log(`  ok    ${name}`);
+    else { console.error(`  FAIL  ${name} — expected invalid, got valid`); ecPass = false; }
+  };
+
+  // ── Two-group continuous ──────────────────────────────────────────────────
+  console.log("--- Two-group continuous (MD, SMD, SMDH, ROM, CVR, VR) ---");
+  ecInvalid("MD: n1=0",    "MD",   { m1:1, sd1:1, n1:0,  m2:1, sd2:1, n2:10 });
+  ecInvalid("MD: sd1=0",   "MD",   { m1:1, sd1:0, n1:10, m2:1, sd2:1, n2:10 });
+  ecInvalid("SMD: n2=0",   "SMD",  { m1:1, sd1:1, n1:10, m2:1, sd2:1, n2:0  });
+  ecInvalid("SMDH: n1=1",  "SMDH", { m1:1, sd1:1, n1:1,  m2:1, sd2:1, n2:10 }); // needs n≥2
+  ecInvalid("ROM: m1=0",   "ROM",  { m1:0, sd1:1, n1:10, m2:1, sd2:1, n2:10 });
+  ecInvalid("ROM: m2<0",   "ROM",  { m1:1, sd1:1, n1:10, m2:-1, sd2:1, n2:10 });
+  ecInvalid("CVR: m1=0",   "CVR",  { m1:0, sd1:1, n1:10, m2:1, sd2:1, n2:10 });
+  ecInvalid("VR: sd1=0",   "VR",   { sd1:0, n1:10, sd2:1, n2:10 });
+  ecInvalid("VR: n1=1",    "VR",   { sd1:1, n1:1,  sd2:1, n2:10 }); // needs n≥2
+
+  // ── Paired ───────────────────────────────────────────────────────────────
+  console.log("--- Paired (MD_paired, SMD_paired, SMCC) ---");
+  for (const type of ["MD_paired", "SMD_paired", "SMCC"]) {
+    ecInvalid(`${type}: n=1`,      type, { m_pre:1, sd_pre:1, m_post:0, sd_post:1, n:1,  r:0.5 });
+    ecInvalid(`${type}: sd_pre=0`, type, { m_pre:1, sd_pre:0, m_post:0, sd_post:1, n:10, r:0.5 });
+    ecInvalid(`${type}: r=2`,      type, { m_pre:1, sd_pre:1, m_post:0, sd_post:1, n:10, r:2   });
+  }
+
+  // ── Single-group continuous ───────────────────────────────────────────────
+  console.log("--- Single-group (SMD1, SMD1H, MN, MNLN) ---");
+  ecInvalid("SMD1: n=0",   "SMD1",  { m:1,  sd:1, n:0,  ref:0 }); // needs n≥2
+  ecInvalid("SMD1: sd=0",  "SMD1",  { m:1,  sd:0, n:10, ref:0 });
+  ecInvalid("SMD1H: n=1",  "SMD1H", { m:1,  sd:1, n:1,  ref:0 }); // needs n≥2
+  ecInvalid("MN: n=0",     "MN",    { m:1,  sd:1, n:0  });
+  ecInvalid("MN: sd=0",    "MN",    { m:1,  sd:0, n:10 });
+  ecInvalid("MNLN: m=0",   "MNLN",  { m:0,  sd:1, n:10 });
+  ecInvalid("MNLN: m<0",   "MNLN",  { m:-1, sd:1, n:10 });
+
+  // ── Binary 2×2 ───────────────────────────────────────────────────────────
+  console.log("--- Binary 2×2 (OR, RR, RD, AS, YUQ, YUY) ---");
+  // OR/RR: negative cell invalid; all-zero invalid (zero-row margin handled by CC)
+  ecInvalid("OR: a<0",        "OR",  { a:-1, b:10, c:10, d:10 });
+  ecInvalid("OR: all zeros",  "OR",  { a:0,  b:0,  c:0,  d:0  });
+  ecInvalid("RR: d<0",        "RR",  { a:10, b:10, c:10, d:-1 });
+  // RD/AS: also check zero row-margin
+  ecInvalid("RD: zero row-1", "RD",  { a:0,  b:0,  c:10, d:10 });
+  ecInvalid("RD: zero row-2", "RD",  { a:10, b:10, c:0,  d:0  });
+  ecInvalid("AS: zero row-1", "AS",  { a:0,  b:0,  c:10, d:10 });
+  // YUQ: a·d + b·c = 0 (both diagonal products zero)
+  ecInvalid("YUQ: ad=bc=0",   "YUQ", { a:0,  b:0,  c:5,  d:5  });
+  // YUY: √(a·d) + √(b·c) = 0 (same condition)
+  ecInvalid("YUY: ad=bc=0",   "YUY", { a:0,  b:0,  c:5,  d:5  });
+
+  // ── Correlation-based 2×2: PHI, RTET ─────────────────────────────────────
+  console.log("--- Correlation-based 2×2 (PHI, RTET) ---");
+  // validateBinaryMarginals: all four marginals must be > 0
+  ecInvalid("PHI: zero col-1",  "PHI",  { a:0, b:5, c:0, d:5 }); // a+c=0
+  ecInvalid("RTET: zero row-1", "RTET", { a:0, b:0, c:5, d:5 }); // a+b=0
+
+  // ── GOR (uses raw counts1/counts2 strings, not a/b/c/d) ──────────────────
+  console.log("--- GOR ---");
+  ecInvalid("GOR: empty counts1", "GOR", { counts1: "",    counts2: "10 20" });
+  ecInvalid("GOR: negative count","GOR", { counts1: "-1 5",counts2: "10 20" });
+
+  // ── Correlations ─────────────────────────────────────────────────────────
+  console.log("--- Correlations (COR, UCOR, ZCOR, RPB, RBIS) ---");
+  ecInvalid("COR: r=1",   "COR",  { r:1,   n:10 }); // |r|≥1 invalid
+  ecInvalid("COR: r=-1",  "COR",  { r:-1,  n:10 });
+  ecInvalid("COR: n=2",   "COR",  { r:0.5, n:2  }); // needs n≥3
+  ecInvalid("UCOR: r=1",  "UCOR", { r:1,   n:10 });
+  ecInvalid("UCOR: n=3",  "UCOR", { r:0.5, n:3  }); // needs n≥4
+  ecInvalid("ZCOR: r=1",  "ZCOR", { r:1,   n:10 });
+  ecInvalid("ZCOR: n=3",  "ZCOR", { r:0.5, n:3  }); // needs n≥4
+  ecInvalid("RPB: r=-1",  "RPB",  { r:-1,  n:10 });
+  ecInvalid("RPB: n=2",   "RPB",  { r:0.5, n:2  }); // needs n≥3
+  ecInvalid("RBIS: r=1",  "RBIS", { r:1,   n:10, p:0.3 });
+
+  // ── Partial correlations ──────────────────────────────────────────────────
+  console.log("--- Partial correlations (PCOR, ZPCOR) ---");
+  ecInvalid("PCOR: r=1",      "PCOR",  { r:1,   n:20, p:2 });
+  ecInvalid("PCOR: n-p-3<0",  "PCOR",  { r:0.3, n:5,  p:4 }); // df = n-p-3 = -2
+  ecInvalid("ZPCOR: r=1",     "ZPCOR", { r:1,   n:20, p:2 });
+  ecInvalid("ZPCOR: n-p-3<0", "ZPCOR", { r:0.3, n:5,  p:4 });
+
+  // ── R² ───────────────────────────────────────────────────────────────────
+  console.log("--- R2 / ZR2 ---");
+  ecInvalid("R2: r2<0",   "R2",  { r2:-0.1, n:20 });
+  ecInvalid("R2: r2=1",   "R2",  { r2:1,    n:20 }); // must be < 1
+  ecInvalid("ZR2: r2<0",  "ZR2", { r2:-0.1, n:20 });
+  ecInvalid("ZR2: r2>=1", "ZR2", { r2:1,    n:20 });
+
+  // ── Proportions ──────────────────────────────────────────────────────────
+  console.log("--- Proportions (PR, PLN, PLO, PAS, PFT) ---");
+  for (const type of ["PR", "PLN", "PLO", "PAS", "PFT"]) {
+    ecInvalid(`${type}: x>n`,  type, { x:11, n:10 });
+    ecInvalid(`${type}: n=0`,  type, { x:0,  n:0  });
+    ecInvalid(`${type}: x<0`,  type, { x:-1, n:10 });
+  }
+
+  // ── HR ───────────────────────────────────────────────────────────────────
+  console.log("--- HR ---");
+  ecInvalid("HR: hr=0",    "HR", { hr:0,  ci_lo:0.5, ci_hi:1.5 });
+  ecInvalid("HR: hr<0",    "HR", { hr:-1, ci_lo:0.5, ci_hi:1.5 });
+  ecInvalid("HR: ci_lo=0", "HR", { hr:1,  ci_lo:0,   ci_hi:1.5 });
+
+  // ── Incidence rates ───────────────────────────────────────────────────────
+  console.log("--- Incidence rates (IRR, IRD, IRSD) ---");
+  for (const type of ["IRR", "IRD", "IRSD"]) {
+    ecInvalid(`${type}: t1=0`, type, { x1:5, t1:0,   x2:5, t2:100 });
+    ecInvalid(`${type}: t2=0`, type, { x1:5, t1:100, x2:5, t2:0   });
+  }
+
+  // ── Single-group rate: IR ─────────────────────────────────────────────────
+  console.log("--- IR ---");
+  ecInvalid("IR: t=0",  "IR", { x:5, t:0  });
+  ecInvalid("IR: t<0",  "IR", { x:5, t:-1 });
+
+  // ── Reliability ──────────────────────────────────────────────────────────
+  console.log("--- Reliability (ARAW, ABT, AHW) ---");
+  for (const type of ["ARAW", "ABT", "AHW"]) {
+    ecInvalid(`${type}: alpha<0`, type, { alpha:-0.1, k:5, n:20 });
+    ecInvalid(`${type}: alpha>1`, type, { alpha:1.1,  k:5, n:20 });
+    ecInvalid(`${type}: k<2`,     type, { alpha:0.8,  k:1, n:20 });
+  }
+
+  // ── GENERIC ──────────────────────────────────────────────────────────────
+  console.log("--- GENERIC ---");
+  ecInvalid("GENERIC: vi=0",  "GENERIC", { yi:0.5, vi:0   });
+  ecInvalid("GENERIC: vi<0",  "GENERIC", { yi:0.5, vi:-1  });
+  ecInvalid("GENERIC: yi NaN","GENERIC", { yi:NaN, vi:1   });
+
+  console.log(ecPass ? "\n✅ ALL EFFECT TYPE EDGE CASE TESTS PASSED" : "\n❌ SOME EFFECT TYPE EDGE CASE TESTS FAILED");

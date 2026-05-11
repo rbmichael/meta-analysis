@@ -2391,7 +2391,11 @@ export const PUB_BIAS_BENCHMARKS = [
       failSafe: { rosenthal: 656, orwin: 44 },
       harbord:  { intercept: -2.093, interceptP: 0.235 },
       peters:   { intercept: -0.357, interceptP: 0.045 },
-      trimFill: { k0: 0, adjustedRE: -0.747 },
+      trimFill: {
+        L0: { k0: 0, adjustedRE: -0.747 },
+        R0: { k0: 0, adjustedRE: -0.747 },
+        Q0: { k0: 0, adjustedRE: -0.747 },
+      },
       tes:      { O: 8, E: 8.703, chi2: 0.172, p: 0.661 },
       // hc() from metafor: verified via generate.R block HC-1
       hc:       { beta: -0.4361, tau2: 0.3663, t0: 0.3252, ciLb: -1.1910, ciUb: 0.3187 },
@@ -2652,19 +2656,19 @@ export const INFLUENCE_BENCHMARKS = [
       { label: "Comstock et al 1976",     yi: -0.0173139482168798, vi: 0.0714046596839863 }
     ],
     expected: [
-      { label: "Aronson 1948",            DFFITS: -0.0501725, highDffits: false, covRatio: 1.0625800, highCovRatio: false },
-      { label: "Ferguson & Simes 1949",   DFFITS: -0.3363976, highDffits: false, covRatio: 1.0429284, highCovRatio: false },
-      { label: "Rosenthal et al 1960",    DFFITS: -0.1638125, highDffits: false, covRatio: 1.0455078, highCovRatio: false },
-      { label: "Hart & Sutherland 1977",  DFFITS: -0.6291024, highDffits: false, covRatio: 0.8425990, highCovRatio: false },
-      { label: "Frimodt-Moller et al 1973", DFFITS: 0.2727445, highDffits: false, covRatio: 1.1467962, highCovRatio: true  },
-      { label: "Stein & Aronson 1953",    DFFITS: -0.0069973, highDffits: false, covRatio: 1.3202119, highCovRatio: true  },
-      { label: "Vandiviere et al 1973",   DFFITS: -0.3294041, highDffits: false, covRatio: 1.0408079, highCovRatio: false },
-      { label: "TPT Madras 1980",         DFFITS:  0.5127745, highDffits: false, covRatio: 0.8324774, highCovRatio: false },
-      { label: "Coetzee & Berjak 1968",   DFFITS:  0.1373670, highDffits: false, covRatio: 1.1464091, highCovRatio: true  },
-      { label: "Rosenthal et al 1961",    DFFITS: -0.3507962, highDffits: false, covRatio: 1.0511511, highCovRatio: false },
-      { label: "Comstock et al 1974",     DFFITS:  0.2334335, highDffits: false, covRatio: 1.3318039, highCovRatio: true  },
-      { label: "Comstock & Webster 1969", DFFITS:  0.2566754, highDffits: false, covRatio: 1.0411904, highCovRatio: false },
-      { label: "Comstock et al 1976",     DFFITS:  0.3583792, highDffits: false, covRatio: 1.1171108, highCovRatio: true  }
+      { label: "Aronson 1948",            DFFITS: -0.0501725, highDffits: false, covRatio: 1.0625800, highCovRatio: false, RE_loo: -0.7051252, tau2_loo: 0.3121715, hat: 0.0503649, cookD: 0.0025308, stdResidual: -0.2199666, DFBETA: -0.0488034, deltaTau2: -0.0034112, outlier: false, influential: false, highLeverage: false, highCookD: false },
+      { label: "Ferguson & Simes 1949",   DFFITS: -0.3363976, highDffits: false, covRatio: 1.0429284, highCovRatio: false, RE_loo: -0.6545159, tau2_loo: 0.2999746, hat: 0.0634733, cookD: 0.1111881, stdResidual: -1.2280673, DFBETA: -0.3265141, deltaTau2:  0.0087857, outlier: false, influential: false, highLeverage: false, highCookD: false },
+      { label: "Rosenthal et al 1960",    DFFITS: -0.1638125, highDffits: false, covRatio: 1.0455078, highCovRatio: false, RE_loo: -0.6848417, tau2_loo: 0.3085271, hat: 0.0441203, cookD: 0.0268259, stdResidual: -0.7449915, DFBETA: -0.1601819, deltaTau2:  0.0002332, outlier: false, influential: false, highLeverage: false, highCookD: false },
+      { label: "Hart & Sutherland 1977",  DFFITS: -0.6291024, highDffits: false, covRatio: 0.8425990, highCovRatio: false, RE_loo: -0.6186969, tau2_loo: 0.2167336, hat: 0.0971765, cookD: 0.2849892, stdResidual: -1.2686660, DFBETA: -0.5815723, deltaTau2:  0.0920267, outlier: false, influential: false, highLeverage: false, highCookD: false },
+      { label: "Frimodt-Moller et al 1973", DFFITS: 0.2727445, highDffits: false, covRatio: 1.1467962, highCovRatio: true,  RE_loo: -0.7640357, tau2_loo: 0.3262089, hat: 0.0887538, cookD: 0.0779954, stdResidual:  0.8276505, DFBETA:  0.2607903, deltaTau2: -0.0174486, outlier: false, influential: false, highLeverage: false, highCookD: false },
+      { label: "Stein & Aronson 1953",    DFFITS: -0.0069973, highDffits: false, covRatio: 1.3202119, highCovRatio: true,  RE_loo: -0.7127273, tau2_loo: 0.3829190, hat: 0.1012106, cookD: 0.0000605, stdResidual: -0.1281471, DFBETA: -0.0067675, deltaTau2: -0.0741588, outlier: false, influential: false, highLeverage: false, highCookD: false },
+      { label: "Vandiviere et al 1973",   DFFITS: -0.3294041, highDffits: false, covRatio: 1.0408079, highCovRatio: false, RE_loo: -0.6556939, tau2_loo: 0.3005713, hat: 0.0600791, cookD: 0.1068361, stdResidual: -1.2434761, DFBETA: -0.3203862, deltaTau2:  0.0081890, outlier: false, influential: false, highLeverage: false, highCookD: false },
+      { label: "TPT Madras 1980",         DFFITS:  0.5127745, highDffits: false, covRatio: 0.8324774, highCovRatio: false, RE_loo: -0.7900866, tau2_loo: 0.2108852, hat: 0.1021634, cookD: 0.1806440, stdResidual:  1.2983719, DFBETA:  0.4658279, deltaTau2:  0.0978750, outlier: false, influential: false, highLeverage: false, highCookD: false },
+      { label: "Coetzee & Berjak 1968",   DFFITS:  0.1373670, highDffits: false, covRatio: 1.1464091, highCovRatio: true,  RE_loo: -0.7392634, tau2_loo: 0.3266093, hat: 0.0874842, cookD: 0.0197920, stdResidual:  0.4049218, DFBETA:  0.1313937, deltaTau2: -0.0178490, outlier: false, influential: false, highLeverage: false, highCookD: false },
+      { label: "Rosenthal et al 1961",    DFFITS: -0.3507962, highDffits: false, covRatio: 1.0511511, highCovRatio: false, RE_loo: -0.6525852, tau2_loo: 0.2946449, hat: 0.0836825, cookD: 0.1185083, stdResidual: -1.0636685, DFBETA: -0.3357699, deltaTau2:  0.0141154, outlier: false, influential: false, highLeverage: false, highCookD: false },
+      { label: "Comstock et al 1974",     DFFITS:  0.2334335, highDffits: false, covRatio: 1.3318039, highCovRatio: true,  RE_loo: -0.7606942, tau2_loo: 0.3878092, hat: 0.0994753, cookD: 0.0679029, stdResidual:  0.6612752, DFBETA:  0.2258001, deltaTau2: -0.0790489, outlier: false, influential: false, highLeverage: false, highCookD: false },
+      { label: "Comstock & Webster 1969", DFFITS:  0.2566754, highDffits: false, covRatio: 1.0411904, highCovRatio: false, RE_loo: -0.7600128, tau2_loo: 0.3093804, hat: 0.0379770, cookD: 0.0659308, stdResidual:  1.2647444, DFBETA:  0.2516397, deltaTau2: -0.0006202, outlier: false, influential: false, highLeverage: false, highCookD: false },
+      { label: "Comstock et al 1976",     DFFITS:  0.3583792, highDffits: false, covRatio: 1.1171108, highCovRatio: true,  RE_loo: -0.7789237, tau2_loo: 0.3177033, hat: 0.0840391, cookD: 0.1314570, stdResidual:  1.1301190, DFBETA:  0.3430392, deltaTau2: -0.0089430, outlier: false, influential: false, highLeverage: false, highCookD: false }
     ],
     citation: "metafor 4.8-0 influence.rma.uni(), dat.bcg, DL method. DFFITS cross-validated to ≤ 3e-17; covRatio to ≤ 1.78e-15."
   }
