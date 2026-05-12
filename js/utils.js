@@ -269,12 +269,9 @@ export function logGamma(z) {
 // gamma ratio Γ(df/2) / (√(df/2) · Γ((df−1)/2)) — this approximation matches
 // to < 0.1% for df ≥ 3. See also Hedges & Olkin (1985, pp. 80–81).
 //
-// Variance: uses the large-sample formula Var(g) ≈ (n1+n2)/(n1·n2) + d²/(2·N)
-// (Hedges & Olkin 1985, p. 79, eq. 14), where N = n1+n2. Two approximations:
-//   1. d² in place of g² (differ by J²; negligible when J ≈ 1, i.e. df ≥ 10).
-//   2. N in the denominator instead of df = N−2 (negligible for N ≥ 20).
-// The strict formula is J² × [(n1+n2)/(n1·n2) + d²/(2·(n1+n2−2))];
-// both forms agree with metafor output to within benchmark tolerances.
+// Variance: Hedges & Olkin (1985, p. 79): Var(g) ≈ (n1+n2)/(n1·n2) + g²/(2·df)
+// where df = n1+n2−2.  Uses g² (the corrected estimator) in the second term,
+// matching metafor's escalc(measure="SMD") implementation.
 export function hedgesG(s, options = {}) {
   const n1 = s.n1, n2 = s.n2;
   const df = n1 + n2 - 2;
@@ -283,7 +280,7 @@ export function hedgesG(s, options = {}) {
   const applyHedges = options.hedgesCorrection ?? true;
   const J  = 1 - (3 / (4 * df - 1));
   const g  = applyHedges ? d * J : d;
-  const varBase = (n1 + n2) / (n1 * n2) + (d * d) / (2 * (n1 + n2));
+  const varBase = (n1 + n2) / (n1 * n2) + (g * g) / (2 * df);
   return { es: g, var: Math.max(varBase, MIN_VAR) };
 }
 

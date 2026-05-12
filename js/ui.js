@@ -3999,6 +3999,7 @@ function _renderAllResults(ctx) {
     <div class="result-re-primary">
       <span class="result-label">${profile.label} (${methodLabel})</span>
       <span class="result-re-value">${fmt(FE_disp)}</span>
+      <span class="result-se">SE = ${fmt(m.seFE)}</span>
       <span class="result-ci">${ciLbl} [${fmt(feCi_disp.lb)}, ${fmt(feCi_disp.ub)}]</span>
     </div>
     <div class="result-method-note">Fixed-effect only — no τ², RE estimate, or prediction interval.</div>
@@ -4011,7 +4012,8 @@ function _renderAllResults(ctx) {
     <div class="result-re-primary">
       <span class="result-label">${profile.label} (RE)</span>
       <span class="result-re-value">${fmt(RE_disp)}</span>
-      <span class="result-ci">${ciLbl} [${fmt(ci_disp.lb)}, ${fmt(ci_disp.ub)}]${m.isClustered ? ` &nbsp;<span class="result-se">SE (model) = ${fmt(m.seRE)}</span>` : ""}</span>
+      <span class="result-se">SE = ${fmt(m.seRE)}</span>
+      <span class="result-ci">${ciLbl} [${fmt(ci_disp.lb)}, ${fmt(ci_disp.ub)}]</span>
     </div>
     ${useTF && mAdjusted ? `<div class="result-re-adjusted">RE (adjusted): <b>${fmt(RE_adj_disp)}</b>${hasClusters ? ` <span class="result-note">(cluster-robust not applied to imputed studies)</span>` : ""}</div>` : ""}
     <div class="result-stat-row">
@@ -4025,6 +4027,7 @@ function _renderAllResults(ctx) {
     <div class="result-fe-secondary">
       <span class="result-label">${profile.label} (FE)</span>
       <span>${fmt(FE_disp)}</span>
+      <span class="result-se">SE = ${fmt(m.seFE)}</span>
       <span class="result-ci">${ciLbl} [${fmt(feCi_disp.lb)}, ${fmt(feCi_disp.ub)}]</span>
     </div>
     ${robustCILine}${clesLine}<div class="result-het-group">
