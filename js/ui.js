@@ -159,9 +159,28 @@ let _lastReg = null;
 // Debounced autosave trigger. Resets the 1.2 s idle timer on every call; the
 // actual save fires once the user pauses for 1.2 s. Does NOT call runAnalysis()
 // — analysis is triggered separately by the callers.
+// Build a complete session object for autosave, including MV state when active.
+function _buildAutosaveSession() {
+  const session = gatherSessionState(moderators, scaleModerators, interactions, { domains: _robDomains, data: _robData });
+  if (_mvMode) session.mv = _gatherMVState();
+  return session;
+}
+
+// Return true if the session has any data worth preserving.
+// Prevents an effect-type change (which clears the standard table) from
+// overwriting a valid draft with an empty one.
+function _autosaveHasData(session) {
+  if (session.studies.length > 0) return true;
+  if (session.mv) return session.mv.rows.some(r => r.study_id || r.outcome_id || r.yi || r.vi);
+  return false;
+}
+
 function scheduleSave() {
   clearTimeout(_saveTimer);
-  _saveTimer = setTimeout(() => saveDraft(gatherSessionState(moderators, scaleModerators, interactions, { domains: _robDomains, data: _robData })), 1200);
+  _saveTimer = setTimeout(() => {
+    const session = _buildAutosaveSession();
+    if (_autosaveHasData(session)) saveDraft(session);
+  }, 1200);
 }
 
 // ---------------- DEBOUNCED ANALYSIS ----------------
@@ -174,7 +193,8 @@ let _analysisRunning = false;
 function flushSave() {
   clearTimeout(_saveTimer);
   _saveTimer = null;
-  saveDraft(gatherSessionState(moderators, scaleModerators, interactions, { domains: _robDomains, data: _robData }));
+  const session = _buildAutosaveSession();
+  if (_autosaveHasData(session)) saveDraft(session);
 }
 
 window.addEventListener("beforeunload", flushSave);
