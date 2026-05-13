@@ -126,15 +126,18 @@ export function heterogeneityCIs(studies, tau2, alpha = 0.05) {
 
   // --- I² and H² CIs ---
   // Convert τ²CI bounds to I²/H²CI using the τ²-based formula
-  // (Higgins & Thompson 2002, Stat Med 21:1539–1558, eq. 9 rearranged):
-  //   σ²_typical = (k−1) / Σ(1/vᵢ)   — "typical" within-study variance
-  //   I² = τ² / (τ² + σ²_typical) × 100 %
-  //   H² = τ² / σ²_typical + 1
-  // This τ²-based form is used here (not the Q-based formula used in meta())
-  // because the input is already a τ² value from the Q-profile inversion.
-  // The two formulas agree when τ² = τ²_DL; they diverge for REML/ML.
-  const sumWFE = studies.reduce((acc, d) => acc + 1 / d.vi, 0);
-  const sigma2 = df / sumWFE;
+  // (Higgins & Thompson 2002, Stat Med 21:1539–1558, eq. 6 and 9):
+  //   c          = Σwᵢ − Σwᵢ²/Σwᵢ        — H&T eq. 6 (wᵢ = 1/vᵢ)
+  //   σ²_typical = (k−1) / c              — H&T eq. 9 rearranged
+  //   I²         = τ² / (τ² + σ²_typical) × 100 %
+  //   H²         = τ² / σ²_typical + 1
+  // Using c (not Σwᵢ) in the denominator matches metafor's confint() and the
+  // Higgins & Thompson paper; it gives larger σ²_typical, hence smaller I²/H²
+  // CI upper bounds, especially when study weights are heterogeneous.
+  const sumWFE  = studies.reduce((acc, d) => acc + 1 / d.vi,          0);
+  const sumWFE2 = studies.reduce((acc, d) => acc + 1 / (d.vi * d.vi), 0);
+  const c       = sumWFE - sumWFE2 / sumWFE;
+  const sigma2  = c > 0 ? df / c : df / sumWFE;
 
   const toI2 = t => 100 * t / (t + sigma2);
   const toH2 = t => t / sigma2 + 1;
