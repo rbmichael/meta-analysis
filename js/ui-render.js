@@ -8,7 +8,7 @@
 // Extracted from ui.js (item 4.2.1 of TECHNICAL IMPROVEMENT ROADMAP).
 // =============================================================================
 
-import { fmt } from "./utils.js";
+import { fmt, fmtPval } from "./utils.js";
 import { effectProfiles } from "./profiles.js";
 import { Z_95 } from "./constants.js";
 import { leaveOneOut, estimatorComparison } from "./influence.js";
@@ -92,9 +92,10 @@ export function regStars(p) {
 
 export function regFmtP(p) {
   if (!isFinite(p)) return "—";
-  if (p < 0.0001) return `<span class="reg-sig-3">&lt;0.0001</span>`;
-  const cls = p < 0.001 ? "reg-sig-3" : p < 0.01 ? "reg-sig-2" : p < 0.05 ? "reg-sig-1" : "";
-  return cls ? `<span class="${cls}">${fmt(p)}</span>` : fmt(p);
+  if (p < 0.001) return `<span class="reg-sig-3">&lt; .001</span>`;
+  const s   = p.toFixed(3).replace(/^0\./, ".");
+  const cls = p < 0.01 ? "reg-sig-2" : p < 0.05 ? "reg-sig-1" : "";
+  return cls ? `<span class="${cls}">${s}</span>` : s;
 }
 
 export function buildRegCoeffRows(reg, adjPs = null, mods = []) {
@@ -521,7 +522,7 @@ export const TAU_METHOD_LABELS = {
 };
 
 function sensFv(v)  { return isFinite(v) ? v.toFixed(3) : "—"; }
-function sensFvp(v) { return isFinite(v) ? (v < 0.001 ? "<.001" : v.toFixed(3)) : "—"; }
+function sensFvp(v) { return isFinite(v) ? (v < 0.001 ? "< .001" : v.toFixed(3).replace(/^0\./, ".")) : "—"; }
 function sensTrunc(s, n) { const e = escapeHTML(s); return e.length > n ? e.slice(0, n - 1) + "\u2026" : e; }
 
 function buildLooBody(loo, fullSig, fullEst, profile) {
@@ -745,12 +746,7 @@ export function renderPCurvePanel(pcurve) {
   }
 
   function fmtZ(z) { return isFinite(z) ? z.toFixed(3) : "—"; }
-  function fmtP(p) {
-    if (!isFinite(p)) return "—";
-    if (p < 0.001)  return "< 0.001";
-    if (p < 0.01)   return "< 0.01";
-    return p.toFixed(3);
-  }
+  function fmtP(p) { return fmtPval(p); }
 
   const verdictLabels = {
     "evidential":     "Evidential value",
@@ -762,8 +758,8 @@ export function renderPCurvePanel(pcurve) {
   panel.innerHTML = `
     <div class="pcurve-summary">
       <span>P-curve &nbsp;·&nbsp; <strong>${pcurve.k}</strong> significant result${pcurve.k !== 1 ? "s" : ""} (p &lt; .05)</span>
-      <span>Right-skew test: Z = <strong>${fmtZ(pcurve.rightSkewZ)}</strong>, p = <strong>${fmtP(pcurve.rightSkewP)}</strong></span>
-      <span>Flatness test: Z = <strong>${fmtZ(pcurve.flatnessZ)}</strong>, p = <strong>${fmtP(pcurve.flatnessP)}</strong></span>
+      <span>Right-skew test: Z = <strong>${fmtZ(pcurve.rightSkewZ)}</strong>, p <strong>${fmtP(pcurve.rightSkewP)}</strong></span>
+      <span>Flatness test: Z = <strong>${fmtZ(pcurve.flatnessZ)}</strong>, p <strong>${fmtP(pcurve.flatnessP)}</strong></span>
       <span class="status-pill ${pcurve.verdict}">${verdictLabels[pcurve.verdict] ?? pcurve.verdict}</span>
     </div>`;
 
@@ -809,8 +805,8 @@ export function renderPUniformPanel(puniform, m, profile) {
     <div class="puniform-summary">
       <span>P-uniform &nbsp;·&nbsp; <strong>${puniform.k}</strong> significant result${puniform.k !== 1 ? "s" : ""} (p &lt; .05)</span>
       <span>Estimate: <strong>${est}</strong> [${lo}, ${hi}]</span>
-      <span>Significance test: Z = <strong>${fmtZ(puniform.Z_sig)}</strong>, p = <strong>${fmtP(puniform.p_sig)}</strong></span>
-      <span>Bias test: Z = <strong>${fmtZ(puniform.Z_bias)}</strong>, p = <strong>${fmtP(puniform.p_bias)}</strong></span>
+      <span>Significance test: Z = <strong>${fmtZ(puniform.Z_sig)}</strong>, p <strong>${fmtP(puniform.p_sig)}</strong></span>
+      <span>Bias test: Z = <strong>${fmtZ(puniform.Z_bias)}</strong>, p <strong>${fmtP(puniform.p_bias)}</strong></span>
       ${flags.join(" ")}
     </div>`;
 
@@ -870,7 +866,7 @@ export function renderSelectionModelPanel(r, mode, weightFn, profile) {
           <tr><td>Adjusted τ²</td>
               <td>${fmtV(r.tau2)} &nbsp;·&nbsp; unadjusted: ${fmtV(r.tau2_unsel)}</td></tr>
           <tr><td>LRT (H₀: δ = 0)</td>
-              <td>χ²(1) = ${fmtV(r.LRT)}, p = ${fmtP(r.LRTp)}</td></tr>
+              <td>χ²(1) = ${fmtV(r.LRT)}, p ${fmtP(r.LRTp)}</td></tr>
         </tbody>
       </table>
       ${convNote}`;
@@ -903,7 +899,7 @@ export function renderSelectionModelPanel(r, mode, weightFn, profile) {
           <tr><td>Adjusted τ²</td>
               <td>${fmtV(r.tau2)} &nbsp;·&nbsp; unadjusted: ${fmtV(r.tau2_unsel)}</td></tr>
           <tr><td>LRT (H₀: δ = 0)</td>
-              <td>χ²(1) = ${fmtV(r.LRT)}, p = ${fmtP(r.LRTp)}</td></tr>
+              <td>χ²(1) = ${fmtV(r.LRT)}, p ${fmtP(r.LRTp)}</td></tr>
         </tbody>
       </table>
       ${convNote}`;
@@ -936,7 +932,7 @@ export function renderSelectionModelPanel(r, mode, weightFn, profile) {
           <tr><td>Adjusted τ²</td>
               <td>${fmtV(r.tau2)} &nbsp;·&nbsp; unadjusted: ${fmtV(r.tau2_unsel)}</td></tr>
           <tr><td>LRT (H₀: δ = 0)</td>
-              <td>χ²(1) = ${fmtV(r.LRT)}, p = ${fmtP(r.LRTp)}</td></tr>
+              <td>χ²(1) = ${fmtV(r.LRT)}, p ${fmtP(r.LRTp)}</td></tr>
         </tbody>
       </table>
       ${convNote}`;
@@ -971,7 +967,7 @@ export function renderSelectionModelPanel(r, mode, weightFn, profile) {
           <tr><td>Adjusted τ²</td>
               <td>${fmtV(r.tau2)} &nbsp;·&nbsp; unadjusted: ${fmtV(r.tau2_unsel)}</td></tr>
           <tr><td>LRT (H₀: a = b = 1)</td>
-              <td>χ²(2) = ${fmtV(r.LRT)}, p = ${fmtP(r.LRTp)}</td></tr>
+              <td>χ²(2) = ${fmtV(r.LRT)}, p ${fmtP(r.LRTp)}</td></tr>
         </tbody>
       </table>
       ${convNote}`;
@@ -1017,7 +1013,7 @@ export function renderSelectionModelPanel(r, mode, weightFn, profile) {
 
   // ---- LRT row (MLE only) ----
   const lrtRow = isMLE
-    ? `<tr><td>LRT (H₀: no selection)</td><td colspan="${K}">χ²(${r.LRTdf}) = ${fmtV(r.LRT)}, p = ${fmtP(r.LRTp)}</td></tr>`
+    ? `<tr><td>LRT (H₀: no selection)</td><td colspan="${K}">χ²(${r.LRTdf}) = ${fmtV(r.LRT)}, p ${fmtP(r.LRTp)}</td></tr>`
     : "";
 
   // ---- Convergence note (MLE only) ----
@@ -1214,7 +1210,7 @@ export function buildSubgroupHTML(subgroup, profile, hasClusters) {
       <tr><th>Group</th><th>k</th><th>Effect</th><th>SE</th><th>CI</th><th>τ²</th><th>I² (%)</th></tr>
       ${rows}
       <tr style="font-weight:bold;">
-        <td colspan="7">Q_between = ${subgroup.Qbetween.toFixed(3)}, df = ${subgroup.df}, p = ${subgroup.p.toFixed(4)}</td>
+        <td colspan="7">Q_between(${subgroup.df}) = ${subgroup.Qbetween.toFixed(3)}, p ${fmtPval(subgroup.p)}</td>
       </tr>
     </table>`;
 }
@@ -1240,7 +1236,7 @@ export function renderPermResults(permResult, reg) {
   function fmtP(p) {
     if (!isFinite(p)) return "NA";
     if (p < 0.001) return "< .001";
-    return p.toFixed(3);
+    return p.toFixed(3).replace(/^0\./, ".");
   }
 
   const omniP   = permPval(QM_dist, reg.QM);

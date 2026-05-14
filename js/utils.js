@@ -39,6 +39,15 @@ export function fmt(value, digits = 3) {
  return round(value, digits).toFixed(digits);
 }
 
+// APA-style inline p-value for use as "p ${fmtPval(p)}".
+// Omits leading zero (APA convention for statistics bounded by 1).
+// Examples: p < .001  |  p = .047  |  p = .234
+export function fmtPval(p) {
+  if (!isFinite(p)) return "= NA";
+  if (p < 0.001) return "< .001";
+  return "= " + p.toFixed(3).replace(/^0\./, ".");
+}
+
 // ================= T CRITICAL =================
 // Two-tailed 95% critical value via bisection on tCDF.
 export function tCritical(df, alpha = 0.05) {
