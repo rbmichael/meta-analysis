@@ -162,7 +162,9 @@ export const HELP = {
            "d = (m − ref) / sd; yi = d · J; vi = 1/n + yi² / (2(n−1)). " +
            "Use when studies report a single group measured against an external norm " +
            "or established threshold with no control group. " +
-           "Corresponds to measure=\"SMD1\" in metafor.",
+           "Formula follows Hedges & Olkin (1985) for a one-sample design where the reference is a fixed constant. " +
+           "Note: metafor's escalc(\"SMD1\") expects a two-group design (group 2 provides the standardizer SD) " +
+           "and applies a different vi formula; FE and Q will differ when mapping single-group data.",
   },
 
   "effect.SMD1H": {
@@ -171,7 +173,8 @@ export const HELP = {
            "vi = J² · (1/n + d² / (2(n−1))). " +
            "SMD1 and SMD1H are identical for large n (J → 1) but differ for n < 20. " +
            "Prefer SMD1H when consistency with the heteroscedastic two-group SMDH is desired. " +
-           "Corresponds to measure=\"SMD1H\" in metafor.",
+           "Note: metafor's escalc(\"SMD1H\") uses a different vi formula suited to two-group designs; " +
+           "direct numerical comparison requires awareness of this distinction.",
   },
 
   "effect.MD_paired": {
