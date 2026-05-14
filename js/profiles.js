@@ -294,10 +294,10 @@ export const effectProfiles = {
       const df   = n - 1;
       const J    = 1 - (3 / (4*df - 1));
       const g    = d * J;
-      // Variance: correlation-adjusted SMCR formula (Morris & DeShon 2002)
-      const var_d = 2 * (1 - corr) / n + (d * d) / (2 * df);
-      const vi    = clampVi(J * J * var_d);
-      return { ...s, yi: g, vi, se: Math.sqrt(vi), w: 1 / vi, md: g, varMD: var_d };
+      // Variance: Borenstein et al. 2009 eq 4.27 (large-sample).
+      // J applies only to g in the d² term; the 2(1-r)/n term is not scaled by J².
+      const vi   = clampVi(2 * (1 - corr) / n + (g * g) / (2 * n));
+      return { ...s, yi: g, vi, se: Math.sqrt(vi), w: 1 / vi, md: g };
     },
     transform:   (x) => x,
 
@@ -331,12 +331,10 @@ export const effectProfiles = {
       const df   = n - 1;
       const J    = 1 - (3 / (4*df - 1));
       const g    = d * J;
-      // Variance: SMCC formula (Morris 2008 Eq.17; Borenstein et al. 2009 Table 4.5)
-      // Standardiser is sd_change which already captures r, so first term is 1/n not 2(1−r)/n.
-      // var(d) = 1/n + d²/(2df);  var(g) = J²·var(d)
-      const var_d = 1 / n + (d * d) / (2 * df);
-      const vi    = clampVi(J * J * var_d);
-      return { ...s, yi: g, vi, se: Math.sqrt(vi), w: 1 / vi, md: g, varMD: var_d };
+      // Variance: Borenstein et al. 2009 eq 4.30 (large-sample).
+      // J applies only to g in the d² term; the 1/n term is not scaled by J².
+      const vi   = clampVi(1 / n + (g * g) / (2 * n));
+      return { ...s, yi: g, vi, se: Math.sqrt(vi), w: 1 / vi, md: g };
     },
     transform: (x) => x,
 

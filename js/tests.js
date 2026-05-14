@@ -2089,10 +2089,9 @@ export function runTests() {
   // Tests cover:
   //   1. Formula spot-check  (m_pre=10, m_post=8, sd_pre=2, sd_post=2, n=30, r=0.5)
   //        sd_change=2, d=-1, J=1-3/115, g=d·J
-  //        var_d = 2·(1-0.5)/30 + 1/(2·29) = 1/30 + 1/58
-  //        vi = J²·var_d
+  //        vi = 1/n + g²/(2n)  (Borenstein et al. 2009 eq 4.30)
   //   2. var formula depends on r — vi(r=0.2) ≠ vi(r=0.8)
-  //   3. J² applied to variance — vi < var_d
+  //   3. vi > 1/n (g² term is non-negative)
   //   4. Missing r defaults to 0.5 (finite yi, w > 0)
   //   5. Invalid inputs → NaN / w=0
   //   6. transformEffect is identity
@@ -2108,20 +2107,17 @@ export function runTests() {
   // d = (8-10)/2 = -1
   // df=29, J = 1-3/(4*29-1) = 1-3/115
   // g = d*J
-  // var_d = 2*(1-0.5)/30 + 1/(2*29) = 1/30 + 1/58
-  // vi = J²*var_d
+  // vi = 1/n + g²/(2n) = 1/30 + (J²)/60  (Borenstein 2009 eq 4.30)
   console.log("--- SMCC 1. Formula spot-check ---");
   {
     const s = compute({ m_pre: 10, m_post: 8, sd_pre: 2, sd_post: 2, n: 30, r: 0.5 }, "SMCC");
     const J      = 1 - 3 / 115;
     const g_exp  = -1 * J;
-    const vard_exp = 1/30 + 1/58;
-    const vi_exp   = J * J * vard_exp;
-    smccChk("g  = d·J",          s.yi, g_exp,        1e-9);
-    smccChk("vi = J²·var_d",     s.vi, vi_exp,        1e-9);
+    const vi_exp = 1/30 + (g_exp * g_exp) / 60;
+    smccChk("g  = d·J",          s.yi, g_exp,         1e-9);
+    smccChk("vi = 1/n + g²/(2n)",s.vi, vi_exp,        1e-9);
     smccChk("se = √vi",          s.se, Math.sqrt(vi_exp), 1e-9);
     smccChk("w  = 1/vi",         s.w,  1 / vi_exp,    1e-6);
-    smccChk("varMD = var_d",     s.varMD, vard_exp,   1e-9);
   }
 
   // --- SMCC 2: var formula depends on r ---
@@ -2134,11 +2130,11 @@ export function runTests() {
     smccChkTrue("yi(r=0.2) ≠ yi(r=0.8)", Math.abs(s2.yi - s8.yi) > 1e-6);
   }
 
-  // --- SMCC 3: J² applied — vi < var_d ---
-  console.log("--- SMCC 3. J² applied: vi < varMD ---");
+  // --- SMCC 3: vi > 1/n (g² term is non-negative) ---
+  console.log("--- SMCC 3. vi > 1/n ---");
   {
     const s = compute({ m_pre: 10, m_post: 8, sd_pre: 2, sd_post: 2, n: 30, r: 0.5 }, "SMCC");
-    smccChkTrue("vi < varMD (J² < 1)", s.vi < s.varMD);
+    smccChkTrue("vi > 1/n (g²/(2n) ≥ 0)", s.vi > 1/30);
   }
 
   // --- SMCC 4: missing r defaults to 0.5 ---

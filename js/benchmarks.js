@@ -564,7 +564,7 @@ export const BENCHMARKS = [
   // Same raw data as MD_paired benchmark above.
   // SMCR formula: d = (m_post - m_pre) / sd_pre  (pre-test SD standardiser)
   // g = d · J(df),  J = 1 − 3/(4·df − 1),  df = n − 1
-  // vi = J² · [2(1−r)/n + d²/(2·df)]
+  // vi = 2(1−r)/n + g²/(2n)  (Borenstein et al. 2009 eq 4.27)
   // Per-study g verified by hand; pooled values computed analytically (DL).
   // ----------------------------------------------------------------
   {
@@ -582,12 +582,12 @@ export const BENCHMARKS = [
     expected: {
       // Hedges' g per study: d = Δm/sd_pre, g = d·J, verified by hand
       yi:   [0.5056, 1.0481, 1.8065, 1.4187, 0.0801],
-      FE:    0.839,
-      RE:    0.892,
-      tau2:  0.2474,
-      I2:   78.0
+      FE:    0.864,
+      RE:    0.902,
+      tau2:  0.243,
+      I2:   77.1
     },
-    citation: "Morris (2008) Org Res Methods 11:364–386. Per-study g and pooled values computed analytically from SMCR formula."
+    citation: "Morris (2008) Org Res Methods 11:364–386. Per-study g and pooled values recomputed with Borenstein 2009 eq 4.27 vi formula."
   },
 
   // ----------------------------------------------------------------
@@ -1339,7 +1339,7 @@ export const BENCHMARKS = [
   // Standardiser: sd_change (change-score SD), not sd_pre.
   // sd_change = √(sd_pre²+sd_post²−2·r·sd_pre·sd_post)
   // d = Δm/sd_change,  g = d·J,  J = 1−3/(4·(n−1)−1)
-  // vi = J²·[2(1−r)/n + d²/(2(n−1))]
+  // vi = 1/n + g²/(2n)  (Borenstein et al. 2009 eq 4.30)
   // All values computed analytically (DL).
   // ----------------------------------------------------------------
   {
@@ -1357,12 +1357,12 @@ export const BENCHMARKS = [
     expected: {
       // g per study (sd_change standardiser), verified by formula
       yi:   [0.5417, 1.0198, 2.6635, 1.9096, 0.0765],
-      FE:    0.779,
-      RE:    1.003,
-      tau2:  0.3611,
-      I2:   81.7
+      FE:    0.804,
+      RE:    1.018,
+      tau2:  0.369,
+      I2:   81.2
     },
-    citation: "Morris (2008) Org Res Methods 11:364–386. SMCC formula: Morris (2008) Eq.17 / Borenstein et al. (2009) Table 4.5 — var(d)=1/n+d²/(2df). DL values from corrected formula."
+    citation: "Morris (2008) Org Res Methods 11:364–386. SMCC formula: Borenstein et al. (2009) eq 4.30 — vi=1/n+g²/(2n). DL values recomputed."
   },
 
   // ----------------------------------------------------------------
