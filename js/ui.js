@@ -1275,7 +1275,7 @@ function _renderMVResults(res, { alpha, rows = [] } = {}) {
         ρ<sub>between</sub> = ${fmt(rho_between ?? 0, 4)}
       </p>
       <table class="reg-table" style="margin-bottom:8px">
-        <thead><tr><th>Outcome</th><th>τ²</th><th>I²</th></tr></thead>
+        <thead><tr><th>Outcome</th><th>τ²</th><th><em>I</em>²</th></tr></thead>
         <tbody>${i2rows}</tbody>
       </table>`;
   } else if (struct === "Diag") {
@@ -1284,7 +1284,7 @@ function _renderMVResults(res, { alpha, rows = [] } = {}) {
     ).join("");
     psiBlock = `<h4 style="font-size:0.9em;margin:8px 0 4px">Between-study heterogeneity (Ψ̂, Diagonal)</h4>
       <table class="reg-table" style="margin-bottom:8px">
-        <thead><tr><th>Outcome</th><th>τ²</th><th>I²</th></tr></thead>
+        <thead><tr><th>Outcome</th><th>τ²</th><th><em>I</em>²</th></tr></thead>
         <tbody>${i2rows}</tbody>
       </table>`;
   } else { // UN
@@ -1309,7 +1309,7 @@ function _renderMVResults(res, { alpha, rows = [] } = {}) {
         <thead><tr><th></th>${hdr}</tr></thead><tbody>${corRows}</tbody>
       </table>
       <table class="reg-table" style="margin-bottom:8px">
-        <thead><tr><th>Outcome</th><th>τ²</th><th>I²</th></tr></thead>
+        <thead><tr><th>Outcome</th><th>τ²</th><th><em>I</em>²</th></tr></thead>
         <tbody>${i2rows}</tbody>
       </table>`;
   }
@@ -2315,8 +2315,8 @@ function _buildMVReportHTML(res, rows = [], alpha = 0.05) {
 
   // Heterogeneity
   const hetCols = struct === "CS"
-    ? ["Outcome","τ²","I²","ρ (between)"]
-    : ["Outcome","τ²","I²"];
+    ? ["Outcome","τ²","<em>I</em>²","ρ (between)"]
+    : ["Outcome","τ²","<em>I</em>²"];
   const hetRows = outcomeIds.map((id, o) => {
     const rho = struct === "CS" ? `<td>${fmtN(rho_between ?? 0, 4)}</td>` : "";
     return `<tr><td>${esc(String(id))}</td><td>${fmtN(tau2[o],5)}</td>
@@ -3944,7 +3944,7 @@ function _renderAllResults(ctx) {
               ${Math.round((1 - alpha) * 100)}% CI [${fmt(ciLoDisp)}, ${fmt(ciHiDisp)}] | SE = ${fmt(tl.se)} | <em>z</em> = ${fmt(tl.z)} | <em>p</em> ${fmtPval(tl.p)}<br>
               m=${tl.kCluster} cluster${tl.kCluster === 1 ? "" : "s"} &nbsp;·&nbsp; k=${tl.k} studies &nbsp;·&nbsp; df=${tl.df}<br>
               ${hBtn("threelevel.tau2")}σ²<sub>within</sub>=${fmt(tl.tau2_within)} &nbsp;·&nbsp; σ²<sub>between</sub>=${fmt(tl.tau2_between)}<br>
-              ${hBtn("threelevel.I2")}I²<sub>within</sub>=${fmt(tl.I2_within)}% &nbsp;·&nbsp; I²<sub>between</sub>=${fmt(tl.I2_between)}%<br>
+              ${hBtn("threelevel.I2")}<em>I</em>²<sub>within</sub>=${fmt(tl.I2_within)}% &nbsp;·&nbsp; <em>I</em>²<sub>between</sub>=${fmt(tl.I2_between)}%<br>
               ${hBtn("het.Q")}<em>Q</em>(${tl.df}) = ${fmt(tl.Q)} | method=REML
             </div>
           `;
@@ -4024,7 +4024,7 @@ function _renderAllResults(ctx) {
     <div class="result-method-note">Fixed-effect only — no τ², RE estimate, or prediction interval.</div>
     <div class="result-het-group">
       <div class="result-section-label">Heterogeneity</div>
-      <div class="result-het-stats">I²=${fmt(m.I2)}% [${fmt(m.I2CI[0])}%, ${fmt(m.I2CI[1])}%]${hBtn("het.I2")} &nbsp;·&nbsp; H²-CI=[${fmt(m.H2CI[0])}, ${isFinite(m.H2CI[1])?fmt(m.H2CI[1]):"∞"}]${hBtn("het.H2")}</div>
+      <div class="result-het-stats"><em>I</em>²=${fmt(m.I2)}% [${fmt(m.I2CI[0])}%, ${fmt(m.I2CI[1])}%]${hBtn("het.I2")} &nbsp;·&nbsp; <em>H</em>²-CI=[${fmt(m.H2CI[0])}, ${isFinite(m.H2CI[1])?fmt(m.H2CI[1]):"∞"}]${hBtn("het.H2")}</div>
       <div class="result-het-stats result-het-test"><em>Q</em>(${m.df}) = ${fmt(m.Q)}, <em>p</em> ${fmtPval(m.df > 0 ? 1 - chiSquareCDF(m.Q, m.df) : NaN)}${hBtn("het.Q")}</div>
     </div>
   ` : `
@@ -4055,7 +4055,7 @@ function _renderAllResults(ctx) {
     ${logScaleFELine}${analysisScaleFELine}
     ${robustCILine}${clesLine}<div class="result-het-group">
       <div class="result-section-label">Heterogeneity</div>
-      <div class="result-het-stats">τ²=${fmt(m.tau2)} [${fmt(m.tauCI[0])}, ${isFinite(m.tauCI[1])?fmt(m.tauCI[1]):"∞"}]${hBtn("het.tau2")} &nbsp;·&nbsp; I²=${fmt(m.I2)}% [${fmt(m.I2CI[0])}%, ${fmt(m.I2CI[1])}%]${hBtn("het.I2")} &nbsp;·&nbsp; H²-CI=[${fmt(m.H2CI[0])}, ${isFinite(m.H2CI[1])?fmt(m.H2CI[1]):"∞"}]${hBtn("het.H2")}</div>
+      <div class="result-het-stats">τ²=${fmt(m.tau2)} [${fmt(m.tauCI[0])}, ${isFinite(m.tauCI[1])?fmt(m.tauCI[1]):"∞"}]${hBtn("het.tau2")} &nbsp;·&nbsp; <em>I</em>²=${fmt(m.I2)}% [${fmt(m.I2CI[0])}%, ${fmt(m.I2CI[1])}%]${hBtn("het.I2")} &nbsp;·&nbsp; <em>H</em>²-CI=[${fmt(m.H2CI[0])}, ${isFinite(m.H2CI[1])?fmt(m.H2CI[1]):"∞"}]${hBtn("het.H2")}</div>
       <div class="result-het-stats result-het-test"><em>Q</em>(${m.df}) = ${fmt(m.Q)}, <em>p</em> ${fmtPval(m.df > 0 ? 1 - chiSquareCDF(m.Q, m.df) : NaN)}${hBtn("het.Q")}</div>
     </div>
   `);
@@ -4065,13 +4065,13 @@ function _renderAllResults(ctx) {
   const fatpetRobustNote = fatpet.clustersUsed ? ` | <em>p</em><sub>FAT,rob</sub> ${isFinite(fatpet.robustSlopeP) ? fmtPval(fatpet.robustSlopeP) : "= —"} · <em>p</em><sub>PET,rob</sub> ${isFinite(fatpet.robustInterceptP) ? fmtPval(fatpet.robustInterceptP) : "= —"}` : "";
 
   elPubBiasStats.innerHTML = `
-    &nbsp;&nbsp;${hBtn("bias.egger")}Egger: intercept = ${isFinite(egger.intercept)?fmt(egger.intercept):"NA"} | ${isFinite(egger.p)?`p ${fmtPval(egger.p)}`:"<em>p</em> (k<3)"}${eggerRobustNote}<br>
-    &nbsp;&nbsp;${hBtn("bias.begg")}Begg: τ = ${isFinite(begg.tau)?fmt(begg.tau):"NA"} | ${isFinite(begg.p)?`p ${fmtPval(begg.p)}`:"<em>p</em> (k<3)"}<br>
-    &nbsp;&nbsp;${hBtn("bias.fatpet")}FAT (bias): β₁ = ${isFinite(fatpet.slope)?fmt(fatpet.slope):"NA"} | ${isFinite(fatpet.slopeP)?`p ${fmtPval(fatpet.slopeP)}`:"<em>p</em> (k<3)"} &nbsp;·&nbsp; PET (effect at SE→0): ${isFinite(fatpet.intercept)?fmt(profile.transform(fatpet.intercept)):"NA"} | ${isFinite(fatpet.interceptP)?`p ${fmtPval(fatpet.interceptP)}`:"<em>p</em> (k<3)"}${fatpetRobustNote}<br>
+    &nbsp;&nbsp;${hBtn("bias.egger")}Egger: intercept = ${isFinite(egger.intercept)?fmt(egger.intercept):"NA"} | ${isFinite(egger.p)?`<em>p</em> ${fmtPval(egger.p)}`:"<em>p</em> (k<3)"}${eggerRobustNote}<br>
+    &nbsp;&nbsp;${hBtn("bias.begg")}Begg: τ = ${isFinite(begg.tau)?fmt(begg.tau):"NA"} | ${isFinite(begg.p)?`<em>p</em> ${fmtPval(begg.p)}`:"<em>p</em> (k<3)"}<br>
+    &nbsp;&nbsp;${hBtn("bias.fatpet")}FAT (bias): β₁ = ${isFinite(fatpet.slope)?fmt(fatpet.slope):"NA"} | ${isFinite(fatpet.slopeP)?`<em>p</em> ${fmtPval(fatpet.slopeP)}`:"<em>p</em> (k<3)"} &nbsp;·&nbsp; PET (effect at SE→0): ${isFinite(fatpet.intercept)?fmt(profile.transform(fatpet.intercept)):"NA"} | ${isFinite(fatpet.interceptP)?`<em>p</em> ${fmtPval(fatpet.interceptP)}`:"<em>p</em> (k<3)"}${fatpetRobustNote}<br>
     &nbsp;&nbsp;${hBtn("bias.petpeese")}${petpeese.usePeese?"<b>":""}PET-PEESE (corrected): ${(()=>{const src=petpeese.usePeese?petpeese.peese:petpeese.fat;return isFinite(src.intercept)?`${fmt(profile.transform(src.intercept))} [${petpeese.usePeese?"PEESE":"PET"}, <em>p</em> ${fmtPval(src.interceptP)}]`:"NA (k<3)";})()}${petpeese.usePeese?"</b>":""}<br>
     &nbsp;&nbsp;${hBtn("bias.fsn")}Fail-safe N (Rosenthal): ${isFinite(fsn.rosenthal)?Math.round(fsn.rosenthal):"NA"} &nbsp;·&nbsp; Orwin (trivial=0.1): ${isFinite(fsn.orwin)?Math.round(fsn.orwin):"NA"}<br>
-    &nbsp;&nbsp;${hBtn("bias.tes")}TES: O = ${isFinite(tes.O)?tes.O:"NA"} | E = ${isFinite(tes.E)?fmt(tes.E):"NA"} | χ²(k−1) = ${isFinite(tes.chi2)?fmt(tes.chi2):"NA (k<2)"} | ${isFinite(tes.p)?`<em>p</em> ${fmtPval(tes.p)}`:"p (k<2)"}${isFinite(tes.p)&&tes.p<0.1?" <span style='color:var(--color-warning)'>⚠ excess</span>":""}<br>
-    &nbsp;&nbsp;${hBtn("bias.waap")}WAAP-WLS: ${isFinite(waap.estimate)?`${fmt(profile.transform(waap.estimate))} [${fmt(profile.transform(waap.ci[0]))}, ${fmt(profile.transform(waap.ci[1]))}] | p ${fmtPval(waap.p)} | k<sub>adequate</sub> = ${waap.kAdequate}/${waap.k}${waap.fallback?" <span style='color:var(--fg-muted)'>(fallback to WLS)</span>":""}`:"NA (k<1)"}<br>
+    &nbsp;&nbsp;${hBtn("bias.tes")}TES: O = ${isFinite(tes.O)?tes.O:"NA"} | E = ${isFinite(tes.E)?fmt(tes.E):"NA"} | χ²(k−1) = ${isFinite(tes.chi2)?fmt(tes.chi2):"NA (k<2)"} | ${isFinite(tes.p)?`<em>p</em> ${fmtPval(tes.p)}`:"<em>p</em> (k<2)"}${isFinite(tes.p)&&tes.p<0.1?" <span style='color:var(--color-warning)'>⚠ excess</span>":""}<br>
+    &nbsp;&nbsp;${hBtn("bias.waap")}WAAP-WLS: ${isFinite(waap.estimate)?`${fmt(profile.transform(waap.estimate))} [${fmt(profile.transform(waap.ci[0]))}, ${fmt(profile.transform(waap.ci[1]))}] | <em>p</em> ${fmtPval(waap.p)} | k<sub>adequate</sub> = ${waap.kAdequate}/${waap.k}${waap.fallback?" <span style='color:var(--fg-muted)'>(fallback to WLS)</span>":""}`:"NA (k<1)"}<br>
     &nbsp;&nbsp;${hBtn("bias.hc")}Henmi-Copas: ${hc.error ? `NA (${escapeHTML(hc.error)})` : `${fmt(profile.transform(hc.beta))} [${fmt(profile.transform(hc.ci[0]))}, ${fmt(profile.transform(hc.ci[1]))}] (DL τ²=${fmt(hc.tau2)}, t₀=${fmt(hc.t0)})`}<br>
     <b>Trim &amp; Fill:</b>${hBtn("bias.trimfill")} ${useTF?"ON":"OFF"} (${useTF?tfEstimator+" estimator, ":""}${tf.length} filled studies)
     <details style="margin-top:4px">
