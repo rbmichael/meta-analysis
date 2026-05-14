@@ -574,9 +574,11 @@ function docSubgroup(args, ctx) {
 
 function docStudyTable(args, ctx) {
   const { studies, m, profile, widthCiLabel } = args;
-  const tau2   = isFinite(m.tau2) ? m.tau2 : 0;
-  const real   = studies.filter(d => !d.filled);
-  const totalW = real.reduce((s, d) => s + 1 / (d.vi + tau2), 0);
+  const tau2      = isFinite(m.tau2) ? m.tau2 : 0;
+  const real      = studies.filter(d => !d.filled);
+  const totalW    = real.reduce((s, d) => s + 1 / (d.vi + tau2), 0);
+  const showFEcol = !m.isMH && !m.isPeto;
+  const totalWfe  = showFEcol ? real.reduce((s, d) => s + 1 / d.vi, 0) : 0;
 
   const transformedScale = ["Ratio", "Hazard", "Rate", "log", "logit", "arcsine", "Freeman", "Fisher"]
     .some(t => profile.label.includes(t));
@@ -590,21 +592,28 @@ function docStudyTable(args, ctx) {
   const pooledHi = profile.transform(m.ciHigh);
 
   const headers = ["Study", `Effect size (${profile.label})`, seLabel, widthCiLabel, "RE Weight (%)"];
+  if (showFEcol) headers.push("FE Weight (%)");
 
   const rows = studies.map(d => {
-    const wi  = 1 / (d.vi + tau2);
-    const pct = d.filled ? null : wi / totalW * 100;
-    const ef  = profile.transform(d.yi);
-    const lo  = profile.transform(d.yi - Z_95 * d.se);
-    const hi  = profile.transform(d.yi + Z_95 * d.se);
-    const lbl = d.label.length > 40 ? d.label.slice(0, 39) + "\u2026" : d.label;
-    return [run(lbl), run(fmtV(ef)), run(fmtV(d.se)), run(fmtCI_APA(lo, hi)), run(fmtPct(pct))];
+    const wi    = 1 / (d.vi + tau2);
+    const pct   = d.filled ? null : wi / totalW * 100;
+    const pctFE = (showFEcol && !d.filled) ? (1 / d.vi) / totalWfe * 100 : null;
+    const ef    = profile.transform(d.yi);
+    const lo    = profile.transform(d.yi - Z_95 * d.se);
+    const hi    = profile.transform(d.yi + Z_95 * d.se);
+    const lbl   = d.label.length > 40 ? d.label.slice(0, 39) + "\u2026" : d.label;
+    const cells = [run(lbl), run(fmtV(ef)), run(fmtV(d.se)), run(fmtCI_APA(lo, hi)), run(fmtPct(pct))];
+    if (showFEcol) cells.push(run(fmtPct(pctFE)));
+    return cells;
   });
 
   // Pooled row — bold cells
-  rows.push([bold("Pooled (RE)"), bold(fmtV(pooledEf)), bold(fmtV(m.seRE)), bold(fmtCI_APA(pooledLo, pooledHi)), bold("100%")]);
+  const pooledCells = [bold("Pooled (RE)"), bold(fmtV(pooledEf)), bold(fmtV(m.seRE)), bold(fmtCI_APA(pooledLo, pooledHi)), bold("100%")];
+  if (showFEcol) pooledCells.push(bold("100%"));
+  rows.push(pooledCells);
 
-  const note = `Effect size = ${profile.label}. SE = standard error. CI = confidence interval. RE weights shown.`
+  const weightNote = showFEcol ? "RE and FE weights shown." : "FE weights shown.";
+  const note = `Effect size = ${profile.label}. SE = standard error. CI = confidence interval. ${weightNote}`
     + (studies.some(d => d.filled) ? " Trim-and-fill imputed rows are included." : "");
 
   return [

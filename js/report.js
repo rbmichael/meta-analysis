@@ -880,9 +880,11 @@ function sectionStudyTable(args) {
   const { studies, m, profile, apaFormat = false, nextTable, ciLevel } = args;
   const widthCiLabel = (ciLevel ?? "95") + "% CI";
 
-  const tau2   = isFinite(m.tau2) ? m.tau2 : 0;
-  const real   = studies.filter(d => !d.filled);
-  const totalW = real.reduce((s, d) => s + 1 / (d.vi + tau2), 0);
+  const tau2      = isFinite(m.tau2) ? m.tau2 : 0;
+  const real      = studies.filter(d => !d.filled);
+  const totalW    = real.reduce((s, d) => s + 1 / (d.vi + tau2), 0);
+  const showFEcol = !m.isMH && !m.isPeto;
+  const totalWfe  = showFEcol ? real.reduce((s, d) => s + 1 / d.vi, 0) : 0;
 
   const transformedScale = (
     profile.label.includes("Ratio")   ||
@@ -905,9 +907,10 @@ function sectionStudyTable(args) {
 
   if (apaFormat) {
     const rows = studies.map(d => {
-      const wi  = 1 / (d.vi + tau2);
-      const pct = d.filled ? null : wi / totalW * 100;
-      const ef  = profile.transform(d.yi);
+      const wi    = 1 / (d.vi + tau2);
+      const pct   = d.filled ? null : wi / totalW * 100;
+      const pctFE = (showFEcol && !d.filled) ? (1 / d.vi) / totalWfe * 100 : null;
+      const ef    = profile.transform(d.yi);
       const lo  = profile.transform(d.yi - Z_95 * d.se);
       const hi  = profile.transform(d.yi + Z_95 * d.se);
       const lbl = d.label.length > 40 ? d.label.slice(0, 39) + "\u2026" : d.label;
@@ -918,27 +921,31 @@ function sectionStudyTable(args) {
         <td>${fmtV(d.se)}</td>
         <td>${fmtCI_APA(lo, hi)}</td>
         <td>${fmtPct(pct)}</td>
+        ${showFEcol ? `<td>${fmtPct(pctFE)}</td>` : ""}
       </tr>`;
     });
 
-    // Pooled row in tfoot uses the same 5-column layout
+    const ncols    = showFEcol ? 6 : 5;
     const tfootAPA = `<tr class="pooled">
         <td>Pooled (RE)</td>
         <td>${fmtV(pooledEf)}</td>
         <td>${fmtV(m.seRE)}</td>
         <td>${fmtCI_APA(pooledLo, pooledHi)}</td>
         <td>100%</td>
+        ${showFEcol ? "<td>100%</td>" : ""}
       </tr>`;
 
+    const weightNote = showFEcol ? "RE and FE weights shown." : "FE weights shown.";
     const note = `Effect size = ${esc(profile.label)}. SE = standard error. CI = confidence interval. `
-      + `RE weights shown. ${studies.some(d => d.filled) ? "Italic rows are trim-and-fill imputed studies." : ""}`;
+      + `${weightNote} ${studies.some(d => d.filled) ? "Italic rows are trim-and-fill imputed studies." : ""}`;
 
-    // buildTableAPA doesn't support tfoot natively; embed pooled row manually
-    const head   = `<thead><tr>${["Study", `Effect size (${esc(profile.label)})`, esc(seLabel), widthCiLabel, "RE Weight (%)"].map(h => `<th>${h}</th>`).join("")}</tr></thead>`;
-    const body   = `<tbody>${rows.join("")}</tbody>`;
-    const foot   = `<tfoot>
+    const headCols = ["Study", `Effect size (${esc(profile.label)})`, esc(seLabel), widthCiLabel, "RE Weight (%)"];
+    if (showFEcol) headCols.push("FE Weight (%)");
+    const head = `<thead><tr>${headCols.map(h => `<th>${h}</th>`).join("")}</tr></thead>`;
+    const body = `<tbody>${rows.join("")}</tbody>`;
+    const foot = `<tfoot>
       ${tfootAPA}
-      <tr><td colspan="5"><span class="apa-note"><em>Note.</em> ${note}</span></td></tr>
+      <tr><td colspan="${ncols}"><span class="apa-note"><em>Note.</em> ${note}</span></td></tr>
     </tfoot>`;
 
     return `
@@ -951,11 +958,12 @@ function sectionStudyTable(args) {
   }
 
   const rows = studies.map(d => {
-    const wi  = 1 / (d.vi + tau2);
-    const pct = d.filled ? null : wi / totalW * 100;
-    const ef  = profile.transform(d.yi);
-    const lo  = profile.transform(d.yi - Z_95 * d.se);
-    const hi  = profile.transform(d.yi + Z_95 * d.se);
+    const wi    = 1 / (d.vi + tau2);
+    const pct   = d.filled ? null : wi / totalW * 100;
+    const pctFE = (showFEcol && !d.filled) ? (1 / d.vi) / totalWfe * 100 : null;
+    const ef    = profile.transform(d.yi);
+    const lo    = profile.transform(d.yi - Z_95 * d.se);
+    const hi    = profile.transform(d.yi + Z_95 * d.se);
     const lbl = d.label.length > 40 ? d.label.slice(0, 39) + "\u2026" : d.label;
     const cls = d.filled ? ' class="imputed"' : "";
     return `<tr${cls}>
@@ -965,6 +973,7 @@ function sectionStudyTable(args) {
       <td>${fmtV(hi)}</td>
       <td>${fmtV(d.se)}</td>
       <td>${fmtPct(pct)}</td>
+      ${showFEcol ? `<td>${fmtPct(pctFE)}</td>` : ""}
     </tr>`;
   });
 
@@ -975,16 +984,16 @@ function sectionStudyTable(args) {
       <td>${fmtV(pooledHi)}</td>
       <td>${fmtV(m.seRE)}</td>
       <td>100%</td>
+      ${showFEcol ? "<td>100%</td>" : ""}
     </tr>`;
+
+  const colHeaders = ["Study", "Effect", `${widthCiLabel} (low)`, `${widthCiLabel} (high)`, esc(seLabel), "RE Weight"];
+  if (showFEcol) colHeaders.push("FE Weight");
 
   return `
 <section>
   <h2>Study-Level Results</h2>
-  ${buildTable(
-    ["Study", "Effect", `${widthCiLabel} (low)`, `${widthCiLabel} (high)`, esc(seLabel), "RE Weight"],
-    rows,
-    { extraClass: "study-tbl", tfoot }
-  )}
+  ${buildTable(colHeaders, rows, { extraClass: "study-tbl", tfoot })}
 </section>`;
 }
 

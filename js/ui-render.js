@@ -657,9 +657,12 @@ export function renderStudyTable(studies, m, profile) {
   if (!container) return;
 
   // For MH/Peto use FE (τ²=0) weights; for RE use τ²-inflated weights.
-  const tau2   = (m.isMH || m.isPeto || !isFinite(m.tau2)) ? 0 : m.tau2;
-  const real   = studies.filter(d => !d.filled);
-  const totalW = real.reduce((s, d) => s + 1 / (d.vi + tau2), 0);
+  const tau2      = (m.isMH || m.isPeto || !isFinite(m.tau2)) ? 0 : m.tau2;
+  const real      = studies.filter(d => !d.filled);
+  const totalW    = real.reduce((s, d) => s + 1 / (d.vi + tau2), 0);
+  // Show a separate FE weight column only for RE models (MH/Peto already uses FE weights).
+  const showFEcol = !m.isMH && !m.isPeto;
+  const totalWfe  = showFEcol ? real.reduce((s, d) => s + 1 / d.vi, 0) : 0;
 
   // SE column header: label the scale when yi is stored on a transformed scale.
   const seLabel = profile.isTransformedScale ? "SE (transformed)" : "SE";
@@ -668,10 +671,11 @@ export function renderStudyTable(studies, m, profile) {
   const rows = studies.map(d => {
     const wi    = 1 / (d.vi + tau2);
     const pct   = d.filled ? null : wi / totalW * 100;
+    const pctFE = (showFEcol && !d.filled) ? (1 / d.vi) / totalWfe * 100 : null;
     const ef    = profile.transform(d.yi);
     const lo    = profile.transform(d.yi - Z_95 * d.se);
     const hi    = profile.transform(d.yi + Z_95 * d.se);
-    return { label: escapeHTML(d.label), ef, lo, hi, se: d.se, pct, filled: !!d.filled };
+    return { label: escapeHTML(d.label), ef, lo, hi, se: d.se, pct, pctFE, filled: !!d.filled };
   });
 
   // Pooled row values — use FE for MH/Peto (RE is NaN)
@@ -696,6 +700,7 @@ export function renderStudyTable(studies, m, profile) {
       <th>${getCiLabel()} (high)</th>
       <th>${seLabel}</th>
       <th>${weightLabel}</th>
+      ${showFEcol ? "<th>FE Weight</th>" : ""}
     </tr>`;
 
   const studyRows = rows.map(r => `
@@ -706,6 +711,7 @@ export function renderStudyTable(studies, m, profile) {
       <td>${fmtVal(r.hi)}</td>
       <td>${fmtVal(r.se)}</td>
       <td>${fmtPct(r.pct)}</td>
+      ${showFEcol ? `<td>${fmtPct(r.pctFE)}</td>` : ""}
     </tr>`).join("");
 
   const pooledLabel = m.isMH ? "Pooled (MH)" : m.isPeto ? "Pooled (Peto)" : "Pooled (RE)";
@@ -718,6 +724,7 @@ export function renderStudyTable(studies, m, profile) {
       <td>${fmtVal(pooledHi)}</td>
       <td>${fmtVal(pooledSE)}</td>
       <td>100%</td>
+      ${showFEcol ? "<td>100%</td>" : ""}
     </tr>`;
 
   container.innerHTML = `<table class="study-table">${headerRow}${studyRows}${pooledRow}</table>`;
