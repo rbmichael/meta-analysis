@@ -532,10 +532,17 @@ export function meta(studies, method="DL", ciMethod="normal", alpha=0.05, tau2In
 	  pval = k <= 1 ? NaN : 2 * (1 - normalCDF(Math.abs(stat)));
 	}
 
-  // Prediction interval: Higgins et al. (2009), t_{k-2} quantile.
-  // Requires k >= 3 (df = k-2 >= 1). Uses base seRE, not KH-adjusted.
-  const predVar = seRE_base * seRE_base + tau2;
-  const predCrit = k >= 3 ? tCritical(k - 2, alpha) : NaN;
+  // Prediction interval critical value matches the CI method's distributional
+  // assumption, consistent with metafor predict.rma() behaviour:
+  //   normal → z(1−α/2)          (test="z" in metafor)
+  //   t / KH → t(k−1, 1−α/2)    (test="t" / "knha"; df = k − p, p=1)
+  // Requires k >= 3. Uses base seRE (not KH-adjusted variance).
+  const predVar  = seRE_base * seRE_base + tau2;
+  const predCrit = k >= 3
+    ? (ciMethod === "normal"
+        ? normalQuantile(1 - alpha / 2)
+        : tCritical(k - 1, alpha))
+    : NaN;
 
   // Q-profile CIs for τ², I², H²
   const hetCI = heterogeneityCIs(studies, tau2, alpha);
