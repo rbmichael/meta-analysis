@@ -1652,15 +1652,16 @@ export function runTests() {
   // 1. yi / vi formula spot-check
   // m1=20, sd1=4, n1=40, m2=20, sd2=2, n2=38
   // cv1 = 4/20 = 0.2,  cv2 = 2/20 = 0.1
-  // yi  = log(0.2 / 0.1) = log(2)
+  // yi  = log(cv1/cv2) + 1/(2*(n1-1)) - 1/(2*(n2-1))  [Nakagawa 2015 eq. 1 bias correction]
+  //     = log(2) + 1/78 - 1/74
   // vi  = 1/(2·39) + 0.04/40 + 1/(2·37) + 0.01/38
   console.log("--- 1. yi / vi formulas ---");
   {
     const s = compute({ m1: 20, sd1: 4, n1: 40, m2: 20, sd2: 2, n2: 38 }, "CVR");
     const cv1 = 0.2, cv2 = 0.1;
-    const yi_exp = Math.log(cv1 / cv2);
+    const yi_exp = Math.log(cv1 / cv2) + 1 / (2 * 39) - 1 / (2 * 37);
     const vi_exp = 1 / (2 * 39) + cv1**2 / 40 + 1 / (2 * 37) + cv2**2 / 38;
-    cvrchk("yi = log(cv1/cv2)", s.yi, yi_exp);
+    cvrchk("yi = log(cv1/cv2) + bias", s.yi, yi_exp);
     cvrchk("vi formula",        s.vi, vi_exp);
     cvrchk("se = √vi",          s.se, Math.sqrt(vi_exp));
     cvrchk("w  = 1/vi",         s.w,  1 / vi_exp, 1e-3);
@@ -1680,19 +1681,19 @@ export function runTests() {
     cvrchkTrue("m2 = 0   → w = 0",       compute({ ...base, m2:  0  }, "CVR").w === 0);
   }
 
-  // 3. CVR = 1 (yi = 0) when cv1 = cv2
-  //    m1=10, sd1=2, n1=30 → cv1=0.2;  m2=20, sd2=4, n2=28 → cv2=0.2
+  // 3. CVR = 1 (yi = 0) when cv1 = cv2 and n1 = n2 (bias correction cancels)
+  //    m1=10, sd1=2, n1=30 → cv1=0.2;  m2=20, sd2=4, n2=30 → cv2=0.2
   console.log("--- 3. yi = 0 when CV₁ = CV₂ ---");
   {
-    const s = compute({ m1: 10, sd1: 2, n1: 30, m2: 20, sd2: 4, n2: 28 }, "CVR");
+    const s = compute({ m1: 10, sd1: 2, n1: 30, m2: 20, sd2: 4, n2: 30 }, "CVR");
     cvrchk("yi = 0 (cv1=cv2=0.2)", s.yi, 0);
     cvrchkTrue("vi > 0 (sampling variance present)", isFinite(s.vi) && s.vi > 0);
   }
 
-  // 4. transformEffect back-transform: exp(yi) = cv1/cv2
+  // 4. transformEffect back-transform: exp(yi) = cv1/cv2 (use n1=n2 so bias correction = 0)
   console.log("--- 4. Back-transform: exp(yi) = CV₁/CV₂ ---");
   {
-    const s = compute({ m1: 20, sd1: 4, n1: 40, m2: 20, sd2: 2, n2: 38 }, "CVR");
+    const s = compute({ m1: 20, sd1: 4, n1: 40, m2: 20, sd2: 2, n2: 40 }, "CVR");
     cvrchk("exp(yi) = 2.0", transformEffect(s.yi, "CVR"), 2.0, 1e-9);
     const ciLb = transformEffect(s.yi - 1.96 * s.se, "CVR");
     const ciUb = transformEffect(s.yi + 1.96 * s.se, "CVR");
@@ -1700,17 +1701,16 @@ export function runTests() {
     cvrchkTrue("CI lb < exp(yi) < ub", ciLb < 2.0 && 2.0 < ciUb);
   }
 
-  // 5. Pooled meta() — 3-study DL
-  // Studies share cv1=0.2, cv2=0.1 (yi=log2) except study 3 (higher cv1)
-  // Study 1: m1=20, sd1=4, n1=40, m2=20, sd2=2, n2=38
-  // Study 2: m1=15, sd1=3, n1=30, m2=15, sd2=1.5, n2=28
-  // Study 3: m1=25, sd1=6, n1=50, m2=24, sd2=2.4, n2=48  (cv1=0.24, cv2=0.1)
+  // 5. Pooled meta() — 3-study DL (use n1=n2 so bias correction = 0 and yi are exact)
+  // Study 1: m1=20, sd1=4, n1=40, m2=20, sd2=2, n2=40  → cv1=0.2, cv2=0.1, yi=log(2)
+  // Study 2: m1=15, sd1=3, n1=30, m2=15, sd2=1.5, n2=30  → yi=log(2)
+  // Study 3: m1=25, sd1=6, n1=50, m2=24, sd2=2.4, n2=50  → cv1=0.24, cv2=0.1, yi=log(2.4)
   console.log("--- 5. Pooled meta() (k=3, DL) ---");
   {
     const studies = [
-      compute({ m1: 20, sd1: 4,   n1: 40, m2: 20, sd2: 2,   n2: 38 }, "CVR"),
-      compute({ m1: 15, sd1: 3,   n1: 30, m2: 15, sd2: 1.5, n2: 28 }, "CVR"),
-      compute({ m1: 25, sd1: 6,   n1: 50, m2: 24, sd2: 2.4, n2: 48 }, "CVR"),
+      compute({ m1: 20, sd1: 4,   n1: 40, m2: 20, sd2: 2,   n2: 40 }, "CVR"),
+      compute({ m1: 15, sd1: 3,   n1: 30, m2: 15, sd2: 1.5, n2: 30 }, "CVR"),
+      compute({ m1: 25, sd1: 6,   n1: 50, m2: 24, sd2: 2.4, n2: 50 }, "CVR"),
     ];
     cvrchk("yi[0] = log(2)",     studies[0].yi, Math.log(2),    1e-9);
     cvrchk("yi[1] = log(2)",     studies[1].yi, Math.log(2),    1e-9);
@@ -1737,14 +1737,15 @@ export function runTests() {
 
   // 1. yi / vi formula spot-check
   // sd1=4, n1=40, sd2=2, n2=38
-  // yi = log(4/2) = log(2)
+  // yi = log(sd1/sd2) + 1/(2*(n1-1)) - 1/(2*(n2-1))  [Nakagawa 2015 eq. 1 bias correction]
+  //    = log(2) + 1/78 - 1/74
   // vi = 1/(2*39) + 1/(2*37)
   console.log("--- 1. yi / vi formulas ---");
   {
     const s = compute({ sd1: 4, n1: 40, sd2: 2, n2: 38 }, "VR");
-    const yi_exp = Math.log(4 / 2);
+    const yi_exp = Math.log(4 / 2) + 1 / (2 * 39) - 1 / (2 * 37);
     const vi_exp = 1 / (2 * 39) + 1 / (2 * 37);
-    vrchk("yi = log(sd1/sd2)", s.yi, yi_exp);
+    vrchk("yi = log(sd1/sd2) + bias", s.yi, yi_exp);
     vrchk("vi formula",        s.vi, vi_exp);
     vrchk("se = √vi",          s.se, Math.sqrt(vi_exp));
     vrchk("w  = 1/vi",         s.w,  1 / vi_exp, 1e-3);
@@ -1762,10 +1763,10 @@ export function runTests() {
     vrchkTrue("sd2 = 0  → w = 0",       compute({ ...base, sd2:  0  }, "VR").w === 0);
   }
 
-  // 3. VR = 1 (yi = 0) when sd1 = sd2
+  // 3. VR = 1 (yi = 0) when sd1 = sd2 and n1 = n2 (bias correction cancels)
   console.log("--- 3. yi = 0 when sd1 = sd2 ---");
   {
-    const s = compute({ sd1: 3, n1: 30, sd2: 3, n2: 28 }, "VR");
+    const s = compute({ sd1: 3, n1: 30, sd2: 3, n2: 30 }, "VR");
     vrchk("yi = 0 (sd1 = sd2)", s.yi, 0);
     vrchkTrue("vi > 0 (sampling variance present)", isFinite(s.vi) && s.vi > 0);
   }
@@ -1779,10 +1780,10 @@ export function runTests() {
     vrchk("vi same when n same (different SDs)", s1.vi, s2.vi, 1e-12);
   }
 
-  // 5. Back-transform: exp(yi) = sd1/sd2
+  // 5. Back-transform: exp(yi) = sd1/sd2 (use n1=n2 so bias correction = 0)
   console.log("--- 5. Back-transform: exp(yi) = sd1/sd2 ---");
   {
-    const s = compute({ sd1: 4, n1: 40, sd2: 2, n2: 38 }, "VR");
+    const s = compute({ sd1: 4, n1: 40, sd2: 2, n2: 40 }, "VR");
     vrchk("exp(yi) = 2.0", transformEffect(s.yi, "VR"), 2.0, 1e-9);
     const ciLb = transformEffect(s.yi - 1.96 * s.se, "VR");
     const ciUb = transformEffect(s.yi + 1.96 * s.se, "VR");
@@ -1790,16 +1791,16 @@ export function runTests() {
     vrchkTrue("CI lb < exp(yi) < ub", ciLb < 2.0 && 2.0 < ciUb);
   }
 
-  // 6. Pooled meta() — 3-study DL with heterogeneous SDs
-  // Study 1: sd1=4.0, n1=40, sd2=2.0, n2=38 → yi=log(2.0)≈0.6931
-  // Study 2: sd1=3.5, n1=30, sd2=1.5, n2=28 → yi=log(7/3)≈0.8473
-  // Study 3: sd1=5.0, n1=50, sd2=3.0, n2=48 → yi=log(5/3)≈0.5108
+  // 6. Pooled meta() — 3-study DL with heterogeneous SDs (use n1=n2 so yi are exact)
+  // Study 1: sd1=4.0, n1=40, sd2=2.0, n2=40 → yi=log(2.0)
+  // Study 2: sd1=3.5, n1=30, sd2=1.5, n2=30 → yi=log(7/3)
+  // Study 3: sd1=5.0, n1=50, sd2=3.0, n2=50 → yi=log(5/3)
   console.log("--- 6. Pooled meta() (k=3, DL) ---");
   {
     const studies = [
-      compute({ sd1: 4.0, n1: 40, sd2: 2.0, n2: 38 }, "VR"),
-      compute({ sd1: 3.5, n1: 30, sd2: 1.5, n2: 28 }, "VR"),
-      compute({ sd1: 5.0, n1: 50, sd2: 3.0, n2: 48 }, "VR"),
+      compute({ sd1: 4.0, n1: 40, sd2: 2.0, n2: 40 }, "VR"),
+      compute({ sd1: 3.5, n1: 30, sd2: 1.5, n2: 30 }, "VR"),
+      compute({ sd1: 5.0, n1: 50, sd2: 3.0, n2: 50 }, "VR"),
     ];
     vrchk("yi[0] = log(2.0)", studies[0].yi, Math.log(2.0),     1e-9);
     vrchk("yi[1] = log(7/3)", studies[1].yi, Math.log(7 / 3),   1e-9);

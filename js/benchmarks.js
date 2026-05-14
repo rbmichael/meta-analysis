@@ -1737,8 +1737,8 @@ export const BENCHMARKS = [
   // CVR — Synthetic variability dataset (profiles.js CVR exampleData, DL)
   // 5 studies with n≥28, m>0, CV<1, SD ratio<4 — all soft-warning
   // thresholds satisfied.
-  // yi = ln(cv1/cv2),  vi = 1/(2(n1−1)) + cv1²/n1 + 1/(2(n2−1)) + cv2²/n2
-  // τ²=0 reflects homogeneous CVR across these studies (all ≈ 0.56).
+  // yi = ln(cv1/cv2) + 1/(2(n1−1)) − 1/(2(n2−1)),  vi = 1/(2(n1−1)) + cv1²/n1 + 1/(2(n2−1)) + cv2²/n2
+  // Bias correction per Nakagawa et al. (2015) eq. 1. τ²=0 reflects homogeneous CVR.
   // ----------------------------------------------------------------
   {
     name: "Synthetic Variability – CVR (log CV ratio, DL)",
@@ -1753,10 +1753,10 @@ export const BENCHMARKS = [
       { label: "Study 5", m1: 22.3, sd1:  7.8, n1: 45, m2: 23.1, sd2: 4.9, n2: 43 }
     ],
     expected: {
-      // yi = ln(cv1/cv2) per study, verified by formula
-      yi:   [0.5638, 0.6152, 0.5573, 0.5814, 0.5001],
-      FE:    0.569,
-      RE:    0.569,
+      // yi = ln(cv1/cv2) + bias correction; verified via metafor escalc("CVR"), R block 29
+      yi:   [0.5631, 0.6147, 0.5560, 0.5812, 0.4996],
+      FE:    0.568,
+      RE:    0.568,
       tau2:  0.000,
       I2:    0.0
     },
@@ -1767,8 +1767,8 @@ export const BENCHMARKS = [
   // VR — Synthetic variability dataset (profiles.js VR exampleData, DL)
   // 5 studies with n≥28, SD ratio<4 — all soft-warning thresholds
   // satisfied.
-  // yi = ln(sd1/sd2),  vi = 1/(2(n1−1)) + 1/(2(n2−1))
-  // τ²=0 reflects homogeneous VR across these studies (all ≈ 0.56).
+  // yi = ln(sd1/sd2) + 1/(2(n1−1)) − 1/(2(n2−1)),  vi = 1/(2(n1−1)) + 1/(2(n2−1))
+  // Bias correction per Nakagawa et al. (2015) eq. 1. τ²=0 reflects homogeneous VR.
   // ----------------------------------------------------------------
   {
     name: "Synthetic Variability – VR (log SD ratio, DL)",
@@ -1783,8 +1783,8 @@ export const BENCHMARKS = [
       { label: "Study 5", sd1: 4.9, n1: 45, sd2: 3.5, n2: 43 }
     ],
     expected: {
-      // yi = ln(sd1/sd2) per study, verified by formula
-      yi:   [0.4055, 0.5416, 0.4187, 0.4220, 0.3365],
+      // yi = ln(sd1/sd2) + bias correction; verified via metafor escalc("VR"), R block 30
+      yi:   [0.4048, 0.5411, 0.4174, 0.4218, 0.3359],
       FE:    0.430,
       RE:    0.430,
       tau2:  0.000,

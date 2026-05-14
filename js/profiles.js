@@ -440,9 +440,10 @@ export const effectProfiles = {
       const { m1, sd1, n1, m2, sd2, n2 } = s;
       const cv1 = sd1 / m1;
       const cv2 = sd2 / m2;
-      const yi  = Math.log(cv1 / cv2);
-      // Delta-method variance of log(CV) = 1/(2(n−1)) + CV²/n per group, summed.
-      // Nakagawa et al. (2015, Methods Ecol Evol 6:143–152, eq. 5).
+      // Bias correction for log(S): E[log S] ≈ log σ − 1/(2(n−1)); add back.
+      // Nakagawa et al. (2015, Methods Ecol Evol 6:143–152, eq. 1).
+      const yi  = Math.log(cv1 / cv2) + 1 / (2 * (n1 - 1)) - 1 / (2 * (n2 - 1));
+      // Delta-method variance (eq. 5); vi uses raw sample CVs regardless of bias correction.
       const vi  = clampVi(1 / (2 * (n1 - 1)) + cv1 ** 2 / n1 + 1 / (2 * (n2 - 1)) + cv2 ** 2 / n2);
       return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
     },
@@ -507,10 +508,10 @@ export const effectProfiles = {
     compute(s) {
       if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
       const { sd1, n1, sd2, n2 } = s;
-      const yi = Math.log(sd1 / sd2);
+      // Bias correction for log(S): E[log S] ≈ log σ − 1/(2(n−1)); add back.
+      // Nakagawa et al. (2015, Methods Ecol Evol 6:143–152, eq. 1).
+      const yi = Math.log(sd1 / sd2) + 1 / (2 * (n1 - 1)) - 1 / (2 * (n2 - 1));
       // Var(log SD) ≈ 1/(2(n−1)) per group (chi-squared approximation for s²).
-      // Nakagawa et al. (2015, Methods Ecol Evol 6:143–152); Hedges & Olkin (1985, p. 86).
-      // CV²/n terms absent because VR does not normalise by the mean.
       const vi = clampVi(1 / (2 * (n1 - 1)) + 1 / (2 * (n2 - 1)));
       return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
     },
