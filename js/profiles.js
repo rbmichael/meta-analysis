@@ -2116,6 +2116,7 @@ export const effectProfiles = {
     label: "Cronbach's α (log transform, ABT)",
     group: "Reliability",
     isTransformedScale: true,
+    analysisScaleLabel: "log(1−α) scale",
     inputs: ["alpha", "k", "n"],
     compute(s) {
       if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
