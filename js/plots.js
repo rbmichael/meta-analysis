@@ -899,14 +899,17 @@ function forestDrawPredictionInterval(ctx, m, showRE) {
 function forestDrawHetSummary(ctx, m) {
   const { svg, L, T } = ctx;
   const Qp = (isFinite(m.Q) && isFinite(m.df) && m.df > 0) ? 1 - chiSquareCDF(m.Q, m.df) : NaN;
-  svg.append("text")
+  { const t = svg.append("text")
     .attr("x", L.labelW + L.plotW / 2).attr("y", L.hetY).attr("text-anchor", "middle")
     .style("font-size", L.annotFontSize).style("font-family", T.fontFamily)
-    .attr("fill", T.fgMuted)
-    .text(`Heterogeneity:  τ² = ${isFinite(m.tau2) ? m.tau2.toFixed(3) : "NA"},` +
-          `  I² = ${isFinite(m.I2) ? m.I2.toFixed(1) + "%" : "NA"},` +
-          `  Q(df=${isFinite(m.df) ? m.df : "NA"}) = ${isFinite(m.Q) ? m.Q.toFixed(2) : "NA"},` +
-          `  p = ${isFinite(Qp) ? (Qp < 0.001 ? "< 0.001" : Qp.toFixed(3)) : "NA"}`);
+    .attr("fill", T.fgMuted);
+  t.append("tspan").text(`Heterogeneity:  τ² = ${isFinite(m.tau2) ? m.tau2.toFixed(3) : "NA"},  `);
+  t.append("tspan").style("font-style", "italic").text("I");
+  t.append("tspan").text(`² = ${isFinite(m.I2) ? m.I2.toFixed(1) + "%" : "NA"},  `);
+  t.append("tspan").style("font-style", "italic").text("Q");
+  t.append("tspan").text(`(df=${isFinite(m.df) ? m.df : "NA"}) = ${isFinite(m.Q) ? m.Q.toFixed(2) : "NA"},  `);
+  t.append("tspan").style("font-style", "italic").text("p");
+  t.append("tspan").text(` = ${isFinite(Qp) ? (Qp < 0.001 ? "< .001" : Qp.toFixed(3)) : "NA"}`); }
 }
 
 export function drawForest(studies, m, options = {}) {
@@ -1236,12 +1239,17 @@ function funnelDrawLegend(svg, W, margin, BANDS, isDark) {
       .attr("fill", fill)
       .attr("stroke", needBorder ? legendBorder : "none")
       .attr("stroke-width", 1);
-    lg.append("text")
+    { const tl = lg.append("text")
       .attr("x", PAD + SW + 5)
       .attr("y", rowY + ROW / 2 + 3)
       .attr("fill", legendFg)
-      .style("font-size", "9px")
-      .text(label);
+      .style("font-size", "9px");
+    const pi = label.indexOf("p");
+    if (pi >= 0) {
+      if (pi > 0) tl.append("tspan").text(label.slice(0, pi));
+      tl.append("tspan").style("font-style", "italic").text("p");
+      tl.append("tspan").text(label.slice(pi + 1));
+    } else { tl.text(label); } }
   });
 }
 
@@ -2340,14 +2348,20 @@ export function drawOrchardPlot(studies, m, profile) {
 
   // ---- Heterogeneity annotation ----
   const hetParts = [];
-  if (isFinite(m.I2))            hetParts.push(`I² = ${(m.I2 * 100).toFixed(1)}%`);
+  if (isFinite(m.I2))            hetParts.push(`I² = ${m.I2.toFixed(1)}%`);
   if (isFinite(m.tau2) && m.tau2 > 0) hetParts.push(`τ² = ${m.tau2.toFixed(3)}`);
   if (hetParts.length) {
-    g.append("text")
+    const ht = g.append("text")
       .attr("x", 4).attr("y", iH - 4)
       .attr("fill", "var(--fg-muted)")
-      .style("font-size", "10px")
-      .text(hetParts.join("  "));
+      .style("font-size", "10px");
+    hetParts.forEach((part, pi) => {
+      if (pi > 0) ht.append("tspan").text("  ");
+      if (part.startsWith("I²")) {
+        ht.append("tspan").style("font-style", "italic").text("I");
+        ht.append("tspan").text(part.slice(1));
+      } else { ht.append("tspan").text(part); }
+    });
   }
 }
 
@@ -2507,14 +2521,20 @@ export function drawCaterpillarPlot(studies, m, profile, options = {}) {
   // ---- Heterogeneity + k annotation (top margin, clear of study rows) ----
   const pageNote = totalPages > 1 ? `  ·  page ${page + 1} of ${totalPages}` : "";
   const hetParts = [`k = ${k}${pageNote}`];
-  if (isFinite(m.I2))                 hetParts.push(`I² = ${(m.I2 * 100).toFixed(1)}%`);
+  if (isFinite(m.I2))                 hetParts.push(`I² = ${m.I2.toFixed(1)}%`);
   if (isFinite(m.tau2) && m.tau2 > 0) hetParts.push(`τ² = ${m.tau2.toFixed(3)}`);
-  svg.append("text")
+  { const ht = svg.append("text")
     .attr("x", margin.left + 4)
     .attr("y", 16)
     .attr("fill", "var(--fg-muted)")
-    .style("font-size", "10px")
-    .text(hetParts.join("  "));
+    .style("font-size", "10px");
+  hetParts.forEach((part, pi) => {
+    if (pi > 0) ht.append("tspan").text("  ");
+    if (part.startsWith("I²")) {
+      ht.append("tspan").style("font-style", "italic").text("I");
+      ht.append("tspan").text(part.slice(1));
+    } else { ht.append("tspan").text(part); }
+  }); }
 
   // ---- Legend (groups only) ----
   if (hasGroups) {
@@ -3560,10 +3580,13 @@ export function drawGoshPlot(result, profile, options = {}) {
   styleAxis(axisY, "var(--border-hover)", "var(--fg-muted)", "10px");
 
   // ---- Axis labels ----
-  svg.append("text")
+  { const xl = svg.append("text")
     .attr("x", margin.left + iW / 2).attr("y", H - 8)
-    .attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "11px")
-    .text(xLabel);
+    .attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "11px");
+  if (xLabel.startsWith("I²")) {
+    xl.append("tspan").style("font-style", "italic").text("I");
+    xl.append("tspan").text(xLabel.slice(1));
+  } else { xl.text(xLabel); } }
 
   svg.append("text")
     .attr("transform", "rotate(-90)")

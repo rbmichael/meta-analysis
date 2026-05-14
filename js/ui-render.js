@@ -60,7 +60,7 @@ function getCiLabel() {
  */
 export function formatContrastResult(result, reg) {
   const { est, se, stat, p, ci } = result;
-  const statLabel = reg.dist === "t" ? `t(${reg.QEdf})` : "z";
+  const statLabel = reg.dist === "t" ? `<em>t</em>(${reg.QEdf})` : "<em>z</em>";
   const ciLabel   = getCiLabel();
   if (!isFinite(est)) {
     return `<div class="reg-note reg-warn" style="margin-top:6px">
@@ -70,7 +70,7 @@ export function formatContrastResult(result, reg) {
   return `
     <table class="reg-table" style="margin-top:8px">
       <thead><tr>
-        <th>Estimate</th><th>SE</th><th>${statLabel}</th><th>p</th><th>${ciLabel}</th>
+        <th>Estimate</th><th>SE</th><th>${statLabel}</th><th><em>p</em></th><th>${ciLabel}</th>
       </tr></thead>
       <tbody><tr>
         <td>${fmt(est)}</td>
@@ -146,10 +146,10 @@ export function buildRegCoeffRows(reg, adjPs = null, mods = []) {
       ? `F(${mt.QMdf},\u2009${reg.QEdf})`
       : `χ²(${mt.QMdf})`;
     let qmStr = isFinite(mt.QM)
-      ? ` &nbsp;·&nbsp; QM ${QMlabel} = ${fmt(mt.QM)}, p = ${regFmtP(mt.QMp)}`
+      ? ` &nbsp;·&nbsp; <em>Q</em>M ${QMlabel} = ${fmt(mt.QM)}, <em>p</em> = ${regFmtP(mt.QMp)}`
       : "";
     if (adjPs && adjPs[mi] !== undefined && isFinite(adjPs[mi]) && adjPs[mi] !== mt.QMp) {
-      qmStr += `, p (adj) = ${regFmtP(adjPs[mi])}`;
+      qmStr += `, <em>p</em> (adj) = ${regFmtP(adjPs[mi])}`;
     }
     html += `<tr class="reg-mod-group">
       <td colspan="${colCount}"><span class="reg-mod-name">${escapeHTML(mt.name)}</span>${qmStr}</td>
@@ -223,7 +223,7 @@ export function renderLocationScalePanel(ls, ciMethod, kExcluded = 0) {
     for (const mt of ls.locModTests) {
       if (!mt.colIdxs || mt.colIdxs.length === 0) continue;
       const qmStr = isFinite(mt.QM)
-        ? ` &nbsp;·&nbsp; QM χ²(${mt.QMdf}) = ${fmt(mt.QM)}, p = ${regFmtP(mt.QMp)}`
+        ? ` &nbsp;·&nbsp; <em>Q</em>M χ²(${mt.QMdf}) = ${fmt(mt.QM)}, <em>p</em> = ${regFmtP(mt.QMp)}`
         : "";
       html += `<tr class="reg-mod-group"><td colspan="7"><span class="reg-mod-name">${escapeHTML(mt.name)}</span>${qmStr}</td></tr>`;
       for (const j of mt.colIdxs) html += dataRow(j);
@@ -252,7 +252,7 @@ export function renderLocationScalePanel(ls, ciMethod, kExcluded = 0) {
     for (const mt of ls.scaleModTests) {
       if (!mt.colIdxs || mt.colIdxs.length === 0) continue;
       const qmStr = isFinite(mt.QM)
-        ? ` &nbsp;·&nbsp; QM χ²(${mt.QMdf}) = ${fmt(mt.QM)}, p = ${regFmtP(mt.QMp)}`
+        ? ` &nbsp;·&nbsp; <em>Q</em>M χ²(${mt.QMdf}) = ${fmt(mt.QM)}, <em>p</em> = ${regFmtP(mt.QMp)}`
         : "";
       html += `<tr class="reg-mod-group"><td colspan="7"><span class="reg-mod-name">${escapeHTML(mt.name)}</span>${qmStr}</td></tr>`;
       for (const j of mt.colIdxs) html += dataRow(j);
@@ -277,13 +277,13 @@ export function renderLocationScalePanel(ls, ciMethod, kExcluded = 0) {
     : "";
 
   const QM_locRow = ls.p > 1 && isFinite(ls.QM_loc)
-    ? ` &nbsp;·&nbsp; QM<sub>loc</sub> χ²(${ls.QM_locDf}) = ${fmt(ls.QM_loc)}, p = ${regFmtP(ls.QM_locP)}`
+    ? ` &nbsp;·&nbsp; <em>Q</em>M<sub>loc</sub> χ²(${ls.QM_locDf}) = ${fmt(ls.QM_loc)}, <em>p</em> = ${regFmtP(ls.QM_locP)}`
     : "";
   const QM_scaleRow = ls.q > 1 && isFinite(ls.QM_scale)
-    ? ` &nbsp;·&nbsp; QM<sub>scale</sub> χ²(${ls.QM_scaleDf}) = ${fmt(ls.QM_scale)}, p = ${regFmtP(ls.QM_scaleP)}`
+    ? ` &nbsp;·&nbsp; <em>Q</em>M<sub>scale</sub> χ²(${ls.QM_scaleDf}) = ${fmt(ls.QM_scale)}, <em>p</em> = ${regFmtP(ls.QM_scaleP)}`
     : "";
   const lrRow = ls.q > 1 && isFinite(ls.LRchi2)
-    ? `<br><span style="color:var(--fg-muted);font-size:0.93em">LR test (scale mods): χ²(${ls.LRdf}) = ${fmt(ls.LRchi2)}, p = ${regFmtP(ls.LRp)}</span>`
+    ? `<br><span style="color:var(--fg-muted);font-size:0.93em">LR test (scale mods): χ²(${ls.LRdf}) = ${fmt(ls.LRchi2)}, <em>p</em> = ${regFmtP(ls.LRp)}</span>`
     : "";
 
   const fRows = fittedRows();
@@ -295,7 +295,7 @@ export function renderLocationScalePanel(ls, ciMethod, kExcluded = 0) {
     </div>
     <div class="reg-het">
       ${tau2rng} &nbsp;·&nbsp; I² = ${fmt(ls.I2)}%
-      &nbsp;·&nbsp; QE(${ls.QEdf}) = ${fmt(ls.QE)}, p = ${regFmtP(ls.QEp)}
+      &nbsp;·&nbsp; <em>Q</em>E(${ls.QEdf}) = ${fmt(ls.QE)}, <em>p</em> = ${regFmtP(ls.QEp)}
       ${QM_locRow}${QM_scaleRow}
       ${lrRow}
       <br><span style="color:var(--fg-muted);font-size:0.93em">LL = ${fmt(ls.LL)} (ML; log τ²ᵢ = Zᵢγ)</span>
@@ -305,20 +305,20 @@ export function renderLocationScalePanel(ls, ciMethod, kExcluded = 0) {
       <p style="margin:4px 0 2px;font-weight:600;font-size:0.95em">Location model — E[yᵢ] = Xᵢβ</p>
       <table class="reg-table">
         <thead><tr>
-          <th>Term</th><th>β</th><th>SE</th><th>z</th>
-          <th>p</th><th>${ciLbl}</th><th></th>
+          <th>Term</th><th>β</th><th>SE</th><th><em>z</em></th>
+          <th><em>p</em></th><th>${ciLbl}</th><th></th>
         </tr></thead>
         <tbody>${locRows()}</tbody>
       </table>
       <p style="margin:10px 0 2px;font-weight:600;font-size:0.95em">Scale model — log τ²ᵢ = Zᵢγ</p>
       <table class="reg-table">
         <thead><tr>
-          <th>Term</th><th>γ</th><th>SE</th><th>z</th>
-          <th>p</th><th>${ciLbl}</th><th></th>
+          <th>Term</th><th>γ</th><th>SE</th><th><em>z</em></th>
+          <th><em>p</em></th><th>${ciLbl}</th><th></th>
         </tr></thead>
         <tbody>${scaleRows()}</tbody>
       </table>
-      <div class="reg-note">*** p &lt; .001 &nbsp;·&nbsp; ** p &lt; .01 &nbsp;·&nbsp; * p &lt; .05 &nbsp;·&nbsp; · p &lt; .10 &nbsp;·&nbsp; eˣ: exponentiated intercept = τ² when all scale predictors = 0</div>
+      <div class="reg-note">*** <em>p</em> &lt; .001 &nbsp;·&nbsp; ** <em>p</em> &lt; .01 &nbsp;·&nbsp; * <em>p</em> &lt; .05 &nbsp;·&nbsp; · <em>p</em> &lt; .10 &nbsp;·&nbsp; eˣ: exponentiated intercept = τ² when all scale predictors = 0</div>
       ${fRows ? `
       <details>
         <summary>Fitted values &amp; study-specific τ²ᵢ (k = ${ls.k})</summary>
@@ -361,14 +361,14 @@ export function renderRegressionPanel(reg, method, ciMethod, kExcluded = 0, mods
     return;
   }
 
-  const statLabel = reg.dist === "t" ? `t(${reg.QEdf})` : "z";
+  const statLabel = reg.dist === "t" ? `<em>t</em>(${reg.QEdf})` : "<em>z</em>";
   const QMlabel   = reg.QMdist === "F"
-    ? `F(${reg.QMdf}, ${reg.QEdf})`
+    ? `<em>F</em>(${reg.QMdf}, ${reg.QEdf})`
     : `χ²(${reg.QMdf})`;
   const ciLabel   = ciMethod === "KH" ? "Knapp-Hartung" : "Normal CI";
 
   const QMrow = reg.p > 1
-    ? ` &nbsp;·&nbsp; QM ${QMlabel} = ${fmt(reg.QM)}, p = ${regFmtP(reg.QMp)}`
+    ? ` &nbsp;·&nbsp; <em>Q</em>M ${QMlabel} = ${fmt(reg.QM)}, <em>p</em> = ${regFmtP(reg.QMp)}`
     : "";
 
   const mccMethod = document.getElementById("mccMethod")?.value ?? "none";
@@ -407,12 +407,12 @@ export function renderRegressionPanel(reg, method, ciMethod, kExcluded = 0, mods
         <table class="reg-table">
           <thead><tr>
             <th>Moderator</th>
-            <th>${reg.QMdist === "F" ? "F" : "QM"} (Wald)</th>
+            <th>${reg.QMdist === "F" ? "<em>F</em>" : "<em>Q</em>M"} (Wald)</th>
             ${hasLRT ? `<th>LRT χ²${hBtn("mreg.lrt")}</th>` : ""}
             <th>df</th>
-            <th>p (Wald)</th>
-            ${hasLRT ? `<th>p (LRT)</th>` : ""}
-            ${hasAdjPs ? `<th>p (${mccLabel})</th>` : ""}
+            <th><em>p</em> (Wald)</th>
+            ${hasLRT ? `<th><em>p</em> (LRT)</th>` : ""}
+            ${hasAdjPs ? `<th><em>p</em> (${mccLabel})</th>` : ""}
           </tr></thead>
           <tbody>
             ${reg.modTests.map((mt, mi) => {
@@ -445,7 +445,7 @@ export function renderRegressionPanel(reg, method, ciMethod, kExcluded = 0, mods
     : "";
 
   const robustHeaders = reg.isClustered
-    ? `<th>Rob.SE</th><th>Rob.p</th>`
+    ? `<th>Rob.SE</th><th>Rob.<em>p</em></th>`
     : "";
 
   panel.innerHTML = `
@@ -456,7 +456,7 @@ export function renderRegressionPanel(reg, method, ciMethod, kExcluded = 0, mods
     <div class="reg-het">
       τ² = ${fmt(reg.tau2)} (residual) &nbsp;·&nbsp; I² = ${fmt(reg.I2)}%
       ${reg.p > 1 ? `&nbsp;·&nbsp; R² = ${isFinite(reg.R2) ? fmt(reg.R2 * 100) + "%" : "N/A"}` : ""}
-      &nbsp;·&nbsp; QE(${reg.QEdf}) = ${fmt(reg.QE)}, p = ${regFmtP(reg.QEp)}
+      &nbsp;·&nbsp; <em>Q</em>E(${reg.QEdf}) = ${fmt(reg.QE)}, <em>p</em> = ${regFmtP(reg.QEp)}
       ${QMrow}
       <br><span style="color:var(--fg-muted);font-size:0.93em">${hBtn("reg.aic")}AIC&nbsp;=&nbsp;${fmt(reg.AIC)} &nbsp;·&nbsp; BIC&nbsp;=&nbsp;${fmt(reg.BIC)} &nbsp;·&nbsp; LL&nbsp;=&nbsp;${fmt(reg.LL)}&nbsp;&nbsp;<span style="font-size:0.9em;opacity:0.75">(${method}; compare ${method === "REML" ? "models with same predictors only" : "any nested models"})</span></span>
     </div>
@@ -465,12 +465,12 @@ export function renderRegressionPanel(reg, method, ciMethod, kExcluded = 0, mods
       <table class="reg-table">
         <thead><tr>
           <th>Term</th><th>β</th><th>SE</th><th>${statLabel}</th>
-          <th>p</th><th>${getCiLabel()}</th><th>VIF</th><th></th>
+          <th><em>p</em></th><th>${getCiLabel()}</th><th>VIF</th><th></th>
           ${robustHeaders}
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>
-      <div class="reg-note">*** p &lt; .001 &nbsp;·&nbsp; ** p &lt; .01 &nbsp;·&nbsp; * p &lt; .05 &nbsp;·&nbsp; · p &lt; .10</div>
+      <div class="reg-note">*** <em>p</em> &lt; .001 &nbsp;·&nbsp; ** <em>p</em> &lt; .01 &nbsp;·&nbsp; * <em>p</em> &lt; .05 &nbsp;·&nbsp; · <em>p</em> &lt; .10</div>
       ${modTestsBlock}
       <details class="contrast-section">
         <summary>Custom contrasts${hBtn("mreg.contrasts")}</summary>
@@ -537,7 +537,7 @@ function buildLooBody(loo, fullSig, fullEst, profile) {
       <th>${getCiLabel()} (high)</th>
       <th>I² (%)</th>
       <th>τ²</th>
-      <th>p</th>
+      <th><em>p</em></th>
       <th>Δ estimate</th>
     </tr>`;
   const dataRows = loo.rows.map(row => {
@@ -758,8 +758,8 @@ export function renderPCurvePanel(pcurve) {
   panel.innerHTML = `
     <div class="pcurve-summary">
       <span>P-curve &nbsp;·&nbsp; <strong>${pcurve.k}</strong> significant result${pcurve.k !== 1 ? "s" : ""} (p &lt; .05)</span>
-      <span>Right-skew test: Z = <strong>${fmtZ(pcurve.rightSkewZ)}</strong>, p <strong>${fmtP(pcurve.rightSkewP)}</strong></span>
-      <span>Flatness test: Z = <strong>${fmtZ(pcurve.flatnessZ)}</strong>, p <strong>${fmtP(pcurve.flatnessP)}</strong></span>
+      <span>Right-skew test: <em>Z</em> = <strong>${fmtZ(pcurve.rightSkewZ)}</strong>, <em>p</em> <strong>${fmtP(pcurve.rightSkewP)}</strong></span>
+      <span>Flatness test: <em>Z</em> = <strong>${fmtZ(pcurve.flatnessZ)}</strong>, <em>p</em> <strong>${fmtP(pcurve.flatnessP)}</strong></span>
       <span class="status-pill ${pcurve.verdict}">${verdictLabels[pcurve.verdict] ?? pcurve.verdict}</span>
     </div>`;
 
@@ -781,12 +781,7 @@ export function renderPUniformPanel(puniform, m, profile) {
   }
 
   function fmtZ(z) { return isFinite(z) ? z.toFixed(3) : "—"; }
-  function fmtP(p) {
-    if (!isFinite(p)) return "—";
-    if (p < 0.001) return "< 0.001";
-    if (p < 0.01)  return "< 0.01";
-    return p.toFixed(3);
-  }
+  function fmtP(p) { return fmtPval(p); }
   function fmtEst(v) { return isFinite(v) ? fmt(profile.transform(v)) : "—"; }
 
   const est = fmtEst(puniform.estimate);
@@ -805,8 +800,8 @@ export function renderPUniformPanel(puniform, m, profile) {
     <div class="puniform-summary">
       <span>P-uniform &nbsp;·&nbsp; <strong>${puniform.k}</strong> significant result${puniform.k !== 1 ? "s" : ""} (p &lt; .05)</span>
       <span>Estimate: <strong>${est}</strong> [${lo}, ${hi}]</span>
-      <span>Significance test: Z = <strong>${fmtZ(puniform.Z_sig)}</strong>, p <strong>${fmtP(puniform.p_sig)}</strong></span>
-      <span>Bias test: Z = <strong>${fmtZ(puniform.Z_bias)}</strong>, p <strong>${fmtP(puniform.p_bias)}</strong></span>
+      <span>Significance test: <em>Z</em> = <strong>${fmtZ(puniform.Z_sig)}</strong>, <em>p</em> <strong>${fmtP(puniform.p_sig)}</strong></span>
+      <span>Bias test: <em>Z</em> = <strong>${fmtZ(puniform.Z_bias)}</strong>, <em>p</em> <strong>${fmtP(puniform.p_bias)}</strong></span>
       ${flags.join(" ")}
     </div>`;
 
@@ -819,12 +814,7 @@ export function renderSelectionModelPanel(r, mode, weightFn, profile) {
   if (!panel) return;
 
   function fmtV(v) { return isFinite(v) ? fmt(v) : "—"; }
-  function fmtP(p) {
-    if (!isFinite(p)) return "—";
-    if (p < 0.001) return "< 0.001";
-    if (p < 0.01)  return "< 0.01";
-    return p.toFixed(3);
-  }
+  function fmtP(p) { return fmtPval(p); }
   function fmtDisp(v) { return isFinite(v) ? fmt(profile.transform(v)) : "—"; }
 
   // Not run (meta-regression active)
@@ -866,7 +856,7 @@ export function renderSelectionModelPanel(r, mode, weightFn, profile) {
           <tr><td>Adjusted τ²</td>
               <td>${fmtV(r.tau2)} &nbsp;·&nbsp; unadjusted: ${fmtV(r.tau2_unsel)}</td></tr>
           <tr><td>LRT (H₀: δ = 0)</td>
-              <td>χ²(1) = ${fmtV(r.LRT)}, p ${fmtP(r.LRTp)}</td></tr>
+              <td>χ²(1) = ${fmtV(r.LRT)}, <em>p</em> ${fmtP(r.LRTp)}</td></tr>
         </tbody>
       </table>
       ${convNote}`;
@@ -899,7 +889,7 @@ export function renderSelectionModelPanel(r, mode, weightFn, profile) {
           <tr><td>Adjusted τ²</td>
               <td>${fmtV(r.tau2)} &nbsp;·&nbsp; unadjusted: ${fmtV(r.tau2_unsel)}</td></tr>
           <tr><td>LRT (H₀: δ = 0)</td>
-              <td>χ²(1) = ${fmtV(r.LRT)}, p ${fmtP(r.LRTp)}</td></tr>
+              <td>χ²(1) = ${fmtV(r.LRT)}, <em>p</em> ${fmtP(r.LRTp)}</td></tr>
         </tbody>
       </table>
       ${convNote}`;
@@ -932,7 +922,7 @@ export function renderSelectionModelPanel(r, mode, weightFn, profile) {
           <tr><td>Adjusted τ²</td>
               <td>${fmtV(r.tau2)} &nbsp;·&nbsp; unadjusted: ${fmtV(r.tau2_unsel)}</td></tr>
           <tr><td>LRT (H₀: δ = 0)</td>
-              <td>χ²(1) = ${fmtV(r.LRT)}, p ${fmtP(r.LRTp)}</td></tr>
+              <td>χ²(1) = ${fmtV(r.LRT)}, <em>p</em> ${fmtP(r.LRTp)}</td></tr>
         </tbody>
       </table>
       ${convNote}`;
@@ -967,7 +957,7 @@ export function renderSelectionModelPanel(r, mode, weightFn, profile) {
           <tr><td>Adjusted τ²</td>
               <td>${fmtV(r.tau2)} &nbsp;·&nbsp; unadjusted: ${fmtV(r.tau2_unsel)}</td></tr>
           <tr><td>LRT (H₀: a = b = 1)</td>
-              <td>χ²(2) = ${fmtV(r.LRT)}, p ${fmtP(r.LRTp)}</td></tr>
+              <td>χ²(2) = ${fmtV(r.LRT)}, <em>p</em> ${fmtP(r.LRTp)}</td></tr>
         </tbody>
       </table>
       ${convNote}`;
@@ -1013,7 +1003,7 @@ export function renderSelectionModelPanel(r, mode, weightFn, profile) {
 
   // ---- LRT row (MLE only) ----
   const lrtRow = isMLE
-    ? `<tr><td>LRT (H₀: no selection)</td><td colspan="${K}">χ²(${r.LRTdf}) = ${fmtV(r.LRT)}, p ${fmtP(r.LRTp)}</td></tr>`
+    ? `<tr><td>LRT (H₀: no selection)</td><td colspan="${K}">χ²(${r.LRTdf}) = ${fmtV(r.LRT)}, <em>p</em> ${fmtP(r.LRTp)}</td></tr>`
     : "";
 
   // ---- Convergence note (MLE only) ----
@@ -1210,7 +1200,7 @@ export function buildSubgroupHTML(subgroup, profile, hasClusters) {
       <tr><th>Group</th><th>k</th><th>Effect</th><th>SE</th><th>CI</th><th>τ²</th><th>I² (%)</th></tr>
       ${rows}
       <tr style="font-weight:bold;">
-        <td colspan="7">Q_between(${subgroup.df}) = ${subgroup.Qbetween.toFixed(3)}, p ${fmtPval(subgroup.p)}</td>
+        <td colspan="7"><em>Q</em><sub>between</sub>(${subgroup.df}) = ${subgroup.Qbetween.toFixed(3)}, <em>p</em> ${fmtPval(subgroup.p)}</td>
       </tr>
     </table>`;
 }
@@ -1267,9 +1257,9 @@ export function renderPermResults(permResult, reg) {
 
   const modTable = nMods > 1 && modRows
     ? `<details style="margin-top:6px">
-        <summary style="cursor:pointer;color:var(--fg-muted)">Per-moderator permutation p-values</summary>
+        <summary style="cursor:pointer;color:var(--fg-muted)">Per-moderator permutation <em>p</em>-values</summary>
         <table class="reg-table" style="margin-top:4px">
-          <thead><tr><th>Moderator</th><th>QM (${reg.QMdist ?? "χ²"})</th><th>Perm p</th></tr></thead>
+          <thead><tr><th>Moderator</th><th><em>Q</em>M (${reg.QMdist ?? "χ²"})</th><th>Perm <em>p</em></th></tr></thead>
           <tbody>${modRows}</tbody>
         </table>
       </details>`
@@ -1277,9 +1267,9 @@ export function renderPermResults(permResult, reg) {
 
   el.innerHTML = `
     <div class="perm-results-block">
-      <strong>Permutation QM ${omniLabel} = ${fmt(reg.QM)}</strong>
+      <strong>Permutation <em>Q</em>M ${omniLabel} = ${fmt(reg.QM)}</strong>
       &nbsp;&mdash;&nbsp;
-      permutation p = <strong>${fmtP(omniP)}</strong>
+      permutation <em>p</em> = <strong>${fmtP(omniP)}</strong>
       <span class="reg-note" style="display:inline;margin-left:8px">(${nPerm} permutations, τ² re-estimated per permutation)</span>
     </div>
     ${modTable}`;

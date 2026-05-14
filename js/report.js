@@ -459,8 +459,8 @@ function sectionSummary(args) {
       `<tr><td>I²</td><td>${fmt(m.I2)}% [${fmt(m.I2CI[0])}%, ${fmt(m.I2CI[1])}%]</td></tr>`,
       !isMHorPeto ? `<tr><td>H²-CI</td><td>[${fmt(m.H2CI[0])}, ${H2hi}]</td></tr>` : "",
       `<tr><td>Q (df = ${m.df})</td><td>${fmt(m.Q)}</td></tr>`,
-      m.dist ? `<tr><td>${esc(m.dist)}-statistic</td><td>${fmt(m.stat)}, p ${fmtP_APA(m.pval)}</td></tr>` : "",
-      m.isClustered ? `<tr><td>Robust CI (C = ${m.clustersUsed} clusters)</td><td>${fmtCI_APA(profile.transform(m.robustCiLow), profile.transform(m.robustCiHigh))} · SE = ${fmt(m.robustSE)} · z = ${fmt(m.robustStat)}, p ${fmtP_APA(m.robustPval)}</td></tr>` : "",
+      m.dist ? `<tr><td><em>${esc(m.dist)}</em>-statistic</td><td>${fmt(m.stat)}, <em>p</em> ${fmtP_APA(m.pval)}</td></tr>` : "",
+      m.isClustered ? `<tr><td>Robust CI (C = ${m.clustersUsed} clusters)</td><td>${fmtCI_APA(profile.transform(m.robustCiLow), profile.transform(m.robustCiHigh))} · SE = ${fmt(m.robustSE)} · <em>z</em> = ${fmt(m.robustStat)}, <em>p</em> ${fmtP_APA(m.robustPval)}</td></tr>` : "",
     ].filter(Boolean);
 
     const tableNote = isMHorPeto
@@ -508,8 +508,8 @@ function sectionSummary(args) {
       `<tr><td>I²</td><td>${fmt(m.I2)}% [${fmt(m.I2CI[0])}%, ${fmt(m.I2CI[1])}%]</td></tr>`,
       !isMHorPeto ? `<tr><td>H²-CI</td><td>[${fmt(m.H2CI[0])}, ${H2hi}]</td></tr>` : "",
       `<tr><td>Q (df = ${m.df})</td><td>${fmt(m.Q)}</td></tr>`,
-      m.dist ? `<tr><td>${esc(m.dist)}-statistic</td><td>${fmt(m.stat)}, p = ${fmtP(m.pval)}</td></tr>` : "",
-      m.isClustered ? `<tr><td>Robust CI (C = ${m.clustersUsed} clusters)</td><td>[${fmt(profile.transform(m.robustCiLow))}, ${fmt(profile.transform(m.robustCiHigh))}] · SE = ${fmt(m.robustSE)} · z = ${fmt(m.robustStat)}, p = ${fmtP(m.robustPval)}</td></tr>` : "",
+      m.dist ? `<tr><td><em>${esc(m.dist)}</em>-statistic</td><td>${fmt(m.stat)}, <em>p</em> = ${fmtP(m.pval)}</td></tr>` : "",
+      m.isClustered ? `<tr><td>Robust CI (C = ${m.clustersUsed} clusters)</td><td>[${fmt(profile.transform(m.robustCiLow))}, ${fmt(profile.transform(m.robustCiHigh))}] · SE = ${fmt(m.robustSE)} · <em>z</em> = ${fmt(m.robustStat)}, <em>p</em> = ${fmtP(m.robustPval)}</td></tr>` : "",
     ].filter(Boolean),
     { style: "margin-top:14px" }
   );
@@ -648,12 +648,12 @@ function sectionPUniform(puniform, m, profile, apaFormat = false, nextTable, wid
 <section>
   <h2>P-uniform (van Assen et al., 2015)</h2>
   <p class="meta-line">${puniform.k} significant result${puniform.k !== 1 ? "s" : ""} (p &lt; .05) used &nbsp;·&nbsp; effect scale: ${esc(profile.label)}</p>
-  ${buildTableAPA(nextTable(), "P-uniform Bias-Corrected Estimates", ["Method", "Estimate", widthCiLabel, "Z", "p"], rows, note)}
+  ${buildTableAPA(nextTable(), "P-uniform Bias-Corrected Estimates", ["Method", "Estimate", widthCiLabel, "<em>Z</em>", "<em>p</em>"], rows, note)}
 </section>`;
   }
 
   const table = buildTable(
-    ["Method", "Estimate", widthCiLabel, "Z", "p"],
+    ["Method", "Estimate", widthCiLabel, "<em>Z</em>", "<em>p</em>"],
     [
       `<tr><td>RE (uncorrected)</td><td>${reEst}</td><td>[${reLo}, ${reHi}]</td><td>${fmt(puniform.Z_bias)}</td><td>${fmtP(puniform.p_bias)}</td></tr>`,
       `<tr><td>P-uniform (bias-corrected)</td><td>${puEst}</td><td>[${puLo}, ${puHi}]</td><td>${fmt(puniform.Z_sig)}</td><td>${fmtP(puniform.p_sig)}</td></tr>`,
@@ -724,7 +724,7 @@ function sectionSelectionModel(sel, profile, selMode, selLabel, apaFormat = fals
   // ---- Shared table rows ----
   const lrtFmt = p => apaFormat ? fmtP_APA(p) : `= ${fmtP(p)}`;
   const lrtRow = isMLE && isFinite(sel.LRT)
-    ? `<tr><td>LRT (H₀: no selection)</td><td colspan="${K}">χ²(${sel.LRTdf}) = ${fmtV(sel.LRT)}, p ${lrtFmt(sel.LRTp)}</td></tr>`
+    ? `<tr><td>LRT (H₀: no selection)</td><td colspan="${K}">χ²(${sel.LRTdf}) = ${fmtV(sel.LRT)}, <em>p</em> ${lrtFmt(sel.LRTp)}</td></tr>`
     : "";
 
   const tableRows = [
@@ -738,7 +738,7 @@ function sectionSelectionModel(sel, profile, selMode, selLabel, apaFormat = fals
   const interpNote = `Under ${schemeText} the bias-corrected estimate is ${muAdj} [${ciLo}, ${ciHi}]`
     + ` — ${direction} than the unadjusted RE estimate of ${muUnadj}.`
     + (isMLE && isFinite(sel.LRTp) && sel.LRTp < 0.05
-        ? ` The LRT rejects the null of no selection (p ${lrtFmt(sel.LRTp)}).`
+        ? ` The LRT rejects the null of no selection (<em>p</em> ${lrtFmt(sel.LRTp)}).`
         : "");
 
   if (apaFormat) {
@@ -1017,7 +1017,7 @@ function sectionRegression(reg, method, ciMethod, apaFormat = false, nextTable, 
     return `<td>${isFinite(v) ? fmt(v) : "—"}</td>`;
   };
 
-  const modTestsQMlabel = reg.QMdist === "F" ? "F" : "χ²";
+  const modTestsQMlabel = reg.QMdist === "F" ? "<em>F</em>" : "χ²";
 
   if (apaFormat) {
     const rows = reg.colNames.map((name, j) => {
@@ -1039,7 +1039,7 @@ function sectionRegression(reg, method, ciMethod, apaFormat = false, nextTable, 
 
     const coefNote = `β = unstandardised regression coefficient. SE = standard error. CI = confidence interval. `
       + `QE(${reg.QEdf}) = ${fmt(reg.QE)}, p ${fmtP_APA(reg.QEp)}.`
-      + (reg.p > 1 ? ` QM ${esc(QMlabel)} = ${fmt(reg.QM)}, p ${fmtP_APA(reg.QMp)}.` : "")
+      + (reg.p > 1 ? ` <em>Q</em>M ${esc(QMlabel)} = ${fmt(reg.QM)}, <em>p</em> ${fmtP_APA(reg.QMp)}.` : "")
       + (reg.p > 1 && isFinite(reg.R2) ? ` R² = ${fmt(reg.R2 * 100)}%.` : "");
 
     const coefTable = buildTableAPA(nextTable(), "Meta-Regression Coefficients", coefHeaders, rows, coefNote);
@@ -1102,7 +1102,7 @@ function sectionRegression(reg, method, ciMethod, apaFormat = false, nextTable, 
   const modTestsTable = reg.modTests && reg.modTests.length > 1
     ? `<h3>Per-moderator omnibus tests</h3>
   ${buildTable(
-    ["Moderator", `${esc(modTestsQMlabel)} (Wald)`, ...(hasLRT_std ? ["LRT χ²"] : []), "df", "p (Wald)", ...(hasLRT_std ? ["p (LRT)"] : [])],
+    ["Moderator", `${esc(modTestsQMlabel)} (Wald)`, ...(hasLRT_std ? ["LRT χ²"] : []), "df", "<em>p</em> (Wald)", ...(hasLRT_std ? ["<em>p</em> (LRT)"] : [])],
     reg.modTests.map(mt => `<tr>
       <td>${esc(mt.name)}</td>
       <td>${fmt(mt.QM)}</td>
@@ -1120,12 +1120,12 @@ function sectionRegression(reg, method, ciMethod, apaFormat = false, nextTable, 
   <p class="meta-line">
     k = ${reg.k} · ${esc(method)} · ${esc(ciLabel)}
     · τ² = ${fmt(reg.tau2)} · I² = ${fmt(reg.I2)}%${R2row}
-    · QE(${reg.QEdf}) = ${fmt(reg.QE)}, p = ${fmtP(reg.QEp)}
-    ${reg.p > 1 ? `· QM ${esc(QMlabel)} = ${fmt(reg.QM)}, p = ${fmtP(reg.QMp)}` : ""}
+    · <em>Q</em>E(${reg.QEdf}) = ${fmt(reg.QE)}, <em>p</em> = ${fmtP(reg.QEp)}
+    ${reg.p > 1 ? `· <em>Q</em>M ${esc(QMlabel)} = ${fmt(reg.QM)}, <em>p</em> = ${fmtP(reg.QMp)}` : ""}
     ${aicRow ? `<br><span style="font-size:0.93em">${aicRow.slice(3)}</span>` : ""}
   </p>
   ${buildTable(coefHeaders, rows)}
-  <p class="note">*** p &lt; .001 · ** p &lt; .01 · * p &lt; .05 · . p &lt; .10</p>
+  <p class="note">*** <em>p</em> &lt; .001 · ** <em>p</em> &lt; .01 · * <em>p</em> &lt; .05 · . <em>p</em> &lt; .10</p>
   ${modTestsTable}
 </section>`;
 }
@@ -1749,7 +1749,7 @@ export function buildMVReport({ res, alpha = 0.05, apaFormat = false }) {
   const fP = p => !isFinite(p) ? "—" : p < 0.0001 ? p.toExponential(2) : (+p).toFixed(4);
 
   // Pooled estimates table
-  const pooledHeaders = ["Outcome", "Estimate", "SE", `${ciPct}% CI`, "z", "p"];
+  const pooledHeaders = ["Outcome", "Estimate", "SE", `${ciPct}% CI`, "<em>z</em>", "<em>p</em>"];
   const pooledRows = outcomeIds.map((id, o) => {
     const [lo, hi] = ci[o];
     return `<tr><td>${esc(String(id))}</td><td>${fmt(beta[o], 4)}</td><td>${fmt(se[o], 4)}</td>
@@ -1759,7 +1759,7 @@ export function buildMVReport({ res, alpha = 0.05, apaFormat = false }) {
   // Moderator table (if any)
   let modHTML = "";
   if (hasMods) {
-    const modHeaders = ["Coefficient", "Estimate", "SE", `${ciPct}% CI`, "z", "p"];
+    const modHeaders = ["Coefficient", "Estimate", "SE", `${ciPct}% CI`, "<em>z</em>", "<em>p</em>"];
     const modRows = beta.slice(P).map((b, i) => {
       const j = P + i;
       const [lo, hi] = ci[j];

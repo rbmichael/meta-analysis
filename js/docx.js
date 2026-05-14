@@ -162,6 +162,23 @@ function italic(text) {
   return `<w:r><w:rPr><w:i/></w:rPr><w:t xml:space="preserve">${xmlEsc(String(text))}</w:t></w:r>`;
 }
 
+// Render a string that may contain <em>…</em> tags as a sequence of plain runs
+// with italic runs for the tagged portions. Used for table headers and notes.
+function richRuns(text, { bold: isBold = false } = {}) {
+  if (!text) return "";
+  const bTag = isBold ? "<w:b/>" : "";
+  const parts = String(text).split(/(<em>[^<]*<\/em>)/);
+  return parts.map(part => {
+    if (part.startsWith("<em>")) {
+      const inner = xmlEsc(part.slice(4, -5));
+      return `<w:r><w:rPr>${bTag}<w:i/></w:rPr><w:t xml:space="preserve">${inner}</w:t></w:r>`;
+    }
+    const escaped = xmlEsc(part);
+    if (!escaped) return "";
+    return `<w:r><w:rPr>${bTag}</w:rPr><w:t xml:space="preserve">${escaped}</w:t></w:r>`;
+  }).join("");
+}
+
 // External hyperlink. rId must be registered in document.xml.rels.
 function hyperlink(rId, text) {
   return `<w:hyperlink r:id="${rId}" w:history="1"><w:r><w:rPr><w:rStyle w:val="Hyperlink"/></w:rPr><w:t xml:space="preserve">${xmlEsc(String(text))}</w:t></w:r></w:hyperlink>`;
@@ -281,7 +298,7 @@ function apaTableDocx(tableNum, subtitle, headers, rows, note) {
     <w:tcPr><w:tcBorders>
       <w:bottom w:val="single" w:sz="6" w:space="0" w:color="000000"/>
     </w:tcBorders></w:tcPr>
-    <w:p><w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">${xmlEsc(h)}</w:t></w:r></w:p>
+    <w:p>${richRuns(h, { bold: true })}</w:p>
   </w:tc>`).join("")}
 </w:tr>`;
 
@@ -307,7 +324,7 @@ ${bodyRowsXML}
 </w:tbl>`;
 
   const notePara = note
-    ? `<w:p><w:pPr><w:pStyle w:val="APANote"/></w:pPr>${italic("Note.")}${run(" " + note)}</w:p>`
+    ? `<w:p><w:pPr><w:pStyle w:val="APANote"/></w:pPr>${italic("Note.")}${richRuns(" " + note)}</w:p>`
     : "";
 
   return [
@@ -627,11 +644,11 @@ function docRegression(args, ctx) {
   if (!reg || reg.rankDeficient || !reg.colNames) return [];
 
   const ciLabel   = ciMethod === "KH" ? "Knapp-Hartung" : "Normal CI";
-  const statLabel = reg.dist === "t" ? `t(${reg.QEdf})` : "z";
-  const QMlabel   = reg.QMdist === "F" ? `F(${reg.QMdf},\u202F${reg.QEdf})` : `\u03C7\u00B2(${reg.QMdf})`;
+  const statLabel = reg.dist === "t" ? `<em>t</em>(${reg.QEdf})` : "<em>z</em>";
+  const QMlabel   = reg.QMdist === "F" ? `<em>F</em>(${reg.QMdf},\u202F${reg.QEdf})` : `\u03C7\u00B2(${reg.QMdf})`;
   const hasVif    = Array.isArray(reg.vif) && reg.vif.some(v => isFinite(v));
 
-  const coefHeaders = ["Predictor", "\u03B2", "SE", statLabel, "p", widthCiLabel];
+  const coefHeaders = ["Predictor", "\u03B2", "SE", statLabel, "<em>p</em>", widthCiLabel];
   if (hasVif) coefHeaders.push("VIF");
 
   const coefRows = reg.colNames.map((name, j) => {
@@ -644,8 +661,8 @@ function docRegression(args, ctx) {
 
   const R2row = reg.p > 1 && isFinite(reg.R2) ? ` R\u00B2\u202F=\u202F${fmt(reg.R2 * 100)}%.` : "";
   const coefNote = `\u03B2 = unstandardised regression coefficient. SE = standard error. CI = confidence interval. `
-    + `QE(${reg.QEdf})\u202F=\u202F${fmt(reg.QE)}, p ${fmtP_APA(reg.QEp)}.`
-    + (reg.p > 1 ? ` QM ${QMlabel}\u202F=\u202F${fmt(reg.QM)}, p ${fmtP_APA(reg.QMp)}.` : "")
+    + `<em>Q</em>E(${reg.QEdf})\u202F=\u202F${fmt(reg.QE)}, <em>p</em> ${fmtP_APA(reg.QEp)}.`
+    + (reg.p > 1 ? ` <em>Q</em>M ${QMlabel}\u202F=\u202F${fmt(reg.QM)}, <em>p</em> ${fmtP_APA(reg.QMp)}.` : "")
     + R2row;
 
   const chunks = [
@@ -655,15 +672,15 @@ function docRegression(args, ctx) {
   ];
 
   if (reg.modTests && reg.modTests.length > 1) {
-    const modQlabel = reg.QMdist === "F" ? "F" : "\u03C7\u00B2";
+    const modQlabel = reg.QMdist === "F" ? "<em>F</em>" : "\u03C7\u00B2";
     const hasLRT_docx = reg.modTests.some(mt => isFinite(mt.lrt));
     const modHeaders = [
       "Moderator",
       `${modQlabel} (Wald)`,
       ...(hasLRT_docx ? ["LRT \u03C7\u00B2"] : []),
       "df",
-      "p (Wald)",
-      ...(hasLRT_docx ? ["p (LRT)"] : []),
+      "<em>p</em> (Wald)",
+      ...(hasLRT_docx ? ["<em>p</em> (LRT)"] : []),
     ];
     const modRows = reg.modTests.map(mt => [
       run(mt.name),
