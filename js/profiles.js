@@ -14,8 +14,10 @@
 //                     Controls the "SE (transformed)" column label in the table.
 //   isLog             true when the back-transform is Math.exp.
 //                     Causes plots to append a "(log scale)" axis annotation.
-//   isFisherZ         true when yi is on the Fisher z scale (atanh transform).
-//                     Causes results panel to append a "z scale: ..." secondary line.
+//   analysisScaleLabel  String label for the analysis scale (e.g. "Fisher z scale",
+//                     "logit scale"). When present, the results panel appends a
+//                     secondary "<label>: raw_value | SE | CI" line alongside the
+//                     primary back-transformed display.
 //   inputs            Ordered array of column names expected in the data table.
 //   rawInputs         (GOR only) Set of input fields that receive raw text
 //                     rather than a numeric value.
@@ -922,7 +924,7 @@ export const effectProfiles = {
     label:  "Correlation (Fisher's z)",
     group:  "Correlations",
     isTransformedScale: true,
-    isFisherZ: true,
+    analysisScaleLabel: "Fisher z scale",
     inputs: ["r", "n"],
     compute(s) {
       if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
@@ -1012,7 +1014,7 @@ export const effectProfiles = {
     label:  "Partial Correlation (Fisher's z)",
     group:  "Correlations",
     isTransformedScale: true,
-    isFisherZ: true,
+    analysisScaleLabel: "Fisher z scale",
     inputs: ["r", "n", "p"],
     compute(s) {
       if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
@@ -1245,7 +1247,7 @@ export const effectProfiles = {
     label:  "R-squared (Fisher's z of √R²)",
     group:  "Correlations",
     isTransformedScale: true,
-    isFisherZ: true,
+    analysisScaleLabel: "Fisher z scale",
     inputs: ["r2", "n"],
     compute(s) {
       if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
@@ -1427,6 +1429,7 @@ export const effectProfiles = {
     label:  "Proportion (log)",
     group:  "Proportions",
     isTransformedScale: true,
+    isLog: true,
     inputs: ["x", "n"],
     compute(s) {
       if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
@@ -1456,6 +1459,7 @@ export const effectProfiles = {
     label:  "Proportion (logit)",
     group:  "Proportions",
     isTransformedScale: true,
+    analysisScaleLabel: "logit scale",
     inputs: ["x", "n"],
     compute(s) {
       if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
@@ -1485,6 +1489,7 @@ export const effectProfiles = {
     label:  "Proportion (arcsine)",
     group:  "Proportions",
     isTransformedScale: true,
+    analysisScaleLabel: "arcsine scale",
     inputs: ["x", "n"],
     compute(s) {
       if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
@@ -1513,6 +1518,7 @@ export const effectProfiles = {
     label:  "Proportion (Freeman-Tukey)",
     group:  "Proportions",
     isTransformedScale: true,
+    analysisScaleLabel: "double-arcsine scale",
     inputs: ["x", "n"],
     compute(s) {
       if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
