@@ -14,6 +14,8 @@
 //                     Controls the "SE (transformed)" column label in the table.
 //   isLog             true when the back-transform is Math.exp.
 //                     Causes plots to append a "(log scale)" axis annotation.
+//   isFisherZ         true when yi is on the Fisher z scale (atanh transform).
+//                     Causes results panel to append a "z scale: ..." secondary line.
 //   inputs            Ordered array of column names expected in the data table.
 //   rawInputs         (GOR only) Set of input fields that receive raw text
 //                     rather than a numeric value.
@@ -920,6 +922,7 @@ export const effectProfiles = {
     label:  "Correlation (Fisher's z)",
     group:  "Correlations",
     isTransformedScale: true,
+    isFisherZ: true,
     inputs: ["r", "n"],
     compute(s) {
       if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
@@ -1009,6 +1012,7 @@ export const effectProfiles = {
     label:  "Partial Correlation (Fisher's z)",
     group:  "Correlations",
     isTransformedScale: true,
+    isFisherZ: true,
     inputs: ["r", "n", "p"],
     compute(s) {
       if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
@@ -1241,6 +1245,7 @@ export const effectProfiles = {
     label:  "R-squared (Fisher's z of √R²)",
     group:  "Correlations",
     isTransformedScale: true,
+    isFisherZ: true,
     inputs: ["r2", "n"],
     compute(s) {
       if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
