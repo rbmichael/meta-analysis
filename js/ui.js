@@ -3995,6 +3995,13 @@ function _renderAllResults(ctx) {
     : "";
 
   const ciLbl = getCiLabel();
+  const showLogScale = !!profile.isLog;
+  const logScaleRELine = showLogScale
+    ? `<div class="result-log-note">log scale: ${fmt(m.RE)} | SE = ${fmt(m.seRE)} | ${ciLbl} [${fmt(m.ciLow)}, ${fmt(m.ciHigh)}]</div>`
+    : "";
+  const logScaleFELine = showLogScale
+    ? `<div class="result-log-note">log scale: ${fmt(m.FE)} | SE = ${fmt(m.seFE)} | ${ciLbl} [${fmt(m.FE - feZ * m.seFE)}, ${fmt(m.FE + feZ * m.seFE)}]</div>`
+    : "";
   elResults.innerHTML = warningHTML + clusterBanner + (isMHorPeto ? `
     <div class="result-re-primary">
       <span class="result-label">${profile.label} (${methodLabel})</span>
@@ -4002,6 +4009,7 @@ function _renderAllResults(ctx) {
       <span class="result-se">SE = ${fmt(m.seFE)}</span>
       <span class="result-ci">${ciLbl} [${fmt(feCi_disp.lb)}, ${fmt(feCi_disp.ub)}]</span>
     </div>
+    ${logScaleFELine}
     <div class="result-method-note">Fixed-effect only — no τ², RE estimate, or prediction interval.</div>
     <div class="result-het-group">
       <div class="result-section-label">Heterogeneity</div>
@@ -4015,6 +4023,7 @@ function _renderAllResults(ctx) {
       <span class="result-se">SE = ${fmt(m.seRE)}</span>
       <span class="result-ci">${ciLbl} [${fmt(ci_disp.lb)}, ${fmt(ci_disp.ub)}]</span>
     </div>
+    ${logScaleRELine}
     ${useTF && mAdjusted ? `<div class="result-re-adjusted">RE (adjusted): <b>${fmt(RE_adj_disp)}</b>${hasClusters ? ` <span class="result-note">(cluster-robust not applied to imputed studies)</span>` : ""}</div>` : ""}
     <div class="result-stat-row">
       <span class="result-row-label">Test of pooled effect</span>
@@ -4024,12 +4033,14 @@ function _renderAllResults(ctx) {
       <span class="result-row-label">Prediction interval</span>
       <span class="result-stat-value">${isFinite(pred_disp.lb) ? `[${fmt(pred_disp.lb)}, ${fmt(pred_disp.ub)}]` : "NA (k &lt; 3)"}${hBtn("het.pred")}</span>
     </div>
+    ${showLogScale && isFinite(m.predLow) ? `<div class="result-log-note">log scale: [${fmt(m.predLow)}, ${fmt(m.predHigh)}]</div>` : ""}
     <div class="result-fe-secondary">
       <span class="result-label">${profile.label} (FE)</span>
       <span>${fmt(FE_disp)}</span>
       <span class="result-se">SE = ${fmt(m.seFE)}</span>
       <span class="result-ci">${ciLbl} [${fmt(feCi_disp.lb)}, ${fmt(feCi_disp.ub)}]</span>
     </div>
+    ${logScaleFELine}
     ${robustCILine}${clesLine}<div class="result-het-group">
       <div class="result-section-label">Heterogeneity</div>
       <div class="result-het-stats">τ²=${fmt(m.tau2)} [${fmt(m.tauCI[0])}, ${isFinite(m.tauCI[1])?fmt(m.tauCI[1]):"∞"}]${hBtn("het.tau2")} &nbsp;·&nbsp; I²=${fmt(m.I2)}% [${fmt(m.I2CI[0])}%, ${fmt(m.I2CI[1])}%]${hBtn("het.I2")} &nbsp;·&nbsp; H²-CI=[${fmt(m.H2CI[0])}, ${isFinite(m.H2CI[1])?fmt(m.H2CI[1]):"∞"}]${hBtn("het.H2")}</div>
