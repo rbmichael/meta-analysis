@@ -52,9 +52,13 @@ export function fmtPval(p) {
 
 // ================= T CRITICAL =================
 // Two-tailed 95% critical value via bisection on tCDF.
+const _tCriticalCache = new Map();
 export function tCritical(df, alpha = 0.05) {
   const target = 1 - alpha / 2;
   if (!isFinite(df) || df <= 0) return normalQuantile(target);
+
+  const key = `${df}:${alpha}`;
+  if (_tCriticalCache.has(key)) return _tCriticalCache.get(key);
 
   let lo = 0, hi = 20;  // t_{0.975,1} ≈ 12.706; 20 is a safe upper bound
 
@@ -64,7 +68,9 @@ export function tCritical(df, alpha = 0.05) {
     else hi = mid;
   }
 
-  return (lo + hi) / 2;
+  const result = (lo + hi) / 2;
+  _tCriticalCache.set(key, result);
+  return result;
 }
 
 // ================= NORMAL CDF =================
