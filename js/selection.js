@@ -27,7 +27,7 @@
 //   utils.js     normalCDF, normalQuantile
 //   constants.js Z_95, BISECTION_ITERS
 
-import { meta, logLik } from "./analysis.js";
+import { meta, logLik, validStudies } from "./analysis.js";
 import { matInverse } from "./linalg.js";
 import { normalCDF, normalQuantile, chiSquareCDF } from "./utils.js";
 import { Z_95, BISECTION_ITERS } from "./constants.js";
@@ -845,7 +845,7 @@ function betaNormConst(mu, tau2, vi, a, b, sides, pval_min = 1e-5) {
 //   error: "insufficient_k" if k < 4
 export function halfNormalSelModel(studies, opts = {}) {
   const sides = opts.sides ?? 1;
-  const valid  = studies.filter(s => isFinite(s.yi) && isFinite(s.vi) && s.vi > 0);
+  const valid = validStudies(studies);
   const k      = valid.length;
 
   if (k < 4) {
@@ -988,7 +988,7 @@ export function halfNormalSelModel(studies, opts = {}) {
 //   error: "insufficient_k" if k < 4
 export function powerSelModel(studies, opts = {}) {
   const sides = opts.sides ?? 1;
-  const valid  = studies.filter(s => isFinite(s.yi) && isFinite(s.vi) && s.vi > 0);
+  const valid = validStudies(studies);
   const k      = valid.length;
 
   if (k < 4) {
@@ -1124,7 +1124,7 @@ export function powerSelModel(studies, opts = {}) {
 //   error: "insufficient_k" if k < 4
 export function negexpSelModel(studies, opts = {}) {
   const sides = opts.sides ?? 1;
-  const valid  = studies.filter(s => isFinite(s.yi) && isFinite(s.vi) && s.vi > 0);
+  const valid = validStudies(studies);
   const k      = valid.length;
 
   if (k < 4) {
@@ -1262,7 +1262,7 @@ export function negexpSelModel(studies, opts = {}) {
 //   error: "insufficient_k" if k < 4
 export function betaSelModel(studies, opts = {}) {
   const sides = opts.sides ?? 1;
-  const valid  = studies.filter(s => isFinite(s.yi) && isFinite(s.vi) && s.vi > 0);
+  const valid = validStudies(studies);
   const k      = valid.length;
 
   if (k < 4) {
@@ -1430,7 +1430,7 @@ export function betaSelModel(studies, opts = {}) {
 //   no LRT is computed.  When null (default), all parameters are estimated
 //   by MLE (full Vevea-Hedges model).
 export function veveaHedges(studies, cuts = SEL_CUTS_ONE_SIDED, sides = 1, fixedOmega = null) {
-  const valid = studies.filter(s => isFinite(s.yi) && isFinite(s.vi) && s.vi > 0);
+  const valid = validStudies(studies);
   const k = valid.length;
   const K = cuts.length;
 

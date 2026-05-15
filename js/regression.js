@@ -6,7 +6,7 @@
 // =============================================================================
 
 // Circular imports — safe: these are only called inside function bodies.
-import { meta, robustWlsResult, logLik } from "./analysis.js";
+import { meta, robustWlsResult, logLik, validStudies } from "./analysis.js";
 import { wls, matInverse, logDet } from "./linalg.js";
 import { normalCDF, normalQuantile, tCDF, tCritical, fCDF, chiSquareCDF, chiSquareQuantile } from "./utils.js";
 import { MIN_VAR, REML_TOL, BISECTION_ITERS } from "./constants.js";
@@ -578,7 +578,7 @@ export function tau2_metaReg(yi, vi, X, method = "REML", tol = REML_TOL, maxIter
  */
 export function metaRegression(studies, moderators = [], method = "REML", ciMethod = "normal", alpha = 0.05, interactions = []) {
   // Filter to studies with finite yi and vi
-  const valid = studies.filter(s => isFinite(s.yi) && isFinite(s.vi) && s.vi > 0);
+  const valid = validStudies(studies);
   const k = valid.length;
 
   const { X, colNames, modColMap, modKnots, validMask, p } = buildDesignMatrix(valid, moderators, interactions);
@@ -993,7 +993,7 @@ export function lsModel(studies, locMods = [], scaleMods = [], opts = {}) {
   const locInteractions = opts.locInteractions ?? [];
 
   // ---- Filter valid studies ----
-  const valid = studies.filter(s => isFinite(s.yi) && isFinite(s.vi) && s.vi > 0);
+  const valid = validStudies(studies);
   const k = valid.length;
 
   // ---- Build design matrices ----

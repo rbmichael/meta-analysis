@@ -126,7 +126,7 @@
 import { chiSquareCDF, normalQuantile } from "./utils.js";
 import { Z_95 } from "./constants.js";
 import { FOREST_THEMES } from "./forestThemes.js";
-import { rcsBasis } from "./analysis.js";
+import { rcsBasis, validStudies } from "./analysis.js";
 
 // ── Tooltip element (set once by ui.js on load) ───────────────────────────────
 // Decouples plot functions from the specific DOM ID "#tooltip".
@@ -4314,7 +4314,7 @@ export function drawRadialPlot(studies, m, profile, options = {}) {
   const svg = clearAndSelectSVG(containerId);
   svg.attr("aria-label", "Radial (Galbraith) plot");
 
-  const valid = studies.filter(s => isFinite(s.yi) && isFinite(s.vi) && s.vi > 0);
+  const valid = validStudies(studies);
   const k = valid.length;
   if (k < 2) return;
 

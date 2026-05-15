@@ -6,7 +6,7 @@
 // =============================================================================
 
 // Circular imports — safe: these are only called inside function bodies.
-import { meta, tau2_REML } from "./analysis.js";
+import { meta, tau2_REML, validStudies } from "./analysis.js";
 import { normalCDF, normalQuantile, tCDF, tCritical } from "./utils.js";
 import { MIN_VAR, REML_TOL } from "./constants.js";
 
@@ -877,7 +877,7 @@ export function estimatorComparison(studies, ciMethod = "normal") {
 // Returns null when fewer than 2 studies have finite yi / vi.
 // -----------------------------------------------------------------------------
 export function baujat(studies) {
-  const valid = studies.filter(s => isFinite(s.yi) && isFinite(s.vi) && s.vi > 0);
+  const valid = validStudies(studies);
   if (valid.length < 2) return null;
 
   // ---- FE quantities ----
@@ -950,7 +950,7 @@ export function baujat(studies) {
 // Returns null when k < 2 or τ² is not finite.
 // -----------------------------------------------------------------------------
 export function blupMeta(studies, m, alpha = 0.05) {
-  const valid = studies.filter(s => isFinite(s.yi) && isFinite(s.vi) && s.vi > 0);
+  const valid = validStudies(studies);
   const k = valid.length;
   if (k < 2 || !m || !isFinite(m.RE) || !isFinite(m.tau2) || m.tau2 <= 0) return null;
 

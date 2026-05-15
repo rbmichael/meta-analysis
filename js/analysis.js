@@ -6,6 +6,12 @@
 //
 // Owned here
 // ----------
+//   isValidStudy(s)
+//     Returns true when a study has finite yi and finite vi > 0.
+//     Canonical validity predicate — use instead of inlining the check.
+//   validStudies(studies)
+//     Returns studies.filter(isValidStudy). Use everywhere instead of inline.
+//
 //   compute(s, type)
 //     Dispatches per-study (yi, vi) computation via profiles.js.
 //     Returns NaN yi/vi/se with w=0 on validation failure so meta() skips it.
@@ -54,6 +60,28 @@ import { getProfile, autoDetectType } from "./profiles.js";
 // module initialisation time.
 import { profileLikCI } from "./bayes.js";       // bayes no longer imports back
 import { heterogeneityCIs } from "./regression.js";
+
+// ================= STUDY VALIDITY PREDICATE =================
+/**
+ * Returns true when a single study is valid for meta-analysis:
+ * yi must be finite, vi must be finite and positive.
+ * This is the canonical validity rule — use it instead of inlining the check.
+ * @param {{ yi: number, vi: number }} s
+ * @returns {boolean}
+ */
+export function isValidStudy(s) {
+  return isFinite(s.yi) && isFinite(s.vi) && s.vi > 0;
+}
+
+/**
+ * Returns the subset of studies that are valid for meta-analysis.
+ * Equivalent to studies.filter(isValidStudy); centralised so the rule can't drift.
+ * @param {{ yi: number, vi: number }[]} studies
+ * @returns {{ yi: number, vi: number }[]}
+ */
+export function validStudies(studies) {
+  return studies.filter(isValidStudy);
+}
 
 // ================= DYNAMIC COMPUTE =================
 /**
@@ -180,7 +208,7 @@ export function meta(studies, method="DL", ciMethod="normal", alpha=0.05, tau2In
   let _byMethod = _metaCache.get(studies);
   if (_byMethod?.has(_cacheKey)) return _byMethod.get(_cacheKey);
 
-  const valid = studies.filter(s => isFinite(s.vi) && s.vi > 0 && isFinite(s.yi));
+  const valid = validStudies(studies);
   if (valid.length < studies.length) {
     console.warn(`meta(): dropped ${studies.length - valid.length} study/studies with non-finite or non-positive vi/yi`);
     studies = valid;
