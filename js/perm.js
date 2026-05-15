@@ -33,7 +33,7 @@
 // Dependencies: matInverse, wls from analysis.js
 // =============================================================================
 
-import { matInverse, wls } from "./linalg.js";
+import { matInverse, wls, wlsCholesky } from "./linalg.js";
 
 // ---------------------------------------------------------------------------
 // Mulberry32 PRNG (same as gosh.js / perm.worker.js)
@@ -86,7 +86,7 @@ function tau2DL(X, yi, vi) {
   const k = yi.length, p = X[0].length, df = k - p;
   if (df <= 0) return 0;
   const w0 = vi.map(v => 1 / v);
-  const { beta: b0, vcov: V0, rankDeficient: rd0 } = wls(X, yi, w0);
+  const { beta: b0, vcov: V0, rankDeficient: rd0 } = wlsCholesky(X, yi, w0);
   if (rd0) return 0;
   const QE = yi.reduce((s, y, i) => {
     const e = y - X[i].reduce((a, xi, j) => a + xi * b0[j], 0);
@@ -105,7 +105,7 @@ function tau2REML(X, yi, vi, tol = 1e-10, maxIter = 100) {
   let tau2 = tau2DL(X, yi, vi);
   for (let iter = 0; iter < maxIter; iter++) {
     const w = vi.map(v => 1 / (v + tau2));
-    const { beta, vcov: V, rankDeficient: rd } = wls(X, yi, w);
+    const { beta, vcov: V, rankDeficient: rd } = wlsCholesky(X, yi, w);
     if (rd) break;
     let score = 0, info = 0;
     for (let i = 0; i < k; i++) {
@@ -136,7 +136,7 @@ function tau2ML(X, yi, vi, tol = 1e-10, maxIter = 100) {
   let tau2 = tau2DL(X, yi, vi);
   for (let iter = 0; iter < maxIter; iter++) {
     const w = vi.map(v => 1 / (v + tau2));
-    const { beta, rankDeficient: rd } = wls(X, yi, w);
+    const { beta, rankDeficient: rd } = wlsCholesky(X, yi, w);
     if (rd) break;
     let score = 0, info = 0;
     for (let i = 0; i < k; i++) {
@@ -166,7 +166,7 @@ function tau2PM(X, yi, vi, tol = 1e-10, maxIter = 100) {
   let tau2 = 0;
   for (let iter = 0; iter < maxIter; iter++) {
     const w = vi.map(v => 1 / (v + tau2));
-    const { beta, rankDeficient: rd } = wls(X, yi, w);
+    const { beta, rankDeficient: rd } = wlsCholesky(X, yi, w);
     if (rd) break;
     const QE = yi.reduce((s, y, i) => {
       const e = y - X[i].reduce((a, xi, j) => a + xi * beta[j], 0);
@@ -262,7 +262,7 @@ export function permTestSync(params) {
   if (nMods > 0) {
     const tau2_obs = estimateTau2(X, yi, vi, method);
     const w_obs = vi.map(v => 1 / (v + tau2_obs));
-    const { beta: b0, vcov: V0, rankDeficient: rd0 } = wls(X, yi, w_obs);
+    const { beta: b0, vcov: V0, rankDeficient: rd0 } = wlsCholesky(X, yi, w_obs);
     if (!rd0) {
       for (let m = 0; m < nMods; m++) {
         const { colIdxs } = modTests[m];
@@ -294,7 +294,7 @@ export function permTestSync(params) {
     // Re-estimate tau2
     const tau2_p = estimateTau2(X_perm, yi, vi, method);
     const w_p = vi.map(v => 1 / (v + tau2_p));
-    const { beta, vcov: V, rankDeficient: rd } = wls(X_perm, yi, w_p);
+    const { beta, vcov: V, rankDeficient: rd } = wlsCholesky(X_perm, yi, w_p);
 
     if (rd) {
       QM_dist[perm] = NaN;

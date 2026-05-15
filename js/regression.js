@@ -8,7 +8,7 @@
 // Circular imports — safe: these are only called inside function bodies.
 import { meta, robustWlsResult, logLik, validStudies, resolveClusterIds, groupByCluster } from "./analysis.js";
 import { tau2Core_REML, tau2Core_ML, tau2Core_PM, tau2Core_DL, tau2Core_HS, tau2Core_HE, tau2Core_SJ } from "./tau2.js";
-import { wls, matInverse, logDet, numericalHessian } from "./linalg.js";
+import { wls, wlsCholesky, matInverse, logDet, numericalHessian } from "./linalg.js";
 import { normalCDF, normalQuantile, tCDF, tCritical, fCDF, chiSquareCDF, chiSquareQuantile } from "./utils.js";
 import { MIN_VAR, REML_TOL, BISECTION_ITERS } from "./constants.js";
 import { bfgs } from "./selection.js";
@@ -380,7 +380,7 @@ export function tau2_metaReg(yi, vi, X, method = "REML", tol = REML_TOL, maxIter
 
   const reFitFn = (tau2) => {
     const w = vi.map(v => 1 / (v + tau2));
-    const { beta, vcov, rankDeficient } = wls(X, yi, w);
+    const { beta, vcov, rankDeficient } = wlsCholesky(X, yi, w);
     if (rankDeficient) return null;
     const W = w.reduce((s, v) => s + v, 0);
     return {
@@ -392,7 +392,7 @@ export function tau2_metaReg(yi, vi, X, method = "REML", tol = REML_TOL, maxIter
 
   const feFitFn = () => {
     const w0 = vi.map(v => 1 / v);
-    const { beta, vcov, rankDeficient } = wls(X, yi, w0);
+    const { beta, vcov, rankDeficient } = wlsCholesky(X, yi, w0);
     if (rankDeficient) return null;
     const W = w0.reduce((s, v) => s + v, 0);
     return {

@@ -6,11 +6,16 @@
 //
 // Exports
 // -------
-//   wls(X, y, w)          — weighted least squares; returns { beta, vcov, rankDeficient }
-//   matInverse(A)         — Gauss-Jordan inverse; returns null if singular
-//   logDet(A)             — log|det(A)| via Gaussian elimination
-//   inverseWithRidge(H)   — matInverse with progressive diagonal ridge fallback
-//   numericalHessian(f,x) — central-difference n×n Hessian; fval and h optional
+//   wls(X, y, w)              — weighted least squares; returns { beta, vcov, rankDeficient }
+//   wlsCholesky(X, y, w)      — wls via Cholesky (2× faster for SPD); falls back to wls
+//   matInverse(A)             — Gauss-Jordan inverse; returns null if singular
+//   logDet(A)                 — log|det(A)| via Gaussian elimination
+//   inverseWithRidge(H)       — matInverse with progressive diagonal ridge fallback
+//   numericalHessian(f,x)     — central-difference n×n Hessian; fval and h optional
+//   cholFactor(m)             — lower-triangular L s.t. m = LL'; null if not PD
+//   cholLogDet(L)             — log|det(LL')| = 2·Σ log(Lⱼⱼ)
+//   cholSolveVec(L, b)        — solve LL'x = b via forward+back substitution
+//   cholInverse(L)            — full inverse of LL' via column-by-column solves
 // =============================================================================
 
 /**
@@ -146,6 +151,109 @@ export function inverseWithRidge(H, schedule = [1e-8, 1e-6, 1e-4, 1e-2, 1, 10]) 
     if (inv !== null) return inv;
   }
   return null;
+}
+
+// =============================================================================
+// Cholesky decomposition helpers for symmetric positive-definite (SPD) matrices.
+// All operate on regular JS arrays (row-major, 2-D or flat).
+// =============================================================================
+
+// Returns lower-triangular L s.t. m = LL', or null if m is not positive-definite.
+export function cholFactor(m) {
+  const p = m.length;
+  const L = Array.from({ length: p }, () => new Float64Array(p));
+  for (let i = 0; i < p; i++) {
+    for (let j = 0; j <= i; j++) {
+      let s = 0;
+      for (let k = 0; k < j; k++) s += L[i][k] * L[j][k];
+      if (i === j) {
+        const d = m[i][i] - s;
+        if (d <= 0) return null;
+        L[i][j] = Math.sqrt(d);
+      } else {
+        L[i][j] = (m[i][j] - s) / L[j][j];
+      }
+    }
+  }
+  return L;
+}
+
+// log|det(LL')| = 2 · Σⱼ log(Lⱼⱼ)
+export function cholLogDet(L) {
+  let s = 0;
+  for (let j = 0; j < L.length; j++) s += Math.log(L[j][j]);
+  return 2 * s;
+}
+
+// Forward substitution: solve Lx = b (L lower-triangular).
+function forwardSolve(L, b) {
+  const p = L.length;
+  const x = new Float64Array(p);
+  for (let i = 0; i < p; i++) {
+    let s = b[i];
+    for (let j = 0; j < i; j++) s -= L[i][j] * x[j];
+    x[i] = s / L[i][i];
+  }
+  return x;
+}
+
+// Back substitution: solve L'x = b (L lower-triangular, L' upper-triangular).
+function backSolve(L, b) {
+  const p = L.length;
+  const x = new Float64Array(p);
+  for (let i = p - 1; i >= 0; i--) {
+    let s = b[i];
+    for (let j = i + 1; j < p; j++) s -= L[j][i] * x[j];
+    x[i] = s / L[i][i];
+  }
+  return x;
+}
+
+// Solve LL'x = b (Cholesky solve).
+export function cholSolveVec(L, b) {
+  return backSolve(L, forwardSolve(L, b));
+}
+
+// Full inverse of LL' via column-by-column Cholesky solves.
+export function cholInverse(L) {
+  const p = L.length;
+  const inv = Array.from({ length: p }, () => new Array(p).fill(0));
+  for (let j = 0; j < p; j++) {
+    const ej = new Array(p).fill(0); ej[j] = 1;
+    const col = cholSolveVec(L, ej);
+    for (let i = 0; i < p; i++) inv[i][j] = col[i];
+  }
+  return inv;
+}
+
+// WLS via Cholesky (≈2× faster than wls() for SPD X'WX).
+// Falls back to matInverse when X'WX is not positive-definite (e.g. rank-deficient X).
+// Same return shape as wls(): { beta, vcov, rankDeficient }.
+export function wlsCholesky(X, y, w) {
+  const k = X.length, p = X[0].length;
+  const XtWX = Array.from({ length: p }, () => Array(p).fill(0));
+  const XtWy = Array(p).fill(0);
+  for (let i = 0; i < k; i++) {
+    const wi = w[i];
+    for (let j = 0; j < p; j++) {
+      XtWy[j] += wi * X[i][j] * y[i];
+      for (let l = j; l < p; l++) {
+        const v = wi * X[i][j] * X[i][l];
+        XtWX[j][l] += v;
+        if (l !== j) XtWX[l][j] += v;
+      }
+    }
+  }
+  const L   = cholFactor(XtWX);
+  const inv = L !== null ? cholInverse(L) : matInverse(XtWX);
+  if (inv === null) {
+    return {
+      beta: Array(p).fill(NaN),
+      vcov: Array.from({ length: p }, () => Array(p).fill(NaN)),
+      rankDeficient: true
+    };
+  }
+  return { beta: inv.map(row => row.reduce((a, v, j) => a + v * XtWy[j], 0)), vcov: inv, rankDeficient: false };
 }
 
 // log|det(A)| via partial-pivoting Gaussian elimination.

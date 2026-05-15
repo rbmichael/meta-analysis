@@ -147,40 +147,79 @@ function fisherYates(arr, k, rand) {
 }
 
 // ---------------------------------------------------------------------------
-// WLS: compute XtWX (p*p flat), invert it (V), compute XtWy and beta.
+// Cholesky factorization of flat p×p SPD matrix. Returns L (flat p×p) or null.
+// ---------------------------------------------------------------------------
+function cholFactor(A, p) {
+  var L = new Float64Array(p * p);
+  for (var i = 0; i < p; i++) {
+    for (var j = 0; j <= i; j++) {
+      var s = 0;
+      for (var kk = 0; kk < j; kk++) s += L[i*p+kk] * L[j*p+kk];
+      if (i === j) {
+        var d = A[i*p+i] - s;
+        if (d <= 0) return null;
+        L[i*p+i] = Math.sqrt(d);
+      } else {
+        L[i*p+j] = (A[i*p+j] - s) / L[j*p+j];
+      }
+    }
+  }
+  return L;
+}
+
+// ---------------------------------------------------------------------------
+// Inverse of LL' via column-by-column forward+back substitution.
+// Returns flat p×p inverse (Float64Array).
+// ---------------------------------------------------------------------------
+function cholInverse(L, p) {
+  var inv = new Float64Array(p * p);
+  var x = new Float64Array(p);
+  for (var j = 0; j < p; j++) {
+    // Forward solve: Lx = e_j
+    for (var i = 0; i < p; i++) {
+      var s = (i === j) ? 1.0 : 0.0;
+      for (var kk = 0; kk < i; kk++) s -= L[i*p+kk] * x[kk];
+      x[i] = s / L[i*p+i];
+    }
+    // Back solve: L'x = fwd (overwrites x)
+    for (var i = p-1; i >= 0; i--) {
+      var s = x[i];
+      for (var kk = i+1; kk < p; kk++) s -= L[kk*p+i] * x[kk];
+      x[i] = s / L[i*p+i];
+    }
+    for (var i = 0; i < p; i++) inv[i*p+j] = x[i];
+  }
+  return inv;
+}
+
+// ---------------------------------------------------------------------------
+// WLS: build XtWX + XtWy, try Cholesky, fall back to Gauss-Jordan.
 // X is a FLAT k*p row-major array (or slice from permuted X).
 // Returns { V, beta } or null if singular.
 // ---------------------------------------------------------------------------
 function wlsSolve(X_flat, yi, w, k, p) {
-  var r, c, i;
-  // XtWX
+  var r, c, i, s;
   var XtWX = new Float64Array(p * p);
+  var XtWy = new Float64Array(p);
   for (i = 0; i < k; i++) {
-    var wi = w[i];
-    var base = i * p;
+    var wi = w[i], wyi = wi * yi[i], base = i * p;
     for (r = 0; r < p; r++) {
-      var xir = X_flat[base + r] * wi;
+      var xir = X_flat[base + r];
+      XtWy[r] += xir * wyi;
       for (c = r; c < p; c++) {
-        var val = xir * X_flat[base + c];
-        XtWX[r * p + c] += val;
-        if (c !== r) XtWX[c * p + r] += val;
+        var val = wi * xir * X_flat[base + c];
+        XtWX[r*p+c] += val;
+        if (c !== r) XtWX[c*p+r] += val;
       }
     }
   }
-  var V = matInv(XtWX, p);
+  var L = cholFactor(XtWX, p);
+  var V = L !== null ? cholInverse(L, p) : matInv(XtWX, p);
   if (V === null) return null;
-  // XtWy
-  var XtWy = new Float64Array(p);
-  for (i = 0; i < k; i++) {
-    var wyi = w[i] * yi[i];
-    var base2 = i * p;
-    for (r = 0; r < p; r++) XtWy[r] += X_flat[base2 + r] * wyi;
-  }
-  // beta = V * XtWy
   var beta = new Float64Array(p);
   for (r = 0; r < p; r++) {
-    var s = 0.0;
-    for (c = 0; c < p; c++) s += V[r * p + c] * XtWy[c];
+    s = 0.0;
+    for (c = 0; c < p; c++) s += V[r*p+c] * XtWy[c];
     beta[r] = s;
   }
   return { V: V, beta: beta };

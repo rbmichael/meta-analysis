@@ -8,133 +8,10 @@
 
 import { MIN_VAR } from "./constants.js";
 import { normalCDF, normalQuantile, chiSquareCDF } from "./utils.js";
+import { cholFactor, cholLogDet, cholSolveVec, cholInverse, matInverse, logDet } from "./linalg.js";
 // bfgs is imported from selection.js to avoid a circular dep through analysis.js.
 // Safe: bfgs is only called inside mvMeta (a function body), never at module init.
 import { bfgs } from "./selection.js";
-
-// =============================================================================
-// Low-level matrix helpers for small dense p×p matrices (p ≤ ~10 typical).
-// Self-contained — no imports from analysis.js to keep the module free of
-// circular dependency issues at initialisation time.
-// =============================================================================
-
-// Returns lower-triangular L such that m = LL', or null if m is not PD.
-function _cholFactor(m) {
-  const p = m.length;
-  const L = Array.from({ length: p }, () => new Float64Array(p));
-  for (let i = 0; i < p; i++) {
-    for (let j = 0; j <= i; j++) {
-      let s = 0;
-      for (let k = 0; k < j; k++) s += L[i][k] * L[j][k];
-      if (i === j) {
-        const d = m[i][i] - s;
-        if (d <= 0) return null;
-        L[i][j] = Math.sqrt(d);
-      } else {
-        L[i][j] = (m[i][j] - s) / L[j][j];
-      }
-    }
-  }
-  return L;
-}
-
-// log|det(LL')| = 2 · Σⱼ log(Lⱼⱼ)
-function _cholLogDet(L) {
-  let s = 0;
-  for (let j = 0; j < L.length; j++) s += Math.log(L[j][j]);
-  return 2 * s;
-}
-
-// Solve Lx = b (L lower-triangular) via forward substitution.
-function _forwardSolve(L, b) {
-  const p = L.length;
-  const x = new Float64Array(p);
-  for (let i = 0; i < p; i++) {
-    let s = b[i];
-    for (let j = 0; j < i; j++) s -= L[i][j] * x[j];
-    x[i] = s / L[i][i];
-  }
-  return x;
-}
-
-// Solve L'x = b (L lower-triangular, so L' upper-triangular) via back substitution.
-function _backSolve(L, b) {
-  const p = L.length;
-  const x = new Float64Array(p);
-  for (let i = p - 1; i >= 0; i--) {
-    let s = b[i];
-    for (let j = i + 1; j < p; j++) s -= L[j][i] * x[j];   // L'[i][j] = L[j][i]
-    x[i] = s / L[i][i];
-  }
-  return x;
-}
-
-// Solve LL'x = b.
-function _cholSolveVec(L, b) {
-  return _backSolve(L, _forwardSolve(L, b));
-}
-
-// Compute full inverse Σ⁻¹ of Σ = LL' via column-by-column Cholesky solves.
-// Returns a p×p array (row-major regular JS arrays).
-function _cholInverse(L) {
-  const p = L.length;
-  const inv = Array.from({ length: p }, () => new Array(p).fill(0));
-  for (let j = 0; j < p; j++) {
-    const ej = new Array(p).fill(0); ej[j] = 1;
-    const col = _cholSolveVec(L, ej);
-    for (let i = 0; i < p; i++) inv[i][j] = col[i];
-  }
-  return inv;
-}
-
-// Gauss-Jordan matrix inverse with partial pivoting.  Returns null if singular.
-// Used for the P×P X'Ω⁻¹X information matrix (P = number of outcomes, typically 2–5).
-function _matInverse(A) {
-  const p = A.length;
-  const M = A.map((row, i) => {
-    const aug = row.slice();
-    for (let j = 0; j < p; j++) aug.push(i === j ? 1 : 0);
-    return aug;
-  });
-  for (let col = 0; col < p; col++) {
-    let pivotRow = col;
-    for (let row = col + 1; row < p; row++) {
-      if (Math.abs(M[row][col]) > Math.abs(M[pivotRow][col])) pivotRow = row;
-    }
-    [M[col], M[pivotRow]] = [M[pivotRow], M[col]];
-    const pivot = M[col][col];
-    if (Math.abs(pivot) < 1e-14) return null;
-    for (let j = col; j < 2 * p; j++) M[col][j] /= pivot;
-    for (let row = 0; row < p; row++) {
-      if (row === col) continue;
-      const f = M[row][col];
-      if (f === 0) continue;
-      for (let j = col; j < 2 * p; j++) M[row][j] -= f * M[col][j];
-    }
-  }
-  return M.map(row => row.slice(p));
-}
-
-// log|det(A)| via partial-pivoting Gaussian elimination.
-function _logDet(A) {
-  const n = A.length;
-  const M = A.map(row => row.slice());
-  let logd = 0;
-  for (let i = 0; i < n; i++) {
-    let maxVal = Math.abs(M[i][i]), maxRow = i;
-    for (let k = i + 1; k < n; k++) {
-      if (Math.abs(M[k][i]) > maxVal) { maxVal = Math.abs(M[k][i]); maxRow = k; }
-    }
-    if (maxRow !== i) [M[i], M[maxRow]] = [M[maxRow], M[i]];
-    if (Math.abs(M[i][i]) < 1e-15) return -Infinity;
-    logd += Math.log(Math.abs(M[i][i]));
-    for (let k = i + 1; k < n; k++) {
-      const f = M[k][i] / M[i][i];
-      for (let j = i; j < n; j++) M[k][j] -= f * M[i][j];
-    }
-  }
-  return logd;
-}
 
 // =============================================================================
 // Ψ (between-study covariance) parameterization
@@ -313,7 +190,7 @@ export function vcalc(rows, { rho = 0.5, type = "constant" } = {}) {
       })
     );
 
-    if (p > 1 && _cholFactor(matrix) === null)
+    if (p > 1 && cholFactor(matrix) === null)
       warnings.push(`study_id="${studyId}": V block is not positive definite (check rho and vi values)`);
 
     blocks.push({ studyId, outcomeIds: uniqRows.map(r => r._oid), rows: uniqRows, k: p, matrix });
@@ -443,7 +320,7 @@ export function mvMeta(rows, V, opts = {}) {
       for (let c1 = 0; c1 < q_total; c1++)
         for (let c2 = 0; c2 < q_total; c2++)
           XtX[c1][c2] += xr[c1] * xr[c2];
-  const logDetXtX = _logDet(XtX);
+  const logDetXtX = logDet(XtX);
 
   // ---- Starting values ----
   const tau2_0 = _initTau2(studyData, P);
@@ -466,12 +343,12 @@ export function mvMeta(rows, V, opts = {}) {
         Array.from({ length: p }, (_, k) => Vmat[j][k] + Psi[idx[j]][idx[k]])
       );
 
-      const L = _cholFactor(Sigma);
+      const L = cholFactor(Sigma);
       if (L === null) return 1e10;   // Σᵢ not PD — penalise
 
-      logDetSum += _cholLogDet(L);
+      logDetSum += cholLogDet(L);
 
-      const Oiy = _cholSolveVec(L, y);           // Σᵢ⁻¹yᵢ
+      const Oiy = cholSolveVec(L, y);           // Σᵢ⁻¹yᵢ
       for (let j = 0; j < p; j++) yOy += y[j] * Oiy[j];
 
       // X'Ω⁻¹y += Xᵢ' (Σᵢ⁻¹yᵢ)
@@ -481,7 +358,7 @@ export function mvMeta(rows, V, opts = {}) {
       }
 
       // X'Ω⁻¹X += Xᵢ' Σᵢ⁻¹ Xᵢ  (via Σᵢ⁻¹ Xᵢ intermediate)
-      const Oi = _cholInverse(L);                // Σᵢ⁻¹  (full pᵢ×pᵢ)
+      const Oi = cholInverse(L);                // Σᵢ⁻¹  (full pᵢ×pᵢ)
       for (let j = 0; j < p; j++) {
         const OiXrow = new Float64Array(q_total);
         for (let kk = 0; kk < p; kk++) {
@@ -496,7 +373,7 @@ export function mvMeta(rows, V, opts = {}) {
       }
     }
 
-    const XOXinv = _matInverse(XOX);
+    const XOXinv = matInverse(XOX);
     if (XOXinv === null) return 1e10;
 
     // Q = y'Ω⁻¹y − (X'Ω⁻¹y)'β̂  =  yOy − XOy'·XOXinv·XOy
@@ -513,7 +390,7 @@ export function mvMeta(rows, V, opts = {}) {
 
     // REML correction: −½ log|X'Ω⁻¹X|
     if (method === "REML") {
-      const ld = _logDet(XOX);
+      const ld = logDet(XOX);
       if (!isFinite(ld)) return 1e10;
       logL -= 0.5 * ld;
     }
@@ -536,16 +413,16 @@ export function mvMeta(rows, V, opts = {}) {
     const Sigma = Array.from({ length: p }, (_, j) =>
       Array.from({ length: p }, (_, kk) => Vmat[j][kk] + Psi[idx[j]][idx[kk]])
     );
-    const L = _cholFactor(Sigma);
+    const L = cholFactor(Sigma);
     if (L === null) return { error: 'Cholesky factorisation failed at converged parameters' };
-    logDetSum += _cholLogDet(L);
-    const Oiy = _cholSolveVec(L, y);
+    logDetSum += cholLogDet(L);
+    const Oiy = cholSolveVec(L, y);
     for (let j = 0; j < p; j++) yOy += y[j] * Oiy[j];
     for (let j = 0; j < p; j++) {
       const xrj = Xrows[j];
       for (let c = 0; c < q_total; c++) XOy[c] += xrj[c] * Oiy[j];
     }
-    const Oi = _cholInverse(L);
+    const Oi = cholInverse(L);
     for (let j = 0; j < p; j++) {
       const OiXrow = new Float64Array(q_total);
       for (let kk = 0; kk < p; kk++) {
@@ -560,7 +437,7 @@ export function mvMeta(rows, V, opts = {}) {
     }
   }
 
-  const XOXinv = _matInverse(XOX);
+  const XOXinv = matInverse(XOX);
   if (XOXinv === null) return { error: 'Singular information matrix X\'Ω⁻¹X at converged parameters' };
 
   // Fixed effects β̂ = (X'Ω⁻¹X)⁻¹ X'Ω⁻¹y
@@ -594,15 +471,15 @@ export function mvMeta(rows, V, opts = {}) {
   const XVX = Array.from({ length: q_total }, () => new Array(q_total).fill(0));
   const XVy = new Array(q_total).fill(0);
   for (const { p, y, Vmat, Xrows } of studyData) {
-    const Lv = _cholFactor(Vmat);
+    const Lv = cholFactor(Vmat);
     if (Lv === null) continue;                 // V validated at entry; shouldn't happen
-    const Viy = _cholSolveVec(Lv, y);
+    const Viy = cholSolveVec(Lv, y);
     for (let j = 0; j < p; j++) yVy += y[j] * Viy[j];
     for (let j = 0; j < p; j++) {
       const xrj = Xrows[j];
       for (let c = 0; c < q_total; c++) XVy[c] += xrj[c] * Viy[j];
     }
-    const Vi = _cholInverse(Lv);
+    const Vi = cholInverse(Lv);
     for (let j = 0; j < p; j++) {
       const ViXrow = new Float64Array(q_total);
       for (let kk = 0; kk < p; kk++) {
@@ -616,7 +493,7 @@ export function mvMeta(rows, V, opts = {}) {
           XVX[c1][c2] += xrj[c1] * ViXrow[c2];
     }
   }
-  const XVXinv = _matInverse(XVX);
+  const XVXinv = matInverse(XVX);
   let crossTermV = 0;
   if (XVXinv) {
     for (let j = 0; j < q_total; j++) {
@@ -658,7 +535,7 @@ export function mvMeta(rows, V, opts = {}) {
   // Full log-likelihood at (β̂, Ψ*):  −½[n·log(2π) + log|Ω| + y'Ω⁻¹y − QM]
   let logL = -0.5 * (n * Math.log(2 * Math.PI) + logDetSum + residOmega);
   if (method === "REML") {
-    logL -= 0.5 * _logDet(XOX);
+    logL -= 0.5 * logDet(XOX);
     // REML normalizing constant: +q_total/2·log(2π) + ½·log|X'X|
     // (X'X is the unweighted design cross-product, constant w.r.t. θ)
     logL += q_total / 2 * Math.log(2 * Math.PI) + 0.5 * logDetXtX;
