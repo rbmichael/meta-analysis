@@ -6,10 +6,11 @@
 //
 // Exports
 // -------
-//   wls(X, y, w)        — weighted least squares; returns { beta, vcov, rankDeficient }
-//   matInverse(A)       — Gauss-Jordan inverse; returns null if singular
-//   logDet(A)           — log|det(A)| via Gaussian elimination
-//   inverseWithRidge(H) — matInverse with progressive diagonal ridge fallback
+//   wls(X, y, w)          — weighted least squares; returns { beta, vcov, rankDeficient }
+//   matInverse(A)         — Gauss-Jordan inverse; returns null if singular
+//   logDet(A)             — log|det(A)| via Gaussian elimination
+//   inverseWithRidge(H)   — matInverse with progressive diagonal ridge fallback
+//   numericalHessian(f,x) — central-difference n×n Hessian; fval and h optional
 // =============================================================================
 
 /**
@@ -101,6 +102,35 @@ export function matInverse(A) {
 
   // The right half of M is now A⁻¹
   return M.map(row => row.slice(p));
+}
+
+// numericalHessian(f, x, fval?, h?) → n×n matrix
+// Central-difference second-order approximation of the Hessian of f at x.
+//   fval — f(x) if already computed; evaluated internally when omitted.
+//   h    — step sizes: scalar, array, or omitted (default: max(1e-4, 1e-4·|xⱼ|)).
+// Used for observed Fisher information and standard errors after optimisation.
+export function numericalHessian(f, x, fval, h) {
+  const n = x.length;
+  const fv = fval !== undefined ? fval : f(x);
+  const hs = h === undefined
+    ? x.map(v => Math.max(1e-4, 1e-4 * Math.abs(v)))
+    : (typeof h === "number" ? x.map(() => h) : h);
+  const H = Array.from({ length: n }, () => new Array(n).fill(0));
+  for (let i = 0; i < n; i++) {
+    const xp = x.slice(); xp[i] += hs[i];
+    const xm = x.slice(); xm[i] -= hs[i];
+    H[i][i] = (f(xp) - 2 * fv + f(xm)) / (hs[i] * hs[i]);
+    for (let j = i + 1; j < n; j++) {
+      const xpp = x.slice(); xpp[i] += hs[i]; xpp[j] += hs[j];
+      const xpm = x.slice(); xpm[i] += hs[i]; xpm[j] -= hs[j];
+      const xmp = x.slice(); xmp[i] -= hs[i]; xmp[j] += hs[j];
+      const xmm = x.slice(); xmm[i] -= hs[i]; xmm[j] -= hs[j];
+      const hij = (f(xpp) - f(xpm) - f(xmp) + f(xmm)) / (4 * hs[i] * hs[j]);
+      H[i][j] = hij;
+      H[j][i] = hij;
+    }
+  }
+  return H;
 }
 
 // inverseWithRidge(H, schedule) → matrix | null

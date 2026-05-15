@@ -7,7 +7,7 @@
 
 // Circular imports — safe: these are only called inside function bodies.
 import { meta, robustWlsResult, logLik, validStudies, resolveClusterIds, groupByCluster } from "./analysis.js";
-import { wls, matInverse, logDet } from "./linalg.js";
+import { wls, matInverse, logDet, numericalHessian } from "./linalg.js";
 import { normalCDF, normalQuantile, tCDF, tCritical, fCDF, chiSquareCDF, chiSquareQuantile } from "./utils.js";
 import { MIN_VAR, REML_TOL, BISECTION_ITERS } from "./constants.js";
 import { bfgs } from "./selection.js";
@@ -1070,29 +1070,7 @@ export function lsModel(studies, locMods = [], scaleMods = [], opts = {}) {
   if (rdBeta) return emptyResult;
 
   // ---- SE for γ: numerical Hessian of negLL at γ̂ ----
-  // Central-difference second-order partial derivatives.
-  const H_gamma = Array.from({ length: q }, () => Array(q).fill(0));
-  for (let j = 0; j < q; j++) {
-    for (let l = j; l < q; l++) {
-      const hj = Math.max(1e-4, 1e-4 * Math.abs(gamma_hat[j]));
-      const hl = Math.max(1e-4, 1e-4 * Math.abs(gamma_hat[l]));
-      let val;
-      if (j === l) {
-        // Second diagonal: (f(x+h) - 2f(x) + f(x-h)) / h²
-        const gp = gamma_hat.slice(); gp[j] += hj;
-        const gm = gamma_hat.slice(); gm[j] -= hj;
-        val = (negLL(gp) - 2 * negLL(gamma_hat) + negLL(gm)) / (hj * hj);
-      } else {
-        // Mixed partial: (f(x+hj,x+hl) - f(x+hj,x-hl) - f(x-hj,x+hl) + f(x-hj,x-hl)) / (4·hj·hl)
-        const gpp = gamma_hat.slice(); gpp[j] += hj; gpp[l] += hl;
-        const gpm = gamma_hat.slice(); gpm[j] += hj; gpm[l] -= hl;
-        const gmp = gamma_hat.slice(); gmp[j] -= hj; gmp[l] += hl;
-        const gmm = gamma_hat.slice(); gmm[j] -= hj; gmm[l] -= hl;
-        val = (negLL(gpp) - negLL(gpm) - negLL(gmp) + negLL(gmm)) / (4 * hj * hl);
-      }
-      H_gamma[j][l] = H_gamma[l][j] = val;
-    }
-  }
+  const H_gamma = numericalHessian(negLL, gamma_hat);
 
   const vcov_gamma_raw = matInverse(H_gamma);
   const vcov_gamma = vcov_gamma_raw ?? Array.from({ length: q }, () => Array(q).fill(NaN));

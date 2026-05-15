@@ -28,7 +28,7 @@
 //   constants.js Z_95, BISECTION_ITERS
 
 import { meta, logLik, validStudies } from "./analysis.js";
-import { inverseWithRidge } from "./linalg.js";
+import { inverseWithRidge, numericalHessian } from "./linalg.js";
 import { normalCDF, normalQuantile, chiSquareCDF } from "./utils.js";
 import { Z_95, BISECTION_ITERS } from "./constants.js";
 import { GL20_X, GL20_W, GH20_X, GH20_W } from "./quadrature.js";
@@ -622,35 +622,6 @@ export const SELECTION_PRESETS = {
   },
 };
 
-// numericalHessian — central-difference second-order approximation of the
-// Hessian matrix of f at x, given f(x) = fval.
-// Step h_j = max(1e-4, 1e-4·|x_j|) for each dimension j.
-// Used to compute the observed Fisher information for standard errors.
-function numericalHessian(f, x, fval) {
-  const n = x.length;
-  const h = x.map(v => Math.max(1e-4, 1e-4 * Math.abs(v)));
-  const H = Array.from({ length: n }, () => new Array(n).fill(0));
-
-  for (let i = 0; i < n; i++) {
-    // Diagonal: (f(x+hᵢeᵢ) − 2f(x) + f(x−hᵢeᵢ)) / hᵢ²
-    const xp = x.slice(); xp[i] += h[i];
-    const xm = x.slice(); xm[i] -= h[i];
-    H[i][i] = (f(xp) - 2 * fval + f(xm)) / (h[i] * h[i]);
-
-    // Off-diagonal (upper triangle, symmetrised):
-    // (f(x+hᵢeᵢ+hⱼeⱼ) − f(x+hᵢeᵢ−hⱼeⱼ) − f(x−hᵢeᵢ+hⱼeⱼ) + f(x−hᵢeᵢ−hⱼeⱼ)) / (4hᵢhⱼ)
-    for (let j = i + 1; j < n; j++) {
-      const xpp = x.slice(); xpp[i] += h[i]; xpp[j] += h[j];
-      const xpm = x.slice(); xpm[i] += h[i]; xpm[j] -= h[j];
-      const xmp = x.slice(); xmp[i] -= h[i]; xmp[j] += h[j];
-      const xmm = x.slice(); xmm[i] -= h[i]; xmm[j] -= h[j];
-      const hij = (f(xpp) - f(xpm) - f(xmp) + f(xmm)) / (4 * h[i] * h[j]);
-      H[i][j] = hij;
-      H[j][i] = hij;
-    }
-  }
-  return H;
-}
 
 // GL20_X/GL20_W and GH20_X/GH20_W imported from quadrature.js (single source of truth).
 const _SQRT_PI = Math.sqrt(Math.PI);
