@@ -11,62 +11,22 @@
 // ------------
 //   format.js    fmt, fmtP_APA, fmtCI_APA
 //   plots.js     drawForest, drawCumulativeForest, drawCaterpillarPlot, drawGoshPlot
-//   export.js    resolveThemeVars, hasEmbeddedBackground
+//   export.js    serializeSVG, collectPagedSVGs
 //   constants.js Z_95
 //   report.js    CITATIONS, collectCitations
 
 import { fmt, fmtP_APA, fmtCI_APA } from "./format.js";
 import { drawForest, drawCumulativeForest, drawCaterpillarPlot, drawGoshPlot } from "./plots.js";
-import { resolveThemeVars, hasEmbeddedBackground, currentBgColour } from "./export.js";
+import { serializeSVG, collectPagedSVGs } from "./export.js";
 import { Z_95 } from "./constants.js";
 import { normalQuantile } from "./utils.js";
 import { CITATIONS, collectCitations } from "./report.js";
 
-// ---------------------------------------------------------------------------
-// SVG serialization (mirrors report.js)
-// ---------------------------------------------------------------------------
-
-function serializeSVG(svgEl) {
-  if (!svgEl) return "";
-  const clone = svgEl.cloneNode(true);
-  clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
-  const w = clone.getAttribute("width")  || String(svgEl.getBoundingClientRect().width);
-  const h = clone.getAttribute("height") || String(svgEl.getBoundingClientRect().height);
-  clone.setAttribute("width",  w);
-  clone.setAttribute("height", h);
-  resolveThemeVars(clone);
-  if (!hasEmbeddedBackground(clone)) {
-    const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-    bg.setAttribute("width",  "100%");
-    bg.setAttribute("height", "100%");
-    bg.setAttribute("fill", currentBgColour());
-    clone.insertBefore(bg, clone.firstChild);
-  }
-  return new XMLSerializer().serializeToString(clone);
-}
+// serializeSVG and collectPagedSVGs are imported from export.js.
 
 function liveSVGString(id) {
   const el = document.getElementById(id);
   return el ? serializeSVG(el) : "";
-}
-
-// Collect all pages of a paginated plot into SVG strings (mirrors collectForestSVGs).
-function collectPagedSVGs(svgId, drawFn, drawArgs, options) {
-  const svgEl = document.getElementById(svgId);
-  if (!svgEl) return [];
-  const svgs = [];
-  let totalPages = 1;
-  try {
-    ({ totalPages } = drawFn(...drawArgs, { ...options, page: 0 }));
-    svgs.push(serializeSVG(svgEl));
-  } catch (e) { return []; }
-  for (let p = 1; p < totalPages; p++) {
-    try { drawFn(...drawArgs, { ...options, page: p }); svgs.push(serializeSVG(svgEl)); }
-    catch (e) {}
-  }
-  try { drawFn(...drawArgs, { ...options, page: options.currentPage ?? 0 }); }
-  catch (e) {}
-  return svgs;
 }
 
 // ---------------------------------------------------------------------------

@@ -2463,7 +2463,7 @@ async function buildReportAndResync() {
 
   const { buildReport, downloadHTML, openPrintPreview } = await getReport();
 
-  // Pass the live forestPlot.page so the restore inside collectForestSVGs lands on
+  // Pass the live forestPlot.page so the restore inside collectPagedSVGs lands on
   // the correct page rather than always page 0 (which was the value at cache time).
   const args = {
     ...appState.reportArgs,

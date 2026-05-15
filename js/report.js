@@ -29,145 +29,16 @@
 //   plots.js     drawForest()
 //   io.js        downloadBlob()
 //   constants.js Z_95
-//   export.js    resolveThemeVars(), hasEmbeddedBackground()
+//   export.js    serializeSVG(), collectPagedSVGs()
 
 import { fmt, fmtCI_APA, escHTML, fmtP as _fmtP, fmtP_APA as _fmtP_APA } from "./format.js";
 import { drawForest, drawGoshPlot, drawCumulativeForest, drawCaterpillarPlot } from "./plots.js";
 import { downloadBlob } from "./io.js";
 import { Z_95 } from "./constants.js";
 import { normalQuantile } from "./utils.js";
-import { resolveThemeVars, hasEmbeddedBackground, currentBgColour } from "./export.js";
+import { serializeSVG, collectPagedSVGs } from "./export.js";
 
-// ---------------------------------------------------------------------------
-// SVG serialization
-// ---------------------------------------------------------------------------
-
-function serializeSVG(svgEl) {
-  if (!svgEl) return "";
-  const clone = svgEl.cloneNode(true);
-  clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
-
-  const w = clone.getAttribute("width")  || String(svgEl.getBoundingClientRect().width);
-  const h = clone.getAttribute("height") || String(svgEl.getBoundingClientRect().height);
-  clone.setAttribute("width",  w);
-  clone.setAttribute("height", h);
-
-  // Resolve CSS custom properties so SVGs are self-contained in the report
-  // document (which has its own CSS cascade that doesn't apply to serialised SVG).
-  resolveThemeVars(clone);
-
-  // Inject a background rect when the SVG has no embedded one.
-  // Use the app's current --bg-base so the report matches the active theme.
-  if (!hasEmbeddedBackground(clone)) {
-    const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-    bg.setAttribute("width",  "100%");
-    bg.setAttribute("height", "100%");
-    bg.setAttribute("fill", currentBgColour());
-    clone.insertBefore(bg, clone.firstChild);
-  }
-
-  return new XMLSerializer().serializeToString(clone);
-}
-
-// Render every forest-plot page to SVG strings.
-//
-// We render directly into the live #forestPlot element rather than using a
-// hidden temporary element.  Because this function runs synchronously inside
-// a click handler the browser never repaints between renders, so the user
-// sees no flicker.  The originally-displayed page is restored before the
-// function returns.
-function collectForestSVGs(studies, m, forestOptions) {
-  const svgEl = document.getElementById("forestPlot");
-  if (!svgEl) return [];
-
-  const svgs = [];
-  let totalPages = 1;
-
-  // Render page 0 to discover totalPages; capture its SVG immediately.
-  try {
-    ({ totalPages } = drawForest(studies, m, { ...forestOptions, page: 0 }));
-    svgs.push(serializeSVG(svgEl));
-  } catch (e) {
-    console.error("collectForestSVGs: failed to render page 0", e);
-    return [];
-  }
-
-  for (let p = 1; p < totalPages; p++) {
-    try {
-      drawForest(studies, m, { ...forestOptions, page: p });
-      svgs.push(serializeSVG(svgEl));
-    } catch (e) {
-      console.error(`collectForestSVGs: failed to render page ${p}`, e);
-    }
-  }
-
-  // Restore the originally-displayed page.
-  try {
-    drawForest(studies, m, { ...forestOptions, page: forestOptions.currentPage ?? 0 });
-  } catch (e) {
-    console.error("collectForestSVGs: failed to restore page", e);
-  }
-
-  return svgs;
-}
-
-// Render every cumulative-forest page to SVG strings (mirrors collectForestSVGs).
-function collectCumulativeForestSVGs(results, profile, options = {}) {
-  const svgEl = document.getElementById("cumulativePlot");
-  if (!svgEl) return [];
-  const svgs = [];
-  let totalPages = 1;
-  try {
-    ({ totalPages } = drawCumulativeForest(results, profile, { ...options, page: 0 }));
-    svgs.push(serializeSVG(svgEl));
-  } catch (e) {
-    console.error("collectCumulativeForestSVGs: failed to render page 0", e);
-    return [];
-  }
-  for (let p = 1; p < totalPages; p++) {
-    try {
-      drawCumulativeForest(results, profile, { ...options, page: p });
-      svgs.push(serializeSVG(svgEl));
-    } catch (e) {
-      console.error(`collectCumulativeForestSVGs: failed to render page ${p}`, e);
-    }
-  }
-  try {
-    drawCumulativeForest(results, profile, { ...options, page: options.currentPage ?? 0 });
-  } catch (e) {
-    console.error("collectCumulativeForestSVGs: failed to restore page", e);
-  }
-  return svgs;
-}
-
-// Render every caterpillar page to SVG strings (mirrors collectForestSVGs).
-function collectCaterpillarSVGs(studies, m, profile, options = {}) {
-  const svgEl = document.getElementById("caterpillarPlot");
-  if (!svgEl) return [];
-  const svgs = [];
-  let totalPages = 1;
-  try {
-    ({ totalPages } = drawCaterpillarPlot(studies, m, profile, { ...options, page: 0 }));
-    svgs.push(serializeSVG(svgEl));
-  } catch (e) {
-    console.error("collectCaterpillarSVGs: failed to render page 0", e);
-    return [];
-  }
-  for (let p = 1; p < totalPages; p++) {
-    try {
-      drawCaterpillarPlot(studies, m, profile, { ...options, page: p });
-      svgs.push(serializeSVG(svgEl));
-    } catch (e) {
-      console.error(`collectCaterpillarSVGs: failed to render page ${p}`, e);
-    }
-  }
-  try {
-    drawCaterpillarPlot(studies, m, profile, { ...options, page: options.currentPage ?? 0 });
-  } catch (e) {
-    console.error("collectCaterpillarSVGs: failed to restore page", e);
-  }
-  return svgs;
-}
+// serializeSVG and collectPagedSVGs are imported from export.js.
 
 // ---------------------------------------------------------------------------
 // Formatting helpers (plain-text core in format.js; wrappers add HTML escaping)
@@ -1386,7 +1257,7 @@ export function openPrintPreview(htmlString) {
 // Re-renders the GOSH plot using SVG circles (forReport:true) so the report
 // contains clean vector output rather than an embedded canvas PNG.
 // The live #goshPlot element is restored to its screen render after serialization,
-// exactly as collectForestSVGs does for the forest plot.
+// exactly as collectPagedSVGs does for the forest plot.
 function sectionGosh(goshResult, profile, xAxis, apaFormat = false, nextFigure) {
   if (!goshResult || goshResult.error) {
     return `
@@ -1500,13 +1371,16 @@ export function buildReport(args) {
 
   // Collect forest SVGs for every page; other plots read directly from DOM.
   const forestSVGs        = forestOptions
-    ? collectForestSVGs(studies, m, forestOptions)
+    ? collectPagedSVGs("forestPlot", drawForest, [studies, m], forestOptions)
     : [];
   const cumForestSVGs     = cumForestOptions
-    ? collectCumulativeForestSVGs(cumForestOptions.results, cumForestOptions.profile ?? profile, cumForestOptions)
+    ? collectPagedSVGs("cumulativePlot", drawCumulativeForest,
+        [cumForestOptions.results, cumForestOptions.profile ?? profile], cumForestOptions)
     : [];
   const caterpillarSVGs   = caterpillarOptions
-    ? collectCaterpillarSVGs(caterpillarOptions.studies ?? studies, caterpillarOptions.m ?? m, caterpillarOptions.profile ?? profile, caterpillarOptions)
+    ? collectPagedSVGs("caterpillarPlot", drawCaterpillarPlot,
+        [caterpillarOptions.studies ?? studies, caterpillarOptions.m ?? m, caterpillarOptions.profile ?? profile],
+        caterpillarOptions)
     : [];
 
   function liveSVG(id) {
