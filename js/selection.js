@@ -23,12 +23,12 @@
 //
 // Dependencies
 // ------------
-//   analysis.js  meta(), logLik(), matInverse()
+//   analysis.js  meta(), logLik(), validStudies()
 //   utils.js     normalCDF, normalQuantile
 //   constants.js Z_95, BISECTION_ITERS
 
 import { meta, logLik, validStudies } from "./analysis.js";
-import { matInverse } from "./linalg.js";
+import { inverseWithRidge } from "./linalg.js";
 import { normalCDF, normalQuantile, chiSquareCDF } from "./utils.js";
 import { Z_95, BISECTION_ITERS } from "./constants.js";
 import { GL20_X, GL20_W, GH20_X, GH20_W } from "./quadrature.js";
@@ -819,14 +819,7 @@ function _fitContinuousSelModel({ studies, sides, weightFn, makeWFn, initGrid, l
   const logLikSel = -result.fval;
 
   const hess = numericalHessian(nLL, result.x, result.fval);
-  let inv = matInverse(hess);
-  if (inv === null) {
-    for (const lam of [1e-8, 1e-6, 1e-4, 1e-2, 1, 10]) {
-      const ridge = hess.map((row, ii) => row.map((v, jj) => ii === jj ? v + lam : v));
-      inv = matInverse(ridge);
-      if (inv !== null) break;
-    }
-  }
+  const inv  = inverseWithRidge(hess);
 
   function getSE(j) {
     if (inv !== null && inv[j][j] > 0) return Math.sqrt(inv[j][j]);
@@ -1183,15 +1176,7 @@ export function veveaHedges(studies, cuts = SEL_CUTS_ONE_SIDED, sides = 1, fixed
   function invertHess(H, fval, f2) {
     // Recompute H with fresh fval to avoid stale-fval bugs
     const hess = numericalHessian(f2, H, fval);
-    let inv = matInverse(hess);
-    if (inv === null) {
-      for (const lam of [1e-8, 1e-6, 1e-4, 1e-2, 1, 10]) {
-        const ridge = hess.map((row, i) => row.map((v, j) => i === j ? v + lam : v));
-        inv = matInverse(ridge);
-        if (inv !== null) break;
-      }
-    }
-    return { hess, inv };
+    return { hess, inv: inverseWithRidge(hess) };
   }
 
   function getSE(hess, inv, j) {

@@ -9,6 +9,7 @@
 //   wls(X, y, w)        — weighted least squares; returns { beta, vcov, rankDeficient }
 //   matInverse(A)       — Gauss-Jordan inverse; returns null if singular
 //   logDet(A)           — log|det(A)| via Gaussian elimination
+//   inverseWithRidge(H) — matInverse with progressive diagonal ridge fallback
 // =============================================================================
 
 /**
@@ -100,6 +101,21 @@ export function matInverse(A) {
 
   // The right half of M is now A⁻¹
   return M.map(row => row.slice(p));
+}
+
+// inverseWithRidge(H, schedule) → matrix | null
+// Attempts matInverse(H); on failure retries with progressively larger diagonal
+// ridge penalties until inversion succeeds or the schedule is exhausted.
+// Returns null only when every ridge value fails.
+export function inverseWithRidge(H, schedule = [1e-8, 1e-6, 1e-4, 1e-2, 1, 10]) {
+  let inv = matInverse(H);
+  if (inv !== null) return inv;
+  for (const lam of schedule) {
+    const ridge = H.map((row, i) => row.map((v, j) => i === j ? v + lam : v));
+    inv = matInverse(ridge);
+    if (inv !== null) return inv;
+  }
+  return null;
 }
 
 // log|det(A)| via partial-pivoting Gaussian elimination.
