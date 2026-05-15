@@ -37,6 +37,8 @@ import { downloadBlob } from "./io.js";
 import { Z_95 } from "./constants.js";
 import { normalQuantile } from "./utils.js";
 import { serializeSVG, collectPagedSVGs } from "./export.js";
+import { summaryData, pubBiasData, puniformData, selModelData,
+         influenceData, subgroupData, studyTableData, regressionData } from "./sections.js";
 
 // serializeSVG and collectPagedSVGs are imported from export.js.
 
@@ -49,6 +51,8 @@ import { serializeSVG, collectPagedSVGs } from "./export.js";
 function fmtP(p)     { return escHTML(_fmtP(p)); }
 function fmtP_APA(p) { return escHTML(_fmtP_APA(p)); }
 const esc = escHTML;
+// Escape < that is NOT part of <em> or </em> markup (safe for innerHTML notes).
+function escNote(s) { return String(s).replace(/<(?!\/?em>)/g, "&lt;"); }
 
 // buildTable(headers, rows, opts) → HTML string
 // Shared helper for every stat-table in the report.
@@ -297,34 +301,12 @@ function sectionSummary(args) {
       k = ${k}${tf.length > 0 ? ` + ${tf.length} imputed (trim &amp; fill)` : ""}
     </p>`;
 
-    const statsRows = [
-      `<tr><td>${esc(profile.label)} — Fixed Effects (FE)</td><td>${fmt(FE_disp)}</td></tr>`,
-      `<tr><td>FE ${widthCiLabel}</td><td>${fmtCI_APA(feCi.lb, feCi.ub)}</td></tr>`,
-      !isMHorPeto ? `<tr><td>${esc(profile.label)} — Random Effects (RE)</td><td><strong>${fmt(RE_disp)}</strong></td></tr>` : "",
-      !isMHorPeto ? `<tr><td>RE ${widthCiLabel}</td><td>${fmtCI_APA(ci.lb, ci.ub)}</td></tr>` : "",
-      isMHorPeto  ? `<tr><td>${widthCiLabel}</td><td>${fmtCI_APA(ci.lb, ci.ub)}</td></tr>` : "",
-      cles        ? `<tr><td>CLES (RE)</td><td>${fmt(cles.estimate)} [${fmt(cles.ci[0])}, ${fmt(cles.ci[1])}]</td></tr>` : "",
-      RE_adj !== null ? `<tr><td>RE (trim-and-fill adjusted)</td><td>${fmt(RE_adj)}</td></tr>` : "",
-      !isMHorPeto ? `<tr><td>95% Prediction interval (PI)</td><td>${fmtCI_APA(pred.lb, pred.ub)}</td></tr>` : "",
-      !isMHorPeto ? `<tr><td>τ²</td><td>${fmt(m.tau2)} [${tauCI1}, ${tauCI2}]</td></tr>` : "",
-      `<tr><td>I²</td><td>${fmt(m.I2)}% [${fmt(m.I2CI[0])}%, ${fmt(m.I2CI[1])}%]</td></tr>`,
-      !isMHorPeto ? `<tr><td>H²-CI</td><td>[${fmt(m.H2CI[0])}, ${H2hi}]</td></tr>` : "",
-      `<tr><td>Q (df = ${m.df})</td><td>${fmt(m.Q)}</td></tr>`,
-      m.dist ? `<tr><td><em>${esc(m.dist)}</em>-statistic</td><td>${fmt(m.stat)}, <em>p</em> ${fmtP_APA(m.pval)}</td></tr>` : "",
-      m.isClustered ? `<tr><td>Robust CI (C = ${m.clustersUsed} clusters)</td><td>${fmtCI_APA(profile.transform(m.robustCiLow), profile.transform(m.robustCiHigh))} · SE = ${fmt(m.robustSE)} · <em>z</em> = ${fmt(m.robustStat)}, <em>p</em> ${fmtP_APA(m.robustPval)}</td></tr>` : "",
-    ].filter(Boolean);
-
-    const tableNote = isMHorPeto
-      ? `Fixed-effect pooling (${esc(methodLabel)}) — RE estimate, τ², and prediction interval not applicable. FE = fixed effects; CI = confidence interval.`
-      : `FE = fixed effects; RE = random effects; CI = confidence interval; PI = prediction interval.${cles ? " CLES = common language effect size = Φ(g/√2); probability that a randomly drawn score from group 1 exceeds group 2 (McGraw & Wong, 1992)." : ""}${m.isClustered ? " Robust CI uses cluster-robust (sandwich) standard errors." : ""}`;
-
-    const statsTable = buildTableAPA(
-      nextTable(),
-      `Summary of Meta-Analysis Results (${esc(profile.label)})`,
-      ["Statistic", "Value"],
-      statsRows,
-      tableNote
-    );
+    const d = summaryData(args);
+    const statsRows = d.rows.map(([label, value], i) => {
+      const valCell = i === d.reRowIdx ? `<strong>${esc(value)}</strong>` : esc(value);
+      return `<tr><td>${esc(label)}</td><td>${valCell}</td></tr>`;
+    });
+    const statsTable = buildTableAPA(nextTable(), d.subtitle, d.headers, statsRows, escNote(d.note));
 
     return `
 <section>
@@ -406,33 +388,11 @@ function sectionPubBias(args) {
     : `<tr><td>Henmi-Copas (bias-robust CI)</td><td>—</td><td>NA</td></tr>`;
 
   if (apaFormat) {
-    const rows = [
-      `<tr><td>Egger's test (intercept)</td><td>${naCell(egger.intercept, fmt)}</td><td>${naP(egger.p, fmtP_APA)}</td></tr>`,
-      `<tr><td>Begg's test (rank correlation τ)</td><td>${naCell(begg.tau, fmt)}</td><td>${naP(begg.p, fmtP_APA)}</td></tr>`,
-      `<tr><td>FAT — β₁ (bias)</td><td>${naCell(fatpet.slope, fmt)}</td><td>${naP(fatpet.slopeP, fmtP_APA)}</td></tr>`,
-      `<tr><td>PET — effect at SE → 0</td><td>${petEff}</td><td>${naP(fatpet.interceptP, fmtP_APA)}</td></tr>`,
-      `<tr><td>Harbord (intercept)</td><td>${naCell(harbord.intercept, fmt)}</td><td>${naP(harbord.interceptP, fmtP_APA)}</td></tr>`,
-      `<tr><td>Peters (intercept)</td><td>${naCell(peters.intercept, fmt)}</td><td>${naP(peters.interceptP, fmtP_APA)}</td></tr>`,
-      `<tr><td>Deeks (intercept)</td><td>${naCell(deeks.intercept, fmt)}</td><td>${naP(deeks.interceptP, fmtP_APA)}</td></tr>`,
-      `<tr><td>Rücker (intercept)</td><td>${naCell(ruecker.intercept, fmt)}</td><td>${naP(ruecker.interceptP, fmtP_APA)}</td></tr>`,
-      tes && isFinite(tes.chi2)
-        ? `<tr><td>TES — χ² (O=${tes.O}, E=${fmt(tes.E)})</td><td>${fmt(tes.chi2)}</td><td>${naP(tes.p, fmtP_APA)}</td></tr>`
-        : `<tr><td>TES (test of excess significance)</td><td>—</td><td>NA</td></tr>`,
-      waap && isFinite(waap.estimate)
-        ? `<tr><td>WAAP-WLS (k<sub>adequate</sub> = ${waap.kAdequate} of ${waap.k}${waap.fallback ? "; WLS fallback" : ""})</td><td>${fmt(profile.transform(waap.estimate))} [${fmt(profile.transform(waap.ci[0]))}, ${fmt(profile.transform(waap.ci[1]))}]</td><td>${naP(waap.p, fmtP_APA)}</td></tr>`
-        : `<tr><td>WAAP-WLS</td><td>—</td><td>NA</td></tr>`,
-      hcRow_apa,
-    ];
-    const table = buildTableAPA(
-      nextTable(),
-      "Tests of Publication Bias",
-      ["Test", "Statistic", "p"],
-      rows,
-      "FAT = funnel asymmetry test; PET = precision-effect test. " +
-      "Harbord, Peters, Deeks, and Rücker are binary-outcome variants of the Egger test; TES = test of excess significance (Ioannidis & Trikalinos, 2007); " +
-      "WAAP-WLS = weighted average of adequately powered studies (Stanley & Doucouliagos, 2015); statistic is bias-corrected effect estimate [95% CI]; " +
-      "Henmi-Copas = bias-robust CI centred on FE estimate (DL τ²); NA = fewer than 3 eligible studies or missing cell counts."
-    );
+    const d = pubBiasData(args);
+    const rows = d.rows.map(([t, s, p]) =>
+      `<tr><td>${esc(t)}</td><td>${esc(s)}</td><td>${esc(p)}</td></tr>`);
+    const table = buildTableAPA(nextTable(), "Tests of Publication Bias",
+      d.headers, rows, esc(d.note));
     return `
 <section>
   <h2>Publication Bias</h2>
@@ -488,18 +448,13 @@ function sectionPUniform(puniform, m, profile, apaFormat = false, nextTable, wid
   ].filter(Boolean).join(" ");
 
   if (apaFormat) {
-    const rows = [
-      `<tr><td>RE (uncorrected)</td><td>${reEst}</td><td>${fmtCI_APA(reLo, reHi)}</td><td>${fmt(puniform.Z_bias)}</td><td>${fmtP_APA(puniform.p_bias)}</td></tr>`,
-      `<tr><td>P-uniform (bias-corrected)</td><td>${puEst}</td><td>${fmtCI_APA(puLo, puHi)}</td><td>${fmt(puniform.Z_sig)}</td><td>${fmtP_APA(puniform.p_sig)}</td></tr>`,
-    ];
-    const note = "RE row: bias test (H₀: RE = true effect); positive Z indicates overestimation. "
-      + "P-uniform row: significance test (H₀: δ = 0); negative Z indicates true positive effect. "
-      + `CI = confidence interval. ${noteExtra}`;
+    const d = puniformData({ puniform, m, profile, ciLevel: widthCiLabel.replace("% CI", "") });
+    const rows = d.rows.map(r => `<tr>${r.map(c => `<td>${esc(c)}</td>`).join("")}</tr>`);
     return `
 <section>
   <h2>P-uniform (van Assen et al., 2015)</h2>
-  <p class="meta-line">${puniform.k} significant result${puniform.k !== 1 ? "s" : ""} (p &lt; .05) used &nbsp;·&nbsp; effect scale: ${esc(profile.label)}</p>
-  ${buildTableAPA(nextTable(), "P-uniform Bias-Corrected Estimates", ["Method", "Estimate", widthCiLabel, "<em>Z</em>", "<em>p</em>"], rows, note)}
+  <p class="meta-line">${escNote(d.kLine)}</p>
+  ${buildTableAPA(nextTable(), "P-uniform Bias-Corrected Estimates", d.headers, rows, escNote(d.note))}
 </section>`;
   }
 
@@ -593,21 +548,37 @@ function sectionSelectionModel(sel, profile, selMode, selLabel, apaFormat = fals
         : "");
 
   if (apaFormat) {
+    const d = selModelData({ sel, profile, selMode, selLabel, ciLevel: widthCiLabel.replace("% CI", "") });
+    const K = d.nCols - 1;
+    const htmlRows = d.rows.map((r, ri) => {
+      if (r.length === 2) {
+        return `<tr><td>${esc(r[0])}</td><td colspan="${K}">${esc(r[1])}</td></tr>`;
+      }
+      return `<tr>${r.map((c, ci) => {
+        if (ci > 0 && ri === 1 && c === "0") return `<td class="flagged">${c}</td>`;
+        return `<td>${esc(c)}</td>`;
+      }).join("")}</tr>`;
+    });
     const emptyWarning = (() => {
-      const empty = sel.nPerInterval.map((n, j) => n === 0 ? j + 1 : -1).filter(j => j > 0);
+      const empty = d.nPerInterval.map((n, j) => n === 0 ? j + 1 : -1).filter(j => j > 0);
       return empty.length > 0
         ? ` Warning: interval${empty.length > 1 ? "s" : ""} ${empty.join(", ")} ha${empty.length > 1 ? "ve" : "s"} 0 studies.`
         : "";
     })();
-    const convWarning = isMLE && !sel.converged
-      ? " Optimizer did not fully converge; results may be approximate."
-      : "";
-    const note = `ω = selection weight; μ̂ = bias-corrected pooled estimate; CI = confidence interval; LRT = likelihood ratio test. ${interpNote}${emptyWarning}${convWarning}`;
+    const convWarning = d.isMLE && !d.converged ? " Optimizer did not fully converge; results may be approximate." : "";
+    const direction = sel.mu > sel.RE_unsel ? "higher" : "lower";
+    const schemeText = d.isMLE ? "the estimated selection pattern" : `<em>${esc(selLabel)}</em> selection`;
+    const interpNote = `Under ${schemeText} the bias-corrected estimate is ${d.muAdj} [${d.ciLo}, ${d.ciHi}]`
+      + ` — ${direction} than the unadjusted RE estimate of ${d.muUnadj}.`
+      + (d.isMLE && isFinite(d.LRTp) && d.LRTp < 0.05
+          ? ` The LRT rejects the null of no selection (<em>p</em> ${fmtP_APA(d.LRTp)}).`
+          : "");
+    const note = escNote(d.note) + " " + interpNote + emptyWarning + convWarning;
     return `
 <section>
   <h2>Selection Model (Vevea-Hedges, 1995)</h2>
-  <p class="meta-line">Mode: ${modeLabel} &nbsp;·&nbsp; p-values: ${sidesLabel} &nbsp;·&nbsp; k = ${sel.k}</p>
-  ${buildTableAPA(nextTable(), "Vevea-Hedges Selection Model Results", ["Quantity", ...intervalLabels], tableRows, note)}
+  <p class="meta-line">${escNote(d.metaLine)}</p>
+  ${buildTableAPA(nextTable(), "Vevea-Hedges Selection Model Results", d.headers, htmlRows, note)}
 </section>`;
   }
 
@@ -662,12 +633,15 @@ function sectionInfluence(influence, k, apaFormat = false, nextTable) {
   const headers = ["Study", "RE (LOO)", "Δτ²", "Std. Residual", "DFBETA", "Hat", "Cook's D", "Flag"];
 
   if (apaFormat) {
-    const note = `LOO = leave-one-out; Std. Residual = standardised residual; DFBETA = influence on pooled estimate. `
-      + `Threshold: Hat &gt; ${thresh2k} (= 2/k); Cook's D &gt; ${thresh4k} (= 4/k). Flagged rows shown in italic.`;
+    const d = influenceData({ influence, studies: Array.from({ length: k }, () => ({ filled: false })) });
+    const apaRows = d.rows.map((r, i) => {
+      const cls = d.flagged[i] ? ' class="flagged"' : "";
+      return `<tr${cls}>${r.map(c => `<td>${esc(c)}</td>`).join("")}</tr>`;
+    });
     return `
 <section>
   <h2>Influence Diagnostics</h2>
-  ${buildTableAPA(nextTable(), "Leave-One-Out Influence Diagnostics", headers, rows, note)}
+  ${buildTableAPA(nextTable(), "Leave-One-Out Influence Diagnostics", d.headers, apaRows, escNote(d.note))}
 </section>`;
   }
 
@@ -705,13 +679,13 @@ function sectionSubgroup(subgroup, profile, apaFormat = false, nextTable, widthC
   });
 
   if (apaFormat) {
-    const note = `CI = confidence interval. `
-      + `Q<sub>between</sub> = ${subgroup.Qbetween.toFixed(3)}, df = ${subgroup.df}, p ${fmtP_APA(subgroup.p)}.`;
+    const d = subgroupData({ subgroup, profile, ciLevel: widthCiLabel.replace("% CI", "") });
+    const apaRows = d.rows.map(r => `<tr>${r.map(c => `<td>${esc(c)}</td>`).join("")}</tr>`);
+    const note = escNote(d.note).replace("Q_between", "Q<sub>between</sub>");
     return `
 <section>
   <h2>Subgroup Analysis</h2>
-  ${buildTableAPA(nextTable(), `Subgroup Analysis Results (${esc(profile.label)})`,
-    ["Group", "k", "Effect size", "SE", widthCiLabel, "τ²", "I² (%)"], rows, note)}
+  ${buildTableAPA(nextTable(), d.subtitle, d.headers, apaRows, note)}
 </section>`;
   }
 
@@ -757,48 +731,19 @@ function sectionStudyTable(args) {
   const pooledHi = profile.transform(m.ciHigh);
 
   if (apaFormat) {
-    const rows = studies.map(d => {
-      const wi    = 1 / (d.vi + tau2);
-      const pct   = d.filled ? null : wi / totalW * 100;
-      const pctFE = (showFEcol && !d.filled) ? (1 / d.vi) / totalWfe * 100 : null;
-      const ef    = profile.transform(d.yi);
-      const lo  = profile.transform(d.yi - Z_95 * d.se);
-      const hi  = profile.transform(d.yi + Z_95 * d.se);
-      const lbl = d.label.length > 40 ? d.label.slice(0, 39) + "\u2026" : d.label;
-      const cls = d.filled ? ' class="imputed"' : "";
-      return `<tr${cls}>
-        <td>${esc(lbl)}</td>
-        <td>${fmtV(ef)}</td>
-        <td>${fmtV(d.se)}</td>
-        <td>${fmtCI_APA(lo, hi)}</td>
-        <td>${fmtPct(pct)}</td>
-        ${showFEcol ? `<td>${fmtPct(pctFE)}</td>` : ""}
-      </tr>`;
+    const d = studyTableData({ studies, m, profile, ciLevel: ciLevel ?? "95" });
+    const bodyRows = d.rows.map((r, i) => {
+      const cls = d.filled[i] ? ' class="imputed"' : "";
+      return `<tr${cls}>${r.map(c => `<td>${esc(c)}</td>`).join("")}</tr>`;
     });
-
-    const ncols    = showFEcol ? 6 : 5;
-    const tfootAPA = `<tr class="pooled">
-        <td>Pooled (RE)</td>
-        <td>${fmtV(pooledEf)}</td>
-        <td>${fmtV(m.seRE)}</td>
-        <td>${fmtCI_APA(pooledLo, pooledHi)}</td>
-        <td>100%</td>
-        ${showFEcol ? "<td>100%</td>" : ""}
-      </tr>`;
-
-    const weightNote = showFEcol ? "RE and FE weights shown." : "FE weights shown.";
-    const note = `Effect size = ${esc(profile.label)}. SE = standard error. CI = confidence interval. `
-      + `${weightNote} ${studies.some(d => d.filled) ? "Italic rows are trim-and-fill imputed studies." : ""}`;
-
-    const headCols = ["Study", `Effect size (${esc(profile.label)})`, esc(seLabel), widthCiLabel, "RE Weight (%)"];
-    if (showFEcol) headCols.push("FE Weight (%)");
-    const head = `<thead><tr>${headCols.map(h => `<th>${h}</th>`).join("")}</tr></thead>`;
-    const body = `<tbody>${rows.join("")}</tbody>`;
+    const ncols = d.headers.length;
+    const pooled = `<tr class="pooled">${d.pooledRow.map(c => `<td>${esc(c)}</td>`).join("")}</tr>`;
+    const head = `<thead><tr>${d.headers.map(h => `<th>${esc(h)}</th>`).join("")}</tr></thead>`;
+    const body = `<tbody>${bodyRows.join("")}</tbody>`;
     const foot = `<tfoot>
-      ${tfootAPA}
-      <tr><td colspan="${ncols}"><span class="apa-note"><em>Note.</em> ${note}</span></td></tr>
+      ${pooled}
+      <tr><td colspan="${ncols}"><span class="apa-note"><em>Note.</em> ${escNote(d.note)}</span></td></tr>
     </tfoot>`;
-
     return `
 <section>
   <h2>Study-Level Results</h2>
@@ -871,53 +816,24 @@ function sectionRegression(reg, method, ciMethod, apaFormat = false, nextTable, 
   const modTestsQMlabel = reg.QMdist === "F" ? "<em>F</em>" : "χ²";
 
   if (apaFormat) {
-    const rows = reg.colNames.map((name, j) => {
-      const [lo, hi] = reg.ci[j];
+    const d = regressionData({ reg, method, ciMethod, ciLevel: widthCiLabel.replace("% CI", "") });
+    if (!d) return "";
+    const coefRows = d.coef.rows.map((r, j) => {
       const cls = j === 0 ? ' class="intercept"' : "";
-      return `<tr${cls}>
-        <td>${esc(name)}</td>
-        <td>${fmt(reg.beta[j])}</td>
-        <td>${fmt(reg.se[j])}</td>
-        <td>${fmt(reg.zval[j])}</td>
-        <td>${fmtP_APA(reg.pval[j])}</td>
-        <td>${fmtCI_APA(lo, hi)}</td>
-        ${hasVif ? vifCell(j) : ""}
-      </tr>`;
+      return `<tr${cls}>${r.map(c => `<td>${esc(c)}</td>`).join("")}</tr>`;
     });
-
-    const coefHeaders = ["Predictor", "β", "SE", esc(statLabel), "p", widthCiLabel];
-    if (hasVif) coefHeaders.push("VIF");
-
-    const coefNote = `β = unstandardised regression coefficient. SE = standard error. CI = confidence interval. `
-      + `QE(${reg.QEdf}) = ${fmt(reg.QE)}, p ${fmtP_APA(reg.QEp)}.`
-      + (reg.p > 1 ? ` <em>Q</em>M ${esc(QMlabel)} = ${fmt(reg.QM)}, <em>p</em> ${fmtP_APA(reg.QMp)}.` : "")
-      + (reg.p > 1 && isFinite(reg.R2) ? ` R² = ${fmt(reg.R2 * 100)}%.` : "");
-
-    const coefTable = buildTableAPA(nextTable(), "Meta-Regression Coefficients", coefHeaders, rows, coefNote);
-
-    const hasLRT_apa = reg.modTests && reg.modTests.some(mt => isFinite(mt.lrt));
-    const modTestsTable = reg.modTests && reg.modTests.length > 1
+    const coefTable = buildTableAPA(nextTable(), "Meta-Regression Coefficients", d.coef.headers, coefRows, escNote(d.coef.note));
+    const modTestsTable = d.modTests
       ? `<h3>Per-moderator omnibus tests</h3>
-  ${buildTableAPA(
-    nextTable(),
-    "Per-Moderator Omnibus Tests",
-    ["Moderator", esc(modTestsQMlabel) + " (Wald)", ...(hasLRT_apa ? ["LRT χ²"] : []), "df", "p (Wald)", ...(hasLRT_apa ? ["p (LRT)"] : [])],
-    reg.modTests.map(mt => `<tr>
-      <td>${esc(mt.name)}</td>
-      <td>${fmt(mt.QM)}</td>
-      ${hasLRT_apa ? `<td>${isFinite(mt.lrt) ? fmt(mt.lrt) : "NA"}</td>` : ""}
-      <td>${mt.QMdf}</td>
-      <td>${fmtP_APA(mt.QMp)}</td>
-      ${hasLRT_apa ? `<td>${isFinite(mt.lrtP) ? fmtP_APA(mt.lrtP) : "NA"}</td>` : ""}
-    </tr>`),
-    hasLRT_apa ? "LRT = Likelihood Ratio Test; uses ML estimation internally regardless of τ² method." : ""
-  )}`
+  ${buildTableAPA(nextTable(), "Per-Moderator Omnibus Tests",
+    d.modTests.headers,
+    d.modTests.rows.map(r => `<tr>${r.map(c => `<td>${esc(c)}</td>`).join("")}</tr>`),
+    escNote(d.modTests.note))}`
       : "";
-
     return `
 <section>
   <h2>Meta-Regression</h2>
-  <p class="meta-line">k = ${reg.k} · ${esc(method)} · ${esc(ciLabel)} · τ² = ${fmt(reg.tau2)} · I² = ${fmt(reg.I2)}%${R2row}${aicRow}</p>
+  <p class="meta-line">${escNote(d.metaLine)}${R2row}${aicRow}</p>
   ${coefTable}
   ${modTestsTable}
 </section>`;
