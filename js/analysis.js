@@ -83,6 +83,35 @@ export function validStudies(studies) {
   return studies.filter(isValidStudy);
 }
 
+// resolveClusterIds(studies) → string[]
+// Returns one cluster-ID string per study.  Missing or blank cluster values
+// (null, undefined, or whitespace-only) produce a synthetic "__s<i>" fallback
+// that makes every such study its own singleton cluster.
+export function resolveClusterIds(studies) {
+  return studies.map((s, i) => {
+    const c = s.cluster;
+    if (c !== null && c !== undefined) {
+      const t = String(c).trim();
+      if (t !== "") return t;
+    }
+    return `__s${i}`;
+  });
+}
+
+// groupByCluster(studies) → Map<string, study[]>
+// Groups studies by resolved cluster ID (see resolveClusterIds).
+// Preserves insertion order of first encounter per cluster.
+export function groupByCluster(studies) {
+  const ids = resolveClusterIds(studies);
+  const map = new Map();
+  for (let i = 0; i < studies.length; i++) {
+    const id = ids[i];
+    if (!map.has(id)) map.set(id, []);
+    map.get(id).push(studies[i]);
+  }
+  return map;
+}
+
 // ================= DYNAMIC COMPUTE =================
 /**
  * Compute per-study (yi, vi) for one study row using the named effect profile.

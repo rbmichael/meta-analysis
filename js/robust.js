@@ -31,7 +31,7 @@ import { matInverse } from "./linalg.js";
 import { tCritical, tCDF, normalCDF, normalQuantile } from "./utils.js";
 import { MIN_VAR, Z_95 } from "./constants.js";
 // Circular import — safe: meta() only called inside robustMeta function body.
-import { meta } from "./analysis.js";
+import { meta, resolveClusterIds } from "./analysis.js";
 
 
 // ================= SANDWICH (CLUSTER-ROBUST) VARIANCE ESTIMATOR =================
@@ -63,13 +63,9 @@ export function sandwichVar(X, w, residuals, clusterIds) {
   const k = residuals.length;
   const p = X[0].length;
 
-  // Assign a cluster label to every row; missing/blank → unique singleton key
-  const ids = Array.from({ length: k }, (_, i) => {
-    const id = clusterIds ? clusterIds[i] : null;
-    return (id !== null && id !== undefined && String(id).trim() !== "")
-      ? String(id).trim()
-      : `__s_${i}`;
-  });
+  // clusterIds is a pre-resolved string[] from resolveClusterIds(); the
+  // null-fallback handles direct external calls (each row becomes a singleton).
+  const ids = clusterIds ?? Array.from({ length: k }, (_, i) => `__s${i}`);
 
   // Group row indices by cluster
   const clusterMap = new Map();
@@ -196,8 +192,8 @@ export function robustWlsResult(X, w, y, beta, clusterIds) {
 export function robustMeta(studies, method, ciMethod, alpha = 0.05) {
   const m = meta(studies, method, ciMethod, alpha);
 
-  const clusterIds = studies.map(s => s.cluster?.trim() || null);
-  if (clusterIds.every(id => !id)) return m;
+  if (!studies.some(s => s.cluster?.trim())) return m;
+  const clusterIds = resolveClusterIds(studies);
 
   const k = studies.length;
   const X = Array.from({ length: k }, () => [1]);

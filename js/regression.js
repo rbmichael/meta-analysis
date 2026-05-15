@@ -6,7 +6,7 @@
 // =============================================================================
 
 // Circular imports — safe: these are only called inside function bodies.
-import { meta, robustWlsResult, logLik, validStudies } from "./analysis.js";
+import { meta, robustWlsResult, logLik, validStudies, resolveClusterIds, groupByCluster } from "./analysis.js";
 import { wls, matInverse, logDet } from "./linalg.js";
 import { normalCDF, normalQuantile, tCDF, tCritical, fCDF, chiSquareCDF, chiSquareQuantile } from "./utils.js";
 import { MIN_VAR, REML_TOL, BISECTION_ITERS } from "./constants.js";
@@ -774,9 +774,9 @@ export function metaRegression(studies, moderators = [], method = "REML", ciMeth
 
   // ---- Cluster-robust SEs for regression coefficients ----
   // Reads study.cluster from each study in rows (the filtered set used in the fit).
-  const clusters = rows.map(s => s.cluster?.trim() || null);
   let robustSE, robustZ, robustP, robustCi, robustDf, robustC, robustError, allSingletons;
-  if (clusters.some(id => id)) {
+  if (rows.some(s => s.cluster?.trim())) {
+    const clusters = resolveClusterIds(rows);
     const rob = robustWlsResult(Xf, w, yi, beta, clusters);
     if (!rob.error) {
       robustSE      = rob.robustSE;
@@ -1291,14 +1291,7 @@ export function rvePooled(studies, opts = {}) {
   if (k < 2) return { error: "Need at least 2 valid studies." };
 
   // Group studies by cluster; studies without a cluster ID are singletons.
-  const clusterMap = new Map();
-  valid.forEach((s, idx) => {
-    const id = (s.cluster !== null && s.cluster !== undefined && String(s.cluster).trim() !== "")
-      ? String(s.cluster).trim()
-      : `__s${idx}`;
-    if (!clusterMap.has(id)) clusterMap.set(id, []);
-    clusterMap.get(id).push(s);
-  });
+  const clusterMap = groupByCluster(valid);
   const m = clusterMap.size;
   if (m < 2) return { error: "Need at least 2 clusters for RVE." };
 
@@ -1440,12 +1433,7 @@ export function meta3level(studies, opts = {}) {
     return { error: "Three-level meta-analysis requires at least 3 studies" };
 
   // Group studies by cluster; singletons get a unique synthetic key.
-  const clusterMap = new Map();
-  studies.forEach((s, i) => {
-    const key = (s.cluster != null && s.cluster !== "") ? String(s.cluster) : `__s${i}`;
-    if (!clusterMap.has(key)) clusterMap.set(key, []);
-    clusterMap.get(key).push(s);
-  });
+  const clusterMap = groupByCluster(studies);
   const clusters = [...clusterMap.values()];
   const m = clusters.length;
   const k = studies.length;

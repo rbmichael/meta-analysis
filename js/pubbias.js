@@ -25,7 +25,7 @@
 //   utils.js     normalCDF, normalQuantile, tCDF, regularizedGammaP
 //   constants.js BISECTION_ITERS
 
-import { robustWlsResult, validStudies } from "./analysis.js";
+import { robustWlsResult, validStudies, resolveClusterIds } from "./analysis.js";
 import { wls } from "./linalg.js";
 import { normalCDF, normalQuantile, tCDF, regularizedGammaP } from "./utils.js";
 import { BISECTION_ITERS } from "./constants.js";
@@ -50,8 +50,8 @@ export function eggerTest(studies){
   const result = { intercept, slope, se, t, df, p };
 
   // Cluster-robust extension: reads study.cluster (set by ui.js)
-  const clusters = studies.map(s => s.cluster?.trim() || null);
-  if (clusters.some(id => id)) {
+  if (studies.some(s => s.cluster?.trim())) {
+    const clusters = resolveClusterIds(studies);
     const X2d = studies.map((_, i) => [1, X[i]]);
     const wUnit = Array(k).fill(1);
     const rob = robustWlsResult(X2d, wUnit, Z, [intercept, slope], clusters);
@@ -188,8 +188,8 @@ export function fatPetTest(studies) {
   const result = _wlsFinish(beta, vcov, ys, xs, ws, k - 2);
 
   // Cluster-robust extension: reads study.cluster (set by ui.js)
-  const clusters = valid.map(s => s.cluster?.trim() || null);
-  if (clusters.some(id => id)) {
+  if (valid.some(s => s.cluster?.trim())) {
+    const clusters = resolveClusterIds(valid);
     const rob = robustWlsResult(X, ws, ys, beta, clusters);
     if (!rob.error) {
       result.robustInterceptSE = rob.robustSE[0];
