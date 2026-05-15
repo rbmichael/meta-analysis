@@ -52,7 +52,7 @@
 
 import { tCritical, normalCDF, normalQuantile, tCDF } from "./utils.js";
 import { MIN_VAR, REML_TOL } from "./constants.js";
-import { tau2_HS, tau2_DLIT, tau2_HSk, tau2_HE, tau2_SJ, tau2_ML,
+import { tau2_DL, tau2_HS, tau2_DLIT, tau2_HSk, tau2_HE, tau2_SJ, tau2_ML,
          logLik, tau2_REML, tau2_PM, tau2_EB, tau2_PMM, tau2_GENQM,
          tau2_SQGENQ, tau2_GENQ, RE_mean, FE_mean, I2 } from "./tau2.js";
 import { getProfile, autoDetectType } from "./profiles.js";
@@ -193,30 +193,25 @@ export function clES(d, ci) {
 // (i.e. after each runAnalysis() cycle), so no manual invalidation is needed.
 const _metaCache = new WeakMap();
 
-// Lookup table replacing the 15-branch if-chain in meta().
-// Each function receives (studies, wFE, W, Q, dfQ, tau2Init); most only use a subset.
+// Dispatch table for τ² estimators.  All entries accept (studies, tau2Init).
 // DL is the default fallback (TAU2_FN[method] ?? TAU2_FN.DL).
 // EBLUP is an alias for REML — see legacy estimator notes in benchmark-data.md.
 const TAU2_FN = {
-  REML:   (s, _w, _W, _Q, _d, t0) => tau2_REML (s, REML_TOL, 500, t0),
-  PM:     (s, _w, _W, _Q, _d, t0) => tau2_PM   (s, REML_TOL, 100, t0),
-  EB:     (s, _w, _W, _Q, _d, t0) => tau2_EB   (s, REML_TOL, 200, t0),
-  PMM:    (s, _w, _W, _Q, _d, t0) => tau2_PMM  (s, REML_TOL, 200, t0),
-  ML:     (s, _w, _W, _Q, _d, t0) => tau2_ML   (s, REML_TOL, 100, t0),
-  SJ:     (s, _w, _W, _Q, _d, t0) => tau2_SJ   (s, REML_TOL, 200, t0),
-  DLIT:   (s, _w, _W, _Q, _d, t0) => tau2_DLIT (s, REML_TOL, 200, t0),
-  EBLUP:  (s, _w, _W, _Q, _d, t0) => tau2_REML (s, REML_TOL, 500, t0),  // alias for REML
-  GENQM:  (s)                      => tau2_GENQM(s),                      // bisection — tau2Init not applicable
-  HS:     (s)                      => tau2_HS   (s),
-  HE:     (s)                      => tau2_HE   (s),
-  GENQ:   (s)                      => tau2_GENQ (s),
-  SQGENQ: (s)                      => tau2_SQGENQ(s),
-  HSk:    (s)                      => tau2_HSk  (s),
-  DL:     (s, wFE, W, Q, dfQ)      => {
-    const sumW2 = wFE.reduce((acc, w) => acc + w * w, 0);
-    const C = W - (sumW2 / W);
-    return C > 0 ? Math.max(0, (Q - dfQ) / C) : 0;
-  },
+  DL:     s       => tau2_DL   (s),
+  REML:   (s, t0) => tau2_REML (s, REML_TOL, 500, t0),
+  PM:     (s, t0) => tau2_PM   (s, REML_TOL, 100, t0),
+  EB:     (s, t0) => tau2_EB   (s, REML_TOL, 200, t0),
+  PMM:    (s, t0) => tau2_PMM  (s, REML_TOL, 200, t0),
+  ML:     (s, t0) => tau2_ML   (s, REML_TOL, 100, t0),
+  SJ:     (s, t0) => tau2_SJ   (s, REML_TOL, 200, t0),
+  DLIT:   (s, t0) => tau2_DLIT (s, REML_TOL, 200, t0),
+  EBLUP:  (s, t0) => tau2_REML (s, REML_TOL, 500, t0),
+  GENQM:  s       => tau2_GENQM(s),
+  HS:     s       => tau2_HS   (s),
+  HE:     s       => tau2_HE   (s),
+  GENQ:   s       => tau2_GENQ (s),
+  SQGENQ: s       => tau2_SQGENQ(s),
+  HSk:    s       => tau2_HSk  (s),
 };
 
 /**
@@ -277,7 +272,7 @@ export function meta(studies, method="DL", ciMethod="normal", alpha=0.05, tau2In
   if(Q>dfQ && Q>0) I2 = ((Q-dfQ)/Q)*100;
   I2 = Math.max(0, Math.min(100,I2));
 
-  const tau2 = (TAU2_FN[method] ?? TAU2_FN.DL)(studies, wFE, W, Q, dfQ, tau2Init);
+  const tau2 = (TAU2_FN[method] ?? TAU2_FN.DL)(studies, tau2Init);
 
   // ---------- RANDOM EFFECT ----------
   const wRE = studies.map(d => 1 / Math.max(d.vi + tau2, MIN_VAR));

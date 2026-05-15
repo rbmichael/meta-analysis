@@ -18,6 +18,24 @@ function iterate(seed, updateFn, maxIter = 200, tol = REML_TOL) {
   return tau2;
 }
 
+// ================= DERSIMONIAN-LAIRD (DL) TAU² =================
+// Classic method-of-moments estimator (DerSimonian & Laird 1986, Controlled
+// Clinical Trials 7:177–188).  τ² = max(0, (Q − (k−1)) / C) where
+//   Q = Σwᵢ(yᵢ − ȳ_FE)²  (Cochran's Q, using FE weights wᵢ = 1/vᵢ)
+//   C = W − Σwᵢ²/W        (bias-corrected denominator)
+export function tau2_DL(studies) {
+  const k = studies.length;
+  if (k <= 1) return 0;
+  let W = 0, WY = 0, WY2 = 0, W2 = 0;
+  for (const d of studies) {
+    const wi = 1 / d.vi;
+    W += wi; WY += wi * d.yi; WY2 += wi * d.yi * d.yi; W2 += wi * wi;
+  }
+  const Q = WY2 - WY * WY / W;   // Σwᵢ(yᵢ − ȳ_FE)² by algebraic identity
+  const C = W - W2 / W;
+  return C > 0 ? Math.max(0, (Q - (k - 1)) / C) : 0;
+}
+
 // ================= HUNTER-SCHMIDT TAU² =================
 // Method-of-moments. Identical to DL except the denominator is Σwᵢ
 // rather than the bias-corrected c = Σwᵢ − Σwᵢ²/Σwᵢ.
