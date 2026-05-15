@@ -201,8 +201,10 @@ when you want to compare variability independently of the mean — e.g. to test
 whether an intervention homogenises or disperses outcomes beyond any shift
 in the mean.</p>
 <p><strong>Formula:</strong><br>
-<code>yi = log(CV₁ / CV₂)</code><br>
+<code>yi = log(CV₁ / CV₂) + 1/(2(n₁−1)) − 1/(2(n₂−1))</code>&ensp;(bias-corrected)<br>
 <code>vi = 1/(2(n₁−1)) + CV₁²/n₁ + 1/(2(n₂−1)) + CV₂²/n₂</code></p>
+<p>The bias correction accounts for the fact that E[log S] ≈ log σ − 1/(2(n−1)); adding
+1/(2(n−1)) per group recovers an unbiased estimate of the log CV ratio (Nakagawa et al., 2015, eq. 1).</p>
 <p><strong>When to use:</strong> Both means are strictly positive; you are
 specifically interested in dispersion differences after controlling for the
 mean.</p>
@@ -220,8 +222,9 @@ where the variance approximation degrades. For absolute spread, use VR.</p>`,
 scale. Measures absolute dispersion rather than relative dispersion (CVR).
 Unusually, the variance depends only on sample sizes, not on the SDs.</p>
 <p><strong>Formula:</strong><br>
-<code>yi = log(s₁ / s₂)</code><br>
+<code>yi = log(s₁ / s₂) + 1/(2(n₁−1)) − 1/(2(n₂−1))</code>&ensp;(bias-corrected)<br>
 <code>vi = 1/(2(n₁−1)) + 1/(2(n₂−1))</code></p>
+<p>The bias correction is the same as for CVR: E[log S] ≈ log σ − 1/(2(n−1)) (Nakagawa et al., 2015, eq. 1).</p>
 <p><strong>When to use:</strong> The outcome scale is fixed and meaningful, and
 you want to compare spread without reference to group means.</p>
 <p><strong>When to avoid:</strong> When means differ substantially and you want

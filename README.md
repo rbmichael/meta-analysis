@@ -151,6 +151,8 @@ All plots export as SVG, PNG, or TIFF. Log-scale effect types label the axis in 
 | RoB summary | Stacked bar chart showing domain-level rating distributions. |
 | GOSH plot | Fixed-effects μ̂ and I² for every non-empty subset of studies. Exact for k ≤ 15; sampled for k ≤ 30. |
 | Profile likelihood (τ²) | Profile log-likelihood curve for τ² with LRT-based 95% CI. x-axis toggles between τ² and τ. ML/REML only. |
+| Bayesian posterior (μ) | Marginal posterior density of the overall effect μ with 95% credible interval shaded. |
+| Bayesian posterior (τ) | Marginal posterior density of the heterogeneity SD τ with 95% credible interval shaded. |
 | Bubble plots | Meta-regression fit per continuous moderator, bubbles sized by weight. |
 
 ---
@@ -243,10 +245,13 @@ git commit -m "Rebuild bundle after sync with main"
 
 ## Statistical references
 
+- Akaike H (1974). A new look at the statistical model identification. *IEEE Trans Autom Control*, 19(6), 716–723.
 - Andrews I, Kasy M (2019). Identification of and correction for publication bias. *Am Econ Rev*, 109(8), 2766–2794.
 - Berkey CS, Hoaglin DC, Antczak-Bouckoms A, Mosteller F, Colditz GA (1998). Meta-analysis of multiple outcomes by regression with random effects. *Stat Med*, 17(22), 2537–2550.
+- Blom G (1958). *Statistical Estimates and Transformed Beta-Variables*. Wiley.
 - Bonett DG (2002). Sample size requirements for estimating intraclass correlations with desired precision. *Stat Med*, 21(9), 1331–1335.
 - Borenstein M, Hedges LV, Higgins JPT, Rothstein HR (2009). *Introduction to Meta-Analysis*. Wiley.
+- Burnham KP, Anderson DR (2002). *Model Selection and Multimodel Inference* (2nd ed.). Springer.
 - Cheung MWL (2014). Modeling dependent effect sizes with three-level meta-analyses: A structural equation modeling approach. *Psychol Methods*, 19(2), 211–229.
 - Deeks JJ, Macaskill P, Irwig L (2005). The performance of tests of publication bias and other sample size effects in systematic reviews of diagnostic test accuracy was assessed. *J Clin Epidemiol*, 58(9), 882–893.
 - DerSimonian R, Laird N (1986). Meta-analysis in clinical trials. *Controlled Clinical Trials*, 7, 177–188.
@@ -279,6 +284,7 @@ git commit -m "Rebuild bundle after sync with main"
 - Peto R, Pike MC, Armitage P, et al. (1976). Design and analysis of randomized clinical trials requiring prolonged observation of each patient. *Br J Cancer*, 34, 585–612.
 - Riley RD, Abrams KR, Lambert PC, Sutton AJ, Thompson JR (2007). An evaluation of bivariate random-effects meta-analysis for the joint synthesis of two correlated outcomes. *Stat Med*, 26(1), 78–97.
 - Rücker G, Schwarzer G, Carpenter J (2008). Arcsine test for publication bias in meta-analyses with binary outcomes. *Stat Med*, 27(19), 4450–4465.
+- Schwarz G (1978). Estimating the dimension of a model. *Ann Stat*, 6(2), 461–464.
 - Simonsohn U, Nelson LD, Simmons JP (2014). P-curve: A key to the file-drawer. *J Exp Psychol Gen*, 143(2), 534–547.
 - Stanley TD, Doucouliagos H (2014). Meta-regression approximations to reduce publication selection bias. *Res Synth Methods*, 5(1), 60–78.
 - Stanley TD, Doucouliagos H (2015). Neither fixed nor random: Weighted least squares meta-regression. *Res Synth Methods*, 6(1), 67–87.
@@ -286,6 +292,7 @@ git commit -m "Rebuild bundle after sync with main"
 - van Assen MALM, van Aert RCM, Wicherts JM (2015). Meta-analysis using effect size distributions of only statistically significant studies. *Psychol Methods*, 20(3), 293–309.
 - Van den Noortgate W, López-López JA, Marín-Martínez F, Sánchez-Meca J (2013). Three-level meta-analysis of dependent effect sizes. *Behav Res Methods*, 45(2), 576–594.
 - Vevea JL, Hedges LV (1995). A general linear model for estimating effect size in the presence of publication bias. *Psychometrika*, 60(3), 419–435.
+- Vevea JL, Woods CM (2005). Publication bias in research synthesis: Sensitivity analysis using a priori weight functions. *Psychol Methods*, 10(4), 428–443.
 - Viechtbauer W (2005). Bias and efficiency of meta-analytic variance estimators in the random-effects model. *J Educ Behav Stat*, 30, 261–293.
 - Viechtbauer W (2007). Confidence intervals for the amount of heterogeneity in meta-analysis. *Stat Med*, 26(1), 37–52.
 - Viechtbauer W (2010). Conducting meta-analyses in R with the metafor package. *J Stat Softw*, 36(3), 1–48.
