@@ -354,11 +354,26 @@ interpreted cautiously.</p>`,
 
       {
         id: "guide-yuq",
-        title: "Yule's Q and Yule's Y",
-        body: `<p>Two association measures for 2×2 tables derived from the cross-product
-ratio (odds ratio). Both lie on [−1, +1] and are symmetric around 0 (no
-association). They pre-date the log-odds ratio but are still used in
-bibliometric, epidemiological, and psychological research.</p>
+        title: "Yule's Q, Yule's Y, and Generalised Odds Ratio (GOR)",
+        body: `<p>Three non-parametric association measures for ordered categorical outcomes.</p>
+
+<h4>Generalised Odds Ratio — ordinal (GOR)</h4>
+<p>Extends the odds ratio to outcomes with more than two ordered categories
+(Agresti 1980). GOR = P(Y₁ &gt; Y₂) / P(Y₁ &lt; Y₂): the odds that a randomly
+drawn participant from group 1 scores higher than one from group 2, relative
+to the reverse. GOR &gt; 1 means group 1 tends to score higher.</p>
+<p><strong>Inputs:</strong> category counts from lowest to highest, entered as
+comma- or space-separated integers for each group (e.g. <code>15,28,22,10</code>).
+Both groups must have the same number of categories. Stored on the log scale;
+displayed back-transformed as the ratio.</p>
+<p><strong>When undefined:</strong> when one group has zero probability of scoring
+strictly above or below the other (complete separation).</p>
+
+<hr style="margin:1em 0">
+<p>Yule's Q and Yule's Y are two bounded association measures for 2×2 tables
+derived from the cross-product ratio (odds ratio). Both lie on [−1, +1] and are
+symmetric around 0 (no association). They pre-date the log-odds ratio but are
+still used in bibliometric, epidemiological, and psychological research.</p>
 
 <h4>Formulas</h4>
 <p>For a 2×2 table with cells a (events, group 1), b (non-events, group 1),
@@ -406,6 +421,7 @@ provided the denominator is positive; a warning is shown in that case.</p>
         citations: [
           "Yule, G. U. (1900). On the association of attributes in statistics. <em>Philosophical Transactions of the Royal Society of London, Series A, 194</em>, 257–319.",
           "Yule, G. U. (1912). On the methods of measuring association between two attributes. <em>Journal of the Royal Statistical Society, 75</em>(6), 579–642.",
+          "Agresti, A. (1980). Generalized odds ratios for ordinal data. <em>Biometrics, 36</em>(1), 59–67.",
           "Viechtbauer, W. (2010). Conducting meta-analyses in R with the metafor package. <em>Journal of Statistical Software, 36</em>(3), 1–48.",
         ],
       },
@@ -601,7 +617,7 @@ COR and ZCOR are nearly identical; either is acceptable.</p>`,
 
       {
         id: "guide-rpb",
-        title: "Point-biserial and biserial correlations (RPB / RBIS)",
+        title: "Point-biserial, biserial, and tetrachoric correlations (RPB / RBIS / RTET)",
         body: `<p><strong>Point-biserial (RPB)</strong> is the Pearson correlation between a
 continuous variable and a binary grouping variable. Computed from an
 independent-samples t-test as r<sub>pb</sub> = t / √(t² + n−2). Unlike the standard
@@ -618,10 +634,25 @@ r<sub>bis</sub> ≈ 1.25 · r<sub>pb</sub>. For very unequal splits r<sub>bis</s
 can exceed ±1, which signals unreliable estimation.</p>
 
 <p><strong>Inputs:</strong> RPB takes r<sub>pb</sub> and n.
-RBIS additionally takes p, the proportion of participants in group 1.</p>`,
+RBIS additionally takes p, the proportion of participants in group 1.</p>
+
+<p><strong>Tetrachoric Correlation (RTET)</strong> estimates the latent Pearson
+correlation between two underlying continuous, bivariate-normal variables from
+their dichotomisation in a 2×2 table (Pearson 1900). Thresholds
+h = Φ⁻¹((a+b)/N) and k = Φ⁻¹((a+c)/N) are computed from the marginal
+proportions; the tetrachoric ρ is then found by bisecting Φ₂(h, k; ρ) = a/N.
+Variance uses the delta-method approximation
+p<sub>r</sub>(1−p<sub>r</sub>)·p<sub>c</sub>(1−p<sub>c</sub>) / (N·φ₂(h,k;ρ)²).
+A zero cell triggers a +0.5 continuity correction to all cells before estimation.</p>
+<p>Key properties: |ρ<sub>tet</sub>| ≥ |φ| for the same table; ρ<sub>tet</sub> = φ
+only when marginals are 50/50. Appropriate when binary outcomes reflect an
+underlying continuous normal construct. Contrast with PHI (distribution-free)
+and COR/ZCOR (continuous r input). Same 2×2 inputs as OR/RR/PHI: a, b, c, d ≥ 0
+with all four marginal totals &gt; 0.</p>`,
         citations: [
           "Kraemer, H. C. (1975). On estimation and hypothesis testing problems for correlation coefficients. <em>Psychometrika, 40</em>(4), 473–485.",
           "Borenstein, M., Hedges, L. V., Higgins, J. P. T., & Rothstein, H. R. (2009). <em>Introduction to meta-analysis</em>. Wiley.",
+          "Pearson, K. (1900). Mathematical contributions to the theory of evolution. VII. On the correlation of characters not quantitatively measurable. <em>Philosophical Transactions of the Royal Society of London, Series A, 195</em>, 1–47.",
         ],
       },
 
@@ -3297,13 +3328,13 @@ export const HELP_TO_GUIDE = {
   "effect.R2":        "guide-r2",
   "effect.ZR2":       "guide-r2",
   "effect.PHI":       "guide-proportions",
-  "effect.RTET":      "guide-proportions",
+  "effect.RTET":      "guide-rpb",
   "effect.PR":        "guide-proportions",
   "effect.PLN":       "guide-proportions",
   "effect.PLO":       "guide-proportions",
   "effect.PAS":       "guide-proportions",
   "effect.PFT":       "guide-proportions",
-  "effect.GOR":       "guide-or",
+  "effect.GOR":       "guide-yuq",
   "effect.GENERIC":   "guide-generic",
   "tau.DL":           "guide-dl",
   "tau.REML":         "guide-reml",
@@ -3324,6 +3355,7 @@ export const HELP_TO_GUIDE = {
   "ci.KH":            "guide-ci-kh",
   "ci.t":             "guide-ci-t",
   "ci.PL":            "guide-ci-pl",
+  "ci.width":         "guide-ci-normal",
   "het.Q":            "guide-cochran-q",
   "het.I2":           "guide-i2",
   "het.tau2":         "guide-tau2",
@@ -3371,7 +3403,6 @@ export const HELP_TO_GUIDE = {
   "mreg.contrasts":      "guide-custom-contrasts",
   "perm.run":            "guide-permutation-test",
   "perm.iter":           "guide-permutation-test",
-  "diag.nonlinear-reg":  "guide-nonlinear-reg",
   "diag.locationscale":  "guide-location-scale",
   "input.scaleModerators": "guide-location-scale",
   "diag.qqplot":         "guide-qqplot",
@@ -3394,6 +3425,7 @@ export const HELP_TO_GUIDE = {
   "tau.Peto":            "guide-mantel-haenszel",
   "cluster.id":          "guide-cluster-robust",
   "cluster.robust":      "guide-cluster-robust",
+  "rve.model":           "guide-rve",
   "threelevel.model":    "guide-three-level",
   "threelevel.tau2":     "guide-three-level",
   "threelevel.I2":       "guide-three-level",

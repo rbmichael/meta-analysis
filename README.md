@@ -245,6 +245,7 @@ git commit -m "Rebuild bundle after sync with main"
 
 ## Statistical references
 
+- Agresti A (1980). Generalized odds ratios for ordinal data. *Biometrics*, 36(1), 59–67.
 - Akaike H (1974). A new look at the statistical model identification. *IEEE Trans Autom Control*, 19(6), 716–723.
 - Andrews I, Kasy M (2019). Identification of and correction for publication bias. *Am Econ Rev*, 109(8), 2766–2794.
 - Berkey CS, Hoaglin DC, Antczak-Bouckoms A, Mosteller F, Colditz GA (1998). Meta-analysis of multiple outcomes by regression with random effects. *Stat Med*, 17(22), 2537–2550.
@@ -280,6 +281,7 @@ git commit -m "Rebuild bundle after sync with main"
 - Olkin I, Dahabreh IJ, Trikalinos TA (2012). GOSH — a graphical display of study heterogeneity. *Res Synth Methods*, 3(3), 214–223.
 - Olkin I, Pratt JW (1958). Unbiased estimation of certain correlation coefficients. *Ann Math Stat*, 29(1), 201–211.
 - Paule RC, Mandel J (1982). Consensus values and weighting factors. *J Res Natl Bur Stand*, 87, 377–385.
+- Pearson K (1900). Mathematical contributions to the theory of evolution. VII. On the correlation of characters not quantitatively measurable. *Phil Trans R Soc Lond A*, 195, 1–47.
 - Peters JL, Sutton AJ, Jones DR, Abrams KR, Rushton L (2006). Comparison of two methods to detect publication bias in meta-analysis. *JAMA*, 295(6), 676–680.
 - Peto R, Pike MC, Armitage P, et al. (1976). Design and analysis of randomized clinical trials requiring prolonged observation of each patient. *Br J Cancer*, 34, 585–612.
 - Riley RD, Abrams KR, Lambert PC, Sutton AJ, Thompson JR (2007). An evaluation of bivariate random-effects meta-analysis for the joint synthesis of two correlated outcomes. *Stat Med*, 26(1), 78–97.
