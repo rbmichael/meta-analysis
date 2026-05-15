@@ -299,6 +299,7 @@ export function pUniform(studies, m) {
 // =============================================================================
 // Minimizes f: Rⁿ → R via the inverse-Hessian form of BFGS with a numerical
 // central-difference gradient and Armijo backtracking line search.
+// Broyden (1970), Fletcher (1970), Goldfarb (1970), Shanno (1970); Armijo (1966).
 //
 // Parameters
 // ----------

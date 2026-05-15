@@ -36,6 +36,7 @@ export function tau2_HS(studies) {
 // Fixed-point iteration of the DL formula using RE-updated weights.
 // τ²_{new} = max(0, (Q(τ²) − (k−1)) / c(τ²))
 // Converges to a self-consistent solution; usually 2-3 iterations suffice.
+// DerSimonian & Kacker (2007) Contemp Clin Trials 28:105–114.
 //
 // NOTE: Removed from the UI dropdown (rarely used in practice; inflates the
 // options list). Preserved here so it can be re-exposed if needed.

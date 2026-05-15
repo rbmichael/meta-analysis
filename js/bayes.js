@@ -58,6 +58,7 @@ function profileTau2(studies, mu, tol = REML_TOL) {
 //   { μ : 2[L(μ̂,τ̂²) − L_p(μ)] ≤ χ²_{1,1−α} }
 // where L_p(μ) = L(μ, profileTau2(μ)).
 // Always uses ML internally regardless of the selected τ² estimator.
+// Hardy & Thompson (1996) Stat Med 15:619–629.
 // Returns [lower, upper].
 export function profileLikCI(studies, alpha = 0.05) {
   const k = studies.length;
