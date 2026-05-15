@@ -7,6 +7,7 @@
 
 // Circular imports — safe: these are only called inside function bodies.
 import { meta, robustWlsResult, logLik, validStudies, resolveClusterIds, groupByCluster } from "./analysis.js";
+import { tau2Core_REML, tau2Core_ML, tau2Core_PM, tau2Core_DL, tau2Core_HS, tau2Core_HE, tau2Core_SJ } from "./tau2.js";
 import { wls, matInverse, logDet, numericalHessian } from "./linalg.js";
 import { normalCDF, normalQuantile, tCDF, tCritical, fCDF, chiSquareCDF, chiSquareQuantile } from "./utils.js";
 import { MIN_VAR, REML_TOL, BISECTION_ITERS } from "./constants.js";
@@ -373,156 +374,52 @@ function quadForm(A, x) {
   return dot(x, A.map(row => dot(row, x)));
 }
 
-function tau2Reg_DL(yi, vi, X) {
-  const k = vi.length, p = X[0].length;
-  const df = k - p;
+export function tau2_metaReg(yi, vi, X, method = "REML", tol = REML_TOL, maxIter = 100) {
+  const k = vi.length, p = X[0].length, df = k - p;
   if (df <= 0) return 0;
-  const w0 = vi.map(v => 1 / v);
-  const { beta, vcov, rankDeficient } = wls(X, yi, w0);
-  if (rankDeficient) return 0;
-  const QE = yi.reduce((acc, y, i) => {
-    const e = y - dot(X[i], beta);
-    return acc + w0[i] * e * e;
-  }, 0);
-  const c = w0.reduce((acc, wi, i) => acc + wi * (1 - wi * quadForm(vcov, X[i])), 0);
-  return c > 0 ? Math.max(0, (QE - df) / c) : 0;
-}
 
-function tau2Reg_REML(yi, vi, X, tol = REML_TOL, maxIter = 100) {
-  const k = vi.length, p = X[0].length;
-  if (k - p <= 0) return 0;
-  let tau2 = tau2Reg_DL(yi, vi, X);
-  for (let iter = 0; iter < maxIter; iter++) {
+  const reFitFn = (tau2) => {
     const w = vi.map(v => 1 / (v + tau2));
     const { beta, vcov, rankDeficient } = wls(X, yi, w);
-    if (rankDeficient) break;
-    const h = X.map((xi, i) => w[i] * quadForm(vcov, xi));
-    const e = yi.map((y, i) => y - dot(X[i], beta));
-    let score = 0, info = 0;
-    for (let i = 0; i < k; i++) {
-      const pi = w[i] * (1 - h[i]);
-      score += w[i] * w[i] * e[i] * e[i] - pi;
-      info  += w[i] * pi;
-    }
-    if (info <= 0) break;
-    let step = score / info;
-    let newTau2 = tau2 + step;
-    let sh = 0;
-    while (newTau2 < 0 && sh++ < 20) { step /= 2; newTau2 = tau2 + step; }
-    newTau2 = Math.max(0, newTau2);
-    if (Math.abs(newTau2 - tau2) < tol) { tau2 = newTau2; break; }
-    tau2 = newTau2;
+    if (rankDeficient) return null;
+    const W = w.reduce((s, v) => s + v, 0);
+    return {
+      e: yi.map((y, i) => y - dot(X[i], beta)),
+      h: X.map((xi, i) => w[i] * quadForm(vcov, xi)),
+      W
+    };
+  };
+
+  const feFitFn = () => {
+    const w0 = vi.map(v => 1 / v);
+    const { beta, vcov, rankDeficient } = wls(X, yi, w0);
+    if (rankDeficient) return null;
+    const W = w0.reduce((s, v) => s + v, 0);
+    return {
+      e: yi.map((y, i) => y - dot(X[i], beta)),
+      h: X.map((xi, i) => w0[i] * quadForm(vcov, xi)),
+      W
+    };
+  };
+
+  const uwFitFn = () => {
+    const { beta, rankDeficient } = wls(X, yi, vi.map(() => 1));
+    if (rankDeficient) return null;
+    return { e: yi.map((y, i) => y - dot(X[i], beta)) };
+  };
+
+  if (method === "REML") return tau2Core_REML(vi, reFitFn, tau2Core_DL(vi, feFitFn, df), tol, maxIter);
+  if (method === "ML")   return tau2Core_ML  (vi, reFitFn, tau2Core_DL(vi, feFitFn, df), tol, maxIter);
+  if (method === "PM")   return tau2Core_PM  (vi, reFitFn, df, 0, tol, maxIter);
+  if (method === "HS")   return tau2Core_HS  (vi, feFitFn, df);
+  if (method === "HE")   return tau2Core_HE  (vi, uwFitFn, df);
+  if (method === "SJ") {
+    const fit0 = uwFitFn();
+    if (!fit0) return 0;
+    const seed = fit0.e.reduce((s, ei) => s + ei * ei, 0) / k;
+    return tau2Core_SJ(vi, reFitFn, seed, tol, maxIter);
   }
-  return tau2;
-}
-
-function tau2Reg_PM(yi, vi, X, tol = REML_TOL, maxIter = 100) {
-  const k = vi.length, p = X[0].length;
-  const df = k - p;
-  if (df <= 0) return 0;
-  let tau2 = 0;
-  for (let iter = 0; iter < maxIter; iter++) {
-    const w = vi.map(v => 1 / (v + tau2));
-    const { beta, rankDeficient } = wls(X, yi, w);
-    if (rankDeficient) break;
-    const QE = yi.reduce((acc, y, i) => {
-      const e = y - dot(X[i], beta);
-      return acc + w[i] * e * e;
-    }, 0);
-    const sumW = w.reduce((acc, b) => acc + b, 0);
-    const newTau2 = Math.max(0, tau2 + (QE - df) / sumW);
-    if (Math.abs(newTau2 - tau2) < tol) return newTau2;
-    tau2 = newTau2;
-  }
-  return tau2;
-}
-
-// HS regression: same as DL but denominator is Σwᵢ (FE weights)
-function tau2Reg_HS(yi, vi, X) {
-  const k = vi.length, p = X[0].length;
-  const df = k - p;
-  if (df <= 0) return 0;
-  const w0 = vi.map(v => 1 / v);
-  const { beta, rankDeficient } = wls(X, yi, w0);
-  if (rankDeficient) return 0;
-  const QE  = yi.reduce((acc, y, i) => acc + w0[i] * (y - dot(X[i], beta)) ** 2, 0);
-  const sumW = w0.reduce((acc, b) => acc + b, 0);
-  return sumW > 0 ? Math.max(0, (QE - df) / sumW) : 0;
-}
-
-// HE regression: unweighted — residuals from unweighted OLS fit
-function tau2Reg_HE(yi, vi, X) {
-  const k = vi.length, p = X[0].length;
-  const df = k - p;
-  if (df <= 0) return 0;
-  // Unweighted OLS: wᵢ = 1 for all i
-  const w1 = vi.map(() => 1);
-  const { beta, rankDeficient } = wls(X, yi, w1);
-  if (rankDeficient) return 0;
-  const SS   = yi.reduce((acc, y, i) => acc + (y - dot(X[i], beta)) ** 2, 0);
-  const meanV = vi.reduce((acc, b) => acc + b, 0) / k;
-  return Math.max(0, SS / df - meanV);
-}
-
-// SJ regression: iterative, seeded from unweighted residual variance
-function tau2Reg_SJ(yi, vi, X, tol = REML_TOL, maxIter = 200) {
-  const k = vi.length, p = X[0].length;
-  if (k - p <= 0) return 0;
-  // Seed from unweighted OLS residuals
-  const w1 = vi.map(() => 1);
-  const { beta: beta0, rankDeficient } = wls(X, yi, w1);
-  if (rankDeficient) return 0;
-  let tau2 = yi.reduce((acc, y, i) => acc + (y - dot(X[i], beta0)) ** 2, 0) / k;
-  if (tau2 === 0) return 0;
-  for (let iter = 0; iter < maxIter; iter++) {
-    const w  = vi.map(v => 1 / (v + tau2));
-    const { beta, rankDeficient: rd } = wls(X, yi, w);
-    if (rd) break;
-    const newTau2 = yi.reduce((acc, y, i) => {
-      return acc + vi[i] * (y - dot(X[i], beta)) ** 2 / (vi[i] + tau2);
-    }, 0) / k;
-    if (Math.abs(newTau2 - tau2) < tol) return Math.max(0, newTau2);
-    tau2 = Math.max(0, newTau2);
-  }
-  return tau2;
-}
-
-// ML regression: Fisher scoring without leverage correction
-function tau2Reg_ML(yi, vi, X, tol = REML_TOL, maxIter = 100) {
-  const k = vi.length, p = X[0].length;
-  if (k - p <= 0) return 0;
-  let tau2 = tau2Reg_DL(yi, vi, X);
-  for (let iter = 0; iter < maxIter; iter++) {
-    const w = vi.map(v => 1 / (v + tau2));
-    const { beta, rankDeficient } = wls(X, yi, w);
-    if (rankDeficient) break;
-    const e = yi.map((y, i) => y - dot(X[i], beta));
-    let score = 0, info = 0;
-    for (let i = 0; i < k; i++) {
-      const vi_tau = vi[i] + tau2;
-      score += e[i] * e[i] / (vi_tau * vi_tau) - 1 / vi_tau;
-      info  += 1 / (vi_tau * vi_tau);
-    }
-    if (info <= 0) break;
-    let step = score / info;
-    let newTau2 = tau2 + step;
-    let sh = 0;
-    while (newTau2 < 0 && sh++ < 20) { step /= 2; newTau2 = tau2 + step; }
-    newTau2 = Math.max(0, newTau2);
-    if (Math.abs(newTau2 - tau2) < tol) { tau2 = newTau2; break; }
-    tau2 = newTau2;
-  }
-  return tau2;
-}
-
-export function tau2_metaReg(yi, vi, X, method = "REML", tol = REML_TOL, maxIter = 100) {
-  if (method === "REML") return tau2Reg_REML(yi, vi, X, tol, maxIter);
-  if (method === "PM")   return tau2Reg_PM  (yi, vi, X, tol, maxIter);
-  if (method === "ML")   return tau2Reg_ML  (yi, vi, X, tol, maxIter);
-  if (method === "HS")   return tau2Reg_HS  (yi, vi, X);
-  if (method === "HE")   return tau2Reg_HE  (yi, vi, X);
-  if (method === "SJ")   return tau2Reg_SJ  (yi, vi, X, tol, maxIter);
-  return tau2Reg_DL(yi, vi, X);
+  return tau2Core_DL(vi, feFitFn, df);
 }
 
 // ================= META-REGRESSION =================

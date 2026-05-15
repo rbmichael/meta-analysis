@@ -142,46 +142,22 @@ export function tau2_SJ(studies, tol = REML_TOL, maxIter = 200, tau2Init = null)
   return tau2;
 }
 
-// ================= ML TAU² =================
-// Maximum Likelihood estimator via Fisher scoring. Same algorithm as REML
-// but without the leverage correction in the score/information terms:
-//   score = Σ [(yᵢ−μ)²/(vᵢ+τ²)² − 1/(vᵢ+τ²)]
-//   info  = Σ [1/(vᵢ+τ²)²]
-// ML is asymptotically unbiased but has greater downward bias than REML
-// in small samples. Useful when comparing nested models via LRT.
-export function tau2_ML(studies, tol = REML_TOL, maxIter = 100, tau2Init = null) {
-  const k = studies.length;
-  if (k <= 1) return 0;
-  let tau2;
-  if (tau2Init !== null) {
-    tau2 = Math.max(0, tau2Init);
-  } else {
-    // Seed with DL estimate
-    let W0 = 0, W02 = 0, W0mu = 0;
-    for (const d of studies) {
-      const wi = 1 / d.vi;
-      W0 += wi; W02 += wi * wi; W0mu += wi * d.yi;
-    }
-    const ybar0 = W0mu / W0;
-    let Q0 = 0;
-    for (const d of studies) Q0 += (d.yi - ybar0) ** 2 / d.vi;
-    const c0 = W0 - W02 / W0;
-    tau2 = Math.max(0, (Q0 - (k - 1)) / c0);
-  }
-
+// ================= FISHER SCORING CORE =================
+// Shared loop for REML (useHat=true) and ML (useHat=false).
+// fitFn(tau2) → { e: residual[], h: hat-diagonal[], W: sumW } | null
+function fisherScoringCore(vi, fitFn, seed, tol, maxIter, useHat) {
+  const k = vi.length;
+  let tau2 = seed;
   for (let iter = 0; iter < maxIter; iter++) {
-    let W = 0, Wmu = 0;
-    for (const d of studies) {
-      const wi = 1 / (d.vi + tau2);
-      W += wi; Wmu += wi * d.yi;
-    }
-    const mu = Wmu / W;
+    const fit = fitFn(tau2);
+    if (!fit) break;
+    const { e, h } = fit;
     let score = 0, info = 0;
-    for (const d of studies) {
-      const vi_tau = d.vi + tau2;
-      const r = d.yi - mu;
-      score += r * r / (vi_tau * vi_tau) - 1 / vi_tau;
-      info  += 1 / (vi_tau * vi_tau);
+    for (let i = 0; i < k; i++) {
+      const wi = 1 / (vi[i] + tau2);
+      const c = useHat ? 1 - h[i] : 1;
+      score += wi * wi * e[i] * e[i] - c * wi;
+      info  += c * wi * wi;
     }
     if (info <= 0) break;
     let step = score / info;
@@ -193,6 +169,27 @@ export function tau2_ML(studies, tol = REML_TOL, maxIter = 100, tau2Init = null)
     tau2 = newTau2;
   }
   return tau2;
+}
+
+// ================= ML TAU² =================
+// Maximum Likelihood estimator via Fisher scoring. Same algorithm as REML
+// but without the leverage correction in the score/information terms:
+//   score = Σ [(yᵢ−μ)²/(vᵢ+τ²)² − 1/(vᵢ+τ²)]
+//   info  = Σ [1/(vᵢ+τ²)²]
+// ML is asymptotically unbiased but has greater downward bias than REML
+// in small samples. Useful when comparing nested models via LRT.
+export function tau2_ML(studies, tol = REML_TOL, maxIter = 100, tau2Init = null) {
+  const k = studies.length;
+  if (k <= 1) return 0;
+  const vi = studies.map(d => d.vi);
+  const yi = studies.map(d => d.yi);
+  const seed = tau2Init !== null ? Math.max(0, tau2Init) : tau2_DL(studies);
+  return fisherScoringCore(vi, tau2 => {
+    let W = 0, Wmu = 0;
+    for (let i = 0; i < k; i++) { const wi = 1/(vi[i]+tau2); W+=wi; Wmu+=wi*yi[i]; }
+    const mu = Wmu / W;
+    return { e: yi.map(y => y - mu), W };
+  }, seed, tol, maxIter, false);
 }
 
 // ================= LOG-LIKELIHOOD =================
@@ -213,66 +210,17 @@ export function logLik(studies, mu, tau2) {
 // already have yi and vi set (as produced by compute()). Uses the DL
 // estimator as the starting value and refines via Fisher scoring.
 export function tau2_REML(studies, tol = REML_TOL, maxIter = 100, tau2Init = null) {
-
   const k = studies.length;
   if (k <= 1) return 0;
-
-  let tau2;
-  if (tau2Init !== null) {
-    tau2 = Math.max(0, tau2Init);
-  } else {
-    // --- 1️⃣ Initial τ² (DL seed) ---
-    let W0 = 0, W02 = 0, W0mu = 0;
-    for (const d of studies) {
-      const wi = 1 / d.vi;
-      W0 += wi; W02 += wi * wi; W0mu += wi * d.yi;
-    }
-    const ybar = W0mu / W0;
-    let Qseed = 0;
-    for (const d of studies) Qseed += (d.yi - ybar) ** 2 / d.vi;
-    const c = W0 - W02 / W0;
-    tau2 = Math.max(0, (Qseed - (k - 1)) / c);
-  }
-
-  // --- 2️⃣ Fisher scoring iteration ---
-  for (let iter = 0; iter < maxIter; iter++) {
+  const vi = studies.map(d => d.vi);
+  const yi = studies.map(d => d.yi);
+  const seed = tau2Init !== null ? Math.max(0, tau2Init) : tau2_DL(studies);
+  return fisherScoringCore(vi, tau2 => {
     let W = 0, Wmu = 0;
-    for (const d of studies) {
-      const wi = 1 / (d.vi + tau2);
-      W += wi; Wmu += wi * d.yi;
-    }
+    for (let i = 0; i < k; i++) { const wi = 1/(vi[i]+tau2); W+=wi; Wmu+=wi*yi[i]; }
     const mu = Wmu / W;
-
-    let score = 0, info = 0;
-    for (const d of studies) {
-      const vi_tau = d.vi + tau2;
-      const hi = 1 / (vi_tau * W);  // h[i] = w[i]/W = 1/(vi_tau·W)
-      const ri = d.yi - mu;
-      score += ri * ri / (vi_tau * vi_tau) - (1 - hi) / vi_tau;
-      info  += (1 - hi) / (vi_tau * vi_tau);
-    }
-
-    let step = score / info;
-    let newTau2 = tau2 + step;
-
-    // Step-halving to keep τ² non-negative
-    let halveIter = 0;
-    while (newTau2 < 0 && halveIter < 20) {
-      step /= 2;
-      newTau2 = tau2 + step;
-      halveIter++;
-    }
-    newTau2 = Math.max(0, newTau2);
-
-    if (Math.abs(newTau2 - tau2) < tol) {
-      tau2 = newTau2;
-      break;
-    }
-
-    tau2 = newTau2;
-  }
-
-  return tau2;
+    return { e: yi.map(y => y - mu), h: vi.map(v => 1/(W*(v+tau2))), W };
+  }, seed, tol, maxIter, true);
 }
 
 // ================= TAU² PAULE-MANDEL =================
@@ -512,6 +460,90 @@ export function tau2_SQGENQ(studies) {
 export function tau2_GENQ(studies, weights) {
   const w = weights ?? studies.map(d => 1 / d.vi);
   return genqCore(studies, w);
+}
+
+// ================= REGRESSION TAU² CORES =================
+// Unified estimator cores for meta-regression (regression.js).
+// Each function accepts a fitFn callback that supplies residuals + hat diagonals,
+// allowing the same algorithm to serve both intercept-only and regression paths.
+
+// REML core: Fisher scoring with leverage correction.
+// fitFn(tau2) → { e: residual[], h: hat-diagonal[], W: sumW } | null
+export function tau2Core_REML(vi, fitFn, seed = 0, tol = REML_TOL, maxIter = 100) {
+  return fisherScoringCore(vi, fitFn, seed, tol, maxIter, true);
+}
+
+// ML core: Fisher scoring without leverage correction.
+// fitFn(tau2) → { e: residual[], W: sumW } | null
+export function tau2Core_ML(vi, fitFn, seed = 0, tol = REML_TOL, maxIter = 100) {
+  return fisherScoringCore(vi, fitFn, seed, tol, maxIter, false);
+}
+
+// PM core: fixed-point iteration. df = k − p.
+// fitFn(tau2) → { e: residual[], W: sumW } | null
+export function tau2Core_PM(vi, fitFn, df, seed = 0, tol = REML_TOL, maxIter = 100) {
+  let tau2 = seed;
+  for (let iter = 0; iter < maxIter; iter++) {
+    const fit = fitFn(tau2);
+    if (!fit) break;
+    const { e, W } = fit;
+    const QE = vi.reduce((s, v, i) => s + e[i] * e[i] / (v + tau2), 0);
+    const newTau2 = Math.max(0, tau2 + (QE - df) / W);
+    if (Math.abs(newTau2 - tau2) < tol) return newTau2;
+    tau2 = newTau2;
+  }
+  return tau2;
+}
+
+// DL core: one-shot with leverage correction. fitFn0 uses FE weights. df = k − p.
+// fitFn0() → { e: residual[], h: hat-diagonal[], W: sumW } | null
+export function tau2Core_DL(vi, fitFn0, df) {
+  if (df <= 0) return 0;
+  const fit = fitFn0();
+  if (!fit) return 0;
+  const { e, h } = fit;
+  const QE = vi.reduce((s, v, i) => s + e[i] * e[i] / v, 0);
+  const c  = vi.reduce((s, v, i) => s + (1 - h[i]) / v, 0);
+  return c > 0 ? Math.max(0, (QE - df) / c) : 0;
+}
+
+// HS core: one-shot, W denominator (no leverage). fitFn0 uses FE weights. df = k − p.
+// fitFn0() → { e: residual[], W: sumW } | null
+export function tau2Core_HS(vi, fitFn0, df) {
+  if (df <= 0) return 0;
+  const fit = fitFn0();
+  if (!fit) return 0;
+  const { e, W } = fit;
+  const QE = vi.reduce((s, v, i) => s + e[i] * e[i] / v, 0);
+  return W > 0 ? Math.max(0, (QE - df) / W) : 0;
+}
+
+// HE core: one-shot, unweighted OLS. df = k − p.
+// fitFn0() → { e: residual[] } | null
+export function tau2Core_HE(vi, fitFn0, df) {
+  if (df <= 0) return 0;
+  const fit = fitFn0();
+  if (!fit) return 0;
+  const SS   = fit.e.reduce((s, ei) => s + ei * ei, 0);
+  const meanV = vi.reduce((s, v) => s + v, 0) / vi.length;
+  return Math.max(0, SS / df - meanV);
+}
+
+// SJ core: iterative Sidik-Jonkman. fitFn uses RE weights.
+// fitFn(tau2) → { e: residual[] } | null
+export function tau2Core_SJ(vi, fitFn, seed, tol = REML_TOL, maxIter = 200) {
+  const k = vi.length;
+  let tau2 = seed;
+  if (tau2 === 0) return 0;
+  for (let iter = 0; iter < maxIter; iter++) {
+    const fit = fitFn(tau2);
+    if (!fit) break;
+    const { e } = fit;
+    const newTau2 = vi.reduce((s, v, i) => s + v * e[i] * e[i] / (v + tau2), 0) / k;
+    if (Math.abs(newTau2 - tau2) < tol) return Math.max(0, newTau2);
+    tau2 = Math.max(0, newTau2);
+  }
+  return tau2;
 }
 
 // Compute RE mean given τ²
