@@ -914,6 +914,7 @@ function forestDrawHetSummary(ctx, m) {
 
 export function drawForest(studies, m, options = {}) {
   const svg       = clearAndSelectSVG("#forestPlot");
+  svg.attr("aria-label", "Forest plot");
   const ciMethod  = options.ciMethod || "normal";
   const profile   = options.profile  || { transform: x => x };
   const T         = FOREST_THEMES[options.theme] ?? FOREST_THEMES["default"];
@@ -1286,6 +1287,7 @@ export function drawFunnel(studies, m, profile, options = {}) {
   const egger = options.egger ?? null;
   profile = profile || { transform: x => x };
   const svg = clearAndSelectSVG("#funnelPlot");
+  svg.attr("aria-label", "Funnel plot");
 
   if (!studies || studies.length === 0) return;
 
@@ -1401,6 +1403,7 @@ export function drawFunnel(studies, m, profile, options = {}) {
 //               { label, hat, cookD, highLeverage, highCookD }
 export function drawInfluencePlot(influence) {
   const svg = clearAndSelectSVG("#influencePlot");
+  svg.attr("aria-label", "Influence plot");
 
   if (!influence || influence.length < 2) return;
 
@@ -1511,6 +1514,7 @@ export function drawInfluencePlot(influence) {
 //   profile           — effect-type profile with .label, .transform
 export function drawCumulativeForest(cumulativeResults, profile, options = {}) {
   const svg = clearAndSelectSVG("#cumulativePlot");
+  svg.attr("aria-label", "Cumulative forest plot");
 
   if (!cumulativeResults || cumulativeResults.length === 0) return;
 
@@ -1679,6 +1683,7 @@ export function drawCumulativeForest(cumulativeResults, profile, options = {}) {
 export function drawCumulativeFunnel(cumulativeStudies, cumResults, profile, stepIdx) {
   profile = profile || { transform: x => x };
   const svg = clearAndSelectSVG("#cumulativeFunnelPlot");
+  svg.attr("aria-label", "Cumulative funnel plot");
 
   if (!cumulativeStudies || cumulativeStudies.length === 0 || !cumResults) return;
 
@@ -1851,6 +1856,7 @@ export function drawCumulativeFunnel(cumulativeStudies, cumResults, profile, ste
 //   result — object returned by pCurve() in analysis.js
 export function drawPCurve(result) {
   const svg = clearAndSelectSVG("#pCurvePlot");
+  svg.attr("aria-label", "p-curve plot");
 
   if (!result || result.k === 0) return;
 
@@ -2038,6 +2044,7 @@ export function drawPCurve(result) {
 //   profile — effect profile (provides .transform and .label)
 export function drawPUniform(result, m, profile) {
   const svg = clearAndSelectSVG("#pUniformPlot");
+  svg.attr("aria-label", "p-uniform plot");
 
   if (!result || result.k === 0 || !isFinite(result.estimate)) return;
 
@@ -2172,6 +2179,7 @@ export function drawPUniform(result, m, profile) {
 //   Imputed (trim-fill) studies rendered with reduced opacity.
 export function drawOrchardPlot(studies, m, profile) {
   const svg = clearAndSelectSVG("#orchardPlot");
+  svg.attr("aria-label", "Orchard plot");
 
   if (!studies || studies.length === 0) return;
 
@@ -2375,6 +2383,7 @@ export function drawOrchardPlot(studies, m, profile) {
 // remains visible.
 export function drawCaterpillarPlot(studies, m, profile, options = {}) {
   const svg = clearAndSelectSVG("#caterpillarPlot");
+  svg.attr("aria-label", "Caterpillar plot");
 
   if (!studies || studies.length === 0) return;
 
@@ -2571,6 +2580,7 @@ export function drawCaterpillarPlot(studies, m, profile, options = {}) {
 // Returns { totalPages }.
 export function drawBlupPlot(result, profile, options = {}) {
   const svg = clearAndSelectSVG("#blupPlot");
+  svg.attr("aria-label", "BLUP forest plot");
   if (!result || !result.studies || result.studies.length === 0) return { totalPages: 1 };
 
   profile = profile || { transform: x => x, label: "Effect" };
@@ -2766,6 +2776,7 @@ export function drawBlupPlot(result, profile, options = {}) {
 // Reference: Baujat et al. (2002) Statistics in Medicine 21:2442–2456.
 export function drawBaujatPlot(result, profile) {
   const svg = clearAndSelectSVG("#baujatPlot");
+  svg.attr("aria-label", "Baujat plot");
 
   if (!result || result.k < 2) return;
 
@@ -2928,6 +2939,7 @@ export function drawBaujatPlot(result, profile) {
 export function drawLabbe(studies, m, profile, options = {}) {
   const type = options.type ?? "OR";
   const svg = clearAndSelectSVG("#labbePlot");
+  svg.attr("aria-label", "L'Abbé plot");
   if (!studies || studies.length === 0) return;
 
   // Only meaningful for studies with a/b/c/d cell counts.
@@ -3142,6 +3154,7 @@ export function drawLabbe(studies, m, profile, options = {}) {
 // robData  — { [studyLabel]: { [domain]: string } }  ("Low"|"Some concerns"|"High"|"NI"|"")
 export function drawRoBTrafficLight(studies, domains, robData) {
   const svg = clearAndSelectSVG("#robTrafficLight");
+  svg.attr("aria-label", "Risk of bias traffic light");
   if (!studies || !domains || domains.length === 0) return;
 
   const ROB_COLORS = {
@@ -3252,6 +3265,7 @@ export function drawRoBTrafficLight(studies, domains, robData) {
 // robData  — { [studyLabel]: { [domain]: string } }
 export function drawRoBSummary(studies, domains, robData) {
   const svg = clearAndSelectSVG("#robSummary");
+  svg.attr("aria-label", "Risk of bias summary");
   if (!studies || !domains || domains.length === 0) return;
 
   const ROB_COLORS = {
@@ -3669,6 +3683,7 @@ export function drawGoshPlot(result, profile, options = {}) {
 // =============================================================================
 export function drawProfileLikTau2(result, options = {}) {
   const svg = clearAndSelectSVG("#profileLikTau2Plot");
+  svg.attr("aria-label", "Profile likelihood plot for τ²");
   if (!result || result.error) return;
 
   const xScale = options.xScale || "tau2";
@@ -3848,6 +3863,7 @@ export function drawProfileLikTau2(result, options = {}) {
 // =============================================================================
 export function drawBayesTauPosterior(result, options = {}) {
   const svg = clearAndSelectSVG("#bayesTauPlot");
+  svg.attr("aria-label", "Bayesian posterior for τ");
   if (!result || result.error) return;
 
   const { tauGrid, tauWeights, tauMean, tauCI, sigma_tau, k } = result;
@@ -3982,6 +3998,7 @@ export function drawBayesTauPosterior(result, options = {}) {
 // =============================================================================
 export function drawBayesMuPosterior(result, options = {}) {
   const svg = clearAndSelectSVG("#bayesMuPlot");
+  svg.attr("aria-label", "Bayesian posterior for μ");
   if (!result || result.error) return;
 
   const { muGrid, muDensity, muMean, muCI, mu0, sigma_mu, k } = result;
@@ -4132,6 +4149,7 @@ export function drawBayesMuPosterior(result, options = {}) {
 export function drawQQPlot(stdResiduals, labels, options = {}) {
   const containerId = options.containerId || "#qqPlot";
   const svg = clearAndSelectSVG(containerId);
+  svg.attr("aria-label", "Normal Q-Q plot of standardised residuals");
 
   const k = stdResiduals.length;
   if (k < 3) return;
@@ -4294,6 +4312,7 @@ export function drawQQPlot(stdResiduals, labels, options = {}) {
 export function drawRadialPlot(studies, m, profile, options = {}) {
   const containerId = options.containerId || "#radialPlot";
   const svg = clearAndSelectSVG(containerId);
+  svg.attr("aria-label", "Radial (Galbraith) plot");
 
   const valid = studies.filter(s => isFinite(s.yi) && isFinite(s.vi) && s.vi > 0);
   const k = valid.length;
