@@ -265,12 +265,15 @@ export function addRow(values) {
   const table = document.getElementById("inputTable");
   const row = table.insertRow();
   row.draggable = true;
-  row.addEventListener("pointerdown", _rowPointerDown);
-  row.addEventListener("dragstart",   _rowDragStart);
-  row.addEventListener("dragover",    _rowDragOver);
-  row.addEventListener("dragleave",   _rowDragLeave);
-  row.addEventListener("drop",        _rowDrop);
-  row.addEventListener("dragend",     _rowDragEnd);
+  row._dragHandlers = [
+    ["pointerdown", _rowPointerDown],
+    ["dragstart",   _rowDragStart],
+    ["dragover",    _rowDragOver],
+    ["dragleave",   _rowDragLeave],
+    ["drop",        _rowDrop],
+    ["dragend",     _rowDragEnd],
+  ];
+  row._dragHandlers.forEach(([evt, fn]) => row.addEventListener(evt, fn));
 
   const v = values || ["", ...Array(profile.inputs.length).fill(""), "", ""];
 
@@ -353,6 +356,7 @@ export function commitPendingDelete() {
   if (!_undoState.row) return;
   clearTimeout(_undoState.timer);
   if (_undoState.robKey) _cb.deleteRobEntry(_undoState.robKey);
+  _undoState.row._dragHandlers?.forEach(([evt, fn]) => _undoState.row.removeEventListener(evt, fn));
   _undoState.row.remove();
   _undoState.row    = null;
   _undoState.robKey = null;
