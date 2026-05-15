@@ -284,6 +284,7 @@ export function logGamma(z) {
 export function hedgesG(s, options = {}) {
   const n1 = s.n1, n2 = s.n2;
   const df = n1 + n2 - 2;
+  if (df < 1) return { es: NaN, var: NaN };
   const sp = Math.sqrt(((n1 - 1) * s.sd1 ** 2 + (n2 - 1) * s.sd2 ** 2) / df);
   const d  = (s.m1 - s.m2) / sp;
   const applyHedges = options.hedgesCorrection ?? true;

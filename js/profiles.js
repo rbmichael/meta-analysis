@@ -200,7 +200,7 @@ export const effectProfiles = {
       return { ...s, md: g.es, varMD: g.var, se: Math.sqrt(g.var), w: 1/g.var, yi: g.es, vi: g.var };
     },
     transform:   (x) => x,
-    validate:      (s) => validateTwoGroup(s, 1),
+    validate:      (s) => validateTwoGroup(s, 2),
     softWarnings:  softWarnTwoGroup,
 
     exampleData: [

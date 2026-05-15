@@ -408,14 +408,14 @@ const _metaCache = new WeakMap();
 // DL is the default fallback (TAU2_FN[method] ?? TAU2_FN.DL).
 // EBLUP is an alias for REML — see legacy estimator notes in benchmark-data.md.
 const TAU2_FN = {
-  REML:   (s, _w, _W, _Q, _d, t0) => tau2_REML (s, 1e-12,    500, t0),
+  REML:   (s, _w, _W, _Q, _d, t0) => tau2_REML (s, REML_TOL, 500, t0),
   PM:     (s, _w, _W, _Q, _d, t0) => tau2_PM   (s, REML_TOL, 100, t0),
   EB:     (s, _w, _W, _Q, _d, t0) => tau2_EB   (s, REML_TOL, 200, t0),
   PMM:    (s, _w, _W, _Q, _d, t0) => tau2_PMM  (s, REML_TOL, 200, t0),
   ML:     (s, _w, _W, _Q, _d, t0) => tau2_ML   (s, REML_TOL, 100, t0),
   SJ:     (s, _w, _W, _Q, _d, t0) => tau2_SJ   (s, REML_TOL, 200, t0),
   DLIT:   (s, _w, _W, _Q, _d, t0) => tau2_DLIT (s, REML_TOL, 200, t0),
-  EBLUP:  (s, _w, _W, _Q, _d, t0) => tau2_REML (s, 1e-12,    500, t0),  // alias for REML
+  EBLUP:  (s, _w, _W, _Q, _d, t0) => tau2_REML (s, REML_TOL, 500, t0),  // alias for REML
   GENQM:  (s)                      => tau2_GENQM(s),                      // bisection — tau2Init not applicable
   HS:     (s)                      => tau2_HS   (s),
   HE:     (s)                      => tau2_HE   (s),
