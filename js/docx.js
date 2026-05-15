@@ -9,11 +9,13 @@
 //
 // Dependencies
 // ------------
+//   format.js    fmt, fmtP_APA, fmtCI_APA
 //   plots.js     drawForest, drawCumulativeForest, drawCaterpillarPlot, drawGoshPlot
 //   export.js    resolveThemeVars, hasEmbeddedBackground
 //   constants.js Z_95
 //   report.js    CITATIONS, collectCitations
 
+import { fmt, fmtP_APA, fmtCI_APA } from "./format.js";
 import { drawForest, drawCumulativeForest, drawCaterpillarPlot, drawGoshPlot } from "./plots.js";
 import { resolveThemeVars, hasEmbeddedBackground, currentBgColour } from "./export.js";
 import { Z_95 } from "./constants.js";
@@ -234,20 +236,6 @@ function inlineImage(rId, svgW, svgH, imgIdx) {
   </wp:inline>
 </w:drawing></w:r></w:p>`;
 }
-
-// ---------------------------------------------------------------------------
-// Formatting helpers
-// ---------------------------------------------------------------------------
-
-function fmt(v, d = 3) { return isFinite(v) ? (+v).toFixed(d) : "\u2014"; }
-
-function fmtP_APA(p) {
-  if (!isFinite(p)) return "\u2014";
-  if (p < 0.001) return "< .001";
-  return "= " + (+p).toFixed(3).replace(/^0\./, ".");
-}
-
-function fmtCI_APA(lo, hi, d = 3) { return `[${fmt(lo, d)}, ${fmt(hi, d)}]`; }
 
 // Convert an HTML citation string (from CITATIONS) to OOXML run+hyperlink XML.
 // Handles: <em>…</em>, <a href="…">…</a>, <br>, &amp;, &lt;, &gt;

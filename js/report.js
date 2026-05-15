@@ -25,11 +25,13 @@
 //
 // Dependencies
 // ------------
+//   format.js    fmt, fmtP, fmtP_APA, fmtCI_APA, escHTML
 //   plots.js     drawForest()
 //   io.js        downloadBlob()
 //   constants.js Z_95
 //   export.js    resolveThemeVars(), hasEmbeddedBackground()
 
+import { fmt, fmtCI_APA, escHTML, fmtP as _fmtP, fmtP_APA as _fmtP_APA } from "./format.js";
 import { drawForest, drawGoshPlot, drawCumulativeForest, drawCaterpillarPlot } from "./plots.js";
 import { downloadBlob } from "./io.js";
 import { Z_95 } from "./constants.js";
@@ -168,36 +170,14 @@ function collectCaterpillarSVGs(studies, m, profile, options = {}) {
 }
 
 // ---------------------------------------------------------------------------
-// Formatting helpers
+// Formatting helpers (plain-text core in format.js; wrappers add HTML escaping)
 // ---------------------------------------------------------------------------
-
-function fmt(v, d = 3) { return isFinite(v) ? (+v).toFixed(d) : "—"; }
-
-function fmtP(p) {
-  if (!isFinite(p)) return "—";
-  if (p < 0.0001)   return "&lt;0.0001";
-  return (+p).toFixed(4);
-}
-
-// APA 7th edition p-value: no leading zero, three decimal places, threshold < .001
-function fmtP_APA(p) {
-  if (!isFinite(p)) return "—";
-  if (p < 0.001)    return "&lt; .001";
-  return "= " + (+p).toFixed(3).replace(/^0\./, ".");
-}
-
-// APA CI string: "[x.xxx, x.xxx]" — both bounds pre-formatted by caller via fmt()
-function fmtCI_APA(lo, hi, d = 3) {
-  return `[${fmt(lo, d)}, ${fmt(hi, d)}]`;
-}
-
-function esc(s) {
-  return String(s)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
+// fmtP / fmtP_APA wrap the shared versions with escHTML because their output
+// may contain '<' (e.g. "<0.0001") and is placed directly into innerHTML.
+// fmt and fmtCI_APA are used as-is (em-dash and brackets need no HTML encoding).
+function fmtP(p)     { return escHTML(_fmtP(p)); }
+function fmtP_APA(p) { return escHTML(_fmtP_APA(p)); }
+const esc = escHTML;
 
 // buildTable(headers, rows, opts) → HTML string
 // Shared helper for every stat-table in the report.
