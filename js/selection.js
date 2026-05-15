@@ -31,6 +31,7 @@ import { meta, logLik, validStudies } from "./analysis.js";
 import { matInverse } from "./linalg.js";
 import { normalCDF, normalQuantile, chiSquareCDF } from "./utils.js";
 import { Z_95, BISECTION_ITERS } from "./constants.js";
+import { GL20_X, GL20_W, GH20_X, GH20_W } from "./quadrature.js";
 
 // ================ P-CURVE ANALYSIS ================
 // pCurve(studies)
@@ -651,51 +652,8 @@ function numericalHessian(f, x, fval) {
   return H;
 }
 
-// =============================================================================
-// GAUSS-HERMITE 20-POINT QUADRATURE
-// =============================================================================
-// Physicist's form: ∫ f(x) exp(−x²) dx ≈ Σ GH20_W[j] · f(GH20_X[j])
-//
-// To integrate a function against the standard normal density:
-//   ∫ f(z) φ(z) dz ≈ (1/√π) · Σ GH20_W[j] · f(GH20_X[j] · √2)
-//
-// Nodes/weights from scipy.special.roots_hermite(20); verified: Σ w = √π.
-const _GH20_X_POS = [
-  0.24534070830090113, 0.73747372854539436, 1.2340762153953230,
-  1.7385377121165858,  2.2549740020892756,  2.7888060584281306,
-  3.3478545673832163,  3.9447640401156251,  4.6036824495507445,
-  5.3874808900112353
-];
-const _GH20_W_POS = [
-  0.46224366960061100, 0.28667550536283512, 0.10901720602002330,
-  0.02481052088746526, 0.00324377334223786, 0.00022833863601635,
-  7.8025564785321e-6,  1.0860693707692800e-7, 4.3993409922732e-10,
-  2.2293936455342e-13
-];
-const _GH20_X = [..._GH20_X_POS.map(x => -x).reverse(), ..._GH20_X_POS];
-const _GH20_W = [..._GH20_W_POS.slice().reverse(), ..._GH20_W_POS];
+// GL20_X/GL20_W and GH20_X/GH20_W imported from quadrature.js (single source of truth).
 const _SQRT_PI = Math.sqrt(Math.PI);
-
-// 20-point Gauss-Legendre quadrature on [-1, 1].  Nodes/weights from
-// Abramowitz & Stegun table 25.4; Σ wⱼ = 2.
-const _GL20_X = [
-  -0.9931285991850949, -0.9639719272779138, -0.9122344282513259,
-  -0.8391169718222188, -0.7463062256567499, -0.6360536807265150,
-  -0.5108670019508271, -0.3737060887154195, -0.2277858511416451,
-  -0.0765265211334973,  0.0765265211334973,  0.2277858511416451,
-   0.3737060887154195,  0.5108670019508271,  0.6360536807265150,
-   0.7463062256567499,  0.8391169718222188,  0.9122344282513259,
-   0.9639719272779138,  0.9931285991850949
-];
-const _GL20_W = [
-  0.0176140071391521, 0.0406014298003869, 0.0626720483341091,
-  0.0832767415767048, 0.1019301198172404, 0.1181945319615184,
-  0.1316886384491766, 0.1420961093183820, 0.1491729864726037,
-  0.1527533871307258, 0.1527533871307258, 0.1491729864726037,
-  0.1420961093183820, 0.1316886384491766, 0.1181945319615184,
-  0.1019301198172404, 0.0832767415767048, 0.0626720483341091,
-  0.0406014298003869, 0.0176140071391521
-];
 
 // continuousNormConst — normalising constant for a continuous weight function.
 // Computes A_i = ∫ wFn(p(y)) · φ((y−μ)/σᵢ)/σᵢ dy via 20-point GH quadrature.
@@ -709,11 +667,11 @@ function continuousNormConst(mu, tau2, vi, wFn, sides) {
   const se_i    = Math.sqrt(vi);
   let sum = 0;
   for (let j = 0; j < 20; j++) {
-    const y = mu + _GH20_X[j] * Math.SQRT2 * sigma_i;
+    const y = mu + GH20_X[j] * Math.SQRT2 * sigma_i;
     const p = sides === 2
       ? 2 * (1 - normalCDF(Math.abs(y) / se_i))
       : 1 - normalCDF(y / se_i);
-    sum += _GH20_W[j] * wFn(p);
+    sum += GH20_W[j] * wFn(p);
   }
   return sum / _SQRT_PI;
 }
@@ -753,7 +711,7 @@ function betaNormConst(mu, tau2, vi, a, b, sides, pval_min = 1e-5) {
     const mid  = 0.5 * (lo + hi);
     const half = 0.5 * (hi - lo);
     let s = 0;
-    for (let j = 0; j < 20; j++) s += _GL20_W[j] * integrand(mid + half * _GL20_X[j]);
+    for (let j = 0; j < 20; j++) s += GL20_W[j] * integrand(mid + half * GL20_X[j]);
     return s * half;
   }
 

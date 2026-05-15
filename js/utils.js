@@ -18,10 +18,11 @@
 // All numerical approximations cite their source algorithm in the function
 // comment.  No function in this file has side effects.
 //
-// Dependencies: constants.js
+// Dependencies: constants.js, quadrature.js
 // =============================================================================
 
 import { MIN_VAR, BISECTION_ITERS, Z_95 } from "./constants.js";
+import { GL20_X, GL20_W } from "./quadrature.js";
 
 // ================= ROUNDING =================
 
@@ -423,22 +424,7 @@ export function normalQuantile(p) {
 // Φ₂(h, k; ρ) via Pearson's formula:
 //   Φ₂(h,k;ρ) = Φ(h)Φ(k) + ∫₀^ρ φ₂(h,k;t) dt
 // where φ₂(h,k;t) = exp(−(h²−2thk+k²)/(2(1−t²))) / (2π√(1−t²))
-// Integral evaluated by 20-point Gauss-Legendre on [0, ρ].
-// Nodes and weights: Abramowitz & Stegun (1964) Table 25.4.
-const _GL20_X = [
-  -0.9931285991850949, -0.9639719272779138, -0.9122344282513259, -0.8391169718222188,
-  -0.7463064833401189, -0.6360536807265150, -0.5108670019508271, -0.3737060887154195,
-  -0.2277858511416451, -0.0765265211334973,  0.0765265211334973,  0.2277858511416451,
-   0.3737060887154195,  0.5108670019508271,  0.6360536807265150,  0.7463064833401189,
-   0.8391169718222188,  0.9122344282513259,  0.9639719272779138,  0.9931285991850949,
-];
-const _GL20_W = [
-  0.0176140071391521, 0.0406014298003869, 0.0626720483341091, 0.0832767415767048,
-  0.1019301198172404, 0.1181945319615184, 0.1316886384491766, 0.1420961093183820,
-  0.1491729864726037, 0.1527533871307258, 0.1527533871307258, 0.1491729864726037,
-  0.1420961093183820, 0.1316886384491766, 0.1181945319615184, 0.1019301198172404,
-  0.0832767415767048, 0.0626720483341091, 0.0406014298003869, 0.0176140071391521,
-];
+// Integral evaluated by 20-point Gauss-Legendre on [0, ρ]; tables from quadrature.js.
 export function bivariateNormalCDF(h, k, rho) {
   if (!isFinite(h) || !isFinite(k) || !isFinite(rho)) return NaN;
   rho = Math.max(-1 + 1e-10, Math.min(1 - 1e-10, rho));
@@ -448,9 +434,9 @@ export function bivariateNormalCDF(h, k, rho) {
   const TWO_PI = 2 * Math.PI;
   let sum = 0;
   for (let i = 0; i < 20; i++) {
-    const t  = rho * (_GL20_X[i] + 1) / 2;
+    const t  = rho * (GL20_X[i] + 1) / 2;
     const r2 = 1 - t * t;
-    sum += _GL20_W[i] * Math.exp(-(hh + kk - 2*t*hk) / (2*r2)) / (TWO_PI * Math.sqrt(r2));
+    sum += GL20_W[i] * Math.exp(-(hh + kk - 2*t*hk) / (2*r2)) / (TWO_PI * Math.sqrt(r2));
   }
   return normalCDF(h) * normalCDF(k) + (rho / 2) * sum;
 }
