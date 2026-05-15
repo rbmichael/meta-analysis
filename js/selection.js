@@ -755,6 +755,113 @@ function betaNormConst(mu, tau2, vi, a, b, sides, pval_min = 1e-5) {
 }
 
 // =============================================================================
+// _fitContinuousSelModel — shared BFGS/Hessian/LRT engine for all four
+// continuous selection models (halfnorm, power, negexp, beta).
+//
+//   makeWFn(logShapes) → { w, normConst }
+//     logShapes: log-scale shape params from result.x.slice(2).
+//     w(p):                weight function — must be positive for observed pvals.
+//     normConst(mu, tau2, vi_i): normalising constant E[w(p(Y))|mu, tau2, vi_i].
+//
+//   initGrid: array of initial log-shape vectors, e.g. [[ld0], [ld1], ...]
+//   lrtDf: degrees of freedom for the LRT (1 for 1-param models, 2 for beta)
+//   pvalMin: p-value floor for clamping observed p-values (1e-15 or 1e-5 for beta)
+//
+//   extractShapeParams(logShapeFits, getSE) → object with named shape params.
+// =============================================================================
+function _fitContinuousSelModel({ studies, sides, weightFn, makeWFn, initGrid, lrtDf, pvalMin, extractShapeParams }) {
+  const valid = validStudies(studies);
+  const k     = valid.length;
+  if (k < 4) return { error: "insufficient_k", k, minK: 4, weightFn };
+
+  const yi = valid.map(s => s.yi);
+  const vi = valid.map(s => s.vi);
+  const mUnsel      = meta(valid, "ML");
+  const logLikUnsel = logLik(valid, mUnsel.RE, mUnsel.tau2);
+
+  const pvals = yi.map((y, i) => {
+    const se_i = Math.sqrt(vi[i]);
+    const p    = sides === 2
+      ? 2 * (1 - normalCDF(Math.abs(y) / se_i))
+      : 1 - normalCDF(y / se_i);
+    return Math.max(pvalMin, Math.min(1 - pvalMin, p));
+  });
+
+  function nLL(params) {
+    const mu   = params[0];
+    const tau2 = Math.exp(params[1]);
+    const { w, normConst } = makeWFn(params.slice(2));
+    let ll = 0;
+    for (let i = 0; i < k; i++) {
+      const totalVar = vi[i] + tau2;
+      ll += 0.5 * (Math.log(totalVar) + (yi[i] - mu) ** 2 / totalVar);
+      const wi = w(pvals[i]);
+      if (!(wi > 0)) return Infinity;
+      ll -= Math.log(wi);
+      const c_i = normConst(mu, tau2, vi[i]);
+      if (!(c_i > 0) || !isFinite(c_i)) return Infinity;
+      ll += Math.log(c_i);
+    }
+    return ll;
+  }
+
+  const mu0  = mUnsel.RE;
+  const rho0 = Math.log(Math.max(mUnsel.tau2, 1e-9));
+  let result = null;
+  for (const init of initGrid) {
+    const r = bfgs(nLL, [mu0, rho0, ...init]);
+    if (result === null || r.fval < result.fval) result = r;
+  }
+
+  const [mu_fit, rho_fit, ...logShapeFits] = result.x;
+  const mu   = mu_fit;
+  const tau2 = Math.exp(rho_fit);
+  const logLikSel = -result.fval;
+
+  const hess = numericalHessian(nLL, result.x, result.fval);
+  let inv = matInverse(hess);
+  if (inv === null) {
+    for (const lam of [1e-8, 1e-6, 1e-4, 1e-2, 1, 10]) {
+      const ridge = hess.map((row, ii) => row.map((v, jj) => ii === jj ? v + lam : v));
+      inv = matInverse(ridge);
+      if (inv !== null) break;
+    }
+  }
+
+  function getSE(j) {
+    if (inv !== null && inv[j][j] > 0) return Math.sqrt(inv[j][j]);
+    return hess[j][j] > 0 ? 1 / Math.sqrt(hess[j][j]) : NaN;
+  }
+
+  const se_mu   = getSE(0);
+  const se_rho  = getSE(1);
+  const se_tau2 = isFinite(se_rho) ? tau2 * se_rho : NaN;
+
+  const zval_mu = mu / se_mu;
+  const pval_mu = 2 * (1 - normalCDF(Math.abs(zval_mu)));
+  const ci_mu   = [mu - Z_95 * se_mu, mu + Z_95 * se_mu];
+
+  const lrt_stat = 2 * (logLikSel - logLikUnsel);
+  const lrt_p    = lrt_stat > 0 ? 1 - chiSquareCDF(lrt_stat, lrtDf) : 1;
+
+  return {
+    mu, se_mu, zval_mu, pval_mu, ci_mu,
+    tau2, se_tau2,
+    ...extractShapeParams(logShapeFits, getSE),
+    logLikSel, logLikUnsel,
+    LRT: lrt_stat, LRTdf: lrtDf, LRTp: lrt_p,
+    RE_unsel:     mUnsel.RE,
+    tau2_unsel:   mUnsel.tau2,
+    ciLow_unsel:  mUnsel.ciLow,
+    ciHigh_unsel: mUnsel.ciHigh,
+    converged: result.converged,
+    iters:     result.iters,
+    k, sides,
+    weightFn,
+  };
+}
+
+// =============================================================================
 // HALF-NORMAL SELECTION MODEL
 // =============================================================================
 // halfNormalSelModel(studies, opts)
@@ -802,118 +909,28 @@ function betaNormConst(mu, tau2, vi, a, b, sides, pval_min = 1e-5) {
 //   converged, iters, k, sides, weightFn: "halfnorm"
 //   error: "insufficient_k" if k < 4
 export function halfNormalSelModel(studies, opts = {}) {
-  const sides = opts.sides ?? 1;
-  const valid = validStudies(studies);
-  const k      = valid.length;
-
-  if (k < 4) {
-    return { error: "insufficient_k", k, minK: 4, weightFn: "halfnorm" };
-  }
-
-  const yi = valid.map(s => s.yi);
-  const vi = valid.map(s => s.vi);
-
-  // Unweighted ML model — starting values and LRT baseline
-  const mUnsel      = meta(valid, "ML");
-  const logLikUnsel = logLik(valid, mUnsel.RE, mUnsel.tau2);
-
-  // Observed one-/two-sided p-values for each study
-  const pvals = yi.map((y, i) => {
-    const se_i = Math.sqrt(vi[i]);
-    const p    = sides === 2
-      ? 2 * (1 - normalCDF(Math.abs(y) / se_i))
-      : 1 - normalCDF(y / se_i);
-    return Math.max(1e-15, Math.min(1 - 1e-15, p));
-  });
-
-  // Weight function: w(p; δ) = Φ(Φ⁻¹(1−p) · δ), δ ≥ 0
-  // Parameterised as δ = exp(ρ) so BFGS is unconstrained.
-  function wFn(p, delta) {
-    const pc = Math.max(1e-15, Math.min(1 - 1e-15, p));
-    const zp = normalQuantile(1 - pc);   // z_p = Φ⁻¹(1−p)
-    return normalCDF(zp * delta);
-  }
-
-  // Negative log-likelihood (to minimise)
-  function nLL(params) {
-    const mu    = params[0];
-    const tau2  = Math.exp(params[1]);
-    const delta = Math.exp(params[2]);   // δ = exp(ρ) ≥ 0
-    const w = p => wFn(p, delta);
-    let ll = 0;
-    for (let i = 0; i < k; i++) {
-      const totalVar = vi[i] + tau2;
-      ll += 0.5 * (Math.log(totalVar) + (yi[i] - mu) ** 2 / totalVar);
-      const wi = wFn(pvals[i], delta);
-      if (wi <= 0) return Infinity;
-      ll -= Math.log(wi);
-      const c_i = continuousNormConst(mu, tau2, vi[i], w, sides);
-      if (c_i <= 0) return Infinity;
-      ll += Math.log(c_i);
-    }
-    return ll;
-  }
-
-  // Multi-start BFGS: try several δ₀ values (in log scale)
-  const mu0  = mUnsel.RE;
-  const rho0 = Math.log(Math.max(mUnsel.tau2, 1e-9));
-  const logDelta_inits = [Math.log(1e-3), Math.log(0.5), Math.log(1.0), Math.log(2.0)];
-  let result = null;
-  for (const ld0 of logDelta_inits) {
-    const r = bfgs(nLL, [mu0, rho0, ld0]);
-    if (result === null || r.fval < result.fval) result = r;
-  }
-
-  const [mu_fit, rho_fit, logDelta_fit] = result.x;
-  const mu    = mu_fit;
-  const tau2  = Math.exp(rho_fit);
-  const delta = Math.exp(logDelta_fit);
-  const logLikSel = -result.fval;
-
-  // Standard errors via numerical Hessian
-  const hess = numericalHessian(nLL, result.x, result.fval);
-  let inv = matInverse(hess);
-  if (inv === null) {
-    for (const lam of [1e-8, 1e-6, 1e-4, 1e-2, 1, 10]) {
-      const ridge = hess.map((row, ii) => row.map((v, jj) => ii === jj ? v + lam : v));
-      inv = matInverse(ridge);
-      if (inv !== null) break;
-    }
-  }
-
-  function getSE(j) {
-    if (inv !== null && inv[j][j] > 0) return Math.sqrt(inv[j][j]);
-    return hess[j][j] > 0 ? 1 / Math.sqrt(hess[j][j]) : NaN;
-  }
-
-  const se_mu       = getSE(0);
-  const se_rho      = getSE(1);
-  const se_logDelta = getSE(2);
-  const se_tau2     = isFinite(se_rho)      ? tau2  * se_rho      : NaN;
-  const se_delta    = isFinite(se_logDelta) ? delta * se_logDelta : NaN;
-
-  const zval_mu = mu / se_mu;
-  const pval_mu = 2 * (1 - normalCDF(Math.abs(zval_mu)));
-  const ci_mu   = [mu - Z_95 * se_mu, mu + Z_95 * se_mu];
-
-  const lrt_stat = 2 * (logLikSel - logLikUnsel);
-  const lrt_p    = lrt_stat > 0 ? 1 - chiSquareCDF(lrt_stat, 1) : 1;
-
-  return {
-    mu, se_mu, zval_mu, pval_mu, ci_mu,
-    tau2, se_tau2,
-    delta, se_delta,
-    logLikSel, logLikUnsel,
-    LRT: lrt_stat, LRTdf: 1, LRTp: lrt_p,
-    RE_unsel:     mUnsel.RE,
-    tau2_unsel:   mUnsel.tau2,
-    ciLow_unsel:  mUnsel.ciLow,
-    ciHigh_unsel: mUnsel.ciHigh,
-    converged: result.converged,
-    iters:     result.iters,
-    k, sides,
+  const sides   = opts.sides ?? 1;
+  const pvalMin = 1e-15;
+  return _fitContinuousSelModel({
+    studies, sides,
     weightFn: "halfnorm",
-  };
+    pvalMin,
+    makeWFn: ([logDelta]) => {
+      const delta = Math.exp(logDelta);
+      const w = p => {
+        const pc = Math.max(pvalMin, Math.min(1 - pvalMin, p));
+        return normalCDF(normalQuantile(1 - pc) * delta);
+      };
+      return { w, normConst: (mu, tau2, vi) => continuousNormConst(mu, tau2, vi, w, sides) };
+    },
+    initGrid:           [[Math.log(1e-3)], [Math.log(0.5)], [Math.log(1.0)], [Math.log(2.0)]],
+    lrtDf:              1,
+    extractShapeParams: ([logDelta], getSE) => {
+      const delta = Math.exp(logDelta);
+      const se_logDelta = getSE(2);
+      return { delta, se_delta: isFinite(se_logDelta) ? delta * se_logDelta : NaN };
+    },
+  });
 }
 
 // =============================================================================
@@ -945,111 +962,28 @@ export function halfNormalSelModel(studies, opts = {}) {
 //   converged, iters, k, sides, weightFn: "power"
 //   error: "insufficient_k" if k < 4
 export function powerSelModel(studies, opts = {}) {
-  const sides = opts.sides ?? 1;
-  const valid = validStudies(studies);
-  const k      = valid.length;
-
-  if (k < 4) {
-    return { error: "insufficient_k", k, minK: 4, weightFn: "power" };
-  }
-
-  const yi = valid.map(s => s.yi);
-  const vi = valid.map(s => s.vi);
-
-  const mUnsel      = meta(valid, "ML");
-  const logLikUnsel = logLik(valid, mUnsel.RE, mUnsel.tau2);
-
-  const pvals = yi.map((y, i) => {
-    const se_i = Math.sqrt(vi[i]);
-    const p    = sides === 2
-      ? 2 * (1 - normalCDF(Math.abs(y) / se_i))
-      : 1 - normalCDF(y / se_i);
-    return Math.max(1e-15, Math.min(1 - 1e-15, p));
-  });
-
-  // Weight function: w(p; δ) = (1 − p)^δ, δ ≥ 0
-  function wFn(p, delta) {
-    const pc = Math.max(1e-15, Math.min(1 - 1e-15, p));
-    return Math.pow(1 - pc, delta);
-  }
-
-  function nLL(params) {
-    const mu    = params[0];
-    const tau2  = Math.exp(params[1]);
-    const delta = Math.exp(params[2]);
-    const w = p => wFn(p, delta);
-    let ll = 0;
-    for (let i = 0; i < k; i++) {
-      const totalVar = vi[i] + tau2;
-      ll += 0.5 * (Math.log(totalVar) + (yi[i] - mu) ** 2 / totalVar);
-      const wi = wFn(pvals[i], delta);
-      if (wi <= 0) return Infinity;
-      ll -= Math.log(wi);
-      const c_i = continuousNormConst(mu, tau2, vi[i], w, sides);
-      if (c_i <= 0) return Infinity;
-      ll += Math.log(c_i);
-    }
-    return ll;
-  }
-
-  const mu0  = mUnsel.RE;
-  const rho0 = Math.log(Math.max(mUnsel.tau2, 1e-9));
-  const logDelta_inits = [Math.log(1e-3), Math.log(0.5), Math.log(1.0), Math.log(2.0)];
-  let result = null;
-  for (const ld0 of logDelta_inits) {
-    const r = bfgs(nLL, [mu0, rho0, ld0]);
-    if (result === null || r.fval < result.fval) result = r;
-  }
-
-  const [mu_fit, rho_fit, logDelta_fit] = result.x;
-  const mu    = mu_fit;
-  const tau2  = Math.exp(rho_fit);
-  const delta = Math.exp(logDelta_fit);
-  const logLikSel = -result.fval;
-
-  const hess = numericalHessian(nLL, result.x, result.fval);
-  let inv = matInverse(hess);
-  if (inv === null) {
-    for (const lam of [1e-8, 1e-6, 1e-4, 1e-2, 1, 10]) {
-      const ridge = hess.map((row, ii) => row.map((v, jj) => ii === jj ? v + lam : v));
-      inv = matInverse(ridge);
-      if (inv !== null) break;
-    }
-  }
-
-  function getSE(j) {
-    if (inv !== null && inv[j][j] > 0) return Math.sqrt(inv[j][j]);
-    return hess[j][j] > 0 ? 1 / Math.sqrt(hess[j][j]) : NaN;
-  }
-
-  const se_mu       = getSE(0);
-  const se_rho      = getSE(1);
-  const se_logDelta = getSE(2);
-  const se_tau2     = isFinite(se_rho)      ? tau2  * se_rho      : NaN;
-  const se_delta    = isFinite(se_logDelta) ? delta * se_logDelta : NaN;
-
-  const zval_mu = mu / se_mu;
-  const pval_mu = 2 * (1 - normalCDF(Math.abs(zval_mu)));
-  const ci_mu   = [mu - Z_95 * se_mu, mu + Z_95 * se_mu];
-
-  const lrt_stat = 2 * (logLikSel - logLikUnsel);
-  const lrt_p    = lrt_stat > 0 ? 1 - chiSquareCDF(lrt_stat, 1) : 1;
-
-  return {
-    mu, se_mu, zval_mu, pval_mu, ci_mu,
-    tau2, se_tau2,
-    delta, se_delta,
-    logLikSel, logLikUnsel,
-    LRT: lrt_stat, LRTdf: 1, LRTp: lrt_p,
-    RE_unsel:     mUnsel.RE,
-    tau2_unsel:   mUnsel.tau2,
-    ciLow_unsel:  mUnsel.ciLow,
-    ciHigh_unsel: mUnsel.ciHigh,
-    converged: result.converged,
-    iters:     result.iters,
-    k, sides,
+  const sides   = opts.sides ?? 1;
+  const pvalMin = 1e-15;
+  return _fitContinuousSelModel({
+    studies, sides,
     weightFn: "power",
-  };
+    pvalMin,
+    makeWFn: ([logDelta]) => {
+      const delta = Math.exp(logDelta);
+      const w = p => {
+        const pc = Math.max(pvalMin, Math.min(1 - pvalMin, p));
+        return Math.pow(1 - pc, delta);
+      };
+      return { w, normConst: (mu, tau2, vi) => continuousNormConst(mu, tau2, vi, w, sides) };
+    },
+    initGrid:           [[Math.log(1e-3)], [Math.log(0.5)], [Math.log(1.0)], [Math.log(2.0)]],
+    lrtDf:              1,
+    extractShapeParams: ([logDelta], getSE) => {
+      const delta = Math.exp(logDelta);
+      const se_logDelta = getSE(2);
+      return { delta, se_delta: isFinite(se_logDelta) ? delta * se_logDelta : NaN };
+    },
+  });
 }
 
 // =============================================================================
@@ -1081,111 +1015,28 @@ export function powerSelModel(studies, opts = {}) {
 //   converged, iters, k, sides, weightFn: "negexp"
 //   error: "insufficient_k" if k < 4
 export function negexpSelModel(studies, opts = {}) {
-  const sides = opts.sides ?? 1;
-  const valid = validStudies(studies);
-  const k      = valid.length;
-
-  if (k < 4) {
-    return { error: "insufficient_k", k, minK: 4, weightFn: "negexp" };
-  }
-
-  const yi = valid.map(s => s.yi);
-  const vi = valid.map(s => s.vi);
-
-  const mUnsel      = meta(valid, "ML");
-  const logLikUnsel = logLik(valid, mUnsel.RE, mUnsel.tau2);
-
-  const pvals = yi.map((y, i) => {
-    const se_i = Math.sqrt(vi[i]);
-    const p    = sides === 2
-      ? 2 * (1 - normalCDF(Math.abs(y) / se_i))
-      : 1 - normalCDF(y / se_i);
-    return Math.max(1e-15, Math.min(1 - 1e-15, p));
-  });
-
-  // Weight function: w(p; δ) = exp(−δ · p), δ ≥ 0
-  function wFn(p, delta) {
-    const pc = Math.max(1e-15, Math.min(1 - 1e-15, p));
-    return Math.exp(-delta * pc);
-  }
-
-  function nLL(params) {
-    const mu    = params[0];
-    const tau2  = Math.exp(params[1]);
-    const delta = Math.exp(params[2]);
-    const w = p => wFn(p, delta);
-    let ll = 0;
-    for (let i = 0; i < k; i++) {
-      const totalVar = vi[i] + tau2;
-      ll += 0.5 * (Math.log(totalVar) + (yi[i] - mu) ** 2 / totalVar);
-      const wi = wFn(pvals[i], delta);
-      if (wi <= 0) return Infinity;
-      ll -= Math.log(wi);
-      const c_i = continuousNormConst(mu, tau2, vi[i], w, sides);
-      if (c_i <= 0) return Infinity;
-      ll += Math.log(c_i);
-    }
-    return ll;
-  }
-
-  const mu0  = mUnsel.RE;
-  const rho0 = Math.log(Math.max(mUnsel.tau2, 1e-9));
-  const logDelta_inits = [Math.log(1e-3), Math.log(0.5), Math.log(1.0), Math.log(2.0)];
-  let result = null;
-  for (const ld0 of logDelta_inits) {
-    const r = bfgs(nLL, [mu0, rho0, ld0]);
-    if (result === null || r.fval < result.fval) result = r;
-  }
-
-  const [mu_fit, rho_fit, logDelta_fit] = result.x;
-  const mu    = mu_fit;
-  const tau2  = Math.exp(rho_fit);
-  const delta = Math.exp(logDelta_fit);
-  const logLikSel = -result.fval;
-
-  const hess = numericalHessian(nLL, result.x, result.fval);
-  let inv = matInverse(hess);
-  if (inv === null) {
-    for (const lam of [1e-8, 1e-6, 1e-4, 1e-2, 1, 10]) {
-      const ridge = hess.map((row, ii) => row.map((v, jj) => ii === jj ? v + lam : v));
-      inv = matInverse(ridge);
-      if (inv !== null) break;
-    }
-  }
-
-  function getSE(j) {
-    if (inv !== null && inv[j][j] > 0) return Math.sqrt(inv[j][j]);
-    return hess[j][j] > 0 ? 1 / Math.sqrt(hess[j][j]) : NaN;
-  }
-
-  const se_mu       = getSE(0);
-  const se_rho      = getSE(1);
-  const se_logDelta = getSE(2);
-  const se_tau2     = isFinite(se_rho)      ? tau2  * se_rho      : NaN;
-  const se_delta    = isFinite(se_logDelta) ? delta * se_logDelta : NaN;
-
-  const zval_mu = mu / se_mu;
-  const pval_mu = 2 * (1 - normalCDF(Math.abs(zval_mu)));
-  const ci_mu   = [mu - Z_95 * se_mu, mu + Z_95 * se_mu];
-
-  const lrt_stat = 2 * (logLikSel - logLikUnsel);
-  const lrt_p    = lrt_stat > 0 ? 1 - chiSquareCDF(lrt_stat, 1) : 1;
-
-  return {
-    mu, se_mu, zval_mu, pval_mu, ci_mu,
-    tau2, se_tau2,
-    delta, se_delta,
-    logLikSel, logLikUnsel,
-    LRT: lrt_stat, LRTdf: 1, LRTp: lrt_p,
-    RE_unsel:     mUnsel.RE,
-    tau2_unsel:   mUnsel.tau2,
-    ciLow_unsel:  mUnsel.ciLow,
-    ciHigh_unsel: mUnsel.ciHigh,
-    converged: result.converged,
-    iters:     result.iters,
-    k, sides,
+  const sides   = opts.sides ?? 1;
+  const pvalMin = 1e-15;
+  return _fitContinuousSelModel({
+    studies, sides,
     weightFn: "negexp",
-  };
+    pvalMin,
+    makeWFn: ([logDelta]) => {
+      const delta = Math.exp(logDelta);
+      const w = p => {
+        const pc = Math.max(pvalMin, Math.min(1 - pvalMin, p));
+        return Math.exp(-delta * pc);
+      };
+      return { w, normConst: (mu, tau2, vi) => continuousNormConst(mu, tau2, vi, w, sides) };
+    },
+    initGrid:           [[Math.log(1e-3)], [Math.log(0.5)], [Math.log(1.0)], [Math.log(2.0)]],
+    lrtDf:              1,
+    extractShapeParams: ([logDelta], getSE) => {
+      const delta = Math.exp(logDelta);
+      const se_logDelta = getSE(2);
+      return { delta, se_delta: isFinite(se_logDelta) ? delta * se_logDelta : NaN };
+    },
+  });
 }
 
 // =============================================================================
@@ -1219,131 +1070,47 @@ export function negexpSelModel(studies, opts = {}) {
 //   converged, iters, k, sides, weightFn: "beta"
 //   error: "insufficient_k" if k < 4
 export function betaSelModel(studies, opts = {}) {
-  const sides = opts.sides ?? 1;
-  const valid = validStudies(studies);
-  const k      = valid.length;
-
-  if (k < 4) {
-    return { error: "insufficient_k", k, minK: 4, weightFn: "beta" };
-  }
-
-  const yi = valid.map(s => s.yi);
-  const vi = valid.map(s => s.vi);
-
-  const mUnsel      = meta(valid, "ML");
-  const logLikUnsel = logLik(valid, mUnsel.RE, mUnsel.tau2);
-
-  // pval.min=1e-5: clamp both observed pvals and the normConst integral.
-  // Matches metafor's behavior for datasets where some studies have extreme
-  // p-values (< 1e-5 in double precision) — prevents degenerate a < 0.1
-  // solutions driven by (near-)zero p-values with a < 1.
-  const BETA_PMIN = 1e-5;
-  const pvals = yi.map((y, i) => {
-    const se_i = Math.sqrt(vi[i]);
-    const p    = sides === 2
-      ? 2 * (1 - normalCDF(Math.abs(y) / se_i))
-      : 1 - normalCDF(y / se_i);
-    return Math.max(BETA_PMIN, Math.min(1 - BETA_PMIN, p));
-  });
-
-  // Weight function: w(p; a, b) = p^(a-1) * (1-p)^(b-1), a > 0, b > 0
-  function wFn(p, a, b) {
-    const pc = Math.max(BETA_PMIN, Math.min(1 - BETA_PMIN, p));
-    return Math.pow(pc, a - 1) * Math.pow(1 - pc, b - 1);
-  }
-
-  function nLL(params) {
-    const mu   = params[0];
-    const tau2 = Math.exp(params[1]);
-    const a    = Math.exp(params[2]);
-    const b    = Math.exp(params[3]);
-    let ll = 0;
-    for (let i = 0; i < k; i++) {
-      const totalVar = vi[i] + tau2;
-      ll += 0.5 * (Math.log(totalVar) + (yi[i] - mu) ** 2 / totalVar);
-      const wi = wFn(pvals[i], a, b);
-      if (!(wi > 0) || !isFinite(wi)) return Infinity;
-      ll -= Math.log(wi);
-      const c_i = betaNormConst(mu, tau2, vi[i], a, b, sides, BETA_PMIN);
-      if (!(c_i > 0) || !isFinite(c_i)) return Infinity;
-      ll += Math.log(c_i);
-    }
-    return ll;
-  }
-
-  const mu0  = mUnsel.RE;
-  const rho0 = Math.log(Math.max(mUnsel.tau2, 1e-9));
-  // Multi-start: (log a, log b) pairs; include b<1 region where typical
-  // near-null solutions live, and b>1 region for typical publication bias
-  const abInits = [
-    [0,              0              ],  // a=1, b=1 — uniform
-    [0,              Math.log(2)    ],  // a=1, b=2 — mild selection
-    [0,              Math.log(4)    ],  // a=1, b=4 — strong selection
-    [Math.log(0.5),  Math.log(2)    ],  // a=0.5, b=2
-    [0,              Math.log(0.75) ],  // a=1, b=0.75 — typical near-null
-    [Math.log(1.2),  Math.log(0.75) ],  // a=1.2, b=0.75
-    [Math.log(0.8),  Math.log(0.8)  ],  // a=0.8, b=0.8
-    [0,              Math.log(0.5)  ],  // a=1, b=0.5
-  ];
-  let result = null;
-  for (const [la0, lb0] of abInits) {
-    const r = bfgs(nLL, [mu0, rho0, la0, lb0]);
-    if (result === null || r.fval < result.fval) result = r;
-  }
-
-  const [mu_fit, rho_fit, logA_fit, logB_fit] = result.x;
-  const mu   = mu_fit;
-  const tau2 = Math.exp(rho_fit);
-  const a    = Math.exp(logA_fit);
-  const b    = Math.exp(logB_fit);
-  const logLikSel = -result.fval;
-
-  const hess = numericalHessian(nLL, result.x, result.fval);
-  let inv = matInverse(hess);
-  if (inv === null) {
-    for (const lam of [1e-8, 1e-6, 1e-4, 1e-2, 1, 10]) {
-      const ridge = hess.map((row, ii) => row.map((v, jj) => ii === jj ? v + lam : v));
-      inv = matInverse(ridge);
-      if (inv !== null) break;
-    }
-  }
-
-  function getSE(j) {
-    if (inv !== null && inv[j][j] > 0) return Math.sqrt(inv[j][j]);
-    return hess[j][j] > 0 ? 1 / Math.sqrt(hess[j][j]) : NaN;
-  }
-
-  const se_mu   = getSE(0);
-  const se_rho  = getSE(1);
-  const se_logA = getSE(2);
-  const se_logB = getSE(3);
-  const se_tau2 = isFinite(se_rho)  ? tau2 * se_rho  : NaN;
-  const se_a    = isFinite(se_logA) ? a    * se_logA : NaN;
-  const se_b    = isFinite(se_logB) ? b    * se_logB : NaN;
-
-  const zval_mu = mu / se_mu;
-  const pval_mu = 2 * (1 - normalCDF(Math.abs(zval_mu)));
-  const ci_mu   = [mu - Z_95 * se_mu, mu + Z_95 * se_mu];
-
-  const lrt_stat = 2 * (logLikSel - logLikUnsel);
-  const lrt_p    = lrt_stat > 0 ? 1 - chiSquareCDF(lrt_stat, 2) : 1;
-
-  return {
-    mu, se_mu, zval_mu, pval_mu, ci_mu,
-    tau2, se_tau2,
-    a, se_a,
-    b, se_b,
-    logLikSel, logLikUnsel,
-    LRT: lrt_stat, LRTdf: 2, LRTp: lrt_p,
-    RE_unsel:     mUnsel.RE,
-    tau2_unsel:   mUnsel.tau2,
-    ciLow_unsel:  mUnsel.ciLow,
-    ciHigh_unsel: mUnsel.ciHigh,
-    converged: result.converged,
-    iters:     result.iters,
-    k, sides,
+  const sides   = opts.sides ?? 1;
+  // pvalMin=1e-5: clamp both observed pvals and the normConst integral.
+  // Matches metafor's behavior — prevents degenerate a < 0.1 solutions when
+  // some studies have extreme p-values (< 1e-5 in double precision).
+  const pvalMin = 1e-5;
+  return _fitContinuousSelModel({
+    studies, sides,
     weightFn: "beta",
-  };
+    pvalMin,
+    makeWFn: ([logA, logB]) => {
+      const a = Math.exp(logA);
+      const b = Math.exp(logB);
+      const w = p => {
+        const pc = Math.max(pvalMin, Math.min(1 - pvalMin, p));
+        return Math.pow(pc, a - 1) * Math.pow(1 - pc, b - 1);
+      };
+      return { w, normConst: (mu, tau2, vi) => betaNormConst(mu, tau2, vi, a, b, sides, pvalMin) };
+    },
+    // Multi-start: (log a, log b) pairs covering b<1 (near-null) and b>1 (pub bias)
+    initGrid: [
+      [0,              0              ],  // a=1, b=1 — uniform
+      [0,              Math.log(2)    ],  // a=1, b=2 — mild selection
+      [0,              Math.log(4)    ],  // a=1, b=4 — strong selection
+      [Math.log(0.5),  Math.log(2)    ],  // a=0.5, b=2
+      [0,              Math.log(0.75) ],  // a=1, b=0.75 — typical near-null
+      [Math.log(1.2),  Math.log(0.75) ],  // a=1.2, b=0.75
+      [Math.log(0.8),  Math.log(0.8)  ],  // a=0.8, b=0.8
+      [0,              Math.log(0.5)  ],  // a=1, b=0.5
+    ],
+    lrtDf: 2,
+    extractShapeParams: ([logA, logB], getSE) => {
+      const a = Math.exp(logA);
+      const b = Math.exp(logB);
+      const se_logA = getSE(2);
+      const se_logB = getSE(3);
+      return {
+        a, se_a: isFinite(se_logA) ? a * se_logA : NaN,
+        b, se_b: isFinite(se_logB) ? b * se_logB : NaN,
+      };
+    },
+  });
 }
 
 // =============================================================================
