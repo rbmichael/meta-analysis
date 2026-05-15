@@ -463,7 +463,7 @@ export function failSafeN(studies, alpha = 0.05, trivial = 0.1) {
 /**
  * Henmi & Copas (2010) confidence interval robust to publication bias.
  *
- * Always uses DL tau² and FE weights (wi = 1/vi), matching metafor::hc().
+ * Always uses DL τ² and FE weights (wi = 1/vi), matching metafor::hc().
  * The CI is centred on the FE estimate but accounts for potential small-study
  * bias by integrating over the conditional distribution of Q given the
  * ratio R = (theta_hat - mu) / sqrt(vb).
@@ -496,7 +496,7 @@ export function henmiCopas(studies, alpha = 0.05) {
   const beta = yi.reduce((s, y, i) => s + wi[i] * y, 0) / W1;
   const Q    = yi.reduce((s, y, i) => s + wi[i] * (y - beta) ** 2, 0);
 
-  // DL tau² (always DL in HC, matching metafor)
+  // DL τ² (always DL in HC, matching metafor)
   const tau2 = Math.max(0, (Q - (k - 1)) / (W1 - W2));
 
   // Variance of beta under RE model

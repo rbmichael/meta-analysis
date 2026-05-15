@@ -431,10 +431,10 @@ export function bfgs(f, x0, opts = {}) {
 // =============================================================================
 
 // selIntervalProbs — probability that study i's true effect falls in each
-// selection interval, under the marginal distribution Y_i ~ N(mu, vi + tau²).
+// selection interval, under the marginal distribution Y_i ~ N(mu, vi + τ²).
 //
 //   mu       : pooled mean
-//   totalVar : vi + tau²  (marginal variance for study i)
+//   totalVar : vi + τ²  (marginal variance for study i)
 //   se_i     : sqrt(vi)   (study i's standard error, used to define boundaries)
 //   zcuts    : normal quantiles of the p-value cutpoints
 //              zcuts[j] = Φ⁻¹(1 − cuts[j]);  length K (same as cuts)

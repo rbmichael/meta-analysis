@@ -2051,7 +2051,7 @@ export const BENCHMARKS = [
   // ----------------------------------------------------------------
 
   // ----------------------------------------------------------------
-  // KH — Knapp-Hartung adjusted CI (DL tau², t_{k-1} critical value,
+  // KH — Knapp-Hartung adjusted CI (DL τ², t_{k-1} critical value,
   // seRE² = Σ wᵢ(yᵢ−RE)² / ((k−1)·W))
   // ----------------------------------------------------------------
   {

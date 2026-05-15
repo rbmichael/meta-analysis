@@ -162,7 +162,7 @@ export function runTests() {
   // ===== INTEGRATION: intercept-only regression must match meta() exactly =====
   // For every existing benchmark, metaRegression([], method) must give
   // beta[0] ≈ RE and tau2 ≈ tau2 from meta(). This verifies end-to-end consistency
-  // across all effect types and tau² estimators.
+  // across all effect types and τ² estimators.
   console.log("\n===== INTERCEPT-ONLY REGRESSION vs META() =====\n");
   let intPass = true;
   const { chkField: ichk } = makeChk(() => { intPass = false; });
@@ -212,7 +212,7 @@ export function runTests() {
 
     console.log("--- BCG log RR ~ ablat (k=13, REML) ---");
     // Slope independently verified from metafor / Viechtbauer (2010).
-    // Intercept and residual tau² verified qualitatively only — exact numerical
+    // Intercept and residual τ² verified qualitatively only — exact numerical
     // comparison against metafor requires a live R session.
     rbchk("ablat slope", reg.beta[1], -0.0291, "FE");  // abs 0.01, matches metafor
 
@@ -1717,7 +1717,7 @@ export function runTests() {
     cvrchk("yi[2] = log(2.4)",   studies[2].yi, Math.log(2.4),  1e-9);
 
     const m = meta(studies, "DL");
-    // FE and RE should lie between log(2) and log(2.4); tau2 should be small but positive
+    // FE and RE should lie between log(2) and log(2.4); τ² should be small but positive
     cvrchkTrue("FE in (log2, log2.4)", m.FE > Math.log(2) && m.FE < Math.log(2.4));
     cvrchkTrue("RE in (log2, log2.4)", m.RE > Math.log(2) && m.RE < Math.log(2.4));
     cvrchkTrue("tau2 ≥ 0",            isFinite(m.tau2) && m.tau2 >= 0);

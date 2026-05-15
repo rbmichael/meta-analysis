@@ -1337,7 +1337,7 @@ function _renderMVResults(res, { alpha, rows = [] } = {}) {
     ${convergence === false ? `&nbsp;·&nbsp; <span style="color:var(--color-warning)">convergence uncertain</span>` : ""}
   </div>`;
 
-  // Near-zero tau² boundary note
+  // Near-zero τ² boundary note
   const boundaryOutcomes = outcomeIds.filter((_, o) => tau2[o] < 1e-6).map(id => escapeHTML(String(id)));
   const boundaryNote = boundaryOutcomes.length
     ? `<p style="color:var(--fg-muted);font-size:0.8em;margin:0 0 6px">ℹ τ² ≈ 0 for ${boundaryOutcomes.join(", ")} — estimate is at the boundary; no detectable between-study heterogeneity for these outcomes.</p>`

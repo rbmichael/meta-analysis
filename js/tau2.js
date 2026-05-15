@@ -203,7 +203,7 @@ export function tau2_REML(studies, tol = REML_TOL, maxIter = 100, tau2Init = nul
   if (tau2Init !== null) {
     tau2 = Math.max(0, tau2Init);
   } else {
-    // --- 1️⃣ Initial tau² (DL seed) ---
+    // --- 1️⃣ Initial τ² (DL seed) ---
     let W0 = 0, W02 = 0, W0mu = 0;
     for (const d of studies) {
       const wi = 1 / d.vi;
@@ -237,7 +237,7 @@ export function tau2_REML(studies, tol = REML_TOL, maxIter = 100, tau2Init = nul
     let step = score / info;
     let newTau2 = tau2 + step;
 
-    // Step-halving to keep tau² non-negative
+    // Step-halving to keep τ² non-negative
     let halveIter = 0;
     while (newTau2 < 0 && halveIter < 20) {
       step /= 2;
@@ -496,7 +496,7 @@ export function tau2_GENQ(studies, weights) {
   return genqCore(studies, w);
 }
 
-// Compute RE mean given tau²
+// Compute RE mean given τ²
 export function RE_mean(corrected, tau2) {
   const wRE = corrected.map(d => 1 / (d.vi + tau2));
   const WRE = wRE.reduce((acc, b) => acc + b, 0);

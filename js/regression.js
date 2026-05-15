@@ -530,7 +530,7 @@ export function tau2_metaReg(yi, vi, X, method = "REML", tol = REML_TOL, maxIter
 // Parameters:
 //   studies    — array of study objects, each with { yi, vi, ... }
 //   moderators — array of { key, type } passed to buildDesignMatrix
-//   method     — tau² estimator: "REML" (default), "DL", "PM"
+//   method     — τ² estimator: "REML" (default), "DL", "PM"
 //   ciMethod   — "normal" (default) or "KH" (Knapp-Hartung)
 //
 // Returns:
@@ -601,7 +601,7 @@ export function metaRegression(studies, moderators = [], method = "REML", ciMeth
 
   if (kf < p + 1) return { ...empty, rankDeficientCause: "insufficient_k" };
 
-  // ---- tau² ----
+  // ---- τ² ----
   const tau2 = tau2_metaReg(yi, vi, Xf, method);
 
   // ---- pseudo-R² (proportion of heterogeneity explained by moderators) ----
