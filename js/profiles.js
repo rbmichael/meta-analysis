@@ -45,7 +45,7 @@
 // Dependencies: utils.js, constants.js
 // =============================================================================
 
-import { hedgesG, parseCounts, gorFromCounts, tetrachoricFromCounts, hyperg2F1_ucor, normalQuantile } from "./utils.js";
+import { hedgesG, parseCounts, gorFromCounts, tetrachoricFromCounts, continuityCorrect, hyperg2F1_ucor, normalQuantile } from "./utils.js";
 import { MIN_VAR, Z_95 } from "./constants.js";
 
 function clampVi(x) { return x < MIN_VAR ? MIN_VAR : x; }
@@ -576,8 +576,7 @@ const _profileSpecs = {
     isLog: true,
     inputs: ["a", "b", "c", "d"],
     compute(s) {
-      let { a, b, c, d } = s;
-      if (a === 0 || b === 0 || c === 0 || d === 0) { a += 0.5; b += 0.5; c += 0.5; d += 0.5; }
+      let { a, b, c, d } = continuityCorrect(s);
       const yi = Math.log((a*d)/(b*c));
       const vi = clampVi(1/a + 1/b + 1/c + 1/d);
       return { yi, vi, md: yi, varMD: vi };
@@ -610,8 +609,7 @@ const _profileSpecs = {
     isLog: true,
     inputs: ["a", "b", "c", "d"],
     compute(s) {
-      let { a, b, c, d } = s;
-      if (a === 0 || b === 0 || c === 0 || d === 0) { a += 0.5; b += 0.5; c += 0.5; d += 0.5; }
+      let { a, b, c, d } = continuityCorrect(s);
       const risk1 = a/(a+b), risk2 = c/(c+d);
       const yi = Math.log(risk1/risk2);
       const vi = clampVi((1/a - 1/(a+b)) + (1/c - 1/(c+d)));

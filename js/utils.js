@@ -11,7 +11,8 @@
 //                    chiSquareCDF(), chiSquareQuantile(), fCDF(),
 //                    regularizedBeta(), regularizedGammaP(), logGamma()
 //   Bivariate        bivariateNormalCDF()
-//   Effect sizes     hedgesG(), tetrachoricFromCounts(), gorFromCounts()
+//   Effect sizes     hedgesG(), tetrachoricFromCounts(), gorFromCounts(),
+//                    continuityCorrect()
 //   Parsing          parseCounts()
 //   Display          transformEffect()
 //
@@ -442,6 +443,18 @@ export function bivariateNormalCDF(h, k, rho) {
 }
 
 // ================= TETRACHORIC CORRELATION =================
+
+// continuityCorrect({a, b, c, d}) → {a, b, c, d}
+// Standard Haldane-Anscombe 0.5 continuity correction for 2×2 tables.
+// Adds 0.5 to all four cells when any is zero, preventing log(0) and
+// division-by-zero in OR, RR, and tetrachoric calculations.
+export function continuityCorrect({ a, b, c, d }) {
+  if (a === 0 || b === 0 || c === 0 || d === 0) {
+    return { a: a + 0.5, b: b + 0.5, c: c + 0.5, d: d + 0.5 };
+  }
+  return { a, b, c, d };
+}
+
 // Estimates the latent Pearson correlation from a 2×2 table (a,b,c,d).
 // Finds ρ by bisecting bivariateNormalCDF(h, k; ρ) = a/N.
 // Variance: p_r(1−p_r)·p_c(1−p_c) / (N · φ₂(h,k;ρ)²)  — delta method.
@@ -450,11 +463,7 @@ export function tetrachoricFromCounts(a, b, c, d) {
   const nan = { rho: NaN, var: NaN };
   if (!isFinite(a) || !isFinite(b) || !isFinite(c) || !isFinite(d)) return nan;
 
-  // Continuity correction when any cell is zero
-  let aa = a, bb = b, cc = c, dd = d;
-  if (aa === 0 || bb === 0 || cc === 0 || dd === 0) {
-    aa += 0.5; bb += 0.5; cc += 0.5; dd += 0.5;
-  }
+  let { a: aa, b: bb, c: cc, d: dd } = continuityCorrect({ a, b, c, d });
 
   const N     = aa + bb + cc + dd;
   const p_row = (aa + bb) / N;
