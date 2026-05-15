@@ -2461,6 +2461,7 @@ export const PUB_BIAS_BENCHMARKS = [
   //   lm(log(DOR) ~ I(1/sqrt(ESS)), weights=ESS)
   // ----------------------------------------------------------------
   {
+    rBlock: "DEEKS-1",
     name: "Synthetic 2×2 tables – Deeks (k=4)",
     type: "OR",
     data: [
@@ -2489,6 +2490,7 @@ export const PUB_BIAS_BENCHMARKS = [
   //   lm(z ~ I(1/se))  (OLS, uniform weights)
   // ----------------------------------------------------------------
   {
+    rBlock: "RUECKER-1",
     name: "Synthetic 2×2 tables – Rücker (k=4)",
     type: "OR",
     data: [
