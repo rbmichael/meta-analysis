@@ -6,7 +6,8 @@
 // =============================================================================
 
 // Circular imports — safe: these are only called inside function bodies.
-import { meta, wls, matInverse, robustWlsResult, logLik, logDet } from "./analysis.js";
+import { meta, robustWlsResult, logLik } from "./analysis.js";
+import { wls, matInverse, logDet } from "./linalg.js";
 import { normalCDF, normalQuantile, tCDF, tCritical, fCDF, chiSquareCDF, chiSquareQuantile } from "./utils.js";
 import { MIN_VAR, REML_TOL, BISECTION_ITERS } from "./constants.js";
 import { bfgs } from "./selection.js";

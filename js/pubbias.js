@@ -25,7 +25,8 @@
 //   utils.js     normalCDF, normalQuantile, tCDF, regularizedGammaP
 //   constants.js BISECTION_ITERS
 
-import { wls, robustWlsResult } from "./analysis.js";
+import { robustWlsResult } from "./analysis.js";
+import { wls } from "./linalg.js";
 import { normalCDF, normalQuantile, tCDF, regularizedGammaP } from "./utils.js";
 import { BISECTION_ITERS } from "./constants.js";
 

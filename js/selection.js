@@ -27,7 +27,8 @@
 //   utils.js     normalCDF, normalQuantile
 //   constants.js Z_95, BISECTION_ITERS
 
-import { meta, logLik, matInverse } from "./analysis.js";
+import { meta, logLik } from "./analysis.js";
+import { matInverse } from "./linalg.js";
 import { normalCDF, normalQuantile, chiSquareCDF } from "./utils.js";
 import { Z_95, BISECTION_ITERS } from "./constants.js";
 

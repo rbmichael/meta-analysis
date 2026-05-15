@@ -33,7 +33,7 @@
 // Dependencies: matInverse, wls from analysis.js
 // =============================================================================
 
-import { matInverse, wls } from "./analysis.js";
+import { matInverse, wls } from "./linalg.js";
 
 // ---------------------------------------------------------------------------
 // Mulberry32 PRNG (same as gosh.js / perm.worker.js)
