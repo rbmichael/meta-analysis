@@ -523,7 +523,7 @@ function renderScaleModTags() {
   scaleModerators.forEach(({ name }) => {
     const span = document.createElement("span");
     span.className = "mod-tag";
-    span.innerHTML = `${name} <button class="remove-mod-btn" title="Remove scale moderator">×</button>`;
+    span.innerHTML = `${escapeHTML(name)} <button class="remove-mod-btn" title="Remove scale moderator">×</button>`;
     span.querySelector("button").addEventListener("click", () => removeScaleModerator(name));
     container.appendChild(span);
   });

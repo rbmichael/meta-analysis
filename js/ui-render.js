@@ -165,7 +165,7 @@ export function buildRegFittedRows(reg) {
     const sr   = reg.stdResiduals[i];
     const flag = Math.abs(sr) > Z_95 ? " style='color:var(--color-warning)'" : "";
     return `<tr>
-      <td>${lbl || i + 1}</td>
+      <td>${lbl ? escapeHTML(lbl) : i + 1}</td>
       <td>${fmt(reg.yi[i])}</td>
       <td>${fmt(reg.fitted[i])}</td>
       <td>${fmt(reg.residuals[i])}</td>
@@ -264,7 +264,7 @@ export function renderLocationScalePanel(ls, ciMethod, kExcluded = 0) {
   function fittedRows() {
     if (!ls.labels || !ls.fitted) return "";
     return ls.labels.map((lbl, i) => `<tr>
-      <td>${lbl || i + 1}</td>
+      <td>${lbl ? escapeHTML(lbl) : i + 1}</td>
       <td>${fmt(ls.yi[i])}</td>
       <td>${fmt(ls.fitted[i])}</td>
       <td>${fmt(ls.residuals[i])}</td>
@@ -1071,7 +1071,7 @@ export function buildInfluenceHTML(influence) {
       d.highCovRatio ? "Hi-CovRatio"  : "",
     ].filter(Boolean).join(", ");
     return `<tr ${rowStyle}>
-      <td>${d.label}</td>
+      <td>${escapeHTML(d.label)}</td>
       <td>${isFinite(d.RE_loo)      ? fmt(d.RE_loo)      : "NA"}</td>
       <td>${isFinite(d.deltaTau2)   ? fmt(d.deltaTau2)   : "NA"}</td>
       <td>${isFinite(d.stdResidual) ? fmt(d.stdResidual) : "NA"}</td>

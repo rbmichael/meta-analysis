@@ -434,9 +434,9 @@ export function updateValidationWarnings(studies, excluded, softWarnings) {
 
   // Input errors
   rows.forEach((row, idx) => {
-    const label  = row.querySelector("input")?.value || `Row ${idx + 1}`;
+    const label  = escapeHTML(row.querySelector("input")?.value || `Row ${idx + 1}`);
     const errors = JSON.parse(row.dataset.validationErrors || "{}");
-    Object.entries(errors).forEach(([, msg]) => messages.push(`❌ ${label}: ${msg}`));
+    Object.entries(errors).forEach(([, msg]) => messages.push(`❌ ${label}: ${escapeHTML(msg)}`));
 
     const groupName = row.querySelector(".group")?.value.trim();
     if (groupName) {
@@ -448,14 +448,14 @@ export function updateValidationWarnings(studies, excluded, softWarnings) {
   // Subgroup warnings
   Object.entries(subgroupMap).forEach(([group, studiesInGroup]) => {
     if (studiesInGroup.length < 2)
-      messages.push(`⚠️ Subgroup "${group}" has <2 studies (${studiesInGroup.join(", ")})`);
+      messages.push(`⚠️ Subgroup "${escapeHTML(group)}" has &lt;2 studies (${studiesInGroup.join(", ")})`);
   });
 
   // Excluded studies
-  excluded.forEach(e => messages.push(`⚠️ Excluded: ${e.label} (${e.reason})`));
+  excluded.forEach(e => messages.push(`⚠️ Excluded: ${escapeHTML(e.label)} (${escapeHTML(e.reason)})`));
 
   // Soft warnings
-  softWarnings.forEach(w => messages.push(w));
+  softWarnings.forEach(w => messages.push(escapeHTML(w)));
 
   // Analysis-level warnings
   const k = studies.length;
