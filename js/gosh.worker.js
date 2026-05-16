@@ -33,6 +33,23 @@
 // --allow-file-access-from-files.  The UI (ui.js) wraps Worker creation in
 // try/catch and falls back to chunked setTimeout on the main thread when the
 // Worker cannot be created.
+//
+// Shadowed functions (keep in sync when updating upstream)
+// --------------------------------------------------------
+// This file is self-contained (no import/importScripts) to support classic
+// Workers on file://.  When any upstream function changes, apply the equivalent
+// change here and update the line ranges below.  The sync-check in
+// run_tests.mjs verifies the PRNG constant and the GOSH_* values.
+//
+//   Worker symbol              Upstream                       Lines (upstream)
+//   ─────────────────────────  ─────────────────────────────  ────────────────
+//   GOSH_MAX_ENUM_K            gosh.js — exported constants   65–67
+//   GOSH_MAX_K                 gosh.js — exported constants   65–67
+//   GOSH_DEFAULT_MAX_SUBSETS   gosh.js — exported constants   65–67
+//   mulberry32                 gosh.js — mulberry32           72–80
+//   processSubset (inline)     gosh.js — processSubset        128–147
+//   enumeration loop           gosh.js — !sampled branch      149–154
+//   sampling loop              gosh.js — sampled branch       155–172
 // =============================================================================
 
 'use strict';

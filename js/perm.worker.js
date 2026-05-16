@@ -37,6 +37,36 @@
 //   { type: 'error', message: string }
 //
 // Self-contained: no import/importScripts.
+//
+// Shadowed functions (keep in sync when updating upstream)
+// --------------------------------------------------------
+// This file is self-contained to support classic Workers on file://.  When
+// any upstream function changes, apply the equivalent change here and update
+// the line ranges below.  Note: worker functions use flat (row-major)
+// Float64Arrays throughout; upstream uses 2-D JS arrays.  The sync-check in
+// run_tests.mjs verifies the PRNG constant, TOL, and estimateTau2 dispatch.
+//
+//   Worker symbol    Upstream                            Lines (upstream)
+//   ───────────────  ──────────────────────────────────  ────────────────
+//   mulberry32       gosh.js / perm.js — mulberry32      gosh.js 72–80
+//                                                        perm.js 41–49
+//   matInv           linalg.js — matInverse (flat array) 70–110
+//   subMatrix        perm.js — subMatrix (flat array)    64–66
+//   quadForm         perm.js — quadForm (flat array)     71–80
+//   quadFormRow      worker-specific helper              —
+//   fisherYates      perm.js — fisherYates               54–59
+//   cholFactor       linalg.js — cholFactor (flat array) 162–179
+//   cholInverse      linalg.js — cholInverse (flat array)218–227
+//   wlsSolve         linalg.js — wlsCholesky (flat array)232–257
+//   rowDot           worker-specific helper              —
+//   tau2DL           perm.js — tau2DL                    85–97
+//   tau2REML         perm.js — tau2REML                  102–128
+//   tau2ML           perm.js — tau2ML                    133–158
+//   tau2PM           perm.js — tau2PM                    163–181
+//   tau2HS           perm.js — tau2HS                    186–199
+//   tau2HE           perm.js — tau2HE                    204–217
+//   estimateTau2     perm.js — estimateTau2              222–229
+//   computeQMs       perm.js — inline in permTestSync    258–329
 // =============================================================================
 
 'use strict';
