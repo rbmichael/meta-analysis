@@ -5,8 +5,9 @@
 // Extracted from analysis.js (item 4.1.6 of TECHNICAL IMPROVEMENT ROADMAP).
 // =============================================================================
 
-import { chiSquareQuantile } from "./utils.js";
+import { chiSquareQuantile, chiSquareCDF } from "./utils.js";
 import { REML_TOL } from "./constants.js";
+import { GL20_X, GL20_W } from "./quadrature.js";
 
 function iterate(seed, updateFn, maxIter = 200, tol = REML_TOL) {
   let tau2 = seed;
@@ -317,11 +318,10 @@ export function tau2_PMM(studies, tol = REML_TOL, maxIter = 200, tau2Init = null
 // For intercept-only models (p=1) S·P·S is a rank-1 perturbed diagonal matrix;
 // its k−1 positive eigenvalues are found via the secular equation
 //   Σ bᵢ²/(dᵢ − λ) = W,   dᵢ = (vᵢ+τ²)/vᵢ,   bᵢ² = (vᵢ+τ²)/vᵢ²
-// The median of the weighted chi-square is approximated by a scaled χ²(ν)
-// (Patnaik/Satterthwaite 2-moment method):   c·χ²₀.₅(ν),
-// where c = Σλ²/(Σλ), ν = (Σλ)²/Σλ².
-// This approximation introduces ~3–4 % error vs the exact Farebrother CDF
-// but stays within the 5 % relative tolerance used by the benchmark tests.
+// The CDF of Σλᵢ χ²(1) is evaluated via the exact Imhof (1961) formula:
+// P(Q≤q) = ½−(1/π)∫₀^∞ sin(θ(u)−uq/2)/(u·ρ(u)) du, computed by composite
+// 20-point Gauss-Legendre quadrature (16 subintervals; truncation at amplitude < 1e-10).
+// Replaces the previous Patnaik/Satterthwaite 2-moment approximation (3–4 % error).
 export function tau2_GENQM(studies, tol = REML_TOL, maxIter = 200) {
   const k = studies.length;
   if (k <= 1) return 0;
@@ -366,28 +366,59 @@ export function tau2_GENQM(studies, tol = REML_TOL, maxIter = 200) {
     return lams;
   }
 
-  // 2-moment chi-sq approximation for median of Σλᵢ χ²(1)
-  function approxMedian(tau2) {
-    const lams = eigenvalues(tau2);
-    if (lams.length === 0) return chiSquareQuantile(0.5, k - 1);
-    const mu   = lams.reduce((s, l) => s + l, 0);
-    const sig2 = 2 * lams.reduce((s, l) => s + l * l, 0);
-    if (sig2 <= 0) return mu;
-    const c = sig2 / (2 * mu);
-    const nu = (2 * mu * mu) / sig2;
-    return c * chiSquareQuantile(0.5, nu);
+  // Exact Imhof (1961) CDF for Q = Σ lams[i]·χ²(1) evaluated at q.
+  // P(Q ≤ q) = ½ − (1/π)·∫₀^∞ sin(θ(u)−u·q/2) / (u·ρ(u)) du
+  // θ(u) = ½·Σ arctan(λⱼ·u),  log ρ(u) = ¼·Σ log(1+λⱼ²u²).
+  // Upper limit T is found by doubling until the integrand amplitude 1/(T·ρ(T)) < 1e-10;
+  // the integral is evaluated via composite 20-point Gauss-Legendre with 16 subintervals.
+  function imhofCDF(lams, q) {
+    if (lams.length === 0) return chiSquareCDF(q, k - 1);
+    if (lams.length === 1) return chiSquareCDF(q / lams[0], 1);
+    if (q <= 0) return 0;
+    const n = lams.length;
+
+    function integrand(u) {
+      let theta = 0, logRho = 0;
+      for (let j = 0; j < n; j++) {
+        const lu = lams[j] * u;
+        theta  += Math.atan(lu);
+        logRho += Math.log1p(lu * lu);
+      }
+      return Math.sin(theta * 0.5 - u * q * 0.5) / (u * Math.exp(logRho * 0.25));
+    }
+
+    // Find T s.t. amplitude 1/(T·ρ(T)) < 1e-10
+    let T = Math.max(4 / Math.max(...lams), 1e-3);
+    for (let it = 0; it < 50; it++) {
+      let logRho = 0;
+      for (let j = 0; j < n; j++) { const lu = lams[j] * T; logRho += Math.log1p(lu * lu); }
+      if (Math.exp(-logRho * 0.25) / T < 1e-10) break;
+      T *= 2;
+    }
+
+    // Composite GL20 on [0, T] with 16 equal subintervals
+    const halfH = T / 32; // h/2 where h = T/16
+    let s = 0;
+    for (let m = 0; m < 16; m++) {
+      const mid = (m + 0.5) * halfH * 2;
+      for (let i = 0; i < 20; i++) s += GL20_W[i] * integrand(mid + halfH * GL20_X[i]);
+    }
+
+    return Math.min(1, Math.max(0, 0.5 - s * halfH / Math.PI));
   }
 
-  if (approxMedian(0) >= Q_obs) return 0;
+  // Return 0 if Q_obs is at or below the median of Q_FE at τ²=0
+  if (imhofCDF(eigenvalues(0), Q_obs) <= 0.5) return 0;
 
-  // Bisect on τ² to find where approxMedian(τ²) = Q_obs
+  // Bisect on τ²: find where P(Q_FE(τ²) ≤ Q_obs) crosses 0.5 from above.
+  // imhofCDF is decreasing in τ² (larger τ² → heavier distribution → lower CDF at fixed Q_obs).
   let lo = 0, hi = 1;
-  while (approxMedian(hi) < Q_obs && hi < 1e6) hi *= 2;
+  while (imhofCDF(eigenvalues(hi), Q_obs) > 0.5 && hi < 1e6) hi *= 2;
   if (hi >= 1e6) return hi / 2; // fallback
 
   for (let i = 0; i < maxIter; i++) {
     const mid = (lo + hi) / 2;
-    if (approxMedian(mid) < Q_obs) lo = mid; else hi = mid;
+    if (imhofCDF(eigenvalues(mid), Q_obs) > 0.5) lo = mid; else hi = mid;
     if (hi - lo < tol) break;
   }
 
