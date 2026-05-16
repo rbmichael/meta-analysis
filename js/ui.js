@@ -4429,7 +4429,7 @@ async function runAnalysis() {
 
     // ── Phase 1: Parse input table ────────────────────────────────────────
     performance.mark("phase:parse:start");
-    const { studies, excluded, softWarnings, missingCorrelation } = collectStudies(type);
+    const { studies, excluded, softWarnings, missingCorrelation } = collectStudies(type, scaleModerators);
     performance.measure("phase:parse", "phase:parse:start");
 
     if (!studies.length) {

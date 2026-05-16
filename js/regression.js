@@ -46,18 +46,19 @@ export function subgroupAnalysis(studies, method="REML", ciMethod="normal", alph
     results[g] = {
       k: groupStudies.length,
       y: res.RE,
-      se: res.se ?? Math.sqrt(res.vi ?? 0),
+      se: res.seRE ?? res.se ?? Math.sqrt(res.vi ?? 0),
       ci: { lb: res.ciLow, ub: res.ciHigh },
       tau2: res.tau2 ?? 0,
       I2: res.I2 ?? 0
     };
     if(isFinite(res.Q)) Qwithin_sum += res.Q;
   });
-  let Qbetween = overall.Q - Qwithin_sum;
+  const Qtotal = isFinite(overall.Q) ? overall.Q : 0;
+  let Qbetween = Qtotal - Qwithin_sum;
   if(!isFinite(Qbetween) || Qbetween < 0) Qbetween = 0;
   const df = groupNames.length - 1;
   const p = 1 - chiSquareCDF(Qbetween, df);
-  return { groups: results, Qbetween, df, p, k: valid.length, G: groupNames.length, kNoGroup };
+  return { groups: results, Qtotal, Qwithin: Qwithin_sum, Qbetween, df, p, k: valid.length, G: groupNames.length, kNoGroup };
 }
 
 // ================= Q-PROFILE HETEROGENEITY CIs =================

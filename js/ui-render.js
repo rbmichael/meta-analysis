@@ -422,18 +422,21 @@ export function renderRegressionPanel(reg, method, ciMethod, kExcluded = 0, mods
               const dfLabel = reg.QMdist === "F"
                 ? `F(${mt.QMdf},\u2009${reg.QEdf})`
                 : `χ²(${mt.QMdf})`;
-              const lrtCells = hasLRT
-                ? `<td>${isFinite(mt.lrt) ? fmt(mt.lrt) : "NA"}</td>
-                   <td>${isFinite(mt.lrtP) ? regFmtP(mt.lrtP) : "NA"}</td>`
+              const lrtStatCell = hasLRT
+                ? `<td>${isFinite(mt.lrt) ? fmt(mt.lrt) : "NA"}</td>`
+                : "";
+              const lrtPCell = hasLRT
+                ? `<td>${isFinite(mt.lrtP) ? regFmtP(mt.lrtP) : "NA"}</td>`
                 : "";
               const adjCell = hasAdjPs
                 ? `<td>${regFmtP(adjModPs[mi])}</td>` : "";
               return `<tr>
                 <td>${mt.name}</td>
                 <td>${fmt(mt.QM)}</td>
-                ${lrtCells}
+                ${lrtStatCell}
                 <td>${dfLabel}</td>
                 <td>${regFmtP(mt.QMp)}</td>
+                ${lrtPCell}
                 ${adjCell}
               </tr>`;
             }).join("")}
@@ -1199,6 +1202,13 @@ export function buildSubgroupHTML(subgroup, profile, hasClusters) {
     <table border="1">
       <tr><th>Group</th><th>k</th><th>Effect</th><th>SE</th><th>CI</th><th>τ²</th><th>I² (%)</th></tr>
       ${rows}
+      <tr>
+        <td colspan="7" style="font-size:0.92em;color:var(--muted)">
+          <em>Q</em><sub>total</sub>(${subgroup.k - 1}) = ${subgroup.Qtotal.toFixed(3)}
+          &ensp;·&ensp;
+          <em>Q</em><sub>within</sub>(${subgroup.k - subgroup.G}) = ${subgroup.Qwithin.toFixed(3)}
+        </td>
+      </tr>
       <tr style="font-weight:bold;">
         <td colspan="7"><em>Q</em><sub>between</sub>(${subgroup.df}) = ${subgroup.Qbetween.toFixed(3)}, <em>p</em> ${fmtPval(subgroup.p)}</td>
       </tr>

@@ -90,6 +90,26 @@ export function makeModTd(name, type) {
  * Low-level: add one moderator to state + DOM.
  * Does not read form inputs; does not call runAnalysis.
  */
+function renderModTags() {
+  const container = document.getElementById("modTags");
+  if (!container) return;
+  container.innerHTML = "";
+  moderators.forEach(({ name }) => {
+    const span = document.createElement("span");
+    span.className = "mod-tag";
+    span.innerHTML = `${escapeHTML(name)} <button class="remove-mod-btn" title="Remove moderator">×</button>`;
+    span.querySelector("button").addEventListener("click", () => {
+      // Remove from analysis state only; keep the table column so the data isn't lost.
+      moderators.splice(0, moderators.length, ...moderators.filter(m => m.name !== name));
+      interactions.splice(0, interactions.length, ...interactions.filter(ix => ix.termA !== name && ix.termB !== name));
+      renderModTags();
+      _cb.onModeratorChanged();
+      _cb.markStale();
+    });
+    container.appendChild(span);
+  });
+}
+
 export function doAddModerator(name, type, transform = "linear") {
   if (!name || moderators.some(m => m.name === name)) return;
   moderators.push({ name, type, transform });
@@ -102,6 +122,7 @@ export function doAddModerator(name, type, transform = "linear") {
     const row = table.rows[i];
     row.insertBefore(makeModTd(name, type), row.lastElementChild);
   }
+  renderModTags();
 }
 
 /** Remove a moderator from state and from every table row. */
@@ -114,6 +135,7 @@ export function removeModerator(name) {
     const cell = [...table.rows[i].cells].find(c => c.dataset.mod === name);
     if (cell) cell.remove();
   }
+  renderModTags();
   _cb.onModeratorChanged();
   _cb.markStale();
 }
@@ -123,6 +145,7 @@ export function clearModerators() {
   moderators.splice(0);
   interactions.splice(0);
   document.querySelectorAll("[data-mod]").forEach(el => el.remove());
+  renderModTags();
 }
 
 // =============================================================================
@@ -490,7 +513,7 @@ export function updateValidationWarnings(studies, excluded, softWarnings) {
  * @returns {{ studies: object[], excluded: object[], softWarnings: string[],
  *             missingCorrelation: boolean }}
  */
-export function collectStudies(type) {
+export function collectStudies(type, extraMods = []) {
   const profile = effectProfiles[type];
   if (!profile) return { studies: [], excluded: [], softWarnings: [], missingCorrelation: false };
 
@@ -543,6 +566,15 @@ export function collectStudies(type) {
 
     moderators.forEach(({ name, type: mtype }, modIdx) => {
       const raw = (inputs[modOffset + modIdx] ?? "").trim();
+      study[name] = mtype === "continuous" ? (raw === "" ? NaN : +raw) : raw;
+    });
+
+    // Read scale-moderator (and other extra-mod) values from named columns when
+    // they are not already present as a regular moderator column.
+    extraMods.forEach(({ name, type: mtype }) => {
+      if (study[name] !== undefined) return;
+      const cell = [...row.cells].find(c => c.dataset.mod === name);
+      const raw  = cell ? (cell.querySelector("input")?.value ?? "").trim() : "";
       study[name] = mtype === "continuous" ? (raw === "" ? NaN : +raw) : raw;
     });
 
