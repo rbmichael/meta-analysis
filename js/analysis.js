@@ -26,25 +26,17 @@
 //   clES(d, ci)
 //     Common Language Effect Size Φ(d/√2); transforms d CI endpoints.
 //
-// Re-exported from sub-modules (import from here or directly — same binding)
-// --------------------------------------------------------------------------
-//   tau2.js        — export *  (all τ² estimators, logLik, RE_mean, FE_mean, I2)
-//   bayes.js       — profileLikCI, profileLikTau2, bayesMeta, priorSensitivity
-//   multivariate.js — vcalc, mvMeta
-//   binary.js      — metaMH, metaPeto
-//   pubbias.js     — eggerTest, beggTest, fatPetTest, petPeeseTest,
-//                    harbordTest, petersTest, deeksTest, rueckerTest,
-//                    failSafeN, henmiCopas, tesTest, waapWls
-//   influence.js   — influenceDiagnostics, leaveOneOut, cumulativeMeta,
-//                    estimatorComparison, baujat, blupMeta
-//   regression.js  — subgroupAnalysis, heterogeneityCIs, rcsKnots, rcsBasis,
-//                    buildDesignMatrix, tau2_metaReg, metaRegression,
-//                    testContrast, adjustPvals, lsModel, rvePooled, meta3level
-//   selection.js   — pCurve, pUniform, veveaHedges, SELECTION_PRESETS,
-//                    SEL_CUTS_ONE_SIDED, SEL_CUTS_TWO_SIDED, bfgs,
-//                    selIntervalProbs, selIntervalIdx, selectionLogLik,
-//                    halfNormalSelModel, powerSelModel, negexpSelModel, betaSelModel
-//   robust.js      — sandwichVar, robustWlsResult, robustMeta
+// Re-exported from sub-modules via export * (import from here or directly — same binding)
+// -------------------------------------------------------------------------------------
+//   tau2.js         — export *  (τ² estimators, logLik, RE_mean, FE_mean, I2)
+//   bayes.js        — export *
+//   multivariate.js — export *
+//   binary.js       — export *
+//   pubbias.js      — export *
+//   influence.js    — export *
+//   regression.js   — export *
+//   selection.js    — export *
+//   robust.js       — export *
 //
 // Circular imports (bayes.js, regression.js, robust.js) are safe: cross-module
 // calls only happen inside function bodies, never at module initialisation time.
@@ -139,33 +131,13 @@ export function compute(s, type, options = {}) {
   return profile.compute(s);
 }
 
-// τ² estimators and primitives (tau2.js) — export * kept: all names are τ² functions
 export * from "./tau2.js";
-
-// Bayesian meta-analysis (bayes.js)
-export { profileLikCI, profileLikTau2, bayesMeta, priorSensitivity } from "./bayes.js";
-
-// Multivariate meta-analysis (multivariate.js)
-export { vcalc, mvMeta } from "./multivariate.js";
-
-
-// Binary-data pooled estimators (binary.js)
-export { metaMH, metaPeto } from "./binary.js";
-
-
-// Publication bias tests (pubbias.js)
-export { eggerTest, beggTest, fatPetTest, petPeeseTest,
-         harbordTest, petersTest, deeksTest, rueckerTest,
-         failSafeN, henmiCopas, tesTest, waapWls } from "./pubbias.js";
-
-// Sensitivity and influence (influence.js)
-export { influenceDiagnostics, leaveOneOut, cumulativeMeta,
-         estimatorComparison, baujat, blupMeta } from "./influence.js";
-
-// Meta-regression and moderators (regression.js)
-export { subgroupAnalysis, heterogeneityCIs, rcsKnots, rcsBasis,
-         buildDesignMatrix, tau2_metaReg, metaRegression, testContrast, adjustPvals,
-         lsModel, rvePooled, meta3level } from "./regression.js";
+export * from "./bayes.js";
+export * from "./multivariate.js";
+export * from "./binary.js";
+export * from "./pubbias.js";
+export * from "./influence.js";
+export * from "./regression.js";
 
 /**
  * Common Language Effect Size (CLES / CL statistic / AUC).
@@ -370,12 +342,6 @@ export function meta(studies, method="DL", ciMethod="normal", alpha=0.05, tau2In
   return _result;
 }
 
-// Selection models and p-value methods (selection.js)
-export { pCurve, pUniform, veveaHedges, SELECTION_PRESETS,
-         SEL_CUTS_ONE_SIDED, SEL_CUTS_TWO_SIDED,
-         bfgs, selIntervalProbs, selIntervalIdx, selectionLogLik,
-         halfNormalSelModel, powerSelModel, negexpSelModel, betaSelModel } from "./selection.js";
-
-// Cluster-robust (sandwich) variance estimation (robust.js)
-export { sandwichVar, robustWlsResult, robustMeta } from "./robust.js";
+export * from "./selection.js";
+export * from "./robust.js";
 
