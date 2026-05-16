@@ -23,7 +23,9 @@ export const HELP = {
   "input.session": {
     title: "Save / Load Session",
     body:  "Save Session: serialises the full application state — data, effect type, " +
-           "τ² estimator, CI method, moderators, and RoB ratings — to a JSON file. " +
+           "τ² estimator, CI method, moderators, scale moderators, interaction terms, " +
+           "cumulative order, trim-and-fill toggles, Bayesian priors, selection-model settings, " +
+           "and RoB ratings — to a JSON file. " +
            "Load Session: restores a previously saved session from that JSON file. " +
            "Sessions are also auto-saved to browser localStorage; a recovery banner " +
            "appears on next load if unsaved changes are detected.",
@@ -63,7 +65,7 @@ export const HELP = {
   "input.rob": {
     title: "Risk-of-bias domains",
     body:  "User-defined assessment domains (e.g. Randomisation, Blinding, Attrition). " +
-           "Each domain gets a Low / Some concerns / High / Not reported rating per study, " +
+           "Each domain gets a Low / Some concerns / High / NI (no information) rating per study, " +
            "entered in the RoB grid that appears below the data table once domains are added. " +
            "Results are visualised as a per-study traffic light grid and a per-domain summary bar chart " +
            "in the Risk of Bias section of the Results pane.",
@@ -789,7 +791,8 @@ export const HELP = {
     body:  "Regresses the standardised effect size on precision (1 / SE). " +
            "A significant non-zero intercept indicates funnel-plot asymmetry, " +
            "which may reflect publication bias. Has inflated Type I error for " +
-           "ratio measures (OR, RR) and requires at least 10 studies for adequate power.",
+           "ratio measures (OR, RR). Has low power below ~10 studies; the app accepts k ≥ 3 " +
+           "but small-k results should be treated as exploratory.",
   },
 
   "bias.begg": {
@@ -988,11 +991,11 @@ export const HELP = {
 
   "sens.estimator": {
     title: "τ² estimator comparison",
-    body:  "Runs the random-effects model with all seven available τ² estimators " +
-           "(DL, REML, PM, ML, HS, HE, SJ) and displays their pooled estimates side " +
-           "by side. If results differ substantially across estimators, the conclusion " +
-           "is sensitive to the choice of heterogeneity estimation method. The " +
-           "currently selected estimator is highlighted.",
+    body:  "Runs the random-effects model with all 15 available τ² estimators " +
+           "(DL, REML, EB, PM, PMM, GENQM, ML, HS, HE, SJ, GENQ, SQGENQ, DLIT, EBLUP, HSk) " +
+           "and displays their pooled estimates side by side. If results differ substantially " +
+           "across estimators, the conclusion is sensitive to the choice of heterogeneity " +
+           "estimation method. The currently selected estimator is highlighted.",
   },
 
   // ------------------------------------------------------------------ //
@@ -1045,7 +1048,7 @@ export const HELP = {
            "The selection-corrected μ̂ and τ² are obtained by MLE jointly with δ. " +
            "The likelihood ratio test (H₀: δ = 0) tests for selective reporting. " +
            "Normalising constants are computed by 20-point Gauss-Hermite quadrature. " +
-           "Requires k ≥ 6. Matches metafor selmodel(type='halfnorm').",
+           "Requires k ≥ 4. Matches metafor selmodel(type='halfnorm').",
   },
 
   "sel.power": {
@@ -1057,7 +1060,7 @@ export const HELP = {
            "The selection-corrected μ̂ and τ² are obtained by MLE jointly with δ. " +
            "The likelihood ratio test (H₀: δ = 0) tests for selective reporting. " +
            "Normalising constants are computed by 20-point Gauss-Hermite quadrature. " +
-           "Requires k ≥ 6. Matches metafor selmodel(type='power').",
+           "Requires k ≥ 4. Matches metafor selmodel(type='power').",
   },
 
   "sel.beta": {
@@ -1070,7 +1073,7 @@ export const HELP = {
            "The selection-corrected μ̂ and τ² are obtained by MLE jointly with a and b. " +
            "The likelihood ratio test (H₀: a = b = 1) uses df = 2. " +
            "Normalising constants are computed by 20-point Gauss-Hermite quadrature. " +
-           "Requires k ≥ 6. Matches metafor selmodel(type='beta').",
+           "Requires k ≥ 4. Matches metafor selmodel(type='beta').",
   },
 
   "sel.negexp": {
@@ -1082,7 +1085,7 @@ export const HELP = {
            "The selection-corrected μ̂ and τ² are obtained by MLE jointly with δ. " +
            "The likelihood ratio test (H₀: δ = 0) tests for selective reporting. " +
            "Normalising constants are computed by 20-point Gauss-Hermite quadrature. " +
-           "Requires k ≥ 6. Matches metafor selmodel(type='negexp').",
+           "Requires k ≥ 4. Matches metafor selmodel(type='negexp').",
   },
 
   // ------------------------------------------------------------------ //
@@ -1170,7 +1173,7 @@ export const HELP = {
            "(continuous or categorical) using weighted least squares with RE weights. " +
            "Reports β coefficients with SEs, z/t statistics, p-values, and 95% CIs; " +
            "Q_M (omnibus moderator test); Q_E (residual heterogeneity); " +
-           "R² (proportion of variance explained); and VIFs (collinearity). " +
+           "R² (proportion of variance explained). " +
            "Bubble plots are generated per continuous moderator. " +
            "Rule of thumb: ≥ 10 studies per predictor for adequate power.",
   },
@@ -1476,8 +1479,8 @@ export const HELP = {
 
   "bayes.model": {
     title: "Bayesian meta-analysis",
-    body:  "Fits a conjugate normal-normal random-effects model using a grid " +
-           "approximation over τ (300 points). " +
+    body:  "Fits a conjugate normal-normal random-effects model using an " +
+           "adaptive grid approximation over τ (100–300 points, scaled to k). " +
            "Prior on μ: N(μ₀, σ_μ²); prior on τ: HalfNormal(σ_τ). " +
            "Because the prior on μ is conjugate given τ, the marginal " +
            "posterior of μ is an analytic mixture of normals — no MCMC required. " +
@@ -1509,8 +1512,8 @@ export const HELP = {
     title: "Ψ structure",
     body:  "Determines how many parameters describe the between-study covariance matrix Ψ. " +
            "CS (Compound Symmetric): all outcomes share one variance τ² and one correlation ρ — 2 parameters, most parsimonious. " +
-           "Diagonal: separate τ²ⱼ per outcome, zero between-study correlation — P parameters. " +
-           "Unstructured (UN): freely estimated P×P Cholesky Ψ — P(P+1)/2 parameters; requires many studies. " +
+           "Diag (Diagonal): separate τ²ⱼ per outcome, zero between-study correlation — P parameters. " +
+           "UN (Unstructured): freely estimated P×P Cholesky Ψ — P(P+1)/2 parameters; requires many studies. " +
            "Prefer CS when k is small relative to P; UN is appropriate only when k ≫ P.",
   },
 
@@ -1540,7 +1543,7 @@ export const HELP = {
            "Cov(yⱼ, yₖ) = ρ · √vⱼ · √vₖ for j ≠ k within the same study. " +
            "This value is rarely reported in primary studies and must be assumed. " +
            "ρ = 0 treats outcomes as independent within studies (conservative); " +
-           "ρ = 0.5 is a common default. " +
+           "ρ = 0.5 is the app default and is commonly used in practice. " +
            "Sensitivity to this assumption can be checked by re-running with ρ = 0 and ρ = 0.8.",
   },
 
