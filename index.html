@@ -231,9 +231,18 @@
                     <option value="effect_desc">Effect descending</option>
                   </select>
                 </label>
+              </div>
+            </div>
+
+            <div class="settings-group-sep" role="separator"></div>
+
+            <!-- Group: Trim & Fill -->
+            <div class="settings-group">
+              <span class="settings-group-label">Trim &amp; Fill<button class="help-btn" data-help="bias.trimfill" title="Help">?</button></span>
+              <div class="settings-group-controls">
                 <label class="inline">
                   <input type="checkbox" id="useTrimFill">
-                  Trim-and-fill<button class="help-btn" data-help="bias.trimfill" title="Help">?</button>
+                  Enable
                 </label>
                 <label class="inline">
                   Estimator:
@@ -245,9 +254,8 @@
                 </label>
                 <label class="inline">
                   <input type="checkbox" id="useTFAdjusted">
-                  Show adjusted RE<button class="help-btn" data-help="bias.trimfill" title="Help">?</button>
+                  Show adjusted RE
                 </label>
-                <p class="settings-hint">Results appear in the Publication Bias section.</p>
               </div>
             </div>
 
@@ -809,7 +817,6 @@
         <!-- ── Section 8: P-value Analyses (collapsed) ── -->
         <details class="results-section" id="pvalSection">
           <summary class="results-section-header">P-value Analyses</summary>
-          <div id="pCurvePanel"></div>
           <div class="plot-block" id="pCurvePlotBlock" style="display:none">
             <p class="plot-label">P-curve<button class="help-btn" data-help="bias.pcurve" title="Help">?</button></p>
             <div class="plot-export">
@@ -819,7 +826,7 @@
             </div>
             <svg id="pCurvePlot" role="img" aria-label="P-curve plot" width="500" height="380"></svg>
           </div>
-          <div id="pUniformPanel"></div>
+          <div id="pCurvePanel"></div>
           <div class="plot-block" id="pUniformPlotBlock" style="display:none">
             <p class="plot-label">P-uniform<button class="help-btn" data-help="bias.puniform" title="Help">?</button></p>
             <div class="plot-export">
@@ -829,6 +836,7 @@
             </div>
             <svg id="pUniformPlot" role="img" aria-label="P-uniform plot" width="500" height="170"></svg>
           </div>
+          <div id="pUniformPanel"></div>
         </details>
 
         <!-- ── Section 9: Selection Model ── -->

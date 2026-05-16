@@ -865,6 +865,8 @@ export function renderSelectionModelPanel(r, mode, weightFn, profile) {
               <td>${fmtV(r.tau2)} &nbsp;·&nbsp; unadjusted: ${fmtV(r.tau2_unsel)}</td></tr>
           <tr><td>LRT (H₀: δ = 0)</td>
               <td>χ²(1) = ${fmtV(r.LRT)}, <em>p</em> ${fmtP(r.LRTp)}</td></tr>
+          <tr><td>Log-likelihood</td>
+              <td>sel: ${fmtV(r.logLikSel)} · unsel: ${fmtV(r.logLikUnsel)}<span class="sel-note"> (ML; omits normalising constants)</span></td></tr>
         </tbody>
       </table>
       ${convNote}`;
@@ -898,6 +900,8 @@ export function renderSelectionModelPanel(r, mode, weightFn, profile) {
               <td>${fmtV(r.tau2)} &nbsp;·&nbsp; unadjusted: ${fmtV(r.tau2_unsel)}</td></tr>
           <tr><td>LRT (H₀: δ = 0)</td>
               <td>χ²(1) = ${fmtV(r.LRT)}, <em>p</em> ${fmtP(r.LRTp)}</td></tr>
+          <tr><td>Log-likelihood</td>
+              <td>sel: ${fmtV(r.logLikSel)} · unsel: ${fmtV(r.logLikUnsel)}<span class="sel-note"> (ML; omits normalising constants)</span></td></tr>
         </tbody>
       </table>
       ${convNote}`;
@@ -931,6 +935,8 @@ export function renderSelectionModelPanel(r, mode, weightFn, profile) {
               <td>${fmtV(r.tau2)} &nbsp;·&nbsp; unadjusted: ${fmtV(r.tau2_unsel)}</td></tr>
           <tr><td>LRT (H₀: δ = 0)</td>
               <td>χ²(1) = ${fmtV(r.LRT)}, <em>p</em> ${fmtP(r.LRTp)}</td></tr>
+          <tr><td>Log-likelihood</td>
+              <td>sel: ${fmtV(r.logLikSel)} · unsel: ${fmtV(r.logLikUnsel)}<span class="sel-note"> (ML; omits normalising constants)</span></td></tr>
         </tbody>
       </table>
       ${convNote}`;
@@ -966,6 +972,8 @@ export function renderSelectionModelPanel(r, mode, weightFn, profile) {
               <td>${fmtV(r.tau2)} &nbsp;·&nbsp; unadjusted: ${fmtV(r.tau2_unsel)}</td></tr>
           <tr><td>LRT (H₀: a = b = 1)</td>
               <td>χ²(2) = ${fmtV(r.LRT)}, <em>p</em> ${fmtP(r.LRTp)}</td></tr>
+          <tr><td>Log-likelihood</td>
+              <td>sel: ${fmtV(r.logLikSel)} · unsel: ${fmtV(r.logLikUnsel)}<span class="sel-note"> (ML; omits normalising constants)</span></td></tr>
         </tbody>
       </table>
       ${convNote}`;
@@ -1009,9 +1017,10 @@ export function renderSelectionModelPanel(r, mode, weightFn, profile) {
   const ciHi    = fmtDisp(r.mu + 1.96 * r.se_mu);
   const muUnadj = fmtDisp(r.RE_unsel);
 
-  // ---- LRT row (MLE only) ----
+  // ---- LRT + LL rows (MLE only) ----
   const lrtRow = isMLE
-    ? `<tr><td>LRT (H₀: no selection)</td><td colspan="${K}">χ²(${r.LRTdf}) = ${fmtV(r.LRT)}, <em>p</em> ${fmtP(r.LRTp)}</td></tr>`
+    ? `<tr><td>LRT (H₀: no selection)</td><td colspan="${K}">χ²(${r.LRTdf}) = ${fmtV(r.LRT)}, <em>p</em> ${fmtP(r.LRTp)}</td></tr>
+       <tr><td>Log-likelihood</td><td colspan="${K}">sel: ${fmtV(r.logLikSel)} · unsel: ${fmtV(r.logLikUnsel)}<span class="sel-note"> (ML; omits normalising constants)</span></td></tr>`
     : "";
 
   // ---- Convergence note (MLE only) ----

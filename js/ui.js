@@ -3694,8 +3694,8 @@ function _runCoreMeta(studies, opts) {
       ? profileLikTau2(studies, { method })
       : null;
 
-  const mAdjusted = (useTF && useTFAdjusted && tf.length > 0)
-    ? meta([...studies, ...tf], method, ciMethod, alpha)
+  const mAdjusted = (useTF && useTFAdjusted)
+    ? (tf.length > 0 ? meta([...studies, ...tf], method, ciMethod, alpha) : m)
     : null;
 
   const rveResult = (hasClusters && !isMHorPeto)
@@ -4129,7 +4129,13 @@ function _renderAllResults(ctx) {
     &nbsp;&nbsp;${hBtn("bias.tes")}TES: O = ${isFinite(tes.O)?tes.O:"NA"} | E = ${isFinite(tes.E)?fmt(tes.E):"NA"} | χ²(k−1) = ${isFinite(tes.chi2)?fmt(tes.chi2):"NA (k<2)"} | ${isFinite(tes.p)?`<em>p</em> ${fmtPval(tes.p)}`:"<em>p</em> (k<2)"}${isFinite(tes.p)&&tes.p<0.1?" <span style='color:var(--color-warning)'>⚠ excess</span>":""}<br>
     &nbsp;&nbsp;${hBtn("bias.waap")}WAAP-WLS: ${waapStats}<br>
     &nbsp;&nbsp;${hBtn("bias.hc")}Henmi-Copas: ${hcStats}<br>
-    <b>Trim &amp; Fill:</b>${hBtn("bias.trimfill")} ${useTF?"ON":"OFF"} (${useTF?tfEstimator+" estimator, ":""}${tf.length} filled studies)
+    <b>Trim &amp; Fill:</b>${hBtn("bias.trimfill")} ${useTF ? (() => {
+      const k0Line = `k₀ = ${tf.length} (${tfEstimator} estimator)`;
+      const adjLine = mAdjusted
+        ? `, adjusted RE = ${fmt(profile.transform(mAdjusted.RE))}, SE = ${fmt(mAdjusted.seRE)}, τ² = ${fmt(mAdjusted.tau2)}, 95% CI [${fmt(profile.transform(mAdjusted.ciLow))}, ${fmt(profile.transform(mAdjusted.ciHigh))}]`
+        : "";
+      return k0Line + adjLine;
+    })() : "OFF"}
     <details style="margin-top:4px">
       <summary style="cursor:pointer;color:var(--fg-muted);font-size:0.9em">Additional regression tests (binary outcomes)</summary>
       <div style="margin-top:4px">
