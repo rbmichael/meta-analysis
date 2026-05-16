@@ -3945,7 +3945,8 @@ function _renderAllResults(ctx) {
               m=${tl.kCluster} cluster${tl.kCluster === 1 ? "" : "s"} &nbsp;·&nbsp; k=${tl.k} studies &nbsp;·&nbsp; df=${tl.df}<br>
               ${hBtn("threelevel.tau2")}σ²<sub>within</sub>=${fmt(tl.tau2_within)} &nbsp;·&nbsp; σ²<sub>between</sub>=${fmt(tl.tau2_between)}<br>
               ${hBtn("threelevel.I2")}<em>I</em>²<sub>within</sub>=${fmt(tl.I2_within)}% &nbsp;·&nbsp; <em>I</em>²<sub>between</sub>=${fmt(tl.I2_between)}%<br>
-              ${hBtn("het.Q")}<em>Q</em>(${tl.df}) = ${fmt(tl.Q)} | method=REML
+              ${hBtn("het.Q")}<em>Q</em>(${tl.df}) = ${fmt(tl.Q)} | method=REML<br>
+              LL = ${fmt(tl.logLik)} (REML; omits normalising constants from R's logLik() convention)
             </div>
           `;
         }

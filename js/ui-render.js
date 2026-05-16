@@ -105,7 +105,7 @@ export function buildRegCoeffRows(reg, adjPs = null, mods = []) {
   // column indices are tracked in modTests.
   const multiMod = mods.length > 1
     && Array.isArray(reg.modTests) && reg.modTests.length > 0;
-  const colCount = 8 + (hasRobust ? 2 : 0);  // Term + β + SE + stat + p + CI + VIF + stars [+ Rob.SE + Rob.p]
+  const colCount = 8 + (hasRobust ? 4 : 0);  // Term + β + SE + stat + p + CI + VIF + stars [+ Rob.SE + Rob.t + Rob.p + Rob.CI]
 
   function vifCell(j) {
     if (!hasVif || j === 0) return `<td class="reg-vif">—</td>`;
@@ -117,9 +117,14 @@ export function buildRegCoeffRows(reg, adjPs = null, mods = []) {
 
   function dataRow(j) {
     const [lo, hi] = reg.ci[j];
-    const robustCells = hasRobust
-      ? `<td>${fmt(reg.robustSE[j])}</td><td>${regFmtP(reg.robustP[j])}</td>`
-      : "";
+    const robustCells = hasRobust ? (() => {
+      const rci = Array.isArray(reg.robustCi?.[j]) ? reg.robustCi[j] : [NaN, NaN];
+      const rt  = isFinite(reg.robustZ?.[j]) ? fmt(reg.robustZ[j]) : "NA";
+      return `<td>${fmt(reg.robustSE[j])}</td>`
+           + `<td>${rt}</td>`
+           + `<td>${regFmtP(reg.robustP[j])}</td>`
+           + `<td>[${fmt(rci[0])}, ${fmt(rci[1])}]</td>`;
+    })() : "";
     return `<tr class="${j === 0 ? "reg-intercept" : ""}">
       <td>${reg.colNames[j]}</td>
       <td>${fmt(reg.beta[j])}</td>
@@ -448,7 +453,7 @@ export function renderRegressionPanel(reg, method, ciMethod, kExcluded = 0, mods
     : "";
 
   const robustHeaders = reg.isClustered
-    ? `<th>Rob.SE</th><th>Rob.<em>p</em></th>`
+    ? `<th>Rob.SE</th><th>Rob.<em>t</em></th><th>Rob.<em>p</em></th><th>Rob.CI</th>`
     : "";
 
   panel.innerHTML = `

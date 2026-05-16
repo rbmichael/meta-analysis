@@ -95,8 +95,10 @@ export function sandwichVar(X, w, residuals, clusterIds) {
   const A = matInverse(XtWX);
   if (A === null) return { error: "Design matrix is singular; robust SE not available." };
 
-  // Small-sample CR1 correction: C / (C − p)
-  const cr1 = C / (C - p);
+  // Small-sample CR1 correction: C / (C − 1), matching clubSandwich::coef_test(vcov="CR1").
+  // Analogous to HC1 (n/(n-1)) but at the cluster level; invariant to p.
+  // Note: df for t-tests remains C − p (see return value), which is separate from this scale factor.
+  const cr1 = C / (C - 1);
 
   // Meat B = Σ_c g_c g_c'   where g_c = Σ_{i∈c} w_i X[i] ê_i   (p-vector)
   const B = Array.from({ length: p }, () => Array(p).fill(0));
