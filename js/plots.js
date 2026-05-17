@@ -231,13 +231,24 @@ function paginate(arr, options = {}) {
 function attachTooltip(sel, htmlFn) {
   const tt = selTooltip();
   return sel
+    .attr("tabindex", 0)
+    .attr("role", "button")
     .on("mousemove", (event, d) => {
       tt.style("opacity", 1)
         .html(htmlFn(d))
         .style("left", (event.pageX + TOOLTIP_OFFSET.x) + "px")
         .style("top",  (event.pageY + TOOLTIP_OFFSET.y) + "px");
     })
-    .on("mouseout", () => tt.style("opacity", 0));
+    .on("mouseout", () => tt.style("opacity", 0))
+    .on("focus", (event, d) => {
+      const rect = event.target.getBoundingClientRect();
+      tt.style("opacity", 1)
+        .html(htmlFn(d))
+        .style("left", (rect.right  + window.scrollX + TOOLTIP_OFFSET.x) + "px")
+        .style("top",  (rect.top   + window.scrollY + TOOLTIP_OFFSET.y) + "px");
+    })
+    .on("blur",    () => tt.style("opacity", 0))
+    .on("keydown", (event) => { if (event.key === "Escape") tt.style("opacity", 0); });
 }
 
 // truncateLabel(text, maxPx, fontPx, bold)
@@ -291,6 +302,27 @@ function placeLegend(iW, iH, lW, lH, corner = "tr", pad = 6) {
   if (corner === "tl") return { x: pad, y: pad };
   if (corner === "br") return { x: iW - lW - pad, y: iH - lH - pad };
   return { x: pad, y: iH - lH - pad };
+}
+
+// initSvg(selector, ariaLabel)
+// Combines clearAndSelectSVG, aria-label attribute, and SVG <title> in one call.
+// Use instead of the clearAndSelectSVG + svg.attr("aria-label") pattern.
+function initSvg(selector, ariaLabel) {
+  const svg = clearAndSelectSVG(selector);
+  svg.attr("aria-label", ariaLabel);
+  svg.append("title").text(ariaLabel);
+  return svg;
+}
+
+// Returns a D3 symbol path string for BW-mode group differentiation.
+// groupIdx — 0-based group index (cycles through BW_MARKERS)
+// size     — approximate area in px² (default 64 ≈ r 5 circle)
+function bwSymbolPath(groupIdx, size = 64) {
+  const markers = [
+    d3.symbolCircle, d3.symbolSquare, d3.symbolTriangle,
+    d3.symbolDiamond, d3.symbolCross,
+  ];
+  return d3.symbol().type(markers[groupIdx % markers.length]).size(size)();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -406,6 +438,7 @@ export function drawBubble(studies, reg, mod, container, options = {}) {
   const svg = setSvgSize(d3.select(container).append("svg")
     .attr("role", "img")
     .attr("aria-label", _bubbleLabel), W, H);
+  svg.append("title").text(_bubbleLabel);
   if (T.bg && T.bg !== "transparent") {
     svg.insert("rect", ":first-child")
       .attr("width", W).attr("height", H).attr("fill", T.bg);
@@ -628,6 +661,7 @@ export function drawPartialResidualBubble(studies, reg, mod, container, options 
   const svg = setSvgSize(d3.select(container).append("svg")
     .attr("role", "img")
     .attr("aria-label", _partialLabel), W, H);
+  svg.append("title").text(_partialLabel);
   if (T.bg && T.bg !== "transparent") {
     svg.insert("rect", ":first-child")
       .attr("width", W).attr("height", H).attr("fill", T.bg);
@@ -1010,8 +1044,7 @@ function forestDrawHetSummary(ctx, m) {
 }
 
 export function drawForest(studies, m, options = {}) {
-  const svg       = clearAndSelectSVG("#forestPlot");
-  svg.attr("aria-label", "Forest plot");
+  const svg       = initSvg("#forestPlot", "Forest plot");
   const ciMethod  = options.ciMethod || "normal";
   const profile   = options.profile  || { transform: x => x };
   const T         = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
@@ -1026,6 +1059,16 @@ export function drawForest(studies, m, options = {}) {
   const studyCrit    = normalQuantile(1 - alpha / 2);
   const feCiLow  = isFinite(m.FE) ? m.FE - studyCrit * m.seFE : NaN;
   const feCiHigh = isFinite(m.FE) ? m.FE + studyCrit * m.seFE : NaN;
+
+  // Accessible description with key stats for screen readers
+  { const re_t = isFinite(m.RE) ? profile.transform(m.RE) : NaN;
+    const desc = [
+      `k = ${studies.length} studies`,
+      isFinite(re_t) ? `RE = ${(+re_t.toFixed(3))} [${(+profile.transform(m.ciLow).toFixed(3))}, ${(+profile.transform(m.ciHigh).toFixed(3))}]` : null,
+      isFinite(m.tau2) ? `τ² = ${m.tau2.toFixed(4)}` : null,
+      isFinite(m.I2)   ? `I² = ${m.I2.toFixed(1)}%`  : null,
+    ].filter(Boolean).join("; ");
+    svg.append("desc").text(desc); }
 
   const ciMethodLabel = {
     normal: "Normal (z)", t: "t-distribution", KH: "Knapp-Hartung", PL: "Profile Likelihood"
@@ -1406,8 +1449,7 @@ function funnelDrawLegend(svg, W, margin, BANDS, T) {
 export function drawFunnel(studies, m, profile, options = {}) {
   const egger = options.egger ?? null;
   profile = profile || { transform: x => x };
-  const svg = clearAndSelectSVG("#funnelPlot");
-  svg.attr("aria-label", "Funnel plot");
+  const svg = initSvg("#funnelPlot", "Funnel plot");
 
   if (!studies || studies.length === 0) return;
 
@@ -1549,8 +1591,7 @@ export function drawFunnel(studies, m, profile, options = {}) {
 //   influence — array from influenceDiagnostics(), each entry has
 //               { label, hat, cookD, highLeverage, highCookD }
 export function drawInfluencePlot(influence, options = {}) {
-  const svg = clearAndSelectSVG("#influencePlot");
-  svg.attr("aria-label", "Influence plot");
+  const svg = initSvg("#influencePlot", "Influence plot");
 
   if (!influence || influence.length < 2) return;
 
@@ -1702,8 +1743,7 @@ export function drawInfluencePlot(influence, options = {}) {
 //   cumulativeResults — array from cumulativeMeta(), already in order
 //   profile           — effect-type profile with .label, .transform
 export function drawCumulativeForest(cumulativeResults, profile, options = {}) {
-  const svg = clearAndSelectSVG("#cumulativePlot");
-  svg.attr("aria-label", "Cumulative forest plot");
+  const svg = initSvg("#cumulativePlot", "Cumulative forest plot");
 
   if (!cumulativeResults || cumulativeResults.length === 0) return;
 
@@ -1880,8 +1920,7 @@ export function drawCumulativeForest(cumulativeResults, profile, options = {}) {
 // purpose here is visual inspection of the evolving dot pattern).
 export function drawCumulativeFunnel(cumulativeStudies, cumResults, profile, stepIdx, options = {}) {
   profile = profile || { transform: x => x };
-  const svg = clearAndSelectSVG("#cumulativeFunnelPlot");
-  svg.attr("aria-label", "Cumulative funnel plot");
+  const svg = initSvg("#cumulativeFunnelPlot", "Cumulative funnel plot");
 
   if (!cumulativeStudies || cumulativeStudies.length === 0 || !cumResults) return;
 
@@ -2064,8 +2103,7 @@ export function drawCumulativeFunnel(cumulativeStudies, cumResults, profile, ste
 // Parameters:
 //   result — object returned by pCurve() in analysis.js
 export function drawPCurve(result, options = {}) {
-  const svg = clearAndSelectSVG("#pCurvePlot");
-  svg.attr("aria-label", "p-curve plot");
+  const svg = initSvg("#pCurvePlot", "p-curve plot");
 
   if (!result || result.k === 0) return;
 
@@ -2259,8 +2297,7 @@ export function drawPCurve(result, options = {}) {
 //   m       — meta() result, used for RE estimate and CI
 //   profile — effect profile (provides .transform and .label)
 export function drawPUniform(result, m, profile, options = {}) {
-  const svg = clearAndSelectSVG("#pUniformPlot");
-  svg.attr("aria-label", "p-uniform plot");
+  const svg = initSvg("#pUniformPlot", "p-uniform plot");
 
   if (!result || result.k === 0 || !isFinite(result.estimate)) return;
 
@@ -2402,8 +2439,7 @@ export function drawPUniform(result, m, profile, options = {}) {
 //     • Jittered circles        → individual studies, r ∝ 1/SE
 //   Imputed (trim-fill) studies rendered with reduced opacity.
 export function drawOrchardPlot(studies, m, profile, options = {}) {
-  const svg = clearAndSelectSVG("#orchardPlot");
-  svg.attr("aria-label", "Orchard plot");
+  const svg = initSvg("#orchardPlot", "Orchard plot");
 
   if (!studies || studies.length === 0) return;
 
@@ -2630,8 +2666,7 @@ export function drawOrchardPlot(studies, m, profile, options = {}) {
 // Studies that don't fit are hidden via an SVG clipPath so the x-axis always
 // remains visible.
 export function drawCaterpillarPlot(studies, m, profile, options = {}) {
-  const svg = clearAndSelectSVG("#caterpillarPlot");
-  svg.attr("aria-label", "Caterpillar plot");
+  const svg = initSvg("#caterpillarPlot", "Caterpillar plot");
 
   if (!studies || studies.length === 0) return;
 
@@ -2665,6 +2700,10 @@ export function drawCaterpillarPlot(studies, m, profile, options = {}) {
     if (T.useBwShapes) return T.fg;
     const idx = allGroups.indexOf(grp);
     return idx >= 0 ? GROUP_COLORS[idx % GROUP_COLORS.length] : T.fgSubtle;
+  };
+  const groupDash = grp => {
+    if (!T.useBwShapes || !hasGroups) return "none";
+    return BW_DASHES[hashGroupLabel(grp) % BW_DASHES.length];
   };
   // Right margin: expand to a gutter wide enough for the group legend when needed
   const maxGroupLen = hasGroups ? Math.max(...allGroups.map(g => g.length)) : 0;
@@ -2723,12 +2762,14 @@ export function drawCaterpillarPlot(studies, m, profile, options = {}) {
     const color = hasGroups ? groupColor(s.group || "") : T.fgSubtle;
 
     // CI line
+    const ciDash = groupDash(s.group || "");
     g.append("line")
       .attr("x1", x(lo)).attr("x2", x(hi))
       .attr("y1", cy).attr("y2", cy)
       .attr("stroke", color)
       .attr("stroke-width", s.filled ? 1 : 1.4)
-      .attr("stroke-opacity", s.filled ? 0.45 : 0.80);
+      .attr("stroke-opacity", s.filled ? 0.45 : 0.80)
+      .attr("stroke-dasharray", ciDash === "none" ? null : ciDash);
 
     // CI end ticks
     [lo, hi].forEach(v => {
@@ -2741,23 +2782,31 @@ export function drawCaterpillarPlot(studies, m, profile, options = {}) {
     });
 
     // Point estimate circle
+    const showTip = (x0, y0) => {
+      const seVal = (s.se || Math.sqrt(s.vi)).toFixed(3);
+      const yi_t  = profile.transform(s.yi);
+      const lo_t  = profile.transform(lo);
+      const hi_t  = profile.transform(hi);
+      const fmt   = v => isFinite(v) ? +v.toFixed(3) : "NA";
+      tooltip.style("opacity", 1)
+        .html(`<b>${s.label}</b><br>Effect: ${fmt(yi_t)} [${fmt(lo_t)}, ${fmt(hi_t)}]<br>SE: ${seVal}${s.filled ? "<br><i>(imputed)</i>" : ""}`)
+        .style("left", x0 + "px").style("top", y0 + "px");
+    };
     g.append("circle")
       .attr("cx", x(s.yi)).attr("cy", cy)
       .attr("r", s.filled ? 2.5 : 3.2)
       .attr("fill", color)
       .attr("fill-opacity", s.filled ? 0.40 : 1)
-      .on("mousemove", (event) => {
-        const seVal  = (s.se || Math.sqrt(s.vi)).toFixed(3);
-        const yi_t   = profile.transform(s.yi);
-        const lo_t   = profile.transform(lo);
-        const hi_t   = profile.transform(hi);
-        const fmtCI  = v => isFinite(v) ? +v.toFixed(3) : "NA";
-        tooltip.style("opacity", 1)
-          .html(`<b>${s.label}</b><br>Effect: ${fmtCI(yi_t)} [${fmtCI(lo_t)}, ${fmtCI(hi_t)}]<br>SE: ${seVal}${s.filled ? "<br><i>(imputed)</i>" : ""}`)
-          .style("left", (event.pageX + TOOLTIP_OFFSET.x) + "px")
-          .style("top",  (event.pageY + TOOLTIP_OFFSET.y) + "px");
+      .attr("tabindex", 0)
+      .attr("role", "button")
+      .on("mousemove", (event) => showTip(event.pageX + TOOLTIP_OFFSET.x, event.pageY + TOOLTIP_OFFSET.y))
+      .on("mouseout",  () => tooltip.style("opacity", 0))
+      .on("focus", (event) => {
+        const rect = event.target.getBoundingClientRect();
+        showTip(rect.right + window.scrollX + TOOLTIP_OFFSET.x, rect.top + window.scrollY + TOOLTIP_OFFSET.y);
       })
-      .on("mouseout", () => tooltip.style("opacity", 0));
+      .on("blur",    () => tooltip.style("opacity", 0))
+      .on("keydown", (event) => { if (event.key === "Escape") tooltip.style("opacity", 0); });
 
     // Study label (left margin)
     const maxChars = Math.floor((margin.left - 12) / LABEL_CHAR_PX.regular10);
@@ -2811,11 +2860,13 @@ export function drawCaterpillarPlot(studies, m, profile, options = {}) {
     const lx = margin.left + iW + 8;   // left edge of legend gutter
     allGroups.forEach((grp, gi) => {
       const color = T.useBwShapes ? T.fg : GROUP_COLORS[gi % GROUP_COLORS.length];
+      const dash  = groupDash(grp);
       const ly = margin.top + gi * 14;
       svg.append("line")
         .attr("x1", lx).attr("x2", lx + 14)
         .attr("y1", ly + 5).attr("y2", ly + 5)
-        .attr("stroke", color).attr("stroke-width", 2);
+        .attr("stroke", color).attr("stroke-width", 2)
+        .attr("stroke-dasharray", dash === "none" ? null : dash);
       svg.append("circle")
         .attr("cx", lx + 7).attr("cy", ly + 5)
         .attr("r", 3).attr("fill", color);
@@ -2839,8 +2890,7 @@ export function drawCaterpillarPlot(studies, m, profile, options = {}) {
 // options — { page, pageSize }
 // Returns { totalPages }.
 export function drawBlupPlot(result, profile, options = {}) {
-  const svg = clearAndSelectSVG("#blupPlot");
-  svg.attr("aria-label", "BLUP forest plot");
+  const svg = initSvg("#blupPlot", "BLUP forest plot");
   if (!result || !result.studies || result.studies.length === 0) return { totalPages: 1 };
 
   const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
@@ -2855,6 +2905,10 @@ export function drawBlupPlot(result, profile, options = {}) {
 
   const ROW_H = 18;
   const W = +svg.attr("width") || 560;
+
+  // Accessible description
+  { const tau2Str = isFinite(result.tau2) ? `τ² = ${result.tau2.toFixed(4)}` : null;
+    svg.append("desc").text([`k = ${result.k} studies`, tau2Str].filter(Boolean).join("; ")); }
 
   const maxLabelLen = sorted.reduce((mx, s) => Math.max(mx, (s.label || "").length), 0);
   const leftMargin  = Math.max(60, Math.min(180, Math.ceil(maxLabelLen * LABEL_CHAR_PX.regular10) + 14));
@@ -3041,8 +3095,7 @@ export function drawBlupPlot(result, profile, options = {}) {
 // influential — the primary targets for sensitivity investigation.
 // Reference: Baujat et al. (2002) Statistics in Medicine 21:2442–2456.
 export function drawBaujatPlot(result, profile, options = {}) {
-  const svg = clearAndSelectSVG("#baujatPlot");
-  svg.attr("aria-label", "Baujat plot");
+  const svg = initSvg("#baujatPlot", "Baujat plot");
 
   if (!result || result.k < 2) return;
 
@@ -3107,10 +3160,14 @@ export function drawBaujatPlot(result, profile, options = {}) {
     const cx = x(p.x);
     const cy = y(p.influence);
     const color = pointColor(p);
+    const gi    = hasGroups ? allGroups.indexOf(p.group || "") : 0;
+    const useSym = T.useBwShapes && hasGroups;
 
-    g.append("circle")
-      .attr("cx", cx).attr("cy", cy)
-      .attr("r", 5)
+    // BW mode: D3 symbol shapes per group; color mode: filled circles
+    const dot = useSym
+      ? g.append("path").attr("transform", `translate(${cx},${cy})`).attr("d", bwSymbolPath(gi, 64))
+      : g.append("circle").attr("cx", cx).attr("cy", cy).attr("r", 5);
+    dot
       .attr("fill", color)
       .attr("fill-opacity", 0.75)
       .attr("stroke", T.bgSurface)
@@ -3185,9 +3242,16 @@ export function drawBaujatPlot(result, profile, options = {}) {
       const color = T.useBwShapes ? T.fg : GROUP_COLORS[gi % GROUP_COLORS.length];
       const lx = iW - 4;
       const ly = gi * 16;
-      g.append("circle")
-        .attr("cx", lx - 80).attr("cy", ly + 5)
-        .attr("r", 5).attr("fill", color).attr("fill-opacity", 0.75);
+      if (T.useBwShapes) {
+        g.append("path")
+          .attr("transform", `translate(${lx - 80},${ly + 5})`)
+          .attr("d", bwSymbolPath(gi, 64))
+          .attr("fill", color).attr("fill-opacity", 0.75);
+      } else {
+        g.append("circle")
+          .attr("cx", lx - 80).attr("cy", ly + 5)
+          .attr("r", 5).attr("fill", color).attr("fill-opacity", 0.75);
+      }
       g.append("text")
         .attr("x", lx - 72).attr("y", ly + 9)
         .attr("fill", T.fgMuted)
@@ -3212,8 +3276,7 @@ export function drawBaujatPlot(result, profile, options = {}) {
 // type     — "OR" | "RR" | "RD"
 export function drawLabbe(studies, m, profile, options = {}) {
   const type = options.type ?? "OR";
-  const svg = clearAndSelectSVG("#labbePlot");
-  svg.attr("aria-label", "L'Abbé plot");
+  const svg = initSvg("#labbePlot", "L'Abbé plot");
   if (!studies || studies.length === 0) return;
 
   const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
@@ -3326,10 +3389,15 @@ export function drawLabbe(studies, m, profile, options = {}) {
     const cy = y(p.py);
     const r  = Math.max(rScale(p.N), 3);
     const color = pointColor(p);
+    const gi     = hasGroups ? allGroups.indexOf(p.group) : 0;
+    const useSym = T.useBwShapes && hasGroups;
+    // Symbol area ≈ π r² for a comparable visual footprint to the bubble radius
+    const symSize = Math.PI * r * r;
 
-    g.append("circle")
-      .attr("cx", cx).attr("cy", cy)
-      .attr("r", r)
+    const dot = useSym
+      ? g.append("path").attr("transform", `translate(${cx},${cy})`).attr("d", bwSymbolPath(gi, symSize))
+      : g.append("circle").attr("cx", cx).attr("cy", cy).attr("r", r);
+    dot
       .attr("fill", color)
       .attr("fill-opacity", 0.65)
       .attr("stroke", T.bgSurface)
@@ -3435,8 +3503,7 @@ export function drawLabbe(studies, m, profile, options = {}) {
 // domains  — string[]
 // robData  — { [studyLabel]: { [domain]: string } }  ("Low"|"Some concerns"|"High"|"NI"|"")
 export function drawRoBTrafficLight(studies, domains, robData, options = {}) {
-  const svg = clearAndSelectSVG("#robTrafficLight");
-  svg.attr("aria-label", "Risk of bias traffic light");
+  const svg = initSvg("#robTrafficLight", "Risk of bias traffic light");
   if (!studies || !domains || domains.length === 0) return;
 
   const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
@@ -3557,8 +3624,7 @@ export function drawRoBTrafficLight(studies, domains, robData, options = {}) {
 // domains  — string[]
 // robData  — { [studyLabel]: { [domain]: string } }
 export function drawRoBSummary(studies, domains, robData, options = {}) {
-  const svg = clearAndSelectSVG("#robSummary");
-  svg.attr("aria-label", "Risk of bias summary");
+  const svg = initSvg("#robSummary", "Risk of bias summary");
   if (!studies || !domains || domains.length === 0) return;
 
   const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
@@ -3704,7 +3770,7 @@ export function drawRoBSummary(studies, domains, robData, options = {}) {
 const GOSH_SVG_REPORT_MAX = 3000;
 
 export function drawGoshPlot(result, profile, options = {}) {
-  const svg = clearAndSelectSVG("#goshPlot");
+  const svg = initSvg("#goshPlot", "GOSH plot");
   if (!result || result.error || !result.count) return;
 
   profile = profile || { transform: x => x, label: "Effect" };
@@ -3997,8 +4063,7 @@ export function drawGoshPlot(result, profile, options = {}) {
 //   profile curve → peak dot → axes → labels → title.
 // =============================================================================
 export function drawProfileLikTau2(result, options = {}) {
-  const svg = clearAndSelectSVG("#profileLikTau2Plot");
-  svg.attr("aria-label", "Profile likelihood plot for τ²");
+  const svg = initSvg("#profileLikTau2Plot", "Profile likelihood plot for τ²");
   if (!result || result.error) return;
 
   const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
@@ -4187,8 +4252,7 @@ export function drawProfileLikTau2(result, options = {}) {
 //   density curve → CI bound lines → posterior mean line → axes → labels → title
 // =============================================================================
 export function drawBayesTauPosterior(result, options = {}) {
-  const svg = clearAndSelectSVG("#bayesTauPlot");
-  svg.attr("aria-label", "Bayesian posterior for τ");
+  const svg = initSvg("#bayesTauPlot", "Bayesian posterior for τ");
   if (!result || result.error) return;
 
   const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
@@ -4330,8 +4394,7 @@ export function drawBayesTauPosterior(result, options = {}) {
 //   RE comparison line (if options.reMean provided) → axes → labels → title
 // =============================================================================
 export function drawBayesMuPosterior(result, options = {}) {
-  const svg = clearAndSelectSVG("#bayesMuPlot");
-  svg.attr("aria-label", "Bayesian posterior for μ");
+  const svg = initSvg("#bayesMuPlot", "Bayesian posterior for μ");
   if (!result || result.error) return;
 
   const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
@@ -4498,8 +4561,7 @@ export function drawBayesMuPosterior(result, options = {}) {
 // =============================================================================
 export function drawQQPlot(stdResiduals, labels, options = {}) {
   const containerId = options.containerId || "#qqPlot";
-  const svg = clearAndSelectSVG(containerId);
-  svg.attr("aria-label", "Normal Q-Q plot of standardised residuals");
+  const svg = initSvg(containerId, "Normal Q-Q plot of standardised residuals");
 
   const k = stdResiduals.length;
   if (k < 3) return;
@@ -4593,33 +4655,26 @@ export function drawQQPlot(stdResiduals, labels, options = {}) {
     .attr("stroke-dasharray", "6,3");
 
   // ---- 6. Points ----
-  const tooltip = selTooltip();
-
-  points.forEach(pt => {
-    const cx = x(pt.theory);
-    const cy = y(pt.observed);
-    const isOutlier = Math.abs(pt.observed) > 2;
-
-    g.append("circle")
-      .attr("cx", cx).attr("cy", cy)
+  attachTooltip(
+    g.selectAll("circle.qq-pt")
+      .data(points)
+      .enter().append("circle")
+      .attr("class", "qq-pt")
+      .attr("cx", pt => x(pt.theory))
+      .attr("cy", pt => y(pt.observed))
       .attr("r", 5)
-      .attr("fill", isOutlier ? T.colorWarning : T.accent)
+      .attr("fill", pt => Math.abs(pt.observed) > 2 ? T.colorWarning : T.accent)
       .attr("fill-opacity", 0.80)
       .attr("stroke", T.bgSurface)
-      .attr("stroke-width", 1)
-      .on("mousemove", (event) => {
-        tooltip.style("opacity", 1)
-          .html(
-            `<b>${pt.label}</b>` +
-            `<br>Theoretical quantile: ${pt.theory.toFixed(3)}` +
-            `<br>Std. residual: ${pt.observed.toFixed(3)}` +
-            (isOutlier ? `<br><i>Potential outlier (|z| > 2)</i>` : "")
-          )
-          .style("left", (event.pageX + TOOLTIP_OFFSET.x) + "px")
-          .style("top",  (event.pageY + TOOLTIP_OFFSET.y) + "px");
-      })
-      .on("mouseout", () => tooltip.style("opacity", 0));
-  });
+      .attr("stroke-width", 1),
+    pt => {
+      const isOutlier = Math.abs(pt.observed) > 2;
+      return `<b>${pt.label}</b>` +
+        `<br>Theoretical quantile: ${pt.theory.toFixed(3)}` +
+        `<br>Std. residual: ${pt.observed.toFixed(3)}` +
+        (isOutlier ? `<br><i>Potential outlier (|z| > 2)</i>` : "");
+    }
+  );
 
   // ---- 7. Axes ----
   const xAxis = d3.axisBottom(x).ticks(5).tickSize(4);
@@ -4665,8 +4720,7 @@ export function drawQQPlot(stdResiduals, labels, options = {}) {
 //   options  — { containerId: "#radialPlot" }
 export function drawRadialPlot(studies, m, profile, options = {}) {
   const containerId = options.containerId || "#radialPlot";
-  const svg = clearAndSelectSVG(containerId);
-  svg.attr("aria-label", "Radial (Galbraith) plot");
+  const svg = initSvg(containerId, "Radial (Galbraith) plot");
 
   const valid = validStudies(studies);
   const k = valid.length;
