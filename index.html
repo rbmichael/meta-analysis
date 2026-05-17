@@ -259,23 +259,6 @@
               </div>
             </div>
 
-            <div class="settings-group-sep" role="separator"></div>
-
-            <!-- Group: Display -->
-            <div class="settings-group">
-              <span class="settings-group-label">Display</span>
-              <div class="settings-group-controls">
-                <label>
-                  <span>Forest style</span>
-                  <select id="forestTheme">
-                    <option value="default">App default</option>
-                    <option value="cochrane">Cochrane</option>
-                    <option value="jama">JAMA</option>
-                    <option value="bw">Black &amp; white</option>
-                  </select>
-                </label>
-              </div>
-            </div>
 
           </div><!-- /.settings-groups -->
 
@@ -479,6 +462,15 @@
         <div class="section-title-row">
           <p class="section-title">Results</p>
           <div class="report-export">
+            <label class="export-scale-label">
+              Forest style
+              <select id="forestTheme">
+                <option value="default">App default</option>
+                <option value="cochrane">Cochrane</option>
+                <option value="jama">JAMA</option>
+                <option value="bw">Black &amp; white</option>
+              </select>
+            </label>
             <label class="export-scale-label" title="Output resolution for PNG and TIFF exports">
               Resolution
               <select id="exportScale">
