@@ -1159,6 +1159,7 @@ function _runMVAnalysis() {
   if (_robSectionEl && _robDomains.length > 0 && rows.length > 0) {
     _robSectionEl.style.display = "";
     const robStudies = [...new Set(rows.map(r => r.study_id))].map(id => ({ label: id }));
+    robPlotState.studies = robStudies;
     drawIfVisible("robSection", () => {
       drawRoBTrafficLight(robStudies, _robDomains, _robData, { theme: appState.plotTheme });
       drawRoBSummary(robStudies, _robDomains, _robData, { theme: appState.plotTheme });
@@ -3153,6 +3154,7 @@ const diagnosticsState = {
   showQQ: false, showLabbe: false, isMHorPeto: false,
 };
 const bubblePlotState = { bubbleResult: null, moderators: null, usePartialBubble: false };
+const robPlotState    = { studies: null };   // _robDomains/_robData are already module-level
 
 document.getElementById("exportScale").addEventListener("change", e => {
   appState.exportScale = +e.target.value;
@@ -3277,6 +3279,10 @@ function redrawCachedPlots() {
         }
       });
     }
+  }
+  if (robPlotState.studies && _robDomains.length > 0) {
+    drawRoBTrafficLight(robPlotState.studies, _robDomains, _robData, { theme });
+    drawRoBSummary(robPlotState.studies, _robDomains, _robData, { theme });
   }
 }
 
@@ -4509,6 +4515,7 @@ function _renderAllResults(ctx) {
   const hasRoB = _robDomains.length > 0 && studies.length > 0;
   elRobSection.style.display = hasRoB ? "" : "none";
   if (hasRoB) {
+    robPlotState.studies = studies;
     drawIfVisible("robSection", () => {
       drawRoBTrafficLight(studies, _robDomains, _robData, { theme: appState.plotTheme });
       drawRoBSummary(studies, _robDomains, _robData, { theme: appState.plotTheme });

@@ -1408,9 +1408,10 @@ export const HELP = {
   // Plots                                                               //
   "plot.theme": {
     title: "Plot style",
-    body:  "Applies a visual theme to every plot — forest, funnel, caterpillar, orchard, BLUP, " +
-           "influence, Baujat, GOSH, p-curve, p-uniform, Bayesian posteriors, Q-Q, radial, " +
-           "cumulative forest/funnel, and risk-of-bias plots. " +
+    body:  "Applies a visual theme to every plot — forest, funnel, bubble, caterpillar, orchard, " +
+           "BLUP, Baujat, L’Abbé, GOSH, p-curve, p-uniform, profile-likelihood, " +
+           "Bayesian posteriors, Q-Q, radial, cumulative forest/funnel, influence, " +
+           "and risk-of-bias plots. " +
            "App default reads CSS variables and adapts to light/dark mode but produces " +
            "unresolved var(--…) references in standalone SVG exports. " +
            "Cochrane, JAMA, and Black & white are fixed-colour journal presets that produce " +
