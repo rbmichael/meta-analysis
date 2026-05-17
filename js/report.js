@@ -499,7 +499,7 @@ function sectionSelectionModel(sel, profile, selMode, selLabel, apaFormat = fals
   function fmtV(v)    { return isFinite(v) ? fmt(v) : "—"; }
 
   // ---- Cutpoint interval labels: (0, c₁], (c₁, c₂], … ----
-  const cuts = sel.cuts;
+  const cuts = sel.cuts ?? [];
   const intervalLabels = cuts.map((c, j) => {
     const lo = j === 0 ? "0" : cuts[j - 1];
     return `(${lo}, ${c}]`;
@@ -1178,7 +1178,7 @@ export function openPrintPreview(htmlString) {
 // contains clean vector output rather than an embedded canvas PNG.
 // The live #goshPlot element is restored to its screen render after serialization,
 // exactly as collectPagedSVGs does for the forest plot.
-function sectionGosh(goshResult, profile, xAxis, apaFormat = false, nextFigure) {
+function sectionGosh(goshResult, profile, xAxis, apaFormat = false, nextFigure, theme = "default") {
   if (!goshResult || goshResult.error) {
     return `
 <section>
@@ -1196,11 +1196,11 @@ function sectionGosh(goshResult, profile, xAxis, apaFormat = false, nextFigure) 
     : `All ${count.toLocaleString()} non-empty subsets enumerated exactly.`;
 
   // Re-render into the live SVG using SVG circles (no canvas PNG embed).
-  drawGoshPlot(goshResult, profile, { xAxis, forReport: true });
+  drawGoshPlot(goshResult, profile, { xAxis, forReport: true, theme });
   const svgEl  = document.getElementById("goshPlot");
   const svgStr = svgEl ? serializeSVG(svgEl) : "";
   // Restore screen render (avoids a visible change if the user has the section open).
-  drawGoshPlot(goshResult, profile, { xAxis });
+  drawGoshPlot(goshResult, profile, { xAxis, theme });
 
   if (!svgStr) {
     return `
@@ -1266,7 +1266,10 @@ export function buildReport(args) {
     sensitivityRows,
     apaFormat = false,
     ciLevel,
+    plotTheme,
   } = args;
+
+  const theme = plotTheme ?? "default";
 
   const widthCiLabel = (ciLevel ?? "95") + "% CI";
   const widthCrLabel = (ciLevel ?? "95") + "% CrI";
@@ -1291,16 +1294,16 @@ export function buildReport(args) {
 
   // Collect forest SVGs for every page; other plots read directly from DOM.
   const forestSVGs        = forestOptions
-    ? collectPagedSVGs("forestPlot", drawForest, [studies, m], forestOptions)
+    ? collectPagedSVGs("forestPlot", drawForest, [studies, m], { ...forestOptions, theme })
     : [];
   const cumForestSVGs     = cumForestOptions
     ? collectPagedSVGs("cumulativePlot", drawCumulativeForest,
-        [cumForestOptions.results, cumForestOptions.profile ?? profile], cumForestOptions)
+        [cumForestOptions.results, cumForestOptions.profile ?? profile], { ...cumForestOptions, theme })
     : [];
   const caterpillarSVGs   = caterpillarOptions
     ? collectPagedSVGs("caterpillarPlot", drawCaterpillarPlot,
         [caterpillarOptions.studies ?? studies, caterpillarOptions.m ?? m, caterpillarOptions.profile ?? profile],
-        caterpillarOptions)
+        { ...caterpillarOptions, theme })
     : [];
 
   function liveSVG(id) {
@@ -1390,7 +1393,7 @@ export function buildReport(args) {
   ${plotsTau}
 </section>`;
     })(apaFormat, nextFigure),
-    sectionGosh(gosh ?? null, profile, goshXAxis ?? "I2", apaFormat, nextFigure),
+    sectionGosh(gosh ?? null, profile, goshXAxis ?? "I2", apaFormat, nextFigure, theme),
     ((apaFormat, nextFigure) => {
       const svg = liveSVG("profileLikTau2Plot");
       if (!svg) return "";

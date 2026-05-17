@@ -131,11 +131,11 @@ Conjugate normal-normal random-effects model fit via grid approximation (300 poi
 
 ## Plots
 
-All plots export as SVG, PNG, or TIFF. Log-scale effect types label the axis in the display scale (e.g. OR, RR).
+All plots export as SVG, PNG, or TIFF. Log-scale effect types label the axis in the display scale (e.g. OR, RR). A single **Plot style** dropdown applies a visual preset (App default, Cochrane, JAMA, Black & white) to every plot simultaneously; journal presets produce self-contained SVGs with resolved colours suitable for Word and PDF submission.
 
 | Plot | Description |
 |---|---|
-| Forest plot | Study CIs + pooled diamond(s). Toggle FE only, RE only, or both. Four visual themes (default, Cochrane, JAMA, black & white). Paginated for large datasets. |
+| Forest plot | Study CIs + pooled diamond(s). Toggle FE only, RE only, or both. Paginated for large datasets. |
 | Funnel plot | Effect vs. SE with Egger regression line. Toggle between standard and contour-enhanced modes. |
 | Influence plot | Per-study leverage and Cook's distance visualised as a bubble chart. |
 | BLUPs | Dual caterpillar: observed yi (gray) vs. shrunken BLUP (accent) per study. Shrinkage lines, hover tooltips. Only when τ² > 0. |

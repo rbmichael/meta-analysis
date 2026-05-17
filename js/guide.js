@@ -2521,6 +2521,36 @@ overall pooled estimates are shown separately.</p>`,
       },
 
       {
+        id: "guide-plot-themes",
+        title: "Plot style presets",
+        body: `<p>The <strong>Plot style</strong> dropdown applies a visual theme to every plot — forest,
+funnel, bubble, caterpillar, BLUP, Baujat, L'Abbé, GOSH, p-curve, p-uniform, orchard,
+cumulative forest/funnel, influence, profile-likelihood, Bayesian posteriors, Q-Q, radial,
+and risk-of-bias plots.</p>
+<p><strong>Available presets:</strong></p>
+<ul>
+  <li><strong>App default</strong> — reads CSS custom properties; adapts automatically to the
+  page's light/dark mode toggle. SVG exports from this preset contain unresolved
+  <code>var(--…)</code> references; use a journal preset for self-contained exports.</li>
+  <li><strong>Cochrane</strong> — white background, Times New Roman, near-black data elements,
+  mid-grey for structural chrome and the fixed-effects diamond. Matches the RevMan 5 output
+  convention (Cochrane Handbook §I.2).</li>
+  <li><strong>JAMA</strong> — white background, Arial/Helvetica, near-black data, lighter grey
+  for chrome. Matches JAMA Network and most North American clinical journal figure
+  guidelines.</li>
+  <li><strong>Black &amp; white</strong> — strict monochrome for journals that prohibit colour
+  and grey shading. Where colour carries categorical information (influence severity, orchard
+  group densities, funnel contour regions), shapes and hatch patterns are substituted.
+  Risk-of-bias traffic-light colours (green/amber/red) are preserved across every preset,
+  including Black &amp; white, because those colours are part of the published Cochrane
+  RoB 2 / ROBINS-I convention (Sterne et al., 2019; Sterne et al., 2016).</li>
+</ul>
+<p>Changing the preset immediately redraws all cached plots. Plots without a cached result
+(e.g., influence, Baujat, orchard) update on the next Run.</p>`,
+        citations: [],
+      },
+
+      {
         id: "guide-influence",
         title: "Influence diagnostics",
         body: `<p>Quantitative per-study diagnostics that measure each study's impact on
@@ -3431,6 +3461,7 @@ export const HELP_TO_GUIDE = {
   "bayes.model":         "guide-bayes-meta",
   "bayes.tau":           "guide-bayes-meta",
   "bayes.sensitivity":   "guide-prior-sensitivity",
+  "plot.theme":          "guide-plot-themes",
   "plot.forest":         "guide-forest",
   "plot.funnel":         "guide-funnel-plot",
   "plot.cumulative":     "guide-cumulative",

@@ -463,8 +463,8 @@
           <p class="section-title">Results</p>
           <div class="report-export">
             <label class="export-scale-label">
-              Forest style
-              <select id="forestTheme">
+              Plot style<button class="help-btn" data-help="plot.theme" title="Help">?</button>
+              <select id="plotTheme">
                 <option value="default">App default</option>
                 <option value="cochrane">Cochrane</option>
                 <option value="jama">JAMA</option>
@@ -1239,6 +1239,7 @@
         <li><strong>Word (.docx)</strong> — exports all results tables and plots to a Word document via OOXML/JSZip; no server required</li>
         <li><strong>PDF</strong> — via the browser's print dialog</li>
         <li><strong>SVG / PNG / TIFF</strong> — individual plot export from each plot's toolbar</li>
+        <li><strong>Plot style presets</strong> — a single dropdown (App default / Cochrane / JAMA / Black &amp; white) applies a consistent visual theme to every plot simultaneously; journal presets produce self-contained SVGs with resolved colours suitable for Word and PDF submission</li>
         <li>All tables use <strong>APA 7th edition style</strong> — no vertical lines, merged CI columns, <em>Note</em> paragraphs</li>
       </ul>
 

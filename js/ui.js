@@ -110,7 +110,7 @@ import { fmt, fmtPval, normalQuantile, normalCDF, chiSquareCDF, tCritical } from
 import { escapeHTML } from "./utils-html.js";
 import { effectProfiles, getProfile } from "./profiles.js";
 import { trimFill } from "./trimfill.js";
-import { drawForest, drawFunnel, drawBubble, drawPartialResidualBubble, drawInfluencePlot, drawCumulativeForest, drawCumulativeFunnel, drawOrchardPlot, drawCaterpillarPlot, drawBlupPlot, drawBaujatPlot, drawLabbe, drawRoBTrafficLight, drawRoBSummary, drawGoshPlot, drawProfileLikTau2, drawBayesTauPosterior, drawBayesMuPosterior, drawQQPlot, drawRadialPlot, setTooltipElement } from "./plots.js";
+import { drawForest, drawFunnel, drawBubble, drawPartialResidualBubble, drawInfluencePlot, drawCumulativeForest, drawCumulativeFunnel, drawOrchardPlot, drawCaterpillarPlot, drawBlupPlot, drawBaujatPlot, drawLabbe, drawRoBTrafficLight, drawRoBSummary, drawGoshPlot, drawProfileLikTau2, drawBayesTauPosterior, drawBayesMuPosterior, drawQQPlot, drawRadialPlot, drawPCurve, drawPUniform, setTooltipElement } from "./plots.js";
 import { goshCompute, GOSH_MAX_K } from "./gosh.js";
 import { permTestSync, permPval } from "./perm.js";
 import { vcalc, mvMeta } from "./multivariate.js";
@@ -120,11 +120,16 @@ import { exportSVG, exportPNG, exportTIFF, resolveThemeVars, hasEmbeddedBackgrou
 // block startup.
 // Each getter caches the resolved promise. On rejection the cache is cleared so
 // the next call retries the import rather than re-throwing the stale failure.
+// The ?cb= suffix is a per-session cache-buster: ES module registries key by
+// exact URL, so appending a timestamp forces a fresh fetch on every page load
+// without re-fetching within the same session. Python's http.server strips
+// query strings before translating paths, so static serving is unaffected.
+const _cb = `?cb=${Date.now()}`;
 let _reportMod, _docxMod, _helpMod, _guideMod;
-function getReport() { return (_reportMod ??= import("./report.js").catch(e => { _reportMod = null; throw e; })); }
-function getDocx()   { return (_docxMod   ??= import("./docx.js"  ).catch(e => { _docxMod   = null; throw e; })); }
-function getHelp()   { return (_helpMod   ??= import("./help.js"  ).catch(e => { _helpMod   = null; throw e; })); }
-function getGuide()  { return (_guideMod  ??= import("./guide.js" ).catch(e => { _guideMod  = null; throw e; })); }
+function getReport() { return (_reportMod ??= import(`./report.js${_cb}`).catch(e => { _reportMod = null; throw e; })); }
+function getDocx()   { return (_docxMod   ??= import(`./docx.js${_cb}`  ).catch(e => { _docxMod   = null; throw e; })); }
+function getHelp()   { return (_helpMod   ??= import(`./help.js${_cb}`  ).catch(e => { _helpMod   = null; throw e; })); }
+function getGuide()  { return (_guideMod  ??= import(`./guide.js${_cb}` ).catch(e => { _guideMod  = null; throw e; })); }
 import { serializeSession, parseSession, missingInputCols } from "./session.js";
 import { saveDraft, loadDraft, clearDraft } from "./autosave.js";
 import { downloadBlob, readTextFile, serializeCSV } from "./io.js";
@@ -700,7 +705,7 @@ _themeToggle.addEventListener("click", () => {
   localStorage.setItem("theme", next);
   _applyTheme(next);
   if (funnelPlot.args && funnelPlot.contours) {
-    drawFunnel(...funnelPlot.args, { egger: funnelPlot.egger, contours: true, petpeese: funnelPlot.petpeese });
+    drawFunnel(...funnelPlot.args, { egger: funnelPlot.egger, contours: true, petpeese: funnelPlot.petpeese, theme: appState.plotTheme });
   }
 });
 
@@ -1155,8 +1160,8 @@ function _runMVAnalysis() {
     _robSectionEl.style.display = "";
     const robStudies = [...new Set(rows.map(r => r.study_id))].map(id => ({ label: id }));
     drawIfVisible("robSection", () => {
-      drawRoBTrafficLight(robStudies, _robDomains, _robData);
-      drawRoBSummary(robStudies, _robDomains, _robData);
+      drawRoBTrafficLight(robStudies, _robDomains, _robData, { theme: appState.plotTheme });
+      drawRoBSummary(robStudies, _robDomains, _robData, { theme: appState.plotTheme });
     });
   }
 
@@ -1935,7 +1940,7 @@ document.getElementById("cumulativeFunnelStep").addEventListener("input", e => {
   if (!cumFunnelPlot.studies) return;
   const step = +e.target.value;
   _updateCumFunnelLabel(step);
-  drawCumulativeFunnel(cumFunnelPlot.studies, cumFunnelPlot.results, cumFunnelPlot.profile, step);
+  drawCumulativeFunnel(cumFunnelPlot.studies, cumFunnelPlot.results, cumFunnelPlot.profile, step, { theme: appState.plotTheme });
 });
 document.getElementById("caterpillarPageSize").addEventListener("change", () => {
   if (!caterpillarPlot.args) return;
@@ -1972,7 +1977,7 @@ document.getElementById("forestPageSize").addEventListener("change", () => {
   forestPlot.page = 0;
   const rawPageSize = document.getElementById("forestPageSize").value;
   const pageSize    = rawPageSize === "Infinity" ? Infinity : +rawPageSize;
-  forestPlot.args.options = { ...forestPlot.args.options, pageSize, theme: forestPlot.theme };
+  forestPlot.args.options = { ...forestPlot.args.options, pageSize, theme: appState.plotTheme };
   if (appState.reportArgs) {
     appState.reportArgs = { ...appState.reportArgs, forestOptions: { ...appState.reportArgs.forestOptions, pageSize, currentPage: 0 } };
   }
@@ -2170,7 +2175,7 @@ document.getElementById("draftStartFresh").addEventListener("click", () => {
 
   resetSel("effectType"); resetSel("tauMethod"); resetSel("ciMethod");
   resetSel("ciLevel");    resetSel("mccMethod"); resetSel("cumulativeOrder");
-  resetSel("tfEstimator"); resetSel("forestTheme");
+  resetSel("tfEstimator"); resetSel("plotTheme");
   resetSel("selMode");    resetSel("selPreset"); resetSel("selSides"); resetSel("selWeightFn");
   resetChk("useTrimFill"); resetChk("useTFAdjusted");
   resetNum("bayesMu0"); resetNum("bayesSigmaMu"); resetNum("bayesSigmaTau");
@@ -2477,6 +2482,7 @@ async function buildReportAndResync() {
     // Use the live goshState so a re-run after the last analysis is captured.
     gosh:     goshState.result ?? appState.reportArgs.gosh,
     goshXAxis: document.getElementById("goshXAxis")?.value ?? appState.reportArgs.goshXAxis ?? "I2",
+    plotTheme: appState.plotTheme,
     apaFormat: true,
   };
   const html = buildReport(args);
@@ -2545,6 +2551,7 @@ document.getElementById("exportReportDOCX").addEventListener("click", async () =
           : undefined,
         gosh:      goshState.result ?? appState.reportArgs.gosh,
         goshXAxis: document.getElementById("goshXAxis")?.value ?? appState.reportArgs.goshXAxis ?? "I2",
+        plotTheme: appState.plotTheme,
         apaFormat: true,
       };
       blob = await buildDocx(args);
@@ -2707,7 +2714,7 @@ document.getElementById("permCancelBtn").addEventListener("click", () => {
 document.getElementById("profileLikScale").addEventListener("change", () => {
   if (appState.reportArgs?.profileLik) {
     const xScale = document.getElementById("profileLikScale").value;
-    drawProfileLikTau2(appState.reportArgs.profileLik, { xScale });
+    drawProfileLikTau2(appState.reportArgs.profileLik, { xScale, theme: appState.plotTheme });
     appState.reportArgs.profileLikXScale = xScale;
   }
 });
@@ -3085,13 +3092,14 @@ const appState = {
   hasRunOnce:  false,  // prevents stale banner before the first run
   exportScale: 3,      // matches <option selected> in #exportScale (3× ≈ 288 dpi)
   reportArgs:  null,   // cached after each run; consumed by export buttons
+  plotTheme:   "default",
 };
 
 const forestPlot = {
   page:        0,
   args:        null,        // { studies, m, options } — cached for page-nav re-renders
   poolDisplay: "RE",        // "FE" | "RE" | "Both"
-  theme:       "default",   // visual style preset key (see forestThemes.js)
+  theme:       "default",   // visual style preset key (see plotThemes.js)
 };
 
 const caterpillarPlot = {
@@ -3132,7 +3140,19 @@ const bayesState = {
   studies: null,   // study array from the last runAnalysis() call
   reMean:  NaN,    // RE pooled mean from the last runAnalysis() call
   profile: null,   // effect-type profile from the last runAnalysis() call
+  result:  null,   // cached for theme redraw
 };
+
+const pCurvePlot  = { result: null };
+const pUniformPlot = { result: null, m: null, profile: null };
+
+const diagnosticsState = {
+  influence: null, baujatResult: null, profile: null,
+  qqResiduals: null, qqLabels: null,
+  studies: null, m: null, type: null,
+  showQQ: false, showLabbe: false, isMHorPeto: false,
+};
+const bubblePlotState = { bubbleResult: null, moderators: null, usePartialBubble: false };
 
 document.getElementById("exportScale").addEventListener("change", e => {
   appState.exportScale = +e.target.value;
@@ -3150,23 +3170,122 @@ document.querySelectorAll(".forest-pool-btn").forEach(btn => {
   });
 });
 
-document.getElementById("forestTheme").addEventListener("change", e => {
-  if (!forestPlot.args) return;
-  forestPlot.theme = e.target.value;
-  forestPlot.args.options = { ...forestPlot.args.options, theme: forestPlot.theme };
+document.getElementById("plotTheme").addEventListener("change", e => {
+  appState.plotTheme = e.target.value;
   if (appState.reportArgs) {
-    appState.reportArgs = { ...appState.reportArgs, forestOptions: { ...appState.reportArgs.forestOptions, theme: forestPlot.theme } };
+    appState.reportArgs = { ...appState.reportArgs, plotTheme: appState.plotTheme };
   }
-  const { totalPages } = drawForest(forestPlot.args.studies, forestPlot.args.m, { ...forestPlot.args.options, page: forestPlot.page });
-  renderForestNav(totalPages);
+  redrawCachedPlots();
 });
+
+function redrawCachedPlots() {
+  const theme = appState.plotTheme;
+  if (forestPlot.args) {
+    forestPlot.args.options = { ...forestPlot.args.options, theme };
+    const { totalPages } = drawForest(forestPlot.args.studies, forestPlot.args.m, { ...forestPlot.args.options, page: forestPlot.page });
+    renderForestNav(totalPages);
+  }
+  if (funnelPlot.args) {
+    drawFunnel(...funnelPlot.args, { egger: funnelPlot.egger, contours: funnelPlot.contours, petpeese: funnelPlot.petpeese, theme });
+  }
+  if (cumForestPlot.args) {
+    const { totalPages } = drawCumulativeForest(
+      cumForestPlot.args.results, cumForestPlot.args.profile,
+      { pageSize: cumForestPlot.args.pageSize, page: cumForestPlot.page, theme }
+    );
+    renderCumulativeForestNav(totalPages);
+  }
+  if (cumFunnelPlot.studies) {
+    const slider = document.getElementById("cumulativeFunnelStep");
+    const step = slider ? +slider.value : (cumFunnelPlot.results?.length ?? 1) - 1;
+    drawCumulativeFunnel(cumFunnelPlot.studies, cumFunnelPlot.results, cumFunnelPlot.profile, step, { theme });
+  }
+  if (caterpillarPlot.args) {
+    const { totalPages } = drawCaterpillarPlot(
+      caterpillarPlot.args.studies, caterpillarPlot.args.m, caterpillarPlot.args.profile,
+      { pageSize: caterpillarPlot.args.pageSize, page: caterpillarPlot.page, theme }
+    );
+    renderCaterpillarNav(totalPages);
+  }
+  if (blupPlot.result) {
+    const { totalPages } = drawBlupPlot(blupPlot.result, blupPlot.profile, { pageSize: blupPlot.pageSize, page: blupPlot.page, theme });
+    renderBlupNav(totalPages);
+  }
+  if (goshState.result) {
+    const xAxis = document.getElementById("goshXAxis")?.value || "I2";
+    drawGoshPlot(goshState.result, goshState.profile, { xAxis, theme });
+  }
+  if (bayesState.result) {
+    drawBayesMuPosterior(bayesState.result, { reMean: bayesState.reMean, theme });
+    drawBayesTauPosterior(bayesState.result, { theme });
+  }
+  if (appState.reportArgs?.profileLik) {
+    const xScale = document.getElementById("profileLikScale")?.value || appState.reportArgs.profileLikXScale || "tau2";
+    drawProfileLikTau2(appState.reportArgs.profileLik, { xScale, theme });
+  }
+  if (pCurvePlot.result) {
+    drawPCurve(pCurvePlot.result, { theme });
+  }
+  if (pUniformPlot.result) {
+    drawPUniform(pUniformPlot.result, pUniformPlot.m, pUniformPlot.profile, { theme });
+  }
+  if (diagnosticsState.influence) {
+    drawInfluencePlot(diagnosticsState.influence, { theme });
+    drawBaujatPlot(diagnosticsState.baujatResult, diagnosticsState.profile, { theme });
+    if (diagnosticsState.showQQ)
+      drawQQPlot(diagnosticsState.qqResiduals, diagnosticsState.qqLabels, { theme });
+    if (!diagnosticsState.isMHorPeto && diagnosticsState.studies?.length >= 2)
+      drawRadialPlot(diagnosticsState.studies, diagnosticsState.m, diagnosticsState.profile, { theme });
+    if (diagnosticsState.showLabbe)
+      drawLabbe(diagnosticsState.studies, diagnosticsState.m, diagnosticsState.profile, { type: diagnosticsState.type, theme });
+  }
+  if (caterpillarPlot.args) {
+    drawOrchardPlot(caterpillarPlot.args.studies, caterpillarPlot.args.m, caterpillarPlot.args.profile, { theme });
+  }
+  if (bubblePlotState.bubbleResult) {
+    const bc = document.getElementById("bubblePlots");
+    if (bc) {
+      bc.innerHTML = "";
+      bubblePlotState.moderators.forEach((mod, i) => {
+        const colIdxs = bubblePlotState.bubbleResult.modColMap && bubblePlotState.bubbleResult.modColMap[mod.name];
+        if (!colIdxs || colIdxs.length === 0) return;
+        const wrap = document.createElement("div");
+        wrap.dataset.moderator = mod.name;
+        bc.appendChild(wrap);
+        if (bubblePlotState.usePartialBubble) {
+          drawPartialResidualBubble(bubblePlotState.bubbleResult.studiesUsed, bubblePlotState.bubbleResult, mod, wrap, { theme });
+        } else {
+          drawBubble(bubblePlotState.bubbleResult.studiesUsed, bubblePlotState.bubbleResult, mod, wrap, { theme });
+        }
+        const bubbleSvg = wrap.querySelector("svg");
+        if (bubbleSvg) {
+          const svgId = `bubblePlot_${i}`;
+          bubbleSvg.id = svgId;
+          const exportDiv = document.createElement("div");
+          exportDiv.className = "plot-export";
+          exportDiv.innerHTML =
+            `<button class="export-btn" data-target="${svgId}" data-format="svg">SVG</button>` +
+            `<button class="export-btn" data-target="${svgId}" data-format="png">PNG</button>` +
+            `<button class="export-btn" data-target="${svgId}" data-format="tiff">TIFF</button>`;
+          wrap.insertBefore(exportDiv, bubbleSvg);
+        }
+        if (bubblePlotState.usePartialBubble) {
+          const note = document.createElement("p");
+          note.className = "reg-note";
+          note.textContent = "Partial residual plot — other predictors held at zero (residuals).";
+          wrap.appendChild(note);
+        }
+      });
+    }
+  }
+}
 
 document.querySelectorAll(".funnel-mode-btn").forEach(btn => {
   btn.addEventListener("click", () => {
     if (!funnelPlot.args) return;
     funnelPlot.contours = btn.dataset.mode === "contour";
     document.querySelectorAll(".funnel-mode-btn").forEach(b => b.classList.toggle("active", b === btn));
-    drawFunnel(...funnelPlot.args, { egger: funnelPlot.egger, contours: funnelPlot.contours, petpeese: funnelPlot.petpeese });
+    drawFunnel(...funnelPlot.args, { egger: funnelPlot.egger, contours: funnelPlot.contours, petpeese: funnelPlot.petpeese, theme: appState.plotTheme });
   });
 });
 
@@ -3217,7 +3336,7 @@ const renderForestNav = makeNavRenderer({
   getKAll: () => forestPlot.args?.studies?.length ?? "?",
   getPage: () => forestPlot.page,
   setPage: p  => { forestPlot.page = p; },
-  redraw:  p  => drawForest(forestPlot.args.studies, forestPlot.args.m, { ...forestPlot.args.options, page: p }),
+  redraw:  p  => drawForest(forestPlot.args.studies, forestPlot.args.m, { ...forestPlot.args.options, page: p, theme: appState.plotTheme }),
 });
 
 const renderCaterpillarNav = makeNavRenderer({
@@ -3230,7 +3349,7 @@ const renderCaterpillarNav = makeNavRenderer({
   setPage: p  => { caterpillarPlot.page = p; },
   redraw:  p  => drawCaterpillarPlot(
     caterpillarPlot.args.studies, caterpillarPlot.args.m, caterpillarPlot.args.profile,
-    { pageSize: caterpillarPlot.args.pageSize, page: p }
+    { pageSize: caterpillarPlot.args.pageSize, page: p, theme: appState.plotTheme }
   ),
 });
 
@@ -3242,7 +3361,7 @@ const renderBlupNav = makeNavRenderer({
   getKAll: () => blupPlot.result?.k ?? "?",
   getPage: () => blupPlot.page,
   setPage: p  => { blupPlot.page = p; },
-  redraw:  p  => drawBlupPlot(blupPlot.result, blupPlot.profile, { pageSize: blupPlot.pageSize, page: p }),
+  redraw:  p  => drawBlupPlot(blupPlot.result, blupPlot.profile, { pageSize: blupPlot.pageSize, page: p, theme: appState.plotTheme }),
 });
 
 const renderCumulativeForestNav = makeNavRenderer({
@@ -3255,7 +3374,7 @@ const renderCumulativeForestNav = makeNavRenderer({
   setPage: p  => { cumForestPlot.page = p; },
   redraw:  p  => drawCumulativeForest(
     cumForestPlot.args.results, cumForestPlot.args.profile,
-    { pageSize: cumForestPlot.args.pageSize, page: p }
+    { pageSize: cumForestPlot.args.pageSize, page: p, theme: appState.plotTheme }
   ),
 });
 
@@ -3415,7 +3534,7 @@ function runGosh() {
     if (elPlot) { elPlot.style.display = ""; }
     resetControls();
     const xAxis = document.getElementById("goshXAxis").value;
-    drawGoshPlot(result, profile, { xAxis });
+    drawGoshPlot(result, profile, { xAxis, theme: appState.plotTheme });
     renderGoshInfo(result, profile);
   }
 
@@ -3870,7 +3989,7 @@ function _renderAllResults(ctx) {
   const elHetDiag = document.getElementById("hetDiagSection");
   if (profileLikResult && !profileLikResult.error) {
     elHetDiag.style.display = "";
-    drawProfileLikTau2(profileLikResult, { xScale: elProfileLikScale?.value || "tau2" });
+    drawProfileLikTau2(profileLikResult, { xScale: elProfileLikScale?.value || "tau2", theme: appState.plotTheme });
   } else {
     elHetDiag.style.display = "none";
   }
@@ -3879,6 +3998,7 @@ function _renderAllResults(ctx) {
   const elBayes      = document.getElementById("bayesSection");
   if (bayesResult && !bayesResult.error) {
     bayesState.studies = studies;
+    bayesState.result  = bayesResult;
     bayesState.reMean  = reMeanRef;
     bayesState.profile = profile;
     elBayes.style.display = "";
@@ -3887,14 +4007,15 @@ function _renderAllResults(ctx) {
       : "";
     document.getElementById("bayesSummary").innerHTML =
       bayesClusterNote + buildBayesSummaryHTML(bayesResult, profile, reMeanRef);
-    drawBayesMuPosterior(bayesResult, { reMean: reMeanRef });
-    drawBayesTauPosterior(bayesResult);
+    drawBayesMuPosterior(bayesResult, { reMean: reMeanRef, theme: appState.plotTheme });
+    drawBayesTauPosterior(bayesResult, { theme: appState.plotTheme });
     document.getElementById("bayesGridWarning").style.display =
       bayesResult.grid_truncated ? "" : "none";
     const ciLevel = document.getElementById("ciLevel")?.value ?? "95";
     renderSensitivity(bayesMu0, bayesSigmaMu, bayesSigmaTau, ciLevel);
   } else {
     bayesState.studies = null;
+    bayesState.result  = null;
     elBayes.style.display = "none";
     const elSensSection = document.getElementById("bayesSensitivitySection");
     if (elSensSection) elSensSection.style.display = "none";
@@ -4178,8 +4299,10 @@ function _renderAllResults(ctx) {
   renderSensitivityPanel(studies, isMHorPeto ? null : m, isMHorPeto ? "DL" : method, ciMethod, profile, { isMHFallback: isMHorPeto }, alpha);
   performance.measure("phase:loo:render", "phase:loo:render:start");
 
-  renderPCurvePanel(pcurve);
-  renderPUniformPanel(puniform, m, profile);
+  pCurvePlot.result = pcurve;
+  pUniformPlot.result = puniform; pUniformPlot.m = m; pUniformPlot.profile = profile;
+  renderPCurvePanel(pcurve, { theme: appState.plotTheme });
+  renderPUniformPanel(puniform, m, profile, { theme: appState.plotTheme });
   renderSelectionModelPanel(selResult, selModeVal, selWeightFn, profile);
 
   // ── Regression panel + bubble plots ───────────────────────────────────────
@@ -4220,6 +4343,10 @@ function _renderAllResults(ctx) {
     rankDeficient: ls.rankDeficient,
   } : reg;
   const usePartialBubble = moderators.length > 1;
+  bubblePlotState.bubbleResult     = (bubbleResult && !bubbleResult.rankDeficient) ? bubbleResult : null;
+  bubblePlotState.moderators       = moderators.filter(mod => mod.type === "continuous");
+  bubblePlotState.usePartialBubble = usePartialBubble;
+
   if (bubbleResult && !bubbleResult.rankDeficient) {
     moderators
       .filter(mod => mod.type === "continuous")
@@ -4230,9 +4357,9 @@ function _renderAllResults(ctx) {
         wrap.dataset.moderator = mod.name;
         bubbleContainer.appendChild(wrap);
         if (usePartialBubble) {
-          drawPartialResidualBubble(bubbleResult.studiesUsed, bubbleResult, mod, wrap);
+          drawPartialResidualBubble(bubbleResult.studiesUsed, bubbleResult, mod, wrap, { theme: appState.plotTheme });
         } else {
-          drawBubble(bubbleResult.studiesUsed, bubbleResult, mod, wrap);
+          drawBubble(bubbleResult.studiesUsed, bubbleResult, mod, wrap, { theme: appState.plotTheme });
         }
         const bubbleSvg = wrap.querySelector("svg");
         if (bubbleSvg) {
@@ -4258,7 +4385,7 @@ function _renderAllResults(ctx) {
   // ── Forest plot ───────────────────────────────────────────────────────────
   const rawPageSize = elForestPageSize?.value ?? "30";
   const pageSize    = rawPageSize === "Infinity" ? Infinity : +rawPageSize;
-  const forestOpts  = { ciMethod, profile, pageSize, pooledDisplay: forestPlot.poolDisplay, theme: forestPlot.theme, alpha, ciLabel: getCiLabel() };
+  const forestOpts  = { ciMethod, profile, pageSize, pooledDisplay: forestPlot.poolDisplay, theme: appState.plotTheme, alpha, ciLabel: getCiLabel() };
   const mForest     = isMHorPeto
     ? { ...m, RE: m.FE, seRE: m.seFE, tau2: 0, predLow: NaN, predHigh: NaN }
     : m;
@@ -4300,7 +4427,7 @@ function _renderAllResults(ctx) {
   funnelPlot.petpeese = petpeese;
   drawIfVisible("pubBiasSection", () => {
     performance.mark("phase:plot:funnel:start");
-    drawFunnel(...funnelPlot.args, { egger: funnelPlot.egger, contours: funnelPlot.contours, petpeese: funnelPlot.petpeese });
+    drawFunnel(...funnelPlot.args, { egger: funnelPlot.egger, contours: funnelPlot.contours, petpeese: funnelPlot.petpeese, theme: appState.plotTheme });
     performance.measure("phase:plot:funnel", "phase:plot:funnel:start");
   });
 
@@ -4318,17 +4445,24 @@ function _renderAllResults(ctx) {
   elRadialPlotBlock.style.display = studies.length >= 2 && !isMHorPeto ? "" : "none";
   elLabbeBlock.style.display      = showLabbe ? "" : "none";
 
+  Object.assign(diagnosticsState, {
+    influence, baujatResult, profile,
+    qqResiduals, qqLabels,
+    studies, m, type,
+    showQQ, showLabbe, isMHorPeto,
+  });
+
   drawIfVisible("diagnosticSection", () => {
     performance.mark("phase:plot:influence:start");
-    drawInfluencePlot(influence);
+    drawInfluencePlot(influence, { theme: appState.plotTheme });
     if (blupResult) {
-      const { totalPages: blupPages } = drawBlupPlot(blupResult, profile, { pageSize: blupPlot.pageSize, page: 0 });
+      const { totalPages: blupPages } = drawBlupPlot(blupResult, profile, { pageSize: blupPlot.pageSize, page: 0, theme: appState.plotTheme });
       renderBlupNav(blupPages);
     }
-    drawBaujatPlot(baujatResult, profile);
-    if (showQQ)  drawQQPlot(qqResiduals, qqLabels);
-    if (studies.length >= 2 && !isMHorPeto) drawRadialPlot(studies, m, profile);
-    if (showLabbe) drawLabbe(studies, m, profile, { type });
+    drawBaujatPlot(baujatResult, profile, { theme: appState.plotTheme });
+    if (showQQ)  drawQQPlot(qqResiduals, qqLabels, { theme: appState.plotTheme });
+    if (studies.length >= 2 && !isMHorPeto) drawRadialPlot(studies, m, profile, { theme: appState.plotTheme });
+    if (showLabbe) drawLabbe(studies, m, profile, { type, theme: appState.plotTheme });
     performance.measure("phase:plot:influence", "phase:plot:influence:start");
   });
 
@@ -4348,9 +4482,9 @@ function _renderAllResults(ctx) {
 
   drawIfVisible("cumulativeSection", () => {
     performance.mark("phase:plot:cumulative:start");
-    const { totalPages: cumForestPages } = drawCumulativeForest(cumResults, profile, { pageSize: cumForestPageSize, page: 0 });
+    const { totalPages: cumForestPages } = drawCumulativeForest(cumResults, profile, { pageSize: cumForestPageSize, page: 0, theme: appState.plotTheme });
     renderCumulativeForestNav(cumForestPages);
-    drawCumulativeFunnel(cumulativeStudies, cumResults, profile, cumResults.length - 1);
+    drawCumulativeFunnel(cumulativeStudies, cumResults, profile, cumResults.length - 1, { theme: appState.plotTheme });
     performance.measure("phase:plot:cumulative", "phase:plot:cumulative:start");
   });
 
@@ -4365,8 +4499,8 @@ function _renderAllResults(ctx) {
 
   drawIfVisible("altVizSection", () => {
     performance.mark("phase:plot:orchard:start");
-    drawOrchardPlot(all, m, profile);
-    const { totalPages: catPages } = drawCaterpillarPlot(all, m, profile, { pageSize: catPageSize, page: 0 });
+    drawOrchardPlot(all, m, profile, { theme: appState.plotTheme });
+    const { totalPages: catPages } = drawCaterpillarPlot(all, m, profile, { pageSize: catPageSize, page: 0, theme: appState.plotTheme });
     renderCaterpillarNav(catPages);
     performance.measure("phase:plot:orchard", "phase:plot:orchard:start");
   });
@@ -4376,8 +4510,8 @@ function _renderAllResults(ctx) {
   elRobSection.style.display = hasRoB ? "" : "none";
   if (hasRoB) {
     drawIfVisible("robSection", () => {
-      drawRoBTrafficLight(studies, _robDomains, _robData);
-      drawRoBSummary(studies, _robDomains, _robData);
+      drawRoBTrafficLight(studies, _robDomains, _robData, { theme: appState.plotTheme });
+      drawRoBSummary(studies, _robDomains, _robData, { theme: appState.plotTheme });
     });
   }
 

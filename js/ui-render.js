@@ -750,7 +750,7 @@ export function renderStudyTable(studies, m, profile) {
 }
 
 // ---------------- P-CURVE PANEL ----------------
-export function renderPCurvePanel(pcurve) {
+export function renderPCurvePanel(pcurve, options = {}) {
   const panel     = document.getElementById("pCurvePanel");
   const plotBlock = document.getElementById("pCurvePlotBlock");
   if (!panel || !plotBlock) return;
@@ -781,11 +781,11 @@ export function renderPCurvePanel(pcurve) {
       <span class="status-pill ${pcurve.verdict}">${verdictLabels[pcurve.verdict] ?? pcurve.verdict}</span>
     </div>`;
 
-  drawPCurve(pcurve);
+  drawPCurve(pcurve, options);
 }
 
 // ---------------- P-UNIFORM PANEL ----------------
-export function renderPUniformPanel(puniform, m, profile) {
+export function renderPUniformPanel(puniform, m, profile, options = {}) {
   const panel     = document.getElementById("pUniformPanel");
   const plotBlock = document.getElementById("pUniformPlotBlock");
   if (!panel || !plotBlock) return;
@@ -823,7 +823,7 @@ export function renderPUniformPanel(puniform, m, profile) {
       ${flags.join(" ")}
     </div>`;
 
-  drawPUniform(puniform, m, profile);
+  drawPUniform(puniform, m, profile, options);
 }
 
 // ---------------- SELECTION MODEL PANEL ----------------

@@ -575,7 +575,10 @@ export async function buildDocx(args) {
     gosh, goshXAxis,
     bayesResult, bayesReMean,
     sensitivityRows,
+    plotTheme,
   } = args;
+
+  const theme = plotTheme ?? "default";
 
   const widthCiLabel = (ciLevel ?? "95") + "% CI";
   const widthCrLabel = (ciLevel ?? "95") + "% CrI";
@@ -590,7 +593,7 @@ export async function buildDocx(args) {
 
   svgArrays.set("forest",
     forestOptions
-      ? collectPagedSVGs("forestPlot", drawForest, [studies, m], forestOptions)
+      ? collectPagedSVGs("forestPlot", drawForest, [studies, m], { ...forestOptions, theme })
       : [liveSVGString("forestPlot")].filter(Boolean));
 
   svgArrays.set("funnel",       [liveSVGString("funnelPlot")].filter(Boolean));
@@ -601,7 +604,7 @@ export async function buildDocx(args) {
   svgArrays.set("cumForest",
     cumForestOptions
       ? collectPagedSVGs("cumulativePlot", drawCumulativeForest,
-          [cumForestOptions.results, cumForestOptions.profile ?? profile], cumForestOptions)
+          [cumForestOptions.results, cumForestOptions.profile ?? profile], { ...cumForestOptions, theme })
       : [liveSVGString("cumulativePlot")].filter(Boolean));
 
   svgArrays.set("cumFunnel",    [liveSVGString("cumulativeFunnelPlot")].filter(Boolean));
@@ -613,7 +616,7 @@ export async function buildDocx(args) {
     caterpillarOptions
       ? collectPagedSVGs("caterpillarPlot", drawCaterpillarPlot,
           [caterpillarOptions.studies ?? studies, caterpillarOptions.m ?? m, caterpillarOptions.profile ?? profile],
-          caterpillarOptions)
+          { ...caterpillarOptions, theme })
       : [liveSVGString("caterpillarPlot")].filter(Boolean));
 
   svgArrays.set("robTL",        [liveSVGString("robTrafficLight")].filter(Boolean));
@@ -640,9 +643,9 @@ export async function buildDocx(args) {
 
   // GOSH (needs re-render to SVG circles)
   if (gosh && !gosh.error) {
-    drawGoshPlot(gosh, profile, { xAxis: goshXAxis ?? "I2", forReport: true });
+    drawGoshPlot(gosh, profile, { xAxis: goshXAxis ?? "I2", forReport: true, theme });
     svgArrays.set("gosh", [liveSVGString("goshPlot")].filter(Boolean));
-    drawGoshPlot(gosh, profile, { xAxis: goshXAxis ?? "I2" });
+    drawGoshPlot(gosh, profile, { xAxis: goshXAxis ?? "I2", theme });
   }
 
   // Profile likelihood + Bayesian
