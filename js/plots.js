@@ -284,6 +284,15 @@ function getContrastFg(fillHex) {
   return L > 0.179 ? "#1a1a1a" : "#ffffff";
 }
 
+// Returns {x, y} for the top-left corner of a legend box within inner-plot g-space.
+// corner: "tr" | "tl" | "br" | "bl"
+function placeLegend(iW, iH, lW, lH, corner = "tr", pad = 6) {
+  if (corner === "tr") return { x: iW - lW - pad, y: pad };
+  if (corner === "tl") return { x: pad, y: pad };
+  if (corner === "br") return { x: iW - lW - pad, y: iH - lH - pad };
+  return { x: pad, y: iH - lH - pad };
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ---- Nonlinear moderator basis evaluator ----
@@ -1133,12 +1142,17 @@ export function drawForest(studies, m, options = {}) {
   forestDrawStudyLabels(ctx, pageStudies, yPos, _charW);
 
   if (!isLastPage) {
+    // Continuation band: shaded rect + chevrons make the page break clearly visible
+    svg.append("rect")
+      .attr("x", L.labelW + 4).attr("y", L.studyY1 + 4)
+      .attr("width", L.plotW - 8).attr("height", 26)
+      .attr("fill", T.bgSurface).attr("rx", 3);
     svg.append("text")
-      .attr("x", L.labelW + L.plotW / 2).attr("y", L.studyY1 + 18)
+      .attr("x", L.labelW + L.plotW / 2).attr("y", L.studyY1 + 21)
       .attr("text-anchor", "middle")
       .style("font-size", L.annotFontSize).style("font-family", T.fontFamily)
       .attr("fill", T.fgMuted)
-      .text(`— page ${page + 1} of ${totalPages}, continued —`);
+      .text(`▼  page ${page + 1} of ${totalPages}, continued  ▼`);
     svg.attr("height", L.totalH);
     return { totalPages };
   }
@@ -2190,8 +2204,7 @@ export function drawPCurve(result, options = {}) {
 
   // ---- Legend ----
   const LW = 172, LH = 46, PAD = 8, ROW = 16;
-  const legendX = iW - LW - 4;
-  const legendY = 4;
+  const { x: legendX, y: legendY } = placeLegend(iW, iH, LW, LH, "tr");
   const lg = g.append("g").attr("transform", `translate(${legendX},${legendY})`);
 
   lg.append("rect")
@@ -2428,8 +2441,9 @@ export function drawOrchardPlot(studies, m, profile, options = {}) {
 
   const laneH = iH / bands.length;
 
-  // Cap the drawing height within each lane (prevents giant bars in single-band plots)
-  const DRAW_CAP = 80;
+  // Scale drawing height with lane — cap higher for single-band layouts where
+  // the fixed 80 px cap leaves most of the lane height as dead space.
+  const DRAW_CAP = Math.min(laneH, Math.max(80, Math.round(laneH * 0.60)));
   const drawH    = Math.min(laneH, DRAW_CAP);
 
   // ---- X scale (internal / untransformed) ----
@@ -2643,7 +2657,21 @@ export function drawCaterpillarPlot(studies, m, profile, options = {}) {
   // Dynamic left margin fitted to the longest study label (≈6.5px per char at 10px font)
   const maxStudyLen = sorted.reduce((m, s) => Math.max(m, (s.label || "").length), 0);
   const leftMargin  = Math.max(50, Math.min(160, Math.ceil(maxStudyLen * LABEL_CHAR_PX.regular10) + 14));
-  const margin  = { top: 28, right: 20, bottom: 38, left: leftMargin };
+
+  // ---- Group colour palette (computed before margin so legend width is known) ----
+  const allGroups = [...new Set(sorted.map(s => s.group || "").filter(Boolean))];
+  const hasGroups = allGroups.length > 1;
+  const groupColor = grp => {
+    if (T.useBwShapes) return T.fg;
+    const idx = allGroups.indexOf(grp);
+    return idx >= 0 ? GROUP_COLORS[idx % GROUP_COLORS.length] : T.fgSubtle;
+  };
+  // Right margin: expand to a gutter wide enough for the group legend when needed
+  const maxGroupLen = hasGroups ? Math.max(...allGroups.map(g => g.length)) : 0;
+  const LEGEND_W    = hasGroups
+    ? Math.max(80, Math.min(140, Math.ceil(maxGroupLen * LABEL_CHAR_PX.regular10) + 26))
+    : 20;
+  const margin  = { top: 28, right: LEGEND_W, bottom: 38, left: leftMargin };
 
   // Height fitted to the studies on this page (no cap needed with pagination)
   const H = margin.top + pk * ROW_H + margin.bottom;
@@ -2658,15 +2686,6 @@ export function drawCaterpillarPlot(studies, m, profile, options = {}) {
   const iH = H - margin.top  - margin.bottom;
 
   const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
-
-  // ---- Group colour palette ----
-  const allGroups = [...new Set(sorted.map(s => s.group || "").filter(Boolean))];
-  const hasGroups = allGroups.length > 1;
-  const groupColor = grp => {
-    if (T.useBwShapes) return T.fg;
-    const idx = allGroups.indexOf(grp);
-    return idx >= 0 ? GROUP_COLORS[idx % GROUP_COLORS.length] : T.fgSubtle;
-  };
 
   // ---- X scale — domain from ALL sorted studies for stability across pages ----
   // Individual study CI: yi ± Z_95 * se  (always normal, per forest plot convention)
@@ -2787,25 +2806,24 @@ export function drawCaterpillarPlot(studies, m, profile, options = {}) {
     } else { ht.append("tspan").text(part); }
   }); }
 
-  // ---- Legend (groups only) ----
+  // ---- Legend (groups only — right gutter, outside inner plot area) ----
   if (hasGroups) {
+    const lx = margin.left + iW + 8;   // left edge of legend gutter
     allGroups.forEach((grp, gi) => {
       const color = T.useBwShapes ? T.fg : GROUP_COLORS[gi % GROUP_COLORS.length];
-      const lx = iW - 4;
-      const ly = gi * 14;
-      g.append("line")
-        .attr("x1", lx - 20).attr("x2", lx - 6)
+      const ly = margin.top + gi * 14;
+      svg.append("line")
+        .attr("x1", lx).attr("x2", lx + 14)
         .attr("y1", ly + 5).attr("y2", ly + 5)
         .attr("stroke", color).attr("stroke-width", 2);
-      g.append("circle")
-        .attr("cx", lx - 13).attr("cy", ly + 5)
+      svg.append("circle")
+        .attr("cx", lx + 7).attr("cy", ly + 5)
         .attr("r", 3).attr("fill", color);
-      g.append("text")
-        .attr("x", lx - 24).attr("y", ly + 9)
-        .attr("text-anchor", "end")
+      svg.append("text")
+        .attr("x", lx + 18).attr("y", ly + 9)
         .attr("fill", T.fgMuted)
         .style("font-size", FONT_SIZE.tickLabel)
-        .text(grp.length > 14 ? grp.slice(0, 13) + "…" : grp);
+        .text(truncateLabel(grp, LEGEND_W - 26, 10));
     });
   }
 
@@ -2996,22 +3014,21 @@ export function drawBlupPlot(result, profile, options = {}) {
     .attr("text-anchor", "middle").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.tickLabel)
     .text(`BLUPs  k = ${result.k}   ${tau2Str}`);
 
-  // Legend
-  const legY = H - 28;
-  const legX = margin.left + 4;
-  svg.append("line").attr("x1", legX).attr("x2", legX + 16).attr("y1", legY + 5).attr("y2", legY + 5)
+  // Legend — top-right header band (clears the axis / tick-label space)
+  const legX = W - margin.right - 4;
+  svg.append("line").attr("x1", legX - 82).attr("x2", legX - 66).attr("y1", 11).attr("y2", 11)
     .attr("stroke", T.fgSubtle).attr("stroke-width", 1.5).attr("opacity", 0.7);
-  svg.append("circle").attr("cx", legX + 8).attr("cy", legY + 5).attr("r", 3)
+  svg.append("circle").attr("cx", legX - 74).attr("cy", 11).attr("r", 2.5)
     .attr("fill", T.fgSubtle).attr("opacity", 0.7);
-  svg.append("text").attr("x", legX + 20).attr("y", legY + 9)
-    .attr("fill", T.fgMuted).style("font-size", FONT_SIZE.tickLabel).text("Observed");
+  svg.append("text").attr("x", legX - 62).attr("y", 15)
+    .attr("fill", T.fgMuted).style("font-size", FONT_SIZE.annot).text("Observed");
 
-  svg.append("line").attr("x1", legX + 82).attr("x2", legX + 98).attr("y1", legY + 5).attr("y2", legY + 5)
+  svg.append("line").attr("x1", legX - 82).attr("x2", legX - 66).attr("y1", 25).attr("y2", 25)
     .attr("stroke", T.accent).attr("stroke-width", 2);
-  svg.append("circle").attr("cx", legX + 90).attr("cy", legY + 5).attr("r", 4)
+  svg.append("circle").attr("cx", legX - 74).attr("cy", 25).attr("r", 3.5)
     .attr("fill", T.accent).attr("stroke", T.bgSurface).attr("stroke-width", 1);
-  svg.append("text").attr("x", legX + 102).attr("y", legY + 9)
-    .attr("fill", T.fgMuted).style("font-size", FONT_SIZE.tickLabel).text("BLUP (shrunken)");
+  svg.append("text").attr("x", legX - 62).attr("y", 29)
+    .attr("fill", T.fgMuted).style("font-size", FONT_SIZE.annot).text("BLUP (shrunken)");
 
   return { totalPages };
 }
@@ -4048,8 +4065,10 @@ export function drawProfileLikTau2(result, options = {}) {
     .attr("stroke", T.fgSubtle)
     .attr("stroke-width", 1.2)
     .attr("stroke-dasharray", "5,3");
+  // If the cutoff line is near the top, place label below to avoid τ̂ label collision
+  const cutoffBelow = yCrit < 20;
   g.append("text")
-    .attr("x", iW - 2).attr("y", yCrit - 4)
+    .attr("x", iW - 2).attr("y", cutoffBelow ? yCrit + 12 : yCrit - 4)
     .attr("text-anchor", "end")
     .attr("fill", T.fgMuted)
     .style("font-size", FONT_SIZE.annot)
@@ -4401,17 +4420,26 @@ export function drawBayesMuPosterior(result, options = {}) {
     .attr("stroke", T.accent).attr("stroke-width", 2)
     .attr("stroke-dasharray", "6,3");
 
+  // ---- 6. Frequentist RE comparison line (dotted) ----
+  const hasRE   = reMean !== undefined && isFinite(reMean) && reMean >= muMin && reMean <= muMax;
+  const reX     = hasRE ? x(reMean) : null;
+  // When lines are close, share a label anchor to prevent horizontal overlap
+  const labelsClose  = hasRE && Math.abs(meanX - reX) < 40;
+  const sharedX      = labelsClose ? (meanX + reX) / 2 : null;
+  const sharedRight  = labelsClose ? sharedX > iW * 0.6 : null;
+  const mLabelX      = sharedX !== null ? sharedX : meanX;
+  const mRight       = sharedRight !== null ? sharedRight : meanRight;
+
   g.append("text")
-    .attr("x", meanX + (meanRight ? -4 : 4))
+    .attr("x", mLabelX + (mRight ? -4 : 4))
     .attr("y", 22)
-    .attr("text-anchor", meanRight ? "end" : "start")
+    .attr("text-anchor", mRight ? "end" : "start")
     .attr("fill", T.fgMuted).style("font-size", FONT_SIZE.annot)
     .text(`posterior mean\u202F=\u202F${muMean.toFixed(3)}`);
 
-  // ---- 6. Frequentist RE comparison line (dotted) ----
-  if (reMean !== undefined && isFinite(reMean) && reMean >= muMin && reMean <= muMax) {
-    const reX     = x(reMean);
-    const reRight = reX > iW * 0.6;
+  if (hasRE) {
+    const reRight = sharedRight !== null ? sharedRight : reX > iW * 0.6;
+    const rLabelX = sharedX !== null ? sharedX : reX;
     g.append("line")
       .attr("x1", reX).attr("x2", reX)
       .attr("y1", 0).attr("y2", iH)
@@ -4419,7 +4447,7 @@ export function drawBayesMuPosterior(result, options = {}) {
       .attr("stroke-dasharray", "3,2");
 
     g.append("text")
-      .attr("x", reX + (reRight ? -4 : 4))
+      .attr("x", rLabelX + (reRight ? -4 : 4))
       .attr("y", 34)
       .attr("text-anchor", reRight ? "end" : "start")
       .attr("fill", T.fgMuted).style("font-size", FONT_SIZE.annot)
