@@ -390,19 +390,19 @@ export function drawBubble(studies, reg, mod, container) {
     .on("mouseout", () => tooltip.style("opacity", 0));
 
   // Axes
-  g.append("g").attr("transform", `translate(0,${iH})`).call(d3.axisBottom(xScale).ticks(5));
-  g.append("g").call(d3.axisLeft(yScale).ticks(5));
+  styleAxis(g.append("g").attr("transform", `translate(0,${iH})`).call(d3.axisBottom(xScale).ticks(5)), "var(--border-hover)", "var(--fg-muted)", "10px");
+  styleAxis(g.append("g").call(d3.axisLeft(yScale).ticks(5)), "var(--border-hover)", "var(--fg-muted)", "10px");
 
   // Axis labels
   g.append("text")
     .attr("x", iW / 2).attr("y", iH + 42)
-    .attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "12px")
+    .attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "11px")
     .text(modName);
 
   g.append("text")
     .attr("transform", "rotate(-90)")
     .attr("x", -iH / 2).attr("y", -44)
-    .attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "12px")
+    .attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "11px")
     .text("Effect size (yi)");
 
   // Title — for linear show β; for nonlinear show transform label
@@ -603,19 +603,19 @@ export function drawPartialResidualBubble(studies, reg, mod, container) {
     .on("mouseout", () => tooltip.style("opacity", 0));
 
   // Axes
-  g.append("g").attr("transform", `translate(0,${iH})`).call(d3.axisBottom(xScale).ticks(5));
-  g.append("g").call(d3.axisLeft(yScale).ticks(5));
+  styleAxis(g.append("g").attr("transform", `translate(0,${iH})`).call(d3.axisBottom(xScale).ticks(5)), "var(--border-hover)", "var(--fg-muted)", "10px");
+  styleAxis(g.append("g").call(d3.axisLeft(yScale).ticks(5)), "var(--border-hover)", "var(--fg-muted)", "10px");
 
   // Axis labels
   g.append("text")
     .attr("x", iW / 2).attr("y", iH + 42)
-    .attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "12px")
+    .attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "11px")
     .text(modName);
 
   g.append("text")
     .attr("transform", "rotate(-90)")
     .attr("x", -iH / 2).attr("y", -44)
-    .attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "12px")
+    .attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "11px")
     .text("Partial residual");
 
   // Title
@@ -1482,8 +1482,8 @@ export function drawInfluencePlot(influence) {
     .text(d => d.label);
 
   // ----------- AXES -----------
-  g.append("g").attr("transform", `translate(0,${iH})`).call(d3.axisBottom(x).ticks(5));
-  g.append("g").call(d3.axisLeft(y).ticks(5));
+  styleAxis(g.append("g").attr("transform", `translate(0,${iH})`).call(d3.axisBottom(x).ticks(5)), "var(--border-hover)", "var(--fg-muted)", "10px");
+  styleAxis(g.append("g").call(d3.axisLeft(y).ticks(5)), "var(--border-hover)", "var(--fg-muted)", "10px");
 
   // Axis labels
   g.append("text")
@@ -1500,7 +1500,7 @@ export function drawInfluencePlot(influence) {
   // Title
   svg.append("text")
     .attr("x", margin.left + iW / 2).attr("y", 18)
-    .attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "12px")
+    .attr("text-anchor", "middle").attr("fill", "var(--fg)").style("font-size", "11px")
     .text("Influence plot  (red = both flags, orange = one flag)");
 }
 
@@ -1556,8 +1556,8 @@ export function drawCumulativeForest(cumulativeResults, profile, options = {}) {
   svg.append("text")
     .attr("x", margin.left + plotW / 2).attr("y", 20)
     .attr("text-anchor", "middle")
-    .attr("fill", "var(--fg-muted)")
-    .style("font-size", "12px")
+    .attr("fill", "var(--fg)")
+    .style("font-size", "11px")
     .text(`Cumulative meta-analysis${pageNote}`);
 
   // Null reference line (at the back-transformed 0 — e.g. 0 for MD, 1 for OR/RR)
@@ -4267,14 +4267,10 @@ export function drawQQPlot(stdResiduals, labels, options = {}) {
   const xAxis = d3.axisBottom(x).ticks(5).tickSize(4);
   const yAxis = d3.axisLeft(y).ticks(5).tickSize(4);
 
-  const isDark = document.documentElement.classList.contains("dark");
-  const strokeColor = isDark ? "#aaa" : "#555";
-  const fillColor   = isDark ? "#ccc" : "#333";
-
   const xAxisG = g.append("g").attr("transform", `translate(0,${iH})`).call(xAxis);
-  styleAxis(xAxisG, strokeColor, fillColor, 10, "sans-serif");
+  styleAxis(xAxisG, "var(--border-hover)", "var(--fg-muted)", "10px");
   const yAxisG = g.append("g").call(yAxis);
-  styleAxis(yAxisG, strokeColor, fillColor, 10, "sans-serif");
+  styleAxis(yAxisG, "var(--border-hover)", "var(--fg-muted)", "10px");
 
   // ---- 8. Axis labels ----
   g.append("text")
@@ -4431,15 +4427,13 @@ export function drawRadialPlot(studies, m, profile, options = {}) {
   const xAxis = d3.axisBottom(xScale).ticks(6);
   const yAxis = d3.axisLeft(yScale).ticks(7);
 
-  g.append("g").attr("transform", `translate(0,${iH})`).call(xAxis)
-    .selectAll("text").style("font-size", "10px");
-  g.append("g").call(yAxis)
-    .selectAll("text").style("font-size", "10px");
+  styleAxis(g.append("g").attr("transform", `translate(0,${iH})`).call(xAxis), "var(--border-hover)", "var(--fg-muted)", "10px");
+  styleAxis(g.append("g").call(yAxis), "var(--border-hover)", "var(--fg-muted)", "10px");
 
   // X-axis label
   g.append("text")
     .attr("x", iW / 2).attr("y", iH + 42)
-    .attr("text-anchor", "middle").attr("fill", "var(--fg)")
+    .attr("text-anchor", "middle").attr("fill", "var(--fg-muted)")
     .style("font-size", "11px")
     .text("Precision (1/SE)");
 
@@ -4447,7 +4441,7 @@ export function drawRadialPlot(studies, m, profile, options = {}) {
   g.append("text")
     .attr("transform", "rotate(-90)")
     .attr("x", -iH / 2).attr("y", -46)
-    .attr("text-anchor", "middle").attr("fill", "var(--fg)")
+    .attr("text-anchor", "middle").attr("fill", "var(--fg-muted)")
     .style("font-size", "11px")
     .text("Standardised effect (y/SE)");
 
@@ -4468,7 +4462,7 @@ export function drawRadialPlot(studies, m, profile, options = {}) {
     g.append("line")
       .attr("x1", iW).attr("x2", iW)
       .attr("y1", 0).attr("y2", iH)
-      .attr("stroke", "var(--border)").attr("stroke-width", 1);
+      .attr("stroke", "var(--border-hover)").attr("stroke-width", 1);
 
     thetaTicks.forEach(θ => {
       const yPx = yScale(θ * xRight);
@@ -4478,7 +4472,7 @@ export function drawRadialPlot(studies, m, profile, options = {}) {
       g.append("line")
         .attr("x1", iW).attr("x2", iW + 4)
         .attr("y1", yPx).attr("y2", yPx)
-        .attr("stroke", "var(--border)").attr("stroke-width", 1);
+        .attr("stroke", "var(--border-hover)").attr("stroke-width", 1);
       g.append("text")
         .attr("x", iW + 7).attr("y", yPx + 4)
         .attr("fill", "var(--fg-muted)").style("font-size", "9px")
@@ -4491,7 +4485,7 @@ export function drawRadialPlot(studies, m, profile, options = {}) {
       .attr("transform", "rotate(90)")
       .attr("x", iH / 2).attr("y", -(iW + margin.right - 10))
       .attr("text-anchor", "middle").attr("fill", "var(--fg-muted)")
-      .style("font-size", "10px")
+      .style("font-size", "11px")
       .text(axisLabel);
   }
 
