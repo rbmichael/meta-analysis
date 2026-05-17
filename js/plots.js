@@ -125,7 +125,7 @@
 
 import { chiSquareCDF, normalQuantile } from "./utils.js";
 import { Z_95 } from "./constants.js";
-import { PLOT_THEMES, BW_DASHES, hashGroupLabel } from "./plotThemes.js";
+import { PLOT_THEMES, ROB_COLORS, BW_DASHES, hashGroupLabel } from "./plotThemes.js";
 import { rcsBasis, validStudies } from "./analysis.js";
 
 // ── Plot style constants ──────────────────────────────────────────────────────
@@ -272,6 +272,16 @@ function formatTick(v, transform) {
     return isFinite(t) ? String(+t.toFixed(3)) : "";
   }
   return d3.format(".3~g")(v);
+}
+
+// Returns "#ffffff" or "#1a1a1a" based on WCAG relative luminance of fillHex.
+function getContrastFg(fillHex) {
+  const r = parseInt(fillHex.slice(1, 3), 16) / 255;
+  const g = parseInt(fillHex.slice(3, 5), 16) / 255;
+  const b = parseInt(fillHex.slice(5, 7), 16) / 255;
+  const lin = c => c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  const L = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+  return L > 0.179 ? "#1a1a1a" : "#ffffff";
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1162,7 +1172,7 @@ export function drawForest(studies, m, options = {}) {
 
 // ---- Funnel sub-renderers ----
 
-function funnelDrawContours(svg, bgColor, BANDS, bandPath, W, H) {
+function funnelDrawContours(svg, bgColor, BANDS, bandPath, W, H, T) {
   if (BANDS.some(b => b.fill && b.fill.startsWith("url(#hatch-"))) {
     const defs = svg.append("defs");
     [
@@ -1178,7 +1188,7 @@ function funnelDrawContours(svg, bgColor, BANDS, bandPath, W, H) {
       pat.append("line")
         .attr("x1", 0).attr("y1", 0)
         .attr("x2", 0).attr("y2", size)
-        .attr("stroke", "#333333").attr("stroke-width", 1);
+        .attr("stroke", T.fgMuted).attr("stroke-width", 1);
     });
   }
   svg.append("rect")
@@ -1317,7 +1327,7 @@ function funnelDrawLegend(svg, W, margin, BANDS, T) {
   const legendX = W - margin.right - LW - 8;
   const legendY = margin.top + 8;
   const lg = svg.append("g").attr("transform", `translate(${legendX},${legendY})`);
-  const legendBg     = T.bg !== "transparent" ? T.bg : (document.documentElement.dataset.theme !== "light" ? "#1e1e1e" : "#ffffff");
+  const legendBg     = T.bg !== "transparent" ? T.bg : T.bgSurface;
   const legendBorder = T.border;
   const legendFg     = T.fgMuted;
   const innermostFill = BANDS[BANDS.length - 1].fill;
@@ -1497,15 +1507,15 @@ export function drawFunnel(studies, m, profile, options = {}) {
     } else {
       bgColor = T.bg;
       BANDS = [
-        { z: Infinity, fill: "#a8a8a8", label: "p < 0.01"        },
-        { z: 2.576,    fill: "#c8c8c8", label: "0.01 ≤ p < 0.05" },
-        { z: 1.960,    fill: "#e4e4e4", label: "0.05 ≤ p < 0.10" },
-        { z: 1.645,    fill: T.bg,      label: "p ≥ 0.10"         },
+        { z: Infinity, fill: T.contour01 ?? "#a8a8a8", label: "p < 0.01"        },
+        { z: 2.576,    fill: T.contour05 ?? "#c8c8c8", label: "0.01 ≤ p < 0.05" },
+        { z: 1.960,    fill: T.contour10 ?? "#e4e4e4", label: "0.05 ≤ p < 0.10" },
+        { z: 1.645,    fill: T.bg,                     label: "p ≥ 0.10"         },
       ];
     }
   }
 
-  if (contours) funnelDrawContours(svg, bgColor, BANDS, bandPath, W, H);
+  if (contours) funnelDrawContours(svg, bgColor, BANDS, bandPath, W, H, T);
   funnelDrawFunnelArms(svg, x, y, seMax, xHalf, borderClr, m, T);
   funnelDrawStudies(svg, studies, x, y, dotFill, dotStroke, dotFillImp, dotStrImp);
   funnelDrawEggerLine(svg, egger, studies, x, y, T);
@@ -1564,7 +1574,8 @@ export function drawInfluencePlot(influence, options = {}) {
     g.append("rect")
       .attr("x", x2).attr("y", 0)
       .attr("width", iW - x2).attr("height", y2)
-      .attr("fill", T.useBwShapes ? "rgba(0,0,0,0.05)" : "rgba(224,96,96,0.08)");
+      .attr("fill", T.useBwShapes ? "#000000" : T.colorError)
+      .attr("fill-opacity", T.useBwShapes ? 0.05 : 0.08);
   }
 
   // ----------- REFERENCE LINES -----------
@@ -3413,13 +3424,6 @@ export function drawRoBTrafficLight(studies, domains, robData, options = {}) {
 
   const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
 
-  const ROB_COLORS = {
-    "Low":           "#4caf50",
-    "Some concerns": "#ff9800",
-    "High":          "#e53935",
-    "NI":            "#9e9e9e",
-  };
-
   const CELL_W   = 44;
   const CELL_H   = 22;
   const TOP      = 70;   // space for rotated domain labels
@@ -3542,12 +3546,6 @@ export function drawRoBSummary(studies, domains, robData, options = {}) {
 
   const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
 
-  const ROB_COLORS = {
-    "Low":           "#4caf50",
-    "Some concerns": "#ff9800",
-    "High":          "#e53935",
-    "NI":            "#9e9e9e",
-  };
   const RATINGS   = ["Low", "Some concerns", "High", "NI"];
 
   const BAR_H    = 22;
@@ -3622,7 +3620,7 @@ export function drawRoBSummary(studies, domains, robData, options = {}) {
         svg.append("text")
           .attr("x", LEFT + xOffset + w / 2).attr("y", y + BAR_H / 2 + 4)
           .attr("text-anchor", "middle")
-          .attr("fill", "#fff")
+          .attr("fill", getContrastFg(ROB_COLORS[rating] ?? "#888888"))
           .style("font-size", FONT_SIZE.tickLabel)
           .style("pointer-events", "none")
           .text(`${Math.round(prop * 100)}%`);

@@ -73,6 +73,16 @@
 //                     preserveSignalColors is true.  Empty string → no note.
 // =============================================================================
 
+// Standard RoB 2 / ROBINS-I traffic-light palette (signal colors).
+// Kept here so all themes share the same semantic meaning.
+// When T.preserveSignalColors is true (BW theme), these are used unchanged.
+export const ROB_COLORS = {
+  "Low":           "#4caf50",
+  "Some concerns": "#ff9800",
+  "High":          "#e53935",
+  "NI":            "#9e9e9e",
+};
+
 export const PLOT_THEMES = {
 
   // ---------------------------------------------------------------------------
@@ -155,6 +165,10 @@ export const PLOT_THEMES = {
     colorInfo:       "#1a5276",   // dark navy — informational text
     colorSuccess:    "#1a7a3a",   // dark green — PEESE curve
 
+    contour01:       "#a8a8a8",   // outermost band fill (p < 0.01)
+    contour05:       "#c8c8c8",   // second band fill   (0.01 ≤ p < 0.05)
+    contour10:       "#e4e4e4",   // third band fill    (0.05 ≤ p < 0.10)
+
     fontFamily:      "'Times New Roman', Times, serif",
     ciStrokeWidth:   1.5,
     headerRuleWidth: 1,
@@ -199,6 +213,10 @@ export const PLOT_THEMES = {
     colorWarning:    "#b86a00",
     colorInfo:       "#1a5276",
     colorSuccess:    "#1a7a3a",
+
+    contour01:       "#a8a8a8",
+    contour05:       "#c8c8c8",
+    contour10:       "#e4e4e4",
 
     fontFamily:      "Arial, Helvetica, sans-serif",
     ciStrokeWidth:   1.5,
