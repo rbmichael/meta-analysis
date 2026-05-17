@@ -466,7 +466,7 @@ export function renderRegressionPanel(reg, method, ciMethod, kExcluded = 0, mods
       ${reg.p > 1 ? `&nbsp;·&nbsp; R² = ${isFinite(reg.R2) ? fmt(reg.R2 * 100) + "%" : "N/A"}` : ""}
       &nbsp;·&nbsp; <em>Q</em>E(${reg.QEdf}) = ${fmt(reg.QE)}, <em>p</em> = ${regFmtP(reg.QEp)}
       ${QMrow}
-      <br><span style="color:var(--fg-muted);font-size:0.93em">${hBtn("reg.aic")}AIC&nbsp;=&nbsp;${fmt(reg.AIC)} &nbsp;·&nbsp; BIC&nbsp;=&nbsp;${fmt(reg.BIC)} &nbsp;·&nbsp; LL&nbsp;=&nbsp;${fmt(reg.LL)}&nbsp;&nbsp;<span style="font-size:0.9em;opacity:0.75">(${method}; compare ${method === "REML" ? "models with same predictors only" : "any nested models"})</span></span>
+      <br><span style="color:var(--fg-muted);font-size:0.93em">${hBtn("reg.aic")}AIC&nbsp;=&nbsp;${fmt(reg.AIC)} &nbsp;·&nbsp; BIC&nbsp;=&nbsp;${fmt(reg.BIC)} &nbsp;·&nbsp; LL&nbsp;=&nbsp;${fmt(reg.LL)}${ciMethod === "KH" && isFinite(reg.s2) ? ` &nbsp;·&nbsp; KH&nbsp;<em>s</em>²&nbsp;=&nbsp;${fmt(reg.s2)}` : ""}&nbsp;&nbsp;<span style="font-size:0.9em;opacity:0.75">(${method}; compare ${method === "REML" ? "models with same predictors only" : "any nested models"})</span></span>
     </div>
     <div class="reg-body">
       ${clusterRegNote}${excludedWarning}${lowDfWarning}${vifWarning}
@@ -513,6 +513,16 @@ export function renderRegressionPanel(reg, method, ciMethod, kExcluded = 0, mods
           <tbody>${fittedRows}</tbody>
         </table>
         <div class="reg-note">Standardized residuals |std. e| &gt; 1.96 highlighted.</div>
+      </details>` : ""}
+      ${reg.vcov && reg.p >= 2 ? `
+      <details>
+        <summary>Coefficient covariance matrix (vcov)</summary>
+        <div class="reg-note" style="margin:4px 0 8px">
+          The ${reg.p}&times;${reg.p} variance-covariance matrix of regression coefficients.
+          Useful for computing SEs of linear combinations not available in the contrasts panel.
+          ${reg.isClustered ? "Note: this is the model-based vcov, not the cluster-robust sandwich estimator." : ""}
+        </div>
+        <button class="btn-sm vcov-download-btn" type="button">Download vcov as CSV</button>
       </details>` : ""}
     </div>`;
 }
@@ -1125,17 +1135,20 @@ export function bayesInterpretation(BF10) {
 export function buildBayesSummaryHTML(result, profile, reMean) {
   const muDisp   = profile.transform(result.muMean);
   const muCIDisp = result.muCI.map(v => profile.transform(v));
+  const muSDNote = profile.isTransformedScale ? " (log)" : "";
+  const crLabel  = getCiLabel().replace("CI", "CrI");
+  const fmtBF    = bf => !isFinite(bf) ? "NA" : bf >= 1000 || bf < 0.001 ? bf.toExponential(2) : bf.toFixed(3);
   return `
     <table class="stats-table" style="margin-bottom:8px">
       <tr>
         <td>Posterior mean μ</td>
         <td>${fmt(muDisp)}</td>
-        <td>${getCiLabel().replace("CI","CrI")} [${fmt(muCIDisp[0])}, ${fmt(muCIDisp[1])}]</td>
+        <td>${crLabel} [${fmt(muCIDisp[0])}, ${fmt(muCIDisp[1])}] · SD${muSDNote} = ${fmt(result.muSD)}</td>
       </tr>
       <tr>
         <td>Posterior mean τ</td>
         <td>${fmt(result.tauMean)}</td>
-        <td>${getCiLabel().replace("CI","CrI")} [${fmt(result.tauCI[0])}, ${fmt(result.tauCI[1])}]</td>
+        <td>${crLabel} [${fmt(result.tauCI[0])}, ${fmt(result.tauCI[1])}] · SD = ${fmt(result.tauSD)}</td>
       </tr>
       ${isFinite(reMean) ? `<tr>
         <td>Frequentist RE (comparison)</td>
@@ -1144,9 +1157,14 @@ export function buildBayesSummaryHTML(result, profile, reMean) {
       </tr>` : ""}
       ${isFinite(result.BF10) ? `<tr>
         <td>Bayes Factor BF\u2081\u2080 (H\u2081: \u03BC\u22600)</td>
-        <td>${result.BF10 >= 1000 ? result.BF10.toExponential(2) : result.BF10 < 0.001 ? result.BF10.toExponential(2) : result.BF10.toFixed(3)}</td>
+        <td>${fmtBF(result.BF10)}</td>
         <td>${bayesInterpretation(result.BF10)}</td>
       </tr>
+      ${result.BF10 < 1 && isFinite(result.BF01) ? `<tr>
+        <td>BF\u2080\u2081 = 1/BF\u2081\u2080 (H\u2080: \u03BC\u202F=\u202F0)</td>
+        <td>${fmtBF(result.BF01)}</td>
+        <td>${bayesInterpretation(result.BF10)}</td>
+      </tr>` : ""}
       <tr>
         <td>log(BF\u2081\u2080)</td>
         <td>${result.logBF10.toFixed(3)}</td>

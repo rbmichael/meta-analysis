@@ -108,7 +108,10 @@ export function pubBiasData(args) {
          `${fmt(profile.transform(hc.beta))} [${fmt(profile.transform(hc.ci[0]))}, ${fmt(profile.transform(hc.ci[1]))}]`,
          "—"]
       : ["Henmi-Copas CI", "—", "NA (k < 3)"],
-  ];
+    hc && !hc.error && isFinite(hc.tau2)
+      ? ["Henmi-Copas τ² (DL, bias-robust)", fmt(hc.tau2), "—"]
+      : null,
+  ].filter(Boolean);
 
   const fsnLine = [
     `Fail-safe N (Rosenthal): ${isFinite(fsn?.rosenthal) ? Math.round(fsn.rosenthal) : "—"}`,

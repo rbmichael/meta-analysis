@@ -386,6 +386,9 @@ function sectionPubBias(args) {
   const hcRow_std = hc && !hc.error
     ? `<tr><td>Henmi-Copas (bias-robust CI)</td><td>${fmt(profile.transform(hc.beta))} [${fmt(profile.transform(hc.ci[0]))}, ${fmt(profile.transform(hc.ci[1]))}]</td><td>—</td></tr>`
     : `<tr><td>Henmi-Copas (bias-robust CI)</td><td>—</td><td>NA</td></tr>`;
+  const hcTau2Row_std = hc && !hc.error && isFinite(hc.tau2)
+    ? `<tr><td>Henmi-Copas τ² (DL, bias-robust)</td><td>${fmt(hc.tau2)}</td><td>—</td></tr>`
+    : "";
 
   if (apaFormat) {
     const d = pubBiasData(args);
@@ -419,6 +422,7 @@ function sectionPubBias(args) {
         ? `<tr><td>WAAP-WLS (k<sub>adequate</sub> = ${waap.kAdequate} of ${waap.k}${waap.fallback ? "; WLS fallback" : ""})</td><td>${fmt(profile.transform(waap.estimate))} [${fmt(profile.transform(waap.ci[0]))}, ${fmt(profile.transform(waap.ci[1]))}]</td><td>${naP(waap.p, fmtP)}</td></tr>`
         : `<tr><td>WAAP-WLS</td><td>—</td><td>NA</td></tr>`,
       hcRow_std,
+      hcTau2Row_std,
     ]
   );
 
@@ -804,7 +808,7 @@ function sectionRegression(reg, method, ciMethod, apaFormat = false, nextTable, 
   const R2row  = reg.p > 1 && isFinite(reg.R2)
     ? ` · R² = ${fmt(reg.R2 * 100)}%` : "";
   const aicRow = isFinite(reg.AIC)
-    ? ` · AIC = ${fmt(reg.AIC)} · BIC = ${fmt(reg.BIC)} · LL = ${fmt(reg.LL)}` : "";
+    ? ` · AIC = ${fmt(reg.AIC)} · BIC = ${fmt(reg.BIC)} · LL = ${fmt(reg.LL)}${ciMethod === "KH" && isFinite(reg.s2) ? ` · KH s² = ${fmt(reg.s2)}` : ""}` : "";
 
   const hasVif = Array.isArray(reg.vif) && reg.vif.some(v => isFinite(v));
   const vifCell = j => {
@@ -1336,11 +1340,15 @@ export function buildReport(args) {
       const muCIDisp = bayesResult.muCI.map(v => profile.transform(v));
       const reDisp   = isFinite(bayesReMean) ? profile.transform(bayesReMean) : NaN;
       const priorLine = `Prior: \u03BC\u202F~\u202FN(${esc(bayesResult.mu0)},\u202F${esc(bayesResult.sigma_mu)}\u00B2)\u2003\u03C4\u202F~\u202FHalfNormal(${esc(bayesResult.sigma_tau)})\u2003k\u202F=\u202F${bayesResult.k} studies`;
+      const muSDNote = profile.isTransformedScale ? " (log)" : "";
+      const fmtBF = bf => !isFinite(bf) ? "NA" : bf >= 1000 || bf < 0.001 ? bf.toExponential(2) : bf.toFixed(3);
       const statsTable = `
   <table class="stats-table">
-    <tr><td>Posterior mean \u03BC</td><td>${fmt(muDisp)}</td><td>${widthCrLabel} [${fmt(muCIDisp[0])}, ${fmt(muCIDisp[1])}]</td></tr>
-    <tr><td>Posterior mean \u03C4</td><td>${fmt(bayesResult.tauMean)}</td><td>${widthCrLabel} [${fmt(bayesResult.tauCI[0])}, ${fmt(bayesResult.tauCI[1])}]</td></tr>
+    <tr><td>Posterior mean \u03BC</td><td>${fmt(muDisp)}</td><td>${widthCrLabel} [${fmt(muCIDisp[0])}, ${fmt(muCIDisp[1])}] \u00B7 SD${muSDNote} = ${fmt(bayesResult.muSD)}</td></tr>
+    <tr><td>Posterior mean \u03C4</td><td>${fmt(bayesResult.tauMean)}</td><td>${widthCrLabel} [${fmt(bayesResult.tauCI[0])}, ${fmt(bayesResult.tauCI[1])}] \u00B7 SD = ${fmt(bayesResult.tauSD)}</td></tr>
     ${isFinite(reDisp) ? `<tr><td>Frequentist RE (comparison)</td><td>${fmt(reDisp)}</td><td></td></tr>` : ""}
+    ${isFinite(bayesResult.BF10) ? `<tr><td>Bayes Factor BF\u2081\u2080 (H\u2081: \u03BC\u22600)</td><td>${fmtBF(bayesResult.BF10)}</td><td></td></tr>` : ""}
+    ${bayesResult.BF10 < 1 && isFinite(bayesResult.BF01) ? `<tr><td>BF\u2080\u2081 = 1/BF\u2081\u2080 (H\u2080: \u03BC\u202F=\u202F0)</td><td>${fmtBF(bayesResult.BF01)}</td><td></td></tr>` : ""}
   </table>`;
       const bayesPriorNote = `Prior: \u03BC\u202F~\u202FN(${esc(bayesResult.mu0)},\u202F${esc(bayesResult.sigma_mu)}\u00B2); \u03C4\u202F~\u202FHalfNormal(${esc(bayesResult.sigma_tau)}). Vertical line\u202F=\u202Fposterior mean; shaded region\u202F=\u202F95% credible interval.`;
       const plotsMu  = apaFormat && svgMu

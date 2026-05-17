@@ -1067,7 +1067,10 @@
       <em>p</em>-values, <em>R</em>² (proportion of heterogeneity explained), and model-fit
       indices AIC, BIC, and log-likelihood (ML and REML conventions; matches metafor's
       <code>AIC.rma()</code> / <code>BIC.rma()</code>).
-      Bubble plots are generated per continuous moderator.</p>
+      Bubble plots are generated per continuous moderator.
+      When ≥ 2 moderators are present, a <strong>Download vcov CSV</strong> button exports
+      the full coefficient covariance matrix (rows and columns labelled by predictor name),
+      useful for custom contrasts and replication.</p>
       <p>When two or more moderators are present, the per-moderator tests panel shows
       both a <strong>Wald QM</strong> statistic and a <strong>Likelihood Ratio Test
       (LRT)</strong> for each moderator. LRT = 2·(LL<sub>ML,full</sub> −

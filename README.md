@@ -104,6 +104,8 @@ Continuous and categorical moderators. Multiple moderators may be added simultan
 
 **Multiple comparison correction** — Bonferroni or Holm adjustment of per-moderator omnibus QM p-values when m ≥ 2 moderators are tested simultaneously. Adjusted p-values displayed alongside raw values in the per-moderator tests table. Matches `p.adjust(method="bonferroni"/"holm")` in R (Holm, 1979).
 
+**Coefficient covariance matrix export** — when ≥ 2 moderators are present, a *Download vcov CSV* button exports the full p×p covariance matrix of estimated coefficients (rows and columns labelled by predictor name). Off-diagonal entries are required for custom contrasts and for replicating SE calculations externally.
+
 **Custom contrasts** — test any linear combination of coefficients H₀: L·β = 0, where L is a weight vector you supply (one weight per model term). SE = √(L′VL) using the full variance–covariance matrix. Typical use: set +1 and −1 on two categorical levels to directly compare them.
 
 **Permutation tests** — after running meta-regression, click *Run permutation test* to compute non-parametric p-values for the omnibus Q_M and per-moderator Q_M statistics. Shuffles y_i labels across studies (v_i and τ² held fixed) to build an exact null distribution. Recommended when k < 20 where parametric χ²/F approximations may be anti-conservative (Higgins & Thompson, 2004). Runs in a Web Worker with progress bar; equivalent to `metafor::permutest(res, iter=999)`.

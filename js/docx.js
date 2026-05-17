@@ -725,10 +725,14 @@ export async function buildDocx(args) {
       const muCIDisp = bayesResult.muCI.map(v => profile.transform(v));
       const reDisp   = isFinite(bayesReMean) ? profile.transform(bayesReMean) : NaN;
       const priorLine = `Prior: \u03BC\u202F~\u202FN(${bayesResult.mu0},\u202F${bayesResult.sigma_mu}\u00B2)  \u00B7  \u03C4\u202F~\u202FHalfNormal(${bayesResult.sigma_tau})  \u00B7  k\u202F=\u202F${bayesResult.k} studies`;
+      const muSDNote = profile.isTransformedScale ? " (log)" : "";
+      const fmtBF = bf => !isFinite(bf) ? "NA" : bf >= 1000 || bf < 0.001 ? bf.toExponential(2) : bf.toFixed(3);
       const bayesRows = [
-        [`Posterior mean \u03BC`, `${fmt(muDisp)}  ·  ${widthCrLabel} ${fmtCI_APA(muCIDisp[0], muCIDisp[1])}`],
-        [`Posterior mean \u03C4`, `${fmt(bayesResult.tauMean)}  ·  ${widthCrLabel} ${fmtCI_APA(bayesResult.tauCI[0], bayesResult.tauCI[1])}`],
+        [`Posterior mean \u03BC`, `${fmt(muDisp)}  ·  ${widthCrLabel} ${fmtCI_APA(muCIDisp[0], muCIDisp[1])}  ·  SD${muSDNote} = ${fmt(bayesResult.muSD)}`],
+        [`Posterior mean \u03C4`, `${fmt(bayesResult.tauMean)}  ·  ${widthCrLabel} ${fmtCI_APA(bayesResult.tauCI[0], bayesResult.tauCI[1])}  ·  SD = ${fmt(bayesResult.tauSD)}`],
         ...(isFinite(reDisp) ? [["Frequentist RE (comparison)", fmt(reDisp)]] : []),
+        ...(isFinite(bayesResult.BF10) ? [[`Bayes Factor BF\u2081\u2080 (H\u2081: \u03BC\u22600)`, fmtBF(bayesResult.BF10)]] : []),
+        ...(bayesResult.BF10 < 1 && isFinite(bayesResult.BF01) ? [[`BF\u2080\u2081 = 1/BF\u2081\u2080 (H\u2080: \u03BC = 0)`, fmtBF(bayesResult.BF01)]] : []),
       ];
       const chunks = [
         paraText("Bayesian Meta-Analysis", "Heading1"),

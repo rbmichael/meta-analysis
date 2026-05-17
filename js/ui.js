@@ -2573,6 +2573,17 @@ document.addEventListener("click", e => {
   section.querySelector(".contrast-result").innerHTML = formatContrastResult(result, _lastReg);
 });
 
+// Delegated listener for vcov CSV download button (injected into regression panel).
+document.addEventListener("click", e => {
+  const btn = e.target.closest(".vcov-download-btn");
+  if (!btn) return;
+  if (!_lastReg?.vcov || !_lastReg?.colNames) return;
+  const { vcov, colNames } = _lastReg;
+  const headers = ["", ...colNames];
+  const rows = vcov.map((row, i) => [colNames[i], ...row.map(v => isFinite(v) ? v.toFixed(6) : "NA")]);
+  downloadBlob(serializeCSV(headers, rows), "vcov.csv", "text/csv;charset=utf-8;");
+});
+
 // Single delegated listener covers all static plot-export buttons and any
 // bubble-plot buttons injected dynamically during runAnalysis.
 document.addEventListener("click", e => {

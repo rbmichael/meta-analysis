@@ -1401,7 +1401,13 @@ of the weighted regression. Produces wider, better-calibrated intervals
 when k is small.</p>
 <p><strong>Recommendation:</strong> Use KH when using REML and k &lt; 40.
 Simulations consistently show better nominal coverage than the Normal CI
-for small k.</p>`,
+for small k.</p>
+<p><strong>Diagnostic:</strong> When KH is active, the model-fit line in the
+meta-regression panel displays <em>s²</em>, the KH variance-inflation factor
+(s² = max(1, RSS<sub>RE</sub> / df<sub>E</sub>)). Values substantially above 1
+indicate that observed residual variability exceeds what is expected under the
+fitted model, justifying the wider KH intervals. Values at or near 1 mean the
+KH and Normal CIs will be similar.</p>`,
         citations: [
           "Knapp, G., & Hartung, J. (2003). Improved tests for a random effects meta-regression with a single covariate. <em>Statistics in Medicine, 22</em>(17), 2693–2710.",
           "IntHout, J., Ioannidis, J. P. A., & Borm, G. F. (2014). The Hartung-Knapp-Sidik-Jonkman method for random effects meta-analysis is straightforward and considerably outperforms the standard DerSimonian-Laird method. <em>BMC Medical Research Methodology, 14</em>, 25.",
@@ -1785,6 +1791,10 @@ the result is robust to publication bias. If the HC CI includes zero
 while the RE CI excludes it, publication bias may explain the apparent
 effect. As a sensitivity analysis, it complements rather than replaces
 the standard RE analysis.</p>
+<p><strong>Output:</strong> The bias-robust point estimate, its CI, and the DL τ²
+used internally are reported in the publication-bias table. The τ² value
+reflects the heterogeneity assumption baked into the HC correction, not the
+τ² from the main analysis estimator.</p>
 <p>Matched against <code>metafor::hc()</code> to ≤ 0.005.</p>`,
         citations: [
           "Henmi, M., & Copas, J. B. (2010). Confidence intervals for random effects meta-analysis and robustness to publication bias. <em>Statistics in Medicine, 29</em>(29), 2969–2983.",
@@ -2081,6 +2091,12 @@ wᵢ = 1/(vᵢ + τ²), with τ² estimated by REML or the selected estimator.</
     but can differ in small samples; LRT is generally preferred when k is
     small because Wald tests can be anti-conservative.</li>
   </ul></li>
+  <li><strong>Coefficient covariance matrix (vcov)</strong> — when ≥ 2
+  moderators are present, a <em>Download vcov CSV</em> button appears in the
+  regression panel. The CSV contains the full p×p covariance matrix of the
+  estimated coefficients (rows and columns labelled by predictor name).
+  Off-diagonal entries are needed for linear contrasts and for replicating
+  the app's own contrast-test calculations.</li>
 </ul>
 <p><strong>Cautionary notes:</strong></p>
 <ul>
@@ -3028,9 +3044,9 @@ BF<sub>10</sub>. Reporting σ<sub>μ</sub> alongside BF<sub>10</sub>
 ensures reproducibility.</p>
 <p><strong>Outputs:</strong></p>
 <ul>
-  <li>Posterior mean and 95 % credible interval for μ (overall effect)</li>
-  <li>Posterior mean and 95 % credible interval for τ (heterogeneity SD)</li>
-  <li>BF<sub>10</sub>, log(BF<sub>10</sub>), and Jeffreys-scale interpretation</li>
+  <li>Posterior mean, posterior SD, and 95 % credible interval for μ (overall effect)</li>
+  <li>Posterior mean, posterior SD, and 95 % credible interval for τ (heterogeneity SD)</li>
+  <li>BF<sub>10</sub>, log(BF<sub>10</sub>), and Jeffreys-scale interpretation; BF<sub>01</sub> = 1/BF<sub>10</sub> is additionally shown when BF<sub>10</sub> &lt; 1 (evidence favouring the null)</li>
   <li>Plots of the marginal posterior densities for μ and τ</li>
 </ul>
 <p><strong>Prior inputs</strong> are accessible in the
