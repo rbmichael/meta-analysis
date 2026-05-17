@@ -1024,13 +1024,12 @@ export function drawForest(studies, m, options = {}) {
   L.plotW = 440; L.annotW = 240; L.headerH = 28;
 
   const _charW          = parseFloat(L.labelFontSize) >= 11 ? 6.5 : parseFloat(L.labelFontSize) >= 10 ? 5.9 : 5.3;
+  const _charW_bold     = parseFloat(L.labelFontSize) >= 11 ? 7.2 : parseFloat(L.labelFontSize) >= 10 ? 6.5 : 5.8;
   const _diamondLabelLen = showBoth ? 6 : 14;
-  const _maxLen         = Math.min(Math.max(
-    studies.reduce((a, d) => Math.max(a, (d.label || "").length), 0),
-    studies.reduce((a, d) => Math.max(a, (d.group || "").length), 0),
-    _diamondLabelLen
-  ), 28);
-  L.labelW  = Math.max(70, Math.min(180, Math.ceil(_maxLen * _charW) + 16));
+  const _maxStudyPx     = studies.reduce((a, d) => Math.max(a, (d.label || "").length * _charW), 0);
+  const _maxGroupPx     = studies.reduce((a, d) => Math.max(a, (d.group || "").length * _charW_bold), 0);
+  const _maxPx          = Math.min(Math.max(_maxStudyPx, _maxGroupPx, _diamondLabelLen * _charW), 28 * _charW);
+  L.labelW  = Math.max(70, Math.min(180, Math.ceil(_maxPx) + 16));
   L.totalW  = L.labelW + L.plotW + L.annotW;
   L.summaryH = isLastPage ? (showBoth ? 152 : 132) : 52;
   L.studyY0  = L.headerH;
@@ -1683,8 +1682,10 @@ export function drawCumulativeForest(cumulativeResults, profile, options = {}) {
 
   if (!cumulativeResults || cumulativeResults.length === 0) return;
 
-  const rowH   = 22;
-  const margin = { top: 40, right: 90, bottom: 46, left: 200 };
+  const rowH       = 22;
+  const maxLabelLen = cumulativeResults.reduce((m, r) => Math.max(m, (r.addedLabel || "").length), 0);
+  const leftMargin  = Math.max(70, Math.min(220, Math.ceil(maxLabelLen * LABEL_CHAR_PX.regular11) + 14));
+  const margin = { top: 40, right: 90, bottom: 46, left: leftMargin };
   const plotW  = 580;
   const totalW = margin.left + plotW + margin.right;
 
@@ -1973,7 +1974,11 @@ export function drawCumulativeFunnel(cumulativeStudies, cumResults, profile, ste
     .attr("text-anchor", "end")
     .attr("fill", T.fgMuted)
     .style("font-size", FONT_SIZE.tickLabel)
-    .text(`k = ${step + 1} / ${k}\u2003added: ${cur.addedLabel}`);
+    .text((() => {
+      const prefix = `k = ${step + 1} / ${k}\u2003added: `;
+      const budget = Math.max(20, iW - Math.ceil(prefix.length * LABEL_CHAR_PX.regular10));
+      return prefix + truncateLabel(cur.addedLabel, budget, 10);
+    })());
 
   // ---- RE estimate annotation (right of RE line, near top) ----
   if (isFinite(cur.RE)) {
@@ -2944,7 +2949,7 @@ export function drawBlupPlot(result, profile, options = {}) {
       .attr("x", -6).attr("y", cy + 4)
       .attr("text-anchor", "end")
       .attr("fill", T.fgMuted).style("font-size", FONT_SIZE.tickLabel)
-      .text((s.label || "").length > 18 ? (s.label || "").slice(0, 17) + "…" : (s.label || ""));
+      .text(truncateLabel(s.label || "", leftMargin - 8, 10));
   });
 
   // X axis
@@ -3465,7 +3470,7 @@ export function drawRoBTrafficLight(studies, domains, robData, options = {}) {
       .attr("text-anchor", "end")
       .attr("fill", T.fg)
       .style("font-size", FONT_SIZE.axisLabel)
-      .text(label.length > 18 ? label.slice(0, 17) + "…" : label);
+      .text(truncateLabel(label, LEFT - 8, 11));
 
     // Cells
     domains.forEach((dom, di) => {
@@ -3588,7 +3593,7 @@ export function drawRoBSummary(studies, domains, robData, options = {}) {
       .attr("text-anchor", "end")
       .attr("fill", T.fg)
       .style("font-size", FONT_SIZE.axisLabel)
-      .text(dom.length > 18 ? dom.slice(0, 17) + "…" : dom);
+      .text(truncateLabel(dom, LEFT - 8, 11));
 
     // Stacked bars
     let xOffset = 0;
