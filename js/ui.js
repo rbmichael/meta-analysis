@@ -4297,11 +4297,15 @@ function _renderAllResults(ctx) {
   _animateFresh(elResults);
 
   // ── Influence diagnostics + subgroup ──────────────────────────────────────
-  const influenceHTML = buildInfluenceHTML(influence);
+  const influenceOpen = elInfluenceDiagTable.querySelector(".sens-block")?.open ?? true;
+  const influenceHTML = buildInfluenceHTML(influence, influenceOpen);
   const hasSubgroup   = subgroup && subgroup.G >= 2;
   const subgroupHTML  = hasSubgroup ? buildSubgroupHTML(subgroup, profile, hasClusters) : "";
 
   elInfluenceDiagTable.innerHTML = influenceHTML;
+  elInfluenceDiagTable.querySelectorAll(".sens-summary").forEach(summary => {
+    summary.addEventListener("click", e => { if (e.target.closest(".help-btn")) e.preventDefault(); });
+  });
   elSubgroupSection.style.display = hasSubgroup ? "" : "none";
   elSubgroupTable.innerHTML = (hasSubgroup && isMHorPeto)
     ? `<p class="reg-note" style="margin:4px 0 8px">⚠ Subgroup pooling uses inverse-variance (DL) weights — switch to DL or REML for M-H subgroup analysis.</p>` + subgroupHTML

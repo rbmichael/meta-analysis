@@ -1078,7 +1078,7 @@ export function renderSelectionModelPanel(r, mode, weightFn, profile) {
     ${convNote}`;
 }
 
-export function buildInfluenceHTML(influence) {
+export function buildInfluenceHTML(influence, isOpen = true) {
   const k    = influence.length;
   const dffitsThresh   = 3 * Math.sqrt(1 / Math.max(k - 1, 1));
   const covRatioThresh = 1 + 1 / k;
@@ -1109,12 +1109,16 @@ export function buildInfluenceHTML(influence) {
       <td${cookStyle}>${isFinite(d.cookD) ? d.cookD.toFixed(3) : "NA"}</td>
       <td>${flags}</td></tr>`;
   }).join("");
-  return `<b>Influence diagnostics:${hBtn("diag.influence")}</b><br>
+  return `<details class="sens-block"${isOpen ? " open" : ""}>
+    <summary class="sens-summary">
+      Influence diagnostics ${hBtn("diag.influence")}
+    </summary>
     <table border="1">
       <tr><th>Study</th><th>RE (LOO)</th><th>Δτ²</th><th>Std Residual</th><th>DFBETA</th><th>DFFITS${hBtn("diag.dffits")}</th><th>CovRatio${hBtn("diag.covratio")}</th><th>Hat</th><th>Cook's D</th><th>Flag</th></tr>
       ${rows}
     </table>
-    <small style="color:var(--fg-muted);">Thresholds: Hat &gt; ${fmt(2/k)} (= 2/k); Cook's D &gt; ${fmt(4/k)} (= 4/k); DFFITS &gt; ${fmt(dffitsThresh)} (= 3·√(1/(k−1))); CovRatio &gt; ${fmt(covRatioThresh)} (= 1+1/k)</small>`;
+    <small style="color:var(--fg-muted);">Thresholds: Hat &gt; ${fmt(2/k)} (= 2/k); Cook's D &gt; ${fmt(4/k)} (= 4/k); DFFITS &gt; ${fmt(dffitsThresh)} (= 3·√(1/(k−1))); CovRatio &gt; ${fmt(covRatioThresh)} (= 1+1/k)</small>
+  </details>`;
 }
 
 // Jeffreys (1961) interpretation scale for BF₁₀
