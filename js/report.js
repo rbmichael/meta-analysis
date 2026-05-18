@@ -1327,9 +1327,23 @@ export function buildReport(args) {
 
   const body = [
     sectionSummary(rArgs),
-    sectionPubBias(rArgs),
-    sectionPUniform(puniform, m, profile, apaFormat, nextTable, widthCiLabel),
-    sectionSelectionModel(sel ?? null, profile, selMode ?? "mle", selLabel ?? "", apaFormat, nextTable, widthCiLabel),
+    sectionPlot("Forest Plot", forestSVGs, apaFormat, nextFigure,
+      `Forest plot of ${esc(profile.label)}, k = ${k} studies`,
+      `RE = random effects. Error bars represent 95% ${esc(ciLabel)} CI. τ² estimated by ${esc(method)}. Diamond = pooled estimate and ${widthCiLabel}.`),
+    sectionStudyTable(rArgs),
+    ((apaFormat, nextFigure) => {
+      const svg = liveSVG("profileLikTau2Plot");
+      if (!svg) return "";
+      const note = `Shaded region = ${widthCiLabel} from likelihood-ratio inversion (LRT). The τ² CI in the summary table uses the Q-profile method (moment-based) and may differ.`;
+      return `
+<section class="plot-section">
+  <h2>Profile Likelihood for τ²</h2>
+  ${apaFormat
+    ? buildFigureAPA(nextFigure(), `Profile likelihood curve for τ²`, [svg], note)
+    : `<div class="svg-wrap">${svg}</div>
+  <p class="note">${widthCiLabel} from likelihood-ratio inversion (LRT). Note: the τ² CI in the summary table uses the Q-profile method (moment-based) and will differ.</p>`}
+</section>`;
+    })(apaFormat, nextFigure),
     ((apaFormat, nextFigure) => {
       if (!bayesResult || bayesResult.error) return "";
       const svgMu  = liveSVG("bayesMuPlot");
@@ -1338,28 +1352,28 @@ export function buildReport(args) {
       const muDisp   = profile.transform(bayesResult.muMean);
       const muCIDisp = bayesResult.muCI.map(v => profile.transform(v));
       const reDisp   = isFinite(bayesReMean) ? profile.transform(bayesReMean) : NaN;
-      const priorLine = `Prior: \u03BC\u202F~\u202FN(${esc(bayesResult.mu0)},\u202F${esc(bayesResult.sigma_mu)}\u00B2)\u2003\u03C4\u202F~\u202FHalfNormal(${esc(bayesResult.sigma_tau)})\u2003k\u202F=\u202F${bayesResult.k} studies`;
+      const priorLine = `Prior: μ ~ N(${esc(bayesResult.mu0)}, ${esc(bayesResult.sigma_mu)}²) τ ~ HalfNormal(${esc(bayesResult.sigma_tau)}) k = ${bayesResult.k} studies`;
       const muSDNote = profile.isTransformedScale ? " (log)" : "";
       const fmtBF = bf => !isFinite(bf) ? "NA" : bf >= 1000 || bf < 0.001 ? bf.toExponential(2) : bf.toFixed(3);
       const statsTable = `
   <table class="stats-table">
-    <tr><td>Posterior mean \u03BC</td><td>${fmt(muDisp)}</td><td>${widthCrLabel} [${fmt(muCIDisp[0])}, ${fmt(muCIDisp[1])}] \u00B7 SD${muSDNote} = ${fmt(bayesResult.muSD)}</td></tr>
-    <tr><td>Posterior mean \u03C4</td><td>${fmt(bayesResult.tauMean)}</td><td>${widthCrLabel} [${fmt(bayesResult.tauCI[0])}, ${fmt(bayesResult.tauCI[1])}] \u00B7 SD = ${fmt(bayesResult.tauSD)}</td></tr>
+    <tr><td>Posterior mean μ</td><td>${fmt(muDisp)}</td><td>${widthCrLabel} [${fmt(muCIDisp[0])}, ${fmt(muCIDisp[1])}] · SD${muSDNote} = ${fmt(bayesResult.muSD)}</td></tr>
+    <tr><td>Posterior mean τ</td><td>${fmt(bayesResult.tauMean)}</td><td>${widthCrLabel} [${fmt(bayesResult.tauCI[0])}, ${fmt(bayesResult.tauCI[1])}] · SD = ${fmt(bayesResult.tauSD)}</td></tr>
     ${isFinite(reDisp) ? `<tr><td>Frequentist RE (comparison)</td><td>${fmt(reDisp)}</td><td></td></tr>` : ""}
-    ${isFinite(bayesResult.BF10) ? `<tr><td>Bayes Factor BF\u2081\u2080 (H\u2081: \u03BC\u22600)</td><td>${fmtBF(bayesResult.BF10)}</td><td></td></tr>` : ""}
-    ${bayesResult.BF10 < 1 && isFinite(bayesResult.BF01) ? `<tr><td>BF\u2080\u2081 = 1/BF\u2081\u2080 (H\u2080: \u03BC\u202F=\u202F0)</td><td>${fmtBF(bayesResult.BF01)}</td><td></td></tr>` : ""}
+    ${isFinite(bayesResult.BF10) ? `<tr><td>Bayes Factor BF₁₀ (H₁: μ≠0)</td><td>${fmtBF(bayesResult.BF10)}</td><td></td></tr>` : ""}
+    ${bayesResult.BF10 < 1 && isFinite(bayesResult.BF01) ? `<tr><td>BF₀₁ = 1/BF₁₀ (H₀: μ = 0)</td><td>${fmtBF(bayesResult.BF01)}</td><td></td></tr>` : ""}
   </table>`;
-      const bayesPriorNote = `Prior: \u03BC\u202F~\u202FN(${esc(bayesResult.mu0)},\u202F${esc(bayesResult.sigma_mu)}\u00B2); \u03C4\u202F~\u202FHalfNormal(${esc(bayesResult.sigma_tau)}). Vertical line\u202F=\u202Fposterior mean; shaded region\u202F=\u202F95% credible interval.`;
+      const bayesPriorNote = `Prior: μ ~ N(${esc(bayesResult.mu0)}, ${esc(bayesResult.sigma_mu)}²); τ ~ HalfNormal(${esc(bayesResult.sigma_tau)}). Vertical line = posterior mean; shaded region = 95% credible interval.`;
       const plotsMu  = apaFormat && svgMu
         ? buildFigureAPA(nextFigure(),
-            `Posterior distribution of pooled effect \u03BC (${esc(profile.label)})`,
+            `Posterior distribution of pooled effect μ (${esc(profile.label)})`,
             [svgMu], bayesPriorNote)
         : (svgMu  ? `<div class="svg-wrap">${svgMu}</div>`  : "");
       const plotsTau = apaFormat && svgTau
         ? buildFigureAPA(nextFigure(),
-            `Posterior distribution of between-study standard deviation \u03C4`,
+            `Posterior distribution of between-study standard deviation τ`,
             [svgTau],
-            `Prior: \u03C4\u202F~\u202FHalfNormal(${esc(bayesResult.sigma_tau)}).`)
+            `Prior: τ ~ HalfNormal(${esc(bayesResult.sigma_tau)}).`)
         : (svgTau ? `<div class="svg-wrap">${svgTau}</div>` : "");
       const sensitivityTable = (() => {
         if (!sensitivityRows || !sensitivityRows.length) return "";
@@ -1389,73 +1403,65 @@ export function buildReport(args) {
   ${plotsTau}
 </section>`;
     })(apaFormat, nextFigure),
-    sectionGosh(gosh ?? null, profile, goshXAxis ?? "I2", apaFormat, nextFigure, theme),
-    ((apaFormat, nextFigure) => {
-      const svg = liveSVG("profileLikTau2Plot");
-      if (!svg) return "";
-      const note = `Shaded region\u202F=\u202F${widthCiLabel} from likelihood-ratio inversion (LRT). The \u03C4\u00B2 CI in the summary table uses the Q-profile method (moment-based) and may differ.`;
-      return `
-<section class="plot-section">
-  <h2>Profile Likelihood for τ²</h2>
-  ${apaFormat
-    ? buildFigureAPA(nextFigure(), `Profile likelihood curve for \u03C4\u00B2`, [svg], note)
-    : `<div class="svg-wrap">${svg}</div>
-  <p class="note">${widthCiLabel} from likelihood-ratio inversion (LRT). Note: the \u03C4\u00B2 CI in the summary table uses the Q-profile method (moment-based) and will differ.</p>`}
-</section>`;
-    })(apaFormat, nextFigure),
-    sectionInfluence(influence, k, apaFormat, nextTable),
-    sectionSubgroup(subgroup, profile, apaFormat, nextTable, widthCiLabel),
-    sectionStudyTable(rArgs),
-    sectionRegression(reg, method, ciMethod, apaFormat, nextTable, widthCiLabel),
-    sectionPlot("Forest Plot", forestSVGs, apaFormat, nextFigure,
-      `Forest plot of ${esc(profile.label)}, k\u202F=\u202F${k} studies`,
-      `RE\u202F=\u202Frandom effects. Error bars represent 95% ${esc(ciLabel)} CI. \u03C4\u00B2 estimated by ${esc(method)}. Diamond\u202F=\u202Fpooled estimate and ${widthCiLabel}.`),
+    sectionPubBias(rArgs),
     sectionPlot("Funnel Plot", [liveSVG("funnelPlot")], apaFormat, nextFigure,
       `Funnel plot of ${esc(profile.label)} against standard error`,
-      `Each point\u202F=\u202Fone study. Asymmetry may indicate publication bias or between-study heterogeneity.`),
+      `Each point = one study. Asymmetry may indicate publication bias or between-study heterogeneity.`),
+    sectionSubgroup(subgroup, profile, apaFormat, nextTable, widthCiLabel),
+    sectionInfluence(influence, k, apaFormat, nextTable),
     sectionPlot("Influence Plot", [liveSVG("influencePlot")], apaFormat, nextFigure,
-      `Influence diagnostics for k\u202F=\u202F${k} studies`,
+      `Influence diagnostics for k = ${k} studies`,
       `Left panel: standardised residuals. Right panel: leave-one-out (LOO) random-effects estimates with ${widthCiLabel}.`),
+    sectionPlot("BLUPs", [liveSVG("blupPlot")], apaFormat, nextFigure,
+      `Best linear unbiased predictions (BLUPs) for k = ${k} studies`,
+      `Shrunken study-level estimates sorted by effect size.`),
     sectionPlot("Baujat Plot", [liveSVG("baujatPlot")], apaFormat, nextFigure,
       `Baujat plot of contribution to Q statistic against overall influence on the pooled estimate`,
       ``),
     sectionPlot("Normal Q-Q Plot", [liveSVG("qqPlot")], apaFormat, nextFigure,
       `Normal Q-Q plot of internally standardised residuals from the random-effects model`,
-      `Points near the reference line support the normality assumption. Orange points have |z|\u202F>\u202F2.`),
+      `Points near the reference line support the normality assumption. Orange points have |z| > 2.`),
+    sectionPlot("Radial (Galbraith) Plot", [liveSVG("radialPlot")], apaFormat, nextFigure,
+      `Radial (Galbraith) plot of standardised effect against reciprocal of standard error`,
+      `Points near the reference line support homogeneity. Outliers may indicate heterogeneity.`),
     sectionPlot("Cumulative Forest Plot", cumForestSVGs.length ? cumForestSVGs : [liveSVG("cumulativePlot")], apaFormat, nextFigure,
       `Cumulative forest plot of ${esc(profile.label)}`,
       `Studies added in dataset order. Effect and ${widthCiLabel} shown at each cumulative step.`),
     sectionPlot("Cumulative Funnel Plot", [liveSVG("cumulativeFunnelPlot")], apaFormat, nextFigure,
       `Cumulative funnel plot of ${esc(profile.label)}`,
       ``),
+    sectionPlot("Orchard Plot", [liveSVG("orchardPlot")], apaFormat, nextFigure,
+      `Orchard plot of ${esc(profile.label)}`,
+      `Points scaled by random-effects weight. Thick bar = ${widthCiLabel}; thin bar = 95% prediction interval.`),
+    sectionPlot("Caterpillar Plot", caterpillarSVGs.length ? caterpillarSVGs : [liveSVG("caterpillarPlot")], apaFormat, nextFigure,
+      `Caterpillar plot of study-level ${esc(profile.label)}, sorted by effect size`,
+      `Error bars = ${widthCiLabel}.`),
     sectionPlot("P-curve", [liveSVG("pCurvePlot")], apaFormat, nextFigure,
-      `P-curve of statistically significant results (p\u202F&lt;\u202F.05)`,
-      `Simonsohn et al. (2014). Only studies with p\u202F&lt;\u202F.05 included.`),
+      `P-curve of statistically significant results (p &lt; .05)`,
+      `Simonsohn et al. (2014). Only studies with p &lt; .05 included.`),
+    sectionPUniform(puniform, m, profile, apaFormat, nextTable, widthCiLabel),
     sectionPlot("P-uniform", [liveSVG("pUniformPlot")], apaFormat, nextFigure,
       `P-uniform plot (van Assen et al., 2015)`,
       ``),
-    sectionPlot("Orchard Plot", [liveSVG("orchardPlot")], apaFormat, nextFigure,
-      `Orchard plot of ${esc(profile.label)}`,
-      `Points scaled by random-effects weight. Thick bar\u202F=\u202F${widthCiLabel}; thin bar\u202F=\u202F95% prediction interval.`),
-    sectionPlot("Caterpillar Plot", caterpillarSVGs.length ? caterpillarSVGs : [liveSVG("caterpillarPlot")], apaFormat, nextFigure,
-      `Caterpillar plot of study-level ${esc(profile.label)}, sorted by effect size`,
-      `Error bars\u202F=\u202F${widthCiLabel}.`),
+    sectionSelectionModel(sel ?? null, profile, selMode ?? "mle", selLabel ?? "", apaFormat, nextTable, widthCiLabel),
+    sectionGosh(gosh ?? null, profile, goshXAxis ?? "I2", apaFormat, nextFigure, theme),
     sectionPlot("Risk-of-bias Traffic Light", [liveSVG("robTrafficLight")], apaFormat, nextFigure,
       `Risk-of-bias traffic-light plot`,
       ``),
     sectionPlot("Risk-of-bias Summary", [liveSVG("robSummary")], apaFormat, nextFigure,
       `Risk-of-bias summary plot`,
       ``),
+    sectionRegression(reg, method, ciMethod, apaFormat, nextTable, widthCiLabel),
     // Bubble plots: in APA mode one Figure per moderator; non-APA all in one section.
     ...(apaFormat
       ? bubbleSVGs.map(({ svg, moderator }) =>
           sectionPlot(
-            moderator ? `Bubble Plot \u2014 ${esc(moderator)}` : "Bubble Plot",
+            moderator ? `Bubble Plot — ${esc(moderator)}` : "Bubble Plot",
             [svg], apaFormat, nextFigure,
             moderator
               ? `Bubble plot of ${esc(moderator)} against ${esc(profile.label)}`
               : `Bubble plot of meta-regression moderator against ${esc(profile.label)}`,
-            `Line\u202F=\u202Fmeta-regression fit. Point area proportional to random-effects weight.`
+            `Line = meta-regression fit. Point area proportional to random-effects weight.`
           )
         )
       : [sectionPlot(
@@ -1463,7 +1469,7 @@ export function buildReport(args) {
           bubbleSVGs.map(b => b.svg),
           apaFormat, nextFigure,
           `Bubble plots of meta-regression moderators against ${esc(profile.label)}`,
-          `Line\u202F=\u202Fmeta-regression fit. Point area proportional to random-effects weight. One panel per moderator.`
+          `Line = meta-regression fit. Point area proportional to random-effects weight. One panel per moderator.`
         )]
     ),
     // References section — APA mode only, always last.

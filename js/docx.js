@@ -598,8 +598,10 @@ export async function buildDocx(args) {
 
   svgArrays.set("funnel",       [liveSVGString("funnelPlot")].filter(Boolean));
   svgArrays.set("influence",    [liveSVGString("influencePlot")].filter(Boolean));
+  svgArrays.set("blup",         [liveSVGString("blupPlot")].filter(Boolean));
   svgArrays.set("baujat",       [liveSVGString("baujatPlot")].filter(Boolean));
   svgArrays.set("qqplot",       [liveSVGString("qqPlot")].filter(Boolean));
+  svgArrays.set("radial",       [liveSVGString("radialPlot")].filter(Boolean));
 
   svgArrays.set("cumForest",
     cumForestOptions
@@ -707,13 +709,29 @@ export async function buildDocx(args) {
   const bodyChunks = [
     // Title + metadata
     paraText("Meta-Analysis Report", "Heading1"),
-    paraText(`Generated ${date}  \u00B7  k\u202F=\u202F${k}${tf.length > 0 ? ` + ${tf.length} imputed` : ""}  \u00B7  ${profile.label}  \u00B7  ${method}  \u00B7  ${ciLabel}`),
+    paraText(`Generated ${date}  ·  k = ${k}${tf.length > 0 ? ` + ${tf.length} imputed` : ""}  ·  ${profile.label}  ·  ${method}  ·  ${ciLabel}`),
 
-    // Statistical sections
+    // Summary statistics
     ...docSummary(docArgs, ctx),
-    ...docPubBias(docArgs, ctx),
-    ...docPUniform(docArgs, ctx),
-    ...docSelectionModel(docArgs, ctx),
+
+    // Forest plot
+    ...figSection("Forest Plot", "forest",
+      `Forest plot of ${profile.label}, k = ${k} studies`,
+      `RE = random effects. Error bars = ${widthCiLabel} (${ciLabel}). τ² estimated by ${method}. Diamond = pooled estimate and ${widthCiLabel}.`),
+
+    // Individual studies table
+    ...docStudyTable(docArgs, ctx),
+
+    // Profile likelihood
+    ...(() => {
+      const imgs = getImgs("profileLik");
+      if (!imgs.length) return [];
+      return [
+        paraText("Profile Likelihood for τ²", "Heading1"),
+        ...apaFigureDocx(ctx.nextFigure(), "Profile likelihood curve for τ²", imgs,
+          `Shaded region = ${widthCiLabel} from likelihood-ratio inversion (LRT).`),
+      ];
+    })(),
 
     // Bayesian
     ...(() => {
@@ -724,15 +742,15 @@ export async function buildDocx(args) {
       const muDisp   = profile.transform(bayesResult.muMean);
       const muCIDisp = bayesResult.muCI.map(v => profile.transform(v));
       const reDisp   = isFinite(bayesReMean) ? profile.transform(bayesReMean) : NaN;
-      const priorLine = `Prior: \u03BC\u202F~\u202FN(${bayesResult.mu0},\u202F${bayesResult.sigma_mu}\u00B2)  \u00B7  \u03C4\u202F~\u202FHalfNormal(${bayesResult.sigma_tau})  \u00B7  k\u202F=\u202F${bayesResult.k} studies`;
+      const priorLine = `Prior: μ ~ N(${bayesResult.mu0}, ${bayesResult.sigma_mu}²)  ·  τ ~ HalfNormal(${bayesResult.sigma_tau})  ·  k = ${bayesResult.k} studies`;
       const muSDNote = profile.isTransformedScale ? " (log)" : "";
       const fmtBF = bf => !isFinite(bf) ? "NA" : bf >= 1000 || bf < 0.001 ? bf.toExponential(2) : bf.toFixed(3);
       const bayesRows = [
-        [`Posterior mean \u03BC`, `${fmt(muDisp)}  ·  ${widthCrLabel} ${fmtCI_APA(muCIDisp[0], muCIDisp[1])}  ·  SD${muSDNote} = ${fmt(bayesResult.muSD)}`],
-        [`Posterior mean \u03C4`, `${fmt(bayesResult.tauMean)}  ·  ${widthCrLabel} ${fmtCI_APA(bayesResult.tauCI[0], bayesResult.tauCI[1])}  ·  SD = ${fmt(bayesResult.tauSD)}`],
+        [`Posterior mean μ`, `${fmt(muDisp)}  ·  ${widthCrLabel} ${fmtCI_APA(muCIDisp[0], muCIDisp[1])}  ·  SD${muSDNote} = ${fmt(bayesResult.muSD)}`],
+        [`Posterior mean τ`, `${fmt(bayesResult.tauMean)}  ·  ${widthCrLabel} ${fmtCI_APA(bayesResult.tauCI[0], bayesResult.tauCI[1])}  ·  SD = ${fmt(bayesResult.tauSD)}`],
         ...(isFinite(reDisp) ? [["Frequentist RE (comparison)", fmt(reDisp)]] : []),
-        ...(isFinite(bayesResult.BF10) ? [[`Bayes Factor BF\u2081\u2080 (H\u2081: \u03BC\u22600)`, fmtBF(bayesResult.BF10)]] : []),
-        ...(bayesResult.BF10 < 1 && isFinite(bayesResult.BF01) ? [[`BF\u2080\u2081 = 1/BF\u2081\u2080 (H\u2080: \u03BC = 0)`, fmtBF(bayesResult.BF01)]] : []),
+        ...(isFinite(bayesResult.BF10) ? [[`Bayes Factor BF₁₀ (H₁: μ≠0)`, fmtBF(bayesResult.BF10)]] : []),
+        ...(bayesResult.BF10 < 1 && isFinite(bayesResult.BF01) ? [[`BF₀₁ = 1/BF₁₀ (H₀: μ = 0)`, fmtBF(bayesResult.BF01)]] : []),
       ];
       const chunks = [
         paraText("Bayesian Meta-Analysis", "Heading1"),
@@ -741,10 +759,10 @@ export async function buildDocx(args) {
           `Bayesian Meta-Analysis Results (${profile.label})`,
           ["Statistic", "Value"],
           bayesRows.map(r => r.map(run)),
-          `CrI = credible interval. Posterior mean \u03BC on ${profile.label} scale. Frequentist RE shown for comparison only.`),
+          `CrI = credible interval. Posterior mean μ on ${profile.label} scale. Frequentist RE shown for comparison only.`),
       ];
-      if (muImgs.length)  chunks.push(...apaFigureDocx(ctx.nextFigure(), `Posterior distribution of pooled effect \u03BC (${profile.label})`, muImgs, priorLine));
-      if (tauImgs.length) chunks.push(...apaFigureDocx(ctx.nextFigure(), "Posterior distribution of between-study standard deviation \u03C4", tauImgs, `Prior: \u03C4\u202F~\u202FHalfNormal(${bayesResult.sigma_tau}).`));
+      if (muImgs.length)  chunks.push(...apaFigureDocx(ctx.nextFigure(), `Posterior distribution of pooled effect μ (${profile.label})`, muImgs, priorLine));
+      if (tauImgs.length) chunks.push(...apaFigureDocx(ctx.nextFigure(), "Posterior distribution of between-study standard deviation τ", tauImgs, `Prior: τ ~ HalfNormal(${bayesResult.sigma_tau}).`));
       if (sensitivityRows && sensitivityRows.length) {
         const sensRows = sensitivityRows.map(row => {
           const muDisp2   = profile.transform(row.muMean);
@@ -759,42 +777,33 @@ export async function buildDocx(args) {
         });
         chunks.push(...apaTableDocx(ctx.nextTable(),
           "Prior Sensitivity Analysis",
-          ["\u03C3_\u03BC", "\u03C3_\u03C4", "Post. \u03BC", `${widthCrLabel}`, "BF\u2081\u2080"],
+          ["σ_μ", "σ_τ", "Post. μ", `${widthCrLabel}`, "BF₁₀"],
           sensRows,
-          "Grid: \u03C3_\u03BC \u2208 {0.5, 1, 2}, \u03C3_\u03C4 \u2208 {0.25, 0.5, 1}. Diffuse priors approach the frequentist RE estimate."));
+          "Grid: σ_μ ∈ {0.5, 1, 2}, σ_τ ∈ {0.25, 0.5, 1}. Diffuse priors approach the frequentist RE estimate."));
       }
       return chunks;
     })(),
 
-    // Profile likelihood
-    ...(() => {
-      const imgs = getImgs("profileLik");
-      if (!imgs.length) return [];
-      return [
-        paraText("Profile Likelihood for \u03C4\u00B2", "Heading1"),
-        ...apaFigureDocx(ctx.nextFigure(), "Profile likelihood curve for \u03C4\u00B2", imgs,
-          `Shaded region = ${widthCiLabel} from likelihood-ratio inversion (LRT).`),
-      ];
-    })(),
-
-    // Influence, subgroup, study table, regression
-    ...docInfluence(docArgs, ctx),
-    ...docSubgroup(docArgs, ctx),
-    ...docStudyTable(docArgs, ctx),
-    ...docRegression(docArgs, ctx),
-
-    // Plot figures
-    ...figSection("Forest Plot", "forest",
-      `Forest plot of ${profile.label}, k\u202F=\u202F${k} studies`,
-      `RE = random effects. Error bars = ${widthCiLabel} (${ciLabel}). \u03C4\u00B2 estimated by ${method}. Diamond = pooled estimate and ${widthCiLabel}.`),
+    // Publication bias
+    ...docPubBias(docArgs, ctx),
 
     ...figSection("Funnel Plot", "funnel",
       `Funnel plot of ${profile.label} against standard error`,
       "Each point = one study. Asymmetry may indicate publication bias or between-study heterogeneity."),
 
+    // Subgroup analysis
+    ...docSubgroup(docArgs, ctx),
+
+    // Influence diagnostics
+    ...docInfluence(docArgs, ctx),
+
     ...figSection("Influence Plot", "influence",
-      `Influence diagnostics for k\u202F=\u202F${k} studies`,
+      `Influence diagnostics for k = ${k} studies`,
       `Left panel: standardised residuals. Right panel: leave-one-out (LOO) random-effects estimates with ${widthCiLabel}.`),
+
+    ...figSection("BLUPs", "blup",
+      `Best linear unbiased predictions (BLUPs) for k = ${k} studies`,
+      "Shrunken study-level estimates sorted by effect size."),
 
     ...figSection("Baujat Plot", "baujat",
       "Baujat plot of contribution to Q statistic against overall influence on the pooled estimate", ""),
@@ -803,18 +812,18 @@ export async function buildDocx(args) {
       "Normal Q-Q plot of internally standardised residuals from the random-effects model",
       "Points near the reference line support the normality assumption. Orange points have |z| > 2."),
 
+    ...figSection("Radial (Galbraith) Plot", "radial",
+      "Radial (Galbraith) plot of standardised effect against reciprocal of standard error",
+      "Points near the reference line support homogeneity. Outliers may indicate heterogeneity."),
+
+    // Cumulative analysis
     ...figSection("Cumulative Forest Plot", "cumForest",
       `Cumulative forest plot of ${profile.label}`,
       `Studies added in dataset order. Effect and ${widthCiLabel} shown at each cumulative step.`),
 
     ...figSection("Cumulative Funnel Plot", "cumFunnel", "Cumulative funnel plot", ""),
 
-    ...figSection("P-curve", "pcurve",
-      "P-curve of statistically significant results (p\u202F<\u202F.05)",
-      "Simonsohn et al. (2014). Only studies with p\u202F<\u202F.05 included."),
-
-    ...figSection("P-uniform", "puniformPlot", "P-uniform plot (van Assen et al., 2015)", ""),
-
+    // Alternative visualisations
     ...figSection("Orchard Plot", "orchard",
       `Orchard plot of ${profile.label}`,
       `Points scaled by random-effects weight. Thick bar = ${widthCiLabel}; thin bar = ${(ciLevel ?? "95")}% prediction interval.`),
@@ -823,8 +832,29 @@ export async function buildDocx(args) {
       `Caterpillar plot of study-level ${profile.label}, sorted by effect size`,
       `Error bars = ${widthCiLabel}.`),
 
+    // P-value analyses
+    ...figSection("P-curve", "pcurve",
+      "P-curve of statistically significant results (p < .05)",
+      "Simonsohn et al. (2014). Only studies with p < .05 included."),
+
+    ...docPUniform(docArgs, ctx),
+
+    ...figSection("P-uniform", "puniformPlot", "P-uniform plot (van Assen et al., 2015)", ""),
+
+    // Selection model
+    ...docSelectionModel(docArgs, ctx),
+
+    // GOSH plot
+    ...figSection("GOSH Plot", "gosh",
+      `Graphical Display of Study Heterogeneity (GOSH) plot, k = ${k} studies`,
+      `Each point = one non-empty subset. x-axis: ${goshXAxis === "Q" ? "Q (Cochran's Q)" : goshXAxis === "n" ? "n (subset size)" : "I² (%)"}.`),
+
+    // Risk of bias
     ...figSection("Risk-of-bias Traffic Light", "robTL", "Risk-of-bias traffic-light plot", ""),
     ...figSection("Risk-of-bias Summary",        "robSummary", "Risk-of-bias summary plot",  ""),
+
+    // Meta-regression
+    ...docRegression(docArgs, ctx),
 
     // Bubble plots (one figure per moderator)
     ...bubbleMods.flatMap(({ key, mod }) => {
@@ -834,15 +864,11 @@ export async function buildDocx(args) {
         ? `Bubble plot of ${mod} against ${profile.label}`
         : `Bubble plot of meta-regression moderator against ${profile.label}`;
       return [
-        paraText(mod ? `Bubble Plot \u2014 ${mod}` : "Bubble Plot", "Heading1"),
+        paraText(mod ? `Bubble Plot — ${mod}` : "Bubble Plot", "Heading1"),
         ...apaFigureDocx(ctx.nextFigure(), title, imgs,
           "Line = meta-regression fit. Point area proportional to random-effects weight."),
       ];
     }),
-
-    ...figSection("GOSH Plot", "gosh",
-      `Graphical Display of Study Heterogeneity (GOSH) plot, k\u202F=\u202F${k} studies`,
-      `Each point = one non-empty subset. x-axis: ${goshXAxis === "Q" ? "Q (Cochran\u2019s Q)" : goshXAxis === "n" ? "n (subset size)" : "I\u00B2 (%)"}.`),
 
     // References
     ...docReferences(args, linkMgr),
