@@ -40,10 +40,8 @@ export function summaryData(args) {
   const settings = `Effect type: ${profile.label}  ·  Pooling: ${methodLabel}  ·  CI method: ${ciLabel}  ·  k = ${k}${tf.length > 0 ? ` + ${tf.length} imputed (trim & fill)` : ""}`;
 
   const rows = [
-    [profile.label + " — Fixed Effects (FE)", fmt(FE_disp)],
-    ["FE " + widthCiLabel, fmtCI_APA(feCi.lb, feCi.ub)],
-    ...(!isMHorPeto ? [[profile.label + " — Random Effects (RE)", fmt(RE_disp)]] : []),
-    ...(!isMHorPeto ? [["RE " + widthCiLabel, fmtCI_APA(ci.lb, ci.ub)]] : []),
+    [profile.label + " — Fixed Effects (FE)", `${fmt(FE_disp)} ${fmtCI_APA(feCi.lb, feCi.ub)}`],
+    ...(!isMHorPeto ? [[profile.label + " — Random Effects (RE)", `${fmt(RE_disp)} ${fmtCI_APA(ci.lb, ci.ub)}`]] : []),
     ...(isMHorPeto  ? [[widthCiLabel, fmtCI_APA(ci.lb, ci.ub)]] : []),
     ...(cles        ? [["CLES (RE)", `${fmt(cles.estimate)} [${fmt(cles.ci[0])}, ${fmt(cles.ci[1])}]`]] : []),
     ...(RE_adj !== null ? [["RE (trim-and-fill adjusted)", fmt(RE_adj)]] : []),
@@ -69,7 +67,7 @@ export function summaryData(args) {
     headers:  ["Statistic", "Value"],
     rows,
     note,
-    reRowIdx: !isMHorPeto ? 2 : -1,
+    reRowIdx: !isMHorPeto ? 1 : -1,
   };
 }
 
