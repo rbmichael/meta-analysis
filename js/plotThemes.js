@@ -110,8 +110,8 @@ export const PLOT_THEMES = {
     bgSurface:       "var(--bg-surface)",
     bgSurfaceHover:  "var(--bg-surface-hover)",
 
-    border:          "var(--border-hover)",
-    borderGrid:      "var(--border)",
+    border:          "var(--plot-border)",
+    borderGrid:      "var(--plot-border-grid)",
     groupSepStroke:  "var(--border-accent)",
     groupLabelFill:  "var(--color-info)",
 
@@ -153,7 +153,7 @@ export const PLOT_THEMES = {
     pi:              "#767676",   // PI bracket: same grey as FE
 
     bgSurface:       "#f8f8f8",   // barely-off-white neutral surface
-    bgSurfaceHover:  "#eeeeee",   // light grey for scatter dots
+    bgSurfaceHover:  "#cccccc",   // medium grey for scatter dots (visible on white SVG bg)
 
     border:          "#cccccc",   // Thin light-grey rules (header, separators, axes)
     borderGrid:      "#e8e8e8",   // quieter background grid lines
@@ -202,9 +202,9 @@ export const PLOT_THEMES = {
     pi:              "#666666",
 
     bgSurface:       "#f8f8f8",
-    bgSurfaceHover:  "#eeeeee",
+    bgSurfaceHover:  "#c8c8c8",   // medium grey for scatter dots (visible on white SVG bg)
 
-    border:          "#d0d0d0",   // Slightly lighter rules than Cochrane
+    border:          "#bbbbbb",   // Axis rules — slightly darker than original for legibility
     borderGrid:      "#ebebeb",   // quieter background grid lines
     groupSepStroke:  "#444444",
     groupLabelFill:  "#1a1a1a",
