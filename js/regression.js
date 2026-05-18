@@ -1052,8 +1052,12 @@ export function lsModel(studies, locMods = [], scaleMods = [], opts = {}) {
     return Math.max(0, tau2_mean / (tau2_mean + QEdf / c) * 100);
   })() : 0;
 
-  // ---- Per-location-moderator Wald tests ----
-  const locModTests = locMods.map(({ key }) => {
+  // ---- Per-location-moderator Wald tests (includes interaction terms) ----
+  const _allLocTermKeys = [
+    ...locMods.map(m => m.key),
+    ...locInteractions.map(ix => ix.name),
+  ];
+  const locModTests = _allLocTermKeys.map(key => {
     const colIdxs = locDM.modColMap[key] ?? [];
     const df = colIdxs.length;
     if (df === 0) return { name: key, colIdxs, QM: NaN, QMdf: 0, QMp: NaN };
@@ -1086,7 +1090,7 @@ export function lsModel(studies, locMods = [], scaleMods = [], opts = {}) {
     beta, se_beta, zval_beta, pval_beta, ci_beta,
     gamma: gamma_hat, se_gamma, zval_gamma, pval_gamma, ci_gamma,
     tau2_i, tau2_mean,
-    vcov_beta,
+    vcov_beta, vcov_gamma,
     QE, QEdf, QEp,
     QM_loc, QM_locDf, QM_locP,
     QM_scale, QM_scaleDf, QM_scaleP,

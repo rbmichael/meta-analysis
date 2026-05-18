@@ -116,13 +116,24 @@ export function doAddModerator(name, type, transform = "linear") {
 
   const table = document.getElementById("inputTable");
   const headerRow = table.rows[0];
-  headerRow.insertBefore(makeModTh(name), headerRow.lastElementChild);
-
-  for (let i = 1; i < table.rows.length; i++) {
-    const row = table.rows[i];
-    row.insertBefore(makeModTd(name, type), row.lastElementChild);
+  if (![...headerRow.cells].some(c => c.dataset.mod === name)) {
+    headerRow.insertBefore(makeModTh(name), headerRow.lastElementChild);
+    for (let i = 1; i < table.rows.length; i++) {
+      table.rows[i].insertBefore(makeModTd(name, type), table.rows[i].lastElementChild);
+    }
   }
   renderModTags();
+}
+
+/** Add a moderator column to the table without touching moderators[] state. No-op if already present. */
+export function ensureModColumn(name, type) {
+  const table = document.getElementById("inputTable");
+  const headerRow = table.rows[0];
+  if ([...headerRow.cells].some(c => c.dataset.mod === name)) return;
+  headerRow.insertBefore(makeModTh(name), headerRow.lastElementChild);
+  for (let i = 1; i < table.rows.length; i++) {
+    table.rows[i].insertBefore(makeModTd(name, type), table.rows[i].lastElementChild);
+  }
 }
 
 /** Remove a moderator from state and from every table row. */
@@ -757,6 +768,7 @@ export function commitImport() {
     const mtype = vals.length > 0 && vals.every(v => !isNaN(v.trim())) ? "continuous" : "categorical";
     doAddModerator(col, mtype);
   });
+  if (modCols.length > 0) _cb.onModeratorChanged();
 
   document.getElementById("effectType").value = type;
   updateTableHeaders();

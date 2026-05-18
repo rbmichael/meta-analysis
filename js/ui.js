@@ -146,7 +146,7 @@ import { validateRow, gatherSessionState } from "./ui-state.js";
 import { initTable, moderators, doAddModerator, removeModerator, clearModerators,
          interactions, doAddInteraction, removeInteraction, clearInteractions,
          updateTableHeaders, addRow, commitPendingDelete, removeRow, clearRow,
-         updateValidationWarnings, collectStudies,
+         updateValidationWarnings, collectStudies, ensureModColumn,
          refreshPreviewUI, previewCSV, commitImport, cancelImport, getPendingImport,
          registerDeleteCompanion, showUndoToast, hideUndoToast }
   from "./ui-table.js";
@@ -157,8 +157,9 @@ const USE_EXAMPLES = new URLSearchParams(window.location.search).has("tests");
 
 let _saveTimer = null;
 
-// Last successful metaRegression result — referenced by the contrast test handler.
+// Last successful metaRegression / lsModel result — referenced by contrast and vcov handlers.
 let _lastReg = null;
+let _lastLs  = null;
 
 // scheduleSave()
 // Debounced autosave trigger. Resets the 1.2 s idle timer on every call; the
@@ -555,6 +556,7 @@ function addScaleModerator() {
     : "linear";
   if (!name) return;
   doAddScaleModerator(name, type, transform);
+  ensureModColumn(name, type);
   nameEl.value = "";
   markStale();
 }
@@ -2545,9 +2547,10 @@ document.getElementById("exportReportDOCX").addEventListener("click", async () =
     let blob;
     if (appState.reportArgs.mv) {
       blob = await buildMVDocx({
-        res:   appState.reportArgs.mvRes,
-        rows:  appState.reportArgs.mvRows ?? [],
-        alpha: appState.reportArgs.mvAlpha ?? 0.05,
+        res:         appState.reportArgs.mvRes,
+        rows:        appState.reportArgs.mvRows ?? [],
+        alpha:       appState.reportArgs.mvAlpha ?? 0.05,
+        exportScale: appState.exportScale,
       });
     } else {
       const args = {
@@ -2561,8 +2564,9 @@ document.getElementById("exportReportDOCX").addEventListener("click", async () =
           : undefined,
         gosh:      goshState.result ?? appState.reportArgs.gosh,
         goshXAxis: document.getElementById("goshXAxis")?.value ?? appState.reportArgs.goshXAxis ?? "I2",
-        plotTheme: appState.plotTheme,
-        apaFormat: true,
+        plotTheme:   appState.plotTheme,
+        apaFormat:   true,
+        exportScale: appState.exportScale,
       };
       blob = await buildDocx(args);
     }
@@ -2581,24 +2585,40 @@ document.getElementById("exportReportDOCX").addEventListener("click", async () =
 document.addEventListener("click", e => {
   const btn = e.target.closest(".contrast-test-btn");
   if (!btn) return;
-  if (!_lastReg) return;
-  const section = btn.closest(".contrast-section");
+  const section = btn.closest(".ls-contrast-section") ?? btn.closest(".contrast-section");
   if (!section) return;
+  const isLs = section.classList.contains("ls-contrast-section");
   const inputs = section.querySelectorAll(".contrast-weight");
   const L = Array.from(inputs).map(inp => parseFloat(inp.value) || 0);
-  const result = testContrast(_lastReg, L);
-  section.querySelector(".contrast-result").innerHTML = formatContrastResult(result, _lastReg);
+  if (isLs) {
+    if (!_lastLs) return;
+    const regLike = { beta: _lastLs.beta, vcov: _lastLs.vcov_beta, crit: _lastLs.crit, dist: "z", QEdf: _lastLs.QEdf };
+    section.querySelector(".contrast-result").innerHTML = formatContrastResult(testContrast(regLike, L), regLike);
+  } else {
+    if (!_lastReg) return;
+    section.querySelector(".contrast-result").innerHTML = formatContrastResult(testContrast(_lastReg, L), _lastReg);
+  }
 });
 
 // Delegated listener for vcov CSV download button (injected into regression panel).
 document.addEventListener("click", e => {
   const btn = e.target.closest(".vcov-download-btn");
   if (!btn) return;
-  if (!_lastReg?.vcov || !_lastReg?.colNames) return;
-  const { vcov, colNames } = _lastReg;
+  const which = btn.dataset.which;
+  let vcov, colNames, filename;
+  if (which === "loc") {
+    if (!_lastLs?.vcov_beta) return;
+    vcov = _lastLs.vcov_beta; colNames = _lastLs.locColNames; filename = "vcov_beta.csv";
+  } else if (which === "scale") {
+    if (!_lastLs?.vcov_gamma) return;
+    vcov = _lastLs.vcov_gamma; colNames = _lastLs.scaleColNames; filename = "vcov_gamma.csv";
+  } else {
+    if (!_lastReg?.vcov || !_lastReg?.colNames) return;
+    vcov = _lastReg.vcov; colNames = _lastReg.colNames; filename = "vcov.csv";
+  }
   const headers = ["", ...colNames];
   const rows = vcov.map((row, i) => [colNames[i], ...row.map(v => isFinite(v) ? v.toFixed(6) : "NA")]);
-  downloadBlob(serializeCSV(headers, rows), "vcov.csv", "text/csv;charset=utf-8;");
+  downloadBlob(serializeCSV(headers, rows), filename, "text/csv;charset=utf-8;");
 });
 
 // Single delegated listener covers all static plot-export buttons and any
@@ -4338,8 +4358,10 @@ function _renderAllResults(ctx) {
   const kExcluded    = (reg ?? ls) ? studies.length - (reg ?? ls).k : 0;
   if (ls) {
     _lastReg = null;
+    _lastLs  = ls.rankDeficient ? null : ls;
     renderLocationScalePanel(ls, ciMethod, kExcluded);
   } else {
+    _lastLs  = null;
     _lastReg = (reg && !reg.rankDeficient) ? reg : null;
     // Pass moderators + interaction pseudo-entries so the panel sees the full term count.
     const _allTermMods = [...moderators, ...interactions.map(ix => ({ name: ix.name }))];

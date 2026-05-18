@@ -680,6 +680,7 @@ export async function buildDocx(args) {
     sensitivityRows,
     plotTheme,
     mccMethod = "none",
+    exportScale = 3,
   } = args;
 
   const theme = plotTheme ?? "default";
@@ -778,7 +779,7 @@ export async function buildDocx(args) {
     for (const svg of svgs) flatSVGs.push(svg);
   }
 
-  const pngResults = await Promise.all(flatSVGs.map(svg => svgStringToPng(svg)));
+  const pngResults = await Promise.all(flatSVGs.map(svg => svgStringToPng(svg, exportScale)));
 
   // Build image registry: key → [{blob, svgW, svgH, rId, idx}]
   const imgReg = new Map();
@@ -1028,7 +1029,7 @@ export async function buildDocx(args) {
 // Multivariate DOCX builder
 // ---------------------------------------------------------------------------
 
-export async function buildMVDocx({ res, rows = [], alpha = 0.05 }) {
+export async function buildMVDocx({ res, rows = [], alpha = 0.05, exportScale = 3 }) {
   const { beta, se, ci, z, pval, betaNames = [], tau2, rho_between,
           outcomeIds, n, k, P, QM, df_QM, pQM, QE, df_QE, pQE,
           logLik, AIC, BIC, AICc, struct, method, I2, convergence,
@@ -1053,7 +1054,7 @@ export async function buildMVDocx({ res, rows = [], alpha = 0.05 }) {
   })();
 
   // Convert SVGs to PNGs
-  const pngResults = await Promise.all(forestSVGStrings.map(s => svgStringToPng(s)));
+  const pngResults = await Promise.all(forestSVGStrings.map(s => svgStringToPng(s, exportScale)));
   let imgCounter = 0;
   const forestImgs = pngResults.map(png => {
     if (!png || !png.blob) return null;
@@ -1134,7 +1135,7 @@ export async function buildMVDocx({ res, rows = [], alpha = 0.05 }) {
     });
     return result;
   })();
-  const robPngResults = await Promise.all(robSVGStrings.map(s => svgStringToPng(s)));
+  const robPngResults = await Promise.all(robSVGStrings.map(s => svgStringToPng(s, exportScale)));
   const robImgs = robPngResults.map(png => {
     if (!png || !png.blob) return null;
     imgCounter++;

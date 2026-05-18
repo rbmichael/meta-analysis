@@ -334,6 +334,62 @@ export function renderLocationScalePanel(ls, ciMethod, kExcluded = 0) {
           <tbody>${fRows}</tbody>
         </table>
       </details>` : ""}
+      ${(ls.locModTests.length + ls.scaleModTests.length) > 0 ? (() => {
+        function modTestRows(tests) {
+          return tests.map(mt => {
+            if (mt.QMdf === 0) return `<tr><td>${escapeHTML(mt.name)}</td><td colspan="3"><i>degenerate (≤ 1 level)</i></td></tr>`;
+            return `<tr>
+              <td>${escapeHTML(mt.name)}</td>
+              <td>${isFinite(mt.QM) ? fmt(mt.QM) : "—"}</td>
+              <td>χ²(${mt.QMdf})</td>
+              <td>${regFmtP(mt.QMp)}</td>
+            </tr>`;
+          }).join("");
+        }
+        const locBlock = ls.locModTests.length > 0
+          ? `<p style="margin:6px 0 2px;font-weight:600;font-size:0.93em">Location model</p>
+             <table class="reg-table"><thead><tr>
+               <th>Moderator</th><th><em>Q</em>M (Wald)</th><th>df</th><th><em>p</em></th>
+             </tr></thead><tbody>${modTestRows(ls.locModTests)}</tbody></table>` : "";
+        const scaleBlock = ls.scaleModTests.length > 0
+          ? `<p style="margin:8px 0 2px;font-weight:600;font-size:0.93em">Scale model</p>
+             <table class="reg-table"><thead><tr>
+               <th>Moderator</th><th><em>Q</em>M (Wald)</th><th>df</th><th><em>p</em></th>
+             </tr></thead><tbody>${modTestRows(ls.scaleModTests)}</tbody></table>` : "";
+        return `<details><summary>Per-moderator tests</summary>${locBlock}${scaleBlock}</details>`;
+      })() : ""}
+      <details class="ls-contrast-section">
+        <summary>Custom contrasts — location model${hBtn("mreg.contrasts")}</summary>
+        <div class="reg-note" style="margin:4px 0 8px">
+          Enter a weight for each location term, then click <em>Test</em>.
+          The test evaluates whether the linear combination L·β differs from zero.
+        </div>
+        <table class="reg-table">
+          <thead><tr><th>Term</th><th style="width:6em">Weight</th></tr></thead>
+          <tbody>
+            ${ls.locColNames.map((name, i) => `
+              <tr>
+                <td>${escapeHTML(name)}</td>
+                <td><input type="number" class="contrast-weight" data-idx="${i}"
+                     value="0" step="any" style="width:5em"></td>
+              </tr>`).join("")}
+          </tbody>
+        </table>
+        <button class="btn-sm contrast-test-btn" type="button" style="margin-top:6px">
+          Test contrast
+        </button>
+        <div class="contrast-result"></div>
+      </details>
+      ${ls.vcov_beta && ls.p >= 2 ? `
+      <details>
+        <summary>Coefficient covariance matrices (vcov)</summary>
+        <div class="reg-note" style="margin:4px 0 8px">
+          Location model: ${ls.p}&times;${ls.p} vcov(β).${ls.q >= 2 ? ` Scale model: ${ls.q}&times;${ls.q} vcov(γ).` : ""}
+          Useful for computing SEs of linear combinations not available in the contrasts panel.
+        </div>
+        <button class="btn-sm vcov-download-btn" data-which="loc" type="button">Download vcov(β) as CSV</button>
+        ${ls.q >= 2 ? `<button class="btn-sm vcov-download-btn" data-which="scale" type="button" style="margin-left:6px">Download vcov(γ) as CSV</button>` : ""}
+      </details>` : ""}
     </div>`;
 }
 
