@@ -1,4 +1,4 @@
-// =============================================================================
+﻿// =============================================================================
 // report.js — HTML report builder and export
 // =============================================================================
 // Assembles a self-contained, printable HTML report from the last completed
@@ -36,9 +36,12 @@ import { drawForest, drawCumulativeForest, drawCaterpillarPlot } from "./plots.j
 import { downloadBlob } from "./io.js";
 import { Z_95 } from "./constants.js";
 import { normalQuantile } from "./utils.js";
+import { adjustPvals } from "./regression.js";
 import { serializeSVG, collectPagedSVGs } from "./export.js";
-import { summaryData, pubBiasData, puniformData, selModelData,
-         influenceData, subgroupData, studyTableData, regressionData } from "./sections.js";
+import { summaryData, pubBiasData, pCurveData, puniformData, selModelData,
+         influenceData, subgroupData, studyTableData, regressionData,
+         regressionFittedData, locationScaleData, permutationData,
+         rveData, threeLevelData, sensitivityData } from "./sections.js";
 
 // serializeSVG and collectPagedSVGs are imported from export.js.
 
@@ -181,6 +184,32 @@ export const CITATIONS = {
   // ── Meta-regression ───────────────────────────────────────────────────────
   MREG: `Thompson, S. G., &amp; Sharp, S. J. (1999). Explaining heterogeneity in meta-analysis: A comparison of methods. <em>Statistics in Medicine</em>, <em>18</em>(20), 2693–2708.`,
 
+  // ── Location-scale model ──────────────────────────────────────────────────
+  LS: `Viechtbauer, W., López-López, J. A., Sánchez-Meca, J., &amp; Marín-Martínez, F. (2015). A comparison of procedures to test for moderators in mixed-effects meta-regression models. <em>Psychological Methods</em>, <em>20</em>(3), 360–374. <a href="https://doi.org/10.1037/met0000023">https://doi.org/10.1037/met0000023</a>`,
+
+  // ── Permutation test ──────────────────────────────────────────────────────
+  PERM: `Viechtbauer, W., López-López, J. A., Sánchez-Meca, J., &amp; Marín-Martínez, F. (2015). A comparison of procedures to test for moderators in mixed-effects meta-regression models. <em>Psychological Methods</em>, <em>20</em>(3), 360–374. <a href="https://doi.org/10.1037/met0000023">https://doi.org/10.1037/met0000023</a>`,
+
+  // ── Cluster-robust SE ─────────────────────────────────────────────────────
+  CRSE: `Hedges, L. V., Tipton, E., &amp; Johnson, M. C. (2010). Robust variance estimation in meta-regression with dependent effect size estimates. <em>Research Synthesis Methods</em>, <em>1</em>(1), 39–65. <a href="https://doi.org/10.1002/jrsm.5">https://doi.org/10.1002/jrsm.5</a>`,
+
+  // ── RVE ───────────────────────────────────────────────────────────────────
+  RVE: `Hedges, L. V., Tipton, E., &amp; Johnson, M. C. (2010). Robust variance estimation in meta-regression with dependent effect size estimates. <em>Research Synthesis Methods</em>, <em>1</em>(1), 39–65. <a href="https://doi.org/10.1002/jrsm.5">https://doi.org/10.1002/jrsm.5</a>`,
+
+  // ── Three-level MA ────────────────────────────────────────────────────────
+  THREE: `Cheung, M. W.-L. (2014). Modeling dependent effect sizes with three-level meta-analyses: A structural equation modeling approach. <em>Psychological Methods</em>, <em>19</em>(2), 211–229. <a href="https://doi.org/10.1037/a0032968">https://doi.org/10.1037/a0032968</a>`,
+
+  // ── WAAP-WLS ──────────────────────────────────────────────────────────────
+  WAAP: `Stanley, T. D., &amp; Doucouliagos, H. (2014). Meta-regression approximations to reduce publication selection bias. <em>Research Synthesis Methods</em>, <em>5</em>(1), 60–78. <a href="https://doi.org/10.1002/jrsm.1095">https://doi.org/10.1002/jrsm.1095</a>`,
+
+  // ── GOSH ─────────────────────────────────────────────────────────────────
+  GOSH: `Olkin, I., Dahabreh, I. J., &amp; Trikalinos, T. A. (2012). GOSH — a graphical display of study heterogeneity. <em>Research Synthesis Methods</em>, <em>3</em>(3), 214–223. <a href="https://doi.org/10.1002/jrsm.1053">https://doi.org/10.1002/jrsm.1053</a>`,
+
+  // ── MH / Peto ────────────────────────────────────────────────────────────
+  MH: `Mantel, N., &amp; Haenszel, W. (1959). Statistical aspects of the analysis of data from retrospective studies of disease. <em>Journal of the National Cancer Institute</em>, <em>22</em>(4), 719–748.`,
+
+  PETO: `Yusuf, S., Peto, R., Lewis, J., Collins, R., &amp; Sleight, P. (1985). Beta blockade during and after myocardial infarction: An overview of the randomized trials. <em>Progress in Cardiovascular Diseases</em>, <em>27</em>(5), 335–371. <a href="https://doi.org/10.1016/S0033-0620(85)80003-7">https://doi.org/10.1016/S0033-0620(85)80003-7</a>`,
+
   // ── Influence diagnostics ─────────────────────────────────────────────────
   INFL: `Viechtbauer, W., &amp; Cheung, M. W.-L. (2010). Outlier and influence diagnostics for meta-analysis. <em>Research Synthesis Methods</em>, <em>1</em>(2), 112–125. <a href="https://doi.org/10.1002/jrsm.11">https://doi.org/10.1002/jrsm.11</a>`,
 
@@ -204,6 +233,10 @@ export function collectCitations(args) {
     reg,
     influence,
     bayesResult,
+    waap,
+    rveResult,
+    threeLevelResult,
+    permResult,
   } = args;
 
   const keys = [];
@@ -211,6 +244,10 @@ export function collectCitations(args) {
   function add(key) {
     if (key && !seen.has(key)) { seen.add(key); keys.push(key); }
   }
+
+  // Fixed-effects binary pooling
+  if (args.m?.isMH)   add("MH");
+  if (args.m?.isPeto) add("PETO");
 
   // τ² estimator
   const methodMap = {
@@ -243,12 +280,25 @@ export function collectCitations(args) {
   if (pcurve && pcurve.k >= 3)      add("PCURVE");
   if (puniform && puniform.k >= 3)  add("PUNIF");
   if (sel    && !sel.error)         add("VH");
+  if (waap   && isFinite(waap.estimate)) add("WAAP");
+
+  // Cluster-robust SE / RVE / Three-level
+  if (reg?.isClustered)                          add("CRSE");
+  if (rveResult    && !rveResult.error)          add("RVE");
+  if (threeLevelResult && !threeLevelResult.error) add("THREE");
 
   // Meta-regression
   if (reg && !reg.rankDeficient) add("MREG");
 
+  // Location-scale / permutation
+  if (args.ls && !args.ls.rankDeficient)         add("LS");
+  if (permResult && permResult.nPerm > 0)        add("PERM");
+
   // Influence diagnostics
   if (influence && influence.length) add("INFL");
+
+  // GOSH
+  if (args.gosh && args.gosh.count > 0) add("GOSH");
 
   // Bayesian
   if (bayesResult && !bayesResult.error) add("BAYES");
@@ -309,7 +359,7 @@ function sectionSummary(args) {
 // status. PET estimate is back-transformed through profile.transform().
 // "NA (k < 3)" is shown for any test that requires at least 3 studies.
 function sectionPubBias(args) {
-  const { useTF, tf, nextTable } = args;
+  const { useTF, tf, nextTable, nextFigure, profile } = args;
 
   const fsnProse = `
   <p style="margin-top:10px">
@@ -324,11 +374,33 @@ function sectionPubBias(args) {
     `<tr><td>${esc(t)}</td><td>${esc(s)}</td><td>${esc(p)}</td></tr>`);
   const table = buildTableAPA(nextTable(), "Tests of Publication Bias",
     d.headers, rows, esc(d.note));
+
+  const { funnelSVG } = args;
+  const funnelFig = funnelSVG
+    ? buildFigureAPA(nextFigure(),
+        `Funnel plot of ${esc(profile.label)} against standard error`,
+        [funnelSVG],
+        `Each point = one study. Asymmetry may indicate publication bias or between-study heterogeneity.`)
+    : "";
+
   return `
 <section>
   <h2>Publication Bias</h2>
   ${table}
   ${fsnProse}
+  ${funnelFig}
+</section>`;
+}
+
+function sectionPCurve(pcurve, nextTable) {
+  const d = pCurveData(pcurve);
+  if (!d) return "";
+  const rows = d.rows.map(r => `<tr>${r.map(c => `<td>${esc(c)}</td>`).join("")}</tr>`);
+  return `
+<section>
+  <h2>P-curve (Simonsohn et al., 2014)</h2>
+  <p class="meta-line">${escNote(d.kLine)}  ·  Verdict: <strong>${esc(d.verdict)}</strong></p>
+  ${buildTableAPA(nextTable(), "P-curve Test Statistics", d.headers, rows, escNote(d.note))}
 </section>`;
 }
 
@@ -395,11 +467,39 @@ function sectionInfluence(influence, k, nextTable) {
 </section>`;
 }
 
+function sectionSensitivity(args, nextTable) {
+  const d = sensitivityData(args);
+  if (!d) return "";
+  const widthCiLabel = (args.ciLevel ?? "95") + "% CI";
+
+  const looRows = d.loo.rows.map((r, i) => {
+    const flag = d.loo.sigChanges[i] ? ` title="Removing this study changes statistical significance"` : "";
+    const mark = d.loo.sigChanges[i] ? " *" : "";
+    return `<tr${flag}><td>${esc(r[0])}${mark}</td>${r.slice(1).map(c => `<td>${c}</td>`).join("")}</tr>`;
+  });
+  const looSection = d.loo.rows.length > 0
+    ? buildTableAPA(nextTable(), "Leave-one-out analysis", d.loo.headers, looRows, d.loo.note)
+    : `<p class="table-note">Need at least 3 studies for leave-one-out analysis.</p>`;
+
+  const estRows = d.est.rows.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join("")}</tr>`);
+  const estSection = buildTableAPA(nextTable(), `τ² estimator comparison (${widthCiLabel})`, d.est.headers, estRows, d.est.note);
+
+  return `
+<section>
+  <h2>Sensitivity Analysis</h2>
+  ${looSection}
+  ${estSection}
+</section>`;
+}
+
 function sectionSubgroup(subgroup, profile, nextTable, widthCiLabel = "95% CI") {
   if (!subgroup || subgroup.G < 2) return "";
   const d = subgroupData({ subgroup, profile, ciLevel: widthCiLabel.replace("% CI", "") });
   const apaRows = d.rows.map(r => `<tr>${r.map(c => `<td>${esc(c)}</td>`).join("")}</tr>`);
-  const note = escNote(d.note).replace("Q_between", "Q<sub>between</sub>");
+  const note = escNote(d.note)
+    .replace("Q_total",   "Q<sub>total</sub>")
+    .replace("Q_within",  "Q<sub>within</sub>")
+    .replace("Q_between", "Q<sub>between</sub>");
   return `
 <section>
   <h2>Subgroup Analysis</h2>
@@ -431,7 +531,7 @@ function sectionStudyTable(args) {
 </section>`;
 }
 
-function sectionRegression(reg, method, ciMethod, nextTable, widthCiLabel = "95% CI") {
+function sectionRegression(reg, method, ciMethod, nextTable, widthCiLabel = "95% CI", adjPs = null, mccLabel = "") {
   if (!reg || reg.rankDeficient || !reg.colNames) return "";
 
   const R2row  = reg.p > 1 && isFinite(reg.R2)
@@ -439,7 +539,7 @@ function sectionRegression(reg, method, ciMethod, nextTable, widthCiLabel = "95%
   const aicRow = isFinite(reg.AIC)
     ? ` · AIC = ${fmt(reg.AIC)} · BIC = ${fmt(reg.BIC)} · LL = ${fmt(reg.LL)}${ciMethod === "KH" && isFinite(reg.s2) ? ` · KH s² = ${fmt(reg.s2)}` : ""}` : "";
 
-  const d = regressionData({ reg, method, ciMethod, ciLevel: widthCiLabel.replace("% CI", "") });
+  const d = regressionData({ reg, method, ciMethod, ciLevel: widthCiLabel.replace("% CI", ""), adjPs, mccLabel });
   if (!d) return "";
   const coefRows = d.coef.rows.map((r, j) => {
     const cls = j === 0 ? ' class="intercept"' : "";
@@ -453,12 +553,101 @@ function sectionRegression(reg, method, ciMethod, nextTable, widthCiLabel = "95%
     d.modTests.rows.map(r => `<tr>${r.map(c => `<td>${esc(c)}</td>`).join("")}</tr>`),
     escNote(d.modTests.note))}`
     : "";
+
+  const fd = regressionFittedData(reg);
+  const fittedTable = fd
+    ? `<h3>Fitted values &amp; residuals</h3>
+  ${buildTableAPA(nextTable(), "Meta-Regression Fitted Values and Residuals",
+    fd.headers,
+    fd.rows.map(({ cells, flag }) => {
+      const flagAttr = flag ? ' class="outlier"' : "";
+      return `<tr${flagAttr}>${cells.map(c => `<td>${esc(c)}</td>`).join("")}</tr>`;
+    }),
+    esc(fd.note))}`
+    : "";
+
   return `
 <section>
   <h2>Meta-Regression</h2>
   <p class="meta-line">${escNote(d.metaLine)}${R2row}${aicRow}</p>
   ${coefTable}
   ${modTestsTable}
+  ${fittedTable}
+</section>`;
+}
+
+function sectionRve(args, nextTable) {
+  const d = rveData(args);
+  if (!d) return "";
+  const bodyRows = d.rows.map(r => `<tr>${r.map(c => `<td>${escNote(c)}</td>`).join("")}</tr>`);
+  return `
+<section>
+  <h2>Robust Variance Estimation (RVE)</h2>
+  ${buildTableAPA(nextTable(), "RVE Pooled Estimate", d.headers, bodyRows, esc(d.note))}
+</section>`;
+}
+
+function sectionThreeLevel(args, nextTable) {
+  const d = threeLevelData(args);
+  if (!d) return "";
+  const bodyRows = d.rows.map(r => `<tr>${r.map(c => `<td>${escNote(c)}</td>`).join("")}</tr>`);
+  return `
+<section>
+  <h2>Three-Level Meta-Analysis</h2>
+  ${buildTableAPA(nextTable(), "Three-Level Model Estimates", d.headers, bodyRows, esc(d.note))}
+</section>`;
+}
+
+function sectionLocationScale(ls, nextTable, widthCiLabel = "95% CI") {
+  if (!ls || ls.rankDeficient) return "";
+  const d = locationScaleData(ls, widthCiLabel.replace("% CI", ""));
+  if (!d) return "";
+
+  const locRows = d.locCoef.rows.map((r, j) => {
+    const cls = j === 0 ? ' class="intercept"' : "";
+    return `<tr${cls}>${r.map(c => `<td>${esc(c)}</td>`).join("")}</tr>`;
+  });
+  const scaleRows = d.scaleCoef.rows.map((r, j) => {
+    const cls = j === 0 ? ' class="intercept"' : "";
+    return `<tr${cls}>${r.map(c => `<td>${esc(c)}</td>`).join("")}</tr>`;
+  });
+  const locTable   = buildTableAPA(nextTable(), "Location Model Coefficients",   d.locCoef.headers,   locRows,   escNote(d.locCoef.note));
+  const scaleTable = buildTableAPA(nextTable(), "Scale Model Coefficients",       d.scaleCoef.headers, scaleRows, escNote(d.scaleCoef.note));
+  const fittedTable = d.fitted
+    ? `<h3>Fitted values &amp; study-specific τ²ᵢ</h3>
+  ${buildTableAPA(nextTable(), "Location-Scale Fitted Values", d.fitted.headers,
+    d.fitted.rows.map(r => `<tr>${r.map(c => `<td>${esc(c)}</td>`).join("")}</tr>`),
+    esc(d.fitted.note))}`
+    : "";
+
+  return `
+<section>
+  <h2>Location-Scale Model</h2>
+  <p class="meta-line">${escNote(d.metaLine)}</p>
+  ${locTable}
+  ${scaleTable}
+  ${fittedTable}
+</section>`;
+}
+
+function sectionPermutation(permResult, reg, nextTable) {
+  if (!permResult || !reg) return "";
+  const d = permutationData(permResult, reg);
+  if (!d) return "";
+
+  const headers = ["Test", "Statistic", "Observed", "<em>p</em> (perm.)"];
+  const allRows = [
+    `<tr><td>Omnibus <em>Q</em>M</td><td>${escNote(d.omniLabel)}</td><td>${fmt(d.omniObserved)}</td><td>${fmtP_APA(d.omniP)}</td></tr>`,
+    ...d.mods.map(m =>
+      `<tr><td>${esc(m.name)}</td><td>${escNote(m.label)}</td><td>${isFinite(m.observed) ? fmt(m.observed) : "—"}</td><td>${isFinite(m.p) ? fmtP_APA(m.p) : "—"}</td></tr>`
+    ),
+  ];
+  const note = `${d.nPerm} permutations; τ² re-estimated per permutation. Permutation p = (1 + #≥observed) / (B + 1).`;
+  const table = buildTableAPA(nextTable(), "Permutation Test Results", headers, allRows, esc(note));
+  return `
+<section>
+  <h2>Permutation Test</h2>
+  ${table}
 </section>`;
 }
 
@@ -801,7 +990,8 @@ function sectionReferences(citationKeys) {
 
 export function buildReport(args) {
   const {
-    studies, m, profile, reg, tf, influence, subgroup,
+    studies, m, profile, reg, ls, tf, influence, subgroup,
+    rveResult, threeLevelResult, rveRho,
     method, ciMethod, useTF, forestOptions,
     cumForestOptions, caterpillarOptions,
     pcurve, puniform,
@@ -811,6 +1001,8 @@ export function buildReport(args) {
     sensitivityRows,
     ciLevel,
     plotTheme,
+    mccMethod = "none",
+    permResult = null,
   } = args;
 
   const theme = plotTheme ?? "default";
@@ -852,7 +1044,7 @@ export function buildReport(args) {
 
   function liveSVG(id) {
     const el = document.getElementById(id);
-    return el ? serializeSVG(el) : "";
+    return (el && el.childElementCount > 0) ? serializeSVG(el) : "";
   }
   // Collect bubble plot SVGs with their moderator names (set via data-moderator
   // on the wrapper div in ui.js).  Falls back to unnamed SVG scan when the
@@ -869,8 +1061,13 @@ export function buildReport(args) {
       .filter(b => b.svg);
   })();
 
+  // Multiple comparison correction for per-moderator tests.
+  const mccLabel  = mccMethod === "bonferroni" ? "Bonferroni" : mccMethod === "holm" ? "Holm" : "";
+  const rawModPs  = Array.isArray(reg?.modTests) ? reg.modTests.map(mt => mt.QMp) : [];
+  const adjRegPs  = mccMethod !== "none" && rawModPs.length > 1 ? adjustPvals(rawModPs, mccMethod) : null;
+
   // Augmented args passed to every section builder.
-  const rArgs = { ...args, nextTable, nextFigure };
+  const rArgs = { ...args, nextTable, nextFigure, funnelSVG: liveSVG("funnelPlot") };
 
   const body = [
     sectionSummary(rArgs),
@@ -947,10 +1144,10 @@ export function buildReport(args) {
   ${plotsTau}
 </section>`;
     })(),
+    sectionRve({ ...rArgs, rveResult, rveRho }, nextTable),
+    sectionThreeLevel({ ...rArgs, threeLevelResult }, nextTable),
     sectionPubBias(rArgs),
-    sectionPlot("Funnel Plot", [liveSVG("funnelPlot")], nextFigure,
-      `Funnel plot of ${esc(profile.label)} against standard error`,
-      `Each point = one study. Asymmetry may indicate publication bias or between-study heterogeneity.`),
+    sectionSensitivity(rArgs, nextTable),
     sectionSubgroup(subgroup, profile, nextTable, widthCiLabel),
     sectionInfluence(influence, k, nextTable),
     sectionPlot("Influence Plot", [liveSVG("influencePlot")], nextFigure,
@@ -968,6 +1165,9 @@ export function buildReport(args) {
     sectionPlot("Radial (Galbraith) Plot", [liveSVG("radialPlot")], nextFigure,
       `Radial (Galbraith) plot of standardised effect against reciprocal of standard error`,
       `Points near the reference line support homogeneity. Outliers may indicate heterogeneity.`),
+    sectionPlot("L’Abbé Plot", [liveSVG("labbePlot")], nextFigure,
+      `L’Abbé plot of event rates for ${esc(profile.label)}`,
+      `Each point = one study. Point area proportional to study weight. Applicable to OR, RR, and RD only.`),
     sectionPlot("Cumulative Forest Plot", cumForestSVGs.length ? cumForestSVGs : [liveSVG("cumulativePlot")], nextFigure,
       `Cumulative forest plot of ${esc(profile.label)}`,
       `Studies added in dataset order. Effect and ${widthCiLabel} shown at each cumulative step.`),
@@ -980,6 +1180,7 @@ export function buildReport(args) {
     sectionPlot("Caterpillar Plot", caterpillarSVGs.length ? caterpillarSVGs : [liveSVG("caterpillarPlot")], nextFigure,
       `Caterpillar plot of study-level ${esc(profile.label)}, sorted by effect size`,
       `Error bars = ${widthCiLabel}.`),
+    sectionPCurve(pcurve, nextTable),
     sectionPlot("P-curve", [liveSVG("pCurvePlot")], nextFigure,
       `P-curve of statistically significant results (p &lt; .05)`,
       `Simonsohn et al. (2014). Only studies with p &lt; .05 included.`),
@@ -995,7 +1196,9 @@ export function buildReport(args) {
     sectionPlot("Risk-of-bias Summary", [liveSVG("robSummary")], nextFigure,
       `Risk-of-bias summary plot`,
       ``),
-    sectionRegression(reg, method, ciMethod, nextTable, widthCiLabel),
+    sectionLocationScale(ls, nextTable, widthCiLabel),
+    sectionRegression(reg, method, ciMethod, nextTable, widthCiLabel, adjRegPs, mccLabel),
+    sectionPermutation(permResult, reg, nextTable),
     ...bubbleSVGs.map(({ svg, moderator }) =>
       sectionPlot(
         moderator ? `Bubble Plot — ${esc(moderator)}` : "Bubble Plot",

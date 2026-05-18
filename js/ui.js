@@ -3649,7 +3649,7 @@ function runGosh() {
 // -----------------------------------------------------------------------------
 // Permutation test state and runner
 // -----------------------------------------------------------------------------
-const permState = { worker: null };
+const permState = { worker: null, lastResult: null, lastReg: null };
 
 function _clearPermResults() {
   const el = document.getElementById("permResults");
@@ -3661,6 +3661,8 @@ function _clearPermResults() {
   const runBtn = document.getElementById("permRunBtn");
   if (runBtn) runBtn.style.display = "";
   if (permState.worker) { permState.worker.terminate(); permState.worker = null; }
+  permState.lastResult = null;
+  permState.lastReg    = null;
 }
 
 function _startPermTest() {
@@ -3708,6 +3710,11 @@ function _startPermTest() {
 
   const onDone = (result) => {
     permState.worker = null;
+    permState.lastResult = result;
+    permState.lastReg    = reg;
+    if (appState.reportArgs) {
+      appState.reportArgs = { ...appState.reportArgs, permResult: result };
+    }
     if (elProgress) elProgress.style.display = "none";
     if (elRun)    elRun.style.display = "";
     if (elCancel) elCancel.style.display = "none";
@@ -4424,11 +4431,15 @@ function _renderAllResults(ctx) {
       : "Custom";
 
   appState.reportArgs = {
-    studies: all, m, profile, reg,
+    studies: all, m, profile, reg, ls,
     tf, egger, begg, fatpet, petpeese, fsn, tes, waap, cles, pcurve, puniform,
     harbord, peters, deeks, ruecker, hc, baujatResult,
     influence, subgroup, method, ciMethod,
-    ciLevel: document.getElementById("ciLevel")?.value ?? "95",
+    rveResult, threeLevelResult,
+    rveRho: parseFloat(document.getElementById("rveRho")?.value ?? 0.8),
+    permResult: permState.lastResult ?? null,
+    ciLevel:   document.getElementById("ciLevel")?.value   ?? "95",
+    mccMethod: document.getElementById("mccMethod")?.value ?? "none",
     useTF, mAdjusted,
     sel: selResult, selMode: selModeVal, selLabel: _selLabel,
     gosh: goshState.result,

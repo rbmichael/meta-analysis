@@ -1,4 +1,4 @@
-// =============================================================================
+﻿// =============================================================================
 // docx.js — Word (.docx) export
 // =============================================================================
 // Exports buildDocx(args) → Promise<Blob>.
@@ -20,15 +20,18 @@ import { drawForest, drawCumulativeForest, drawCaterpillarPlot } from "./plots.j
 import { serializeSVG, collectPagedSVGs } from "./export.js";
 import { Z_95 } from "./constants.js";
 import { normalQuantile } from "./utils.js";
+import { adjustPvals } from "./regression.js";
 import { CITATIONS, collectCitations } from "./report.js";
-import { summaryData, pubBiasData, puniformData, selModelData,
-         influenceData, subgroupData, studyTableData, regressionData } from "./sections.js";
+import { summaryData, pubBiasData, pCurveData, puniformData, selModelData,
+         influenceData, subgroupData, studyTableData, regressionData,
+         regressionFittedData, locationScaleData, permutationData,
+         rveData, threeLevelData, sensitivityData } from "./sections.js";
 
 // serializeSVG and collectPagedSVGs are imported from export.js.
 
 function liveSVGString(id) {
   const el = document.getElementById(id);
-  return el ? serializeSVG(el) : "";
+  return (el && el.childElementCount > 0) ? serializeSVG(el) : "";
 }
 
 // ---------------------------------------------------------------------------
@@ -330,6 +333,17 @@ function docPubBias(args, ctx) {
   ];
 }
 
+function docPCurve(args, ctx) {
+  const d = pCurveData(args.pcurve);
+  if (!d) return [];
+  return [
+    paraText("P-curve (Simonsohn et al., 2014)", "Heading1"),
+    paraText(`${d.kLine}  ·  Verdict: ${d.verdict}`),
+    ...apaTableDocx(ctx.nextTable(), "P-curve Test Statistics",
+      d.headers, d.rows.map(r => r.map(run)), d.note),
+  ];
+}
+
 function docPUniform(args, ctx) {
   const d = puniformData(args);
   if (!d) return [];
@@ -365,6 +379,25 @@ function docInfluence(args, ctx) {
     ...apaTableDocx(ctx.nextTable(), "Leave-One-Out Influence Diagnostics",
       d.headers, d.rows.map(r => r.map(run)), d.note),
   ];
+}
+
+function docSensitivity(args, ctx) {
+  const d = sensitivityData(args);
+  if (!d) return [];
+  const looRows = d.loo.rows.map((r, i) => {
+    const cells = r.map(run);
+    if (d.loo.sigChanges[i]) cells[0] = run(r[0] + " *");
+    return cells;
+  });
+  const estRows = d.est.rows.map(r => r.map(run));
+  const chunks = [paraText("Sensitivity Analysis", "Heading1")];
+  if (d.loo.rows.length > 0) {
+    chunks.push(...apaTableDocx(ctx.nextTable(), "Leave-one-out analysis",
+      d.loo.headers, looRows, d.loo.note));
+  }
+  chunks.push(...apaTableDocx(ctx.nextTable(), "τ² Estimator comparison",
+    d.est.headers, estRows, d.est.note));
+  return chunks;
 }
 
 function docSubgroup(args, ctx) {
@@ -406,8 +439,78 @@ function docRegression(args, ctx) {
         d.modTests.headers, d.modTests.rows.map(r => r.map(run)), d.modTests.note),
     );
   }
+  const fd = regressionFittedData(args.reg);
+  if (fd) {
+    chunks.push(
+      paraText("Fitted values & residuals", "Heading2"),
+      ...apaTableDocx(ctx.nextTable(), "Meta-Regression Fitted Values and Residuals",
+        fd.headers, fd.rows.map(({ cells }) => cells.map(run)), fd.note),
+    );
+  }
   return chunks;
 }
+function docRve(args, ctx) {
+  const d = rveData(args);
+  if (!d) return [];
+  return [
+    paraText("Robust Variance Estimation (RVE)", "Heading1"),
+    ...apaTableDocx(ctx.nextTable(), "RVE Pooled Estimate",
+      d.headers, d.rows.map(r => r.map(run)), d.note),
+  ];
+}
+
+function docThreeLevel(args, ctx) {
+  const d = threeLevelData(args);
+  if (!d) return [];
+  return [
+    paraText("Three-Level Meta-Analysis", "Heading1"),
+    ...apaTableDocx(ctx.nextTable(), "Three-Level Model Estimates",
+      d.headers, d.rows.map(r => r.map(run)), d.note),
+  ];
+}
+
+function docLocationScale(args, ctx) {
+  const d = locationScaleData(args.ls, args.ciLevel ?? "95");
+  if (!d) return [];
+  const chunks = [
+    paraText("Location-Scale Model", "Heading1"),
+    paraText(d.metaLine),
+    ...apaTableDocx(ctx.nextTable(), "Location Model Coefficients",
+      d.locCoef.headers, d.locCoef.rows.map(r => r.map(run)), d.locCoef.note),
+    ...apaTableDocx(ctx.nextTable(), "Scale Model Coefficients",
+      d.scaleCoef.headers, d.scaleCoef.rows.map(r => r.map(run)), d.scaleCoef.note),
+  ];
+  if (d.fitted) {
+    chunks.push(
+      paraText("Fitted values & study-specific τ²ᵢ", "Heading2"),
+      ...apaTableDocx(ctx.nextTable(), "Location-Scale Fitted Values",
+        d.fitted.headers, d.fitted.rows.map(r => r.map(run)), d.fitted.note),
+    );
+  }
+  return chunks;
+}
+
+function docPermutation(args, ctx) {
+  const { permResult, reg } = args;
+  const d = permutationData(permResult, reg);
+  if (!d) return [];
+
+  const headers = ["Test", "Statistic", "Observed", "p (perm.)"];
+  const stripEm = s => s.replace(/<\/?em>/g, "");
+  const omniRow = ["Omnibus QM", stripEm(d.omniLabel), fmt(d.omniObserved), fmtP_APA(d.omniP)];
+  const modRows = d.mods.map(m => [
+    m.name, stripEm(m.label),
+    isFinite(m.observed) ? fmt(m.observed) : "—",
+    isFinite(m.p) ? fmtP_APA(m.p) : "—",
+  ]);
+  const rows = [omniRow, ...modRows].map(r => r.map(run));
+  const note = `${d.nPerm} permutations; τ\xB2 re-estimated per permutation. Permutation p = (1 + #≥observed) / (B + 1).`;
+  return [
+    paraText("Permutation Test", "Heading1"),
+    ...apaTableDocx(ctx.nextTable(), "Permutation Test Results", headers, rows, note),
+  ];
+}
+
 function docReferences(args, linkMgr) {
   const keys = collectCitations(args);
   if (!keys.length) return [];
@@ -576,6 +679,7 @@ export async function buildDocx(args) {
     bayesResult, bayesReMean,
     sensitivityRows,
     plotTheme,
+    mccMethod = "none",
   } = args;
 
   const theme = plotTheme ?? "default";
@@ -583,8 +687,12 @@ export async function buildDocx(args) {
   const widthCiLabel = (ciLevel ?? "95") + "% CI";
   const widthCrLabel = (ciLevel ?? "95") + "% CrI";
 
-  // Augment args so section helpers can access CI width labels
-  const docArgs = { ...args, widthCiLabel, widthCrLabel };
+  const mccLabel  = mccMethod === "bonferroni" ? "Bonferroni" : mccMethod === "holm" ? "Holm" : "";
+  const rawModPs  = Array.isArray(reg?.modTests) ? reg.modTests.map(mt => mt.QMp) : [];
+  const adjPs     = mccMethod !== "none" && rawModPs.length > 1 ? adjustPvals(rawModPs, mccMethod) : null;
+
+  // Augment args so section helpers can access CI width labels and MCC data
+  const docArgs = { ...args, widthCiLabel, widthCrLabel, adjPs, mccLabel };
 
   // ── 1. Collect all SVG strings synchronously ────────────────────────────
 
@@ -602,6 +710,7 @@ export async function buildDocx(args) {
   svgArrays.set("baujat",       [liveSVGString("baujatPlot")].filter(Boolean));
   svgArrays.set("qqplot",       [liveSVGString("qqPlot")].filter(Boolean));
   svgArrays.set("radial",       [liveSVGString("radialPlot")].filter(Boolean));
+  svgArrays.set("labbe",        [liveSVGString("labbePlot")].filter(Boolean));
 
   svgArrays.set("cumForest",
     cumForestOptions
@@ -784,14 +893,20 @@ export async function buildDocx(args) {
       return chunks;
     })(),
 
+    // RVE and three-level (cluster-dependent results)
+    ...docRve(docArgs, ctx),
+    ...docThreeLevel(docArgs, ctx),
+
     // Publication bias
     ...docPubBias(docArgs, ctx),
+    ...(getImgs("funnel").length ? apaFigureDocx(ctx.nextFigure(),
+        `Funnel plot of ${profile.label} against standard error`,
+        getImgs("funnel"),
+        "Each point = one study. Asymmetry may indicate publication bias or between-study heterogeneity.") : []),
 
-    ...figSection("Funnel Plot", "funnel",
-      `Funnel plot of ${profile.label} against standard error`,
-      "Each point = one study. Asymmetry may indicate publication bias or between-study heterogeneity."),
+    // Sensitivity analysis
+    ...docSensitivity(docArgs, ctx),
 
-    // Subgroup analysis
     ...docSubgroup(docArgs, ctx),
 
     // Influence diagnostics
@@ -816,6 +931,10 @@ export async function buildDocx(args) {
       "Radial (Galbraith) plot of standardised effect against reciprocal of standard error",
       "Points near the reference line support homogeneity. Outliers may indicate heterogeneity."),
 
+    ...figSection("L'Abbé Plot", "labbe",
+      `L'Abbé plot of event rates for ${profile.label}`,
+      "Each point = one study. Point area proportional to study weight. Applicable to OR, RR, and RD only."),
+
     // Cumulative analysis
     ...figSection("Cumulative Forest Plot", "cumForest",
       `Cumulative forest plot of ${profile.label}`,
@@ -833,10 +952,11 @@ export async function buildDocx(args) {
       `Error bars = ${widthCiLabel}.`),
 
     // P-value analyses
+    ...docPCurve(docArgs, ctx),
+
     ...figSection("P-curve", "pcurve",
       "P-curve of statistically significant results (p < .05)",
       "Simonsohn et al. (2014). Only studies with p < .05 included."),
-
     ...docPUniform(docArgs, ctx),
 
     ...figSection("P-uniform", "puniformPlot", "P-uniform plot (van Assen et al., 2015)", ""),
@@ -853,8 +973,14 @@ export async function buildDocx(args) {
     ...figSection("Risk-of-bias Traffic Light", "robTL", "Risk-of-bias traffic-light plot", ""),
     ...figSection("Risk-of-bias Summary",        "robSummary", "Risk-of-bias summary plot",  ""),
 
+    // Location-scale model
+    ...docLocationScale(docArgs, ctx),
+
     // Meta-regression
     ...docRegression(docArgs, ctx),
+
+    // Permutation test
+    ...docPermutation(docArgs, ctx),
 
     // Bubble plots (one figure per moderator)
     ...bubbleMods.flatMap(({ key, mod }) => {
