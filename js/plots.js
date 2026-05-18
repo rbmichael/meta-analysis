@@ -203,9 +203,9 @@ function setSvgSize(sel, w, h) {
 //   fontSize    — optional font-size string (e.g. "10px") for tick labels
 //   fontFamily  — optional font-family string; used by themed forest plots
 function styleAxis(axisG, strokeColor, fillColor, fontSize, fontFamily) {
-  axisG.select(".domain").attr("stroke", strokeColor);
-  axisG.selectAll(".tick line").attr("stroke", strokeColor);
-  const tickText = axisG.selectAll(".tick text").attr("fill", fillColor);
+  axisG.select(".domain").style("stroke", strokeColor);
+  axisG.selectAll(".tick line").style("stroke", strokeColor);
+  const tickText = axisG.selectAll(".tick text").style("fill", fillColor);
   if (fontSize)   tickText.style("font-size",   fontSize);
   if (fontFamily) tickText.style("font-family", fontFamily);
 }
@@ -308,10 +308,11 @@ function placeLegend(iW, iH, lW, lH, corner = "tr", pad = 6) {
 // initSvg(selector, ariaLabel)
 // Combines clearAndSelectSVG, aria-label attribute, and SVG <title> in one call.
 // Use instead of the clearAndSelectSVG + svg.attr("aria-label") pattern.
-function initSvg(selector, ariaLabel) {
+function initSvg(selector, ariaLabel, T) {
   const svg = clearAndSelectSVG(selector);
   svg.attr("aria-label", ariaLabel);
   svg.append("title").text(ariaLabel);
+  if (T && T.bg !== "transparent") svg.style("background", T.bg);
   return svg;
 }
 
@@ -438,7 +439,8 @@ export function drawBubble(studies, reg, mod, container, options = {}) {
   // ---- SVG ----
   const svg = setSvgSize(d3.select(container).append("svg")
     .attr("role", "img")
-    .attr("aria-label", _bubbleLabel), W, H);
+    .attr("aria-label", _bubbleLabel)
+    .style("background", T.bg !== "transparent" ? T.bg : ""), W, H);
   svg.append("title").text(_bubbleLabel);
   if (T.bg && T.bg !== "transparent") {
     svg.insert("rect", ":first-child")
@@ -661,7 +663,8 @@ export function drawPartialResidualBubble(studies, reg, mod, container, options 
   // ---- SVG ----
   const svg = setSvgSize(d3.select(container).append("svg")
     .attr("role", "img")
-    .attr("aria-label", _partialLabel), W, H);
+    .attr("aria-label", _partialLabel)
+    .style("background", T.bg !== "transparent" ? T.bg : ""), W, H);
   svg.append("title").text(_partialLabel);
   if (T.bg && T.bg !== "transparent") {
     svg.insert("rect", ":first-child")
@@ -1044,10 +1047,10 @@ function forestDrawHetSummary(ctx, m) {
 }
 
 export function drawForest(studies, m, options = {}) {
-  const svg       = initSvg("#forestPlot", "Forest plot");
+  const T         = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
+  const svg       = initSvg("#forestPlot", "Forest plot", T);
   const ciMethod  = options.ciMethod || "normal";
   const profile   = options.profile  || { transform: x => x };
-  const T         = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
 
   const pooledDisplay = options.pooledDisplay || "RE";
   const showFE   = pooledDisplay === "FE"   || pooledDisplay === "Both";
@@ -1449,7 +1452,8 @@ function funnelDrawLegend(svg, W, margin, BANDS, T) {
 export function drawFunnel(studies, m, profile, options = {}) {
   const egger = options.egger ?? null;
   profile = profile || { transform: x => x };
-  const svg = initSvg("#funnelPlot", "Funnel plot");
+  const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
+  const svg = initSvg("#funnelPlot", "Funnel plot", T);
 
   if (!studies || studies.length === 0) { drawNoDataPlaceholder(svg, +svg.attr("width") || 500, +svg.attr("height") || 400); return; }
 
@@ -1459,8 +1463,6 @@ export function drawFunnel(studies, m, profile, options = {}) {
   const iW = W - margin.left - margin.right;
   const iH = H - margin.top  - margin.bottom;
   setSvgSize(svg, W, H);
-
-  const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
   if (T.bg && T.bg !== "transparent") {
     svg.insert("rect", ":first-child")
       .attr("width", W).attr("height", H).attr("fill", T.bg);
@@ -1597,11 +1599,10 @@ export function drawFunnel(studies, m, profile, options = {}) {
 //   influence — array from influenceDiagnostics(), each entry has
 //               { label, hat, cookD, highLeverage, highCookD }
 export function drawInfluencePlot(influence, options = {}) {
-  const svg = initSvg("#influencePlot", "Influence plot");
+  const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
+  const svg = initSvg("#influencePlot", "Influence plot", T);
 
   if (!influence || influence.length < 2) { drawNoDataPlaceholder(svg, +svg.attr("width") || 500, +svg.attr("height") || 400, influence?.length === 1 ? "Need ≥ 2 studies" : "No data"); return; }
-
-  const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
 
   const k = influence.length;
   const hatThresh  = 2 / k;
@@ -1749,7 +1750,8 @@ export function drawInfluencePlot(influence, options = {}) {
 //   cumulativeResults — array from cumulativeMeta(), already in order
 //   profile           — effect-type profile with .label, .transform
 export function drawCumulativeForest(cumulativeResults, profile, options = {}) {
-  const svg = initSvg("#cumulativePlot", "Cumulative forest plot");
+  const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
+  const svg = initSvg("#cumulativePlot", "Cumulative forest plot", T);
 
   if (!cumulativeResults || cumulativeResults.length === 0) { drawNoDataPlaceholder(svg, +svg.attr("width") || 580, +svg.attr("height") || 400); return; }
 
@@ -1777,7 +1779,6 @@ export function drawCumulativeForest(cumulativeResults, profile, options = {}) {
 
   setSvgSize(svg, totalW, totalH);
 
-  const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
   if (T.bg && T.bg !== "transparent") {
     svg.insert("rect", ":first-child")
       .attr("width", totalW).attr("height", totalH).attr("fill", T.bg);
@@ -1926,7 +1927,8 @@ export function drawCumulativeForest(cumulativeResults, profile, options = {}) {
 // purpose here is visual inspection of the evolving dot pattern).
 export function drawCumulativeFunnel(cumulativeStudies, cumResults, profile, stepIdx, options = {}) {
   profile = profile || { transform: x => x };
-  const svg = initSvg("#cumulativeFunnelPlot", "Cumulative funnel plot");
+  const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
+  const svg = initSvg("#cumulativeFunnelPlot", "Cumulative funnel plot", T);
 
   if (!cumulativeStudies || cumulativeStudies.length === 0 || !cumResults) { drawNoDataPlaceholder(svg, +svg.attr("width") || 500, +svg.attr("height") || 420); return; }
 
@@ -1941,7 +1943,6 @@ export function drawCumulativeFunnel(cumulativeStudies, cumResults, profile, ste
   const iH = H - margin.top  - margin.bottom;
   setSvgSize(svg, W, H);
 
-  const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
   if (T.bg && T.bg !== "transparent") {
     svg.insert("rect", ":first-child")
       .attr("width", W).attr("height", H).attr("fill", T.bg);
@@ -2099,11 +2100,10 @@ export function drawCumulativeFunnel(cumulativeStudies, cumResults, profile, ste
 // Parameters:
 //   result — object returned by pCurve() in analysis.js
 export function drawPCurve(result, options = {}) {
-  const svg = initSvg("#pCurvePlot", "p-curve plot");
+  const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
+  const svg = initSvg("#pCurvePlot", "p-curve plot", T);
 
   if (!result || result.k === 0) { drawNoDataPlaceholder(svg, +svg.attr("width") || 500, +svg.attr("height") || 380, "No significant p-values"); return; }
-
-  const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
 
   const { bins, expected0, expected33 } = result;
 
@@ -2299,13 +2299,12 @@ export function drawPCurve(result, options = {}) {
 //   m       — meta() result, used for RE estimate and CI
 //   profile — effect profile (provides .transform and .label)
 export function drawPUniform(result, m, profile, options = {}) {
-  const svg = initSvg("#pUniformPlot", "p-uniform plot");
+  const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
+  const svg = initSvg("#pUniformPlot", "p-uniform plot", T);
 
   if (!result || result.k === 0 || !isFinite(result.estimate)) { drawNoDataPlaceholder(svg, +svg.attr("width") || 500, +svg.attr("height") || 170, "No significant p-values"); return; }
 
   profile = profile || { transform: x => x, label: "Effect" };
-
-  const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
 
   // ---- Layout ----
   const margin = { top: 34, right: 24, bottom: 44, left: 100 };
@@ -2447,13 +2446,12 @@ export function drawPUniform(result, m, profile, options = {}) {
 //     • Jittered circles        → individual studies, r ∝ 1/SE
 //   Imputed (trim-fill) studies rendered with reduced opacity.
 export function drawOrchardPlot(studies, m, profile, options = {}) {
-  const svg = initSvg("#orchardPlot", "Orchard plot");
+  const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
+  const svg = initSvg("#orchardPlot", "Orchard plot", T);
 
   if (!studies || studies.length === 0) { drawNoDataPlaceholder(svg, +svg.attr("width") || 520, +svg.attr("height") || 340); return; }
 
   profile = profile || { transform: x => x, label: "Effect" };
-
-  const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
 
   const W = +svg.attr("width")  || 520;
   const H = +svg.attr("height") || 340;
@@ -2675,11 +2673,10 @@ export function drawOrchardPlot(studies, m, profile, options = {}) {
 // Studies that don't fit are hidden via an SVG clipPath so the x-axis always
 // remains visible.
 export function drawCaterpillarPlot(studies, m, profile, options = {}) {
-  const svg = initSvg("#caterpillarPlot", "Caterpillar plot");
+  const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
+  const svg = initSvg("#caterpillarPlot", "Caterpillar plot", T);
 
   if (!studies || studies.length === 0) { drawNoDataPlaceholder(svg, +svg.attr("width") || 520, +svg.attr("height") || 300); return; }
-
-  const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
 
   profile = profile || { transform: x => x, label: "Effect" };
 
@@ -2902,10 +2899,9 @@ export function drawCaterpillarPlot(studies, m, profile, options = {}) {
 // options — { page, pageSize }
 // Returns { totalPages }.
 export function drawBlupPlot(result, profile, options = {}) {
-  const svg = initSvg("#blupPlot", "BLUP forest plot");
-  if (!result || !result.studies || result.studies.length === 0) return { totalPages: 1 };
-
   const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
+  const svg = initSvg("#blupPlot", "BLUP forest plot", T);
+  if (!result || !result.studies || result.studies.length === 0) return { totalPages: 1 };
 
   profile = profile || { transform: x => x, label: "Effect" };
 
@@ -3103,11 +3099,10 @@ export function drawBlupPlot(result, profile, options = {}) {
 // influential — the primary targets for sensitivity investigation.
 // Reference: Baujat et al. (2002) Statistics in Medicine 21:2442–2456.
 export function drawBaujatPlot(result, profile, options = {}) {
-  const svg = initSvg("#baujatPlot", "Baujat plot");
+  const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
+  const svg = initSvg("#baujatPlot", "Baujat plot", T);
 
   if (!result || result.k < 2) { drawNoDataPlaceholder(svg, +svg.attr("width") || 500, +svg.attr("height") || 420, result?.k === 1 ? "Need ≥ 2 studies" : "No data"); return; }
-
-  const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
 
   profile = profile || { transform: x => x, label: "Effect" };
 
@@ -3286,10 +3281,9 @@ export function drawBaujatPlot(result, profile, options = {}) {
 // type     — "OR" | "RR" | "RD"
 export function drawLabbe(studies, m, profile, options = {}) {
   const type = options.type ?? "OR";
-  const svg = initSvg("#labbePlot", "L'Abbé plot");
-  if (!studies || studies.length === 0) { drawNoDataPlaceholder(svg, +svg.attr("width") || 500, +svg.attr("height") || 420); return; }
-
   const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
+  const svg = initSvg("#labbePlot", "L'Abbé plot", T);
+  if (!studies || studies.length === 0) { drawNoDataPlaceholder(svg, +svg.attr("width") || 500, +svg.attr("height") || 420); return; }
 
   // Only meaningful for studies with a/b/c/d cell counts.
   const pts = studies
@@ -3515,10 +3509,9 @@ export function drawLabbe(studies, m, profile, options = {}) {
 // domains  — string[]
 // robData  — { [studyLabel]: { [domain]: string } }  ("Low"|"Some concerns"|"High"|"NI"|"")
 export function drawRoBTrafficLight(studies, domains, robData, options = {}) {
-  const svg = initSvg("#robTrafficLight", "Risk of bias traffic light");
-  if (!studies || !domains || domains.length === 0) { drawNoDataPlaceholder(svg, +svg.attr("width") || 500, +svg.attr("height") || 300); return; }
-
   const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
+  const svg = initSvg("#robTrafficLight", "Risk of bias traffic light", T);
+  if (!studies || !domains || domains.length === 0) { drawNoDataPlaceholder(svg, +svg.attr("width") || 500, +svg.attr("height") || 300); return; }
 
   const CELL_W   = 44;
   const CELL_H   = 22;
@@ -3629,10 +3622,9 @@ export function drawRoBTrafficLight(studies, domains, robData, options = {}) {
 // domains  — string[]
 // robData  — { [studyLabel]: { [domain]: string } }
 export function drawRoBSummary(studies, domains, robData, options = {}) {
-  const svg = initSvg("#robSummary", "Risk of bias summary");
-  if (!studies || !domains || domains.length === 0) { drawNoDataPlaceholder(svg, +svg.attr("width") || 500, +svg.attr("height") || 300); return; }
-
   const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
+  const svg = initSvg("#robSummary", "Risk of bias summary", T);
+  if (!studies || !domains || domains.length === 0) { drawNoDataPlaceholder(svg, +svg.attr("width") || 500, +svg.attr("height") || 300); return; }
 
   const RATINGS   = ["Low", "Some concerns", "High", "NI"];
 
@@ -3768,12 +3760,11 @@ export function drawRoBSummary(studies, domains, robData, options = {}) {
 const GOSH_SVG_REPORT_MAX = 3000;
 
 export function drawGoshPlot(result, profile, options = {}) {
-  const svg = initSvg("#goshPlot", "GOSH plot");
+  const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
+  const svg = initSvg("#goshPlot", "GOSH plot", T);
   if (!result || result.error || !result.count) { drawNoDataPlaceholder(svg, +svg.attr("width") || 500, +svg.attr("height") || 400, result?.error || "No data"); return; }
 
   profile = profile || { transform: x => x, label: "Effect" };
-
-  const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
 
   const { mu: muArr, I2: I2Arr, Q: QArr, n: nArr, count, k, sampled } = result;
   const xAxis     = options.xAxis     || "I2";    // "I2" | "Q" | "n"
@@ -4061,10 +4052,9 @@ export function drawGoshPlot(result, profile, options = {}) {
 //   profile curve → peak dot → axes → labels → title.
 // =============================================================================
 export function drawProfileLikTau2(result, options = {}) {
-  const svg = initSvg("#profileLikTau2Plot", "Profile likelihood plot for τ²");
-  if (!result || result.error) { drawNoDataPlaceholder(svg, +svg.attr("width") || 500, +svg.attr("height") || 340, result?.error || "No data"); return; }
-
   const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
+  const svg = initSvg("#profileLikTau2Plot", "Profile likelihood plot for τ²", T);
+  if (!result || result.error) { drawNoDataPlaceholder(svg, +svg.attr("width") || 500, +svg.attr("height") || 340, result?.error || "No data"); return; }
 
   const xScale = options.xScale || "tau2";
   const { grid, ll, tau2hat, lCritRel, ciLow, ciHigh, method, k } = result;
@@ -4250,10 +4240,9 @@ export function drawProfileLikTau2(result, options = {}) {
 //   density curve → CI bound lines → posterior mean line → axes → labels → title
 // =============================================================================
 export function drawBayesTauPosterior(result, options = {}) {
-  const svg = initSvg("#bayesTauPlot", "Bayesian posterior for τ");
-  if (!result || result.error) { drawNoDataPlaceholder(svg, +svg.attr("width") || 500, +svg.attr("height") || 340, result?.error || "No data"); return; }
-
   const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
+  const svg = initSvg("#bayesTauPlot", "Bayesian posterior for τ", T);
+  if (!result || result.error) { drawNoDataPlaceholder(svg, +svg.attr("width") || 500, +svg.attr("height") || 340, result?.error || "No data"); return; }
 
   const { tauGrid, tauWeights, tauMean, tauCI, sigma_tau, k } = result;
   const nGrid = tauGrid.length;
@@ -4392,10 +4381,9 @@ export function drawBayesTauPosterior(result, options = {}) {
 //   RE comparison line (if options.reMean provided) → axes → labels → title
 // =============================================================================
 export function drawBayesMuPosterior(result, options = {}) {
-  const svg = initSvg("#bayesMuPlot", "Bayesian posterior for μ");
-  if (!result || result.error) { drawNoDataPlaceholder(svg, +svg.attr("width") || 500, +svg.attr("height") || 340, result?.error || "No data"); return; }
-
   const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
+  const svg = initSvg("#bayesMuPlot", "Bayesian posterior for μ", T);
+  if (!result || result.error) { drawNoDataPlaceholder(svg, +svg.attr("width") || 500, +svg.attr("height") || 340, result?.error || "No data"); return; }
 
   const { muGrid, muDensity, muMean, muCI, mu0, sigma_mu, k } = result;
   const nMu   = muGrid.length;
@@ -4559,12 +4547,11 @@ export function drawBayesMuPosterior(result, options = {}) {
 // =============================================================================
 export function drawQQPlot(stdResiduals, labels, options = {}) {
   const containerId = options.containerId || "#qqPlot";
-  const svg = initSvg(containerId, "Normal Q-Q plot of standardised residuals");
+  const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
+  const svg = initSvg(containerId, "Normal Q-Q plot of standardised residuals", T);
 
   const k = stdResiduals.length;
   if (k < 3) { drawNoDataPlaceholder(svg, +svg.attr("width") || 420, +svg.attr("height") || 380, "Need ≥ 3 studies"); return; }
-
-  const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
 
   const W = +svg.attr("width")  || 420;
   const H = +svg.attr("height") || 380;
@@ -4718,13 +4705,12 @@ export function drawQQPlot(stdResiduals, labels, options = {}) {
 //   options  — { containerId: "#radialPlot" }
 export function drawRadialPlot(studies, m, profile, options = {}) {
   const containerId = options.containerId || "#radialPlot";
-  const svg = initSvg(containerId, "Radial (Galbraith) plot");
+  const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
+  const svg = initSvg(containerId, "Radial (Galbraith) plot", T);
 
   const valid = validStudies(studies);
   const k = valid.length;
   if (k < 2) { drawNoDataPlaceholder(svg, +svg.attr("width") || 500, +svg.attr("height") || 400, "Need ≥ 2 studies"); return; }
-
-  const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
 
   const W = +svg.attr("width")  || 500;
   const H = +svg.attr("height") || 400;
