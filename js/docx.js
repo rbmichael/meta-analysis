@@ -10,13 +10,13 @@
 // Dependencies
 // ------------
 //   format.js    fmt, fmtP_APA, fmtCI_APA
-//   plots.js     drawForest, drawCumulativeForest, drawCaterpillarPlot, drawGoshPlot
+//   plots.js     drawForest, drawCumulativeForest, drawCaterpillarPlot
 //   export.js    serializeSVG, collectPagedSVGs
 //   constants.js Z_95
 //   report.js    CITATIONS, collectCitations
 
 import { fmt, fmtP_APA, fmtCI_APA } from "./format.js";
-import { drawForest, drawCumulativeForest, drawCaterpillarPlot, drawGoshPlot } from "./plots.js";
+import { drawForest, drawCumulativeForest, drawCaterpillarPlot } from "./plots.js";
 import { serializeSVG, collectPagedSVGs } from "./export.js";
 import { Z_95 } from "./constants.js";
 import { normalQuantile } from "./utils.js";
@@ -641,11 +641,8 @@ export async function buildDocx(args) {
     bubbleMods.push({ key, mod: allBubbles[i].mod });
   }
 
-  // GOSH (needs re-render to SVG circles)
   if (gosh && !gosh.error) {
-    drawGoshPlot(gosh, profile, { xAxis: goshXAxis ?? "I2", forReport: true, theme });
     svgArrays.set("gosh", [liveSVGString("goshPlot")].filter(Boolean));
-    drawGoshPlot(gosh, profile, { xAxis: goshXAxis ?? "I2", theme });
   }
 
   // Profile likelihood + Bayesian

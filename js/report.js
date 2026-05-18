@@ -32,7 +32,7 @@
 //   export.js    serializeSVG(), collectPagedSVGs()
 
 import { fmt, fmtCI_APA, escHTML, fmtP as _fmtP, fmtP_APA as _fmtP_APA } from "./format.js";
-import { drawForest, drawGoshPlot, drawCumulativeForest, drawCaterpillarPlot } from "./plots.js";
+import { drawForest, drawCumulativeForest, drawCaterpillarPlot } from "./plots.js";
 import { downloadBlob } from "./io.js";
 import { Z_95 } from "./constants.js";
 import { normalQuantile } from "./utils.js";
@@ -1195,12 +1195,8 @@ function sectionGosh(goshResult, profile, xAxis, apaFormat = false, nextFigure, 
     ? `Random sample of ${count.toLocaleString()} subsets (of ${totalPossible.toLocaleString()} possible).`
     : `All ${count.toLocaleString()} non-empty subsets enumerated exactly.`;
 
-  // Re-render into the live SVG using SVG circles (no canvas PNG embed).
-  drawGoshPlot(goshResult, profile, { xAxis, forReport: true, theme });
   const svgEl  = document.getElementById("goshPlot");
   const svgStr = svgEl ? serializeSVG(svgEl) : "";
-  // Restore screen render (avoids a visible change if the user has the section open).
-  drawGoshPlot(goshResult, profile, { xAxis, theme });
 
   if (!svgStr) {
     return `
