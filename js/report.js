@@ -497,9 +497,9 @@ function sectionSubgroup(subgroup, profile, nextTable, widthCiLabel = "95% CI") 
   const d = subgroupData({ subgroup, profile, ciLevel: widthCiLabel.replace("% CI", "") });
   const apaRows = d.rows.map(r => `<tr>${r.map(c => `<td>${esc(c)}</td>`).join("")}</tr>`);
   const note = escNote(d.note)
-    .replace("Q_total",   "Q<sub>total</sub>")
-    .replace("Q_within",  "Q<sub>within</sub>")
-    .replace("Q_between", "Q<sub>between</sub>");
+    .replace("<em>Q</em>_total",   "<em>Q</em><sub>total</sub>")
+    .replace("<em>Q</em>_within",  "<em>Q</em><sub>within</sub>")
+    .replace("<em>Q</em>_between", "<em>Q</em><sub>between</sub>");
   return `
 <section>
   <h2>Subgroup Analysis</h2>

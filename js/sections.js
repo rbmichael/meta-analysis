@@ -48,13 +48,13 @@ export function summaryData(args) {
     ...(RE_adj !== null ? [["RE (trim-and-fill adjusted)", fmt(RE_adj)]] : []),
     ...(!isMHorPeto ? [["95% Prediction interval (PI)", fmtCI_APA(pred.lb, pred.ub)]] : []),
     ...(!isMHorPeto ? [["τ²", `${fmt(m.tau2)}, ${widthCiLabel} [${tauCI1}, ${tauCI2}]`]] : []),
-    ["I²", `${fmt(m.I2)}%, ${widthCiLabel} [${fmt(m.I2CI?.[0])}%, ${fmt(m.I2CI?.[1])}%]`],
+    ["<em>I</em>²", `${fmt(m.I2)}%, ${widthCiLabel} [${fmt(m.I2CI?.[0])}%, ${fmt(m.I2CI?.[1])}%]`],
     ...(!isMHorPeto ? [["H²-CI", `[${fmt(m.H2CI?.[0])}, ${H2hi}]`]] : []),
-    [`Q (df = ${m.df})`, fmt(m.Q)],
-    ...(m.dist ? [[`${m.dist}-statistic`, `${fmt(m.stat)}, p ${fmtP_APA(m.pval)}`]] : []),
+    [`<em>Q</em> (<em>df</em> = ${m.df})`, fmt(m.Q)],
+    ...(m.dist ? [[`${m.dist}-statistic`, `${fmt(m.stat)}, <em>p</em> ${fmtP_APA(m.pval)}`]] : []),
     ...(m.isClustered ? [[
       `Robust CI (C = ${m.clustersUsed} clusters)`,
-      `${fmtCI_APA(profile.transform(m.robustCiLow), profile.transform(m.robustCiHigh))}  ·  SE = ${fmt(m.robustSE)}  ·  z = ${fmt(m.robustStat)}, p ${fmtP_APA(m.robustPval)}`,
+      `${fmtCI_APA(profile.transform(m.robustCiLow), profile.transform(m.robustCiHigh))}  ·  SE = ${fmt(m.robustSE)}  ·  <em>z</em> = ${fmt(m.robustStat)}, <em>p</em> ${fmtP_APA(m.robustPval)}`,
     ]] : []),
   ];
 
@@ -130,7 +130,7 @@ export function pubBiasData(args) {
     + "Henmi-Copas = bias-robust CI centred on FE estimate (DL τ²). "
     + "NA = fewer than 3 eligible studies or missing cell counts.";
 
-  return { headers: ["Test", "Statistic", "p"], rows, note, fsnLine };
+  return { headers: ["Test", "Statistic", "<em>p</em>"], rows, note, fsnLine };
 }
 
 // ---------------------------------------------------------------------------
@@ -242,7 +242,7 @@ export function selModelData(args) {
     [`Adjusted μ̂ [${widthCiLabel}]`, `${muAdj} [${ciLo}, ${ciHi}]  ·  unadjusted: ${fmtDisp(sel.RE_unsel)}`],
     [`Adjusted τ²`, `${fmtV(sel.tau2)}  ·  unadjusted: ${fmtV(sel.tau2_unsel)}`],
     ...(isMLE && isFinite(sel.LRT) ? [
-      [`LRT (H₀: no selection)`, `χ²(${sel.LRTdf}) = ${fmtV(sel.LRT)}, p ${fmtP_APA(sel.LRTp)}`],
+      [`LRT (H₀: no selection)`, `χ²(${sel.LRTdf}) = ${fmtV(sel.LRT)}, <em>p</em> ${fmtP_APA(sel.LRTp)}`],
     ] : []),
   ];
 
@@ -332,9 +332,9 @@ export function subgroupData(args) {
 
   return {
     subtitle: `Subgroup Analysis Results (${profile.label})`,
-    headers:  ["Group", "k", "Effect size", "SE", widthCiLabel, "τ²", "I² (%)"],
+    headers:  ["Group", "<em>k</em>", "Effect size", "SE", widthCiLabel, "τ²", "<em>I</em>² (%)"],
     rows,
-    note:     `CI = confidence interval. Q_total(${subgroup.k - 1}) = ${subgroup.Qtotal.toFixed(3)}  ·  Q_within(${subgroup.k - subgroup.G}) = ${subgroup.Qwithin.toFixed(3)}  ·  Q_between(${subgroup.df}) = ${subgroup.Qbetween.toFixed(3)}, p ${fmtP_APA(subgroup.p)}.`,
+    note:     `CI = confidence interval. <em>Q</em>_total(${subgroup.k - 1}) = ${subgroup.Qtotal.toFixed(3)}  ·  <em>Q</em>_within(${subgroup.k - subgroup.G}) = ${subgroup.Qwithin.toFixed(3)}  ·  <em>Q</em>_between(${subgroup.df}) = ${subgroup.Qbetween.toFixed(3)}, <em>p</em> ${fmtP_APA(subgroup.p)}.`,
     Qbetween: subgroup.Qbetween,
     df:       subgroup.df,
     p:        subgroup.p,
@@ -452,7 +452,7 @@ export function regressionData(args) {
     const modHeaders = [
       "Moderator", `${modQlabel} (Wald)`,
       ...(hasLRT ? ["LRT χ²"] : []),
-      "df", "<em>p</em> (Wald)",
+      "<em>df</em>", "<em>p</em> (Wald)",
       ...(hasLRT ? ["<em>p</em> (LRT)"] : []),
       ...(hasAdj ? [`<em>p</em> (${mccLabel})`] : []),
     ];
@@ -547,7 +547,7 @@ export function regressionFittedData(reg) {
     const flag  = isFinite(sr) && Math.abs(sr) > 1.96;
     return { cells: [lbl || String(i + 1), fmt(reg.yi[i]), fmt(reg.fitted[i]), fmt(reg.residuals[i]), fmt(sr)], flag };
   });
-  const note = "Std. eᵢ = standardized residual. |Std. eᵢ| > 1.96 may indicate outliers.";
+  const note = "Std. <em>e</em>ᵢ = standardized residual. |Std. <em>e</em>ᵢ| > 1.96 may indicate outliers.";
   return { headers, rows, note };
 }
 
@@ -610,7 +610,7 @@ export function rveData(args) {
     ["<em>p</em>", fmtP_APA(rveResult.p)],
     ["ρ (assumed within-cluster correlation)", fmt(rveRho)],
     ["m (clusters)", String(rveResult.kCluster)],
-    ["k (studies)", String(rveResult.k)],
+    ["<em>k</em> (studies)", String(rveResult.k)],
   ];
   const note = "RVE = robust variance estimation (Hedges, Tipton & Johnson, 2010). Working correlation model: ρ assumed constant within cluster.";
   return { headers: ["Parameter", "Value"], rows, note };
@@ -639,7 +639,7 @@ export function threeLevelData(args) {
     ["<em>I</em>²_between", `${fmt(tl.I2_between)}%`],
     [`<em>Q</em>(${tl.df})`, fmt(tl.Q)],
     ["m (clusters)", String(tl.kCluster)],
-    ["k (studies)", String(tl.k)],
+    ["<em>k</em> (studies)", String(tl.k)],
     ["Log-likelihood (REML)", fmt(tl.logLik)],
   ];
   const note = "Three-level model: studies nested within clusters. σ²_within = within-cluster, σ²_between = between-cluster between-study heterogeneity. REML estimation.";
@@ -691,7 +691,7 @@ export function sensitivityData(args) {
     ];
   });
   const sigChanges = loo.rows.map(row => row.significant !== fullSig);
-  const looNote = "Rows marked * change statistical significance (p = .05 threshold) when that study is omitted. Δ estimate = LOO estimate minus full-set estimate.";
+  const looNote = "Rows marked * change statistical significance (<em>p</em> = .05 threshold) when that study is omitted. Δ estimate = LOO estimate minus full-set estimate.";
 
   // ── Estimator comparison ───────────────────────────────────────────────────
   const estData = estimatorComparison(realStudies, ciMethod);
