@@ -1958,6 +1958,15 @@ document.getElementById("caterpillarPageSize").addEventListener("change", () => 
   }
 });
 
+document.getElementById("blupPageSize").addEventListener("change", () => {
+  if (!blupPlot.result) return;
+  blupPlot.page = 0;
+  const raw = document.getElementById("blupPageSize").value;
+  blupPlot.pageSize = raw === "Infinity" ? Infinity : +raw;
+  const { totalPages } = drawBlupPlot(blupPlot.result, blupPlot.profile, { pageSize: blupPlot.pageSize, page: 0, theme: appState.plotTheme });
+  renderBlupNav(totalPages);
+});
+
 document.getElementById("cumulativeForestPageSize").addEventListener("change", () => {
   if (!cumForestPlot.args) return;
   cumForestPlot.page = 0;
@@ -3986,6 +3995,7 @@ function _renderAllResults(ctx) {
   const elCumFunnelBlock     = document.getElementById("cumulativeFunnelBlock");
   const elOrchardPlotBlock   = document.getElementById("orchardPlotBlock");
   const elCatPageSize        = document.getElementById("caterpillarPageSize");
+  const elBlupPageSize       = document.getElementById("blupPageSize");
   const elCaterpillarBlock   = document.getElementById("caterpillarPlotBlock");
   const elRobSection         = document.getElementById("robSection");
   const elProfileLikScale    = document.getElementById("profileLikScale");
@@ -4442,9 +4452,11 @@ function _renderAllResults(ctx) {
   const showLabbe   = labbeTypes.includes(type);
   const showQQ      = qqResiduals.length >= 3;
 
-  blupPlot.result  = blupResult;
-  blupPlot.profile = profile;
-  blupPlot.page    = 0;
+  blupPlot.result   = blupResult;
+  blupPlot.profile  = profile;
+  blupPlot.page     = 0;
+  const rawBlupPageSize = elBlupPageSize?.value ?? "30";
+  blupPlot.pageSize = rawBlupPageSize === "Infinity" ? Infinity : +rawBlupPageSize;
   elBlupBlock.style.display      = blupResult ? "" : "none";
   elBaujatPlotBlock.style.display = baujatResult ? "" : "none";
   elQQPlotBlock.style.display     = showQQ ? "" : "none";
