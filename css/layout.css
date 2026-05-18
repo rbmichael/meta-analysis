@@ -336,6 +336,12 @@
   width: 80px;
 }
 
+.prior-warn {
+  margin-left: 4px;
+  font-size: 0.75rem;
+  color: var(--color-error, #c0392b);
+}
+
 /* ---- Help buttons ---- */
 .help-btn {
   display: inline-flex;

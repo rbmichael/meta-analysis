@@ -271,9 +271,11 @@
               </label>
               <label class="inline">μ prior SD (σ_μ):
                 <input type="number" id="bayesSigmaMu" value="1" min="0.01" step="0.1">
+                <span id="bayesSigmaMuWarn" class="prior-warn" style="display:none" role="alert"></span>
               </label>
               <label class="inline">τ prior scale (σ_τ):
                 <input type="number" id="bayesSigmaTau" value="0.5" min="0.01" step="0.05">
+                <span id="bayesSigmaTauWarn" class="prior-warn" style="display:none" role="alert"></span>
               </label>
             </div>
           </div>
@@ -284,7 +286,7 @@
             <div class="settings-subsection-controls">
               <label class="inline">Assumed within-cluster correlation ρ:
                 <input type="range" id="rveRho" min="0" max="0.999" step="0.01" value="0.8" style="width:120px;vertical-align:middle">
-                <span id="rveRhoDisplay" style="font-variant-numeric:tabular-nums;min-width:2.5em;display:inline-block">0.80</span>
+                <span id="rveRhoDisplay" aria-live="polite" style="font-variant-numeric:tabular-nums;min-width:2.5em;display:inline-block">0.80</span>
               </label>
             </div>
           </div>
@@ -336,7 +338,7 @@
           <div id="moderatorManager">
             <strong>Moderators:</strong>
             <input type="text" id="modName" placeholder="Column name" style="width:110px">
-            <select id="modType" onchange="document.getElementById('modTransformWrap').style.display=this.value==='continuous'?'':'none'">
+            <select id="modType">
               <option value="continuous">Continuous</option>
               <option value="categorical">Categorical</option>
             </select>
@@ -368,7 +370,7 @@
           <div id="scaleModManager">
             <strong>Location-scale model moderators:</strong>
             <input type="text" id="scaleModName" placeholder="Column name" style="width:110px">
-            <select id="scaleModType" onchange="document.getElementById('scaleModTransformWrap').style.display=this.value==='continuous'?'':'none'">
+            <select id="scaleModType">
               <option value="continuous">Continuous</option>
               <option value="categorical">Categorical</option>
             </select>

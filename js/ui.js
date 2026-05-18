@@ -2713,6 +2713,47 @@ document.getElementById("selSides").addEventListener("change", markStale);
 document.getElementById("selCuts").addEventListener("change", markStale);
 syncSelControls();
 
+// ---------------- MOD TYPE → TRANSFORM WRAP VISIBILITY ----------------
+{
+  const syncModTransform = () => {
+    const show = document.getElementById("modType").value === "continuous";
+    document.getElementById("modTransformWrap").style.display = show ? "" : "none";
+  };
+  document.getElementById("modType").addEventListener("change", syncModTransform);
+  syncModTransform();
+
+  const syncScaleModTransform = () => {
+    const show = document.getElementById("scaleModType").value === "continuous";
+    document.getElementById("scaleModTransformWrap").style.display = show ? "" : "none";
+  };
+  document.getElementById("scaleModType").addEventListener("change", syncScaleModTransform);
+  syncScaleModTransform();
+}
+
+// ---------------- BAYESIAN PRIOR VALIDATION ----------------
+{
+  const clampPos = (inputId, warnId, min = 0.01) => {
+    const input = document.getElementById(inputId);
+    const warn  = document.getElementById(warnId);
+    if (!input || !warn) return;
+    const validate = () => {
+      const v = parseFloat(input.value);
+      if (!isFinite(v) || v < min) {
+        input.value = min;
+        warn.textContent = `Must be ≥ ${min}`;
+        warn.style.display = "";
+        markStale();
+      } else {
+        warn.style.display = "none";
+      }
+    };
+    input.addEventListener("blur",   validate);
+    input.addEventListener("change", validate);
+  };
+  clampPos("bayesSigmaMu",  "bayesSigmaMuWarn");
+  clampPos("bayesSigmaTau", "bayesSigmaTauWarn");
+}
+
 // ---------------- RVE ρ SLIDER ----------------
 {
   const rveRhoSlider  = document.getElementById("rveRho");
