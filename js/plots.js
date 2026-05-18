@@ -262,15 +262,16 @@ function truncateLabel(text, maxPx, fontPx = 10, bold = false) {
   return text.length > maxChars ? text.slice(0, Math.max(1, maxChars - 1)) + "…" : text;
 }
 
-// drawNoDataPlaceholder(svg, w, h [, message])
+// drawNoDataPlaceholder(svg, w, h [, message [, T]])
 // Renders a centred muted "No data" message into a blank SVG.
-function drawNoDataPlaceholder(svg, w, h, message = "No data") {
+function drawNoDataPlaceholder(svg, w, h, message = "No data", T = null) {
   svg.append("text")
     .attr("x", w / 2).attr("y", h / 2)
     .attr("text-anchor", "middle")
     .attr("dominant-baseline", "middle")
     .style("font-size", FONT_SIZE.axisLabel)
-    .attr("fill", "var(--fg-muted)")
+    .style("font-style", "italic")
+    .attr("fill", T ? T.fgMuted : "var(--fg-muted)")
     .text(message);
 }
 
@@ -831,24 +832,23 @@ function forestDrawStudyRows(ctx, pageStudies, studies, studyCrit, widthCiLabel,
     .attr("stroke-width", T.ciStrokeWidth);
 
   // Weight boxes — wMax uses the full study array so sizes are comparable across pages.
-  svg.selectAll("rect")
-    .data(pageStudies).enter().append("rect")
-    .attr("x", d => x(d.yi) - Math.sqrt(d.w / wMax) * L.boxHalf * 2)
-    .attr("y", d => yPos.get(d) - L.boxHalf)
-    .attr("width",  d => Math.sqrt(d.w / wMax) * L.boxHalf * 4)
-    .attr("height", L.boxHalf * 2)
-    .attr("fill",   d => d.filled ? "none"    : T.accent)
-    .attr("stroke", d => d.filled ? T.fgMuted : T.accent)
-    .on("mousemove", (e, d) => {
+  attachTooltip(
+    svg.selectAll("rect")
+      .data(pageStudies).enter().append("rect")
+      .attr("x", d => x(d.yi) - Math.sqrt(d.w / wMax) * L.boxHalf * 2)
+      .attr("y", d => yPos.get(d) - L.boxHalf)
+      .attr("width",  d => Math.sqrt(d.w / wMax) * L.boxHalf * 4)
+      .attr("height", L.boxHalf * 2)
+      .attr("fill",   d => d.filled ? "none"    : T.accent)
+      .attr("stroke", d => d.filled ? T.fgMuted : T.accent),
+    d => {
       const ef_disp = profile.transform(d.yi);
       const lo_disp = profile.transform(d.yi - studyCrit * d.se);
       const hi_disp = profile.transform(d.yi + studyCrit * d.se);
-      tooltip.style("opacity", 1)
-        .html(`${d.label}<br>Effect: ${isFinite(ef_disp) ? ef_disp.toFixed(3) : "NA"}<br>` +
-              `${widthCiLabel} (${ciMethodLabel}): ${isFinite(lo_disp) ? lo_disp.toFixed(3) : "NA"} – ${isFinite(hi_disp) ? hi_disp.toFixed(3) : "NA"}`)
-        .style("left", (e.pageX + TOOLTIP_OFFSET.x) + "px").style("top", (e.pageY + TOOLTIP_OFFSET.y) + "px");
-    })
-    .on("mouseout", () => tooltip.style("opacity", 0));
+      return `${d.label}<br>Effect: ${isFinite(ef_disp) ? ef_disp.toFixed(3) : "NA"}<br>` +
+        `${widthCiLabel} (${ciMethodLabel}): ${isFinite(lo_disp) ? lo_disp.toFixed(3) : "NA"} – ${isFinite(hi_disp) ? hi_disp.toFixed(3) : "NA"}`;
+    }
+  );
 }
 
 function forestDrawStudyLabels(ctx, pageStudies, yPos, charW) {
@@ -1451,13 +1451,13 @@ export function drawFunnel(studies, m, profile, options = {}) {
   profile = profile || { transform: x => x };
   const svg = initSvg("#funnelPlot", "Funnel plot");
 
-  if (!studies || studies.length === 0) return;
+  if (!studies || studies.length === 0) { drawNoDataPlaceholder(svg, +svg.attr("width") || 500, +svg.attr("height") || 400); return; }
 
   // ---- Layout ----
-  const margin = { top: 20, right: 20, bottom: 52, left: 60 };
+  const margin = { top: 34, right: 20, bottom: 52, left: 60 };
   const W = 500, H = 400;
-  const iW = W - margin.left - margin.right;   // 420
-  const iH = H - margin.top  - margin.bottom;  // 328
+  const iW = W - margin.left - margin.right;
+  const iH = H - margin.top  - margin.bottom;
   setSvgSize(svg, W, H);
 
   const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
@@ -1578,6 +1578,12 @@ export function drawFunnel(studies, m, profile, options = {}) {
   if (options.petpeese) funnelDrawPeeseLines(svg, options.petpeese, studies, x, y, T);
   funnelDrawAxesAndLabels(svg, x, y, margin, W, H, iW, iH, profile, borderClr, fgColor);
   if (contours) funnelDrawLegend(svg, W, margin, BANDS, T);
+
+  svg.append("text")
+    .attr("x", margin.left + iW / 2).attr("y", 18)
+    .attr("text-anchor", "middle").attr("fill", T.fg)
+    .style("font-size", FONT_SIZE.title).style("font-weight", "600")
+    .text(`Funnel plot — k = ${studies.length}`);
 }
 
 // ================= INFLUENCE PLOT (hat vs Cook's D) =================
@@ -1593,7 +1599,7 @@ export function drawFunnel(studies, m, profile, options = {}) {
 export function drawInfluencePlot(influence, options = {}) {
   const svg = initSvg("#influencePlot", "Influence plot");
 
-  if (!influence || influence.length < 2) return;
+  if (!influence || influence.length < 2) { drawNoDataPlaceholder(svg, +svg.attr("width") || 500, +svg.attr("height") || 400, influence?.length === 1 ? "Need ≥ 2 studies" : "No data"); return; }
 
   const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
 
@@ -1745,7 +1751,7 @@ export function drawInfluencePlot(influence, options = {}) {
 export function drawCumulativeForest(cumulativeResults, profile, options = {}) {
   const svg = initSvg("#cumulativePlot", "Cumulative forest plot");
 
-  if (!cumulativeResults || cumulativeResults.length === 0) return;
+  if (!cumulativeResults || cumulativeResults.length === 0) { drawNoDataPlaceholder(svg, +svg.attr("width") || 580, +svg.attr("height") || 400); return; }
 
   const rowH       = 22;
   const maxLabelLen = cumulativeResults.reduce((m, r) => Math.max(m, (r.addedLabel || "").length), 0);
@@ -1922,7 +1928,7 @@ export function drawCumulativeFunnel(cumulativeStudies, cumResults, profile, ste
   profile = profile || { transform: x => x };
   const svg = initSvg("#cumulativeFunnelPlot", "Cumulative funnel plot");
 
-  if (!cumulativeStudies || cumulativeStudies.length === 0 || !cumResults) return;
+  if (!cumulativeStudies || cumulativeStudies.length === 0 || !cumResults) { drawNoDataPlaceholder(svg, +svg.attr("width") || 500, +svg.attr("height") || 420); return; }
 
   const k     = cumulativeStudies.length;
   const step  = Math.max(0, Math.min(stepIdx, k - 1));
@@ -1995,39 +2001,29 @@ export function drawCumulativeFunnel(cumulativeStudies, cumResults, profile, ste
   const prevStudies = cumulativeStudies.slice(0, step);
   const newStudy    = cumulativeStudies[step];
 
-  svg.selectAll(".dot-prev")
-    .data(prevStudies).enter().append("circle")
-    .attr("class", "dot-prev")
-    .attr("cx", d => x(d.yi))
-    .attr("cy", d => y(d.se))
-    .attr("r", 4)
-    .attr("fill",   T.bgSurfaceHover)
-    .attr("stroke", T.fgSubtle)
-    .on("mousemove", (event, d) => {
-      tooltip.style("opacity", 1)
-        .html(`<b>${d.label ?? ""}</b><br>` +
-              `yi = ${d.yi.toFixed(3)}&nbsp; SE = ${d.se.toFixed(3)}`)
-        .style("left", (event.pageX + TOOLTIP_OFFSET.x) + "px")
-        .style("top",  (event.pageY + TOOLTIP_OFFSET.y) + "px");
-    })
-    .on("mouseout", () => tooltip.style("opacity", 0));
+  attachTooltip(
+    svg.selectAll(".dot-prev")
+      .data(prevStudies).enter().append("circle")
+      .attr("class", "dot-prev")
+      .attr("cx", d => x(d.yi))
+      .attr("cy", d => y(d.se))
+      .attr("r", 4)
+      .attr("fill",   T.bgSurfaceHover)
+      .attr("stroke", T.fgSubtle),
+    d => `<b>${d.label ?? ""}</b><br>yi = ${d.yi.toFixed(3)}&nbsp; SE = ${d.se.toFixed(3)}`
+  );
 
   if (newStudy) {
-    svg.append("circle")
-      .attr("cx", x(newStudy.yi))
-      .attr("cy", y(newStudy.se))
-      .attr("r", 5)
-      .attr("fill",         T.accentLight)
-      .attr("stroke",       T.accent)
-      .attr("stroke-width", 1.5)
-      .on("mousemove", (event) => {
-        tooltip.style("opacity", 1)
-          .html(`<b>${newStudy.label ?? ""}</b> ← added at this step<br>` +
-                `yi = ${newStudy.yi.toFixed(3)}&nbsp; SE = ${newStudy.se.toFixed(3)}`)
-          .style("left", (event.pageX + TOOLTIP_OFFSET.x) + "px")
-          .style("top",  (event.pageY + TOOLTIP_OFFSET.y) + "px");
-      })
-      .on("mouseout", () => tooltip.style("opacity", 0));
+    attachTooltip(
+      svg.append("circle").datum(newStudy)
+        .attr("cx", x(newStudy.yi))
+        .attr("cy", y(newStudy.se))
+        .attr("r", 5)
+        .attr("fill",         T.accentLight)
+        .attr("stroke",       T.accent)
+        .attr("stroke-width", 1.5),
+      d => `<b>${d.label ?? ""}</b> ← added at this step<br>yi = ${d.yi.toFixed(3)}&nbsp; SE = ${d.se.toFixed(3)}`
+    );
   }
 
   // ---- Step annotation (top-right) ----
@@ -2105,13 +2101,13 @@ export function drawCumulativeFunnel(cumulativeStudies, cumResults, profile, ste
 export function drawPCurve(result, options = {}) {
   const svg = initSvg("#pCurvePlot", "p-curve plot");
 
-  if (!result || result.k === 0) return;
+  if (!result || result.k === 0) { drawNoDataPlaceholder(svg, +svg.attr("width") || 500, +svg.attr("height") || 380, "No significant p-values"); return; }
 
   const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
 
   const { bins, expected0, expected33 } = result;
 
-  const margin = { top: 24, right: 24, bottom: 52, left: 56 };
+  const margin = { top: 34, right: 24, bottom: 52, left: 56 };
   const W = +svg.attr("width")  || 500;
   const H = +svg.attr("height") || 380;
   const iW = W - margin.left - margin.right;
@@ -2278,6 +2274,12 @@ export function drawPCurve(result, options = {}) {
     .attr("x", PAD + 22).attr("y", PAD + ROW * 1 + ROW / 2 + 4)
     .attr("fill", T.fgMuted).style("font-size", FONT_SIZE.annot)
     .text("Expected (33% power)");
+
+  svg.append("text")
+    .attr("x", margin.left + iW / 2).attr("y", 18)
+    .attr("text-anchor", "middle").attr("fill", T.fg)
+    .style("font-size", FONT_SIZE.title).style("font-weight", "600")
+    .text(`p-curve — k = ${result.k}`);
 }
 
 // ================= P-UNIFORM COMPARISON PLOT =================
@@ -2299,14 +2301,14 @@ export function drawPCurve(result, options = {}) {
 export function drawPUniform(result, m, profile, options = {}) {
   const svg = initSvg("#pUniformPlot", "p-uniform plot");
 
-  if (!result || result.k === 0 || !isFinite(result.estimate)) return;
+  if (!result || result.k === 0 || !isFinite(result.estimate)) { drawNoDataPlaceholder(svg, +svg.attr("width") || 500, +svg.attr("height") || 170, "No significant p-values"); return; }
 
   profile = profile || { transform: x => x, label: "Effect" };
 
   const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
 
   // ---- Layout ----
-  const margin = { top: 20, right: 24, bottom: 44, left: 100 };
+  const margin = { top: 34, right: 24, bottom: 44, left: 100 };
   const W = +svg.attr("width")  || 500;
   const H = +svg.attr("height") || 170;
   const iW = W - margin.left - margin.right;
@@ -2423,6 +2425,12 @@ export function drawPUniform(result, m, profile, options = {}) {
     .attr("fill", T.fgMuted)
     .style("font-size", FONT_SIZE.axisLabel)
     .text(profile.label + (profile.isLog ? " (log scale)" : ""));
+
+  svg.append("text")
+    .attr("x", margin.left + iW / 2).attr("y", 18)
+    .attr("text-anchor", "middle").attr("fill", T.fg)
+    .style("font-size", FONT_SIZE.title).style("font-weight", "600")
+    .text(`p-uniform — k = ${result.k}`);
 }
 
 // ================= ORCHARD PLOT =================
@@ -2441,7 +2449,7 @@ export function drawPUniform(result, m, profile, options = {}) {
 export function drawOrchardPlot(studies, m, profile, options = {}) {
   const svg = initSvg("#orchardPlot", "Orchard plot");
 
-  if (!studies || studies.length === 0) return;
+  if (!studies || studies.length === 0) { drawNoDataPlaceholder(svg, +svg.attr("width") || 520, +svg.attr("height") || 340); return; }
 
   profile = profile || { transform: x => x, label: "Effect" };
 
@@ -2465,7 +2473,7 @@ export function drawOrchardPlot(studies, m, profile, options = {}) {
   const leftMargin = hasGroups
     ? Math.max(60, Math.min(150, Math.ceil(allGroups.reduce((m, g) => Math.max(m, g.length), 0) * LABEL_CHAR_PX.regular11) + 14))
     : 30;
-  const margin = { top: 28, right: 20, bottom: 48, left: leftMargin };
+  const margin = { top: 34, right: 20, bottom: 48, left: leftMargin };
   const iW = W - margin.left - margin.right;
   const iH = H - margin.top  - margin.bottom;
 
@@ -2578,23 +2586,21 @@ export function drawOrchardPlot(studies, m, profile, options = {}) {
       const jitter = n > 1 ? (i / (n - 1) - 0.5) * 2 * jitterRange : 0;
       const r      = R_MIN + (R_MAX - R_MIN) * (invSE[i] / maxInvSE);
 
-      g.append("circle")
-        .attr("cx", x(s.yi))
-        .attr("cy", cy + jitter)
-        .attr("r",  r)
-        .attr("fill", color)
-        .attr("fill-opacity", s.filled ? 0.25 : 0.60)
-        .attr("stroke", T.bgSurface)
-        .attr("stroke-width", 0.8)
-        .on("mousemove", (event) => {
-          const seVal = (s.se || Math.sqrt(Math.max(s.vi, 0))).toFixed(3);
-          const yi_t  = profile.transform(s.yi);
-          tooltip.style("opacity", 1)
-            .html(`<b>${s.label}</b><br>Effect: ${isFinite(yi_t) ? +yi_t.toFixed(3) : "NA"}<br>SE: ${seVal}${s.filled ? "<br><i>(imputed)</i>" : ""}`)
-            .style("left", (event.pageX + TOOLTIP_OFFSET.x) + "px")
-            .style("top",  (event.pageY + TOOLTIP_OFFSET.y) + "px");
-        })
-        .on("mouseout", () => tooltip.style("opacity", 0));
+      attachTooltip(
+        g.append("circle").datum(s)
+          .attr("cx", x(s.yi))
+          .attr("cy", cy + jitter)
+          .attr("r",  r)
+          .attr("fill", color)
+          .attr("fill-opacity", s.filled ? 0.25 : 0.60)
+          .attr("stroke", T.bgSurface)
+          .attr("stroke-width", 0.8),
+        d => {
+          const seVal = (d.se || Math.sqrt(Math.max(d.vi, 0))).toFixed(3);
+          const yi_t  = profile.transform(d.yi);
+          return `<b>${d.label}</b><br>Effect: ${isFinite(yi_t) ? +yi_t.toFixed(3) : "NA"}<br>SE: ${seVal}${d.filled ? "<br><i>(imputed)</i>" : ""}`;
+        }
+      );
     });
 
     // Group label at lane centre (left margin)
@@ -2623,10 +2629,7 @@ export function drawOrchardPlot(studies, m, profile, options = {}) {
   // ---- X axis ----
   const axisX = g.append("g")
     .attr("transform", `translate(0,${iH})`)
-    .call(d3.axisBottom(x).ticks(6).tickFormat(v => {
-      const t = profile.transform(v);
-      return isFinite(t) ? +t.toFixed(2) : "";
-    }));
+    .call(d3.axisBottom(x).ticks(6).tickFormat(v => formatTick(v, profile.transform)));
   styleAxis(axisX, T.border, T.fgMuted, FONT_SIZE.tickLabel, T.fontFamily);
 
   // ---- X axis label ----
@@ -2655,6 +2658,12 @@ export function drawOrchardPlot(studies, m, profile, options = {}) {
       } else { ht.append("tspan").text(part); }
     });
   }
+
+  svg.append("text")
+    .attr("x", margin.left + iW / 2).attr("y", 18)
+    .attr("text-anchor", "middle").attr("fill", T.fg)
+    .style("font-size", FONT_SIZE.title).style("font-weight", "600")
+    .text(`Orchard plot — k = ${studies.length}`);
 }
 
 // ================= CATERPILLAR PLOT =================
@@ -2668,7 +2677,7 @@ export function drawOrchardPlot(studies, m, profile, options = {}) {
 export function drawCaterpillarPlot(studies, m, profile, options = {}) {
   const svg = initSvg("#caterpillarPlot", "Caterpillar plot");
 
-  if (!studies || studies.length === 0) return;
+  if (!studies || studies.length === 0) { drawNoDataPlaceholder(svg, +svg.attr("width") || 520, +svg.attr("height") || 300); return; }
 
   const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
 
@@ -2681,7 +2690,7 @@ export function drawCaterpillarPlot(studies, m, profile, options = {}) {
     .sort((a, b) => b.yi - a.yi);
 
   const k = sorted.length;
-  if (k === 0) return;
+  if (k === 0) { drawNoDataPlaceholder(svg, +svg.attr("width") || 520, +svg.attr("height") || 300, "No valid studies", T); return; }
 
   // ---- Pagination ----
   const { page, pageSize, totalPages, items: pageStudies } = paginate(sorted, options);
@@ -2822,10 +2831,7 @@ export function drawCaterpillarPlot(studies, m, profile, options = {}) {
   // ---- X axis ----
   const axisX = g.append("g")
     .attr("transform", `translate(0,${iH})`)
-    .call(d3.axisBottom(x).ticks(6).tickFormat(v => {
-      const t = profile.transform(v);
-      return isFinite(t) ? +t.toFixed(2) : "";
-    }));
+    .call(d3.axisBottom(x).ticks(6).tickFormat(v => formatTick(v, profile.transform)));
   styleAxis(axisX, T.border, T.fgMuted, FONT_SIZE.tickLabel);
 
   // ---- X axis label ----
@@ -2877,6 +2883,12 @@ export function drawCaterpillarPlot(studies, m, profile, options = {}) {
         .text(truncateLabel(grp, LEGEND_W - 26, 10));
     });
   }
+
+  svg.append("text")
+    .attr("x", margin.left + iW / 2).attr("y", 16)
+    .attr("text-anchor", "middle").attr("fill", T.fgMuted)
+    .style("font-size", FONT_SIZE.axisLabel).style("font-weight", "600")
+    .text("Caterpillar plot");
 
   return { totalPages };
 }
@@ -3006,25 +3018,21 @@ export function drawBlupPlot(result, profile, options = {}) {
 
     // BLUP point (with tooltip)
     if (isFinite(s.blup)) {
-      const effDisplay = profile.transform(s.blup);
-      const obsDisplay = profile.transform(s.yi);
-      g.append("circle")
-        .attr("cx", x(s.blup)).attr("cy", cy).attr("r", 4)
-        .attr("fill", T.accent)
-        .attr("stroke", T.bgSurface).attr("stroke-width", 1)
-        .on("mousemove", (event) => {
-          tooltip.style("opacity", 1)
-            .html(
-              `<b>${s.label}</b>` +
-              `<br>Observed: ${isFinite(obsDisplay) ? (+obsDisplay.toFixed(3)) : "NA"}` +
-              `<br>BLUP: ${isFinite(effDisplay) ? (+effDisplay.toFixed(3)) : "NA"}` +
-              `<br>Random effect (û): ${(+s.ranef.toFixed(4))}` +
-              `<br>Shrinkage (λ): ${(+(s.lambda * 100).toFixed(1))}%`
-            )
-            .style("left", (event.pageX + TOOLTIP_OFFSET.x) + "px")
-            .style("top",  (event.pageY + TOOLTIP_OFFSET.y) + "px");
-        })
-        .on("mouseout", () => tooltip.style("opacity", 0));
+      attachTooltip(
+        g.append("circle").datum(s)
+          .attr("cx", x(s.blup)).attr("cy", cy).attr("r", 4)
+          .attr("fill", T.accent)
+          .attr("stroke", T.bgSurface).attr("stroke-width", 1),
+        d => {
+          const effDisplay = profile.transform(d.blup);
+          const obsDisplay = profile.transform(d.yi);
+          return `<b>${d.label}</b>` +
+            `<br>Observed: ${isFinite(obsDisplay) ? (+obsDisplay.toFixed(3)) : "NA"}` +
+            `<br>BLUP: ${isFinite(effDisplay) ? (+effDisplay.toFixed(3)) : "NA"}` +
+            `<br>Random effect (û): ${(+d.ranef.toFixed(4))}` +
+            `<br>Shrinkage (λ): ${(+(d.lambda * 100).toFixed(1))}%`;
+        }
+      );
     }
 
     // Study label
@@ -3043,7 +3051,7 @@ export function drawBlupPlot(result, profile, options = {}) {
     xAxisG.call(
       d3.axisBottom(x)
         .tickValues(ticks)
-        .tickFormat(v => { const t = profile.transform(v); return isFinite(t) ? (+t.toFixed(2)).toString() : ""; })
+        .tickFormat(v => formatTick(v, profile.transform))
     );
   } else {
     xAxisG.call(d3.axisBottom(x).ticks(6).tickFormat(d3.format(".3~g")));
@@ -3097,7 +3105,7 @@ export function drawBlupPlot(result, profile, options = {}) {
 export function drawBaujatPlot(result, profile, options = {}) {
   const svg = initSvg("#baujatPlot", "Baujat plot");
 
-  if (!result || result.k < 2) return;
+  if (!result || result.k < 2) { drawNoDataPlaceholder(svg, +svg.attr("width") || 500, +svg.attr("height") || 420, result?.k === 1 ? "Need ≥ 2 studies" : "No data"); return; }
 
   const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
 
@@ -3165,26 +3173,22 @@ export function drawBaujatPlot(result, profile, options = {}) {
 
     // BW mode: D3 symbol shapes per group; color mode: filled circles
     const dot = useSym
-      ? g.append("path").attr("transform", `translate(${cx},${cy})`).attr("d", bwSymbolPath(gi, 64))
-      : g.append("circle").attr("cx", cx).attr("cy", cy).attr("r", 5);
-    dot
-      .attr("fill", color)
-      .attr("fill-opacity", 0.75)
-      .attr("stroke", T.bgSurface)
-      .attr("stroke-width", 1)
-      .on("mousemove", (event) => {
-        const yi_t = profile.transform(p.yi);
-        tooltip.style("opacity", 1)
-          .html(
-            `<b>${p.label}</b>` +
-            `<br>Q contribution: ${p.x.toFixed(3)}` +
-            `<br>Influence: ${p.influence.toFixed(4)}` +
-            `<br>Effect (${profile.label}): ${isFinite(yi_t) ? +yi_t.toFixed(3) : "NA"}`
-          )
-          .style("left", (event.pageX + TOOLTIP_OFFSET.x) + "px")
-          .style("top",  (event.pageY + TOOLTIP_OFFSET.y) + "px");
-      })
-      .on("mouseout", () => tooltip.style("opacity", 0));
+      ? g.append("path").datum(p).attr("transform", `translate(${cx},${cy})`).attr("d", bwSymbolPath(gi, 64))
+      : g.append("circle").datum(p).attr("cx", cx).attr("cy", cy).attr("r", 5);
+    attachTooltip(
+      dot
+        .attr("fill", color)
+        .attr("fill-opacity", 0.75)
+        .attr("stroke", T.bgSurface)
+        .attr("stroke-width", 1),
+      d => {
+        const yi_t = profile.transform(d.yi);
+        return `<b>${d.label}</b>` +
+          `<br>Q contribution: ${d.x.toFixed(3)}` +
+          `<br>Influence: ${d.influence.toFixed(4)}` +
+          `<br>Effect (${profile.label}): ${isFinite(yi_t) ? +yi_t.toFixed(3) : "NA"}`;
+      }
+    );
 
     if (showLabels) {
       const abbr = p.label.length > 9 ? p.label.slice(0, 8) + "…" : p.label;
@@ -3259,6 +3263,12 @@ export function drawBaujatPlot(result, profile, options = {}) {
         .text(grp.length > 10 ? grp.slice(0, 9) + "…" : grp);
     });
   }
+
+  svg.append("text")
+    .attr("x", margin.left + iW / 2).attr("y", 18)
+    .attr("text-anchor", "middle").attr("fill", T.fg)
+    .style("font-size", FONT_SIZE.title).style("font-weight", "600")
+    .text(`Baujat plot — k = ${result.k}`);
 }
 
 // ── drawLabbe ────────────────────────────────────────────────────────────────
@@ -3277,7 +3287,7 @@ export function drawBaujatPlot(result, profile, options = {}) {
 export function drawLabbe(studies, m, profile, options = {}) {
   const type = options.type ?? "OR";
   const svg = initSvg("#labbePlot", "L'Abbé plot");
-  if (!studies || studies.length === 0) return;
+  if (!studies || studies.length === 0) { drawNoDataPlaceholder(svg, +svg.attr("width") || 500, +svg.attr("height") || 420); return; }
 
   const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
 
@@ -3295,7 +3305,7 @@ export function drawLabbe(studies, m, profile, options = {}) {
       vi: s.vi,
     }));
 
-  if (pts.length === 0) return;
+  if (pts.length === 0) { drawNoDataPlaceholder(svg, +svg.attr("width") || 500, +svg.attr("height") || 420, "No studies with 2×2 data", T); return; }
 
   const W = +svg.attr("width")  || 500;
   const H = +svg.attr("height") || 420;
@@ -3395,27 +3405,23 @@ export function drawLabbe(studies, m, profile, options = {}) {
     const symSize = Math.PI * r * r;
 
     const dot = useSym
-      ? g.append("path").attr("transform", `translate(${cx},${cy})`).attr("d", bwSymbolPath(gi, symSize))
-      : g.append("circle").attr("cx", cx).attr("cy", cy).attr("r", r);
-    dot
-      .attr("fill", color)
-      .attr("fill-opacity", 0.65)
-      .attr("stroke", T.bgSurface)
-      .attr("stroke-width", 1)
-      .on("mousemove", (event) => {
-        const effVal = profile ? profile.transform(p.yi) : p.yi;
-        tooltip.style("opacity", 1)
-          .html(
-            `<b>${p.label}</b>` +
-            `<br>Control rate: ${(p.px * 100).toFixed(1)}%` +
-            `<br>Treatment rate: ${(p.py * 100).toFixed(1)}%` +
-            `<br>N: ${p.N}` +
-            (isFinite(effVal) ? `<br>Effect: ${(+effVal.toFixed(3))}` : "")
-          )
-          .style("left", (event.pageX + TOOLTIP_OFFSET.x) + "px")
-          .style("top",  (event.pageY + TOOLTIP_OFFSET.y) + "px");
-      })
-      .on("mouseout", () => tooltip.style("opacity", 0));
+      ? g.append("path").datum(p).attr("transform", `translate(${cx},${cy})`).attr("d", bwSymbolPath(gi, symSize))
+      : g.append("circle").datum(p).attr("cx", cx).attr("cy", cy).attr("r", r);
+    attachTooltip(
+      dot
+        .attr("fill", color)
+        .attr("fill-opacity", 0.65)
+        .attr("stroke", T.bgSurface)
+        .attr("stroke-width", 1),
+      d => {
+        const effVal = profile ? profile.transform(d.yi) : d.yi;
+        return `<b>${d.label}</b>` +
+          `<br>Control rate: ${(d.px * 100).toFixed(1)}%` +
+          `<br>Treatment rate: ${(d.py * 100).toFixed(1)}%` +
+          `<br>N: ${d.N}` +
+          (isFinite(effVal) ? `<br>Effect: ${(+effVal.toFixed(3))}` : "");
+      }
+    );
 
     if (showLabels) {
       const abbr = p.label.length > 9 ? p.label.slice(0, 8) + "…" : p.label;
@@ -3495,6 +3501,12 @@ export function drawLabbe(studies, m, profile, options = {}) {
     .attr("fill", T.fgMuted)
     .style("font-size", FONT_SIZE.annot)
     .text("no effect");
+
+  svg.append("text")
+    .attr("x", margin.left + iW / 2).attr("y", 18)
+    .attr("text-anchor", "middle").attr("fill", T.fg)
+    .style("font-size", FONT_SIZE.title).style("font-weight", "600")
+    .text(`L'Abbé plot — k = ${pts.length}`);
 }
 
 // ── drawRoBTrafficLight ──────────────────────────────────────────────────────
@@ -3504,7 +3516,7 @@ export function drawLabbe(studies, m, profile, options = {}) {
 // robData  — { [studyLabel]: { [domain]: string } }  ("Low"|"Some concerns"|"High"|"NI"|"")
 export function drawRoBTrafficLight(studies, domains, robData, options = {}) {
   const svg = initSvg("#robTrafficLight", "Risk of bias traffic light");
-  if (!studies || !domains || domains.length === 0) return;
+  if (!studies || !domains || domains.length === 0) { drawNoDataPlaceholder(svg, +svg.attr("width") || 500, +svg.attr("height") || 300); return; }
 
   const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
 
@@ -3566,21 +3578,14 @@ export function drawRoBTrafficLight(studies, domains, robData, options = {}) {
       const cx     = LEFT + di * CELL_W + CELL_W / 2;
 
       if (rating && ROB_COLORS[rating]) {
-        svg.append("circle")
-          .attr("cx", cx).attr("cy", cy)
-          .attr("r", 7)
-          .attr("fill", ROB_COLORS[rating])
-          .attr("fill-opacity", 0.85)
-          .on("mouseover", (event) => {
-            tooltip.style("opacity", 1)
-              .html(`<strong>${label}</strong><br>${dom}<br>${rating}`);
-          })
-          .on("mousemove", (event) => {
-            tooltip
-              .style("left", (event.pageX + TOOLTIP_OFFSET.x) + "px")
-              .style("top",  (event.pageY + TOOLTIP_OFFSET.y) + "px");
-          })
-          .on("mouseout", () => tooltip.style("opacity", 0));
+        attachTooltip(
+          svg.append("circle").datum({ label, dom, rating })
+            .attr("cx", cx).attr("cy", cy)
+            .attr("r", 7)
+            .attr("fill", ROB_COLORS[rating])
+            .attr("fill-opacity", 0.85),
+          d => `<strong>${d.label}</strong><br>${d.dom}<br>${d.rating}`
+        );
       } else {
         // Unrated dash
         svg.append("line")
@@ -3625,7 +3630,7 @@ export function drawRoBTrafficLight(studies, domains, robData, options = {}) {
 // robData  — { [studyLabel]: { [domain]: string } }
 export function drawRoBSummary(studies, domains, robData, options = {}) {
   const svg = initSvg("#robSummary", "Risk of bias summary");
-  if (!studies || !domains || domains.length === 0) return;
+  if (!studies || !domains || domains.length === 0) { drawNoDataPlaceholder(svg, +svg.attr("width") || 500, +svg.attr("height") || 300); return; }
 
   const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
 
@@ -3682,21 +3687,14 @@ export function drawRoBSummary(studies, domains, robData, options = {}) {
       const prop = counts[rating] / total;
       if (prop === 0) return;
       const w = xScale(prop);
-      svg.append("rect")
-        .attr("x", LEFT + xOffset).attr("y", y)
-        .attr("width", w).attr("height", BAR_H)
-        .attr("fill", ROB_COLORS[rating])
-        .attr("fill-opacity", 0.85)
-        .on("mouseover", (event) => {
-          selTooltip().style("opacity", 1)
-            .html(`<strong>${dom}</strong><br>${rating}: ${counts[rating]} / ${total} (${Math.round(prop * 100)}%)`);
-        })
-        .on("mousemove", (event) => {
-          selTooltip()
-            .style("left", (event.pageX + TOOLTIP_OFFSET.x) + "px")
-            .style("top",  (event.pageY + TOOLTIP_OFFSET.y) + "px");
-        })
-        .on("mouseout", () => selTooltip().style("opacity", 0));
+      attachTooltip(
+        svg.append("rect").datum({ dom, rating, n: counts[rating], total, pct: Math.round(prop * 100) })
+          .attr("x", LEFT + xOffset).attr("y", y)
+          .attr("width", w).attr("height", BAR_H)
+          .attr("fill", ROB_COLORS[rating])
+          .attr("fill-opacity", 0.85),
+        d => `<strong>${d.dom}</strong><br>${d.rating}: ${d.n} / ${d.total} (${d.pct}%)`
+      );
 
       // Percentage label inside bar (if wide enough)
       if (w >= 24) {
@@ -3771,7 +3769,7 @@ const GOSH_SVG_REPORT_MAX = 3000;
 
 export function drawGoshPlot(result, profile, options = {}) {
   const svg = initSvg("#goshPlot", "GOSH plot");
-  if (!result || result.error || !result.count) return;
+  if (!result || result.error || !result.count) { drawNoDataPlaceholder(svg, +svg.attr("width") || 500, +svg.attr("height") || 400, result?.error || "No data"); return; }
 
   profile = profile || { transform: x => x, label: "Effect" };
 
@@ -4064,7 +4062,7 @@ export function drawGoshPlot(result, profile, options = {}) {
 // =============================================================================
 export function drawProfileLikTau2(result, options = {}) {
   const svg = initSvg("#profileLikTau2Plot", "Profile likelihood plot for τ²");
-  if (!result || result.error) return;
+  if (!result || result.error) { drawNoDataPlaceholder(svg, +svg.attr("width") || 500, +svg.attr("height") || 340, result?.error || "No data"); return; }
 
   const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
 
@@ -4253,7 +4251,7 @@ export function drawProfileLikTau2(result, options = {}) {
 // =============================================================================
 export function drawBayesTauPosterior(result, options = {}) {
   const svg = initSvg("#bayesTauPlot", "Bayesian posterior for τ");
-  if (!result || result.error) return;
+  if (!result || result.error) { drawNoDataPlaceholder(svg, +svg.attr("width") || 500, +svg.attr("height") || 340, result?.error || "No data"); return; }
 
   const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
 
@@ -4395,7 +4393,7 @@ export function drawBayesTauPosterior(result, options = {}) {
 // =============================================================================
 export function drawBayesMuPosterior(result, options = {}) {
   const svg = initSvg("#bayesMuPlot", "Bayesian posterior for μ");
-  if (!result || result.error) return;
+  if (!result || result.error) { drawNoDataPlaceholder(svg, +svg.attr("width") || 500, +svg.attr("height") || 340, result?.error || "No data"); return; }
 
   const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
 
@@ -4564,7 +4562,7 @@ export function drawQQPlot(stdResiduals, labels, options = {}) {
   const svg = initSvg(containerId, "Normal Q-Q plot of standardised residuals");
 
   const k = stdResiduals.length;
-  if (k < 3) return;
+  if (k < 3) { drawNoDataPlaceholder(svg, +svg.attr("width") || 420, +svg.attr("height") || 380, "Need ≥ 3 studies"); return; }
 
   const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
 
@@ -4724,7 +4722,7 @@ export function drawRadialPlot(studies, m, profile, options = {}) {
 
   const valid = validStudies(studies);
   const k = valid.length;
-  if (k < 2) return;
+  if (k < 2) { drawNoDataPlaceholder(svg, +svg.attr("width") || 500, +svg.attr("height") || 400, "Need ≥ 2 studies"); return; }
 
   const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
 
