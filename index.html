@@ -192,7 +192,7 @@
           <!-- Moderator manager -->
           <div id="moderatorManager">
             <strong>Moderators:</strong>
-            <input type="text" id="modName" placeholder="Column name" style="width:110px">
+            <input type="text" id="modName" placeholder="Column name">
             <select id="modType">
               <option value="continuous">Continuous</option>
               <option value="categorical">Categorical</option>
@@ -224,7 +224,7 @@
           <!-- Scale moderator manager (location-scale model) -->
           <div id="scaleModManager">
             <strong>Location-scale model moderators:</strong>
-            <input type="text" id="scaleModName" placeholder="Column name" style="width:110px">
+            <input type="text" id="scaleModName" placeholder="Column name">
             <select id="scaleModType">
               <option value="continuous">Continuous</option>
               <option value="categorical">Categorical</option>
@@ -246,7 +246,7 @@
           <!-- Risk-of-bias domain manager -->
           <div id="robManager">
             <strong>Risk-of-bias domains:</strong>
-            <input type="text" id="robDomainInput" placeholder="Domain name" style="width:160px">
+            <input type="text" id="robDomainInput" placeholder="Domain name">
             <button id="addRobDomain">+ Add</button><button class="help-btn" data-help="input.rob" title="Help">?</button>
             <div id="robDomainTags"></div>
           </div>
@@ -349,7 +349,7 @@
                   </select>
                 </label>
                 <label class="inline">Cutpoints:
-                  <input type="text" id="selCuts" value="0.025, 0.05, 0.10, 0.25, 0.50, 1.0" style="width:220px">
+                  <input type="text" id="selCuts" value="0.025, 0.05, 0.10, 0.25, 0.50, 1.0">
                 </label>
               </span>
             </div>
@@ -378,7 +378,7 @@
             <span class="settings-group-label">RVE (robust variance estimation)</span>
             <div class="settings-section-controls">
               <label class="inline">Assumed within-cluster correlation ρ:
-                <input type="range" id="rveRho" min="0" max="0.999" step="0.01" value="0.8" style="width:120px;vertical-align:middle">
+                <input type="range" id="rveRho" min="0" max="0.999" step="0.01" value="0.8">
                 <span id="rveRhoDisplay" aria-live="polite" style="font-variant-numeric:tabular-nums;min-width:2.5em;display:inline-block">0.80</span>
               </label>
             </div>

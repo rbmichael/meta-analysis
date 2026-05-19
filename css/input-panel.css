@@ -324,6 +324,18 @@ input[type="file"]::file-selector-button:hover {
   color: var(--fg-muted);
 }
 
+/* Replace fixed pixel widths in manager inputs with responsive min/max pairs */
+#modName,
+#scaleModName {
+  min-width: 80px;
+  max-width: 110px;
+}
+
+#robDomainInput {
+  min-width: 100px;
+  max-width: 160px;
+}
+
 .mod-tag,
 .rob-domain-tag {
   display: inline-flex;
