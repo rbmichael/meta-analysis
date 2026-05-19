@@ -3457,26 +3457,27 @@ export function drawLabbe(studies, m, profile, options = {}) {
     .style("font-size", FONT_SIZE.axisLabel)
     .text("Treatment event rate");
 
-  // ---- Pooled-estimate label ----
+  // ---- Top-right legend: RE label then group items (stacked to avoid overlap) ----
+  let legendY = 12;
   if (reMu !== null && profile) {
     const reDisplay = profile.transform(reMu);
     if (isFinite(reDisplay)) {
       const typeLabel = type === "OR" ? "OR" : type === "RR" ? "RR" : "RD";
       g.append("text")
-        .attr("x", iW - 2).attr("y", 12)
+        .attr("x", iW - 2).attr("y", legendY)
         .attr("text-anchor", "end")
         .attr("fill", T.accent)
         .style("font-size", FONT_SIZE.tickLabel)
         .text(`RE ${typeLabel} = ${(+reDisplay.toFixed(3))}`);
+      legendY += 18;
     }
   }
 
-  // ---- Legend (groups) ----
   if (hasGroups) {
     allGroups.forEach((grp, gi) => {
       const color = T.useBwShapes ? T.fg : GROUP_COLORS[gi % GROUP_COLORS.length];
       const lx = iW - 4;
-      const ly = gi * 16 + 26;
+      const ly = gi * 16 + legendY;
       g.append("circle")
         .attr("cx", lx - 80).attr("cy", ly + 5)
         .attr("r", 5).attr("fill", color).attr("fill-opacity", 0.65);
@@ -3488,10 +3489,10 @@ export function drawLabbe(studies, m, profile, options = {}) {
     });
   }
 
-  // ---- Reference annotation ----
+  // ---- Reference annotation (mid-diagonal, away from top-right RE label) ----
   g.append("text")
-    .attr("x", x(0.95)).attr("y", y(0.95) - 6)
-    .attr("text-anchor", "end")
+    .attr("x", x(0.55)).attr("y", y(0.55) - 7)
+    .attr("text-anchor", "middle")
     .attr("fill", T.fgMuted)
     .style("font-size", FONT_SIZE.annot)
     .text("no effect");
