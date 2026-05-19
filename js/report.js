@@ -81,7 +81,7 @@ function buildTable(headers, rows, { extraClass = "", style = "", tfoot = "" } =
 //   headers   string[] — header cell text (HTML-safe)
 //   rows      string[] — pre-built <tr>…</tr> strings (same format as buildTable)
 //   note      string   — content after "Note." in tfoot; omit or pass "" to skip
-function buildTableAPA(tableNum, subtitle, headers, rows, note = "") {
+export function buildTableAPA(tableNum, subtitle, headers, rows, note = "") {
   const head = `<thead><tr>${headers.map(h => `<th>${h}</th>`).join("")}</tr></thead>`;
   const body = `<tbody>${rows.join("")}</tbody>`;
   const foot = note
@@ -100,7 +100,7 @@ function buildTableAPA(tableNum, subtitle, headers, rows, note = "") {
 //   title      string   — italic descriptive title (HTML-safe)
 //   svgStrings string[] — one serialised SVG string per page/panel
 //   note       string   — content after "Note."; omit or pass "" to skip
-function buildFigureAPA(figNum, title, svgStrings, note = "") {
+export function buildFigureAPA(figNum, title, svgStrings, note = "") {
   const panels = svgStrings.filter(Boolean);
   if (!panels.length) return "";
   const noteBlock = note
@@ -666,7 +666,7 @@ function sectionPlot(label, svgStrings, nextFigure, apaTitle = "", apaNote = "")
 // Embedded CSS
 // ---------------------------------------------------------------------------
 
-function reportCSS() {
+export function reportCSS() {
   const isLight = document.documentElement.dataset.theme === "light";
 
   const v = isLight ? {

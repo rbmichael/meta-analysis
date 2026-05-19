@@ -115,6 +115,7 @@ import { goshCompute, GOSH_MAX_K } from "./gosh.js";
 import { permTestSync, permPval } from "./perm.js";
 import { vcalc, mvMeta } from "./multivariate.js";
 import { exportSVG, exportPNG, exportTIFF, resolveThemeVars, hasEmbeddedBackground, currentBgColour } from "./export.js";
+import { PLOT_THEMES } from "./plotThemes.js";
 // report.js (81 KB) and docx.js (51 KB) are loaded on first export click.
 // guide.js (166 KB) and help.js (76 KB) are loaded on first use so they don't
 // block startup.
@@ -1472,7 +1473,7 @@ function _redrawAllMVForestPlots() {
     if (!svgEl) return;
     const allStudyIds = [...new Set(rows.map(r => String(r.study_id)))];
     const { totalPages } = _drawMVForestCombined(svgEl, rows, res, alpha, {
-      page: combinedPage, pageSize, showPI,
+      page: combinedPage, pageSize, showPI, theme: appState.plotTheme ?? "default",
     });
     _renderMVForestNavCombined(navEl, totalPages, allStudyIds.length);
     return;
@@ -1492,7 +1493,7 @@ function _redrawAllMVForestPlots() {
       hi: beta[o] + tCritical(dfPred, alpha) * Math.sqrt(tau2[o] + se[o] ** 2),
     } : null;
     const { totalPages } = _drawMVForestPlot(svgEl, outcomeRows, pooled, String(id), alpha, {
-      page: pages[o] ?? 0, pageSize, pi: piOpts,
+      page: pages[o] ?? 0, pageSize, pi: piOpts, theme: appState.plotTheme ?? "default",
     });
     _renderMVForestNav(navEl, o, totalPages, outcomeRows.length);
   });
@@ -1523,10 +1524,11 @@ function _renderMVForestNav(navEl, outcomeIdx, totalPages, kAll) {
   });
 }
 
-function _drawMVForestPlot(svgEl, rows, pooled, label, alpha = 0.05, { page = 0, pageSize = Infinity, pi = null } = {}) {
+function _drawMVForestPlot(svgEl, rows, pooled, label, alpha = 0.05, { page = 0, pageSize = Infinity, pi = null, theme = "default" } = {}) {
   if (typeof d3 === "undefined" || !rows.length) return;
 
   const z = normalQuantile(1 - alpha / 2);
+  const T = PLOT_THEMES[theme] ?? PLOT_THEMES["default"];
 
   // Pagination
   const ps = pageSize === Infinity ? rows.length : pageSize;
@@ -1547,6 +1549,11 @@ function _drawMVForestPlot(svgEl, rows, pooled, label, alpha = 0.05, { page = 0,
     .attr("width", totalW)
     .attr("height", totalH);
   svg.selectAll("*").remove();
+  svg.style("background", (T.bg !== "transparent") ? T.bg : null);
+  svg.style("font-family", T.fontFamily);
+  if (T.bg !== "transparent") {
+    svg.append("rect").attr("width", totalW).attr("height", totalH).attr("fill", T.bg);
+  }
 
   // X scale — use all rows (not just page) so domain stays stable across pages
   const seAll = rows.map(r => Math.sqrt(r.vi));
@@ -1567,7 +1574,7 @@ function _drawMVForestPlot(svgEl, rows, pooled, label, alpha = 0.05, { page = 0,
     plotG.append("line")
       .attr("x1", xScale(0)).attr("x2", xScale(0))
       .attr("y1", 0).attr("y2", zeroLineH)
-      .attr("stroke", "var(--border)").attr("stroke-dasharray", "3,3").attr("stroke-width", 1);
+      .attr("stroke", T.border).attr("stroke-dasharray", "3,3").attr("stroke-width", 1);
   }
 
   // Column headers
@@ -1579,7 +1586,7 @@ function _drawMVForestPlot(svgEl, rows, pooled, label, alpha = 0.05, { page = 0,
     svg.append("text")
       .attr("x", x).attr("y", headerH - 6)
       .attr("text-anchor", "middle")
-      .attr("fill", "var(--fg-muted)").attr("font-size", "10px")
+      .attr("fill", T.fgMuted).attr("font-size", "10px")
       .text(text)
   );
 
@@ -1600,22 +1607,22 @@ function _drawMVForestPlot(svgEl, rows, pooled, label, alpha = 0.05, { page = 0,
       .attr("x1", xScale(Math.max(xScale.domain()[0], lo)))
       .attr("x2", xScale(Math.min(xScale.domain()[1], hi)))
       .attr("y1", y).attr("y2", y)
-      .attr("stroke", "var(--fg)").attr("stroke-width", 1);
+      .attr("stroke", T.fg).attr("stroke-width", 1);
     plotG.append("rect")
       .attr("x", xScale(row.yi) - bh).attr("y", y - bh)
       .attr("width", bh * 2).attr("height", bh * 2)
-      .attr("fill", "var(--accent)");
+      .attr("fill", T.accent);
 
     svg.append("text")
       .attr("x", ml + lW - 4).attr("y", headerH + y + 4)
       .attr("text-anchor", "end")
-      .attr("fill", "var(--fg)").attr("font-size", "10px")
+      .attr("fill", T.fg).attr("font-size", "10px")
       .text(String(row.study_id));
 
     svg.append("text")
       .attr("x", ml + lW + pW + 5).attr("y", headerH + y + 4)
       .attr("text-anchor", "start")
-      .attr("fill", "var(--fg)").attr("font-size", "10px")
+      .attr("fill", T.fg).attr("font-size", "10px")
       .text(`${fmt(row.yi, 3)} [${fmt(lo, 3)}, ${fmt(hi, 3)}]`);
   });
 
@@ -1624,7 +1631,7 @@ function _drawMVForestPlot(svgEl, rows, pooled, label, alpha = 0.05, { page = 0,
   plotG.append("line")
     .attr("x1", 0).attr("x2", pW)
     .attr("y1", sepY).attr("y2", sepY)
-    .attr("stroke", "var(--border)").attr("stroke-width", 1);
+    .attr("stroke", T.border).attr("stroke-width", 1);
 
   // Pooled diamond
   const dY   = sepY + rowH / 2;
@@ -1634,17 +1641,17 @@ function _drawMVForestPlot(svgEl, rows, pooled, label, alpha = 0.05, { page = 0,
   const dH   = 7;
   plotG.append("polygon")
     .attr("points", `${dMid},${dY - dH} ${dHi},${dY} ${dMid},${dY + dH} ${dLo},${dY}`)
-    .attr("fill", "var(--accent)");
+    .attr("fill", T.accent);
 
   svg.append("text")
     .attr("x", ml + lW - 4).attr("y", headerH + dY + 4)
     .attr("text-anchor", "end")
-    .attr("fill", "var(--fg)").attr("font-size", "10px").attr("font-weight", "600")
+    .attr("fill", T.fg).attr("font-size", "10px").attr("font-weight", "600")
     .text("Pooled (MV)");
   svg.append("text")
     .attr("x", ml + lW + pW + 5).attr("y", headerH + dY + 4)
     .attr("text-anchor", "start")
-    .attr("fill", "var(--fg)").attr("font-size", "10px").attr("font-weight", "600")
+    .attr("fill", T.fg).attr("font-size", "10px").attr("font-weight", "600")
     .text(`${fmt(pooled.est, 3)} [${fmt(pooled.lo, 3)}, ${fmt(pooled.hi, 3)}]`);
 
   // Prediction interval row (below diamond, only when pi != null)
@@ -1652,8 +1659,7 @@ function _drawMVForestPlot(svgEl, rows, pooled, label, alpha = 0.05, { page = 0,
     const piY   = dY + rowH;
     const piLoX = xScale(Math.max(xScale.domain()[0], pi.lo));
     const piHiX = xScale(Math.min(xScale.domain()[1], pi.hi));
-    const piMid = xScale(pooled.est);
-    const piColor = "var(--fg-muted)";
+    const piColor = T.pi;
     // Dashed line + endcap ticks
     plotG.append("line")
       .attr("x1", piLoX).attr("x2", piHiX)
@@ -1683,10 +1689,10 @@ function _drawMVForestPlot(svgEl, rows, pooled, label, alpha = 0.05, { page = 0,
   plotG.append("g")
     .attr("transform", `translate(0,${axisOffsetY})`)
     .call(d3.axisBottom(xScale).ticks(5).tickSize(3))
-    .call(g => g.select(".domain").attr("stroke", "var(--border)"))
-    .call(g => g.selectAll(".tick line").attr("stroke", "var(--border)"))
+    .call(g => g.select(".domain").attr("stroke", T.border))
+    .call(g => g.selectAll(".tick line").attr("stroke", T.border))
     .call(g => g.selectAll(".tick text")
-      .attr("fill", "var(--fg-muted)").attr("font-size", "9px").attr("font-family", "inherit"));
+      .attr("fill", T.fgMuted).attr("font-size", "9px").attr("font-family", T.fontFamily));
 
   return { totalPages };
 }
@@ -1708,8 +1714,9 @@ function _renderMVForestNavCombined(navEl, totalPages, nStudies) {
   });
 }
 
-function _drawMVForestCombined(svgEl, rows, res, alpha, { page = 0, pageSize = Infinity, showPI = false } = {}) {
+function _drawMVForestCombined(svgEl, rows, res, alpha, { page = 0, pageSize = Infinity, showPI = false, theme = "default" } = {}) {
   if (typeof d3 === "undefined" || !rows.length || !res) return { totalPages: 1 };
+  const T = PLOT_THEMES[theme] ?? PLOT_THEMES["default"];
   const { beta, ci, se, tau2, outcomeIds, k, P } = res;
   const z = normalQuantile(1 - alpha / 2);
   const dfPred = Math.max(k - P - 1, 1);
@@ -1721,8 +1728,10 @@ function _drawMVForestCombined(svgEl, rows, res, alpha, { page = 0, pageSize = I
   const safePage = Math.min(Math.max(0, page), totalPages - 1);
   const pageStudyIds = new Set(allStudyIds.slice(safePage * ps, safePage * ps + ps));
 
-  // Distinct colors per outcome (Tableau-10 palette, works on light + dark)
-  const palette = ["#4e79a7","#f28e2b","#e15759","#76b7b2","#59a14f","#edc948","#b07aa1","#ff9da7","#9c755f","#bab0ac"];
+  // Distinct colors per outcome — monochrome shades for BW theme, Tableau-10 otherwise
+  const palette = T.useBwShapes
+    ? ["#111111","#555555","#888888","#333333","#666666","#999999","#222222","#777777","#444444","#aaaaaa"]
+    : ["#4e79a7","#f28e2b","#e15759","#76b7b2","#59a14f","#edc948","#b07aa1","#ff9da7","#9c755f","#bab0ac"];
 
   // X domain from all rows + all pooled CIs ± PI
   const seAll = rows.map(r => Math.sqrt(r.vi));
@@ -1755,6 +1764,11 @@ function _drawMVForestCombined(svgEl, rows, res, alpha, { page = 0, pageSize = I
 
   const svg = d3.select(svgEl).attr("width", totalW).attr("height", totalH);
   svg.selectAll("*").remove();
+  svg.style("background", (T.bg !== "transparent") ? T.bg : null);
+  svg.style("font-family", T.fontFamily);
+  if (T.bg !== "transparent") {
+    svg.append("rect").attr("width", totalW).attr("height", totalH).attr("fill", T.bg);
+  }
 
   const xScale = d3.scaleLinear().domain([xMin - pad, xMax + pad]).range([0, pW]);
   const plotG = svg.append("g").attr("transform", `translate(${ml + lW},${headerH})`);
@@ -1764,7 +1778,7 @@ function _drawMVForestCombined(svgEl, rows, res, alpha, { page = 0, pageSize = I
     plotG.append("line")
       .attr("x1", xScale(0)).attr("x2", xScale(0))
       .attr("y1", 0).attr("y2", totalGroupH)
-      .attr("stroke", "var(--border)").attr("stroke-dasharray", "3,3").attr("stroke-width", 1);
+      .attr("stroke", T.border).attr("stroke-dasharray", "3,3").attr("stroke-width", 1);
   }
 
   // Column headers
@@ -1774,7 +1788,7 @@ function _drawMVForestCombined(svgEl, rows, res, alpha, { page = 0, pageSize = I
     [ml + lW + pW + aW / 2, `Effect [${Math.round((1 - alpha) * 100)}% CI]`],
   ].forEach(([x, text]) =>
     svg.append("text").attr("x", x).attr("y", headerH - 6)
-      .attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").attr("font-size", "10px").text(text)
+      .attr("text-anchor", "middle").attr("fill", T.fgMuted).attr("font-size", "10px").text(text)
   );
 
   let gy = 0; // y cursor in plotG coords
@@ -1817,11 +1831,11 @@ function _drawMVForestCombined(svgEl, rows, res, alpha, { page = 0, pageSize = I
         .attr("fill", color);
       svg.append("text")
         .attr("x", ml + lW - 4).attr("y", headerH + y + 4)
-        .attr("text-anchor", "end").attr("fill", "var(--fg)").attr("font-size", "10px")
+        .attr("text-anchor", "end").attr("fill", T.fg).attr("font-size", "10px")
         .text(String(row.study_id));
       svg.append("text")
         .attr("x", ml + lW + pW + 5).attr("y", headerH + y + 4)
-        .attr("text-anchor", "start").attr("fill", "var(--fg)").attr("font-size", "10px")
+        .attr("text-anchor", "start").attr("fill", T.fg).attr("font-size", "10px")
         .text(`${fmt(row.yi, 3)} [${fmt(lo, 3)}, ${fmt(hi, 3)}]`);
     });
     gy += nS * rowH;
@@ -1830,7 +1844,7 @@ function _drawMVForestCombined(svgEl, rows, res, alpha, { page = 0, pageSize = I
     plotG.append("line")
       .attr("x1", 0).attr("x2", pW)
       .attr("y1", gy + sepH / 2).attr("y2", gy + sepH / 2)
-      .attr("stroke", "var(--border)").attr("stroke-width", 1);
+      .attr("stroke", T.border).attr("stroke-width", 1);
     gy += sepH;
 
     // Pooled diamond
@@ -1845,11 +1859,11 @@ function _drawMVForestCombined(svgEl, rows, res, alpha, { page = 0, pageSize = I
       .attr("fill", color);
     svg.append("text")
       .attr("x", ml + lW - 4).attr("y", headerH + dY + 4)
-      .attr("text-anchor", "end").attr("fill", "var(--fg)").attr("font-size", "10px").attr("font-weight", "600")
+      .attr("text-anchor", "end").attr("fill", T.fg).attr("font-size", "10px").attr("font-weight", "600")
       .text("Pooled (MV)");
     svg.append("text")
       .attr("x", ml + lW + pW + 5).attr("y", headerH + dY + 4)
-      .attr("text-anchor", "start").attr("fill", "var(--fg)").attr("font-size", "10px").attr("font-weight", "600")
+      .attr("text-anchor", "start").attr("fill", T.fg).attr("font-size", "10px").attr("font-weight", "600")
       .text(`${fmt(pooled.est, 3)} [${fmt(pooled.lo, 3)}, ${fmt(pooled.hi, 3)}]`);
     gy += rowH;
 
@@ -1871,11 +1885,11 @@ function _drawMVForestCombined(svgEl, rows, res, alpha, { page = 0, pageSize = I
           .attr("y1", piY - 5).attr("y2", piY + 5).attr("stroke", color).attr("stroke-width", 2).attr("opacity", 0.65);
         svg.append("text")
           .attr("x", ml + lW - 4).attr("y", headerH + piY + 4)
-          .attr("text-anchor", "end").attr("fill", "var(--fg-muted)").attr("font-size", "10px")
+          .attr("text-anchor", "end").attr("fill", T.pi).attr("font-size", "10px")
           .text("Pred. interval");
         svg.append("text")
           .attr("x", ml + lW + pW + 5).attr("y", headerH + piY + 4)
-          .attr("text-anchor", "start").attr("fill", "var(--fg-muted)").attr("font-size", "10px")
+          .attr("text-anchor", "start").attr("fill", T.pi).attr("font-size", "10px")
           .text(`${fmt(piLo, 3)} to ${fmt(piHi, 3)}`);
       }
       gy += rowH;
@@ -1888,10 +1902,10 @@ function _drawMVForestCombined(svgEl, rows, res, alpha, { page = 0, pageSize = I
   plotG.append("g")
     .attr("transform", `translate(0,${gy})`)
     .call(d3.axisBottom(xScale).ticks(5).tickSize(3))
-    .call(g => g.select(".domain").attr("stroke", "var(--border)"))
-    .call(g => g.selectAll(".tick line").attr("stroke", "var(--border)"))
+    .call(g => g.select(".domain").attr("stroke", T.border))
+    .call(g => g.selectAll(".tick line").attr("stroke", T.border))
     .call(g => g.selectAll(".tick text")
-      .attr("fill", "var(--fg-muted)").attr("font-size", "9px").attr("font-family", "inherit"));
+      .attr("fill", T.fgMuted).attr("font-size", "9px").attr("font-family", T.fontFamily));
 
   return { totalPages };
 }
@@ -2315,39 +2329,8 @@ function _mvSerializeSVG(svgEl) {
   return new XMLSerializer().serializeToString(clone);
 }
 
-function _mvReportCSS() {
-  const isLight = document.documentElement.dataset.theme === "light";
-  const v = isLight ? {
-    bodyBg:"#f5f5f8", bodyColor:"#1a1a1a", metaColor:"#888",
-    h2Color:"#555", h2Border:"#d0d0d0", sectionBg:"#fff", sectionBorder:"#ddd",
-    thBg:"#e8e8f0", thColor:"#333", thBorder:"#ddd", tdBorder:"#e0e0e0",
-    tdColor:"#222", tdAltBg:"#f5f5f8",
-  } : {
-    bodyBg:"#121212", bodyColor:"#eee", metaColor:"#666",
-    h2Color:"#888", h2Border:"#2e2e2e", sectionBg:"#1a1a1a", sectionBorder:"#333",
-    thBg:"#1e2840", thColor:"#aac", thBorder:"#333", tdBorder:"#2a2a2a",
-    tdColor:"#ddd", tdAltBg:"#171727",
-  };
-  return `*, *::before, *::after { box-sizing: border-box; }
-body { font-family: Arial, sans-serif; background: ${v.bodyBg}; color: ${v.bodyColor};
-  margin: 0; padding: 24px 32px; font-size: 14px; }
-h1 { font-size: 1.4em; margin: 0 0 4px 0; }
-h2 { font-size: 0.78em; font-weight: bold; letter-spacing: 0.1em; text-transform: uppercase;
-  color: ${v.h2Color}; margin: 0 0 12px 0; padding-bottom: 6px;
-  border-bottom: 1px solid ${v.h2Border}; }
-.report-meta { font-size: 0.82em; color: ${v.metaColor}; margin-bottom: 20px; }
-section { background: ${v.sectionBg}; border: 1px solid ${v.sectionBorder};
-  border-radius: 8px; padding: 16px 20px; margin-bottom: 24px; }
-.stat-table { border-collapse: collapse; font-size: 0.88em; width: 100%; max-width: 900px; }
-.stat-table th { background: ${v.thBg}; color: ${v.thColor}; font-weight: normal;
-  text-align: left; padding: 5px 10px; border: 1px solid ${v.thBorder}; }
-.stat-table td { padding: 5px 10px; border: 1px solid ${v.tdBorder}; color: ${v.tdColor}; }
-.stat-table tbody tr:nth-child(even) td { background: ${v.tdAltBg}; }
-.svg-wrap { margin: 12px 0; overflow-x: auto; }
-.svg-wrap svg { display: block; max-width: 100%; height: auto; }`;
-}
 
-function _buildMVReportHTML(res, rows = [], alpha = 0.05) {
+function _buildMVReportHTML(res, rows = [], alpha = 0.05, { reportCSS, buildTableAPA, buildFigureAPA } = {}) {
   const { beta, se, ci, z, pval, betaNames = [], tau2, rho_between,
           outcomeIds, n, k, P, QM, df_QM, pQM, QE, df_QE, pQE,
           logLik, AIC, BIC, AICc, struct, method, I2, convergence,
@@ -2358,16 +2341,21 @@ function _buildMVReportHTML(res, rows = [], alpha = 0.05) {
   const esc   = s => String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
   const fmtN  = (v, d = 3) => isFinite(v) ? (+v).toFixed(d) : "—";
   const fmtP  = p => !isFinite(p) ? "—" : p < 0.001 ? "< .001" : (+p).toFixed(3).replace(/^0\./, ".");
-  const th    = cols => `<thead><tr>${cols.map(c=>`<th>${c}</th>`).join("")}</tr></thead>`;
-  const tbl   = (cols, bodyRows) => `<table class="stat-table">${th(cols)}<tbody>${bodyRows.join("")}</tbody></table>`;
+
+  let _tblN = 0, _figN = 0;
+  const nextTable  = () => ++_tblN;
+  const nextFigure = () => ++_figN;
 
   // Pooled estimates
-  const pooledRows = outcomeIds.map((id, o) => {
+  const pooledTblRows = outcomeIds.map((id, o) => {
     const [lo, hi] = ci[o];
     return `<tr><td><strong>${esc(String(id))}</strong></td><td>${fmtN(beta[o],4)}</td><td>${fmtN(se[o],4)}</td>
       <td>[${fmtN(lo,4)}, ${fmtN(hi,4)}]</td><td>${fmtN(z[o],3)}</td><td>${fmtP(pval[o])}</td></tr>`;
   });
-  const pooledTbl = tbl(["Outcome","Estimate","SE",`${ciPct}% CI`,"z","p"], pooledRows);
+  const pooledSection = buildTableAPA(nextTable(),
+    `Pooled effect estimates per outcome (${method}, Ψ = ${struct})`,
+    ["Outcome","Estimate","SE",`${ciPct}% CI`,"<em>z</em>","<em>p</em>"],
+    pooledTblRows);
 
   // Moderators
   let modSection = "";
@@ -2378,28 +2366,30 @@ function _buildMVReportHTML(res, rows = [], alpha = 0.05) {
       return `<tr><td>${esc(betaNames[j] ?? `β${j}`)}</td><td>${fmtN(b,4)}</td><td>${fmtN(se[j],4)}</td>
         <td>[${fmtN(lo,4)}, ${fmtN(hi,4)}]</td><td>${fmtN(z[j],3)}</td><td>${fmtP(pval[j])}</td></tr>`;
     });
-    modSection = `<h2>Moderator Effects</h2>${tbl(["Coefficient","Estimate","SE",`${ciPct}% CI`,"z","p"], modRows)}`;
+    modSection = buildTableAPA(nextTable(), "Meta-regression coefficients",
+      ["Coefficient","Estimate","SE",`${ciPct}% CI`,"<em>z</em>","<em>p</em>"], modRows);
   }
 
   // Heterogeneity
   const hetCols = struct === "CS"
     ? ["Outcome","τ²","<em>I</em>²","ρ (between)"]
     : ["Outcome","τ²","<em>I</em>²"];
-  const hetRows = outcomeIds.map((id, o) => {
+  const hetTblRows = outcomeIds.map((id, o) => {
     const rho = struct === "CS" ? `<td>${fmtN(rho_between ?? 0, 4)}</td>` : "";
     return `<tr><td>${esc(String(id))}</td><td>${fmtN(tau2[o],5)}</td>
       <td>${isFinite(I2[o]) ? (+I2[o]).toFixed(1)+"%" : "—"}</td>${rho}</tr>`;
   });
-  const hetTbl = tbl(hetCols, hetRows);
+  const hetSection = buildTableAPA(nextTable(), "Between-study heterogeneity", hetCols, hetTblRows);
 
   // Tests
-  const testRows = [
+  const testTblRows = [
     ...(hasMods && isFinite(QM)
       ? [`<tr><td>Omnibus test of moderators (Q<sub>M</sub>)</td><td>${fmtN(QM,3)}</td><td>${df_QM}</td><td>${fmtP(pQM)}</td></tr>`]
       : []),
     `<tr><td>Residual heterogeneity (Q<sub>E</sub>)</td><td>${fmtN(QE,3)}</td><td>${df_QE}</td><td>${fmtP(pQE)}</td></tr>`,
   ];
-  const testTbl = tbl(["Test","χ²","df","p"], testRows);
+  const testSection = buildTableAPA(nextTable(), "Hypothesis tests",
+    ["Test","χ²","df","<em>p</em>"], testTblRows);
 
   const fitLine = `k = ${k} · n = ${n} obs · P = ${P} outcomes`
     + ` │ log-lik = ${fmtN(logLik,4)} · AIC = ${fmtN(AIC,2)} · BIC = ${fmtN(BIC,2)}`
@@ -2408,8 +2398,8 @@ function _buildMVReportHTML(res, rows = [], alpha = 0.05) {
 
   // MV forest SVGs
   const forestSVGs = (() => {
-    const combined     = document.getElementById("mvForestPlotCombined");
-    const combinedBlk  = document.getElementById("mvForestCombinedBlock");
+    const combined    = document.getElementById("mvForestPlotCombined");
+    const combinedBlk = document.getElementById("mvForestCombinedBlock");
     if (combinedBlk && combinedBlk.style.display !== "none" && combined) {
       const s = _mvSerializeSVG(combined); return s ? [s] : [];
     }
@@ -2427,7 +2417,7 @@ function _buildMVReportHTML(res, rows = [], alpha = 0.05) {
   ].filter(Boolean).join("");
 
   const forestSection = forestSVGs.length
-    ? `<h2>Forest Plot</h2>${forestSVGs.map(s=>`<div class="svg-wrap">${s}</div>`).join("\n")}`
+    ? buildFigureAPA(nextFigure(), "Forest plot of multivariate meta-analysis results", forestSVGs)
     : "";
 
   // Individual Studies
@@ -2439,42 +2429,46 @@ function _buildMVReportHTML(res, rows = [], alpha = 0.05) {
       <td>[${fmtN(r.yi - zVal*se_r,4)},&nbsp;${fmtN(r.yi + zVal*se_r,4)}]</td></tr>`;
   });
   const studySection = rows.length
-    ? `<h2>Individual Studies</h2>${tbl(["Study","Outcome","y<sub>i</sub>","v<sub>i</sub>","SE",`${ciPct}% CI`], studyBodyRows)}`
+    ? buildTableAPA(nextTable(), "Individual study data",
+        ["Study","Outcome","y<sub>i</sub>","v<sub>i</sub>","SE",`${ciPct}% CI`], studyBodyRows)
     : "";
 
   // Risk of Bias (only if domains configured)
   let robSection = "";
   if (_robDomains.length > 0) {
-    const robTL  = _mvSerializeSVG(document.getElementById("robTrafficLight"));
-    const robSum = _mvSerializeSVG(document.getElementById("robSummary"));
-    const parts  = [robTL, robSum].filter(Boolean).map(s => `<div class="svg-wrap">${s}</div>`);
-    if (parts.length) robSection = `<h2>Risk of Bias</h2>${parts.join("\n")}`;
+    const robSVGs = [
+      _mvSerializeSVG(document.getElementById("robTrafficLight")),
+      _mvSerializeSVG(document.getElementById("robSummary")),
+    ].filter(Boolean);
+    if (robSVGs.length) robSection = buildFigureAPA(nextFigure(), "Risk of bias assessment", robSVGs);
   }
 
   // References
   const mvRefList = [
-    `Berkey, C. S., Hoaglin, D. C., Antczak-Bouckoms, A., Mosteller, F., &amp; Colditz, G. A. (1998). Meta-analysis of multiple outcomes by regression with random effects. <em>Statistics in Medicine</em>, <em>17</em>(22), 2537–2550.`,
-    `Cheung, M. W.-L. (2014). Modeling dependent effect sizes with three-level meta-analyses: a structural equation modeling approach. <em>Psychological Methods</em>, <em>19</em>(2), 211–229.`,
-    `Cochran, W. G. (1954). The combination of estimates from different experiments. <em>Biometrics</em>, <em>10</em>(1), 101–129.`,
-    `Higgins, J. P. T., Thompson, S. G., Deeks, J. J., &amp; Altman, D. G. (2003). Measuring inconsistency in meta-analyses. <em>BMJ</em>, <em>327</em>(7414), 557–560.`,
-    `Jackson, D., Riley, R., &amp; White, I. R. (2011). Multivariate meta-analysis: Potential and promise. <em>Statistics in Medicine</em>, <em>30</em>(20), 2481–2498.`,
-    `Riley, R. D., Abrams, K. R., Sutton, A. J., Lambert, P. C., &amp; Thompson, J. R. (2007). Bivariate random-effects meta-analysis and the estimation of between-study correlation. <em>BMC Medical Research Methodology</em>, <em>7</em>, 3.`,
-    `Viechtbauer, W. (2005). Bias and efficiency of meta-analytic variance estimators in the random-effects model. <em>Journal of Educational and Behavioral Statistics</em>, <em>30</em>(3), 261–293.`,
+    "Berkey, C. S., Hoaglin, D. C., Antczak-Bouckoms, A., Mosteller, F., &amp; Colditz, G. A. (1998). Meta-analysis of multiple outcomes by regression with random effects. <em>Statistics in Medicine</em>, <em>17</em>(22), 2537–2550.",
+    "Cheung, M. W.-L. (2014). Modeling dependent effect sizes with three-level meta-analyses: a structural equation modeling approach. <em>Psychological Methods</em>, <em>19</em>(2), 211–229.",
+    "Cochran, W. G. (1954). The combination of estimates from different experiments. <em>Biometrics</em>, <em>10</em>(1), 101–129.",
+    "Higgins, J. P. T., Thompson, S. G., Deeks, J. J., &amp; Altman, D. G. (2003). Measuring inconsistency in meta-analyses. <em>BMJ</em>, <em>327</em>(7414), 557–560. <a href=\"https://doi.org/10.1136/bmj.327.7414.557\">https://doi.org/10.1136/bmj.327.7414.557</a>",
+    "Jackson, D., Riley, R., &amp; White, I. R. (2011). Multivariate meta-analysis: Potential and promise. <em>Statistics in Medicine</em>, <em>30</em>(20), 2481–2498.",
+    "Riley, R. D., Abrams, K. R., Sutton, A. J., Lambert, P. C., &amp; Thompson, J. R. (2007). Bivariate random-effects meta-analysis and the estimation of between-study correlation. <em>BMC Medical Research Methodology</em>, <em>7</em>, 3.",
+    "Viechtbauer, W. (2005). Bias and efficiency of meta-analytic variance estimators in the random-effects model. <em>Journal of Educational and Behavioral Statistics</em>, <em>30</em>(3), 261–293.",
   ];
-  const refSection = `<h2>References</h2><ol style="padding-left:1.4em;font-size:0.88em;line-height:1.6">${
-    mvRefList.map(r => `<li style="margin-bottom:6px">${r}</li>`).join("")
-  }</ol>`;
+  const refSection = `<ul class="apa-references">${
+    mvRefList.map(r => `<li>${r}</li>`).join("")
+  }</ul>`;
+
+  const wrapSec = html => html ? `<section>${html}</section>` : "";
 
   const body = [
     warnHTML,
-    `<h2>Pooled Estimates</h2>${pooledTbl}`,
-    modSection,
-    `<h2>Between-Study Heterogeneity</h2>${hetTbl}`,
-    `<h2>Hypothesis Tests</h2>${testTbl}`,
+    wrapSec(pooledSection),
+    wrapSec(modSection),
+    wrapSec(hetSection),
+    wrapSec(testSection),
     `<p class="report-meta" style="margin-top:8px">${fitLine}</p>`,
-    forestSection,
-    studySection,
-    robSection,
+    wrapSec(forestSection),
+    wrapSec(studySection),
+    wrapSec(robSection),
     refSection,
   ].filter(Boolean).join("\n");
 
@@ -2483,18 +2477,17 @@ function _buildMVReportHTML(res, rows = [], alpha = 0.05) {
 <head>
   <meta charset="UTF-8">
   <title>Multivariate Meta-Analysis Report</title>
-  <style>${_mvReportCSS()}</style>
+  <style>${reportCSS()}</style>
 </head>
 <body>
   <h1>Multivariate Meta-Analysis Report</h1>
   <p class="report-meta">Generated ${esc(date)}
     &nbsp;·&nbsp; k = ${k} studies, P = ${P} outcomes
     &nbsp;·&nbsp; ${esc(method)}, Ψ = ${esc(struct)}</p>
-  <section>${body}</section>
+  ${body}
 </body>
 </html>`;
 }
-
 // Thin wrappers matching report.js downloadHTML / openPrintPreview signatures
 // so the MV path doesn't need to lazy-load report.js at all.
 function _mvDownloadHTML(html) {
@@ -2517,14 +2510,13 @@ async function buildReportAndResync() {
   if (!appState.reportArgs) return null;
   flushDeferredDraws();
 
-  // MV mode: build fully inline — no lazy-loaded module needed.
-  // (report.js is cached in the ES-module registry; a stale cached version
-  //  would not export buildMVReport, causing "not a function" errors.)
   if (appState.reportArgs.mv) {
+    const { reportCSS, buildTableAPA, buildFigureAPA } = await getReport();
     const html = _buildMVReportHTML(
       appState.reportArgs.mvRes,
       appState.reportArgs.mvRows ?? [],
       appState.reportArgs.mvAlpha ?? 0.05,
+      { reportCSS, buildTableAPA, buildFigureAPA },
     );
     return { html, downloadHTML: _mvDownloadHTML, openPrintPreview: _mvOpenPrintPreview };
   }
@@ -3402,6 +3394,7 @@ document.getElementById("plotTheme").addEventListener("change", e => {
 
 function redrawCachedPlots() {
   const theme = appState.plotTheme;
+  if (_mvForestState?.lastRes) _redrawAllMVForestPlots();
   if (forestPlot.args) {
     forestPlot.args.options = { ...forestPlot.args.options, theme };
     const { totalPages } = drawForest(forestPlot.args.studies, forestPlot.args.m, { ...forestPlot.args.options, page: forestPlot.page });
