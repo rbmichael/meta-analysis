@@ -2242,6 +2242,7 @@ document.getElementById("draftStartFresh").addEventListener("click", () => {
   resetSel("selMode");    resetSel("selPreset"); resetSel("selSides"); resetSel("selWeightFn");
   resetChk("useTrimFill"); resetChk("useTFAdjusted");
   resetNum("bayesMu0"); resetNum("bayesSigmaMu"); resetNum("bayesSigmaTau");
+  resetSel("bayesPreset");
   resetNum("selCuts");
   // RVE rho: reset value then fire input event so the block-scoped display updater runs.
   const rveRhoEl = document.getElementById("rveRho");
@@ -2713,9 +2714,39 @@ document.getElementById("ciMethod").addEventListener("change", () => {
 });
 document.getElementById("ciLevel").addEventListener("change", () => { scheduleSave(); markStale(); });
 document.getElementById("mccMethod").addEventListener("change", markStale);
-document.getElementById("bayesMu0").addEventListener("input", markStale);
-document.getElementById("bayesSigmaMu").addEventListener("input", markStale);
-document.getElementById("bayesSigmaTau").addEventListener("input", markStale);
+// ---------------- BAYESIAN PRESETS ----------------
+const BAYES_PRESETS = {
+  default:   { mu0: 0,   sigmaMu: 1,    sigmaTau: 0.5  },
+  weakly:    { mu0: 0,   sigmaMu: 2,    sigmaTau: 1.0  },
+  sceptical: { mu0: 0,   sigmaMu: 0.5,  sigmaTau: 0.25 },
+};
+
+function syncBayesPreset() {
+  const mu0  = parseFloat(document.getElementById("bayesMu0").value);
+  const smu  = parseFloat(document.getElementById("bayesSigmaMu").value);
+  const stau = parseFloat(document.getElementById("bayesSigmaTau").value);
+  const match = Object.entries(BAYES_PRESETS).find(([, p]) =>
+    p.mu0 === mu0 && p.sigmaMu === smu && p.sigmaTau === stau
+  );
+  document.getElementById("bayesPreset").value = match ? match[0] : "custom";
+}
+
+document.getElementById("bayesPreset").addEventListener("change", () => {
+  const preset = BAYES_PRESETS[document.getElementById("bayesPreset").value];
+  if (!preset) return; // "custom" — leave inputs alone
+  document.getElementById("bayesMu0").value      = preset.mu0;
+  document.getElementById("bayesSigmaMu").value  = preset.sigmaMu;
+  document.getElementById("bayesSigmaTau").value = preset.sigmaTau;
+  // Clear any lingering validation warnings
+  document.getElementById("bayesSigmaMuWarn").style.display  = "none";
+  document.getElementById("bayesSigmaTauWarn").style.display = "none";
+  markStale();
+  _checkAdvancedBadge();
+});
+
+document.getElementById("bayesMu0").addEventListener("input", () => { syncBayesPreset(); markStale(); });
+document.getElementById("bayesSigmaMu").addEventListener("input", () => { syncBayesPreset(); markStale(); });
+document.getElementById("bayesSigmaTau").addEventListener("input", () => { syncBayesPreset(); markStale(); });
 
 const trimFillCheckbox = document.getElementById("useTrimFill");
 const adjustedCheckbox = document.getElementById("useTFAdjusted");
@@ -2798,6 +2829,7 @@ function resetAdvancedSettings() {
   resetChk("useTrimFill"); resetChk("useTFAdjusted");
   resetSel("selMode"); resetSel("selPreset"); resetSel("selSides"); resetSel("selWeightFn");
   resetNum("bayesMu0"); resetNum("bayesSigmaMu"); resetNum("bayesSigmaTau");
+  resetSel("bayesPreset");
   resetNum("selCuts");
   const rveRhoEl = document.getElementById("rveRho");
   if (rveRhoEl) { rveRhoEl.value = rveRhoEl.defaultValue; rveRhoEl.dispatchEvent(new Event("input")); }
@@ -3030,6 +3062,7 @@ function applySession(session) {
   }
 
   syncTrimFillState();
+  syncBayesPreset();
   _checkAdvancedBadge();
   return { profile, savedStudies };
 }

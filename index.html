@@ -200,8 +200,8 @@
             <span id="modTransformWrap" title="Transform applied to this continuous moderator">
               <select id="modTransform">
                 <option value="linear">Linear</option>
-                <option value="poly2">Poly ²</option>
-                <option value="poly3">Poly ³</option>
+                <option value="poly2">Quadratic (x²)</option>
+                <option value="poly3">Cubic (x², x³)</option>
                 <option value="rcs3">RCS (3 knots)</option>
                 <option value="rcs4">RCS (4 knots)</option>
                 <option value="rcs5">RCS (5 knots)</option>
@@ -232,8 +232,8 @@
             <span id="scaleModTransformWrap" title="Transform applied to this continuous scale moderator">
               <select id="scaleModTransform">
                 <option value="linear">Linear</option>
-                <option value="poly2">Poly ²</option>
-                <option value="poly3">Poly ³</option>
+                <option value="poly2">Quadratic (x²)</option>
+                <option value="poly3">Cubic (x², x³)</option>
                 <option value="rcs3">RCS (3 knots)</option>
                 <option value="rcs4">RCS (4 knots)</option>
                 <option value="rcs5">RCS (5 knots)</option>
@@ -307,7 +307,7 @@
               </label>
               <label class="inline">
                 <input type="checkbox" id="useTFAdjusted">
-                Show adjusted RE
+                Show trim-fill-adjusted RE estimate
               </label>
             </div>
           </div>
@@ -359,6 +359,14 @@
           <div class="settings-section">
             <span class="settings-group-label">Bayesian priors<button class="help-btn" data-help="bayes.model" title="Help">?</button></span>
             <div class="settings-section-controls">
+              <label class="inline">Preset:
+                <select id="bayesPreset">
+                  <option value="default" selected>Default</option>
+                  <option value="weakly">Weakly informative</option>
+                  <option value="sceptical">Sceptical</option>
+                  <option value="custom">Custom</option>
+                </select>
+              </label>
               <label class="inline">μ prior mean (μ₀):
                 <input type="number" id="bayesMu0" value="0" step="0.1">
               </label>
@@ -378,10 +386,16 @@
             <span class="settings-group-label">RVE (robust variance estimation)</span>
             <div class="settings-section-controls">
               <label class="inline">Assumed within-cluster correlation ρ:
-                <input type="range" id="rveRho" min="0" max="0.999" step="0.01" value="0.8">
+                <input type="range" id="rveRho" min="0" max="0.999" step="0.01" value="0.8" list="rveRhoTicks">
                 <span id="rveRhoDisplay" aria-live="polite" style="font-variant-numeric:tabular-nums;min-width:2.5em;display:inline-block">0.80</span>
               </label>
             </div>
+            <datalist id="rveRhoTicks">
+              <option value="0.4"></option>
+              <option value="0.8"></option>
+              <option value="0.95"></option>
+            </datalist>
+            <p class="settings-hint">0.4 = mild &nbsp;·&nbsp; 0.8 = moderate (default) &nbsp;·&nbsp; 0.95 = strong</p>
           </div>
 
           <!-- Reset button -->
@@ -1078,8 +1092,8 @@
       the transform dropdown when adding a moderator:</p>
       <ul>
         <li><strong>Linear</strong> (default) — standard single-column predictor</li>
-        <li><strong>Poly ²</strong> — adds x² to the design matrix (quadratic curve)</li>
-        <li><strong>Poly ³</strong> — adds x² and x³ (cubic curve)</li>
+        <li><strong>Quadratic (x²)</strong> — adds x² to the design matrix (quadratic curve)</li>
+        <li><strong>Cubic (x², x³)</strong> — adds x² and x³ (cubic curve)</li>
         <li><strong>RCS (3–5 knots)</strong> — restricted cubic spline; knots placed at
         Harrell's recommended percentiles (10/50/90 for 3 knots, etc.). Produces a smooth
         curve that is linear outside the outermost knots. The per-moderator Wald test covers
