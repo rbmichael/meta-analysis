@@ -3063,6 +3063,7 @@ function applySession(session) {
 
   syncTrimFillState();
   syncBayesPreset();
+  syncRveVisibility();
   _checkAdvancedBadge();
   return { profile, savedStudies };
 }
@@ -3187,6 +3188,17 @@ function syncPLAvailability() {
 
 // MH is available for OR, RR, RD; Peto is available for OR only.
 // When MH or Peto is selected: lock CI method to "normal" and disable trim-and-fill.
+// Show #rveSettings whenever the table has any non-empty cluster cell and the
+// current method is not MH/Peto.  Called eagerly on table edits, CSV import,
+// session restore, and method change — not gated on a Run.
+function syncRveVisibility() {
+  const method = document.getElementById("tauMethod")?.value ?? "";
+  const isMHorPeto = method === "MH" || method === "Peto";
+  const hasClusters = [...document.querySelectorAll("#inputTable .cluster")]
+    .some(el => el.value.trim() !== "");
+  setVisible(document.getElementById("rveSettings"), hasClusters && !isMHorPeto);
+}
+
 function syncMHOptions(type) {
   const tauSel  = document.getElementById("tauMethod");
   const ciSel   = document.getElementById("ciMethod");
@@ -3221,6 +3233,7 @@ function syncMHOptions(type) {
     if (tfEst) tfEst.disabled = isMHorPeto || !tfCheck.checked;
   }
 
+  syncRveVisibility();
   syncPLAvailability();
 }
 
@@ -3254,6 +3267,11 @@ function init() {
 
   // Initialise MH/Peto and PL availability based on default/restored settings.
   syncMHOptions(document.getElementById("effectType").value);
+
+  // Update RVE visibility whenever a cluster cell changes (no Run required).
+  document.getElementById("inputTable").addEventListener("input", e => {
+    if (e.target.classList.contains("cluster")) syncRveVisibility();
+  });
 
   // Populate MV example data (Berkey 1998: 5 trials, 2 outcomes)
   if (USE_EXAMPLES) _populateMVExample(); else _mvAddRow();
