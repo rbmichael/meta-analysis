@@ -256,7 +256,7 @@
 
       <!-- Collapsible advanced settings -->
       <details id="advancedSettings" class="advanced-settings">
-        <summary>Advanced settings</summary>
+        <summary>Advanced settings<span id="advancedBadge" class="advanced-badge" style="display:none" title="Some settings differ from defaults" aria-label="settings customized">●</span></summary>
         <div class="advanced-settings-body">
 
           <!-- Analysis & display: CI width, MCC, cumulative order -->
@@ -382,6 +382,11 @@
                 <span id="rveRhoDisplay" aria-live="polite" style="font-variant-numeric:tabular-nums;min-width:2.5em;display:inline-block">0.80</span>
               </label>
             </div>
+          </div>
+
+          <!-- Reset button -->
+          <div class="settings-footer">
+            <button id="resetAdvanced" class="settings-reset-btn">Reset to defaults</button>
           </div>
 
         </div><!-- /.advanced-settings-body -->

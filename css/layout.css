@@ -153,6 +153,14 @@
   margin-bottom: 10px;
 }
 
+/* Badge shown on summary when any setting differs from default */
+.advanced-badge {
+  font-size: 0.6em;
+  color: var(--accent);
+  line-height: 1;
+  margin-left: 1px;
+}
+
 .advanced-settings > summary {
   display: inline-flex;
   align-items: center;
@@ -285,6 +293,55 @@
   margin-left: 4px;
   font-size: 0.75rem;
   color: var(--color-error, #c0392b);
+}
+
+/* Disabled trim-fill labels */
+.settings-section-controls label.inline[aria-disabled="true"] {
+  opacity: 0.45;
+  pointer-events: none;
+  cursor: default;
+}
+
+/* Fade transitions for conditionally-shown settings rows */
+#rveSettings,
+#interactionManager,
+#selWeightFnRow,
+#selPresetRow,
+#selCustomRow {
+  transition: opacity 0.12s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #rveSettings,
+  #interactionManager,
+  #selWeightFnRow,
+  #selPresetRow,
+  #selCustomRow {
+    transition: none;
+  }
+}
+
+/* ---- Reset-to-defaults footer ---- */
+.settings-footer {
+  padding: 10px 0 2px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: flex-end;
+}
+
+.settings-reset-btn {
+  font-size: 0.72rem;
+  color: var(--fg-muted);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 4px);
+  padding: 3px 10px;
+  cursor: pointer;
+}
+
+.settings-reset-btn:hover {
+  color: var(--fg);
+  border-color: var(--border-hover);
 }
 
 /* ---- Help buttons ---- */

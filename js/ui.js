@@ -440,6 +440,56 @@ document.querySelectorAll(".help-btn").forEach(btn => {
   btn.setAttribute("aria-label", label === key ? "Help" : `Help: ${label}`);
 });
 
+// ---------------- FADE SHOW/HIDE UTILITY ----------------
+// Fades el in or out using a CSS opacity transition (defined in layout.css).
+// Cancels any in-progress hide timer so rapid toggling is safe.
+function setVisible(el, show) {
+  if (!el) return;
+  el._hideTimer && clearTimeout(el._hideTimer);
+  delete el._hideTimer;
+  const isHidden = el.style.display === "none";
+  // Skip animation during initial page setup (document not yet fully loaded).
+  if (document.readyState !== "complete") {
+    el.style.display = show ? "" : "none";
+    return;
+  }
+  if (show) {
+    if (!isHidden) return;
+    el.style.opacity = "0";
+    el.style.display = "";
+    requestAnimationFrame(() => requestAnimationFrame(() => { el.style.opacity = ""; }));
+  } else {
+    if (isHidden) return;
+    el.style.opacity = "0";
+    el._hideTimer = setTimeout(() => {
+      el.style.display = "none";
+      el.style.opacity = "";
+      delete el._hideTimer;
+    }, 140);
+  }
+}
+
+// ---------------- CUSTOMIZED BADGE ----------------
+function _checkAdvancedBadge() {
+  const selDiffers = id => {
+    const el = document.getElementById(id); if (!el) return false;
+    const def = [...el.options].findIndex(o => o.defaultSelected);
+    return el.selectedIndex !== (def >= 0 ? def : 0);
+  };
+  const chkDiffers = id => { const el = document.getElementById(id); return el && el.checked !== el.defaultChecked; };
+  const valDiffers = id => { const el = document.getElementById(id); return el && el.value !== el.defaultValue; };
+
+  const custom =
+    selDiffers("ciLevel") || selDiffers("mccMethod") || selDiffers("cumulativeOrder") ||
+    selDiffers("tfEstimator") || chkDiffers("useTrimFill") || chkDiffers("useTFAdjusted") ||
+    selDiffers("selMode") || selDiffers("selPreset") || selDiffers("selSides") || selDiffers("selWeightFn") ||
+    valDiffers("bayesMu0") || valDiffers("bayesSigmaMu") || valDiffers("bayesSigmaTau") ||
+    valDiffers("selCuts") || valDiffers("rveRho");
+
+  const badge = document.getElementById("advancedBadge");
+  if (badge) badge.style.display = custom ? "" : "none";
+}
+
 // ---------------- MODERATOR STATE ----------------
 // moderators[] is owned by ui-table.js (imported above) — a live array mutated
 // in place by doAddModerator / removeModerator / clearModerators.
@@ -472,7 +522,7 @@ function refreshInteractionUI() {
   const names = moderators.map(m => m.name);
   const mgr = document.getElementById("interactionManager");
   if (!mgr) return;
-  mgr.style.display = names.length >= 2 ? "" : "none";
+  setVisible(mgr, names.length >= 2);
 
   const termA = document.getElementById("interactTermA");
   const termB = document.getElementById("interactTermB");
@@ -2198,8 +2248,7 @@ document.getElementById("draftStartFresh").addEventListener("click", () => {
   if (rveRhoEl) { rveRhoEl.value = rveRhoEl.defaultValue; rveRhoEl.dispatchEvent(new Event("input")); }
 
   // Sync dependent UI state.
-  adjustedCheckbox.disabled = !trimFillCheckbox.checked;
-  tfEstimatorSelect.disabled = !trimFillCheckbox.checked;
+  syncTrimFillState();
   syncMHOptions(document.getElementById("effectType").value);
   syncPLAvailability();
   syncSelControls();
@@ -2671,12 +2720,26 @@ document.getElementById("bayesSigmaTau").addEventListener("input", markStale);
 const trimFillCheckbox = document.getElementById("useTrimFill");
 const adjustedCheckbox = document.getElementById("useTFAdjusted");
 const tfEstimatorSelect = document.getElementById("tfEstimator");
-adjustedCheckbox.disabled = !trimFillCheckbox.checked;
-tfEstimatorSelect.disabled = !trimFillCheckbox.checked;
+
+function syncTrimFillState() {
+  const enabled = trimFillCheckbox.checked;
+  tfEstimatorSelect.disabled = !enabled;
+  adjustedCheckbox.disabled  = !enabled;
+  const tfLbl  = tfEstimatorSelect.closest("label");
+  const adjLbl = adjustedCheckbox.closest("label");
+  if (enabled) {
+    tfLbl?.removeAttribute("aria-disabled");
+    adjLbl?.removeAttribute("aria-disabled");
+  } else {
+    tfLbl?.setAttribute("aria-disabled", "true");
+    adjLbl?.setAttribute("aria-disabled", "true");
+  }
+}
+
+syncTrimFillState();
 trimFillCheckbox.addEventListener("change", () => {
-  adjustedCheckbox.disabled = !trimFillCheckbox.checked;
-  tfEstimatorSelect.disabled = !trimFillCheckbox.checked;
   if (!trimFillCheckbox.checked) adjustedCheckbox.checked = false;
+  syncTrimFillState();
   markStale();
 });
 adjustedCheckbox.addEventListener("change", markStale);
@@ -2694,11 +2757,11 @@ function syncSelControls() {
   const isSensitivity = mode === "sensitivity";
   const showStepCtrls = !isSensitivity && weightFn === "stepfun";
 
-  weightFnRow.style.display = isSensitivity ? "none" : "";
-  presetRow.style.display   = isSensitivity ? "" : "none";
+  setVisible(weightFnRow, !isSensitivity);
+  setVisible(presetRow,   isSensitivity);
   // Show sides/cuts for: sensitivity custom preset, or MLE step function
   const showCustom = (isSensitivity && preset === "custom") || showStepCtrls;
-  customRow.style.display   = showCustom ? "" : "none";
+  setVisible(customRow, showCustom);
 
   // When a named preset is selected, mirror its sides into the (hidden) selSides field
   if (isSensitivity && preset !== "custom") {
@@ -2713,6 +2776,39 @@ document.getElementById("selWeightFn").addEventListener("change", () => { syncSe
 document.getElementById("selSides").addEventListener("change", markStale);
 document.getElementById("selCuts").addEventListener("change", markStale);
 syncSelControls();
+
+// ---------------- ADVANCED SETTINGS: BADGE + RESET ----------------
+
+// Delegated listeners so the badge updates whenever any advanced control changes.
+document.getElementById("advancedSettings").addEventListener("change", _checkAdvancedBadge);
+document.getElementById("advancedSettings").addEventListener("input",  _checkAdvancedBadge);
+_checkAdvancedBadge();
+
+function resetAdvancedSettings() {
+  const resetSel = id => {
+    const el = document.getElementById(id); if (!el) return;
+    const i = [...el.options].findIndex(o => o.defaultSelected);
+    el.selectedIndex = i >= 0 ? i : 0;
+  };
+  const resetNum = id => { const el = document.getElementById(id); if (el) el.value = el.defaultValue; };
+  const resetChk = id => { const el = document.getElementById(id); if (el) el.checked = el.defaultChecked; };
+
+  resetSel("ciLevel"); resetSel("mccMethod"); resetSel("cumulativeOrder");
+  resetSel("tfEstimator");
+  resetChk("useTrimFill"); resetChk("useTFAdjusted");
+  resetSel("selMode"); resetSel("selPreset"); resetSel("selSides"); resetSel("selWeightFn");
+  resetNum("bayesMu0"); resetNum("bayesSigmaMu"); resetNum("bayesSigmaTau");
+  resetNum("selCuts");
+  const rveRhoEl = document.getElementById("rveRho");
+  if (rveRhoEl) { rveRhoEl.value = rveRhoEl.defaultValue; rveRhoEl.dispatchEvent(new Event("input")); }
+
+  syncTrimFillState();
+  syncSelControls();
+  markStale();
+  _checkAdvancedBadge();
+}
+
+document.getElementById("resetAdvanced").addEventListener("click", resetAdvancedSettings);
 
 // ---------------- MOD TYPE → TRANSFORM WRAP VISIBILITY ----------------
 {
@@ -2933,6 +3029,8 @@ function applySession(session) {
     _applyModeToggle();
   }
 
+  syncTrimFillState();
+  _checkAdvancedBadge();
   return { profile, savedStudies };
 }
 
@@ -4112,7 +4210,7 @@ function _renderAllResults(ctx) {
     const elRveSummary  = document.getElementById("rveSummary");
     const elRveSettings = document.getElementById("rveSettings");
     const showRve = hasClusters && !isMHorPeto;
-    if (elRveSettings) elRveSettings.style.display = showRve ? "" : "none";
+    if (elRveSettings) setVisible(elRveSettings, showRve);
     if (elRve) {
       if (showRve && rveResult) {
         elRve.style.display = "";
