@@ -312,7 +312,9 @@ function initSvg(selector, ariaLabel, T) {
   const svg = clearAndSelectSVG(selector);
   svg.attr("aria-label", ariaLabel);
   svg.append("title").text(ariaLabel);
-  if (T && T.bg !== "transparent") svg.style("background", T.bg);
+  // Always write (or clear) background so switching back to default removes
+  // any inline bg left by a previous journal theme.  null = remove inline style.
+  svg.style("background", (T && T.bg !== "transparent") ? T.bg : null);
   return svg;
 }
 
