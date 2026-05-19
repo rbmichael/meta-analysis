@@ -781,6 +781,7 @@ function _applyModeToggle() {
   document.getElementById("modeStandard").classList.toggle("active", !isMV);
   document.getElementById("modeMultivariate").classList.toggle("active", isMV);
   document.getElementById("standardSettings").style.display        = isMV ? "none" : "";
+  document.getElementById("variablesPanel").style.display          = isMV ? "none" : "";
   document.getElementById("advancedSettings").style.display        = isMV ? "none" : "";
   document.getElementById("mvSettings").style.display              = isMV ? ""     : "none";
   document.getElementById("inputTableWrap").style.display          = isMV ? "none" : "";

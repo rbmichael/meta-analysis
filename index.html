@@ -134,8 +134,8 @@
           </label>
         </div>
         <!-- MV moderator manager -->
-        <div class="settings-subsection" style="border-top:none;padding-top:0">
-          <div class="settings-subsection-controls">
+        <div class="settings-section" style="border-top:none;padding-top:0">
+          <div class="settings-section-controls">
             <strong>Moderators:</strong>
             <input type="text" id="mvModName" placeholder="Column name" style="width:120px">
             <button id="mvAddMod">+ Add</button>
@@ -184,155 +184,10 @@
         </label>
       </div>
 
-      <!-- Collapsible advanced settings -->
-      <details id="advancedSettings" class="advanced-settings">
-        <summary>Advanced settings</summary>
+      <!-- Variables panel: moderators, interactions, scale mods, RoB -->
+      <details id="variablesPanel" class="advanced-settings">
+        <summary>Variables</summary>
         <div class="advanced-settings-body">
-
-          <!-- Three-group settings bar -->
-          <div class="settings-groups">
-
-            <!-- Group: Model -->
-            <div class="settings-group">
-              <span class="settings-group-label">Model</span>
-              <div class="settings-group-controls">
-                <label>
-                  <span>CI width<button class="help-btn" data-help="ci.width" title="Help">?</button></span>
-                  <select id="ciLevel">
-                    <option value="90">90%</option>
-                    <option value="95" selected>95%</option>
-                    <option value="99">99%</option>
-                  </select>
-                </label>
-                <label>
-                  <span>Correction (regression)<button class="help-btn" data-help="reg.mcc" title="Help">?</button></span>
-                  <select id="mccMethod">
-                    <option value="none" selected>None</option>
-                    <option value="bonferroni">Bonferroni</option>
-                    <option value="holm">Holm</option>
-                  </select>
-                </label>
-              </div>
-            </div>
-
-            <div class="settings-group-sep" role="separator"></div>
-
-            <!-- Group: Analysis -->
-            <div class="settings-group">
-              <span class="settings-group-label">Analysis</span>
-              <div class="settings-group-controls">
-                <label>
-                  <span>Cumulative order<button class="help-btn" data-help-select="cumulativeOrder" data-help-prefix="cumorder." title="Help">?</button></span>
-                  <select id="cumulativeOrder">
-                    <option value="input">Input order</option>
-                    <option value="precision_desc">Most precise first</option>
-                    <option value="precision_asc">Least precise first</option>
-                    <option value="effect_asc">Effect ascending</option>
-                    <option value="effect_desc">Effect descending</option>
-                  </select>
-                </label>
-              </div>
-            </div>
-
-            <div class="settings-group-sep" role="separator"></div>
-
-            <!-- Group: Trim & Fill -->
-            <div class="settings-group">
-              <span class="settings-group-label">Trim &amp; Fill<button class="help-btn" data-help="bias.trimfill" title="Help">?</button></span>
-              <div class="settings-group-controls">
-                <label class="inline">
-                  <input type="checkbox" id="useTrimFill">
-                  Enable
-                </label>
-                <label class="inline">
-                  Estimator:
-                  <select id="tfEstimator" title="Trim-and-fill k₀ estimator">
-                    <option value="L0">L0</option>
-                    <option value="R0">R0</option>
-                    <option value="Q0">Q0</option>
-                  </select>
-                </label>
-                <label class="inline">
-                  <input type="checkbox" id="useTFAdjusted">
-                  Show adjusted RE
-                </label>
-              </div>
-            </div>
-
-
-          </div><!-- /.settings-groups -->
-
-          <!-- Bayesian priors subsection -->
-          <div class="settings-subsection">
-            <span class="settings-group-label">Bayesian priors<button class="help-btn" data-help="bayes.model" title="Help">?</button></span>
-            <div class="settings-subsection-controls">
-              <label class="inline">μ prior mean (μ₀):
-                <input type="number" id="bayesMu0" value="0" step="0.1">
-              </label>
-              <label class="inline">μ prior SD (σ_μ):
-                <input type="number" id="bayesSigmaMu" value="1" min="0.01" step="0.1">
-                <span id="bayesSigmaMuWarn" class="prior-warn" style="display:none" role="alert"></span>
-              </label>
-              <label class="inline">τ prior scale (σ_τ):
-                <input type="number" id="bayesSigmaTau" value="0.5" min="0.01" step="0.05">
-                <span id="bayesSigmaTauWarn" class="prior-warn" style="display:none" role="alert"></span>
-              </label>
-            </div>
-          </div>
-
-          <!-- RVE (Robust Variance Estimation) subsection -->
-          <div class="settings-subsection" id="rveSettings" style="display:none">
-            <span class="settings-group-label">RVE (robust variance estimation)</span>
-            <div class="settings-subsection-controls">
-              <label class="inline">Assumed within-cluster correlation ρ:
-                <input type="range" id="rveRho" min="0" max="0.999" step="0.01" value="0.8" style="width:120px;vertical-align:middle">
-                <span id="rveRhoDisplay" aria-live="polite" style="font-variant-numeric:tabular-nums;min-width:2.5em;display:inline-block">0.80</span>
-              </label>
-            </div>
-          </div>
-
-          <!-- Selection model (Vevea-Hedges) subsection -->
-          <div class="settings-subsection">
-            <span class="settings-group-label">Selection model<button class="help-btn" data-help="sel.model" title="Help">?</button></span>
-            <div class="settings-subsection-controls">
-              <label class="inline">Mode:
-                <select id="selMode">
-                  <option value="sensitivity">Sensitivity (fixed ω)</option>
-                  <option value="mle">MLE (estimate weights)</option>
-                </select>
-              </label>
-              <label class="inline" id="selWeightFnRow">Weight function:
-                <select id="selWeightFn">
-                  <option value="stepfun">Step function (Vevea-Hedges)</option>
-                  <option value="halfnorm">Half-normal</option>
-                  <option value="power">Power</option>
-                  <option value="negexp">Negative exponential</option>
-                  <option value="beta">Beta</option>
-                </select>
-              </label>
-              <label class="inline" id="selPresetRow">Weight scheme:
-                <select id="selPreset">
-                  <option value="mild1">Mild (1-sided)</option>
-                  <option value="moderate1">Moderate (1-sided)</option>
-                  <option value="severe1">Severe (1-sided)</option>
-                  <option value="mild2">Mild (2-sided)</option>
-                  <option value="moderate2">Moderate (2-sided)</option>
-                  <option value="custom">Custom…</option>
-                </select>
-              </label>
-              <span id="selCustomRow">
-                <label class="inline">Sides:
-                  <select id="selSides">
-                    <option value="1">1-sided</option>
-                    <option value="2">2-sided</option>
-                  </select>
-                </label>
-                <label class="inline">Cutpoints:
-                  <input type="text" id="selCuts" value="0.025, 0.05, 0.10, 0.25, 0.50, 1.0" style="width:220px">
-                </label>
-              </span>
-            </div>
-          </div>
 
           <!-- Moderator manager -->
           <div id="moderatorManager">
@@ -394,6 +249,139 @@
             <input type="text" id="robDomainInput" placeholder="Domain name" style="width:160px">
             <button id="addRobDomain">+ Add</button><button class="help-btn" data-help="input.rob" title="Help">?</button>
             <div id="robDomainTags"></div>
+          </div>
+
+        </div><!-- /.advanced-settings-body -->
+      </details>
+
+      <!-- Collapsible advanced settings -->
+      <details id="advancedSettings" class="advanced-settings">
+        <summary>Advanced settings</summary>
+        <div class="advanced-settings-body">
+
+          <!-- Analysis & display: CI width, MCC, cumulative order -->
+          <div class="settings-section">
+            <span class="settings-group-label">Analysis &amp; display</span>
+            <div class="settings-section-controls">
+              <label class="inline">CI width:
+                <select id="ciLevel" title="Confidence interval width">
+                  <option value="90">90%</option>
+                  <option value="95" selected>95%</option>
+                  <option value="99">99%</option>
+                </select>
+              </label>
+              <label class="inline">Multiple-test correction:
+                <select id="mccMethod" title="Multiple-test correction for meta-regression coefficients">
+                  <option value="none" selected>None</option>
+                  <option value="bonferroni">Bonferroni</option>
+                  <option value="holm">Holm</option>
+                </select>
+              </label>
+              <label class="inline">Cumulative order:
+                <select id="cumulativeOrder">
+                  <option value="input">Input order</option>
+                  <option value="precision_desc">Most precise first</option>
+                  <option value="precision_asc">Least precise first</option>
+                  <option value="effect_asc">Effect ascending</option>
+                  <option value="effect_desc">Effect descending</option>
+                </select>
+                <button class="help-btn" data-help-select="cumulativeOrder" data-help-prefix="cumorder." title="Help">?</button>
+              </label>
+            </div>
+          </div>
+
+          <!-- Trim & Fill -->
+          <div class="settings-section">
+            <span class="settings-group-label">Trim &amp; Fill<button class="help-btn" data-help="bias.trimfill" title="Help">?</button></span>
+            <div class="settings-section-controls">
+              <label class="inline">
+                <input type="checkbox" id="useTrimFill">
+                Enable
+              </label>
+              <label class="inline">Estimator:
+                <select id="tfEstimator" title="Trim-and-fill k₀ estimator">
+                  <option value="L0">L0</option>
+                  <option value="R0">R0</option>
+                  <option value="Q0">Q0</option>
+                </select>
+              </label>
+              <label class="inline">
+                <input type="checkbox" id="useTFAdjusted">
+                Show adjusted RE
+              </label>
+            </div>
+          </div>
+
+          <!-- Selection model -->
+          <div class="settings-section">
+            <span class="settings-group-label">Selection model<button class="help-btn" data-help="sel.model" title="Help">?</button></span>
+            <div class="settings-section-controls">
+              <label class="inline">Mode:
+                <select id="selMode">
+                  <option value="sensitivity">Sensitivity (fixed ω)</option>
+                  <option value="mle">MLE (estimate weights)</option>
+                </select>
+              </label>
+              <label class="inline" id="selWeightFnRow">Weight function:
+                <select id="selWeightFn">
+                  <option value="stepfun">Step function (Vevea-Hedges)</option>
+                  <option value="halfnorm">Half-normal</option>
+                  <option value="power">Power</option>
+                  <option value="negexp">Negative exponential</option>
+                  <option value="beta">Beta</option>
+                </select>
+              </label>
+              <label class="inline" id="selPresetRow">Weight scheme:
+                <select id="selPreset">
+                  <option value="mild1">Mild (1-sided)</option>
+                  <option value="moderate1">Moderate (1-sided)</option>
+                  <option value="severe1">Severe (1-sided)</option>
+                  <option value="mild2">Mild (2-sided)</option>
+                  <option value="moderate2">Moderate (2-sided)</option>
+                  <option value="custom">Custom…</option>
+                </select>
+              </label>
+              <span id="selCustomRow">
+                <label class="inline">Sides:
+                  <select id="selSides">
+                    <option value="1">1-sided</option>
+                    <option value="2">2-sided</option>
+                  </select>
+                </label>
+                <label class="inline">Cutpoints:
+                  <input type="text" id="selCuts" value="0.025, 0.05, 0.10, 0.25, 0.50, 1.0" style="width:220px">
+                </label>
+              </span>
+            </div>
+          </div>
+
+          <!-- Bayesian priors -->
+          <div class="settings-section">
+            <span class="settings-group-label">Bayesian priors<button class="help-btn" data-help="bayes.model" title="Help">?</button></span>
+            <div class="settings-section-controls">
+              <label class="inline">μ prior mean (μ₀):
+                <input type="number" id="bayesMu0" value="0" step="0.1">
+              </label>
+              <label class="inline">μ prior SD (σ_μ):
+                <input type="number" id="bayesSigmaMu" value="1" min="0.01" step="0.1">
+                <span id="bayesSigmaMuWarn" class="prior-warn" style="display:none" role="alert"></span>
+              </label>
+              <label class="inline">τ prior scale (σ_τ):
+                <input type="number" id="bayesSigmaTau" value="0.5" min="0.01" step="0.05">
+                <span id="bayesSigmaTauWarn" class="prior-warn" style="display:none" role="alert"></span>
+              </label>
+            </div>
+          </div>
+
+          <!-- RVE (shown when clusters present) -->
+          <div class="settings-section" id="rveSettings" style="display:none">
+            <span class="settings-group-label">RVE (robust variance estimation)</span>
+            <div class="settings-section-controls">
+              <label class="inline">Assumed within-cluster correlation ρ:
+                <input type="range" id="rveRho" min="0" max="0.999" step="0.01" value="0.8" style="width:120px;vertical-align:middle">
+                <span id="rveRhoDisplay" aria-live="polite" style="font-variant-numeric:tabular-nums;min-width:2.5em;display:inline-block">0.80</span>
+              </label>
+            </div>
           </div>
 
         </div><!-- /.advanced-settings-body -->

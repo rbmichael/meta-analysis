@@ -225,27 +225,7 @@
   min-width: 160px;
 }
 
-/* ---- Three-group settings bar ---- */
-.settings-groups {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  gap: 0;
-  margin-bottom: 14px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--bg-elevated);
-}
-
-.settings-group {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 10px 16px 12px;
-  flex: 1 1 auto;
-  min-width: 160px;
-}
-
+/* ---- Section header label (shared by settings sections and variable managers) ---- */
 .settings-group-label {
   font-size: 0.6875rem;
   font-weight: 600;
@@ -255,73 +235,24 @@
   user-select: none;
 }
 
-.settings-group-controls {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  align-items: flex-end;
-}
-
-.settings-group-controls label {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  font-size: 0.75rem;
-  font-weight: 500;
-  color: var(--fg-muted);
-}
-
-.settings-group-controls label.inline {
-  flex-direction: row;
-  align-items: center;
-  gap: 7px;
-  color: var(--fg);
-  font-size: 0.875rem;
-  font-weight: 400;
-  cursor: pointer;
-}
-
-.settings-group-controls select,
-.settings-group-controls input[type="text"],
-.settings-group-controls input[type="number"] {
-  width: auto;
-}
-
-/* Inline hint beneath a settings group */
-.settings-hint {
-  margin: 4px 0 0;
-  font-size: 0.75rem;
-  color: var(--fg-muted);
-  font-style: italic;
-}
-
-/* Thin vertical rule between groups */
-.settings-group-sep {
-  width: 1px;
-  align-self: stretch;
-  background: var(--border);
-  flex-shrink: 0;
-}
-
-/* ---- Settings subsections (Bayesian priors, Selection model) ---- */
-.settings-subsection {
+/* ---- Unified settings section ---- */
+.settings-section {
   display: flex;
   flex-direction: column;
   gap: 8px;
   padding: 10px 0 12px;
   border-top: 1px solid var(--border);
   margin-top: 2px;
-  margin-bottom: 2px;
 }
 
-.settings-subsection-controls {
+.settings-section-controls {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 12px;
 }
 
-.settings-subsection-controls label.inline {
+.settings-section-controls label.inline {
   display: flex;
   flex-direction: row;
   align-items: center;
@@ -332,8 +263,22 @@
   cursor: pointer;
 }
 
-.settings-subsection-controls input[type="number"] {
+.settings-section-controls select,
+.settings-section-controls input[type="text"],
+.settings-section-controls input[type="number"] {
+  width: auto;
+}
+
+.settings-section-controls input[type="number"] {
   width: 80px;
+}
+
+/* Inline hint beneath a settings section */
+.settings-hint {
+  margin: 4px 0 0;
+  font-size: 0.75rem;
+  color: var(--fg-muted);
+  font-style: italic;
 }
 
 .prior-warn {
