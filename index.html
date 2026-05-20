@@ -72,7 +72,7 @@
       <div id="csvWarning"></div>
 
       <!-- ---- Import preview panel (hidden until a file is chosen) ---- -->
-      <div id="importPreview" style="display:none">
+      <div id="importPreview" role="region" aria-label="CSV import preview" style="display:none">
 
         <!-- Detected settings row -->
         <div class="preview-meta">
@@ -876,8 +876,8 @@
             <button id="goshRun" class="run-btn">Compute</button><button class="help-btn" data-help="diag.gosh" title="Help">?</button>
           </div>
           <p id="goshEmptyState" class="section-empty-state">GOSH enumerates all k-subsets of studies — this can be slow for large datasets, so results are not computed automatically. Click <strong>Compute</strong> when ready.</p>
-          <div id="goshProgress" hidden>
-            <progress id="goshProgressBar" value="0" max="100" style="width:100%"></progress>
+          <div id="goshProgress" aria-live="polite" hidden>
+            <progress id="goshProgressBar" value="0" max="100" style="width:100%" aria-label="GOSH computation progress"></progress>
             <span id="goshProgressLabel"></span>
             <button id="goshCancel" style="margin-left:8px">Cancel</button>
           </div>
@@ -932,8 +932,8 @@
               <button id="permRunBtn" class="run-btn" data-help="perm.run">Run permutation test</button>
               <button id="permCancelBtn" class="run-btn" style="display:none">Cancel</button>
             </div>
-            <div id="permProgress" style="display:none">
-              <progress id="permProgressBar" value="0" max="100" style="width:180px;vertical-align:middle"></progress>
+            <div id="permProgress" aria-live="polite" style="display:none">
+              <progress id="permProgressBar" value="0" max="100" style="width:180px;vertical-align:middle" aria-label="Permutation test progress"></progress>
               <span id="permProgressText" style="margin-left:6px;font-size:0.9em"></span>
             </div>
             <div id="permResults"></div>

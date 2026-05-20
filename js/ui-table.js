@@ -739,6 +739,7 @@ export async function previewCSV(file) {
 
   refreshPreviewUI(detection.type);
   document.getElementById("importPreview").style.display = "block";
+  document.getElementById("previewImport").focus();
 }
 
 /**
@@ -796,4 +797,5 @@ export function cancelImport() {
   document.getElementById("importPreview").style.display  = "none";
   document.getElementById("csvWarning").style.display     = "none";
   document.getElementById("csvFile").value                = "";
+  document.getElementById("import")?.focus();
 }

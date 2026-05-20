@@ -227,6 +227,7 @@ _helpClose.addEventListener("click", () => {
 
 // Focus trap: Tab/Shift+Tab cycles within the popover while it is open.
 _helpPopover.addEventListener("keydown", e => {
+  if (e.key === "Escape") { hideHelp(); return; }
   if (e.key !== "Tab") return;
   // Collect currently visible focusable elements in DOM order.
   const focusable = [_helpClose, _helpGuideLink].filter(
@@ -742,8 +743,9 @@ const _themeToggle = document.getElementById("themeToggle");
 function _applyTheme(theme) {
   document.documentElement.dataset.theme = theme;
   const isLight = theme === "light";
-  _themeToggle.textContent = isLight ? "☾" : "☀";
-  _themeToggle.title       = isLight ? "Switch to dark mode" : "Switch to light mode";
+  _themeToggle.textContent  = isLight ? "☾" : "☀";
+  _themeToggle.title        = isLight ? "Switch to dark mode" : "Switch to light mode";
+  _themeToggle.setAttribute("aria-label", isLight ? "Switch to dark mode" : "Switch to light mode");
 }
 
 // On load: honour localStorage, fall back to OS preference.
@@ -799,6 +801,7 @@ function showView(name) {
 }
 
 _toggleResults.disabled = true;
+_toggleResults.setAttribute("aria-disabled", "true");
 
 _toggleInput.addEventListener("click",   () => showView("input"));
 _toggleResults.addEventListener("click", () => { if (!_toggleResults.disabled) showView("results"); });
@@ -1228,6 +1231,8 @@ function _runMVAnalysis() {
   if (!appState.hasRunOnce) {
     appState.hasRunOnce = true;
     _toggleResults.disabled = false;
+    _toggleResults.removeAttribute("aria-disabled");
+    _toggleResults.removeAttribute("title");
   }
   return true;
 }
@@ -1984,6 +1989,13 @@ document.getElementById("previewImport").addEventListener("click", () => {
 document.getElementById("previewCancel").addEventListener("click", () => {
   document.getElementById("previewImport").textContent = "Import";
   cancelImport();
+});
+
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape" && document.getElementById("importPreview").style.display !== "none") {
+    document.getElementById("previewImport").textContent = "Import";
+    cancelImport();
+  }
 });
 document.getElementById("previewEffectType").addEventListener("change", e => refreshPreviewUI(e.target.value));
 document.getElementById("export").addEventListener("click", e => {
@@ -4841,6 +4853,8 @@ async function runAnalysis() {
     if (!appState.hasRunOnce) {
       appState.hasRunOnce = true;
       _toggleResults.disabled = false;
+      _toggleResults.removeAttribute("aria-disabled");
+      _toggleResults.removeAttribute("title");
     }
 
     // ── Shared settings ───────────────────────────────────────────────────
