@@ -490,6 +490,7 @@ function _checkAdvancedBadge() {
 
   const badge = document.getElementById("advancedBadge");
   if (badge) badge.style.display = custom ? "" : "none";
+  document.getElementById("advancedSettings")?.classList.toggle("settings-modified", custom);
 }
 
 // ---------------- MODERATOR STATE ----------------
@@ -1939,7 +1940,7 @@ document.getElementById("mvAddMod").addEventListener("click", _mvAddMod);
 document.getElementById("mvModName").addEventListener("keydown", e => { if (e.key === "Enter") _mvAddMod(); });
 document.getElementById("mvForestPageSize").addEventListener("change", e => {
   const raw = e.target.value;
-  _mvForestState.pageSize     = raw === "Infinity" ? Infinity : +raw;
+  _mvForestState.pageSize     = raw === "all" ? Infinity : +raw;
   _mvForestState.pages        = _mvForestState.pages.map(() => 0);
   _mvForestState.combinedPage = 0;
   _redrawAllMVForestPlots();
@@ -2028,7 +2029,7 @@ document.getElementById("caterpillarPageSize").addEventListener("change", () => 
   if (!caterpillarPlot.args) return;
   caterpillarPlot.page = 0;
   const raw = document.getElementById("caterpillarPageSize").value;
-  caterpillarPlot.args.pageSize = raw === "Infinity" ? Infinity : +raw;
+  caterpillarPlot.args.pageSize = raw === "all" ? Infinity : +raw;
   const { totalPages } = drawCaterpillarPlot(
     caterpillarPlot.args.studies, caterpillarPlot.args.m, caterpillarPlot.args.profile,
     { pageSize: caterpillarPlot.args.pageSize, page: caterpillarPlot.page }
@@ -2043,7 +2044,7 @@ document.getElementById("blupPageSize").addEventListener("change", () => {
   if (!blupPlot.result) return;
   blupPlot.page = 0;
   const raw = document.getElementById("blupPageSize").value;
-  blupPlot.pageSize = raw === "Infinity" ? Infinity : +raw;
+  blupPlot.pageSize = raw === "all" ? Infinity : +raw;
   const { totalPages } = drawBlupPlot(blupPlot.result, blupPlot.profile, { pageSize: blupPlot.pageSize, page: 0, theme: appState.plotTheme });
   renderBlupNav(totalPages);
 });
@@ -2052,7 +2053,7 @@ document.getElementById("cumulativeForestPageSize").addEventListener("change", (
   if (!cumForestPlot.args) return;
   cumForestPlot.page = 0;
   const raw = document.getElementById("cumulativeForestPageSize").value;
-  cumForestPlot.args.pageSize = raw === "Infinity" ? Infinity : +raw;
+  cumForestPlot.args.pageSize = raw === "all" ? Infinity : +raw;
   const { totalPages } = drawCumulativeForest(
     cumForestPlot.args.results, cumForestPlot.args.profile,
     { pageSize: cumForestPlot.args.pageSize, page: cumForestPlot.page }
@@ -2067,7 +2068,7 @@ document.getElementById("forestPageSize").addEventListener("change", () => {
   if (!forestPlot.args) return;
   forestPlot.page = 0;
   const rawPageSize = document.getElementById("forestPageSize").value;
-  const pageSize    = rawPageSize === "Infinity" ? Infinity : +rawPageSize;
+  const pageSize    = rawPageSize === "all" ? Infinity : +rawPageSize;
   forestPlot.args.options = { ...forestPlot.args.options, pageSize, theme: appState.plotTheme };
   if (appState.reportArgs) {
     appState.reportArgs = { ...appState.reportArgs, forestOptions: { ...appState.reportArgs.forestOptions, pageSize, currentPage: 0 } };
@@ -4668,7 +4669,7 @@ function _renderAllResults(ctx) {
 
   // ── Forest plot ───────────────────────────────────────────────────────────
   const rawPageSize = elForestPageSize?.value ?? "30";
-  const pageSize    = rawPageSize === "Infinity" ? Infinity : +rawPageSize;
+  const pageSize    = rawPageSize === "all" ? Infinity : +rawPageSize;
   const forestOpts  = { ciMethod, profile, pageSize, pooledDisplay: forestPlot.poolDisplay, theme: appState.plotTheme, alpha, ciLabel: getCiLabel() };
   const mForest     = isMHorPeto
     ? { ...m, RE: m.FE, seRE: m.seFE, tau2: 0, predLow: NaN, predHigh: NaN }
@@ -4728,7 +4729,7 @@ function _renderAllResults(ctx) {
   blupPlot.profile  = profile;
   blupPlot.page     = 0;
   const rawBlupPageSize = elBlupPageSize?.value ?? "30";
-  blupPlot.pageSize = rawBlupPageSize === "Infinity" ? Infinity : +rawBlupPageSize;
+  blupPlot.pageSize = rawBlupPageSize === "all" ? Infinity : +rawBlupPageSize;
   elBlupBlock.style.display      = blupResult ? "" : "none";
   elBaujatPlotBlock.style.display = baujatResult ? "" : "none";
   elQQPlotBlock.style.display     = showQQ ? "" : "none";
@@ -4758,7 +4759,7 @@ function _renderAllResults(ctx) {
 
   // ── Cumulative meta-analysis ──────────────────────────────────────────────
   const rawCumPageSize    = elCumForestPageSize?.value ?? "30";
-  const cumForestPageSize = rawCumPageSize === "Infinity" ? Infinity : +rawCumPageSize;
+  const cumForestPageSize = rawCumPageSize === "all" ? Infinity : +rawCumPageSize;
   cumForestPlot.args  = { results: cumResults, profile, pageSize: cumForestPageSize, alpha, ciLabel: getCiLabel() };
   appState.reportArgs.cumForestOptions = { results: cumResults, profile, pageSize: cumForestPageSize, currentPage: 0, alpha, ciLabel: getCiLabel() };
 
@@ -4782,7 +4783,7 @@ function _renderAllResults(ctx) {
   elOrchardPlotBlock.style.display = "";
   caterpillarPlot.page = 0;
   const rawCatPageSize = elCatPageSize?.value ?? "30";
-  const catPageSize    = rawCatPageSize === "Infinity" ? Infinity : +rawCatPageSize;
+  const catPageSize    = rawCatPageSize === "all" ? Infinity : +rawCatPageSize;
   caterpillarPlot.args = { studies: all, m, profile, pageSize: catPageSize };
   elCaterpillarBlock.style.display = "";
   appState.reportArgs.caterpillarOptions = { studies: all, m, profile, pageSize: catPageSize, currentPage: 0 };

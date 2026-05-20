@@ -619,3 +619,17 @@ tr.row-pending-delete input {
   margin-top: 6px;
   font-size: 0.85rem;
 }
+
+/* ---- RVE ρ slider value display ---- */
+.rve-rho-display {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  min-width: 2.5em;
+  display: inline-block;
+  background: var(--accent-subtle);
+  border: 1px solid var(--border-accent);
+  border-radius: var(--radius-sm, 4px);
+  padding: 1px 5px;
+  text-align: center;
+  color: var(--accent);
+}

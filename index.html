@@ -93,7 +93,7 @@
         <div id="previewTable" class="preview-table-wrap"></div>
 
         <!-- MV hint (shown when study_id/outcome_id/yi/vi detected) -->
-        <div id="previewMvHint" style="display:none;font-size:0.8125rem;color:var(--color-info);background:var(--accent-subtle);border:1px solid var(--border-accent);border-radius:var(--radius-md);padding:6px 12px;margin-bottom:8px">
+        <div id="previewMvHint" style="display:none">
           ℹ Multivariate data detected (study_id / outcome_id / yi / vi). Switch to <strong>Multivariate</strong> mode before importing to populate the multivariate input table.
         </div>
 
@@ -105,7 +105,7 @@
       </div>
 
       <!-- Analysis mode tabs -->
-      <div id="analysisModeTabs" style="display:flex;gap:2px;background:var(--bg-pill);border:1px solid var(--border);border-radius:var(--radius-md);padding:3px;width:fit-content;margin-bottom:12px">
+      <div id="analysisModeTabs">
         <button id="modeStandard"      class="toggle-btn active">Standard</button>
         <button id="modeMultivariate"  class="toggle-btn">Multivariate</button>
       </div>
@@ -128,18 +128,18 @@
               <option value="ML">ML</option>
             </select>
           </label>
-          <label class="inline" style="align-self:flex-end;margin-bottom:6px">
+          <label class="inline mv-rho-label">
             Within-study correlation ρ<button class="help-btn" data-help="mv.rho" title="Help">?</button>:
             <input type="number" id="mvRho" value="0.5" min="-0.999" max="0.999" step="0.05" style="width:70px">
           </label>
         </div>
         <!-- MV moderator manager -->
-        <div class="settings-section" style="border-top:none;padding-top:0">
+        <div class="settings-section settings-section--no-top">
           <div class="settings-section-controls">
             <strong>Moderators:</strong>
             <input type="text" id="mvModName" placeholder="Column name" style="width:120px">
             <button id="mvAddMod">+ Add</button>
-            <p class="settings-hint" style="margin:0">Moderators are added as columns to the table.</p>
+            <p class="settings-hint settings-hint--flush">Moderators are added as columns to the table.</p>
           </div>
           <div id="mvModTags"></div>
         </div>
@@ -400,7 +400,7 @@
             <div class="settings-section-controls">
               <label class="inline">Assumed within-cluster correlation ρ:
                 <input type="range" id="rveRho" min="0" max="0.999" step="0.01" value="0.8" list="rveRhoTicks">
-                <span id="rveRhoDisplay" aria-live="polite" style="font-variant-numeric:tabular-nums;min-width:2.5em;display:inline-block">0.80</span>
+                <span id="rveRhoDisplay" class="rve-rho-display" aria-live="polite">0.80</span>
               </label>
             </div>
             <datalist id="rveRhoTicks">
@@ -539,7 +539,7 @@
                   <option value="20">20</option>
                   <option value="30" selected>30</option>
                   <option value="50">50</option>
-                  <option value="Infinity">All</option>
+                  <option value="all">All</option>
                 </select>
               </label>
             </div>
@@ -551,25 +551,25 @@
         <!-- ── MV forest plots (shown instead of #forestSection in MV mode) ── -->
         <div id="mvForestSection" style="display:none">
           <div class="plot-block">
-            <div style="display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:6px">
-              <p class="plot-label" style="margin:0">Forest plots<button class="help-btn" data-help="mv.forest" title="Help">?</button></p>
-              <label class="inline" style="font-size:0.8125rem;font-weight:normal">
+            <div class="mv-forest-toolbar">
+              <p class="plot-label settings-hint--flush">Forest plots<button class="help-btn" data-help="mv.forest" title="Help">?</button></p>
+              <label class="inline mv-forest-label">
                 Studies per page
                 <select id="mvForestPageSize">
                   <option value="20" selected>20</option>
                   <option value="30">30</option>
                   <option value="50">50</option>
-                  <option value="Infinity">All</option>
+                  <option value="all">All</option>
                 </select>
               </label>
-              <label class="inline" style="font-size:0.8125rem;font-weight:normal">
+              <label class="inline mv-forest-label">
                 View
                 <select id="mvForestView">
                   <option value="separate" selected>Separate panels</option>
                   <option value="combined">Combined</option>
                 </select>
               </label>
-              <label class="inline" style="font-size:0.8125rem;font-weight:normal;gap:4px">
+              <label class="inline mv-forest-label">
                 <input type="checkbox" id="mvShowPI"> Prediction interval
               </label>
             </div>
@@ -722,7 +722,7 @@
                   <option value="20">20</option>
                   <option value="30" selected>30</option>
                   <option value="50">50</option>
-                  <option value="Infinity">All</option>
+                  <option value="all">All</option>
                 </select>
               </label>
             </div>
@@ -782,7 +782,7 @@
                   <option value="20">20</option>
                   <option value="30" selected>30</option>
                   <option value="50">50</option>
-                  <option value="Infinity">All</option>
+                  <option value="all">All</option>
                 </select>
               </label>
             </div>
@@ -830,7 +830,7 @@
                   <option value="20">20</option>
                   <option value="30" selected>30</option>
                   <option value="50">50</option>
-                  <option value="Infinity">All</option>
+                  <option value="all">All</option>
                 </select>
               </label>
             </div>
