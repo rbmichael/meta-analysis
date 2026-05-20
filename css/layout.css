@@ -311,6 +311,12 @@
   font-style: italic;
 }
 
+/* Hint that lives as a direct flex child of .settings-row — forces its own line */
+.settings-hint--row {
+  width: 100%;
+  margin-top: -6px;
+}
+
 .prior-warn {
   margin-left: 4px;
   font-size: 0.75rem;
@@ -581,12 +587,13 @@
 #toggleResults.stale::after {
   content: "";
   display: inline-block;
-  width: 5px;
-  height: 5px;
+  width: 7px;
+  height: 7px;
   background: var(--color-warning);
   border-radius: 50%;
   margin-left: 5px;
   vertical-align: middle;
+  box-shadow: 0 0 0 2px var(--badge-warning-bg);
 }
 
 /* ---- Single-column layout, fills remaining viewport below the header ---- */

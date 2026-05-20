@@ -114,13 +114,24 @@
   margin-top: 8px;
   font-size: 0.8rem;
   line-height: 1.8;
-  color: var(--fg-muted);
 }
 
-/* ❌ error lines */
-#validationWarnings br + *,
-#validationWarnings {
-  /* messages separated by <br> — color whole block, emoji handles distinction */
+.validation-block {
+  border-radius: var(--radius-sm);
+  padding: 4px 10px;
+  margin-top: 4px;
+}
+
+.validation-block--error {
+  background: var(--badge-error-bg-faint);
+  border-left: 3px solid var(--color-error);
+  color: var(--color-error);
+}
+
+.validation-block--warning {
+  background: var(--badge-warning-bg-faint);
+  border-left: 3px solid var(--color-warning);
+  color: var(--color-warning);
 }
 
 /* ---- CSV import warning ---- */

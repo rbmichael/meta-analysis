@@ -16,6 +16,26 @@ import { escapeHTML } from "./utils-html.js";
 import { parseCSV, detectEffectType } from "./csv.js";
 import { readTextFile } from "./io.js";
 
+// Descriptive titles for each input column name, used as <th title="..."> tooltips.
+const INPUT_TITLES = {
+  m1: "Mean — group 1",      sd1: "SD — group 1",      n1: "n — group 1",
+  m2: "Mean — group 2",      sd2: "SD — group 2",      n2: "n — group 2",
+  m_pre: "Mean — pre",       sd_pre: "SD — pre",
+  m_post: "Mean — post",     sd_post: "SD — post",
+  n:  "Sample size",         r:  "Correlation",
+  a:  "Events — group 1",    b:  "Non-events — group 1",
+  c:  "Events — group 2",    d:  "Non-events — group 2",
+  x:  "Events / successes",
+  yi: "Effect size",         vi: "Variance",
+  hr: "Hazard ratio",        ci_lo: "CI lower bound",  ci_hi: "CI upper bound",
+  x1: "Events — group 1",    t1: "Person-time — group 1",
+  x2: "Events — group 2",    t2: "Person-time — group 2",
+  t:  "Person-time",         m:  "Mean",               sd: "SD",
+  ref: "Reference value",    r2: "R²",                 p:  "Number of predictors",
+  counts1: "Group 1 counts", counts2: "Group 2 counts",
+  alpha: "Cronbach α",       k:  "Number of items",
+};
+
 // ── Injected callbacks (set by initTable) ────────────────────────────────────
 let _cb = {
   markStale:            () => {},
@@ -208,6 +228,7 @@ export function updateTableHeaders() {
   profile.inputs.forEach(col => {
     const th = document.createElement("th");
     th.textContent = col;
+    if (INPUT_TITLES[col]) th.title = INPUT_TITLES[col];
     headerRow.appendChild(th);
   });
 
@@ -467,14 +488,15 @@ export function updateValidationWarnings(studies, excluded, softWarnings) {
   const warningDiv = document.getElementById("validationWarnings");
   const rows       = [...table.rows].slice(1);
 
-  const messages    = [];
+  const errLines  = [];
+  const warnLines = [];
   const subgroupMap = {};
 
   // Input errors
   rows.forEach((row, idx) => {
     const label  = escapeHTML(row.querySelector("input")?.value || `Row ${idx + 1}`);
     const errors = JSON.parse(row.dataset.validationErrors || "{}");
-    Object.entries(errors).forEach(([, msg]) => messages.push(`❌ ${label}: ${escapeHTML(msg)}`));
+    Object.entries(errors).forEach(([, msg]) => errLines.push(`${label}: ${escapeHTML(msg)}`));
 
     const groupName = row.querySelector(".group")?.value.trim();
     if (groupName) {
@@ -486,29 +508,32 @@ export function updateValidationWarnings(studies, excluded, softWarnings) {
   // Subgroup warnings
   Object.entries(subgroupMap).forEach(([group, studiesInGroup]) => {
     if (studiesInGroup.length < 2)
-      messages.push(`⚠️ Subgroup "${escapeHTML(group)}" has &lt;2 studies (${studiesInGroup.join(", ")})`);
+      warnLines.push(`Subgroup "${escapeHTML(group)}" has &lt;2 studies (${studiesInGroup.join(", ")})`);
   });
 
   // Excluded studies
-  excluded.forEach(e => messages.push(`⚠️ Excluded: ${escapeHTML(e.label)} (${escapeHTML(e.reason)})`));
+  excluded.forEach(e => warnLines.push(`Excluded: ${escapeHTML(e.label)} (${escapeHTML(e.reason)})`));
 
-  // Soft warnings
-  softWarnings.forEach(w => messages.push(escapeHTML(w)));
+  // Soft warnings (already carry descriptive text from profiles.js)
+  softWarnings.forEach(w => warnLines.push(escapeHTML(w)));
 
-  // Analysis-level warnings
+  // Analysis-level
   const k = studies.length;
   if (k === 0) {
-    messages.push("❌ No valid studies available for analysis");
+    errLines.push("No valid studies available for analysis");
   } else {
-    if (k < 2) messages.push("⚠️ Fewer than 2 studies: meta-analysis not meaningful");
-    if (k < 3) messages.push("⚠️ Egger / Begg / FAT-PET tests require ≥ 3 studies");
+    if (k < 2) warnLines.push("Fewer than 2 studies — meta-analysis not meaningful");
+    if (k < 3) warnLines.push("Egger / Begg / FAT-PET tests require ≥ 3 studies");
     if (studies.some(s => s.vi < 1e-8))
-      messages.push("⚠️ One or more studies have extremely small variance (may inflate weights)");
+      warnLines.push("One or more studies have extremely small variance (may inflate weights)");
   }
 
-  warningDiv.innerHTML = messages.length > 0
-    ? messages.map(m => `• ${m}`).join("<br>")
-    : "";
+  let html = "";
+  if (errLines.length)
+    html += `<div class="validation-block validation-block--error">${errLines.map(m => `<div>❌ ${m}</div>`).join("")}</div>`;
+  if (warnLines.length)
+    html += `<div class="validation-block validation-block--warning">${warnLines.map(m => `<div>⚠ ${m}</div>`).join("")}</div>`;
+  warningDiv.innerHTML = html;
 }
 
 // =============================================================================

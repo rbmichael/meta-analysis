@@ -182,6 +182,7 @@
             <option value="PL">Profile Likelihood</option>
           </select>
         </label>
+        <span id="effectTypeHint" class="settings-hint settings-hint--row" aria-live="polite"></span>
       </div>
 
       <!-- Variables panel: moderators, interactions, scale mods, RoB -->
@@ -426,7 +427,7 @@
         <span class="io-sep" role="separator" aria-hidden="true"></span>
         <button id="run" title="Run analysis (Ctrl+Enter)">Run <kbd class="run-kbd">(Ctrl+Enter)</kbd></button>
         <button class="help-btn" data-help="keyboard.shortcuts" title="Keyboard shortcuts">⌨</button>
-        <span id="inputStaleBadge" hidden>Results out of date</span>
+        <span id="inputStaleBadge" hidden>Results out of date — click Run</span>
       </div>
       <div id="runProgress" role="progressbar" aria-label="Running analysis" aria-live="polite" hidden><div id="runProgressBar"></div></div>
 
@@ -442,7 +443,7 @@
         </tr>
       </table>
 
-      <div id="validationWarnings"></div>
+      <div id="validationWarnings" aria-live="polite"></div>
       </div><!-- /#inputTableWrap -->
 
       <!-- Multivariate input table (hidden in standard mode) -->

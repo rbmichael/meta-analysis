@@ -2288,6 +2288,7 @@ document.getElementById("draftStartFresh").addEventListener("click", () => {
   renderRoBDomainTags();
   renderRoBDataGrid();
   updateTableHeaders();
+  updateEffectTypeHint(document.getElementById("effectType").value);
   const table = document.getElementById("inputTable");
   while (table.rows.length > 1) table.deleteRow(1);
   addRow();
@@ -2690,9 +2691,16 @@ document.addEventListener("click", e => {
 });
 
 // ---------------- EFFECT TYPE HANDLER ----------------
+function updateEffectTypeHint(type) {
+  const hint    = document.getElementById("effectTypeHint");
+  const profile = effectProfiles[type];
+  if (hint) hint.textContent = profile ? `Columns: ${profile.inputs.join(", ")}` : "";
+}
+
 document.getElementById("effectType").addEventListener("change", () => {
   const type = document.getElementById("effectType").value;
   updateTableHeaders();
+  updateEffectTypeHint(type);
   syncMHOptions(type);
 
   // Populate example data for testing
@@ -3013,6 +3021,7 @@ function applySession(session) {
   const type    = document.getElementById("effectType").value;
   const profile = effectProfiles[type];
   updateTableHeaders();
+  updateEffectTypeHint(type);
   const table = document.getElementById("inputTable");
   while (table.rows.length > 1) table.deleteRow(1);
 
@@ -3266,6 +3275,7 @@ function init() {
     // Default effect type: SMD (scale-free, broadly applicable)
     document.getElementById("effectType").value = "SMD";
     updateTableHeaders();
+    updateEffectTypeHint("SMD");
     populateExampleData("SMD");
   }
 
