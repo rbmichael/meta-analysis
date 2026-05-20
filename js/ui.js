@@ -759,9 +759,11 @@ _themeToggle.addEventListener("click", () => {
   const next = THEMES[(THEMES.indexOf(current) + 1) % THEMES.length];
   localStorage.setItem("theme", next);
   _applyTheme(next);
-  if (funnelPlot.args && funnelPlot.contours) {
-    drawFunnel(...funnelPlot.args, { egger: funnelPlot.egger, contours: true, petpeese: funnelPlot.petpeese, theme: appState.plotTheme });
-  }
+  // "App default" plots embed var(--xxx) colour references that are resolved at
+  // paint time.  Re-rendering after the page theme changes ensures computed fills
+  // (contour regions, background clearing, etc.) use the new token values.
+  // Journal presets use hardcoded colours and don't need a redraw here.
+  if (appState.plotTheme === "default") redrawCachedPlots();
 });
 
 // ---------------- VIEW TOGGLE ----------------
