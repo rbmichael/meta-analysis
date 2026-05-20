@@ -154,23 +154,35 @@
         <label>
           <span>τ² estimator<button class="help-btn" data-help-select="tauMethod" data-help-prefix="tau." title="Help">?</button></span>
           <select id="tauMethod">
-            <option value="REML" selected>REML</option>
-            <option value="DL">DerSimonian-Laird (DL)</option>
-            <option value="PM">Paule-Mandel (PM)</option>
-            <option value="EB">Empirical Bayes (EB)</option>
-            <option value="PMM">Paule-Mandel Median (PMM)</option>
-            <option value="GENQM">Generalized Q Median (GENQM)</option>
-            <option value="ML">Maximum Likelihood (ML)</option>
-            <option value="HS">Hunter-Schmidt (HS)</option>
-            <option value="HE">Hedges (HE)</option>
-            <option value="SJ">Sidik-Jonkman (SJ)</option>
-            <option value="GENQ">Generalized Q (GENQ)</option>
-            <option value="DLIT">Iterated DL (DLIT)</option>
-            <option value="HSk">Hunter-Schmidt corrected (HSk)</option>
-            <option value="SQGENQ">Square-root GENQ (SQGENQ)</option>
-            <option value="EBLUP">EBLUP (= REML)</option>
-            <option value="MH">Mantel-Haenszel (MH)</option>
-            <option value="Peto">Peto OR</option>
+            <optgroup label="Recommended">
+              <option value="REML" selected>REML</option>
+              <option value="DL">DerSimonian-Laird (DL)</option>
+              <option value="PM">Paule-Mandel (PM)</option>
+            </optgroup>
+            <optgroup label="Likelihood-based">
+              <option value="ML">Maximum Likelihood (ML)</option>
+              <option value="EB">Empirical Bayes (EB)</option>
+            </optgroup>
+            <optgroup label="Moment-based">
+              <option value="HE">Hedges (HE)</option>
+              <option value="HS">Hunter-Schmidt (HS)</option>
+              <option value="SJ">Sidik-Jonkman (SJ)</option>
+              <option value="GENQ">Generalized Q (GENQ)</option>
+            </optgroup>
+            <optgroup label="Iterated / Median">
+              <option value="DLIT">Iterated DL (DLIT)</option>
+              <option value="PMM">Paule-Mandel Median (PMM)</option>
+              <option value="GENQM">Generalized Q Median (GENQM)</option>
+              <option value="SQGENQ">Square-root GENQ (SQGENQ)</option>
+              <option value="HSk">Hunter-Schmidt corrected (HSk)</option>
+            </optgroup>
+            <optgroup label="Alias">
+              <option value="EBLUP">EBLUP (= REML)</option>
+            </optgroup>
+            <optgroup label="Fixed effects">
+              <option value="MH">Mantel-Haenszel (MH)</option>
+              <option value="Peto">Peto OR</option>
+            </optgroup>
           </select>
         </label>
         <label>
@@ -517,9 +529,9 @@
               <button class="export-btn" data-target="forestPlot" data-format="png">PNG</button>
               <button class="export-btn" data-target="forestPlot" data-format="tiff">TIFF</button>
               <div class="forest-pool-toggle" role="group" aria-label="Pooled estimate display">
-                <button class="forest-pool-btn" data-display="FE">FE</button>
-                <button class="forest-pool-btn active" data-display="RE">RE</button>
-                <button class="forest-pool-btn" data-display="Both">Both</button>
+                <button class="forest-pool-btn" data-display="FE" aria-pressed="false" title="Show fixed-effect pooled estimate">FE</button>
+                <button class="forest-pool-btn active" data-display="RE" aria-pressed="true" title="Show random-effects pooled estimate">RE</button>
+                <button class="forest-pool-btn" data-display="Both" aria-pressed="false" title="Show both FE and RE pooled estimates">Both</button>
               </div>
               <label class="forest-pagesize-label">
                 Studies per page
@@ -630,18 +642,20 @@
           </div>
         </details>
 
-        <!-- ── RVE section (collapsed, shown when cluster IDs present) ── -->
-        <details class="results-section" id="rveSection" style="display:none">
+        <!-- ── RVE section (always visible; empty state shown when no cluster IDs) ── -->
+        <details class="results-section" id="rveSection">
           <summary class="results-section-header">RVE (Robust Variance Estimation)</summary>
           <div class="results-section-body">
+            <p id="rveEmptyState" class="section-empty-state">Assign a Cluster ID to each study (in the input table) to enable RVE analysis.</p>
             <div id="rveSummary"></div>
           </div>
         </details>
 
-        <!-- ── Three-level section (collapsed, shown when cluster IDs present) ── -->
-        <details class="results-section" id="threeLevelSection" style="display:none">
+        <!-- ── Three-level section (always visible; empty state shown when no cluster IDs) ── -->
+        <details class="results-section" id="threeLevelSection">
           <summary class="results-section-header">Three-Level Meta-Analysis</summary>
           <div class="results-section-body">
+            <p id="threeLevelEmptyState" class="section-empty-state">Assign a Cluster ID to each study (in the input table) to enable three-level meta-analysis.</p>
             <div id="threeLevelSummary"></div>
           </div>
         </details>
@@ -659,8 +673,8 @@
               <button class="export-btn" data-target="funnelPlot" data-format="png">PNG</button>
               <button class="export-btn" data-target="funnelPlot" data-format="tiff">TIFF</button>
               <div class="funnel-mode-toggle" role="group" aria-label="Funnel plot mode">
-                <button class="funnel-mode-btn active" data-mode="standard">Standard</button>
-                <button class="funnel-mode-btn"        data-mode="contour">Contour</button>
+                <button class="funnel-mode-btn active" data-mode="standard" aria-pressed="true" title="Standard funnel plot">Standard</button>
+                <button class="funnel-mode-btn"        data-mode="contour"  aria-pressed="false" title="Contour-enhanced funnel plot">Contour</button>
               </div>
             </div>
             <svg id="funnelPlot" role="img" aria-label="Funnel plot" width="500" height="400"></svg>

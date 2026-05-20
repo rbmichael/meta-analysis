@@ -3292,6 +3292,23 @@ function init() {
   // Populate MV example data (Berkey 1998: 5 trials, 2 outcomes)
   if (USE_EXAMPLES) _populateMVExample(); else _mvAddRow();
 
+  // Label all export button groups for accessibility
+  document.querySelectorAll(".plot-export").forEach(div => {
+    const plotBlock = div.closest(".plot-block, .plot-block-inline");
+    const labelEl   = plotBlock?.querySelector(".plot-label");
+    if (labelEl) {
+      const text = Array.from(labelEl.childNodes)
+        .filter(n => n.nodeType === Node.TEXT_NODE)
+        .map(n => n.textContent.trim())
+        .join(" ")
+        .trim();
+      if (text) {
+        div.setAttribute("role", "group");
+        div.setAttribute("aria-label", `Export ${text}`);
+      }
+    }
+  });
+
   // Validate all rows
   document.querySelectorAll("#inputTable tr").forEach((row, i) => {
     if (i === 0) return;
@@ -3400,7 +3417,10 @@ document.querySelectorAll(".forest-pool-btn").forEach(btn => {
   btn.addEventListener("click", () => {
     if (!forestPlot.args) return;
     forestPlot.poolDisplay = btn.dataset.display;
-    document.querySelectorAll(".forest-pool-btn").forEach(b => b.classList.toggle("active", b === btn));
+    document.querySelectorAll(".forest-pool-btn").forEach(b => {
+      b.classList.toggle("active", b === btn);
+      b.setAttribute("aria-pressed", String(b === btn));
+    });
     forestPlot.page = 0;
     forestPlot.args.options = { ...forestPlot.args.options, pooledDisplay: forestPlot.poolDisplay };
     const { totalPages } = drawForest(forestPlot.args.studies, forestPlot.args.m, { ...forestPlot.args.options, page: forestPlot.page });
@@ -3527,7 +3547,10 @@ document.querySelectorAll(".funnel-mode-btn").forEach(btn => {
   btn.addEventListener("click", () => {
     if (!funnelPlot.args) return;
     funnelPlot.contours = btn.dataset.mode === "contour";
-    document.querySelectorAll(".funnel-mode-btn").forEach(b => b.classList.toggle("active", b === btn));
+    document.querySelectorAll(".funnel-mode-btn").forEach(b => {
+      b.classList.toggle("active", b === btn);
+      b.setAttribute("aria-pressed", String(b === btn));
+    });
     drawFunnel(...funnelPlot.args, { egger: funnelPlot.egger, contours: funnelPlot.contours, petpeese: funnelPlot.petpeese, theme: appState.plotTheme });
   });
 });
@@ -4276,12 +4299,13 @@ function _renderAllResults(ctx) {
   {
     const elRve         = document.getElementById("rveSection");
     const elRveSummary  = document.getElementById("rveSummary");
+    const elRveEmpty    = document.getElementById("rveEmptyState");
     const elRveSettings = document.getElementById("rveSettings");
     const showRve = hasClusters && !isMHorPeto;
     if (elRveSettings) setVisible(elRveSettings, showRve);
     if (elRve) {
       if (showRve && rveResult) {
-        elRve.style.display = "";
+        if (elRveEmpty) elRveEmpty.style.display = "none";
         if (rveResult.error) {
           elRveSummary.innerHTML = `<p class="reg-note" style="color:var(--color-warning)">⚠ RVE: ${escapeHTML(rveResult.error)}</p>`;
         } else {
@@ -4301,7 +4325,8 @@ function _renderAllResults(ctx) {
           `;
         }
       } else {
-        elRve.style.display = "none";
+        if (elRveEmpty) elRveEmpty.style.display = "";
+        elRveSummary.innerHTML = "";
       }
     }
   }
@@ -4310,10 +4335,11 @@ function _renderAllResults(ctx) {
   {
     const elThree        = document.getElementById("threeLevelSection");
     const elThreeSummary = document.getElementById("threeLevelSummary");
+    const elThreeEmpty   = document.getElementById("threeLevelEmptyState");
     const showThree = hasClusters && !isMHorPeto;
     if (elThree) {
       if (showThree && threeLevelResult) {
-        elThree.style.display = "";
+        if (elThreeEmpty) elThreeEmpty.style.display = "none";
         if (threeLevelResult.error) {
           elThreeSummary.innerHTML = `<p class="reg-note" style="color:var(--color-warning)">⚠ Three-level: ${escapeHTML(threeLevelResult.error)}</p>`;
         } else {
@@ -4334,7 +4360,8 @@ function _renderAllResults(ctx) {
           `;
         }
       } else {
-        elThree.style.display = "none";
+        if (elThreeEmpty) elThreeEmpty.style.display = "";
+        elThreeSummary.innerHTML = "";
       }
     }
   }
