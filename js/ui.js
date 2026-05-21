@@ -874,11 +874,11 @@ function initSettingsPopovers() {
   });
 
   document.addEventListener("pointerdown", e => {
-    if (!e.target.closest("[data-popover], .settings-popover")) _closeAllPopovers();
+    if (!e.target.closest("[data-popover], .settings-popover, #helpPopover")) _closeAllPopovers();
   }, { capture: true });
 
   document.addEventListener("keydown", e => {
-    if (e.key === "Escape") _closeAllPopovers();
+    if (e.key === "Escape" && _helpPopover.style.display === "none") _closeAllPopovers();
   });
 }
 
