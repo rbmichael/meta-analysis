@@ -470,34 +470,28 @@
    APP SHELL — header + layout
    ================================================================ */
 
-/* ---- Top bar (flex child of body) ---- */
+/* ---- Top bar — single 44 px row: title | tabs (centred) | toggle ---- */
 #appHeader {
   background: var(--bg-header);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border-bottom: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  flex-shrink: 0;
-  /* z-index kept for help popovers / dropdowns that overlap the layout below */
-  position: relative;
-  z-index: 100;
-}
-
-/* Row 1: title centred, theme toggle pinned right */
-#appHeaderTitle {
-  position: relative;
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  justify-content: center;
   height: 44px;
   padding: 0 20px;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 100;
 }
 
 #appTitle {
   display: inline-flex;
   align-items: baseline;
   gap: 0.5em;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .app-title-main {
@@ -506,6 +500,7 @@
   font-weight: 400;
   letter-spacing: 0.01em;
   color: var(--fg);
+  white-space: nowrap;
 }
 
 .app-title-sub {
@@ -515,22 +510,20 @@
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--fg-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-#appHeaderTitle .theme-toggle-btn {
-  position: absolute;
-  right: 20px;
-  top: 50%;
-  transform: translateY(-50%);
+#appHeader > .theme-toggle-btn {
+  justify-self: end;
 }
 
-/* Row 2: tabs centred */
+/* Tabs centred in the middle column */
 #appHeaderTabs {
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 38px;
-  border-top: 1px solid var(--border);
 }
 
 @media (max-width: 480px) {
