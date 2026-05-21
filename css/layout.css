@@ -34,6 +34,7 @@
   box-sizing: border-box;
   max-height: 100%;
   margin-bottom: 0;
+  padding-top: 10px;
   display: flex;
   flex-direction: column;
   overflow-y: auto;
@@ -758,7 +759,7 @@
   align-items: center;
   flex-wrap: wrap;
   gap: 6px;
-  padding: 8px 0;
+  padding: 4px 0 8px;
   margin-bottom: 0;
 }
 
