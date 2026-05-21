@@ -54,19 +54,6 @@
   <!-- =========== INPUT =========== -->
     <div class="section" id="inputSection">
       <div id="inputControls">
-      <!-- File controls inline with section heading -->
-      <div class="section-title-row">
-        <p class="section-title">Input</p>
-        <div id="inputFileControls">
-          <input type="file" id="csvFile" accept=".csv" style="display:none">
-          <button id="import">Import CSV</button>
-          <button id="export">Export CSV</button><button class="help-btn" data-help="input.csv" title="Help">?</button>
-          <span class="io-sep" role="separator" aria-hidden="true"></span>
-          <input type="file" id="sessionFile" accept=".json" style="display:none">
-          <button id="saveSession">Save Session</button>
-          <button id="loadSession">Load Session</button><button class="help-btn" data-help="input.session" title="Help">?</button>
-        </div>
-      </div>
       <div id="csvWarning"></div>
 
       <!-- ---- Import preview panel (hidden until a file is chosen) ---- -->
@@ -438,6 +425,15 @@
         <button id="run" title="Run analysis (Ctrl+Enter)">Run <kbd class="run-kbd">(Ctrl+Enter)</kbd></button>
         <button class="help-btn" data-help="keyboard.shortcuts" title="Keyboard shortcuts">⌨</button>
         <span id="inputStaleBadge" hidden>Results out of date — click Run</span>
+        <div id="inputFileControls">
+          <input type="file" id="csvFile" accept=".csv" style="display:none">
+          <button id="import">Import CSV</button>
+          <button id="export">Export CSV</button><button class="help-btn" data-help="input.csv" title="Help">?</button>
+          <span class="io-sep" role="separator" aria-hidden="true"></span>
+          <input type="file" id="sessionFile" accept=".json" style="display:none">
+          <button id="saveSession">Save Session</button>
+          <button id="loadSession">Load Session</button><button class="help-btn" data-help="input.session" title="Help">?</button>
+        </div>
       </div>
       <div id="runProgress" role="progressbar" aria-label="Running analysis" aria-live="polite" hidden><div id="runProgressBar"></div></div>
 

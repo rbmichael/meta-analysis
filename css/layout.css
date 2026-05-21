@@ -48,11 +48,21 @@
 #inputTableToolbar {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
-  padding-top: 10px;
+  padding: 10px 0;
   border-top: 1px solid var(--border);
-  margin-top: 10px;
+  border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+}
+
+/* File controls pushed to the right of the toolbar */
+#inputFileControls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-left: auto;
 }
 
 #inputTableWrap {
@@ -61,7 +71,7 @@
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   min-height: 60px;
-  margin-top: 10px;
+  margin-top: 8px;
 }
 
 .section-title-row {
@@ -71,14 +81,6 @@
   border-bottom: 1px solid var(--border);
   padding-bottom: 8px;
   margin-bottom: 10px;
-}
-
-/* File-control buttons in the Input section title row */
-#inputFileControls {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
 }
 
 /* Vertical separator — reusable in any flex toolbar row */
