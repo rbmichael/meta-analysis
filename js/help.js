@@ -31,6 +31,19 @@ export const HELP = {
            "appears on next load if unsaved changes are detected.",
   },
 
+  "input.group": {
+    title: "Group",
+    body:  "An optional label that assigns a study to a named subgroup. " +
+           "When at least two distinct group labels are present, subgroup analysis runs automatically: " +
+           "a separate pooled estimate is computed for each group, and a between-group heterogeneity test " +
+           "(Q_between) is reported. " +
+           "Studies with a blank Group field are included in the overall pooled estimate " +
+           "but excluded from subgroup-specific estimates. " +
+           "In the forest plot, studies are sorted by group into labelled blocks " +
+           "(first-seen group order; within-group order matches the table). " +
+           "Group labels do not change the overall pooled estimate.",
+  },
+
   "input.moderators": {
     title: "Moderators",
     body:  "Study-level covariates used in meta-regression and subgroup analysis. " +

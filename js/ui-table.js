@@ -234,7 +234,7 @@ export function updateTableHeaders() {
 
   // Group column
   const thGroup = document.createElement("th");
-  thGroup.textContent = "Group";
+  thGroup.innerHTML = 'Group <button class="help-btn" data-help="input.group" aria-label="Help: Group" title="Help">?</button>';
   headerRow.appendChild(thGroup);
 
   // Cluster column — inline help button (avoids importing hBtn from ui.js)
