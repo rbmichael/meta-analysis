@@ -757,10 +757,10 @@
   position: relative;
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
   gap: 6px;
   padding: 4px 0 8px;
   margin-bottom: 0;
+  min-width: 0;
 }
 
 /* Standard-mode group (selects + popover triggers) */
@@ -769,6 +769,8 @@
   align-items: center;
   flex-wrap: wrap;
   gap: 6px;
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
 /* MV-mode strip controls group */
