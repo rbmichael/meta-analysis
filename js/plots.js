@@ -1313,7 +1313,7 @@ function funnelDrawStudies(svg, studies, x, y, dotFill, dotStroke, dotFillImp, d
     .attr("stroke", d => d.filled ? dotStrImp  : dotStroke);
 }
 
-function funnelDrawEggerLine(svg, egger, studies, x, y, T) {
+function funnelDrawEggerLine(svg, egger, studies, x, y, T, clipId) {
   if (!egger || !isFinite(egger.slope)) return;
   const seMin = d3.min(studies, d => d.se);
   const seMax = d3.max(studies, d => d.se);
@@ -1329,6 +1329,7 @@ function funnelDrawEggerLine(svg, egger, studies, x, y, T) {
     .attr("stroke", T.colorError)
     .attr("stroke-width", 2)
     .attr("stroke-dasharray", eggerDash)
+    .attr("clip-path", `url(#${clipId})`)
     .attr("d", d3.line().x(d => x(d.yi_hat)).y(d => y(d.se)));
 }
 
@@ -1336,7 +1337,7 @@ function funnelDrawEggerLine(svg, egger, studies, x, y, T) {
 // FAT-PET is a straight line: yi = fat.intercept + fat.slope * se
 // PEESE is a parabola:        yi = peese.intercept + peese.slope * vi = peese.intercept + peese.slope * se²
 // The active estimate (usePeese → solid, inactive → dashed at lower opacity).
-function funnelDrawPeeseLines(svg, petpeese, studies, x, y, T) {
+function funnelDrawPeeseLines(svg, petpeese, studies, x, y, T, clipId) {
   const { fat, peese, usePeese } = petpeese;
   const seMin = d3.min(studies, d => d.se);
   const seMax = d3.max(studies, d => d.se);
@@ -1357,6 +1358,7 @@ function funnelDrawPeeseLines(svg, petpeese, studies, x, y, T) {
       .attr("stroke-width", usePeese ? 1.5 : 2)
       .attr("stroke-dasharray", fatDash)
       .attr("opacity", usePeese ? 0.55 : 1)
+      .attr("clip-path", `url(#${clipId})`)
       .attr("d", d3.line().x(d => x(d.yi_hat)).y(d => y(d.se)));
   }
 
@@ -1371,6 +1373,7 @@ function funnelDrawPeeseLines(svg, petpeese, studies, x, y, T) {
       .attr("stroke-width", usePeese ? 2 : 1.5)
       .attr("stroke-dasharray", peeseDash)
       .attr("opacity", usePeese ? 1 : 0.55)
+      .attr("clip-path", `url(#${clipId})`)
       .attr("d", d3.line().x(d => x(d.yi_hat)).y(d => y(d.se)));
   }
 }
@@ -1404,13 +1407,13 @@ function funnelDrawAxesAndLabels(svg, x, y, margin, W, H, iW, iH, profile, borde
     .text("Standard Error");
 }
 
-function funnelDrawLegend(svg, W, margin, BANDS, T) {
+function funnelDrawLegend(svg, W, margin, BANDS, T, bgColor) {
   const LW  = 120, LH  = 76;
   const PAD = 6,   ROW = 16, SW = 10;
   const legendX = W - margin.right - LW - 8;
   const legendY = margin.top + 8;
   const lg = svg.append("g").attr("transform", `translate(${legendX},${legendY})`);
-  const legendBg     = T.bg !== "transparent" ? T.bg : T.bgSurface;
+  const legendBg     = T.bg !== "transparent" ? T.bg : (bgColor || T.bgSurface);
   const legendBorder = T.border;
   const legendFg     = T.fgMuted;
   const innermostFill = BANDS[BANDS.length - 1].fill;
@@ -1440,6 +1443,49 @@ function funnelDrawLegend(svg, W, margin, BANDS, T) {
       tl.append("tspan").style("font-style", "italic").text("p");
       tl.append("tspan").text(label.slice(pi + 1));
     } else { tl.text(label); } }
+  });
+}
+
+// Small legend for Egger / FAT-PET / PEESE lines, shown whenever any are drawn.
+// Positioned upper-right; shifted down by contourLegendH when contour legend is also present.
+function funnelDrawBiasLegend(svg, W, margin, egger, petpeese, contours, T, bgColor) {
+  const items = [];
+  if (egger && isFinite(egger.slope)) {
+    items.push({ color: T.colorError,   dash: T.useBwShapes ? BW_DASHES[2] : "4,2", w: 2,   label: "Egger" });
+  }
+  if (petpeese) {
+    const { fat, peese, usePeese } = petpeese;
+    if (isFinite(fat?.intercept) && isFinite(fat?.slope)) {
+      const d = (T.useBwShapes && usePeese) ? BW_DASHES[1] : (usePeese ? "3,3" : "none");
+      items.push({ color: T.colorWarning, dash: d, w: usePeese ? 1.5 : 2, label: "FAT-PET" });
+    }
+    if (isFinite(peese?.intercept) && isFinite(peese?.slope)) {
+      const d = (T.useBwShapes && !usePeese) ? BW_DASHES[3] : (usePeese ? "none" : "3,3");
+      items.push({ color: T.colorSuccess, dash: d, w: usePeese ? 2 : 1.5, label: "PEESE" });
+    }
+  }
+  if (items.length === 0) return;
+
+  const PAD = 7, ROW = 16, SW = 20;
+  const LW  = 92;
+  const LH  = PAD * 2 + items.length * ROW;
+  const legendX = W - margin.right - LW - 6;
+  const legendY = margin.top + 8 + (contours ? 84 : 0);  // shift below contour legend if present
+
+  const lg = svg.append("g").attr("transform", `translate(${legendX},${legendY})`);
+  const bgFill = T.bg && T.bg !== "transparent" ? T.bg : (bgColor || T.bgSurface || "#111");
+  lg.append("rect").attr("width", LW).attr("height", LH)
+    .attr("fill", bgFill).attr("stroke", T.border).attr("rx", 3);
+  items.forEach(({ color, dash, w, label }, i) => {
+    const iy = PAD + i * ROW + ROW / 2;
+    lg.append("line")
+      .attr("x1", PAD).attr("y1", iy).attr("x2", PAD + SW).attr("y2", iy)
+      .attr("stroke", color).attr("stroke-width", w)
+      .attr("stroke-dasharray", dash || "none");
+    lg.append("text")
+      .attr("x", PAD + SW + 5).attr("y", iy + 4)
+      .attr("fill", T.fgMuted).style("font-size", "9px")
+      .style("font-family", T.fontFamily).text(label);
   });
 }
 
@@ -1486,6 +1532,11 @@ export function drawFunnel(studies, m, profile, options = {}) {
   const iW = W - margin.left - margin.right;
   const iH = H - margin.top  - margin.bottom;
   setSvgSize(svg, W, H);
+  const _funnelClipId = "funnel-plot-clip";
+  svg.append("defs").append("clipPath").attr("id", _funnelClipId)
+    .append("rect")
+    .attr("x", margin.left).attr("y", margin.top)
+    .attr("width", iW).attr("height", iH);
   if (T.bg && T.bg !== "transparent") {
     svg.insert("rect", ":first-child")
       .attr("width", W).attr("height", H).attr("fill", T.bg);
@@ -1602,10 +1653,14 @@ export function drawFunnel(studies, m, profile, options = {}) {
   if (contours) funnelDrawContours(svg, bgColor, BANDS, bandPath, W, H, T);
   funnelDrawFunnelArms(svg, x, y, seMax, xHalf, borderClr, m, T);
   funnelDrawStudies(svg, studies, x, y, dotFill, dotStroke, dotFillImp, dotStrImp);
-  funnelDrawEggerLine(svg, egger, studies, x, y, T);
-  if (options.petpeese) funnelDrawPeeseLines(svg, options.petpeese, studies, x, y, T);
+  // FAT-PET is algebraically identical to Egger (same WLS regression, swapped labels),
+  // so draw the Egger line only when FAT-PET is not present.
+  if (!options.petpeese) funnelDrawEggerLine(svg, egger, studies, x, y, T, _funnelClipId);
+  if (options.petpeese) funnelDrawPeeseLines(svg, options.petpeese, studies, x, y, T, _funnelClipId);
   funnelDrawAxesAndLabels(svg, x, y, margin, W, H, iW, iH, profile, borderClr, fgColor);
-  if (contours) funnelDrawLegend(svg, W, margin, BANDS, T);
+  if (contours) funnelDrawLegend(svg, W, margin, BANDS, T, bgColor);
+  // Pass egger to legend only when FAT-PET is absent (they're the same line).
+  funnelDrawBiasLegend(svg, W, margin, options.petpeese ? null : egger, options.petpeese ?? null, contours, T, bgColor);
 
   svg.append("text")
     .attr("x", margin.left + iW / 2).attr("y", 18)
