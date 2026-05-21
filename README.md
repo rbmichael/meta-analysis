@@ -188,6 +188,7 @@ CSV column names match the input fields for each effect type (e.g. `m1,sd1,n1,m2
 - **Collapsible results sections** — sections are collapsed by default; only core results and the forest plot are open on load, reducing visual overwhelm on large analyses
 - **Light and dark themes** — follows system preference by default; toggle available in the settings bar
 - **In-app methodology guide** — reference documentation for every statistical method in the tool, accessible from the Guide tab or via contextual help buttons (?) throughout the interface
+- **First-visit onboarding tour** — a three-step inline tour (effect type → columns → Run) fires automatically on first visit; dismissed with Skip or Esc, and replayable from the About tab
 
 ---
 

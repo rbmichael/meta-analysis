@@ -126,11 +126,12 @@ import { PLOT_THEMES } from "./plotThemes.js";
 // without re-fetching within the same session. Python's http.server strips
 // query strings before translating paths, so static serving is unaffected.
 const _cb = `?cb=${Date.now()}`;
-let _reportMod, _docxMod, _helpMod, _guideMod;
-function getReport() { return (_reportMod ??= import(`./report.js${_cb}`).catch(e => { _reportMod = null; throw e; })); }
-function getDocx()   { return (_docxMod   ??= import(`./docx.js${_cb}`  ).catch(e => { _docxMod   = null; throw e; })); }
-function getHelp()   { return (_helpMod   ??= import(`./help.js${_cb}`  ).catch(e => { _helpMod   = null; throw e; })); }
-function getGuide()  { return (_guideMod  ??= import(`./guide.js${_cb}` ).catch(e => { _guideMod  = null; throw e; })); }
+let _reportMod, _docxMod, _helpMod, _guideMod, _onboardingMod;
+function getReport()     { return (_reportMod     ??= import(`./report.js${_cb}`    ).catch(e => { _reportMod     = null; throw e; })); }
+function getDocx()       { return (_docxMod       ??= import(`./docx.js${_cb}`      ).catch(e => { _docxMod       = null; throw e; })); }
+function getHelp()       { return (_helpMod       ??= import(`./help.js${_cb}`      ).catch(e => { _helpMod       = null; throw e; })); }
+function getGuide()      { return (_guideMod      ??= import(`./guide.js${_cb}`     ).catch(e => { _guideMod      = null; throw e; })); }
+function getOnboarding() { return (_onboardingMod ??= import(`./onboarding.js${_cb}`).catch(e => { _onboardingMod = null; throw e; })); }
 import { serializeSession, parseSession, missingInputCols } from "./session.js";
 import { saveDraft, loadDraft, clearDraft } from "./autosave.js";
 import { downloadBlob, readTextFile, serializeCSV } from "./io.js";
@@ -3319,6 +3320,18 @@ function init() {
   if (new URLSearchParams(window.location.search).has("tests")) {
     import("./tests.js").then(({ runTests }) => runTests());
   }
+
+  // Fire the onboarding tour after idle — never blocks initial render.
+  const _ric = window.requestIdleCallback ?? (cb => setTimeout(cb, 200));
+  _ric(() => getOnboarding().then(m => m.maybeStartTour()).catch(() => {}));
+
+  // Replay link in the About tab: switch to Input view first so tour anchors
+  // are visible (all Input elements have zero dimensions while hidden).
+  document.getElementById("replayTourLink")?.addEventListener("click", e => {
+    e.preventDefault();
+    showView("input");
+    getOnboarding().then(m => m.startTour({ force: true })).catch(() => {});
+  });
 }
 
 window.onload = init;
