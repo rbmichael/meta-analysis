@@ -156,20 +156,19 @@
           <div id="moderatorManager">
             <strong>Moderators:</strong>
             <input type="text" id="modName" placeholder="Column name">
-            <select id="modType">
-              <option value="continuous">Continuous</option>
-              <option value="categorical">Categorical</option>
-            </select>
-            <span id="modTransformWrap" title="Transform applied to this continuous moderator">
-              <select id="modTransform">
+            <select id="modType" title="Moderator type and transform">
+              <optgroup label="Continuous">
                 <option value="linear">Linear</option>
                 <option value="poly2">Quadratic (x²)</option>
                 <option value="poly3">Cubic (x², x³)</option>
                 <option value="rcs3">RCS (3 knots)</option>
                 <option value="rcs4">RCS (4 knots)</option>
                 <option value="rcs5">RCS (5 knots)</option>
-              </select>
-            </span>
+              </optgroup>
+              <optgroup label="Categorical">
+                <option value="categorical">Categorical</option>
+              </optgroup>
+            </select>
             <button id="addMod">+ Add</button><button class="help-btn" data-help="input.moderators" title="Help">?</button>
             <div id="modTags"></div>
           </div>
@@ -188,20 +187,19 @@
           <div id="scaleModManager">
             <strong>Location-scale model moderators:</strong>
             <input type="text" id="scaleModName" placeholder="Column name">
-            <select id="scaleModType">
-              <option value="continuous">Continuous</option>
-              <option value="categorical">Categorical</option>
-            </select>
-            <span id="scaleModTransformWrap" title="Transform applied to this continuous scale moderator">
-              <select id="scaleModTransform">
+            <select id="scaleModType" title="Moderator type and transform">
+              <optgroup label="Continuous">
                 <option value="linear">Linear</option>
                 <option value="poly2">Quadratic (x²)</option>
                 <option value="poly3">Cubic (x², x³)</option>
                 <option value="rcs3">RCS (3 knots)</option>
                 <option value="rcs4">RCS (4 knots)</option>
                 <option value="rcs5">RCS (5 knots)</option>
-              </select>
-            </span>
+              </optgroup>
+              <optgroup label="Categorical">
+                <option value="categorical">Categorical</option>
+              </optgroup>
+            </select>
             <button id="addScaleMod">+ Add</button><button class="help-btn" data-help="input.scaleModerators" title="Help">?</button>
             <div id="scaleModTags"></div>
           </div>

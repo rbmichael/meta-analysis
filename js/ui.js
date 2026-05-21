@@ -507,13 +507,17 @@ let _robData    = {};  // { [studyLabel]: { [domain]: "Low"|"Some concerns"|"Hig
 // doAddModerator / clearModerators / removeModerator / makeModTh / makeModTd
 // all live in ui-table.js (imported above).
 
+function _readModSpec(selectId) {
+  const val = document.getElementById(selectId).value;
+  return val === "categorical"
+    ? { type: "categorical", transform: "linear" }
+    : { type: "continuous", transform: val || "linear" };
+}
+
 function addModerator() {
   const nameEl = document.getElementById("modName");
   const name = nameEl.value.trim();
-  const type = document.getElementById("modType").value;
-  const transform = type === "continuous"
-    ? (document.getElementById("modTransform")?.value ?? "linear")
-    : "linear";
+  const { type, transform } = _readModSpec("modType");
   if (!name) return;
   doAddModerator(name, type, transform);
   nameEl.value = "";
@@ -605,10 +609,7 @@ function removeScaleModerator(name) {
 function addScaleModerator() {
   const nameEl = document.getElementById("scaleModName");
   const name = nameEl.value.trim();
-  const type = document.getElementById("scaleModType").value;
-  const transform = type === "continuous"
-    ? (document.getElementById("scaleModTransform")?.value ?? "linear")
-    : "linear";
+  const { type, transform } = _readModSpec("scaleModType");
   if (!name) return;
   doAddScaleModerator(name, type, transform);
   ensureModColumn(name, type);
@@ -2901,22 +2902,6 @@ function resetAdvancedSettings() {
 
 document.getElementById("resetAdvanced").addEventListener("click", resetAdvancedSettings);
 
-// ---------------- MOD TYPE → TRANSFORM WRAP VISIBILITY ----------------
-{
-  const syncModTransform = () => {
-    const show = document.getElementById("modType").value === "continuous";
-    document.getElementById("modTransformWrap").style.display = show ? "" : "none";
-  };
-  document.getElementById("modType").addEventListener("change", syncModTransform);
-  syncModTransform();
-
-  const syncScaleModTransform = () => {
-    const show = document.getElementById("scaleModType").value === "continuous";
-    document.getElementById("scaleModTransformWrap").style.display = show ? "" : "none";
-  };
-  document.getElementById("scaleModType").addEventListener("change", syncScaleModTransform);
-  syncScaleModTransform();
-}
 
 // ---------------- BAYESIAN PRIOR VALIDATION ----------------
 {
