@@ -958,7 +958,7 @@ function _rebuildMVTableHeaders() {
   // Fixed columns + moderator columns + actions
   tr.innerHTML =
     "<th>Study ID</th><th>Outcome ID</th><th>Effect (y<sub>i</sub>)</th><th>Variance (v<sub>i</sub>)</th>" +
-    _mvModerators.map(m => `<th>${escapeHTML(m)}</th>`).join("") +
+    _mvModerators.map((m, i) => `<th>${escapeHTML(m)} <button class="remove-mod-btn" title="Remove moderator" onclick="_mvRemoveMod(${i})">×</button></th>`).join("") +
     '<th class="col-actions">Actions</th>';
   // Also rebuild each row's moderator cells if count changed
   document.querySelectorAll("#mvTableBody tr").forEach(row => {
