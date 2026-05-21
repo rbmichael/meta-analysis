@@ -1550,19 +1550,22 @@ export function drawFunnel(studies, m, profile, options = {}) {
         { z: 1.645,    fill: T.bg,                 label: "p ≥ 0.10"         },
       ];
     } else if (T.bg === "transparent") {
-      bgColor = isDark ? "#121212" : "#ffffff";
+      // Resolve actual page background from CSS so the opaque rect behind the
+      // bands blends seamlessly, and the innermost band can match it exactly.
+      bgColor = getComputedStyle(document.documentElement)
+        .getPropertyValue("--bg-base").trim() || (isDark ? "#0d0d0d" : "#ffffff");
       BANDS = isDark
         ? [
-            { z: Infinity, fill: "#505050", label: "p < 0.01"        },
-            { z: 2.576,    fill: "#383838", label: "0.01 ≤ p < 0.05" },
-            { z: 1.960,    fill: "#252525", label: "0.05 ≤ p < 0.10" },
-            { z: 1.645,    fill: "#161616", label: "p ≥ 0.10"         },
+            { z: Infinity, fill: "#606060", label: "p < 0.01"        },
+            { z: 2.576,    fill: "#404040", label: "0.01 ≤ p < 0.05" },
+            { z: 1.960,    fill: "#262626", label: "0.05 ≤ p < 0.10" },
+            { z: 1.645,    fill: bgColor,   label: "p ≥ 0.10"         },
           ]
         : [
             { z: Infinity, fill: "#a0a0a0", label: "p < 0.01"        },
             { z: 2.576,    fill: "#c4c4c4", label: "0.01 ≤ p < 0.05" },
             { z: 1.960,    fill: "#e4e4e4", label: "0.05 ≤ p < 0.10" },
-            { z: 1.645,    fill: "#ffffff", label: "p ≥ 0.10"         },
+            { z: 1.645,    fill: bgColor,   label: "p ≥ 0.10"         },
           ];
     } else {
       bgColor = T.bg;
@@ -3595,7 +3598,7 @@ export function drawRoBTrafficLight(studies, domains, robData, options = {}) {
 
   // ── Legend ──
   const legendY = TOP + k * CELL_H + 14;
-  const items   = [["Low", "#4caf50"], ["Some concerns", "#ff9800"], ["High", "#e53935"], ["NI", "#9e9e9e"]];
+  const items   = Object.entries(ROB_COLORS);
   let lx = LEFT;
   items.forEach(([label, color]) => {
     svg.append("circle").attr("cx", lx + 6).attr("cy", legendY).attr("r", 6).attr("fill", color).attr("fill-opacity", 0.85);
@@ -3717,7 +3720,7 @@ export function drawRoBSummary(studies, domains, robData, options = {}) {
 
   // ── Legend ──
   const legendY = TOP + d * (BAR_H + BAR_GAP) + 14;
-  const items   = [["Low", "#4caf50"], ["Some concerns", "#ff9800"], ["High", "#e53935"], ["NI", "#9e9e9e"]];
+  const items   = Object.entries(ROB_COLORS);
   let lx = LEFT;
   items.forEach(([label, color]) => {
     svg.append("rect").attr("x", lx).attr("y", legendY - 8).attr("width", 12).attr("height", 12).attr("fill", color).attr("fill-opacity", 0.85);
