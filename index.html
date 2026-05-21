@@ -89,56 +89,18 @@
         </div>
       </div>
 
-      <!-- Analysis mode tabs -->
-      <div id="analysisModeTabs">
-        <button id="modeStandard"      class="toggle-btn active">Standard</button>
-        <button id="modeMultivariate"  class="toggle-btn">Multivariate</button>
-      </div>
-
-      <!-- Multivariate settings (hidden in standard mode) -->
-      <div id="mvSettings" style="display:none">
-        <div class="settings-row">
-          <label>
-            <span>Ψ structure<button class="help-btn" data-help="mv.struct" title="Help">?</button></span>
-            <select id="mvStruct">
-              <option value="CS">Compound symmetric (CS)</option>
-              <option value="Diag">Diagonal (Diag)</option>
-              <option value="UN">Unstructured (UN)</option>
-            </select>
-          </label>
-          <label>
-            <span>Estimation<button class="help-btn" data-help="mv.method" title="Help">?</button></span>
-            <select id="mvMethod">
-              <option value="REML" selected>REML</option>
-              <option value="ML">ML</option>
-            </select>
-          </label>
-          <label class="inline mv-rho-label">
-            Within-study correlation ρ<button class="help-btn" data-help="mv.rho" title="Help">?</button>:
-            <input type="number" id="mvRho" value="0.5" min="-0.999" max="0.999" step="0.05" style="width:70px">
-          </label>
+      <!-- Settings strip: single-row primary controls -->
+      <div id="settingsStrip">
+        <div id="analysisModeTabs">
+          <button id="modeStandard"      class="toggle-btn active">Standard</button>
+          <button id="modeMultivariate"  class="toggle-btn">Multivariate</button>
         </div>
-        <!-- MV moderator manager -->
-        <div class="settings-section settings-section--no-top">
-          <div class="settings-section-controls">
-            <strong>Moderators:</strong>
-            <input type="text" id="mvModName" placeholder="Column name" style="width:120px">
-            <button id="mvAddMod">+ Add</button>
-            <p class="settings-hint settings-hint--flush">Moderators are added as columns to the table.</p>
-          </div>
-          <div id="mvModTags"></div>
-        </div>
-      </div>
 
-      <!-- Primary settings: always visible -->
-      <div class="settings-row" id="standardSettings">
-        <label>
-          <span>Effect type<button class="help-btn" data-help-select="effectType" data-help-prefix="effect." title="Help">?</button></span>
-          <select id="effectType"></select>
-        </label>
-        <label>
-          <span>τ² estimator<button class="help-btn" data-help-select="tauMethod" data-help-prefix="tau." title="Help">?</button></span>
-          <select id="tauMethod">
+        <!-- Standard mode: effect/τ²/CI selects + Variables + Settings popover triggers -->
+        <div id="standardSettings">
+          <span class="io-sep" role="separator" aria-hidden="true"></span>
+          <label class="strip-label">Effect<button class="help-btn" data-help-select="effectType" data-help-prefix="effect." title="Help">?</button><select id="effectType"></select></label>
+          <label class="strip-label">τ²<button class="help-btn" data-help-select="tauMethod" data-help-prefix="tau." title="Help">?</button><select id="tauMethod">
             <optgroup label="Recommended">
               <option value="REML" selected>REML</option>
               <option value="DL">DerSimonian-Laird (DL)</option>
@@ -168,23 +130,27 @@
               <option value="MH">Mantel-Haenszel (MH)</option>
               <option value="Peto">Peto OR</option>
             </optgroup>
-          </select>
-        </label>
-        <label>
-          <span>CI method<button class="help-btn" data-help-select="ciMethod" data-help-prefix="ci." title="Help">?</button></span>
-          <select id="ciMethod">
+          </select></label>
+          <label class="strip-label">CI<button class="help-btn" data-help-select="ciMethod" data-help-prefix="ci." title="Help">?</button><select id="ciMethod">
             <option value="normal">Normal CI</option>
             <option value="KH">Knapp-Hartung</option>
             <option value="t">t-distribution</option>
             <option value="PL">Profile Likelihood</option>
-          </select>
-        </label>
-        <span id="effectTypeHint" class="settings-hint settings-hint--row" aria-live="polite"></span>
+          </select></label>
+          <span class="io-sep" role="separator" aria-hidden="true"></span>
+          <button id="variablesPanelBtn" class="strip-popover-btn" aria-expanded="false" data-popover="variablesPanel">Variables ▾</button>
+          <button id="advancedSettingsBtn" class="strip-popover-btn" aria-expanded="false" data-popover="advancedSettings">Settings<span id="advancedBadge" class="advanced-badge" style="display:none" title="Some settings differ from defaults" aria-label="settings customized">●</span> ▾</button>
+        </div>
+
+        <!-- MV mode: MV settings popover trigger (shown only in multivariate mode) -->
+        <div id="mvStripControls" style="display:none">
+          <span class="io-sep" role="separator" aria-hidden="true"></span>
+          <button id="mvSettingsBtn" class="strip-popover-btn" aria-expanded="false" data-popover="mvSettings">MV settings ▾</button>
+        </div>
       </div>
 
-      <!-- Variables panel: moderators, interactions, scale mods, RoB -->
-      <details id="variablesPanel" class="advanced-settings">
-        <summary>Variables</summary>
+      <!-- Variables panel popover -->
+      <div id="variablesPanel" class="settings-popover" hidden>
         <div class="advanced-settings-body">
 
           <!-- Moderator manager -->
@@ -250,11 +216,10 @@
           </div>
 
         </div><!-- /.advanced-settings-body -->
-      </details>
+      </div>
 
-      <!-- Collapsible advanced settings -->
-      <details id="advancedSettings" class="advanced-settings">
-        <summary>Advanced settings<span id="advancedBadge" class="advanced-badge" style="display:none" title="Some settings differ from defaults" aria-label="settings customized">●</span></summary>
+      <!-- Advanced settings popover -->
+      <div id="advancedSettings" class="settings-popover advanced-settings" hidden>
         <div class="advanced-settings-body">
 
           <!-- Analysis & display: CI width, MCC, cumulative order -->
@@ -402,7 +367,41 @@
           </div>
 
         </div><!-- /.advanced-settings-body -->
-      </details>
+      </div>
+
+      <!-- MV settings popover -->
+      <div id="mvSettings" class="settings-popover" hidden>
+        <div class="settings-row">
+          <label>
+            <span>Ψ structure<button class="help-btn" data-help="mv.struct" title="Help">?</button></span>
+            <select id="mvStruct">
+              <option value="CS">Compound symmetric (CS)</option>
+              <option value="Diag">Diagonal (Diag)</option>
+              <option value="UN">Unstructured (UN)</option>
+            </select>
+          </label>
+          <label>
+            <span>Estimation<button class="help-btn" data-help="mv.method" title="Help">?</button></span>
+            <select id="mvMethod">
+              <option value="REML" selected>REML</option>
+              <option value="ML">ML</option>
+            </select>
+          </label>
+          <label class="inline mv-rho-label">
+            Within-study correlation ρ<button class="help-btn" data-help="mv.rho" title="Help">?</button>:
+            <input type="number" id="mvRho" value="0.5" min="-0.999" max="0.999" step="0.05" style="width:70px">
+          </label>
+        </div>
+        <div class="settings-section settings-section--no-top">
+          <div class="settings-section-controls">
+            <strong>Moderators:</strong>
+            <input type="text" id="mvModName" placeholder="Column name" style="width:120px">
+            <button id="mvAddMod">+ Add</button>
+            <p class="settings-hint settings-hint--flush">Moderators are added as columns to the table.</p>
+          </div>
+          <div id="mvModTags"></div>
+        </div>
+      </div>
 
       <!-- Risk-of-bias data entry grid (shown when domains + studies are present) -->
       <div id="robDataGrid" style="display:none"></div>

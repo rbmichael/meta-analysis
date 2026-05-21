@@ -30,9 +30,9 @@ const STEPS = [
     body:   "45 options grouped by data shape — means, binary outcomes, correlations, and more. Choose the one that matches how your studies report results.",
   },
   {
-    anchor: "#effectTypeHint",
+    anchor: "#inputTable tr",
     title:  "Fill the columns",
-    body:   "The input table adapts to show exactly the columns your effect type needs. The hint updates as you change type.",
+    body:   "The table adapts its columns to match the effect type. Hover any column header for a description of what goes there.",
   },
   {
     anchor: "#run",

@@ -835,18 +835,59 @@ const _mvForestState = {
   viewMode:     "separate", // "separate" | "combined"
 };
 
+// ── Settings-strip popovers ───────────────────────────────────────────────────
+
+function _closeAllPopovers() {
+  document.querySelectorAll(".settings-popover").forEach(p => { p.hidden = true; });
+  document.querySelectorAll("[data-popover]").forEach(b => b.setAttribute("aria-expanded", "false"));
+}
+
+function _positionPopover(btn, panel) {
+  const r = btn.getBoundingClientRect();
+  const panelW = panel.offsetWidth || 340;
+  let left = r.left;
+  if (left + panelW > window.innerWidth - 8) left = Math.max(8, window.innerWidth - panelW - 8);
+  panel.style.top  = (r.bottom + 4) + "px";
+  panel.style.left = left + "px";
+}
+
+function initSettingsPopovers() {
+  document.querySelectorAll("[data-popover]").forEach(btn => {
+    btn.addEventListener("click", e => {
+      e.stopPropagation();
+      const panel  = document.getElementById(btn.dataset.popover);
+      const isOpen = !panel.hidden;
+      _closeAllPopovers();
+      if (!isOpen) {
+        panel.hidden = false;
+        btn.setAttribute("aria-expanded", "true");
+        _positionPopover(btn, panel);
+      }
+    });
+  });
+
+  document.addEventListener("pointerdown", e => {
+    if (!e.target.closest("[data-popover], .settings-popover")) _closeAllPopovers();
+  }, { capture: true });
+
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape") _closeAllPopovers();
+  });
+}
+
+initSettingsPopovers();
+
 function _applyModeToggle() {
   const isMV = _mvMode;
   document.getElementById("modeStandard").classList.toggle("active", !isMV);
   document.getElementById("modeMultivariate").classList.toggle("active", isMV);
-  document.getElementById("standardSettings").style.display        = isMV ? "none" : "";
-  document.getElementById("variablesPanel").style.display          = isMV ? "none" : "";
-  document.getElementById("advancedSettings").style.display        = isMV ? "none" : "";
-  document.getElementById("mvSettings").style.display              = isMV ? ""     : "none";
-  document.getElementById("inputTableWrap").style.display          = isMV ? "none" : "";
-  document.getElementById("addStudy").style.display                = isMV ? "none" : "";
-  document.getElementById("mvTableWrap").style.display             = isMV ? ""     : "none";
-  document.getElementById("mvAddRow").style.display                = isMV ? ""     : "none";
+  document.getElementById("standardSettings").style.display  = isMV ? "none" : "";
+  document.getElementById("mvStripControls").style.display   = isMV ? ""     : "none";
+  document.getElementById("inputTableWrap").style.display    = isMV ? "none" : "";
+  document.getElementById("addStudy").style.display          = isMV ? "none" : "";
+  document.getElementById("mvTableWrap").style.display       = isMV ? ""     : "none";
+  document.getElementById("mvAddRow").style.display          = isMV ? ""     : "none";
+  _closeAllPopovers();
 }
 
 // ── MV moderator management ───────────────────────────────────────────────────
@@ -1986,7 +2027,6 @@ document.getElementById("previewImport").addEventListener("click", () => {
   const missingCols = commitImport();
   const importedType = document.getElementById("effectType").value;
   syncMHOptions(importedType);
-  updateEffectTypeHint(importedType);
   const { studies, excluded, softWarnings } = collectStudies(importedType);
   updateValidationWarnings(studies, excluded, softWarnings);
   if (missingCols.length > 0) {
@@ -2297,7 +2337,6 @@ document.getElementById("draftStartFresh").addEventListener("click", () => {
   renderRoBDomainTags();
   renderRoBDataGrid();
   updateTableHeaders();
-  updateEffectTypeHint(document.getElementById("effectType").value);
   const table = document.getElementById("inputTable");
   while (table.rows.length > 1) table.deleteRow(1);
   addRow();
@@ -2700,16 +2739,9 @@ document.addEventListener("click", e => {
 });
 
 // ---------------- EFFECT TYPE HANDLER ----------------
-function updateEffectTypeHint(type) {
-  const hint    = document.getElementById("effectTypeHint");
-  const profile = effectProfiles[type];
-  if (hint) hint.textContent = profile ? `Columns: ${profile.inputs.join(", ")}` : "";
-}
-
 document.getElementById("effectType").addEventListener("change", () => {
   const type = document.getElementById("effectType").value;
   updateTableHeaders();
-  updateEffectTypeHint(type);
   syncMHOptions(type);
 
   // Populate example data for testing
@@ -3040,7 +3072,6 @@ function applySession(session) {
   const type    = document.getElementById("effectType").value;
   const profile = effectProfiles[type];
   updateTableHeaders();
-  updateEffectTypeHint(type);
   const table = document.getElementById("inputTable");
   while (table.rows.length > 1) table.deleteRow(1);
 
@@ -3296,7 +3327,6 @@ function init() {
     // Default effect type: SMD (scale-free, broadly applicable)
     document.getElementById("effectType").value = "SMD";
     updateTableHeaders();
-    updateEffectTypeHint("SMD");
     populateExampleData("SMD");
   }
   // Run validation after table is populated (draft restore or example data).

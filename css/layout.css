@@ -150,9 +150,9 @@
   border-color: var(--border-accent);
 }
 
-/* ---- Collapsible advanced settings ---- */
+/* ---- Advanced-settings panel (now a popover; class kept for badge/reset CSS hooks) ---- */
 .advanced-settings {
-  margin-bottom: 10px;
+  margin-bottom: 0;
 }
 
 /* Badge shown on summary when any setting differs from default */
@@ -739,7 +739,7 @@
   background: var(--accent-subtle);
 }
 
-/* ---- Analysis mode tab pill (item 20: promote from inline style) ---- */
+/* ---- Analysis mode tab pill ---- */
 #analysisModeTabs {
   display: flex;
   gap: 2px;
@@ -748,8 +748,90 @@
   border-radius: var(--radius-md);
   padding: 3px;
   width: fit-content;
-  margin-bottom: 12px;
+  margin-bottom: 0; /* strip context — no standalone row margin */
 }
+
+/* ---- Settings strip: single-row primary controls above the data table ---- */
+#settingsStrip {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 0;
+  margin-bottom: 0;
+}
+
+/* Standard-mode group (selects + popover triggers) */
+#standardSettings {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* MV-mode strip controls group */
+#mvStripControls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Inline label+select inside the strip */
+.strip-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.75rem;
+  color: var(--fg-muted);
+  white-space: nowrap;
+}
+
+.strip-label select {
+  font-size: 0.8125rem;
+  max-width: 180px;
+}
+
+
+/* Popover trigger buttons in the strip */
+.strip-popover-btn {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 3px 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  line-height: 1.6;
+}
+
+.strip-popover-btn:hover,
+.strip-popover-btn[aria-expanded="true"] {
+  color: var(--fg);
+  border-color: var(--border-hover, var(--border));
+  background: var(--bg-surface);
+}
+
+/* Floating popover panels — fixed so they overlay the table */
+.settings-popover {
+  position: fixed;
+  z-index: 300;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-md);
+  padding: 16px 20px;
+  min-width: 300px;
+  max-width: min(560px, calc(100vw - 16px));
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.settings-popover[hidden] { display: none; }
 
 /* ---- MV-hint banner (item 20: promote from inline style) ---- */
 #previewMvHint {
