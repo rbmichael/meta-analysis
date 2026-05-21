@@ -54,7 +54,6 @@
   <!-- =========== INPUT =========== -->
     <div class="section" id="inputSection">
       <div id="inputControls">
-      <div id="csvWarning"></div>
 
       <!-- ---- Import preview panel (hidden until a file is chosen) ---- -->
       <div id="importPreview" role="region" aria-label="CSV import preview" style="display:none">
@@ -138,6 +137,7 @@
             <option value="PL">Profile Likelihood</option>
           </select></label>
           <span class="io-sep" role="separator" aria-hidden="true"></span>
+          <button id="robGridBtn" class="strip-popover-btn" style="display:none" aria-expanded="false" data-popover="robDataGrid">RoB ▾</button>
           <button id="variablesPanelBtn" class="strip-popover-btn" aria-expanded="false" data-popover="variablesPanel">Variables ▾</button>
           <button id="advancedSettingsBtn" class="strip-popover-btn" aria-expanded="false" data-popover="advancedSettings">Settings<span id="advancedBadge" class="advanced-badge" style="display:none" title="Some settings differ from defaults" aria-label="settings customized">●</span> ▾</button>
         </div>
@@ -403,17 +403,8 @@
         </div>
       </div>
 
-      <!-- Risk-of-bias data entry grid (shown when domains + studies are present) -->
-      <div id="robDataGrid" style="display:none"></div>
-
-      <!-- Draft restore banner (hidden until a saved draft is found on load) -->
-      <div id="draftBanner" style="display:none">
-        <span id="draftBannerText"></span>
-        <div class="draft-banner-actions">
-          <button id="draftStartFresh">Discard draft</button>
-          <button id="draftDismiss" aria-label="Dismiss">×</button>
-        </div>
-      </div>
+      <!-- Risk-of-bias data entry grid popover -->
+      <div id="robDataGrid" class="settings-popover" hidden></div>
 
       </div><!-- /#inputControls -->
 
@@ -1361,6 +1352,18 @@
   <button id="undoToastBtn">Undo</button>
   <div class="undo-toast-bar"></div>
 </div>
+
+<!-- Draft restore toast (fixed bottom-left) -->
+<div id="draftBanner" style="display:none">
+  <span id="draftBannerText"></span>
+  <div class="draft-banner-actions">
+    <button id="draftStartFresh">Discard draft</button>
+    <button id="draftDismiss" aria-label="Dismiss">×</button>
+  </div>
+</div>
+
+<!-- CSV / session error toast (fixed bottom-right) -->
+<div id="csvWarning"></div>
 
 </body>
 </html>

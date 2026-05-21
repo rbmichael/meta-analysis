@@ -644,9 +644,15 @@ function renderRoBDomainTags() {
 
 function renderRoBDataGrid() {
   const container = document.getElementById("robDataGrid");
+  const btn       = document.getElementById("robGridBtn");
   container.innerHTML = "";
 
-  if (_robDomains.length === 0) { container.style.display = "none"; return; }
+  const hide = () => {
+    btn.style.display = "none";
+    if (!container.hidden) _closeAllPopovers();
+  };
+
+  if (_robDomains.length === 0) { hide(); return; }
 
   // Collect current (non-empty) study labels from the input table.
   const labels = [];
@@ -656,9 +662,9 @@ function renderRoBDataGrid() {
     if (label) labels.push(label);
   });
 
-  if (labels.length === 0) { container.style.display = "none"; return; }
+  if (labels.length === 0) { hide(); return; }
 
-  container.style.display = "";
+  btn.style.display = "";
 
   const table = document.createElement("table");
 
