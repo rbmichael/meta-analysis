@@ -5,7 +5,7 @@
 /* Escape appLayout padding/max-width — mirrors the #guideSection pattern */
 #aboutSection {
   margin: -20px -20px 0;
-  height: calc(100vh - 44px);
+  height: calc(100% + 20px);
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: var(--scrollbar-thumb) transparent;
