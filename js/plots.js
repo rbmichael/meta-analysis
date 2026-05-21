@@ -926,19 +926,21 @@ function forestDrawColumnHeaders(ctx, separators, hY) {
     .attr("y1", L.studyY0).attr("y2", L.studyY1 + 12)
     .attr("stroke", T.border);
 
-  // Group separators — a full-width rule + bold group label per boundary
+  // Group headers — label at top of the header row, rule at bottom.
+  // Every group (including the first) gets its own header.
   separators.forEach(({ y: sepTop, group }) => {
-    const ruleY = sepTop + L.sepH - 3;
+    const labelY = sepTop + Math.round(L.sepH * 0.72);
+    const ruleY  = sepTop + L.sepH - 1;
+    svg.append("text")
+      .attr("x", 8).attr("y", labelY)
+      .attr("text-anchor", "start")
+      .style("font-size", L.labelFontSize).style("font-family", T.fontFamily)
+      .style("font-weight", "bold")
+      .attr("fill", T.groupLabelFill).text(group);
     svg.append("line")
       .attr("x1", 0).attr("x2", L.totalW)
       .attr("y1", ruleY).attr("y2", ruleY)
       .attr("stroke", T.groupSepStroke);
-    svg.append("text")
-      .attr("x", L.labelW - 8).attr("y", ruleY - 3)
-      .attr("text-anchor", "end")
-      .style("font-size", L.annotFontSize).style("font-family", T.fontFamily)
-      .style("font-weight", "bold")
-      .attr("fill", T.groupLabelFill).text(group);
   });
 }
 
@@ -1079,6 +1081,24 @@ export function drawForest(studies, m, options = {}) {
     normal: "Normal (z)", t: "t-distribution", KH: "Knapp-Hartung", PL: "Profile Likelihood"
   }[ciMethod] || ciMethod;
 
+  // Sort by group (stable, preserves first-seen group order and within-group input order).
+  // Ungrouped studies sort to the end. This is plot-only — the input table is unchanged.
+  const hasGroups = studies.some(d => d.group && d.group.trim() !== "");
+  if (hasGroups) {
+    const _groupOrder = [];
+    const _seen = new Set();
+    studies.forEach(d => {
+      const g = (d.group || "").trim();
+      if (g && !_seen.has(g)) { _groupOrder.push(g); _seen.add(g); }
+    });
+    studies = [...studies].sort((a, b) => {
+      const ga = (a.group || "").trim(), gb = (b.group || "").trim();
+      const ia = ga ? _groupOrder.indexOf(ga) : Infinity;
+      const ib = gb ? _groupOrder.indexOf(gb) : Infinity;
+      return ia - ib;
+    });
+  }
+
   const { page, totalPages, items: pageStudies, isLastPage } = paginate(studies, options);
 
   // ----------- LAYOUT -----------
@@ -1100,18 +1120,19 @@ export function drawForest(studies, m, options = {}) {
   L.totalW  = L.labelW + L.plotW + L.annotW;
   L.summaryH = isLastPage ? (showBoth ? 152 : 132) : 52;
   L.studyY0  = L.headerH;
-  L.sepH     = Math.max(14, L.rowH);
+  L.sepH     = Math.max(18, L.rowH);
 
   // ----------- Y-POSITION MAP -----------
   // Keyed on study object identity (Map), not label string, so duplicate or
   // empty labels don't collide and overwrite each other.
-  const hasGroups = studies.some(d => d.group && d.group.trim() !== "");
+  // hasGroups already computed above. Each group (including the first) gets a
+  // header separator row; within-group order is preserved from the sorted array.
   const yPos       = new Map();
   const separators = [];
   let cursor = L.studyY0, prevGroup = null;
   pageStudies.forEach(d => {
     const group = (d.group || "").trim();
-    if (hasGroups && prevGroup !== null && group !== prevGroup) {
+    if (hasGroups && group !== prevGroup) {
       separators.push({ y: cursor, group });
       cursor += L.sepH;
     }
