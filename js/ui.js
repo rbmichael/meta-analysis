@@ -92,8 +92,9 @@
 //
 // Persistence layer
 // -----------------
-//   localStorage["meta-draft"]   autosave.js  — survives tab/browser close
-//   localStorage["theme"]        ui.js        — light/dark preference
+//   localStorage["meta-draft"]     autosave.js  — survives tab/browser close
+//   localStorage["theme"]          ui.js        — light/dark preference
+//   localStorage["fosma-plot-theme"] ui.js       — plot theme preset (default/cochrane/jama/bw)
 //   <input type="file"> (hidden) csv.js       — CSV import
 //   Blob download                io.js        — CSV export, session JSON,
 //                                               HTML report, SVG, PNG
@@ -3000,6 +3001,16 @@ function applySession(session) {
   }
   syncSelControls();
 
+  // Display / reporting settings
+  if (s.mccMethod) {
+    const el = document.getElementById("mccMethod");
+    if (el && el.querySelector(`option[value="${s.mccMethod}"]`)) el.value = s.mccMethod;
+  }
+  if (isFinite(s.rveRho) && s.rveRho >= 0 && s.rveRho < 1) {
+    const el = document.getElementById("rveRho");
+    if (el) { el.value = s.rveRho; el.dispatchEvent(new Event("input")); }
+  }
+
   // Rebuild moderators
   clearModerators();
   savedMods.forEach(m => {
@@ -3363,6 +3374,16 @@ const appState = {
   plotTheme:   "default",
 };
 
+// Restore plot theme from localStorage so the user's visual preference survives reload.
+{
+  const saved = localStorage.getItem("fosma-plot-theme");
+  const sel   = document.getElementById("plotTheme");
+  if (saved && sel && sel.querySelector(`option[value="${saved}"]`)) {
+    sel.value          = saved;
+    appState.plotTheme = saved;
+  }
+}
+
 const forestPlot = {
   page:        0,
   args:        null,        // { studies, m, options } — cached for page-nav re-renders
@@ -3444,6 +3465,7 @@ document.querySelectorAll(".forest-pool-btn").forEach(btn => {
 
 document.getElementById("plotTheme").addEventListener("change", e => {
   appState.plotTheme = e.target.value;
+  localStorage.setItem("fosma-plot-theme", e.target.value);
   if (appState.reportArgs) {
     appState.reportArgs = { ...appState.reportArgs, plotTheme: appState.plotTheme };
   }
