@@ -381,9 +381,7 @@ export function addRow(values) {
     input.addEventListener("input", () => {
       clearTimeout(_valTimer);
       _valTimer = setTimeout(() => {
-        const type = document.getElementById("effectType").value;
-        const { studies, excluded, softWarnings } = collectStudies(type);
-        updateValidationWarnings(studies, excluded, softWarnings);
+        _revalidate();
         _cb.markStale();
         _cb.scheduleSave();
       }, 150);
@@ -470,13 +468,21 @@ export function removeRow(btn) {
   _undoState.timer  = setTimeout(commitPendingDelete, _UNDO_MS);
 
   showUndoToast(label, _cancelPendingDelete);
+  _revalidate();
   _cb.markStale();
   _cb.scheduleSave();
 }
 
 export function clearRow(btn) {
   btn.closest("tr").querySelectorAll("input").forEach(input => { input.value = ""; });
+  _revalidate();
   _cb.markStale();
+}
+
+function _revalidate() {
+  const type = document.getElementById("effectType").value;
+  const { studies, excluded, softWarnings } = collectStudies(type);
+  updateValidationWarnings(studies, excluded, softWarnings);
 }
 
 // =============================================================================
@@ -494,6 +500,7 @@ export function updateValidationWarnings(studies, excluded, softWarnings) {
 
   // Input errors
   rows.forEach((row, idx) => {
+    if (row.classList.contains("row-pending-delete")) return;
     const label  = escapeHTML(row.querySelector("input")?.value || `Row ${idx + 1}`);
     const errors = JSON.parse(row.dataset.validationErrors || "{}");
     Object.entries(errors).forEach(([, msg]) => errLines.push(`${label}: ${escapeHTML(msg)}`));

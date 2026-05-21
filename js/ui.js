@@ -1984,7 +1984,11 @@ document.getElementById("previewImport").addEventListener("click", () => {
     return;
   }
   const missingCols = commitImport();
-  syncMHOptions(document.getElementById("effectType").value);
+  const importedType = document.getElementById("effectType").value;
+  syncMHOptions(importedType);
+  updateEffectTypeHint(importedType);
+  const { studies, excluded, softWarnings } = collectStudies(importedType);
+  updateValidationWarnings(studies, excluded, softWarnings);
   if (missingCols.length > 0) {
     const warningDiv = document.getElementById("csvWarning");
     warningDiv.textContent = `Warning: CSV is missing required columns: ${missingCols.join(", ")}`;
@@ -3122,7 +3126,9 @@ async function loadSession(file) {
   }
 
   const { profile, savedStudies } = applySession(result.session);
-  syncMHOptions(document.getElementById("effectType").value);
+  const _sessionType = document.getElementById("effectType").value;
+  syncMHOptions(_sessionType);
+  { const { studies, excluded, softWarnings } = collectStudies(_sessionType); updateValidationWarnings(studies, excluded, softWarnings); }
 
   // Warn about any effect-input columns absent from the saved data.
   const missingCols = missingInputCols(profile.inputs, savedStudies);
@@ -3292,6 +3298,12 @@ function init() {
     updateTableHeaders();
     updateEffectTypeHint("SMD");
     populateExampleData("SMD");
+  }
+  // Run validation after table is populated (draft restore or example data).
+  {
+    const type = document.getElementById("effectType").value;
+    const { studies, excluded, softWarnings } = collectStudies(type);
+    updateValidationWarnings(studies, excluded, softWarnings);
   }
 
   // Initialise MH/Peto and PL availability based on default/restored settings.
