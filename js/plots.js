@@ -1144,6 +1144,7 @@ export function drawForest(studies, m, options = {}) {
   L.studyY1    = cursor;
   L.totalH     = L.studyY1 + L.summaryH;
   L.axisY      = L.totalH - 26;
+  if (isLastPage && profile.isLog) L.totalH += 14;
   L.feDiamondY = L.studyY1 + 18;
   L.diamondY   = showBoth ? L.studyY1 + 36 : L.studyY1 + 18;
   L.piY        = showBoth ? L.studyY1 + 60 : L.studyY1 + 44;
@@ -1193,16 +1194,17 @@ export function drawForest(studies, m, options = {}) {
   forestDrawStudyRows(ctx, pageStudies, studies, studyCrit, widthCiLabel, ciMethodLabel, yPos);
 
   // ----------- AXIS -----------
+  const maxTicks = Math.max(4, Math.floor(L.plotW / 60));
   const axisG = svg.append("g")
     .attr("transform", `translate(0,${L.axisY})`)
-    .call(d3.axisBottom(x).tickFormat(v => {
+    .call(d3.axisBottom(x).ticks(maxTicks).tickFormat(v => {
       const d = profile.transform(v);
       return isFinite(d) ? +d.toFixed(3) : "";
     }));
   styleAxis(axisG, T.border, T.fgMuted, null, T.fontFamily);
   if (profile.isLog) {
     svg.append("text")
-      .attr("x", L.labelW + L.plotW / 2).attr("y", L.axisY + 22)
+      .attr("x", L.labelW + L.plotW / 2).attr("y", L.axisY + 36)
       .attr("text-anchor", "middle")
       .style("font-size", L.annotFontSize).style("font-family", T.fontFamily)
       .attr("fill", T.fgMuted).text("(log scale)");
