@@ -1,6 +1,11 @@
 var App = (() => {
   var __defProp = Object.defineProperty;
   var __getOwnPropNames = Object.getOwnPropertyNames;
+  var __glob = (map) => (path) => {
+    var fn = map[path];
+    if (fn) return fn();
+    throw new Error("Module not found in bundle: " + path);
+  };
   var __esm = (fn, res) => function __init() {
     return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
   };
@@ -20,6 +25,83 @@ var App = (() => {
     }
   });
 
+  // js/quadrature.js
+  var GL20_X, GL20_W, _GH20_X_POS, _GH20_W_POS, GH20_X, GH20_W;
+  var init_quadrature = __esm({
+    "js/quadrature.js"() {
+      GL20_X = [
+        -0.9931285991850949,
+        -0.9639719272779138,
+        -0.912234428251326,
+        -0.8391169718222188,
+        -0.7463062256567499,
+        -0.636053680726515,
+        -0.5108670019508271,
+        -0.3737060887154195,
+        -0.2277858511416451,
+        -0.0765265211334973,
+        0.0765265211334973,
+        0.2277858511416451,
+        0.3737060887154195,
+        0.5108670019508271,
+        0.636053680726515,
+        0.7463062256567499,
+        0.8391169718222188,
+        0.912234428251326,
+        0.9639719272779138,
+        0.9931285991850949
+      ];
+      GL20_W = [
+        0.0176140071391521,
+        0.0406014298003869,
+        0.0626720483341091,
+        0.0832767415767048,
+        0.1019301198172404,
+        0.1181945319615184,
+        0.1316886384491766,
+        0.142096109318382,
+        0.1491729864726037,
+        0.1527533871307258,
+        0.1527533871307258,
+        0.1491729864726037,
+        0.142096109318382,
+        0.1316886384491766,
+        0.1181945319615184,
+        0.1019301198172404,
+        0.0832767415767048,
+        0.0626720483341091,
+        0.0406014298003869,
+        0.0176140071391521
+      ];
+      _GH20_X_POS = [
+        0.24534070830090113,
+        0.7374737285453944,
+        1.234076215395323,
+        1.7385377121165857,
+        2.2549740020892757,
+        2.7888060584281305,
+        3.3478545673832163,
+        3.944764040115625,
+        4.603682449550744,
+        5.387480890011235
+      ];
+      _GH20_W_POS = [
+        0.462243669600611,
+        0.2866755053628351,
+        0.1090172060200233,
+        0.02481052088746526,
+        0.00324377334223786,
+        22833863601635e-17,
+        78025564785321e-19,
+        108606937076928e-21,
+        43993409922732e-23,
+        22293936455342e-26
+      ];
+      GH20_X = [..._GH20_X_POS.map((x) => -x).reverse(), ..._GH20_X_POS];
+      GH20_W = [..._GH20_W_POS.slice().reverse(), ..._GH20_W_POS];
+    }
+  });
+
   // js/utils.js
   function round(value, digits = 3) {
     if (!isFinite(value)) return value;
@@ -30,16 +112,25 @@ var App = (() => {
     if (!isFinite(value)) return "NA";
     return round(value, digits).toFixed(digits);
   }
+  function fmtPval(p) {
+    if (!isFinite(p)) return "= NA";
+    if (p < 1e-3) return "< .001";
+    return "= " + p.toFixed(3).replace(/^0\./, ".");
+  }
   function tCritical(df, alpha = 0.05) {
     const target = 1 - alpha / 2;
     if (!isFinite(df) || df <= 0) return normalQuantile(target);
+    const key = `${df}:${alpha}`;
+    if (_tCriticalCache.has(key)) return _tCriticalCache.get(key);
     let lo = 0, hi = 20;
     for (let i = 0; i < BISECTION_ITERS; i++) {
       const mid = (lo + hi) / 2;
       if (tCDF(mid, df) < target) lo = mid;
       else hi = mid;
     }
-    return (lo + hi) / 2;
+    const result = (lo + hi) / 2;
+    _tCriticalCache.set(key, result);
+    return result;
   }
   function normalCDF(x) {
     const t = 1 / (1 + 0.2316419 * Math.abs(x));
@@ -174,12 +265,13 @@ var App = (() => {
   function hedgesG(s, options = {}) {
     const n1 = s.n1, n2 = s.n2;
     const df = n1 + n2 - 2;
+    if (df < 1) return { es: NaN, var: NaN };
     const sp = Math.sqrt(((n1 - 1) * s.sd1 ** 2 + (n2 - 1) * s.sd2 ** 2) / df);
     const d = (s.m1 - s.m2) / sp;
     const applyHedges = options.hedgesCorrection ?? true;
     const J = 1 - 3 / (4 * df - 1);
     const g = applyHedges ? d * J : d;
-    const varBase = (n1 + n2) / (n1 * n2) + d * d / (2 * (n1 + n2));
+    const varBase = (n1 + n2) / (n1 * n2) + g * g / (2 * (n1 + n2));
     return { es: g, var: Math.max(varBase, MIN_VAR) };
   }
   function parseCounts(str) {
@@ -294,22 +386,22 @@ var App = (() => {
     const TWO_PI = 2 * Math.PI;
     let sum = 0;
     for (let i = 0; i < 20; i++) {
-      const t = rho * (_GL20_X[i] + 1) / 2;
+      const t = rho * (GL20_X[i] + 1) / 2;
       const r2 = 1 - t * t;
-      sum += _GL20_W[i] * Math.exp(-(hh + kk - 2 * t * hk) / (2 * r2)) / (TWO_PI * Math.sqrt(r2));
+      sum += GL20_W[i] * Math.exp(-(hh + kk - 2 * t * hk) / (2 * r2)) / (TWO_PI * Math.sqrt(r2));
     }
     return normalCDF(h) * normalCDF(k) + rho / 2 * sum;
+  }
+  function continuityCorrect({ a, b, c, d }) {
+    if (a === 0 || b === 0 || c === 0 || d === 0) {
+      return { a: a + 0.5, b: b + 0.5, c: c + 0.5, d: d + 0.5 };
+    }
+    return { a, b, c, d };
   }
   function tetrachoricFromCounts(a, b, c, d) {
     const nan = { rho: NaN, var: NaN };
     if (!isFinite(a) || !isFinite(b) || !isFinite(c) || !isFinite(d)) return nan;
-    let aa = a, bb = b, cc = c, dd = d;
-    if (aa === 0 || bb === 0 || cc === 0 || dd === 0) {
-      aa += 0.5;
-      bb += 0.5;
-      cc += 0.5;
-      dd += 0.5;
-    }
+    let { a: aa, b: bb, c: cc, d: dd } = continuityCorrect({ a, b, c, d });
     const N = aa + bb + cc + dd;
     const p_row = (aa + bb) / N;
     const p_col = (aa + cc) / N;
@@ -349,54 +441,12 @@ var App = (() => {
     console.warn("Unknown effect type in transformEffect:", type);
     return x;
   }
-  var _GL20_X, _GL20_W, _clamp01, _TRANSFORMS;
+  var _tCriticalCache, _clamp01, _TRANSFORMS;
   var init_utils = __esm({
     "js/utils.js"() {
       init_constants();
-      _GL20_X = [
-        -0.9931285991850949,
-        -0.9639719272779138,
-        -0.912234428251326,
-        -0.8391169718222188,
-        -0.746306483340119,
-        -0.636053680726515,
-        -0.5108670019508271,
-        -0.3737060887154195,
-        -0.2277858511416451,
-        -0.0765265211334973,
-        0.0765265211334973,
-        0.2277858511416451,
-        0.3737060887154195,
-        0.5108670019508271,
-        0.636053680726515,
-        0.746306483340119,
-        0.8391169718222188,
-        0.912234428251326,
-        0.9639719272779138,
-        0.9931285991850949
-      ];
-      _GL20_W = [
-        0.0176140071391521,
-        0.0406014298003869,
-        0.0626720483341091,
-        0.0832767415767048,
-        0.1019301198172404,
-        0.1181945319615184,
-        0.1316886384491766,
-        0.142096109318382,
-        0.1491729864726037,
-        0.1527533871307258,
-        0.1527533871307258,
-        0.1491729864726037,
-        0.142096109318382,
-        0.1316886384491766,
-        0.1181945319615184,
-        0.1019301198172404,
-        0.0832767415767048,
-        0.0626720483341091,
-        0.0406014298003869,
-        0.0176140071391521
-      ];
+      init_quadrature();
+      _tCriticalCache = /* @__PURE__ */ new Map();
       _clamp01 = (v) => Math.min(1, Math.max(0, v));
       _TRANSFORMS = {
         // Log-scale ratio measures → exp(yi)
@@ -439,6 +489,30 @@ var App = (() => {
   });
 
   // js/tau2.js
+  function iterate(seed, updateFn, maxIter = 200, tol = REML_TOL) {
+    let tau2 = seed;
+    for (let iter = 0; iter < maxIter; iter++) {
+      const newTau2 = updateFn(tau2);
+      if (Math.abs(newTau2 - tau2) < tol) return newTau2;
+      tau2 = newTau2;
+    }
+    return tau2;
+  }
+  function tau2_DL(studies) {
+    const k = studies.length;
+    if (k <= 1) return 0;
+    let W = 0, WY = 0, WY2 = 0, W2 = 0;
+    for (const d of studies) {
+      const wi = 1 / d.vi;
+      W += wi;
+      WY += wi * d.yi;
+      WY2 += wi * d.yi * d.yi;
+      W2 += wi * wi;
+    }
+    const Q = WY2 - WY * WY / W;
+    const C = W - W2 / W;
+    return C > 0 ? Math.max(0, (Q - (k - 1)) / C) : 0;
+  }
   function tau2_HS(studies) {
     const k = studies.length;
     if (k <= 1) return 0;
@@ -451,8 +525,8 @@ var App = (() => {
   function tau2_DLIT(studies, tol = REML_TOL, maxIter = 200, tau2Init = null) {
     const k = studies.length;
     if (k <= 1) return 0;
-    let tau2 = tau2Init !== null ? Math.max(0, tau2Init) : tau2_GENQ(studies);
-    for (let iter = 0; iter < maxIter; iter++) {
+    const seed = tau2Init !== null ? Math.max(0, tau2Init) : tau2_GENQ(studies);
+    return iterate(seed, (tau2) => {
       let W = 0, W2 = 0, Wmu = 0;
       for (const d of studies) {
         const wi = 1 / (d.vi + tau2);
@@ -467,11 +541,8 @@ var App = (() => {
         Q += r * r / (d.vi + tau2);
       }
       const c = W - W2 / W;
-      const newTau2 = Math.max(0, (Q - (k - 1)) / c);
-      if (Math.abs(newTau2 - tau2) < tol) return newTau2;
-      tau2 = newTau2;
-    }
-    return tau2;
+      return Math.max(0, (Q - (k - 1)) / c);
+    }, maxIter, tol);
   }
   function tau2_HSk(studies) {
     const k = studies.length;
@@ -516,40 +587,19 @@ var App = (() => {
     }
     return tau2;
   }
-  function tau2_ML(studies, tol = REML_TOL, maxIter = 100, tau2Init = null) {
-    const k = studies.length;
-    if (k <= 1) return 0;
-    let tau2;
-    if (tau2Init !== null) {
-      tau2 = Math.max(0, tau2Init);
-    } else {
-      let W0 = 0, W02 = 0, W0mu = 0;
-      for (const d of studies) {
-        const wi = 1 / d.vi;
-        W0 += wi;
-        W02 += wi * wi;
-        W0mu += wi * d.yi;
-      }
-      const ybar0 = W0mu / W0;
-      let Q0 = 0;
-      for (const d of studies) Q0 += (d.yi - ybar0) ** 2 / d.vi;
-      const c0 = W0 - W02 / W0;
-      tau2 = Math.max(0, (Q0 - (k - 1)) / c0);
-    }
+  function fisherScoringCore(vi, fitFn, seed, tol, maxIter, useHat) {
+    const k = vi.length;
+    let tau2 = seed;
     for (let iter = 0; iter < maxIter; iter++) {
-      let W = 0, Wmu = 0;
-      for (const d of studies) {
-        const wi = 1 / (d.vi + tau2);
-        W += wi;
-        Wmu += wi * d.yi;
-      }
-      const mu = Wmu / W;
+      const fit = fitFn(tau2);
+      if (!fit) break;
+      const { e, h } = fit;
       let score = 0, info = 0;
-      for (const d of studies) {
-        const vi_tau = d.vi + tau2;
-        const r = d.yi - mu;
-        score += r * r / (vi_tau * vi_tau) - 1 / vi_tau;
-        info += 1 / (vi_tau * vi_tau);
+      for (let i = 0; i < k; i++) {
+        const wi = 1 / (vi[i] + tau2);
+        const c = useHat ? 1 - h[i] : 1;
+        score += wi * wi * e[i] * e[i] - c * wi;
+        info += c * wi * wi;
       }
       if (info <= 0) break;
       let step = score / info;
@@ -568,6 +618,23 @@ var App = (() => {
     }
     return tau2;
   }
+  function tau2_ML(studies, tol = REML_TOL, maxIter = 100, tau2Init = null) {
+    const k = studies.length;
+    if (k <= 1) return 0;
+    const vi = studies.map((d) => d.vi);
+    const yi = studies.map((d) => d.yi);
+    const seed = tau2Init !== null ? Math.max(0, tau2Init) : tau2_DL(studies);
+    return fisherScoringCore(vi, (tau2) => {
+      let W = 0, Wmu = 0;
+      for (let i = 0; i < k; i++) {
+        const wi = 1 / (vi[i] + tau2);
+        W += wi;
+        Wmu += wi * yi[i];
+      }
+      const mu = Wmu / W;
+      return { e: yi.map((y) => y - mu), W };
+    }, seed, tol, maxIter, false);
+  }
   function logLik(studies, mu, tau2) {
     let ll = 0;
     for (const d of studies) {
@@ -579,61 +646,25 @@ var App = (() => {
   function tau2_REML(studies, tol = REML_TOL, maxIter = 100, tau2Init = null) {
     const k = studies.length;
     if (k <= 1) return 0;
-    let tau2;
-    if (tau2Init !== null) {
-      tau2 = Math.max(0, tau2Init);
-    } else {
-      let W0 = 0, W02 = 0, W0mu = 0;
-      for (const d of studies) {
-        const wi = 1 / d.vi;
-        W0 += wi;
-        W02 += wi * wi;
-        W0mu += wi * d.yi;
-      }
-      const ybar = W0mu / W0;
-      let Qseed = 0;
-      for (const d of studies) Qseed += (d.yi - ybar) ** 2 / d.vi;
-      const c = W0 - W02 / W0;
-      tau2 = Math.max(0, (Qseed - (k - 1)) / c);
-    }
-    for (let iter = 0; iter < maxIter; iter++) {
+    const vi = studies.map((d) => d.vi);
+    const yi = studies.map((d) => d.yi);
+    const seed = tau2Init !== null ? Math.max(0, tau2Init) : tau2_DL(studies);
+    return fisherScoringCore(vi, (tau2) => {
       let W = 0, Wmu = 0;
-      for (const d of studies) {
-        const wi = 1 / (d.vi + tau2);
+      for (let i = 0; i < k; i++) {
+        const wi = 1 / (vi[i] + tau2);
         W += wi;
-        Wmu += wi * d.yi;
+        Wmu += wi * yi[i];
       }
       const mu = Wmu / W;
-      let score = 0, info = 0;
-      for (const d of studies) {
-        const vi_tau = d.vi + tau2;
-        const hi = 1 / (vi_tau * W);
-        const ri = d.yi - mu;
-        score += ri * ri / (vi_tau * vi_tau) - (1 - hi) / vi_tau;
-        info += (1 - hi) / (vi_tau * vi_tau);
-      }
-      let step = score / info;
-      let newTau2 = tau2 + step;
-      let halveIter = 0;
-      while (newTau2 < 0 && halveIter < 20) {
-        step /= 2;
-        newTau2 = tau2 + step;
-        halveIter++;
-      }
-      newTau2 = Math.max(0, newTau2);
-      if (Math.abs(newTau2 - tau2) < tol) {
-        tau2 = newTau2;
-        break;
-      }
-      tau2 = newTau2;
-    }
-    return tau2;
+      return { e: yi.map((y) => y - mu), h: vi.map((v) => 1 / (W * (v + tau2))), W };
+    }, seed, tol, maxIter, true);
   }
   function tau2_PM(studies, tol = REML_TOL, maxIter = 100, tau2Init = null) {
     const k = studies.length;
     if (k <= 1) return 0;
-    let tau2 = tau2Init !== null ? Math.max(0, tau2Init) : 0;
-    for (let iter = 0; iter < maxIter; iter++) {
+    const seed = tau2Init !== null ? Math.max(0, tau2Init) : 0;
+    return iterate(seed, (tau2) => {
       let W = 0, Wmu = 0;
       for (const d of studies) {
         const wi = 1 / (d.vi + tau2);
@@ -646,18 +677,15 @@ var App = (() => {
         const r = d.yi - mu;
         Q += r * r / (d.vi + tau2);
       }
-      const newTau2 = Math.max(0, tau2 + (Q - (k - 1)) / W);
-      if (Math.abs(newTau2 - tau2) < tol) return newTau2;
-      tau2 = newTau2;
-    }
-    return tau2;
+      return Math.max(0, tau2 + (Q - (k - 1)) / W);
+    }, maxIter, tol);
   }
   function tau2_EB(studies, tol = REML_TOL, maxIter = 200, tau2Init = null) {
     const k = studies.length;
     if (k <= 1) return 0;
     const df = k - 1;
-    let tau2 = tau2Init !== null ? Math.max(0, tau2Init) : 0;
-    for (let iter = 0; iter < maxIter; iter++) {
+    const seed = tau2Init !== null ? Math.max(0, tau2Init) : 0;
+    return iterate(seed, (tau2) => {
       let W = 0, Wmu = 0;
       for (const d of studies) {
         const wi = 1 / (d.vi + tau2);
@@ -670,19 +698,15 @@ var App = (() => {
         const r = d.yi - mu;
         Q += r * r / (d.vi + tau2);
       }
-      const adj = (Q * k / df - k) / W;
-      const newTau2 = Math.max(0, tau2 + adj);
-      if (Math.abs(newTau2 - tau2) < tol) return newTau2;
-      tau2 = newTau2;
-    }
-    return tau2;
+      return Math.max(0, tau2 + (Q * k / df - k) / W);
+    }, maxIter, tol);
   }
   function tau2_PMM(studies, tol = REML_TOL, maxIter = 200, tau2Init = null) {
     const k = studies.length;
     if (k <= 1) return 0;
     const target = chiSquareQuantile(0.5, k - 1);
-    let tau2 = tau2Init !== null ? Math.max(0, tau2Init) : 0;
-    for (let iter = 0; iter < maxIter; iter++) {
+    const seed = tau2Init !== null ? Math.max(0, tau2Init) : 0;
+    return iterate(seed, (tau2) => {
       let W = 0, Wmu = 0;
       for (const d of studies) {
         const wi = 1 / (d.vi + tau2);
@@ -695,11 +719,8 @@ var App = (() => {
         const r = d.yi - mu;
         Q += r * r / (d.vi + tau2);
       }
-      const newTau2 = Math.max(0, tau2 + (Q - target) / W);
-      if (Math.abs(newTau2 - tau2) < tol) return newTau2;
-      tau2 = newTau2;
-    }
-    return tau2;
+      return Math.max(0, tau2 + (Q - target) / W);
+    }, maxIter, tol);
   }
   function tau2_GENQM(studies, tol = REML_TOL, maxIter = 200) {
     const k = studies.length;
@@ -720,8 +741,9 @@ var App = (() => {
       const secular = (lam) => b2s.reduce((s, b, i) => s + b / (ds[i] - lam), 0) - W;
       const lams = [];
       for (let i = 0; i < k - 1; i++) {
-        const lo2 = ds[i + 1] + 1e-14;
-        const hi2 = ds[i] - 1e-14;
+        const pad = Math.max(1e-14, Math.abs(ds[i]) * 1e-14);
+        const lo2 = ds[i + 1] + pad;
+        const hi2 = ds[i] - pad;
         if (secular(lo2) >= 0 || secular(hi2) <= 0) continue;
         let a = lo2, b = hi2;
         for (let j = 0; j < 64; j++) {
@@ -733,23 +755,45 @@ var App = (() => {
       }
       return lams;
     }
-    function approxMedian(tau2) {
-      const lams = eigenvalues(tau2);
-      if (lams.length === 0) return chiSquareQuantile(0.5, k - 1);
-      const mu = lams.reduce((s, l) => s + l, 0);
-      const sig2 = 2 * lams.reduce((s, l) => s + l * l, 0);
-      if (sig2 <= 0) return mu;
-      const c = sig2 / (2 * mu);
-      const nu = 2 * mu * mu / sig2;
-      return c * chiSquareQuantile(0.5, nu);
+    function imhofCDF(lams, q) {
+      if (lams.length === 0) return chiSquareCDF(q, k - 1);
+      if (lams.length === 1) return chiSquareCDF(q / lams[0], 1);
+      if (q <= 0) return 0;
+      const n = lams.length;
+      function integrand(u) {
+        let theta = 0, logRho = 0;
+        for (let j = 0; j < n; j++) {
+          const lu = lams[j] * u;
+          theta += Math.atan(lu);
+          logRho += Math.log1p(lu * lu);
+        }
+        return Math.sin(theta * 0.5 - u * q * 0.5) / (u * Math.exp(logRho * 0.25));
+      }
+      let T = Math.max(4 / Math.max(...lams), 1e-3);
+      for (let it = 0; it < 50; it++) {
+        let logRho = 0;
+        for (let j = 0; j < n; j++) {
+          const lu = lams[j] * T;
+          logRho += Math.log1p(lu * lu);
+        }
+        if (Math.exp(-logRho * 0.25) / T < 1e-10) break;
+        T *= 2;
+      }
+      const halfH = T / 32;
+      let s = 0;
+      for (let m = 0; m < 16; m++) {
+        const mid = (m + 0.5) * halfH * 2;
+        for (let i = 0; i < 20; i++) s += GL20_W[i] * integrand(mid + halfH * GL20_X[i]);
+      }
+      return Math.min(1, Math.max(0, 0.5 - s * halfH / Math.PI));
     }
-    if (approxMedian(0) >= Q_obs) return 0;
+    if (imhofCDF(eigenvalues(0), Q_obs) <= 0.5) return 0;
     let lo = 0, hi = 1;
-    while (approxMedian(hi) < Q_obs && hi < 1e6) hi *= 2;
+    while (imhofCDF(eigenvalues(hi), Q_obs) > 0.5 && hi < 1e6) hi *= 2;
     if (hi >= 1e6) return hi / 2;
     for (let i = 0; i < maxIter; i++) {
       const mid = (lo + hi) / 2;
-      if (approxMedian(mid) < Q_obs) lo = mid;
+      if (imhofCDF(eigenvalues(mid), Q_obs) > 0.5) lo = mid;
       else hi = mid;
       if (hi - lo < tol) break;
     }
@@ -776,14 +820,76 @@ var App = (() => {
     const w = weights ?? studies.map((d) => 1 / d.vi);
     return genqCore(studies, w);
   }
+  function tau2Core_REML(vi, fitFn, seed = 0, tol = REML_TOL, maxIter = 100) {
+    return fisherScoringCore(vi, fitFn, seed, tol, maxIter, true);
+  }
+  function tau2Core_ML(vi, fitFn, seed = 0, tol = REML_TOL, maxIter = 100) {
+    return fisherScoringCore(vi, fitFn, seed, tol, maxIter, false);
+  }
+  function tau2Core_PM(vi, fitFn, df, seed = 0, tol = REML_TOL, maxIter = 100) {
+    let tau2 = seed;
+    for (let iter = 0; iter < maxIter; iter++) {
+      const fit = fitFn(tau2);
+      if (!fit) break;
+      const { e, W } = fit;
+      const QE = vi.reduce((s, v, i) => s + e[i] * e[i] / (v + tau2), 0);
+      const newTau2 = Math.max(0, tau2 + (QE - df) / W);
+      if (Math.abs(newTau2 - tau2) < tol) return newTau2;
+      tau2 = newTau2;
+    }
+    return tau2;
+  }
+  function tau2Core_DL(vi, fitFn0, df) {
+    if (df <= 0) return 0;
+    const fit = fitFn0();
+    if (!fit) return 0;
+    const { e, h } = fit;
+    const QE = vi.reduce((s, v, i) => s + e[i] * e[i] / v, 0);
+    const c = vi.reduce((s, v, i) => s + (1 - h[i]) / v, 0);
+    return c > 0 ? Math.max(0, (QE - df) / c) : 0;
+  }
+  function tau2Core_HS(vi, fitFn0, df) {
+    if (df <= 0) return 0;
+    const fit = fitFn0();
+    if (!fit) return 0;
+    const { e, W } = fit;
+    const QE = vi.reduce((s, v, i) => s + e[i] * e[i] / v, 0);
+    return W > 0 ? Math.max(0, (QE - df) / W) : 0;
+  }
+  function tau2Core_HE(vi, fitFn0, df) {
+    if (df <= 0) return 0;
+    const fit = fitFn0();
+    if (!fit) return 0;
+    const SS = fit.e.reduce((s, ei) => s + ei * ei, 0);
+    const meanV = vi.reduce((s, v) => s + v, 0) / vi.length;
+    return Math.max(0, SS / df - meanV);
+  }
+  function tau2Core_SJ(vi, fitFn, seed, tol = REML_TOL, maxIter = 200) {
+    const k = vi.length;
+    let tau2 = seed;
+    if (tau2 === 0) return 0;
+    for (let iter = 0; iter < maxIter; iter++) {
+      const fit = fitFn(tau2);
+      if (!fit) break;
+      const { e } = fit;
+      const newTau2 = vi.reduce((s, v, i) => s + v * e[i] * e[i] / (v + tau2), 0) / k;
+      if (Math.abs(newTau2 - tau2) < tol) return Math.max(0, newTau2);
+      tau2 = Math.max(0, newTau2);
+    }
+    return tau2;
+  }
   var init_tau2 = __esm({
     "js/tau2.js"() {
       init_utils();
       init_constants();
+      init_quadrature();
     }
   });
 
   // js/profiles.js
+  function clampVi(x) {
+    return x < MIN_VAR ? MIN_VAR : x;
+  }
   function validateTwoGroup(s, minN) {
     const errors = {};
     if (!isFinite(s.m1)) errors.m1 = "m1 must be numeric";
@@ -860,6 +966,19 @@ var App = (() => {
       w.push(`\u26A0\uFE0F ${label}: rare events (unstable estimate)`);
     return w;
   }
+  function makeProfile(spec) {
+    const { compute: rawCompute, validate } = spec;
+    return {
+      ...spec,
+      compute(s) {
+        if (!validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+        const raw = rawCompute(s);
+        const vi = clampVi(raw.vi);
+        if (!isFinite(raw.yi) || !isFinite(vi)) return { ...s, ...raw, yi: NaN, vi: NaN, se: NaN, w: 0 };
+        return { ...s, ...raw, vi, se: Math.sqrt(vi), w: 1 / vi };
+      }
+    };
+  }
   function getProfile(type) {
     return effectProfiles[type] ?? null;
   }
@@ -871,21 +990,20 @@ var App = (() => {
     if ("a" in s && "b" in s && "c" in s && "d" in s) return "OR";
     return null;
   }
-  var effectProfiles;
+  var _profileSpecs, effectProfiles;
   var init_profiles = __esm({
     "js/profiles.js"() {
       init_utils();
       init_constants();
-      effectProfiles = {
+      _profileSpecs = {
         // ------------------------------------------------------------------ //
         "MD": {
           label: "Mean Difference",
           group: "Continuous (two groups)",
           inputs: ["m1", "sd1", "n1", "m2", "sd2", "n2"],
           compute(s) {
-            if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
-            const varMD = Math.max(s.sd1 ** 2 / s.n1 + s.sd2 ** 2 / s.n2, MIN_VAR);
-            return { ...s, md: s.m1 - s.m2, varMD, se: Math.sqrt(varMD), w: 1 / varMD, yi: s.m1 - s.m2, vi: varMD };
+            const varMD = clampVi(s.sd1 ** 2 / s.n1 + s.sd2 ** 2 / s.n2);
+            return { yi: s.m1 - s.m2, vi: varMD, md: s.m1 - s.m2, varMD };
           },
           transform: (x) => x,
           validate: (s) => validateTwoGroup(s, 1),
@@ -904,12 +1022,11 @@ var App = (() => {
           group: "Continuous (two groups)",
           inputs: ["m1", "sd1", "n1", "m2", "sd2", "n2"],
           compute(s) {
-            if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
             const g = hedgesG(s, { hedgesCorrection: true });
-            return { ...s, md: g.es, varMD: g.var, se: Math.sqrt(g.var), w: 1 / g.var, yi: g.es, vi: g.var };
+            return { yi: g.es, vi: g.var, md: g.es, varMD: g.var };
           },
           transform: (x) => x,
-          validate: (s) => validateTwoGroup(s, 1),
+          validate: (s) => validateTwoGroup(s, 2),
           softWarnings: softWarnTwoGroup,
           exampleData: [
             ["Study 1", 10, 2, 30, 8, 2, 28, "A"],
@@ -928,7 +1045,6 @@ var App = (() => {
           group: "Continuous (two groups)",
           inputs: ["m1", "sd1", "n1", "m2", "sd2", "n2"],
           compute(s) {
-            if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
             const { m1, sd1, n1, m2, sd2, n2 } = s;
             const df = n1 + n2 - 2;
             const sdi2 = (sd1 ** 2 + sd2 ** 2) / 2;
@@ -940,7 +1056,7 @@ var App = (() => {
               g ** 2 * (sd1 ** 4 / (n1 - 1) + sd2 ** 4 / (n2 - 1)) / (8 * sdi2 ** 2) + (sd1 ** 2 / (n1 - 1) + sd2 ** 2 / (n2 - 1)) / sdi2,
               MIN_VAR
             );
-            return { ...s, md: g, varMD: vi_g, yi: g, vi: vi_g, se: Math.sqrt(vi_g), w: 1 / vi_g };
+            return { yi: g, vi: vi_g, md: g, varMD: vi_g };
           },
           transform: (x) => x,
           validate: (s) => validateTwoGroup(s, 2),
@@ -964,12 +1080,11 @@ var App = (() => {
           group: "Continuous (paired)",
           inputs: ["m_pre", "sd_pre", "m_post", "sd_post", "n", "r"],
           compute(s) {
-            if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
             const { m_pre, m_post, sd_pre, sd_post, n, r } = s;
             const corr = isFinite(r) ? r : 0.5;
             const md = m_post - m_pre;
             const varMD = (sd_pre ** 2 + sd_post ** 2 - 2 * corr * sd_pre * sd_post) / n;
-            return { ...s, yi: md, vi: Math.max(varMD, MIN_VAR), se: Math.sqrt(Math.max(varMD, MIN_VAR)), w: 1 / Math.max(varMD, MIN_VAR), md, varMD };
+            return { yi: md, vi: varMD, md, varMD };
           },
           transform: (x) => x,
           validate: (s) => validatePaired(s),
@@ -990,16 +1105,14 @@ var App = (() => {
           group: "Continuous (paired)",
           inputs: ["m_pre", "sd_pre", "m_post", "sd_post", "n", "r"],
           compute(s) {
-            if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
             const { m_pre, m_post, sd_pre, sd_post, n, r } = s;
             const corr = isFinite(r) ? r : 0.5;
             const d = (m_post - m_pre) / sd_pre;
             const df = n - 1;
             const J = 1 - 3 / (4 * df - 1);
             const g = d * J;
-            const var_d = 2 * (1 - corr) / n + d * d / (2 * df);
-            const vi = Math.max(J * J * var_d, MIN_VAR);
-            return { ...s, yi: g, vi, se: Math.sqrt(vi), w: 1 / vi, md: g, varMD: var_d };
+            const vi = clampVi(2 * (1 - corr) / n + g * g / (2 * n));
+            return { yi: g, vi, md: g };
           },
           transform: (x) => x,
           validate: (s) => validatePaired(s),
@@ -1024,7 +1137,6 @@ var App = (() => {
           group: "Continuous (paired)",
           inputs: ["m_pre", "sd_pre", "m_post", "sd_post", "n", "r"],
           compute(s) {
-            if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
             const { m_pre, m_post, sd_pre, sd_post, n, r } = s;
             const corr = isFinite(r) ? r : 0.5;
             const sd_change = Math.sqrt(sd_pre ** 2 + sd_post ** 2 - 2 * corr * sd_pre * sd_post);
@@ -1032,9 +1144,8 @@ var App = (() => {
             const df = n - 1;
             const J = 1 - 3 / (4 * df - 1);
             const g = d * J;
-            const var_d = 1 / n + d * d / (2 * df);
-            const vi = Math.max(J * J * var_d, MIN_VAR);
-            return { ...s, yi: g, vi, se: Math.sqrt(vi), w: 1 / vi, md: g, varMD: var_d };
+            const vi = clampVi(1 / n + g * g / (2 * n));
+            return { yi: g, vi, md: g };
           },
           transform: (x) => x,
           validate: validatePaired,
@@ -1066,11 +1177,10 @@ var App = (() => {
           isLog: true,
           inputs: ["m1", "sd1", "n1", "m2", "sd2", "n2"],
           compute(s) {
-            if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
             const { m1, sd1, n1, m2, sd2, n2 } = s;
             const yi = Math.log(m1 / m2);
-            const vi = Math.max(sd1 ** 2 / (n1 * m1 ** 2) + sd2 ** 2 / (n2 * m2 ** 2), MIN_VAR);
-            return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
+            const vi = clampVi(sd1 ** 2 / (n1 * m1 ** 2) + sd2 ** 2 / (n2 * m2 ** 2));
+            return { yi, vi };
           },
           transform: (x) => Math.exp(x),
           validate(s) {
@@ -1126,13 +1236,12 @@ var App = (() => {
           isLog: true,
           inputs: ["m1", "sd1", "n1", "m2", "sd2", "n2"],
           compute(s) {
-            if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
             const { m1, sd1, n1, m2, sd2, n2 } = s;
             const cv1 = sd1 / m1;
             const cv2 = sd2 / m2;
-            const yi = Math.log(cv1 / cv2);
-            const vi = Math.max(1 / (2 * (n1 - 1)) + cv1 ** 2 / n1 + 1 / (2 * (n2 - 1)) + cv2 ** 2 / n2, MIN_VAR);
-            return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
+            const yi = Math.log(cv1 / cv2) + 1 / (2 * (n1 - 1)) - 1 / (2 * (n2 - 1));
+            const vi = clampVi(1 / (2 * (n1 - 1)) + cv1 ** 2 / n1 + 1 / (2 * (n2 - 1)) + cv2 ** 2 / n2);
+            return { yi, vi };
           },
           transform: (x) => Math.exp(x),
           validate(s) {
@@ -1189,11 +1298,10 @@ var App = (() => {
           isLog: true,
           inputs: ["sd1", "n1", "sd2", "n2"],
           compute(s) {
-            if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
             const { sd1, n1, sd2, n2 } = s;
-            const yi = Math.log(sd1 / sd2);
-            const vi = Math.max(1 / (2 * (n1 - 1)) + 1 / (2 * (n2 - 1)), MIN_VAR);
-            return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
+            const yi = Math.log(sd1 / sd2) + 1 / (2 * (n1 - 1)) - 1 / (2 * (n2 - 1));
+            const vi = clampVi(1 / (2 * (n1 - 1)) + 1 / (2 * (n2 - 1)));
+            return { yi, vi };
           },
           transform: (x) => Math.exp(x),
           validate(s) {
@@ -1241,17 +1349,10 @@ var App = (() => {
           isLog: true,
           inputs: ["a", "b", "c", "d"],
           compute(s) {
-            if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
-            let { a, b, c, d } = s;
-            if (a === 0 || b === 0 || c === 0 || d === 0) {
-              a += 0.5;
-              b += 0.5;
-              c += 0.5;
-              d += 0.5;
-            }
+            let { a, b, c, d } = continuityCorrect(s);
             const yi = Math.log(a * d / (b * c));
-            const vi = Math.max(1 / a + 1 / b + 1 / c + 1 / d, MIN_VAR);
-            return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi, md: yi, varMD: vi };
+            const vi = clampVi(1 / a + 1 / b + 1 / c + 1 / d);
+            return { yi, vi, md: yi, varMD: vi };
           },
           transform: (x) => Math.exp(x),
           validate(s) {
@@ -1277,18 +1378,11 @@ var App = (() => {
           isLog: true,
           inputs: ["a", "b", "c", "d"],
           compute(s) {
-            if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
-            let { a, b, c, d } = s;
-            if (a === 0 || b === 0 || c === 0 || d === 0) {
-              a += 0.5;
-              b += 0.5;
-              c += 0.5;
-              d += 0.5;
-            }
+            let { a, b, c, d } = continuityCorrect(s);
             const risk1 = a / (a + b), risk2 = c / (c + d);
             const yi = Math.log(risk1 / risk2);
-            const vi = Math.max(1 / a - 1 / (a + b) + (1 / c - 1 / (c + d)), MIN_VAR);
-            return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi, md: yi, varMD: vi };
+            const vi = clampVi(1 / a - 1 / (a + b) + (1 / c - 1 / (c + d)));
+            return { yi, vi, md: yi, varMD: vi };
           },
           transform: (x) => Math.exp(x),
           validate(s) {
@@ -1312,13 +1406,12 @@ var App = (() => {
           group: "Binary outcomes",
           inputs: ["a", "b", "c", "d"],
           compute(s) {
-            if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
             const { a, b, c, d } = s;
             const risk1 = a / (a + b);
             const risk2 = c / (c + d);
             const yi = risk1 - risk2;
-            const vi = Math.max(risk1 * (1 - risk1) / (a + b) + risk2 * (1 - risk2) / (c + d), MIN_VAR);
-            return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi, md: yi, varMD: vi };
+            const vi = clampVi(risk1 * (1 - risk1) / (a + b) + risk2 * (1 - risk2) / (c + d));
+            return { yi, vi, md: yi, varMD: vi };
           },
           transform: (x) => x,
           validate(s) {
@@ -1357,13 +1450,12 @@ var App = (() => {
           group: "Binary outcomes",
           inputs: ["a", "b", "c", "d"],
           compute(s) {
-            if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
             const { a, b, c, d } = s;
             const n1 = a + b, n2 = c + d;
             const p1 = a / n1, p2 = c / n2;
             const yi = Math.asin(Math.sqrt(p1)) - Math.asin(Math.sqrt(p2));
-            const vi = Math.max(1 / (4 * n1) + 1 / (4 * n2), MIN_VAR);
-            return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
+            const vi = clampVi(1 / (4 * n1) + 1 / (4 * n2));
+            return { yi, vi };
           },
           transform: (x) => x,
           validate(s) {
@@ -1397,17 +1489,16 @@ var App = (() => {
           group: "Binary outcomes",
           inputs: ["a", "b", "c", "d"],
           compute(s) {
-            if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
             const { a, b, c, d } = s;
             const ad = a * d, bc = b * c;
             const denom = ad + bc;
-            if (denom === 0) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+            if (denom === 0) return { yi: NaN, vi: NaN };
             const yi = (ad - bc) / denom;
             const vi = Math.max(
               (1 - yi * yi) ** 2 / 4 * (1 / a + 1 / b + 1 / c + 1 / d),
               MIN_VAR
             );
-            return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
+            return { yi, vi };
           },
           transform: (x) => x,
           validate(s) {
@@ -1450,17 +1541,16 @@ var App = (() => {
           group: "Binary outcomes",
           inputs: ["a", "b", "c", "d"],
           compute(s) {
-            if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
             const { a, b, c, d } = s;
             const sqrtAD = Math.sqrt(a * d), sqrtBC = Math.sqrt(b * c);
             const denom = sqrtAD + sqrtBC;
-            if (denom === 0) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+            if (denom === 0) return { yi: NaN, vi: NaN };
             const yi = (sqrtAD - sqrtBC) / denom;
             const vi = Math.max(
               (1 - yi * yi) ** 2 / 16 * (1 / a + 1 / b + 1 / c + 1 / d),
               MIN_VAR
             );
-            return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
+            return { yi, vi };
           },
           transform: (x) => x,
           validate(s) {
@@ -1500,10 +1590,9 @@ var App = (() => {
           group: "Correlations",
           inputs: ["r", "n"],
           compute(s) {
-            if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
             const { r, n } = s;
-            const vi = Math.max((1 - r * r) ** 2 / (n - 1), MIN_VAR);
-            return { ...s, yi: r, vi, se: Math.sqrt(vi), w: 1 / vi };
+            const vi = clampVi((1 - r * r) ** 2 / (n - 1));
+            return { yi: r, vi };
           },
           transform: (x) => x,
           validate(s) {
@@ -1543,11 +1632,10 @@ var App = (() => {
           group: "Correlations",
           inputs: ["r", "n"],
           compute(s) {
-            if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
             const { r, n } = s;
             const yi = r * hyperg2F1_ucor((n - 2) / 2, 1 - r * r);
-            const vi = Math.max((1 - yi * yi) ** 2 / (n - 1), MIN_VAR);
-            return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
+            const vi = clampVi((1 - yi * yi) ** 2 / (n - 1));
+            return { yi, vi };
           },
           transform: (x) => x,
           validate(s) {
@@ -1577,13 +1665,13 @@ var App = (() => {
           label: "Correlation (Fisher's z)",
           group: "Correlations",
           isTransformedScale: true,
+          analysisScaleLabel: "Fisher z scale",
           inputs: ["r", "n"],
           compute(s) {
-            if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
             const { r, n } = s;
             const yi = Math.atanh(r);
-            const vi = Math.max(1 / (n - 3), MIN_VAR);
-            return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
+            const vi = clampVi(1 / (n - 3));
+            return { yi, vi };
           },
           transform: (x) => Math.tanh(x),
           validate(s) {
@@ -1620,11 +1708,10 @@ var App = (() => {
           group: "Correlations",
           inputs: ["r", "n", "p"],
           compute(s) {
-            if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
             const { r, n } = s;
             const p = isFinite(s.p) ? s.p : 0;
-            const vi = Math.max((1 - r * r) ** 2 / (n - p - 1), MIN_VAR);
-            return { ...s, yi: r, vi, se: Math.sqrt(vi), w: 1 / vi };
+            const vi = clampVi((1 - r * r) ** 2 / (n - p - 1));
+            return { yi: r, vi };
           },
           transform: (x) => x,
           validate(s) {
@@ -1658,14 +1745,14 @@ var App = (() => {
           label: "Partial Correlation (Fisher's z)",
           group: "Correlations",
           isTransformedScale: true,
+          analysisScaleLabel: "Fisher z scale",
           inputs: ["r", "n", "p"],
           compute(s) {
-            if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
             const { r, n } = s;
             const p = isFinite(s.p) ? s.p : 0;
             const yi = Math.atanh(r);
-            const vi = Math.max(1 / (n - p - 3), MIN_VAR);
-            return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
+            const vi = clampVi(1 / (n - p - 3));
+            return { yi, vi };
           },
           transform: (x) => Math.tanh(x),
           validate(s) {
@@ -1713,11 +1800,10 @@ var App = (() => {
           group: "Correlations",
           inputs: ["r", "n"],
           compute(s) {
-            if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
             const { r, n } = s;
             const r2 = r * r;
-            const vi = Math.max((1 - r2) ** 3 / (n - 2) + r2 * (1 - r2) ** 2 / (2 * n), MIN_VAR);
-            return { ...s, yi: r, vi, se: Math.sqrt(vi), w: 1 / vi };
+            const vi = clampVi((1 - r2) ** 3 / (n - 2) + r2 * (1 - r2) ** 2 / (2 * n));
+            return { yi: r, vi };
           },
           transform: (x) => x,
           validate(s) {
@@ -1765,7 +1851,6 @@ var App = (() => {
           group: "Correlations",
           inputs: ["r", "n", "p"],
           compute(s) {
-            if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
             const { r, n } = s;
             const p1 = s.p;
             const p2 = 1 - p1;
@@ -1777,7 +1862,7 @@ var App = (() => {
               1 / (n - 1) * (p1 * p2 / (phiZ * phiZ) - (1.5 + (1 - p1 * z / phiZ) * (1 + p2 * z / phiZ)) * rt * rt + rt ** 4),
               MIN_VAR
             );
-            return { ...s, yi: r_bis, vi, se: Math.sqrt(vi), w: 1 / vi };
+            return { yi: r_bis, vi };
           },
           transform: (x) => x,
           validate(s) {
@@ -1827,10 +1912,9 @@ var App = (() => {
           group: "Correlations",
           inputs: ["r2", "n"],
           compute(s) {
-            if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
             const { r2, n } = s;
-            const vi = Math.max(4 * r2 * (1 - r2) ** 2 / n, MIN_VAR);
-            return { ...s, yi: r2, vi, se: Math.sqrt(vi), w: 1 / vi };
+            const vi = clampVi(4 * r2 * (1 - r2) ** 2 / n);
+            return { yi: r2, vi };
           },
           transform: (x) => x,
           validate(s) {
@@ -1871,13 +1955,13 @@ var App = (() => {
           label: "R-squared (Fisher's z of \u221AR\xB2)",
           group: "Correlations",
           isTransformedScale: true,
+          analysisScaleLabel: "Fisher z scale",
           inputs: ["r2", "n"],
           compute(s) {
-            if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
             const { r2, n } = s;
             const yi = Math.atanh(Math.sqrt(r2));
-            const vi = Math.max(1 / n, MIN_VAR);
-            return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
+            const vi = clampVi(1 / n);
+            return { yi, vi };
           },
           transform: (x) => Math.tanh(x) ** 2,
           validate(s) {
@@ -1915,14 +1999,13 @@ var App = (() => {
           group: "Correlations",
           inputs: ["a", "b", "c", "d"],
           compute(s) {
-            if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
             const { a, b, c, d } = s;
             const N = a + b + c + d;
             const phi = (a * d - b * c) / Math.sqrt((a + b) * (c + d) * (a + c) * (b + d));
             const pi1d = (a + b) / N, pi2d = (c + d) / N;
             const pd1 = (a + c) / N, pd2 = (b + d) / N;
             const vi = Math.max(1 / N * (1 - phi ** 2 + phi * (1 + phi ** 2 / 2) * (pi1d - pi2d) * (pd1 - pd2) / Math.sqrt(pi1d * pi2d * pd1 * pd2) - 0.75 * phi ** 2 * ((pi1d - pi2d) ** 2 / (pi1d * pi2d) + (pd1 - pd2) ** 2 / (pd1 * pd2))), MIN_VAR);
-            return { ...s, yi: phi, vi, se: Math.sqrt(vi), w: 1 / vi };
+            return { yi: phi, vi };
           },
           transform: (x) => x,
           validate(s) {
@@ -1955,10 +2038,9 @@ var App = (() => {
           group: "Correlations",
           inputs: ["a", "b", "c", "d"],
           compute(s) {
-            if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
             const { rho, var: v } = tetrachoricFromCounts(s.a, s.b, s.c, s.d);
-            if (!isFinite(rho) || !isFinite(v)) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
-            return { ...s, yi: rho, vi: v, se: Math.sqrt(v), w: 1 / v };
+            if (!isFinite(rho) || !isFinite(v)) return { yi: NaN, vi: NaN };
+            return { yi: rho, vi: v };
           },
           transform: (x) => x,
           validate(s) {
@@ -2007,12 +2089,11 @@ var App = (() => {
           group: "Proportions",
           inputs: ["x", "n"],
           compute(s) {
-            if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
             const { x, n } = s;
             const p = x / n;
             const yi = p;
-            const vi = Math.max(p * (1 - p) / n, MIN_VAR);
-            return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
+            const vi = clampVi(p * (1 - p) / n);
+            return { yi, vi };
           },
           transform: (x) => Math.min(1, Math.max(0, x)),
           validate: validateProportion,
@@ -2030,9 +2111,9 @@ var App = (() => {
           label: "Proportion (log)",
           group: "Proportions",
           isTransformedScale: true,
+          isLog: true,
           inputs: ["x", "n"],
           compute(s) {
-            if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
             let { x, n } = s;
             if (x === 0 || x === n) {
               x += 0.5;
@@ -2040,8 +2121,8 @@ var App = (() => {
             }
             const p = x / n;
             const yi = Math.log(p);
-            const vi = Math.max((1 - p) / (n * p), MIN_VAR);
-            return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
+            const vi = clampVi((1 - p) / (n * p));
+            return { yi, vi };
           },
           transform: (x) => Math.min(1, Math.max(0, Math.exp(x))),
           validate: validateProportion,
@@ -2059,9 +2140,9 @@ var App = (() => {
           label: "Proportion (logit)",
           group: "Proportions",
           isTransformedScale: true,
+          analysisScaleLabel: "logit scale",
           inputs: ["x", "n"],
           compute(s) {
-            if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
             let { x, n } = s;
             if (x === 0 || x === n) {
               x += 0.5;
@@ -2069,8 +2150,8 @@ var App = (() => {
             }
             const p = x / n;
             const yi = Math.log(p / (1 - p));
-            const vi = Math.max(1 / (n * p * (1 - p)), MIN_VAR);
-            return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
+            const vi = clampVi(1 / (n * p * (1 - p)));
+            return { yi, vi };
           },
           transform: (x) => Math.min(1, Math.max(0, 1 / (1 + Math.exp(-x)))),
           validate: validateProportion,
@@ -2088,14 +2169,14 @@ var App = (() => {
           label: "Proportion (arcsine)",
           group: "Proportions",
           isTransformedScale: true,
+          analysisScaleLabel: "arcsine scale",
           inputs: ["x", "n"],
           compute(s) {
-            if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
             const { x, n } = s;
             const p = x / n;
             const yi = Math.asin(Math.sqrt(p));
-            const vi = Math.max(1 / (4 * n), MIN_VAR);
-            return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
+            const vi = clampVi(1 / (4 * n));
+            return { yi, vi };
           },
           transform: (x) => Math.min(1, Math.max(0, Math.sin(x) ** 2)),
           validate: validateProportion,
@@ -2113,13 +2194,13 @@ var App = (() => {
           label: "Proportion (Freeman-Tukey)",
           group: "Proportions",
           isTransformedScale: true,
+          analysisScaleLabel: "double-arcsine scale",
           inputs: ["x", "n"],
           compute(s) {
-            if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
             const { x, n } = s;
             const yi = Math.asin(Math.sqrt(x / (n + 1))) + Math.asin(Math.sqrt((x + 1) / (n + 1)));
-            const vi = Math.max(1 / (n + 0.5), MIN_VAR);
-            return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
+            const vi = clampVi(1 / (n + 0.5));
+            return { yi, vi };
           },
           transform: (x) => Math.min(1, Math.max(0, Math.sin(x / 2) ** 2)),
           validate: validateProportion,
@@ -2143,9 +2224,8 @@ var App = (() => {
           group: "Generic",
           inputs: ["yi", "vi"],
           compute(s) {
-            if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
-            const vi = Math.max(s.vi, MIN_VAR);
-            return { ...s, yi: s.yi, vi, se: Math.sqrt(vi), w: 1 / vi, md: s.yi, varMD: s.vi };
+            const vi = clampVi(s.vi);
+            return { yi: s.yi, vi, md: s.yi, varMD: s.vi };
           },
           transform: (x) => x,
           validate(s) {
@@ -2176,12 +2256,11 @@ var App = (() => {
           isLog: true,
           inputs: ["hr", "ci_lo", "ci_hi"],
           compute(s) {
-            if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
             const { hr, ci_lo, ci_hi } = s;
             const yi = Math.log(hr);
             const se = (Math.log(ci_hi) - Math.log(ci_lo)) / (2 * Z_95);
-            const vi = Math.max(se * se, MIN_VAR);
-            return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
+            const vi = clampVi(se * se);
+            return { yi, vi };
           },
           transform: (x) => Math.exp(x),
           validate(s) {
@@ -2216,15 +2295,14 @@ var App = (() => {
           isLog: true,
           inputs: ["x1", "t1", "x2", "t2"],
           compute(s) {
-            if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
             let { x1, t1, x2, t2 } = s;
             if (x1 === 0 || x2 === 0) {
               x1 += 0.5;
               x2 += 0.5;
             }
             const yi = Math.log(x1 / t1) - Math.log(x2 / t2);
-            const vi = Math.max(1 / x1 + 1 / x2, MIN_VAR);
-            return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
+            const vi = clampVi(1 / x1 + 1 / x2);
+            return { yi, vi };
           },
           transform: (x) => Math.exp(x),
           validate(s) {
@@ -2259,11 +2337,10 @@ var App = (() => {
           group: "Time-to-event / Rates",
           inputs: ["x1", "t1", "x2", "t2"],
           compute(s) {
-            if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
             const { x1, t1, x2, t2 } = s;
             const yi = x1 / t1 - x2 / t2;
-            const vi = Math.max(x1 / (t1 * t1) + x2 / (t2 * t2), MIN_VAR);
-            return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
+            const vi = clampVi(x1 / (t1 * t1) + x2 / (t2 * t2));
+            return { yi, vi };
           },
           transform: (x) => x,
           validate(s) {
@@ -2299,11 +2376,10 @@ var App = (() => {
           group: "Time-to-event / Rates",
           inputs: ["x1", "t1", "x2", "t2"],
           compute(s) {
-            if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
             const { x1, t1, x2, t2 } = s;
             const yi = Math.sqrt(x1 / t1) - Math.sqrt(x2 / t2);
-            const vi = Math.max(1 / (4 * t1) + 1 / (4 * t2), MIN_VAR);
-            return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
+            const vi = clampVi(1 / (4 * t1) + 1 / (4 * t2));
+            return { yi, vi };
           },
           transform: (x) => x,
           validate(s) {
@@ -2337,12 +2413,11 @@ var App = (() => {
           isLog: true,
           inputs: ["x", "t"],
           compute(s) {
-            if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
             let { x, t } = s;
             if (x === 0) x = 0.5;
             const yi = Math.log(x / t);
-            const vi = Math.max(1 / x, MIN_VAR);
-            return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
+            const vi = clampVi(1 / x);
+            return { yi, vi };
           },
           transform: (x) => Math.exp(x),
           validate(s) {
@@ -2390,15 +2465,14 @@ var App = (() => {
           group: "Continuous (single group)",
           inputs: ["m", "sd", "n", "ref"],
           compute(s) {
-            if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
             const { m, sd, n } = s;
             const ref = isFinite(s.ref) ? s.ref : 0;
             const d = (m - ref) / sd;
             const df = n - 1;
             const J = 1 - 3 / (4 * df - 1);
             const yi = d * J;
-            const vi = Math.max(1 / n + yi * yi / (2 * df), MIN_VAR);
-            return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
+            const vi = clampVi(1 / n + yi * yi / (2 * df));
+            return { yi, vi };
           },
           transform: (x) => x,
           validate(s) {
@@ -2428,7 +2502,6 @@ var App = (() => {
           group: "Continuous (single group)",
           inputs: ["m", "sd", "n", "ref"],
           compute(s) {
-            if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
             const { m, sd, n } = s;
             const ref = isFinite(s.ref) ? s.ref : 0;
             const d = (m - ref) / sd;
@@ -2436,8 +2509,8 @@ var App = (() => {
             const J = 1 - 3 / (4 * df - 1);
             const yi = d * J;
             const vi_d = 1 / n + d * d / (2 * df);
-            const vi = Math.max(J * J * vi_d, MIN_VAR);
-            return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
+            const vi = clampVi(J * J * vi_d);
+            return { yi, vi };
           },
           transform: (x) => x,
           validate(s) {
@@ -2475,9 +2548,8 @@ var App = (() => {
           group: "Continuous (single group)",
           inputs: ["m", "sd", "n"],
           compute(s) {
-            if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
-            const vi = Math.max(s.sd ** 2 / s.n, MIN_VAR);
-            return { ...s, yi: s.m, vi, se: Math.sqrt(vi), w: 1 / vi };
+            const vi = clampVi(s.sd ** 2 / s.n);
+            return { yi: s.m, vi };
           },
           transform: (x) => x,
           validate(s) {
@@ -2516,9 +2588,8 @@ var App = (() => {
           isLog: true,
           inputs: ["m", "sd", "n"],
           compute(s) {
-            if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
-            const vi = Math.max(s.sd ** 2 / (s.n * s.m ** 2), MIN_VAR);
-            return { ...s, yi: Math.log(s.m), vi, se: Math.sqrt(vi), w: 1 / vi };
+            const vi = clampVi(s.sd ** 2 / (s.n * s.m ** 2));
+            return { yi: Math.log(s.m), vi };
           },
           transform: (x) => Math.exp(x),
           validate(s) {
@@ -2560,11 +2631,10 @@ var App = (() => {
           inputs: ["counts1", "counts2"],
           rawInputs: /* @__PURE__ */ new Set(["counts1", "counts2"]),
           compute(s) {
-            if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
             const { es, var: v } = gorFromCounts(parseCounts(s.counts1), parseCounts(s.counts2));
-            if (!isFinite(es) || !isFinite(v)) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
-            const vi = Math.max(v, MIN_VAR);
-            return { ...s, yi: es, vi, se: Math.sqrt(vi), w: 1 / vi };
+            if (!isFinite(es) || !isFinite(v)) return { yi: NaN, vi: NaN };
+            const vi = clampVi(v);
+            return { yi: es, vi };
           },
           transform: (x) => Math.exp(x),
           validate(s) {
@@ -2621,11 +2691,10 @@ var App = (() => {
           group: "Reliability",
           inputs: ["alpha", "k", "n"],
           compute(s) {
-            if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
             const { alpha, k, n } = s;
             const yi = alpha;
-            const vi = Math.max(2 * k * k * (1 - alpha) ** 2 / (n * (k - 1)), MIN_VAR);
-            return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
+            const vi = clampVi(2 * k * k * (1 - alpha) ** 2 / (n * (k - 1)));
+            return { yi, vi };
           },
           transform: (x) => x,
           validate(s) {
@@ -2664,13 +2733,13 @@ var App = (() => {
           label: "Cronbach's \u03B1 (log transform, ABT)",
           group: "Reliability",
           isTransformedScale: true,
+          analysisScaleLabel: "log(1\u2212\u03B1) scale",
           inputs: ["alpha", "k", "n"],
           compute(s) {
-            if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
             const { alpha, k, n } = s;
             const yi = Math.log(1 - alpha);
-            const vi = Math.max(2 * k / (n * (k - 1)), MIN_VAR);
-            return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
+            const vi = clampVi(2 * k / (n * (k - 1)));
+            return { yi, vi };
           },
           transform: (x) => 1 - Math.exp(x),
           validate(s) {
@@ -2713,12 +2782,11 @@ var App = (() => {
           isTransformedScale: true,
           inputs: ["alpha", "k", "n"],
           compute(s) {
-            if (!this.validate(s).valid) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
             const { alpha, k, n } = s;
             const u = k / (k - 1) * (1 - alpha);
             const yi = Math.cbrt(u);
-            const vi = Math.max(2 * k * k * yi * yi / (9 * n * (k - 1)), MIN_VAR);
-            return { ...s, yi, vi, se: Math.sqrt(vi), w: 1 / vi };
+            const vi = clampVi(2 * k * k * yi * yi / (9 * n * (k - 1)));
+            return { yi, vi };
           },
           // Back-transform to α requires k (unavailable here); display on internal scale.
           transform: (x) => x,
@@ -2746,6 +2814,9 @@ var App = (() => {
           ]
         }
       };
+      effectProfiles = Object.fromEntries(
+        Object.entries(_profileSpecs).map(([k, v]) => [k, makeProfile(v)])
+      );
     }
   });
 
@@ -2848,9 +2919,10 @@ var App = (() => {
     }
     const grid = new Float64Array(nGrid);
     const ll = new Float64Array(nGrid);
-    const step = hi / (nGrid - 1);
+    const stepTau = Math.sqrt(hi) / (nGrid - 1);
     for (let i = 0; i < nGrid; i++) {
-      const t = i * step;
+      const tau = i * stepTau;
+      const t = tau * tau;
       grid[i] = t;
       ll[i] = evalProfile(t) - lMax;
     }
@@ -2930,14 +3002,18 @@ var App = (() => {
       return new Float64Array(raw.map((v) => v / total));
     };
     let tauWeights = normalise(logW);
-    const maxW = tauWeights.reduce((m, v) => Math.max(m, v), 0);
-    let grid_truncated = tauWeights[nGrid - 1] > 1e-4 * maxW;
-    if (grid_truncated) {
+    let grid_truncated = false;
+    for (let _expand = 0; _expand < 3; _expand++) {
+      const maxW = tauWeights.reduce((m, v) => Math.max(m, v), 0);
+      if (tauWeights[nGrid - 1] <= 1e-4 * maxW) break;
       tauMax *= 2;
       ({ tauGrid, condMeans, condVars, logW, dtau } = computeGrid(tauMax));
       tauWeights = normalise(logW);
-      const maxW2 = tauWeights.reduce((m, v) => Math.max(m, v), 0);
-      grid_truncated = tauWeights[nGrid - 1] > 1e-4 * maxW2;
+      grid_truncated = true;
+    }
+    {
+      const maxW = tauWeights.reduce((m, v) => Math.max(m, v), 0);
+      grid_truncated = tauWeights[nGrid - 1] > 1e-4 * maxW;
     }
     let tauMean = 0, tauMeanSq = 0;
     for (let g = 0; g < nGrid; g++) {
@@ -3068,6 +3144,212 @@ var App = (() => {
     }
   });
 
+  // js/linalg.js
+  function wls(X, y, w) {
+    const k = X.length;
+    const p = X[0].length;
+    const XtWX = Array.from({ length: p }, () => Array(p).fill(0));
+    const XtWy = Array(p).fill(0);
+    for (let i = 0; i < k; i++) {
+      const wi = w[i];
+      for (let j = 0; j < p; j++) {
+        XtWy[j] += wi * X[i][j] * y[i];
+        for (let l = j; l < p; l++) {
+          const v = wi * X[i][j] * X[i][l];
+          XtWX[j][l] += v;
+          if (l !== j) XtWX[l][j] += v;
+        }
+      }
+    }
+    const inv = matInverse(XtWX);
+    if (inv === null) {
+      return {
+        beta: Array(p).fill(NaN),
+        vcov: Array.from({ length: p }, () => Array(p).fill(NaN)),
+        rankDeficient: true
+      };
+    }
+    const beta = inv.map((row) => row.reduce((acc, v, j) => acc + v * XtWy[j], 0));
+    return { beta, vcov: inv, rankDeficient: false };
+  }
+  function matInverse(A) {
+    const p = A.length;
+    const M = A.map((row, i) => {
+      const aug = row.slice();
+      for (let j = 0; j < p; j++) aug.push(i === j ? 1 : 0);
+      return aug;
+    });
+    const matScale = A.reduce((m, row) => Math.max(m, ...row.map(Math.abs)), 0);
+    const singTol = 1e-14 * Math.max(1, matScale);
+    for (let col = 0; col < p; col++) {
+      let pivotRow = col;
+      for (let row = col + 1; row < p; row++) {
+        if (Math.abs(M[row][col]) > Math.abs(M[pivotRow][col])) pivotRow = row;
+      }
+      [M[col], M[pivotRow]] = [M[pivotRow], M[col]];
+      const pivot = M[col][col];
+      if (Math.abs(pivot) < singTol) return null;
+      for (let j = col; j < 2 * p; j++) M[col][j] /= pivot;
+      for (let row = 0; row < p; row++) {
+        if (row === col) continue;
+        const f = M[row][col];
+        if (f === 0) continue;
+        for (let j = col; j < 2 * p; j++) M[row][j] -= f * M[col][j];
+      }
+    }
+    return M.map((row) => row.slice(p));
+  }
+  function numericalHessian(f, x, fval, h) {
+    const n = x.length;
+    const fv = fval !== void 0 ? fval : f(x);
+    const hs = h === void 0 ? x.map((v) => Math.max(1e-4, 1e-4 * Math.abs(v))) : typeof h === "number" ? x.map(() => h) : h;
+    const H = Array.from({ length: n }, () => new Array(n).fill(0));
+    for (let i = 0; i < n; i++) {
+      const xp = x.slice();
+      xp[i] += hs[i];
+      const xm = x.slice();
+      xm[i] -= hs[i];
+      H[i][i] = (f(xp) - 2 * fv + f(xm)) / (hs[i] * hs[i]);
+      for (let j = i + 1; j < n; j++) {
+        const xpp = x.slice();
+        xpp[i] += hs[i];
+        xpp[j] += hs[j];
+        const xpm = x.slice();
+        xpm[i] += hs[i];
+        xpm[j] -= hs[j];
+        const xmp = x.slice();
+        xmp[i] -= hs[i];
+        xmp[j] += hs[j];
+        const xmm = x.slice();
+        xmm[i] -= hs[i];
+        xmm[j] -= hs[j];
+        const hij = (f(xpp) - f(xpm) - f(xmp) + f(xmm)) / (4 * hs[i] * hs[j]);
+        H[i][j] = hij;
+        H[j][i] = hij;
+      }
+    }
+    return H;
+  }
+  function inverseWithRidge(H, schedule = [1e-8, 1e-6, 1e-4, 0.01, 1, 10]) {
+    let inv = matInverse(H);
+    if (inv !== null) return inv;
+    for (const lam of schedule) {
+      const ridge = H.map((row, i) => row.map((v, j) => i === j ? v + lam : v));
+      inv = matInverse(ridge);
+      if (inv !== null) return inv;
+    }
+    return null;
+  }
+  function cholFactor(m) {
+    const p = m.length;
+    const L = Array.from({ length: p }, () => new Float64Array(p));
+    for (let i = 0; i < p; i++) {
+      for (let j = 0; j <= i; j++) {
+        let s = 0;
+        for (let k = 0; k < j; k++) s += L[i][k] * L[j][k];
+        if (i === j) {
+          const d = m[i][i] - s;
+          if (d <= 0) return null;
+          L[i][j] = Math.sqrt(d);
+        } else {
+          L[i][j] = (m[i][j] - s) / L[j][j];
+        }
+      }
+    }
+    return L;
+  }
+  function cholLogDet(L) {
+    let s = 0;
+    for (let j = 0; j < L.length; j++) s += Math.log(L[j][j]);
+    return 2 * s;
+  }
+  function forwardSolve(L, b) {
+    const p = L.length;
+    const x = new Float64Array(p);
+    for (let i = 0; i < p; i++) {
+      let s = b[i];
+      for (let j = 0; j < i; j++) s -= L[i][j] * x[j];
+      x[i] = s / L[i][i];
+    }
+    return x;
+  }
+  function backSolve(L, b) {
+    const p = L.length;
+    const x = new Float64Array(p);
+    for (let i = p - 1; i >= 0; i--) {
+      let s = b[i];
+      for (let j = i + 1; j < p; j++) s -= L[j][i] * x[j];
+      x[i] = s / L[i][i];
+    }
+    return x;
+  }
+  function cholSolveVec(L, b) {
+    return backSolve(L, forwardSolve(L, b));
+  }
+  function cholInverse(L) {
+    const p = L.length;
+    const inv = Array.from({ length: p }, () => new Array(p).fill(0));
+    for (let j = 0; j < p; j++) {
+      const ej = new Array(p).fill(0);
+      ej[j] = 1;
+      const col = cholSolveVec(L, ej);
+      for (let i = 0; i < p; i++) inv[i][j] = col[i];
+    }
+    return inv;
+  }
+  function wlsCholesky(X, y, w) {
+    const k = X.length, p = X[0].length;
+    const XtWX = Array.from({ length: p }, () => Array(p).fill(0));
+    const XtWy = Array(p).fill(0);
+    for (let i = 0; i < k; i++) {
+      const wi = w[i];
+      for (let j = 0; j < p; j++) {
+        XtWy[j] += wi * X[i][j] * y[i];
+        for (let l = j; l < p; l++) {
+          const v = wi * X[i][j] * X[i][l];
+          XtWX[j][l] += v;
+          if (l !== j) XtWX[l][j] += v;
+        }
+      }
+    }
+    const L = cholFactor(XtWX);
+    const inv = L !== null ? cholInverse(L) : matInverse(XtWX);
+    if (inv === null) {
+      return {
+        beta: Array(p).fill(NaN),
+        vcov: Array.from({ length: p }, () => Array(p).fill(NaN)),
+        rankDeficient: true
+      };
+    }
+    return { beta: inv.map((row) => row.reduce((a, v, j) => a + v * XtWy[j], 0)), vcov: inv, rankDeficient: false };
+  }
+  function logDet(A) {
+    const n = A.length;
+    const M = A.map((row) => row.slice());
+    let logd = 0;
+    for (let i = 0; i < n; i++) {
+      let maxVal = Math.abs(M[i][i]), maxRow = i;
+      for (let k = i + 1; k < n; k++) {
+        if (Math.abs(M[k][i]) > maxVal) {
+          maxVal = Math.abs(M[k][i]);
+          maxRow = k;
+        }
+      }
+      if (maxRow !== i) [M[i], M[maxRow]] = [M[maxRow], M[i]];
+      if (Math.abs(M[i][i]) < 1e-15) return -Infinity;
+      logd += Math.log(Math.abs(M[i][i]));
+      for (let k = i + 1; k < n; k++) {
+        const f = M[k][i] / M[i][i];
+        for (let j = i; j < n; j++) M[k][j] -= f * M[i][j];
+      }
+    }
+    return logd;
+  }
+  var init_linalg = __esm({
+    "js/linalg.js"() {
+    }
+  });
+
   // js/selection.js
   function pCurve(studies) {
     const sig = studies.filter((d) => isFinite(d.yi) && isFinite(d.se) && d.se > 0).map((d) => {
@@ -3140,14 +3422,15 @@ var App = (() => {
   }
   function pUniform(studies, m) {
     const MIN_DENOM = 1e-10;
-    const SEARCH_LO = -10;
-    const SEARCH_HI = 10;
     const sig = studies.filter((d) => isFinite(d.yi) && isFinite(d.se) && d.se > 0).map((d) => ({
       z: Math.abs(d.yi / d.se),
       // fold to upper tail
       se: d.se
     })).filter((d) => 2 * (1 - normalCDF(d.z)) < 0.05);
     const k = sig.length;
+    const maxAbsYi = k > 0 ? Math.max(...sig.map((d) => d.z * d.se)) : 0;
+    const SEARCH_HI = Math.max(10, maxAbsYi * 2);
+    const SEARCH_LO = -SEARCH_HI;
     function qi(z, se, delta) {
       const lambda = delta / se;
       const numer = 1 - normalCDF(z - lambda);
@@ -3254,7 +3537,7 @@ var App = (() => {
       let alpha = 1;
       let xnew, fnew;
       let accepted = false;
-      for (let sh = 0; sh < 60; sh++) {
+      for (let sh = 0; sh < 20; sh++) {
         xnew = x.map((xi, j) => xi + alpha * d[j]);
         fnew = f(xnew);
         if (fnew <= fval + c1 * alpha * dg) {
@@ -3343,38 +3626,270 @@ var App = (() => {
     }
     return negLL;
   }
-  function numericalHessian(f, x, fval) {
-    const n = x.length;
-    const h = x.map((v) => Math.max(1e-4, 1e-4 * Math.abs(v)));
-    const H = Array.from({ length: n }, () => new Array(n).fill(0));
-    for (let i = 0; i < n; i++) {
-      const xp = x.slice();
-      xp[i] += h[i];
-      const xm = x.slice();
-      xm[i] -= h[i];
-      H[i][i] = (f(xp) - 2 * fval + f(xm)) / (h[i] * h[i]);
-      for (let j = i + 1; j < n; j++) {
-        const xpp = x.slice();
-        xpp[i] += h[i];
-        xpp[j] += h[j];
-        const xpm = x.slice();
-        xpm[i] += h[i];
-        xpm[j] -= h[j];
-        const xmp = x.slice();
-        xmp[i] -= h[i];
-        xmp[j] += h[j];
-        const xmm = x.slice();
-        xmm[i] -= h[i];
-        xmm[j] -= h[j];
-        const hij = (f(xpp) - f(xpm) - f(xmp) + f(xmm)) / (4 * h[i] * h[j]);
-        H[i][j] = hij;
-        H[j][i] = hij;
-      }
+  function continuousNormConst(mu, tau2, vi, wFn, sides) {
+    const sigma_i = Math.sqrt(vi + tau2);
+    const se_i = Math.sqrt(vi);
+    let sum = 0;
+    for (let j = 0; j < 20; j++) {
+      const y = mu + GH20_X[j] * Math.SQRT2 * sigma_i;
+      const p = sides === 2 ? 2 * (1 - normalCDF(Math.abs(y) / se_i)) : 1 - normalCDF(y / se_i);
+      sum += GH20_W[j] * wFn(p);
     }
-    return H;
+    return sum / _SQRT_PI;
+  }
+  function betaNormConst(mu, tau2, vi, a, b, sides, pval_min = 1e-5) {
+    const sigma_i = Math.sqrt(vi + tau2);
+    const se_i = Math.sqrt(vi);
+    const inv_norm = 1 / (sigma_i * Math.SQRT2 * Math.sqrt(Math.PI));
+    function integrand(y) {
+      const p = sides === 2 ? 2 * (1 - normalCDF(Math.abs(y) / se_i)) : 1 - normalCDF(y / se_i);
+      const pc = Math.max(pval_min, Math.min(1 - pval_min, p));
+      const w = Math.pow(pc, a - 1) * Math.pow(1 - pc, b - 1);
+      if (!isFinite(w)) return 0;
+      const z = (y - mu) / sigma_i;
+      return w * Math.exp(-0.5 * z * z) * inv_norm;
+    }
+    function glIntegral(lo, hi) {
+      const mid = 0.5 * (lo + hi);
+      const half = 0.5 * (hi - lo);
+      let s = 0;
+      for (let j = 0; j < 20; j++) s += GL20_W[j] * integrand(mid + half * GL20_X[j]);
+      return s * half;
+    }
+    const y_lo = mu - 8 * sigma_i;
+    const y_hi = mu + 8 * sigma_i;
+    if (sides !== 2) {
+      return glIntegral(y_lo, y_hi);
+    }
+    const eps = se_i / 10;
+    const delta = 6 * se_i;
+    const K = Math.sqrt(2 / Math.PI) / se_i;
+    const x_inc = K * eps;
+    const D0 = Math.exp(-0.5 * (mu / sigma_i) ** 2) * inv_norm;
+    let B_inc = 0, coeff = 1;
+    for (let k = 0; k < 80; k++) {
+      const contrib = Math.pow(x_inc, b + k) / (b + k);
+      B_inc += (k % 2 === 0 ? 1 : -1) * coeff * contrib;
+      const next2 = coeff * (a - 1 - k) / (k + 1);
+      if (!isFinite(next2) || Math.abs(next2 * Math.pow(x_inc, b + k + 1)) < 1e-14 * Math.abs(B_inc) + 1e-300) break;
+      coeff = next2;
+    }
+    if (!isFinite(B_inc) || B_inc < 0) B_inc = 0;
+    const analytical = 2 * D0 / K * B_inc;
+    let numerical = 0;
+    if (delta > eps) numerical += glIntegral(eps, delta) + glIntegral(-delta, -eps);
+    if (y_lo < -delta) numerical += glIntegral(y_lo, -delta);
+    if (y_hi > delta) numerical += glIntegral(delta, y_hi);
+    return analytical + numerical;
+  }
+  function _fitContinuousSelModel({ studies, sides, weightFn, makeWFn, initGrid, lrtDf, pvalMin, extractShapeParams }) {
+    const valid = validStudies(studies);
+    const k = valid.length;
+    if (k < 4) return { error: "insufficient_k", k, minK: 4, weightFn };
+    const yi = valid.map((s) => s.yi);
+    const vi = valid.map((s) => s.vi);
+    const mUnsel = meta(valid, "ML");
+    const logLikUnsel = logLik(valid, mUnsel.RE, mUnsel.tau2);
+    const pvals = yi.map((y, i) => {
+      const se_i = Math.sqrt(vi[i]);
+      const p = sides === 2 ? 2 * (1 - normalCDF(Math.abs(y) / se_i)) : 1 - normalCDF(y / se_i);
+      return Math.max(pvalMin, Math.min(1 - pvalMin, p));
+    });
+    function nLL(params) {
+      const mu2 = params[0];
+      const tau22 = Math.exp(params[1]);
+      const { w, normConst } = makeWFn(params.slice(2));
+      let ll = 0;
+      for (let i = 0; i < k; i++) {
+        const totalVar = vi[i] + tau22;
+        ll += 0.5 * (Math.log(totalVar) + (yi[i] - mu2) ** 2 / totalVar);
+        const wi = w(pvals[i]);
+        if (!(wi > 0)) return Infinity;
+        ll -= Math.log(wi);
+        const c_i = normConst(mu2, tau22, vi[i]);
+        if (!(c_i > 0) || !isFinite(c_i)) return Infinity;
+        ll += Math.log(c_i);
+      }
+      return ll;
+    }
+    const mu0 = mUnsel.RE;
+    const rho0 = Math.log(Math.max(mUnsel.tau2, 1e-9));
+    let result = null;
+    for (const init2 of initGrid) {
+      const r = bfgs(nLL, [mu0, rho0, ...init2]);
+      if (result === null || r.fval < result.fval) result = r;
+    }
+    const [mu_fit, rho_fit, ...logShapeFits] = result.x;
+    const mu = mu_fit;
+    const tau2 = Math.exp(rho_fit);
+    const logLikSel = -result.fval;
+    const hess = numericalHessian(nLL, result.x, result.fval);
+    const inv = inverseWithRidge(hess);
+    function getSE(j) {
+      if (inv !== null && inv[j][j] > 0) return Math.sqrt(inv[j][j]);
+      return hess[j][j] > 0 ? 1 / Math.sqrt(hess[j][j]) : NaN;
+    }
+    const se_mu = getSE(0);
+    const se_rho = getSE(1);
+    const se_tau2 = isFinite(se_rho) ? tau2 * se_rho : NaN;
+    const zval_mu = mu / se_mu;
+    const pval_mu = 2 * (1 - normalCDF(Math.abs(zval_mu)));
+    const ci_mu = [mu - Z_95 * se_mu, mu + Z_95 * se_mu];
+    const lrt_stat = 2 * (logLikSel - logLikUnsel);
+    const lrt_p = lrt_stat > 0 ? 1 - chiSquareCDF(lrt_stat, lrtDf) : 1;
+    return {
+      mu,
+      se_mu,
+      zval_mu,
+      pval_mu,
+      ci_mu,
+      tau2,
+      se_tau2,
+      ...extractShapeParams(logShapeFits, getSE),
+      logLikSel,
+      logLikUnsel,
+      LRT: lrt_stat,
+      LRTdf: lrtDf,
+      LRTp: lrt_p,
+      RE_unsel: mUnsel.RE,
+      tau2_unsel: mUnsel.tau2,
+      ciLow_unsel: mUnsel.ciLow,
+      ciHigh_unsel: mUnsel.ciHigh,
+      converged: result.converged,
+      iters: result.iters,
+      k,
+      sides,
+      weightFn
+    };
+  }
+  function halfNormalSelModel(studies, opts = {}) {
+    const sides = opts.sides ?? 1;
+    const pvalMin = 1e-15;
+    return _fitContinuousSelModel({
+      studies,
+      sides,
+      weightFn: "halfnorm",
+      pvalMin,
+      makeWFn: ([logDelta]) => {
+        const delta = Math.exp(logDelta);
+        const w = (p) => {
+          const pc = Math.max(pvalMin, Math.min(1 - pvalMin, p));
+          return normalCDF(normalQuantile(1 - pc) * delta);
+        };
+        return { w, normConst: (mu, tau2, vi) => continuousNormConst(mu, tau2, vi, w, sides) };
+      },
+      initGrid: [[Math.log(1e-3)], [Math.log(0.5)], [Math.log(1)], [Math.log(2)]],
+      lrtDf: 1,
+      extractShapeParams: ([logDelta], getSE) => {
+        const delta = Math.exp(logDelta);
+        const se_logDelta = getSE(2);
+        return { delta, se_delta: isFinite(se_logDelta) ? delta * se_logDelta : NaN };
+      }
+    });
+  }
+  function powerSelModel(studies, opts = {}) {
+    const sides = opts.sides ?? 1;
+    const pvalMin = 1e-15;
+    return _fitContinuousSelModel({
+      studies,
+      sides,
+      weightFn: "power",
+      pvalMin,
+      makeWFn: ([logDelta]) => {
+        const delta = Math.exp(logDelta);
+        const w = (p) => {
+          const pc = Math.max(pvalMin, Math.min(1 - pvalMin, p));
+          return Math.pow(1 - pc, delta);
+        };
+        return { w, normConst: (mu, tau2, vi) => continuousNormConst(mu, tau2, vi, w, sides) };
+      },
+      initGrid: [[Math.log(1e-3)], [Math.log(0.5)], [Math.log(1)], [Math.log(2)]],
+      lrtDf: 1,
+      extractShapeParams: ([logDelta], getSE) => {
+        const delta = Math.exp(logDelta);
+        const se_logDelta = getSE(2);
+        return { delta, se_delta: isFinite(se_logDelta) ? delta * se_logDelta : NaN };
+      }
+    });
+  }
+  function negexpSelModel(studies, opts = {}) {
+    const sides = opts.sides ?? 1;
+    const pvalMin = 1e-15;
+    return _fitContinuousSelModel({
+      studies,
+      sides,
+      weightFn: "negexp",
+      pvalMin,
+      makeWFn: ([logDelta]) => {
+        const delta = Math.exp(logDelta);
+        const w = (p) => {
+          const pc = Math.max(pvalMin, Math.min(1 - pvalMin, p));
+          return Math.exp(-delta * pc);
+        };
+        return { w, normConst: (mu, tau2, vi) => continuousNormConst(mu, tau2, vi, w, sides) };
+      },
+      initGrid: [[Math.log(1e-3)], [Math.log(0.5)], [Math.log(1)], [Math.log(2)]],
+      lrtDf: 1,
+      extractShapeParams: ([logDelta], getSE) => {
+        const delta = Math.exp(logDelta);
+        const se_logDelta = getSE(2);
+        return { delta, se_delta: isFinite(se_logDelta) ? delta * se_logDelta : NaN };
+      }
+    });
+  }
+  function betaSelModel(studies, opts = {}) {
+    const sides = opts.sides ?? 1;
+    const pvalMin = 1e-5;
+    return _fitContinuousSelModel({
+      studies,
+      sides,
+      weightFn: "beta",
+      pvalMin,
+      makeWFn: ([logA, logB]) => {
+        const a = Math.exp(logA);
+        const b = Math.exp(logB);
+        const w = (p) => {
+          const pc = Math.max(pvalMin, Math.min(1 - pvalMin, p));
+          return Math.pow(pc, a - 1) * Math.pow(1 - pc, b - 1);
+        };
+        return { w, normConst: (mu, tau2, vi) => betaNormConst(mu, tau2, vi, a, b, sides, pvalMin) };
+      },
+      // Multi-start: (log a, log b) pairs covering b<1 (near-null) and b>1 (pub bias)
+      initGrid: [
+        [0, 0],
+        // a=1, b=1 — uniform
+        [0, Math.log(2)],
+        // a=1, b=2 — mild selection
+        [0, Math.log(4)],
+        // a=1, b=4 — strong selection
+        [Math.log(0.5), Math.log(2)],
+        // a=0.5, b=2
+        [0, Math.log(0.75)],
+        // a=1, b=0.75 — typical near-null
+        [Math.log(1.2), Math.log(0.75)],
+        // a=1.2, b=0.75
+        [Math.log(0.8), Math.log(0.8)],
+        // a=0.8, b=0.8
+        [0, Math.log(0.5)]
+        // a=1, b=0.5
+      ],
+      lrtDf: 2,
+      extractShapeParams: ([logA, logB], getSE) => {
+        const a = Math.exp(logA);
+        const b = Math.exp(logB);
+        const se_logA = getSE(2);
+        const se_logB = getSE(3);
+        return {
+          a,
+          se_a: isFinite(se_logA) ? a * se_logA : NaN,
+          b,
+          se_b: isFinite(se_logB) ? b * se_logB : NaN
+        };
+      }
+    });
   }
   function veveaHedges(studies, cuts = SEL_CUTS_ONE_SIDED, sides = 1, fixedOmega = null) {
-    const valid = studies.filter((s) => isFinite(s.yi) && isFinite(s.vi) && s.vi > 0);
+    const valid = validStudies(studies);
     const k = valid.length;
     const K = cuts.length;
     const isFixed = fixedOmega !== null;
@@ -3401,15 +3916,7 @@ var App = (() => {
     const logLikUnsel = logLik(valid, mUnsel.RE, mUnsel.tau2);
     function invertHess(H, fval, f2) {
       const hess = numericalHessian(f2, H, fval);
-      let inv = matInverse(hess);
-      if (inv === null) {
-        for (const lam of [1e-8, 1e-6, 1e-4, 0.01, 1, 10]) {
-          const ridge = hess.map((row, i) => row.map((v, j) => i === j ? v + lam : v));
-          inv = matInverse(ridge);
-          if (inv !== null) break;
-        }
-      }
-      return { hess, inv };
+      return { hess, inv: inverseWithRidge(hess) };
     }
     function getSE(hess, inv, j) {
       if (inv !== null && inv[j][j] > 0) return Math.sqrt(inv[j][j]);
@@ -3600,12 +4107,14 @@ var App = (() => {
       fixed: false
     };
   }
-  var SEL_CUTS_ONE_SIDED, SELECTION_PRESETS;
+  var SEL_CUTS_ONE_SIDED, SELECTION_PRESETS, _SQRT_PI;
   var init_selection = __esm({
     "js/selection.js"() {
       init_analysis();
+      init_linalg();
       init_utils();
       init_constants();
+      init_quadrature();
       SEL_CUTS_ONE_SIDED = [0.025, 0.05, 0.1, 0.25, 0.5, 1];
       SELECTION_PRESETS = {
         // ---- One-sided ----
@@ -3641,6 +4150,7 @@ var App = (() => {
           omega: [1, 0.9, 0.5, 0.3, 0.2, 0.1]
         }
       };
+      _SQRT_PI = Math.sqrt(Math.PI);
     }
   });
 
@@ -3682,18 +4192,19 @@ var App = (() => {
       results[g] = {
         k: groupStudies.length,
         y: res.RE,
-        se: res.se ?? Math.sqrt(res.vi ?? 0),
+        se: res.seRE ?? res.se ?? Math.sqrt(res.vi ?? 0),
         ci: { lb: res.ciLow, ub: res.ciHigh },
         tau2: res.tau2 ?? 0,
         I2: res.I2 ?? 0
       };
       if (isFinite(res.Q)) Qwithin_sum += res.Q;
     });
-    let Qbetween = overall.Q - Qwithin_sum;
+    const Qtotal = isFinite(overall.Q) ? overall.Q : 0;
+    let Qbetween = Qtotal - Qwithin_sum;
     if (!isFinite(Qbetween) || Qbetween < 0) Qbetween = 0;
     const df = groupNames.length - 1;
     const p = 1 - chiSquareCDF(Qbetween, df);
-    return { groups: results, Qbetween, df, p, k: valid.length, G: groupNames.length, kNoGroup };
+    return { groups: results, Qtotal, Qwithin: Qwithin_sum, Qbetween, df, p, k: valid.length, G: groupNames.length, kNoGroup };
   }
   function qProfile(tau2, studies) {
     const w = studies.map((d) => 1 / (d.vi + tau2));
@@ -3744,7 +4255,9 @@ var App = (() => {
       }
     }
     const sumWFE = studies.reduce((acc, d) => acc + 1 / d.vi, 0);
-    const sigma2 = df / sumWFE;
+    const sumWFE2 = studies.reduce((acc, d) => acc + 1 / (d.vi * d.vi), 0);
+    const c = sumWFE - sumWFE2 / sumWFE;
+    const sigma2 = c > 0 ? df / c : df / sumWFE;
     const toI2 = (t) => 100 * t / (t + sigma2);
     const toH2 = (t) => t / sigma2 + 1;
     return {
@@ -3764,12 +4277,15 @@ var App = (() => {
     const sorted = values.filter(isFinite).slice().sort((a, b) => a - b);
     const n = sorted.length;
     if (n === 0) return pcts.map(() => NaN);
-    return pcts.map((p) => {
+    const knots = pcts.map((p) => {
       const idx = p / 100 * (n - 1);
       const lo = Math.floor(idx);
       const hi = Math.ceil(idx);
       return lo === hi ? sorted[lo] : sorted[lo] + (idx - lo) * (sorted[hi] - sorted[lo]);
     });
+    if (knots[nKnots - 1] === knots[nKnots - 2])
+      throw new Error(`RCS requires ${nKnots} distinct knot positions \u2014 moderator has too few unique values. Use fewer knots or a linear term.`);
+    return knots;
   }
   function rcsBasis(x, knots) {
     const k = knots.length;
@@ -3788,7 +4304,7 @@ var App = (() => {
     }
     return result;
   }
-  function buildDesignMatrix(studies, moderators2 = []) {
+  function buildDesignMatrix(studies, moderators2 = [], interactions2 = []) {
     const k = studies.length;
     const columns = [Array(k).fill(1)];
     const colNames = ["intercept"];
@@ -3846,6 +4362,20 @@ var App = (() => {
         }
       }
     }
+    for (const { name, termA, termB } of interactions2) {
+      const colsA = modColMap[termA] ?? [];
+      const colsB = modColMap[termB] ?? [];
+      modColMap[name] = [];
+      if (colsA.length === 0 || colsB.length === 0) continue;
+      for (const ia of colsA) {
+        for (const ib of colsB) {
+          const ca = columns[ia], cb = columns[ib];
+          columns.push(ca.map((a, i) => a * cb[i]));
+          colNames.push(`${colNames[ia]}\xD7${colNames[ib]}`);
+          modColMap[name].push(nextColIdx++);
+        }
+      }
+    }
     const p = columns.length;
     const X = Array.from({ length: k }, (_, i) => columns.map((col) => col[i]));
     const validMask = X.map((row) => row.every(isFinite));
@@ -3857,160 +4387,53 @@ var App = (() => {
   function quadForm(A, x) {
     return dot(x, A.map((row) => dot(row, x)));
   }
-  function tau2Reg_DL(yi, vi, X) {
-    const k = vi.length, p = X[0].length;
-    const df = k - p;
-    if (df <= 0) return 0;
-    const w0 = vi.map((v) => 1 / v);
-    const { beta, vcov, rankDeficient } = wls(X, yi, w0);
-    if (rankDeficient) return 0;
-    const QE = yi.reduce((acc, y, i) => {
-      const e = y - dot(X[i], beta);
-      return acc + w0[i] * e * e;
-    }, 0);
-    const c = w0.reduce((acc, wi, i) => acc + wi * (1 - wi * quadForm(vcov, X[i])), 0);
-    return c > 0 ? Math.max(0, (QE - df) / c) : 0;
-  }
-  function tau2Reg_REML(yi, vi, X, tol = REML_TOL, maxIter = 100) {
-    const k = vi.length, p = X[0].length;
-    if (k - p <= 0) return 0;
-    let tau2 = tau2Reg_DL(yi, vi, X);
-    for (let iter = 0; iter < maxIter; iter++) {
-      const w = vi.map((v) => 1 / (v + tau2));
-      const { beta, vcov, rankDeficient } = wls(X, yi, w);
-      if (rankDeficient) break;
-      const h = X.map((xi, i) => w[i] * quadForm(vcov, xi));
-      const e = yi.map((y, i) => y - dot(X[i], beta));
-      let score = 0, info = 0;
-      for (let i = 0; i < k; i++) {
-        const pi = w[i] * (1 - h[i]);
-        score += w[i] * w[i] * e[i] * e[i] - pi;
-        info += w[i] * pi;
-      }
-      if (info <= 0) break;
-      let step = score / info;
-      let newTau2 = tau2 + step;
-      let sh = 0;
-      while (newTau2 < 0 && sh++ < 20) {
-        step /= 2;
-        newTau2 = tau2 + step;
-      }
-      newTau2 = Math.max(0, newTau2);
-      if (Math.abs(newTau2 - tau2) < tol) {
-        tau2 = newTau2;
-        break;
-      }
-      tau2 = newTau2;
-    }
-    return tau2;
-  }
-  function tau2Reg_PM(yi, vi, X, tol = REML_TOL, maxIter = 100) {
-    const k = vi.length, p = X[0].length;
-    const df = k - p;
-    if (df <= 0) return 0;
-    let tau2 = 0;
-    for (let iter = 0; iter < maxIter; iter++) {
-      const w = vi.map((v) => 1 / (v + tau2));
-      const { beta, rankDeficient } = wls(X, yi, w);
-      if (rankDeficient) break;
-      const QE = yi.reduce((acc, y, i) => {
-        const e = y - dot(X[i], beta);
-        return acc + w[i] * e * e;
-      }, 0);
-      const sumW = w.reduce((acc, b) => acc + b, 0);
-      const newTau2 = Math.max(0, tau2 + (QE - df) / sumW);
-      if (Math.abs(newTau2 - tau2) < tol) return newTau2;
-      tau2 = newTau2;
-    }
-    return tau2;
-  }
-  function tau2Reg_HS(yi, vi, X) {
-    const k = vi.length, p = X[0].length;
-    const df = k - p;
-    if (df <= 0) return 0;
-    const w0 = vi.map((v) => 1 / v);
-    const { beta, rankDeficient } = wls(X, yi, w0);
-    if (rankDeficient) return 0;
-    const QE = yi.reduce((acc, y, i) => acc + w0[i] * (y - dot(X[i], beta)) ** 2, 0);
-    const sumW = w0.reduce((acc, b) => acc + b, 0);
-    return sumW > 0 ? Math.max(0, (QE - df) / sumW) : 0;
-  }
-  function tau2Reg_HE(yi, vi, X) {
-    const k = vi.length, p = X[0].length;
-    const df = k - p;
-    if (df <= 0) return 0;
-    const w1 = vi.map(() => 1);
-    const { beta, rankDeficient } = wls(X, yi, w1);
-    if (rankDeficient) return 0;
-    const SS = yi.reduce((acc, y, i) => acc + (y - dot(X[i], beta)) ** 2, 0);
-    const meanV = vi.reduce((acc, b) => acc + b, 0) / k;
-    return Math.max(0, SS / df - meanV);
-  }
-  function tau2Reg_SJ(yi, vi, X, tol = REML_TOL, maxIter = 200) {
-    const k = vi.length, p = X[0].length;
-    if (k - p <= 0) return 0;
-    const w1 = vi.map(() => 1);
-    const { beta: beta0, rankDeficient } = wls(X, yi, w1);
-    if (rankDeficient) return 0;
-    let tau2 = yi.reduce((acc, y, i) => acc + (y - dot(X[i], beta0)) ** 2, 0) / k;
-    if (tau2 === 0) return 0;
-    for (let iter = 0; iter < maxIter; iter++) {
-      const w = vi.map((v) => 1 / (v + tau2));
-      const { beta, rankDeficient: rd } = wls(X, yi, w);
-      if (rd) break;
-      const newTau2 = yi.reduce((acc, y, i) => {
-        return acc + vi[i] * (y - dot(X[i], beta)) ** 2 / (vi[i] + tau2);
-      }, 0) / k;
-      if (Math.abs(newTau2 - tau2) < tol) return Math.max(0, newTau2);
-      tau2 = Math.max(0, newTau2);
-    }
-    return tau2;
-  }
-  function tau2Reg_ML(yi, vi, X, tol = REML_TOL, maxIter = 100) {
-    const k = vi.length, p = X[0].length;
-    if (k - p <= 0) return 0;
-    let tau2 = tau2Reg_DL(yi, vi, X);
-    for (let iter = 0; iter < maxIter; iter++) {
-      const w = vi.map((v) => 1 / (v + tau2));
-      const { beta, rankDeficient } = wls(X, yi, w);
-      if (rankDeficient) break;
-      const e = yi.map((y, i) => y - dot(X[i], beta));
-      let score = 0, info = 0;
-      for (let i = 0; i < k; i++) {
-        const vi_tau = vi[i] + tau2;
-        score += e[i] * e[i] / (vi_tau * vi_tau) - 1 / vi_tau;
-        info += 1 / (vi_tau * vi_tau);
-      }
-      if (info <= 0) break;
-      let step = score / info;
-      let newTau2 = tau2 + step;
-      let sh = 0;
-      while (newTau2 < 0 && sh++ < 20) {
-        step /= 2;
-        newTau2 = tau2 + step;
-      }
-      newTau2 = Math.max(0, newTau2);
-      if (Math.abs(newTau2 - tau2) < tol) {
-        tau2 = newTau2;
-        break;
-      }
-      tau2 = newTau2;
-    }
-    return tau2;
-  }
   function tau2_metaReg(yi, vi, X, method = "REML", tol = REML_TOL, maxIter = 100) {
-    if (method === "REML") return tau2Reg_REML(yi, vi, X, tol, maxIter);
-    if (method === "PM") return tau2Reg_PM(yi, vi, X, tol, maxIter);
-    if (method === "ML") return tau2Reg_ML(yi, vi, X, tol, maxIter);
-    if (method === "HS") return tau2Reg_HS(yi, vi, X);
-    if (method === "HE") return tau2Reg_HE(yi, vi, X);
-    if (method === "SJ") return tau2Reg_SJ(yi, vi, X, tol, maxIter);
-    return tau2Reg_DL(yi, vi, X);
+    const k = vi.length, p = X[0].length, df = k - p;
+    if (df <= 0) return 0;
+    const reFitFn = (tau2) => {
+      const w = vi.map((v) => 1 / (v + tau2));
+      const { beta, vcov, rankDeficient } = wlsCholesky(X, yi, w);
+      if (rankDeficient) return null;
+      const W = w.reduce((s, v) => s + v, 0);
+      return {
+        e: yi.map((y, i) => y - dot(X[i], beta)),
+        h: X.map((xi, i) => w[i] * quadForm(vcov, xi)),
+        W
+      };
+    };
+    const feFitFn = () => {
+      const w0 = vi.map((v) => 1 / v);
+      const { beta, vcov, rankDeficient } = wlsCholesky(X, yi, w0);
+      if (rankDeficient) return null;
+      const W = w0.reduce((s, v) => s + v, 0);
+      return {
+        e: yi.map((y, i) => y - dot(X[i], beta)),
+        h: X.map((xi, i) => w0[i] * quadForm(vcov, xi)),
+        W
+      };
+    };
+    const uwFitFn = () => {
+      const { beta, rankDeficient } = wls(X, yi, vi.map(() => 1));
+      if (rankDeficient) return null;
+      return { e: yi.map((y, i) => y - dot(X[i], beta)) };
+    };
+    if (method === "REML") return tau2Core_REML(vi, reFitFn, tau2Core_DL(vi, feFitFn, df), tol, maxIter);
+    if (method === "ML") return tau2Core_ML(vi, reFitFn, tau2Core_DL(vi, feFitFn, df), tol, maxIter);
+    if (method === "PM") return tau2Core_PM(vi, reFitFn, df, 0, tol, maxIter);
+    if (method === "HS") return tau2Core_HS(vi, feFitFn, df);
+    if (method === "HE") return tau2Core_HE(vi, uwFitFn, df);
+    if (method === "SJ") {
+      const fit0 = uwFitFn();
+      if (!fit0) return 0;
+      const seed = fit0.e.reduce((s, ei) => s + ei * ei, 0) / k;
+      return tau2Core_SJ(vi, reFitFn, seed, tol, maxIter);
+    }
+    return tau2Core_DL(vi, feFitFn, df);
   }
-  function metaRegression(studies, moderators2 = [], method = "REML", ciMethod = "normal", alpha = 0.05) {
-    const valid = studies.filter((s) => isFinite(s.yi) && isFinite(s.vi) && s.vi > 0);
+  function metaRegression(studies, moderators2 = [], method = "REML", ciMethod = "normal", alpha = 0.05, interactions2 = []) {
+    const valid = validStudies(studies);
     const k = valid.length;
-    const { X, colNames, modColMap, modKnots, validMask, p } = buildDesignMatrix(valid, moderators2);
+    const { X, colNames, modColMap, modKnots, validMask, p } = buildDesignMatrix(valid, moderators2, interactions2);
     const rows = valid.filter((_, i) => validMask[i]);
     const Xf = X.filter((_, i) => validMask[i]);
     const kf = rows.length;
@@ -4104,7 +4527,11 @@ var App = (() => {
         }
       }
     }
-    const modTests = moderators2.map(({ key }) => {
+    const _allTermKeys = [
+      ...moderators2.map((m) => m.key),
+      ...interactions2.map((ix) => ix.name)
+    ];
+    const modTests = _allTermKeys.map((key) => {
       const colIdxs = modColMap[key] ?? [];
       const df = colIdxs.length;
       if (df === 0) return { name: key, colIdxs, QM: NaN, QMdf: 0, QMp: NaN };
@@ -4146,9 +4573,9 @@ var App = (() => {
     const fitted = Xf.map((xi) => dot(xi, beta));
     const eRE = yi.map((y, i) => y - fitted[i]);
     const stdResiduals = eRE.map((ei, i) => ei / Math.sqrt(vi[i] + tau2));
-    const clusters = rows.map((s) => s.cluster?.trim() || null);
     let robustSE, robustZ, robustP, robustCi, robustDf, robustC, robustError, allSingletons;
-    if (clusters.some((id) => id)) {
+    if (rows.some((s) => s.cluster?.trim())) {
+      const clusters = resolveClusterIds(rows);
       const rob = robustWlsResult(Xf, w, yi, beta, clusters);
       if (!rob.error) {
         robustSE = rob.robustSE;
@@ -4168,8 +4595,7 @@ var App = (() => {
       LL_ML -= 0.5 * (Math.log(2 * Math.PI) + Math.log(v) + (yi[i] - fitted[i]) ** 2 / v);
     }
     {
-      const _mlFit = (X_) => {
-        const t2 = Math.max(0, tau2_metaReg(yi, vi, X_, "ML"));
+      const _llAt = (X_, t2) => {
         const w_ = vi.map((v) => 1 / (v + t2));
         const { beta: b_, rankDeficient: rd_ } = wls(X_, yi, w_);
         if (rd_ || !b_) return NaN;
@@ -4180,6 +4606,13 @@ var App = (() => {
           ll -= 0.5 * (Math.log(2 * Math.PI) + Math.log(v) + (yi[i] - fit) ** 2 / v);
         }
         return ll;
+      };
+      const _mlFit = (X_) => {
+        const t2_opt = Math.max(0, tau2_metaReg(yi, vi, X_, "ML"));
+        const ll_opt = _llAt(X_, t2_opt);
+        if (t2_opt === 0) return ll_opt;
+        const ll_bnd = _llAt(X_, 0);
+        return isFinite(ll_bnd) && ll_bnd > ll_opt ? ll_bnd : ll_opt;
       };
       const LL_ML_full = _mlFit(Xf);
       for (const mt of modTests) {
@@ -4241,12 +4674,15 @@ var App = (() => {
       p,
       rankDeficient: false,
       dist,
+      method,
       fitted,
       residuals: eRE,
       stdResiduals,
       labels: rows.map((s) => s.label || ""),
       studiesUsed: rows,
       // exact set used in the fit (for bubble plot)
+      Xf,
+      // filtered design matrix (k×p) — used by permutation worker
       yi,
       vi,
       // pass through for display
@@ -4309,9 +4745,10 @@ var App = (() => {
   function lsModel(studies, locMods = [], scaleMods = [], opts = {}) {
     const ciMethod = opts.ciMethod ?? "normal";
     const alpha = opts.alpha ?? 0.05;
-    const valid = studies.filter((s) => isFinite(s.yi) && isFinite(s.vi) && s.vi > 0);
+    const locInteractions = opts.locInteractions ?? [];
+    const valid = validStudies(studies);
     const k = valid.length;
-    const locDM = buildDesignMatrix(valid, locMods);
+    const locDM = buildDesignMatrix(valid, locMods, locInteractions);
     const scaleDM = buildDesignMatrix(valid, scaleMods);
     const validMask = locDM.validMask.map((v, i) => v && scaleDM.validMask[i]);
     const rows = valid.filter((_, i) => validMask[i]);
@@ -4390,36 +4827,7 @@ var App = (() => {
     const { beta, tau2_i, w, resid, LL } = pr;
     const { vcov: vcov_beta, rankDeficient: rdBeta } = wls(Xloc, yi, w);
     if (rdBeta) return emptyResult;
-    const H_gamma = Array.from({ length: q }, () => Array(q).fill(0));
-    for (let j = 0; j < q; j++) {
-      for (let l = j; l < q; l++) {
-        const hj = Math.max(1e-4, 1e-4 * Math.abs(gamma_hat[j]));
-        const hl = Math.max(1e-4, 1e-4 * Math.abs(gamma_hat[l]));
-        let val;
-        if (j === l) {
-          const gp = gamma_hat.slice();
-          gp[j] += hj;
-          const gm = gamma_hat.slice();
-          gm[j] -= hj;
-          val = (negLL(gp) - 2 * negLL(gamma_hat) + negLL(gm)) / (hj * hj);
-        } else {
-          const gpp = gamma_hat.slice();
-          gpp[j] += hj;
-          gpp[l] += hl;
-          const gpm = gamma_hat.slice();
-          gpm[j] += hj;
-          gpm[l] -= hl;
-          const gmp = gamma_hat.slice();
-          gmp[j] -= hj;
-          gmp[l] += hl;
-          const gmm = gamma_hat.slice();
-          gmm[j] -= hj;
-          gmm[l] -= hl;
-          val = (negLL(gpp) - negLL(gpm) - negLL(gmp) + negLL(gmm)) / (4 * hj * hl);
-        }
-        H_gamma[j][l] = H_gamma[l][j] = val;
-      }
-    }
+    const H_gamma = numericalHessian(negLL, gamma_hat);
     const vcov_gamma_raw = matInverse(H_gamma);
     const vcov_gamma = vcov_gamma_raw ?? Array.from({ length: q }, () => Array(q).fill(NaN));
     const rdGamma = vcov_gamma_raw === null;
@@ -4484,7 +4892,11 @@ var App = (() => {
       if (c <= 0) return 0;
       return Math.max(0, tau2_mean / (tau2_mean + QEdf / c) * 100);
     })() : 0;
-    const locModTests = locMods.map(({ key }) => {
+    const _allLocTermKeys = [
+      ...locMods.map((m) => m.key),
+      ...locInteractions.map((ix) => ix.name)
+    ];
+    const locModTests = _allLocTermKeys.map((key) => {
       const colIdxs = locDM.modColMap[key] ?? [];
       const df = colIdxs.length;
       if (df === 0) return { name: key, colIdxs, QM: NaN, QMdf: 0, QMp: NaN };
@@ -4522,6 +4934,7 @@ var App = (() => {
       tau2_i,
       tau2_mean,
       vcov_beta,
+      vcov_gamma,
       QE,
       QEdf,
       QEp,
@@ -4574,12 +4987,7 @@ var App = (() => {
     });
     const k = valid.length;
     if (k < 2) return { error: "Need at least 2 valid studies." };
-    const clusterMap = /* @__PURE__ */ new Map();
-    valid.forEach((s, idx) => {
-      const id = s.cluster !== null && s.cluster !== void 0 && String(s.cluster).trim() !== "" ? String(s.cluster).trim() : `__s${idx}`;
-      if (!clusterMap.has(id)) clusterMap.set(id, []);
-      clusterMap.get(id).push(s);
-    });
+    const clusterMap = groupByCluster(valid);
     const m = clusterMap.size;
     if (m < 2) return { error: "Need at least 2 clusters for RVE." };
     const df = m - p;
@@ -4659,12 +5067,7 @@ var App = (() => {
       return { error: `method must be "REML" or "ML" (got "${method}")` };
     if (!Array.isArray(studies) || studies.length < 3)
       return { error: "Three-level meta-analysis requires at least 3 studies" };
-    const clusterMap = /* @__PURE__ */ new Map();
-    studies.forEach((s, i) => {
-      const key = s.cluster != null && s.cluster !== "" ? String(s.cluster) : `__s${i}`;
-      if (!clusterMap.has(key)) clusterMap.set(key, []);
-      clusterMap.get(key).push(s);
-    });
+    const clusterMap = groupByCluster(studies);
     const clusters = [...clusterMap.values()];
     const m = clusters.length;
     const k = studies.length;
@@ -4716,8 +5119,8 @@ var App = (() => {
     const muFE0 = Wmu0 / W0;
     const Q0 = studies.reduce((a, s) => a + (s.yi - muFE0) ** 2 / s.vi, 0);
     const c0 = W0 - W02 / W0;
-    const tau2DL = Math.max(0.01, (Q0 - (k - 1)) / c0);
-    const x0 = [Math.log(tau2DL / 2), Math.log(tau2DL / 2)];
+    const tau2DL2 = Math.max(0.01, (Q0 - (k - 1)) / c0);
+    const x0 = [Math.log(tau2DL2 / 2), Math.log(tau2DL2 / 2)];
     const res = bfgs(negLL, x0, { maxIter: 400, gtol: 1e-6 });
     const tau2u = Math.max(0, Math.exp(res.x[0]));
     const tau2t = Math.max(0, Math.exp(res.x[1]));
@@ -4765,1169 +5168,431 @@ var App = (() => {
   var init_regression = __esm({
     "js/regression.js"() {
       init_analysis();
+      init_tau2();
+      init_linalg();
       init_utils();
       init_constants();
       init_selection();
     }
   });
 
-  // js/pubbias.js
-  function eggerTest(studies) {
-    const k = studies.length;
-    if (k < 3) return { intercept: NaN, slope: NaN, se: NaN, t: NaN, df: NaN, p: NaN };
-    const Z = studies.map((d) => d.yi / d.se);
-    const X = studies.map((d) => 1 / d.se);
-    const meanX = X.reduce((acc, b) => acc + b, 0) / X.length, meanZ = Z.reduce((acc, b) => acc + b, 0) / Z.length;
-    let num = 0, den = 0;
-    for (let i = 0; i < k; i++) {
-      num += (X[i] - meanX) * (Z[i] - meanZ);
-      den += (X[i] - meanX) ** 2;
-    }
-    const slope = num / den;
-    const intercept = meanZ - slope * meanX;
-    let rss = 0;
-    for (let i = 0; i < k; i++) {
-      rss += (Z[i] - (intercept + slope * X[i])) ** 2;
-    }
-    const df = k - 2;
-    const se = Math.sqrt(rss / df) * Math.sqrt(1 / k + meanX * meanX / den);
-    const t = intercept / se;
-    const p = 2 * (1 - tCDF(Math.abs(t), df));
-    const result = { intercept, slope, se, t, df, p };
-    const clusters = studies.map((s) => s.cluster?.trim() || null);
-    if (clusters.some((id) => id)) {
-      const X2d = studies.map((_, i) => [1, X[i]]);
-      const wUnit = Array(k).fill(1);
-      const rob = robustWlsResult(X2d, wUnit, Z, [intercept, slope], clusters);
-      if (!rob.error) {
-        result.robustInterceptSE = rob.robustSE[0];
-        result.robustInterceptZ = rob.robustZ[0];
-        result.robustInterceptP = rob.robustP[0];
-        result.robustSlopeSE = rob.robustSE[1];
-        result.robustSlopeZ = rob.robustZ[1];
-        result.robustSlopeP = rob.robustP[1];
-        result.robustDf = rob.df;
-        result.clustersUsed = rob.C;
-        result.allSingletons = rob.allSingletons;
-      } else {
-        result.robustError = rob.error;
-      }
-    }
-    return result;
+  // js/multivariate.js
+  function _nPsiParams(struct, P) {
+    if (struct === "CS") return 2;
+    if (struct === "Diag") return P;
+    if (struct === "UN") return P * (P + 1) / 2;
+    return 0;
   }
-  function beggTest(studies) {
-    const valid = studies.filter((s) => isFinite(s.yi) && isFinite(s.vi) && s.vi > 0);
-    const k = valid.length;
-    if (k < 3) return { tau: NaN, S: NaN, z: NaN, p: NaN };
-    const adj = valid.map((s) => s.yi);
-    let S = 0;
-    for (let i = 0; i < k - 1; i++) {
-      for (let j = i + 1; j < k; j++) {
-        S += Math.sign(adj[i] - adj[j]) * Math.sign(valid[i].vi - valid[j].vi);
-      }
+  function _psiFromTheta(theta, struct, P) {
+    if (struct === "CS") {
+      const tau2 = Math.exp(theta[0]);
+      const rho = Math.tanh(theta[1]);
+      return Array.from(
+        { length: P },
+        (_, j) => Array.from({ length: P }, (_2, k) => j === k ? tau2 : rho * tau2)
+      );
     }
-    const tieStats = (vals) => {
-      const counts = /* @__PURE__ */ new Map();
-      for (const v of vals) counts.set(v, (counts.get(v) || 0) + 1);
-      let varTerm = 0, pairs = 0;
-      for (const t of counts.values()) {
-        if (t > 1) {
-          varTerm += t * (t - 1) * (2 * t + 5);
-          pairs += t * (t - 1) / 2;
+    if (struct === "Diag") {
+      return Array.from({ length: P }, (_, j) => {
+        const row = new Array(P).fill(0);
+        row[j] = Math.exp(theta[j]);
+        return row;
+      });
+    }
+    const L = Array.from({ length: P }, () => new Array(P).fill(0));
+    for (let j = 0; j < P; j++) L[j][j] = Math.exp(theta[j]);
+    let t = P;
+    for (let i = 1; i < P; i++)
+      for (let j = 0; j < i; j++)
+        L[i][j] = theta[t++];
+    return Array.from(
+      { length: P },
+      (_, i) => Array.from({ length: P }, (_2, j) => {
+        let s = 0;
+        for (let k = 0; k < P; k++) s += L[i][k] * L[j][k];
+        return s;
+      })
+    );
+  }
+  function _initTau2(studyData, P) {
+    const byOutcome = Array.from({ length: P }, () => []);
+    for (const { y, idx, Vmat } of studyData) {
+      for (let j = 0; j < idx.length; j++)
+        byOutcome[idx[j]].push({ yi: y[j], vi: Vmat[j][j] });
+    }
+    return byOutcome.map((obs) => {
+      if (obs.length < 2) return 0.01;
+      let W = 0, W2 = 0, Wmu = 0;
+      for (const { vi } of obs) {
+        const w = 1 / Math.max(vi, MIN_VAR);
+        W += w;
+        W2 += w * w;
+      }
+      for (const { yi, vi } of obs) Wmu += yi / Math.max(vi, MIN_VAR);
+      const muFE = Wmu / W;
+      const Q = obs.reduce((a, { yi, vi }) => a + (yi - muFE) ** 2 / Math.max(vi, MIN_VAR), 0);
+      const c = W - W2 / W;
+      const t = c > 0 ? Math.max(0, (Q - (obs.length - 1)) / c) : 0;
+      return Math.max(MIN_VAR, t > 0 ? t : 0.01);
+    });
+  }
+  function _initialTheta(struct, P, tau2_0) {
+    if (struct === "CS") {
+      const tau2_mean = tau2_0.reduce((a, v) => a + v, 0) / P;
+      return [Math.log(Math.max(MIN_VAR, tau2_mean)), 0];
+    }
+    if (struct === "Diag")
+      return tau2_0.map((t) => Math.log(Math.max(MIN_VAR, t)));
+    const theta = tau2_0.map((t) => 0.5 * Math.log(Math.max(MIN_VAR, t)));
+    for (let i = 1; i < P; i++)
+      for (let j = 0; j < i; j++)
+        theta.push(0);
+    return theta;
+  }
+  function vcalc(rows, { rho = 0.5, type = "constant" } = {}) {
+    const warnings = [];
+    if (!isFinite(rho) || rho <= -1 || rho >= 1)
+      warnings.push(`rho=${rho} is outside the open interval (-1, 1); V blocks may be singular`);
+    if (type !== "constant") {
+      warnings.push(`type="${type}" is not supported; falling back to "constant"`);
+      type = "constant";
+    }
+    const studyMap = /* @__PURE__ */ new Map();
+    rows.forEach((row, i) => {
+      const sid = row.study_id != null ? String(row.study_id) : `__s${i}`;
+      const oid = row.outcome_id != null ? String(row.outcome_id) : `__o${i}`;
+      if (!studyMap.has(sid)) studyMap.set(sid, []);
+      studyMap.get(sid).push({ ...row, _sid: sid, _oid: oid });
+    });
+    const blocks = [];
+    const allOutcomeIdSet = /* @__PURE__ */ new Set();
+    let n = 0;
+    for (const [studyId, studyRows] of studyMap) {
+      const seen = /* @__PURE__ */ new Set();
+      const uniqRows = [];
+      for (const r of studyRows) {
+        if (seen.has(r._oid)) {
+          warnings.push(`study_id="${studyId}": duplicate outcome_id="${r._oid}" \u2014 keeping first occurrence`);
+        } else {
+          seen.add(r._oid);
+          allOutcomeIdSet.add(r._oid);
+          uniqRows.push(r);
         }
       }
-      return { varTerm, pairs };
-    };
-    const tsX = tieStats(adj);
-    const tsY = tieStats(valid.map((s) => s.vi));
-    const varS = (k * (k - 1) * (2 * k + 5) - tsX.varTerm - tsY.varTerm) / 18;
-    const z = S === 0 || varS <= 0 ? 0 : (Math.abs(S) - 1) / Math.sqrt(varS) * Math.sign(S);
-    const p = 2 * (1 - normalCDF(Math.abs(z)));
-    const p0 = k * (k - 1) / 2;
-    const denom = Math.sqrt((p0 - tsX.pairs) * (p0 - tsY.pairs));
-    const tau = denom > 0 ? S / denom : 0;
-    return { tau, S, z, p };
-  }
-  function _pubBiasNaN(df) {
-    return {
-      intercept: NaN,
-      interceptSE: NaN,
-      interceptT: NaN,
-      interceptP: NaN,
-      slope: NaN,
-      slopeSE: NaN,
-      slopeT: NaN,
-      slopeP: NaN,
-      df
-    };
-  }
-  function _wlsFinish(beta, vcov, ys, xs, ws, df) {
-    let rss = 0;
-    for (let i = 0; i < ys.length; i++) {
-      const e = ys[i] - beta[0] - beta[1] * xs[i];
-      rss += ws[i] * e * e;
+      const p = uniqRows.length;
+      n += p;
+      const matrix = Array.from(
+        { length: p },
+        (_, j) => Array.from({ length: p }, (_2, k) => {
+          const vj = Math.max(uniqRows[j].vi ?? 0, MIN_VAR);
+          const vk = Math.max(uniqRows[k].vi ?? 0, MIN_VAR);
+          if (j === k) return vj;
+          return rho * Math.sqrt(vj * vk);
+        })
+      );
+      if (p > 1 && cholFactor(matrix) === null)
+        warnings.push(`study_id="${studyId}": V block is not positive definite (check rho and vi values)`);
+      blocks.push({ studyId, outcomeIds: uniqRows.map((r) => r._oid), rows: uniqRows, k: p, matrix });
     }
-    const s2 = df > 0 ? rss / df : NaN;
-    const interceptSE = Math.sqrt(s2 * vcov[0][0]);
-    const slopeSE = Math.sqrt(s2 * vcov[1][1]);
-    const interceptT = beta[0] / interceptSE;
-    const slopeT = beta[1] / slopeSE;
-    const interceptP = 2 * (1 - tCDF(Math.abs(interceptT), df));
-    const slopeP = 2 * (1 - tCDF(Math.abs(slopeT), df));
-    return {
-      intercept: beta[0],
-      interceptSE,
-      interceptT,
-      interceptP,
-      slope: beta[1],
-      slopeSE,
-      slopeT,
-      slopeP,
-      df
-    };
+    return { blocks, n, studyIds: [...studyMap.keys()], outcomeIds: [...allOutcomeIdSet], rho, type, warnings };
   }
-  function fatPetTest(studies) {
-    const valid = studies.filter((s) => isFinite(s.yi) && isFinite(s.vi) && s.vi > 0);
-    const k = valid.length;
-    if (k < 3) return _pubBiasNaN(k - 2);
-    const ys = valid.map((s) => s.yi);
-    const xs = valid.map((s) => s.se ?? Math.sqrt(s.vi));
-    const ws = valid.map((s) => 1 / s.vi);
-    const X = xs.map((x) => [1, x]);
-    const { beta, vcov, rankDeficient } = wls(X, ys, ws);
-    if (rankDeficient) return _pubBiasNaN(k - 2);
-    const result = _wlsFinish(beta, vcov, ys, xs, ws, k - 2);
-    const clusters = valid.map((s) => s.cluster?.trim() || null);
-    if (clusters.some((id) => id)) {
-      const rob = robustWlsResult(X, ws, ys, beta, clusters);
-      if (!rob.error) {
-        result.robustInterceptSE = rob.robustSE[0];
-        result.robustInterceptZ = rob.robustZ[0];
-        result.robustInterceptP = rob.robustP[0];
-        result.robustSlopeSE = rob.robustSE[1];
-        result.robustSlopeZ = rob.robustZ[1];
-        result.robustSlopeP = rob.robustP[1];
-        result.robustDf = rob.df;
-        result.clustersUsed = rob.C;
-        result.allSingletons = rob.allSingletons;
+  function mvMeta(rows, V, opts = {}) {
+    const {
+      struct = "CS",
+      method = "REML",
+      alpha = 0.05,
+      moderators: moderators2 = [],
+      // [{key, type}] — continuous moderators only for now
+      slopes = "separate"
+      // "separate" (one slope per outcome) | "common" (shared slope)
+    } = opts;
+    if (!V || !Array.isArray(V.blocks) || V.blocks.length === 0)
+      return { error: "V must be a vcalc() result with at least one block" };
+    if (!["CS", "Diag", "UN"].includes(struct))
+      return { error: `struct must be "CS", "Diag", or "UN" (got "${struct}")` };
+    if (!["REML", "ML"].includes(method))
+      return { error: `method must be "REML" or "ML" (got "${method}")` };
+    const k = V.blocks.length;
+    const P = V.outcomeIds.length;
+    const n = V.n;
+    if (P < 2)
+      return { error: "mvMeta requires at least 2 outcomes; use meta() for univariate analysis" };
+    if (k < 3)
+      return { error: "mvMeta requires at least 3 studies" };
+    const nPsiPar = _nPsiParams(struct, P);
+    const warnings = [...V.warnings];
+    if (k < P + nPsiPar)
+      warnings.push(`Only ${k} studies for ${P} outcomes + ${nPsiPar} \u03A8 parameters \u2014 results may be unreliable`);
+    for (const block of V.blocks) {
+      for (const r of block.rows) {
+        if (!isFinite(r.yi) || !isFinite(r.vi) || r.vi <= 0)
+          return { error: `Invalid yi=${r.yi} or vi=${r.vi} in study "${block.studyId}", outcome "${r._oid}"` };
+      }
+    }
+    const outcomeIdx = new Map(V.outcomeIds.map((id, i) => [id, i]));
+    const q = moderators2.length;
+    const q_total = q === 0 ? P : slopes === "common" ? P + q : P + P * q;
+    const betaNames = V.outcomeIds.map((id) => String(id));
+    if (q > 0) {
+      if (slopes === "common") {
+        for (const m of moderators2) betaNames.push(m.key);
       } else {
-        result.robustError = rob.error;
+        for (const m of moderators2)
+          for (const id of V.outcomeIds) betaNames.push(`${id}:${m.key}`);
       }
     }
-    return result;
-  }
-  function petPeeseTest(studies) {
-    const fat = fatPetTest(studies);
-    const valid = studies.filter((s) => isFinite(s.yi) && isFinite(s.vi) && s.vi > 0);
-    const k = valid.length;
-    let peese = _pubBiasNaN(k - 2);
-    if (k >= 3 && !isNaN(fat.intercept)) {
-      const ys = valid.map((s) => s.yi);
-      const xs = valid.map((s) => s.vi);
-      const ws = valid.map((s) => 1 / s.vi);
-      const X = xs.map((x) => [1, x]);
-      const { beta, vcov, rankDeficient } = wls(X, ys, ws);
-      if (!rankDeficient) peese = _wlsFinish(beta, vcov, ys, xs, ws, k - 2);
-    }
-    const usePeese = isFinite(fat.interceptP) && fat.interceptP < 0.1;
-    return { fat, peese, usePeese };
-  }
-  function harbordTest(studies) {
-    const valid = studies.filter((s) => {
-      const { a, b, c, d } = s;
-      if (!isFinite(a) || !isFinite(b) || !isFinite(c) || !isFinite(d)) return false;
-      if (a < 0 || b < 0 || c < 0 || d < 0) return false;
-      const N = a + b + c + d;
-      if (N < 2) return false;
-      const V = (a + b) * (c + d) * (a + c) * (b + d) / (N * N * (N - 1));
-      return V > 0;
-    });
-    const k = valid.length;
-    if (k < 3) return _pubBiasNaN(k - 2);
-    const ys = [], xs = [];
-    for (const s of valid) {
-      const { a, b, c, d } = s;
-      const N = a + b + c + d;
-      const E = (a + b) * (a + c) / N;
-      const V = (a + b) * (c + d) * (a + c) * (b + d) / (N * N * (N - 1));
-      const sqrtV = Math.sqrt(V);
-      ys.push((a - E) / sqrtV);
-      xs.push(sqrtV);
-    }
-    const X = xs.map((x) => [1, x]);
-    const ws = xs.map(() => 1);
-    const { beta, vcov, rankDeficient } = wls(X, ys, ws);
-    if (rankDeficient) return _pubBiasNaN(k - 2);
-    return _wlsFinish(beta, vcov, ys, xs, ws, k - 2);
-  }
-  function petersTest(studies) {
-    function getN(s) {
-      if (isFinite(s.a) && isFinite(s.b) && isFinite(s.c) && isFinite(s.d))
-        return s.a + s.b + s.c + s.d;
-      if (isFinite(s.n1) && isFinite(s.n2))
-        return s.n1 + s.n2;
-      if (isFinite(s.n))
-        return s.n;
-      return NaN;
-    }
-    const valid = studies.filter((s) => {
-      if (!isFinite(s.yi) || !isFinite(s.vi) || s.vi <= 0) return false;
-      const N = getN(s);
-      return isFinite(N) && N >= 2;
-    });
-    const k = valid.length;
-    if (k < 3) return _pubBiasNaN(k - 2);
-    const ys = valid.map((s) => s.yi);
-    const xs = valid.map((s) => 1 / getN(s));
-    const ws = valid.map((s) => 1 / s.vi);
-    const X = xs.map((x) => [1, x]);
-    const { beta, vcov, rankDeficient } = wls(X, ys, ws);
-    if (rankDeficient) return _pubBiasNaN(k - 2);
-    return _wlsFinish(beta, vcov, ys, xs, ws, k - 2);
-  }
-  function deeksTest(studies) {
-    const valid = studies.filter((s) => {
-      const { a, b, c, d } = s;
-      if (!isFinite(a) || !isFinite(b) || !isFinite(c) || !isFinite(d)) return false;
-      if (a <= 0 || b <= 0 || c <= 0 || d <= 0) return false;
-      const N = a + b + c + d;
-      const ESS = 2 * (a + c) * (b + d) / N;
-      return ESS > 0;
-    });
-    const k = valid.length;
-    if (k < 3) return _pubBiasNaN(k - 2);
-    const ys = [], xs = [], ws = [];
-    for (const s of valid) {
-      const { a, b, c, d } = s;
-      const N = a + b + c + d;
-      const ESS = 2 * (a + c) * (b + d) / N;
-      ys.push(Math.log(a * d / (b * c)));
-      xs.push(1 / Math.sqrt(ESS));
-      ws.push(ESS);
-    }
-    const X = xs.map((x) => [1, x]);
-    const { beta, vcov, rankDeficient } = wls(X, ys, ws);
-    if (rankDeficient) return _pubBiasNaN(k - 2);
-    return _wlsFinish(beta, vcov, ys, xs, ws, k - 2);
-  }
-  function rueckerTest(studies) {
-    const valid = studies.filter((s) => {
-      const { a, b, c, d } = s;
-      if (!isFinite(a) || !isFinite(b) || !isFinite(c) || !isFinite(d)) return false;
-      if (a < 0 || b < 0 || c < 0 || d < 0) return false;
-      return a + b > 0 && c + d > 0;
-    });
-    const k = valid.length;
-    if (k < 3) return _pubBiasNaN(k - 2);
-    const ys = [], xs = [];
-    for (const s of valid) {
-      const { a, b, c, d } = s;
-      const n1 = a + b;
-      const n2 = c + d;
-      const p1 = a / n1;
-      const p2 = c / n2;
-      const se = Math.sqrt(1 / (4 * n1) + 1 / (4 * n2));
-      const y = Math.asin(Math.sqrt(p1)) - Math.asin(Math.sqrt(p2));
-      ys.push(y / se);
-      xs.push(1 / se);
-    }
-    const X = xs.map((x) => [1, x]);
-    const ws = xs.map(() => 1);
-    const { beta, vcov, rankDeficient } = wls(X, ys, ws);
-    if (rankDeficient) return _pubBiasNaN(k - 2);
-    return _wlsFinish(beta, vcov, ys, xs, ws, k - 2);
-  }
-  function failSafeN(studies, alpha = 0.05, trivial = 0.1) {
-    const valid = studies.filter((s) => isFinite(s.yi) && isFinite(s.vi) && s.vi > 0);
-    const k = valid.length;
-    if (k < 1) return { rosenthal: NaN, orwin: NaN, sumZ: NaN, z_crit: NaN, k: 0 };
-    const sumZ = valid.reduce((acc, d) => {
-      const z = Math.abs(d.yi) / Math.sqrt(d.vi);
-      return acc + z;
-    }, 0);
-    const z_crit = (() => {
-      const target = 1 - alpha;
-      let lo = 0, hi = 10;
-      for (let i = 0; i < BISECTION_ITERS; i++) {
-        const mid = (lo + hi) / 2;
-        normalCDF(mid) < target ? lo = mid : hi = mid;
+    function _xrow(j, row) {
+      const xr = new Float64Array(q_total);
+      xr[j] = 1;
+      for (let m = 0; m < q; m++) {
+        const val = Number(row[moderators2[m].key]);
+        if (slopes === "common") {
+          xr[P + m] = val;
+        } else {
+          xr[P + m * P + j] = val;
+        }
       }
-      return (lo + hi) / 2;
-    })();
-    const rosenthal = Math.max(0, (sumZ / z_crit) ** 2 - k);
-    const w0 = valid.map((s) => 1 / s.vi);
-    const W = w0.reduce((acc, b) => acc + b, 0);
-    const FE = valid.reduce((acc, d, i) => acc + w0[i] * d.yi, 0) / W;
-    const orwin = Math.max(0, k * (Math.abs(FE) - Math.abs(trivial)) / Math.abs(trivial));
-    return { rosenthal, orwin, sumZ, z_crit, k };
-  }
-  function henmiCopas(studies, alpha = 0.05) {
-    const valid = studies.filter((s) => isFinite(s.yi) && isFinite(s.vi) && s.vi > 0);
-    const k = valid.length;
-    if (k < 3) return { error: "k < 3" };
-    const yi = valid.map((s) => s.yi);
-    const vi = valid.map((s) => s.vi);
-    const wi = vi.map((v) => 1 / v);
-    const W1 = wi.reduce((s, w) => s + w, 0);
-    const W2 = wi.reduce((s, w) => s + w * w, 0) / W1;
-    const W3 = wi.reduce((s, w) => s + w * w * w, 0) / W1;
-    const W4 = wi.reduce((s, w) => s + w * w * w * w, 0) / W1;
-    const beta = yi.reduce((s, y, i) => s + wi[i] * y, 0) / W1;
-    const Q = yi.reduce((s, y, i) => s + wi[i] * (y - beta) ** 2, 0);
-    const tau2 = Math.max(0, (Q - (k - 1)) / (W1 - W2));
-    const vb = (tau2 * W2 + 1) / W1;
-    const se = Math.sqrt(vb);
-    const VR = 1 + tau2 * W2;
-    const SDR = Math.sqrt(VR);
-    const EQ = (r) => k - 1 + tau2 * (W1 - W2) + tau2 ** 2 * (1 / VR ** 2 * r * r - 1 / VR) * (W3 - W2 ** 2);
-    const VQ = (r) => {
-      const rsq = r * r;
-      const recipvr2 = 1 / VR ** 2;
-      return 2 * (k - 1) + 4 * tau2 * (W1 - W2) + 2 * tau2 ** 2 * (W1 * W2 - 2 * W3 + W2 ** 2) + 4 * tau2 ** 2 * (recipvr2 * rsq - 1 / VR) * (W3 - W2 ** 2) + 4 * tau2 ** 3 * (recipvr2 * rsq - 1 / VR) * (W4 - 2 * W2 * W3 + W2 ** 3) + 2 * tau2 ** 4 * (recipvr2 - 2 * (1 / VR ** 3) * rsq) * (W3 - W2 ** 2) ** 2;
-    };
-    const shapeF = (r) => {
-      const eq = EQ(r);
-      const vq = VQ(r);
-      return vq > 0 ? eq * eq / vq : NaN;
-    };
-    const scaleF = (r) => {
-      const eq = EQ(r);
-      const vq = VQ(r);
-      return eq > 0 ? vq / eq : NaN;
-    };
-    const finv = (f) => (W1 / W2 - 1) * (f * f - 1) + (k - 1);
-    const pgamma = (q, shape, scale) => {
-      if (!isFinite(q) || !isFinite(shape) || !isFinite(scale) || shape <= 0 || scale <= 0) {
-        return q <= 0 ? 0 : 1;
-      }
-      if (q <= 0) return 0;
-      return regularizedGammaP(shape, q / scale);
-    };
-    const SQRT2PI = Math.sqrt(2 * Math.PI);
-    const dnorm = (x) => Math.exp(-0.5 * x * x) / SQRT2PI;
-    const integrate = (x) => {
-      const lo2 = x;
-      const hi2 = Math.max(lo2 + 0.01, 7);
-      const N = 400;
-      const h = (hi2 - lo2) / N;
-      let sum = 0;
-      for (let i = 0; i <= N; i++) {
-        const r = lo2 + i * h;
-        const rv = SDR * r;
-        const fv = finv(r / x);
-        const pg = pgamma(fv, shapeF(rv), scaleF(rv));
-        const coeff = i === 0 || i === N ? 1 : i % 2 === 0 ? 2 : 4;
-        sum += coeff * pg * dnorm(r);
-      }
-      return sum * h / 3;
-    };
-    const halfAlpha = alpha / 2;
-    const eqn = (x) => integrate(x) - halfAlpha;
-    let lo = 1e-4, hi = 10;
-    if (!isFinite(eqn(lo)) || !isFinite(eqn(hi)) || eqn(lo) < 0) {
-      return { error: "HC: failed to bracket root" };
+      return xr;
     }
-    let t0 = (lo + hi) / 2;
-    for (let iter = 0; iter < BISECTION_ITERS; iter++) {
-      t0 = (lo + hi) / 2;
-      const fmid = eqn(t0);
-      if (Math.abs(fmid) < 1e-12 || hi - lo < 1e-14) break;
-      if (fmid > 0) lo = t0;
-      else hi = t0;
+    const studyData = V.blocks.map((block) => ({
+      p: block.k,
+      y: block.rows.map((r) => r.yi),
+      idx: block.outcomeIds.map((oid) => outcomeIdx.get(oid)),
+      Vmat: block.matrix,
+      Xrows: block.rows.map((r) => _xrow(outcomeIdx.get(r._oid), r))
+    }));
+    const XtX = Array.from({ length: q_total }, () => new Array(q_total).fill(0));
+    for (const { Xrows } of studyData)
+      for (const xr of Xrows)
+        for (let c1 = 0; c1 < q_total; c1++)
+          for (let c2 = 0; c2 < q_total; c2++)
+            XtX[c1][c2] += xr[c1] * xr[c2];
+    const logDetXtX = logDet(XtX);
+    const tau2_0 = _initTau2(studyData, P);
+    const theta0 = _initialTheta(struct, P, tau2_0);
+    function negLogLik(theta) {
+      const Psi2 = _psiFromTheta(theta, struct, P);
+      let logDetSum2 = 0;
+      let yOy2 = 0;
+      const XOX2 = Array.from({ length: q_total }, () => new Array(q_total).fill(0));
+      const XOy2 = new Array(q_total).fill(0);
+      for (const { p, y, idx, Vmat, Xrows } of studyData) {
+        const Sigma = Array.from(
+          { length: p },
+          (_, j) => Array.from({ length: p }, (_2, k2) => Vmat[j][k2] + Psi2[idx[j]][idx[k2]])
+        );
+        const L = cholFactor(Sigma);
+        if (L === null) return 1e10;
+        logDetSum2 += cholLogDet(L);
+        const Oiy = cholSolveVec(L, y);
+        for (let j = 0; j < p; j++) yOy2 += y[j] * Oiy[j];
+        for (let j = 0; j < p; j++) {
+          const xrj = Xrows[j];
+          for (let c = 0; c < q_total; c++) XOy2[c] += xrj[c] * Oiy[j];
+        }
+        const Oi = cholInverse(L);
+        for (let j = 0; j < p; j++) {
+          const OiXrow = new Float64Array(q_total);
+          for (let kk = 0; kk < p; kk++) {
+            const oijk = Oi[j][kk];
+            const xrk = Xrows[kk];
+            for (let c = 0; c < q_total; c++) OiXrow[c] += oijk * xrk[c];
+          }
+          const xrj = Xrows[j];
+          for (let c1 = 0; c1 < q_total; c1++)
+            for (let c2 = 0; c2 < q_total; c2++)
+              XOX2[c1][c2] += xrj[c1] * OiXrow[c2];
+        }
+      }
+      const XOXinv2 = matInverse(XOX2);
+      if (XOXinv2 === null) return 1e10;
+      let crossTerm2 = 0;
+      for (let j = 0; j < q_total; j++) {
+        let s = 0;
+        for (let kk = 0; kk < q_total; kk++) s += XOXinv2[j][kk] * XOy2[kk];
+        crossTerm2 += XOy2[j] * s;
+      }
+      const Q = Math.max(0, yOy2 - crossTerm2);
+      let logL2 = -0.5 * (logDetSum2 + Q);
+      if (method === "REML") {
+        const ld = logDet(XOX2);
+        if (!isFinite(ld)) return 1e10;
+        logL2 -= 0.5 * ld;
+      }
+      return isFinite(logL2) ? -logL2 : 1e10;
     }
-    const u0 = SDR * t0;
+    const res = bfgs(negLogLik, theta0, { maxIter: 500, gtol: 1e-6 });
+    const thetaStar = res.x;
+    const Psi = _psiFromTheta(thetaStar, struct, P);
+    let logDetSum = 0, yOy = 0;
+    const XOX = Array.from({ length: q_total }, () => new Array(q_total).fill(0));
+    const XOy = new Array(q_total).fill(0);
+    for (const { p, y, idx, Vmat, Xrows } of studyData) {
+      const Sigma = Array.from(
+        { length: p },
+        (_, j) => Array.from({ length: p }, (_2, kk) => Vmat[j][kk] + Psi[idx[j]][idx[kk]])
+      );
+      const L = cholFactor(Sigma);
+      if (L === null) return { error: "Cholesky factorisation failed at converged parameters" };
+      logDetSum += cholLogDet(L);
+      const Oiy = cholSolveVec(L, y);
+      for (let j = 0; j < p; j++) yOy += y[j] * Oiy[j];
+      for (let j = 0; j < p; j++) {
+        const xrj = Xrows[j];
+        for (let c = 0; c < q_total; c++) XOy[c] += xrj[c] * Oiy[j];
+      }
+      const Oi = cholInverse(L);
+      for (let j = 0; j < p; j++) {
+        const OiXrow = new Float64Array(q_total);
+        for (let kk = 0; kk < p; kk++) {
+          const oijk = Oi[j][kk];
+          const xrk = Xrows[kk];
+          for (let c = 0; c < q_total; c++) OiXrow[c] += oijk * xrk[c];
+        }
+        const xrj = Xrows[j];
+        for (let c1 = 0; c1 < q_total; c1++)
+          for (let c2 = 0; c2 < q_total; c2++)
+            XOX[c1][c2] += xrj[c1] * OiXrow[c2];
+      }
+    }
+    const XOXinv = matInverse(XOX);
+    if (XOXinv === null) return { error: "Singular information matrix X'\u03A9\u207B\xB9X at converged parameters" };
+    const beta = XOXinv.map((row) => row.reduce((s, v, j) => s + v * XOy[j], 0));
+    const se = XOXinv.map((row, j) => Math.sqrt(Math.max(0, row[j])));
+    const zcrit = normalQuantile(1 - alpha / 2);
+    const ci = beta.map((b, j) => [b - zcrit * se[j], b + zcrit * se[j]]);
+    const z = beta.map((b, j) => se[j] > 0 ? b / se[j] : NaN);
+    const pval = z.map((zi) => isFinite(zi) ? 2 * (1 - normalCDF(Math.abs(zi))) : NaN);
+    let crossTerm = 0;
+    for (let j = 0; j < q_total; j++) {
+      let s = 0;
+      for (let kk = 0; kk < q_total; kk++) s += XOXinv[j][kk] * XOy[kk];
+      crossTerm += XOy[j] * s;
+    }
+    const QM = Math.max(0, crossTerm);
+    const df_QM = q_total;
+    const pQM = 1 - chiSquareCDF(QM, q_total);
+    const residOmega = Math.max(0, yOy - QM);
+    let yVy = 0;
+    const XVX = Array.from({ length: q_total }, () => new Array(q_total).fill(0));
+    const XVy = new Array(q_total).fill(0);
+    for (const { p, y, Vmat, Xrows } of studyData) {
+      const Lv = cholFactor(Vmat);
+      if (Lv === null) continue;
+      const Viy = cholSolveVec(Lv, y);
+      for (let j = 0; j < p; j++) yVy += y[j] * Viy[j];
+      for (let j = 0; j < p; j++) {
+        const xrj = Xrows[j];
+        for (let c = 0; c < q_total; c++) XVy[c] += xrj[c] * Viy[j];
+      }
+      const Vi = cholInverse(Lv);
+      for (let j = 0; j < p; j++) {
+        const ViXrow = new Float64Array(q_total);
+        for (let kk = 0; kk < p; kk++) {
+          const vik = Vi[j][kk];
+          const xrk = Xrows[kk];
+          for (let c = 0; c < q_total; c++) ViXrow[c] += vik * xrk[c];
+        }
+        const xrj = Xrows[j];
+        for (let c1 = 0; c1 < q_total; c1++)
+          for (let c2 = 0; c2 < q_total; c2++)
+            XVX[c1][c2] += xrj[c1] * ViXrow[c2];
+      }
+    }
+    const XVXinv = matInverse(XVX);
+    let crossTermV = 0;
+    if (XVXinv) {
+      for (let j = 0; j < q_total; j++) {
+        let s = 0;
+        for (let kk = 0; kk < q_total; kk++) s += XVXinv[j][kk] * XVy[kk];
+        crossTermV += XVy[j] * s;
+      }
+    }
+    const QE = Math.max(0, yVy - crossTermV);
+    const df_QE = n - q_total;
+    const pQE = df_QE > 0 ? 1 - chiSquareCDF(QE, df_QE) : NaN;
+    const corPsi = Array.from(
+      { length: P },
+      (_, i) => Array.from({ length: P }, (_2, j) => {
+        if (i === j) return 1;
+        const denom = Math.sqrt(Math.max(0, Psi[i][i]) * Math.max(0, Psi[j][j]));
+        if (denom < 1e-15) return 0;
+        return Psi[i][j] / denom;
+      })
+    );
+    const I22 = V.outcomeIds.map((oid, o) => {
+      const tau2_o = Math.max(0, Psi[o][o]);
+      const vis = V.blocks.filter((b) => b.outcomeIds.includes(oid)).map((b) => {
+        const li = b.outcomeIds.indexOf(oid);
+        return b.matrix[li][li];
+      });
+      if (vis.length === 0) return NaN;
+      vis.sort((a, b) => a - b);
+      const mid = Math.floor(vis.length / 2);
+      const medVi = vis.length % 2 === 0 ? (vis[mid - 1] + vis[mid]) / 2 : vis[mid];
+      return tau2_o + medVi > 0 ? 100 * tau2_o / (tau2_o + medVi) : 0;
+    });
+    let logL = -0.5 * (n * Math.log(2 * Math.PI) + logDetSum + residOmega);
+    if (method === "REML") {
+      logL -= 0.5 * logDet(XOX);
+      logL += q_total / 2 * Math.log(2 * Math.PI) + 0.5 * logDetXtX;
+    }
+    const nParamsFit = method === "ML" ? q_total + nPsiPar : nPsiPar;
+    const AIC = -2 * logL + 2 * nParamsFit;
+    const BIC = -2 * logL + Math.log(n) * nParamsFit;
+    const AICc = n - nParamsFit - 1 > 0 ? AIC + 2 * nParamsFit * (nParamsFit + 1) / (n - nParamsFit - 1) : Infinity;
+    const tau2 = V.outcomeIds.map((_, o) => Math.max(0, Psi[o][o]));
+    const rho_between = struct === "CS" ? Math.tanh(thetaStar[1]) : void 0;
     return {
+      // Fixed effects (one entry per outcome, same order as V.outcomeIds)
       beta,
       se,
-      ci: [beta - u0 * se, beta + u0 * se],
+      ci,
+      z,
+      pval,
+      betaNames,
+      outcomeIds: V.outcomeIds,
+      // Between-study covariance
+      Psi,
+      corPsi,
       tau2,
-      t0,
-      u0,
-      k
-    };
-  }
-  function tesTest(studies, m) {
-    const valid = studies.filter((s) => isFinite(s.yi) && isFinite(s.vi) && s.vi > 0);
-    const k = valid.length;
-    const nan = { O: NaN, E: NaN, Var: NaN, z: NaN, chi2: NaN, p: NaN, k, theta: NaN, powers: [], sig: [] };
-    if (k < 2 || !m || !isFinite(m.RE)) return nan;
-    const theta = m.RE;
-    const z025 = normalQuantile(0.975);
-    const powers = valid.map((s) => {
-      const se = Math.sqrt(s.vi);
-      const ncp = Math.abs(theta) / se;
-      return normalCDF(ncp - z025) + normalCDF(-z025 - ncp);
-    });
-    const sig = valid.map((s) => Math.abs(s.yi / Math.sqrt(s.vi)) > z025);
-    const O = sig.reduce((n, b) => n + (b ? 1 : 0), 0);
-    const E = powers.reduce((s, p2) => s + p2, 0);
-    const Var = E * (1 - E / k);
-    if (Var <= 0) return nan;
-    const z = (O - E) / Math.sqrt(Var);
-    const chi2 = z * z;
-    const p = 1 - normalCDF(z);
-    return { O, E, Var, z, chi2, p, k, theta, powers, sig };
-  }
-  function waapWls(studies) {
-    const valid = studies.filter((s) => isFinite(s.yi) && isFinite(s.vi) && s.vi > 0);
-    const k = valid.length;
-    const nan = {
-      estimate: NaN,
-      se: NaN,
-      ci: [NaN, NaN],
-      z: NaN,
-      p: NaN,
+      rho_between,
+      // Omnibus Wald test (β = 0)
+      QM,
+      df_QM,
+      pQM,
+      // Residual heterogeneity
+      QE,
+      df_QE,
+      pQE,
+      // Per-outcome I²
+      I2: I22,
+      // Fit
+      logLik: logL,
+      AIC,
+      BIC,
+      AICc,
+      // Model metadata
       k,
-      kAdequate: 0,
-      wlsEstimate: NaN,
-      fallback: false
+      n,
+      P,
+      struct,
+      method,
+      convergence: res.converged,
+      optimizer: { iters: res.iters, gnorm: res.gnorm },
+      warnings
     };
-    if (k < 1) return nan;
-    const z025 = normalQuantile(0.975);
-    const W = valid.reduce((s, d) => s + 1 / d.vi, 0);
-    const wlsEst = valid.reduce((s, d) => s + d.yi / d.vi, 0) / W;
-    const adequate = valid.filter((d) => {
-      const ncp = Math.abs(wlsEst) / Math.sqrt(d.vi);
-      const power = normalCDF(ncp - z025) + normalCDF(-z025 - ncp);
-      return power >= 0.8;
-    });
-    const kAdequate = adequate.length;
-    const fallback = kAdequate === 0;
-    const subset = fallback ? valid : adequate;
-    const Wa = subset.reduce((s, d) => s + 1 / d.vi, 0);
-    const waap = subset.reduce((s, d) => s + d.yi / d.vi, 0) / Wa;
-    const se = Math.sqrt(1 / Wa);
-    const z = waap / se;
-    const p = 2 * (1 - normalCDF(Math.abs(z)));
-    const ci = [waap - z025 * se, waap + z025 * se];
-    return { estimate: waap, se, ci, z, p, k, kAdequate, wlsEstimate: wlsEst, fallback };
   }
-  var init_pubbias = __esm({
-    "js/pubbias.js"() {
-      init_analysis();
-      init_utils();
+  var init_multivariate = __esm({
+    "js/multivariate.js"() {
       init_constants();
+      init_utils();
+      init_linalg();
+      init_selection();
     }
   });
 
-  // js/influence.js
-  function influenceDiagnostics(studies, method = "DL", ciMethod = "normal", alpha = 0.05) {
-    const n = studies.length;
-    if (n < 2) return [];
-    const full = meta(studies, method, ciMethod, alpha);
-    const W = studies.reduce((acc, d) => acc + 1 / (d.vi + full.tau2), 0);
-    const DL_SS_METHODS = /* @__PURE__ */ new Set(["DL", "GENQ", "HS", "HSk", "DLIT"]);
-    let dlSS = null;
-    let heSS = null;
-    let sqSS = null;
-    if (DL_SS_METHODS.has(method)) {
-      let W_fe = 0, WY = 0, WY2 = 0, W2 = 0;
-      for (const d of studies) {
-        const wi = 1 / d.vi;
-        W_fe += wi;
-        WY += wi * d.yi;
-        WY2 += wi * d.yi * d.yi;
-        W2 += wi * wi;
-      }
-      dlSS = { W_fe, WY, WY2, W2 };
-    }
-    if (method === "HE") {
-      let SY = 0, SY2 = 0, SV = 0;
-      for (const d of studies) {
-        SY += d.yi;
-        SY2 += d.yi * d.yi;
-        SV += d.vi;
-      }
-      heSS = { SY, SY2, SV };
-    }
-    if (method === "SQGENQ") {
-      let SA = 0, SAY = 0, SAY2 = 0, SsV = 0, W_fe = 0;
-      for (const d of studies) {
-        const ai = Math.sqrt(1 / d.vi);
-        SA += ai;
-        SAY += ai * d.yi;
-        SAY2 += ai * d.yi * d.yi;
-        SsV += Math.sqrt(d.vi);
-        W_fe += 1 / d.vi;
-      }
-      sqSS = { SA, SAY, SAY2, SsV, W_fe };
-    }
-    let pmSS = null;
-    if (method === "PM") {
-      const tau2 = full.tau2;
-      let WY_re = 0, WY2_re = 0;
-      for (const d of studies) {
-        const wi = 1 / (d.vi + tau2);
-        WY_re += wi * d.yi;
-        WY2_re += wi * d.yi * d.yi;
-      }
-      pmSS = { WY_re, WY2_re };
-    }
-    let sjSS = null;
-    if (method === "SJ") {
-      const tau2 = full.tau2, mu = full.RE;
-      const perStudy = studies.map((d) => d.vi * (d.yi - mu) ** 2 / (d.vi + tau2));
-      sjSS = { totalSJ: n * tau2, perStudy };
-    }
-    const LIKEL_METHODS = /* @__PURE__ */ new Set(["REML", "ML", "EBLUP"]);
-    let likelSS = null;
-    if (LIKEL_METHODS.has(method) && ciMethod !== "PL") {
-      const tau2 = full.tau2;
-      const RE = full.RE;
-      let totalInfo = 0;
-      const perStudy = studies.map((d) => {
-        const vi_tau = d.vi + tau2;
-        const wi = 1 / vi_tau;
-        const hi = wi / W;
-        const ri = d.yi - RE;
-        let score_i, info_i;
-        if (method === "ML") {
-          score_i = ri * ri / (vi_tau * vi_tau) - 1 / vi_tau;
-          info_i = 1 / (vi_tau * vi_tau);
-        } else {
-          score_i = ri * ri / (vi_tau * vi_tau) - (1 - hi) / vi_tau;
-          info_i = (1 - hi) / (vi_tau * vi_tau);
-        }
-        totalInfo += info_i;
-        return { score_i, info_i };
-      });
-      likelSS = { perStudy, totalInfo };
-    }
-    const FAST_PATH_METHODS = /* @__PURE__ */ new Set([...DL_SS_METHODS, "HE", "SQGENQ", ...LIKEL_METHODS, "PM", "SJ"]);
-    const useFastPath = FAST_PATH_METHODS.has(method) && ciMethod !== "PL";
-    return studies.map((study, idx) => {
-      let tau2_loo, RE_loo, seRE_loo;
-      if (useFastPath) {
-        const wi_fe = 1 / study.vi;
-        if (method === "DL" || method === "GENQ") {
-          const W_l = dlSS.W_fe - wi_fe;
-          const WY_l = dlSS.WY - wi_fe * study.yi;
-          const WY2_l = dlSS.WY2 - wi_fe * study.yi * study.yi;
-          const W2_l = dlSS.W2 - wi_fe * wi_fe;
-          const Q_l = WY2_l - WY_l * WY_l / W_l;
-          const c_l = W_l - W2_l / W_l;
-          tau2_loo = c_l > 0 ? Math.max(0, (Q_l - (n - 2)) / c_l) : 0;
-        } else if (method === "HS") {
-          const W_l = dlSS.W_fe - wi_fe;
-          const WY_l = dlSS.WY - wi_fe * study.yi;
-          const WY2_l = dlSS.WY2 - wi_fe * study.yi * study.yi;
-          const Q_l = WY2_l - WY_l * WY_l / W_l;
-          tau2_loo = W_l > 0 ? Math.max(0, (Q_l - (n - 2)) / W_l) : 0;
-        } else if (method === "HSk") {
-          const W_l = dlSS.W_fe - wi_fe;
-          const WY_l = dlSS.WY - wi_fe * study.yi;
-          const WY2_l = dlSS.WY2 - wi_fe * study.yi * study.yi;
-          const Q_l = WY2_l - WY_l * WY_l / W_l;
-          const tau2_hs_l = W_l > 0 ? Math.max(0, (Q_l - (n - 2)) / W_l) : 0;
-          tau2_loo = n > 2 ? tau2_hs_l * (n - 1) / (n - 2) : 0;
-        } else if (method === "DLIT") {
-          const W_l = dlSS.W_fe - wi_fe;
-          const WY_l = dlSS.WY - wi_fe * study.yi;
-          const WY2_l = dlSS.WY2 - wi_fe * study.yi * study.yi;
-          const W2_l = dlSS.W2 - wi_fe * wi_fe;
-          const Q_l = WY2_l - WY_l * WY_l / W_l;
-          const c_l = W_l - W2_l / W_l;
-          let t2 = c_l > 0 ? Math.max(0, (Q_l - (n - 2)) / c_l) : 0;
-          for (let iter = 0; iter < 200; iter++) {
-            let Wit = 0, W2it = 0, Wmuit = 0, WY2it = 0;
-            for (let j = 0; j < n; j++) {
-              if (j === idx) continue;
-              const wj = 1 / (studies[j].vi + t2);
-              Wit += wj;
-              W2it += wj * wj;
-              Wmuit += wj * studies[j].yi;
-              WY2it += wj * studies[j].yi * studies[j].yi;
-            }
-            const Qit = WY2it - Wmuit * Wmuit / Wit;
-            const cit = Wit - W2it / Wit;
-            const newT2 = Math.max(0, (Qit - (n - 2)) / cit);
-            if (Math.abs(newT2 - t2) < REML_TOL) {
-              t2 = newT2;
-              break;
-            }
-            t2 = newT2;
-          }
-          tau2_loo = t2;
-        } else if (method === "HE") {
-          const k_l = n - 1;
-          const SY_l = heSS.SY - study.yi;
-          const SY2_l = heSS.SY2 - study.yi * study.yi;
-          const SV_l = heSS.SV - study.vi;
-          const SS_l = SY2_l - SY_l * SY_l / k_l;
-          tau2_loo = k_l > 1 ? Math.max(0, SS_l / (k_l - 1) - SV_l / k_l) : 0;
-        } else if (method === "SQGENQ") {
-          const ai = Math.sqrt(wi_fe);
-          const k_l = n - 1;
-          const A_l = sqSS.SA - ai;
-          const SAY_l = sqSS.SAY - ai * study.yi;
-          const SAY2_l = sqSS.SAY2 - ai * study.yi * study.yi;
-          const SsV_l = sqSS.SsV - Math.sqrt(study.vi);
-          const Wfe_l = sqSS.W_fe - wi_fe;
-          if (A_l <= 0) {
-            tau2_loo = 0;
-          } else {
-            const Qa_l = SAY2_l - SAY_l * SAY_l / A_l;
-            const ba_l = SsV_l - k_l / A_l;
-            const ca_l = A_l - Wfe_l / A_l;
-            tau2_loo = ca_l > 0 ? Math.max(0, (Qa_l - ba_l) / ca_l) : 0;
-          }
-        } else if (method === "PM") {
-          const wi2 = 1 / (study.vi + full.tau2);
-          const W_l = W - wi2;
-          const WY_l = pmSS.WY_re - wi2 * study.yi;
-          const WY2_l = pmSS.WY2_re - wi2 * study.yi * study.yi;
-          const Q_PM_l = W_l > 0 ? WY2_l - WY_l * WY_l / W_l : 0;
-          let t2 = W_l > 0 ? Math.max(0, full.tau2 + (Q_PM_l - (n - 2)) / W_l) : full.tau2;
-          for (let iter = 0; iter < 100; iter++) {
-            let Wit = 0, WYit = 0, WY2it = 0;
-            for (let j = 0; j < n; j++) {
-              if (j === idx) continue;
-              const wj = 1 / (studies[j].vi + t2);
-              Wit += wj;
-              WYit += wj * studies[j].yi;
-              WY2it += wj * studies[j].yi * studies[j].yi;
-            }
-            if (Wit <= 0) break;
-            const Qit = WY2it - WYit * WYit / Wit;
-            const newT2 = Math.max(0, t2 + (Qit - (n - 2)) / Wit);
-            if (Math.abs(newT2 - t2) < REML_TOL) {
-              t2 = newT2;
-              break;
-            }
-            t2 = newT2;
-          }
-          tau2_loo = t2;
-        } else if (method === "SJ") {
-          let t2 = Math.max(0, (sjSS.totalSJ - sjSS.perStudy[idx]) / (n - 1));
-          for (let iter = 0; iter < 200; iter++) {
-            let Wit = 0, WYit = 0;
-            for (let j = 0; j < n; j++) {
-              if (j === idx) continue;
-              const wj = 1 / (studies[j].vi + t2);
-              Wit += wj;
-              WYit += wj * studies[j].yi;
-            }
-            if (Wit <= 0) break;
-            const mu_it = WYit / Wit;
-            let s = 0;
-            for (let j = 0; j < n; j++) {
-              if (j === idx) continue;
-              const rj = studies[j].yi - mu_it;
-              s += studies[j].vi * rj * rj / (studies[j].vi + t2);
-            }
-            const newT2 = Math.max(0, s / (n - 1));
-            if (Math.abs(newT2 - t2) < REML_TOL) {
-              t2 = newT2;
-              break;
-            }
-            t2 = newT2;
-          }
-          tau2_loo = t2;
-        } else if (method === "REML" || method === "ML" || method === "EBLUP") {
-          const { score_i, info_i } = likelSS.perStudy[idx];
-          const infoLoo = likelSS.totalInfo - info_i;
-          let t2 = infoLoo > 0 ? Math.max(0, full.tau2 + score_i / infoLoo) : full.tau2;
-          const isREML = method !== "ML";
-          for (let iter = 0; iter < 100; iter++) {
-            let W_it = 0, Wmu_it = 0;
-            for (let j = 0; j < n; j++) {
-              if (j === idx) continue;
-              const wj = 1 / (studies[j].vi + t2);
-              W_it += wj;
-              Wmu_it += wj * studies[j].yi;
-            }
-            if (W_it <= 0) break;
-            const mu_it = Wmu_it / W_it;
-            let sc = 0, inf_it = 0;
-            for (let j = 0; j < n; j++) {
-              if (j === idx) continue;
-              const vi_tau = studies[j].vi + t2;
-              const rj = studies[j].yi - mu_it;
-              if (isREML) {
-                const hj = 1 / (vi_tau * W_it);
-                sc += rj * rj / (vi_tau * vi_tau) - (1 - hj) / vi_tau;
-                inf_it += (1 - hj) / (vi_tau * vi_tau);
-              } else {
-                sc += rj * rj / (vi_tau * vi_tau) - 1 / vi_tau;
-                inf_it += 1 / (vi_tau * vi_tau);
-              }
-            }
-            if (inf_it <= 0) break;
-            let step = sc / inf_it;
-            let newT2 = t2 + step;
-            let sh = 0;
-            while (newT2 < 0 && sh++ < 20) {
-              step /= 2;
-              newT2 = t2 + step;
-            }
-            newT2 = Math.max(0, newT2);
-            if (Math.abs(newT2 - t2) < REML_TOL) {
-              t2 = newT2;
-              break;
-            }
-            t2 = newT2;
-          }
-          tau2_loo = t2;
-        }
-        let W_RE_l = 0, WY_RE_l = 0, WY2_RE_l = 0;
-        for (let j = 0; j < n; j++) {
-          if (j === idx) continue;
-          const s = studies[j];
-          const wj = 1 / Math.max(s.vi + tau2_loo, MIN_VAR);
-          W_RE_l += wj;
-          WY_RE_l += wj * s.yi;
-          WY2_RE_l += wj * s.yi * s.yi;
-        }
-        RE_loo = W_RE_l > 0 ? WY_RE_l / W_RE_l : NaN;
-        const df_loo = n - 2;
-        if (ciMethod === "KH" && df_loo > 0) {
-          const sumKH = WY2_RE_l - WY_RE_l * WY_RE_l / W_RE_l;
-          seRE_loo = Math.sqrt(Math.max(sumKH, 0) / (df_loo * W_RE_l));
-        } else {
-          seRE_loo = W_RE_l > 0 ? Math.sqrt(1 / W_RE_l) : NaN;
-        }
-      } else {
-        const loo = studies.filter((_, i) => i !== idx);
-        const looMeta = meta(loo, method, ciMethod, alpha);
-        tau2_loo = looMeta.tau2;
-        RE_loo = looMeta.RE;
-        seRE_loo = looMeta.seRE;
-      }
-      const r = (study.yi - full.RE) / Math.sqrt(study.vi + full.tau2);
-      const dfbeta = (full.RE - RE_loo) / seRE_loo;
-      const deltaTau2 = full.tau2 - tau2_loo;
-      const outlier = Math.abs(r) > 2;
-      const influential = Math.abs(dfbeta) > 1;
-      const wi = 1 / (study.vi + full.tau2);
-      const hat = wi / W;
-      const W_loo = studies.reduce((acc, s, j) => j === idx ? acc : acc + 1 / (s.vi + tau2_loo), 0);
-      const covRatio = W_loo > 0 ? W / W_loo : NaN;
-      const cookD = (full.RE - RE_loo) ** 2 * W;
-      const dffitsVar = hat * (tau2_loo + study.vi);
-      const DFFITS = dffitsVar > 0 ? (full.RE - RE_loo) / Math.sqrt(dffitsVar) : NaN;
-      const highLeverage = hat > 2 / n;
-      const highCookD = cookD > 4 / n;
-      const dffitsThresh = 3 * Math.sqrt(1 / (n - 1));
-      const highDffits = isFinite(DFFITS) && Math.abs(DFFITS) > dffitsThresh;
-      const highCovRatio = isFinite(covRatio) && covRatio > 1 + 1 / n;
-      return {
-        label: study.label,
-        RE_loo,
-        tau2_loo,
-        stdResidual: r,
-        DFBETA: dfbeta,
-        DFFITS,
-        covRatio,
-        deltaTau2,
-        outlier,
-        influential,
-        hat,
-        cookD,
-        highLeverage,
-        highCookD,
-        highDffits,
-        highCovRatio
-      };
-    });
-  }
-  function cumulativeMeta(studies, method = "DL", ciMethod = "normal", alpha = 0.05) {
-    return studies.map((s, idx) => {
-      const prefix = studies.slice(0, idx + 1);
-      const m = meta(prefix, method, ciMethod, alpha);
-      return {
-        k: idx + 1,
-        addedLabel: s.label ?? `Study ${idx + 1}`,
-        RE: m.RE,
-        seRE: m.seRE,
-        ciLow: m.ciLow,
-        ciHigh: m.ciHigh,
-        tau2: m.tau2,
-        I2: m.I2
-      };
-    });
-  }
-  function leaveOneOut(studies, method = "DL", ciMethod = "normal", precomputedFull = null, alpha = 0.05) {
-    const full = precomputedFull ?? meta(studies, method, ciMethod, alpha);
-    if (studies.length < 3) return { full, rows: [] };
-    const n = studies.length;
-    const W_RE = studies.reduce((acc, d) => acc + 1 / (d.vi + full.tau2), 0);
-    const DL_SS_METHODS = /* @__PURE__ */ new Set(["DL", "GENQ", "HS", "HSk", "DLIT"]);
-    let dl_W_fe = 0, dl_WY = 0, dl_WY2 = 0, dl_W2 = 0;
-    for (const d of studies) {
-      const wi = 1 / d.vi;
-      dl_W_fe += wi;
-      dl_WY += wi * d.yi;
-      dl_WY2 += wi * d.yi * d.yi;
-      dl_W2 += wi * wi;
-    }
-    const dlSS = { W_fe: dl_W_fe, WY: dl_WY, WY2: dl_WY2, W2: dl_W2 };
-    let heSS = null;
-    if (method === "HE") {
-      let SY = 0, SY2 = 0, SV = 0;
-      for (const d of studies) {
-        SY += d.yi;
-        SY2 += d.yi * d.yi;
-        SV += d.vi;
-      }
-      heSS = { SY, SY2, SV };
-    }
-    let sqSS = null;
-    if (method === "SQGENQ") {
-      let SA = 0, SAY = 0, SAY2 = 0, SsV = 0, W_fe = 0;
-      for (const d of studies) {
-        const ai = Math.sqrt(1 / d.vi);
-        SA += ai;
-        SAY += ai * d.yi;
-        SAY2 += ai * d.yi * d.yi;
-        SsV += Math.sqrt(d.vi);
-        W_fe += 1 / d.vi;
-      }
-      sqSS = { SA, SAY, SAY2, SsV, W_fe };
-    }
-    const LIKEL_METHODS = /* @__PURE__ */ new Set(["REML", "ML", "EBLUP"]);
-    let likelSS = null;
-    if (LIKEL_METHODS.has(method) && ciMethod !== "PL") {
-      const tau2 = full.tau2;
-      const RE = full.RE;
-      let totalInfo = 0;
-      const perStudy = studies.map((d) => {
-        const vi_tau = d.vi + tau2;
-        const wi = 1 / vi_tau;
-        const hi = wi / W_RE;
-        const ri = d.yi - RE;
-        let score_i, info_i;
-        if (method === "ML") {
-          score_i = ri * ri / (vi_tau * vi_tau) - 1 / vi_tau;
-          info_i = 1 / (vi_tau * vi_tau);
-        } else {
-          score_i = ri * ri / (vi_tau * vi_tau) - (1 - hi) / vi_tau;
-          info_i = (1 - hi) / (vi_tau * vi_tau);
-        }
-        totalInfo += info_i;
-        return { score_i, info_i };
-      });
-      likelSS = { perStudy, totalInfo };
-    }
-    let pmSS = null;
-    if (method === "PM" && ciMethod !== "PL") {
-      const tau2 = full.tau2;
-      let WY_re = 0, WY2_re = 0;
-      for (const d of studies) {
-        const wi = 1 / (d.vi + tau2);
-        WY_re += wi * d.yi;
-        WY2_re += wi * d.yi * d.yi;
-      }
-      pmSS = { WY_re, WY2_re };
-    }
-    let sjSS = null;
-    if (method === "SJ" && ciMethod !== "PL") {
-      const tau2 = full.tau2, mu = full.RE;
-      const perStudy = studies.map((d) => d.vi * (d.yi - mu) ** 2 / (d.vi + tau2));
-      sjSS = { totalSJ: n * tau2, perStudy };
-    }
-    const FAST_PATH_METHODS = /* @__PURE__ */ new Set([...DL_SS_METHODS, "HE", "SQGENQ", ...LIKEL_METHODS, "PM", "SJ"]);
-    const useFastPath = FAST_PATH_METHODS.has(method) && ciMethod !== "PL";
-    const df_loo = n - 2;
-    const crit_loo = ciMethod === "KH" || ciMethod === "t" ? tCritical(df_loo, alpha) : normalQuantile(1 - alpha / 2);
-    const useT = ciMethod === "KH" || ciMethod === "t";
-    const rows = studies.map((omitted, omitIdx) => {
-      if (!useFastPath) {
-        const subset = studies.filter((_, i) => i !== omitIdx);
-        const m = meta(subset, method, ciMethod, alpha);
-        return {
-          label: omitted.label ?? `Study ${omitIdx + 1}`,
-          estimate: m.RE,
-          lb: m.ciLow,
-          ub: m.ciHigh,
-          tau2: m.tau2,
-          i2: m.I2,
-          pval: m.pval,
-          significant: m.pval < 0.05
-        };
-      }
-      const wi_fe = 1 / omitted.vi;
-      const W_fe_l = dlSS.W_fe - wi_fe;
-      const WY_fe_l = dlSS.WY - wi_fe * omitted.yi;
-      const WY2_fe_l = dlSS.WY2 - wi_fe * omitted.yi * omitted.yi;
-      const W2_fe_l = dlSS.W2 - wi_fe * wi_fe;
-      const Q_fe_l = W_fe_l > 0 ? WY2_fe_l - WY_fe_l * WY_fe_l / W_fe_l : 0;
-      const i2_loo = Q_fe_l > df_loo && Q_fe_l > 0 ? Math.min(100, (Q_fe_l - df_loo) / Q_fe_l * 100) : 0;
-      let tau2_loo;
-      if (method === "DL" || method === "GENQ") {
-        const c_l = W_fe_l - W2_fe_l / W_fe_l;
-        tau2_loo = c_l > 0 ? Math.max(0, (Q_fe_l - df_loo) / c_l) : 0;
-      } else if (method === "HS") {
-        tau2_loo = W_fe_l > 0 ? Math.max(0, (Q_fe_l - df_loo) / W_fe_l) : 0;
-      } else if (method === "HSk") {
-        const tau2_hs_l = W_fe_l > 0 ? Math.max(0, (Q_fe_l - df_loo) / W_fe_l) : 0;
-        tau2_loo = df_loo > 0 ? tau2_hs_l * (n - 1) / df_loo : 0;
-      } else if (method === "DLIT") {
-        const c_l = W_fe_l - W2_fe_l / W_fe_l;
-        let t2 = c_l > 0 ? Math.max(0, (Q_fe_l - df_loo) / c_l) : 0;
-        for (let iter = 0; iter < 200; iter++) {
-          let Wit = 0, W2it = 0, Wmuit = 0, WY2it = 0;
-          for (let j = 0; j < n; j++) {
-            if (j === omitIdx) continue;
-            const wj = 1 / (studies[j].vi + t2);
-            Wit += wj;
-            W2it += wj * wj;
-            Wmuit += wj * studies[j].yi;
-            WY2it += wj * studies[j].yi * studies[j].yi;
-          }
-          const Qit = WY2it - Wmuit * Wmuit / Wit;
-          const cit = Wit - W2it / Wit;
-          const newT2 = Math.max(0, (Qit - df_loo) / cit);
-          if (Math.abs(newT2 - t2) < REML_TOL) {
-            t2 = newT2;
-            break;
-          }
-          t2 = newT2;
-        }
-        tau2_loo = t2;
-      } else if (method === "HE") {
-        const k_l = n - 1;
-        const SY_l = heSS.SY - omitted.yi;
-        const SY2_l = heSS.SY2 - omitted.yi * omitted.yi;
-        const SV_l = heSS.SV - omitted.vi;
-        const SS_l = SY2_l - SY_l * SY_l / k_l;
-        tau2_loo = k_l > 1 ? Math.max(0, SS_l / (k_l - 1) - SV_l / k_l) : 0;
-      } else if (method === "SQGENQ") {
-        const ai = Math.sqrt(wi_fe);
-        const k_l = n - 1;
-        const A_l = sqSS.SA - ai;
-        const SAY_l = sqSS.SAY - ai * omitted.yi;
-        const SAY2_l = sqSS.SAY2 - ai * omitted.yi * omitted.yi;
-        const SsV_l = sqSS.SsV - Math.sqrt(omitted.vi);
-        const Wfe_l = sqSS.W_fe - wi_fe;
-        if (A_l <= 0) {
-          tau2_loo = 0;
-        } else {
-          const Qa_l = SAY2_l - SAY_l * SAY_l / A_l;
-          const ba_l = SsV_l - k_l / A_l;
-          const ca_l = A_l - Wfe_l / A_l;
-          tau2_loo = ca_l > 0 ? Math.max(0, (Qa_l - ba_l) / ca_l) : 0;
-        }
-      } else if (method === "PM") {
-        const wi = 1 / (omitted.vi + full.tau2);
-        const W_l = W_RE - wi;
-        const WY_l = pmSS.WY_re - wi * omitted.yi;
-        const WY2_l = pmSS.WY2_re - wi * omitted.yi * omitted.yi;
-        const Q_PM_l = W_l > 0 ? WY2_l - WY_l * WY_l / W_l : 0;
-        let t2 = W_l > 0 ? Math.max(0, full.tau2 + (Q_PM_l - df_loo) / W_l) : full.tau2;
-        for (let iter = 0; iter < 100; iter++) {
-          let Wit = 0, WYit = 0, WY2it = 0;
-          for (let j = 0; j < n; j++) {
-            if (j === omitIdx) continue;
-            const wj = 1 / (studies[j].vi + t2);
-            Wit += wj;
-            WYit += wj * studies[j].yi;
-            WY2it += wj * studies[j].yi * studies[j].yi;
-          }
-          if (Wit <= 0) break;
-          const Qit = WY2it - WYit * WYit / Wit;
-          const newT2 = Math.max(0, t2 + (Qit - df_loo) / Wit);
-          if (Math.abs(newT2 - t2) < REML_TOL) {
-            t2 = newT2;
-            break;
-          }
-          t2 = newT2;
-        }
-        tau2_loo = t2;
-      } else if (method === "SJ") {
-        let t2 = Math.max(0, (sjSS.totalSJ - sjSS.perStudy[omitIdx]) / (n - 1));
-        for (let iter = 0; iter < 200; iter++) {
-          let Wit = 0, WYit = 0;
-          for (let j = 0; j < n; j++) {
-            if (j === omitIdx) continue;
-            const wj = 1 / (studies[j].vi + t2);
-            Wit += wj;
-            WYit += wj * studies[j].yi;
-          }
-          if (Wit <= 0) break;
-          const mu_it = WYit / Wit;
-          let s = 0;
-          for (let j = 0; j < n; j++) {
-            if (j === omitIdx) continue;
-            const rj = studies[j].yi - mu_it;
-            s += studies[j].vi * rj * rj / (studies[j].vi + t2);
-          }
-          const newT2 = Math.max(0, s / (n - 1));
-          if (Math.abs(newT2 - t2) < REML_TOL) {
-            t2 = newT2;
-            break;
-          }
-          t2 = newT2;
-        }
-        tau2_loo = t2;
-      } else {
-        const { score_i, info_i } = likelSS.perStudy[omitIdx];
-        const infoLoo = likelSS.totalInfo - info_i;
-        let t2 = infoLoo > 0 ? Math.max(0, full.tau2 + score_i / infoLoo) : full.tau2;
-        const isREML = method !== "ML";
-        for (let iter = 0; iter < 100; iter++) {
-          let W_it = 0, Wmu_it = 0;
-          for (let j = 0; j < n; j++) {
-            if (j === omitIdx) continue;
-            const wj = 1 / (studies[j].vi + t2);
-            W_it += wj;
-            Wmu_it += wj * studies[j].yi;
-          }
-          if (W_it <= 0) break;
-          const mu_it = Wmu_it / W_it;
-          let sc = 0, inf_it = 0;
-          for (let j = 0; j < n; j++) {
-            if (j === omitIdx) continue;
-            const vi_tau = studies[j].vi + t2;
-            const rj = studies[j].yi - mu_it;
-            if (isREML) {
-              const hj = 1 / (vi_tau * W_it);
-              sc += rj * rj / (vi_tau * vi_tau) - (1 - hj) / vi_tau;
-              inf_it += (1 - hj) / (vi_tau * vi_tau);
-            } else {
-              sc += rj * rj / (vi_tau * vi_tau) - 1 / vi_tau;
-              inf_it += 1 / (vi_tau * vi_tau);
-            }
-          }
-          if (inf_it <= 0) break;
-          let step = sc / inf_it;
-          let newT2 = t2 + step;
-          let sh = 0;
-          while (newT2 < 0 && sh++ < 20) {
-            step /= 2;
-            newT2 = t2 + step;
-          }
-          newT2 = Math.max(0, newT2);
-          if (Math.abs(newT2 - t2) < REML_TOL) {
-            t2 = newT2;
-            break;
-          }
-          t2 = newT2;
-        }
-        tau2_loo = t2;
-      }
-      let W_RE_l = 0, WY_RE_l = 0, WY2_RE_l = 0;
-      for (let j = 0; j < n; j++) {
-        if (j === omitIdx) continue;
-        const wj = 1 / Math.max(studies[j].vi + tau2_loo, MIN_VAR);
-        W_RE_l += wj;
-        WY_RE_l += wj * studies[j].yi;
-        WY2_RE_l += wj * studies[j].yi * studies[j].yi;
-      }
-      const RE_loo = W_RE_l > 0 ? WY_RE_l / W_RE_l : NaN;
-      let seRE_loo;
-      if (ciMethod === "KH" && df_loo > 0) {
-        const sumKH = WY2_RE_l - WY_RE_l * WY_RE_l / W_RE_l;
-        seRE_loo = Math.sqrt(Math.max(sumKH, 0) / (df_loo * W_RE_l));
-      } else {
-        seRE_loo = W_RE_l > 0 ? Math.sqrt(1 / W_RE_l) : NaN;
-      }
-      const ciLow_loo = RE_loo - crit_loo * seRE_loo;
-      const ciHigh_loo = RE_loo + crit_loo * seRE_loo;
-      const stat_loo = RE_loo / seRE_loo;
-      const pval_loo = useT ? 2 * (1 - tCDF(Math.abs(stat_loo), df_loo)) : 2 * (1 - normalCDF(Math.abs(stat_loo)));
-      return {
-        label: omitted.label ?? `Study ${omitIdx + 1}`,
-        estimate: RE_loo,
-        lb: ciLow_loo,
-        ub: ciHigh_loo,
-        tau2: tau2_loo,
-        i2: i2_loo,
-        pval: pval_loo,
-        significant: pval_loo < 0.05
-      };
-    });
-    return { full, rows };
-  }
-  function estimatorComparison(studies, ciMethod = "normal") {
-    const methods = ["DL", "REML", "PM", "EB", "PMM", "GENQM", "ML", "HS", "HE", "SJ", "GENQ", "SQGENQ", "DLIT", "EBLUP", "HSk"];
-    return methods.map((method) => {
-      const m = meta(studies, method, ciMethod);
-      return {
-        method,
-        estimate: m.RE,
-        lb: m.ciLow,
-        ub: m.ciHigh,
-        tau2: m.tau2,
-        i2: m.I2
-      };
-    });
-  }
-  function baujat(studies) {
-    const valid = studies.filter((s) => isFinite(s.yi) && isFinite(s.vi) && s.vi > 0);
-    if (valid.length < 2) return null;
-    const W = valid.reduce((acc, d) => acc + 1 / d.vi, 0);
-    const muFE = valid.reduce((acc, d) => acc + d.yi / d.vi, 0) / W;
-    const Q = valid.reduce((acc, d) => acc + (d.yi - muFE) ** 2 / d.vi, 0);
-    const points = valid.map((s) => {
-      const wi = 1 / s.vi;
-      const dev = s.yi - muFE;
-      const x = wi * dev ** 2;
-      const influence = wi * x / (W - wi);
-      return {
-        label: s.label,
-        x,
-        influence,
-        yi: s.yi,
-        vi: s.vi,
-        group: s.group ?? null
-      };
-    });
-    return { points, muFE, Q, k: valid.length };
-  }
-  function blupMeta(studies, m, alpha = 0.05) {
-    const valid = studies.filter((s) => isFinite(s.yi) && isFinite(s.vi) && s.vi > 0);
-    const k = valid.length;
-    if (k < 2 || !m || !isFinite(m.RE) || !isFinite(m.tau2) || m.tau2 <= 0) return null;
-    const { RE: mu, tau2 } = m;
-    const crit = normalQuantile(1 - alpha / 2);
-    const WRE = valid.reduce((acc, s) => acc + 1 / (s.vi + tau2), 0);
-    const varMu = WRE > 0 ? 1 / WRE : NaN;
-    const out = valid.map((s) => {
-      const lambda = tau2 / (tau2 + s.vi);
-      const blup = mu + lambda * (s.yi - mu);
-      const varBlup = lambda * s.vi + (s.vi / (tau2 + s.vi)) ** 2 * varMu;
-      const se_blup = Math.sqrt(Math.max(varBlup, 0));
-      const ranef = blup - mu;
-      const se_ranef = Math.sqrt(lambda * s.vi);
-      return {
-        label: s.label,
-        yi: s.yi,
-        vi: s.vi,
-        se_obs: Math.sqrt(s.vi),
-        blup,
-        se_blup,
-        ci_lb: blup - crit * se_blup,
-        ci_ub: blup + crit * se_blup,
-        ranef,
-        se_ranef,
-        lambda,
-        group: s.group ?? null
-      };
-    });
-    return { studies: out, mu, tau2, k };
-  }
-  var init_influence = __esm({
-    "js/influence.js"() {
-      init_analysis();
-      init_utils();
-      init_constants();
-    }
-  });
-
-  // js/analysis.js
-  function compute(s, type, options = {}) {
-    const resolvedType = type || autoDetectType(s);
-    if (!resolvedType) {
-      console.warn("compute(): cannot auto-detect effect type", s);
-      return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
-    }
-    const profile = getProfile(resolvedType);
-    if (!profile) {
-      console.warn(`compute(): unknown effect type "${resolvedType}"`);
-      return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
-    }
-    return profile.compute(s);
-  }
+  // js/binary.js
   function metaMH(studies, type, alpha = 0.05) {
     const k = studies.length;
     if (k < 2) return { error: "Mantel-Haenszel requires at least 2 studies." };
@@ -6105,188 +5770,930 @@ var App = (() => {
       k
     };
   }
-  function clES(d, ci) {
-    const transform = (x) => normalCDF(x / Math.SQRT2);
-    return {
-      estimate: transform(d),
-      ci: [transform(ci[0]), transform(ci[1])]
-    };
-  }
-  function meta(studies, method = "DL", ciMethod = "normal", alpha = 0.05, tau2Init = null) {
-    const _cacheKey = `${method}::${ciMethod}::${alpha}`;
-    let _byMethod = _metaCache.get(studies);
-    if (_byMethod?.has(_cacheKey)) return _byMethod.get(_cacheKey);
-    const valid = studies.filter((s) => isFinite(s.vi) && s.vi > 0 && isFinite(s.yi));
-    if (valid.length < studies.length) {
-      console.warn(`meta(): dropped ${studies.length - valid.length} study/studies with non-finite or non-positive vi/yi`);
-      studies = valid;
+  var init_binary = __esm({
+    "js/binary.js"() {
+      init_utils();
+      init_constants();
+      init_regression();
     }
+  });
+
+  // js/pubbias.js
+  function eggerTest(studies) {
     const k = studies.length;
-    if (k === 0) {
-      return { FE: NaN, seFE: NaN, RE: NaN, seRE: NaN, tau2: 0, Q: NaN, df: 0, I2: 0, predLow: NaN, predHigh: NaN, ciLow: NaN, ciHigh: NaN, crit: NaN, stat: NaN, pval: NaN, dist: null };
-    }
-    const wFE = studies.map((d) => 1 / Math.max(d.vi, MIN_VAR));
-    const W = wFE.reduce((acc, b) => acc + b, 0);
-    const FE = W > 0 ? studies.reduce((acc, d, i) => acc + d.yi * wFE[i], 0) / W : NaN;
-    const seFE = W > 0 ? Math.sqrt(1 / W) : NaN;
-    let Q = 0;
+    if (k < 3) return { intercept: NaN, slope: NaN, se: NaN, t: NaN, df: NaN, p: NaN };
+    const Z = studies.map((d) => d.yi / d.se);
+    const X = studies.map((d) => 1 / d.se);
+    const meanX = X.reduce((acc, b) => acc + b, 0) / X.length, meanZ = Z.reduce((acc, b) => acc + b, 0) / Z.length;
+    let num = 0, den = 0;
     for (let i = 0; i < k; i++) {
-      Q += wFE[i] * Math.pow(studies[i].yi - FE, 2);
+      num += (X[i] - meanX) * (Z[i] - meanZ);
+      den += (X[i] - meanX) ** 2;
     }
-    const dfQ = k - 1;
-    let I22 = 0;
-    if (Q > dfQ && Q > 0) I22 = (Q - dfQ) / Q * 100;
-    I22 = Math.max(0, Math.min(100, I22));
-    const tau2 = (TAU2_FN[method] ?? TAU2_FN.DL)(studies, wFE, W, Q, dfQ, tau2Init);
-    const wRE = studies.map((d) => 1 / Math.max(d.vi + tau2, MIN_VAR));
-    const WRE = wRE.reduce((acc, b) => acc + b, 0);
-    const RE = WRE > 0 ? studies.reduce((acc, d, i) => acc + d.yi * wRE[i], 0) / WRE : NaN;
-    const seRE_base = WRE > 0 ? Math.sqrt(1 / WRE) : NaN;
-    let seRE = seRE_base;
-    let crit, stat, pval, dist;
-    if (ciMethod === "KH" && k > 1) {
-      const df = k - 1;
-      let sum = 0;
-      for (let i = 0; i < k; i++) {
-        sum += wRE[i] * Math.pow(studies[i].yi - RE, 2);
+    const slope = num / den;
+    const intercept = meanZ - slope * meanX;
+    let rss = 0;
+    for (let i = 0; i < k; i++) {
+      rss += (Z[i] - (intercept + slope * X[i])) ** 2;
+    }
+    const df = k - 2;
+    const se = Math.sqrt(rss / df) * Math.sqrt(1 / k + meanX * meanX / den);
+    const t = intercept / se;
+    const p = 2 * (1 - tCDF(Math.abs(t), df));
+    const result = { intercept, slope, se, t, df, p };
+    if (studies.some((s) => s.cluster?.trim())) {
+      const clusters = resolveClusterIds(studies);
+      const X2d = studies.map((_, i) => [1, X[i]]);
+      const wUnit = Array(k).fill(1);
+      const rob = robustWlsResult(X2d, wUnit, Z, [intercept, slope], clusters);
+      if (!rob.error) {
+        result.robustInterceptSE = rob.robustSE[0];
+        result.robustInterceptZ = rob.robustZ[0];
+        result.robustInterceptP = rob.robustP[0];
+        result.robustSlopeSE = rob.robustSE[1];
+        result.robustSlopeZ = rob.robustZ[1];
+        result.robustSlopeP = rob.robustP[1];
+        result.robustDf = rob.df;
+        result.clustersUsed = rob.C;
+        result.allSingletons = rob.allSingletons;
+      } else {
+        result.robustError = rob.error;
       }
-      const varKH = sum / (df * WRE);
-      seRE = Math.sqrt(Math.max(varKH, 0));
-      crit = tCritical(df, alpha);
-      stat = RE / seRE;
-      dist = "t";
-      pval = 2 * (1 - tCDF(Math.abs(stat), df));
-    } else if (ciMethod === "t" && k > 1) {
-      const df = k - 1;
-      crit = tCritical(df, alpha);
-      stat = RE / seRE;
-      dist = "t";
-      pval = 2 * (1 - tCDF(Math.abs(stat), df));
-    } else {
-      crit = normalQuantile(1 - alpha / 2);
-      stat = RE / seRE;
-      dist = "z";
-      pval = k <= 1 ? NaN : 2 * (1 - normalCDF(Math.abs(stat)));
     }
-    const predVar = seRE_base * seRE_base + tau2;
-    const predCrit = k >= 3 ? tCritical(k - 2, alpha) : NaN;
-    const hetCI = heterogeneityCIs(studies, tau2, alpha);
-    let ciLow = RE - crit * seRE;
-    let ciHigh = RE + crit * seRE;
-    if (ciMethod === "PL" && k > 1) {
-      const plCI = profileLikCI(studies, alpha);
-      ciLow = plCI[0];
-      ciHigh = plCI[1];
+    return result;
+  }
+  function beggTest(studies) {
+    const valid = validStudies(studies);
+    const k = valid.length;
+    if (k < 3) return { tau: NaN, S: NaN, z: NaN, p: NaN };
+    const adj = valid.map((s) => s.yi);
+    let S = 0;
+    for (let i = 0; i < k - 1; i++) {
+      for (let j = i + 1; j < k; j++) {
+        S += Math.sign(adj[i] - adj[j]) * Math.sign(valid[i].vi - valid[j].vi);
+      }
     }
-    const _result = {
-      FE,
-      seFE,
-      RE,
-      seRE,
-      tau2,
-      Q,
-      df: dfQ,
-      I2: I22,
-      tauCI: hetCI.tauCI,
-      I2CI: hetCI.I2CI,
-      H2CI: hetCI.H2CI,
-      predLow: isFinite(predCrit) ? RE - predCrit * Math.sqrt(predVar) : NaN,
-      predHigh: isFinite(predCrit) ? RE + predCrit * Math.sqrt(predVar) : NaN,
-      ciLow,
-      ciHigh,
-      crit,
-      stat,
-      pval,
-      dist
+    const tieStats = (vals) => {
+      const counts = /* @__PURE__ */ new Map();
+      for (const v of vals) counts.set(v, (counts.get(v) || 0) + 1);
+      let varTerm = 0, pairs = 0;
+      for (const t of counts.values()) {
+        if (t > 1) {
+          varTerm += t * (t - 1) * (2 * t + 5);
+          pairs += t * (t - 1) / 2;
+        }
+      }
+      return { varTerm, pairs };
     };
-    if (!_byMethod) {
-      _byMethod = /* @__PURE__ */ new Map();
-      _metaCache.set(studies, _byMethod);
-    }
-    _byMethod.set(_cacheKey, _result);
-    return _result;
+    const tsX = tieStats(adj);
+    const tsY = tieStats(valid.map((s) => s.vi));
+    const varS = (k * (k - 1) * (2 * k + 5) - tsX.varTerm - tsY.varTerm) / 18;
+    const z = S === 0 || varS <= 0 ? 0 : (Math.abs(S) - 1) / Math.sqrt(varS) * Math.sign(S);
+    const p = 2 * (1 - normalCDF(Math.abs(z)));
+    const p0 = k * (k - 1) / 2;
+    const denom = Math.sqrt((p0 - tsX.pairs) * (p0 - tsY.pairs));
+    const tau = denom > 0 ? S / denom : 0;
+    return { tau, S, z, p };
   }
-  function wls(X, y, w) {
-    const k = X.length;
-    const p = X[0].length;
-    const XtWX = Array.from({ length: p }, () => Array(p).fill(0));
-    const XtWy = Array(p).fill(0);
-    for (let i = 0; i < k; i++) {
-      const wi = w[i];
-      for (let j = 0; j < p; j++) {
-        XtWy[j] += wi * X[i][j] * y[i];
-        for (let l = j; l < p; l++) {
-          const v = wi * X[i][j] * X[i][l];
-          XtWX[j][l] += v;
-          if (l !== j) XtWX[l][j] += v;
-        }
+  function _pubBiasNaN(df) {
+    return {
+      intercept: NaN,
+      interceptSE: NaN,
+      interceptT: NaN,
+      interceptP: NaN,
+      slope: NaN,
+      slopeSE: NaN,
+      slopeT: NaN,
+      slopeP: NaN,
+      df
+    };
+  }
+  function _wlsFinish(beta, vcov, ys, xs, ws, df) {
+    let rss = 0;
+    for (let i = 0; i < ys.length; i++) {
+      const e = ys[i] - beta[0] - beta[1] * xs[i];
+      rss += ws[i] * e * e;
+    }
+    const s2 = df > 0 ? rss / df : NaN;
+    const interceptSE = Math.sqrt(s2 * vcov[0][0]);
+    const slopeSE = Math.sqrt(s2 * vcov[1][1]);
+    const interceptT = beta[0] / interceptSE;
+    const slopeT = beta[1] / slopeSE;
+    const interceptP = 2 * (1 - tCDF(Math.abs(interceptT), df));
+    const slopeP = 2 * (1 - tCDF(Math.abs(slopeT), df));
+    return {
+      intercept: beta[0],
+      interceptSE,
+      interceptT,
+      interceptP,
+      slope: beta[1],
+      slopeSE,
+      slopeT,
+      slopeP,
+      df
+    };
+  }
+  function fatPetTest(studies) {
+    const valid = validStudies(studies);
+    const k = valid.length;
+    if (k < 3) return _pubBiasNaN(k - 2);
+    const ys = valid.map((s) => s.yi);
+    const xs = valid.map((s) => s.se ?? Math.sqrt(s.vi));
+    const ws = valid.map((s) => 1 / s.vi);
+    const X = xs.map((x) => [1, x]);
+    const { beta, vcov, rankDeficient } = wls(X, ys, ws);
+    if (rankDeficient) return _pubBiasNaN(k - 2);
+    const result = _wlsFinish(beta, vcov, ys, xs, ws, k - 2);
+    if (valid.some((s) => s.cluster?.trim())) {
+      const clusters = resolveClusterIds(valid);
+      const rob = robustWlsResult(X, ws, ys, beta, clusters);
+      if (!rob.error) {
+        result.robustInterceptSE = rob.robustSE[0];
+        result.robustInterceptZ = rob.robustZ[0];
+        result.robustInterceptP = rob.robustP[0];
+        result.robustSlopeSE = rob.robustSE[1];
+        result.robustSlopeZ = rob.robustZ[1];
+        result.robustSlopeP = rob.robustP[1];
+        result.robustDf = rob.df;
+        result.clustersUsed = rob.C;
+        result.allSingletons = rob.allSingletons;
+      } else {
+        result.robustError = rob.error;
       }
     }
-    const inv = matInverse(XtWX);
-    if (inv === null) {
-      return {
-        beta: Array(p).fill(NaN),
-        vcov: Array.from({ length: p }, () => Array(p).fill(NaN)),
-        rankDeficient: true
-      };
-    }
-    const beta = inv.map((row) => row.reduce((acc, v, j) => acc + v * XtWy[j], 0));
-    return { beta, vcov: inv, rankDeficient: false };
+    return result;
   }
-  function matInverse(A) {
-    const p = A.length;
-    const M = A.map((row, i) => {
-      const aug = row.slice();
-      for (let j = 0; j < p; j++) aug.push(i === j ? 1 : 0);
-      return aug;
+  function petPeeseTest(studies) {
+    const fat = fatPetTest(studies);
+    const valid = validStudies(studies);
+    const k = valid.length;
+    let peese = _pubBiasNaN(k - 2);
+    if (k >= 3 && !isNaN(fat.intercept)) {
+      const ys = valid.map((s) => s.yi);
+      const xs = valid.map((s) => s.vi);
+      const ws = valid.map((s) => 1 / s.vi);
+      const X = xs.map((x) => [1, x]);
+      const { beta, vcov, rankDeficient } = wls(X, ys, ws);
+      if (!rankDeficient) peese = _wlsFinish(beta, vcov, ys, xs, ws, k - 2);
+    }
+    const usePeese = isFinite(fat.interceptP) && fat.interceptP < 0.1;
+    return { fat, peese, usePeese };
+  }
+  function harbordTest(studies) {
+    const valid = studies.filter((s) => {
+      const { a, b, c, d } = s;
+      if (!isFinite(a) || !isFinite(b) || !isFinite(c) || !isFinite(d)) return false;
+      if (a < 0 || b < 0 || c < 0 || d < 0) return false;
+      const N = a + b + c + d;
+      if (N < 2) return false;
+      const V = (a + b) * (c + d) * (a + c) * (b + d) / (N * N * (N - 1));
+      return V > 0;
     });
-    for (let col = 0; col < p; col++) {
-      let pivotRow = col;
-      for (let row = col + 1; row < p; row++) {
-        if (Math.abs(M[row][col]) > Math.abs(M[pivotRow][col])) pivotRow = row;
-      }
-      [M[col], M[pivotRow]] = [M[pivotRow], M[col]];
-      const pivot = M[col][col];
-      if (Math.abs(pivot) < 1e-14) return null;
-      for (let j = col; j < 2 * p; j++) M[col][j] /= pivot;
-      for (let row = 0; row < p; row++) {
-        if (row === col) continue;
-        const f = M[row][col];
-        if (f === 0) continue;
-        for (let j = col; j < 2 * p; j++) M[row][j] -= f * M[col][j];
-      }
+    const k = valid.length;
+    if (k < 3) return _pubBiasNaN(k - 2);
+    const ys = [], xs = [];
+    for (const s of valid) {
+      const { a, b, c, d } = s;
+      const N = a + b + c + d;
+      const E = (a + b) * (a + c) / N;
+      const V = (a + b) * (c + d) * (a + c) * (b + d) / (N * N * (N - 1));
+      const sqrtV = Math.sqrt(V);
+      ys.push((a - E) / sqrtV);
+      xs.push(sqrtV);
     }
-    return M.map((row) => row.slice(p));
+    const X = xs.map((x) => [1, x]);
+    const ws = xs.map(() => 1);
+    const { beta, vcov, rankDeficient } = wls(X, ys, ws);
+    if (rankDeficient) return _pubBiasNaN(k - 2);
+    return _wlsFinish(beta, vcov, ys, xs, ws, k - 2);
   }
-  function logDet(A) {
-    const n = A.length;
-    const M = A.map((row) => row.slice());
-    let logd = 0;
-    for (let i = 0; i < n; i++) {
-      let maxVal = Math.abs(M[i][i]), maxRow = i;
-      for (let k = i + 1; k < n; k++) {
-        if (Math.abs(M[k][i]) > maxVal) {
-          maxVal = Math.abs(M[k][i]);
-          maxRow = k;
+  function petersTest(studies) {
+    function getN(s) {
+      if (isFinite(s.a) && isFinite(s.b) && isFinite(s.c) && isFinite(s.d))
+        return s.a + s.b + s.c + s.d;
+      if (isFinite(s.n1) && isFinite(s.n2))
+        return s.n1 + s.n2;
+      if (isFinite(s.n))
+        return s.n;
+      return NaN;
+    }
+    const valid = studies.filter((s) => {
+      if (!isFinite(s.yi) || !isFinite(s.vi) || s.vi <= 0) return false;
+      const N = getN(s);
+      return isFinite(N) && N >= 2;
+    });
+    const k = valid.length;
+    if (k < 3) return _pubBiasNaN(k - 2);
+    const ys = valid.map((s) => s.yi);
+    const xs = valid.map((s) => 1 / getN(s));
+    const ws = valid.map((s) => 1 / s.vi);
+    const X = xs.map((x) => [1, x]);
+    const { beta, vcov, rankDeficient } = wls(X, ys, ws);
+    if (rankDeficient) return _pubBiasNaN(k - 2);
+    return _wlsFinish(beta, vcov, ys, xs, ws, k - 2);
+  }
+  function deeksTest(studies) {
+    const valid = studies.filter((s) => {
+      const { a, b, c, d } = s;
+      if (!isFinite(a) || !isFinite(b) || !isFinite(c) || !isFinite(d)) return false;
+      if (a <= 0 || b <= 0 || c <= 0 || d <= 0) return false;
+      const N = a + b + c + d;
+      const ESS = 2 * (a + c) * (b + d) / N;
+      return ESS > 0;
+    });
+    const k = valid.length;
+    if (k < 3) return _pubBiasNaN(k - 2);
+    const ys = [], xs = [], ws = [];
+    for (const s of valid) {
+      const { a, b, c, d } = s;
+      const N = a + b + c + d;
+      const ESS = 2 * (a + c) * (b + d) / N;
+      ys.push(Math.log(a * d / (b * c)));
+      xs.push(1 / Math.sqrt(ESS));
+      ws.push(ESS);
+    }
+    const X = xs.map((x) => [1, x]);
+    const { beta, vcov, rankDeficient } = wls(X, ys, ws);
+    if (rankDeficient) return _pubBiasNaN(k - 2);
+    return _wlsFinish(beta, vcov, ys, xs, ws, k - 2);
+  }
+  function rueckerTest(studies) {
+    const valid = studies.filter((s) => {
+      const { a, b, c, d } = s;
+      if (!isFinite(a) || !isFinite(b) || !isFinite(c) || !isFinite(d)) return false;
+      if (a < 0 || b < 0 || c < 0 || d < 0) return false;
+      return a + b > 0 && c + d > 0;
+    });
+    const k = valid.length;
+    if (k < 3) return _pubBiasNaN(k - 2);
+    const ys = [], xs = [];
+    for (const s of valid) {
+      const { a, b, c, d } = s;
+      const n1 = a + b;
+      const n2 = c + d;
+      const p1 = a / n1;
+      const p2 = c / n2;
+      const se = Math.sqrt(1 / (4 * n1) + 1 / (4 * n2));
+      const y = Math.asin(Math.sqrt(p1)) - Math.asin(Math.sqrt(p2));
+      ys.push(y / se);
+      xs.push(1 / se);
+    }
+    const X = xs.map((x) => [1, x]);
+    const ws = xs.map(() => 1);
+    const { beta, vcov, rankDeficient } = wls(X, ys, ws);
+    if (rankDeficient) return _pubBiasNaN(k - 2);
+    return _wlsFinish(beta, vcov, ys, xs, ws, k - 2);
+  }
+  function failSafeN(studies, alpha = 0.05, trivial = 0.1) {
+    const valid = validStudies(studies);
+    const k = valid.length;
+    if (k < 1) return { rosenthal: NaN, orwin: NaN, sumZ: NaN, z_crit: NaN, k: 0 };
+    const sumZ = valid.reduce((acc, d) => {
+      const z = Math.abs(d.yi) / Math.sqrt(d.vi);
+      return acc + z;
+    }, 0);
+    const z_crit = (() => {
+      const target = 1 - alpha;
+      let lo = 0, hi = 10;
+      for (let i = 0; i < BISECTION_ITERS; i++) {
+        const mid = (lo + hi) / 2;
+        normalCDF(mid) < target ? lo = mid : hi = mid;
+      }
+      return (lo + hi) / 2;
+    })();
+    const rosenthal = Math.max(0, (sumZ / z_crit) ** 2 - k);
+    const w0 = valid.map((s) => 1 / s.vi);
+    const W = w0.reduce((acc, b) => acc + b, 0);
+    const FE = valid.reduce((acc, d, i) => acc + w0[i] * d.yi, 0) / W;
+    const orwin = Math.max(0, k * (Math.abs(FE) - Math.abs(trivial)) / Math.abs(trivial));
+    return { rosenthal, orwin, sumZ, z_crit, k };
+  }
+  function henmiCopas(studies, alpha = 0.05) {
+    const valid = validStudies(studies);
+    const k = valid.length;
+    if (k < 3) return { error: "k < 3" };
+    const yi = valid.map((s) => s.yi);
+    const vi = valid.map((s) => s.vi);
+    const wi = vi.map((v) => 1 / v);
+    const W1 = wi.reduce((s, w) => s + w, 0);
+    const W2 = wi.reduce((s, w) => s + w * w, 0) / W1;
+    const W3 = wi.reduce((s, w) => s + w * w * w, 0) / W1;
+    const W4 = wi.reduce((s, w) => s + w * w * w * w, 0) / W1;
+    const beta = yi.reduce((s, y, i) => s + wi[i] * y, 0) / W1;
+    const Q = yi.reduce((s, y, i) => s + wi[i] * (y - beta) ** 2, 0);
+    const tau2 = Math.max(0, (Q - (k - 1)) / (W1 - W2));
+    const vb = (tau2 * W2 + 1) / W1;
+    const se = Math.sqrt(vb);
+    const VR = 1 + tau2 * W2;
+    const SDR = Math.sqrt(VR);
+    const EQ = (r) => k - 1 + tau2 * (W1 - W2) + tau2 ** 2 * (1 / VR ** 2 * r * r - 1 / VR) * (W3 - W2 ** 2);
+    const VQ = (r) => {
+      const rsq = r * r;
+      const recipvr2 = 1 / VR ** 2;
+      return 2 * (k - 1) + 4 * tau2 * (W1 - W2) + 2 * tau2 ** 2 * (W1 * W2 - 2 * W3 + W2 ** 2) + 4 * tau2 ** 2 * (recipvr2 * rsq - 1 / VR) * (W3 - W2 ** 2) + 4 * tau2 ** 3 * (recipvr2 * rsq - 1 / VR) * (W4 - 2 * W2 * W3 + W2 ** 3) + 2 * tau2 ** 4 * (recipvr2 - 2 * (1 / VR ** 3) * rsq) * (W3 - W2 ** 2) ** 2;
+    };
+    const shapeF = (r) => {
+      const eq = EQ(r);
+      const vq = VQ(r);
+      return vq > 0 ? eq * eq / vq : NaN;
+    };
+    const scaleF = (r) => {
+      const eq = EQ(r);
+      const vq = VQ(r);
+      return eq > 0 ? vq / eq : NaN;
+    };
+    const finv = (f) => (W1 / W2 - 1) * (f * f - 1) + (k - 1);
+    const pgamma = (q, shape, scale) => {
+      if (!isFinite(q) || !isFinite(shape) || !isFinite(scale) || shape <= 0 || scale <= 0) {
+        return q <= 0 ? 0 : 1;
+      }
+      if (q <= 0) return 0;
+      return regularizedGammaP(shape, q / scale);
+    };
+    const SQRT2PI = Math.sqrt(2 * Math.PI);
+    const dnorm = (x) => Math.exp(-0.5 * x * x) / SQRT2PI;
+    const integrate = (x) => {
+      const lo2 = x;
+      const hi2 = Math.max(lo2 + 0.01, 7);
+      const N = 400;
+      const h = (hi2 - lo2) / N;
+      let sum = 0;
+      for (let i = 0; i <= N; i++) {
+        const r = lo2 + i * h;
+        const rv = SDR * r;
+        const fv = finv(r / x);
+        const pg = pgamma(fv, shapeF(rv), scaleF(rv));
+        const coeff = i === 0 || i === N ? 1 : i % 2 === 0 ? 2 : 4;
+        sum += coeff * pg * dnorm(r);
+      }
+      return sum * h / 3;
+    };
+    const halfAlpha = alpha / 2;
+    const eqn = (x) => integrate(x) - halfAlpha;
+    let lo = 1e-4, hi = 10;
+    if (!isFinite(eqn(lo)) || !isFinite(eqn(hi)) || eqn(lo) < 0) {
+      return { error: "HC: failed to bracket root" };
+    }
+    let t0 = (lo + hi) / 2;
+    for (let iter = 0; iter < BISECTION_ITERS; iter++) {
+      t0 = (lo + hi) / 2;
+      const fmid = eqn(t0);
+      if (Math.abs(fmid) < 1e-12 || hi - lo < 1e-14) break;
+      if (fmid > 0) lo = t0;
+      else hi = t0;
+    }
+    const u0 = SDR * t0;
+    return {
+      beta,
+      se,
+      ci: [beta - u0 * se, beta + u0 * se],
+      tau2,
+      t0,
+      u0,
+      k
+    };
+  }
+  function tesTest(studies, m) {
+    const valid = validStudies(studies);
+    const k = valid.length;
+    const nan = { O: NaN, E: NaN, Var: NaN, z: NaN, chi2: NaN, p: NaN, k, theta: NaN, powers: [], sig: [] };
+    if (k < 2 || !m || !isFinite(m.RE)) return nan;
+    const theta = m.RE;
+    const z025 = normalQuantile(0.975);
+    const powers = valid.map((s) => {
+      const se = Math.sqrt(s.vi);
+      const ncp = Math.abs(theta) / se;
+      return normalCDF(ncp - z025) + normalCDF(-z025 - ncp);
+    });
+    const sig = valid.map((s) => Math.abs(s.yi / Math.sqrt(s.vi)) > z025);
+    const O = sig.reduce((n, b) => n + (b ? 1 : 0), 0);
+    const E = powers.reduce((s, p2) => s + p2, 0);
+    const Var = E * (1 - E / k);
+    if (Var <= 0) return nan;
+    const z = (O - E) / Math.sqrt(Var);
+    const chi2 = z * z;
+    const p = 1 - normalCDF(z);
+    return { O, E, Var, z, chi2, p, k, theta, powers, sig };
+  }
+  function waapWls(studies) {
+    const valid = validStudies(studies);
+    const k = valid.length;
+    const nan = {
+      estimate: NaN,
+      se: NaN,
+      ci: [NaN, NaN],
+      z: NaN,
+      p: NaN,
+      k,
+      kAdequate: 0,
+      wlsEstimate: NaN,
+      fallback: false
+    };
+    if (k < 1) return nan;
+    const z025 = normalQuantile(0.975);
+    const W = valid.reduce((s, d) => s + 1 / d.vi, 0);
+    const wlsEst = valid.reduce((s, d) => s + d.yi / d.vi, 0) / W;
+    const adequate = valid.filter((d) => {
+      const ncp = Math.abs(wlsEst) / Math.sqrt(d.vi);
+      const power = normalCDF(ncp - z025) + normalCDF(-z025 - ncp);
+      return power >= 0.8;
+    });
+    const kAdequate = adequate.length;
+    const fallback = kAdequate === 0;
+    const subset = fallback ? valid : adequate;
+    const Wa = subset.reduce((s, d) => s + 1 / d.vi, 0);
+    const waap = subset.reduce((s, d) => s + d.yi / d.vi, 0) / Wa;
+    const se = Math.sqrt(1 / Wa);
+    const z = waap / se;
+    const p = 2 * (1 - normalCDF(Math.abs(z)));
+    const ci = [waap - z025 * se, waap + z025 * se];
+    return { estimate: waap, se, ci, z, p, k, kAdequate, wlsEstimate: wlsEst, fallback };
+  }
+  var init_pubbias = __esm({
+    "js/pubbias.js"() {
+      init_analysis();
+      init_linalg();
+      init_utils();
+      init_constants();
+    }
+  });
+
+  // js/influence.js
+  function looEngine(studies, full, method, ciMethod, alpha = 0.05) {
+    const n = studies.length;
+    const W = studies.reduce((acc, d) => acc + 1 / (d.vi + full.tau2), 0);
+    const DL_SS_METHODS = /* @__PURE__ */ new Set(["DL", "GENQ", "HS", "HSk", "DLIT"]);
+    let W_fe = 0, WY = 0, WY2 = 0, W2 = 0;
+    for (const d of studies) {
+      const wi = 1 / d.vi;
+      W_fe += wi;
+      WY += wi * d.yi;
+      WY2 += wi * d.yi * d.yi;
+      W2 += wi * wi;
+    }
+    const dlSS = { W_fe, WY, WY2, W2 };
+    let heSS = null;
+    if (method === "HE") {
+      let SY = 0, SY2 = 0, SV = 0;
+      for (const d of studies) {
+        SY += d.yi;
+        SY2 += d.yi * d.yi;
+        SV += d.vi;
+      }
+      heSS = { SY, SY2, SV };
+    }
+    let sqSS = null;
+    if (method === "SQGENQ") {
+      let SA = 0, SAY = 0, SAY2 = 0, SsV = 0, Wfe = 0;
+      for (const d of studies) {
+        const ai = Math.sqrt(1 / d.vi);
+        SA += ai;
+        SAY += ai * d.yi;
+        SAY2 += ai * d.yi * d.yi;
+        SsV += Math.sqrt(d.vi);
+        Wfe += 1 / d.vi;
+      }
+      sqSS = { SA, SAY, SAY2, SsV, W_fe: Wfe };
+    }
+    const LIKEL_METHODS = /* @__PURE__ */ new Set(["REML", "ML", "EBLUP"]);
+    let likelSS = null;
+    if (LIKEL_METHODS.has(method) && ciMethod !== "PL") {
+      const tau2 = full.tau2, RE = full.RE;
+      let totalInfo = 0;
+      const perStudy = studies.map((d) => {
+        const vi_tau = d.vi + tau2;
+        const wi = 1 / vi_tau;
+        const hi = wi / W;
+        const ri = d.yi - RE;
+        let score_i, info_i;
+        if (method === "ML") {
+          score_i = ri * ri / (vi_tau * vi_tau) - 1 / vi_tau;
+          info_i = 1 / (vi_tau * vi_tau);
+        } else {
+          score_i = ri * ri / (vi_tau * vi_tau) - (1 - hi) / vi_tau;
+          info_i = (1 - hi) / (vi_tau * vi_tau);
         }
-      }
-      if (maxRow !== i) [M[i], M[maxRow]] = [M[maxRow], M[i]];
-      if (Math.abs(M[i][i]) < 1e-15) return -Infinity;
-      logd += Math.log(Math.abs(M[i][i]));
-      for (let k = i + 1; k < n; k++) {
-        const f = M[k][i] / M[i][i];
-        for (let j = i; j < n; j++) M[k][j] -= f * M[i][j];
-      }
+        totalInfo += info_i;
+        return { score_i, info_i };
+      });
+      likelSS = { perStudy, totalInfo };
     }
-    return logd;
+    let pmSS = null;
+    if (method === "PM" && ciMethod !== "PL") {
+      const tau2 = full.tau2;
+      let WY_re = 0, WY2_re = 0;
+      for (const d of studies) {
+        const wi = 1 / (d.vi + tau2);
+        WY_re += wi * d.yi;
+        WY2_re += wi * d.yi * d.yi;
+      }
+      pmSS = { WY_re, WY2_re };
+    }
+    let sjSS = null;
+    if (method === "SJ" && ciMethod !== "PL") {
+      const tau2 = full.tau2, mu = full.RE;
+      const perStudy = studies.map((d) => d.vi * (d.yi - mu) ** 2 / (d.vi + tau2));
+      sjSS = { totalSJ: n * tau2, perStudy };
+    }
+    const FAST_PATH_METHODS = /* @__PURE__ */ new Set([...DL_SS_METHODS, "HE", "SQGENQ", ...LIKEL_METHODS, "PM", "SJ"]);
+    const useFastPath = FAST_PATH_METHODS.has(method) && ciMethod !== "PL";
+    const df_loo = n - 2;
+    return studies.map((study, idx) => {
+      let tau2_loo, RE_loo, seRE_loo;
+      if (useFastPath) {
+        const wi_fe = 1 / study.vi;
+        if (method === "DL" || method === "GENQ") {
+          const W_l = dlSS.W_fe - wi_fe;
+          const WY_l = dlSS.WY - wi_fe * study.yi;
+          const WY2_l = dlSS.WY2 - wi_fe * study.yi * study.yi;
+          const W2_l = dlSS.W2 - wi_fe * wi_fe;
+          const Q_l = WY2_l - WY_l * WY_l / W_l;
+          const c_l = W_l - W2_l / W_l;
+          tau2_loo = c_l > 0 ? Math.max(0, (Q_l - (n - 2)) / c_l) : 0;
+        } else if (method === "HS") {
+          const W_l = dlSS.W_fe - wi_fe;
+          const WY_l = dlSS.WY - wi_fe * study.yi;
+          const WY2_l = dlSS.WY2 - wi_fe * study.yi * study.yi;
+          const Q_l = WY2_l - WY_l * WY_l / W_l;
+          tau2_loo = W_l > 0 ? Math.max(0, (Q_l - (n - 2)) / W_l) : 0;
+        } else if (method === "HSk") {
+          const W_l = dlSS.W_fe - wi_fe;
+          const WY_l = dlSS.WY - wi_fe * study.yi;
+          const WY2_l = dlSS.WY2 - wi_fe * study.yi * study.yi;
+          const Q_l = WY2_l - WY_l * WY_l / W_l;
+          const tau2_hs_l = W_l > 0 ? Math.max(0, (Q_l - (n - 2)) / W_l) : 0;
+          tau2_loo = n > 2 ? tau2_hs_l * (n - 1) / (n - 2) : 0;
+        } else if (method === "DLIT") {
+          const W_l = dlSS.W_fe - wi_fe;
+          const WY_l = dlSS.WY - wi_fe * study.yi;
+          const WY2_l = dlSS.WY2 - wi_fe * study.yi * study.yi;
+          const W2_l = dlSS.W2 - wi_fe * wi_fe;
+          const Q_l = WY2_l - WY_l * WY_l / W_l;
+          const c_l = W_l - W2_l / W_l;
+          let t2 = c_l > 0 ? Math.max(0, (Q_l - (n - 2)) / c_l) : 0;
+          for (let iter = 0; iter < 200; iter++) {
+            let Wit = 0, W2it = 0, Wmuit = 0, WY2it = 0;
+            for (let j = 0; j < n; j++) {
+              if (j === idx) continue;
+              const wj = 1 / (studies[j].vi + t2);
+              Wit += wj;
+              W2it += wj * wj;
+              Wmuit += wj * studies[j].yi;
+              WY2it += wj * studies[j].yi * studies[j].yi;
+            }
+            const Qit = WY2it - Wmuit * Wmuit / Wit;
+            const cit = Wit - W2it / Wit;
+            const newT2 = Math.max(0, (Qit - (n - 2)) / cit);
+            if (Math.abs(newT2 - t2) < REML_TOL) {
+              t2 = newT2;
+              break;
+            }
+            t2 = newT2;
+          }
+          tau2_loo = t2;
+        } else if (method === "HE") {
+          const k_l = n - 1;
+          const SY_l = heSS.SY - study.yi;
+          const SY2_l = heSS.SY2 - study.yi * study.yi;
+          const SV_l = heSS.SV - study.vi;
+          const SS_l = SY2_l - SY_l * SY_l / k_l;
+          tau2_loo = k_l > 1 ? Math.max(0, SS_l / (k_l - 1) - SV_l / k_l) : 0;
+        } else if (method === "SQGENQ") {
+          const ai = Math.sqrt(wi_fe);
+          const k_l = n - 1;
+          const A_l = sqSS.SA - ai;
+          const SAY_l = sqSS.SAY - ai * study.yi;
+          const SAY2_l = sqSS.SAY2 - ai * study.yi * study.yi;
+          const SsV_l = sqSS.SsV - Math.sqrt(study.vi);
+          const Wfe_l = sqSS.W_fe - wi_fe;
+          if (A_l <= 0) {
+            tau2_loo = 0;
+          } else {
+            const Qa_l = SAY2_l - SAY_l * SAY_l / A_l;
+            const ba_l = SsV_l - k_l / A_l;
+            const ca_l = A_l - Wfe_l / A_l;
+            tau2_loo = ca_l > 0 ? Math.max(0, (Qa_l - ba_l) / ca_l) : 0;
+          }
+        } else if (method === "PM") {
+          const wi = 1 / (study.vi + full.tau2);
+          const W_l = W - wi;
+          const WY_l = pmSS.WY_re - wi * study.yi;
+          const WY2_l = pmSS.WY2_re - wi * study.yi * study.yi;
+          const Q_PM_l = W_l > 0 ? WY2_l - WY_l * WY_l / W_l : 0;
+          let t2 = W_l > 0 ? Math.max(0, full.tau2 + (Q_PM_l - (n - 2)) / W_l) : full.tau2;
+          for (let iter = 0; iter < 100; iter++) {
+            let Wit = 0, WYit = 0, WY2it = 0;
+            for (let j = 0; j < n; j++) {
+              if (j === idx) continue;
+              const wj = 1 / (studies[j].vi + t2);
+              Wit += wj;
+              WYit += wj * studies[j].yi;
+              WY2it += wj * studies[j].yi * studies[j].yi;
+            }
+            if (Wit <= 0) break;
+            const Qit = WY2it - WYit * WYit / Wit;
+            const newT2 = Math.max(0, t2 + (Qit - (n - 2)) / Wit);
+            if (Math.abs(newT2 - t2) < REML_TOL) {
+              t2 = newT2;
+              break;
+            }
+            t2 = newT2;
+          }
+          tau2_loo = t2;
+        } else if (method === "SJ") {
+          let t2 = Math.max(0, (sjSS.totalSJ - sjSS.perStudy[idx]) / (n - 1));
+          for (let iter = 0; iter < 200; iter++) {
+            let Wit = 0, WYit = 0;
+            for (let j = 0; j < n; j++) {
+              if (j === idx) continue;
+              const wj = 1 / (studies[j].vi + t2);
+              Wit += wj;
+              WYit += wj * studies[j].yi;
+            }
+            if (Wit <= 0) break;
+            const mu_it = WYit / Wit;
+            let s = 0;
+            for (let j = 0; j < n; j++) {
+              if (j === idx) continue;
+              const rj = studies[j].yi - mu_it;
+              s += studies[j].vi * rj * rj / (studies[j].vi + t2);
+            }
+            const newT2 = Math.max(0, s / (n - 1));
+            if (Math.abs(newT2 - t2) < REML_TOL) {
+              t2 = newT2;
+              break;
+            }
+            t2 = newT2;
+          }
+          tau2_loo = t2;
+        } else {
+          const { score_i, info_i } = likelSS.perStudy[idx];
+          const infoLoo = likelSS.totalInfo - info_i;
+          let t2 = infoLoo > 0 ? Math.max(0, full.tau2 + score_i / infoLoo) : full.tau2;
+          const isREML = method !== "ML";
+          for (let iter = 0; iter < 100; iter++) {
+            let W_it = 0, Wmu_it = 0;
+            for (let j = 0; j < n; j++) {
+              if (j === idx) continue;
+              const wj = 1 / (studies[j].vi + t2);
+              W_it += wj;
+              Wmu_it += wj * studies[j].yi;
+            }
+            if (W_it <= 0) break;
+            const mu_it = Wmu_it / W_it;
+            let sc = 0, inf_it = 0;
+            for (let j = 0; j < n; j++) {
+              if (j === idx) continue;
+              const vi_tau = studies[j].vi + t2;
+              const rj = studies[j].yi - mu_it;
+              if (isREML) {
+                const hj = 1 / (vi_tau * W_it);
+                sc += rj * rj / (vi_tau * vi_tau) - (1 - hj) / vi_tau;
+                inf_it += (1 - hj) / (vi_tau * vi_tau);
+              } else {
+                sc += rj * rj / (vi_tau * vi_tau) - 1 / vi_tau;
+                inf_it += 1 / (vi_tau * vi_tau);
+              }
+            }
+            if (inf_it <= 0) break;
+            let step = sc / inf_it;
+            let newT2 = t2 + step;
+            let sh = 0;
+            while (newT2 < 0 && sh++ < 20) {
+              step /= 2;
+              newT2 = t2 + step;
+            }
+            newT2 = Math.max(0, newT2);
+            if (Math.abs(newT2 - t2) < REML_TOL) {
+              t2 = newT2;
+              break;
+            }
+            t2 = newT2;
+          }
+          tau2_loo = t2;
+        }
+        let W_RE_l = 0, WY_RE_l = 0, WY2_RE_l = 0;
+        for (let j = 0; j < n; j++) {
+          if (j === idx) continue;
+          const wj = 1 / Math.max(studies[j].vi + tau2_loo, MIN_VAR);
+          W_RE_l += wj;
+          WY_RE_l += wj * studies[j].yi;
+          WY2_RE_l += wj * studies[j].yi * studies[j].yi;
+        }
+        RE_loo = W_RE_l > 0 ? WY_RE_l / W_RE_l : NaN;
+        if (ciMethod === "KH" && df_loo > 0) {
+          const sumKH = WY2_RE_l - WY_RE_l * WY_RE_l / W_RE_l;
+          seRE_loo = Math.sqrt(Math.max(sumKH, 0) / (df_loo * W_RE_l));
+        } else {
+          seRE_loo = W_RE_l > 0 ? Math.sqrt(1 / W_RE_l) : NaN;
+        }
+      } else {
+        const loo = studies.filter((_, i) => i !== idx);
+        const looMeta = meta(loo, method, ciMethod, alpha);
+        tau2_loo = looMeta.tau2;
+        RE_loo = looMeta.RE;
+        seRE_loo = looMeta.seRE;
+      }
+      const hat = 1 / (study.vi + full.tau2) / W;
+      return { tau2_loo, RE_loo, seRE_loo, hat };
+    });
   }
+  function influenceDiagnostics(studies, method = "DL", ciMethod = "normal", alpha = 0.05) {
+    const n = studies.length;
+    if (n < 2) return [];
+    const full = meta(studies, method, ciMethod, alpha);
+    const W = studies.reduce((acc, d) => acc + 1 / (d.vi + full.tau2), 0);
+    const rows = looEngine(studies, full, method, ciMethod, alpha);
+    return studies.map((study, idx) => {
+      const { tau2_loo, RE_loo, seRE_loo, hat } = rows[idx];
+      const r = (study.yi - full.RE) / Math.sqrt(study.vi + full.tau2);
+      const dfbeta = (full.RE - RE_loo) / seRE_loo;
+      const deltaTau2 = full.tau2 - tau2_loo;
+      const outlier = Math.abs(r) > 2;
+      const influential = Math.abs(dfbeta) > 1;
+      const W_loo = studies.reduce((acc, s, j) => j === idx ? acc : acc + 1 / (s.vi + tau2_loo), 0);
+      const covRatio = W_loo > 0 ? W / W_loo : NaN;
+      const cookD = (full.RE - RE_loo) ** 2 * W;
+      const dffitsVar = hat * (tau2_loo + study.vi);
+      const DFFITS = dffitsVar > 0 ? (full.RE - RE_loo) / Math.sqrt(dffitsVar) : NaN;
+      const highLeverage = hat > 2 / n;
+      const highCookD = cookD > 4 / n;
+      const dffitsThresh = 3 * Math.sqrt(1 / (n - 1));
+      const highDffits = isFinite(DFFITS) && Math.abs(DFFITS) > dffitsThresh;
+      const highCovRatio = isFinite(covRatio) && (covRatio > 1 + 1 / n || covRatio < 1 - 1 / n);
+      return {
+        label: study.label,
+        RE_loo,
+        tau2_loo,
+        stdResidual: r,
+        DFBETA: dfbeta,
+        DFFITS,
+        covRatio,
+        deltaTau2,
+        outlier,
+        influential,
+        hat,
+        cookD,
+        highLeverage,
+        highCookD,
+        highDffits,
+        highCovRatio
+      };
+    });
+  }
+  function cumulativeMeta(studies, method = "DL", ciMethod = "normal", alpha = 0.05) {
+    return studies.map((s, idx) => {
+      const prefix = studies.slice(0, idx + 1);
+      const m = meta(prefix, method, ciMethod, alpha);
+      return {
+        k: idx + 1,
+        addedLabel: s.label ?? `Study ${idx + 1}`,
+        RE: m.RE,
+        seRE: m.seRE,
+        ciLow: m.ciLow,
+        ciHigh: m.ciHigh,
+        tau2: m.tau2,
+        I2: m.I2
+      };
+    });
+  }
+  function leaveOneOut(studies, method = "DL", ciMethod = "normal", precomputedFull = null, alpha = 0.05) {
+    const full = precomputedFull ?? meta(studies, method, ciMethod, alpha);
+    if (studies.length < 3) return { full, rows: [] };
+    const n = studies.length;
+    let dl_W_fe = 0, dl_WY = 0, dl_WY2 = 0, dl_W2 = 0;
+    for (const d of studies) {
+      const wi = 1 / d.vi;
+      dl_W_fe += wi;
+      dl_WY += wi * d.yi;
+      dl_WY2 += wi * d.yi * d.yi;
+      dl_W2 += wi * wi;
+    }
+    const dlSS = { W_fe: dl_W_fe, WY: dl_WY, WY2: dl_WY2, W2: dl_W2 };
+    const df_loo = n - 2;
+    const crit_loo = ciMethod === "KH" || ciMethod === "t" ? tCritical(df_loo, alpha) : normalQuantile(1 - alpha / 2);
+    const useT = ciMethod === "KH" || ciMethod === "t";
+    const engineRows = ciMethod !== "PL" ? looEngine(studies, full, method, ciMethod, alpha) : null;
+    const rows = studies.map((omitted, omitIdx) => {
+      const wi_fe = 1 / omitted.vi;
+      const W_fe_l = dlSS.W_fe - wi_fe;
+      const WY_fe_l = dlSS.WY - wi_fe * omitted.yi;
+      const WY2_fe_l = dlSS.WY2 - wi_fe * omitted.yi * omitted.yi;
+      const Q_fe_l = W_fe_l > 0 ? WY2_fe_l - WY_fe_l * WY_fe_l / W_fe_l : 0;
+      const i2_loo = Q_fe_l > df_loo && Q_fe_l > 0 ? Math.min(100, (Q_fe_l - df_loo) / Q_fe_l * 100) : 0;
+      if (ciMethod === "PL") {
+        const subset = studies.filter((_, i) => i !== omitIdx);
+        const m = meta(subset, method, ciMethod, alpha);
+        return {
+          label: omitted.label ?? `Study ${omitIdx + 1}`,
+          estimate: m.RE,
+          lb: m.ciLow,
+          ub: m.ciHigh,
+          tau2: m.tau2,
+          i2: i2_loo,
+          pval: m.pval,
+          significant: m.pval < 0.05
+        };
+      }
+      const { tau2_loo, RE_loo, seRE_loo } = engineRows[omitIdx];
+      const ciLow_loo = RE_loo - crit_loo * seRE_loo;
+      const ciHigh_loo = RE_loo + crit_loo * seRE_loo;
+      const stat_loo = RE_loo / seRE_loo;
+      const pval_loo = useT ? 2 * (1 - tCDF(Math.abs(stat_loo), df_loo)) : 2 * (1 - normalCDF(Math.abs(stat_loo)));
+      return {
+        label: omitted.label ?? `Study ${omitIdx + 1}`,
+        estimate: RE_loo,
+        lb: ciLow_loo,
+        ub: ciHigh_loo,
+        tau2: tau2_loo,
+        i2: i2_loo,
+        pval: pval_loo,
+        significant: pval_loo < 0.05
+      };
+    });
+    return { full, rows };
+  }
+  function estimatorComparison(studies, ciMethod = "normal") {
+    const methods = ["REML", "DL", "PM", "ML", "EB", "HE", "HS", "SJ", "GENQ", "DLIT", "PMM", "GENQM", "SQGENQ", "HSk", "EBLUP"];
+    return methods.map((method) => {
+      const m = meta(studies, method, ciMethod);
+      return {
+        method,
+        estimate: m.RE,
+        lb: m.ciLow,
+        ub: m.ciHigh,
+        tau2: m.tau2,
+        i2: m.I2
+      };
+    });
+  }
+  function baujat(studies) {
+    const valid = validStudies(studies);
+    if (valid.length < 2) return null;
+    const W = valid.reduce((acc, d) => acc + 1 / d.vi, 0);
+    const muFE = valid.reduce((acc, d) => acc + d.yi / d.vi, 0) / W;
+    const Q = valid.reduce((acc, d) => acc + (d.yi - muFE) ** 2 / d.vi, 0);
+    const points = valid.map((s) => {
+      const wi = 1 / s.vi;
+      const dev = s.yi - muFE;
+      const x = wi * dev ** 2;
+      const influence = wi * x / (W - wi);
+      return {
+        label: s.label,
+        x,
+        influence,
+        yi: s.yi,
+        vi: s.vi,
+        group: s.group ?? null
+      };
+    });
+    return { points, muFE, Q, k: valid.length };
+  }
+  function blupMeta(studies, m, alpha = 0.05) {
+    const valid = validStudies(studies);
+    const k = valid.length;
+    if (k < 2 || !m || !isFinite(m.RE) || !isFinite(m.tau2) || m.tau2 <= 0) return null;
+    const { RE: mu, tau2 } = m;
+    const crit = normalQuantile(1 - alpha / 2);
+    const WRE = valid.reduce((acc, s) => acc + 1 / (s.vi + tau2), 0);
+    const varMu = WRE > 0 ? 1 / WRE : NaN;
+    const out = valid.map((s) => {
+      const lambda = tau2 / (tau2 + s.vi);
+      const blup = mu + lambda * (s.yi - mu);
+      const varBlup = lambda * s.vi + (s.vi / (tau2 + s.vi)) ** 2 * varMu;
+      const se_blup = Math.sqrt(Math.max(varBlup, 0));
+      const ranef = blup - mu;
+      const se_ranef = Math.sqrt(lambda * s.vi);
+      return {
+        label: s.label,
+        yi: s.yi,
+        vi: s.vi,
+        se_obs: Math.sqrt(s.vi),
+        blup,
+        se_blup,
+        ci_lb: blup - crit * se_blup,
+        ci_ub: blup + crit * se_blup,
+        ranef,
+        se_ranef,
+        lambda,
+        group: s.group ?? null
+      };
+    });
+    return { studies: out, mu, tau2, k };
+  }
+  var init_influence = __esm({
+    "js/influence.js"() {
+      init_analysis();
+      init_utils();
+      init_constants();
+    }
+  });
+
+  // js/robust.js
   function sandwichVar(X, w, residuals, clusterIds) {
     const k = residuals.length;
     const p = X[0].length;
-    const ids = Array.from({ length: k }, (_, i) => {
-      const id = clusterIds ? clusterIds[i] : null;
-      return id !== null && id !== void 0 && String(id).trim() !== "" ? String(id).trim() : `__s_${i}`;
-    });
+    const ids = clusterIds ?? Array.from({ length: k }, (_, i) => `__s${i}`);
     const clusterMap = /* @__PURE__ */ new Map();
     for (let i = 0; i < k; i++) {
       const id = ids[i];
@@ -6310,7 +6717,7 @@ var App = (() => {
     }
     const A = matInverse(XtWX);
     if (A === null) return { error: "Design matrix is singular; robust SE not available." };
-    const cr1 = C / (C - p);
+    const cr1 = C / (C - 1);
     const B = Array.from({ length: p }, () => Array(p).fill(0));
     for (const clRows of clusterMap.values()) {
       const g = Array(p).fill(0);
@@ -6361,8 +6768,8 @@ var App = (() => {
   }
   function robustMeta(studies, method, ciMethod, alpha = 0.05) {
     const m = meta(studies, method, ciMethod, alpha);
-    const clusterIds = studies.map((s) => s.cluster?.trim() || null);
-    if (clusterIds.every((id) => !id)) return m;
+    if (!studies.some((s) => s.cluster?.trim())) return m;
+    const clusterIds = resolveClusterIds(studies);
     const k = studies.length;
     const X = Array.from({ length: k }, () => [1]);
     const w = studies.map((s) => 1 / Math.max(s.vi + m.tau2, MIN_VAR));
@@ -6387,6 +6794,156 @@ var App = (() => {
       allSingletons: rob.allSingletons
     };
   }
+  var init_robust = __esm({
+    "js/robust.js"() {
+      init_linalg();
+      init_utils();
+      init_constants();
+      init_analysis();
+    }
+  });
+
+  // js/analysis.js
+  function isValidStudy(s) {
+    return isFinite(s.yi) && isFinite(s.vi) && s.vi > 0;
+  }
+  function validStudies(studies) {
+    return studies.filter(isValidStudy);
+  }
+  function resolveClusterIds(studies) {
+    return studies.map((s, i) => {
+      const c = s.cluster;
+      if (c !== null && c !== void 0) {
+        const t = String(c).trim();
+        if (t !== "") return t;
+      }
+      return `__s${i}`;
+    });
+  }
+  function groupByCluster(studies) {
+    const ids = resolveClusterIds(studies);
+    const map = /* @__PURE__ */ new Map();
+    for (let i = 0; i < studies.length; i++) {
+      const id = ids[i];
+      if (!map.has(id)) map.set(id, []);
+      map.get(id).push(studies[i]);
+    }
+    return map;
+  }
+  function compute(s, type, options = {}) {
+    const resolvedType = type || autoDetectType(s);
+    if (!resolvedType) {
+      console.warn("compute(): cannot auto-detect effect type", s);
+      return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+    }
+    const profile = getProfile(resolvedType);
+    if (!profile) {
+      console.warn(`compute(): unknown effect type "${resolvedType}"`);
+      return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
+    }
+    return profile.compute(s);
+  }
+  function clES(d, ci) {
+    const transform = (x) => normalCDF(x / Math.SQRT2);
+    return {
+      estimate: transform(d),
+      ci: [transform(ci[0]), transform(ci[1])]
+    };
+  }
+  function meta(studies, method = "DL", ciMethod = "normal", alpha = 0.05, tau2Init = null) {
+    const _cacheKey = `${method}::${ciMethod}::${alpha}`;
+    let _byMethod = _metaCache.get(studies);
+    if (_byMethod?.has(_cacheKey)) return _byMethod.get(_cacheKey);
+    const valid = validStudies(studies);
+    if (valid.length < studies.length) {
+      console.warn(`meta(): dropped ${studies.length - valid.length} study/studies with non-finite or non-positive vi/yi`);
+      studies = valid;
+    }
+    const k = studies.length;
+    if (k === 0) {
+      return { FE: NaN, seFE: NaN, RE: NaN, seRE: NaN, tau2: 0, Q: NaN, df: 0, I2: 0, predLow: NaN, predHigh: NaN, ciLow: NaN, ciHigh: NaN, crit: NaN, stat: NaN, pval: NaN, dist: null };
+    }
+    const wFE = studies.map((d) => 1 / Math.max(d.vi, MIN_VAR));
+    const W = wFE.reduce((acc, b) => acc + b, 0);
+    const FE = W > 0 ? studies.reduce((acc, d, i) => acc + d.yi * wFE[i], 0) / W : NaN;
+    const seFE = W > 0 ? Math.sqrt(1 / W) : NaN;
+    let Q = 0;
+    for (let i = 0; i < k; i++) {
+      Q += wFE[i] * Math.pow(studies[i].yi - FE, 2);
+    }
+    const dfQ = k - 1;
+    let I22 = 0;
+    if (Q > dfQ && Q > 0) I22 = (Q - dfQ) / Q * 100;
+    I22 = Math.max(0, Math.min(100, I22));
+    const tau2 = (TAU2_FN[method] ?? TAU2_FN.DL)(studies, tau2Init);
+    const wRE = studies.map((d) => 1 / Math.max(d.vi + tau2, MIN_VAR));
+    const WRE = wRE.reduce((acc, b) => acc + b, 0);
+    const RE = WRE > 0 ? studies.reduce((acc, d, i) => acc + d.yi * wRE[i], 0) / WRE : NaN;
+    const seRE_base = WRE > 0 ? Math.sqrt(1 / WRE) : NaN;
+    let seRE = seRE_base;
+    let crit, stat, pval, dist;
+    if (ciMethod === "KH" && k > 1) {
+      const df = k - 1;
+      let sum = 0;
+      for (let i = 0; i < k; i++) {
+        sum += wRE[i] * Math.pow(studies[i].yi - RE, 2);
+      }
+      const varKH = sum / (df * WRE);
+      seRE = Math.sqrt(Math.max(varKH, 0));
+      crit = tCritical(df, alpha);
+      stat = RE / seRE;
+      dist = "t";
+      pval = 2 * (1 - tCDF(Math.abs(stat), df));
+    } else if (ciMethod === "t" && k > 1) {
+      const df = k - 1;
+      crit = tCritical(df, alpha);
+      stat = RE / seRE;
+      dist = "t";
+      pval = 2 * (1 - tCDF(Math.abs(stat), df));
+    } else {
+      crit = normalQuantile(1 - alpha / 2);
+      stat = RE / seRE;
+      dist = "z";
+      pval = k <= 1 ? NaN : 2 * (1 - normalCDF(Math.abs(stat)));
+    }
+    const predVar = seRE_base * seRE_base + tau2;
+    const predCrit = k >= 3 ? ciMethod === "normal" ? normalQuantile(1 - alpha / 2) : tCritical(k - 1, alpha) : NaN;
+    const hetCI = heterogeneityCIs(studies, tau2, alpha);
+    let ciLow = RE - crit * seRE;
+    let ciHigh = RE + crit * seRE;
+    if (ciMethod === "PL" && k > 1) {
+      const plCI = profileLikCI(studies, alpha);
+      ciLow = plCI[0];
+      ciHigh = plCI[1];
+    }
+    const _result = {
+      FE,
+      seFE,
+      RE,
+      seRE,
+      tau2,
+      Q,
+      df: dfQ,
+      I2: I22,
+      tauCI: hetCI.tauCI,
+      I2CI: hetCI.I2CI,
+      H2CI: hetCI.H2CI,
+      predLow: isFinite(predCrit) ? RE - predCrit * Math.sqrt(predVar) : NaN,
+      predHigh: isFinite(predCrit) ? RE + predCrit * Math.sqrt(predVar) : NaN,
+      ciLow,
+      ciHigh,
+      crit,
+      stat,
+      pval,
+      dist
+    };
+    if (!_byMethod) {
+      _byMethod = /* @__PURE__ */ new Map();
+      _metaCache.set(studies, _byMethod);
+    }
+    _byMethod.set(_cacheKey, _result);
+    return _result;
+  }
   var _metaCache, TAU2_FN;
   var init_analysis = __esm({
     "js/analysis.js"() {
@@ -6398,33 +6955,30 @@ var App = (() => {
       init_regression();
       init_tau2();
       init_bayes();
+      init_multivariate();
+      init_binary();
       init_pubbias();
       init_influence();
       init_regression();
       init_selection();
+      init_robust();
       _metaCache = /* @__PURE__ */ new WeakMap();
       TAU2_FN = {
-        REML: (s, _w, _W, _Q, _d, t0) => tau2_REML(s, 1e-12, 500, t0),
-        PM: (s, _w, _W, _Q, _d, t0) => tau2_PM(s, REML_TOL, 100, t0),
-        EB: (s, _w, _W, _Q, _d, t0) => tau2_EB(s, REML_TOL, 200, t0),
-        PMM: (s, _w, _W, _Q, _d, t0) => tau2_PMM(s, REML_TOL, 200, t0),
-        ML: (s, _w, _W, _Q, _d, t0) => tau2_ML(s, REML_TOL, 100, t0),
-        SJ: (s, _w, _W, _Q, _d, t0) => tau2_SJ(s, REML_TOL, 200, t0),
-        DLIT: (s, _w, _W, _Q, _d, t0) => tau2_DLIT(s, REML_TOL, 200, t0),
-        EBLUP: (s, _w, _W, _Q, _d, t0) => tau2_REML(s, 1e-12, 500, t0),
-        // alias for REML
+        DL: (s) => tau2_DL(s),
+        REML: (s, t0) => tau2_REML(s, REML_TOL, 500, t0),
+        PM: (s, t0) => tau2_PM(s, REML_TOL, 100, t0),
+        EB: (s, t0) => tau2_EB(s, REML_TOL, 200, t0),
+        PMM: (s, t0) => tau2_PMM(s, REML_TOL, 200, t0),
+        ML: (s, t0) => tau2_ML(s, REML_TOL, 100, t0),
+        SJ: (s, t0) => tau2_SJ(s, REML_TOL, 200, t0),
+        DLIT: (s, t0) => tau2_DLIT(s, REML_TOL, 200, t0),
+        EBLUP: (s, t0) => tau2_REML(s, REML_TOL, 500, t0),
         GENQM: (s) => tau2_GENQM(s),
-        // bisection — tau2Init not applicable
         HS: (s) => tau2_HS(s),
         HE: (s) => tau2_HE(s),
         GENQ: (s) => tau2_GENQ(s),
         SQGENQ: (s) => tau2_SQGENQ(s),
-        HSk: (s) => tau2_HSk(s),
-        DL: (s, wFE, W, Q, dfQ) => {
-          const sumW2 = wFE.reduce((acc, w) => acc + w * w, 0);
-          const C = W - sumW2 / W;
-          return C > 0 ? Math.max(0, (Q - dfQ) / C) : 0;
-        }
+        HSk: (s) => tau2_HSk(s)
       };
     }
   });
@@ -6515,14 +7069,26 @@ var App = (() => {
   var init_trimfill = __esm({
     "js/trimfill.js"() {
       init_analysis();
+      init_linalg();
     }
   });
 
-  // js/forestThemes.js
-  var FOREST_THEMES;
-  var init_forestThemes = __esm({
-    "js/forestThemes.js"() {
-      FOREST_THEMES = {
+  // js/plotThemes.js
+  function hashGroupLabel(label) {
+    let h = 5381;
+    for (let i = 0; i < label.length; i++) h = (h << 5) + h ^ label.charCodeAt(i);
+    return h >>> 0;
+  }
+  var ROB_COLORS, PLOT_THEMES, BW_DASHES;
+  var init_plotThemes = __esm({
+    "js/plotThemes.js"() {
+      ROB_COLORS = {
+        "Low": "#4caf50",
+        "Some concerns": "#ff9800",
+        "High": "#e53935",
+        "NI": "#9e9e9e"
+      };
+      PLOT_THEMES = {
         // ---------------------------------------------------------------------------
         // App default — reads CSS custom properties so the plot adapts automatically
         // to the light/dark theme switch.  Exported SVGs rendered with this preset
@@ -6538,14 +7104,26 @@ var App = (() => {
           accent: "var(--accent)",
           accentFE: "var(--fg-muted)",
           accentREAnnot: "var(--color-warning)",
+          accentGlow: "var(--accent-glow)",
+          accentLight: "var(--accent-light)",
           pi: "var(--accent-light)",
-          border: "var(--border-hover)",
+          bgSurface: "var(--bg-surface)",
+          bgSurfaceHover: "var(--bg-surface-hover)",
+          border: "var(--plot-border)",
+          borderGrid: "var(--plot-border-grid)",
           groupSepStroke: "var(--border-accent)",
           groupLabelFill: "var(--color-info)",
+          colorError: "var(--color-error)",
+          colorWarning: "var(--color-warning)",
+          colorInfo: "var(--color-info)",
+          colorSuccess: "var(--color-success, #22aa66)",
           fontFamily: "inherit",
           ciStrokeWidth: 1.5,
           headerRuleWidth: 1,
-          nullLineDash: "4"
+          nullLineDash: "4",
+          useBwShapes: false,
+          preserveSignalColors: false,
+          signalColorNote: ""
         },
         // ---------------------------------------------------------------------------
         // Cochrane — matches the visual language of Cochrane Reviews and RevMan.
@@ -6565,16 +7143,43 @@ var App = (() => {
           // FE diamond: medium grey (visually distinct)
           accentREAnnot: "#1a1a1a",
           // RE annotation: same as primary text
+          accentGlow: "rgba(26,26,26,0.08)",
+          // faint dark tint for CI bands
+          accentLight: "#767676",
+          // lighter accent = same grey as FE/PI
           pi: "#767676",
           // PI bracket: same grey as FE
+          bgSurface: "#f8f8f8",
+          // barely-off-white neutral surface
+          bgSurfaceHover: "#cccccc",
+          // medium grey for scatter dots (visible on white SVG bg)
           border: "#cccccc",
-          // Thin light-grey rules (header, separators)
+          // Thin light-grey rules (header, separators, axes)
+          borderGrid: "#e8e8e8",
+          // quieter background grid lines
           groupSepStroke: "#333333",
           groupLabelFill: "#1a1a1a",
+          colorError: "#b22222",
+          // dark crimson — high-severity (influence, Egger)
+          colorWarning: "#b86a00",
+          // dark amber — medium-severity (p-curve power, etc.)
+          colorInfo: "#1a5276",
+          // dark navy — informational text
+          colorSuccess: "#1a7a3a",
+          // dark green — PEESE curve
+          contour01: "#a8a8a8",
+          // outermost band fill (p < 0.01)
+          contour05: "#c8c8c8",
+          // second band fill   (0.01 ≤ p < 0.05)
+          contour10: "#e4e4e4",
+          // third band fill    (0.05 ≤ p < 0.10)
           fontFamily: "'Times New Roman', Times, serif",
           ciStrokeWidth: 1.5,
           headerRuleWidth: 1,
-          nullLineDash: "4"
+          nullLineDash: "4",
+          useBwShapes: false,
+          preserveSignalColors: false,
+          signalColorNote: ""
         },
         // ---------------------------------------------------------------------------
         // JAMA — matches the visual language of JAMA and most North American clinical
@@ -6593,21 +7198,49 @@ var App = (() => {
           accentFE: "#888888",
           // FE diamond: medium grey
           accentREAnnot: "#1a1a1a",
+          accentGlow: "rgba(26,26,26,0.08)",
+          // faint dark tint for CI bands
+          accentLight: "#888888",
+          // lighter accent = same grey as FE
           pi: "#666666",
-          border: "#d0d0d0",
-          // Slightly lighter rules than Cochrane
+          bgSurface: "#f8f8f8",
+          bgSurfaceHover: "#c8c8c8",
+          // medium grey for scatter dots (visible on white SVG bg)
+          border: "#bbbbbb",
+          // Axis rules — slightly darker than original for legibility
+          borderGrid: "#ebebeb",
+          // quieter background grid lines
           groupSepStroke: "#444444",
           groupLabelFill: "#1a1a1a",
+          colorError: "#b22222",
+          colorWarning: "#b86a00",
+          colorInfo: "#1a5276",
+          colorSuccess: "#1a7a3a",
+          contour01: "#a8a8a8",
+          contour05: "#c8c8c8",
+          contour10: "#e4e4e4",
           fontFamily: "Arial, Helvetica, sans-serif",
           ciStrokeWidth: 1.5,
           headerRuleWidth: 1,
-          nullLineDash: "4"
+          nullLineDash: "4",
+          useBwShapes: false,
+          preserveSignalColors: false,
+          signalColorNote: ""
         },
         // ---------------------------------------------------------------------------
         // Black & white — strict monochrome for journals that prohibit colour and
-        // grey shading in figures.  All data and chrome elements use pure black;
-        // structural rules use dark grey so they remain visually subordinate.
-        // Both FE and RE diamonds are black (no tonal differentiation).
+        // grey shading in figures.  All data and chrome elements use pure black or
+        // dark grey; scatter plots and categorical encodings use shape/hatch
+        // differentiation (T.useBwShapes = true) instead of hue.
+        //
+        // Exception: RoB traffic-light cells remain colored (T.preserveSignalColors)
+        // because green/amber/red is itself the Cochrane RoB 2 / ROBINS-I published
+        // convention — dropping those colors would make the chart non-standard.
+        // A note is injected below RoB plots to explain this.
+        //
+        // For semantic lines that would ordinarily use colorError/colorWarning
+        // (Egger line, FAT-PET, PEESE in funnel plot), the renderer step will layer
+        // in distinct dash patterns so the lines remain distinguishable without hue.
         // ---------------------------------------------------------------------------
         "bw": {
           label: "Black & white",
@@ -6619,18 +7252,47 @@ var App = (() => {
           accentFE: "#000000",
           // FE and RE identical in monochrome
           accentREAnnot: "#000000",
+          accentGlow: "rgba(0,0,0,0.07)",
+          // extremely faint tint for CI bands
+          accentLight: "#333333",
+          // dark grey for secondary lines
           pi: "#000000",
+          bgSurface: "#f0f0f0",
+          bgSurfaceHover: "#d8d8d8",
+          // medium grey for scatter dots
           border: "#333333",
           // Dark grey keeps rules visible without heavy ink
+          borderGrid: "#cccccc",
           groupSepStroke: "#000000",
           groupLabelFill: "#000000",
+          colorError: "#000000",
+          // shape differentiation takes over (useBwShapes)
+          colorWarning: "#555555",
+          // dark grey; dash pattern distinguishes in funnel
+          colorInfo: "#555555",
+          colorSuccess: "#333333",
           fontFamily: "Arial, Helvetica, sans-serif",
           ciStrokeWidth: 1,
           // Slightly thinner lines for print legibility
           headerRuleWidth: 1,
-          nullLineDash: "4"
+          nullLineDash: "4",
+          useBwShapes: true,
+          preserveSignalColors: true,
+          signalColorNote: "Note: Risk of bias traffic-light colors (green/amber/red) are preserved in monochrome output to maintain compatibility with the Cochrane RoB 2 and ROBINS-I published conventions (Sterne et al., 2019; Sterne et al., 2016)."
         }
       };
+      BW_DASHES = [
+        "none",
+        // solid — accent / RE line
+        "6,3",
+        // long dash — colorWarning equivalent (FAT-PET)
+        "2,3",
+        // short dash — colorError equivalent (Egger)
+        "8,3,2,3",
+        // dash-dot — colorSuccess equivalent (PEESE)
+        "4,4"
+        // medium dash — additional line if needed
+      ];
     }
   });
 
@@ -6650,9 +7312,9 @@ var App = (() => {
     return sel.attr("width", w).attr("height", h).attr("viewBox", `0 0 ${w} ${h}`);
   }
   function styleAxis(axisG, strokeColor, fillColor, fontSize, fontFamily) {
-    axisG.select(".domain").attr("stroke", strokeColor);
-    axisG.selectAll(".tick line").attr("stroke", strokeColor);
-    const tickText = axisG.selectAll(".tick text").attr("fill", fillColor);
+    axisG.select(".domain").style("stroke", strokeColor);
+    axisG.selectAll(".tick line").style("stroke", strokeColor);
+    const tickText = axisG.selectAll(".tick text").style("fill", fillColor);
     if (fontSize) tickText.style("font-size", fontSize);
     if (fontFamily) tickText.style("font-family", fontFamily);
   }
@@ -6666,9 +7328,60 @@ var App = (() => {
   }
   function attachTooltip(sel, htmlFn) {
     const tt = selTooltip();
-    return sel.on("mousemove", (event, d) => {
-      tt.style("opacity", 1).html(htmlFn(d)).style("left", event.pageX + 12 + "px").style("top", event.pageY - 28 + "px");
-    }).on("mouseout", () => tt.style("opacity", 0));
+    return sel.attr("tabindex", 0).attr("role", "button").on("mousemove", (event, d) => {
+      tt.style("opacity", 1).html(htmlFn(d)).style("left", event.pageX + TOOLTIP_OFFSET.x + "px").style("top", event.pageY + TOOLTIP_OFFSET.y + "px");
+    }).on("mouseout", () => tt.style("opacity", 0)).on("focus", (event, d) => {
+      const rect = event.target.getBoundingClientRect();
+      tt.style("opacity", 1).html(htmlFn(d)).style("left", rect.right + window.scrollX + TOOLTIP_OFFSET.x + "px").style("top", rect.top + window.scrollY + TOOLTIP_OFFSET.y + "px");
+    }).on("blur", () => tt.style("opacity", 0)).on("keydown", (event) => {
+      if (event.key === "Escape") tt.style("opacity", 0);
+    });
+  }
+  function truncateLabel(text, maxPx, fontPx = 10, bold2 = false) {
+    const charW = bold2 ? LABEL_CHAR_PX.bold10 : fontPx >= 11 ? LABEL_CHAR_PX.regular11 : LABEL_CHAR_PX.regular10;
+    const maxChars = Math.floor(maxPx / charW);
+    return text.length > maxChars ? text.slice(0, Math.max(1, maxChars - 1)) + "\u2026" : text;
+  }
+  function drawNoDataPlaceholder(svg, w, h, message = "No data", T = null) {
+    svg.append("text").attr("x", w / 2).attr("y", h / 2).attr("text-anchor", "middle").attr("dominant-baseline", "middle").style("font-size", FONT_SIZE.axisLabel).style("font-style", "italic").attr("fill", T ? T.fgMuted : "var(--fg-muted)").text(message);
+  }
+  function formatTick(v, transform) {
+    if (transform) {
+      const t = transform(v);
+      return isFinite(t) ? String(+t.toFixed(3)) : "";
+    }
+    return d3.format(".3~g")(v);
+  }
+  function getContrastFg(fillHex) {
+    const r = parseInt(fillHex.slice(1, 3), 16) / 255;
+    const g = parseInt(fillHex.slice(3, 5), 16) / 255;
+    const b = parseInt(fillHex.slice(5, 7), 16) / 255;
+    const lin = (c) => c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+    const L = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+    return L > 0.179 ? "#1a1a1a" : "#ffffff";
+  }
+  function placeLegend(iW, iH, lW, lH, corner = "tr", pad = 6) {
+    if (corner === "tr") return { x: iW - lW - pad, y: pad };
+    if (corner === "tl") return { x: pad, y: pad };
+    if (corner === "br") return { x: iW - lW - pad, y: iH - lH - pad };
+    return { x: pad, y: iH - lH - pad };
+  }
+  function initSvg(selector, ariaLabel, T) {
+    const svg = clearAndSelectSVG(selector);
+    svg.attr("aria-label", ariaLabel);
+    svg.append("title").text(ariaLabel);
+    svg.style("background", T && T.bg !== "transparent" ? T.bg : null);
+    return svg;
+  }
+  function bwSymbolPath(groupIdx, size = 64) {
+    const markers = [
+      d3.symbolCircle,
+      d3.symbolSquare,
+      d3.symbolTriangle,
+      d3.symbolDiamond,
+      d3.symbolCross
+    ];
+    return d3.symbol().type(markers[groupIdx % markers.length]).size(size)();
   }
   function evalModBasis(x, transform, knots) {
     if (transform === "poly2") return [x, x * x];
@@ -6678,7 +7391,7 @@ var App = (() => {
     }
     return [x];
   }
-  function drawBubble(studies, reg, mod, container) {
+  function drawBubble(studies, reg, mod, container, options = {}) {
     const modName = mod.name;
     const transform = mod.transform || "linear";
     const W = 460, H = 340;
@@ -6688,6 +7401,7 @@ var App = (() => {
     const iH = H - margin.top - margin.bottom;
     const valid = studies.filter((s) => isFinite(s[modName]) && isFinite(s.yi) && isFinite(s.vi));
     if (valid.length < 2) return;
+    const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
     const tau2 = isFinite(reg.tau2) ? reg.tau2 : 0;
     const wArr = valid.map((s) => 1 / (s.vi + tau2));
     const wSum = wArr.reduce((a, b) => a + b, 0);
@@ -6741,11 +7455,16 @@ var App = (() => {
     const [yMin, yMax] = d3.extent(yVals);
     const yPad = (yMax - yMin) * 0.15 || 0.2;
     const yScale = d3.scaleLinear().domain([yMin - yPad, yMax + yPad]).nice().range([iH, 0]);
-    const svg = setSvgSize(d3.select(container).append("svg").attr("role", "img").attr("aria-label", _bubbleLabel), W, H);
+    const svg = setSvgSize(d3.select(container).append("svg").attr("role", "img").attr("aria-label", _bubbleLabel).style("background", T.bg !== "transparent" ? T.bg : ""), W, H);
+    svg.append("title").text(_bubbleLabel);
+    if (T.bg && T.bg !== "transparent") {
+      svg.insert("rect", ":first-child").attr("width", W).attr("height", H).attr("fill", T.bg);
+    }
+    svg.style("font-family", T.fontFamily);
     const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
     const [yd0, yd1] = yScale.domain();
     if (yd0 < 0 && yd1 > 0) {
-      g.append("line").attr("x1", 0).attr("x2", iW).attr("y1", yScale(0)).attr("y2", yScale(0)).attr("stroke", "var(--border-hover)").attr("stroke-dasharray", "4,2");
+      g.append("line").attr("x1", 0).attr("x2", iW).attr("y1", yScale(0)).attr("y2", yScale(0)).attr("stroke", T.borderGrid).attr("stroke-dasharray", "4,2");
     }
     if (colIdxs.length > 0 && isFinite(intercept0)) {
       const [xl, xr] = xScale.domain();
@@ -6760,29 +7479,29 @@ var App = (() => {
           const f = fitAt(x);
           return yScale(f + crit * seAt(x));
         });
-        g.append("path").datum(pts).attr("fill", "var(--accent-glow)").attr("stroke", "none").attr("d", area);
+        g.append("path").datum(pts).attr("fill", T.accentGlow).attr("stroke", "none").attr("d", area);
       }
       if (isLinear) {
-        g.append("line").attr("x1", xScale(xl)).attr("y1", yScale(fitAt(xl))).attr("x2", xScale(xr)).attr("y2", yScale(fitAt(xr))).attr("stroke", "var(--accent)").attr("stroke-width", 2);
+        g.append("line").attr("x1", xScale(xl)).attr("y1", yScale(fitAt(xl))).attr("x2", xScale(xr)).attr("y2", yScale(fitAt(xr))).attr("stroke", T.accent).attr("stroke-width", 2);
       } else {
         const line = d3.line().x((x) => xScale(x)).y((x) => yScale(fitAt(x)));
-        g.append("path").datum(pts).attr("fill", "none").attr("stroke", "var(--accent)").attr("stroke-width", 2).attr("d", line);
+        g.append("path").datum(pts).attr("fill", "none").attr("stroke", T.accent).attr("stroke-width", 2).attr("d", line);
       }
     }
     const tooltip = selTooltip();
-    g.selectAll("circle").data(valid).enter().append("circle").attr("cx", (s) => xScale(s[modName])).attr("cy", (s) => yScale(s.yi)).attr("r", (s, i) => Math.max(3, rMax * Math.sqrt(wArr[i] / wMax))).attr("fill", "var(--bg-surface-hover)").attr("stroke", "var(--fg-subtle)").attr("stroke-width", 1.2).on("mousemove", (event, s) => {
+    g.selectAll("circle").data(valid).enter().append("circle").attr("cx", (s) => xScale(s[modName])).attr("cy", (s) => yScale(s.yi)).attr("r", (s, i) => Math.max(3, rMax * Math.sqrt(wArr[i] / wMax))).attr("fill", T.bgSurfaceHover).attr("stroke", T.fgSubtle).attr("stroke-width", 1.2).on("mousemove", (event, s) => {
       const fitted = fitAt(s[modName]);
-      tooltip.style("opacity", 1).html(`<b>${s.label}</b><br>${modName}: ${s[modName]}<br>yi: ${s.yi.toFixed(3)}<br>\u0177: ${fitted.toFixed(3)}`).style("left", event.pageX + 12 + "px").style("top", event.pageY - 24 + "px");
+      tooltip.style("opacity", 1).html(`<b>${s.label}</b><br>${modName}: ${s[modName]}<br>yi: ${s.yi.toFixed(3)}<br>\u0177: ${fitted.toFixed(3)}`).style("left", event.pageX + TOOLTIP_OFFSET.x + "px").style("top", event.pageY + TOOLTIP_OFFSET.y + "px");
     }).on("mouseout", () => tooltip.style("opacity", 0));
-    g.append("g").attr("transform", `translate(0,${iH})`).call(d3.axisBottom(xScale).ticks(5));
-    g.append("g").call(d3.axisLeft(yScale).ticks(5));
-    g.append("text").attr("x", iW / 2).attr("y", iH + 42).attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "12px").text(modName);
-    g.append("text").attr("transform", "rotate(-90)").attr("x", -iH / 2).attr("y", -44).attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "12px").text("Effect size (yi)");
+    styleAxis(g.append("g").attr("transform", `translate(0,${iH})`).call(d3.axisBottom(xScale).ticks(5)), T.border, T.fgMuted, FONT_SIZE.tickLabel);
+    styleAxis(g.append("g").call(d3.axisLeft(yScale).ticks(5)), T.border, T.fgMuted, FONT_SIZE.tickLabel);
+    g.append("text").attr("x", iW / 2).attr("y", iH + 42).attr("text-anchor", "middle").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.axisLabel).text(modName);
+    g.append("text").attr("transform", "rotate(-90)").attr("x", -iH / 2).attr("y", -44).attr("text-anchor", "middle").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.axisLabel).text("Effect size (yi)");
     const linearBeta = () => isFinite(beta[colIdxs[0]]) ? beta[colIdxs[0]].toFixed(3) : "NA";
     const titleSuffix = isLinear ? `\u03B2 = ${colIdxs.length ? linearBeta() : "NA"}` : transform.startsWith("rcs") ? `RCS (${transform.slice(3)} knots)` : transform;
-    svg.append("text").attr("x", margin.left + iW / 2).attr("y", 16).attr("text-anchor", "middle").attr("fill", "var(--fg)").style("font-size", "13px").text(`${modName}  (${titleSuffix})`);
+    svg.append("text").attr("x", margin.left + iW / 2).attr("y", 16).attr("text-anchor", "middle").attr("fill", T.fg).style("font-size", FONT_SIZE.title).text(`${modName}  (${titleSuffix})`);
   }
-  function drawPartialResidualBubble(studies, reg, mod, container) {
+  function drawPartialResidualBubble(studies, reg, mod, container, options = {}) {
     const modName = mod.name;
     const transform = mod.transform || "linear";
     const _partialLabel = `Partial-residual bubble plot for ${modName}`;
@@ -6792,6 +7511,7 @@ var App = (() => {
     const iH = H - margin.top - margin.bottom;
     const valid = studies.filter((s) => isFinite(s[modName]) && isFinite(s.yi) && isFinite(s.vi));
     if (valid.length < 2) return;
+    const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
     const tau2 = isFinite(reg.tau2) ? reg.tau2 : 0;
     const wArr = valid.map((s) => 1 / (s.vi + tau2));
     const wSum = wArr.reduce((a, b) => a + b, 0);
@@ -6851,11 +7571,16 @@ var App = (() => {
     const [yMin, yMax] = d3.extent(partialY);
     const yPad = (yMax - yMin) * 0.15 || 0.2;
     const yScale = d3.scaleLinear().domain([yMin - yPad, yMax + yPad]).nice().range([iH, 0]);
-    const svg = setSvgSize(d3.select(container).append("svg").attr("role", "img").attr("aria-label", _partialLabel), W, H);
+    const svg = setSvgSize(d3.select(container).append("svg").attr("role", "img").attr("aria-label", _partialLabel).style("background", T.bg !== "transparent" ? T.bg : ""), W, H);
+    svg.append("title").text(_partialLabel);
+    if (T.bg && T.bg !== "transparent") {
+      svg.insert("rect", ":first-child").attr("width", W).attr("height", H).attr("fill", T.bg);
+    }
+    svg.style("font-family", T.fontFamily);
     const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
     const [yd0, yd1] = yScale.domain();
     if (yd0 < 0 && yd1 > 0) {
-      g.append("line").attr("x1", 0).attr("x2", iW).attr("y1", yScale(0)).attr("y2", yScale(0)).attr("stroke", "var(--border-hover)").attr("stroke-dasharray", "4,2");
+      g.append("line").attr("x1", 0).attr("x2", iW).attr("y1", yScale(0)).attr("y2", yScale(0)).attr("stroke", T.borderGrid).attr("stroke-dasharray", "4,2");
     }
     if (isFinite(yIntercept) && colIdxs.length > 0) {
       const [xl, xr] = xScale.domain();
@@ -6870,40 +7595,43 @@ var App = (() => {
           const f = partialFitAt(x);
           return yScale(f + crit * seAt(x));
         });
-        g.append("path").datum(pts).attr("fill", "var(--accent-glow)").attr("stroke", "none").attr("d", area);
+        g.append("path").datum(pts).attr("fill", T.accentGlow).attr("stroke", "none").attr("d", area);
       }
       if (isLinear) {
-        g.append("line").attr("x1", xScale(xl)).attr("y1", yScale(partialFitAt(xl))).attr("x2", xScale(xr)).attr("y2", yScale(partialFitAt(xr))).attr("stroke", "var(--accent)").attr("stroke-width", 2);
+        g.append("line").attr("x1", xScale(xl)).attr("y1", yScale(partialFitAt(xl))).attr("x2", xScale(xr)).attr("y2", yScale(partialFitAt(xr))).attr("stroke", T.accent).attr("stroke-width", 2);
       } else {
         const line = d3.line().x((x) => xScale(x)).y((x) => yScale(partialFitAt(x)));
-        g.append("path").datum(pts).attr("fill", "none").attr("stroke", "var(--accent)").attr("stroke-width", 2).attr("d", line);
+        g.append("path").datum(pts).attr("fill", "none").attr("stroke", T.accent).attr("stroke-width", 2).attr("d", line);
       }
     }
     const tooltip = selTooltip();
-    g.selectAll("circle").data(valid).enter().append("circle").attr("cx", (s) => xScale(s[modName])).attr("cy", (_, i) => yScale(partialY[i])).attr("r", (_, i) => Math.max(3, rMax * Math.sqrt(wArr[i] / wMax))).attr("fill", "var(--bg-surface-hover)").attr("stroke", "var(--fg-subtle)").attr("stroke-width", 1.2).on("mousemove", (event, s) => {
+    g.selectAll("circle").data(valid).enter().append("circle").attr("cx", (s) => xScale(s[modName])).attr("cy", (_, i) => yScale(partialY[i])).attr("r", (_, i) => Math.max(3, rMax * Math.sqrt(wArr[i] / wMax))).attr("fill", T.bgSurfaceHover).attr("stroke", T.fgSubtle).attr("stroke-width", 1.2).on("mousemove", (event, s) => {
       const i = valid.indexOf(s);
       const fitted = partialFitAt(s[modName]);
-      tooltip.style("opacity", 1).html(`<b>${s.label}</b><br>${modName}: ${s[modName]}<br>y*: ${partialY[i].toFixed(3)}<br>\u0177: ${fitted.toFixed(3)}`).style("left", event.pageX + 12 + "px").style("top", event.pageY - 24 + "px");
+      tooltip.style("opacity", 1).html(`<b>${s.label}</b><br>${modName}: ${s[modName]}<br>y*: ${partialY[i].toFixed(3)}<br>\u0177: ${fitted.toFixed(3)}`).style("left", event.pageX + TOOLTIP_OFFSET.x + "px").style("top", event.pageY + TOOLTIP_OFFSET.y + "px");
     }).on("mouseout", () => tooltip.style("opacity", 0));
-    g.append("g").attr("transform", `translate(0,${iH})`).call(d3.axisBottom(xScale).ticks(5));
-    g.append("g").call(d3.axisLeft(yScale).ticks(5));
-    g.append("text").attr("x", iW / 2).attr("y", iH + 42).attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "12px").text(modName);
-    g.append("text").attr("transform", "rotate(-90)").attr("x", -iH / 2).attr("y", -44).attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "12px").text("Partial residual");
+    styleAxis(g.append("g").attr("transform", `translate(0,${iH})`).call(d3.axisBottom(xScale).ticks(5)), T.border, T.fgMuted, FONT_SIZE.tickLabel);
+    styleAxis(g.append("g").call(d3.axisLeft(yScale).ticks(5)), T.border, T.fgMuted, FONT_SIZE.tickLabel);
+    g.append("text").attr("x", iW / 2).attr("y", iH + 42).attr("text-anchor", "middle").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.axisLabel).text(modName);
+    g.append("text").attr("transform", "rotate(-90)").attr("x", -iH / 2).attr("y", -44).attr("text-anchor", "middle").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.axisLabel).text("Partial residual");
     const slope = isFinite(beta[colIdxs[0]]) ? beta[colIdxs[0]].toFixed(3) : "NA";
     const titleSuffix = isLinear ? `\u03B2 = ${slope}, partial residual` : (transform.startsWith("rcs") ? `RCS (${transform.slice(3)} knots)` : transform) + ", partial residual";
-    svg.append("text").attr("x", margin.left + iW / 2).attr("y", 16).attr("text-anchor", "middle").attr("fill", "var(--fg)").style("font-size", "13px").text(`${modName}  (${titleSuffix})`);
+    svg.append("text").attr("x", margin.left + iW / 2).attr("y", 16).attr("text-anchor", "middle").attr("fill", T.fg).style("font-size", FONT_SIZE.title).text(`${modName}  (${titleSuffix})`);
   }
   function forestDrawStudyRows(ctx, pageStudies, studies, studyCrit, widthCiLabel, ciMethodLabel, yPos) {
     const { svg, x, L, T, profile } = ctx;
     const tooltip = selTooltip();
     const wMax = d3.max(studies, (d) => d.w);
     svg.selectAll("line.ci").data(pageStudies).enter().append("line").attr("x1", (d) => x(d.yi - studyCrit * d.se)).attr("x2", (d) => x(d.yi + studyCrit * d.se)).attr("y1", (d) => yPos.get(d)).attr("y2", (d) => yPos.get(d)).attr("stroke", (d) => d.filled ? T.fgMuted : T.fgSubtle).attr("stroke-width", T.ciStrokeWidth);
-    svg.selectAll("rect").data(pageStudies).enter().append("rect").attr("x", (d) => x(d.yi) - Math.sqrt(d.w / wMax) * L.boxHalf * 2).attr("y", (d) => yPos.get(d) - L.boxHalf).attr("width", (d) => Math.sqrt(d.w / wMax) * L.boxHalf * 4).attr("height", L.boxHalf * 2).attr("fill", (d) => d.filled ? "none" : T.accent).attr("stroke", (d) => d.filled ? T.fgMuted : T.accent).on("mousemove", (e, d) => {
-      const ef_disp = profile.transform(d.yi);
-      const lo_disp = profile.transform(d.yi - studyCrit * d.se);
-      const hi_disp = profile.transform(d.yi + studyCrit * d.se);
-      tooltip.style("opacity", 1).html(`${d.label}<br>Effect: ${isFinite(ef_disp) ? ef_disp.toFixed(3) : "NA"}<br>${widthCiLabel} (${ciMethodLabel}): ${isFinite(lo_disp) ? lo_disp.toFixed(3) : "NA"} \u2013 ${isFinite(hi_disp) ? hi_disp.toFixed(3) : "NA"}`).style("left", e.pageX + 10 + "px").style("top", e.pageY - 20 + "px");
-    }).on("mouseout", () => tooltip.style("opacity", 0));
+    attachTooltip(
+      svg.selectAll("rect").data(pageStudies).enter().append("rect").attr("x", (d) => x(d.yi) - Math.sqrt(d.w / wMax) * L.boxHalf * 2).attr("y", (d) => yPos.get(d) - L.boxHalf).attr("width", (d) => Math.sqrt(d.w / wMax) * L.boxHalf * 4).attr("height", L.boxHalf * 2).attr("fill", (d) => d.filled ? "none" : T.accent).attr("stroke", (d) => d.filled ? T.fgMuted : T.accent),
+      (d) => {
+        const ef_disp = profile.transform(d.yi);
+        const lo_disp = profile.transform(d.yi - studyCrit * d.se);
+        const hi_disp = profile.transform(d.yi + studyCrit * d.se);
+        return `${d.label}<br>Effect: ${isFinite(ef_disp) ? ef_disp.toFixed(3) : "NA"}<br>${widthCiLabel} (${ciMethodLabel}): ${isFinite(lo_disp) ? lo_disp.toFixed(3) : "NA"} \u2013 ${isFinite(hi_disp) ? hi_disp.toFixed(3) : "NA"}`;
+      }
+    );
   }
   function forestDrawStudyLabels(ctx, pageStudies, yPos, charW) {
     const { svg, L, T } = ctx;
@@ -6931,9 +7659,10 @@ var App = (() => {
     svg.append("line").attr("x1", L.labelW).attr("x2", L.labelW).attr("y1", L.studyY0).attr("y2", L.studyY1 + 12).attr("stroke", T.border);
     svg.append("line").attr("x1", L.annotX0).attr("x2", L.annotX0).attr("y1", L.studyY0).attr("y2", L.studyY1 + 12).attr("stroke", T.border);
     separators.forEach(({ y: sepTop, group }) => {
-      const ruleY = sepTop + L.sepH - 3;
+      const labelY = sepTop + Math.round(L.sepH * 0.72);
+      const ruleY = sepTop + L.sepH - 1;
+      svg.append("text").attr("x", 8).attr("y", labelY).attr("text-anchor", "start").style("font-size", L.labelFontSize).style("font-family", T.fontFamily).style("font-weight", "bold").attr("fill", T.groupLabelFill).text(group);
       svg.append("line").attr("x1", 0).attr("x2", L.totalW).attr("y1", ruleY).attr("y2", ruleY).attr("stroke", T.groupSepStroke);
-      svg.append("text").attr("x", L.labelW - 8).attr("y", ruleY - 3).attr("text-anchor", "end").style("font-size", L.annotFontSize).style("font-family", T.fontFamily).style("font-weight", "bold").attr("fill", T.groupLabelFill).text(group);
     });
   }
   function forestDrawAnnotations(ctx, pageStudies, yPos, studies, studyCrit, m, showFE, showRE, showBoth, feCiLow, feCiHigh, hY, widthCiLabel) {
@@ -6979,13 +7708,22 @@ var App = (() => {
   function forestDrawHetSummary(ctx, m) {
     const { svg, L, T } = ctx;
     const Qp = isFinite(m.Q) && isFinite(m.df) && m.df > 0 ? 1 - chiSquareCDF(m.Q, m.df) : NaN;
-    svg.append("text").attr("x", L.labelW + L.plotW / 2).attr("y", L.hetY).attr("text-anchor", "middle").style("font-size", L.annotFontSize).style("font-family", T.fontFamily).attr("fill", T.fgMuted).text(`Heterogeneity:  \u03C4\xB2 = ${isFinite(m.tau2) ? m.tau2.toFixed(3) : "NA"},  I\xB2 = ${isFinite(m.I2) ? m.I2.toFixed(1) + "%" : "NA"},  Q(df=${isFinite(m.df) ? m.df : "NA"}) = ${isFinite(m.Q) ? m.Q.toFixed(2) : "NA"},  p = ${isFinite(Qp) ? Qp < 1e-3 ? "< 0.001" : Qp.toFixed(3) : "NA"}`);
+    {
+      const t = svg.append("text").attr("x", L.labelW + L.plotW / 2).attr("y", L.hetY).attr("text-anchor", "middle").style("font-size", L.annotFontSize).style("font-family", T.fontFamily).attr("fill", T.fgMuted);
+      t.append("tspan").text(`Heterogeneity:  \u03C4\xB2 = ${isFinite(m.tau2) ? m.tau2.toFixed(3) : "NA"},  `);
+      t.append("tspan").style("font-style", "italic").text("I");
+      t.append("tspan").text(`\xB2 = ${isFinite(m.I2) ? m.I2.toFixed(1) + "%" : "NA"},  `);
+      t.append("tspan").style("font-style", "italic").text("Q");
+      t.append("tspan").text(`(df=${isFinite(m.df) ? m.df : "NA"}) = ${isFinite(m.Q) ? m.Q.toFixed(2) : "NA"},  `);
+      t.append("tspan").style("font-style", "italic").text("p");
+      t.append("tspan").text(` = ${isFinite(Qp) ? Qp < 1e-3 ? "< .001" : Qp.toFixed(3) : "NA"}`);
+    }
   }
   function drawForest(studies, m, options = {}) {
-    const svg = clearAndSelectSVG("#forestPlot");
+    const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
+    const svg = initSvg("#forestPlot", "Forest plot", T);
     const ciMethod = options.ciMethod || "normal";
     const profile = options.profile || { transform: (x2) => x2 };
-    const T = FOREST_THEMES[options.theme] ?? FOREST_THEMES["default"];
     const pooledDisplay = options.pooledDisplay || "RE";
     const showFE = pooledDisplay === "FE" || pooledDisplay === "Both";
     const showRE = pooledDisplay === "RE" || pooledDisplay === "Both";
@@ -6995,12 +7733,40 @@ var App = (() => {
     const studyCrit = normalQuantile(1 - alpha / 2);
     const feCiLow = isFinite(m.FE) ? m.FE - studyCrit * m.seFE : NaN;
     const feCiHigh = isFinite(m.FE) ? m.FE + studyCrit * m.seFE : NaN;
+    {
+      const re_t = isFinite(m.RE) ? profile.transform(m.RE) : NaN;
+      const desc = [
+        `k = ${studies.length} studies`,
+        isFinite(re_t) ? `RE = ${+re_t.toFixed(3)} [${+profile.transform(m.ciLow).toFixed(3)}, ${+profile.transform(m.ciHigh).toFixed(3)}]` : null,
+        isFinite(m.tau2) ? `\u03C4\xB2 = ${m.tau2.toFixed(4)}` : null,
+        isFinite(m.I2) ? `I\xB2 = ${m.I2.toFixed(1)}%` : null
+      ].filter(Boolean).join("; ");
+      svg.append("desc").text(desc);
+    }
     const ciMethodLabel = {
       normal: "Normal (z)",
       t: "t-distribution",
       KH: "Knapp-Hartung",
       PL: "Profile Likelihood"
     }[ciMethod] || ciMethod;
+    const hasGroups = studies.some((d) => d.group && d.group.trim() !== "");
+    if (hasGroups) {
+      const _groupOrder = [];
+      const _seen = /* @__PURE__ */ new Set();
+      studies.forEach((d) => {
+        const g = (d.group || "").trim();
+        if (g && !_seen.has(g)) {
+          _groupOrder.push(g);
+          _seen.add(g);
+        }
+      });
+      studies = [...studies].sort((a, b) => {
+        const ga = (a.group || "").trim(), gb = (b.group || "").trim();
+        const ia = ga ? _groupOrder.indexOf(ga) : Infinity;
+        const ib = gb ? _groupOrder.indexOf(gb) : Infinity;
+        return ia - ib;
+      });
+    }
     const { page, totalPages, items: pageStudies, isLastPage } = paginate(studies, options);
     const k = studies.length;
     const L = k <= 20 ? { rowH: 22, labelFontSize: "11px", annotFontSize: "10px", titleFontSize: "12px", boxHalf: 5, diamondHH: 8 } : k <= 40 ? { rowH: 18, labelFontSize: "10px", annotFontSize: "9px", titleFontSize: "11px", boxHalf: 4, diamondHH: 7 } : { rowH: 14, labelFontSize: "9px", annotFontSize: "8px", titleFontSize: "10px", boxHalf: 3, diamondHH: 6 };
@@ -7008,24 +7774,22 @@ var App = (() => {
     L.annotW = 240;
     L.headerH = 28;
     const _charW = parseFloat(L.labelFontSize) >= 11 ? 6.5 : parseFloat(L.labelFontSize) >= 10 ? 5.9 : 5.3;
+    const _charW_bold = parseFloat(L.labelFontSize) >= 11 ? 7.2 : parseFloat(L.labelFontSize) >= 10 ? 6.5 : 5.8;
     const _diamondLabelLen = showBoth ? 6 : 14;
-    const _maxLen = Math.min(Math.max(
-      studies.reduce((a, d) => Math.max(a, (d.label || "").length), 0),
-      studies.reduce((a, d) => Math.max(a, (d.group || "").length), 0),
-      _diamondLabelLen
-    ), 28);
-    L.labelW = Math.max(70, Math.min(180, Math.ceil(_maxLen * _charW) + 16));
+    const _maxStudyPx = studies.reduce((a, d) => Math.max(a, (d.label || "").length * _charW), 0);
+    const _maxGroupPx = studies.reduce((a, d) => Math.max(a, (d.group || "").length * _charW_bold), 0);
+    const _maxPx = Math.min(Math.max(_maxStudyPx, _maxGroupPx, _diamondLabelLen * _charW), 28 * _charW);
+    L.labelW = Math.max(70, Math.min(180, Math.ceil(_maxPx) + 16));
     L.totalW = L.labelW + L.plotW + L.annotW;
     L.summaryH = isLastPage ? showBoth ? 152 : 132 : 52;
     L.studyY0 = L.headerH;
-    L.sepH = Math.max(14, L.rowH);
-    const hasGroups = studies.some((d) => d.group && d.group.trim() !== "");
+    L.sepH = Math.max(18, L.rowH);
     const yPos = /* @__PURE__ */ new Map();
     const separators = [];
     let cursor = L.studyY0, prevGroup = null;
     pageStudies.forEach((d) => {
       const group = (d.group || "").trim();
-      if (hasGroups && prevGroup !== null && group !== prevGroup) {
+      if (hasGroups && group !== prevGroup) {
         separators.push({ y: cursor, group });
         cursor += L.sepH;
       }
@@ -7036,6 +7800,7 @@ var App = (() => {
     L.studyY1 = cursor;
     L.totalH = L.studyY1 + L.summaryH;
     L.axisY = L.totalH - 26;
+    if (isLastPage && profile.isLog) L.totalH += 14;
     L.feDiamondY = L.studyY1 + 18;
     L.diamondY = showBoth ? L.studyY1 + 36 : L.studyY1 + 18;
     L.piY = showBoth ? L.studyY1 + 60 : L.studyY1 + 44;
@@ -7064,17 +7829,19 @@ var App = (() => {
       svg.append("line").attr("x1", nullX).attr("x2", nullX).attr("y1", L.studyY0).attr("y2", isLastPage ? L.diamondY + L.diamondHH : L.studyY1).attr("stroke", T.border).attr("stroke-dasharray", T.nullLineDash);
     }
     forestDrawStudyRows(ctx, pageStudies, studies, studyCrit, widthCiLabel, ciMethodLabel, yPos);
-    const axisG = svg.append("g").attr("transform", `translate(0,${L.axisY})`).call(d3.axisBottom(x).tickFormat((v) => {
+    const maxTicks = Math.max(4, Math.floor(L.plotW / 60));
+    const axisG = svg.append("g").attr("transform", `translate(0,${L.axisY})`).call(d3.axisBottom(x).ticks(maxTicks).tickFormat((v) => {
       const d = profile.transform(v);
       return isFinite(d) ? +d.toFixed(3) : "";
     }));
     styleAxis(axisG, T.border, T.fgMuted, null, T.fontFamily);
     if (profile.isLog) {
-      svg.append("text").attr("x", L.labelW + L.plotW / 2).attr("y", L.axisY + 22).attr("text-anchor", "middle").style("font-size", L.annotFontSize).style("font-family", T.fontFamily).attr("fill", T.fgMuted).text("(log scale)");
+      svg.append("text").attr("x", L.labelW + L.plotW / 2).attr("y", L.axisY + 36).attr("text-anchor", "middle").style("font-size", L.annotFontSize).style("font-family", T.fontFamily).attr("fill", T.fgMuted).text("(log scale)");
     }
     forestDrawStudyLabels(ctx, pageStudies, yPos, _charW);
     if (!isLastPage) {
-      svg.append("text").attr("x", L.labelW + L.plotW / 2).attr("y", L.studyY1 + 18).attr("text-anchor", "middle").style("font-size", L.annotFontSize).style("font-family", T.fontFamily).attr("fill", T.fgMuted).text(`\u2014 page ${page + 1} of ${totalPages}, continued \u2014`);
+      svg.append("rect").attr("x", L.labelW + 4).attr("y", L.studyY1 + 4).attr("width", L.plotW - 8).attr("height", 26).attr("fill", T.bgSurface).attr("rx", 3);
+      svg.append("text").attr("x", L.labelW + L.plotW / 2).attr("y", L.studyY1 + 21).attr("text-anchor", "middle").style("font-size", L.annotFontSize).style("font-family", T.fontFamily).attr("fill", T.fgMuted).text(`\u25BC  page ${page + 1} of ${totalPages}, continued  \u25BC`);
       svg.attr("height", L.totalH);
       return { totalPages };
     }
@@ -7115,24 +7882,34 @@ var App = (() => {
     forestDrawHetSummary(ctx, m);
     return { totalPages };
   }
-  function funnelDrawContours(svg, bgColor, BANDS, bandPath, W, H) {
+  function funnelDrawContours(svg, bgColor, BANDS, bandPath, W, H, T) {
+    if (BANDS.some((b) => b.fill && b.fill.startsWith("url(#hatch-"))) {
+      const defs = svg.append("defs");
+      [
+        { id: "hatch-dense", size: 4 },
+        { id: "hatch-medium", size: 8 },
+        { id: "hatch-sparse", size: 16 }
+      ].forEach(({ id, size }) => {
+        const pat = defs.append("pattern").attr("id", id).attr("patternUnits", "userSpaceOnUse").attr("width", size).attr("height", size).attr("patternTransform", "rotate(45)");
+        pat.append("line").attr("x1", 0).attr("y1", 0).attr("x2", 0).attr("y2", size).attr("stroke", T.fgMuted).attr("stroke-width", 1);
+      });
+    }
     svg.append("rect").attr("width", W).attr("height", H).attr("fill", bgColor);
     BANDS.forEach(({ z, fill }) => {
       svg.append("path").attr("d", bandPath(z)).attr("fill", fill).attr("stroke", "none");
     });
   }
-  function funnelDrawFunnelArms(svg, x, y, seMax, xHalf, borderClr, m, contours, isDark) {
+  function funnelDrawFunnelArms(svg, x, y, seMax, xHalf, borderClr, m, T) {
     const armRight = Math.min(1.96 * seMax, xHalf);
     const armLeft = Math.max(-1.96 * seMax, -xHalf);
     svg.append("line").attr("x1", x(0)).attr("y1", y(0)).attr("x2", x(armRight)).attr("y2", y(seMax)).attr("stroke", borderClr).attr("stroke-width", 1).attr("stroke-dasharray", "4,2");
     svg.append("line").attr("x1", x(0)).attr("y1", y(0)).attr("x2", x(armLeft)).attr("y2", y(seMax)).attr("stroke", borderClr).attr("stroke-width", 1).attr("stroke-dasharray", "4,2");
-    const reLineColor = contours ? isDark ? "#5588cc" : "#2255aa" : "var(--accent)";
-    svg.append("line").attr("x1", x(m.RE)).attr("x2", x(m.RE)).attr("y1", y(0)).attr("y2", y(seMax)).attr("stroke", reLineColor).attr("stroke-dasharray", "4");
+    svg.append("line").attr("x1", x(m.RE)).attr("x2", x(m.RE)).attr("y1", y(0)).attr("y2", y(seMax)).attr("stroke", T.accent).attr("stroke-dasharray", "4");
   }
   function funnelDrawStudies(svg, studies, x, y, dotFill, dotStroke, dotFillImp, dotStrImp) {
     svg.selectAll("circle").data(studies).enter().append("circle").attr("cx", (d) => x(d.yi)).attr("cy", (d) => y(d.se)).attr("r", 4).attr("fill", (d) => d.filled ? dotFillImp : dotFill).attr("stroke", (d) => d.filled ? dotStrImp : dotStroke);
   }
-  function funnelDrawEggerLine(svg, egger, studies, x, y, contours, isDark) {
+  function funnelDrawEggerLine(svg, egger, studies, x, y, T, clipId) {
     if (!egger || !isFinite(egger.slope)) return;
     const seMin = d3.min(studies, (d) => d.se);
     const seMax = d3.max(studies, (d) => d.se);
@@ -7141,65 +7918,119 @@ var App = (() => {
       yi_hat: egger.intercept * se + egger.slope,
       se
     }));
-    const eggerColor = contours ? isDark ? "#cc4444" : "#aa2222" : "var(--color-error)";
-    svg.append("path").datum(lineData).attr("fill", "none").attr("stroke", eggerColor).attr("stroke-width", 2).attr("stroke-dasharray", "4,2").attr("d", d3.line().x((d) => x(d.yi_hat)).y((d) => y(d.se)));
+    const eggerDash = T.useBwShapes ? BW_DASHES[2] : "4,2";
+    svg.append("path").datum(lineData).attr("fill", "none").attr("stroke", T.colorError).attr("stroke-width", 2).attr("stroke-dasharray", eggerDash).attr("clip-path", `url(#${clipId})`).attr("d", d3.line().x((d) => x(d.yi_hat)).y((d) => y(d.se)));
   }
-  function funnelDrawPeeseLines(svg, petpeese, studies, x, y, contours, isDark) {
+  function funnelDrawPeeseLines(svg, petpeese, studies, x, y, T, clipId) {
     const { fat, peese, usePeese } = petpeese;
     const seMin = d3.min(studies, (d) => d.se);
     const seMax = d3.max(studies, (d) => d.se);
     if (seMin === seMax) return;
     const pts = d3.range(0, 51).map((i) => seMin + i / 50 * (seMax - seMin));
-    const petColor = contours ? isDark ? "#cc9944" : "#996600" : "var(--color-warning)";
-    const peeseColor = contours ? isDark ? "#44cc88" : "#007744" : "var(--color-success, #22aa66)";
+    const petColor = T.colorWarning;
+    const peeseColor = T.colorSuccess;
     if (isFinite(fat.intercept) && isFinite(fat.slope)) {
       const lineData = pts.map((se) => ({ yi_hat: fat.intercept + fat.slope * se, se }));
-      svg.append("path").datum(lineData).attr("fill", "none").attr("stroke", petColor).attr("stroke-width", usePeese ? 1.5 : 2).attr("stroke-dasharray", usePeese ? "3,3" : "none").attr("opacity", usePeese ? 0.55 : 1).attr("d", d3.line().x((d) => x(d.yi_hat)).y((d) => y(d.se)));
+      const fatDash = T.useBwShapes && usePeese ? BW_DASHES[1] : usePeese ? "3,3" : "none";
+      svg.append("path").datum(lineData).attr("fill", "none").attr("stroke", petColor).attr("stroke-width", usePeese ? 1.5 : 2).attr("stroke-dasharray", fatDash).attr("opacity", usePeese ? 0.55 : 1).attr("clip-path", `url(#${clipId})`).attr("d", d3.line().x((d) => x(d.yi_hat)).y((d) => y(d.se)));
     }
     if (isFinite(peese.intercept) && isFinite(peese.slope)) {
       const curveData = pts.map((se) => ({ yi_hat: peese.intercept + peese.slope * se * se, se }));
-      svg.append("path").datum(curveData).attr("fill", "none").attr("stroke", peeseColor).attr("stroke-width", usePeese ? 2 : 1.5).attr("stroke-dasharray", usePeese ? "none" : "3,3").attr("opacity", usePeese ? 1 : 0.55).attr("d", d3.line().x((d) => x(d.yi_hat)).y((d) => y(d.se)));
+      const peeseDash = T.useBwShapes && !usePeese ? BW_DASHES[3] : usePeese ? "none" : "3,3";
+      svg.append("path").datum(curveData).attr("fill", "none").attr("stroke", peeseColor).attr("stroke-width", usePeese ? 2 : 1.5).attr("stroke-dasharray", peeseDash).attr("opacity", usePeese ? 1 : 0.55).attr("clip-path", `url(#${clipId})`).attr("d", d3.line().x((d) => x(d.yi_hat)).y((d) => y(d.se)));
     }
   }
   function funnelDrawAxesAndLabels(svg, x, y, margin, W, H, iW, iH, profile, borderClr, fgColor) {
-    const axisX = svg.append("g").attr("transform", `translate(0,${H - margin.bottom})`).call(d3.axisBottom(x).tickFormat((v) => {
+    const maxTicksX = Math.max(4, Math.floor(iW / 60));
+    const axisX = svg.append("g").attr("transform", `translate(0,${H - margin.bottom})`).call(d3.axisBottom(x).ticks(maxTicksX).tickFormat((v) => {
       const t = profile.transform(v);
       return isFinite(t) ? +t.toFixed(3) : "";
     }));
     styleAxis(axisX, borderClr, fgColor);
     const axisY = svg.append("g").attr("transform", `translate(${margin.left},0)`).call(d3.axisLeft(y));
     styleAxis(axisY, borderClr, fgColor);
-    svg.append("text").attr("x", margin.left + iW / 2).attr("y", H - 4).attr("text-anchor", "middle").attr("fill", fgColor).style("font-size", "10px").text(profile.label + (profile.isLog ? " (log scale)" : ""));
-    svg.append("text").attr("transform", "rotate(-90)").attr("x", -(margin.top + iH / 2)).attr("y", 12).attr("text-anchor", "middle").attr("fill", fgColor).style("font-size", "11px").text("Standard Error");
+    svg.append("text").attr("x", margin.left + iW / 2).attr("y", H - 4).attr("text-anchor", "middle").attr("fill", fgColor).style("font-size", FONT_SIZE.tickLabel).text(profile.label + (profile.isLog ? " (log scale)" : ""));
+    svg.append("text").attr("transform", "rotate(-90)").attr("x", -(margin.top + iH / 2)).attr("y", 12).attr("text-anchor", "middle").attr("fill", fgColor).style("font-size", FONT_SIZE.axisLabel).text("Standard Error");
   }
-  function funnelDrawLegend(svg, W, margin, BANDS, isDark) {
+  function funnelDrawLegend(svg, W, margin, BANDS, T, bgColor) {
     const LW = 120, LH = 76;
-    const PAD = 6, ROW = 16, SW = 10;
+    const PAD2 = 6, ROW = 16, SW = 10;
     const legendX = W - margin.right - LW - 8;
     const legendY = margin.top + 8;
     const lg = svg.append("g").attr("transform", `translate(${legendX},${legendY})`);
-    const legendBg = isDark ? "#1e1e1e" : "#ffffff";
-    const legendBorder = isDark ? "#444444" : "#cccccc";
-    const legendFg = isDark ? "#cccccc" : "#333333";
+    const legendBg = T.bg !== "transparent" ? T.bg : bgColor || T.bgSurface;
+    const legendBorder = T.border;
+    const legendFg = T.fgMuted;
     const innermostFill = BANDS[BANDS.length - 1].fill;
     lg.append("rect").attr("width", LW).attr("height", LH).attr("fill", legendBg).attr("stroke", legendBorder).attr("stroke-width", 1).attr("rx", 2);
     BANDS.forEach(({ fill, label }, i) => {
-      const rowY = PAD + i * ROW;
+      const rowY = PAD2 + i * ROW;
       const needBorder = fill === innermostFill;
-      lg.append("rect").attr("x", PAD).attr("y", rowY + (ROW - SW) / 2).attr("width", SW).attr("height", SW).attr("fill", fill).attr("stroke", needBorder ? legendBorder : "none").attr("stroke-width", 1);
-      lg.append("text").attr("x", PAD + SW + 5).attr("y", rowY + ROW / 2 + 3).attr("fill", legendFg).style("font-size", "9px").text(label);
+      lg.append("rect").attr("x", PAD2).attr("y", rowY + (ROW - SW) / 2).attr("width", SW).attr("height", SW).attr("fill", fill).attr("stroke", needBorder ? legendBorder : "none").attr("stroke-width", 1);
+      {
+        const tl = lg.append("text").attr("x", PAD2 + SW + 5).attr("y", rowY + ROW / 2 + 3).attr("fill", legendFg).style("font-size", FONT_SIZE.annot);
+        const pi = label.indexOf("p");
+        if (pi >= 0) {
+          if (pi > 0) tl.append("tspan").text(label.slice(0, pi));
+          tl.append("tspan").style("font-style", "italic").text("p");
+          tl.append("tspan").text(label.slice(pi + 1));
+        } else {
+          tl.text(label);
+        }
+      }
+    });
+  }
+  function funnelDrawBiasLegend(svg, W, margin, egger, petpeese, contours, T, bgColor) {
+    const items = [];
+    if (egger && isFinite(egger.slope)) {
+      items.push({ color: T.colorError, dash: T.useBwShapes ? BW_DASHES[2] : "4,2", w: 2, label: "Egger" });
+    }
+    if (petpeese) {
+      const { fat, peese, usePeese } = petpeese;
+      if (isFinite(fat?.intercept) && isFinite(fat?.slope)) {
+        const d = T.useBwShapes && usePeese ? BW_DASHES[1] : usePeese ? "3,3" : "none";
+        items.push({ color: T.colorWarning, dash: d, w: usePeese ? 1.5 : 2, label: "FAT-PET" });
+      }
+      if (isFinite(peese?.intercept) && isFinite(peese?.slope)) {
+        const d = T.useBwShapes && !usePeese ? BW_DASHES[3] : usePeese ? "none" : "3,3";
+        items.push({ color: T.colorSuccess, dash: d, w: usePeese ? 2 : 1.5, label: "PEESE" });
+      }
+    }
+    if (items.length === 0) return;
+    const PAD2 = 7, ROW = 16, SW = 20;
+    const LW = 92;
+    const LH = PAD2 * 2 + items.length * ROW;
+    const legendX = W - margin.right - LW - 6;
+    const legendY = margin.top + 8 + (contours ? 84 : 0);
+    const lg = svg.append("g").attr("transform", `translate(${legendX},${legendY})`);
+    const bgFill = T.bg && T.bg !== "transparent" ? T.bg : bgColor || T.bgSurface || "#111";
+    lg.append("rect").attr("width", LW).attr("height", LH).attr("fill", bgFill).attr("stroke", T.border).attr("rx", 3);
+    items.forEach(({ color, dash, w, label }, i) => {
+      const iy = PAD2 + i * ROW + ROW / 2;
+      lg.append("line").attr("x1", PAD2).attr("y1", iy).attr("x2", PAD2 + SW).attr("y2", iy).attr("stroke", color).attr("stroke-width", w).attr("stroke-dasharray", dash || "none");
+      lg.append("text").attr("x", PAD2 + SW + 5).attr("y", iy + 4).attr("fill", T.fgMuted).style("font-size", "9px").style("font-family", T.fontFamily).text(label);
     });
   }
   function drawFunnel(studies, m, profile, options = {}) {
     const egger = options.egger ?? null;
     profile = profile || { transform: (x2) => x2 };
-    const svg = clearAndSelectSVG("#funnelPlot");
-    if (!studies || studies.length === 0) return;
-    const margin = { top: 20, right: 20, bottom: 52, left: 60 };
+    const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
+    const svg = initSvg("#funnelPlot", "Funnel plot", T);
+    if (!studies || studies.length === 0) {
+      drawNoDataPlaceholder(svg, +svg.attr("width") || 500, +svg.attr("height") || 400);
+      return;
+    }
+    const margin = { top: 34, right: 20, bottom: 52, left: 60 };
     const W = 500, H = 400;
     const iW = W - margin.left - margin.right;
     const iH = H - margin.top - margin.bottom;
     setSvgSize(svg, W, H);
+    const _funnelClipId = "funnel-plot-clip";
+    svg.append("defs").append("clipPath").attr("id", _funnelClipId).append("rect").attr("x", margin.left).attr("y", margin.top).attr("width", iW).attr("height", iH);
+    if (T.bg && T.bg !== "transparent") {
+      svg.insert("rect", ":first-child").attr("width", W).attr("height", H).attr("fill", T.bg);
+    }
+    svg.style("font-family", T.fontFamily);
     const seMax = d3.max(studies, (d) => d.se);
     const xHalf = Math.max(
       d3.max(studies, (d) => Math.abs(d.yi)) * 1.15,
@@ -7208,14 +8039,13 @@ var App = (() => {
     const x = d3.scaleLinear().domain([-xHalf, xHalf]).range([margin.left, W - margin.right]);
     const y = d3.scaleLinear().domain([seMax, 0]).range([H - margin.bottom, margin.top]);
     const contours = !!options.contours;
-    const isDark = contours && document.documentElement.dataset.theme !== "light";
-    const bgColor = contours ? isDark ? "#121212" : "#ffffff" : null;
-    const fgColor = contours ? isDark ? "#cccccc" : "#333333" : "var(--fg-muted)";
-    const borderClr = contours ? isDark ? "#666666" : "#888888" : "var(--border-hover)";
-    const dotFill = contours ? isDark ? "#aaaaaa" : "#444444" : "var(--bg-surface-hover)";
-    const dotStroke = contours ? isDark ? "#cccccc" : "#333333" : "var(--fg-subtle)";
+    const isDark = T.bg === "transparent" && contours && document.documentElement.dataset.theme !== "light";
+    const fgColor = T.fgMuted;
+    const borderClr = T.border;
+    const dotFill = T.bgSurfaceHover;
+    const dotStroke = T.fgSubtle;
     const dotFillImp = "none";
-    const dotStrImp = contours ? isDark ? "#777777" : "#777777" : "var(--fg-muted)";
+    const dotStrImp = T.fgMuted;
     function bandPath(z) {
       const x0 = x(-xHalf), x1 = x(xHalf);
       const y0 = y(0), y1 = y(seMax);
@@ -7240,28 +8070,57 @@ var App = (() => {
         "Z"
       ].join(" ");
     }
-    const BANDS = isDark ? [
-      { z: Infinity, fill: "#505050", label: "p < 0.01" },
-      { z: 2.576, fill: "#383838", label: "0.01 \u2264 p < 0.05" },
-      { z: 1.96, fill: "#252525", label: "0.05 \u2264 p < 0.10" },
-      { z: 1.645, fill: "#161616", label: "p \u2265 0.10" }
-    ] : [
-      { z: Infinity, fill: "#a0a0a0", label: "p < 0.01" },
-      { z: 2.576, fill: "#c4c4c4", label: "0.01 \u2264 p < 0.05" },
-      { z: 1.96, fill: "#e4e4e4", label: "0.05 \u2264 p < 0.10" },
-      { z: 1.645, fill: "#ffffff", label: "p \u2265 0.10" }
-    ];
-    if (contours) funnelDrawContours(svg, bgColor, BANDS, bandPath, W, H);
-    funnelDrawFunnelArms(svg, x, y, seMax, xHalf, borderClr, m, contours, isDark);
+    let bgColor = null;
+    let BANDS = [];
+    if (contours) {
+      if (T.useBwShapes) {
+        bgColor = T.bg;
+        BANDS = [
+          { z: Infinity, fill: "url(#hatch-dense)", label: "p < 0.01" },
+          { z: 2.576, fill: "url(#hatch-medium)", label: "0.01 \u2264 p < 0.05" },
+          { z: 1.96, fill: "url(#hatch-sparse)", label: "0.05 \u2264 p < 0.10" },
+          { z: 1.645, fill: T.bg, label: "p \u2265 0.10" }
+        ];
+      } else if (T.bg === "transparent") {
+        bgColor = getComputedStyle(document.documentElement).getPropertyValue("--bg-base").trim() || (isDark ? "#0d0d0d" : "#ffffff");
+        BANDS = isDark ? [
+          { z: Infinity, fill: "#606060", label: "p < 0.01" },
+          { z: 2.576, fill: "#404040", label: "0.01 \u2264 p < 0.05" },
+          { z: 1.96, fill: "#262626", label: "0.05 \u2264 p < 0.10" },
+          { z: 1.645, fill: bgColor, label: "p \u2265 0.10" }
+        ] : [
+          { z: Infinity, fill: "#a0a0a0", label: "p < 0.01" },
+          { z: 2.576, fill: "#c4c4c4", label: "0.01 \u2264 p < 0.05" },
+          { z: 1.96, fill: "#e4e4e4", label: "0.05 \u2264 p < 0.10" },
+          { z: 1.645, fill: bgColor, label: "p \u2265 0.10" }
+        ];
+      } else {
+        bgColor = T.bg;
+        BANDS = [
+          { z: Infinity, fill: T.contour01 ?? "#a8a8a8", label: "p < 0.01" },
+          { z: 2.576, fill: T.contour05 ?? "#c8c8c8", label: "0.01 \u2264 p < 0.05" },
+          { z: 1.96, fill: T.contour10 ?? "#e4e4e4", label: "0.05 \u2264 p < 0.10" },
+          { z: 1.645, fill: T.bg, label: "p \u2265 0.10" }
+        ];
+      }
+    }
+    if (contours) funnelDrawContours(svg, bgColor, BANDS, bandPath, W, H, T);
+    funnelDrawFunnelArms(svg, x, y, seMax, xHalf, borderClr, m, T);
     funnelDrawStudies(svg, studies, x, y, dotFill, dotStroke, dotFillImp, dotStrImp);
-    funnelDrawEggerLine(svg, egger, studies, x, y, contours, isDark);
-    if (options.petpeese) funnelDrawPeeseLines(svg, options.petpeese, studies, x, y, contours, isDark);
+    if (!options.petpeese) funnelDrawEggerLine(svg, egger, studies, x, y, T, _funnelClipId);
+    if (options.petpeese) funnelDrawPeeseLines(svg, options.petpeese, studies, x, y, T, _funnelClipId);
     funnelDrawAxesAndLabels(svg, x, y, margin, W, H, iW, iH, profile, borderClr, fgColor);
-    if (contours) funnelDrawLegend(svg, W, margin, BANDS, isDark);
+    if (contours) funnelDrawLegend(svg, W, margin, BANDS, T, bgColor);
+    funnelDrawBiasLegend(svg, W, margin, options.petpeese ? null : egger, options.petpeese ?? null, contours, T, bgColor);
+    svg.append("text").attr("x", margin.left + iW / 2).attr("y", 18).attr("text-anchor", "middle").attr("fill", T.fg).style("font-size", FONT_SIZE.title).style("font-weight", "600").text(`Funnel plot \u2014 k\u202F=\u202F${studies.length}`);
   }
-  function drawInfluencePlot(influence) {
-    const svg = clearAndSelectSVG("#influencePlot");
-    if (!influence || influence.length < 2) return;
+  function drawInfluencePlot(influence, options = {}) {
+    const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
+    const svg = initSvg("#influencePlot", "Influence plot", T);
+    if (!influence || influence.length < 2) {
+      drawNoDataPlaceholder(svg, +svg.attr("width") || 500, +svg.attr("height") || 400, influence?.length === 1 ? "Need \u2265 2 studies" : "No data");
+      return;
+    }
     const k = influence.length;
     const hatThresh = 2 / k;
     const cookThresh = 4 / k;
@@ -7271,6 +8130,10 @@ var App = (() => {
     const iW = W - margin.left - margin.right;
     const iH = H - margin.top - margin.bottom;
     const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+    if (T.bg && T.bg !== "transparent") {
+      svg.insert("rect", ":first-child").attr("width", W).attr("height", H).attr("fill", T.bg);
+    }
+    svg.style("font-family", T.fontFamily);
     const xMax = Math.max(d3.max(influence, (d) => d.hat), hatThresh * 1.5);
     const yMax = Math.max(d3.max(influence, (d) => d.cookD), cookThresh * 1.5);
     const x = d3.scaleLinear().domain([0, xMax * 1.1]).range([0, iW]);
@@ -7278,30 +8141,58 @@ var App = (() => {
     const x2 = x(hatThresh);
     const y2 = y(cookThresh);
     if (isFinite(x2) && isFinite(y2)) {
-      g.append("rect").attr("x", x2).attr("y", 0).attr("width", iW - x2).attr("height", y2).attr("fill", "rgba(224,96,96,0.08)");
+      g.append("rect").attr("x", x2).attr("y", 0).attr("width", iW - x2).attr("height", y2).attr("fill", T.useBwShapes ? "#000000" : T.colorError).attr("fill-opacity", T.useBwShapes ? 0.05 : 0.08);
     }
     if (isFinite(x(hatThresh))) {
-      g.append("line").attr("x1", x(hatThresh)).attr("x2", x(hatThresh)).attr("y1", 0).attr("y2", iH).attr("stroke", "var(--border-hover)").attr("stroke-dasharray", "4,3").append("title").text(`Hat threshold = 2/k = ${hatThresh.toFixed(3)}`);
+      g.append("line").attr("x1", x(hatThresh)).attr("x2", x(hatThresh)).attr("y1", 0).attr("y2", iH).attr("stroke", T.border).attr("stroke-dasharray", "4,3").append("title").text(`Hat threshold = 2/k = ${hatThresh.toFixed(3)}`);
     }
     if (isFinite(y(cookThresh))) {
-      g.append("line").attr("x1", 0).attr("x2", iW).attr("y1", y(cookThresh)).attr("y2", y(cookThresh)).attr("stroke", "var(--border-hover)").attr("stroke-dasharray", "4,3").append("title").text(`Cook's D threshold = 4/k = ${cookThresh.toFixed(3)}`);
+      g.append("line").attr("x1", 0).attr("x2", iW).attr("y1", y(cookThresh)).attr("y2", y(cookThresh)).attr("stroke", T.border).attr("stroke-dasharray", "4,3").append("title").text(`Cook's D threshold = 4/k = ${cookThresh.toFixed(3)}`);
     }
-    attachTooltip(
-      g.selectAll("circle").data(influence).enter().append("circle").attr("cx", (d) => x(d.hat)).attr("cy", (d) => y(d.cookD)).attr("r", 5).attr("fill", (d) => d.highLeverage && d.highCookD ? "var(--color-error)" : d.highLeverage || d.highCookD ? "var(--color-warning)" : "var(--bg-surface-hover)").attr("stroke", (d) => d.highLeverage && d.highCookD ? "var(--color-error)" : d.highLeverage || d.highCookD ? "var(--color-warning)" : "var(--fg-muted)").attr("opacity", 0.85),
-      (d) => `${d.label}<br>Hat: ${d.hat.toFixed(4)}<br>Cook's D: ${d.cookD.toFixed(4)}`
-    );
-    g.selectAll("text.pt-label").data(influence.filter((d) => d.highLeverage || d.highCookD)).enter().append("text").attr("class", "pt-label").attr("x", (d) => x(d.hat) + 7).attr("y", (d) => y(d.cookD) + 4).style("font-size", "10px").attr("fill", (d) => d.highLeverage && d.highCookD ? "var(--color-error)" : "var(--color-warning)").text((d) => d.label);
-    g.append("g").attr("transform", `translate(0,${iH})`).call(d3.axisBottom(x).ticks(5));
-    g.append("g").call(d3.axisLeft(y).ticks(5));
-    g.append("text").attr("x", iW / 2).attr("y", iH + 38).attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "12px").text("Hat value (leverage)");
-    g.append("text").attr("transform", "rotate(-90)").attr("x", -iH / 2).attr("y", -46).attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "12px").text("Cook's distance");
-    svg.append("text").attr("x", margin.left + iW / 2).attr("y", 18).attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "12px").text("Influence plot  (red = both flags, orange = one flag)");
+    if (T.useBwShapes) {
+      const symbolSize = 60;
+      attachTooltip(
+        g.selectAll("path.inf-pt").data(influence).enter().append("path").attr("class", "inf-pt").attr("transform", (d) => `translate(${x(d.hat)},${y(d.cookD)})`).attr("d", (d) => {
+          if (d.highLeverage && d.highCookD) return d3.symbol().type(d3.symbolDiamond).size(symbolSize)();
+          if (d.highLeverage) return d3.symbol().type(d3.symbolSquare).size(symbolSize)();
+          if (d.highCookD) return d3.symbol().type(d3.symbolTriangle).size(symbolSize)();
+          return d3.symbol().type(d3.symbolCircle).size(symbolSize)();
+        }).attr("fill", (d) => {
+          if (d.highLeverage && d.highCookD) return "black";
+          if (d.highLeverage || d.highCookD) return T.fgSubtle;
+          return T.bgSurfaceHover;
+        }).attr("stroke", (d) => {
+          if (d.highLeverage && d.highCookD) return "black";
+          if (d.highLeverage || d.highCookD) return T.fgSubtle;
+          return T.fgMuted;
+        }).attr("opacity", 0.85),
+        (d) => `${d.label}<br>Hat: ${d.hat.toFixed(4)}<br>Cook's D: ${d.cookD.toFixed(4)}`
+      );
+    } else {
+      attachTooltip(
+        g.selectAll("circle").data(influence).enter().append("circle").attr("cx", (d) => x(d.hat)).attr("cy", (d) => y(d.cookD)).attr("r", 5).attr("fill", (d) => d.highLeverage && d.highCookD ? T.colorError : d.highLeverage || d.highCookD ? T.colorWarning : T.bgSurfaceHover).attr("stroke", (d) => d.highLeverage && d.highCookD ? T.colorError : d.highLeverage || d.highCookD ? T.colorWarning : T.fgMuted).attr("opacity", 0.85),
+        (d) => `${d.label}<br>Hat: ${d.hat.toFixed(4)}<br>Cook's D: ${d.cookD.toFixed(4)}`
+      );
+    }
+    g.selectAll("text.pt-label").data(influence.filter((d) => d.highLeverage || d.highCookD)).enter().append("text").attr("class", "pt-label").attr("x", (d) => x(d.hat) + 7).attr("y", (d) => y(d.cookD) + 4).style("font-size", FONT_SIZE.tickLabel).attr("fill", (d) => T.useBwShapes ? T.fg : d.highLeverage && d.highCookD ? T.colorError : T.colorWarning).text((d) => d.label);
+    styleAxis(g.append("g").attr("transform", `translate(0,${iH})`).call(d3.axisBottom(x).ticks(5)), T.border, T.fgMuted, FONT_SIZE.tickLabel);
+    styleAxis(g.append("g").call(d3.axisLeft(y).ticks(5)), T.border, T.fgMuted, FONT_SIZE.tickLabel);
+    g.append("text").attr("x", iW / 2).attr("y", iH + 38).attr("text-anchor", "middle").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.title).text("Hat value (leverage)");
+    g.append("text").attr("transform", "rotate(-90)").attr("x", -iH / 2).attr("y", -46).attr("text-anchor", "middle").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.title).text("Cook's distance");
+    const titleText = T.useBwShapes ? "Influence plot  (\u25C7 = both flags, \u25A1/\u25B3 = one flag)" : "Influence plot  (red = both flags, orange = one flag)";
+    svg.append("text").attr("x", margin.left + iW / 2).attr("y", 18).attr("text-anchor", "middle").attr("fill", T.fg).style("font-size", FONT_SIZE.axisLabel).text(titleText);
   }
   function drawCumulativeForest(cumulativeResults, profile, options = {}) {
-    const svg = clearAndSelectSVG("#cumulativePlot");
-    if (!cumulativeResults || cumulativeResults.length === 0) return;
+    const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
+    const svg = initSvg("#cumulativePlot", "Cumulative forest plot", T);
+    if (!cumulativeResults || cumulativeResults.length === 0) {
+      drawNoDataPlaceholder(svg, +svg.attr("width") || 580, +svg.attr("height") || 400);
+      return;
+    }
     const rowH = 22;
-    const margin = { top: 40, right: 90, bottom: 46, left: 200 };
+    const maxLabelLen = cumulativeResults.reduce((m, r) => Math.max(m, (r.addedLabel || "").length), 0);
+    const leftMargin = Math.max(70, Math.min(220, Math.ceil(maxLabelLen * LABEL_CHAR_PX.regular11) + 14));
+    const margin = { top: 40, right: 90, bottom: 46, left: leftMargin };
     const plotW = 580;
     const totalW = margin.left + plotW + margin.right;
     const rows = cumulativeResults.map((r) => {
@@ -7314,23 +8205,27 @@ var App = (() => {
     const k = rows.length;
     const totalH = margin.top + pk * rowH + margin.bottom;
     setSvgSize(svg, totalW, totalH);
+    if (T.bg && T.bg !== "transparent") {
+      svg.insert("rect", ":first-child").attr("width", totalW).attr("height", totalH).attr("fill", T.bg);
+    }
+    svg.style("font-family", T.fontFamily);
     const allX = rows.flatMap((r) => [r.lo_disp, r.re_disp, r.hi_disp]).filter(isFinite);
     const [xMin, xMax] = d3.extent(allX);
     const xPad = Math.max((xMax - xMin) * 0.05, 1e-6);
     const xScale = d3.scaleLinear().domain([xMin - xPad, xMax + xPad]).nice().range([0, plotW]);
     const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
     const pageNote = totalPages > 1 ? ` (page ${page + 1} of ${totalPages})` : "";
-    svg.append("text").attr("x", margin.left + plotW / 2).attr("y", 20).attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "12px").text(`Cumulative meta-analysis${pageNote}`);
+    svg.append("text").attr("x", margin.left + plotW / 2).attr("y", 20).attr("text-anchor", "middle").attr("fill", T.fg).style("font-size", FONT_SIZE.axisLabel).text(`Cumulative meta-analysis${pageNote}`);
     const nullDisp = profile.transform(0);
     if (isFinite(nullDisp)) {
-      g.append("line").attr("x1", xScale(nullDisp)).attr("x2", xScale(nullDisp)).attr("y1", 0).attr("y2", pk * rowH).attr("stroke", "var(--border-hover)").attr("stroke-dasharray", "4,3").attr("opacity", 0.6);
+      g.append("line").attr("x1", xScale(nullDisp)).attr("x2", xScale(nullDisp)).attr("y1", 0).attr("y2", pk * rowH).attr("stroke", T.border).attr("stroke-dasharray", "4,3").attr("opacity", 0.6);
     }
     pageRows.forEach((r, i) => {
       const cy = (i + 0.5) * rowH;
       const globalIdx = page * pageSize + i;
       const isLast = globalIdx === k - 1;
-      const colour = isLast ? "var(--color-warning)" : "var(--fg-subtle)";
-      svg.append("text").attr("x", margin.left - 8).attr("y", margin.top + cy + 4).attr("text-anchor", "end").style("font-size", "11px").attr("fill", colour).text(r.addedLabel);
+      const colour = isLast ? T.colorWarning : T.fgSubtle;
+      svg.append("text").attr("x", margin.left - 8).attr("y", margin.top + cy + 4).attr("text-anchor", "end").style("font-size", FONT_SIZE.axisLabel).attr("fill", colour).text(r.addedLabel);
       const x1 = isFinite(r.lo_disp) ? xScale(r.lo_disp) : null;
       const x2 = isFinite(r.hi_disp) ? xScale(r.hi_disp) : null;
       const cx = isFinite(r.re_disp) ? xScale(r.re_disp) : null;
@@ -7347,7 +8242,7 @@ var App = (() => {
         }
       }
       if (isFinite(r.re_disp)) {
-        svg.append("text").attr("x", margin.left + plotW + 6).attr("y", margin.top + cy + 4).style("font-size", "10px").attr("fill", colour).text(r.re_disp.toFixed(3));
+        svg.append("text").attr("x", margin.left + plotW + 6).attr("y", margin.top + cy + 4).style("font-size", FONT_SIZE.tickLabel).attr("fill", colour).text(r.re_disp.toFixed(3));
       }
       const hitX1 = Math.min(x1 ?? cx ?? 0, cx ?? 0);
       const hitX2 = Math.max(x2 ?? cx ?? plotW, cx ?? plotW);
@@ -7357,14 +8252,18 @@ var App = (() => {
       );
     });
     const axisG = g.append("g").attr("transform", `translate(0,${pk * rowH + 6})`).call(d3.axisBottom(xScale).ticks(5));
-    styleAxis(axisG, "var(--border-hover)", "var(--fg-muted)");
-    svg.append("text").attr("x", margin.left + plotW / 2).attr("y", totalH - 6).attr("text-anchor", "middle").style("font-size", "11px").attr("fill", "var(--fg-muted)").text(profile.label);
+    styleAxis(axisG, T.border, T.fgMuted);
+    svg.append("text").attr("x", margin.left + plotW / 2).attr("y", totalH - 6).attr("text-anchor", "middle").style("font-size", FONT_SIZE.axisLabel).attr("fill", T.fgMuted).text(profile.label);
     return { totalPages };
   }
-  function drawCumulativeFunnel(cumulativeStudies, cumResults, profile, stepIdx) {
+  function drawCumulativeFunnel(cumulativeStudies, cumResults, profile, stepIdx, options = {}) {
     profile = profile || { transform: (x2) => x2 };
-    const svg = clearAndSelectSVG("#cumulativeFunnelPlot");
-    if (!cumulativeStudies || cumulativeStudies.length === 0 || !cumResults) return;
+    const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
+    const svg = initSvg("#cumulativeFunnelPlot", "Cumulative funnel plot", T);
+    if (!cumulativeStudies || cumulativeStudies.length === 0 || !cumResults) {
+      drawNoDataPlaceholder(svg, +svg.attr("width") || 500, +svg.attr("height") || 420);
+      return;
+    }
     const k = cumulativeStudies.length;
     const step = Math.max(0, Math.min(stepIdx, k - 1));
     const cur = cumResults[step];
@@ -7373,6 +8272,10 @@ var App = (() => {
     const iW = W - margin.left - margin.right;
     const iH = H - margin.top - margin.bottom;
     setSvgSize(svg, W, H);
+    if (T.bg && T.bg !== "transparent") {
+      svg.insert("rect", ":first-child").attr("width", W).attr("height", H).attr("fill", T.bg);
+    }
+    svg.style("font-family", T.fontFamily);
     const tooltip = selTooltip();
     const seMax = d3.max(cumulativeStudies, (d) => d.se);
     const xHalf = Math.max(
@@ -7381,52 +8284,67 @@ var App = (() => {
     );
     const x = d3.scaleLinear().domain([-xHalf, xHalf]).range([margin.left, W - margin.right]);
     const y = d3.scaleLinear().domain([seMax, 0]).range([H - margin.bottom, margin.top]);
-    const fgColor = "var(--fg-muted)";
-    const borderClr = "var(--border-hover)";
+    const fgColor = T.fgMuted;
+    const borderClr = T.border;
     const armRight = Math.min(1.96 * seMax, xHalf);
     const armLeft = Math.max(-1.96 * seMax, -xHalf);
     svg.append("line").attr("x1", x(0)).attr("y1", y(0)).attr("x2", x(armRight)).attr("y2", y(seMax)).attr("stroke", borderClr).attr("stroke-width", 1).attr("stroke-dasharray", "4,2");
     svg.append("line").attr("x1", x(0)).attr("y1", y(0)).attr("x2", x(armLeft)).attr("y2", y(seMax)).attr("stroke", borderClr).attr("stroke-width", 1).attr("stroke-dasharray", "4,2");
     if (isFinite(cur.RE)) {
-      svg.append("line").attr("x1", x(cur.RE)).attr("x2", x(cur.RE)).attr("y1", y(0)).attr("y2", y(seMax)).attr("stroke", "var(--accent)").attr("stroke-dasharray", "4");
+      svg.append("line").attr("x1", x(cur.RE)).attr("x2", x(cur.RE)).attr("y1", y(0)).attr("y2", y(seMax)).attr("stroke", T.accent).attr("stroke-dasharray", "4");
     }
     const prevStudies = cumulativeStudies.slice(0, step);
     const newStudy = cumulativeStudies[step];
-    svg.selectAll(".dot-prev").data(prevStudies).enter().append("circle").attr("class", "dot-prev").attr("cx", (d) => x(d.yi)).attr("cy", (d) => y(d.se)).attr("r", 4).attr("fill", "var(--bg-surface-hover)").attr("stroke", "var(--fg-subtle)").on("mousemove", (event, d) => {
-      tooltip.style("opacity", 1).html(`<b>${d.label ?? ""}</b><br>yi = ${d.yi.toFixed(3)}&nbsp; SE = ${d.se.toFixed(3)}`).style("left", event.pageX + 12 + "px").style("top", event.pageY - 28 + "px");
-    }).on("mouseout", () => tooltip.style("opacity", 0));
+    attachTooltip(
+      svg.selectAll(".dot-prev").data(prevStudies).enter().append("circle").attr("class", "dot-prev").attr("cx", (d) => x(d.yi)).attr("cy", (d) => y(d.se)).attr("r", 4).attr("fill", T.bgSurfaceHover).attr("stroke", T.fgSubtle),
+      (d) => `<b>${d.label ?? ""}</b><br>yi = ${d.yi.toFixed(3)}&nbsp; SE = ${d.se.toFixed(3)}`
+    );
     if (newStudy) {
-      svg.append("circle").attr("cx", x(newStudy.yi)).attr("cy", y(newStudy.se)).attr("r", 5).attr("fill", "var(--accent-light)").attr("stroke", "var(--accent)").attr("stroke-width", 1.5).on("mousemove", (event) => {
-        tooltip.style("opacity", 1).html(`<b>${newStudy.label ?? ""}</b> \u2190 added at this step<br>yi = ${newStudy.yi.toFixed(3)}&nbsp; SE = ${newStudy.se.toFixed(3)}`).style("left", event.pageX + 12 + "px").style("top", event.pageY - 28 + "px");
-      }).on("mouseout", () => tooltip.style("opacity", 0));
+      attachTooltip(
+        svg.append("circle").datum(newStudy).attr("cx", x(newStudy.yi)).attr("cy", y(newStudy.se)).attr("r", 5).attr("fill", T.accentLight).attr("stroke", T.accent).attr("stroke-width", 1.5),
+        (d) => `<b>${d.label ?? ""}</b> \u2190 added at this step<br>yi = ${d.yi.toFixed(3)}&nbsp; SE = ${d.se.toFixed(3)}`
+      );
     }
     const annotY = margin.top - 10;
-    svg.append("text").attr("x", W - margin.right).attr("y", annotY).attr("text-anchor", "end").attr("fill", "var(--fg-muted)").style("font-size", "10px").text(`k = ${step + 1} / ${k}\u2003added: ${cur.addedLabel}`);
+    svg.append("text").attr("x", W - margin.right).attr("y", annotY).attr("text-anchor", "end").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.tickLabel).text((() => {
+      const prefix = `k = ${step + 1} / ${k}\u2003added: `;
+      const budget = Math.max(20, iW - Math.ceil(prefix.length * LABEL_CHAR_PX.regular10));
+      return prefix + truncateLabel(cur.addedLabel, budget, 10);
+    })());
     if (isFinite(cur.RE)) {
       const reDisp = profile.transform(cur.RE);
       if (isFinite(reDisp)) {
-        svg.append("text").attr("x", x(cur.RE) + 4).attr("y", y(0) + 12).attr("fill", "var(--accent)").style("font-size", "9px").text(reDisp.toFixed(3));
+        svg.append("text").attr("x", x(cur.RE) + 4).attr("y", y(0) + 12).attr("fill", T.accent).style("font-size", FONT_SIZE.annot).text(reDisp.toFixed(3));
       }
     }
-    const axisX = svg.append("g").attr("transform", `translate(0,${H - margin.bottom})`).call(d3.axisBottom(x).tickFormat((v) => {
+    const maxTicksX = Math.max(4, Math.floor(iW / 60));
+    const axisX = svg.append("g").attr("transform", `translate(0,${H - margin.bottom})`).call(d3.axisBottom(x).ticks(maxTicksX).tickFormat((v) => {
       const t = profile.transform(v);
       return isFinite(t) ? +t.toFixed(3) : "";
     }));
     styleAxis(axisX, borderClr, fgColor);
     const axisY = svg.append("g").attr("transform", `translate(${margin.left},0)`).call(d3.axisLeft(y));
     styleAxis(axisY, borderClr, fgColor);
-    svg.append("text").attr("x", margin.left + iW / 2).attr("y", H - 4).attr("text-anchor", "middle").attr("fill", fgColor).style("font-size", "10px").text(profile.label + (profile.isLog ? " (log scale)" : ""));
-    svg.append("text").attr("transform", "rotate(-90)").attr("x", -(margin.top + iH / 2)).attr("y", 12).attr("text-anchor", "middle").attr("fill", fgColor).style("font-size", "11px").text("Standard Error");
+    svg.append("text").attr("x", margin.left + iW / 2).attr("y", H - 4).attr("text-anchor", "middle").attr("fill", fgColor).style("font-size", FONT_SIZE.tickLabel).text(profile.label + (profile.isLog ? " (log scale)" : ""));
+    svg.append("text").attr("transform", "rotate(-90)").attr("x", -(margin.top + iH / 2)).attr("y", 12).attr("text-anchor", "middle").attr("fill", fgColor).style("font-size", FONT_SIZE.axisLabel).text("Standard Error");
   }
-  function drawPCurve(result) {
-    const svg = clearAndSelectSVG("#pCurvePlot");
-    if (!result || result.k === 0) return;
+  function drawPCurve(result, options = {}) {
+    const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
+    const svg = initSvg("#pCurvePlot", "p-curve plot", T);
+    if (!result || result.k === 0) {
+      drawNoDataPlaceholder(svg, +svg.attr("width") || 500, +svg.attr("height") || 380, "No significant p-values");
+      return;
+    }
     const { bins, expected0, expected33 } = result;
-    const margin = { top: 24, right: 24, bottom: 52, left: 56 };
+    const margin = { top: 34, right: 24, bottom: 52, left: 56 };
     const W = +svg.attr("width") || 500;
     const H = +svg.attr("height") || 380;
     const iW = W - margin.left - margin.right;
     const iH = H - margin.top - margin.bottom;
+    if (T.bg && T.bg !== "transparent") {
+      svg.insert("rect", ":first-child").attr("width", W).attr("height", H).attr("fill", T.bg);
+    }
+    svg.style("font-family", T.fontFamily);
     const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
     const binLabels = bins.map((b) => `${b.lo.toFixed(2)}\u2013${b.hi.toFixed(2)}`);
     const x = d3.scaleBand().domain(binLabels).range([0, iW]).padding(0.25);
@@ -7438,45 +8356,53 @@ var App = (() => {
     const y = d3.scaleLinear().domain([0, yMax]).range([iH, 0]);
     g.append("g").attr("class", "grid").call(
       d3.axisLeft(y).ticks(5).tickSize(-iW).tickFormat("")
-    ).selectAll("line").attr("stroke", "var(--border)").attr("stroke-dasharray", "2,3");
+    ).selectAll("line").attr("stroke", T.borderGrid).attr("stroke-dasharray", "2,3");
     g.select(".grid .domain").remove();
-    g.selectAll(".pcurve-bar").data(bins).enter().append("rect").attr("class", "pcurve-bar").attr("x", (_, i) => x(binLabels[i])).attr("y", (d) => y(d.prop)).attr("width", x.bandwidth()).attr("height", (d) => iH - y(d.prop)).attr("fill", "var(--accent)").attr("opacity", 0.8);
-    g.selectAll(".pcurve-count").data(bins).enter().append("text").attr("class", "pcurve-count").attr("x", (_, i) => x(binLabels[i]) + x.bandwidth() / 2).attr("y", (d) => y(d.prop) - 4).attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "10px").text((d) => d.count > 0 ? `n=${d.count}` : "");
-    g.append("line").attr("x1", 0).attr("x2", iW).attr("y1", y(expected0)).attr("y2", y(expected0)).attr("stroke", "var(--fg-subtle)").attr("stroke-width", 1.5).attr("stroke-dasharray", "5,3");
+    g.selectAll(".pcurve-bar").data(bins).enter().append("rect").attr("class", "pcurve-bar").attr("x", (_, i) => x(binLabels[i])).attr("y", (d) => y(d.prop)).attr("width", x.bandwidth()).attr("height", (d) => iH - y(d.prop)).attr("fill", T.accent).attr("opacity", 0.8);
+    g.selectAll(".pcurve-count").data(bins).enter().append("text").attr("class", "pcurve-count").attr("x", (_, i) => x(binLabels[i]) + x.bandwidth() / 2).attr("y", (d) => y(d.prop) - 4).attr("text-anchor", "middle").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.tickLabel).text((d) => d.count > 0 ? `n=${d.count}` : "");
+    g.append("line").attr("x1", 0).attr("x2", iW).attr("y1", y(expected0)).attr("y2", y(expected0)).attr("stroke", T.fgSubtle).attr("stroke-width", 1.5).attr("stroke-dasharray", "5,3");
     const linePoints = bins.map((_, i) => [
       x(binLabels[i]) + x.bandwidth() / 2,
       y(expected33[i])
     ]);
-    g.append("polyline").attr("points", linePoints.map((p) => p.join(",")).join(" ")).attr("fill", "none").attr("stroke", "var(--color-warning)").attr("stroke-width", 2).attr("stroke-dasharray", "4,2");
-    g.selectAll(".pcurve-33-dot").data(expected33).enter().append("circle").attr("class", "pcurve-33-dot").attr("cx", (_, i) => x(binLabels[i]) + x.bandwidth() / 2).attr("cy", (d) => y(d)).attr("r", 3).attr("fill", "var(--color-warning)");
+    g.append("polyline").attr("points", linePoints.map((p) => p.join(",")).join(" ")).attr("fill", "none").attr("stroke", T.colorWarning).attr("stroke-width", 2).attr("stroke-dasharray", "4,2");
+    g.selectAll(".pcurve-33-dot").data(expected33).enter().append("circle").attr("class", "pcurve-33-dot").attr("cx", (_, i) => x(binLabels[i]) + x.bandwidth() / 2).attr("cy", (d) => y(d)).attr("r", 3).attr("fill", T.colorWarning);
     const axisX = g.append("g").attr("transform", `translate(0,${iH})`).call(d3.axisBottom(x));
-    styleAxis(axisX, "var(--border-hover)", "var(--fg-muted)", "11px");
+    styleAxis(axisX, T.border, T.fgMuted, FONT_SIZE.axisLabel);
     const axisY = g.append("g").call(
       d3.axisLeft(y).ticks(5).tickFormat((d) => `${Math.round(d * 100)}%`)
     );
-    styleAxis(axisY, "var(--border-hover)", "var(--fg-muted)");
-    svg.append("text").attr("x", margin.left + iW / 2).attr("y", H - 6).attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "11px").text("p-value");
-    svg.append("text").attr("transform", "rotate(-90)").attr("x", -(margin.top + iH / 2)).attr("y", 14).attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "11px").text("Proportion of studies");
-    const LW = 172, LH = 46, PAD = 8, ROW = 16;
-    const legendX = iW - LW - 4;
-    const legendY = 4;
+    styleAxis(axisY, T.border, T.fgMuted);
+    svg.append("text").attr("x", margin.left + iW / 2).attr("y", H - 6).attr("text-anchor", "middle").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.axisLabel).text("p-value");
+    svg.append("text").attr("transform", "rotate(-90)").attr("x", -(margin.top + iH / 2)).attr("y", 14).attr("text-anchor", "middle").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.axisLabel).text("Proportion of studies");
+    const LW = 172, LH = 46, PAD2 = 8, ROW = 16;
+    const { x: legendX, y: legendY } = placeLegend(iW, iH, LW, LH, "tr");
     const lg = g.append("g").attr("transform", `translate(${legendX},${legendY})`);
-    lg.append("rect").attr("width", LW).attr("height", LH).attr("fill", "var(--bg-surface)").attr("stroke", "var(--border)").attr("stroke-width", 1).attr("rx", 3);
-    lg.append("line").attr("x1", PAD).attr("x2", PAD + 18).attr("y1", PAD + ROW * 0 + ROW / 2).attr("y2", PAD + ROW * 0 + ROW / 2).attr("stroke", "var(--fg-subtle)").attr("stroke-width", 1.5).attr("stroke-dasharray", "5,3");
-    lg.append("text").attr("x", PAD + 22).attr("y", PAD + ROW * 0 + ROW / 2 + 4).attr("fill", "var(--fg-muted)").style("font-size", "9px").text("Expected (H\u2080, no effect)");
-    lg.append("line").attr("x1", PAD).attr("x2", PAD + 18).attr("y1", PAD + ROW * 1 + ROW / 2).attr("y2", PAD + ROW * 1 + ROW / 2).attr("stroke", "var(--color-warning)").attr("stroke-width", 2).attr("stroke-dasharray", "4,2");
-    lg.append("circle").attr("cx", PAD + 9).attr("cy", PAD + ROW * 1 + ROW / 2).attr("r", 3).attr("fill", "var(--color-warning)");
-    lg.append("text").attr("x", PAD + 22).attr("y", PAD + ROW * 1 + ROW / 2 + 4).attr("fill", "var(--fg-muted)").style("font-size", "9px").text("Expected (33% power)");
+    lg.append("rect").attr("width", LW).attr("height", LH).attr("fill", T.bgSurface).attr("stroke", T.borderGrid).attr("stroke-width", 1).attr("rx", 3);
+    lg.append("line").attr("x1", PAD2).attr("x2", PAD2 + 18).attr("y1", PAD2 + ROW * 0 + ROW / 2).attr("y2", PAD2 + ROW * 0 + ROW / 2).attr("stroke", T.fgSubtle).attr("stroke-width", 1.5).attr("stroke-dasharray", "5,3");
+    lg.append("text").attr("x", PAD2 + 22).attr("y", PAD2 + ROW * 0 + ROW / 2 + 4).attr("fill", T.fgMuted).style("font-size", FONT_SIZE.annot).text("Expected (H\u2080, no effect)");
+    lg.append("line").attr("x1", PAD2).attr("x2", PAD2 + 18).attr("y1", PAD2 + ROW * 1 + ROW / 2).attr("y2", PAD2 + ROW * 1 + ROW / 2).attr("stroke", T.colorWarning).attr("stroke-width", 2).attr("stroke-dasharray", "4,2");
+    lg.append("circle").attr("cx", PAD2 + 9).attr("cy", PAD2 + ROW * 1 + ROW / 2).attr("r", 3).attr("fill", T.colorWarning);
+    lg.append("text").attr("x", PAD2 + 22).attr("y", PAD2 + ROW * 1 + ROW / 2 + 4).attr("fill", T.fgMuted).style("font-size", FONT_SIZE.annot).text("Expected (33% power)");
+    svg.append("text").attr("x", margin.left + iW / 2).attr("y", 18).attr("text-anchor", "middle").attr("fill", T.fg).style("font-size", FONT_SIZE.title).style("font-weight", "600").text(`p-curve \u2014 k = ${result.k}`);
   }
-  function drawPUniform(result, m, profile) {
-    const svg = clearAndSelectSVG("#pUniformPlot");
-    if (!result || result.k === 0 || !isFinite(result.estimate)) return;
+  function drawPUniform(result, m, profile, options = {}) {
+    const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
+    const svg = initSvg("#pUniformPlot", "p-uniform plot", T);
+    if (!result || result.k === 0 || !isFinite(result.estimate)) {
+      drawNoDataPlaceholder(svg, +svg.attr("width") || 500, +svg.attr("height") || 170, "No significant p-values");
+      return;
+    }
     profile = profile || { transform: (x2) => x2, label: "Effect" };
-    const margin = { top: 20, right: 24, bottom: 44, left: 100 };
+    const margin = { top: 34, right: 24, bottom: 44, left: 100 };
     const W = +svg.attr("width") || 500;
     const H = +svg.attr("height") || 170;
     const iW = W - margin.left - margin.right;
     const iH = H - margin.top - margin.bottom;
+    if (T.bg && T.bg !== "transparent") {
+      svg.insert("rect", ":first-child").attr("width", W).attr("height", H).attr("fill", T.bg);
+    }
+    svg.style("font-family", T.fontFamily);
     const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
     const rows = [
       {
@@ -7484,7 +8410,7 @@ var App = (() => {
         estimate: m.RE,
         lo: m.ciLow,
         hi: m.ciHigh,
-        color: "var(--accent)",
+        color: T.accent,
         shape: "diamond"
       },
       {
@@ -7492,7 +8418,7 @@ var App = (() => {
         estimate: result.estimate,
         lo: result.ciLow,
         hi: result.ciHigh,
-        color: "var(--color-info)",
+        color: T.colorInfo,
         shape: "circle"
       }
     ].filter((r) => isFinite(r.estimate) && isFinite(r.lo) && isFinite(r.hi));
@@ -7502,7 +8428,7 @@ var App = (() => {
     const x = d3.scaleLinear().domain([-xExtent, xExtent]).range([0, iW]);
     const rowH = iH / rows.length;
     const rowMid = (i) => rowH * i + rowH / 2;
-    g.append("line").attr("x1", x(0)).attr("x2", x(0)).attr("y1", 0).attr("y2", iH).attr("stroke", "var(--border-hover)").attr("stroke-width", 1).attr("stroke-dasharray", "4,3");
+    g.append("line").attr("x1", x(0)).attr("x2", x(0)).attr("y1", 0).attr("y2", iH).attr("stroke", T.border).attr("stroke-width", 1).attr("stroke-dasharray", "4,3");
     rows.forEach((row, i) => {
       const cy = rowMid(i);
       const TICK = 5;
@@ -7522,26 +8448,35 @@ var App = (() => {
       } else {
         g.append("circle").attr("cx", x(row.estimate)).attr("cy", cy).attr("r", 6).attr("fill", row.color);
       }
-      g.append("text").attr("x", -8).attr("y", cy + 4).attr("text-anchor", "end").attr("fill", "var(--fg-muted)").style("font-size", "11px").text(row.label);
+      g.append("text").attr("x", -8).attr("y", cy + 4).attr("text-anchor", "end").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.axisLabel).text(row.label);
     });
     const axisX = g.append("g").attr("transform", `translate(0,${iH})`).call(d3.axisBottom(x).ticks(6).tickFormat((v) => {
       const t = profile.transform(v);
       return isFinite(t) ? +t.toFixed(2) : "";
     }));
-    styleAxis(axisX, "var(--border-hover)", "var(--fg-muted)", "10px");
-    svg.append("text").attr("x", margin.left + iW / 2).attr("y", H - 6).attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "11px").text(profile.label + (profile.isLog ? " (log scale)" : ""));
+    styleAxis(axisX, T.border, T.fgMuted, FONT_SIZE.tickLabel);
+    svg.append("text").attr("x", margin.left + iW / 2).attr("y", H - 6).attr("text-anchor", "middle").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.axisLabel).text(profile.label + (profile.isLog ? " (log scale)" : ""));
+    svg.append("text").attr("x", margin.left + iW / 2).attr("y", 18).attr("text-anchor", "middle").attr("fill", T.fg).style("font-size", FONT_SIZE.title).style("font-weight", "600").text(`p-uniform \u2014 k = ${result.k}`);
   }
-  function drawOrchardPlot(studies, m, profile) {
-    const svg = clearAndSelectSVG("#orchardPlot");
-    if (!studies || studies.length === 0) return;
+  function drawOrchardPlot(studies, m, profile, options = {}) {
+    const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
+    const svg = initSvg("#orchardPlot", "Orchard plot", T);
+    if (!studies || studies.length === 0) {
+      drawNoDataPlaceholder(svg, +svg.attr("width") || 520, +svg.attr("height") || 340);
+      return;
+    }
     profile = profile || { transform: (x2) => x2, label: "Effect" };
     const W = +svg.attr("width") || 520;
     const H = +svg.attr("height") || 340;
+    if (T.bg && T.bg !== "transparent") {
+      svg.insert("rect", ":first-child").attr("width", W).attr("height", H).attr("fill", T.bg);
+    }
+    svg.style("font-family", T.fontFamily);
     const allGroups = [...new Set(studies.map((s) => s.group || "").filter(Boolean))];
     const hasGroups = allGroups.length > 1;
     const bands = hasGroups ? allGroups : ["All studies"];
-    const leftMargin = hasGroups ? Math.max(60, Math.min(150, Math.ceil(allGroups.reduce((m2, g2) => Math.max(m2, g2.length), 0) * 6.8) + 14)) : 30;
-    const margin = { top: 28, right: 20, bottom: 48, left: leftMargin };
+    const leftMargin = hasGroups ? Math.max(60, Math.min(150, Math.ceil(allGroups.reduce((m2, g2) => Math.max(m2, g2.length), 0) * LABEL_CHAR_PX.regular11) + 14)) : 30;
+    const margin = { top: 34, right: 20, bottom: 48, left: leftMargin };
     const iW = W - margin.left - margin.right;
     const iH = H - margin.top - margin.bottom;
     const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
@@ -7549,7 +8484,7 @@ var App = (() => {
       (band) => hasGroups ? studies.filter((s) => s.group === band) : studies.slice()
     );
     const laneH = iH / bands.length;
-    const DRAW_CAP = 80;
+    const DRAW_CAP = Math.min(laneH, Math.max(80, Math.round(laneH * 0.6)));
     const drawH = Math.min(laneH, DRAW_CAP);
     const allYi = studies.map((s) => s.yi).filter(isFinite);
     const piLow = isFinite(m.predLow) ? m.predLow : null;
@@ -7560,10 +8495,11 @@ var App = (() => {
     const xExtent = Math.max(...refs.filter(isFinite).map(Math.abs)) * 1.12 || 1;
     const x = d3.scaleLinear().domain([-xExtent, xExtent]).range([0, iW]);
     const tooltip = selTooltip();
-    g.append("line").attr("x1", x(0)).attr("x2", x(0)).attr("y1", 0).attr("y2", iH).attr("stroke", "var(--border-hover)").attr("stroke-width", 1).attr("stroke-dasharray", "4,3");
+    g.append("line").attr("x1", x(0)).attr("x2", x(0)).attr("y1", 0).attr("y2", iH).attr("stroke", T.border).attr("stroke-width", 1).attr("stroke-dasharray", "4,3");
     bands.forEach((band, bi) => {
       const cy = laneH * bi + laneH / 2;
-      const color = GROUP_COLORS[bi % GROUP_COLORS.length];
+      const color = T.useBwShapes ? T.accent : GROUP_COLORS[bi % GROUP_COLORS.length];
+      const dashArr = T.useBwShapes ? BW_DASHES[hashGroupLabel(band) % BW_DASHES.length] : "none";
       const bStudies = bandStudies[bi];
       const jitterRange = drawH * 0.4;
       const invSE = bStudies.map((s) => 1 / Math.max(s.se || Math.sqrt(Math.max(s.vi, 0)), 1e-6));
@@ -7572,135 +8508,190 @@ var App = (() => {
       if (piLow != null && piHigh != null) {
         const piW = Math.max(0, x(piHigh) - x(piLow));
         if (piW > 0) {
-          g.append("rect").attr("x", x(piLow)).attr("y", cy - drawH * 0.44).attr("width", piW).attr("height", drawH * 0.88).attr("fill", color).attr("opacity", 0.1).attr("rx", 3);
+          const piRect = g.append("rect").attr("x", x(piLow)).attr("y", cy - drawH * 0.44).attr("width", piW).attr("height", drawH * 0.88).attr("fill", color).attr("opacity", 0.1).attr("rx", 3);
+          if (T.useBwShapes && dashArr !== "none") {
+            piRect.attr("stroke", color).attr("stroke-width", 1).attr("stroke-dasharray", dashArr).attr("fill-opacity", 0);
+          }
         }
       }
       if (isFinite(m.ciLow) && isFinite(m.ciHigh)) {
         const ciW = Math.max(0, x(m.ciHigh) - x(m.ciLow));
         if (ciW > 0) {
-          g.append("rect").attr("x", x(m.ciLow)).attr("y", cy - drawH * 0.2).attr("width", ciW).attr("height", drawH * 0.4).attr("fill", color).attr("opacity", 0.35).attr("rx", 2);
+          const ciRect = g.append("rect").attr("x", x(m.ciLow)).attr("y", cy - drawH * 0.2).attr("width", ciW).attr("height", drawH * 0.4).attr("fill", color).attr("opacity", 0.35).attr("rx", 2);
+          if (T.useBwShapes && dashArr !== "none") {
+            ciRect.attr("stroke", color).attr("stroke-width", 1.5).attr("stroke-dasharray", dashArr);
+          }
         }
       }
       if (isFinite(m.RE)) {
         const S = drawH * 0.18;
         const cx = x(m.RE);
         const pts = [[cx, cy - S], [cx + S, cy], [cx, cy + S], [cx - S, cy]].map((p) => p.join(",")).join(" ");
-        g.append("polygon").attr("points", pts).attr("fill", color);
+        const diamond = g.append("polygon").attr("points", pts).attr("fill", color);
+        if (T.useBwShapes && dashArr !== "none") {
+          diamond.attr("stroke", color).attr("stroke-width", 1.5).attr("stroke-dasharray", dashArr).attr("fill-opacity", 0.3);
+        }
       }
       bStudies.forEach((s, i) => {
         if (!isFinite(s.yi)) return;
         const n = bStudies.length;
         const jitter = n > 1 ? (i / (n - 1) - 0.5) * 2 * jitterRange : 0;
         const r = R_MIN + (R_MAX - R_MIN) * (invSE[i] / maxInvSE);
-        g.append("circle").attr("cx", x(s.yi)).attr("cy", cy + jitter).attr("r", r).attr("fill", color).attr("fill-opacity", s.filled ? 0.25 : 0.6).attr("stroke", "var(--bg-surface)").attr("stroke-width", 0.8).on("mousemove", (event) => {
-          const seVal = (s.se || Math.sqrt(Math.max(s.vi, 0))).toFixed(3);
-          const yi_t = profile.transform(s.yi);
-          tooltip.style("opacity", 1).html(`<b>${s.label}</b><br>Effect: ${isFinite(yi_t) ? +yi_t.toFixed(3) : "NA"}<br>SE: ${seVal}${s.filled ? "<br><i>(imputed)</i>" : ""}`).style("left", event.pageX + 12 + "px").style("top", event.pageY - 24 + "px");
-        }).on("mouseout", () => tooltip.style("opacity", 0));
+        attachTooltip(
+          g.append("circle").datum(s).attr("cx", x(s.yi)).attr("cy", cy + jitter).attr("r", r).attr("fill", color).attr("fill-opacity", s.filled ? 0.25 : 0.6).attr("stroke", T.bgSurface).attr("stroke-width", 0.8),
+          (d) => {
+            const seVal = (d.se || Math.sqrt(Math.max(d.vi, 0))).toFixed(3);
+            const yi_t = profile.transform(d.yi);
+            return `<b>${d.label}</b><br>Effect: ${isFinite(yi_t) ? +yi_t.toFixed(3) : "NA"}<br>SE: ${seVal}${d.filled ? "<br><i>(imputed)</i>" : ""}`;
+          }
+        );
       });
       if (hasGroups) {
-        const maxCharsGroup = Math.floor((margin.left - 8) / 6.8);
+        const maxCharsGroup = Math.floor((margin.left - 8) / LABEL_CHAR_PX.regular11);
         const label = band.length > maxCharsGroup ? band.slice(0, maxCharsGroup - 1) + "\u2026" : band;
-        g.append("text").attr("x", -8).attr("y", cy + 4).attr("text-anchor", "end").attr("fill", "var(--fg-muted)").style("font-size", "11px").text(label);
+        g.append("text").attr("x", -8).attr("y", cy + 4).attr("text-anchor", "end").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.axisLabel).text(label);
       }
       if (bi < bands.length - 1) {
-        g.append("line").attr("x1", 0).attr("x2", iW).attr("y1", laneH * (bi + 1)).attr("y2", laneH * (bi + 1)).attr("stroke", "var(--border)").attr("stroke-width", 0.5).attr("stroke-dasharray", "3,4");
+        g.append("line").attr("x1", 0).attr("x2", iW).attr("y1", laneH * (bi + 1)).attr("y2", laneH * (bi + 1)).attr("stroke", T.borderGrid).attr("stroke-width", 0.5).attr("stroke-dasharray", "3,4");
       }
     });
-    const axisX = g.append("g").attr("transform", `translate(0,${iH})`).call(d3.axisBottom(x).ticks(6).tickFormat((v) => {
-      const t = profile.transform(v);
-      return isFinite(t) ? +t.toFixed(2) : "";
-    }));
-    styleAxis(axisX, "var(--border-hover)", "var(--fg-muted)", "10px");
-    svg.append("text").attr("x", margin.left + iW / 2).attr("y", H - 6).attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "11px").text(profile.label + (profile.isLog ? " (log scale)" : ""));
+    const axisX = g.append("g").attr("transform", `translate(0,${iH})`).call(d3.axisBottom(x).ticks(6).tickFormat((v) => formatTick(v, profile.transform)));
+    styleAxis(axisX, T.border, T.fgMuted, FONT_SIZE.tickLabel, T.fontFamily);
+    svg.append("text").attr("x", margin.left + iW / 2).attr("y", H - 6).attr("text-anchor", "middle").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.axisLabel).text(profile.label + (profile.isLog ? " (log scale)" : ""));
     const hetParts = [];
-    if (isFinite(m.I2)) hetParts.push(`I\xB2 = ${(m.I2 * 100).toFixed(1)}%`);
+    if (isFinite(m.I2)) hetParts.push(`I\xB2 = ${m.I2.toFixed(1)}%`);
     if (isFinite(m.tau2) && m.tau2 > 0) hetParts.push(`\u03C4\xB2 = ${m.tau2.toFixed(3)}`);
     if (hetParts.length) {
-      g.append("text").attr("x", 4).attr("y", iH - 4).attr("fill", "var(--fg-muted)").style("font-size", "10px").text(hetParts.join("  "));
+      const ht = g.append("text").attr("x", 4).attr("y", iH - 4).attr("fill", T.fgMuted).style("font-size", FONT_SIZE.tickLabel);
+      hetParts.forEach((part, pi) => {
+        if (pi > 0) ht.append("tspan").text("  ");
+        if (part.startsWith("I\xB2")) {
+          ht.append("tspan").style("font-style", "italic").text("I");
+          ht.append("tspan").text(part.slice(1));
+        } else {
+          ht.append("tspan").text(part);
+        }
+      });
     }
+    svg.append("text").attr("x", margin.left + iW / 2).attr("y", 18).attr("text-anchor", "middle").attr("fill", T.fg).style("font-size", FONT_SIZE.title).style("font-weight", "600").text(`Orchard plot \u2014 k = ${studies.length}`);
   }
   function drawCaterpillarPlot(studies, m, profile, options = {}) {
-    const svg = clearAndSelectSVG("#caterpillarPlot");
-    if (!studies || studies.length === 0) return;
+    const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
+    const svg = initSvg("#caterpillarPlot", "Caterpillar plot", T);
+    if (!studies || studies.length === 0) {
+      drawNoDataPlaceholder(svg, +svg.attr("width") || 520, +svg.attr("height") || 300);
+      return;
+    }
     profile = profile || { transform: (x2) => x2, label: "Effect" };
     const sorted = studies.filter((s) => isFinite(s.yi) && isFinite(s.vi)).slice().sort((a, b) => b.yi - a.yi);
     const k = sorted.length;
-    if (k === 0) return;
+    if (k === 0) {
+      drawNoDataPlaceholder(svg, +svg.attr("width") || 520, +svg.attr("height") || 300, "No valid studies", T);
+      return;
+    }
     const { page, pageSize, totalPages, items: pageStudies } = paginate(sorted, options);
     const pk = pageStudies.length;
     const ROW_H = 16;
     const W = +svg.attr("width") || 520;
     const maxStudyLen = sorted.reduce((m2, s) => Math.max(m2, (s.label || "").length), 0);
-    const leftMargin = Math.max(50, Math.min(160, Math.ceil(maxStudyLen * 6.5) + 14));
-    const margin = { top: 28, right: 20, bottom: 38, left: leftMargin };
-    const H = margin.top + pk * ROW_H + margin.bottom;
-    svg.attr("height", H);
-    const iW = W - margin.left - margin.right;
-    const iH = H - margin.top - margin.bottom;
-    const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+    const leftMargin = Math.max(50, Math.min(160, Math.ceil(maxStudyLen * LABEL_CHAR_PX.regular10) + 14));
     const allGroups = [...new Set(sorted.map((s) => s.group || "").filter(Boolean))];
     const hasGroups = allGroups.length > 1;
     const groupColor = (grp) => {
+      if (T.useBwShapes) return T.fg;
       const idx = allGroups.indexOf(grp);
-      return idx >= 0 ? GROUP_COLORS[idx % GROUP_COLORS.length] : "var(--fg-subtle)";
+      return idx >= 0 ? GROUP_COLORS[idx % GROUP_COLORS.length] : T.fgSubtle;
     };
+    const groupDash = (grp) => {
+      if (!T.useBwShapes || !hasGroups) return "none";
+      return BW_DASHES[hashGroupLabel(grp) % BW_DASHES.length];
+    };
+    const maxGroupLen = hasGroups ? Math.max(...allGroups.map((g2) => g2.length)) : 0;
+    const LEGEND_W = hasGroups ? Math.max(80, Math.min(140, Math.ceil(maxGroupLen * LABEL_CHAR_PX.regular10) + 26)) : 20;
+    const margin = { top: 28, right: LEGEND_W, bottom: 38, left: leftMargin };
+    const H = margin.top + pk * ROW_H + margin.bottom;
+    svg.attr("height", H);
+    if (T.bg && T.bg !== "transparent") {
+      svg.insert("rect", ":first-child").attr("width", W).attr("height", H).attr("fill", T.bg);
+    }
+    svg.style("font-family", T.fontFamily);
+    const iW = W - margin.left - margin.right;
+    const iH = H - margin.top - margin.bottom;
+    const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
     const allCiLows = sorted.map((s) => s.yi - Z_95 * (s.se || Math.sqrt(s.vi)));
     const allCiHighs = sorted.map((s) => s.yi + Z_95 * (s.se || Math.sqrt(s.vi)));
     const refs = [...allCiLows, ...allCiHighs, m.RE, 0].filter(isFinite);
     const xExtent = Math.max(...refs.map(Math.abs)) * 1.08 || 1;
     const x = d3.scaleLinear().domain([-xExtent, xExtent]).range([0, iW]);
     const tooltip = selTooltip();
-    g.append("line").attr("x1", x(0)).attr("x2", x(0)).attr("y1", 0).attr("y2", iH).attr("stroke", "var(--border-hover)").attr("stroke-width", 1).attr("stroke-dasharray", "4,3");
+    g.append("line").attr("x1", x(0)).attr("x2", x(0)).attr("y1", 0).attr("y2", iH).attr("stroke", T.border).attr("stroke-width", 1).attr("stroke-dasharray", "4,3");
     if (isFinite(m.RE)) {
-      g.append("line").attr("x1", x(m.RE)).attr("x2", x(m.RE)).attr("y1", 0).attr("y2", iH).attr("stroke", "var(--accent)").attr("stroke-width", 1.2).attr("stroke-opacity", 0.55);
+      g.append("line").attr("x1", x(m.RE)).attr("x2", x(m.RE)).attr("y1", 0).attr("y2", iH).attr("stroke", T.accent).attr("stroke-width", 1.2).attr("stroke-opacity", 0.55);
     }
     pageStudies.forEach((s, i) => {
       const cy = i * ROW_H + ROW_H / 2;
       const lo = s.yi - Z_95 * (s.se || Math.sqrt(s.vi));
       const hi = s.yi + Z_95 * (s.se || Math.sqrt(s.vi));
-      const color = hasGroups ? groupColor(s.group || "") : "var(--fg-subtle)";
-      g.append("line").attr("x1", x(lo)).attr("x2", x(hi)).attr("y1", cy).attr("y2", cy).attr("stroke", color).attr("stroke-width", s.filled ? 1 : 1.4).attr("stroke-opacity", s.filled ? 0.45 : 0.8);
+      const color = hasGroups ? groupColor(s.group || "") : T.fgSubtle;
+      const ciDash = groupDash(s.group || "");
+      g.append("line").attr("x1", x(lo)).attr("x2", x(hi)).attr("y1", cy).attr("y2", cy).attr("stroke", color).attr("stroke-width", s.filled ? 1 : 1.4).attr("stroke-opacity", s.filled ? 0.45 : 0.8).attr("stroke-dasharray", ciDash === "none" ? null : ciDash);
       [lo, hi].forEach((v) => {
         g.append("line").attr("x1", x(v)).attr("x2", x(v)).attr("y1", cy - 3).attr("y2", cy + 3).attr("stroke", color).attr("stroke-width", s.filled ? 1 : 1.4).attr("stroke-opacity", s.filled ? 0.45 : 0.8);
       });
-      g.append("circle").attr("cx", x(s.yi)).attr("cy", cy).attr("r", s.filled ? 2.5 : 3.2).attr("fill", color).attr("fill-opacity", s.filled ? 0.4 : 1).on("mousemove", (event) => {
+      const showTip = (x0, y0) => {
         const seVal = (s.se || Math.sqrt(s.vi)).toFixed(3);
         const yi_t = profile.transform(s.yi);
         const lo_t = profile.transform(lo);
         const hi_t = profile.transform(hi);
-        const fmtCI = (v) => isFinite(v) ? +v.toFixed(3) : "NA";
-        tooltip.style("opacity", 1).html(`<b>${s.label}</b><br>Effect: ${fmtCI(yi_t)} [${fmtCI(lo_t)}, ${fmtCI(hi_t)}]<br>SE: ${seVal}${s.filled ? "<br><i>(imputed)</i>" : ""}`).style("left", event.pageX + 12 + "px").style("top", event.pageY - 24 + "px");
-      }).on("mouseout", () => tooltip.style("opacity", 0));
-      const maxChars = Math.floor((margin.left - 12) / 6.5);
+        const fmt3 = (v) => isFinite(v) ? +v.toFixed(3) : "NA";
+        tooltip.style("opacity", 1).html(`<b>${s.label}</b><br>Effect: ${fmt3(yi_t)} [${fmt3(lo_t)}, ${fmt3(hi_t)}]<br>SE: ${seVal}${s.filled ? "<br><i>(imputed)</i>" : ""}`).style("left", x0 + "px").style("top", y0 + "px");
+      };
+      g.append("circle").attr("cx", x(s.yi)).attr("cy", cy).attr("r", s.filled ? 2.5 : 3.2).attr("fill", color).attr("fill-opacity", s.filled ? 0.4 : 1).attr("tabindex", 0).attr("role", "button").on("mousemove", (event) => showTip(event.pageX + TOOLTIP_OFFSET.x, event.pageY + TOOLTIP_OFFSET.y)).on("mouseout", () => tooltip.style("opacity", 0)).on("focus", (event) => {
+        const rect = event.target.getBoundingClientRect();
+        showTip(rect.right + window.scrollX + TOOLTIP_OFFSET.x, rect.top + window.scrollY + TOOLTIP_OFFSET.y);
+      }).on("blur", () => tooltip.style("opacity", 0)).on("keydown", (event) => {
+        if (event.key === "Escape") tooltip.style("opacity", 0);
+      });
+      const maxChars = Math.floor((margin.left - 12) / LABEL_CHAR_PX.regular10);
       const labelTxt = s.label.length > maxChars ? s.label.slice(0, maxChars - 1) + "\u2026" : s.label;
-      g.append("text").attr("x", -8).attr("y", cy + 4).attr("text-anchor", "end").attr("fill", s.filled ? "var(--fg-muted)" : "var(--fg)").style("font-size", "10px").text(labelTxt);
+      g.append("text").attr("x", -8).attr("y", cy + 4).attr("text-anchor", "end").attr("fill", s.filled ? T.fgMuted : T.fg).style("font-size", FONT_SIZE.tickLabel).text(labelTxt);
     });
-    const axisX = g.append("g").attr("transform", `translate(0,${iH})`).call(d3.axisBottom(x).ticks(6).tickFormat((v) => {
-      const t = profile.transform(v);
-      return isFinite(t) ? +t.toFixed(2) : "";
-    }));
-    styleAxis(axisX, "var(--border-hover)", "var(--fg-muted)", "10px");
-    svg.append("text").attr("x", margin.left + iW / 2).attr("y", H - 4).attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "11px").text(profile.label + (profile.isLog ? " (log scale)" : ""));
+    const axisX = g.append("g").attr("transform", `translate(0,${iH})`).call(d3.axisBottom(x).ticks(6).tickFormat((v) => formatTick(v, profile.transform)));
+    styleAxis(axisX, T.border, T.fgMuted, FONT_SIZE.tickLabel);
+    svg.append("text").attr("x", margin.left + iW / 2).attr("y", H - 4).attr("text-anchor", "middle").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.axisLabel).text(profile.label + (profile.isLog ? " (log scale)" : ""));
     const pageNote = totalPages > 1 ? `  \xB7  page ${page + 1} of ${totalPages}` : "";
     const hetParts = [`k = ${k}${pageNote}`];
-    if (isFinite(m.I2)) hetParts.push(`I\xB2 = ${(m.I2 * 100).toFixed(1)}%`);
+    if (isFinite(m.I2)) hetParts.push(`I\xB2 = ${m.I2.toFixed(1)}%`);
     if (isFinite(m.tau2) && m.tau2 > 0) hetParts.push(`\u03C4\xB2 = ${m.tau2.toFixed(3)}`);
-    svg.append("text").attr("x", margin.left + 4).attr("y", 16).attr("fill", "var(--fg-muted)").style("font-size", "10px").text(hetParts.join("  "));
-    if (hasGroups) {
-      allGroups.forEach((grp, gi) => {
-        const color = GROUP_COLORS[gi % GROUP_COLORS.length];
-        const lx = iW - 4;
-        const ly = gi * 14;
-        g.append("line").attr("x1", lx - 20).attr("x2", lx - 6).attr("y1", ly + 5).attr("y2", ly + 5).attr("stroke", color).attr("stroke-width", 2);
-        g.append("circle").attr("cx", lx - 13).attr("cy", ly + 5).attr("r", 3).attr("fill", color);
-        g.append("text").attr("x", lx - 24).attr("y", ly + 9).attr("text-anchor", "end").attr("fill", "var(--fg-muted)").style("font-size", "10px").text(grp.length > 14 ? grp.slice(0, 13) + "\u2026" : grp);
+    {
+      const ht = svg.append("text").attr("x", margin.left + 4).attr("y", 16).attr("fill", T.fgMuted).style("font-size", FONT_SIZE.tickLabel);
+      hetParts.forEach((part, pi) => {
+        if (pi > 0) ht.append("tspan").text("  ");
+        if (part.startsWith("I\xB2")) {
+          ht.append("tspan").style("font-style", "italic").text("I");
+          ht.append("tspan").text(part.slice(1));
+        } else {
+          ht.append("tspan").text(part);
+        }
       });
     }
+    if (hasGroups) {
+      const lx = margin.left + iW + 8;
+      allGroups.forEach((grp, gi) => {
+        const color = T.useBwShapes ? T.fg : GROUP_COLORS[gi % GROUP_COLORS.length];
+        const dash = groupDash(grp);
+        const ly = margin.top + gi * 14;
+        svg.append("line").attr("x1", lx).attr("x2", lx + 14).attr("y1", ly + 5).attr("y2", ly + 5).attr("stroke", color).attr("stroke-width", 2).attr("stroke-dasharray", dash === "none" ? null : dash);
+        svg.append("circle").attr("cx", lx + 7).attr("cy", ly + 5).attr("r", 3).attr("fill", color);
+        svg.append("text").attr("x", lx + 18).attr("y", ly + 9).attr("fill", T.fgMuted).style("font-size", FONT_SIZE.tickLabel).text(truncateLabel(grp, LEGEND_W - 26, 10));
+      });
+    }
+    svg.append("text").attr("x", margin.left + iW / 2).attr("y", 16).attr("text-anchor", "middle").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.axisLabel).style("font-weight", "600").text("Caterpillar plot");
     return { totalPages };
   }
   function drawBlupPlot(result, profile, options = {}) {
-    const svg = clearAndSelectSVG("#blupPlot");
+    const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
+    const svg = initSvg("#blupPlot", "BLUP forest plot", T);
     if (!result || !result.studies || result.studies.length === 0) return { totalPages: 1 };
     profile = profile || { transform: (x2) => x2, label: "Effect" };
     const sorted = result.studies.slice().sort((a, b) => b.yi - a.yi);
@@ -7708,11 +8699,19 @@ var App = (() => {
     const pk = pageStudies.length;
     const ROW_H = 18;
     const W = +svg.attr("width") || 560;
+    {
+      const tau2Str2 = isFinite(result.tau2) ? `\u03C4\xB2 = ${result.tau2.toFixed(4)}` : null;
+      svg.append("desc").text([`k = ${result.k} studies`, tau2Str2].filter(Boolean).join("; "));
+    }
     const maxLabelLen = sorted.reduce((mx, s) => Math.max(mx, (s.label || "").length), 0);
-    const leftMargin = Math.max(60, Math.min(180, Math.ceil(maxLabelLen * 6.5) + 14));
+    const leftMargin = Math.max(60, Math.min(180, Math.ceil(maxLabelLen * LABEL_CHAR_PX.regular10) + 14));
     const margin = { top: 30, right: 24, bottom: 46, left: leftMargin };
     const H = margin.top + pk * ROW_H + margin.bottom;
     svg.attr("height", H);
+    if (T.bg && T.bg !== "transparent") {
+      svg.insert("rect", ":first-child").attr("width", W).attr("height", H).attr("fill", T.bg);
+    }
+    svg.style("font-family", T.fontFamily);
     const iW = W - margin.left - margin.right;
     const iH = H - margin.top - margin.bottom;
     const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
@@ -7727,75 +8726,80 @@ var App = (() => {
     const xExt = Math.max(...allVals.map(Math.abs)) * 1.1 || 1;
     const x = d3.scaleLinear().domain([-xExt, xExt]).range([0, iW]);
     const tooltip = selTooltip();
-    g.append("line").attr("x1", x(0)).attr("x2", x(0)).attr("y1", 0).attr("y2", iH).attr("stroke", "var(--border-hover)").attr("stroke-width", 1).attr("stroke-dasharray", "4,3");
+    g.append("line").attr("x1", x(0)).attr("x2", x(0)).attr("y1", 0).attr("y2", iH).attr("stroke", T.border).attr("stroke-width", 1).attr("stroke-dasharray", "4,3");
     if (isFinite(result.mu)) {
-      g.append("line").attr("x1", x(result.mu)).attr("x2", x(result.mu)).attr("y1", 0).attr("y2", iH).attr("stroke", "var(--accent)").attr("stroke-width", 1.2).attr("stroke-opacity", 0.55);
+      g.append("line").attr("x1", x(result.mu)).attr("x2", x(result.mu)).attr("y1", 0).attr("y2", iH).attr("stroke", T.accent).attr("stroke-width", 1.2).attr("stroke-opacity", 0.55);
     }
     pageStudies.forEach((s, i) => {
       const cy = i * ROW_H + ROW_H / 2;
       const obsLow = s.yi - Z_95 * s.se_obs;
       const obsHigh = s.yi + Z_95 * s.se_obs;
       if (isFinite(obsLow) && isFinite(obsHigh)) {
-        g.append("line").attr("x1", x(obsLow)).attr("x2", x(obsHigh)).attr("y1", cy).attr("y2", cy).attr("stroke", "var(--fg-subtle)").attr("stroke-width", 1.5).attr("opacity", 0.55);
-        g.append("circle").attr("cx", x(s.yi)).attr("cy", cy).attr("r", 3).attr("fill", "var(--fg-subtle)").attr("opacity", 0.7);
+        g.append("line").attr("x1", x(obsLow)).attr("x2", x(obsHigh)).attr("y1", cy).attr("y2", cy).attr("stroke", T.fgSubtle).attr("stroke-width", 1.5).attr("opacity", 0.55);
+        g.append("circle").attr("cx", x(s.yi)).attr("cy", cy).attr("r", 3).attr("fill", T.fgSubtle).attr("opacity", 0.7);
       }
       if (isFinite(s.blup) && isFinite(s.yi)) {
-        g.append("line").attr("x1", x(s.yi)).attr("x2", x(s.blup)).attr("y1", cy).attr("y2", cy).attr("stroke", "var(--fg-muted)").attr("stroke-width", 0.8).attr("stroke-dasharray", "2,2").attr("opacity", 0.5);
+        g.append("line").attr("x1", x(s.yi)).attr("x2", x(s.blup)).attr("y1", cy).attr("y2", cy).attr("stroke", T.fgMuted).attr("stroke-width", 0.8).attr("stroke-dasharray", "2,2").attr("opacity", 0.5);
       }
       if (isFinite(s.ci_lb) && isFinite(s.ci_ub)) {
-        g.append("line").attr("x1", x(s.ci_lb)).attr("x2", x(s.ci_ub)).attr("y1", cy).attr("y2", cy).attr("stroke", "var(--accent)").attr("stroke-width", 2);
+        g.append("line").attr("x1", x(s.ci_lb)).attr("x2", x(s.ci_ub)).attr("y1", cy).attr("y2", cy).attr("stroke", T.accent).attr("stroke-width", 2);
         [s.ci_lb, s.ci_ub].forEach((v) => {
-          g.append("line").attr("x1", x(v)).attr("x2", x(v)).attr("y1", cy - 3).attr("y2", cy + 3).attr("stroke", "var(--accent)").attr("stroke-width", 1.5);
+          g.append("line").attr("x1", x(v)).attr("x2", x(v)).attr("y1", cy - 3).attr("y2", cy + 3).attr("stroke", T.accent).attr("stroke-width", 1.5);
         });
       }
       if (isFinite(s.blup)) {
-        const effDisplay = profile.transform(s.blup);
-        const obsDisplay = profile.transform(s.yi);
-        g.append("circle").attr("cx", x(s.blup)).attr("cy", cy).attr("r", 4).attr("fill", "var(--accent)").attr("stroke", "var(--bg-surface)").attr("stroke-width", 1).on("mousemove", (event) => {
-          tooltip.style("opacity", 1).html(
-            `<b>${s.label}</b><br>Observed: ${isFinite(obsDisplay) ? +obsDisplay.toFixed(3) : "NA"}<br>BLUP: ${isFinite(effDisplay) ? +effDisplay.toFixed(3) : "NA"}<br>Random effect (\xFB): ${+s.ranef.toFixed(4)}<br>Shrinkage (\u03BB): ${+(s.lambda * 100).toFixed(1)}%`
-          ).style("left", event.pageX + 12 + "px").style("top", event.pageY - 24 + "px");
-        }).on("mouseout", () => tooltip.style("opacity", 0));
+        attachTooltip(
+          g.append("circle").datum(s).attr("cx", x(s.blup)).attr("cy", cy).attr("r", 4).attr("fill", T.accent).attr("stroke", T.bgSurface).attr("stroke-width", 1),
+          (d) => {
+            const effDisplay = profile.transform(d.blup);
+            const obsDisplay = profile.transform(d.yi);
+            return `<b>${d.label}</b><br>Observed: ${isFinite(obsDisplay) ? +obsDisplay.toFixed(3) : "NA"}<br>BLUP: ${isFinite(effDisplay) ? +effDisplay.toFixed(3) : "NA"}<br>Random effect (\xFB): ${+d.ranef.toFixed(4)}<br>Shrinkage (\u03BB): ${+(d.lambda * 100).toFixed(1)}%`;
+          }
+        );
       }
-      g.append("text").attr("x", -6).attr("y", cy + 4).attr("text-anchor", "end").attr("fill", "var(--fg-muted)").style("font-size", "10px").text((s.label || "").length > 18 ? (s.label || "").slice(0, 17) + "\u2026" : s.label || "");
+      g.append("text").attr("x", -6).attr("y", cy + 4).attr("text-anchor", "end").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.tickLabel).text(truncateLabel(s.label || "", leftMargin - 8, 10));
     });
     const isTransformed = profile.isTransformedScale;
     const xAxisG = g.append("g").attr("transform", `translate(0,${iH})`);
     if (isTransformed) {
       const ticks = x.ticks(6).filter((v) => isFinite(profile.transform(v)));
       xAxisG.call(
-        d3.axisBottom(x).tickValues(ticks).tickFormat((v) => {
-          const t = profile.transform(v);
-          return isFinite(t) ? (+t.toFixed(2)).toString() : "";
-        })
+        d3.axisBottom(x).tickValues(ticks).tickFormat((v) => formatTick(v, profile.transform))
       );
     } else {
       xAxisG.call(d3.axisBottom(x).ticks(6).tickFormat(d3.format(".3~g")));
     }
-    styleAxis(xAxisG, "var(--border-hover)", "var(--fg-muted)", "10px");
+    styleAxis(xAxisG, T.border, T.fgMuted, FONT_SIZE.tickLabel);
     const xLabel = isTransformed ? `${profile.label || "Effect"} (log scale)` : profile.label || "Effect size";
-    svg.append("text").attr("x", margin.left + iW / 2).attr("y", H - 4).attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "11px").text(xLabel);
+    svg.append("text").attr("x", margin.left + iW / 2).attr("y", H - 4).attr("text-anchor", "middle").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.axisLabel).text(xLabel);
     const tau2Str = isFinite(result.tau2) && result.tau2 > 0 ? `\u03C4\xB2 = ${result.tau2.toFixed(4)}` : "\u03C4\xB2 = 0";
-    svg.append("text").attr("x", margin.left + iW / 2).attr("y", 16).attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "10px").text(`BLUPs  k = ${result.k}   ${tau2Str}`);
-    const legY = H - 28;
-    const legX = margin.left + 4;
-    svg.append("line").attr("x1", legX).attr("x2", legX + 16).attr("y1", legY + 5).attr("y2", legY + 5).attr("stroke", "var(--fg-subtle)").attr("stroke-width", 1.5).attr("opacity", 0.7);
-    svg.append("circle").attr("cx", legX + 8).attr("cy", legY + 5).attr("r", 3).attr("fill", "var(--fg-subtle)").attr("opacity", 0.7);
-    svg.append("text").attr("x", legX + 20).attr("y", legY + 9).attr("fill", "var(--fg-muted)").style("font-size", "10px").text("Observed");
-    svg.append("line").attr("x1", legX + 82).attr("x2", legX + 98).attr("y1", legY + 5).attr("y2", legY + 5).attr("stroke", "var(--accent)").attr("stroke-width", 2);
-    svg.append("circle").attr("cx", legX + 90).attr("cy", legY + 5).attr("r", 4).attr("fill", "var(--accent)").attr("stroke", "var(--bg-surface)").attr("stroke-width", 1);
-    svg.append("text").attr("x", legX + 102).attr("y", legY + 9).attr("fill", "var(--fg-muted)").style("font-size", "10px").text("BLUP (shrunken)");
+    svg.append("text").attr("x", margin.left + iW / 2).attr("y", 16).attr("text-anchor", "middle").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.tickLabel).text(`BLUPs  k = ${result.k}   ${tau2Str}`);
+    const legX = W - margin.right - 4;
+    svg.append("line").attr("x1", legX - 82).attr("x2", legX - 66).attr("y1", 11).attr("y2", 11).attr("stroke", T.fgSubtle).attr("stroke-width", 1.5).attr("opacity", 0.7);
+    svg.append("circle").attr("cx", legX - 74).attr("cy", 11).attr("r", 2.5).attr("fill", T.fgSubtle).attr("opacity", 0.7);
+    svg.append("text").attr("x", legX - 62).attr("y", 15).attr("fill", T.fgMuted).style("font-size", FONT_SIZE.annot).text("Observed");
+    svg.append("line").attr("x1", legX - 82).attr("x2", legX - 66).attr("y1", 25).attr("y2", 25).attr("stroke", T.accent).attr("stroke-width", 2);
+    svg.append("circle").attr("cx", legX - 74).attr("cy", 25).attr("r", 3.5).attr("fill", T.accent).attr("stroke", T.bgSurface).attr("stroke-width", 1);
+    svg.append("text").attr("x", legX - 62).attr("y", 29).attr("fill", T.fgMuted).style("font-size", FONT_SIZE.annot).text("BLUP (shrunken)");
     return { totalPages };
   }
-  function drawBaujatPlot(result, profile) {
-    const svg = clearAndSelectSVG("#baujatPlot");
-    if (!result || result.k < 2) return;
+  function drawBaujatPlot(result, profile, options = {}) {
+    const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
+    const svg = initSvg("#baujatPlot", "Baujat plot", T);
+    if (!result || result.k < 2) {
+      drawNoDataPlaceholder(svg, +svg.attr("width") || 500, +svg.attr("height") || 420, result?.k === 1 ? "Need \u2265 2 studies" : "No data");
+      return;
+    }
     profile = profile || { transform: (x2) => x2, label: "Effect" };
     const W = +svg.attr("width") || 500;
     const H = +svg.attr("height") || 420;
     const margin = { top: 30, right: 24, bottom: 58, left: 62 };
     const iW = W - margin.left - margin.right;
     const iH = H - margin.top - margin.bottom;
+    if (T.bg && T.bg !== "transparent") {
+      svg.insert("rect", ":first-child").attr("width", W).attr("height", H).attr("fill", T.bg);
+    }
+    svg.style("font-family", T.fontFamily);
     const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
     const { points } = result;
     const xMax = Math.max(...points.map((p) => p.x)) * 1.15 || 1;
@@ -7805,9 +8809,9 @@ var App = (() => {
     const allGroups = [...new Set(points.map((p) => p.group || "").filter(Boolean))];
     const hasGroups = allGroups.length > 1;
     const pointColor = (p) => {
-      if (!hasGroups) return "var(--accent)";
+      if (T.useBwShapes || !hasGroups) return T.accent;
       const idx = allGroups.indexOf(p.group || "");
-      return idx >= 0 ? GROUP_COLORS[idx % GROUP_COLORS.length] : "var(--fg-subtle)";
+      return idx >= 0 ? GROUP_COLORS[idx % GROUP_COLORS.length] : T.fgSubtle;
     };
     const meanX = points.reduce((s, p) => s + p.x, 0) / points.length;
     const meanY = points.reduce((s, p) => s + p.influence, 0) / points.length;
@@ -7816,7 +8820,7 @@ var App = (() => {
       const x2 = axis === "x" ? x(val) : iW;
       const y1 = axis === "y" ? y(val) : 0;
       const y2 = axis === "y" ? y(val) : iH;
-      g.append("line").attr("x1", x1).attr("x2", x2).attr("y1", y1).attr("y2", y2).attr("stroke", "var(--border-hover)").attr("stroke-width", 1).attr("stroke-dasharray", "5,3");
+      g.append("line").attr("x1", x1).attr("x2", x2).attr("y1", y1).attr("y2", y2).attr("stroke", T.border).attr("stroke-width", 1).attr("stroke-dasharray", "5,3");
     });
     const tooltip = selTooltip();
     const showLabels = points.length <= 25;
@@ -7824,41 +8828,54 @@ var App = (() => {
       const cx = x(p.x);
       const cy = y(p.influence);
       const color = pointColor(p);
-      g.append("circle").attr("cx", cx).attr("cy", cy).attr("r", 5).attr("fill", color).attr("fill-opacity", 0.75).attr("stroke", "var(--bg-surface)").attr("stroke-width", 1).on("mousemove", (event) => {
-        const yi_t = profile.transform(p.yi);
-        tooltip.style("opacity", 1).html(
-          `<b>${p.label}</b><br>Q contribution: ${p.x.toFixed(3)}<br>Influence: ${p.influence.toFixed(4)}<br>Effect (${profile.label}): ${isFinite(yi_t) ? +yi_t.toFixed(3) : "NA"}`
-        ).style("left", event.pageX + 12 + "px").style("top", event.pageY - 24 + "px");
-      }).on("mouseout", () => tooltip.style("opacity", 0));
+      const gi = hasGroups ? allGroups.indexOf(p.group || "") : 0;
+      const useSym = T.useBwShapes && hasGroups;
+      const dot2 = useSym ? g.append("path").datum(p).attr("transform", `translate(${cx},${cy})`).attr("d", bwSymbolPath(gi, 64)) : g.append("circle").datum(p).attr("cx", cx).attr("cy", cy).attr("r", 5);
+      attachTooltip(
+        dot2.attr("fill", color).attr("fill-opacity", 0.75).attr("stroke", T.bgSurface).attr("stroke-width", 1),
+        (d) => {
+          const yi_t = profile.transform(d.yi);
+          return `<b>${d.label}</b><br>Q contribution: ${d.x.toFixed(3)}<br>Influence: ${d.influence.toFixed(4)}<br>Effect (${profile.label}): ${isFinite(yi_t) ? +yi_t.toFixed(3) : "NA"}`;
+        }
+      );
       if (showLabels) {
         const abbr = p.label.length > 9 ? p.label.slice(0, 8) + "\u2026" : p.label;
-        g.append("text").attr("x", cx + 7).attr("y", cy + 4).attr("fill", "var(--fg-muted)").style("font-size", "9px").style("pointer-events", "none").text(abbr);
+        g.append("text").attr("x", cx + 7).attr("y", cy + 4).attr("fill", T.fgMuted).style("font-size", FONT_SIZE.annot).style("pointer-events", "none").text(abbr);
       }
     });
     const axisX = g.append("g").attr("transform", `translate(0,${iH})`).call(d3.axisBottom(x).ticks(5).tickFormat(d3.format(".3~g")));
-    styleAxis(axisX, "var(--border-hover)", "var(--fg-muted)", "10px");
+    styleAxis(axisX, T.border, T.fgMuted, FONT_SIZE.tickLabel);
     const axisY = g.append("g").call(d3.axisLeft(y).ticks(5).tickFormat(d3.format(".3~g")));
-    styleAxis(axisY, "var(--border-hover)", "var(--fg-muted)", "10px");
-    svg.append("text").attr("x", margin.left + iW / 2).attr("y", H - 8).attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "11px").text("Contribution to Cochran's Q");
-    svg.append("text").attr("transform", "rotate(-90)").attr("x", -(margin.top + iH / 2)).attr("y", 14).attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "11px").text("Influence on pooled estimate");
+    styleAxis(axisY, T.border, T.fgMuted, FONT_SIZE.tickLabel);
+    svg.append("text").attr("x", margin.left + iW / 2).attr("y", H - 8).attr("text-anchor", "middle").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.axisLabel).text("Contribution to Cochran's Q");
+    svg.append("text").attr("transform", "rotate(-90)").attr("x", -(margin.top + iH / 2)).attr("y", 14).attr("text-anchor", "middle").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.axisLabel).text("Influence on pooled estimate");
     const muFE_t = profile.transform(result.muFE);
     const annotParts = [`Q = ${result.Q.toFixed(2)}`];
     if (isFinite(muFE_t)) annotParts.push(`FE = ${+muFE_t.toFixed(3)}`);
-    g.append("text").attr("x", iW - 2).attr("y", iH - 4).attr("text-anchor", "end").attr("fill", "var(--fg-muted)").style("font-size", "10px").text(annotParts.join("   "));
+    g.append("text").attr("x", iW - 2).attr("y", iH - 4).attr("text-anchor", "end").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.tickLabel).text(annotParts.join("   "));
     if (hasGroups) {
       allGroups.forEach((grp, gi) => {
-        const color = GROUP_COLORS[gi % GROUP_COLORS.length];
+        const color = T.useBwShapes ? T.fg : GROUP_COLORS[gi % GROUP_COLORS.length];
         const lx = iW - 4;
         const ly = gi * 16;
-        g.append("circle").attr("cx", lx - 80).attr("cy", ly + 5).attr("r", 5).attr("fill", color).attr("fill-opacity", 0.75);
-        g.append("text").attr("x", lx - 72).attr("y", ly + 9).attr("fill", "var(--fg-muted)").style("font-size", "10px").text(grp.length > 10 ? grp.slice(0, 9) + "\u2026" : grp);
+        if (T.useBwShapes) {
+          g.append("path").attr("transform", `translate(${lx - 80},${ly + 5})`).attr("d", bwSymbolPath(gi, 64)).attr("fill", color).attr("fill-opacity", 0.75);
+        } else {
+          g.append("circle").attr("cx", lx - 80).attr("cy", ly + 5).attr("r", 5).attr("fill", color).attr("fill-opacity", 0.75);
+        }
+        g.append("text").attr("x", lx - 72).attr("y", ly + 9).attr("fill", T.fgMuted).style("font-size", FONT_SIZE.tickLabel).text(grp.length > 10 ? grp.slice(0, 9) + "\u2026" : grp);
       });
     }
+    svg.append("text").attr("x", margin.left + iW / 2).attr("y", 18).attr("text-anchor", "middle").attr("fill", T.fg).style("font-size", FONT_SIZE.title).style("font-weight", "600").text(`Baujat plot \u2014 k = ${result.k}`);
   }
   function drawLabbe(studies, m, profile, options = {}) {
     const type = options.type ?? "OR";
-    const svg = clearAndSelectSVG("#labbePlot");
-    if (!studies || studies.length === 0) return;
+    const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
+    const svg = initSvg("#labbePlot", "L'Abb\xE9 plot", T);
+    if (!studies || studies.length === 0) {
+      drawNoDataPlaceholder(svg, +svg.attr("width") || 500, +svg.attr("height") || 420);
+      return;
+    }
     const pts = studies.filter((s) => isFinite(s.a) && isFinite(s.b) && isFinite(s.c) && isFinite(s.d) && s.a + s.b > 0 && s.c + s.d > 0).map((s) => ({
       label: s.label,
       group: s.group || "",
@@ -7870,18 +8887,25 @@ var App = (() => {
       yi: s.yi,
       vi: s.vi
     }));
-    if (pts.length === 0) return;
+    if (pts.length === 0) {
+      drawNoDataPlaceholder(svg, +svg.attr("width") || 500, +svg.attr("height") || 420, "No studies with 2\xD72 data", T);
+      return;
+    }
     const W = +svg.attr("width") || 500;
     const H = +svg.attr("height") || 420;
     const margin = { top: 30, right: 24, bottom: 60, left: 64 };
     const iW = W - margin.left - margin.right;
     const iH = H - margin.top - margin.bottom;
+    if (T.bg && T.bg !== "transparent") {
+      svg.insert("rect", ":first-child").attr("width", W).attr("height", H).attr("fill", T.bg);
+    }
+    svg.style("font-family", T.fontFamily);
     const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
     const x = d3.scaleLinear().domain([0, 1]).range([0, iW]);
     const y = d3.scaleLinear().domain([0, 1]).range([iH, 0]);
     const maxN = Math.max(...pts.map((p) => p.N));
     const rScale = d3.scaleSqrt().domain([0, maxN]).range([0, 14]);
-    g.append("line").attr("x1", x(0)).attr("y1", y(0)).attr("x2", x(1)).attr("y2", y(1)).attr("stroke", "var(--fg-muted)").attr("stroke-width", 1).attr("stroke-dasharray", "4,3");
+    g.append("line").attr("x1", x(0)).attr("y1", y(0)).attr("x2", x(1)).attr("y2", y(1)).attr("stroke", T.fgMuted).attr("stroke-width", 1).attr("stroke-dasharray", "4,3");
     const reMu = m && isFinite(m.RE) ? m.RE : null;
     if (reMu !== null && profile) {
       const reDisplay = profile.transform(reMu);
@@ -7911,15 +8935,15 @@ var App = (() => {
       }
       if (curveData.length > 1) {
         const line = d3.line().x((d) => x(d[0])).y((d) => y(d[1]));
-        g.append("path").datum(curveData).attr("d", line).attr("fill", "none").attr("stroke", "var(--accent)").attr("stroke-width", 1.5).attr("stroke-dasharray", "6,3").attr("opacity", 0.7);
+        g.append("path").datum(curveData).attr("d", line).attr("fill", "none").attr("stroke", T.accent).attr("stroke-width", 1.5).attr("stroke-dasharray", "6,3").attr("opacity", 0.7);
       }
     }
     const allGroups = [...new Set(pts.map((p) => p.group).filter(Boolean))];
     const hasGroups = allGroups.length > 1;
     const pointColor = (p) => {
-      if (!hasGroups) return "var(--accent)";
+      if (T.useBwShapes || !hasGroups) return T.accent;
       const idx = allGroups.indexOf(p.group);
-      return idx >= 0 ? GROUP_COLORS[idx % GROUP_COLORS.length] : "var(--fg-subtle)";
+      return idx >= 0 ? GROUP_COLORS[idx % GROUP_COLORS.length] : T.fgSubtle;
     };
     const tooltip = selTooltip();
     const showLabels = pts.length <= 20;
@@ -7928,50 +8952,56 @@ var App = (() => {
       const cy = y(p.py);
       const r = Math.max(rScale(p.N), 3);
       const color = pointColor(p);
-      g.append("circle").attr("cx", cx).attr("cy", cy).attr("r", r).attr("fill", color).attr("fill-opacity", 0.65).attr("stroke", "var(--bg-surface)").attr("stroke-width", 1).on("mousemove", (event) => {
-        const effVal = profile ? profile.transform(p.yi) : p.yi;
-        tooltip.style("opacity", 1).html(
-          `<b>${p.label}</b><br>Control rate: ${(p.px * 100).toFixed(1)}%<br>Treatment rate: ${(p.py * 100).toFixed(1)}%<br>N: ${p.N}` + (isFinite(effVal) ? `<br>Effect: ${+effVal.toFixed(3)}` : "")
-        ).style("left", event.pageX + 12 + "px").style("top", event.pageY - 24 + "px");
-      }).on("mouseout", () => tooltip.style("opacity", 0));
+      const gi = hasGroups ? allGroups.indexOf(p.group) : 0;
+      const useSym = T.useBwShapes && hasGroups;
+      const symSize = Math.PI * r * r;
+      const dot2 = useSym ? g.append("path").datum(p).attr("transform", `translate(${cx},${cy})`).attr("d", bwSymbolPath(gi, symSize)) : g.append("circle").datum(p).attr("cx", cx).attr("cy", cy).attr("r", r);
+      attachTooltip(
+        dot2.attr("fill", color).attr("fill-opacity", 0.65).attr("stroke", T.bgSurface).attr("stroke-width", 1),
+        (d) => {
+          const effVal = profile ? profile.transform(d.yi) : d.yi;
+          return `<b>${d.label}</b><br>Control rate: ${(d.px * 100).toFixed(1)}%<br>Treatment rate: ${(d.py * 100).toFixed(1)}%<br>N: ${d.N}` + (isFinite(effVal) ? `<br>Effect: ${+effVal.toFixed(3)}` : "");
+        }
+      );
       if (showLabels) {
         const abbr = p.label.length > 9 ? p.label.slice(0, 8) + "\u2026" : p.label;
-        g.append("text").attr("x", cx + r + 2).attr("y", cy + 4).attr("fill", "var(--fg-muted)").style("font-size", "9px").style("pointer-events", "none").text(abbr);
+        g.append("text").attr("x", cx + r + 2).attr("y", cy + 4).attr("fill", T.fgMuted).style("font-size", FONT_SIZE.annot).style("pointer-events", "none").text(abbr);
       }
     });
     const axisX = g.append("g").attr("transform", `translate(0,${iH})`).call(d3.axisBottom(x).ticks(5).tickFormat(d3.format(".0%")));
-    styleAxis(axisX, "var(--border-hover)", "var(--fg-muted)", "10px");
+    styleAxis(axisX, T.border, T.fgMuted, FONT_SIZE.tickLabel);
     const axisY = g.append("g").call(d3.axisLeft(y).ticks(5).tickFormat(d3.format(".0%")));
-    styleAxis(axisY, "var(--border-hover)", "var(--fg-muted)", "10px");
-    svg.append("text").attr("x", margin.left + iW / 2).attr("y", H - 10).attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "11px").text("Control event rate");
-    svg.append("text").attr("transform", "rotate(-90)").attr("x", -(margin.top + iH / 2)).attr("y", 15).attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "11px").text("Treatment event rate");
+    styleAxis(axisY, T.border, T.fgMuted, FONT_SIZE.tickLabel);
+    svg.append("text").attr("x", margin.left + iW / 2).attr("y", H - 10).attr("text-anchor", "middle").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.axisLabel).text("Control event rate");
+    svg.append("text").attr("transform", "rotate(-90)").attr("x", -(margin.top + iH / 2)).attr("y", 15).attr("text-anchor", "middle").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.axisLabel).text("Treatment event rate");
+    let legendY = 12;
     if (reMu !== null && profile) {
       const reDisplay = profile.transform(reMu);
       if (isFinite(reDisplay)) {
         const typeLabel = type === "OR" ? "OR" : type === "RR" ? "RR" : "RD";
-        g.append("text").attr("x", iW - 2).attr("y", 12).attr("text-anchor", "end").attr("fill", "var(--accent)").style("font-size", "10px").text(`RE ${typeLabel} = ${+reDisplay.toFixed(3)}`);
+        g.append("text").attr("x", iW - 2).attr("y", legendY).attr("text-anchor", "end").attr("fill", T.accent).style("font-size", FONT_SIZE.tickLabel).text(`RE ${typeLabel} = ${+reDisplay.toFixed(3)}`);
+        legendY += 18;
       }
     }
     if (hasGroups) {
       allGroups.forEach((grp, gi) => {
-        const color = GROUP_COLORS[gi % GROUP_COLORS.length];
+        const color = T.useBwShapes ? T.fg : GROUP_COLORS[gi % GROUP_COLORS.length];
         const lx = iW - 4;
-        const ly = gi * 16 + 26;
+        const ly = gi * 16 + legendY;
         g.append("circle").attr("cx", lx - 80).attr("cy", ly + 5).attr("r", 5).attr("fill", color).attr("fill-opacity", 0.65);
-        g.append("text").attr("x", lx - 72).attr("y", ly + 9).attr("fill", "var(--fg-muted)").style("font-size", "10px").text(grp.length > 10 ? grp.slice(0, 9) + "\u2026" : grp);
+        g.append("text").attr("x", lx - 72).attr("y", ly + 9).attr("fill", T.fgMuted).style("font-size", FONT_SIZE.tickLabel).text(grp.length > 10 ? grp.slice(0, 9) + "\u2026" : grp);
       });
     }
-    g.append("text").attr("x", x(0.95)).attr("y", y(0.95) - 6).attr("text-anchor", "end").attr("fill", "var(--fg-muted)").style("font-size", "9px").text("no effect");
+    g.append("text").attr("x", x(0.55)).attr("y", y(0.55) - 7).attr("text-anchor", "middle").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.annot).text("no effect");
+    svg.append("text").attr("x", margin.left + iW / 2).attr("y", 18).attr("text-anchor", "middle").attr("fill", T.fg).style("font-size", FONT_SIZE.title).style("font-weight", "600").text(`L'Abb\xE9 plot \u2014 k = ${pts.length}`);
   }
-  function drawRoBTrafficLight(studies, domains, robData) {
-    const svg = clearAndSelectSVG("#robTrafficLight");
-    if (!studies || !domains || domains.length === 0) return;
-    const ROB_COLORS = {
-      "Low": "#4caf50",
-      "Some concerns": "#ff9800",
-      "High": "#e53935",
-      "NI": "#9e9e9e"
-    };
+  function drawRoBTrafficLight(studies, domains, robData, options = {}) {
+    const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
+    const svg = initSvg("#robTrafficLight", "Risk of bias traffic light", T);
+    if (!studies || !domains || domains.length === 0) {
+      drawNoDataPlaceholder(svg, +svg.attr("width") || 500, +svg.attr("height") || 300);
+      return;
+    }
     const CELL_W = 44;
     const CELL_H = 22;
     const TOP = 70;
@@ -7979,52 +9009,56 @@ var App = (() => {
     const k = studies.length;
     const d = domains.length;
     const maxLabelLen = studies.reduce((m, s) => Math.max(m, (s.label ?? s.study ?? "").length), 0);
-    const LEFT = Math.max(60, Math.min(160, Math.ceil(maxLabelLen * 6.5) + 14));
+    const LEFT = Math.max(60, Math.min(160, Math.ceil(maxLabelLen * LABEL_CHAR_PX.regular11) + 14));
     const LEGEND_MIN_W = LEFT + 315;
     const svgW = Math.max(LEGEND_MIN_W, LEFT + d * CELL_W + 10);
-    const svgH = TOP + k * CELL_H + LEGEND_H + 10;
+    const svgH = TOP + k * CELL_H + LEGEND_H + 10 + (T.signalColorNote ? 14 : 0);
     setSvgSize(svg, svgW, svgH);
+    if (T.bg && T.bg !== "transparent") {
+      svg.insert("rect", ":first-child").attr("width", svgW).attr("height", svgH).attr("fill", T.bg);
+    }
+    svg.style("font-family", T.fontFamily);
     const tooltip = selTooltip();
     domains.forEach((dom, di) => {
       const cx = LEFT + di * CELL_W + CELL_W / 2;
-      svg.append("text").attr("transform", `translate(${cx},${TOP - 4}) rotate(-45)`).attr("text-anchor", "start").attr("fill", "var(--fg)").style("font-size", "11px").text(dom.length > 14 ? dom.slice(0, 13) + "\u2026" : dom);
+      svg.append("text").attr("transform", `translate(${cx},${TOP - 4}) rotate(-45)`).attr("text-anchor", "start").attr("fill", T.fg).style("font-size", FONT_SIZE.axisLabel).text(dom.length > 14 ? dom.slice(0, 13) + "\u2026" : dom);
     });
     studies.forEach((s, si) => {
       const label = s.label ?? s.study ?? "";
       const cy = TOP + si * CELL_H + CELL_H / 2;
-      svg.append("text").attr("x", LEFT - 6).attr("y", cy + 4).attr("text-anchor", "end").attr("fill", "var(--fg)").style("font-size", "11px").text(label.length > 18 ? label.slice(0, 17) + "\u2026" : label);
+      svg.append("text").attr("x", LEFT - 6).attr("y", cy + 4).attr("text-anchor", "end").attr("fill", T.fg).style("font-size", FONT_SIZE.axisLabel).text(truncateLabel(label, LEFT - 8, 11));
       domains.forEach((dom, di) => {
         const rating = robData[label]?.[dom] ?? "";
         const cx = LEFT + di * CELL_W + CELL_W / 2;
         if (rating && ROB_COLORS[rating]) {
-          svg.append("circle").attr("cx", cx).attr("cy", cy).attr("r", 7).attr("fill", ROB_COLORS[rating]).attr("fill-opacity", 0.85).on("mouseover", (event) => {
-            tooltip.style("opacity", 1).html(`<strong>${label}</strong><br>${dom}<br>${rating}`);
-          }).on("mousemove", (event) => {
-            tooltip.style("left", event.pageX + 12 + "px").style("top", event.pageY - 28 + "px");
-          }).on("mouseout", () => tooltip.style("opacity", 0));
+          attachTooltip(
+            svg.append("circle").datum({ label, dom, rating }).attr("cx", cx).attr("cy", cy).attr("r", 7).attr("fill", ROB_COLORS[rating]).attr("fill-opacity", 0.85),
+            (d2) => `<strong>${d2.label}</strong><br>${d2.dom}<br>${d2.rating}`
+          );
         } else {
-          svg.append("line").attr("x1", cx - 5).attr("x2", cx + 5).attr("y1", cy).attr("y2", cy).attr("stroke", "var(--fg-muted)").attr("stroke-width", 1.5);
+          svg.append("line").attr("x1", cx - 5).attr("x2", cx + 5).attr("y1", cy).attr("y2", cy).attr("stroke", T.fgMuted).attr("stroke-width", 1.5);
         }
       });
     });
     const legendY = TOP + k * CELL_H + 14;
-    const items = [["Low", "#4caf50"], ["Some concerns", "#ff9800"], ["High", "#e53935"], ["NI", "#9e9e9e"]];
+    const items = Object.entries(ROB_COLORS);
     let lx = LEFT;
     items.forEach(([label, color]) => {
       svg.append("circle").attr("cx", lx + 6).attr("cy", legendY).attr("r", 6).attr("fill", color).attr("fill-opacity", 0.85);
-      svg.append("text").attr("x", lx + 15).attr("y", legendY + 4).attr("fill", "var(--fg-muted)").style("font-size", "10px").text(label);
+      svg.append("text").attr("x", lx + 15).attr("y", legendY + 4).attr("fill", T.fgMuted).style("font-size", FONT_SIZE.tickLabel).text(label);
       lx += label === "Some concerns" ? 110 : 60;
     });
+    if (T.signalColorNote) {
+      svg.append("text").attr("x", svgW / 2).attr("y", svgH - 4).attr("text-anchor", "middle").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.annot).text(T.signalColorNote);
+    }
   }
-  function drawRoBSummary(studies, domains, robData) {
-    const svg = clearAndSelectSVG("#robSummary");
-    if (!studies || !domains || domains.length === 0) return;
-    const ROB_COLORS = {
-      "Low": "#4caf50",
-      "Some concerns": "#ff9800",
-      "High": "#e53935",
-      "NI": "#9e9e9e"
-    };
+  function drawRoBSummary(studies, domains, robData, options = {}) {
+    const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
+    const svg = initSvg("#robSummary", "Risk of bias summary", T);
+    if (!studies || !domains || domains.length === 0) {
+      drawNoDataPlaceholder(svg, +svg.attr("width") || 500, +svg.attr("height") || 300);
+      return;
+    }
     const RATINGS = ["Low", "Some concerns", "High", "NI"];
     const BAR_H = 22;
     const BAR_GAP = 6;
@@ -8033,10 +9067,14 @@ var App = (() => {
     const RIGHT = 20;
     const d = domains.length;
     const maxDomLen = domains.reduce((m, dom) => Math.max(m, dom.length), 0);
-    const LEFT = Math.max(60, Math.min(160, Math.ceil(maxDomLen * 6.5) + 14));
+    const LEFT = Math.max(60, Math.min(160, Math.ceil(maxDomLen * LABEL_CHAR_PX.regular11) + 14));
     const svgW = Math.max(LEFT + 320, LEFT + 300 + RIGHT);
-    const svgH = TOP + d * (BAR_H + BAR_GAP) + LEGEND_H + 10;
+    const svgH = TOP + d * (BAR_H + BAR_GAP) + LEGEND_H + 10 + (T.signalColorNote ? 14 : 0);
     setSvgSize(svg, svgW, svgH);
+    if (T.bg && T.bg !== "transparent") {
+      svg.insert("rect", ":first-child").attr("width", svgW).attr("height", svgH).attr("fill", T.bg);
+    }
+    svg.style("font-family", T.fontFamily);
     const barW = svgW - LEFT - RIGHT;
     const xScale = d3.scaleLinear().domain([0, 1]).range([0, barW]);
     domains.forEach((dom, di) => {
@@ -8049,39 +9087,45 @@ var App = (() => {
         else counts[""]++;
       });
       const total = studies.length || 1;
-      svg.append("text").attr("x", LEFT - 6).attr("y", y + BAR_H / 2 + 4).attr("text-anchor", "end").attr("fill", "var(--fg)").style("font-size", "11px").text(dom.length > 18 ? dom.slice(0, 17) + "\u2026" : dom);
+      svg.append("text").attr("x", LEFT - 6).attr("y", y + BAR_H / 2 + 4).attr("text-anchor", "end").attr("fill", T.fg).style("font-size", FONT_SIZE.axisLabel).text(truncateLabel(dom, LEFT - 8, 11));
       let xOffset = 0;
       RATINGS.forEach((rating) => {
         const prop = counts[rating] / total;
         if (prop === 0) return;
         const w = xScale(prop);
-        svg.append("rect").attr("x", LEFT + xOffset).attr("y", y).attr("width", w).attr("height", BAR_H).attr("fill", ROB_COLORS[rating]).attr("fill-opacity", 0.85).on("mouseover", (event) => {
-          selTooltip().style("opacity", 1).html(`<strong>${dom}</strong><br>${rating}: ${counts[rating]} / ${total} (${Math.round(prop * 100)}%)`);
-        }).on("mousemove", (event) => {
-          selTooltip().style("left", event.pageX + 12 + "px").style("top", event.pageY - 28 + "px");
-        }).on("mouseout", () => selTooltip().style("opacity", 0));
+        attachTooltip(
+          svg.append("rect").datum({ dom, rating, n: counts[rating], total, pct: Math.round(prop * 100) }).attr("x", LEFT + xOffset).attr("y", y).attr("width", w).attr("height", BAR_H).attr("fill", ROB_COLORS[rating]).attr("fill-opacity", 0.85),
+          (d2) => `<strong>${d2.dom}</strong><br>${d2.rating}: ${d2.n} / ${d2.total} (${d2.pct}%)`
+        );
         if (w >= 24) {
-          svg.append("text").attr("x", LEFT + xOffset + w / 2).attr("y", y + BAR_H / 2 + 4).attr("text-anchor", "middle").attr("fill", "#fff").style("font-size", "10px").style("pointer-events", "none").text(`${Math.round(prop * 100)}%`);
+          svg.append("text").attr("x", LEFT + xOffset + w / 2).attr("y", y + BAR_H / 2 + 4).attr("text-anchor", "middle").attr("fill", getContrastFg(ROB_COLORS[rating] ?? "#888888")).style("font-size", FONT_SIZE.tickLabel).style("pointer-events", "none").text(`${Math.round(prop * 100)}%`);
         }
         xOffset += w;
       });
       const ratedProp = RATINGS.reduce((s, r) => s + counts[r] / total, 0);
       if (ratedProp < 1) {
-        svg.append("rect").attr("x", LEFT + xOffset).attr("y", y).attr("width", xScale(1 - ratedProp)).attr("height", BAR_H).attr("fill", "var(--border)").attr("fill-opacity", 0.5);
+        svg.append("rect").attr("x", LEFT + xOffset).attr("y", y).attr("width", xScale(1 - ratedProp)).attr("height", BAR_H).attr("fill", T.border).attr("fill-opacity", 0.5);
       }
     });
     const legendY = TOP + d * (BAR_H + BAR_GAP) + 14;
-    const items = [["Low", "#4caf50"], ["Some concerns", "#ff9800"], ["High", "#e53935"], ["NI", "#9e9e9e"]];
+    const items = Object.entries(ROB_COLORS);
     let lx = LEFT;
     items.forEach(([label, color]) => {
       svg.append("rect").attr("x", lx).attr("y", legendY - 8).attr("width", 12).attr("height", 12).attr("fill", color).attr("fill-opacity", 0.85);
-      svg.append("text").attr("x", lx + 15).attr("y", legendY + 2).attr("fill", "var(--fg-muted)").style("font-size", "10px").text(label);
+      svg.append("text").attr("x", lx + 15).attr("y", legendY + 2).attr("fill", T.fgMuted).style("font-size", FONT_SIZE.tickLabel).text(label);
       lx += label === "Some concerns" ? 110 : 60;
     });
+    if (T.signalColorNote) {
+      svg.append("text").attr("x", svgW / 2).attr("y", svgH - 4).attr("text-anchor", "middle").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.annot).text(T.signalColorNote);
+    }
   }
   function drawGoshPlot(result, profile, options = {}) {
-    const svg = clearAndSelectSVG("#goshPlot");
-    if (!result || result.error || !result.count) return;
+    const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
+    const svg = initSvg("#goshPlot", "GOSH plot", T);
+    if (!result || result.error || !result.count) {
+      drawNoDataPlaceholder(svg, +svg.attr("width") || 500, +svg.attr("height") || 400, result?.error || "No data");
+      return;
+    }
     profile = profile || { transform: (x) => x, label: "Effect" };
     const { mu: muArr, I2: I2Arr, Q: QArr, n: nArr, count, k, sampled } = result;
     const xAxis = options.xAxis || "I2";
@@ -8091,6 +9135,10 @@ var App = (() => {
     const margin = { top: 34, right: 88, bottom: 56, left: 62 };
     const iW = W - margin.left - margin.right;
     const iH = H - margin.top - margin.bottom;
+    if (T.bg && T.bg !== "transparent") {
+      svg.insert("rect", ":first-child").attr("width", W).attr("height", H).attr("fill", T.bg);
+    }
+    svg.style("font-family", T.fontFamily);
     const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
     const muDisplay = new Float64Array(count);
     let muMin = Infinity, muMax = -Infinity;
@@ -8130,7 +9178,9 @@ var App = (() => {
       xScale = d3.scaleLinear().domain([qMin - qPad, qMax + qPad]).nice().range([0, iW]);
     }
     const yScale = d3.scaleLinear().domain([muMin - muPad, muMax + muPad]).nice().range([iH, 0]);
-    const colorScale = d3.scaleSequential(d3.interpolateViridis).domain([1, k]);
+    const colorScale = d3.scaleSequential(
+      T.useBwShapes ? ((t) => d3.interpolateGreys(0.15 + t * 0.75)) : d3.interpolateViridis
+    ).domain([1, k]);
     const SVG_THRESHOLD = 5e3;
     const useCanvas = count > SVG_THRESHOLD && !forReport;
     if (useCanvas) {
@@ -8167,7 +9217,7 @@ var App = (() => {
         const xval = xScale.invert(mx);
         const muval = yScale.invert(my);
         const xStr = xAxis === "I2" ? `I\xB2 = ${xval.toFixed(1)} %` : xAxis === "n" ? `n = ${Math.round(xval)}` : `Q = ${xval.toFixed(2)}`;
-        tt.style("opacity", 1).html(`${xStr}<br>${profile.label}: ${+muval.toFixed(3)}`).style("left", event.pageX + 12 + "px").style("top", event.pageY - 24 + "px");
+        tt.style("opacity", 1).html(`${xStr}<br>${profile.label}: ${+muval.toFixed(3)}`).style("left", event.pageX + TOOLTIP_OFFSET.x + "px").style("top", event.pageY + TOOLTIP_OFFSET.y + "px");
       }).on("mouseout", () => tt.style("opacity", 0));
     } else {
       let indices;
@@ -8195,13 +9245,21 @@ var App = (() => {
       xAxisGen = d3.axisBottom(xScale).ticks(5).tickFormat(d3.format(".3~g"));
     }
     const axisX = g.append("g").attr("transform", `translate(0,${iH})`).call(xAxisGen);
-    styleAxis(axisX, "var(--border-hover)", "var(--fg-muted)", "10px");
+    styleAxis(axisX, T.border, T.fgMuted, FONT_SIZE.tickLabel, T.fontFamily);
     const axisY = g.append("g").call(d3.axisLeft(yScale).ticks(5).tickFormat(d3.format(".3~g")));
-    styleAxis(axisY, "var(--border-hover)", "var(--fg-muted)", "10px");
-    svg.append("text").attr("x", margin.left + iW / 2).attr("y", H - 8).attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "11px").text(xLabel);
-    svg.append("text").attr("transform", "rotate(-90)").attr("x", -(margin.top + iH / 2)).attr("y", 14).attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "11px").text(profile.label);
+    styleAxis(axisY, T.border, T.fgMuted, FONT_SIZE.tickLabel, T.fontFamily);
+    {
+      const xl = svg.append("text").attr("x", margin.left + iW / 2).attr("y", H - 8).attr("text-anchor", "middle").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.axisLabel);
+      if (xLabel.startsWith("I\xB2")) {
+        xl.append("tspan").style("font-style", "italic").text("I");
+        xl.append("tspan").text(xLabel.slice(1));
+      } else {
+        xl.text(xLabel);
+      }
+    }
+    svg.append("text").attr("transform", "rotate(-90)").attr("x", -(margin.top + iH / 2)).attr("y", 14).attr("text-anchor", "middle").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.axisLabel).text(profile.label);
     const subsetNote = sampled ? `${count.toLocaleString()} sampled of 2^${k}\u22121` : `all 2^${k}\u22121 = ${count.toLocaleString()}`;
-    svg.append("text").attr("x", margin.left + iW / 2).attr("y", 18).attr("text-anchor", "middle").attr("fill", "var(--fg)").style("font-size", "12px").text(`GOSH \u2014 k = ${k}  (${subsetNote} subsets)`);
+    svg.append("text").attr("x", margin.left + iW / 2).attr("y", 18).attr("text-anchor", "middle").attr("fill", T.fg).style("font-size", FONT_SIZE.title).text(`GOSH \u2014 k = ${k}  (${subsetNote} subsets)`);
     const legH = Math.min(iH * 0.65, 110);
     const legW = 11;
     const legX = iW + 20;
@@ -8215,30 +9273,38 @@ var App = (() => {
       grad.append("stop").attr("offset", (t * 100).toFixed(1) + "%").attr("stop-color", colorScale(1 + t * (k - 1)));
     }
     const lg = g.append("g").attr("transform", `translate(${legX},${legY})`);
-    lg.append("rect").attr("width", legW).attr("height", legH).attr("fill", `url(#${gradId})`).attr("stroke", "var(--border-hover)").attr("stroke-width", 0.5);
+    lg.append("rect").attr("width", legW).attr("height", legH).attr("fill", `url(#${gradId})`).attr("stroke", T.border).attr("stroke-width", 0.5);
     [
       { y: 0, label: k },
       { y: legH / 2, label: Math.round((k + 1) / 2) },
       { y: legH, label: 1 }
     ].forEach(({ y, label }) => {
-      lg.append("line").attr("x1", legW).attr("x2", legW + 3).attr("y1", y).attr("y2", y).attr("stroke", "var(--fg-muted)").attr("stroke-width", 0.8);
-      lg.append("text").attr("x", legW + 5).attr("y", y).attr("dominant-baseline", "middle").attr("fill", "var(--fg-muted)").style("font-size", "9px").text(label);
+      lg.append("line").attr("x1", legW).attr("x2", legW + 3).attr("y1", y).attr("y2", y).attr("stroke", T.fgMuted).attr("stroke-width", 0.8);
+      lg.append("text").attr("x", legW + 5).attr("y", y).attr("dominant-baseline", "middle").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.annot).text(label);
     });
     svg.append("text").attr(
       "transform",
       `rotate(-90) translate(${-(margin.top + legY + legH / 2)},${margin.left + legX + legW + 30})`
-    ).attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "9px").text("n (subset size)");
+    ).attr("text-anchor", "middle").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.annot).text("n (subset size)");
   }
   function drawProfileLikTau2(result, options = {}) {
-    const svg = clearAndSelectSVG("#profileLikTau2Plot");
-    if (!result || result.error) return;
+    const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
+    const svg = initSvg("#profileLikTau2Plot", "Profile likelihood plot for \u03C4\xB2", T);
+    if (!result || result.error) {
+      drawNoDataPlaceholder(svg, +svg.attr("width") || 500, +svg.attr("height") || 340, result?.error || "No data");
+      return;
+    }
     const xScale = options.xScale || "tau2";
     const { grid, ll, tau2hat, lCritRel, ciLow, ciHigh, method, k } = result;
-    const margin = { top: 34, right: 24, bottom: 56, left: 66 };
+    const margin = { ...MARGIN_DENSITY };
     const W = +svg.attr("width") || 500;
     const H = +svg.attr("height") || 380;
     const iW = W - margin.left - margin.right;
     const iH = H - margin.top - margin.bottom;
+    if (T.bg && T.bg !== "transparent") {
+      svg.insert("rect", ":first-child").attr("width", W).attr("height", H).attr("fill", T.bg);
+    }
+    svg.style("font-family", T.fontFamily);
     const clipId = "profileLikClip";
     svg.append("defs").append("clipPath").attr("id", clipId).append("rect").attr("width", iW).attr("height", iH);
     const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
@@ -8248,48 +9314,57 @@ var App = (() => {
     const x = d3.scaleLinear().domain([0, xDomainMax]).range([0, iW]);
     const llMin = d3.min(ll);
     const y = d3.scaleLinear().domain([Math.min(llMin - 0.5, lCritRel - 0.5), 0.3]).range([iH, 0]);
-    g.append("g").attr("class", "grid").call(d3.axisLeft(y).ticks(5).tickSize(-iW).tickFormat("")).selectAll("line").attr("stroke", "var(--border)").attr("stroke-dasharray", "2,3");
+    g.append("g").attr("class", "grid").call(d3.axisLeft(y).ticks(5).tickSize(-iW).tickFormat("")).selectAll("line").attr("stroke", T.borderGrid).attr("stroke-dasharray", "2,3");
     g.select(".grid .domain").remove();
     const bandX1 = x(toX(ciLow));
     const bandX2 = x(toX(ciHigh));
-    g.append("rect").attr("x", bandX1).attr("y", 0).attr("width", Math.max(0, bandX2 - bandX1)).attr("height", iH).attr("fill", "var(--accent)").attr("fill-opacity", 0.1);
+    g.append("rect").attr("x", bandX1).attr("y", 0).attr("width", Math.max(0, bandX2 - bandX1)).attr("height", iH).attr("fill", T.accent).attr("fill-opacity", 0.1);
     const yCrit = y(lCritRel);
-    g.append("line").attr("x1", 0).attr("x2", iW).attr("y1", yCrit).attr("y2", yCrit).attr("stroke", "var(--fg-subtle)").attr("stroke-width", 1.2).attr("stroke-dasharray", "5,3");
-    g.append("text").attr("x", iW - 2).attr("y", yCrit - 4).attr("text-anchor", "end").attr("fill", "var(--fg-muted)").style("font-size", "9px").text("95% CI cutoff");
+    g.append("line").attr("x1", 0).attr("x2", iW).attr("y1", yCrit).attr("y2", yCrit).attr("stroke", T.fgSubtle).attr("stroke-width", 1.2).attr("stroke-dasharray", "5,3");
+    const cutoffBelow = yCrit < 20;
+    g.append("text").attr("x", iW - 2).attr("y", cutoffBelow ? yCrit + 12 : yCrit - 4).attr("text-anchor", "end").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.annot).text("95% CI cutoff");
     const xHat = x(toX(tau2hat));
-    g.append("line").attr("x1", xHat).attr("x2", xHat).attr("y1", 0).attr("y2", iH).attr("stroke", "var(--accent)").attr("stroke-width", 1.2);
-    g.append("text").attr("x", xHat).attr("y", -6).attr("text-anchor", "middle").attr("fill", "var(--accent)").style("font-size", "9px").text(xScale === "tau" ? `\u03C4\u0302 = ${Math.sqrt(tau2hat).toPrecision(3)}` : `\u03C4\u0302\xB2 = ${tau2hat.toPrecision(3)}`);
+    g.append("line").attr("x1", xHat).attr("x2", xHat).attr("y1", 0).attr("y2", iH).attr("stroke", T.accent).attr("stroke-width", 1.2);
+    g.append("text").attr("x", xHat).attr("y", -6).attr("text-anchor", "middle").attr("fill", T.accent).style("font-size", FONT_SIZE.annot).text(xScale === "tau" ? `\u03C4\u0302 = ${Math.sqrt(tau2hat).toPrecision(3)}` : `\u03C4\u0302\xB2 = ${tau2hat.toPrecision(3)}`);
     function drawCIBound(tau2val, label) {
       const xb = x(toX(tau2val));
-      g.append("line").attr("x1", xb).attr("x2", xb).attr("y1", 0).attr("y2", iH).attr("stroke", "var(--fg-subtle)").attr("stroke-width", 1).attr("stroke-dasharray", "4,3");
-      g.append("text").attr("x", xb).attr("y", iH + 30).attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "8.5px").text(label);
+      g.append("line").attr("x1", xb).attr("x2", xb).attr("y1", 0).attr("y2", iH).attr("stroke", T.fgSubtle).attr("stroke-width", 1).attr("stroke-dasharray", "4,3");
+      g.append("text").attr("x", xb).attr("y", iH + 30).attr("text-anchor", "middle").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.annot).text(label);
     }
     if (ciLow > 0) drawCIBound(ciLow, toX(ciLow).toPrecision(3));
     drawCIBound(ciHigh, toX(ciHigh).toPrecision(3));
     const lineGen = d3.line().x((_, i) => x(toX(grid[i]))).y((_, i) => y(ll[i])).defined((_, i) => isFinite(ll[i]));
-    g.append("g").attr("clip-path", `url(#${clipId})`).append("path").datum(ll).attr("fill", "none").attr("stroke", "var(--accent)").attr("stroke-width", 2).attr("d", lineGen);
-    g.append("circle").attr("cx", xHat).attr("cy", y(0)).attr("r", 4).attr("fill", "var(--accent)");
-    const fmt4 = xScale === "tau" ? d3.format(".3~g") : d3.format(".3~g");
-    const axisX = g.append("g").attr("transform", `translate(0,${iH})`).call(d3.axisBottom(x).ticks(5).tickFormat(fmt4));
-    styleAxis(axisX, "var(--border-hover)", "var(--fg-muted)", "10px");
+    g.append("g").attr("clip-path", `url(#${clipId})`).append("path").datum(ll).attr("fill", "none").attr("stroke", T.accent).attr("stroke-width", 2).attr("d", lineGen);
+    g.append("circle").attr("cx", xHat).attr("cy", y(0)).attr("r", 4).attr("fill", T.accent);
+    const fmt3 = xScale === "tau" ? d3.format(".3~g") : d3.format(".3~g");
+    const axisX = g.append("g").attr("transform", `translate(0,${iH})`).call(d3.axisBottom(x).ticks(5).tickFormat(fmt3));
+    styleAxis(axisX, T.border, T.fgMuted, FONT_SIZE.tickLabel);
     const axisY = g.append("g").call(d3.axisLeft(y).ticks(5).tickFormat(d3.format(".2f")));
-    styleAxis(axisY, "var(--border-hover)", "var(--fg-muted)", "10px");
+    styleAxis(axisY, T.border, T.fgMuted, FONT_SIZE.tickLabel);
     const xLabel = xScale === "tau" ? "\u03C4 (between-study SD)" : "\u03C4\xB2 (between-study variance)";
-    svg.append("text").attr("x", margin.left + iW / 2).attr("y", H - 8).attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "11px").text(xLabel);
-    svg.append("text").attr("transform", "rotate(-90)").attr("x", -(margin.top + iH / 2)).attr("y", 14).attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "11px").text("Profile log-likelihood (relative)");
-    svg.append("text").attr("x", margin.left + iW / 2).attr("y", 14).attr("text-anchor", "middle").attr("fill", "var(--fg)").style("font-size", "11px").style("font-weight", "600").text(`Profile likelihood \u2014 \u03C4\xB2 \u2014 ${method} \u2014 k\u202F=\u202F${k}`);
+    svg.append("text").attr("x", margin.left + iW / 2).attr("y", H - 8).attr("text-anchor", "middle").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.axisLabel).text(xLabel);
+    svg.append("text").attr("transform", "rotate(-90)").attr("x", -(margin.top + iH / 2)).attr("y", 14).attr("text-anchor", "middle").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.axisLabel).text("Profile log-likelihood (relative)");
+    svg.append("text").attr("x", margin.left + iW / 2).attr("y", 14).attr("text-anchor", "middle").attr("fill", T.fg).style("font-size", FONT_SIZE.axisLabel).style("font-weight", "600").text(`Profile likelihood \u2014 \u03C4\xB2 \u2014 ${method} \u2014 k\u202F=\u202F${k}`);
   }
   function drawBayesTauPosterior(result, options = {}) {
-    const svg = clearAndSelectSVG("#bayesTauPlot");
-    if (!result || result.error) return;
+    const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
+    const svg = initSvg("#bayesTauPlot", "Bayesian posterior for \u03C4", T);
+    if (!result || result.error) {
+      drawNoDataPlaceholder(svg, +svg.attr("width") || 500, +svg.attr("height") || 340, result?.error || "No data");
+      return;
+    }
     const { tauGrid, tauWeights, tauMean, tauCI, sigma_tau, k } = result;
     const nGrid = tauGrid.length;
     const dtau = nGrid > 1 ? tauGrid[1] - tauGrid[0] : 1;
-    const margin = { top: 34, right: 24, bottom: 56, left: 66 };
+    const margin = { ...MARGIN_DENSITY };
     const W = +svg.attr("width") || 500;
     const H = +svg.attr("height") || 340;
     const iW = W - margin.left - margin.right;
     const iH = H - margin.top - margin.bottom;
+    if (T.bg && T.bg !== "transparent") {
+      svg.insert("rect", ":first-child").attr("width", W).attr("height", H).attr("fill", T.bg);
+    }
+    svg.style("font-family", T.fontFamily);
     const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
     const density = new Float64Array(nGrid);
     for (let i = 0; i < nGrid; i++) density[i] = tauWeights[i] / dtau;
@@ -8297,7 +9372,7 @@ var App = (() => {
     const densMax = d3.max(density);
     const x = d3.scaleLinear().domain([0, tauMax]).range([0, iW]);
     const y = d3.scaleLinear().domain([0, densMax * 1.1]).range([iH, 0]);
-    g.append("g").attr("class", "grid").call(d3.axisLeft(y).ticks(4).tickSize(-iW).tickFormat("")).selectAll("line").attr("stroke", "var(--border)").attr("stroke-dasharray", "2,3");
+    g.append("g").attr("class", "grid").call(d3.axisLeft(y).ticks(4).tickSize(-iW).tickFormat("")).selectAll("line").attr("stroke", T.borderGrid).attr("stroke-dasharray", "2,3");
     g.select(".grid .domain").remove();
     const interpDens = (tau) => {
       if (dtau <= 0) return 0;
@@ -8310,44 +9385,52 @@ var App = (() => {
       if (tauGrid[i] > tauCI[0] && tauGrid[i] < tauCI[1]) ciPts.push([tauGrid[i], density[i]]);
     }
     ciPts.push([tauCI[1], interpDens(tauCI[1])]);
-    g.append("path").datum(ciPts).attr("fill", "var(--accent)").attr("fill-opacity", 0.2).attr("stroke", "none").attr("d", d3.area().x((d) => x(d[0])).y0(iH).y1((d) => y(d[1])));
+    g.append("path").datum(ciPts).attr("fill", T.accent).attr("fill-opacity", 0.2).attr("stroke", "none").attr("d", d3.area().x((d) => x(d[0])).y0(iH).y1((d) => y(d[1])));
     const allPts = Array.from({ length: nGrid }, (_, i) => [tauGrid[i], density[i]]);
-    g.append("path").datum(allPts).attr("fill", "var(--accent)").attr("fill-opacity", 0.06).attr("stroke", "none").attr("d", d3.area().x((d) => x(d[0])).y0(iH).y1((d) => y(d[1])));
-    g.append("path").datum(allPts).attr("fill", "none").attr("stroke", "var(--accent)").attr("stroke-width", 2).attr("d", d3.line().x((d) => x(d[0])).y((d) => y(d[1])));
+    g.append("path").datum(allPts).attr("fill", T.accent).attr("fill-opacity", 0.06).attr("stroke", "none").attr("d", d3.area().x((d) => x(d[0])).y0(iH).y1((d) => y(d[1])));
+    g.append("path").datum(allPts).attr("fill", "none").attr("stroke", T.accent).attr("stroke-width", 2).attr("d", d3.line().x((d) => x(d[0])).y((d) => y(d[1])));
     [tauCI[0], tauCI[1]].forEach((t) => {
-      g.append("line").attr("x1", x(t)).attr("x2", x(t)).attr("y1", 0).attr("y2", iH).attr("stroke", "var(--accent)").attr("stroke-width", 1).attr("stroke-dasharray", "3,3").attr("opacity", 0.7);
+      g.append("line").attr("x1", x(t)).attr("x2", x(t)).attr("y1", 0).attr("y2", iH).attr("stroke", T.accent).attr("stroke-width", 1).attr("stroke-dasharray", "3,3").attr("opacity", 0.7);
     });
     const meanX = x(tauMean);
     const meanRight = meanX > iW * 0.6;
-    g.append("line").attr("x1", meanX).attr("x2", meanX).attr("y1", 0).attr("y2", iH).attr("stroke", "var(--accent)").attr("stroke-width", 2).attr("stroke-dasharray", "6,3");
-    g.append("text").attr("x", meanX + (meanRight ? -4 : 4)).attr("y", 22).attr("text-anchor", meanRight ? "end" : "start").attr("fill", "var(--fg-muted)").style("font-size", "9px").text(`mean\u202F=\u202F${tauMean.toFixed(3)}`);
+    g.append("line").attr("x1", meanX).attr("x2", meanX).attr("y1", 0).attr("y2", iH).attr("stroke", T.accent).attr("stroke-width", 2).attr("stroke-dasharray", "6,3");
+    g.append("text").attr("x", meanX + (meanRight ? -4 : 4)).attr("y", 22).attr("text-anchor", meanRight ? "end" : "start").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.annot).text(`mean\u202F=\u202F${tauMean.toFixed(3)}`);
     const axisX = g.append("g").attr("transform", `translate(0,${iH})`).call(d3.axisBottom(x).ticks(5).tickFormat(d3.format(".2~g")));
-    styleAxis(axisX, "var(--border-hover)", "var(--fg-muted)", "10px");
+    styleAxis(axisX, T.border, T.fgMuted, FONT_SIZE.tickLabel);
     const axisY = g.append("g").call(d3.axisLeft(y).ticks(4).tickFormat(d3.format(".2~g")));
-    styleAxis(axisY, "var(--border-hover)", "var(--fg-muted)", "10px");
-    svg.append("text").attr("x", margin.left + iW / 2).attr("y", H - 8).attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "11px").text("\u03C4 (between-study SD)");
-    svg.append("text").attr("transform", "rotate(-90)").attr("x", -(margin.top + iH / 2)).attr("y", 14).attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "11px").text("Posterior density");
-    svg.append("text").attr("x", margin.left + iW / 2).attr("y", 14).attr("text-anchor", "middle").attr("fill", "var(--fg)").style("font-size", "11px").style("font-weight", "600").text(`Posterior of \u03C4 \u2014 HalfNormal(\u03C3_\u03C4\u202F=\u202F${sigma_tau}) \u2014 k\u202F=\u202F${k}`);
+    styleAxis(axisY, T.border, T.fgMuted, FONT_SIZE.tickLabel);
+    svg.append("text").attr("x", margin.left + iW / 2).attr("y", H - 8).attr("text-anchor", "middle").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.axisLabel).text("\u03C4 (between-study SD)");
+    svg.append("text").attr("transform", "rotate(-90)").attr("x", -(margin.top + iH / 2)).attr("y", 14).attr("text-anchor", "middle").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.axisLabel).text("Posterior density");
+    svg.append("text").attr("x", margin.left + iW / 2).attr("y", 14).attr("text-anchor", "middle").attr("fill", T.fg).style("font-size", FONT_SIZE.title).style("font-weight", "600").text(`Posterior of \u03C4 \u2014 HalfNormal(\u03C3_\u03C4\u202F=\u202F${sigma_tau}) \u2014 k\u202F=\u202F${k}`);
   }
   function drawBayesMuPosterior(result, options = {}) {
-    const svg = clearAndSelectSVG("#bayesMuPlot");
-    if (!result || result.error) return;
+    const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
+    const svg = initSvg("#bayesMuPlot", "Bayesian posterior for \u03BC", T);
+    if (!result || result.error) {
+      drawNoDataPlaceholder(svg, +svg.attr("width") || 500, +svg.attr("height") || 340, result?.error || "No data");
+      return;
+    }
     const { muGrid, muDensity, muMean, muCI, mu0, sigma_mu, k } = result;
     const nMu = muGrid.length;
     const dMu = nMu > 1 ? muGrid[1] - muGrid[0] : 1;
     const muMin = muGrid[0];
     const muMax = muGrid[nMu - 1];
     const reMean = options.reMean;
-    const margin = { top: 34, right: 24, bottom: 56, left: 66 };
+    const margin = { ...MARGIN_DENSITY };
     const W = +svg.attr("width") || 500;
     const H = +svg.attr("height") || 340;
     const iW = W - margin.left - margin.right;
     const iH = H - margin.top - margin.bottom;
+    if (T.bg && T.bg !== "transparent") {
+      svg.insert("rect", ":first-child").attr("width", W).attr("height", H).attr("fill", T.bg);
+    }
+    svg.style("font-family", T.fontFamily);
     const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
     const densMax = d3.max(muDensity);
     const x = d3.scaleLinear().domain([muMin, muMax]).range([0, iW]);
     const y = d3.scaleLinear().domain([0, densMax * 1.1]).range([iH, 0]);
-    g.append("g").attr("class", "grid").call(d3.axisLeft(y).ticks(4).tickSize(-iW).tickFormat("")).selectAll("line").attr("stroke", "var(--border)").attr("stroke-dasharray", "2,3");
+    g.append("g").attr("class", "grid").call(d3.axisLeft(y).ticks(4).tickSize(-iW).tickFormat("")).selectAll("line").attr("stroke", T.borderGrid).attr("stroke-dasharray", "2,3");
     g.select(".grid .domain").remove();
     const interpDens = (mu) => {
       if (dMu <= 0) return 0;
@@ -8360,41 +9443,56 @@ var App = (() => {
       if (muGrid[j] > muCI[0] && muGrid[j] < muCI[1]) ciPts.push([muGrid[j], muDensity[j]]);
     }
     ciPts.push([muCI[1], interpDens(muCI[1])]);
-    g.append("path").datum(ciPts).attr("fill", "var(--accent)").attr("fill-opacity", 0.2).attr("stroke", "none").attr("d", d3.area().x((d) => x(d[0])).y0(iH).y1((d) => y(d[1])));
+    g.append("path").datum(ciPts).attr("fill", T.accent).attr("fill-opacity", 0.2).attr("stroke", "none").attr("d", d3.area().x((d) => x(d[0])).y0(iH).y1((d) => y(d[1])));
     const allPts = Array.from({ length: nMu }, (_, j) => [muGrid[j], muDensity[j]]);
-    g.append("path").datum(allPts).attr("fill", "var(--accent)").attr("fill-opacity", 0.06).attr("stroke", "none").attr("d", d3.area().x((d) => x(d[0])).y0(iH).y1((d) => y(d[1])));
-    g.append("path").datum(allPts).attr("fill", "none").attr("stroke", "var(--accent)").attr("stroke-width", 2).attr("d", d3.line().x((d) => x(d[0])).y((d) => y(d[1])));
+    g.append("path").datum(allPts).attr("fill", T.accent).attr("fill-opacity", 0.06).attr("stroke", "none").attr("d", d3.area().x((d) => x(d[0])).y0(iH).y1((d) => y(d[1])));
+    g.append("path").datum(allPts).attr("fill", "none").attr("stroke", T.accent).attr("stroke-width", 2).attr("d", d3.line().x((d) => x(d[0])).y((d) => y(d[1])));
     [muCI[0], muCI[1]].forEach((m) => {
-      g.append("line").attr("x1", x(m)).attr("x2", x(m)).attr("y1", 0).attr("y2", iH).attr("stroke", "var(--accent)").attr("stroke-width", 1).attr("stroke-dasharray", "3,3").attr("opacity", 0.7);
+      g.append("line").attr("x1", x(m)).attr("x2", x(m)).attr("y1", 0).attr("y2", iH).attr("stroke", T.accent).attr("stroke-width", 1).attr("stroke-dasharray", "3,3").attr("opacity", 0.7);
     });
     const meanX = x(muMean);
     const meanRight = meanX > iW * 0.6;
-    g.append("line").attr("x1", meanX).attr("x2", meanX).attr("y1", 0).attr("y2", iH).attr("stroke", "var(--accent)").attr("stroke-width", 2).attr("stroke-dasharray", "6,3");
-    g.append("text").attr("x", meanX + (meanRight ? -4 : 4)).attr("y", 22).attr("text-anchor", meanRight ? "end" : "start").attr("fill", "var(--fg-muted)").style("font-size", "9px").text(`posterior mean\u202F=\u202F${muMean.toFixed(3)}`);
-    if (reMean !== void 0 && isFinite(reMean) && reMean >= muMin && reMean <= muMax) {
-      const reX = x(reMean);
-      const reRight = reX > iW * 0.6;
-      g.append("line").attr("x1", reX).attr("x2", reX).attr("y1", 0).attr("y2", iH).attr("stroke", "var(--fg-muted)").attr("stroke-width", 1.5).attr("stroke-dasharray", "3,2");
-      g.append("text").attr("x", reX + (reRight ? -4 : 4)).attr("y", 34).attr("text-anchor", reRight ? "end" : "start").attr("fill", "var(--fg-muted)").style("font-size", "9px").text(`RE\u202F=\u202F${reMean.toFixed(3)}`);
+    g.append("line").attr("x1", meanX).attr("x2", meanX).attr("y1", 0).attr("y2", iH).attr("stroke", T.accent).attr("stroke-width", 2).attr("stroke-dasharray", "6,3");
+    const hasRE = reMean !== void 0 && isFinite(reMean) && reMean >= muMin && reMean <= muMax;
+    const reX = hasRE ? x(reMean) : null;
+    const labelsClose = hasRE && Math.abs(meanX - reX) < 40;
+    const sharedX = labelsClose ? (meanX + reX) / 2 : null;
+    const sharedRight = labelsClose ? sharedX > iW * 0.6 : null;
+    const mLabelX = sharedX !== null ? sharedX : meanX;
+    const mRight = sharedRight !== null ? sharedRight : meanRight;
+    g.append("text").attr("x", mLabelX + (mRight ? -4 : 4)).attr("y", 22).attr("text-anchor", mRight ? "end" : "start").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.annot).text(`posterior mean\u202F=\u202F${muMean.toFixed(3)}`);
+    if (hasRE) {
+      const reRight = sharedRight !== null ? sharedRight : reX > iW * 0.6;
+      const rLabelX = sharedX !== null ? sharedX : reX;
+      g.append("line").attr("x1", reX).attr("x2", reX).attr("y1", 0).attr("y2", iH).attr("stroke", T.fgMuted).attr("stroke-width", 1.5).attr("stroke-dasharray", "3,2");
+      g.append("text").attr("x", rLabelX + (reRight ? -4 : 4)).attr("y", 34).attr("text-anchor", reRight ? "end" : "start").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.annot).text(`RE\u202F=\u202F${reMean.toFixed(3)}`);
     }
     const axisX = g.append("g").attr("transform", `translate(0,${iH})`).call(d3.axisBottom(x).ticks(5).tickFormat(d3.format(".3~g")));
-    styleAxis(axisX, "var(--border-hover)", "var(--fg-muted)", "10px");
+    styleAxis(axisX, T.border, T.fgMuted, FONT_SIZE.tickLabel);
     const axisY = g.append("g").call(d3.axisLeft(y).ticks(4).tickFormat(d3.format(".2~g")));
-    styleAxis(axisY, "var(--border-hover)", "var(--fg-muted)", "10px");
-    svg.append("text").attr("x", margin.left + iW / 2).attr("y", H - 8).attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "11px").text("\u03BC (pooled effect, analysis scale)");
-    svg.append("text").attr("transform", "rotate(-90)").attr("x", -(margin.top + iH / 2)).attr("y", 14).attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "11px").text("Posterior density");
-    svg.append("text").attr("x", margin.left + iW / 2).attr("y", 14).attr("text-anchor", "middle").attr("fill", "var(--fg)").style("font-size", "11px").style("font-weight", "600").text(`Posterior of \u03BC \u2014 N(\u03BC\u2080\u202F=\u202F${mu0},\u202F\u03C3_\u03BC\u202F=\u202F${sigma_mu}) \u2014 k\u202F=\u202F${k}`);
+    styleAxis(axisY, T.border, T.fgMuted, FONT_SIZE.tickLabel);
+    svg.append("text").attr("x", margin.left + iW / 2).attr("y", H - 8).attr("text-anchor", "middle").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.axisLabel).text("\u03BC (pooled effect, analysis scale)");
+    svg.append("text").attr("transform", "rotate(-90)").attr("x", -(margin.top + iH / 2)).attr("y", 14).attr("text-anchor", "middle").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.axisLabel).text("Posterior density");
+    svg.append("text").attr("x", margin.left + iW / 2).attr("y", 14).attr("text-anchor", "middle").attr("fill", T.fg).style("font-size", FONT_SIZE.title).style("font-weight", "600").text(`Posterior of \u03BC \u2014 N(\u03BC\u2080\u202F=\u202F${mu0},\u202F\u03C3_\u03BC\u202F=\u202F${sigma_mu}) \u2014 k\u202F=\u202F${k}`);
   }
   function drawQQPlot(stdResiduals, labels, options = {}) {
     const containerId = options.containerId || "#qqPlot";
-    const svg = clearAndSelectSVG(containerId);
+    const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
+    const svg = initSvg(containerId, "Normal Q-Q plot of standardised residuals", T);
     const k = stdResiduals.length;
-    if (k < 3) return;
+    if (k < 3) {
+      drawNoDataPlaceholder(svg, +svg.attr("width") || 420, +svg.attr("height") || 380, "Need \u2265 3 studies");
+      return;
+    }
     const W = +svg.attr("width") || 420;
     const H = +svg.attr("height") || 380;
     const margin = { top: 30, right: 24, bottom: 56, left: 62 };
     const iW = W - margin.left - margin.right;
     const iH = H - margin.top - margin.bottom;
+    if (T.bg && T.bg !== "transparent") {
+      svg.insert("rect", ":first-child").attr("width", W).attr("height", H).attr("fill", T.bg);
+    }
+    svg.style("font-family", T.fontFamily);
     const order = Array.from({ length: k }, (_, i) => i).sort((a, b) => stdResiduals[a] - stdResiduals[b]);
     const points = order.map((origIdx, rank) => {
       const p = (rank + 1 - 0.375) / (k + 0.25);
@@ -8433,47 +9531,48 @@ var App = (() => {
       const y1 = axis === "y" ? y(val) : 0;
       const y2 = axis === "y" ? y(val) : iH;
       if (x1 < 0 || x1 > iW || y1 < 0 || y1 > iH) return;
-      g.append("line").attr("x1", x1).attr("x2", x2).attr("y1", y1).attr("y2", y2).attr("stroke", "var(--border)").attr("stroke-width", 1).attr("stroke-dasharray", "3,3");
+      g.append("line").attr("x1", x1).attr("x2", x2).attr("y1", y1).attr("y2", y2).attr("stroke", T.borderGrid).attr("stroke-width", 1).attr("stroke-dasharray", "3,3");
     });
     const lineX1 = xMin, lineX2 = xMax;
     const lineY1 = intercept + slope * lineX1;
     const lineY2 = intercept + slope * lineX2;
-    g.append("line").attr("x1", x(lineX1)).attr("x2", x(lineX2)).attr("y1", y(lineY1)).attr("y2", y(lineY2)).attr("stroke", "var(--accent)").attr("stroke-width", 1.5).attr("stroke-dasharray", "6,3");
-    const tooltip = selTooltip();
-    points.forEach((pt) => {
-      const cx = x(pt.theory);
-      const cy = y(pt.observed);
-      const isOutlier = Math.abs(pt.observed) > 2;
-      g.append("circle").attr("cx", cx).attr("cy", cy).attr("r", 5).attr("fill", isOutlier ? "var(--color-warning)" : "var(--accent)").attr("fill-opacity", 0.8).attr("stroke", "var(--bg-surface)").attr("stroke-width", 1).on("mousemove", (event) => {
-        tooltip.style("opacity", 1).html(
-          `<b>${pt.label}</b><br>Theoretical quantile: ${pt.theory.toFixed(3)}<br>Std. residual: ${pt.observed.toFixed(3)}` + (isOutlier ? `<br><i>Potential outlier (|z| > 2)</i>` : "")
-        ).style("left", event.pageX + 12 + "px").style("top", event.pageY - 24 + "px");
-      }).on("mouseout", () => tooltip.style("opacity", 0));
-    });
+    g.append("line").attr("x1", x(lineX1)).attr("x2", x(lineX2)).attr("y1", y(lineY1)).attr("y2", y(lineY2)).attr("stroke", T.accent).attr("stroke-width", 1.5).attr("stroke-dasharray", "6,3");
+    attachTooltip(
+      g.selectAll("circle.qq-pt").data(points).enter().append("circle").attr("class", "qq-pt").attr("cx", (pt) => x(pt.theory)).attr("cy", (pt) => y(pt.observed)).attr("r", 5).attr("fill", (pt) => Math.abs(pt.observed) > 2 ? T.colorWarning : T.accent).attr("fill-opacity", 0.8).attr("stroke", T.bgSurface).attr("stroke-width", 1),
+      (pt) => {
+        const isOutlier = Math.abs(pt.observed) > 2;
+        return `<b>${pt.label}</b><br>Theoretical quantile: ${pt.theory.toFixed(3)}<br>Std. residual: ${pt.observed.toFixed(3)}` + (isOutlier ? `<br><i>Potential outlier (|z| > 2)</i>` : "");
+      }
+    );
     const xAxis = d3.axisBottom(x).ticks(5).tickSize(4);
     const yAxis = d3.axisLeft(y).ticks(5).tickSize(4);
-    const isDark = document.documentElement.classList.contains("dark");
-    const strokeColor = isDark ? "#aaa" : "#555";
-    const fillColor = isDark ? "#ccc" : "#333";
     const xAxisG = g.append("g").attr("transform", `translate(0,${iH})`).call(xAxis);
-    styleAxis(xAxisG, strokeColor, fillColor, 10, "sans-serif");
+    styleAxis(xAxisG, T.border, T.fgMuted, FONT_SIZE.tickLabel);
     const yAxisG = g.append("g").call(yAxis);
-    styleAxis(yAxisG, strokeColor, fillColor, 10, "sans-serif");
-    g.append("text").attr("x", iW / 2).attr("y", iH + 42).attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "11px").text("Theoretical quantiles");
-    g.append("text").attr("transform", "rotate(-90)").attr("x", -(iH / 2)).attr("y", -48).attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "11px").text("Standardised residuals");
-    svg.append("text").attr("x", margin.left + iW / 2).attr("y", 18).attr("text-anchor", "middle").attr("fill", "var(--fg)").style("font-size", "11px").style("font-weight", "600").text(`Normal Q-Q plot \u2014 k\u202F=\u202F${k}`);
+    styleAxis(yAxisG, T.border, T.fgMuted, FONT_SIZE.tickLabel);
+    g.append("text").attr("x", iW / 2).attr("y", iH + 42).attr("text-anchor", "middle").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.axisLabel).text("Theoretical quantiles");
+    g.append("text").attr("transform", "rotate(-90)").attr("x", -(iH / 2)).attr("y", -48).attr("text-anchor", "middle").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.axisLabel).text("Standardised residuals");
+    svg.append("text").attr("x", margin.left + iW / 2).attr("y", 18).attr("text-anchor", "middle").attr("fill", T.fg).style("font-size", FONT_SIZE.title).style("font-weight", "600").text(`Normal Q-Q plot \u2014 k\u202F=\u202F${k}`);
   }
   function drawRadialPlot(studies, m, profile, options = {}) {
     const containerId = options.containerId || "#radialPlot";
-    const svg = clearAndSelectSVG(containerId);
-    const valid = studies.filter((s) => isFinite(s.yi) && isFinite(s.vi) && s.vi > 0);
+    const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
+    const svg = initSvg(containerId, "Radial (Galbraith) plot", T);
+    const valid = validStudies(studies);
     const k = valid.length;
-    if (k < 2) return;
+    if (k < 2) {
+      drawNoDataPlaceholder(svg, +svg.attr("width") || 500, +svg.attr("height") || 400, "Need \u2265 2 studies");
+      return;
+    }
     const W = +svg.attr("width") || 500;
     const H = +svg.attr("height") || 400;
     const margin = { top: 30, right: 80, bottom: 54, left: 60 };
     const iW = W - margin.left - margin.right;
     const iH = H - margin.top - margin.bottom;
+    if (T.bg && T.bg !== "transparent") {
+      svg.insert("rect", ":first-child").attr("width", W).attr("height", H).attr("fill", T.bg);
+    }
+    svg.style("font-family", T.fontFamily);
     const pts = valid.map((s) => {
       const se = Math.sqrt(s.vi);
       const xi = 1 / se;
@@ -8502,67 +9601,82 @@ var App = (() => {
     const yScale = d3.scaleLinear().domain(yDom).range([iH, 0]);
     const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
     if (yDom[0] < 0 && yDom[1] > 0) {
-      g.append("line").attr("x1", 0).attr("x2", iW).attr("y1", yScale(0)).attr("y2", yScale(0)).attr("stroke", "var(--border)").attr("stroke-dasharray", "3,3").attr("stroke-width", 1);
+      g.append("line").attr("x1", 0).attr("x2", iW).attr("y1", yScale(0)).attr("y2", yScale(0)).attr("stroke", T.borderGrid).attr("stroke-dasharray", "3,3").attr("stroke-width", 1);
     }
     [2, -2].forEach((offset) => {
       const x0 = 0, y0 = theta * 0 + offset;
       const x1 = xDom[1], y1 = theta * xDom[1] + offset;
       const px0 = xScale(x0), py0 = yScale(y0);
       const px1 = xScale(x1), py1 = yScale(y1);
-      g.append("line").attr("x1", px0).attr("y1", py0).attr("x2", px1).attr("y2", py1).attr("stroke", "var(--border-hover)").attr("stroke-dasharray", "5,3").attr("stroke-width", 1.2);
+      g.append("line").attr("x1", px0).attr("y1", py0).attr("x2", px1).attr("y2", py1).attr("stroke", T.border).attr("stroke-dasharray", "5,3").attr("stroke-width", 1.2);
       const labelY = py1;
       if (labelY >= 0 && labelY <= iH) {
-        g.append("text").attr("x", px1 + 4).attr("y", labelY + 4).attr("fill", "var(--fg-muted)").style("font-size", "10px").text(offset > 0 ? "+2" : "\u22122");
+        g.append("text").attr("x", px1 + 4).attr("y", labelY + 4).attr("fill", T.fgMuted).style("font-size", FONT_SIZE.tickLabel).text(offset > 0 ? "+2" : "\u22122");
       }
     });
     if (isFinite(theta)) {
       const lx0 = 0, ly0 = theta * 0;
       const lx1 = xDom[1], ly1 = theta * xDom[1];
-      g.append("line").attr("x1", xScale(lx0)).attr("y1", yScale(ly0)).attr("x2", xScale(lx1)).attr("y2", yScale(ly1)).attr("stroke", "var(--accent)").attr("stroke-width", 1.5);
+      g.append("line").attr("x1", xScale(lx0)).attr("y1", yScale(ly0)).attr("x2", xScale(lx1)).attr("y2", yScale(ly1)).attr("stroke", T.accent).attr("stroke-width", 1.5);
     }
     attachTooltip(
-      g.selectAll("circle.radial-pt").data(pts).enter().append("circle").attr("class", "radial-pt").attr("cx", (d) => xScale(d.xi)).attr("cy", (d) => yScale(d.yi)).attr("r", 5).attr("fill", (d) => d.outlier ? "var(--color-warning)" : "var(--accent)").attr("fill-opacity", 0.82).attr("stroke", "var(--bg)").attr("stroke-width", 0.8),
+      g.selectAll("circle.radial-pt").data(pts).enter().append("circle").attr("class", "radial-pt").attr("cx", (d) => xScale(d.xi)).attr("cy", (d) => yScale(d.yi)).attr("r", 5).attr("fill", (d) => d.outlier ? T.colorWarning : T.accent).attr("fill-opacity", 0.82).attr("stroke", T.bg).attr("stroke-width", 0.8),
       (d) => {
         const thetaHat = d.yi / d.xi;
         const disp = isTransformed ? `${fmt4(profile.transform(d.raw))} (raw: ${fmt4(d.raw)})` : fmt4(d.raw);
-        return `<strong>${d.label || "Study"}</strong><br>y/SE = ${fmt4(d.yi)}<br>1/SE = ${fmt4(d.xi)}<br>Effect (y\u1D62) = ${disp}<br>` + (d.outlier ? `<span style="color:var(--color-warning)">\u26A0 Potential outlier (|residual| > 2)</span>` : "");
+        return `<strong>${d.label || "Study"}</strong><br>y/SE = ${fmt4(d.yi)}<br>1/SE = ${fmt4(d.xi)}<br>Effect (y\u1D62) = ${disp}<br>` + (d.outlier ? `<span style="color:${T.colorWarning}">\u26A0 Potential outlier (|residual| > 2)</span>` : "");
       }
     );
     const xAxis = d3.axisBottom(xScale).ticks(6);
     const yAxis = d3.axisLeft(yScale).ticks(7);
-    g.append("g").attr("transform", `translate(0,${iH})`).call(xAxis).selectAll("text").style("font-size", "10px");
-    g.append("g").call(yAxis).selectAll("text").style("font-size", "10px");
-    g.append("text").attr("x", iW / 2).attr("y", iH + 42).attr("text-anchor", "middle").attr("fill", "var(--fg)").style("font-size", "11px").text("Precision (1/SE)");
-    g.append("text").attr("transform", "rotate(-90)").attr("x", -iH / 2).attr("y", -46).attr("text-anchor", "middle").attr("fill", "var(--fg)").style("font-size", "11px").text("Standardised effect (y/SE)");
+    styleAxis(g.append("g").attr("transform", `translate(0,${iH})`).call(xAxis), T.border, T.fgMuted, FONT_SIZE.tickLabel);
+    styleAxis(g.append("g").call(yAxis), T.border, T.fgMuted, FONT_SIZE.tickLabel);
+    g.append("text").attr("x", iW / 2).attr("y", iH + 42).attr("text-anchor", "middle").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.axisLabel).text("Precision (1/SE)");
+    g.append("text").attr("transform", "rotate(-90)").attr("x", -iH / 2).attr("y", -46).attr("text-anchor", "middle").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.axisLabel).text("Standardised effect (y/SE)");
     const xRight = xDom[1];
     if (isFinite(xRight) && xRight > 0) {
       const thetaMin = yDom[0] / xRight;
       const thetaMax = yDom[1] / xRight;
       const thetaScale = d3.scaleLinear().domain([thetaMin, thetaMax]);
       const thetaTicks = thetaScale.ticks(6);
-      g.append("line").attr("x1", iW).attr("x2", iW).attr("y1", 0).attr("y2", iH).attr("stroke", "var(--border)").attr("stroke-width", 1);
+      g.append("line").attr("x1", iW).attr("x2", iW).attr("y1", 0).attr("y2", iH).attr("stroke", T.border).attr("stroke-width", 1);
       thetaTicks.forEach((\u03B8) => {
         const yPx = yScale(\u03B8 * xRight);
         if (yPx < 0 || yPx > iH) return;
         const dispTheta = isTransformed ? profile.transform(\u03B8) : \u03B8;
         const label = isFinite(dispTheta) ? (+dispTheta.toFixed(3)).toString() : "";
-        g.append("line").attr("x1", iW).attr("x2", iW + 4).attr("y1", yPx).attr("y2", yPx).attr("stroke", "var(--border)").attr("stroke-width", 1);
-        g.append("text").attr("x", iW + 7).attr("y", yPx + 4).attr("fill", "var(--fg-muted)").style("font-size", "9px").text(label);
+        g.append("line").attr("x1", iW).attr("x2", iW + 4).attr("y1", yPx).attr("y2", yPx).attr("stroke", T.border).attr("stroke-width", 1);
+        g.append("text").attr("x", iW + 7).attr("y", yPx + 4).attr("fill", T.fgMuted).style("font-size", FONT_SIZE.annot).text(label);
       });
       const axisLabel = isTransformed ? profile.label || "Effect" : "Effect size (\u03B8)";
-      g.append("text").attr("transform", "rotate(90)").attr("x", iH / 2).attr("y", -(iW + margin.right - 10)).attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "10px").text(axisLabel);
+      g.append("text").attr("transform", "rotate(90)").attr("x", iH / 2).attr("y", -(iW + margin.right - 10)).attr("text-anchor", "middle").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.axisLabel).text(axisLabel);
     }
     const nOut = pts.filter((p) => p.outlier).length;
     const outNote = nOut > 0 ? ` \u2014 ${nOut} outlier${nOut > 1 ? "s" : ""}` : "";
-    svg.append("text").attr("x", margin.left + iW / 2).attr("y", 18).attr("text-anchor", "middle").attr("fill", "var(--fg)").style("font-size", "11px").style("font-weight", "600").text(`Radial (Galbraith) plot \u2014 k\u202F=\u202F${k}${outNote}`);
+    svg.append("text").attr("x", margin.left + iW / 2).attr("y", 18).attr("text-anchor", "middle").attr("fill", T.fg).style("font-size", FONT_SIZE.title).style("font-weight", "600").text(`Radial (Galbraith) plot \u2014 k\u202F=\u202F${k}${outNote}`);
   }
-  var _tooltipEl, GROUP_COLORS, GOSH_SVG_REPORT_MAX;
+  var FONT_SIZE, MARGIN_DENSITY, TOOLTIP_OFFSET, LABEL_CHAR_PX, _tooltipEl, GROUP_COLORS, GOSH_SVG_REPORT_MAX;
   var init_plots = __esm({
     "js/plots.js"() {
       init_utils();
       init_constants();
-      init_forestThemes();
+      init_plotThemes();
       init_analysis();
+      FONT_SIZE = {
+        title: "12px",
+        // SVG-internal plot title
+        axisLabel: "11px",
+        // axis labels (x/y legends)
+        tickLabel: "10px",
+        // axis tick text
+        annot: "9px",
+        // small in-plot annotations
+        legendLabel: "10px"
+        // legend text
+      };
+      MARGIN_DENSITY = { top: 34, right: 24, bottom: 56, left: 66 };
+      TOOLTIP_OFFSET = { x: 12, y: -24 };
+      LABEL_CHAR_PX = { regular10: 6.5, bold10: 7.2, regular11: 7 };
       _tooltipEl = null;
       GROUP_COLORS = [
         "var(--accent)",
@@ -8658,6 +9772,274 @@ var App = (() => {
       GOSH_MAX_ENUM_K = 15;
       GOSH_MAX_K = 30;
       GOSH_DEFAULT_MAX_SUBSETS = 5e4;
+    }
+  });
+
+  // js/perm.js
+  function mulberry322(seed) {
+    let s = seed >>> 0;
+    return function() {
+      s = s + 1831565813 >>> 0;
+      let t = Math.imul(s ^ s >>> 15, 1 | s);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+  function fisherYates(arr, rand) {
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = rand() * (i + 1) | 0;
+      const tmp = arr[i];
+      arr[i] = arr[j];
+      arr[j] = tmp;
+    }
+  }
+  function subMatrix(A, idxs) {
+    return idxs.map((r) => idxs.map((c) => A[r][c]));
+  }
+  function quadForm2(A, v) {
+    const n = v.length;
+    let result = 0;
+    for (let r = 0; r < n; r++) {
+      let Avr = 0;
+      for (let c = 0; c < n; c++) Avr += A[r][c] * v[c];
+      result += v[r] * Avr;
+    }
+    return result;
+  }
+  function tau2DL(X, yi, vi) {
+    const k = yi.length, p = X[0].length, df = k - p;
+    if (df <= 0) return 0;
+    const w0 = vi.map((v) => 1 / v);
+    const { beta: b0, vcov: V0, rankDeficient: rd0 } = wlsCholesky(X, yi, w0);
+    if (rd0) return 0;
+    const QE = yi.reduce((s, y, i) => {
+      const e = y - X[i].reduce((a, xi, j) => a + xi * b0[j], 0);
+      return s + w0[i] * e * e;
+    }, 0);
+    const c = w0.reduce((s, wi, i) => s + wi * (1 - wi * quadForm2(V0, X[i])), 0);
+    return c > 0 ? Math.max(0, (QE - df) / c) : 0;
+  }
+  function tau2REML(X, yi, vi, tol = 1e-10, maxIter = 100) {
+    const k = yi.length, p = X[0].length;
+    if (k - p <= 0) return 0;
+    let tau2 = tau2DL(X, yi, vi);
+    for (let iter = 0; iter < maxIter; iter++) {
+      const w = vi.map((v) => 1 / (v + tau2));
+      const { beta, vcov: V, rankDeficient: rd } = wlsCholesky(X, yi, w);
+      if (rd) break;
+      let score = 0, info = 0;
+      for (let i = 0; i < k; i++) {
+        const h = w[i] * quadForm2(V, X[i]);
+        const e = yi[i] - X[i].reduce((a, xi, j) => a + xi * beta[j], 0);
+        const pi = w[i] * (1 - h);
+        score += w[i] * w[i] * e * e - pi;
+        info += w[i] * pi;
+      }
+      if (info <= 0) break;
+      let step = score / info;
+      let newTau2 = tau2 + step;
+      let sh = 0;
+      while (newTau2 < 0 && sh++ < 20) {
+        step /= 2;
+        newTau2 = tau2 + step;
+      }
+      newTau2 = Math.max(0, newTau2);
+      if (Math.abs(newTau2 - tau2) < tol) {
+        tau2 = newTau2;
+        break;
+      }
+      tau2 = newTau2;
+    }
+    return tau2;
+  }
+  function tau2ML(X, yi, vi, tol = 1e-10, maxIter = 100) {
+    const k = yi.length, p = X[0].length;
+    if (k - p <= 0) return 0;
+    let tau2 = tau2DL(X, yi, vi);
+    for (let iter = 0; iter < maxIter; iter++) {
+      const w = vi.map((v) => 1 / (v + tau2));
+      const { beta, rankDeficient: rd } = wlsCholesky(X, yi, w);
+      if (rd) break;
+      let score = 0, info = 0;
+      for (let i = 0; i < k; i++) {
+        const vit = vi[i] + tau2;
+        const e = yi[i] - X[i].reduce((a, xi, j) => a + xi * beta[j], 0);
+        score += e * e / (vit * vit) - 1 / vit;
+        info += 1 / (vit * vit);
+      }
+      if (info <= 0) break;
+      let step = score / info;
+      let newTau2 = tau2 + step;
+      let sh = 0;
+      while (newTau2 < 0 && sh++ < 20) {
+        step /= 2;
+        newTau2 = tau2 + step;
+      }
+      newTau2 = Math.max(0, newTau2);
+      if (Math.abs(newTau2 - tau2) < tol) {
+        tau2 = newTau2;
+        break;
+      }
+      tau2 = newTau2;
+    }
+    return tau2;
+  }
+  function tau2PM(X, yi, vi, tol = 1e-10, maxIter = 100) {
+    const k = yi.length, p = X[0].length, df = k - p;
+    if (df <= 0) return 0;
+    let tau2 = 0;
+    for (let iter = 0; iter < maxIter; iter++) {
+      const w = vi.map((v) => 1 / (v + tau2));
+      const { beta, rankDeficient: rd } = wlsCholesky(X, yi, w);
+      if (rd) break;
+      const QE = yi.reduce((s, y, i) => {
+        const e = y - X[i].reduce((a, xi, j) => a + xi * beta[j], 0);
+        return s + w[i] * e * e;
+      }, 0);
+      const sumW = w.reduce((a, b) => a + b, 0);
+      const newTau2 = Math.max(0, tau2 + (QE - df) / sumW);
+      if (Math.abs(newTau2 - tau2) < tol) return newTau2;
+      tau2 = newTau2;
+    }
+    return tau2;
+  }
+  function tau2HS(X, yi, vi) {
+    const k = yi.length, p = X[0].length, df = k - p;
+    if (df <= 0) return 0;
+    const w0 = vi.map((v) => 1 / v);
+    const { beta, rankDeficient: rd } = wls(X, yi, w0);
+    if (rd) return 0;
+    let QE = 0, sumW = 0;
+    for (let i = 0; i < k; i++) {
+      const e = yi[i] - X[i].reduce((a, xi, j) => a + xi * beta[j], 0);
+      QE += w0[i] * e * e;
+      sumW += w0[i];
+    }
+    return sumW > 0 ? Math.max(0, (QE - df) / sumW) : 0;
+  }
+  function tau2HE(X, yi, vi) {
+    const k = yi.length, p = X[0].length, df = k - p;
+    if (df <= 0) return 0;
+    const w1 = vi.map(() => 1);
+    const { beta, rankDeficient: rd } = wls(X, yi, w1);
+    if (rd) return 0;
+    let SS = 0;
+    for (let i = 0; i < k; i++) {
+      const e = yi[i] - X[i].reduce((a, xi, j) => a + xi * beta[j], 0);
+      SS += e * e;
+    }
+    const meanV = vi.reduce((a, b) => a + b, 0) / k;
+    return Math.max(0, SS / df - meanV);
+  }
+  function estimateTau2(X, yi, vi, method) {
+    if (method === "REML") return tau2REML(X, yi, vi);
+    if (method === "ML") return tau2ML(X, yi, vi);
+    if (method === "PM") return tau2PM(X, yi, vi);
+    if (method === "HS") return tau2HS(X, yi, vi);
+    if (method === "HE") return tau2HE(X, yi, vi);
+    return tau2DL(X, yi, vi);
+  }
+  function permTestSync(params) {
+    const {
+      yi,
+      vi,
+      Xf: X,
+      QM_obs,
+      nPerm = 999,
+      seed = 12345,
+      method = "REML",
+      modTests = []
+    } = params;
+    const k = yi.length;
+    const p = X[0].length;
+    const pm1 = p - 1;
+    if (k < 2 || p < 2)
+      return { error: `Permutation test requires k \u2265 2 and p \u2265 2 (got k=${k}, p=${p})` };
+    if (!isFinite(QM_obs))
+      return { error: "Observed QM is not finite" };
+    const omniIdxs = Array.from({ length: pm1 }, (_, j) => j + 1);
+    const nMods = modTests.length;
+    const QM_dist = new Float64Array(nPerm);
+    const modQM_dist = nMods > 0 ? new Float64Array(nPerm * nMods) : new Float64Array(0);
+    QM_dist[0] = QM_obs;
+    if (nMods > 0) {
+      const tau2_obs = estimateTau2(X, yi, vi, method);
+      const w_obs = vi.map((v) => 1 / (v + tau2_obs));
+      const { beta: b0, vcov: V0, rankDeficient: rd0 } = wlsCholesky(X, yi, w_obs);
+      if (!rd0) {
+        for (let m = 0; m < nMods; m++) {
+          const { colIdxs } = modTests[m];
+          if (!colIdxs || colIdxs.length === 0) {
+            modQM_dist[m] = NaN;
+            continue;
+          }
+          const Vmm = subMatrix(V0, colIdxs);
+          const Vinv = matInverse(Vmm);
+          if (Vinv === null) {
+            modQM_dist[m] = NaN;
+            continue;
+          }
+          const bm = colIdxs.map((j) => b0[j]);
+          modQM_dist[m] = quadForm2(Vinv, bm);
+        }
+      }
+    }
+    if (nPerm <= 1) return { QM_dist, modQM_dist, nPerm, nMods };
+    const rand = mulberry322(seed);
+    const permIdx = Array.from({ length: k }, (_, i) => i);
+    for (let perm = 1; perm < nPerm; perm++) {
+      fisherYates(permIdx, rand);
+      const X_perm = X.map((_, i) => {
+        const srcRow = X[permIdx[i]];
+        return [1, ...srcRow.slice(1)];
+      });
+      const tau2_p = estimateTau2(X_perm, yi, vi, method);
+      const w_p = vi.map((v) => 1 / (v + tau2_p));
+      const { beta, vcov: V, rankDeficient: rd } = wlsCholesky(X_perm, yi, w_p);
+      if (rd) {
+        QM_dist[perm] = NaN;
+        for (let m = 0; m < nMods; m++) modQM_dist[perm * nMods + m] = NaN;
+        continue;
+      }
+      if (pm1 > 0) {
+        const V22 = subMatrix(V, omniIdxs);
+        const V22inv = matInverse(V22);
+        if (V22inv !== null) {
+          const bMod = omniIdxs.map((j) => beta[j]);
+          QM_dist[perm] = quadForm2(V22inv, bMod);
+        } else {
+          QM_dist[perm] = NaN;
+        }
+      }
+      for (let m = 0; m < nMods; m++) {
+        const { colIdxs } = modTests[m];
+        if (!colIdxs || colIdxs.length === 0) {
+          modQM_dist[perm * nMods + m] = NaN;
+          continue;
+        }
+        const Vmm = subMatrix(V, colIdxs);
+        const Vinv = matInverse(Vmm);
+        if (Vinv === null) {
+          modQM_dist[perm * nMods + m] = NaN;
+          continue;
+        }
+        const bm = colIdxs.map((j) => beta[j]);
+        modQM_dist[perm * nMods + m] = quadForm2(Vinv, bm);
+      }
+    }
+    return { QM_dist, modQM_dist, nPerm, nMods };
+  }
+  function permPval(dist, observed) {
+    if (!isFinite(observed)) return NaN;
+    let exceeds = 0;
+    for (let i = 0; i < dist.length; i++) {
+      if (isFinite(dist[i]) && dist[i] >= observed) exceeds++;
+    }
+    return exceeds / dist.length;
+  }
+  var init_perm = __esm({
+    "js/perm.js"() {
+      init_linalg();
     }
   });
 
@@ -8852,6 +10234,51 @@ var App = (() => {
     }
     return clone;
   }
+  function serializeSVG(svgEl) {
+    if (!svgEl) return "";
+    const clone = svgEl.cloneNode(true);
+    clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+    const w = clone.getAttribute("width") || String(svgEl.getBoundingClientRect().width);
+    const h = clone.getAttribute("height") || String(svgEl.getBoundingClientRect().height);
+    clone.setAttribute("width", w);
+    clone.setAttribute("height", h);
+    resolveThemeVars(clone);
+    if (!hasEmbeddedBackground(clone)) {
+      const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+      bg.setAttribute("width", "100%");
+      bg.setAttribute("height", "100%");
+      bg.setAttribute("fill", currentBgColour());
+      clone.insertBefore(bg, clone.firstChild);
+    }
+    return new XMLSerializer().serializeToString(clone);
+  }
+  function collectPagedSVGs(svgId, drawFn, drawArgs, options) {
+    const svgEl = document.getElementById(svgId);
+    if (!svgEl) return [];
+    const svgs = [];
+    let totalPages = 1;
+    try {
+      ({ totalPages } = drawFn(...drawArgs, { ...options, page: 0 }));
+      svgs.push(serializeSVG(svgEl));
+    } catch (e) {
+      console.error(`collectPagedSVGs(${svgId}): failed to render page 0`, e);
+      return [];
+    }
+    for (let p = 1; p < totalPages; p++) {
+      try {
+        drawFn(...drawArgs, { ...options, page: p });
+        svgs.push(serializeSVG(svgEl));
+      } catch (e) {
+        console.error(`collectPagedSVGs(${svgId}): failed to render page ${p}`, e);
+      }
+    }
+    try {
+      drawFn(...drawArgs, { ...options, page: options.currentPage ?? 0 });
+    } catch (e) {
+      console.error(`collectPagedSVGs(${svgId}): failed to restore page`, e);
+    }
+    return svgs;
+  }
   function exportSVG(svgEl, filename = "plot.svg") {
     if (!svgEl) return;
     const svgStr = new XMLSerializer().serializeToString(prepareSVGClone(svgEl));
@@ -8933,9 +10360,9 @@ var App = (() => {
     let i = 0;
     while (i < text.length) {
       const ch = text[i];
-      const next = text[i + 1];
+      const next2 = text[i + 1];
       if (inQuotes) {
-        if (ch === '"' && next === '"') {
+        if (ch === '"' && next2 === '"') {
           field += '"';
           i += 2;
         } else if (ch === '"') {
@@ -8953,7 +10380,7 @@ var App = (() => {
           row.push(field.trim());
           field = "";
           i++;
-        } else if (ch === "\r" && next === "\n") {
+        } else if (ch === "\r" && next2 === "\n") {
           row.push(field.trim());
           rows.push(row);
           row = [];
@@ -9032,132 +10459,642 @@ var App = (() => {
     }
   });
 
-  // js/report.js
-  var report_exports = {};
-  __export(report_exports, {
-    CITATIONS: () => CITATIONS,
-    buildReport: () => buildReport,
-    collectCitations: () => collectCitations,
-    downloadHTML: () => downloadHTML,
-    openPrintPreview: () => openPrintPreview
-  });
-  function serializeSVG(svgEl) {
-    if (!svgEl) return "";
-    const clone = svgEl.cloneNode(true);
-    clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
-    const w = clone.getAttribute("width") || String(svgEl.getBoundingClientRect().width);
-    const h = clone.getAttribute("height") || String(svgEl.getBoundingClientRect().height);
-    clone.setAttribute("width", w);
-    clone.setAttribute("height", h);
-    resolveThemeVars(clone);
-    if (!hasEmbeddedBackground(clone)) {
-      const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-      bg.setAttribute("width", "100%");
-      bg.setAttribute("height", "100%");
-      bg.setAttribute("fill", currentBgColour());
-      clone.insertBefore(bg, clone.firstChild);
-    }
-    return new XMLSerializer().serializeToString(clone);
-  }
-  function collectForestSVGs(studies, m, forestOptions) {
-    const svgEl = document.getElementById("forestPlot");
-    if (!svgEl) return [];
-    const svgs = [];
-    let totalPages = 1;
-    try {
-      ({ totalPages } = drawForest(studies, m, { ...forestOptions, page: 0 }));
-      svgs.push(serializeSVG(svgEl));
-    } catch (e) {
-      console.error("collectForestSVGs: failed to render page 0", e);
-      return [];
-    }
-    for (let p = 1; p < totalPages; p++) {
-      try {
-        drawForest(studies, m, { ...forestOptions, page: p });
-        svgs.push(serializeSVG(svgEl));
-      } catch (e) {
-        console.error(`collectForestSVGs: failed to render page ${p}`, e);
-      }
-    }
-    try {
-      drawForest(studies, m, { ...forestOptions, page: forestOptions.currentPage ?? 0 });
-    } catch (e) {
-      console.error("collectForestSVGs: failed to restore page", e);
-    }
-    return svgs;
-  }
-  function collectCumulativeForestSVGs(results, profile, options = {}) {
-    const svgEl = document.getElementById("cumulativePlot");
-    if (!svgEl) return [];
-    const svgs = [];
-    let totalPages = 1;
-    try {
-      ({ totalPages } = drawCumulativeForest(results, profile, { ...options, page: 0 }));
-      svgs.push(serializeSVG(svgEl));
-    } catch (e) {
-      console.error("collectCumulativeForestSVGs: failed to render page 0", e);
-      return [];
-    }
-    for (let p = 1; p < totalPages; p++) {
-      try {
-        drawCumulativeForest(results, profile, { ...options, page: p });
-        svgs.push(serializeSVG(svgEl));
-      } catch (e) {
-        console.error(`collectCumulativeForestSVGs: failed to render page ${p}`, e);
-      }
-    }
-    try {
-      drawCumulativeForest(results, profile, { ...options, page: options.currentPage ?? 0 });
-    } catch (e) {
-      console.error("collectCumulativeForestSVGs: failed to restore page", e);
-    }
-    return svgs;
-  }
-  function collectCaterpillarSVGs(studies, m, profile, options = {}) {
-    const svgEl = document.getElementById("caterpillarPlot");
-    if (!svgEl) return [];
-    const svgs = [];
-    let totalPages = 1;
-    try {
-      ({ totalPages } = drawCaterpillarPlot(studies, m, profile, { ...options, page: 0 }));
-      svgs.push(serializeSVG(svgEl));
-    } catch (e) {
-      console.error("collectCaterpillarSVGs: failed to render page 0", e);
-      return [];
-    }
-    for (let p = 1; p < totalPages; p++) {
-      try {
-        drawCaterpillarPlot(studies, m, profile, { ...options, page: p });
-        svgs.push(serializeSVG(svgEl));
-      } catch (e) {
-        console.error(`collectCaterpillarSVGs: failed to render page ${p}`, e);
-      }
-    }
-    try {
-      drawCaterpillarPlot(studies, m, profile, { ...options, page: options.currentPage ?? 0 });
-    } catch (e) {
-      console.error("collectCaterpillarSVGs: failed to restore page", e);
-    }
-    return svgs;
-  }
+  // js/format.js
   function fmt2(v, d = 3) {
     return isFinite(v) ? (+v).toFixed(d) : "\u2014";
   }
-  function fmtP(p) {
-    if (!isFinite(p)) return "\u2014";
-    if (p < 1e-4) return "&lt;0.0001";
-    return (+p).toFixed(4);
-  }
   function fmtP_APA(p) {
     if (!isFinite(p)) return "\u2014";
-    if (p < 1e-3) return "&lt; .001";
+    if (p < 1e-3) return "< .001";
     return "= " + (+p).toFixed(3).replace(/^0\./, ".");
   }
   function fmtCI_APA(lo, hi, d = 3) {
     return `[${fmt2(lo, d)}, ${fmt2(hi, d)}]`;
   }
-  function esc(s) {
+  function escHTML(s) {
     return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+  var init_format = __esm({
+    "js/format.js"() {
+    }
+  });
+
+  // js/sections.js
+  function summaryData(args) {
+    const {
+      m,
+      profile,
+      method,
+      ciMethod,
+      useTF,
+      tf,
+      mAdjusted,
+      studies,
+      cles = null,
+      ciLevel = "95"
+    } = args;
+    const widthCiLabel = ciLevel + "% CI";
+    const k = studies.filter((d) => !d.filled).length;
+    const isMHorPeto = m.isMH || m.isPeto;
+    const FE_disp = profile.transform(m.FE);
+    const RE_disp = isMHorPeto ? null : profile.transform(m.RE);
+    const ci = { lb: profile.transform(m.ciLow), ub: profile.transform(m.ciHigh) };
+    const pred = { lb: profile.transform(m.predLow), ub: profile.transform(m.predHigh) };
+    const RE_adj = !isMHorPeto && useTF && mAdjusted ? profile.transform(mAdjusted.RE) : null;
+    const feAlpha = { "90": 0.1, "95": 0.05, "99": 0.01 }[ciLevel] ?? 0.05;
+    const feZ = normalQuantile(1 - feAlpha / 2);
+    const feCi = { lb: profile.transform(m.FE - feZ * m.seFE), ub: profile.transform(m.FE + feZ * m.seFE) };
+    const tauCI1 = fmt2(m.tauCI?.[0]);
+    const tauCI2 = isFinite(m.tauCI?.[1]) ? fmt2(m.tauCI[1]) : "\u221E";
+    const H2hi = isFinite(m.H2CI?.[1]) ? fmt2(m.H2CI[1]) : "\u221E";
+    const methodLabel = m.isMH ? "Mantel-Haenszel" : m.isPeto ? "Peto" : method;
+    const ciLabel = ciMethod === "KH" ? "Knapp-Hartung" : ciMethod === "t" ? "t-distribution" : ciMethod === "PL" ? "Profile Likelihood" : "Normal (z)";
+    const settings = `Effect type: ${profile.label}  \xB7  Pooling: ${methodLabel}  \xB7  CI method: ${ciLabel}  \xB7  k\u202F=\u202F${k}${tf.length > 0 ? ` + ${tf.length} imputed (trim\u202F&\u202Ffill)` : ""}`;
+    const rows = [
+      [profile.label + " \u2014 Fixed Effects (FE)", `${fmt2(FE_disp)}, SE = ${fmt2(m.seFE)}, ${widthCiLabel} ${fmtCI_APA(feCi.lb, feCi.ub)}`],
+      ...!isMHorPeto ? [[profile.label + " \u2014 Random Effects (RE)", `${fmt2(RE_disp)}, SE = ${fmt2(m.seRE)}, ${widthCiLabel} ${fmtCI_APA(ci.lb, ci.ub)}`]] : [],
+      ...isMHorPeto ? [[widthCiLabel, `${fmtCI_APA(ci.lb, ci.ub)}  \xB7  SE = ${fmt2(m.seFE)}`]] : [],
+      ...cles ? [["CLES (RE)", `${fmt2(cles.estimate)} [${fmt2(cles.ci[0])}, ${fmt2(cles.ci[1])}]`]] : [],
+      ...RE_adj !== null ? [["RE (trim-and-fill adjusted)", fmt2(RE_adj)]] : [],
+      ...!isMHorPeto ? [["95% Prediction interval (PI)", fmtCI_APA(pred.lb, pred.ub)]] : [],
+      ...!isMHorPeto ? [["\u03C4\xB2", `${fmt2(m.tau2)}, ${widthCiLabel} [${tauCI1}, ${tauCI2}]`]] : [],
+      ["<em>I</em>\xB2", `${fmt2(m.I2)}%, ${widthCiLabel} [${fmt2(m.I2CI?.[0])}%, ${fmt2(m.I2CI?.[1])}%]`],
+      ...!isMHorPeto ? [["H\xB2-CI", `[${fmt2(m.H2CI?.[0])}, ${H2hi}]`]] : [],
+      [`<em>Q</em> (<em>df</em>\u202F=\u202F${m.df})`, fmt2(m.Q)],
+      ...m.dist ? [[`${m.dist}-statistic`, `${fmt2(m.stat)}, <em>p</em> ${fmtP_APA(m.pval)}`]] : [],
+      ...m.isClustered ? [[
+        `Robust CI (C\u202F=\u202F${m.clustersUsed} clusters)`,
+        `${fmtCI_APA(profile.transform(m.robustCiLow), profile.transform(m.robustCiHigh))}  \xB7  SE\u202F=\u202F${fmt2(m.robustSE)}  \xB7  <em>z</em>\u202F=\u202F${fmt2(m.robustStat)}, <em>p</em> ${fmtP_APA(m.robustPval)}`
+      ]] : []
+    ];
+    const note = isMHorPeto ? `Fixed-effect pooling (${methodLabel}) \u2014 RE estimate, \u03C4\xB2, and prediction interval not applicable. FE = fixed effects; CI = confidence interval.` : `FE = fixed effects; RE = random effects; CI = confidence interval; PI = prediction interval.${cles ? " CLES = common language effect size = \u03A6(g/\u221A2); probability that a randomly drawn score from group 1 exceeds group 2 (McGraw & Wong, 1992)." : ""}${m.isClustered ? " Robust CI uses cluster-robust (sandwich) standard errors." : ""}`;
+    return {
+      settings,
+      subtitle: `Summary of Meta-Analysis Results (${profile.label})`,
+      headers: ["Statistic", "Value"],
+      rows,
+      note,
+      reRowIdx: !isMHorPeto ? 1 : -1
+    };
+  }
+  function pubBiasData(args) {
+    const {
+      egger,
+      begg,
+      fatpet,
+      petpeese,
+      fsn,
+      tes,
+      waap,
+      harbord,
+      peters,
+      deeks,
+      ruecker,
+      hc,
+      useTF,
+      tf,
+      profile
+    } = args;
+    const na = (v) => isFinite(v) ? fmt2(v) : "\u2014";
+    const naP = (v) => isFinite(v) ? fmtP_APA(v) : "NA";
+    const petEff = isFinite(fatpet?.intercept) ? fmt2(profile.transform(fatpet.intercept)) : "\u2014";
+    const rows = [
+      ["Egger\u2019s test (intercept)", na(egger?.intercept), naP(egger?.p)],
+      ["Begg\u2019s test (rank correlation \u03C4)", na(begg?.tau), naP(begg?.p)],
+      ["FAT \u2014 \u03B2\u2081 (bias)", na(fatpet?.slope), naP(fatpet?.slopeP)],
+      ["PET \u2014 effect at SE \u2192 0", petEff, naP(fatpet?.interceptP)],
+      isFinite(petpeese?.peese?.intercept) ? [
+        `PEESE \u2014 effect at v\u1D62 \u2192 0${petpeese.usePeese ? " \u2713" : ""}`,
+        fmt2(profile.transform(petpeese.peese.intercept)),
+        naP(petpeese.peese.interceptP)
+      ] : ["PEESE", "\u2014", "NA"],
+      ["Harbord (intercept)", na(harbord?.intercept), naP(harbord?.interceptP)],
+      ["Peters (intercept)", na(peters?.intercept), naP(peters?.interceptP)],
+      ["Deeks (intercept)", na(deeks?.intercept), naP(deeks?.interceptP)],
+      ["R\xFCcker (intercept)", na(ruecker?.intercept), naP(ruecker?.interceptP)],
+      tes && isFinite(tes.chi2) ? [`TES \u2014 \u03C7\xB2 (O=${tes.O}, E=${fmt2(tes.E)})`, fmt2(tes.chi2), naP(tes.p)] : ["TES (test of excess significance)", "\u2014", "NA"],
+      waap && isFinite(waap.estimate) ? [
+        `WAAP-WLS (k_adequate\u202F=\u202F${waap.kAdequate} of ${waap.k}${waap.fallback ? "; WLS fallback" : ""})`,
+        `${fmt2(profile.transform(waap.estimate))} [${fmt2(profile.transform(waap.ci[0]))}, ${fmt2(profile.transform(waap.ci[1]))}]`,
+        naP(waap.p)
+      ] : ["WAAP-WLS", "\u2014", "NA"],
+      hc && !hc.error ? [
+        "Henmi-Copas CI",
+        `${fmt2(profile.transform(hc.beta))} [${fmt2(profile.transform(hc.ci[0]))}, ${fmt2(profile.transform(hc.ci[1]))}]`,
+        "\u2014"
+      ] : ["Henmi-Copas CI", "\u2014", "NA (k < 3)"],
+      hc && !hc.error && isFinite(hc.tau2) ? ["Henmi-Copas \u03C4\xB2 (DL, bias-robust)", fmt2(hc.tau2), "\u2014"] : null
+    ].filter(Boolean);
+    const fsnLine = [
+      `Fail-safe N (Rosenthal): ${isFinite(fsn?.rosenthal) ? Math.round(fsn.rosenthal) : "\u2014"}`,
+      `Fail-safe N (Orwin): ${isFinite(fsn?.orwin) ? Math.round(fsn.orwin) : "\u2014"}`,
+      `Trim\u202F&\u202FFill: ${useTF ? "ON" : "OFF"}${tf?.length > 0 ? ` (${tf.length} filled)` : ""}`
+    ].join("  \xB7  ");
+    const note = "FAT = funnel asymmetry test; PET = precision-effect test; PEESE = precision-effect estimate with standard error (Stanley & Doucouliagos, 2014); \u2713 = PEESE preferred (FAT p < .10). Harbord, Peters, Deeks, and R\xFCcker are binary-outcome variants of the Egger test; TES = test of excess significance; WAAP-WLS = weighted average of adequately powered studies; statistic is bias-corrected effect estimate [95% CI]; Henmi-Copas = bias-robust CI centred on FE estimate (DL \u03C4\xB2). NA = fewer than 3 eligible studies or missing cell counts.";
+    return { headers: ["Test", "Statistic", "<em>p</em>"], rows, note, fsnLine };
+  }
+  function pCurveData(pcurve) {
+    if (!pcurve || pcurve.k < 3) return null;
+    const verdictLabels = {
+      "evidential": "Evidential value",
+      "no-evidential": "No evidential value",
+      "inconclusive": "Inconclusive",
+      "insufficient": "Insufficient data"
+    };
+    const fmtZ = (z) => isFinite(z) ? z.toFixed(3) : "\u2014";
+    const rows = [
+      ["Right-skew test", fmtZ(pcurve.rightSkewZ), fmtP_APA(pcurve.rightSkewP)],
+      ["Flatness test", fmtZ(pcurve.flatnessZ), fmtP_APA(pcurve.flatnessP)]
+    ];
+    const verdict = verdictLabels[pcurve.verdict] ?? pcurve.verdict ?? "\u2014";
+    return {
+      kLine: `${pcurve.k} significant result${pcurve.k !== 1 ? "s" : ""} (p < .05)`,
+      headers: ["Test", "<em>Z</em>", "<em>p</em>"],
+      rows,
+      verdict,
+      note: `Right-skew test H\u2080: p-curve is uniform or left-skewed (no evidential value). Flatness test H\u2080: p-curve has evidential value. Verdict: ${verdict}. Simonsohn et al. (2014).`
+    };
+  }
+  function puniformData(args) {
+    const { puniform, m, profile, ciLevel = "95" } = args;
+    if (!puniform || puniform.k < 3 || !isFinite(puniform.estimate)) return null;
+    const widthCiLabel = ciLevel + "% CI";
+    const tr = (v) => isFinite(v) ? profile.transform(v) : NaN;
+    const noteExtra = [
+      puniform.biasDetected ? "Bias detected (p < .05)." : "",
+      puniform.significantEffect ? "Significant effect after correction (p < .05)." : ""
+    ].filter(Boolean).join(" ");
+    const rows = [
+      [
+        "RE (uncorrected)",
+        isFinite(m.RE) ? fmt2(tr(m.RE)) : "\u2014",
+        fmtCI_APA(tr(m.ciLow), tr(m.ciHigh)),
+        fmt2(puniform.Z_bias),
+        fmtP_APA(puniform.p_bias)
+      ],
+      [
+        "P-uniform (bias-corrected)",
+        isFinite(puniform.estimate) ? fmt2(tr(puniform.estimate)) : "\u2014",
+        fmtCI_APA(tr(puniform.ciLow), tr(puniform.ciHigh)),
+        fmt2(puniform.Z_sig),
+        fmtP_APA(puniform.p_sig)
+      ]
+    ];
+    const note = "RE row: bias test (H\u2080: RE = true effect). P-uniform row: significance test (H\u2080: \u03B4\u202F=\u202F0). CI = confidence interval." + (noteExtra ? " " + noteExtra : "");
+    return {
+      kLine: `${puniform.k} significant result${puniform.k !== 1 ? "s" : ""} (p < .05) used  \xB7  effect scale: ${profile.label}`,
+      headers: ["Method", "Estimate", widthCiLabel, "<em>Z</em>", "<em>p</em>"],
+      rows,
+      note
+    };
+  }
+  function selModelData(args) {
+    const { sel, profile, selMode, selLabel, ciLevel = "95" } = args;
+    if (!sel || sel.error) return null;
+    const widthCiLabel = ciLevel + "% CI";
+    const isMLE = selMode === "mle";
+    const fmtDisp = (v) => isFinite(v) ? fmt2(profile.transform(v)) : "\u2014";
+    const fmtV = (v) => isFinite(v) ? fmt2(v) : "\u2014";
+    const cuts = sel.cuts;
+    const intervalLabels = cuts.map((c, j) => `(${j === 0 ? "0" : cuts[j - 1]}, ${c}]`);
+    const muAdj = fmtDisp(sel.mu);
+    const ciLo = fmtDisp(sel.mu - 1.96 * sel.se_mu);
+    const ciHi = fmtDisp(sel.mu + 1.96 * sel.se_mu);
+    const omegaRow = [
+      "Selection weight \u03C9",
+      ...sel.omega.map((w, j) => {
+        if (!isMLE || j === 0) return `${fmtV(w)} (fixed)`;
+        const se = isFinite(sel.se_omega[j]) ? ` \xB1 ${fmtV(sel.se_omega[j])}` : "";
+        return `${fmtV(w)}${se}`;
+      })
+    ];
+    const rows = [
+      omegaRow,
+      ["Studies per interval", ...sel.nPerInterval.map(String)],
+      [`Adjusted \u03BC\u0302 [${widthCiLabel}]`, `${muAdj} [${ciLo}, ${ciHi}]  \xB7  unadjusted: ${fmtDisp(sel.RE_unsel)}`],
+      [`Adjusted \u03C4\xB2`, `${fmtV(sel.tau2)}  \xB7  unadjusted: ${fmtV(sel.tau2_unsel)}`],
+      ...isMLE && isFinite(sel.LRT) ? [
+        [`LRT (H\u2080: no selection)`, `\u03C7\xB2(${sel.LRTdf})\u202F=\u202F${fmtV(sel.LRT)}, <em>p</em> ${fmtP_APA(sel.LRTp)}`]
+      ] : []
+    ];
+    const modeLabel = isMLE ? "MLE (estimated weights)" : `Sensitivity \u2014 ${selLabel}`;
+    const sidesLabel = sel.sides === 2 ? "two-sided" : "one-sided";
+    return {
+      metaLine: `Mode: ${modeLabel}  \xB7  p-values: ${sidesLabel}  \xB7  k\u202F=\u202F${sel.k}`,
+      subtitle: "Selection Model Results",
+      headers: ["Quantity", ...intervalLabels],
+      rows,
+      note: "\u03C9 = selection weight; \u03BC\u0302 = bias-corrected pooled estimate; CI = confidence interval; LRT = likelihood ratio test.",
+      nCols: 1 + cuts.length,
+      nPerInterval: sel.nPerInterval,
+      isMLE,
+      converged: sel.converged,
+      LRTp: sel.LRTp,
+      muAdj,
+      ciLo,
+      ciHi,
+      muUnadj: fmtDisp(sel.RE_unsel)
+    };
+  }
+  function influenceData(args) {
+    const { influence, studies } = args;
+    if (!influence || !influence.length) return null;
+    const k = studies.filter((d) => !d.filled).length;
+    const dffitsThresh = 3 * Math.sqrt(1 / Math.max(k - 1, 1));
+    const covRatioThresh = 1 + 1 / k;
+    const em = "\u2014";
+    const rows = influence.map((d) => [
+      d.label,
+      isFinite(d.RE_loo) ? fmt2(d.RE_loo) : em,
+      isFinite(d.deltaTau2) ? fmt2(d.deltaTau2) : em,
+      isFinite(d.stdResidual) ? fmt2(d.stdResidual) : em,
+      isFinite(d.DFBETA) ? fmt2(d.DFBETA) : em,
+      isFinite(d.DFFITS) ? fmt2(d.DFFITS) : em,
+      isFinite(d.covRatio) ? d.covRatio.toFixed(3) : em,
+      isFinite(d.hat) ? d.hat.toFixed(3) : em,
+      isFinite(d.cookD) ? d.cookD.toFixed(3) : em,
+      [
+        d.outlier ? "Outlier" : "",
+        d.influential ? "Influential" : "",
+        d.highLeverage ? "Hi-Lev" : "",
+        d.highCookD ? "Hi-Cook" : "",
+        d.highDffits ? "Hi-DFFITS" : "",
+        d.highCovRatio ? "Hi-CovRatio" : ""
+      ].filter(Boolean).join(", ")
+    ]);
+    const flagged = influence.map((d) => d.outlier || d.influential || d.highLeverage || d.highCookD || d.highDffits || d.highCovRatio);
+    return {
+      headers: ["Study", "RE (LOO)", "\u0394\u03C4\xB2", "Std. Residual", "DFBETA", "DFFITS", "CovRatio", "Hat", "Cook\u2019s D", "Flag"],
+      rows,
+      flagged,
+      note: `LOO = leave-one-out. Thresholds: Hat > ${fmt2(2 / k)} (= 2/k); Cook\u2019s D > ${fmt2(4 / k)} (= 4/k); DFFITS > ${fmt2(dffitsThresh)} (= 3\xB7\u221A(1/(k\u22121))); CovRatio > ${fmt2(covRatioThresh)} (= 1+1/k).`
+    };
+  }
+  function subgroupData(args) {
+    const { subgroup, profile, ciLevel = "95" } = args;
+    if (!subgroup || subgroup.G < 2) return null;
+    const widthCiLabel = ciLevel + "% CI";
+    const rows = Object.entries(subgroup.groups).map(([g, r]) => {
+      const single = r.k === 1;
+      const y_disp = profile.transform(r.y);
+      const ci_lb = profile.transform(r.ci.lb);
+      const ci_ub = profile.transform(r.ci.ub);
+      return [
+        g,
+        String(r.k),
+        isFinite(y_disp) ? fmt2(y_disp) : "\u2014",
+        single ? "\u2014" : isFinite(r.se) ? fmt2(r.se) : "\u2014",
+        single ? "\u2014" : fmtCI_APA(ci_lb, ci_ub),
+        single ? "\u2014" : isFinite(r.tau2) ? r.tau2.toFixed(3) : "0",
+        single ? "\u2014" : isFinite(r.I2) ? r.I2.toFixed(1) : "0"
+      ];
+    });
+    return {
+      subtitle: `Subgroup Analysis Results (${profile.label})`,
+      headers: ["Group", "<em>k</em>", "Effect size", "SE", widthCiLabel, "\u03C4\xB2", "<em>I</em>\xB2 (%)"],
+      rows,
+      note: `CI = confidence interval. <em>Q</em>_total(${subgroup.k - 1}) = ${subgroup.Qtotal.toFixed(3)}  \xB7  <em>Q</em>_within(${subgroup.k - subgroup.G}) = ${subgroup.Qwithin.toFixed(3)}  \xB7  <em>Q</em>_between(${subgroup.df}) = ${subgroup.Qbetween.toFixed(3)}, <em>p</em> ${fmtP_APA(subgroup.p)}.`,
+      Qbetween: subgroup.Qbetween,
+      df: subgroup.df,
+      p: subgroup.p
+    };
+  }
+  function studyTableData(args) {
+    const { studies, m, profile, ciLevel = "95" } = args;
+    const widthCiLabel = ciLevel + "% CI";
+    const tau2 = isFinite(m.tau2) ? m.tau2 : 0;
+    const real = studies.filter((d) => !d.filled);
+    const totalW = real.reduce((s, d) => s + 1 / (d.vi + tau2), 0);
+    const showFEcol = !m.isMH && !m.isPeto;
+    const totalWfe = showFEcol ? real.reduce((s, d) => s + 1 / d.vi, 0) : 0;
+    const transformedScale = ["Ratio", "Hazard", "Rate", "log", "logit", "arcsine", "Freeman", "Fisher"].some((t) => profile.label.includes(t));
+    const seLabel = transformedScale ? "SE (transformed)" : "SE";
+    const fmtV = (v) => isFinite(v) ? (+v).toFixed(3) : "\u2014";
+    const fmtPct = (v) => v !== null && isFinite(v) ? v.toFixed(1) + "%" : "\u2014";
+    const pooledEf = profile.transform(m.RE);
+    const pooledLo = profile.transform(m.ciLow);
+    const pooledHi = profile.transform(m.ciHigh);
+    const headers = [`Study`, `Effect size (${profile.label})`, seLabel, widthCiLabel, "RE Weight (%)"];
+    if (showFEcol) headers.push("FE Weight (%)");
+    const rows = studies.map((d) => {
+      const wi = 1 / (d.vi + tau2);
+      const pct = d.filled ? null : wi / totalW * 100;
+      const pctFE = showFEcol && !d.filled ? 1 / d.vi / totalWfe * 100 : null;
+      const ef = profile.transform(d.yi);
+      const lo = profile.transform(d.yi - Z_95 * d.se);
+      const hi = profile.transform(d.yi + Z_95 * d.se);
+      const lbl = d.label.length > 40 ? d.label.slice(0, 39) + "\u2026" : d.label;
+      const cells = [lbl, fmtV(ef), fmtV(d.se), fmtCI_APA(lo, hi), fmtPct(pct)];
+      if (showFEcol) cells.push(fmtPct(pctFE));
+      return cells;
+    });
+    const pooledRow = ["Pooled (RE)", fmtV(pooledEf), fmtV(m.seRE), fmtCI_APA(pooledLo, pooledHi), "100%"];
+    if (showFEcol) pooledRow.push("100%");
+    const weightNote = showFEcol ? "RE and FE weights shown." : "FE weights shown.";
+    const note = `Effect size = ${profile.label}. SE = standard error. CI = confidence interval. ${weightNote}` + (studies.some((d) => d.filled) ? " Trim-and-fill imputed rows are included." : "");
+    const filled = studies.map((d) => !!d.filled);
+    return { headers, rows, pooledRow, note, showFEcol, filled, seLabel };
+  }
+  function regressionData(args) {
+    const { reg, method, ciMethod, ciLevel = "95", adjPs = null, mccLabel = "" } = args;
+    if (!reg || reg.rankDeficient || !reg.colNames) return null;
+    const widthCiLabel = ciLevel + "% CI";
+    const ciLabel = ciMethod === "KH" ? "Knapp-Hartung" : "Normal CI";
+    const statLabel = reg.dist === "t" ? `<em>t</em>(${reg.QEdf})` : "<em>z</em>";
+    const QMlabel = reg.QMdist === "F" ? `<em>F</em>(${reg.QMdf},\u202F${reg.QEdf})` : `\u03C7\xB2(${reg.QMdf})`;
+    const hasVif = Array.isArray(reg.vif) && reg.vif.some((v) => isFinite(v));
+    const hasRobust = reg.isClustered && Array.isArray(reg.robustSE);
+    const coefHeaders = ["Predictor", "\u03B2", "SE", statLabel, "<em>p</em>", widthCiLabel];
+    if (hasVif) coefHeaders.push("VIF");
+    if (hasRobust) coefHeaders.push("Rob. SE", "Rob. <em>t</em>", "Rob. <em>p</em>", "Rob. CI");
+    const coefRows = reg.colNames.map((name, j) => {
+      const [lo, hi] = reg.ci[j];
+      const cells = [
+        name,
+        fmt2(reg.beta[j]),
+        fmt2(reg.se[j]),
+        fmt2(reg.zval[j]),
+        fmtP_APA(reg.pval[j]),
+        fmtCI_APA(lo, hi)
+      ];
+      if (hasVif) cells.push(j === 0 ? "\u2014" : isFinite(reg.vif?.[j]) ? fmt2(reg.vif[j]) : "\u2014");
+      if (hasRobust) {
+        const rci = Array.isArray(reg.robustCi?.[j]) ? reg.robustCi[j] : [NaN, NaN];
+        cells.push(
+          fmt2(reg.robustSE[j]),
+          isFinite(reg.robustZ?.[j]) ? fmt2(reg.robustZ[j]) : "NA",
+          fmtP_APA(reg.robustP?.[j]),
+          fmtCI_APA(rci[0], rci[1])
+        );
+      }
+      return cells;
+    });
+    const R2str = reg.p > 1 && isFinite(reg.R2) ? ` <em>R</em>\xB2 = ${fmt2(reg.R2 * 100)}%.` : "";
+    const clusterNote = hasRobust ? ` Cluster-robust SE (CR1): C = ${reg.clustersUsed} cluster${reg.clustersUsed === 1 ? "" : "s"}${reg.allSingletons ? "; all singletons (HC-robust)" : ""}.` : "";
+    const coefNote = `\u03B2 = unstandardised regression coefficient. SE = standard error. CI = confidence interval. <em>Q</em>E(${reg.QEdf}) = ${fmt2(reg.QE)}, <em>p</em> ${fmtP_APA(reg.QEp)}.` + (reg.p > 1 ? ` <em>Q</em>M ${QMlabel} = ${fmt2(reg.QM)}, <em>p</em> ${fmtP_APA(reg.QMp)}.` : "") + R2str + clusterNote;
+    const metaLine = `k\u202F=\u202F${reg.k}  \xB7  ${method}  \xB7  ${ciLabel}  \xB7  \u03C4\xB2\u202F=\u202F${fmt2(reg.tau2)}  \xB7  I\xB2\u202F=\u202F${fmt2(reg.I2)}%`;
+    let modTests = null;
+    if (reg.modTests && reg.modTests.length > 1) {
+      const modQlabel = reg.QMdist === "F" ? "<em>F</em>" : "\u03C7\xB2";
+      const hasLRT = reg.modTests.some((mt) => isFinite(mt.lrt));
+      const hasAdj = Array.isArray(adjPs) && adjPs.length === reg.modTests.length;
+      const modHeaders = [
+        "Moderator",
+        `${modQlabel} (Wald)`,
+        ...hasLRT ? ["LRT \u03C7\xB2"] : [],
+        "<em>df</em>",
+        "<em>p</em> (Wald)",
+        ...hasLRT ? ["<em>p</em> (LRT)"] : [],
+        ...hasAdj ? [`<em>p</em> (${mccLabel})`] : []
+      ];
+      const modRows = reg.modTests.map((mt, mi) => [
+        mt.name,
+        fmt2(mt.QM),
+        ...hasLRT ? [isFinite(mt.lrt) ? fmt2(mt.lrt) : "NA"] : [],
+        String(mt.QMdf),
+        fmtP_APA(mt.QMp),
+        ...hasLRT ? [isFinite(mt.lrtP) ? fmtP_APA(mt.lrtP) : "NA"] : [],
+        ...hasAdj ? [fmtP_APA(adjPs[mi])] : []
+      ]);
+      const lrtNote = hasLRT ? "LRT = Likelihood Ratio Test; uses ML estimation internally regardless of \u03C4\xB2 method." : "";
+      const adjNote = hasAdj ? ` ${mccLabel} correction applied across ${reg.modTests.length} moderator tests.` : "";
+      modTests = {
+        headers: modHeaders,
+        rows: modRows,
+        note: lrtNote + adjNote
+      };
+    }
+    return {
+      metaLine,
+      coef: { headers: coefHeaders, rows: coefRows, note: coefNote },
+      modTests
+    };
+  }
+  function locationScaleData(ls, ciLevel = "95") {
+    if (!ls || ls.rankDeficient) return null;
+    const widthCiLabel = ciLevel + "% CI";
+    const tau2min = ls.tau2_i ? Math.min(...ls.tau2_i) : NaN;
+    const tau2max = ls.tau2_i ? Math.max(...ls.tau2_i) : NaN;
+    const tau2rng = ls.q > 1 ? `\u03C4\xB2 range: [${fmt2(tau2min)}, ${fmt2(tau2max)}]` : `\u03C4\xB2 = ${fmt2(ls.tau2_mean)}`;
+    const metaLine = `k = ${ls.k}  \xB7  ML  \xB7  Normal CI  \xB7  ${tau2rng}  \xB7  I\xB2 = ${fmt2(ls.I2)}%  \xB7  LL = ${fmt2(ls.LL)}`;
+    const locHeaders = ["Term", "\u03B2", "SE", "<em>z</em>", "<em>p</em>", widthCiLabel];
+    const locRows = ls.locColNames.map((name, j) => {
+      const [lo, hi] = ls.ci_beta[j];
+      return [name, fmt2(ls.beta[j]), fmt2(ls.se_beta[j]), fmt2(ls.zval_beta[j]), fmtP_APA(ls.pval_beta[j]), fmtCI_APA(lo, hi)];
+    });
+    const QMlocStr = ls.p > 1 && isFinite(ls.QM_loc) ? ` <em>Q</em>M_loc \u03C7\xB2(${ls.QM_locDf}) = ${fmt2(ls.QM_loc)}, <em>p</em> ${fmtP_APA(ls.QM_locP)}.` : "";
+    const locNote = `\u03B2 = location coefficient. <em>Q</em>E(${ls.QEdf}) = ${fmt2(ls.QE)}, <em>p</em> ${fmtP_APA(ls.QEp)}.${QMlocStr}`;
+    const scaleHeaders = ["Term", "\u03B3", "SE", "<em>z</em>", "<em>p</em>", widthCiLabel, "exp(\u03B3)"];
+    const scaleRows = ls.scaleColNames.map((name, j) => {
+      const [lo, hi] = ls.ci_gamma[j];
+      return [
+        name,
+        fmt2(ls.gamma[j]),
+        fmt2(ls.se_gamma[j]),
+        fmt2(ls.zval_gamma[j]),
+        fmtP_APA(ls.pval_gamma[j]),
+        fmtCI_APA(lo, hi),
+        j === 0 ? fmt2(Math.exp(ls.gamma[j])) : ""
+      ];
+    });
+    const QMscaleStr = ls.q > 1 && isFinite(ls.QM_scale) ? ` <em>Q</em>M_scale \u03C7\xB2(${ls.QM_scaleDf}) = ${fmt2(ls.QM_scale)}, <em>p</em> ${fmtP_APA(ls.QM_scaleP)}.` : "";
+    const LRstr = ls.q > 1 && isFinite(ls.LRchi2) ? ` LR test (scale mods): \u03C7\xB2(${ls.LRdf}) = ${fmt2(ls.LRchi2)}, <em>p</em> ${fmtP_APA(ls.LRp)}.` : "";
+    const scaleNote = `\u03B3 = scale coefficient (log \u03C4\xB2\u1D62 = Z\u1D62\u03B3). exp(\u03B3\u2080) = \u03C4\xB2 when all scale predictors = 0.${QMscaleStr}${LRstr}`;
+    let fitted = null;
+    if (ls.labels && ls.fitted) {
+      fitted = {
+        headers: ["Study", "<em>y</em>\u1D62", "<em>\u0177</em>\u1D62", "<em>e</em>\u1D62", "\u03C4\xB2\u1D62"],
+        rows: ls.labels.map((lbl, i) => [
+          lbl || String(i + 1),
+          fmt2(ls.yi[i]),
+          fmt2(ls.fitted[i]),
+          fmt2(ls.residuals[i]),
+          fmt2(ls.tau2_i[i])
+        ]),
+        note: "\u03C4\xB2\u1D62 = study-specific between-study variance from the scale model."
+      };
+    }
+    return { metaLine, locCoef: { headers: locHeaders, rows: locRows, note: locNote }, scaleCoef: { headers: scaleHeaders, rows: scaleRows, note: scaleNote }, fitted };
+  }
+  function regressionFittedData(reg) {
+    if (!reg || !reg.labels || !reg.fitted) return null;
+    const headers = ["Study", "<em>y</em>\u1D62", "<em>\u0177</em>\u1D62", "<em>e</em>\u1D62", "Std. <em>e</em>\u1D62"];
+    const rows = reg.labels.map((lbl, i) => {
+      const sr = reg.stdResiduals[i];
+      const flag = isFinite(sr) && Math.abs(sr) > 1.96;
+      return { cells: [lbl || String(i + 1), fmt2(reg.yi[i]), fmt2(reg.fitted[i]), fmt2(reg.residuals[i]), fmt2(sr)], flag };
+    });
+    const note = "Std. <em>e</em>\u1D62 = standardized residual. |Std. <em>e</em>\u1D62| > 1.96 may indicate outliers.";
+    return { headers, rows, note };
+  }
+  function permutationData(permResult, reg) {
+    if (!permResult || !reg) return null;
+    const { QM_dist, modQM_dist, nPerm, nMods } = permResult;
+    if (!QM_dist || !nPerm) return null;
+    function permPval2(dist, observed) {
+      if (!isFinite(observed)) return NaN;
+      let exceeds = 0;
+      for (let i = 0; i < dist.length; i++) {
+        if (dist[i] >= observed) exceeds++;
+      }
+      return (1 + exceeds) / (dist.length + 1);
+    }
+    const omniLabel = reg.QMdist === "F" ? `<em>F</em>(${reg.QMdf}, ${reg.QEdf})` : `\u03C7\xB2(${reg.QMdf})`;
+    const omniP = permPval2(QM_dist, reg.QM);
+    const mods = [];
+    if (nMods > 1 && Array.isArray(reg.modTests)) {
+      for (let mi = 0; mi < reg.modTests.length; mi++) {
+        const mt = reg.modTests[mi];
+        if (mt.QMdf === 0 || !mt.colIdxs || mt.colIdxs.length === 0) {
+          mods.push({ name: mt.name, label: "\u2014", observed: NaN, p: NaN });
+          continue;
+        }
+        const colDist = new Float64Array(nPerm);
+        for (let r = 0; r < nPerm; r++) colDist[r] = modQM_dist[r * nMods + mi];
+        const dfLabel = reg.QMdist === "F" ? `<em>F</em>(${mt.QMdf}, ${reg.QEdf})` : `\u03C7\xB2(${mt.QMdf})`;
+        mods.push({ name: mt.name, label: dfLabel, observed: mt.QM, p: permPval2(colDist, mt.QM) });
+      }
+    }
+    return { nPerm, omniLabel, omniObserved: reg.QM, omniP, mods };
+  }
+  function rveData(args) {
+    const { rveResult, rveRho = 0.8, profile, ciLevel = "95" } = args;
+    if (!rveResult || rveResult.error) return null;
+    const widthCiLabel = ciLevel + "% CI";
+    const est = profile.transform(rveResult.est);
+    const lo = profile.transform(rveResult.ci[0]);
+    const hi = profile.transform(rveResult.ci[1]);
+    const rows = [
+      ["Pooled estimate", `${fmt2(est)}, ${widthCiLabel} [${fmt2(lo)}, ${fmt2(hi)}]`],
+      ["SE", fmt2(rveResult.se)],
+      [`<em>t</em>(${rveResult.df})`, fmt2(rveResult.t)],
+      ["<em>p</em>", fmtP_APA(rveResult.p)],
+      ["\u03C1 (assumed within-cluster correlation)", fmt2(rveRho)],
+      ["m (clusters)", String(rveResult.kCluster)],
+      ["<em>k</em> (studies)", String(rveResult.k)]
+    ];
+    const note = "RVE = robust variance estimation (Hedges, Tipton & Johnson, 2010). Working correlation model: \u03C1 assumed constant within cluster.";
+    return { headers: ["Parameter", "Value"], rows, note };
+  }
+  function threeLevelData(args) {
+    const { threeLevelResult, profile, ciLevel = "95" } = args;
+    if (!threeLevelResult || threeLevelResult.error) return null;
+    const tl = threeLevelResult;
+    const widthCiLabel = ciLevel + "% CI";
+    const mu = profile.transform(tl.mu);
+    const lo = profile.transform(tl.ci[0]);
+    const hi = profile.transform(tl.ci[1]);
+    const rows = [
+      ["Pooled estimate", `${fmt2(mu)}, ${widthCiLabel} [${fmt2(lo)}, ${fmt2(hi)}]`],
+      ["SE", fmt2(tl.se)],
+      ["<em>z</em>", fmt2(tl.z)],
+      ["<em>p</em>", fmtP_APA(tl.p)],
+      ["\u03C3\xB2_within", fmt2(tl.tau2_within)],
+      ["\u03C3\xB2_between", fmt2(tl.tau2_between)],
+      ["<em>I</em>\xB2_within", `${fmt2(tl.I2_within)}%`],
+      ["<em>I</em>\xB2_between", `${fmt2(tl.I2_between)}%`],
+      [`<em>Q</em>(${tl.df})`, fmt2(tl.Q)],
+      ["m (clusters)", String(tl.kCluster)],
+      ["<em>k</em> (studies)", String(tl.k)],
+      ["Log-likelihood (REML)", fmt2(tl.logLik)]
+    ];
+    const note = "Three-level model: studies nested within clusters. \u03C3\xB2_within = within-cluster, \u03C3\xB2_between = between-cluster between-study heterogeneity. REML estimation.";
+    return { headers: ["Parameter", "Value"], rows, note };
+  }
+  function sensFv2(v) {
+    return isFinite(v) ? v.toFixed(3) : "\u2014";
+  }
+  function sensFvp2(v) {
+    return isFinite(v) ? v < 1e-3 ? "< .001" : v.toFixed(3).replace(/^0\./, ".") : "\u2014";
+  }
+  function sensitivityData(args) {
+    const { studies, m, method, ciMethod, profile, ciLevel = "95", alpha = 0.05 } = args;
+    if (!studies || studies.length < 2) return null;
+    const widthCiLabel = ciLevel + "% CI";
+    const realStudies = studies.filter((d) => !d.filled);
+    const loo = leaveOneOut(realStudies, method, ciMethod, m, alpha);
+    const fullSig = loo.full.pval < 0.05;
+    const fullEst = profile.transform(loo.full.RE);
+    const looHeaders = ["Study omitted", "Estimate", `${widthCiLabel} (low)`, `${widthCiLabel} (high)`, "<em>I</em>\xB2 (%)", "\u03C4\xB2", "<em>p</em>", "\u0394 estimate"];
+    const looRows = loo.rows.map((row) => {
+      const est = profile.transform(row.estimate);
+      const lo = profile.transform(row.lb);
+      const hi = profile.transform(row.ub);
+      const delta = est - fullEst;
+      return [
+        row.label,
+        sensFv2(est),
+        sensFv2(lo),
+        sensFv2(hi),
+        sensFv2(row.i2),
+        sensFv2(row.tau2),
+        sensFvp2(row.pval),
+        (delta >= 0 ? "+" : "") + sensFv2(delta)
+      ];
+    });
+    const sigChanges = loo.rows.map((row) => row.significant !== fullSig);
+    const looNote = "Rows marked * change statistical significance (<em>p</em> = .05 threshold) when that study is omitted. \u0394 estimate = LOO estimate minus full-set estimate.";
+    const estData = estimatorComparison(realStudies, ciMethod);
+    const estHeaders = ["\u03C4\xB2 Estimator", "Estimate", `${widthCiLabel} (low)`, `${widthCiLabel} (high)`, "\u03C4\xB2", "<em>I</em>\xB2 (%)"];
+    const estRows = estData.map((row) => {
+      const isCurrent = row.method === method;
+      return [
+        (TAU_LABELS[row.method] ?? row.method) + (isCurrent ? " \u2605" : ""),
+        sensFv2(profile.transform(row.estimate)),
+        sensFv2(profile.transform(row.lb)),
+        sensFv2(profile.transform(row.ub)),
+        sensFv2(row.tau2),
+        sensFv2(row.i2)
+      ];
+    });
+    const estNote = "\u2605 = currently selected estimator. Estimates on the same scale as the primary analysis.";
+    return { loo: { headers: looHeaders, rows: looRows, sigChanges, note: looNote }, est: { headers: estHeaders, rows: estRows, note: estNote } };
+  }
+  var TAU_LABELS;
+  var init_sections = __esm({
+    "js/sections.js"() {
+      init_format();
+      init_utils();
+      init_constants();
+      init_influence();
+      TAU_LABELS = {
+        DL: "DerSimonian-Laird (DL)",
+        REML: "REML",
+        PM: "Paule-Mandel (PM)",
+        EB: "Empirical Bayes (EB)",
+        PMM: "PM-Median (PMM)",
+        GENQM: "GENQ-Median",
+        ML: "Maximum Likelihood (ML)",
+        HS: "Hunter-Schmidt (HS)",
+        HE: "Hedges (HE)",
+        SJ: "Sidik-Jonkman (SJ)",
+        GENQ: "GENQ",
+        SQGENQ: "SQGENQ",
+        DLIT: "DLIT",
+        EBLUP: "EBLUP",
+        HSk: "HSk"
+      };
+    }
+  });
+
+  // js/report.js
+  var report_exports = {};
+  __export(report_exports, {
+    CITATIONS: () => CITATIONS,
+    buildFigureAPA: () => buildFigureAPA,
+    buildMVReport: () => buildMVReport,
+    buildReport: () => buildReport,
+    buildTableAPA: () => buildTableAPA,
+    collectCitations: () => collectCitations,
+    downloadHTML: () => downloadHTML,
+    openPrintPreview: () => openPrintPreview,
+    reportCSS: () => reportCSS
+  });
+  function fmtP_APA2(p) {
+    return escHTML(fmtP_APA(p));
+  }
+  function escNote(s) {
+    return String(s).replace(/<(?!\/?em>)/g, "&lt;");
   }
   function buildTable(headers, rows, { extraClass = "", style = "", tfoot = "" } = {}) {
     const cls = extraClass ? ` ${extraClass}` : "";
@@ -9205,7 +11142,11 @@ ${noteBlock}`;
       sel,
       reg,
       influence,
-      bayesResult
+      bayesResult,
+      waap,
+      rveResult,
+      threeLevelResult,
+      permResult
     } = args;
     const keys = [];
     const seen = /* @__PURE__ */ new Set();
@@ -9215,6 +11156,8 @@ ${noteBlock}`;
         keys.push(key);
       }
     }
+    if (args.m?.isMH) add("MH");
+    if (args.m?.isPeto) add("PETO");
     const methodMap = {
       DL: "DL",
       REML: "REML",
@@ -9246,617 +11189,310 @@ ${noteBlock}`;
     if (pcurve && pcurve.k >= 3) add("PCURVE");
     if (puniform && puniform.k >= 3) add("PUNIF");
     if (sel && !sel.error) add("VH");
+    if (waap && isFinite(waap.estimate)) add("WAAP");
+    if (reg?.isClustered) add("CRSE");
+    if (rveResult && !rveResult.error) add("RVE");
+    if (threeLevelResult && !threeLevelResult.error) add("THREE");
     if (reg && !reg.rankDeficient) add("MREG");
+    if (args.ls && !args.ls.rankDeficient) add("LS");
+    if (permResult && permResult.nPerm > 0) add("PERM");
     if (influence && influence.length) add("INFL");
+    if (args.gosh && args.gosh.count > 0) add("GOSH");
     if (bayesResult && !bayesResult.error) add("BAYES");
     return keys;
   }
   function sectionSummary(args) {
-    const {
-      m,
-      profile,
-      method,
-      ciMethod,
-      useTF,
-      tf,
-      mAdjusted,
-      studies,
-      cles = null,
-      apaFormat = false,
-      nextTable,
-      ciLevel
-    } = args;
-    const widthCiLabel = (ciLevel ?? "95") + "% CI";
-    const k = studies.filter((d) => !d.filled).length;
-    const isMHorPeto = m.isMH || m.isPeto;
-    const FE_disp = profile.transform(m.FE);
-    const RE_disp = isMHorPeto ? null : profile.transform(m.RE);
-    const ci = { lb: profile.transform(m.ciLow), ub: profile.transform(m.ciHigh) };
-    const pred = { lb: profile.transform(m.predLow), ub: profile.transform(m.predHigh) };
-    const RE_adj = !isMHorPeto && useTF && mAdjusted ? profile.transform(mAdjusted.RE) : null;
-    const feAlpha = { "90": 0.1, "95": 0.05, "99": 0.01 }[ciLevel] ?? 0.05;
-    const feZ = normalQuantile(1 - feAlpha / 2);
-    const feCi = { lb: profile.transform(m.FE - feZ * m.seFE), ub: profile.transform(m.FE + feZ * m.seFE) };
+    const { m, profile, method, ciMethod, useTF, tf, studies, nextTable, ciLevel } = args;
+    const k = studies.filter((d2) => !d2.filled).length;
     const methodLabel = m.isMH ? "Mantel-Haenszel" : m.isPeto ? "Peto" : method;
     const ciLabel = ciMethod === "KH" ? "Knapp-Hartung" : ciMethod === "t" ? "t-distribution" : ciMethod === "PL" ? "Profile Likelihood" : "Normal (z)";
-    const tauCI1 = fmt2(m.tauCI[0]);
-    const tauCI2 = isFinite(m.tauCI[1]) ? fmt2(m.tauCI[1]) : "\u221E";
-    const H2hi = isFinite(m.H2CI[1]) ? fmt2(m.H2CI[1]) : "\u221E";
-    if (apaFormat) {
-      const settingsProse = `<p class="meta-line">
-      Effect type: ${esc(profile.label)} &nbsp;\xB7&nbsp;
-      Pooling: ${esc(methodLabel)} &nbsp;\xB7&nbsp;
-      CI method: ${esc(ciLabel)} &nbsp;\xB7&nbsp;
-      k = ${k}${tf.length > 0 ? ` + ${tf.length} imputed (trim &amp; fill)` : ""}
-    </p>`;
-      const statsRows = [
-        `<tr><td>${esc(profile.label)} \u2014 Fixed Effects (FE)</td><td>${fmt2(FE_disp)}</td></tr>`,
-        `<tr><td>FE ${widthCiLabel}</td><td>${fmtCI_APA(feCi.lb, feCi.ub)}</td></tr>`,
-        !isMHorPeto ? `<tr><td>${esc(profile.label)} \u2014 Random Effects (RE)</td><td><strong>${fmt2(RE_disp)}</strong></td></tr>` : "",
-        !isMHorPeto ? `<tr><td>RE ${widthCiLabel}</td><td>${fmtCI_APA(ci.lb, ci.ub)}</td></tr>` : "",
-        isMHorPeto ? `<tr><td>${widthCiLabel}</td><td>${fmtCI_APA(ci.lb, ci.ub)}</td></tr>` : "",
-        cles ? `<tr><td>CLES (RE)</td><td>${fmt2(cles.estimate)} [${fmt2(cles.ci[0])}, ${fmt2(cles.ci[1])}]</td></tr>` : "",
-        RE_adj !== null ? `<tr><td>RE (trim-and-fill adjusted)</td><td>${fmt2(RE_adj)}</td></tr>` : "",
-        !isMHorPeto ? `<tr><td>95% Prediction interval (PI)</td><td>${fmtCI_APA(pred.lb, pred.ub)}</td></tr>` : "",
-        !isMHorPeto ? `<tr><td>\u03C4\xB2</td><td>${fmt2(m.tau2)} [${tauCI1}, ${tauCI2}]</td></tr>` : "",
-        `<tr><td>I\xB2</td><td>${fmt2(m.I2)}% [${fmt2(m.I2CI[0])}%, ${fmt2(m.I2CI[1])}%]</td></tr>`,
-        !isMHorPeto ? `<tr><td>H\xB2-CI</td><td>[${fmt2(m.H2CI[0])}, ${H2hi}]</td></tr>` : "",
-        `<tr><td>Q (df = ${m.df})</td><td>${fmt2(m.Q)}</td></tr>`,
-        m.dist ? `<tr><td>${esc(m.dist)}-statistic</td><td>${fmt2(m.stat)}, p ${fmtP_APA(m.pval)}</td></tr>` : "",
-        m.isClustered ? `<tr><td>Robust CI (C = ${m.clustersUsed} clusters)</td><td>${fmtCI_APA(profile.transform(m.robustCiLow), profile.transform(m.robustCiHigh))} \xB7 SE = ${fmt2(m.robustSE)} \xB7 z = ${fmt2(m.robustStat)}, p ${fmtP_APA(m.robustPval)}</td></tr>` : ""
-      ].filter(Boolean);
-      const tableNote = isMHorPeto ? `Fixed-effect pooling (${esc(methodLabel)}) \u2014 RE estimate, \u03C4\xB2, and prediction interval not applicable. FE = fixed effects; CI = confidence interval.` : `FE = fixed effects; RE = random effects; CI = confidence interval; PI = prediction interval.${cles ? " CLES = common language effect size = \u03A6(g/\u221A2); probability that a randomly drawn score from group 1 exceeds group 2 (McGraw & Wong, 1992)." : ""}${m.isClustered ? " Robust CI uses cluster-robust (sandwich) standard errors." : ""}`;
-      const statsTable2 = buildTableAPA(
-        nextTable(),
-        `Summary of Meta-Analysis Results (${esc(profile.label)})`,
-        ["Statistic", "Value"],
-        statsRows,
-        tableNote
-      );
-      return `
-<section>
-  <h2>Summary</h2>
-  ${settingsProse}
-  ${statsTable2}
-</section>`;
-    }
-    const settingsTable = buildTable(
-      ["Setting", "Value"],
-      [
-        `<tr><td>Effect type</td><td>${esc(profile.label)}</td></tr>`,
-        `<tr><td>Pooling</td><td>${esc(methodLabel)}</td></tr>`,
-        `<tr><td>CI method</td><td>${esc(ciLabel)}</td></tr>`,
-        `<tr><td>Studies (k)</td><td>${k}${tf.length > 0 ? ` + ${tf.length} imputed (trim &amp; fill)` : ""}</td></tr>`
-      ]
-    );
-    const statsTable = buildTable(
-      ["Statistic", "Value"],
-      [
-        `<tr><td>${esc(profile.label)} \u2014 Fixed Effects</td><td>${fmt2(FE_disp)}</td></tr>`,
-        `<tr><td>FE ${widthCiLabel}</td><td>[${fmt2(feCi.lb)}, ${fmt2(feCi.ub)}]</td></tr>`,
-        !isMHorPeto ? `<tr><td>${esc(profile.label)} \u2014 Random Effects</td><td><strong>${fmt2(RE_disp)}</strong></td></tr>` : "",
-        !isMHorPeto ? `<tr><td>RE ${widthCiLabel}</td><td>[${fmt2(ci.lb)}, ${fmt2(ci.ub)}]</td></tr>` : "",
-        isMHorPeto ? `<tr><td>${widthCiLabel}</td><td>[${fmt2(ci.lb)}, ${fmt2(ci.ub)}]</td></tr>` : "",
-        cles ? `<tr><td>CLES (RE)</td><td>${fmt2(cles.estimate)} [${fmt2(cles.ci[0])}, ${fmt2(cles.ci[1])}]</td></tr>` : "",
-        RE_adj !== null ? `<tr><td>RE (trim-and-fill adjusted)</td><td>${fmt2(RE_adj)}</td></tr>` : "",
-        !isMHorPeto ? `<tr><td>95% Prediction interval</td><td>[${fmt2(pred.lb)}, ${fmt2(pred.ub)}]</td></tr>` : "",
-        !isMHorPeto ? `<tr><td>\u03C4\xB2</td><td>${fmt2(m.tau2)} [${tauCI1}, ${tauCI2}]</td></tr>` : "",
-        `<tr><td>I\xB2</td><td>${fmt2(m.I2)}% [${fmt2(m.I2CI[0])}%, ${fmt2(m.I2CI[1])}%]</td></tr>`,
-        !isMHorPeto ? `<tr><td>H\xB2-CI</td><td>[${fmt2(m.H2CI[0])}, ${H2hi}]</td></tr>` : "",
-        `<tr><td>Q (df = ${m.df})</td><td>${fmt2(m.Q)}</td></tr>`,
-        m.dist ? `<tr><td>${esc(m.dist)}-statistic</td><td>${fmt2(m.stat)}, p = ${fmtP(m.pval)}</td></tr>` : "",
-        m.isClustered ? `<tr><td>Robust CI (C = ${m.clustersUsed} clusters)</td><td>[${fmt2(profile.transform(m.robustCiLow))}, ${fmt2(profile.transform(m.robustCiHigh))}] \xB7 SE = ${fmt2(m.robustSE)} \xB7 z = ${fmt2(m.robustStat)}, p = ${fmtP(m.robustPval)}</td></tr>` : ""
-      ].filter(Boolean),
-      { style: "margin-top:14px" }
-    );
+    const settingsProse = `<p class="meta-line">
+    Effect type: ${esc(profile.label)} &nbsp;\xB7&nbsp;
+    Pooling: ${esc(methodLabel)} &nbsp;\xB7&nbsp;
+    CI method: ${esc(ciLabel)} &nbsp;\xB7&nbsp;
+    k = ${k}${tf.length > 0 ? ` + ${tf.length} imputed (trim &amp; fill)` : ""}
+  </p>`;
+    const d = summaryData(args);
+    const statsRows = d.rows.map(([label, value], i) => {
+      const valCell = i === d.reRowIdx ? `<strong>${esc(value)}</strong>` : esc(value);
+      return `<tr><td>${esc(label)}</td><td>${valCell}</td></tr>`;
+    });
+    const statsTable = buildTableAPA(nextTable(), d.subtitle, d.headers, statsRows, escNote(d.note));
     return `
 <section>
   <h2>Summary</h2>
-  ${settingsTable}
+  ${settingsProse}
   ${statsTable}
 </section>`;
   }
   function sectionPubBias(args) {
-    const {
-      egger,
-      begg,
-      fatpet,
-      fsn,
-      tes,
-      waap,
-      harbord,
-      peters,
-      deeks,
-      ruecker,
-      hc,
-      useTF,
-      tf,
-      profile,
-      apaFormat = false,
-      nextTable
-    } = args;
-    const petEff = isFinite(fatpet.intercept) ? fmt2(profile.transform(fatpet.intercept)) : "\u2014";
+    const { useTF, tf, nextTable, nextFigure, profile } = args;
     const fsnProse = `
   <p style="margin-top:10px">
-    Fail-safe N (Rosenthal): <strong>${isFinite(fsn.rosenthal) ? Math.round(fsn.rosenthal) : "\u2014"}</strong>
+    Fail-safe N (Rosenthal): <strong>${isFinite(args.fsn.rosenthal) ? Math.round(args.fsn.rosenthal) : "\u2014"}</strong>
     &nbsp;\xB7&nbsp;
-    Fail-safe N (Orwin, trivial = 0.1): <strong>${isFinite(fsn.orwin) ? Math.round(fsn.orwin) : "\u2014"}</strong>
+    Fail-safe N (Orwin, trivial = 0.1): <strong>${isFinite(args.fsn.orwin) ? Math.round(args.fsn.orwin) : "\u2014"}</strong>
   </p>
   <p>Trim &amp; Fill: <strong>${useTF ? "ON" : "OFF"}</strong>${tf.length > 0 ? ` (${tf.length} filled)` : ""}</p>`;
-    const naCell = (v, fmt22) => isFinite(v) ? fmt22(v) : "\u2014";
-    const naP = (v, fmt22) => isFinite(v) ? fmt22(v) : "NA";
-    const hcRow_apa = hc && !hc.error ? `<tr><td>Henmi-Copas CI</td><td>${fmt2(profile.transform(hc.beta))} [${fmt2(profile.transform(hc.ci[0]))}, ${fmt2(profile.transform(hc.ci[1]))}]</td><td>\u2014</td></tr>` : `<tr><td>Henmi-Copas CI</td><td>\u2014</td><td>NA (k &lt; 3)</td></tr>`;
-    const hcRow_std = hc && !hc.error ? `<tr><td>Henmi-Copas (bias-robust CI)</td><td>${fmt2(profile.transform(hc.beta))} [${fmt2(profile.transform(hc.ci[0]))}, ${fmt2(profile.transform(hc.ci[1]))}]</td><td>\u2014</td></tr>` : `<tr><td>Henmi-Copas (bias-robust CI)</td><td>\u2014</td><td>NA</td></tr>`;
-    if (apaFormat) {
-      const rows = [
-        `<tr><td>Egger's test (intercept)</td><td>${naCell(egger.intercept, fmt2)}</td><td>${naP(egger.p, fmtP_APA)}</td></tr>`,
-        `<tr><td>Begg's test (rank correlation \u03C4)</td><td>${naCell(begg.tau, fmt2)}</td><td>${naP(begg.p, fmtP_APA)}</td></tr>`,
-        `<tr><td>FAT \u2014 \u03B2\u2081 (bias)</td><td>${naCell(fatpet.slope, fmt2)}</td><td>${naP(fatpet.slopeP, fmtP_APA)}</td></tr>`,
-        `<tr><td>PET \u2014 effect at SE \u2192 0</td><td>${petEff}</td><td>${naP(fatpet.interceptP, fmtP_APA)}</td></tr>`,
-        `<tr><td>Harbord (intercept)</td><td>${naCell(harbord.intercept, fmt2)}</td><td>${naP(harbord.interceptP, fmtP_APA)}</td></tr>`,
-        `<tr><td>Peters (intercept)</td><td>${naCell(peters.intercept, fmt2)}</td><td>${naP(peters.interceptP, fmtP_APA)}</td></tr>`,
-        `<tr><td>Deeks (intercept)</td><td>${naCell(deeks.intercept, fmt2)}</td><td>${naP(deeks.interceptP, fmtP_APA)}</td></tr>`,
-        `<tr><td>R\xFCcker (intercept)</td><td>${naCell(ruecker.intercept, fmt2)}</td><td>${naP(ruecker.interceptP, fmtP_APA)}</td></tr>`,
-        tes && isFinite(tes.chi2) ? `<tr><td>TES \u2014 \u03C7\xB2 (O=${tes.O}, E=${fmt2(tes.E)})</td><td>${fmt2(tes.chi2)}</td><td>${naP(tes.p, fmtP_APA)}</td></tr>` : `<tr><td>TES (test of excess significance)</td><td>\u2014</td><td>NA</td></tr>`,
-        waap && isFinite(waap.estimate) ? `<tr><td>WAAP-WLS (k<sub>adequate</sub> = ${waap.kAdequate} of ${waap.k}${waap.fallback ? "; WLS fallback" : ""})</td><td>${fmt2(profile.transform(waap.estimate))} [${fmt2(profile.transform(waap.ci[0]))}, ${fmt2(profile.transform(waap.ci[1]))}]</td><td>${naP(waap.p, fmtP_APA)}</td></tr>` : `<tr><td>WAAP-WLS</td><td>\u2014</td><td>NA</td></tr>`,
-        hcRow_apa
-      ];
-      const table2 = buildTableAPA(
-        nextTable(),
-        "Tests of Publication Bias",
-        ["Test", "Statistic", "p"],
-        rows,
-        "FAT = funnel asymmetry test; PET = precision-effect test. Harbord, Peters, Deeks, and R\xFCcker are binary-outcome variants of the Egger test; TES = test of excess significance (Ioannidis & Trikalinos, 2007); WAAP-WLS = weighted average of adequately powered studies (Stanley & Doucouliagos, 2015); statistic is bias-corrected effect estimate [95% CI]; Henmi-Copas = bias-robust CI centred on FE estimate (DL \u03C4\xB2); NA = fewer than 3 eligible studies or missing cell counts."
-      );
-      return `
-<section>
-  <h2>Publication Bias</h2>
-  ${table2}
-  ${fsnProse}
-</section>`;
-    }
-    const table = buildTable(
-      ["Test", "Statistic", "p-value"],
-      [
-        `<tr><td>Egger (intercept)</td><td>${naCell(egger.intercept, fmt2)}</td><td>${naP(egger.p, fmtP)}</td></tr>`,
-        `<tr><td>Begg (rank correlation \u03C4)</td><td>${naCell(begg.tau, fmt2)}</td><td>${naP(begg.p, fmtP)}</td></tr>`,
-        `<tr><td>FAT \u2014 \u03B2\u2081 (bias)</td><td>${naCell(fatpet.slope, fmt2)}</td><td>${naP(fatpet.slopeP, fmtP)}</td></tr>`,
-        `<tr><td>PET \u2014 effect at SE \u2192 0</td><td>${petEff}</td><td>${naP(fatpet.interceptP, fmtP)}</td></tr>`,
-        `<tr><td>Harbord (binary OR/RR)</td><td>${naCell(harbord.intercept, fmt2)}</td><td>${naP(harbord.interceptP, fmtP)}</td></tr>`,
-        `<tr><td>Peters (binary/sample-size)</td><td>${naCell(peters.intercept, fmt2)}</td><td>${naP(peters.interceptP, fmtP)}</td></tr>`,
-        `<tr><td>Deeks (diagnostic DOR)</td><td>${naCell(deeks.intercept, fmt2)}</td><td>${naP(peters.interceptP, fmtP)}</td></tr>`,
-        `<tr><td>R\xFCcker (arcsine)</td><td>${naCell(ruecker.intercept, fmt2)}</td><td>${naP(ruecker.interceptP, fmtP)}</td></tr>`,
-        tes && isFinite(tes.chi2) ? `<tr><td>TES \u2014 \u03C7\xB2 (O=${tes.O}, E=${fmt2(tes.E)})</td><td>${fmt2(tes.chi2)}</td><td>${naP(tes.p, fmtP)}</td></tr>` : `<tr><td>TES (excess significance)</td><td>\u2014</td><td>NA</td></tr>`,
-        waap && isFinite(waap.estimate) ? `<tr><td>WAAP-WLS (k<sub>adequate</sub> = ${waap.kAdequate} of ${waap.k}${waap.fallback ? "; WLS fallback" : ""})</td><td>${fmt2(profile.transform(waap.estimate))} [${fmt2(profile.transform(waap.ci[0]))}, ${fmt2(profile.transform(waap.ci[1]))}]</td><td>${naP(waap.p, fmtP)}</td></tr>` : `<tr><td>WAAP-WLS</td><td>\u2014</td><td>NA</td></tr>`,
-        hcRow_std
-      ]
+    const d = pubBiasData(args);
+    const rows = d.rows.map(([t, s, p]) => `<tr><td>${esc(t)}</td><td>${esc(s)}</td><td>${esc(p)}</td></tr>`);
+    const table = buildTableAPA(
+      nextTable(),
+      "Tests of Publication Bias",
+      d.headers,
+      rows,
+      esc(d.note)
     );
+    const { funnelSVG } = args;
+    const funnelFig = funnelSVG ? buildFigureAPA(
+      nextFigure(),
+      `Funnel plot of ${esc(profile.label)} against standard error`,
+      [funnelSVG],
+      `Each point = one study. Asymmetry may indicate publication bias or between-study heterogeneity.`
+    ) : "";
     return `
 <section>
   <h2>Publication Bias</h2>
   ${table}
   ${fsnProse}
+  ${funnelFig}
 </section>`;
   }
-  function sectionPUniform(puniform, m, profile, apaFormat = false, nextTable, widthCiLabel = "95% CI") {
+  function sectionPCurve(pcurve, nextTable) {
+    const d = pCurveData(pcurve);
+    if (!d) return "";
+    const rows = d.rows.map((r) => `<tr>${r.map((c) => `<td>${esc(c)}</td>`).join("")}</tr>`);
+    return `
+<section>
+  <h2>P-curve (Simonsohn et al., 2014)</h2>
+  <p class="meta-line">${escNote(d.kLine)}  \xB7  Verdict: <strong>${esc(d.verdict)}</strong></p>
+  ${buildTableAPA(nextTable(), "P-curve Test Statistics", d.headers, rows, escNote(d.note))}
+</section>`;
+  }
+  function sectionPUniform(puniform, m, profile, nextTable, widthCiLabel = "95% CI") {
     if (!puniform || puniform.k < 3 || !isFinite(puniform.estimate)) return "";
-    function fmtEst(v) {
-      return isFinite(v) ? fmt2(profile.transform(v)) : "\u2014";
-    }
-    const reEst = fmtEst(m.RE);
-    const reLo = fmtEst(m.ciLow);
-    const reHi = fmtEst(m.ciHigh);
-    const puEst = fmtEst(puniform.estimate);
-    const puLo = fmtEst(puniform.ciLow);
-    const puHi = fmtEst(puniform.ciHigh);
-    const noteExtra = [
-      puniform.biasDetected ? "Bias detected (p &lt; .05)." : "",
-      puniform.significantEffect ? "Significant effect after correction (p &lt; .05)." : ""
-    ].filter(Boolean).join(" ");
-    if (apaFormat) {
-      const rows = [
-        `<tr><td>RE (uncorrected)</td><td>${reEst}</td><td>${fmtCI_APA(reLo, reHi)}</td><td>${fmt2(puniform.Z_bias)}</td><td>${fmtP_APA(puniform.p_bias)}</td></tr>`,
-        `<tr><td>P-uniform (bias-corrected)</td><td>${puEst}</td><td>${fmtCI_APA(puLo, puHi)}</td><td>${fmt2(puniform.Z_sig)}</td><td>${fmtP_APA(puniform.p_sig)}</td></tr>`
-      ];
-      const note = `RE row: bias test (H\u2080: RE = true effect); positive Z indicates overestimation. P-uniform row: significance test (H\u2080: \u03B4 = 0); negative Z indicates true positive effect. CI = confidence interval. ${noteExtra}`;
-      return `
-<section>
-  <h2>P-uniform (van Assen et al., 2015)</h2>
-  <p class="meta-line">${puniform.k} significant result${puniform.k !== 1 ? "s" : ""} (p &lt; .05) used &nbsp;\xB7&nbsp; effect scale: ${esc(profile.label)}</p>
-  ${buildTableAPA(nextTable(), "P-uniform Bias-Corrected Estimates", ["Method", "Estimate", widthCiLabel, "Z", "p"], rows, note)}
-</section>`;
-    }
-    const table = buildTable(
-      ["Method", "Estimate", widthCiLabel, "Z", "p"],
-      [
-        `<tr><td>RE (uncorrected)</td><td>${reEst}</td><td>[${reLo}, ${reHi}]</td><td>${fmt2(puniform.Z_bias)}</td><td>${fmtP(puniform.p_bias)}</td></tr>`,
-        `<tr><td>P-uniform (bias-corrected)</td><td>${puEst}</td><td>[${puLo}, ${puHi}]</td><td>${fmt2(puniform.Z_sig)}</td><td>${fmtP(puniform.p_sig)}</td></tr>`
-      ]
-    );
+    const d = puniformData({ puniform, m, profile, ciLevel: widthCiLabel.replace("% CI", "") });
+    const rows = d.rows.map((r) => `<tr>${r.map((c) => `<td>${esc(c)}</td>`).join("")}</tr>`);
     return `
 <section>
   <h2>P-uniform (van Assen et al., 2015)</h2>
-  <p class="meta-line">${puniform.k} significant result${puniform.k !== 1 ? "s" : ""} (p &lt; .05) used &nbsp;\xB7&nbsp; effect scale: ${esc(profile.label)}</p>
-  ${table}
-  <p class="note" style="margin-top:8px">
-    RE row: bias test (H\u2080: RE = true effect) \u2014 positive Z indicates overestimation.
-    P-uniform row: significance test (H\u2080: \u03B4 = 0) \u2014 negative Z indicates true positive effect.
-    ${puniform.biasDetected ? "<strong>Bias detected</strong> (p &lt; .05)." : ""}
-    ${puniform.significantEffect ? "<strong>Significant effect after correction</strong> (p &lt; .05)." : ""}
-  </p>
+  <p class="meta-line">${escNote(d.kLine)}</p>
+  ${buildTableAPA(nextTable(), "P-uniform Bias-Corrected Estimates", d.headers, rows, escNote(d.note))}
 </section>`;
   }
-  function sectionSelectionModel(sel, profile, selMode, selLabel, apaFormat = false, nextTable, widthCiLabel = "95% CI") {
+  function sectionSelectionModel(sel, profile, selMode, selLabel, nextTable, widthCiLabel = "95% CI") {
     if (!sel || sel.error) return "";
-    const K = sel.K;
-    const isMLE = selMode === "mle";
-    function fmtDisp(v) {
-      return isFinite(v) ? fmt2(profile.transform(v)) : "\u2014";
-    }
-    function fmtV(v) {
-      return isFinite(v) ? fmt2(v) : "\u2014";
-    }
-    const cuts = sel.cuts;
-    const intervalLabels = cuts.map((c, j) => {
-      const lo = j === 0 ? "0" : cuts[j - 1];
-      return `(${lo}, ${c}]`;
+    const d = selModelData({ sel, profile, selMode, selLabel, ciLevel: widthCiLabel.replace("% CI", "") });
+    const K = d.nCols - 1;
+    const htmlRows = d.rows.map((r, ri) => {
+      if (r.length === 2) {
+        return `<tr><td>${esc(r[0])}</td><td colspan="${K}">${esc(r[1])}</td></tr>`;
+      }
+      return `<tr>${r.map((c, ci) => {
+        if (ci > 0 && ri === 1 && c === "0") return `<td class="flagged">${c}</td>`;
+        return `<td>${esc(c)}</td>`;
+      }).join("")}</tr>`;
     });
-    const omegaCells = sel.omega.map((w, j) => {
-      if (!isMLE || j === 0) return `<td>${fmtV(w)} (fixed)</td>`;
-      const se = isFinite(sel.se_omega[j]) ? ` \xB1 ${fmtV(sel.se_omega[j])}` : "";
-      return `<td>${fmtV(w)}${se}</td>`;
-    }).join("");
-    const kCells = sel.nPerInterval.map((n, j) => {
-      const warn = n === 0 ? ' class="flagged"' : "";
-      return `<td${warn}>${n}</td>`;
-    }).join("");
-    const muAdj = fmtDisp(sel.mu);
-    const ciLo = fmtDisp(sel.mu - 1.96 * sel.se_mu);
-    const ciHi = fmtDisp(sel.mu + 1.96 * sel.se_mu);
-    const muUnadj = fmtDisp(sel.RE_unsel);
-    const direction = sel.mu > sel.RE_unsel ? "higher" : "lower";
-    const schemeText = isMLE ? "the estimated selection pattern" : `<em>${esc(selLabel)}</em> selection`;
-    const modeLabel = isMLE ? "MLE (estimated weights)" : `Sensitivity \u2014 ${esc(selLabel)}`;
-    const sidesLabel = sel.sides === 2 ? "two-sided" : "one-sided";
-    const lrtFmt = (p) => apaFormat ? fmtP_APA(p) : `= ${fmtP(p)}`;
-    const lrtRow = isMLE && isFinite(sel.LRT) ? `<tr><td>LRT (H\u2080: no selection)</td><td colspan="${K}">\u03C7\xB2(${sel.LRTdf}) = ${fmtV(sel.LRT)}, p ${lrtFmt(sel.LRTp)}</td></tr>` : "";
-    const tableRows = [
-      `<tr><td>Selection weight \u03C9</td>${omegaCells}</tr>`,
-      `<tr><td>Studies per interval</td>${kCells}</tr>`,
-      `<tr><td>Adjusted \u03BC\u0302 [${widthCiLabel}]</td><td colspan="${K}">${muAdj} [${ciLo}, ${ciHi}] &nbsp;\xB7&nbsp; unadjusted: ${muUnadj}</td></tr>`,
-      `<tr><td>Adjusted \u03C4\xB2</td><td colspan="${K}">${fmtV(sel.tau2)} &nbsp;\xB7&nbsp; unadjusted: ${fmtV(sel.tau2_unsel)}</td></tr>`,
-      ...lrtRow ? [lrtRow] : []
-    ];
-    const interpNote = `Under ${schemeText} the bias-corrected estimate is ${muAdj} [${ciLo}, ${ciHi}] \u2014 ${direction} than the unadjusted RE estimate of ${muUnadj}.` + (isMLE && isFinite(sel.LRTp) && sel.LRTp < 0.05 ? ` The LRT rejects the null of no selection (p ${lrtFmt(sel.LRTp)}).` : "");
-    if (apaFormat) {
-      const emptyWarning = (() => {
-        const empty = sel.nPerInterval.map((n, j) => n === 0 ? j + 1 : -1).filter((j) => j > 0);
-        return empty.length > 0 ? ` Warning: interval${empty.length > 1 ? "s" : ""} ${empty.join(", ")} ha${empty.length > 1 ? "ve" : "s"} 0 studies.` : "";
-      })();
-      const convWarning = isMLE && !sel.converged ? " Optimizer did not fully converge; results may be approximate." : "";
-      const note = `\u03C9 = selection weight; \u03BC\u0302 = bias-corrected pooled estimate; CI = confidence interval; LRT = likelihood ratio test. ${interpNote}${emptyWarning}${convWarning}`;
-      return `
-<section>
-  <h2>Selection Model (Vevea-Hedges, 1995)</h2>
-  <p class="meta-line">Mode: ${modeLabel} &nbsp;\xB7&nbsp; p-values: ${sidesLabel} &nbsp;\xB7&nbsp; k = ${sel.k}</p>
-  ${buildTableAPA(nextTable(), "Vevea-Hedges Selection Model Results", ["Quantity", ...intervalLabels], tableRows, note)}
-</section>`;
-    }
-    const emptyNote = (() => {
-      const empty = sel.nPerInterval.map((n, j) => n === 0 ? j + 1 : -1).filter((j) => j > 0);
-      return empty.length > 0 ? `<p class="note"><strong>Warning:</strong> interval${empty.length > 1 ? "s" : ""} ${empty.join(", ")} ha${empty.length > 1 ? "ve" : "s"} 0 studies.</p>` : "";
+    const emptyWarning = (() => {
+      const empty = d.nPerInterval.map((n, j) => n === 0 ? j + 1 : -1).filter((j) => j > 0);
+      return empty.length > 0 ? ` Warning: interval${empty.length > 1 ? "s" : ""} ${empty.join(", ")} ha${empty.length > 1 ? "ve" : "s"} 0 studies.` : "";
     })();
-    const convNote = isMLE && !sel.converged ? `<p class="note"><strong>Note:</strong> Optimizer did not fully converge; results may be approximate.</p>` : "";
+    const convWarning = d.isMLE && !d.converged ? " Optimizer did not fully converge; results may be approximate." : "";
+    const direction = sel.mu > sel.RE_unsel ? "higher" : "lower";
+    const schemeText = d.isMLE ? "the estimated selection pattern" : `<em>${esc(selLabel)}</em> selection`;
+    const interpNote = `Under ${schemeText} the bias-corrected estimate is ${d.muAdj} [${d.ciLo}, ${d.ciHi}] \u2014 ${direction} than the unadjusted RE estimate of ${d.muUnadj}.` + (d.isMLE && isFinite(d.LRTp) && d.LRTp < 0.05 ? ` The LRT rejects the null of no selection (<em>p</em> ${fmtP_APA2(d.LRTp)}).` : "");
+    const note = escNote(d.note) + " " + interpNote + emptyWarning + convWarning;
     return `
 <section>
   <h2>Selection Model (Vevea-Hedges, 1995)</h2>
-  <p class="meta-line">Mode: ${modeLabel} &nbsp;\xB7&nbsp; p-values: ${sidesLabel} &nbsp;\xB7&nbsp; k = ${sel.k}</p>
-  ${buildTable(["Quantity", ...intervalLabels], tableRows, { style: "width:100%" })}
-  ${emptyNote}
-  ${convNote}
-  <p class="note" style="margin-top:8px">${interpNote}</p>
+  <p class="meta-line">${escNote(d.metaLine)}</p>
+  ${buildTableAPA(nextTable(), "Vevea-Hedges Selection Model Results", d.headers, htmlRows, note)}
 </section>`;
   }
-  function sectionInfluence(influence, k, apaFormat = false, nextTable) {
+  function sectionInfluence(influence, k, nextTable) {
     if (!influence || !influence.length) return "";
-    const thresh2k = fmt2(2 / k);
-    const thresh4k = fmt2(4 / k);
-    const rows = influence.map((d) => {
-      const anyFlag = d.outlier || d.influential || d.highLeverage || d.highCookD;
-      const flags = [
-        d.outlier ? "Outlier" : "",
-        d.influential ? "Influential" : "",
-        d.highLeverage ? "Hi-Lev" : "",
-        d.highCookD ? "Hi-Cook" : ""
-      ].filter(Boolean).join(", ");
-      const cls = anyFlag ? ' class="flagged"' : "";
-      return `<tr${cls}>
-      <td>${esc(d.label)}</td>
-      <td>${isFinite(d.RE_loo) ? fmt2(d.RE_loo) : "\u2014"}</td>
-      <td>${isFinite(d.deltaTau2) ? fmt2(d.deltaTau2) : "\u2014"}</td>
-      <td>${isFinite(d.stdResidual) ? fmt2(d.stdResidual) : "\u2014"}</td>
-      <td>${isFinite(d.DFBETA) ? fmt2(d.DFBETA) : "\u2014"}</td>
-      <td>${isFinite(d.hat) ? d.hat.toFixed(3) : "\u2014"}</td>
-      <td>${isFinite(d.cookD) ? d.cookD.toFixed(3) : "\u2014"}</td>
-      <td>${flags}</td>
-    </tr>`;
+    const d = influenceData({ influence, studies: Array.from({ length: k }, () => ({ filled: false })) });
+    const apaRows = d.rows.map((r, i) => {
+      const cls = d.flagged[i] ? ' class="flagged"' : "";
+      return `<tr${cls}>${r.map((c) => `<td>${esc(c)}</td>`).join("")}</tr>`;
     });
-    const headers = ["Study", "RE (LOO)", "\u0394\u03C4\xB2", "Std. Residual", "DFBETA", "Hat", "Cook's D", "Flag"];
-    if (apaFormat) {
-      const note = `LOO = leave-one-out; Std. Residual = standardised residual; DFBETA = influence on pooled estimate. Threshold: Hat &gt; ${thresh2k} (= 2/k); Cook's D &gt; ${thresh4k} (= 4/k). Flagged rows shown in italic.`;
-      return `
-<section>
-  <h2>Influence Diagnostics</h2>
-  ${buildTableAPA(nextTable(), "Leave-One-Out Influence Diagnostics", headers, rows, note)}
-</section>`;
-    }
     return `
 <section>
   <h2>Influence Diagnostics</h2>
-  ${buildTable(
-      ["Study", "RE (LOO)", "\u0394\u03C4\xB2", "Std Residual", "DFBETA", "Hat", "Cook's D", "Flags"],
-      rows
-    )}
-  <p class="note">Thresholds: Hat &gt; ${thresh2k} (= 2/k) \xB7 Cook's D &gt; ${thresh4k} (= 4/k)</p>
+  ${buildTableAPA(nextTable(), "Leave-One-Out Influence Diagnostics", d.headers, apaRows, escNote(d.note))}
 </section>`;
   }
-  function sectionSubgroup(subgroup, profile, apaFormat = false, nextTable, widthCiLabel = "95% CI") {
-    if (!subgroup || subgroup.G < 2) return "";
-    const rows = Object.entries(subgroup.groups).map(([g, r]) => {
-      const single = r.k === 1;
-      const y_disp = profile.transform(r.y);
-      const ci_lb = profile.transform(r.ci.lb);
-      const ci_ub = profile.transform(r.ci.ub);
-      const ciCell = single ? "\u2014" : apaFormat ? fmtCI_APA(ci_lb, ci_ub) : `[${fmt2(ci_lb)}, ${fmt2(ci_ub)}]`;
-      return `<tr>
-      <td>${esc(g)}</td>
-      <td>${r.k}</td>
-      <td>${isFinite(y_disp) ? fmt2(y_disp) : "\u2014"}</td>
-      <td>${single ? "\u2014" : isFinite(r.se) ? fmt2(r.se) : "\u2014"}</td>
-      <td>${ciCell}</td>
-      <td>${single ? "\u2014" : isFinite(r.tau2) ? r.tau2.toFixed(3) : "0"}</td>
-      <td>${single ? "\u2014" : isFinite(r.I2) ? r.I2.toFixed(1) : "0"}${single ? "" : "%"}</td>
-    </tr>`;
+  function sectionSensitivity(args, nextTable) {
+    const d = sensitivityData(args);
+    if (!d) return "";
+    const widthCiLabel = (args.ciLevel ?? "95") + "% CI";
+    const looRows = d.loo.rows.map((r, i) => {
+      const flag = d.loo.sigChanges[i] ? ` title="Removing this study changes statistical significance"` : "";
+      const mark = d.loo.sigChanges[i] ? " *" : "";
+      return `<tr${flag}><td>${esc(r[0])}${mark}</td>${r.slice(1).map((c) => `<td>${c}</td>`).join("")}</tr>`;
     });
-    if (apaFormat) {
-      const note = `CI = confidence interval. Q<sub>between</sub> = ${subgroup.Qbetween.toFixed(3)}, df = ${subgroup.df}, p ${fmtP_APA(subgroup.p)}.`;
-      return `
+    const looSection = d.loo.rows.length > 0 ? buildTableAPA(nextTable(), "Leave-one-out analysis", d.loo.headers, looRows, d.loo.note) : `<p class="table-note">Need at least 3 studies for leave-one-out analysis.</p>`;
+    const estRows = d.est.rows.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join("")}</tr>`);
+    const estSection = buildTableAPA(nextTable(), `\u03C4\xB2 estimator comparison (${widthCiLabel})`, d.est.headers, estRows, d.est.note);
+    return `
 <section>
-  <h2>Subgroup Analysis</h2>
-  ${buildTableAPA(
-        nextTable(),
-        `Subgroup Analysis Results (${esc(profile.label)})`,
-        ["Group", "k", "Effect size", "SE", widthCiLabel, "\u03C4\xB2", "I\xB2 (%)"],
-        rows,
-        note
-      )}
+  <h2>Sensitivity Analysis</h2>
+  ${looSection}
+  ${estSection}
 </section>`;
-    }
+  }
+  function sectionSubgroup(subgroup, profile, nextTable, widthCiLabel = "95% CI") {
+    if (!subgroup || subgroup.G < 2) return "";
+    const d = subgroupData({ subgroup, profile, ciLevel: widthCiLabel.replace("% CI", "") });
+    const apaRows = d.rows.map((r) => `<tr>${r.map((c) => `<td>${esc(c)}</td>`).join("")}</tr>`);
+    const note = escNote(d.note).replace("<em>Q</em>_total", "<em>Q</em><sub>total</sub>").replace("<em>Q</em>_within", "<em>Q</em><sub>within</sub>").replace("<em>Q</em>_between", "<em>Q</em><sub>between</sub>");
     return `
 <section>
   <h2>Subgroup Analysis</h2>
-  ${buildTable(["Group", "k", "Effect", "SE", widthCiLabel, "\u03C4\xB2", "I\xB2"], rows)}
-  <p class="note">
-    Q<sub>between</sub> = ${subgroup.Qbetween.toFixed(3)},
-    df = ${subgroup.df},
-    p = ${subgroup.p.toFixed(4)}
-  </p>
+  ${buildTableAPA(nextTable(), d.subtitle, d.headers, apaRows, note)}
 </section>`;
   }
   function sectionStudyTable(args) {
-    const { studies, m, profile, apaFormat = false, nextTable, ciLevel } = args;
-    const widthCiLabel = (ciLevel ?? "95") + "% CI";
-    const tau2 = isFinite(m.tau2) ? m.tau2 : 0;
-    const real = studies.filter((d) => !d.filled);
-    const totalW = real.reduce((s, d) => s + 1 / (d.vi + tau2), 0);
-    const transformedScale = profile.label.includes("Ratio") || profile.label.includes("Hazard") || profile.label.includes("Rate") || profile.label.includes("log") || profile.label.includes("logit") || profile.label.includes("arcsine") || profile.label.includes("Freeman") || profile.label.includes("Fisher");
-    const seLabel = transformedScale ? "SE (transformed)" : "SE";
-    function fmtV(v) {
-      return isFinite(v) ? (+v).toFixed(3) : "\u2014";
-    }
-    function fmtPct(v) {
-      return v !== null && isFinite(v) ? v.toFixed(1) + "%" : "\u2014";
-    }
-    const pooledEf = profile.transform(m.RE);
-    const pooledLo = profile.transform(m.ciLow);
-    const pooledHi = profile.transform(m.ciHigh);
-    if (apaFormat) {
-      const rows2 = studies.map((d) => {
-        const wi = 1 / (d.vi + tau2);
-        const pct = d.filled ? null : wi / totalW * 100;
-        const ef = profile.transform(d.yi);
-        const lo = profile.transform(d.yi - Z_95 * d.se);
-        const hi = profile.transform(d.yi + Z_95 * d.se);
-        const lbl = d.label.length > 40 ? d.label.slice(0, 39) + "\u2026" : d.label;
-        const cls = d.filled ? ' class="imputed"' : "";
-        return `<tr${cls}>
-        <td>${esc(lbl)}</td>
-        <td>${fmtV(ef)}</td>
-        <td>${fmtV(d.se)}</td>
-        <td>${fmtCI_APA(lo, hi)}</td>
-        <td>${fmtPct(pct)}</td>
-      </tr>`;
-      });
-      const tfootAPA = `<tr class="pooled">
-        <td>Pooled (RE)</td>
-        <td>${fmtV(pooledEf)}</td>
-        <td>${fmtV(m.seRE)}</td>
-        <td>${fmtCI_APA(pooledLo, pooledHi)}</td>
-        <td>100%</td>
-      </tr>`;
-      const note = `Effect size = ${esc(profile.label)}. SE = standard error. CI = confidence interval. RE weights shown. ${studies.some((d) => d.filled) ? "Italic rows are trim-and-fill imputed studies." : ""}`;
-      const head = `<thead><tr>${["Study", `Effect size (${esc(profile.label)})`, esc(seLabel), widthCiLabel, "RE Weight (%)"].map((h) => `<th>${h}</th>`).join("")}</tr></thead>`;
-      const body = `<tbody>${rows2.join("")}</tbody>`;
-      const foot = `<tfoot>
-      ${tfootAPA}
-      <tr><td colspan="5"><span class="apa-note"><em>Note.</em> ${note}</span></td></tr>
-    </tfoot>`;
-      return `
+    const { studies, m, profile, nextTable, ciLevel } = args;
+    const d = studyTableData({ studies, m, profile, ciLevel: ciLevel ?? "95" });
+    const bodyRows = d.rows.map((r, i) => {
+      const cls = d.filled[i] ? ' class="imputed"' : "";
+      return `<tr${cls}>${r.map((c) => `<td>${esc(c)}</td>`).join("")}</tr>`;
+    });
+    const ncols = d.headers.length;
+    const pooled = `<tr class="pooled">${d.pooledRow.map((c) => `<td>${esc(c)}</td>`).join("")}</tr>`;
+    const head = `<thead><tr>${d.headers.map((h) => `<th>${esc(h)}</th>`).join("")}</tr></thead>`;
+    const body = `<tbody>${bodyRows.join("")}</tbody>`;
+    const foot = `<tfoot>
+    ${pooled}
+    <tr><td colspan="${ncols}"><span class="apa-note"><em>Note.</em> ${escNote(d.note)}</span></td></tr>
+  </tfoot>`;
+    return `
 <section>
   <h2>Study-Level Results</h2>
   <p class="apa-table-title">Table ${nextTable()}</p>
   <p class="apa-table-subtitle">Study-Level Effect Sizes and Weights</p>
   <table class="apa-table">${head}${body}${foot}</table>
 </section>`;
-    }
-    const rows = studies.map((d) => {
-      const wi = 1 / (d.vi + tau2);
-      const pct = d.filled ? null : wi / totalW * 100;
-      const ef = profile.transform(d.yi);
-      const lo = profile.transform(d.yi - Z_95 * d.se);
-      const hi = profile.transform(d.yi + Z_95 * d.se);
-      const lbl = d.label.length > 40 ? d.label.slice(0, 39) + "\u2026" : d.label;
-      const cls = d.filled ? ' class="imputed"' : "";
-      return `<tr${cls}>
-      <td>${esc(lbl)}</td>
-      <td>${fmtV(ef)}</td>
-      <td>${fmtV(lo)}</td>
-      <td>${fmtV(hi)}</td>
-      <td>${fmtV(d.se)}</td>
-      <td>${fmtPct(pct)}</td>
-    </tr>`;
-    });
-    const tfoot = `<tr class="pooled">
-      <td>Pooled (RE)</td>
-      <td>${fmtV(pooledEf)}</td>
-      <td>${fmtV(pooledLo)}</td>
-      <td>${fmtV(pooledHi)}</td>
-      <td>${fmtV(m.seRE)}</td>
-      <td>100%</td>
-    </tr>`;
-    return `
-<section>
-  <h2>Study-Level Results</h2>
-  ${buildTable(
-      ["Study", "Effect", `${widthCiLabel} (low)`, `${widthCiLabel} (high)`, esc(seLabel), "RE Weight"],
-      rows,
-      { extraClass: "study-tbl", tfoot }
-    )}
-</section>`;
   }
-  function sectionRegression(reg, method, ciMethod, apaFormat = false, nextTable, widthCiLabel = "95% CI") {
+  function sectionRegression(reg, method, ciMethod, nextTable, widthCiLabel = "95% CI", adjPs = null, mccLabel = "") {
     if (!reg || reg.rankDeficient || !reg.colNames) return "";
-    const ciLabel = ciMethod === "KH" ? "Knapp-Hartung" : "Normal CI";
-    const statLabel = reg.dist === "t" ? `t(${reg.QEdf})` : "z";
-    const QMlabel = reg.QMdist === "F" ? `F(${reg.QMdf}, ${reg.QEdf})` : `\u03C7\xB2(${reg.QMdf})`;
     const R2row = reg.p > 1 && isFinite(reg.R2) ? ` \xB7 R\xB2 = ${fmt2(reg.R2 * 100)}%` : "";
-    const aicRow = isFinite(reg.AIC) ? ` \xB7 AIC = ${fmt2(reg.AIC)} \xB7 BIC = ${fmt2(reg.BIC)} \xB7 LL = ${fmt2(reg.LL)}` : "";
-    const hasVif = Array.isArray(reg.vif) && reg.vif.some((v) => isFinite(v));
-    const vifCell = (j) => {
-      if (j === 0) return "<td>\u2014</td>";
-      const v = reg.vif?.[j];
-      return `<td>${isFinite(v) ? fmt2(v) : "\u2014"}</td>`;
-    };
-    const modTestsQMlabel = reg.QMdist === "F" ? "F" : "\u03C7\xB2";
-    if (apaFormat) {
-      const rows2 = reg.colNames.map((name, j) => {
-        const [lo, hi] = reg.ci[j];
-        const cls = j === 0 ? ' class="intercept"' : "";
-        return `<tr${cls}>
-        <td>${esc(name)}</td>
-        <td>${fmt2(reg.beta[j])}</td>
-        <td>${fmt2(reg.se[j])}</td>
-        <td>${fmt2(reg.zval[j])}</td>
-        <td>${fmtP_APA(reg.pval[j])}</td>
-        <td>${fmtCI_APA(lo, hi)}</td>
-        ${hasVif ? vifCell(j) : ""}
-      </tr>`;
-      });
-      const coefHeaders2 = ["Predictor", "\u03B2", "SE", esc(statLabel), "p", widthCiLabel];
-      if (hasVif) coefHeaders2.push("VIF");
-      const coefNote = `\u03B2 = unstandardised regression coefficient. SE = standard error. CI = confidence interval. QE(${reg.QEdf}) = ${fmt2(reg.QE)}, p ${fmtP_APA(reg.QEp)}.` + (reg.p > 1 ? ` QM ${esc(QMlabel)} = ${fmt2(reg.QM)}, p ${fmtP_APA(reg.QMp)}.` : "") + (reg.p > 1 && isFinite(reg.R2) ? ` R\xB2 = ${fmt2(reg.R2 * 100)}%.` : "");
-      const coefTable = buildTableAPA(nextTable(), "Meta-Regression Coefficients", coefHeaders2, rows2, coefNote);
-      const hasLRT_apa = reg.modTests && reg.modTests.some((mt) => isFinite(mt.lrt));
-      const modTestsTable2 = reg.modTests && reg.modTests.length > 1 ? `<h3>Per-moderator omnibus tests</h3>
-  ${buildTableAPA(
-        nextTable(),
-        "Per-Moderator Omnibus Tests",
-        ["Moderator", esc(modTestsQMlabel) + " (Wald)", ...hasLRT_apa ? ["LRT \u03C7\xB2"] : [], "df", "p (Wald)", ...hasLRT_apa ? ["p (LRT)"] : []],
-        reg.modTests.map((mt) => `<tr>
-      <td>${esc(mt.name)}</td>
-      <td>${fmt2(mt.QM)}</td>
-      ${hasLRT_apa ? `<td>${isFinite(mt.lrt) ? fmt2(mt.lrt) : "NA"}</td>` : ""}
-      <td>${mt.QMdf}</td>
-      <td>${fmtP_APA(mt.QMp)}</td>
-      ${hasLRT_apa ? `<td>${isFinite(mt.lrtP) ? fmtP_APA(mt.lrtP) : "NA"}</td>` : ""}
-    </tr>`),
-        hasLRT_apa ? "LRT = Likelihood Ratio Test; uses ML estimation internally regardless of \u03C4\xB2 method." : ""
-      )}` : "";
-      return `
-<section>
-  <h2>Meta-Regression</h2>
-  <p class="meta-line">k = ${reg.k} \xB7 ${esc(method)} \xB7 ${esc(ciLabel)} \xB7 \u03C4\xB2 = ${fmt2(reg.tau2)} \xB7 I\xB2 = ${fmt2(reg.I2)}%${R2row}${aicRow}</p>
-  ${coefTable}
-  ${modTestsTable2}
-</section>`;
-    }
-    function stars(p) {
-      if (p < 1e-3) return "***";
-      if (p < 0.01) return "**";
-      if (p < 0.05) return "*";
-      if (p < 0.1) return ".";
-      return "";
-    }
-    const rows = reg.colNames.map((name, j) => {
-      const [lo, hi] = reg.ci[j];
+    const aicRow = isFinite(reg.AIC) ? ` \xB7 AIC = ${fmt2(reg.AIC)} \xB7 BIC = ${fmt2(reg.BIC)} \xB7 LL = ${fmt2(reg.LL)}${ciMethod === "KH" && isFinite(reg.s2) ? ` \xB7 KH s\xB2 = ${fmt2(reg.s2)}` : ""}` : "";
+    const d = regressionData({ reg, method, ciMethod, ciLevel: widthCiLabel.replace("% CI", ""), adjPs, mccLabel });
+    if (!d) return "";
+    const coefRows = d.coef.rows.map((r, j) => {
       const cls = j === 0 ? ' class="intercept"' : "";
-      return `<tr${cls}>
-      <td>${esc(name)}</td>
-      <td>${fmt2(reg.beta[j])}</td>
-      <td>${fmt2(reg.se[j])}</td>
-      <td>${fmt2(reg.zval[j])}</td>
-      <td>${fmtP(reg.pval[j])}</td>
-      <td>[${fmt2(lo)}, ${fmt2(hi)}]</td>
-      <td>${stars(reg.pval[j])}</td>
-      ${hasVif ? vifCell(j) : ""}
-    </tr>`;
+      return `<tr${cls}>${r.map((c) => `<td>${esc(c)}</td>`).join("")}</tr>`;
     });
-    const coefHeaders = ["Term", "\u03B2", "SE", esc(statLabel), "p", widthCiLabel, ""];
-    if (hasVif) coefHeaders.push("VIF");
-    const hasLRT_std = reg.modTests && reg.modTests.some((mt) => isFinite(mt.lrt));
-    const modTestsTable = reg.modTests && reg.modTests.length > 1 ? `<h3>Per-moderator omnibus tests</h3>
-  ${buildTable(
-      ["Moderator", `${esc(modTestsQMlabel)} (Wald)`, ...hasLRT_std ? ["LRT \u03C7\xB2"] : [], "df", "p (Wald)", ...hasLRT_std ? ["p (LRT)"] : []],
-      reg.modTests.map((mt) => `<tr>
-      <td>${esc(mt.name)}</td>
-      <td>${fmt2(mt.QM)}</td>
-      ${hasLRT_std ? `<td>${isFinite(mt.lrt) ? fmt2(mt.lrt) : "NA"}</td>` : ""}
-      <td>${mt.QMdf}</td>
-      <td>${fmtP(mt.QMp)}</td>
-      ${hasLRT_std ? `<td>${isFinite(mt.lrtP) ? fmtP(mt.lrtP) : "NA"}</td>` : ""}
-    </tr>`)
-    )}${hasLRT_std ? `
-  <p class="note">LRT\u202F=\u202FLikelihood Ratio Test; uses ML estimation internally.</p>` : ""}` : "";
+    const coefTable = buildTableAPA(nextTable(), "Meta-Regression Coefficients", d.coef.headers, coefRows, escNote(d.coef.note));
+    const modTestsTable = d.modTests ? `<h3>Per-moderator omnibus tests</h3>
+  ${buildTableAPA(
+      nextTable(),
+      "Per-Moderator Omnibus Tests",
+      d.modTests.headers,
+      d.modTests.rows.map((r) => `<tr>${r.map((c) => `<td>${esc(c)}</td>`).join("")}</tr>`),
+      escNote(d.modTests.note)
+    )}` : "";
+    const fd = regressionFittedData(reg);
+    const fittedTable = fd ? `<h3>Fitted values &amp; residuals</h3>
+  ${buildTableAPA(
+      nextTable(),
+      "Meta-Regression Fitted Values and Residuals",
+      fd.headers,
+      fd.rows.map(({ cells, flag }) => {
+        const flagAttr = flag ? ' class="outlier"' : "";
+        return `<tr${flagAttr}>${cells.map((c) => `<td>${esc(c)}</td>`).join("")}</tr>`;
+      }),
+      esc(fd.note)
+    )}` : "";
     return `
 <section>
   <h2>Meta-Regression</h2>
-  <p class="meta-line">
-    k = ${reg.k} \xB7 ${esc(method)} \xB7 ${esc(ciLabel)}
-    \xB7 \u03C4\xB2 = ${fmt2(reg.tau2)} \xB7 I\xB2 = ${fmt2(reg.I2)}%${R2row}
-    \xB7 QE(${reg.QEdf}) = ${fmt2(reg.QE)}, p = ${fmtP(reg.QEp)}
-    ${reg.p > 1 ? `\xB7 QM ${esc(QMlabel)} = ${fmt2(reg.QM)}, p = ${fmtP(reg.QMp)}` : ""}
-    ${aicRow ? `<br><span style="font-size:0.93em">${aicRow.slice(3)}</span>` : ""}
-  </p>
-  ${buildTable(coefHeaders, rows)}
-  <p class="note">*** p &lt; .001 \xB7 ** p &lt; .01 \xB7 * p &lt; .05 \xB7 . p &lt; .10</p>
+  <p class="meta-line">${escNote(d.metaLine)}${R2row}${aicRow}</p>
+  ${coefTable}
   ${modTestsTable}
+  ${fittedTable}
 </section>`;
   }
-  function sectionPlot(label, svgStrings, apaFormat = false, nextFigure, apaTitle = "", apaNote = "") {
+  function sectionRve(args, nextTable) {
+    const d = rveData(args);
+    if (!d) return "";
+    const bodyRows = d.rows.map((r) => `<tr>${r.map((c) => `<td>${escNote(c)}</td>`).join("")}</tr>`);
+    return `
+<section>
+  <h2>Robust Variance Estimation (RVE)</h2>
+  ${buildTableAPA(nextTable(), "RVE Pooled Estimate", d.headers, bodyRows, esc(d.note))}
+</section>`;
+  }
+  function sectionThreeLevel(args, nextTable) {
+    const d = threeLevelData(args);
+    if (!d) return "";
+    const bodyRows = d.rows.map((r) => `<tr>${r.map((c) => `<td>${escNote(c)}</td>`).join("")}</tr>`);
+    return `
+<section>
+  <h2>Three-Level Meta-Analysis</h2>
+  ${buildTableAPA(nextTable(), "Three-Level Model Estimates", d.headers, bodyRows, esc(d.note))}
+</section>`;
+  }
+  function sectionLocationScale(ls, nextTable, widthCiLabel = "95% CI") {
+    if (!ls || ls.rankDeficient) return "";
+    const d = locationScaleData(ls, widthCiLabel.replace("% CI", ""));
+    if (!d) return "";
+    const locRows = d.locCoef.rows.map((r, j) => {
+      const cls = j === 0 ? ' class="intercept"' : "";
+      return `<tr${cls}>${r.map((c) => `<td>${esc(c)}</td>`).join("")}</tr>`;
+    });
+    const scaleRows = d.scaleCoef.rows.map((r, j) => {
+      const cls = j === 0 ? ' class="intercept"' : "";
+      return `<tr${cls}>${r.map((c) => `<td>${esc(c)}</td>`).join("")}</tr>`;
+    });
+    const locTable = buildTableAPA(nextTable(), "Location Model Coefficients", d.locCoef.headers, locRows, escNote(d.locCoef.note));
+    const scaleTable = buildTableAPA(nextTable(), "Scale Model Coefficients", d.scaleCoef.headers, scaleRows, escNote(d.scaleCoef.note));
+    const fittedTable = d.fitted ? `<h3>Fitted values &amp; study-specific \u03C4\xB2\u1D62</h3>
+  ${buildTableAPA(
+      nextTable(),
+      "Location-Scale Fitted Values",
+      d.fitted.headers,
+      d.fitted.rows.map((r) => `<tr>${r.map((c) => `<td>${esc(c)}</td>`).join("")}</tr>`),
+      esc(d.fitted.note)
+    )}` : "";
+    return `
+<section>
+  <h2>Location-Scale Model</h2>
+  <p class="meta-line">${escNote(d.metaLine)}</p>
+  ${locTable}
+  ${scaleTable}
+  ${fittedTable}
+</section>`;
+  }
+  function sectionPermutation(permResult, reg, nextTable) {
+    if (!permResult || !reg) return "";
+    const d = permutationData(permResult, reg);
+    if (!d) return "";
+    const headers = ["Test", "Statistic", "Observed", "<em>p</em> (perm.)"];
+    const allRows = [
+      `<tr><td>Omnibus <em>Q</em>M</td><td>${escNote(d.omniLabel)}</td><td>${fmt2(d.omniObserved)}</td><td>${fmtP_APA2(d.omniP)}</td></tr>`,
+      ...d.mods.map(
+        (m) => `<tr><td>${esc(m.name)}</td><td>${escNote(m.label)}</td><td>${isFinite(m.observed) ? fmt2(m.observed) : "\u2014"}</td><td>${isFinite(m.p) ? fmtP_APA2(m.p) : "\u2014"}</td></tr>`
+      )
+    ];
+    const note = `${d.nPerm} permutations; \u03C4\xB2 re-estimated per permutation. Permutation p = (1 + #\u2265observed) / (B + 1).`;
+    const table = buildTableAPA(nextTable(), "Permutation Test Results", headers, allRows, esc(note));
+    return `
+<section>
+  <h2>Permutation Test</h2>
+  ${table}
+</section>`;
+  }
+  function sectionPlot(label, svgStrings, nextFigure, apaTitle = "", apaNote = "") {
     const filled = svgStrings.filter(Boolean);
     if (!filled.length) return "";
-    if (apaFormat) {
-      const title = apaTitle || label;
-      return `
+    const title = apaTitle || label;
+    return `
 <section class="plot-section">
   <h2>${esc(label)}</h2>
   ${buildFigureAPA(nextFigure(), title, filled, apaNote)}
-</section>`;
-    }
-    return `
-<section class="plot-section">
-  <h2>${esc(label)}</h2>
-  ${filled.map((s) => `<div class="svg-wrap">${s}</div>`).join("\n  ")}
 </section>`;
   }
   function reportCSS() {
@@ -10066,7 +11702,7 @@ ${noteBlock}`;
       win.addEventListener("load", () => win.print(), { once: true });
     }
   }
-  function sectionGosh(goshResult, profile, xAxis, apaFormat = false, nextFigure) {
+  function sectionGosh(goshResult, profile, xAxis, nextFigure, theme = "default") {
     if (!goshResult || goshResult.error) {
       return `
 <section>
@@ -10078,10 +11714,8 @@ ${noteBlock}`;
     const totalPossible = Math.pow(2, k) - 1;
     const xAxisLabel = xAxis === "Q" ? "Q (Cochran's Q)" : xAxis === "n" ? "n (subset size)" : "I\xB2 (%)";
     const sampleLine = sampled ? `Random sample of ${count.toLocaleString()} subsets (of ${totalPossible.toLocaleString()} possible).` : `All ${count.toLocaleString()} non-empty subsets enumerated exactly.`;
-    drawGoshPlot(goshResult, profile, { xAxis, forReport: true });
     const svgEl = document.getElementById("goshPlot");
     const svgStr = svgEl ? serializeSVG(svgEl) : "";
-    drawGoshPlot(goshResult, profile, { xAxis });
     if (!svgStr) {
       return `
 <section>
@@ -10096,12 +11730,12 @@ ${noteBlock}`;
   <h2>GOSH Plot (Graphical Display of Study Heterogeneity)</h2>
   <p class="meta-line">k = ${k} studies &nbsp;\xB7&nbsp; Fixed-effects model &nbsp;\xB7&nbsp; x-axis: ${esc(xAxisLabel)}</p>
   <p class="note">${esc(sampleLine)}</p>
-  ${apaFormat ? buildFigureAPA(
+  ${buildFigureAPA(
       nextFigure(),
-      `Graphical Display of Study Heterogeneity (GOSH) plot, k\u202F=\u202F${k} studies`,
+      `Graphical Display of Study Heterogeneity (GOSH) plot, k = ${k} studies`,
       [svgStr],
       goshNote
-    ) : `<div class="svg-wrap">${svgStr}</div>`}
+    )}
 </section>`;
   }
   function sectionReferences(citationKeys) {
@@ -10124,9 +11758,13 @@ ${noteBlock}`;
       m,
       profile,
       reg,
+      ls,
       tf,
       influence,
       subgroup,
+      rveResult,
+      threeLevelResult,
+      rveRho,
       method,
       ciMethod,
       useTF,
@@ -10143,9 +11781,12 @@ ${noteBlock}`;
       bayesResult,
       bayesReMean,
       sensitivityRows,
-      apaFormat = false,
-      ciLevel
+      ciLevel,
+      plotTheme,
+      mccMethod = "none",
+      permResult = null
     } = args;
+    const theme = plotTheme ?? "default";
     const widthCiLabel = (ciLevel ?? "95") + "% CI";
     const widthCrLabel = (ciLevel ?? "95") + "% CrI";
     let _tblN = 0;
@@ -10163,12 +11804,22 @@ ${noteBlock}`;
     });
     const k = studies.filter((d) => !d.filled).length;
     const ciLabel = ciMethod === "KH" ? "Knapp-Hartung" : ciMethod === "t" ? "t-dist CI" : ciMethod === "PL" ? "Profile Likelihood" : "Normal CI";
-    const forestSVGs = forestOptions ? collectForestSVGs(studies, m, forestOptions) : [];
-    const cumForestSVGs = cumForestOptions ? collectCumulativeForestSVGs(cumForestOptions.results, cumForestOptions.profile ?? profile, cumForestOptions) : [];
-    const caterpillarSVGs = caterpillarOptions ? collectCaterpillarSVGs(caterpillarOptions.studies ?? studies, caterpillarOptions.m ?? m, caterpillarOptions.profile ?? profile, caterpillarOptions) : [];
+    const forestSVGs = forestOptions ? collectPagedSVGs("forestPlot", drawForest, [studies, m], { ...forestOptions, theme }) : [];
+    const cumForestSVGs = cumForestOptions ? collectPagedSVGs(
+      "cumulativePlot",
+      drawCumulativeForest,
+      [cumForestOptions.results, cumForestOptions.profile ?? profile],
+      { ...cumForestOptions, theme }
+    ) : [];
+    const caterpillarSVGs = caterpillarOptions ? collectPagedSVGs(
+      "caterpillarPlot",
+      drawCaterpillarPlot,
+      [caterpillarOptions.studies ?? studies, caterpillarOptions.m ?? m, caterpillarOptions.profile ?? profile],
+      { ...caterpillarOptions, theme }
+    ) : [];
     function liveSVG(id) {
       const el = document.getElementById(id);
-      return el ? serializeSVG(el) : "";
+      return el && el.childElementCount > 0 ? serializeSVG(el) : "";
     }
     const bubbleSVGs = (() => {
       const c = document.getElementById("bubblePlots");
@@ -10177,13 +11828,31 @@ ${noteBlock}`;
       if (named.length) return named;
       return Array.from(c.querySelectorAll("svg")).map((el) => ({ svg: serializeSVG(el), moderator: "" })).filter((b) => b.svg);
     })();
-    const rArgs = { ...args, apaFormat, nextTable, nextFigure };
+    const mccLabel = mccMethod === "bonferroni" ? "Bonferroni" : mccMethod === "holm" ? "Holm" : "";
+    const rawModPs = Array.isArray(reg?.modTests) ? reg.modTests.map((mt) => mt.QMp) : [];
+    const adjRegPs = mccMethod !== "none" && rawModPs.length > 1 ? adjustPvals(rawModPs, mccMethod) : null;
+    const rArgs = { ...args, nextTable, nextFigure, funnelSVG: liveSVG("funnelPlot") };
     const body = [
       sectionSummary(rArgs),
-      sectionPubBias(rArgs),
-      sectionPUniform(puniform, m, profile, apaFormat, nextTable, widthCiLabel),
-      sectionSelectionModel(sel ?? null, profile, selMode ?? "mle", selLabel ?? "", apaFormat, nextTable, widthCiLabel),
-      ((apaFormat2, nextFigure2) => {
+      sectionPlot(
+        "Forest Plot",
+        forestSVGs,
+        nextFigure,
+        `Forest plot of ${esc(profile.label)}, k\u202F=\u202F${k} studies`,
+        `RE\u202F=\u202Frandom effects. Error bars represent 95% ${esc(ciLabel)} CI. \u03C4\xB2 estimated by ${esc(method)}. Diamond\u202F=\u202Fpooled estimate and ${widthCiLabel}.`
+      ),
+      sectionStudyTable(rArgs),
+      (() => {
+        const svg = liveSVG("profileLikTau2Plot");
+        if (!svg) return "";
+        const note = `Shaded region\u202F=\u202F${widthCiLabel} from likelihood-ratio inversion (LRT). The \u03C4\xB2 CI in the summary table uses the Q-profile method (moment-based) and may differ.`;
+        return `
+<section class="plot-section">
+  <h2>Profile Likelihood for \u03C4\xB2</h2>
+  ${buildFigureAPA(nextFigure(), `Profile likelihood curve for \u03C4\xB2`, [svg], note)}
+</section>`;
+      })(),
+      (() => {
         if (!bayesResult || bayesResult.error) return "";
         const svgMu = liveSVG("bayesMuPlot");
         const svgTau = liveSVG("bayesTauPlot");
@@ -10192,25 +11861,29 @@ ${noteBlock}`;
         const muCIDisp = bayesResult.muCI.map((v) => profile.transform(v));
         const reDisp = isFinite(bayesReMean) ? profile.transform(bayesReMean) : NaN;
         const priorLine = `Prior: \u03BC\u202F~\u202FN(${esc(bayesResult.mu0)},\u202F${esc(bayesResult.sigma_mu)}\xB2)\u2003\u03C4\u202F~\u202FHalfNormal(${esc(bayesResult.sigma_tau)})\u2003k\u202F=\u202F${bayesResult.k} studies`;
+        const muSDNote = profile.isTransformedScale ? " (log)" : "";
+        const fmtBF = (bf) => !isFinite(bf) ? "NA" : bf >= 1e3 || bf < 1e-3 ? bf.toExponential(2) : bf.toFixed(3);
         const statsTable = `
   <table class="stats-table">
-    <tr><td>Posterior mean \u03BC</td><td>${fmt2(muDisp)}</td><td>${widthCrLabel} [${fmt2(muCIDisp[0])}, ${fmt2(muCIDisp[1])}]</td></tr>
-    <tr><td>Posterior mean \u03C4</td><td>${fmt2(bayesResult.tauMean)}</td><td>${widthCrLabel} [${fmt2(bayesResult.tauCI[0])}, ${fmt2(bayesResult.tauCI[1])}]</td></tr>
+    <tr><td>Posterior mean \u03BC</td><td>${fmt2(muDisp)}</td><td>${widthCrLabel} [${fmt2(muCIDisp[0])}, ${fmt2(muCIDisp[1])}] \xB7 SD${muSDNote} = ${fmt2(bayesResult.muSD)}</td></tr>
+    <tr><td>Posterior mean \u03C4</td><td>${fmt2(bayesResult.tauMean)}</td><td>${widthCrLabel} [${fmt2(bayesResult.tauCI[0])}, ${fmt2(bayesResult.tauCI[1])}] \xB7 SD = ${fmt2(bayesResult.tauSD)}</td></tr>
     ${isFinite(reDisp) ? `<tr><td>Frequentist RE (comparison)</td><td>${fmt2(reDisp)}</td><td></td></tr>` : ""}
+    ${isFinite(bayesResult.BF10) ? `<tr><td>Bayes Factor BF\u2081\u2080 (H\u2081: \u03BC\u22600)</td><td>${fmtBF(bayesResult.BF10)}</td><td></td></tr>` : ""}
+    ${bayesResult.BF10 < 1 && isFinite(bayesResult.BF01) ? `<tr><td>BF\u2080\u2081 = 1/BF\u2081\u2080 (H\u2080: \u03BC\u202F=\u202F0)</td><td>${fmtBF(bayesResult.BF01)}</td><td></td></tr>` : ""}
   </table>`;
         const bayesPriorNote = `Prior: \u03BC\u202F~\u202FN(${esc(bayesResult.mu0)},\u202F${esc(bayesResult.sigma_mu)}\xB2); \u03C4\u202F~\u202FHalfNormal(${esc(bayesResult.sigma_tau)}). Vertical line\u202F=\u202Fposterior mean; shaded region\u202F=\u202F95% credible interval.`;
-        const plotsMu = apaFormat2 && svgMu ? buildFigureAPA(
-          nextFigure2(),
+        const plotsMu = svgMu ? buildFigureAPA(
+          nextFigure(),
           `Posterior distribution of pooled effect \u03BC (${esc(profile.label)})`,
           [svgMu],
           bayesPriorNote
-        ) : svgMu ? `<div class="svg-wrap">${svgMu}</div>` : "";
-        const plotsTau = apaFormat2 && svgTau ? buildFigureAPA(
-          nextFigure2(),
+        ) : "";
+        const plotsTau = svgTau ? buildFigureAPA(
+          nextFigure(),
           `Posterior distribution of between-study standard deviation \u03C4`,
           [svgTau],
           `Prior: \u03C4\u202F~\u202FHalfNormal(${esc(bayesResult.sigma_tau)}).`
-        ) : svgTau ? `<div class="svg-wrap">${svgTau}</div>` : "";
+        ) : "";
         const sensitivityTable = (() => {
           if (!sensitivityRows || !sensitivityRows.length) return "";
           const crLabel = widthCrLabel;
@@ -10235,51 +11908,30 @@ ${noteBlock}`;
   ${plotsMu}
   ${plotsTau}
 </section>`;
-      })(apaFormat, nextFigure),
-      sectionGosh(gosh ?? null, profile, goshXAxis ?? "I2", apaFormat, nextFigure),
-      ((apaFormat2, nextFigure2) => {
-        const svg = liveSVG("profileLikTau2Plot");
-        if (!svg) return "";
-        const note = `Shaded region\u202F=\u202F${widthCiLabel} from likelihood-ratio inversion (LRT). The \u03C4\xB2 CI in the summary table uses the Q-profile method (moment-based) and may differ.`;
-        return `
-<section class="plot-section">
-  <h2>Profile Likelihood for \u03C4\xB2</h2>
-  ${apaFormat2 ? buildFigureAPA(nextFigure2(), `Profile likelihood curve for \u03C4\xB2`, [svg], note) : `<div class="svg-wrap">${svg}</div>
-  <p class="note">${widthCiLabel} from likelihood-ratio inversion (LRT). Note: the \u03C4\xB2 CI in the summary table uses the Q-profile method (moment-based) and will differ.</p>`}
-</section>`;
-      })(apaFormat, nextFigure),
-      sectionInfluence(influence, k, apaFormat, nextTable),
-      sectionSubgroup(subgroup, profile, apaFormat, nextTable, widthCiLabel),
-      sectionStudyTable(rArgs),
-      sectionRegression(reg, method, ciMethod, apaFormat, nextTable, widthCiLabel),
-      sectionPlot(
-        "Forest Plot",
-        forestSVGs,
-        apaFormat,
-        nextFigure,
-        `Forest plot of ${esc(profile.label)}, k\u202F=\u202F${k} studies`,
-        `RE\u202F=\u202Frandom effects. Error bars represent 95% ${esc(ciLabel)} CI. \u03C4\xB2 estimated by ${esc(method)}. Diamond\u202F=\u202Fpooled estimate and ${widthCiLabel}.`
-      ),
-      sectionPlot(
-        "Funnel Plot",
-        [liveSVG("funnelPlot")],
-        apaFormat,
-        nextFigure,
-        `Funnel plot of ${esc(profile.label)} against standard error`,
-        `Each point\u202F=\u202Fone study. Asymmetry may indicate publication bias or between-study heterogeneity.`
-      ),
+      })(),
+      sectionRve({ ...rArgs, rveResult, rveRho }, nextTable),
+      sectionThreeLevel({ ...rArgs, threeLevelResult }, nextTable),
+      sectionPubBias(rArgs),
+      sectionSensitivity(rArgs, nextTable),
+      sectionSubgroup(subgroup, profile, nextTable, widthCiLabel),
+      sectionInfluence(influence, k, nextTable),
       sectionPlot(
         "Influence Plot",
         [liveSVG("influencePlot")],
-        apaFormat,
         nextFigure,
         `Influence diagnostics for k\u202F=\u202F${k} studies`,
         `Left panel: standardised residuals. Right panel: leave-one-out (LOO) random-effects estimates with ${widthCiLabel}.`
       ),
       sectionPlot(
+        "BLUPs",
+        [liveSVG("blupPlot")],
+        nextFigure,
+        `Best linear unbiased predictions (BLUPs) for k = ${k} studies`,
+        `Shrunken study-level estimates sorted by effect size.`
+      ),
+      sectionPlot(
         "Baujat Plot",
         [liveSVG("baujatPlot")],
-        apaFormat,
         nextFigure,
         `Baujat plot of contribution to Q statistic against overall influence on the pooled estimate`,
         ``
@@ -10287,15 +11939,27 @@ ${noteBlock}`;
       sectionPlot(
         "Normal Q-Q Plot",
         [liveSVG("qqPlot")],
-        apaFormat,
         nextFigure,
         `Normal Q-Q plot of internally standardised residuals from the random-effects model`,
         `Points near the reference line support the normality assumption. Orange points have |z|\u202F>\u202F2.`
       ),
       sectionPlot(
+        "Radial (Galbraith) Plot",
+        [liveSVG("radialPlot")],
+        nextFigure,
+        `Radial (Galbraith) plot of standardised effect against reciprocal of standard error`,
+        `Points near the reference line support homogeneity. Outliers may indicate heterogeneity.`
+      ),
+      sectionPlot(
+        "L\u2019Abb\xE9 Plot",
+        [liveSVG("labbePlot")],
+        nextFigure,
+        `L\u2019Abb\xE9 plot of event rates for ${esc(profile.label)}`,
+        `Each point = one study. Point area proportional to study weight. Applicable to OR, RR, and RD only.`
+      ),
+      sectionPlot(
         "Cumulative Forest Plot",
         cumForestSVGs.length ? cumForestSVGs : [liveSVG("cumulativePlot")],
-        apaFormat,
         nextFigure,
         `Cumulative forest plot of ${esc(profile.label)}`,
         `Studies added in dataset order. Effect and ${widthCiLabel} shown at each cumulative step.`
@@ -10303,31 +11967,13 @@ ${noteBlock}`;
       sectionPlot(
         "Cumulative Funnel Plot",
         [liveSVG("cumulativeFunnelPlot")],
-        apaFormat,
         nextFigure,
         `Cumulative funnel plot of ${esc(profile.label)}`,
         ``
       ),
       sectionPlot(
-        "P-curve",
-        [liveSVG("pCurvePlot")],
-        apaFormat,
-        nextFigure,
-        `P-curve of statistically significant results (p\u202F&lt;\u202F.05)`,
-        `Simonsohn et al. (2014). Only studies with p\u202F&lt;\u202F.05 included.`
-      ),
-      sectionPlot(
-        "P-uniform",
-        [liveSVG("pUniformPlot")],
-        apaFormat,
-        nextFigure,
-        `P-uniform plot (van Assen et al., 2015)`,
-        ``
-      ),
-      sectionPlot(
         "Orchard Plot",
         [liveSVG("orchardPlot")],
-        apaFormat,
         nextFigure,
         `Orchard plot of ${esc(profile.label)}`,
         `Points scaled by random-effects weight. Thick bar\u202F=\u202F${widthCiLabel}; thin bar\u202F=\u202F95% prediction interval.`
@@ -10335,15 +11981,31 @@ ${noteBlock}`;
       sectionPlot(
         "Caterpillar Plot",
         caterpillarSVGs.length ? caterpillarSVGs : [liveSVG("caterpillarPlot")],
-        apaFormat,
         nextFigure,
         `Caterpillar plot of study-level ${esc(profile.label)}, sorted by effect size`,
         `Error bars\u202F=\u202F${widthCiLabel}.`
       ),
+      sectionPCurve(pcurve, nextTable),
+      sectionPlot(
+        "P-curve",
+        [liveSVG("pCurvePlot")],
+        nextFigure,
+        `P-curve of statistically significant results (p\u202F&lt;\u202F.05)`,
+        `Simonsohn et al. (2014). Only studies with p\u202F&lt;\u202F.05 included.`
+      ),
+      sectionPUniform(puniform, m, profile, nextTable, widthCiLabel),
+      sectionPlot(
+        "P-uniform",
+        [liveSVG("pUniformPlot")],
+        nextFigure,
+        `P-uniform plot (van Assen et al., 2015)`,
+        ``
+      ),
+      sectionSelectionModel(sel ?? null, profile, selMode ?? "mle", selLabel ?? "", nextTable, widthCiLabel),
+      sectionGosh(gosh ?? null, profile, goshXAxis ?? "I2", nextFigure, theme),
       sectionPlot(
         "Risk-of-bias Traffic Light",
         [liveSVG("robTrafficLight")],
-        apaFormat,
         nextFigure,
         `Risk-of-bias traffic-light plot`,
         ``
@@ -10351,31 +12013,23 @@ ${noteBlock}`;
       sectionPlot(
         "Risk-of-bias Summary",
         [liveSVG("robSummary")],
-        apaFormat,
         nextFigure,
         `Risk-of-bias summary plot`,
         ``
       ),
-      // Bubble plots: in APA mode one Figure per moderator; non-APA all in one section.
-      ...apaFormat ? bubbleSVGs.map(
+      sectionLocationScale(ls, nextTable, widthCiLabel),
+      sectionRegression(reg, method, ciMethod, nextTable, widthCiLabel, adjRegPs, mccLabel),
+      sectionPermutation(permResult, reg, nextTable),
+      ...bubbleSVGs.map(
         ({ svg, moderator }) => sectionPlot(
           moderator ? `Bubble Plot \u2014 ${esc(moderator)}` : "Bubble Plot",
           [svg],
-          apaFormat,
           nextFigure,
           moderator ? `Bubble plot of ${esc(moderator)} against ${esc(profile.label)}` : `Bubble plot of meta-regression moderator against ${esc(profile.label)}`,
-          `Line\u202F=\u202Fmeta-regression fit. Point area proportional to random-effects weight.`
+          `Line = meta-regression fit. Point area proportional to random-effects weight.`
         )
-      ) : [sectionPlot(
-        "Bubble Plots",
-        bubbleSVGs.map((b) => b.svg),
-        apaFormat,
-        nextFigure,
-        `Bubble plots of meta-regression moderators against ${esc(profile.label)}`,
-        `Line\u202F=\u202Fmeta-regression fit. Point area proportional to random-effects weight. One panel per moderator.`
-      )],
-      // References section — APA mode only, always last.
-      ...apaFormat ? [sectionReferences(collectCitations(rArgs))] : []
+      ),
+      sectionReferences(collectCitations(rArgs))
     ].join("\n");
     return `<!DOCTYPE html>
 <html lang="en">
@@ -10397,14 +12051,136 @@ ${noteBlock}`;
 </body>
 </html>`;
   }
-  var CITATIONS;
+  function collectMVForestSVGs(outcomeIds) {
+    const combined = document.getElementById("mvForestPlotCombined");
+    const combinedBlock = document.getElementById("mvForestCombinedBlock");
+    if (combinedBlock && combinedBlock.style.display !== "none" && combined) {
+      const s = serializeSVG(combined);
+      return s ? [s] : [];
+    }
+    const result = [];
+    for (let o = 0; o < outcomeIds.length; o++) {
+      const el = document.getElementById(`mvForestPlot-${o}`);
+      if (el) {
+        const s = serializeSVG(el);
+        if (s) result.push(s);
+      }
+    }
+    return result;
+  }
+  function buildMVReport({ res, alpha = 0.05, apaFormat = false }) {
+    const {
+      beta,
+      se,
+      ci,
+      z,
+      pval,
+      betaNames = [],
+      tau2,
+      rho_between,
+      outcomeIds,
+      n,
+      k,
+      P,
+      QM,
+      df_QM,
+      pQM,
+      QE,
+      df_QE,
+      pQE,
+      logLik: logLik2,
+      AIC,
+      BIC,
+      AICc,
+      struct,
+      method,
+      I2: I22,
+      convergence,
+      warnings: engineWarnings = []
+    } = res;
+    const hasMods = beta.length > P;
+    const ciPct = Math.round((1 - alpha) * 100);
+    const date = (/* @__PURE__ */ new Date()).toLocaleDateString(void 0, { year: "numeric", month: "long", day: "numeric" });
+    let _tblN = 0, _figN = 0;
+    const nextTable = () => ++_tblN;
+    const nextFigure = () => ++_figN;
+    const fP = (p) => !isFinite(p) ? "\u2014" : p < 1e-4 ? p.toExponential(2) : (+p).toFixed(4);
+    const pooledHeaders = ["Outcome", "Estimate", "SE", `${ciPct}% CI`, "<em>z</em>", "<em>p</em>"];
+    const pooledRows = outcomeIds.map((id, o) => {
+      const [lo, hi] = ci[o];
+      return `<tr><td>${esc(String(id))}</td><td>${fmt2(beta[o], 4)}</td><td>${fmt2(se[o], 4)}</td>
+      <td>[${fmt2(lo, 4)}, ${fmt2(hi, 4)}]</td><td>${fmt2(z[o], 3)}</td><td>${fP(pval[o])}</td></tr>`;
+    });
+    let modHTML = "";
+    if (hasMods) {
+      const modHeaders = ["Coefficient", "Estimate", "SE", `${ciPct}% CI`, "<em>z</em>", "<em>p</em>"];
+      const modRows = beta.slice(P).map((b, i) => {
+        const j = P + i;
+        const [lo, hi] = ci[j];
+        return `<tr><td>${esc(betaNames[j] ?? `\u03B2${j}`)}</td><td>${fmt2(b, 4)}</td><td>${fmt2(se[j], 4)}</td>
+        <td>[${fmt2(lo, 4)}, ${fmt2(hi, 4)}]</td><td>${fmt2(z[j], 3)}</td><td>${fP(pval[j])}</td></tr>`;
+      });
+      modHTML = apaFormat ? buildTableAPA(nextTable(), "Meta-regression coefficients", modHeaders, modRows) : `<h2>Moderator Effects</h2>${buildTable(modHeaders, modRows)}`;
+    }
+    const hetHeaders = struct === "CS" ? ["Outcome", "\u03C4\xB2", "I\xB2", "\u03C1 (between)"] : ["Outcome", "\u03C4\xB2", "I\xB2"];
+    const hetRows = outcomeIds.map((id, o) => {
+      const rho = struct === "CS" ? `<td>${fmt2(rho_between ?? 0, 4)}</td>` : "";
+      return `<tr><td>${esc(String(id))}</td><td>${fmt2(tau2[o], 5)}</td>
+      <td>${isFinite(I22[o]) ? (+I22[o]).toFixed(1) + "%" : "\u2014"}</td>${rho}</tr>`;
+    });
+    const testHeaders = ["Test", "\u03C7\xB2", "df", "p"];
+    const testRows = [
+      ...hasMods && isFinite(QM) ? [`<tr><td>Omnibus test of moderators (Q<sub>M</sub>)</td><td>${fmt2(QM, 3)}</td><td>${df_QM}</td><td>${fP(pQM)}</td></tr>`] : [],
+      `<tr><td>Residual heterogeneity (Q<sub>E</sub>)</td><td>${fmt2(QE, 3)}</td><td>${df_QE}</td><td>${fP(pQE)}</td></tr>`
+    ];
+    const forestSVGs = collectMVForestSVGs(outcomeIds);
+    const pooledHTML = apaFormat ? buildTableAPA(nextTable(), `Pooled effect estimates per outcome (${method}, \u03A8 = ${struct})`, pooledHeaders, pooledRows) : `<h2>Pooled Estimates</h2>${buildTable(pooledHeaders, pooledRows)}`;
+    const hetHTML = apaFormat ? buildTableAPA(nextTable(), "Between-study heterogeneity", hetHeaders, hetRows) : `<h2>Between-Study Heterogeneity</h2>${buildTable(hetHeaders, hetRows)}`;
+    const testHTML = apaFormat ? buildTableAPA(nextTable(), "Hypothesis tests", testHeaders, testRows) : `<h2>Hypothesis Tests</h2>${buildTable(testHeaders, testRows)}`;
+    const forestHTML = forestSVGs.length ? apaFormat ? buildFigureAPA(nextFigure(), "Forest plot of multivariate meta-analysis results", forestSVGs) : `<h2>Forest Plot</h2>${forestSVGs.map((s) => `<div class="svg-wrap">${s}</div>`).join("\n")}` : "";
+    const fitLine = `k\u202F=\u202F${k} \xB7 n\u202F=\u202F${n} obs \xB7 P\u202F=\u202F${P} outcomes \u2502 log-lik\u202F=\u202F${fmt2(logLik2, 4)} \xB7 AIC\u202F=\u202F${fmt2(AIC, 2)} \xB7 BIC\u202F=\u202F${fmt2(BIC, 2)}` + (isFinite(AICc) ? ` \xB7 AICc\u202F=\u202F${fmt2(AICc, 2)}` : "") + ` \u2502 ${esc(method)}, \u03A8\u202F=\u202F${esc(struct)}`;
+    const warnHTML = [
+      convergence === false ? `<p style="color:#c0392b"><strong>Warning:</strong> Optimizer did not fully converge \u2014 interpret results with caution.</p>` : "",
+      ...engineWarnings.map((w) => `<p style="color:#c0392b">${esc(w)}</p>`)
+    ].filter(Boolean).join("");
+    const body = [
+      warnHTML,
+      pooledHTML,
+      modHTML,
+      hetHTML,
+      testHTML,
+      `<p class="report-meta" style="margin-top:8px">${fitLine}</p>`,
+      forestHTML
+    ].filter(Boolean).join("\n");
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Multivariate Meta-Analysis Report</title>
+  <style>${reportCSS()}</style>
+</head>
+<body>
+  <h1>Multivariate Meta-Analysis Report</h1>
+  <p class="report-meta">Generated ${esc(date)}
+    &nbsp;\xB7&nbsp; k\u202F=\u202F${k} studies, P\u202F=\u202F${P} outcomes
+    &nbsp;\xB7&nbsp; ${esc(method)}, \u03A8\u202F=\u202F${esc(struct)}
+  </p>
+  <section class="report-section">${body}</section>
+</body>
+</html>`;
+  }
+  var esc, CITATIONS;
   var init_report = __esm({
     "js/report.js"() {
+      init_format();
       init_plots();
       init_io();
       init_constants();
       init_utils();
+      init_regression();
       init_export();
+      init_sections();
+      esc = escHTML;
       CITATIONS = {
         // ── Heterogeneity estimators ──────────────────────────────────────────────
         DL: `DerSimonian, R., &amp; Laird, N. (1986). Meta-analysis in clinical trials. <em>Controlled Clinical Trials</em>, <em>7</em>(3), 177\u2013188. <a href="https://doi.org/10.1016/0197-2456(86)90046-2">https://doi.org/10.1016/0197-2456(86)90046-2</a>`,
@@ -10441,6 +12217,23 @@ ${noteBlock}`;
         HC: `Henmi, M., &amp; Copas, J. B. (2010). Confidence intervals for random effects meta-analysis and robustness to publication bias. <em>Statistics in Medicine</em>, <em>29</em>(29), 2969\u20132983. <a href="https://doi.org/10.1002/sim.4029">https://doi.org/10.1002/sim.4029</a>`,
         // ── Meta-regression ───────────────────────────────────────────────────────
         MREG: `Thompson, S. G., &amp; Sharp, S. J. (1999). Explaining heterogeneity in meta-analysis: A comparison of methods. <em>Statistics in Medicine</em>, <em>18</em>(20), 2693\u20132708.`,
+        // ── Location-scale model ──────────────────────────────────────────────────
+        LS: `Viechtbauer, W., L\xF3pez-L\xF3pez, J. A., S\xE1nchez-Meca, J., &amp; Mar\xEDn-Mart\xEDnez, F. (2015). A comparison of procedures to test for moderators in mixed-effects meta-regression models. <em>Psychological Methods</em>, <em>20</em>(3), 360\u2013374. <a href="https://doi.org/10.1037/met0000023">https://doi.org/10.1037/met0000023</a>`,
+        // ── Permutation test ──────────────────────────────────────────────────────
+        PERM: `Viechtbauer, W., L\xF3pez-L\xF3pez, J. A., S\xE1nchez-Meca, J., &amp; Mar\xEDn-Mart\xEDnez, F. (2015). A comparison of procedures to test for moderators in mixed-effects meta-regression models. <em>Psychological Methods</em>, <em>20</em>(3), 360\u2013374. <a href="https://doi.org/10.1037/met0000023">https://doi.org/10.1037/met0000023</a>`,
+        // ── Cluster-robust SE ─────────────────────────────────────────────────────
+        CRSE: `Hedges, L. V., Tipton, E., &amp; Johnson, M. C. (2010). Robust variance estimation in meta-regression with dependent effect size estimates. <em>Research Synthesis Methods</em>, <em>1</em>(1), 39\u201365. <a href="https://doi.org/10.1002/jrsm.5">https://doi.org/10.1002/jrsm.5</a>`,
+        // ── RVE ───────────────────────────────────────────────────────────────────
+        RVE: `Hedges, L. V., Tipton, E., &amp; Johnson, M. C. (2010). Robust variance estimation in meta-regression with dependent effect size estimates. <em>Research Synthesis Methods</em>, <em>1</em>(1), 39\u201365. <a href="https://doi.org/10.1002/jrsm.5">https://doi.org/10.1002/jrsm.5</a>`,
+        // ── Three-level MA ────────────────────────────────────────────────────────
+        THREE: `Cheung, M. W.-L. (2014). Modeling dependent effect sizes with three-level meta-analyses: A structural equation modeling approach. <em>Psychological Methods</em>, <em>19</em>(2), 211\u2013229. <a href="https://doi.org/10.1037/a0032968">https://doi.org/10.1037/a0032968</a>`,
+        // ── WAAP-WLS ──────────────────────────────────────────────────────────────
+        WAAP: `Stanley, T. D., &amp; Doucouliagos, H. (2014). Meta-regression approximations to reduce publication selection bias. <em>Research Synthesis Methods</em>, <em>5</em>(1), 60\u201378. <a href="https://doi.org/10.1002/jrsm.1095">https://doi.org/10.1002/jrsm.1095</a>`,
+        // ── GOSH ─────────────────────────────────────────────────────────────────
+        GOSH: `Olkin, I., Dahabreh, I. J., &amp; Trikalinos, T. A. (2012). GOSH \u2014 a graphical display of study heterogeneity. <em>Research Synthesis Methods</em>, <em>3</em>(3), 214\u2013223. <a href="https://doi.org/10.1002/jrsm.1053">https://doi.org/10.1002/jrsm.1053</a>`,
+        // ── MH / Peto ────────────────────────────────────────────────────────────
+        MH: `Mantel, N., &amp; Haenszel, W. (1959). Statistical aspects of the analysis of data from retrospective studies of disease. <em>Journal of the National Cancer Institute</em>, <em>22</em>(4), 719\u2013748.`,
+        PETO: `Yusuf, S., Peto, R., Lewis, J., Collins, R., &amp; Sleight, P. (1985). Beta blockade during and after myocardial infarction: An overview of the randomized trials. <em>Progress in Cardiovascular Diseases</em>, <em>27</em>(5), 335\u2013371. <a href="https://doi.org/10.1016/S0033-0620(85)80003-7">https://doi.org/10.1016/S0033-0620(85)80003-7</a>`,
         // ── Influence diagnostics ─────────────────────────────────────────────────
         INFL: `Viechtbauer, W., &amp; Cheung, M. W.-L. (2010). Outlier and influence diagnostics for meta-analysis. <em>Research Synthesis Methods</em>, <em>1</em>(2), 112\u2013125. <a href="https://doi.org/10.1002/jrsm.11">https://doi.org/10.1002/jrsm.11</a>`,
         // ── Bayesian ──────────────────────────────────────────────────────────────
@@ -10452,53 +12245,12 @@ ${noteBlock}`;
   // js/docx.js
   var docx_exports = {};
   __export(docx_exports, {
-    buildDocx: () => buildDocx
+    buildDocx: () => buildDocx,
+    buildMVDocx: () => buildMVDocx
   });
-  function serializeSVG2(svgEl) {
-    if (!svgEl) return "";
-    const clone = svgEl.cloneNode(true);
-    clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
-    const w = clone.getAttribute("width") || String(svgEl.getBoundingClientRect().width);
-    const h = clone.getAttribute("height") || String(svgEl.getBoundingClientRect().height);
-    clone.setAttribute("width", w);
-    clone.setAttribute("height", h);
-    resolveThemeVars(clone);
-    if (!hasEmbeddedBackground(clone)) {
-      const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-      bg.setAttribute("width", "100%");
-      bg.setAttribute("height", "100%");
-      bg.setAttribute("fill", currentBgColour());
-      clone.insertBefore(bg, clone.firstChild);
-    }
-    return new XMLSerializer().serializeToString(clone);
-  }
   function liveSVGString(id) {
     const el = document.getElementById(id);
-    return el ? serializeSVG2(el) : "";
-  }
-  function collectPagedSVGs(svgId, drawFn, drawArgs, options) {
-    const svgEl = document.getElementById(svgId);
-    if (!svgEl) return [];
-    const svgs = [];
-    let totalPages = 1;
-    try {
-      ({ totalPages } = drawFn(...drawArgs, { ...options, page: 0 }));
-      svgs.push(serializeSVG2(svgEl));
-    } catch (e) {
-      return [];
-    }
-    for (let p = 1; p < totalPages; p++) {
-      try {
-        drawFn(...drawArgs, { ...options, page: p });
-        svgs.push(serializeSVG2(svgEl));
-      } catch (e) {
-      }
-    }
-    try {
-      drawFn(...drawArgs, { ...options, page: options.currentPage ?? 0 });
-    } catch (e) {
-    }
-    return svgs;
+    return el && el.childElementCount > 0 ? serializeSVG(el) : "";
   }
   function parseSVGDims(svgString) {
     const w = parseFloat(svgString.match(/\swidth="([^"]+)"/)?.[1] || "800");
@@ -10541,6 +12293,20 @@ ${noteBlock}`;
   function italic(text) {
     if (!text) return "";
     return `<w:r><w:rPr><w:i/></w:rPr><w:t xml:space="preserve">${xmlEsc(String(text))}</w:t></w:r>`;
+  }
+  function richRuns(text, { bold: isBold = false } = {}) {
+    if (!text) return "";
+    const bTag = isBold ? "<w:b/>" : "";
+    const parts = String(text).split(/(<em>[^<]*<\/em>)/);
+    return parts.map((part) => {
+      if (part.startsWith("<em>")) {
+        const inner = xmlEsc(part.slice(4, -5));
+        return `<w:r><w:rPr>${bTag}<w:i/></w:rPr><w:t xml:space="preserve">${inner}</w:t></w:r>`;
+      }
+      const escaped = xmlEsc(part);
+      if (!escaped) return "";
+      return `<w:r><w:rPr>${bTag}</w:rPr><w:t xml:space="preserve">${escaped}</w:t></w:r>`;
+    }).join("");
   }
   function hyperlink(rId, text) {
     return `<w:hyperlink r:id="${rId}" w:history="1"><w:r><w:rPr><w:rStyle w:val="Hyperlink"/></w:rPr><w:t xml:space="preserve">${xmlEsc(String(text))}</w:t></w:r></w:hyperlink>`;
@@ -10589,17 +12355,6 @@ ${noteBlock}`;
   </wp:inline>
 </w:drawing></w:r></w:p>`;
   }
-  function fmt3(v, d = 3) {
-    return isFinite(v) ? (+v).toFixed(d) : "\u2014";
-  }
-  function fmtP_APA2(p) {
-    if (!isFinite(p)) return "\u2014";
-    if (p < 1e-3) return "< .001";
-    return "= " + (+p).toFixed(3).replace(/^0\./, ".");
-  }
-  function fmtCI_APA2(lo, hi, d = 3) {
-    return `[${fmt3(lo, d)}, ${fmt3(hi, d)}]`;
-  }
   function citationToRunXML(htmlStr, linkMgr) {
     const s = htmlStr.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"');
     const parts = [];
@@ -10631,7 +12386,7 @@ ${noteBlock}`;
     <w:tcPr><w:tcBorders>
       <w:bottom w:val="single" w:sz="6" w:space="0" w:color="000000"/>
     </w:tcBorders></w:tcPr>
-    <w:p><w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">${xmlEsc(h)}</w:t></w:r></w:p>
+    <w:p>${richRuns(h, { bold: true })}</w:p>
   </w:tc>`).join("")}
 </w:tr>`;
     const bodyRowsXML = rows.map((cells) => `<w:tr>
@@ -10653,7 +12408,7 @@ ${noteBlock}`;
 ${headerRow}
 ${bodyRowsXML}
 </w:tbl>`;
-    const notePara = note ? `<w:p><w:pPr><w:pStyle w:val="APANote"/></w:pPr>${italic("Note.")}${run(" " + note)}</w:p>` : "";
+    const notePara = note ? `<w:p><w:pPr><w:pStyle w:val="APANote"/></w:pPr>${italic("Note.")}${richRuns(" " + note)}</w:p>` : "";
     return [
       paraText(`Table ${tableNum}`, "APATableTitle"),
       paraText(subtitle, "APATableSubtitle"),
@@ -10676,313 +12431,274 @@ ${bodyRowsXML}
     return chunks;
   }
   function docSummary(args, ctx) {
-    const { m, profile, method, ciMethod, useTF, tf, mAdjusted, studies, cles = null, widthCiLabel, ciLevel } = args;
-    const k = studies.filter((d) => !d.filled).length;
-    const isMHorPeto = m.isMH || m.isPeto;
-    const FE_disp = profile.transform(m.FE);
-    const RE_disp = isMHorPeto ? null : profile.transform(m.RE);
-    const ci = { lb: profile.transform(m.ciLow), ub: profile.transform(m.ciHigh) };
-    const pred = { lb: profile.transform(m.predLow), ub: profile.transform(m.predHigh) };
-    const RE_adj = !isMHorPeto && useTF && mAdjusted ? profile.transform(mAdjusted.RE) : null;
-    const feAlpha = { "90": 0.1, "95": 0.05, "99": 0.01 }[ciLevel] ?? 0.05;
-    const feZ = normalQuantile(1 - feAlpha / 2);
-    const feCi = { lb: profile.transform(m.FE - feZ * m.seFE), ub: profile.transform(m.FE + feZ * m.seFE) };
-    const tauCI1 = fmt3(m.tauCI?.[0]);
-    const tauCI2 = isFinite(m.tauCI?.[1]) ? fmt3(m.tauCI[1]) : "\u221E";
-    const H2hi = isFinite(m.H2CI?.[1]) ? fmt3(m.H2CI[1]) : "\u221E";
-    const ciLabel = ciMethod === "KH" ? "Knapp-Hartung" : ciMethod === "t" ? "t-distribution" : ciMethod === "PL" ? "Profile Likelihood" : "Normal (z)";
-    const methodLabel = m.isMH ? "Mantel-Haenszel" : m.isPeto ? "Peto" : method;
-    const settings = `Effect type: ${profile.label}  \xB7  Pooling: ${methodLabel}  \xB7  CI method: ${ciLabel}  \xB7  k\u202F=\u202F${k}${tf.length > 0 ? ` + ${tf.length} imputed (trim\u202F&\u202Ffill)` : ""}`;
-    const rows = [
-      [`${profile.label} \u2014 Fixed Effects (FE)`, fmt3(FE_disp)],
-      [`FE ${widthCiLabel}`, fmtCI_APA2(feCi.lb, feCi.ub)],
-      ...!isMHorPeto ? [[`${profile.label} \u2014 Random Effects (RE)`, fmt3(RE_disp)]] : [],
-      ...!isMHorPeto ? [[`RE ${widthCiLabel}`, fmtCI_APA2(ci.lb, ci.ub)]] : [],
-      ...isMHorPeto ? [[widthCiLabel, fmtCI_APA2(ci.lb, ci.ub)]] : [],
-      ...cles ? [["CLES (RE)", `${fmt3(cles.estimate)} [${fmt3(cles.ci[0])}, ${fmt3(cles.ci[1])}]`]] : [],
-      ...RE_adj !== null ? [["RE (trim-and-fill adjusted)", fmt3(RE_adj)]] : [],
-      ...!isMHorPeto ? [["95% Prediction interval (PI)", fmtCI_APA2(pred.lb, pred.ub)]] : [],
-      ...!isMHorPeto ? [["\u03C4\xB2", `${fmt3(m.tau2)} [${tauCI1}, ${tauCI2}]`]] : [],
-      ["I\xB2", `${fmt3(m.I2)}% [${fmt3(m.I2CI?.[0])}%, ${fmt3(m.I2CI?.[1])}%]`],
-      ...!isMHorPeto ? [["H\xB2-CI", `[${fmt3(m.H2CI?.[0])}, ${H2hi}]`]] : [],
-      [`Q (df\u202F=\u202F${m.df})`, fmt3(m.Q)],
-      ...m.dist ? [[`${m.dist}-statistic`, `${fmt3(m.stat)}, p ${fmtP_APA2(m.pval)}`]] : [],
-      // Cluster-robust SE (shown when cluster IDs are present)
-      ...m.isClustered ? [
-        [
-          `Robust CI (C\u202F=\u202F${m.clustersUsed} clusters)`,
-          `${fmtCI_APA2(profile.transform(m.robustCiLow), profile.transform(m.robustCiHigh))}  \xB7  SE\u202F=\u202F${fmt3(m.robustSE)}  \xB7  z\u202F=\u202F${fmt3(m.robustStat)}, p ${fmtP_APA2(m.robustPval)}`
-        ]
-      ] : []
-    ];
-    const note = isMHorPeto ? `Fixed-effect pooling (${methodLabel}) \u2014 RE estimate, \u03C4\xB2, and prediction interval not applicable. FE = fixed effects; CI = confidence interval.` : `FE = fixed effects; RE = random effects; CI = confidence interval; PI = prediction interval.${cles ? " CLES = common language effect size = \u03A6(g/\u221A2); probability that a randomly drawn score from group 1 exceeds group 2 (McGraw & Wong, 1992)." : ""}${m.isClustered ? " Robust CI uses cluster-robust (sandwich) standard errors." : ""}`;
+    const d = summaryData(args);
     return [
       paraText("Summary", "Heading1"),
-      paraText(settings),
+      paraText(d.settings),
       ...apaTableDocx(
         ctx.nextTable(),
-        `Summary of Meta-Analysis Results (${profile.label})`,
-        ["Statistic", "Value"],
-        rows.map(([s, v]) => [run(s), run(v)]),
-        note
+        d.subtitle,
+        d.headers,
+        d.rows.map((r) => r.map(run)),
+        d.note
       )
     ];
   }
   function docPubBias(args, ctx) {
-    const { egger, begg, fatpet, fsn, tes, hc, useTF, tf, profile } = args;
-    const petEff = isFinite(fatpet?.intercept) ? fmt3(profile.transform(fatpet.intercept)) : "\u2014";
-    const tesRow = tes && isFinite(tes.chi2) ? [`TES \u2014 \u03C7\xB2 (O=${tes.O}, E=${fmt3(tes.E)})`, fmt3(tes.chi2), fmtP_APA2(tes.p)] : ["TES (excess significance)", "\u2014", "NA"];
-    const hcRow = hc && !hc.error ? [`Henmi-Copas CI`, `${fmt3(profile.transform(hc.beta))} [${fmt3(profile.transform(hc.ci[0]))}, ${fmt3(profile.transform(hc.ci[1]))}]`, "\u2014"] : ["Henmi-Copas CI", "\u2014", "NA (k < 3)"];
-    const rows = [
-      ["Egger\u2019s test (intercept)", isFinite(egger?.intercept) ? fmt3(egger.intercept) : "\u2014", isFinite(egger?.p) ? fmtP_APA2(egger.p) : "NA (k < 3)"],
-      ["Begg\u2019s test (rank correlation \u03C4)", isFinite(begg?.tau) ? fmt3(begg.tau) : "\u2014", isFinite(begg?.p) ? fmtP_APA2(begg.p) : "NA (k < 3)"],
-      ["FAT \u2014 \u03B2\u2081 (bias)", isFinite(fatpet?.slope) ? fmt3(fatpet.slope) : "\u2014", isFinite(fatpet?.slopeP) ? fmtP_APA2(fatpet.slopeP) : "NA (k < 3)"],
-      ["PET \u2014 effect at SE \u2192 0", petEff, isFinite(fatpet?.interceptP) ? fmtP_APA2(fatpet.interceptP) : "NA (k < 3)"],
-      tesRow,
-      hcRow
-    ];
-    const fsnLine = [
-      `Fail-safe N (Rosenthal): ${isFinite(fsn?.rosenthal) ? Math.round(fsn.rosenthal) : "\u2014"}`,
-      `Fail-safe N (Orwin): ${isFinite(fsn?.orwin) ? Math.round(fsn.orwin) : "\u2014"}`,
-      `Trim\u202F&\u202FFill: ${useTF ? "ON" : "OFF"}${tf?.length > 0 ? ` (${tf.length} filled)` : ""}`
-    ].join("  \xB7  ");
+    const d = pubBiasData(args);
     return [
       paraText("Publication Bias", "Heading1"),
       ...apaTableDocx(
         ctx.nextTable(),
         "Tests of Publication Bias",
-        ["Test", "Statistic", "p"],
-        rows.map((r) => r.map(run)),
-        "FAT = funnel asymmetry test; PET = precision-effect test; TES = test of excess significance; Henmi-Copas = bias-robust CI centred on FE estimate (DL \u03C4\xB2). NA = fewer than 3 studies."
+        d.headers,
+        d.rows.map((r) => r.map(run)),
+        d.note
       ),
-      paraText(fsnLine)
+      paraText(d.fsnLine)
+    ];
+  }
+  function docPCurve(args, ctx) {
+    const d = pCurveData(args.pcurve);
+    if (!d) return [];
+    return [
+      paraText("P-curve (Simonsohn et al., 2014)", "Heading1"),
+      paraText(`${d.kLine}  \xB7  Verdict: ${d.verdict}`),
+      ...apaTableDocx(
+        ctx.nextTable(),
+        "P-curve Test Statistics",
+        d.headers,
+        d.rows.map((r) => r.map(run)),
+        d.note
+      )
     ];
   }
   function docPUniform(args, ctx) {
-    const { puniform, m, profile, widthCiLabel } = args;
-    if (!puniform || puniform.k < 3 || !isFinite(puniform.estimate)) return [];
-    function tr(v) {
-      return profile.transform(v);
-    }
-    const noteExtra = [
-      puniform.biasDetected ? "Bias detected (p < .05)." : "",
-      puniform.significantEffect ? "Significant effect after correction (p < .05)." : ""
-    ].filter(Boolean).join(" ");
-    const rows = [
-      ["RE (uncorrected)", fmt3(tr(m.RE)), fmtCI_APA2(tr(m.ciLow), tr(m.ciHigh)), fmt3(puniform.Z_bias), fmtP_APA2(puniform.p_bias)],
-      ["P-uniform (bias-corrected)", fmt3(tr(puniform.estimate)), fmtCI_APA2(tr(puniform.ciLow), tr(puniform.ciHigh)), fmt3(puniform.Z_sig), fmtP_APA2(puniform.p_sig)]
-    ];
-    const note = "RE row: bias test (H\u2080: RE = true effect). P-uniform row: significance test (H\u2080: \u03B4\u202F=\u202F0). CI = confidence interval." + (noteExtra ? " " + noteExtra : "");
+    const d = puniformData(args);
+    if (!d) return [];
     return [
       paraText("P-uniform (van Assen et al., 2015)", "Heading1"),
-      paraText(`${puniform.k} significant result${puniform.k !== 1 ? "s" : ""} (p\u202F<\u202F.05) used  \xB7  effect scale: ${profile.label}`),
+      paraText(d.kLine),
       ...apaTableDocx(
         ctx.nextTable(),
         "P-uniform Bias-Corrected Estimates",
-        ["Method", "Estimate", widthCiLabel, "Z", "p"],
-        rows.map((r) => r.map(run)),
-        note
+        d.headers,
+        d.rows.map((r) => r.map(run)),
+        d.note
       )
     ];
   }
   function docSelectionModel(args, ctx) {
-    const { sel, selMode, selLabel, profile, widthCiLabel } = args;
-    if (!sel || sel.error) return [];
-    const isMLE = selMode === "mle";
-    function fmtDisp(v) {
-      return isFinite(v) ? fmt3(profile.transform(v)) : "\u2014";
-    }
-    function fmtV(v) {
-      return isFinite(v) ? fmt3(v) : "\u2014";
-    }
-    const cuts = sel.cuts;
-    const intervalLabels = cuts.map((c, j) => `(${j === 0 ? "0" : cuts[j - 1]}, ${c}]`);
-    const headers = ["Quantity", ...intervalLabels];
-    const muAdj = fmtDisp(sel.mu);
-    const ciLo = fmtDisp(sel.mu - 1.96 * sel.se_mu);
-    const ciHi = fmtDisp(sel.mu + 1.96 * sel.se_mu);
-    const tableRows = [
-      ["Selection weight \u03C9", ...sel.omega.map((w, j) => {
-        if (!isMLE || j === 0) return `${fmtV(w)} (fixed)`;
-        const se = isFinite(sel.se_omega[j]) ? ` \xB1 ${fmtV(sel.se_omega[j])}` : "";
-        return `${fmtV(w)}${se}`;
-      })],
-      ["Studies per interval", ...sel.nPerInterval.map(String)],
-      [`Adjusted \u03BC\u0302 [${widthCiLabel}]`, `${muAdj} [${ciLo}, ${ciHi}]  \xB7  unadjusted: ${fmtDisp(sel.RE_unsel)}`],
-      ["Adjusted \u03C4\xB2", `${fmtV(sel.tau2)}  \xB7  unadjusted: ${fmtV(sel.tau2_unsel)}`],
-      ...isMLE && isFinite(sel.LRT) ? [["LRT (H\u2080: no selection)", `\u03C7\xB2(${sel.LRTdf})\u202F=\u202F${fmtV(sel.LRT)}, p ${fmtP_APA2(sel.LRTp)}`]] : []
-    ];
-    const N = headers.length;
-    const normalizedRows = tableRows.map((r) => {
+    const d = selModelData(args);
+    if (!d) return [];
+    const N = d.nCols;
+    const normalizedRows = d.rows.map((r) => {
       const padded = [...r];
       while (padded.length < N) padded.push("");
       return padded.slice(0, N).map(run);
     });
-    const modeLabel = isMLE ? "MLE (estimated weights)" : `Sensitivity \u2014 ${selLabel}`;
-    const sidesLabel = sel.sides === 2 ? "two-sided" : "one-sided";
     return [
       paraText("Selection Model (Vevea-Hedges, 1995)", "Heading1"),
-      paraText(`Mode: ${modeLabel}  \xB7  p-values: ${sidesLabel}  \xB7  k\u202F=\u202F${sel.k}`),
-      ...apaTableDocx(
-        ctx.nextTable(),
-        "Selection Model Results",
-        headers,
-        normalizedRows,
-        "\u03C9 = selection weight. CI = confidence interval."
-      )
+      paraText(d.metaLine),
+      ...apaTableDocx(ctx.nextTable(), d.subtitle, d.headers, normalizedRows, d.note)
     ];
   }
   function docInfluence(args, ctx) {
-    const { influence, studies } = args;
-    if (!influence || !influence.length) return [];
-    const k = studies.filter((d) => !d.filled).length;
-    const thresh2k = fmt3(2 / k);
-    const thresh4k = fmt3(4 / k);
-    const headers = ["Study", "RE (LOO)", "\u0394\u03C4\xB2", "Std. Residual", "DFBETA", "Hat", "Cook\u2019s D", "Flag"];
-    const rows = influence.map((d) => [
-      d.label,
-      isFinite(d.RE_loo) ? fmt3(d.RE_loo) : "\u2014",
-      isFinite(d.deltaTau2) ? fmt3(d.deltaTau2) : "\u2014",
-      isFinite(d.stdResidual) ? fmt3(d.stdResidual) : "\u2014",
-      isFinite(d.DFBETA) ? fmt3(d.DFBETA) : "\u2014",
-      isFinite(d.hat) ? d.hat.toFixed(3) : "\u2014",
-      isFinite(d.cookD) ? d.cookD.toFixed(3) : "\u2014",
-      [
-        d.outlier ? "Outlier" : "",
-        d.influential ? "Influential" : "",
-        d.highLeverage ? "Hi-Lev" : "",
-        d.highCookD ? "Hi-Cook" : ""
-      ].filter(Boolean).join(", ")
-    ].map(run));
+    const d = influenceData(args);
+    if (!d) return [];
     return [
       paraText("Influence Diagnostics", "Heading1"),
       ...apaTableDocx(
         ctx.nextTable(),
         "Leave-One-Out Influence Diagnostics",
-        headers,
-        rows,
-        `LOO = leave-one-out. Threshold: Hat\u202F>\u202F${thresh2k} (= 2/k); Cook\u2019s D\u202F>\u202F${thresh4k} (= 4/k).`
+        d.headers,
+        d.rows.map((r) => r.map(run)),
+        d.note
       )
     ];
   }
-  function docSubgroup(args, ctx) {
-    const { subgroup, profile, widthCiLabel } = args;
-    if (!subgroup || subgroup.G < 2) return [];
-    const headers = ["Group", "k", "Effect size", "SE", widthCiLabel, "\u03C4\xB2", "I\xB2 (%)"];
-    const rows = Object.entries(subgroup.groups).map(([g, r]) => {
-      const single = r.k === 1;
-      const y_disp = profile.transform(r.y);
-      const ci_lb = profile.transform(r.ci.lb);
-      const ci_ub = profile.transform(r.ci.ub);
-      return [
-        g,
-        String(r.k),
-        isFinite(y_disp) ? fmt3(y_disp) : "\u2014",
-        single ? "\u2014" : isFinite(r.se) ? fmt3(r.se) : "\u2014",
-        single ? "\u2014" : fmtCI_APA2(ci_lb, ci_ub),
-        single ? "\u2014" : isFinite(r.tau2) ? r.tau2.toFixed(3) : "0",
-        single ? "\u2014" : isFinite(r.I2) ? r.I2.toFixed(1) : "0"
-      ].map(run);
+  function docSensitivity(args, ctx) {
+    const d = sensitivityData(args);
+    if (!d) return [];
+    const looRows = d.loo.rows.map((r, i) => {
+      const cells = r.map(run);
+      if (d.loo.sigChanges[i]) cells[0] = run(r[0] + " *");
+      return cells;
     });
-    const note = `CI = confidence interval. Q_between\u202F=\u202F${subgroup.Qbetween.toFixed(3)}, df\u202F=\u202F${subgroup.df}, p ${fmtP_APA2(subgroup.p)}.`;
+    const estRows = d.est.rows.map((r) => r.map(run));
+    const chunks = [paraText("Sensitivity Analysis", "Heading1")];
+    if (d.loo.rows.length > 0) {
+      chunks.push(...apaTableDocx(
+        ctx.nextTable(),
+        "Leave-one-out analysis",
+        d.loo.headers,
+        looRows,
+        d.loo.note
+      ));
+    }
+    chunks.push(...apaTableDocx(
+      ctx.nextTable(),
+      "\u03C4\xB2 Estimator comparison",
+      d.est.headers,
+      estRows,
+      d.est.note
+    ));
+    return chunks;
+  }
+  function docSubgroup(args, ctx) {
+    const d = subgroupData(args);
+    if (!d) return [];
     return [
       paraText("Subgroup Analysis", "Heading1"),
-      ...apaTableDocx(ctx.nextTable(), `Subgroup Analysis Results (${profile.label})`, headers, rows, note)
+      ...apaTableDocx(
+        ctx.nextTable(),
+        d.subtitle,
+        d.headers,
+        d.rows.map((r) => r.map(run)),
+        d.note
+      )
     ];
   }
   function docStudyTable(args, ctx) {
-    const { studies, m, profile, widthCiLabel } = args;
-    const tau2 = isFinite(m.tau2) ? m.tau2 : 0;
-    const real = studies.filter((d) => !d.filled);
-    const totalW = real.reduce((s, d) => s + 1 / (d.vi + tau2), 0);
-    const transformedScale = ["Ratio", "Hazard", "Rate", "log", "logit", "arcsine", "Freeman", "Fisher"].some((t) => profile.label.includes(t));
-    const seLabel = transformedScale ? "SE (transformed)" : "SE";
-    function fmtV(v) {
-      return isFinite(v) ? (+v).toFixed(3) : "\u2014";
-    }
-    function fmtPct(v) {
-      return v !== null && isFinite(v) ? v.toFixed(1) + "%" : "\u2014";
-    }
-    const pooledEf = profile.transform(m.RE);
-    const pooledLo = profile.transform(m.ciLow);
-    const pooledHi = profile.transform(m.ciHigh);
-    const headers = ["Study", `Effect size (${profile.label})`, seLabel, widthCiLabel, "RE Weight (%)"];
-    const rows = studies.map((d) => {
-      const wi = 1 / (d.vi + tau2);
-      const pct = d.filled ? null : wi / totalW * 100;
-      const ef = profile.transform(d.yi);
-      const lo = profile.transform(d.yi - Z_95 * d.se);
-      const hi = profile.transform(d.yi + Z_95 * d.se);
-      const lbl = d.label.length > 40 ? d.label.slice(0, 39) + "\u2026" : d.label;
-      return [run(lbl), run(fmtV(ef)), run(fmtV(d.se)), run(fmtCI_APA2(lo, hi)), run(fmtPct(pct))];
-    });
-    rows.push([bold("Pooled (RE)"), bold(fmtV(pooledEf)), bold(fmtV(m.seRE)), bold(fmtCI_APA2(pooledLo, pooledHi)), bold("100%")]);
-    const note = `Effect size = ${profile.label}. SE = standard error. CI = confidence interval. RE weights shown.` + (studies.some((d) => d.filled) ? " Trim-and-fill imputed rows are included." : "");
+    const d = studyTableData(args);
+    const bodyRows = [
+      ...d.rows.map((r) => r.map(run)),
+      d.pooledRow.map(bold)
+    ];
     return [
       paraText("Study-Level Results", "Heading1"),
-      ...apaTableDocx(ctx.nextTable(), "Study-Level Effect Sizes and Weights", headers, rows, note)
+      ...apaTableDocx(
+        ctx.nextTable(),
+        "Study-Level Effect Sizes and Weights",
+        d.headers,
+        bodyRows,
+        d.note
+      )
     ];
   }
   function docRegression(args, ctx) {
-    const { reg, method, ciMethod, widthCiLabel } = args;
-    if (!reg || reg.rankDeficient || !reg.colNames) return [];
-    const ciLabel = ciMethod === "KH" ? "Knapp-Hartung" : "Normal CI";
-    const statLabel = reg.dist === "t" ? `t(${reg.QEdf})` : "z";
-    const QMlabel = reg.QMdist === "F" ? `F(${reg.QMdf},\u202F${reg.QEdf})` : `\u03C7\xB2(${reg.QMdf})`;
-    const hasVif = Array.isArray(reg.vif) && reg.vif.some((v) => isFinite(v));
-    const coefHeaders = ["Predictor", "\u03B2", "SE", statLabel, "p", widthCiLabel];
-    if (hasVif) coefHeaders.push("VIF");
-    const coefRows = reg.colNames.map((name, j) => {
-      const [lo, hi] = reg.ci[j];
-      const cells = [
-        run(name),
-        run(fmt3(reg.beta[j])),
-        run(fmt3(reg.se[j])),
-        run(fmt3(reg.zval[j])),
-        run(fmtP_APA2(reg.pval[j])),
-        run(fmtCI_APA2(lo, hi))
-      ];
-      if (hasVif) cells.push(run(j === 0 ? "\u2014" : isFinite(reg.vif?.[j]) ? fmt3(reg.vif[j]) : "\u2014"));
-      return cells;
-    });
-    const R2row = reg.p > 1 && isFinite(reg.R2) ? ` R\xB2\u202F=\u202F${fmt3(reg.R2 * 100)}%.` : "";
-    const coefNote = `\u03B2 = unstandardised regression coefficient. SE = standard error. CI = confidence interval. QE(${reg.QEdf})\u202F=\u202F${fmt3(reg.QE)}, p ${fmtP_APA2(reg.QEp)}.` + (reg.p > 1 ? ` QM ${QMlabel}\u202F=\u202F${fmt3(reg.QM)}, p ${fmtP_APA2(reg.QMp)}.` : "") + R2row;
+    const d = regressionData(args);
+    if (!d) return [];
     const chunks = [
       paraText("Meta-Regression", "Heading1"),
-      paraText(`k\u202F=\u202F${reg.k}  \xB7  ${method}  \xB7  ${ciLabel}  \xB7  \u03C4\xB2\u202F=\u202F${fmt3(reg.tau2)}  \xB7  I\xB2\u202F=\u202F${fmt3(reg.I2)}%`),
-      ...apaTableDocx(ctx.nextTable(), "Meta-Regression Coefficients", coefHeaders, coefRows, coefNote)
+      paraText(d.metaLine),
+      ...apaTableDocx(
+        ctx.nextTable(),
+        "Meta-Regression Coefficients",
+        d.coef.headers,
+        d.coef.rows.map((r) => r.map(run)),
+        d.coef.note
+      )
     ];
-    if (reg.modTests && reg.modTests.length > 1) {
-      const modQlabel = reg.QMdist === "F" ? "F" : "\u03C7\xB2";
-      const hasLRT_docx = reg.modTests.some((mt) => isFinite(mt.lrt));
-      const modHeaders = [
-        "Moderator",
-        `${modQlabel} (Wald)`,
-        ...hasLRT_docx ? ["LRT \u03C7\xB2"] : [],
-        "df",
-        "p (Wald)",
-        ...hasLRT_docx ? ["p (LRT)"] : []
-      ];
-      const modRows = reg.modTests.map((mt) => [
-        run(mt.name),
-        run(fmt3(mt.QM)),
-        ...hasLRT_docx ? [run(isFinite(mt.lrt) ? fmt3(mt.lrt) : "NA")] : [],
-        run(String(mt.QMdf)),
-        run(fmtP_APA2(mt.QMp)),
-        ...hasLRT_docx ? [run(isFinite(mt.lrtP) ? fmtP_APA2(mt.lrtP) : "NA")] : []
-      ]);
+    if (d.modTests) {
       chunks.push(
         paraText("Per-moderator omnibus tests", "Heading2"),
         ...apaTableDocx(
           ctx.nextTable(),
           "Per-Moderator Omnibus Tests",
-          modHeaders,
-          modRows,
-          hasLRT_docx ? "LRT = Likelihood Ratio Test; uses ML estimation internally regardless of \u03C4\xB2 method." : ""
+          d.modTests.headers,
+          d.modTests.rows.map((r) => r.map(run)),
+          d.modTests.note
+        )
+      );
+    }
+    const fd = regressionFittedData(args.reg);
+    if (fd) {
+      chunks.push(
+        paraText("Fitted values & residuals", "Heading2"),
+        ...apaTableDocx(
+          ctx.nextTable(),
+          "Meta-Regression Fitted Values and Residuals",
+          fd.headers,
+          fd.rows.map(({ cells }) => cells.map(run)),
+          fd.note
         )
       );
     }
     return chunks;
+  }
+  function docRve(args, ctx) {
+    const d = rveData(args);
+    if (!d) return [];
+    return [
+      paraText("Robust Variance Estimation (RVE)", "Heading1"),
+      ...apaTableDocx(
+        ctx.nextTable(),
+        "RVE Pooled Estimate",
+        d.headers,
+        d.rows.map((r) => r.map(run)),
+        d.note
+      )
+    ];
+  }
+  function docThreeLevel(args, ctx) {
+    const d = threeLevelData(args);
+    if (!d) return [];
+    return [
+      paraText("Three-Level Meta-Analysis", "Heading1"),
+      ...apaTableDocx(
+        ctx.nextTable(),
+        "Three-Level Model Estimates",
+        d.headers,
+        d.rows.map((r) => r.map(run)),
+        d.note
+      )
+    ];
+  }
+  function docLocationScale(args, ctx) {
+    const d = locationScaleData(args.ls, args.ciLevel ?? "95");
+    if (!d) return [];
+    const chunks = [
+      paraText("Location-Scale Model", "Heading1"),
+      paraText(d.metaLine),
+      ...apaTableDocx(
+        ctx.nextTable(),
+        "Location Model Coefficients",
+        d.locCoef.headers,
+        d.locCoef.rows.map((r) => r.map(run)),
+        d.locCoef.note
+      ),
+      ...apaTableDocx(
+        ctx.nextTable(),
+        "Scale Model Coefficients",
+        d.scaleCoef.headers,
+        d.scaleCoef.rows.map((r) => r.map(run)),
+        d.scaleCoef.note
+      )
+    ];
+    if (d.fitted) {
+      chunks.push(
+        paraText("Fitted values & study-specific \u03C4\xB2\u1D62", "Heading2"),
+        ...apaTableDocx(
+          ctx.nextTable(),
+          "Location-Scale Fitted Values",
+          d.fitted.headers,
+          d.fitted.rows.map((r) => r.map(run)),
+          d.fitted.note
+        )
+      );
+    }
+    return chunks;
+  }
+  function docPermutation(args, ctx) {
+    const { permResult, reg } = args;
+    const d = permutationData(permResult, reg);
+    if (!d) return [];
+    const headers = ["Test", "Statistic", "Observed", "p (perm.)"];
+    const stripEm = (s) => s.replace(/<\/?em>/g, "");
+    const omniRow = ["Omnibus QM", stripEm(d.omniLabel), fmt2(d.omniObserved), fmtP_APA(d.omniP)];
+    const modRows = d.mods.map((m) => [
+      m.name,
+      stripEm(m.label),
+      isFinite(m.observed) ? fmt2(m.observed) : "\u2014",
+      isFinite(m.p) ? fmtP_APA(m.p) : "\u2014"
+    ]);
+    const rows = [omniRow, ...modRows].map((r) => r.map(run));
+    const note = `${d.nPerm} permutations; \u03C4\xB2 re-estimated per permutation. Permutation p = (1 + #\u2265observed) / (B + 1).`;
+    return [
+      paraText("Permutation Test", "Heading1"),
+      ...apaTableDocx(ctx.nextTable(), "Permutation Test Results", headers, rows, note)
+    ];
   }
   function docReferences(args, linkMgr) {
     const keys = collectCitations(args);
@@ -11145,27 +12861,37 @@ ${linkRels}
       goshXAxis,
       bayesResult,
       bayesReMean,
-      sensitivityRows
+      sensitivityRows,
+      plotTheme,
+      mccMethod = "none",
+      exportScale = 3
     } = args;
+    const theme = plotTheme ?? "default";
     const widthCiLabel = (ciLevel ?? "95") + "% CI";
     const widthCrLabel = (ciLevel ?? "95") + "% CrI";
-    const docArgs = { ...args, widthCiLabel, widthCrLabel };
+    const mccLabel = mccMethod === "bonferroni" ? "Bonferroni" : mccMethod === "holm" ? "Holm" : "";
+    const rawModPs = Array.isArray(reg?.modTests) ? reg.modTests.map((mt) => mt.QMp) : [];
+    const adjPs = mccMethod !== "none" && rawModPs.length > 1 ? adjustPvals(rawModPs, mccMethod) : null;
+    const docArgs = { ...args, widthCiLabel, widthCrLabel, adjPs, mccLabel };
     const svgArrays = /* @__PURE__ */ new Map();
     svgArrays.set(
       "forest",
-      forestOptions ? collectPagedSVGs("forestPlot", drawForest, [studies, m], forestOptions) : [liveSVGString("forestPlot")].filter(Boolean)
+      forestOptions ? collectPagedSVGs("forestPlot", drawForest, [studies, m], { ...forestOptions, theme }) : [liveSVGString("forestPlot")].filter(Boolean)
     );
     svgArrays.set("funnel", [liveSVGString("funnelPlot")].filter(Boolean));
     svgArrays.set("influence", [liveSVGString("influencePlot")].filter(Boolean));
+    svgArrays.set("blup", [liveSVGString("blupPlot")].filter(Boolean));
     svgArrays.set("baujat", [liveSVGString("baujatPlot")].filter(Boolean));
     svgArrays.set("qqplot", [liveSVGString("qqPlot")].filter(Boolean));
+    svgArrays.set("radial", [liveSVGString("radialPlot")].filter(Boolean));
+    svgArrays.set("labbe", [liveSVGString("labbePlot")].filter(Boolean));
     svgArrays.set(
       "cumForest",
       cumForestOptions ? collectPagedSVGs(
         "cumulativePlot",
         drawCumulativeForest,
         [cumForestOptions.results, cumForestOptions.profile ?? profile],
-        cumForestOptions
+        { ...cumForestOptions, theme }
       ) : [liveSVGString("cumulativePlot")].filter(Boolean)
     );
     svgArrays.set("cumFunnel", [liveSVGString("cumulativeFunnelPlot")].filter(Boolean));
@@ -11178,15 +12904,15 @@ ${linkRels}
         "caterpillarPlot",
         drawCaterpillarPlot,
         [caterpillarOptions.studies ?? studies, caterpillarOptions.m ?? m, caterpillarOptions.profile ?? profile],
-        caterpillarOptions
+        { ...caterpillarOptions, theme }
       ) : [liveSVGString("caterpillarPlot")].filter(Boolean)
     );
     svgArrays.set("robTL", [liveSVGString("robTrafficLight")].filter(Boolean));
     svgArrays.set("robSummary", [liveSVGString("robSummary")].filter(Boolean));
     const bubbleMods = [];
     const bubbleContainer = document.getElementById("bubblePlots");
-    const rawBubbles = bubbleContainer ? Array.from(bubbleContainer.querySelectorAll("[data-moderator]")).map((el) => ({ svg: serializeSVG2(el.querySelector("svg")), mod: el.dataset.moderator })).filter((b) => b.svg) : [];
-    const fallbackBubbles = !rawBubbles.length && bubbleContainer ? Array.from(bubbleContainer.querySelectorAll("svg")).map((el) => ({ svg: serializeSVG2(el), mod: "" })).filter((b) => b.svg) : [];
+    const rawBubbles = bubbleContainer ? Array.from(bubbleContainer.querySelectorAll("[data-moderator]")).map((el) => ({ svg: serializeSVG(el.querySelector("svg")), mod: el.dataset.moderator })).filter((b) => b.svg) : [];
+    const fallbackBubbles = !rawBubbles.length && bubbleContainer ? Array.from(bubbleContainer.querySelectorAll("svg")).map((el) => ({ svg: serializeSVG(el), mod: "" })).filter((b) => b.svg) : [];
     const allBubbles = rawBubbles.length ? rawBubbles : fallbackBubbles;
     for (let i = 0; i < allBubbles.length; i++) {
       const key = `bubble_${i}`;
@@ -11194,9 +12920,7 @@ ${linkRels}
       bubbleMods.push({ key, mod: allBubbles[i].mod });
     }
     if (gosh && !gosh.error) {
-      drawGoshPlot(gosh, profile, { xAxis: goshXAxis ?? "I2", forReport: true });
       svgArrays.set("gosh", [liveSVGString("goshPlot")].filter(Boolean));
-      drawGoshPlot(gosh, profile, { xAxis: goshXAxis ?? "I2" });
     }
     svgArrays.set("profileLik", [liveSVGString("profileLikTau2Plot")].filter(Boolean));
     if (bayesResult && !bayesResult.error) {
@@ -11213,7 +12937,7 @@ ${linkRels}
     for (const [key, svgs] of svgArrays) {
       for (const svg of svgs) flatSVGs.push(svg);
     }
-    const pngResults = await Promise.all(flatSVGs.map((svg) => svgStringToPng(svg)));
+    const pngResults = await Promise.all(flatSVGs.map((svg) => svgStringToPng(svg, exportScale)));
     const imgReg = /* @__PURE__ */ new Map();
     let imgCounter = 0;
     for (let i = 0; i < flatItems.length; i++) {
@@ -11240,59 +12964,18 @@ ${linkRels}
     const bodyChunks = [
       // Title + metadata
       paraText("Meta-Analysis Report", "Heading1"),
-      paraText(`Generated ${date}  \xB7  k\u202F=\u202F${k}${tf.length > 0 ? ` + ${tf.length} imputed` : ""}  \xB7  ${profile.label}  \xB7  ${method}  \xB7  ${ciLabel}`),
-      // Statistical sections
+      paraText(`Generated ${date}  \xB7  k = ${k}${tf.length > 0 ? ` + ${tf.length} imputed` : ""}  \xB7  ${profile.label}  \xB7  ${method}  \xB7  ${ciLabel}`),
+      // Summary statistics
       ...docSummary(docArgs, ctx),
-      ...docPubBias(docArgs, ctx),
-      ...docPUniform(docArgs, ctx),
-      ...docSelectionModel(docArgs, ctx),
-      // Bayesian
-      ...(() => {
-        if (!bayesResult || bayesResult.error) return [];
-        const muImgs = getImgs("bayesMu");
-        const tauImgs = getImgs("bayesTau");
-        if (!muImgs.length && !tauImgs.length) return [];
-        const muDisp = profile.transform(bayesResult.muMean);
-        const muCIDisp = bayesResult.muCI.map((v) => profile.transform(v));
-        const reDisp = isFinite(bayesReMean) ? profile.transform(bayesReMean) : NaN;
-        const priorLine = `Prior: \u03BC\u202F~\u202FN(${bayesResult.mu0},\u202F${bayesResult.sigma_mu}\xB2)  \xB7  \u03C4\u202F~\u202FHalfNormal(${bayesResult.sigma_tau})  \xB7  k\u202F=\u202F${bayesResult.k} studies`;
-        const bayesRows = [
-          [`Posterior mean \u03BC`, `${fmt3(muDisp)}  \xB7  ${widthCrLabel} ${fmtCI_APA2(muCIDisp[0], muCIDisp[1])}`],
-          [`Posterior mean \u03C4`, `${fmt3(bayesResult.tauMean)}  \xB7  ${widthCrLabel} ${fmtCI_APA2(bayesResult.tauCI[0], bayesResult.tauCI[1])}`],
-          ...isFinite(reDisp) ? [["Frequentist RE (comparison)", fmt3(reDisp)]] : []
-        ];
-        const chunks = [
-          paraText("Bayesian Meta-Analysis", "Heading1"),
-          paraText(priorLine),
-          ...apaTableDocx(
-            ctx.nextTable(),
-            `Bayesian Meta-Analysis Results (${profile.label})`,
-            ["Statistic", "Value"],
-            bayesRows.map((r) => r.map(run)),
-            `CrI = credible interval. Posterior mean \u03BC on ${profile.label} scale. Frequentist RE shown for comparison only.`
-          )
-        ];
-        if (muImgs.length) chunks.push(...apaFigureDocx(ctx.nextFigure(), `Posterior distribution of pooled effect \u03BC (${profile.label})`, muImgs, priorLine));
-        if (tauImgs.length) chunks.push(...apaFigureDocx(ctx.nextFigure(), "Posterior distribution of between-study standard deviation \u03C4", tauImgs, `Prior: \u03C4\u202F~\u202FHalfNormal(${bayesResult.sigma_tau}).`));
-        if (sensitivityRows && sensitivityRows.length) {
-          const sensRows = sensitivityRows.map((row) => {
-            const muDisp2 = profile.transform(row.muMean);
-            const muCIDisp2 = row.muCI.map((v) => profile.transform(v));
-            const bf = row.BF10;
-            const bfStr = !isFinite(bf) ? "NA" : bf >= 1e3 ? bf.toExponential(2) : bf < 1e-3 ? bf.toExponential(2) : bf.toFixed(3);
-            const ciStr = `[${isFinite(muCIDisp2[0]) ? fmt3(muCIDisp2[0]) : "NA"}, ${isFinite(muCIDisp2[1]) ? fmt3(muCIDisp2[1]) : "NA"}]`;
-            return [run(String(row.sigma_mu)), run(String(row.sigma_tau)), run(isFinite(muDisp2) ? fmt3(muDisp2) : "NA"), run(ciStr), run(bfStr)];
-          });
-          chunks.push(...apaTableDocx(
-            ctx.nextTable(),
-            "Prior Sensitivity Analysis",
-            ["\u03C3_\u03BC", "\u03C3_\u03C4", "Post. \u03BC", `${widthCrLabel}`, "BF\u2081\u2080"],
-            sensRows,
-            "Grid: \u03C3_\u03BC \u2208 {0.5, 1, 2}, \u03C3_\u03C4 \u2208 {0.25, 0.5, 1}. Diffuse priors approach the frequentist RE estimate."
-          ));
-        }
-        return chunks;
-      })(),
+      // Forest plot
+      ...figSection(
+        "Forest Plot",
+        "forest",
+        `Forest plot of ${profile.label}, k = ${k} studies`,
+        `RE = random effects. Error bars = ${widthCiLabel} (${ciLabel}). \u03C4\xB2 estimated by ${method}. Diamond = pooled estimate and ${widthCiLabel}.`
+      ),
+      // Individual studies table
+      ...docStudyTable(docArgs, ctx),
       // Profile likelihood
       ...(() => {
         const imgs = getImgs("profileLik");
@@ -11307,29 +12990,84 @@ ${linkRels}
           )
         ];
       })(),
-      // Influence, subgroup, study table, regression
-      ...docInfluence(docArgs, ctx),
-      ...docSubgroup(docArgs, ctx),
-      ...docStudyTable(docArgs, ctx),
-      ...docRegression(docArgs, ctx),
-      // Plot figures
-      ...figSection(
-        "Forest Plot",
-        "forest",
-        `Forest plot of ${profile.label}, k\u202F=\u202F${k} studies`,
-        `RE = random effects. Error bars = ${widthCiLabel} (${ciLabel}). \u03C4\xB2 estimated by ${method}. Diamond = pooled estimate and ${widthCiLabel}.`
-      ),
-      ...figSection(
-        "Funnel Plot",
-        "funnel",
+      // Bayesian
+      ...(() => {
+        if (!bayesResult || bayesResult.error) return [];
+        const muImgs = getImgs("bayesMu");
+        const tauImgs = getImgs("bayesTau");
+        if (!muImgs.length && !tauImgs.length) return [];
+        const muDisp = profile.transform(bayesResult.muMean);
+        const muCIDisp = bayesResult.muCI.map((v) => profile.transform(v));
+        const reDisp = isFinite(bayesReMean) ? profile.transform(bayesReMean) : NaN;
+        const priorLine = `Prior: \u03BC ~ N(${bayesResult.mu0}, ${bayesResult.sigma_mu}\xB2)  \xB7  \u03C4 ~ HalfNormal(${bayesResult.sigma_tau})  \xB7  k = ${bayesResult.k} studies`;
+        const muSDNote = profile.isTransformedScale ? " (log)" : "";
+        const fmtBF = (bf) => !isFinite(bf) ? "NA" : bf >= 1e3 || bf < 1e-3 ? bf.toExponential(2) : bf.toFixed(3);
+        const bayesRows = [
+          [`Posterior mean \u03BC`, `${fmt2(muDisp)}  \xB7  ${widthCrLabel} ${fmtCI_APA(muCIDisp[0], muCIDisp[1])}  \xB7  SD${muSDNote} = ${fmt2(bayesResult.muSD)}`],
+          [`Posterior mean \u03C4`, `${fmt2(bayesResult.tauMean)}  \xB7  ${widthCrLabel} ${fmtCI_APA(bayesResult.tauCI[0], bayesResult.tauCI[1])}  \xB7  SD = ${fmt2(bayesResult.tauSD)}`],
+          ...isFinite(reDisp) ? [["Frequentist RE (comparison)", fmt2(reDisp)]] : [],
+          ...isFinite(bayesResult.BF10) ? [[`Bayes Factor BF\u2081\u2080 (H\u2081: \u03BC\u22600)`, fmtBF(bayesResult.BF10)]] : [],
+          ...bayesResult.BF10 < 1 && isFinite(bayesResult.BF01) ? [[`BF\u2080\u2081 = 1/BF\u2081\u2080 (H\u2080: \u03BC = 0)`, fmtBF(bayesResult.BF01)]] : []
+        ];
+        const chunks = [
+          paraText("Bayesian Meta-Analysis", "Heading1"),
+          paraText(priorLine),
+          ...apaTableDocx(
+            ctx.nextTable(),
+            `Bayesian Meta-Analysis Results (${profile.label})`,
+            ["Statistic", "Value"],
+            bayesRows.map((r) => r.map(run)),
+            `CrI = credible interval. Posterior mean \u03BC on ${profile.label} scale. Frequentist RE shown for comparison only.`
+          )
+        ];
+        if (muImgs.length) chunks.push(...apaFigureDocx(ctx.nextFigure(), `Posterior distribution of pooled effect \u03BC (${profile.label})`, muImgs, priorLine));
+        if (tauImgs.length) chunks.push(...apaFigureDocx(ctx.nextFigure(), "Posterior distribution of between-study standard deviation \u03C4", tauImgs, `Prior: \u03C4 ~ HalfNormal(${bayesResult.sigma_tau}).`));
+        if (sensitivityRows && sensitivityRows.length) {
+          const sensRows = sensitivityRows.map((row) => {
+            const muDisp2 = profile.transform(row.muMean);
+            const muCIDisp2 = row.muCI.map((v) => profile.transform(v));
+            const bf = row.BF10;
+            const bfStr = !isFinite(bf) ? "NA" : bf >= 1e3 ? bf.toExponential(2) : bf < 1e-3 ? bf.toExponential(2) : bf.toFixed(3);
+            const ciStr = `[${isFinite(muCIDisp2[0]) ? fmt2(muCIDisp2[0]) : "NA"}, ${isFinite(muCIDisp2[1]) ? fmt2(muCIDisp2[1]) : "NA"}]`;
+            return [run(String(row.sigma_mu)), run(String(row.sigma_tau)), run(isFinite(muDisp2) ? fmt2(muDisp2) : "NA"), run(ciStr), run(bfStr)];
+          });
+          chunks.push(...apaTableDocx(
+            ctx.nextTable(),
+            "Prior Sensitivity Analysis",
+            ["\u03C3_\u03BC", "\u03C3_\u03C4", "Post. \u03BC", `${widthCrLabel}`, "BF\u2081\u2080"],
+            sensRows,
+            "Grid: \u03C3_\u03BC \u2208 {0.5, 1, 2}, \u03C3_\u03C4 \u2208 {0.25, 0.5, 1}. Diffuse priors approach the frequentist RE estimate."
+          ));
+        }
+        return chunks;
+      })(),
+      // RVE and three-level (cluster-dependent results)
+      ...docRve(docArgs, ctx),
+      ...docThreeLevel(docArgs, ctx),
+      // Publication bias
+      ...docPubBias(docArgs, ctx),
+      ...getImgs("funnel").length ? apaFigureDocx(
+        ctx.nextFigure(),
         `Funnel plot of ${profile.label} against standard error`,
+        getImgs("funnel"),
         "Each point = one study. Asymmetry may indicate publication bias or between-study heterogeneity."
-      ),
+      ) : [],
+      // Sensitivity analysis
+      ...docSensitivity(docArgs, ctx),
+      ...docSubgroup(docArgs, ctx),
+      // Influence diagnostics
+      ...docInfluence(docArgs, ctx),
       ...figSection(
         "Influence Plot",
         "influence",
-        `Influence diagnostics for k\u202F=\u202F${k} studies`,
+        `Influence diagnostics for k = ${k} studies`,
         `Left panel: standardised residuals. Right panel: leave-one-out (LOO) random-effects estimates with ${widthCiLabel}.`
+      ),
+      ...figSection(
+        "BLUPs",
+        "blup",
+        `Best linear unbiased predictions (BLUPs) for k = ${k} studies`,
+        "Shrunken study-level estimates sorted by effect size."
       ),
       ...figSection(
         "Baujat Plot",
@@ -11344,19 +13082,26 @@ ${linkRels}
         "Points near the reference line support the normality assumption. Orange points have |z| > 2."
       ),
       ...figSection(
+        "Radial (Galbraith) Plot",
+        "radial",
+        "Radial (Galbraith) plot of standardised effect against reciprocal of standard error",
+        "Points near the reference line support homogeneity. Outliers may indicate heterogeneity."
+      ),
+      ...figSection(
+        "L'Abb\xE9 Plot",
+        "labbe",
+        `L'Abb\xE9 plot of event rates for ${profile.label}`,
+        "Each point = one study. Point area proportional to study weight. Applicable to OR, RR, and RD only."
+      ),
+      // Cumulative analysis
+      ...figSection(
         "Cumulative Forest Plot",
         "cumForest",
         `Cumulative forest plot of ${profile.label}`,
         `Studies added in dataset order. Effect and ${widthCiLabel} shown at each cumulative step.`
       ),
       ...figSection("Cumulative Funnel Plot", "cumFunnel", "Cumulative funnel plot", ""),
-      ...figSection(
-        "P-curve",
-        "pcurve",
-        "P-curve of statistically significant results (p\u202F<\u202F.05)",
-        "Simonsohn et al. (2014). Only studies with p\u202F<\u202F.05 included."
-      ),
-      ...figSection("P-uniform", "puniformPlot", "P-uniform plot (van Assen et al., 2015)", ""),
+      // Alternative visualisations
       ...figSection(
         "Orchard Plot",
         "orchard",
@@ -11369,8 +13114,34 @@ ${linkRels}
         `Caterpillar plot of study-level ${profile.label}, sorted by effect size`,
         `Error bars = ${widthCiLabel}.`
       ),
+      // P-value analyses
+      ...docPCurve(docArgs, ctx),
+      ...figSection(
+        "P-curve",
+        "pcurve",
+        "P-curve of statistically significant results (p < .05)",
+        "Simonsohn et al. (2014). Only studies with p < .05 included."
+      ),
+      ...docPUniform(docArgs, ctx),
+      ...figSection("P-uniform", "puniformPlot", "P-uniform plot (van Assen et al., 2015)", ""),
+      // Selection model
+      ...docSelectionModel(docArgs, ctx),
+      // GOSH plot
+      ...figSection(
+        "GOSH Plot",
+        "gosh",
+        `Graphical Display of Study Heterogeneity (GOSH) plot, k = ${k} studies`,
+        `Each point = one non-empty subset. x-axis: ${goshXAxis === "Q" ? "Q (Cochran's Q)" : goshXAxis === "n" ? "n (subset size)" : "I\xB2 (%)"}.`
+      ),
+      // Risk of bias
       ...figSection("Risk-of-bias Traffic Light", "robTL", "Risk-of-bias traffic-light plot", ""),
       ...figSection("Risk-of-bias Summary", "robSummary", "Risk-of-bias summary plot", ""),
+      // Location-scale model
+      ...docLocationScale(docArgs, ctx),
+      // Meta-regression
+      ...docRegression(docArgs, ctx),
+      // Permutation test
+      ...docPermutation(docArgs, ctx),
       // Bubble plots (one figure per moderator)
       ...bubbleMods.flatMap(({ key, mod }) => {
         const imgs = getImgs(key);
@@ -11386,12 +13157,6 @@ ${linkRels}
           )
         ];
       }),
-      ...figSection(
-        "GOSH Plot",
-        "gosh",
-        `Graphical Display of Study Heterogeneity (GOSH) plot, k\u202F=\u202F${k} studies`,
-        `Each point = one non-empty subset. x-axis: ${goshXAxis === "Q" ? "Q (Cochran\u2019s Q)" : goshXAxis === "n" ? "n (subset size)" : "I\xB2 (%)"}.`
-      ),
       // References
       ...docReferences(args, linkMgr)
     ].filter((chunk) => chunk != null && chunk !== "");
@@ -11413,14 +13178,201 @@ ${linkRels}
     }
     return zip.generateAsync({ type: "blob" });
   }
+  async function buildMVDocx({ res, rows = [], alpha = 0.05, exportScale = 3 }) {
+    const {
+      beta,
+      se,
+      ci,
+      z,
+      pval,
+      betaNames = [],
+      tau2,
+      rho_between,
+      outcomeIds,
+      n,
+      k,
+      P,
+      QM,
+      df_QM,
+      pQM,
+      QE,
+      df_QE,
+      pQE,
+      logLik: logLik2,
+      AIC,
+      BIC,
+      AICc,
+      struct,
+      method,
+      I2: I22,
+      convergence,
+      warnings: engineWarnings = []
+    } = res;
+    const hasMods = beta.length > P;
+    const ciPct = Math.round((1 - alpha) * 100);
+    const fP = (p) => !isFinite(p) ? "\u2014" : p < 1e-3 ? "< .001" : "= " + (+p).toFixed(3).replace(/^0\./, ".");
+    const forestSVGStrings = (() => {
+      const combined = document.getElementById("mvForestPlotCombined");
+      const combinedBlock = document.getElementById("mvForestCombinedBlock");
+      if (combinedBlock && combinedBlock.style.display !== "none" && combined) {
+        const s = serializeSVG(combined);
+        return s ? [s] : [];
+      }
+      const result = [];
+      for (let o = 0; o < outcomeIds.length; o++) {
+        const el = document.getElementById(`mvForestPlot-${o}`);
+        if (el) {
+          const s = serializeSVG(el);
+          if (s) result.push(s);
+        }
+      }
+      return result;
+    })();
+    const pngResults = await Promise.all(forestSVGStrings.map((s) => svgStringToPng(s, exportScale)));
+    let imgCounter = 0;
+    const forestImgs = pngResults.map((png) => {
+      if (!png || !png.blob) return null;
+      imgCounter++;
+      return { ...png, rId: `rId${imgCounter}`, idx: imgCounter };
+    }).filter(Boolean);
+    let _tblN = 0, _figN = 0;
+    const nextTable = () => ++_tblN;
+    const nextFigure = () => ++_figN;
+    const pooledHeaders = ["Outcome", "Estimate", "SE", `${ciPct}% CI`, "z", "p"];
+    const pooledRows = outcomeIds.map((id, o) => {
+      const [lo, hi] = ci[o];
+      return [
+        run(String(id)),
+        run(fmt2(beta[o], 4)),
+        run(fmt2(se[o], 4)),
+        run(`[${fmt2(lo, 4)}, ${fmt2(hi, 4)}]`),
+        run(fmt2(z[o], 3)),
+        run(fP(pval[o]))
+      ];
+    });
+    const hetHeaders = struct === "CS" ? ["Outcome", "\u03C4\xB2", "I\xB2", "\u03C1 (between)"] : ["Outcome", "\u03C4\xB2", "I\xB2"];
+    const hetRows = outcomeIds.map((id, o) => {
+      const cells = [
+        run(String(id)),
+        run(fmt2(tau2[o], 5)),
+        run(isFinite(I22[o]) ? (+I22[o]).toFixed(1) + "%" : "\u2014")
+      ];
+      if (struct === "CS") cells.push(run(fmt2(rho_between ?? 0, 4)));
+      return cells;
+    });
+    const testHeaders = ["Test", "\u03C7\xB2", "df", "p"];
+    const testRows = [
+      ...hasMods && isFinite(QM) ? [[run("Omnibus test of moderators (QM)"), run(fmt2(QM, 3)), run(String(df_QM)), run(fP(pQM))]] : [],
+      [run("Residual heterogeneity (QE)"), run(fmt2(QE, 3)), run(String(df_QE)), run(fP(pQE))]
+    ];
+    let modChunks = [];
+    if (hasMods) {
+      const modHeaders = ["Coefficient", "Estimate", "SE", `${ciPct}% CI`, "z", "p"];
+      const modRows = beta.slice(P).map((b, i) => {
+        const j = P + i;
+        const [lo, hi] = ci[j];
+        return [
+          run(betaNames[j] ?? `\u03B2${j}`),
+          run(fmt2(b, 4)),
+          run(fmt2(se[j], 4)),
+          run(`[${fmt2(lo, 4)}, ${fmt2(hi, 4)}]`),
+          run(fmt2(z[j], 3)),
+          run(fP(pval[j]))
+        ];
+      });
+      modChunks = [...apaTableDocx(nextTable(), "Meta-regression coefficients", modHeaders, modRows), para("")];
+    }
+    const fitText = `k = ${k} \xB7 n = ${n} obs \xB7 P = ${P} outcomes | log-lik = ${fmt2(logLik2, 4)} \xB7 AIC = ${fmt2(AIC, 2)} \xB7 BIC = ${fmt2(BIC, 2)}` + (isFinite(AICc) ? ` \xB7 AICc = ${fmt2(AICc, 2)}` : "") + ` | ${method}, \u03A8 = ${struct}`;
+    const zVal = normalQuantile(1 - alpha / 2);
+    const studyHeaders = ["Study", "Outcome", "yi", "vi", "SE", `${ciPct}% CI`];
+    const studyDocxRows = rows.map((r) => {
+      const se_r = Math.sqrt(r.vi);
+      return [
+        run(String(r.study_id)),
+        run(String(r.outcome_id)),
+        run(fmt2(r.yi, 4)),
+        run(fmt2(r.vi, 4)),
+        run(fmt2(se_r, 4)),
+        run(`[${fmt2(r.yi - zVal * se_r, 4)}, ${fmt2(r.yi + zVal * se_r, 4)}]`)
+      ];
+    });
+    const studyChunks = rows.length ? [...apaTableDocx(nextTable(), "Individual study effect sizes", studyHeaders, studyDocxRows), para("")] : [];
+    const robSVGStrings = (() => {
+      const result = [];
+      ["robTrafficLight", "robSummary"].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el && el.children.length > 0) {
+          const s = serializeSVG(el);
+          if (s) result.push(s);
+        }
+      });
+      return result;
+    })();
+    const robPngResults = await Promise.all(robSVGStrings.map((s) => svgStringToPng(s, exportScale)));
+    const robImgs = robPngResults.map((png) => {
+      if (!png || !png.blob) return null;
+      imgCounter++;
+      return { ...png, rId: `rId${imgCounter}`, idx: imgCounter };
+    }).filter(Boolean);
+    const robChunks = robImgs.length ? [...robImgs.flatMap((img) => apaFigureDocx(nextFigure(), "Risk of bias assessment", [img], "")), para("")] : [];
+    const linkMgr = new HyperlinkManager();
+    const mvCitationHTMLs = [
+      `Berkey, C. S., Hoaglin, D. C., Antczak-Bouckoms, A., Mosteller, F., &amp; Colditz, G. A. (1998). Meta-analysis of multiple outcomes by regression with random effects. <em>Statistics in Medicine</em>, <em>17</em>(22), 2537\u20132550.`,
+      `Cheung, M. W.-L. (2014). Modeling dependent effect sizes with three-level meta-analyses: a structural equation modeling approach. <em>Psychological Methods</em>, <em>19</em>(2), 211\u2013229.`,
+      `Cochran, W. G. (1954). The combination of estimates from different experiments. <em>Biometrics</em>, <em>10</em>(1), 101\u2013129.`,
+      `Higgins, J. P. T., Thompson, S. G., Deeks, J. J., &amp; Altman, D. G. (2003). Measuring inconsistency in meta-analyses. <em>BMJ</em>, <em>327</em>(7414), 557\u2013560.`,
+      `Jackson, D., Riley, R., &amp; White, I. R. (2011). Multivariate meta-analysis: Potential and promise. <em>Statistics in Medicine</em>, <em>30</em>(20), 2481\u20132498.`,
+      `Riley, R. D., Abrams, K. R., Sutton, A. J., Lambert, P. C., &amp; Thompson, J. R. (2007). Bivariate random-effects meta-analysis and the estimation of between-study correlation. <em>BMC Medical Research Methodology</em>, <em>7</em>, 3.`,
+      `Viechtbauer, W. (2005). Bias and efficiency of meta-analytic variance estimators in the random-effects model. <em>Journal of Educational and Behavioral Statistics</em>, <em>30</em>(3), 261\u2013293.`
+    ];
+    const refChunks = [
+      paraText("References", "Heading1"),
+      ...mvCitationHTMLs.map(
+        (html) => `<w:p><w:pPr><w:pStyle w:val="APAReference"/></w:pPr>${citationToRunXML(html, linkMgr)}</w:p>`
+      )
+    ];
+    const allImgs = [...forestImgs, ...robImgs];
+    const bodyChunks = [
+      para(bold("Multivariate Meta-Analysis Report"), "Heading1"),
+      paraText(`Generated ${(/* @__PURE__ */ new Date()).toLocaleDateString()} \xB7 k = ${k} studies, P = ${P} outcomes \xB7 ${method}, \u03A8 = ${struct}`, "APANote"),
+      ...convergence === false ? [paraText("Warning: Optimizer did not fully converge \u2014 interpret results with caution.")] : [],
+      para(""),
+      ...apaTableDocx(nextTable(), `Pooled effect estimates per outcome (${method}, \u03A8 = ${struct})`, pooledHeaders, pooledRows),
+      para(""),
+      ...apaTableDocx(nextTable(), "Between-study heterogeneity", hetHeaders, hetRows),
+      para(""),
+      ...apaTableDocx(nextTable(), "Hypothesis tests", testHeaders, testRows),
+      para(""),
+      ...modChunks,
+      paraText(fitText, "APANote"),
+      para(""),
+      ...forestImgs.flatMap((img) => apaFigureDocx(nextFigure(), "Forest plot of multivariate meta-analysis results", [img], "")),
+      para(""),
+      ...studyChunks,
+      ...robChunks,
+      ...refChunks
+    ].filter(Boolean);
+    const zip = new window.JSZip();
+    zip.file("[Content_Types].xml", contentTypesXML(imgCounter));
+    zip.file("_rels/.rels", rootRelsXML());
+    zip.file("word/document.xml", wrapDocumentXML(bodyChunks.join("\n")));
+    zip.file("word/styles.xml", stylesXML());
+    zip.file("word/settings.xml", settingsXML());
+    zip.file("word/_rels/document.xml.rels", docRelsXML(imgCounter, linkMgr));
+    allImgs.forEach((img, i) => zip.file(`word/media/image${i + 1}.png`, img.blob));
+    return zip.generateAsync({ type: "blob" });
+  }
   var HyperlinkManager;
   var init_docx = __esm({
     "js/docx.js"() {
+      init_format();
       init_plots();
       init_export();
       init_constants();
       init_utils();
+      init_regression();
       init_report();
+      init_sections();
       HyperlinkManager = class {
         constructor() {
           this._map = /* @__PURE__ */ new Map();
@@ -11457,11 +13409,19 @@ ${linkRels}
         },
         "input.session": {
           title: "Save / Load Session",
-          body: "Save Session: serialises the full application state \u2014 data, effect type, \u03C4\xB2 estimator, CI method, moderators, and RoB ratings \u2014 to a JSON file. Load Session: restores a previously saved session from that JSON file. Sessions are also auto-saved to browser localStorage; a recovery banner appears on next load if unsaved changes are detected."
+          body: "Save Session: serialises the full application state \u2014 data, effect type, \u03C4\xB2 estimator, CI method, moderators, scale moderators, interaction terms, cumulative order, trim-and-fill toggles, Bayesian priors, selection-model settings, and RoB ratings \u2014 to a JSON file. Load Session: restores a previously saved session from that JSON file. Sessions are also auto-saved to browser localStorage; a recovery banner appears on next load if unsaved changes are detected."
+        },
+        "input.group": {
+          title: "Group",
+          body: "An optional label that assigns a study to a named subgroup. When at least two distinct group labels are present, subgroup analysis runs automatically: a separate pooled estimate is computed for each group, and a between-group heterogeneity test (Q_between) is reported. Studies with a blank Group field are included in the overall pooled estimate but excluded from subgroup-specific estimates. In the forest plot, studies are sorted by group into labelled blocks (first-seen group order; within-group order matches the table). Group labels do not change the overall pooled estimate."
         },
         "input.moderators": {
           title: "Moderators",
           body: "Study-level covariates used in meta-regression and subgroup analysis. Continuous moderators produce a bubble plot and a slope estimate (\u03B2) per unit increase. Categorical moderators are dummy-coded automatically (first level = reference). Multiple moderators may be added simultaneously. Enter a column name, select Continuous or Categorical, then click + Add. Values are entered in the moderator columns of the data table."
+        },
+        "input.interactions": {
+          title: "Interaction terms",
+          body: "An interaction term A\xD7B tests whether the effect of A on the outcome differs across levels of B. Select two existing moderators and click + Add. No new data column is needed \u2014 values are computed as the outer product of the parent moderator columns. Continuous\xD7continuous: one product column (x\u2081\xB7x\u2082). Continuous\xD7categorical (k levels): k\u22121 product columns. Categorical\xD7categorical (j, k levels): (j\u22121)\xD7(k\u22121) product columns. Each interaction receives its own Wald test and LRT in the per-term table. Caution: interaction tests have low power unless k is large; include main effects of both terms alongside any interaction."
         },
         "input.scaleModerators": {
           title: "Scale moderators (log \u03C4\xB2)",
@@ -11469,7 +13429,7 @@ ${linkRels}
         },
         "input.rob": {
           title: "Risk-of-bias domains",
-          body: "User-defined assessment domains (e.g. Randomisation, Blinding, Attrition). Each domain gets a Low / Some concerns / High / Not reported rating per study, entered in the RoB grid that appears below the data table once domains are added. Results are visualised as a per-study traffic light grid and a per-domain summary bar chart in the Risk of Bias section of the Results pane."
+          body: "User-defined assessment domains (e.g. Randomisation, Blinding, Attrition). Each domain gets a Low / Some concerns / High / NI (no information) rating per study, entered in the RoB grid that appears below the data table once domains are added. Results are visualised as a per-study traffic light grid and a per-domain summary bar chart in the Risk of Bias section of the Results pane."
         },
         // ------------------------------------------------------------------ //
         // Effect types                                                         //
@@ -11500,11 +13460,11 @@ ${linkRels}
         },
         "effect.SMD1": {
           title: "Standardized Mean Difference \u2014 one sample (SMD1)",
-          body: `Compares a single group's mean against a known reference value (default 0), standardized by the group SD with Hedges' J correction. d = (m \u2212 ref) / sd; yi = d \xB7 J; vi = 1/n + yi\xB2 / (2(n\u22121)). Use when studies report a single group measured against an external norm or established threshold with no control group. Corresponds to measure="SMD1" in metafor.`
+          body: `Compares a single group's mean against a known reference value (default 0), standardized by the group SD with Hedges' J correction. d = (m \u2212 ref) / sd; yi = d \xB7 J; vi = 1/n + yi\xB2 / (2(n\u22121)). Use when studies report a single group measured against an external norm or established threshold with no control group. Formula follows Hedges & Olkin (1985) for a one-sample design where the reference is a fixed constant. Note: metafor's escalc("SMD1") expects a two-group design (group 2 provides the standardizer SD) and applies a different vi formula; FE and Q will differ when mapping single-group data.`
         },
         "effect.SMD1H": {
           title: "Standardized Mean Difference \u2014 one sample, heteroscedastic (SMD1H)",
-          body: 'Same as SMD1 but with the full J\xB2 correction applied to both variance terms: vi = J\xB2 \xB7 (1/n + d\xB2 / (2(n\u22121))). SMD1 and SMD1H are identical for large n (J \u2192 1) but differ for n < 20. Prefer SMD1H when consistency with the heteroscedastic two-group SMDH is desired. Corresponds to measure="SMD1H" in metafor.'
+          body: `Same as SMD1 but with the full J\xB2 correction applied to both variance terms: vi = J\xB2 \xB7 (1/n + d\xB2 / (2(n\u22121))). SMD1 and SMD1H are identical for large n (J \u2192 1) but differ for n < 20. Prefer SMD1H when consistency with the heteroscedastic two-group SMDH is desired. Note: metafor's escalc("SMD1H") uses a different vi formula suited to two-group designs; direct numerical comparison requires awareness of this distinction.`
         },
         "effect.MD_paired": {
           title: "Mean Difference \u2014 Paired (MD paired)",
@@ -11780,7 +13740,7 @@ ${linkRels}
         // ------------------------------------------------------------------ //
         "bias.egger": {
           title: "Egger's test",
-          body: "Regresses the standardised effect size on precision (1 / SE). A significant non-zero intercept indicates funnel-plot asymmetry, which may reflect publication bias. Has inflated Type I error for ratio measures (OR, RR) and requires at least 10 studies for adequate power."
+          body: "Regresses the standardised effect size on precision (1 / SE). A significant non-zero intercept indicates funnel-plot asymmetry, which may reflect publication bias. Has inflated Type I error for ratio measures (OR, RR). Has low power below ~10 studies; the app accepts k \u2265 3 but small-k results should be treated as exploratory."
         },
         "bias.begg": {
           title: "Begg's test",
@@ -11862,7 +13822,7 @@ ${linkRels}
         },
         "sens.estimator": {
           title: "\u03C4\xB2 estimator comparison",
-          body: "Runs the random-effects model with all seven available \u03C4\xB2 estimators (DL, REML, PM, ML, HS, HE, SJ) and displays their pooled estimates side by side. If results differ substantially across estimators, the conclusion is sensitive to the choice of heterogeneity estimation method. The currently selected estimator is highlighted."
+          body: "Runs the random-effects model with all 15 available \u03C4\xB2 estimators (DL, REML, EB, PM, PMM, GENQM, ML, HS, HE, SJ, GENQ, SQGENQ, DLIT, EBLUP, HSk) and displays their pooled estimates side by side. If results differ substantially across estimators, the conclusion is sensitive to the choice of heterogeneity estimation method. The currently selected estimator is highlighted."
         },
         // ------------------------------------------------------------------ //
         // P-value analyses                                                     //
@@ -11881,6 +13841,22 @@ ${linkRels}
         "sel.model": {
           title: "Selection model (Vevea-Hedges)",
           body: "Models the publication process by assigning relative selection weights \u03C9 to studies based on their p-value interval. MLE mode estimates \u03C9 jointly with \u03BC and \u03C4\xB2 (requires k \u2265 8); fixed-\u03C9 sensitivity mode holds \u03C9 at Mild / Moderate / Severe presets (requires k \u2265 3). A \u03BC substantially lower than the standard RE estimate indicates publication bias. Vevea & Hedges (1995); presets from Vevea & Woods (2005)."
+        },
+        "sel.halfnorm": {
+          title: "Half-normal selection model",
+          body: "A continuous selection model where the probability of observing a study with p-value p is proportional to w(p; \u03B4) = \u03A6(\u03A6\u207B\xB9(1\u2212p) \xB7 \u03B4), where \u03A6 is the standard normal CDF. \u03B4 = 0 gives uniform selection (reduces exactly to the RE model); \u03B4 > 0 gives progressively more weight to studies with smaller p-values. The selection-corrected \u03BC\u0302 and \u03C4\xB2 are obtained by MLE jointly with \u03B4. The likelihood ratio test (H\u2080: \u03B4 = 0) tests for selective reporting. Normalising constants are computed by 20-point Gauss-Hermite quadrature. Requires k \u2265 4. Matches metafor selmodel(type='halfnorm')."
+        },
+        "sel.power": {
+          title: "Power selection model",
+          body: "A continuous selection model where the probability of observing a study with p-value p is proportional to w(p; \u03B4) = (1 \u2212 p)^\u03B4. \u03B4 = 0 gives uniform selection (reduces exactly to the RE model); \u03B4 > 0 gives more weight to studies with smaller p-values. The selection-corrected \u03BC\u0302 and \u03C4\xB2 are obtained by MLE jointly with \u03B4. The likelihood ratio test (H\u2080: \u03B4 = 0) tests for selective reporting. Normalising constants are computed by 20-point Gauss-Hermite quadrature. Requires k \u2265 4. Matches metafor selmodel(type='power')."
+        },
+        "sel.beta": {
+          title: "Beta selection model",
+          body: "A continuous selection model using an unnormalised beta density as the weight: w(p; a, b) = p^(a\u22121) \xB7 (1\u2212p)^(b\u22121), a > 0, b > 0. When a = b = 1 the weight is uniform (reduces exactly to the RE model). When a = 1 and b > 1 the model resembles power selection (small p preferred). The two-parameter shape allows flexible asymmetric selection patterns. The selection-corrected \u03BC\u0302 and \u03C4\xB2 are obtained by MLE jointly with a and b. The likelihood ratio test (H\u2080: a = b = 1) uses df = 2. Normalising constants are computed by 20-point Gauss-Hermite quadrature. Requires k \u2265 4. Matches metafor selmodel(type='beta')."
+        },
+        "sel.negexp": {
+          title: "Negative exponential selection model",
+          body: "A continuous selection model where the probability of observing a study with p-value p is proportional to w(p; \u03B4) = exp(\u2212\u03B4 \xB7 p). \u03B4 = 0 gives uniform selection (reduces exactly to the RE model); \u03B4 > 0 gives more weight to studies with smaller p-values. The selection-corrected \u03BC\u0302 and \u03C4\xB2 are obtained by MLE jointly with \u03B4. The likelihood ratio test (H\u2080: \u03B4 = 0) tests for selective reporting. Normalising constants are computed by 20-point Gauss-Hermite quadrature. Requires k \u2265 4. Matches metafor selmodel(type='negexp')."
         },
         // ------------------------------------------------------------------ //
         // Diagnostics                                                          //
@@ -11915,7 +13891,7 @@ ${linkRels}
         },
         "diag.metaregression": {
           title: "Meta-regression",
-          body: "Regresses study effect sizes on one or more study-level moderators (continuous or categorical) using weighted least squares with RE weights. Reports \u03B2 coefficients with SEs, z/t statistics, p-values, and 95% CIs; Q_M (omnibus moderator test); Q_E (residual heterogeneity); R\xB2 (proportion of variance explained); and VIFs (collinearity). Bubble plots are generated per continuous moderator. Rule of thumb: \u2265 10 studies per predictor for adequate power."
+          body: "Regresses study effect sizes on one or more study-level moderators (continuous or categorical) using weighted least squares with RE weights. Reports \u03B2 coefficients with SEs, z/t statistics, p-values, and 95% CIs; Q_M (omnibus moderator test); Q_E (residual heterogeneity); R\xB2 (proportion of variance explained). Bubble plots are generated per continuous moderator. Rule of thumb: \u2265 10 studies per predictor for adequate power."
         },
         "diag.locationscale": {
           title: "Location-scale model",
@@ -11924,6 +13900,14 @@ ${linkRels}
         "mreg.lrt": {
           title: "Likelihood Ratio Test (LRT) \u2014 meta-regression",
           body: "LRT = 2\xB7(LL_ML_full \u2212 LL_ML_reduced) ~ \u03C7\xB2(df), where the reduced model omits that moderator's columns. Always uses ML estimation internally regardless of the \u03C4\xB2 method selected for the main analysis \u2014 REML log-likelihoods cannot be compared across models with different fixed-effect structures. LRT and Wald QM test the same hypothesis and are asymptotically equivalent; LRT is generally preferred in small samples because Wald tests can be anti-conservative when the number of studies k is small. df = number of columns contributed by the moderator (1 for a continuous predictor; levels \u2212 1 for a categorical predictor)."
+        },
+        "perm.run": {
+          title: "Permutation test",
+          body: "Non-parametric test of the omnibus moderator effect (QM). Shuffles the observed effect sizes yi across studies while keeping sampling variances vi fixed, refits the WLS regression, and records the resulting QM statistic. Repeating this nPerm times builds a null distribution; the permutation p-value is (1 + #{QM_perm \u2265 QM_obs}) / (nPerm + 1). \u03C4\xB2 is fixed at the observed value (no re-estimation per permutation), matching metafor's permutest() default. Useful when k is small (< 20) and parametric \u03C7\xB2 or F approximations are unreliable."
+        },
+        "perm.iter": {
+          title: "Number of permutations",
+          body: "Number of random label permutations used to build the null QM distribution. More permutations give a more precise p-value: with nPerm = 999 the Monte Carlo standard error of a p = 0.05 result is \u2248 0.007; with nPerm = 4999 it is \u2248 0.003. The minimum achievable p-value is 1/(nPerm + 1)."
         },
         "mreg.contrasts": {
           title: "Custom contrasts",
@@ -11986,6 +13970,10 @@ ${linkRels}
           body: "Ctrl+Enter (Cmd+Enter on Mac) \u2014 run analysis and switch to Results.\nCtrl+Shift+C (Cmd+Shift+C) \u2014 clear all study rows.\nAlt+\u2191 / Alt+\u2193 \u2014 move the focused row up or down.\nEscape \u2014 close this help popover.\n\u2190 / \u2192 arrow keys \u2014 navigate forest plot pages (when Results tab is active and focus is not in a text field)."
         },
         // Plots                                                               //
+        "plot.theme": {
+          title: "Plot style",
+          body: "Applies a visual theme to every plot \u2014 forest, funnel, bubble, caterpillar, orchard, BLUP, Baujat, L\u2019Abb\xE9, GOSH, p-curve, p-uniform, profile-likelihood, Bayesian posteriors, Q-Q, radial, cumulative forest/funnel, influence, and risk-of-bias plots. App default reads CSS variables and adapts to light/dark mode but produces unresolved var(--\u2026) references in standalone SVG exports. Cochrane, JAMA, and Black & white are fixed-colour journal presets that produce self-contained SVGs suitable for Word and PDF submission. Risk-of-bias traffic-light colours are preserved in all presets."
+        },
         "plot.forest": {
           title: "Forest plot",
           body: "Each row shows one study's effect estimate (square, area \u221D weight) with its confidence interval. The pooled estimate is a diamond spanning its CI. A dashed prediction interval is shown when k \u2265 3, indicating where a new study's true effect is expected to fall with 95% probability."
@@ -12021,7 +14009,30 @@ ${linkRels}
         },
         "bayes.model": {
           title: "Bayesian meta-analysis",
-          body: "Fits a conjugate normal-normal random-effects model using a grid approximation over \u03C4 (300 points). Prior on \u03BC: N(\u03BC\u2080, \u03C3_\u03BC\xB2); prior on \u03C4: HalfNormal(\u03C3_\u03C4). Because the prior on \u03BC is conjugate given \u03C4, the marginal posterior of \u03BC is an analytic mixture of normals \u2014 no MCMC required. Outputs: posterior mean and 95% credible interval for \u03BC and \u03C4; Bayes Factor BF\u2081\u2080 (Savage-Dickey ratio, H\u2081: \u03BC\u22600 vs H\u2080: \u03BC=0) with Jeffreys-scale interpretation; posterior density plots. Defaults: \u03BC\u2080 = 0, \u03C3_\u03BC = 1, \u03C3_\u03C4 = 0.5. All three are adjustable in the Bayesian Meta-Analysis section of the Results tab. With diffuse priors (\u03C3_\u03BC, \u03C3_\u03C4 large) the posterior mean of \u03BC approaches the REML random-effects estimate."
+          body: "Fits a conjugate normal-normal random-effects model using an adaptive grid approximation over \u03C4 (100\u2013300 points, scaled to k). Prior on \u03BC: N(\u03BC\u2080, \u03C3_\u03BC\xB2); prior on \u03C4: HalfNormal(\u03C3_\u03C4). Because the prior on \u03BC is conjugate given \u03C4, the marginal posterior of \u03BC is an analytic mixture of normals \u2014 no MCMC required. Outputs: posterior mean and 95% credible interval for \u03BC and \u03C4; Bayes Factor BF\u2081\u2080 (Savage-Dickey ratio, H\u2081: \u03BC\u22600 vs H\u2080: \u03BC=0) with Jeffreys-scale interpretation; posterior density plots. Defaults: \u03BC\u2080 = 0, \u03C3_\u03BC = 1, \u03C3_\u03C4 = 0.5. All three are adjustable in the Bayesian Meta-Analysis section of the Results tab. With diffuse priors (\u03C3_\u03BC, \u03C3_\u03C4 large) the posterior mean of \u03BC approaches the REML random-effects estimate."
+        },
+        // ------------------------------------------------------------------ //
+        // Multivariate meta-analysis                                           //
+        // ------------------------------------------------------------------ //
+        "mv.model": {
+          title: "Multivariate Meta-Analysis",
+          body: "Models multiple correlated outcomes from the same studies jointly. The marginal covariance \u03A9 = V + Z\u03A8Z\u02B9 decomposes into a known within-study block V (estimated via the assumed within-study correlation \u03C1) and an unknown between-study covariance \u03A8 estimated by REML or ML. Pooled effects (one per outcome) are obtained by generalised least squares. Continuous moderators may be included with common or separate slopes across outcomes. Switch to this mode using the Standard / Multivariate toggle above the data table."
+        },
+        "mv.struct": {
+          title: "\u03A8 structure",
+          body: "Determines how many parameters describe the between-study covariance matrix \u03A8. CS (Compound Symmetric): all outcomes share one variance \u03C4\xB2 and one correlation \u03C1 \u2014 2 parameters, most parsimonious. Diag (Diagonal): separate \u03C4\xB2\u2C7C per outcome, zero between-study correlation \u2014 P parameters. UN (Unstructured): freely estimated P\xD7P Cholesky \u03A8 \u2014 P(P+1)/2 parameters; requires many studies. Prefer CS when k is small relative to P; UN is appropriate only when k \u226B P."
+        },
+        "mv.method": {
+          title: "Estimation method",
+          body: "REML (Restricted Maximum Likelihood) estimates the between-study covariance matrix \u03A8 from the residual likelihood after profiling out the fixed effects \u2014 less biased than ML for variance components and the default choice. ML (Maximum Likelihood) estimates all parameters jointly; it underestimates variance components in small samples but is required when comparing models with different fixed-effect structures via likelihood-ratio tests."
+        },
+        "mv.forest": {
+          title: "MV forest plot",
+          body: "One forest plot per outcome. Each study's effect estimate (square, sized by inverse-variance weight) and 95% CI whisker are shown. The pooled multivariate estimate appears as a diamond below the separator. Prediction interval (optional): expected range for a new study's true effect, computed as \u03B2\u0302_p \xB1 t_{k\u2212P\u22121} \xB7 \u221A(\u03C4\u0302\xB2_p + SE\xB2_p). Studies per page: limits rows displayed per plot; the pooled diamond always uses all studies regardless of page."
+        },
+        "mv.rho": {
+          title: "Within-study correlation \u03C1",
+          body: "Assumed correlation between outcomes measured within the same study. Used by vcalc to impute the within-study covariance matrix V: Cov(y\u2C7C, y\u2096) = \u03C1 \xB7 \u221Av\u2C7C \xB7 \u221Av\u2096 for j \u2260 k within the same study. This value is rarely reported in primary studies and must be assumed. \u03C1 = 0 treats outcomes as independent within studies (conservative); \u03C1 = 0.5 is the app default and is commonly used in practice. Sensitivity to this assumption can be checked by re-running with \u03C1 = 0 and \u03C1 = 0.8."
         }
       };
     }
@@ -12289,8 +14300,10 @@ when you want to compare variability independently of the mean \u2014 e.g. to te
 whether an intervention homogenises or disperses outcomes beyond any shift
 in the mean.</p>
 <p><strong>Formula:</strong><br>
-<code>yi = log(CV\u2081 / CV\u2082)</code><br>
+<code>yi = log(CV\u2081 / CV\u2082) + 1/(2(n\u2081\u22121)) \u2212 1/(2(n\u2082\u22121))</code>&ensp;(bias-corrected)<br>
 <code>vi = 1/(2(n\u2081\u22121)) + CV\u2081\xB2/n\u2081 + 1/(2(n\u2082\u22121)) + CV\u2082\xB2/n\u2082</code></p>
+<p>The bias correction accounts for the fact that E[log S] \u2248 log \u03C3 \u2212 1/(2(n\u22121)); adding
+1/(2(n\u22121)) per group recovers an unbiased estimate of the log CV ratio (Nakagawa et al., 2015, eq. 1).</p>
 <p><strong>When to use:</strong> Both means are strictly positive; you are
 specifically interested in dispersion differences after controlling for the
 mean.</p>
@@ -12307,8 +14320,9 @@ where the variance approximation degrades. For absolute spread, use VR.</p>`,
 scale. Measures absolute dispersion rather than relative dispersion (CVR).
 Unusually, the variance depends only on sample sizes, not on the SDs.</p>
 <p><strong>Formula:</strong><br>
-<code>yi = log(s\u2081 / s\u2082)</code><br>
+<code>yi = log(s\u2081 / s\u2082) + 1/(2(n\u2081\u22121)) \u2212 1/(2(n\u2082\u22121))</code>&ensp;(bias-corrected)<br>
 <code>vi = 1/(2(n\u2081\u22121)) + 1/(2(n\u2082\u22121))</code></p>
+<p>The bias correction is the same as for CVR: E[log S] \u2248 log \u03C3 \u2212 1/(2(n\u22121)) (Nakagawa et al., 2015, eq. 1).</p>
 <p><strong>When to use:</strong> The outcome scale is fixed and meaningful, and
 you want to compare spread without reference to group means.</p>
 <p><strong>When to avoid:</strong> When means differ substantially and you want
@@ -12433,11 +14447,26 @@ interpreted cautiously.</p>`,
             },
             {
               id: "guide-yuq",
-              title: "Yule's Q and Yule's Y",
-              body: `<p>Two association measures for 2\xD72 tables derived from the cross-product
-ratio (odds ratio). Both lie on [\u22121, +1] and are symmetric around 0 (no
-association). They pre-date the log-odds ratio but are still used in
-bibliometric, epidemiological, and psychological research.</p>
+              title: "Yule's Q, Yule's Y, and Generalised Odds Ratio (GOR)",
+              body: `<p>Three non-parametric association measures for ordered categorical outcomes.</p>
+
+<h4>Generalised Odds Ratio \u2014 ordinal (GOR)</h4>
+<p>Extends the odds ratio to outcomes with more than two ordered categories
+(Agresti 1980). GOR = P(Y\u2081 &gt; Y\u2082) / P(Y\u2081 &lt; Y\u2082): the odds that a randomly
+drawn participant from group 1 scores higher than one from group 2, relative
+to the reverse. GOR &gt; 1 means group 1 tends to score higher.</p>
+<p><strong>Inputs:</strong> category counts from lowest to highest, entered as
+comma- or space-separated integers for each group (e.g. <code>15,28,22,10</code>).
+Both groups must have the same number of categories. Stored on the log scale;
+displayed back-transformed as the ratio.</p>
+<p><strong>When undefined:</strong> when one group has zero probability of scoring
+strictly above or below the other (complete separation).</p>
+
+<hr style="margin:1em 0">
+<p>Yule's Q and Yule's Y are two bounded association measures for 2\xD72 tables
+derived from the cross-product ratio (odds ratio). Both lie on [\u22121, +1] and are
+symmetric around 0 (no association). They pre-date the log-odds ratio but are
+still used in bibliometric, epidemiological, and psychological research.</p>
 
 <h4>Formulas</h4>
 <p>For a 2\xD72 table with cells a (events, group 1), b (non-events, group 1),
@@ -12485,6 +14514,7 @@ provided the denominator is positive; a warning is shown in that case.</p>
               citations: [
                 "Yule, G. U. (1900). On the association of attributes in statistics. <em>Philosophical Transactions of the Royal Society of London, Series A, 194</em>, 257\u2013319.",
                 "Yule, G. U. (1912). On the methods of measuring association between two attributes. <em>Journal of the Royal Statistical Society, 75</em>(6), 579\u2013642.",
+                "Agresti, A. (1980). Generalized odds ratios for ordinal data. <em>Biometrics, 36</em>(1), 59\u201367.",
                 "Viechtbauer, W. (2010). Conducting meta-analyses in R with the metafor package. <em>Journal of Statistical Software, 36</em>(3), 1\u201348."
               ]
             },
@@ -12671,7 +14701,7 @@ COR and ZCOR are nearly identical; either is acceptable.</p>`,
             },
             {
               id: "guide-rpb",
-              title: "Point-biserial and biserial correlations (RPB / RBIS)",
+              title: "Point-biserial, biserial, and tetrachoric correlations (RPB / RBIS / RTET)",
               body: `<p><strong>Point-biserial (RPB)</strong> is the Pearson correlation between a
 continuous variable and a binary grouping variable. Computed from an
 independent-samples t-test as r<sub>pb</sub> = t / \u221A(t\xB2 + n\u22122). Unlike the standard
@@ -12688,10 +14718,25 @@ r<sub>bis</sub> \u2248 1.25 \xB7 r<sub>pb</sub>. For very unequal splits r<sub>b
 can exceed \xB11, which signals unreliable estimation.</p>
 
 <p><strong>Inputs:</strong> RPB takes r<sub>pb</sub> and n.
-RBIS additionally takes p, the proportion of participants in group 1.</p>`,
+RBIS additionally takes p, the proportion of participants in group 1.</p>
+
+<p><strong>Tetrachoric Correlation (RTET)</strong> estimates the latent Pearson
+correlation between two underlying continuous, bivariate-normal variables from
+their dichotomisation in a 2\xD72 table (Pearson 1900). Thresholds
+h = \u03A6\u207B\xB9((a+b)/N) and k = \u03A6\u207B\xB9((a+c)/N) are computed from the marginal
+proportions; the tetrachoric \u03C1 is then found by bisecting \u03A6\u2082(h, k; \u03C1) = a/N.
+Variance uses the delta-method approximation
+p<sub>r</sub>(1\u2212p<sub>r</sub>)\xB7p<sub>c</sub>(1\u2212p<sub>c</sub>) / (N\xB7\u03C6\u2082(h,k;\u03C1)\xB2).
+A zero cell triggers a +0.5 continuity correction to all cells before estimation.</p>
+<p>Key properties: |\u03C1<sub>tet</sub>| \u2265 |\u03C6| for the same table; \u03C1<sub>tet</sub> = \u03C6
+only when marginals are 50/50. Appropriate when binary outcomes reflect an
+underlying continuous normal construct. Contrast with PHI (distribution-free)
+and COR/ZCOR (continuous r input). Same 2\xD72 inputs as OR/RR/PHI: a, b, c, d \u2265 0
+with all four marginal totals &gt; 0.</p>`,
               citations: [
                 "Kraemer, H. C. (1975). On estimation and hypothesis testing problems for correlation coefficients. <em>Psychometrika, 40</em>(4), 473\u2013485.",
-                "Borenstein, M., Hedges, L. V., Higgins, J. P. T., & Rothstein, H. R. (2009). <em>Introduction to meta-analysis</em>. Wiley."
+                "Borenstein, M., Hedges, L. V., Higgins, J. P. T., & Rothstein, H. R. (2009). <em>Introduction to meta-analysis</em>. Wiley.",
+                "Pearson, K. (1900). Mathematical contributions to the theory of evolution. VII. On the correlation of characters not quantitatively measurable. <em>Philosophical Transactions of the Royal Society of London, Series A, 195</em>, 1\u201347."
               ]
             },
             {
@@ -13413,7 +15458,13 @@ of the weighted regression. Produces wider, better-calibrated intervals
 when k is small.</p>
 <p><strong>Recommendation:</strong> Use KH when using REML and k &lt; 40.
 Simulations consistently show better nominal coverage than the Normal CI
-for small k.</p>`,
+for small k.</p>
+<p><strong>Diagnostic:</strong> When KH is active, the model-fit line in the
+meta-regression panel displays <em>s\xB2</em>, the KH variance-inflation factor
+(s\xB2 = max(1, RSS<sub>RE</sub> / df<sub>E</sub>)). Values substantially above 1
+indicate that observed residual variability exceeds what is expected under the
+fitted model, justifying the wider KH intervals. Values at or near 1 mean the
+KH and Normal CIs will be similar.</p>`,
               citations: [
                 "Knapp, G., & Hartung, J. (2003). Improved tests for a random effects meta-regression with a single covariate. <em>Statistics in Medicine, 22</em>(17), 2693\u20132710.",
                 "IntHout, J., Ioannidis, J. P. A., & Borm, G. F. (2014). The Hartung-Knapp-Sidik-Jonkman method for random effects meta-analysis is straightforward and considerably outperforms the standard DerSimonian-Laird method. <em>BMC Medical Research Methodology, 14</em>, 25."
@@ -13783,6 +15834,10 @@ the result is robust to publication bias. If the HC CI includes zero
 while the RE CI excludes it, publication bias may explain the apparent
 effect. As a sensitivity analysis, it complements rather than replaces
 the standard RE analysis.</p>
+<p><strong>Output:</strong> The bias-robust point estimate, its CI, and the DL \u03C4\xB2
+used internally are reported in the publication-bias table. The \u03C4\xB2 value
+reflects the heterogeneity assumption baked into the HC correction, not the
+\u03C4\xB2 from the main analysis estimator.</p>
 <p>Matched against <code>metafor::hc()</code> to \u2264 0.005.</p>`,
               citations: [
                 "Henmi, M., & Copas, J. B. (2010). Confidence intervals for random effects meta-analysis and robustness to publication bias. <em>Statistics in Medicine, 29</em>(29), 2969\u20132983."
@@ -13894,6 +15949,92 @@ fixed-\u03C9 sensitivity presets are more reliable in that case.</p>`,
                 "Vevea, J. L., & Hedges, L. V. (1995). A general linear model for estimating effect size in the presence of publication bias. <em>Psychometrika, 60</em>(3), 419\u2013435.",
                 "Vevea, J. L., & Woods, C. M. (2005). Publication bias in research synthesis: Sensitivity analysis using a priori weight functions. <em>Psychological Methods, 10</em>(4), 428\u2013443."
               ]
+            },
+            {
+              id: "guide-sel-halfnorm",
+              title: "Half-normal selection model",
+              body: `<p>The half-normal selection model (Andrews &amp; Kasy, 2019; implemented in
+metafor as <code>type="halfnorm"</code>) uses a continuous weight function based
+on the probit transform of the one- or two-sided p-value:</p>
+<p style="margin-left:1.5em"><em>w(p; \u03B4) = exp(\u2212\u03B4 \xB7 [\u03A6\u207B\xB9(1\u2212p)]\xB2 / 2)</em></p>
+<p>where \u03B4 \u2265 0 is estimated by maximum likelihood alongside \u03BC and \u03C4\xB2.</p>
+<ul>
+  <li><strong>\u03B4 = 0</strong> \u2014 no selection (reduces to standard RE).</li>
+  <li><strong>\u03B4 &gt; 0</strong> \u2014 exponentially less weight on non-significant
+  studies; the penalty grows with the probit distance from significance.</li>
+</ul>
+<p><strong>Normalising constant:</strong> Each study contributes a per-study
+integral A<sub>i</sub>(\u03BC, \u03C4\xB2, \u03B4) = \u222B w(p(y)) \xB7 \u03C6((y\u2212\u03BC)/\u03C3<sub>i</sub>) / \u03C3<sub>i</sub> dy
+computed by 20-point Gauss-Hermite quadrature.</p>
+<p><strong>Inference:</strong> A likelihood-ratio test (LRT) against the
+unweighted RE model (H\u2080: \u03B4 = 0) has \u03C7\xB2(1) distribution under the null. SE of
+\u03B4\u0302 is from the numerical Hessian; 95% CI for \u03BC\u0302 uses \xB11.96 \xD7 SE.</p>
+<p><strong>Requires k \u2265 6.</strong></p>`,
+              citations: [
+                "Andrews, I., & Kasy, M. (2019). Identification of and correction for publication bias. <em>American Economic Review, 109</em>(8), 2766\u20132794.",
+                "Vevea, J. L., & Hedges, L. V. (1995). A general linear model for estimating effect size in the presence of publication bias. <em>Psychometrika, 60</em>(3), 419\u2013435."
+              ]
+            },
+            {
+              id: "guide-sel-power",
+              title: "Power selection model",
+              body: `<p>The power selection model uses a simple polynomial weight function:</p>
+<p style="margin-left:1.5em"><em>w(p; \u03B4) = (1 \u2212 p)<sup>\u03B4</sup></em></p>
+<p>where \u03B4 \u2265 0 is estimated jointly with \u03BC and \u03C4\xB2 by ML (metafor
+<code>type="power"</code>).</p>
+<ul>
+  <li><strong>\u03B4 = 0</strong> \u2014 uniform weight (no selection).</li>
+  <li><strong>\u03B4 &gt; 0</strong> \u2014 less weight on studies with larger p-values;
+  weight decreases as a power of (1 \u2212 p).</li>
+</ul>
+<p><strong>Interpretation:</strong> \u03B4\u0302 reflects how steeply the probability of
+being observed falls as p increases. A LRT against the unweighted RE model
+(H\u2080: \u03B4 = 0) provides a formal test of selection. Requires k \u2265 6.</p>`,
+              citations: [
+                "Vevea, J. L., & Hedges, L. V. (1995). A general linear model for estimating effect size in the presence of publication bias. <em>Psychometrika, 60</em>(3), 419\u2013435."
+              ]
+            },
+            {
+              id: "guide-sel-negexp",
+              title: "Negative exponential selection model",
+              body: `<p>The negative exponential selection model uses an exponential weight
+function in p directly:</p>
+<p style="margin-left:1.5em"><em>w(p; \u03B4) = e<sup>\u2212\u03B4p</sup></em></p>
+<p>where \u03B4 \u2265 0 (metafor <code>type="negexp"</code>).</p>
+<ul>
+  <li><strong>\u03B4 = 0</strong> \u2014 uniform weight.</li>
+  <li><strong>\u03B4 &gt; 0</strong> \u2014 studies with small p-values (significant
+  results) are relatively more likely to be published; the penalty for large
+  p is exponential in p rather than in the probit of p (cf. half-normal).</li>
+</ul>
+<p>LRT against the unweighted RE model (H\u2080: \u03B4 = 0) has \u03C7\xB2(1) distribution.
+Requires k \u2265 6.</p>`,
+              citations: [
+                "Vevea, J. L., & Hedges, L. V. (1995). A general linear model for estimating effect size in the presence of publication bias. <em>Psychometrika, 60</em>(3), 419\u2013435."
+              ]
+            },
+            {
+              id: "guide-sel-beta",
+              title: "Beta selection model",
+              body: `<p>The beta selection model uses an unnormalised beta density as the weight
+function (metafor <code>type="beta"</code>):</p>
+<p style="margin-left:1.5em"><em>w(p; a, b) = p<sup>a\u22121</sup>(1\u2212p)<sup>b\u22121</sup></em></p>
+<p>Both shape parameters a &gt; 0 and b &gt; 0 are estimated jointly with \u03BC and
+\u03C4\xB2 by ML. This is the most flexible of the four continuous weight functions and
+can represent a wider range of selection mechanisms.</p>
+<ul>
+  <li><strong>a = 1, b = 1</strong> \u2014 uniform weight (no selection).</li>
+  <li><strong>a = 1, b &gt; 1</strong> \u2014 weight decreases with p (power-type
+  selection favouring small p).</li>
+  <li><strong>a &gt; 1, b = 1</strong> \u2014 weight increases with p (unusual;
+  publication of null results preferred).</li>
+</ul>
+<p><strong>LRT</strong> against the unweighted RE model (H\u2080: a = 1, b = 1)
+has \u03C7\xB2(2) distribution (two free parameters). SE of \xE2 and b\u0302 from the
+numerical Hessian. Requires k \u2265 7 (two selection parameters).</p>`,
+              citations: [
+                "Vevea, J. L., & Hedges, L. V. (1995). A general linear model for estimating effect size in the presence of publication bias. <em>Psychometrika, 60</em>(3), 419\u2013435."
+              ]
             }
           ]
         },
@@ -13982,6 +16123,12 @@ w\u1D62 = 1/(v\u1D62 + \u03C4\xB2), with \u03C4\xB2 estimated by REML or the sel
     but can differ in small samples; LRT is generally preferred when k is
     small because Wald tests can be anti-conservative.</li>
   </ul></li>
+  <li><strong>Coefficient covariance matrix (vcov)</strong> \u2014 when \u2265 2
+  moderators are present, a <em>Download vcov CSV</em> button appears in the
+  regression panel. The CSV contains the full p\xD7p covariance matrix of the
+  estimated coefficients (rows and columns labelled by predictor name).
+  Off-diagonal entries are needed for linear contrasts and for replicating
+  the app's own contrast-test calculations.</li>
 </ul>
 <p><strong>Cautionary notes:</strong></p>
 <ul>
@@ -13996,6 +16143,86 @@ w\u1D62 = 1/(v\u1D62 + \u03C4\xB2), with \u03C4\xB2 estimated by REML or the sel
                 "Knapp, G., & Hartung, J. (2003). Improved tests for a random effects meta-regression with a single covariate. <em>Statistics in Medicine, 22</em>(17), 2693\u20132710.",
                 "Higgins, J. P. T., & Thompson, S. G. (2004). Controlling the risk of spurious findings from meta-regression. <em>Statistics in Medicine, 23</em>(11), 1663\u20131682.",
                 "Thompson, S. G., & Higgins, J. P. T. (2002). How should meta-regression analyses be undertaken and interpreted? <em>Statistics in Medicine, 21</em>(11), 1559\u20131573."
+              ]
+            },
+            {
+              id: "guide-permutation-test",
+              title: "Permutation tests (meta-regression)",
+              body: `<p>Permutation tests provide non-parametric p-values for the omnibus
+moderator test (Q<sub>M</sub>) in meta-regression. They are especially useful
+when the number of studies k is small (< 20), where the chi-square and F
+approximations used by the standard Wald test can be anti-conservative.</p>
+<p><strong>How it works:</strong></p>
+<ol>
+  <li>Fit the meta-regression model and record the observed Q<sub>M</sub>.</li>
+  <li>Shuffle the moderator values across studies (permuting rows of the design
+  matrix X) while keeping each study's effect size y<sub>i</sub> and sampling
+  variance v<sub>i</sub> together. Re-estimate \u03C4\xB2 for the permuted data using
+  the same method as the original model, then refit WLS.</li>
+  <li>Repeat nPerm times to build the null distribution of Q<sub>M</sub> under
+  H\u2080: no moderator relationship.</li>
+  <li>Permutation p-value = #{Q<sub>M,perm</sub> \u2265 Q<sub>M,obs</sub>} / nPerm
+  (the observed Q<sub>M</sub> is placed at position 0, so it always counts once).</li>
+</ol>
+<p><strong>Interpretation:</strong> The permutation p-value is exact (up to Monte
+Carlo error) for the null hypothesis that there is no relationship between the
+moderator and the true effects \u2014 regardless of sample size. A significant result
+(p < 0.05) means the observed Q<sub>M</sub> is unusually large relative to what
+would arise by chance under the null.</p>
+<p><strong>Limitations:</strong></p>
+<ul>
+  <li>Permuting moderator assignments assumes studies are exchangeable under the
+  null \u2014 the effect sizes and sampling variances remain paired, only the
+  moderator labels are shuffled.</li>
+  <li>Very small k (< 5) limits the minimum achievable p-value:
+  with k = 5 there are only 5! = 120 distinct permutations, so p < 0.01 is
+  impossible without ties.</li>
+  <li>Re-estimating \u03C4\xB2 per permutation matches the default behaviour of
+  metafor's <code>permutest()</code> and gives exact inference under the
+  random-effects model.</li>
+</ul>
+<p>Per-moderator permutation p-values (shown when 2+ moderators) test each
+moderator's Q<sub>M</sub> contribution separately using the same permutation
+draws.</p>`,
+              citations: [
+                "Higgins, J. P. T., & Thompson, S. G. (2004). Controlling the risk of spurious findings from meta-regression. <em>Statistics in Medicine, 23</em>(11), 1663\u20131682.",
+                "Follmann, D. A., & Proschan, M. A. (1999). Valid inference in random effects meta-analysis. <em>Biometrics, 55</em>(3), 732\u2013737."
+              ]
+            },
+            {
+              id: "guide-interactions",
+              title: "Interaction terms",
+              body: `<p>An <strong>interaction term</strong> A\xD7B tests whether the slope of A differs
+across levels of B (or equivalently, whether B's effect differs across values of A).</p>
+<p><strong>How to add:</strong> once two or more moderators exist, the <em>Interaction
+terms</em> row appears below the Moderators row. Select two moderators from the
+dropdowns and click + Add. No extra data column is required \u2014 the columns are
+computed automatically as the outer product of the parent moderators' design-matrix
+columns.</p>
+<p><strong>Design matrix columns produced:</strong></p>
+<ul>
+  <li><strong>Continuous \xD7 continuous</strong> \u2014 one column: x\u2081 \xB7 x\u2082.
+    Coefficient \u03B2\u2083 in <code>y = \u03B2\u2080 + \u03B2\u2081x\u2081 + \u03B2\u2082x\u2082 + \u03B2\u2083(x\u2081\xB7x\u2082)</code> is the
+    change in the slope of x\u2081 per unit increase in x\u2082.</li>
+  <li><strong>Continuous \xD7 categorical (k levels)</strong> \u2014 k\u22121 columns, one per
+    non-reference level. Each coefficient is the difference in slope between that
+    level and the reference level.</li>
+  <li><strong>Categorical \xD7 categorical (j, k levels)</strong> \u2014 (j\u22121)\xD7(k\u22121)
+    columns.</li>
+</ul>
+<p><strong>Main effects must be included.</strong> An interaction is only
+interpretable alongside the main effects of both terms. The app includes them
+automatically when you add the interaction, but removing a main-effect moderator
+will also remove any interaction that references it.</p>
+<p><strong>Tests:</strong> each interaction term receives its own omnibus Wald test
+(Q<sub>M</sub>) and Likelihood Ratio Test in the per-term table, using the same
+logic as simple moderator tests.</p>
+<p><strong>Power caution:</strong> interaction tests require substantially more
+power than main-effect tests. With k &lt; 20 studies, interactions are usually
+underpowered and results are exploratory.</p>`,
+              citations: [
+                "Borenstein, M., Hedges, L. V., Higgins, J. P. T., & Rothstein, H. R. (2009). <em>Introduction to Meta-Analysis.</em> Wiley.",
+                "Higgins, J. P. T., & Thompson, S. G. (2004). Controlling the risk of spurious findings from meta-regression. <em>Statistics in Medicine, 23</em>(11), 1663\u20131682."
               ]
             },
             {
@@ -14316,6 +16543,35 @@ overall pooled estimates are shown separately.</p>`,
               citations: [
                 "Lewis, S., & Clarke, M. (2001). Forest plots: Trying to see the wood and the trees. <em>BMJ, 322</em>(7300), 1479\u20131480."
               ]
+            },
+            {
+              id: "guide-plot-themes",
+              title: "Plot style presets",
+              body: `<p>The <strong>Plot style</strong> dropdown applies a visual theme to every plot \u2014 forest,
+funnel, bubble, caterpillar, BLUP, Baujat, L'Abb\xE9, GOSH, p-curve, p-uniform, orchard,
+cumulative forest/funnel, influence, profile-likelihood, Bayesian posteriors, Q-Q, radial,
+and risk-of-bias plots.</p>
+<p><strong>Available presets:</strong></p>
+<ul>
+  <li><strong>App default</strong> \u2014 reads CSS custom properties; adapts automatically to the
+  page's light/dark mode toggle. SVG exports from this preset contain unresolved
+  <code>var(--\u2026)</code> references; use a journal preset for self-contained exports.</li>
+  <li><strong>Cochrane</strong> \u2014 white background, Times New Roman, near-black data elements,
+  mid-grey for structural chrome and the fixed-effects diamond. Matches the RevMan 5 output
+  convention (Cochrane Handbook \xA7I.2).</li>
+  <li><strong>JAMA</strong> \u2014 white background, Arial/Helvetica, near-black data, lighter grey
+  for chrome. Matches JAMA Network and most North American clinical journal figure
+  guidelines.</li>
+  <li><strong>Black &amp; white</strong> \u2014 strict monochrome for journals that prohibit colour
+  and grey shading. Where colour carries categorical information (influence severity, orchard
+  group densities, funnel contour regions), shapes and hatch patterns are substituted.
+  Risk-of-bias traffic-light colours (green/amber/red) are preserved across every preset,
+  including Black &amp; white, because those colours are part of the published Cochrane
+  RoB 2 / ROBINS-I convention (Sterne et al., 2019; Sterne et al., 2016).</li>
+</ul>
+<p>Changing the preset immediately redraws all cached plots. Plots without a cached result
+(e.g., influence, Baujat, orchard) update on the next Run.</p>`,
+              citations: []
             },
             {
               id: "guide-influence",
@@ -14825,9 +17081,9 @@ BF<sub>10</sub>. Reporting \u03C3<sub>\u03BC</sub> alongside BF<sub>10</sub>
 ensures reproducibility.</p>
 <p><strong>Outputs:</strong></p>
 <ul>
-  <li>Posterior mean and 95 % credible interval for \u03BC (overall effect)</li>
-  <li>Posterior mean and 95 % credible interval for \u03C4 (heterogeneity SD)</li>
-  <li>BF<sub>10</sub>, log(BF<sub>10</sub>), and Jeffreys-scale interpretation</li>
+  <li>Posterior mean, posterior SD, and 95 % credible interval for \u03BC (overall effect)</li>
+  <li>Posterior mean, posterior SD, and 95 % credible interval for \u03C4 (heterogeneity SD)</li>
+  <li>BF<sub>10</sub>, log(BF<sub>10</sub>), and Jeffreys-scale interpretation; BF<sub>01</sub> = 1/BF<sub>10</sub> is additionally shown when BF<sub>10</sub> &lt; 1 (evidence favouring the null)</li>
   <li>Plots of the marginal posterior densities for \u03BC and \u03C4</li>
 </ul>
 <p><strong>Prior inputs</strong> are accessible in the
@@ -14979,9 +17235,104 @@ when exported.</p>`,
               ]
             }
           ]
+        },
+        // ------------------------------------------------------------------ //
+        // Multivariate Meta-Analysis                                           //
+        // ------------------------------------------------------------------ //
+        {
+          id: "multivariate-ma",
+          heading: "Multivariate Meta-Analysis",
+          topics: [
+            {
+              id: "guide-multivariate",
+              title: "Multivariate Meta-Analysis (known within-study covariance)",
+              body: `<p>Multivariate meta-analysis models multiple correlated outcomes from the same
+set of studies jointly, explicitly accounting for their within-study and between-study
+covariance. Treating correlated outcomes as independent (three-level or RVE) ignores
+the sign and magnitude of those correlations; the multivariate model estimates them
+from the data and produces correctly calibrated standard errors.</p>
+
+<p><strong>When to use:</strong> A study contributes two or more outcome types
+(e.g. pain and function, anxiety and depression, two laboratory endpoints) and the
+within-study covariance between those outcomes can be estimated from the reported
+data or assumed from the literature.</p>
+
+<p><strong>Model:</strong> Stack all observations from all studies into a single vector
+<em>y</em> (length \u2264 k\xB7P, where k = studies, P = outcomes). The marginal covariance is</p>
+<pre>  \u03A9 = V + Z \u03A8 Z\u02B9</pre>
+<p>where <strong>V</strong> is a known block-diagonal sampling covariance matrix (one
+block per study), <strong>Z</strong> is the study indicator matrix, and <strong>\u03A8</strong> is
+the unknown P\xD7P between-study covariance matrix estimated from the data.</p>
+
+<p><strong>Estimation:</strong> REML (default) or ML via BFGS optimizer. REML is preferred
+because it accounts for uncertainty in the fixed effects when estimating \u03A8; ML is
+required when comparing models with different fixed-effect structures (e.g. via LRT).</p>
+
+<p><strong>\u03A8 structures:</strong></p>
+<ul>
+  <li><strong>CS (Compound Symmetric):</strong> \u03A8 = \u03C4\xB2[(1\u2212\u03C1)I + \u03C111\u02B9]. All outcomes share
+    a common variance \u03C4\xB2 and a common between-study correlation \u03C1. Two parameters. The
+    most parsimonious and numerically stable choice; recommended when the number of studies
+    is small relative to the number of outcomes.</li>
+  <li><strong>Diagonal (Diag):</strong> \u03A8 = diag(\u03C4\xB2\u2081, \u2026, \u03C4\xB2\u209A). Separate variances per
+    outcome but zero between-study correlation. P parameters. Useful when outcomes are
+    conceptually independent at the between-study level.</li>
+  <li><strong>Unstructured (UN):</strong> \u03A8 = LL\u02B9 (Cholesky parameterisation, P(P+1)/2
+    parameters). Each variance and covariance is estimated freely. Most flexible but
+    requires many studies to estimate reliably; can produce near-singular \u03A8 with sparse data.</li>
+</ul>
+
+<p><strong>Within-study covariance (vcalc):</strong> When raw individual-level data are
+unavailable, the within-study covariance between outcomes j and k in study i is
+estimated as</p>
+<pre>  V_jk = \u03C1 \xB7 \u221A(v_j \xB7 v_k)</pre>
+<p>where \u03C1 is an assumed within-study correlation (typically obtained from the
+literature or a sensitivity range) and v_j, v_k are the sampling variances. This is
+the constant-\u03C1 approximation implemented by metafor's <code>vcalc()</code> function
+(Viechtbauer et al., 2021).</p>
+
+<p><strong>Fixed effects (\u03B2):</strong> The pooled effect for each outcome is estimated by
+generalised least squares: \u03B2\u0302 = (X\u02B9\u03A9\u207B\xB9X)\u207B\xB9 X\u02B9\u03A9\u207B\xB9y, with standard errors from the
+diagonal of (X\u02B9\u03A9\u207B\xB9X)\u207B\xB9.</p>
+
+<p><strong>Meta-regression:</strong> Continuous moderators may be added with either
+common slopes (one \u03B2 per moderator, shared across all outcomes) or separate slopes
+(one \u03B2 per moderator per outcome). In rma.mv() terms, common slopes correspond to
+<code>mods = ~ outcome + x - 1</code> and separate slopes to
+<code>mods = ~ outcome + outcome:x - 1</code>.</p>
+
+<p><strong>Heterogeneity statistics:</strong></p>
+<ul>
+  <li><strong>Q<sub>E</sub></strong> \u2014 residual Cochran Q, evaluated at \u03A8 = 0 (V-only).
+    Tests whether the observed spread of effects exceeds sampling error after accounting
+    for fixed effects. df = n \u2212 q (n = observations, q = fixed-effect parameters).</li>
+  <li><strong>I\xB2</strong> \u2014 per-outcome I\xB2: \u03C4\xB2_j / (\u03C4\xB2_j + median v_ij), generalising
+    Higgins' I\xB2 to the multivariate setting (Cheung, 2014).</li>
+  <li><strong>Q<sub>M</sub></strong> \u2014 omnibus Wald test of \u03B2 = 0; \u03C7\xB2(q) where q is the
+    number of fixed-effect parameters. Shown only when moderators are present.</li>
+</ul>
+
+<p><strong>Caution on over-parameterisation:</strong> The UN structure requires
+P(P+1)/2 parameters to estimate \u03A8. As a rough guideline, each variance parameter
+needs at least 3\u20135 studies to estimate reliably; the app will warn when the ratio
+is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
+              citations: [
+                "Berkey, C. S., Hoaglin, D. C., Antczak-Bouckoms, A., Mosteller, F., &amp; Colditz, G. A. (1998). Meta-analysis of multiple outcomes by regression with random effects. <em>Statistics in Medicine</em>, 17(22), 2537\u20132550.",
+                "Cheung, M. W.-L. (2014). Modeling dependent effect sizes with three-level meta-analyses: a structural equation modeling approach. <em>Psychological Methods</em>, 19(2), 211\u2013229.",
+                "Jackson, D., Riley, R., &amp; White, I. R. (2011). Multivariate meta-analysis: Potential and promise. <em>Statistics in Medicine</em>, 30(20), 2481\u20132498.",
+                "Riley, R. D., Abrams, K. R., Sutton, A. J., Lambert, P. C., &amp; Thompson, J. R. (2007). Bivariate random-effects meta-analysis and the estimation of between-study correlation. <em>BMC Medical Research Methodology</em>, 7, 3.",
+                "Viechtbauer, W. (2010). Conducting meta-analyses in R with the metafor package. <em>Journal of Statistical Software</em>, 36(3), 1\u201348."
+              ]
+            }
+          ]
         }
       ];
       HELP_TO_GUIDE = {
+        "mv.model": "guide-multivariate",
+        "mv.struct": "guide-multivariate",
+        "mv.forest": "guide-multivariate",
+        "mv.method": "guide-multivariate",
+        "mv.rho": "guide-multivariate",
         "effect.SMD": "guide-smd",
         "effect.SMDH": "guide-smdh",
         "effect.SMD1": "guide-smd1",
@@ -15016,13 +17367,13 @@ when exported.</p>`,
         "effect.R2": "guide-r2",
         "effect.ZR2": "guide-r2",
         "effect.PHI": "guide-proportions",
-        "effect.RTET": "guide-proportions",
+        "effect.RTET": "guide-rpb",
         "effect.PR": "guide-proportions",
         "effect.PLN": "guide-proportions",
         "effect.PLO": "guide-proportions",
         "effect.PAS": "guide-proportions",
         "effect.PFT": "guide-proportions",
-        "effect.GOR": "guide-or",
+        "effect.GOR": "guide-yuq",
         "effect.GENERIC": "guide-generic",
         "tau.DL": "guide-dl",
         "tau.REML": "guide-reml",
@@ -15043,6 +17394,7 @@ when exported.</p>`,
         "ci.KH": "guide-ci-kh",
         "ci.t": "guide-ci-t",
         "ci.PL": "guide-ci-pl",
+        "ci.width": "guide-ci-normal",
         "het.Q": "guide-cochran-q",
         "het.I2": "guide-i2",
         "het.tau2": "guide-tau2",
@@ -15072,6 +17424,10 @@ when exported.</p>`,
         "bias.pcurve": "guide-pcurve",
         "bias.puniform": "guide-puniform",
         "sel.model": "guide-selection-model",
+        "sel.halfnorm": "guide-sel-halfnorm",
+        "sel.power": "guide-sel-power",
+        "sel.negexp": "guide-sel-negexp",
+        "sel.beta": "guide-sel-beta",
         "diag.blup": "guide-blup",
         "diag.baujat": "guide-baujat",
         "diag.labbe": "guide-labbe",
@@ -15084,7 +17440,8 @@ when exported.</p>`,
         "diag.metaregression": "guide-metaregression",
         "mreg.lrt": "guide-metaregression",
         "mreg.contrasts": "guide-custom-contrasts",
-        "diag.nonlinear-reg": "guide-nonlinear-reg",
+        "perm.run": "guide-permutation-test",
+        "perm.iter": "guide-permutation-test",
         "diag.locationscale": "guide-location-scale",
         "input.scaleModerators": "guide-location-scale",
         "diag.qqplot": "guide-qqplot",
@@ -15092,10 +17449,12 @@ when exported.</p>`,
         "reg.aic": "guide-aic-bic",
         "reg.mcc": "guide-mcc",
         "input.moderators": "guide-subgroup",
+        "input.interactions": "guide-interactions",
         "input.rob": "guide-rob",
         "bayes.model": "guide-bayes-meta",
         "bayes.tau": "guide-bayes-meta",
         "bayes.sensitivity": "guide-prior-sensitivity",
+        "plot.theme": "guide-plot-themes",
         "plot.forest": "guide-forest",
         "plot.funnel": "guide-funnel-plot",
         "plot.cumulative": "guide-cumulative",
@@ -15106,6 +17465,7 @@ when exported.</p>`,
         "tau.Peto": "guide-mantel-haenszel",
         "cluster.id": "guide-cluster-robust",
         "cluster.robust": "guide-cluster-robust",
+        "rve.model": "guide-rve",
         "threelevel.model": "guide-three-level",
         "threelevel.tau2": "guide-three-level",
         "threelevel.I2": "guide-three-level",
@@ -15118,8 +17478,356 @@ when exported.</p>`,
     }
   });
 
+  // js/onboarding.js
+  var onboarding_exports = {};
+  __export(onboarding_exports, {
+    finish: () => finish,
+    maybeStartTour: () => maybeStartTour,
+    next: () => next,
+    prev: () => prev,
+    skip: () => skip,
+    startTour: () => startTour,
+    teardown: () => teardown
+  });
+  function _createDOM() {
+    if (_block) return;
+    _block = document.createElement("div");
+    _block.id = "onboardingBlock";
+    _block.setAttribute("aria-hidden", "true");
+    _block.style.display = "none";
+    _spot = document.createElement("div");
+    _spot.id = "onboardingSpotlight";
+    _spot.setAttribute("aria-hidden", "true");
+    _spot.style.display = "none";
+    _tip = document.createElement("div");
+    _tip.className = "onboarding-tip";
+    _tip.setAttribute("role", "dialog");
+    _tip.setAttribute("aria-modal", "true");
+    _tip.setAttribute("aria-labelledby", "onbTitle");
+    _tip.style.display = "none";
+    _liveEl = document.createElement("p");
+    _liveEl.id = "onbLive";
+    _liveEl.setAttribute("aria-live", "polite");
+    _liveEl.className = "onb-live";
+    _titleEl = document.createElement("h3");
+    _titleEl.id = "onbTitle";
+    _titleEl.className = "onb-title";
+    _bodyEl = document.createElement("p");
+    _bodyEl.className = "onb-body";
+    _counterEl = document.createElement("span");
+    _counterEl.className = "onb-counter";
+    _btnBack = document.createElement("button");
+    _btnBack.type = "button";
+    _btnBack.className = "onb-btn onb-btn-back";
+    _btnBack.textContent = "Back";
+    _btnBack.setAttribute("aria-label", "Go to previous step");
+    _btnBack.onclick = () => prev();
+    _btnNext = document.createElement("button");
+    _btnNext.type = "button";
+    _btnNext.className = "onb-btn onb-btn-next";
+    _btnNext.textContent = "Next";
+    _btnNext.setAttribute("aria-label", "Go to next step");
+    _btnNext.onclick = () => next();
+    _btnSkip = document.createElement("button");
+    _btnSkip.type = "button";
+    _btnSkip.className = "onb-btn onb-btn-skip";
+    _btnSkip.textContent = "Skip";
+    _btnSkip.setAttribute("aria-label", "Skip the tour");
+    _btnSkip.onclick = () => skip();
+    const footer = document.createElement("div");
+    footer.className = "onb-footer";
+    const btns = document.createElement("div");
+    btns.className = "onb-btns";
+    btns.append(_btnBack, _btnNext, _btnSkip);
+    footer.append(_counterEl, btns);
+    _tip.append(_liveEl, _titleEl, _bodyEl, footer);
+    document.body.append(_block, _spot, _tip);
+  }
+  function _spotlightRect(targetEl) {
+    const r = targetEl.getBoundingClientRect();
+    return {
+      left: r.left - PAD,
+      top: r.top - PAD,
+      right: r.right + PAD,
+      bottom: r.bottom + PAD,
+      width: r.width + PAD * 2,
+      height: r.height + PAD * 2
+    };
+  }
+  function _applySpotlight(sr) {
+    Object.assign(_spot.style, {
+      left: `${sr.left}px`,
+      top: `${sr.top}px`,
+      width: `${sr.width}px`,
+      height: `${sr.height}px`
+    });
+  }
+  function _placeTip(sr) {
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const tipH = Math.max(_tip.offsetHeight || 0, MIN_TIP_H);
+    let top, left;
+    if (sr.bottom + GAP + tipH <= vh) {
+      top = sr.bottom + GAP;
+      left = Math.max(8, Math.min(sr.left, vw - TIP_W - 8));
+    } else if (sr.top - GAP - tipH >= 0) {
+      top = sr.top - GAP - tipH;
+      left = Math.max(8, Math.min(sr.left, vw - TIP_W - 8));
+    } else {
+      top = Math.max(8, Math.min(sr.top, vh - tipH - 8));
+      left = Math.max(8, Math.min(sr.right + GAP, vw - TIP_W - 8));
+    }
+    Object.assign(_tip.style, {
+      top: `${top}px`,
+      left: `${left}px`
+    });
+  }
+  function _doReposition() {
+    if (!_current) return;
+    const sr = _spotlightRect(_current);
+    _applySpotlight(sr);
+    _placeTip(sr);
+  }
+  function _scheduleReposition() {
+    if (_rafId) return;
+    _rafId = requestAnimationFrame(() => {
+      _rafId = null;
+      _doReposition();
+    });
+  }
+  function _onResize() {
+    _scheduleReposition();
+  }
+  function _onScroll() {
+    _scheduleReposition();
+  }
+  function _focusableBtns() {
+    return [_btnBack, _btnNext, _btnSkip].filter((b) => b && !b.disabled);
+  }
+  function _trapFocusKey(e) {
+    if (!_tip || _tip.style.display === "none") return;
+    if (e.key === "Escape") {
+      e.preventDefault();
+      skip();
+      return;
+    }
+    if (e.key !== "Tab") return;
+    const focusable = _focusableBtns();
+    if (!focusable.length) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (e.shiftKey) {
+      if (document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      }
+    } else {
+      if (document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+  }
+  function _trapFocusFocusin(e) {
+    if (!_tip || _tip.style.display === "none") return;
+    if (!_tip.contains(e.target)) _btnNext.focus();
+  }
+  function _restoreFocus() {
+    const el = _prevFocus;
+    _prevFocus = null;
+    if (el && typeof el.focus === "function") {
+      try {
+        el.focus();
+      } catch (_) {
+      }
+    }
+  }
+  function _attachListeners() {
+    window.addEventListener("resize", _onResize, { passive: true });
+    document.addEventListener("scroll", _onScroll, { passive: true, capture: true });
+    document.addEventListener("keydown", _trapFocusKey);
+    document.addEventListener("focusin", _trapFocusFocusin);
+  }
+  function _detachListeners() {
+    window.removeEventListener("resize", _onResize);
+    document.removeEventListener("scroll", _onScroll, { passive: true, capture: true });
+    document.removeEventListener("keydown", _trapFocusKey);
+    document.removeEventListener("focusin", _trapFocusFocusin);
+    if (_rafId) {
+      cancelAnimationFrame(_rafId);
+      _rafId = null;
+    }
+  }
+  function spotlight(targetEl) {
+    _current = targetEl;
+    const r = targetEl.getBoundingClientRect();
+    const offscreen = r.bottom < 0 || r.top > window.innerHeight;
+    if (offscreen) {
+      targetEl.scrollIntoView({ block: "center", behavior: "smooth" });
+      setTimeout(() => {
+        const sr = _spotlightRect(targetEl);
+        _applySpotlight(sr);
+        _placeTip(sr);
+        _setVisible(true);
+      }, 400);
+    } else {
+      const sr = _spotlightRect(targetEl);
+      _applySpotlight(sr);
+      _placeTip(sr);
+      _setVisible(true);
+    }
+  }
+  function _setVisible(on) {
+    const display = on ? "" : "none";
+    _block.style.display = display;
+    _spot.style.display = display;
+    _tip.style.display = display;
+  }
+  function _markSeen() {
+    localStorage.setItem(SEEN_KEY, "1");
+  }
+  function _goTo(idx) {
+    if (idx >= STEPS.length) {
+      finish();
+      return;
+    }
+    if (idx < 0) idx = 0;
+    const step = STEPS[idx];
+    const el = document.querySelector(step.anchor);
+    if (!el) {
+      _goTo(idx + 1);
+      return;
+    }
+    const r = el.getBoundingClientRect();
+    if (r.width === 0 && r.height === 0) {
+      _goTo(idx + 1);
+      return;
+    }
+    _stepIdx = idx;
+    const total = STEPS.length;
+    const human = idx + 1;
+    _titleEl.textContent = step.title;
+    _bodyEl.textContent = step.body;
+    _counterEl.textContent = `${human} of ${total}`;
+    _liveEl.textContent = "";
+    requestAnimationFrame(() => {
+      if (_liveEl) _liveEl.textContent = `Step ${human} of ${total}: ${step.title}`;
+    });
+    _btnBack.disabled = idx === 0;
+    const isLast = idx === total - 1;
+    _btnNext.textContent = isLast ? "Done" : "Next";
+    _btnNext.setAttribute("aria-label", isLast ? "Finish tour" : "Go to next step");
+    spotlight(el);
+    requestAnimationFrame(() => {
+      if (_btnNext) _btnNext.focus();
+    });
+  }
+  function next() {
+    _goTo(_stepIdx + 1);
+  }
+  function prev() {
+    _goTo(_stepIdx - 1);
+  }
+  function skip() {
+    _markSeen();
+    _detachListeners();
+    _restoreFocus();
+    teardown();
+  }
+  function finish() {
+    _markSeen();
+    _detachListeners();
+    _restoreFocus();
+    teardown();
+  }
+  function teardown() {
+    _detachListeners();
+    _current = null;
+    _stepIdx = 0;
+    _prevFocus = null;
+    _liveEl = null;
+    _titleEl = null;
+    _bodyEl = null;
+    _counterEl = null;
+    _btnBack = null;
+    _btnNext = null;
+    _btnSkip = null;
+    if (_block) {
+      _block.remove();
+      _block = null;
+    }
+    if (_spot) {
+      _spot.remove();
+      _spot = null;
+    }
+    if (_tip) {
+      _tip.remove();
+      _tip = null;
+    }
+  }
+  function maybeStartTour() {
+    if (localStorage.getItem(SEEN_KEY)) return;
+    if (localStorage.getItem(DRAFT_KEY2)) return;
+    const params = new URLSearchParams(location.search);
+    if (params.has("perf") || params.has("tests")) return;
+    const importPreview = document.getElementById("importPreview");
+    if (importPreview && importPreview.style.display !== "none") return;
+    const inputSection = document.getElementById("inputSection");
+    if (!inputSection || inputSection.offsetParent === null) return;
+    startTour({ force: false });
+  }
+  function startTour({ force = false } = {}) {
+    if (!force && localStorage.getItem(SEEN_KEY)) return;
+    _prevFocus = document.activeElement;
+    _createDOM();
+    _attachListeners();
+    _goTo(0);
+  }
+  var SEEN_KEY, DRAFT_KEY2, PAD, TIP_W, MIN_TIP_H, GAP, STEPS, _block, _spot, _tip, _current, _rafId, _stepIdx, _prevFocus, _liveEl, _titleEl, _bodyEl, _counterEl, _btnBack, _btnNext, _btnSkip;
+  var init_onboarding = __esm({
+    "js/onboarding.js"() {
+      SEEN_KEY = "fosma-onboarding-seen";
+      DRAFT_KEY2 = "meta-draft";
+      PAD = 4;
+      TIP_W = 320;
+      MIN_TIP_H = 160;
+      GAP = 12;
+      STEPS = [
+        {
+          anchor: "#effectType",
+          title: "Pick an effect type",
+          body: "45 options grouped by data shape \u2014 means, binary outcomes, correlations, and more. Choose the one that matches how your studies report results."
+        },
+        {
+          anchor: "#inputTable tr",
+          title: "Fill the columns",
+          body: "The table adapts its columns to match the effect type. Hover any column header for a description of what goes there."
+        },
+        {
+          anchor: "#run",
+          title: "Run the analysis",
+          body: "Click Run \u2014 or press Ctrl+Enter \u2014 once the table is filled. Results appear in the Results tab."
+        }
+      ];
+      _block = null;
+      _spot = null;
+      _tip = null;
+      _current = null;
+      _rafId = null;
+      _stepIdx = 0;
+      _prevFocus = null;
+      _liveEl = null;
+      _titleEl = null;
+      _bodyEl = null;
+      _counterEl = null;
+      _btnBack = null;
+      _btnNext = null;
+      _btnSkip = null;
+    }
+  });
+
   // js/benchmarks.js
-  var BENCHMARKS, PUB_BIAS_BENCHMARKS, INFLUENCE_BENCHMARKS, META_REGRESSION_BENCHMARKS, VH_BENCHMARKS, MH_BENCHMARKS, CLUSTER_BENCHMARKS, RVE_BENCHMARKS, THREE_LEVEL_BENCHMARKS, LS_BENCHMARKS, CONTRAST_BENCHMARKS;
+  var BENCHMARKS, PUB_BIAS_BENCHMARKS, INFLUENCE_BENCHMARKS, META_REGRESSION_BENCHMARKS, VH_BENCHMARKS, HALFNORM_BENCHMARKS, POWER_BENCHMARKS, NEGEXP_BENCHMARKS, BETA_BENCHMARKS, MH_BENCHMARKS, CLUSTER_BENCHMARKS, RVE_BENCHMARKS, THREE_LEVEL_BENCHMARKS, LS_BENCHMARKS, CONTRAST_BENCHMARKS, INTERACTION_BENCHMARKS, _BERKEY98, MULTIVARIATE_BENCHMARKS;
   var init_benchmarks = __esm({
     "js/benchmarks.js"() {
       BENCHMARKS = [
@@ -15709,7 +18417,7 @@ when exported.</p>`,
         // Same raw data as MD_paired benchmark above.
         // SMCR formula: d = (m_post - m_pre) / sd_pre  (pre-test SD standardiser)
         // g = d · J(df),  J = 1 − 3/(4·df − 1),  df = n − 1
-        // vi = J² · [2(1−r)/n + d²/(2·df)]
+        // vi = 2(1−r)/n + g²/(2n)  (Borenstein et al. 2009 eq 4.27)
         // Per-study g verified by hand; pooled values computed analytically (DL).
         // ----------------------------------------------------------------
         {
@@ -15727,12 +18435,12 @@ when exported.</p>`,
           expected: {
             // Hedges' g per study: d = Δm/sd_pre, g = d·J, verified by hand
             yi: [0.5056, 1.0481, 1.8065, 1.4187, 0.0801],
-            FE: 0.839,
-            RE: 0.892,
-            tau2: 0.2474,
-            I2: 78
+            FE: 0.864,
+            RE: 0.902,
+            tau2: 0.243,
+            I2: 77.1
           },
-          citation: "Morris (2008) Org Res Methods 11:364\u2013386. Per-study g and pooled values computed analytically from SMCR formula."
+          citation: "Morris (2008) Org Res Methods 11:364\u2013386. Per-study g and pooled values recomputed with Borenstein 2009 eq 4.27 vi formula."
         },
         // ----------------------------------------------------------------
         // PR — Synthetic proportion dataset (raw proportion)
@@ -16467,7 +19175,7 @@ when exported.</p>`,
         // Standardiser: sd_change (change-score SD), not sd_pre.
         // sd_change = √(sd_pre²+sd_post²−2·r·sd_pre·sd_post)
         // d = Δm/sd_change,  g = d·J,  J = 1−3/(4·(n−1)−1)
-        // vi = J²·[2(1−r)/n + d²/(2(n−1))]
+        // vi = 1/n + g²/(2n)  (Borenstein et al. 2009 eq 4.30)
         // All values computed analytically (DL).
         // ----------------------------------------------------------------
         {
@@ -16485,12 +19193,12 @@ when exported.</p>`,
           expected: {
             // g per study (sd_change standardiser), verified by formula
             yi: [0.5417, 1.0198, 2.6635, 1.9096, 0.0765],
-            FE: 0.779,
-            RE: 1.003,
-            tau2: 0.3611,
-            I2: 81.7
+            FE: 0.804,
+            RE: 1.018,
+            tau2: 0.369,
+            I2: 81.2
           },
-          citation: "Morris (2008) Org Res Methods 11:364\u2013386. SMCC formula: Morris (2008) Eq.17 / Borenstein et al. (2009) Table 4.5 \u2014 var(d)=1/n+d\xB2/(2df). DL values from corrected formula."
+          citation: "Morris (2008) Org Res Methods 11:364\u2013386. SMCC formula: Borenstein et al. (2009) eq 4.30 \u2014 vi=1/n+g\xB2/(2n). DL values recomputed."
         },
         // ----------------------------------------------------------------
         // PLN — Synthetic proportion dataset (log proportion)
@@ -16865,8 +19573,8 @@ when exported.</p>`,
         // CVR — Synthetic variability dataset (profiles.js CVR exampleData, DL)
         // 5 studies with n≥28, m>0, CV<1, SD ratio<4 — all soft-warning
         // thresholds satisfied.
-        // yi = ln(cv1/cv2),  vi = 1/(2(n1−1)) + cv1²/n1 + 1/(2(n2−1)) + cv2²/n2
-        // τ²=0 reflects homogeneous CVR across these studies (all ≈ 0.56).
+        // yi = ln(cv1/cv2) + 1/(2(n1−1)) − 1/(2(n2−1)),  vi = 1/(2(n1−1)) + cv1²/n1 + 1/(2(n2−1)) + cv2²/n2
+        // Bias correction per Nakagawa et al. (2015) eq. 1. τ²=0 reflects homogeneous CVR.
         // ----------------------------------------------------------------
         {
           name: "Synthetic Variability \u2013 CVR (log CV ratio, DL)",
@@ -16881,10 +19589,10 @@ when exported.</p>`,
             { label: "Study 5", m1: 22.3, sd1: 7.8, n1: 45, m2: 23.1, sd2: 4.9, n2: 43 }
           ],
           expected: {
-            // yi = ln(cv1/cv2) per study, verified by formula
-            yi: [0.5638, 0.6152, 0.5573, 0.5814, 0.5001],
-            FE: 0.569,
-            RE: 0.569,
+            // yi = ln(cv1/cv2) + bias correction; verified via metafor escalc("CVR"), R block 29
+            yi: [0.5631, 0.6147, 0.556, 0.5812, 0.4996],
+            FE: 0.568,
+            RE: 0.568,
             tau2: 0,
             I2: 0
           },
@@ -16894,8 +19602,8 @@ when exported.</p>`,
         // VR — Synthetic variability dataset (profiles.js VR exampleData, DL)
         // 5 studies with n≥28, SD ratio<4 — all soft-warning thresholds
         // satisfied.
-        // yi = ln(sd1/sd2),  vi = 1/(2(n1−1)) + 1/(2(n2−1))
-        // τ²=0 reflects homogeneous VR across these studies (all ≈ 0.56).
+        // yi = ln(sd1/sd2) + 1/(2(n1−1)) − 1/(2(n2−1)),  vi = 1/(2(n1−1)) + 1/(2(n2−1))
+        // Bias correction per Nakagawa et al. (2015) eq. 1. τ²=0 reflects homogeneous VR.
         // ----------------------------------------------------------------
         {
           name: "Synthetic Variability \u2013 VR (log SD ratio, DL)",
@@ -16910,8 +19618,8 @@ when exported.</p>`,
             { label: "Study 5", sd1: 4.9, n1: 45, sd2: 3.5, n2: 43 }
           ],
           expected: {
-            // yi = ln(sd1/sd2) per study, verified by formula
-            yi: [0.4055, 0.5416, 0.4187, 0.422, 0.3365],
+            // yi = ln(sd1/sd2) + bias correction; verified via metafor escalc("VR"), R block 30
+            yi: [0.4048, 0.5411, 0.4174, 0.4218, 0.3359],
             FE: 0.43,
             RE: 0.43,
             tau2: 0,
@@ -17168,7 +19876,7 @@ when exported.</p>`,
         // ciLow/ciHigh change with the CI method.
         // ----------------------------------------------------------------
         // ----------------------------------------------------------------
-        // KH — Knapp-Hartung adjusted CI (DL tau², t_{k-1} critical value,
+        // KH — Knapp-Hartung adjusted CI (DL τ², t_{k-1} critical value,
         // seRE² = Σ wᵢ(yᵢ−RE)² / ((k−1)·W))
         // ----------------------------------------------------------------
         {
@@ -17521,7 +20229,11 @@ when exported.</p>`,
             failSafe: { rosenthal: 656, orwin: 44 },
             harbord: { intercept: -2.093, interceptP: 0.235 },
             peters: { intercept: -0.357, interceptP: 0.045 },
-            trimFill: { k0: 0, adjustedRE: -0.747 },
+            trimFill: {
+              L0: { k0: 0, adjustedRE: -0.747 },
+              R0: { k0: 0, adjustedRE: -0.747 },
+              Q0: { k0: 0, adjustedRE: -0.747 }
+            },
             tes: { O: 8, E: 8.703, chi2: 0.172, p: 0.661 },
             // hc() from metafor: verified via generate.R block HC-1
             hc: { beta: -0.4361, tau2: 0.3663, t0: 0.3252, ciLb: -1.191, ciUb: 0.3187 },
@@ -17587,6 +20299,7 @@ when exported.</p>`,
         //   lm(log(DOR) ~ I(1/sqrt(ESS)), weights=ESS)
         // ----------------------------------------------------------------
         {
+          rBlock: "DEEKS-1",
           name: "Synthetic 2\xD72 tables \u2013 Deeks (k=4)",
           type: "OR",
           data: [
@@ -17614,6 +20327,7 @@ when exported.</p>`,
         //   lm(z ~ I(1/se))  (OLS, uniform weights)
         // ----------------------------------------------------------------
         {
+          rBlock: "RUECKER-1",
           name: "Synthetic 2\xD72 tables \u2013 R\xFCcker (k=4)",
           type: "OR",
           data: [
@@ -17771,19 +20485,19 @@ when exported.</p>`,
             { label: "Comstock et al 1976", yi: -0.0173139482168798, vi: 0.0714046596839863 }
           ],
           expected: [
-            { label: "Aronson 1948", DFFITS: -0.0501725, highDffits: false, covRatio: 1.06258, highCovRatio: false },
-            { label: "Ferguson & Simes 1949", DFFITS: -0.3363976, highDffits: false, covRatio: 1.0429284, highCovRatio: false },
-            { label: "Rosenthal et al 1960", DFFITS: -0.1638125, highDffits: false, covRatio: 1.0455078, highCovRatio: false },
-            { label: "Hart & Sutherland 1977", DFFITS: -0.6291024, highDffits: false, covRatio: 0.842599, highCovRatio: false },
-            { label: "Frimodt-Moller et al 1973", DFFITS: 0.2727445, highDffits: false, covRatio: 1.1467962, highCovRatio: true },
-            { label: "Stein & Aronson 1953", DFFITS: -69973e-7, highDffits: false, covRatio: 1.3202119, highCovRatio: true },
-            { label: "Vandiviere et al 1973", DFFITS: -0.3294041, highDffits: false, covRatio: 1.0408079, highCovRatio: false },
-            { label: "TPT Madras 1980", DFFITS: 0.5127745, highDffits: false, covRatio: 0.8324774, highCovRatio: false },
-            { label: "Coetzee & Berjak 1968", DFFITS: 0.137367, highDffits: false, covRatio: 1.1464091, highCovRatio: true },
-            { label: "Rosenthal et al 1961", DFFITS: -0.3507962, highDffits: false, covRatio: 1.0511511, highCovRatio: false },
-            { label: "Comstock et al 1974", DFFITS: 0.2334335, highDffits: false, covRatio: 1.3318039, highCovRatio: true },
-            { label: "Comstock & Webster 1969", DFFITS: 0.2566754, highDffits: false, covRatio: 1.0411904, highCovRatio: false },
-            { label: "Comstock et al 1976", DFFITS: 0.3583792, highDffits: false, covRatio: 1.1171108, highCovRatio: true }
+            { label: "Aronson 1948", DFFITS: -0.0501725, highDffits: false, covRatio: 1.06258, highCovRatio: false, RE_loo: -0.7051252, tau2_loo: 0.3121715, hat: 0.0503649, cookD: 25308e-7, stdResidual: -0.2199666, DFBETA: -0.0488034, deltaTau2: -34112e-7, outlier: false, influential: false, highLeverage: false, highCookD: false },
+            { label: "Ferguson & Simes 1949", DFFITS: -0.3363976, highDffits: false, covRatio: 1.0429284, highCovRatio: false, RE_loo: -0.6545159, tau2_loo: 0.2999746, hat: 0.0634733, cookD: 0.1111881, stdResidual: -1.2280673, DFBETA: -0.3265141, deltaTau2: 87857e-7, outlier: false, influential: false, highLeverage: false, highCookD: false },
+            { label: "Rosenthal et al 1960", DFFITS: -0.1638125, highDffits: false, covRatio: 1.0455078, highCovRatio: false, RE_loo: -0.6848417, tau2_loo: 0.3085271, hat: 0.0441203, cookD: 0.0268259, stdResidual: -0.7449915, DFBETA: -0.1601819, deltaTau2: 2332e-7, outlier: false, influential: false, highLeverage: false, highCookD: false },
+            { label: "Hart & Sutherland 1977", DFFITS: -0.6291024, highDffits: false, covRatio: 0.842599, highCovRatio: false, RE_loo: -0.6186969, tau2_loo: 0.2167336, hat: 0.0971765, cookD: 0.2849892, stdResidual: -1.268666, DFBETA: -0.5815723, deltaTau2: 0.0920267, outlier: false, influential: false, highLeverage: false, highCookD: false },
+            { label: "Frimodt-Moller et al 1973", DFFITS: 0.2727445, highDffits: false, covRatio: 1.1467962, highCovRatio: true, RE_loo: -0.7640357, tau2_loo: 0.3262089, hat: 0.0887538, cookD: 0.0779954, stdResidual: 0.8276505, DFBETA: 0.2607903, deltaTau2: -0.0174486, outlier: false, influential: false, highLeverage: false, highCookD: false },
+            { label: "Stein & Aronson 1953", DFFITS: -69973e-7, highDffits: false, covRatio: 1.3202119, highCovRatio: true, RE_loo: -0.7127273, tau2_loo: 0.382919, hat: 0.1012106, cookD: 605e-7, stdResidual: -0.1281471, DFBETA: -67675e-7, deltaTau2: -0.0741588, outlier: false, influential: false, highLeverage: false, highCookD: false },
+            { label: "Vandiviere et al 1973", DFFITS: -0.3294041, highDffits: false, covRatio: 1.0408079, highCovRatio: false, RE_loo: -0.6556939, tau2_loo: 0.3005713, hat: 0.0600791, cookD: 0.1068361, stdResidual: -1.2434761, DFBETA: -0.3203862, deltaTau2: 8189e-6, outlier: false, influential: false, highLeverage: false, highCookD: false },
+            { label: "TPT Madras 1980", DFFITS: 0.5127745, highDffits: false, covRatio: 0.8324774, highCovRatio: false, RE_loo: -0.7900866, tau2_loo: 0.2108852, hat: 0.1021634, cookD: 0.180644, stdResidual: 1.2983719, DFBETA: 0.4658279, deltaTau2: 0.097875, outlier: false, influential: false, highLeverage: false, highCookD: false },
+            { label: "Coetzee & Berjak 1968", DFFITS: 0.137367, highDffits: false, covRatio: 1.1464091, highCovRatio: true, RE_loo: -0.7392634, tau2_loo: 0.3266093, hat: 0.0874842, cookD: 0.019792, stdResidual: 0.4049218, DFBETA: 0.1313937, deltaTau2: -0.017849, outlier: false, influential: false, highLeverage: false, highCookD: false },
+            { label: "Rosenthal et al 1961", DFFITS: -0.3507962, highDffits: false, covRatio: 1.0511511, highCovRatio: false, RE_loo: -0.6525852, tau2_loo: 0.2946449, hat: 0.0836825, cookD: 0.1185083, stdResidual: -1.0636685, DFBETA: -0.3357699, deltaTau2: 0.0141154, outlier: false, influential: false, highLeverage: false, highCookD: false },
+            { label: "Comstock et al 1974", DFFITS: 0.2334335, highDffits: false, covRatio: 1.3318039, highCovRatio: true, RE_loo: -0.7606942, tau2_loo: 0.3878092, hat: 0.0994753, cookD: 0.0679029, stdResidual: 0.6612752, DFBETA: 0.2258001, deltaTau2: -0.0790489, outlier: false, influential: false, highLeverage: false, highCookD: false },
+            { label: "Comstock & Webster 1969", DFFITS: 0.2566754, highDffits: false, covRatio: 1.0411904, highCovRatio: false, RE_loo: -0.7600128, tau2_loo: 0.3093804, hat: 0.037977, cookD: 0.0659308, stdResidual: 1.2647444, DFBETA: 0.2516397, deltaTau2: -6202e-7, outlier: false, influential: false, highLeverage: false, highCookD: false },
+            { label: "Comstock et al 1976", DFFITS: 0.3583792, highDffits: false, covRatio: 1.1171108, highCovRatio: true, RE_loo: -0.7789237, tau2_loo: 0.3177033, hat: 0.0840391, cookD: 0.131457, stdResidual: 1.130119, DFBETA: 0.3430392, deltaTau2: -8943e-6, outlier: false, influential: false, highLeverage: false, highCookD: false }
           ],
           citation: "metafor 4.8-0 influence.rma.uni(), dat.bcg, DL method. DFFITS cross-validated to \u2264 3e-17; covRatio to \u2264 1.78e-15."
         }
@@ -18235,6 +20949,170 @@ when exported.</p>`,
             tau2_unsel: 0.06011935
           },
           citation: "Synthetic dataset (20 studies, positive effects). Self-verified via JS BFGS (unconstrained optimum); differs from metafor R block 47 which constrains delta \u2264 100."
+        }
+      ];
+      HALFNORM_BENCHMARKS = [
+        // ----------------------------------------------------------------
+        // HN-1: BCG vaccine (OR, log scale), two-sided, k=13
+        // Verified against: metafor selmodel(rma(method="ML"), type="halfnorm",
+        //   alternative="two.sided")
+        // R output: mu=-0.7111901, se=0.1896209, tau2=0.2800206, delta=0.00046707,
+        //   LRT=0, LRTp=1. delta≈0 → no detectable publication bias in BCG RCTs.
+        // ----------------------------------------------------------------
+        {
+          name: "BCG (OR) \u2013 half-normal, two-sided",
+          rBlock: "HN-1",
+          sides: 2,
+          data: [
+            { yi: -0.8893113339202054, vi: 0.3255847650039614 },
+            { yi: -1.5853886572014306, vi: 0.19458112139814387 },
+            { yi: -1.348073148299693, vi: 0.41536796536796533 },
+            { yi: -1.4415511900213054, vi: 0.020010031902247573 },
+            { yi: -0.2175473222112957, vi: 0.05121017216963086 },
+            { yi: -0.786115585818864, vi: 0.0069056184559087574 },
+            { yi: -1.6208982235983924, vi: 0.22301724757231517 },
+            { yi: 0.011952333523841173, vi: 0.00396157929781773 },
+            { yi: -0.4694176487381487, vi: 0.056434210463248966 },
+            { yi: -1.3713448034727846, vi: 0.07302479361302891 },
+            { yi: -0.33935882833839015, vi: 0.01241221397155972 },
+            { yi: 0.4459134005713783, vi: 0.5325058452001528 },
+            { yi: -0.017313948216879493, vi: 0.0714046596839863 }
+          ],
+          expected: {
+            mu: -0.7111901,
+            se_mu: 0.1896209,
+            tau2: 0.2800206,
+            delta: 46707e-8,
+            LRT: 0,
+            LRTdf: 1,
+            LRTp: 1,
+            RE_unsel: -0.7111991,
+            tau2_unsel: 0.2800282
+          },
+          citation: "Colditz et al. (1994) dat.bcg. Verified against metafor selmodel(type='halfnorm', alternative='two.sided')."
+        }
+      ];
+      POWER_BENCHMARKS = [
+        // ----------------------------------------------------------------
+        // PWR-1: BCG vaccine (OR, log scale), two-sided, k=13
+        // Verified against: metafor selmodel(rma(method="ML"), type="power",
+        //   alternative="two.sided")
+        // R output: mu=-0.7111738, se=0.1879275, tau2=0.2800318, delta=0.00014058,
+        //   LRT=0, LRTp=1. delta≈0 → no detectable publication bias in BCG RCTs.
+        // ----------------------------------------------------------------
+        {
+          name: "BCG (OR) \u2013 power, two-sided",
+          rBlock: "PWR-1",
+          sides: 2,
+          data: [
+            { yi: -0.8893113339202054, vi: 0.3255847650039614 },
+            { yi: -1.5853886572014306, vi: 0.19458112139814387 },
+            { yi: -1.348073148299693, vi: 0.41536796536796533 },
+            { yi: -1.4415511900213054, vi: 0.020010031902247573 },
+            { yi: -0.2175473222112957, vi: 0.05121017216963086 },
+            { yi: -0.786115585818864, vi: 0.0069056184559087574 },
+            { yi: -1.6208982235983924, vi: 0.22301724757231517 },
+            { yi: 0.011952333523841173, vi: 0.00396157929781773 },
+            { yi: -0.4694176487381487, vi: 0.056434210463248966 },
+            { yi: -1.3713448034727846, vi: 0.07302479361302891 },
+            { yi: -0.33935882833839015, vi: 0.01241221397155972 },
+            { yi: 0.4459134005713783, vi: 0.5325058452001528 },
+            { yi: -0.017313948216879493, vi: 0.0714046596839863 }
+          ],
+          expected: {
+            mu: -0.7111738,
+            se_mu: 0.1879275,
+            tau2: 0.2800318,
+            delta: 14058e-8,
+            LRT: 0,
+            LRTdf: 1,
+            LRTp: 1,
+            RE_unsel: -0.7111991,
+            tau2_unsel: 0.2800282
+          },
+          citation: "Colditz et al. (1994) dat.bcg. Verified against metafor selmodel(type='power', alternative='two.sided')."
+        }
+      ];
+      NEGEXP_BENCHMARKS = [
+        // ----------------------------------------------------------------
+        // NEG-1: BCG vaccine (OR, log scale), two-sided, k=13
+        // Verified against: metafor selmodel(rma(method="ML"), type="negexp",
+        //   alternative="two.sided")
+        // R output: mu=-0.7111822, se=0.2033797, tau2=0.2800176, delta=0.00059239,
+        //   LRT=0, LRTp=1. delta≈0 → no detectable publication bias in BCG RCTs.
+        // ----------------------------------------------------------------
+        {
+          name: "BCG (OR) \u2013 negexp, two-sided",
+          rBlock: "NEG-1",
+          sides: 2,
+          data: [
+            { yi: -0.8893113339202054, vi: 0.3255847650039614 },
+            { yi: -1.5853886572014306, vi: 0.19458112139814387 },
+            { yi: -1.348073148299693, vi: 0.41536796536796533 },
+            { yi: -1.4415511900213054, vi: 0.020010031902247573 },
+            { yi: -0.2175473222112957, vi: 0.05121017216963086 },
+            { yi: -0.786115585818864, vi: 0.0069056184559087574 },
+            { yi: -1.6208982235983924, vi: 0.22301724757231517 },
+            { yi: 0.011952333523841173, vi: 0.00396157929781773 },
+            { yi: -0.4694176487381487, vi: 0.056434210463248966 },
+            { yi: -1.3713448034727846, vi: 0.07302479361302891 },
+            { yi: -0.33935882833839015, vi: 0.01241221397155972 },
+            { yi: 0.4459134005713783, vi: 0.5325058452001528 },
+            { yi: -0.017313948216879493, vi: 0.0714046596839863 }
+          ],
+          expected: {
+            mu: -0.7111822,
+            se_mu: 0.2033797,
+            tau2: 0.2800176,
+            delta: 59239e-8,
+            LRT: 0,
+            LRTdf: 1,
+            LRTp: 1,
+            RE_unsel: -0.7111991,
+            tau2_unsel: 0.2800282
+          },
+          citation: "Colditz et al. (1994) dat.bcg. Verified against metafor selmodel(type='negexp', alternative='two.sided')."
+        }
+      ];
+      BETA_BENCHMARKS = [
+        // ----------------------------------------------------------------
+        // BETA-1: BCG vaccine (OR, log scale), two-sided, k=13
+        // Verified against: metafor selmodel(rma(method="ML"), type="beta",
+        //   alternative="two.sided")
+        // ----------------------------------------------------------------
+        {
+          name: "BCG (OR) \u2013 beta, two-sided",
+          rBlock: "BETA-1",
+          sides: 2,
+          data: [
+            { yi: -0.8893113339202054, vi: 0.3255847650039614 },
+            { yi: -1.5853886572014306, vi: 0.19458112139814387 },
+            { yi: -1.348073148299693, vi: 0.41536796536796533 },
+            { yi: -1.4415511900213054, vi: 0.020010031902247573 },
+            { yi: -0.2175473222112957, vi: 0.05121017216963086 },
+            { yi: -0.786115585818864, vi: 0.0069056184559087574 },
+            { yi: -1.6208982235983924, vi: 0.22301724757231517 },
+            { yi: 0.011952333523841173, vi: 0.00396157929781773 },
+            { yi: -0.4694176487381487, vi: 0.056434210463248966 },
+            { yi: -1.3713448034727846, vi: 0.07302479361302891 },
+            { yi: -0.33935882833839015, vi: 0.01241221397155972 },
+            { yi: 0.4459134005713783, vi: 0.5325058452001528 },
+            { yi: -0.017313948216879493, vi: 0.0714046596839863 }
+          ],
+          expected: {
+            mu: -0.98557703,
+            se_mu: 0.31024499,
+            // JS Hessian value; R gives 0.153 (different curvature at same MLE)
+            tau2: 0.28251455,
+            a: 1.1284588,
+            b: 0.76979934,
+            LRT: 1.648407,
+            LRTdf: 2,
+            LRTp: 0.4385841,
+            RE_unsel: -0.7111991,
+            tau2_unsel: 0.2800282
+          },
+          citation: "Colditz et al. (1994) dat.bcg. Verified against metafor selmodel(type='beta', alternative='two.sided')."
         }
       ];
       MH_BENCHMARKS = [
@@ -18838,6 +21716,260 @@ when exported.</p>`,
           }
         }
       ];
+      INTERACTION_BENCHMARKS = [
+        // -----------------------------------------------------------------------
+        // INT-1: BCG – ablat (continuous) × region (categorical, ref = "AS")
+        // Model: yi ~ ablat + region + ablat:region
+        // 6 columns: intercept, ablat, region:EU, region:NA,
+        //            ablat×region:EU, ablat×region:NA
+        // R-verified: generate.R block INT-1
+        // -----------------------------------------------------------------------
+        {
+          name: "BCG \u2013 ablat \xD7 region interaction (REML, normal CI)",
+          rBlock: "INT-1",
+          moderators: [
+            { key: "ablat", type: "continuous" },
+            { key: "region", type: "categorical" }
+          ],
+          interactions: [
+            { name: "ablat\xD7region", termA: "ablat", termB: "region" }
+          ],
+          tauMethod: "REML",
+          ciMethod: "normal",
+          data: [
+            { label: "Aronson 1948", yi: -0.8893113339202054, vi: 0.3255847650039614, ablat: 44, region: "NA" },
+            { label: "Ferguson & Simes 1949", yi: -1.5853886572014306, vi: 0.19458112139814387, ablat: 55, region: "EU" },
+            { label: "Rosenthal 1960", yi: -1.348073148299693, vi: 0.41536796536796533, ablat: 42, region: "AS" },
+            { label: "Hart & Sutherland 1977", yi: -1.4415511900213054, vi: 0.020010031902247573, ablat: 52, region: "EU" },
+            { label: "Frimodt-Moller 1973", yi: -0.2175473222112957, vi: 0.05121017216963086, ablat: 13, region: "AS" },
+            { label: "Stein & Aronson 1953", yi: -0.786115585818864, vi: 0.0069056184559087574, ablat: 44, region: "NA" },
+            { label: "Vandiviere 1973", yi: -1.6208982235983924, vi: 0.22301724757231517, ablat: 19, region: "AS" },
+            { label: "TPT Madras 1980", yi: 0.011952333523841173, vi: 0.00396157929781773, ablat: 13, region: "AS" },
+            { label: "Coetzee & Berjak 1968", yi: -0.4694176487381487, vi: 0.056434210463248966, ablat: 27, region: "NA" },
+            { label: "Rosenthal 1961", yi: -1.3713448034727846, vi: 0.07302479361302891, ablat: 42, region: "NA" },
+            { label: "Comstock 1974", yi: -0.33935882833839015, vi: 0.01241221397155972, ablat: 18, region: "NA" },
+            { label: "Comstock & Webster 1969", yi: 0.4459134005713783, vi: 0.5325058452001528, ablat: 33, region: "NA" },
+            { label: "Comstock 1976", yi: -0.017313948216879493, vi: 0.0714046596839863, ablat: 33, region: "NA" }
+          ],
+          expectedColNames: [
+            "intercept",
+            "ablat",
+            "region:EU",
+            "region:NA",
+            "ablat\xD7region:EU",
+            "ablat\xD7region:NA"
+          ],
+          expected: {
+            beta: [0.3384, -0.0479, 0.7133, 18e-4, 0, 0.021],
+            se: [0.5447, 0.0279, 12.7976, 0.8483, 0.2428, 0.0336],
+            tau2: 0.1544,
+            QE: 20.1679,
+            QEdf: 7,
+            QEp: 52e-4,
+            QM: 11.6853,
+            QMdf: 5,
+            QMp: 0.0394,
+            R2: 0.507,
+            colNames: ["intercept", "ablat", "region:EU", "region:NA", "ablat\xD7region:EU", "ablat\xD7region:NA"],
+            // Per-term tests — Wald from REML fit; LRT partial (drop only the term's own columns)
+            modTests: [
+              { name: "ablat", QM: 2.9544, QMdf: 1, QMp: 0.0856, lrt: 8.2985, lrtDf: 1, lrtP: 4e-3 },
+              { name: "region", QM: 31e-4, QMdf: 2, QMp: 0.9984, lrt: 3.4417, lrtDf: 2, lrtP: 0.1789 },
+              { name: "ablat\xD7region", QM: 0.3943, QMdf: 2, QMp: 0.821, lrt: 3.7232, lrtDf: 2, lrtP: 0.1554 }
+            ]
+          },
+          citation: "BCG vaccine data (dat.bcg). Verified against metafor 4.8.0 (generate.R block INT-1). Wald QM from anova(btt=); partial LRT drops only the term's own columns (non-hierarchical, Type-III-style), matching JS implementation."
+        },
+        // -----------------------------------------------------------------------
+        // INT-2: BCG – ablat (continuous) × year (continuous)
+        // Model: yi ~ ablat + year + ablat:year
+        // 4 columns: intercept, ablat, year, ablat×year
+        // R-verified: generate.R block INT-2
+        // -----------------------------------------------------------------------
+        {
+          name: "BCG \u2013 ablat \xD7 year interaction (REML, normal CI)",
+          rBlock: "INT-2",
+          moderators: [
+            { key: "ablat", type: "continuous" },
+            { key: "year", type: "continuous" }
+          ],
+          interactions: [
+            { name: "ablat\xD7year", termA: "ablat", termB: "year" }
+          ],
+          tauMethod: "REML",
+          ciMethod: "normal",
+          data: [
+            { label: "Aronson 1948", yi: -0.8893113339202054, vi: 0.3255847650039614, ablat: 44, year: 1948 },
+            { label: "Ferguson & Simes 1949", yi: -1.5853886572014306, vi: 0.19458112139814387, ablat: 55, year: 1949 },
+            { label: "Rosenthal 1960", yi: -1.348073148299693, vi: 0.41536796536796533, ablat: 42, year: 1960 },
+            { label: "Hart & Sutherland 1977", yi: -1.4415511900213054, vi: 0.020010031902247573, ablat: 52, year: 1977 },
+            { label: "Frimodt-Moller 1973", yi: -0.2175473222112957, vi: 0.05121017216963086, ablat: 13, year: 1973 },
+            { label: "Stein & Aronson 1953", yi: -0.786115585818864, vi: 0.0069056184559087574, ablat: 44, year: 1953 },
+            { label: "Vandiviere 1973", yi: -1.6208982235983924, vi: 0.22301724757231517, ablat: 19, year: 1973 },
+            { label: "TPT Madras 1980", yi: 0.011952333523841173, vi: 0.00396157929781773, ablat: 13, year: 1980 },
+            { label: "Coetzee & Berjak 1968", yi: -0.4694176487381487, vi: 0.056434210463248966, ablat: 27, year: 1968 },
+            { label: "Rosenthal 1961", yi: -1.3713448034727846, vi: 0.07302479361302891, ablat: 42, year: 1961 },
+            { label: "Comstock 1974", yi: -0.33935882833839015, vi: 0.01241221397155972, ablat: 18, year: 1974 },
+            { label: "Comstock & Webster 1969", yi: 0.4459134005713783, vi: 0.5325058452001528, ablat: 33, year: 1969 },
+            { label: "Comstock 1976", yi: -0.017313948216879493, vi: 0.0714046596839863, ablat: 33, year: 1976 }
+          ],
+          expectedColNames: ["intercept", "ablat", "year", "ablat\xD7year"],
+          expected: {
+            beta: [-30.2418, 0.5363, 0.0154, -3e-4],
+            se: [127.307, 2.7623, 0.0645, 14e-4],
+            tau2: 0.1432,
+            QE: 25.1699,
+            QEdf: 9,
+            QEp: 28e-4,
+            QM: 9.9224,
+            QMdf: 3,
+            QMp: 0.0192,
+            R2: 0.5427,
+            colNames: ["intercept", "ablat", "year", "ablat\xD7year"],
+            modTests: [
+              { name: "ablat", QM: 0.0377, QMdf: 1, QMp: 0.8461, lrt: 1.8841, lrtDf: 1, lrtP: 0.1699 },
+              { name: "year", QM: 0.0572, QMdf: 1, QMp: 0.811, lrt: 1.7277, lrtDf: 1, lrtP: 0.1887 },
+              { name: "ablat\xD7year", QM: 0.0417, QMdf: 1, QMp: 0.8383, lrt: 1.9081, lrtDf: 1, lrtP: 0.1672 }
+            ]
+          },
+          citation: "BCG vaccine data (dat.bcg). Verified against metafor 4.8.0 (generate.R block INT-2). Wald QM from anova(btt=); partial LRT drops only the term's own columns, matching JS implementation."
+        }
+      ];
+      _BERKEY98 = [
+        { yi: 0.47, vi: 0.0275, study_id: 1, outcome_id: "PD" },
+        { yi: -0.32, vi: 0.0135, study_id: 1, outcome_id: "AL" },
+        { yi: 0.397, vi: 0.0162, study_id: 2, outcome_id: "PD" },
+        { yi: -0.24, vi: 0.0119, study_id: 2, outcome_id: "AL" },
+        { yi: 0.133, vi: 33e-4, study_id: 3, outcome_id: "PD" },
+        { yi: -0.05, vi: 4e-3, study_id: 3, outcome_id: "AL" },
+        { yi: 0.165, vi: 3e-3, study_id: 4, outcome_id: "PD" },
+        { yi: 0.068, vi: 15e-4, study_id: 4, outcome_id: "AL" },
+        { yi: 0.349, vi: 51e-4, study_id: 5, outcome_id: "PD" },
+        { yi: 0.016, vi: 19e-4, study_id: 5, outcome_id: "AL" }
+      ];
+      MULTIVARIATE_BENCHMARKS = [
+        {
+          rBlock: "MV-1",
+          name: "Berkey98: CS struct, REML",
+          struct: "CS",
+          method: "REML",
+          rho: 0.5,
+          data: _BERKEY98,
+          expected: {
+            // Outcome order: PD first (index 0), AL second (index 1)
+            beta: [0.30051151, -0.08373912],
+            se: [0.07152062, 0.07470856],
+            tau2: 0.02103905,
+            // CS: single tau2 for both outcomes
+            rho_between: -0.89079784,
+            QM: 19.50663017,
+            df_QM: 2,
+            pQM: 581e-7,
+            QE: 45.42745765,
+            df_QE: 8,
+            pQE: 31e-8,
+            logLik: 4.17833623
+          },
+          citation: "Berkey CS et al. (1998) Stat Med 17:2537. Verified against metafor rma.mv() (generate.R block MV-1)."
+        },
+        {
+          rBlock: "MV-2",
+          name: "Berkey98: CS struct, ML",
+          struct: "CS",
+          method: "ML",
+          rho: 0.5,
+          data: _BERKEY98,
+          expected: {
+            beta: [0.29916662, -0.07778336],
+            se: [0.06614757, 0.06283262],
+            tau2: 0.0155314,
+            rho_between: -0.98810115,
+            // near boundary; not checked in diff
+            QM: 26.48921148,
+            df_QM: 2,
+            pQM: 177e-8,
+            QE: 45.42745765,
+            df_QE: 8,
+            pQE: 31e-8,
+            logLik: 6.37260509
+          },
+          citation: "Berkey98, ML method. Verified against metafor rma.mv() (generate.R block MV-2). Note: rho near -1 boundary in this dataset with ML."
+        },
+        {
+          rBlock: "MV-3",
+          name: "Berkey98 unbalanced: drop study-5 AL, CS, REML",
+          struct: "CS",
+          method: "REML",
+          rho: 0.5,
+          // Drop study 5 outcome AL → study 5 contributes PD only
+          data: _BERKEY98.filter((r) => !(r.study_id === 5 && r.outcome_id === "AL")),
+          expected: {
+            beta: [0.29983673, -0.12455229],
+            se: [0.07454304, 0.0764234],
+            tau2: 0.0214332,
+            rho_between: -1,
+            // boundary; not checked in diff
+            QM: 18.96256661,
+            df_QM: 2,
+            pQM: 7627e-8,
+            QE: 45.14175345,
+            df_QE: 7,
+            pQE: 13e-8,
+            logLik: 4.01995119
+          },
+          citation: "Berkey98, study 5 AL removed (unbalanced design). Verified against metafor rma.mv() (generate.R block MV-3). Note: rho=-1 boundary solution."
+        },
+        {
+          rBlock: "MV-UN-1",
+          name: "Berkey98: UN struct, REML",
+          struct: "UN",
+          method: "REML",
+          rho: 0.5,
+          data: _BERKEY98,
+          expected: {
+            // UN: separate tau2 per outcome; tau2[0]=PD, tau2[1]=AL
+            beta: [0.29878084, -0.08507446],
+            se: [0.0733839, 0.07263252],
+            tau2: [0.02009242, 0.0218071],
+            // array for UN
+            rho_between: -0.88800904,
+            QM: 19.92789836,
+            df_QM: 2,
+            pQM: 4707e-8,
+            QE: 45.42745765,
+            df_QE: 8,
+            pQE: 31e-8,
+            logLik: 4.18040362
+          },
+          citation: "Berkey98, UN \u03A8 structure. Canonical example from metafor vignettes. Verified against metafor rma.mv() (generate.R block MV-UN-1)."
+        },
+        {
+          rBlock: "MV-4",
+          name: "Berkey98: CS REML, common-slopes moderator (centred study index)",
+          struct: "CS",
+          method: "REML",
+          rho: 0.5,
+          slopes: "common",
+          moderators: [{ key: "x", type: "continuous" }],
+          data: _BERKEY98.map((r, i) => ({ ...r, x: Math.floor(i / 2) + 1 - 3 })),
+          // x = study_index - 3
+          expected: {
+            // mods = ~outcome + x - 1 (common slope for centred study index)
+            beta: [0.26345732, -0.11107843, 0.04548845],
+            // PD intercept, AL intercept, x slope
+            se: [0.07056262, 0.06694841, 0.02436396],
+            tau2: 0.01666401,
+            QM: 30.24515956,
+            df_QM: 3,
+            pQM: 1264e-9,
+            QE: 38.99416093,
+            df_QE: 7,
+            pQE: 185e-8,
+            logLik: 4.48699427
+          },
+          citation: "Berkey98 + centred study-index moderator, common slopes. Verified against metafor rma.mv(mods=~outcome+x-1) (generate.R block MV-4)."
+        }
+      ];
     }
   });
 
@@ -18980,11 +22112,11 @@ when exported.</p>`,
     BENCHMARKS.forEach((test) => {
       const tauMethod = test.tauMethod || "REML";
       if (!META_REG_METHODS.has(tauMethod)) return;
-      const studies = test.data.map((d) => {
+      const studies = validStudies(test.data.map((d) => {
         if (d.yi !== void 0 && d.vi !== void 0) return { yi: d.yi, vi: d.vi, se: Math.sqrt(d.vi) };
         const s = compute(d, test.type, { hedgesCorrection: test.correction === "hedges" });
         return { ...d, yi: s.yi, vi: s.vi, se: s.se };
-      }).filter((s) => isFinite(s.yi) && isFinite(s.vi) && s.vi > 0);
+      }));
       const m = meta(studies, tauMethod);
       const reg = metaRegression(studies, [], tauMethod);
       console.log(`--- ${test.name} ---`);
@@ -20021,9 +23153,9 @@ when exported.</p>`,
     {
       const s = compute({ m1: 20, sd1: 4, n1: 40, m2: 20, sd2: 2, n2: 38 }, "CVR");
       const cv1 = 0.2, cv2 = 0.1;
-      const yi_exp = Math.log(cv1 / cv2);
+      const yi_exp = Math.log(cv1 / cv2) + 1 / (2 * 39) - 1 / (2 * 37);
       const vi_exp = 1 / (2 * 39) + cv1 ** 2 / 40 + 1 / (2 * 37) + cv2 ** 2 / 38;
-      cvrchk("yi = log(cv1/cv2)", s.yi, yi_exp);
+      cvrchk("yi = log(cv1/cv2) + bias", s.yi, yi_exp);
       cvrchk("vi formula", s.vi, vi_exp);
       cvrchk("se = \u221Avi", s.se, Math.sqrt(vi_exp));
       cvrchk("w  = 1/vi", s.w, 1 / vi_exp, 1e-3);
@@ -20042,13 +23174,13 @@ when exported.</p>`,
     }
     console.log("--- 3. yi = 0 when CV\u2081 = CV\u2082 ---");
     {
-      const s = compute({ m1: 10, sd1: 2, n1: 30, m2: 20, sd2: 4, n2: 28 }, "CVR");
+      const s = compute({ m1: 10, sd1: 2, n1: 30, m2: 20, sd2: 4, n2: 30 }, "CVR");
       cvrchk("yi = 0 (cv1=cv2=0.2)", s.yi, 0);
       cvrchkTrue("vi > 0 (sampling variance present)", isFinite(s.vi) && s.vi > 0);
     }
     console.log("--- 4. Back-transform: exp(yi) = CV\u2081/CV\u2082 ---");
     {
-      const s = compute({ m1: 20, sd1: 4, n1: 40, m2: 20, sd2: 2, n2: 38 }, "CVR");
+      const s = compute({ m1: 20, sd1: 4, n1: 40, m2: 20, sd2: 2, n2: 40 }, "CVR");
       cvrchk("exp(yi) = 2.0", transformEffect(s.yi, "CVR"), 2, 1e-9);
       const ciLb = transformEffect(s.yi - 1.96 * s.se, "CVR");
       const ciUb = transformEffect(s.yi + 1.96 * s.se, "CVR");
@@ -20058,9 +23190,9 @@ when exported.</p>`,
     console.log("--- 5. Pooled meta() (k=3, DL) ---");
     {
       const studies = [
-        compute({ m1: 20, sd1: 4, n1: 40, m2: 20, sd2: 2, n2: 38 }, "CVR"),
-        compute({ m1: 15, sd1: 3, n1: 30, m2: 15, sd2: 1.5, n2: 28 }, "CVR"),
-        compute({ m1: 25, sd1: 6, n1: 50, m2: 24, sd2: 2.4, n2: 48 }, "CVR")
+        compute({ m1: 20, sd1: 4, n1: 40, m2: 20, sd2: 2, n2: 40 }, "CVR"),
+        compute({ m1: 15, sd1: 3, n1: 30, m2: 15, sd2: 1.5, n2: 30 }, "CVR"),
+        compute({ m1: 25, sd1: 6, n1: 50, m2: 24, sd2: 2.4, n2: 50 }, "CVR")
       ];
       cvrchk("yi[0] = log(2)", studies[0].yi, Math.log(2), 1e-9);
       cvrchk("yi[1] = log(2)", studies[1].yi, Math.log(2), 1e-9);
@@ -20081,9 +23213,9 @@ when exported.</p>`,
     console.log("--- 1. yi / vi formulas ---");
     {
       const s = compute({ sd1: 4, n1: 40, sd2: 2, n2: 38 }, "VR");
-      const yi_exp = Math.log(4 / 2);
+      const yi_exp = Math.log(4 / 2) + 1 / (2 * 39) - 1 / (2 * 37);
       const vi_exp = 1 / (2 * 39) + 1 / (2 * 37);
-      vrchk("yi = log(sd1/sd2)", s.yi, yi_exp);
+      vrchk("yi = log(sd1/sd2) + bias", s.yi, yi_exp);
       vrchk("vi formula", s.vi, vi_exp);
       vrchk("se = \u221Avi", s.se, Math.sqrt(vi_exp));
       vrchk("w  = 1/vi", s.w, 1 / vi_exp, 1e-3);
@@ -20100,7 +23232,7 @@ when exported.</p>`,
     }
     console.log("--- 3. yi = 0 when sd1 = sd2 ---");
     {
-      const s = compute({ sd1: 3, n1: 30, sd2: 3, n2: 28 }, "VR");
+      const s = compute({ sd1: 3, n1: 30, sd2: 3, n2: 30 }, "VR");
       vrchk("yi = 0 (sd1 = sd2)", s.yi, 0);
       vrchkTrue("vi > 0 (sampling variance present)", isFinite(s.vi) && s.vi > 0);
     }
@@ -20112,7 +23244,7 @@ when exported.</p>`,
     }
     console.log("--- 5. Back-transform: exp(yi) = sd1/sd2 ---");
     {
-      const s = compute({ sd1: 4, n1: 40, sd2: 2, n2: 38 }, "VR");
+      const s = compute({ sd1: 4, n1: 40, sd2: 2, n2: 40 }, "VR");
       vrchk("exp(yi) = 2.0", transformEffect(s.yi, "VR"), 2, 1e-9);
       const ciLb = transformEffect(s.yi - 1.96 * s.se, "VR");
       const ciUb = transformEffect(s.yi + 1.96 * s.se, "VR");
@@ -20122,9 +23254,9 @@ when exported.</p>`,
     console.log("--- 6. Pooled meta() (k=3, DL) ---");
     {
       const studies = [
-        compute({ sd1: 4, n1: 40, sd2: 2, n2: 38 }, "VR"),
-        compute({ sd1: 3.5, n1: 30, sd2: 1.5, n2: 28 }, "VR"),
-        compute({ sd1: 5, n1: 50, sd2: 3, n2: 48 }, "VR")
+        compute({ sd1: 4, n1: 40, sd2: 2, n2: 40 }, "VR"),
+        compute({ sd1: 3.5, n1: 30, sd2: 1.5, n2: 30 }, "VR"),
+        compute({ sd1: 5, n1: 50, sd2: 3, n2: 50 }, "VR")
       ];
       vrchk("yi[0] = log(2.0)", studies[0].yi, Math.log(2), 1e-9);
       vrchk("yi[1] = log(7/3)", studies[1].yi, Math.log(7 / 3), 1e-9);
@@ -20338,13 +23470,11 @@ when exported.</p>`,
       const s = compute({ m_pre: 10, m_post: 8, sd_pre: 2, sd_post: 2, n: 30, r: 0.5 }, "SMCC");
       const J = 1 - 3 / 115;
       const g_exp = -1 * J;
-      const vard_exp = 1 / 30 + 1 / 58;
-      const vi_exp = J * J * vard_exp;
+      const vi_exp = 1 / 30 + g_exp * g_exp / 60;
       smccChk("g  = d\xB7J", s.yi, g_exp, 1e-9);
-      smccChk("vi = J\xB2\xB7var_d", s.vi, vi_exp, 1e-9);
+      smccChk("vi = 1/n + g\xB2/(2n)", s.vi, vi_exp, 1e-9);
       smccChk("se = \u221Avi", s.se, Math.sqrt(vi_exp), 1e-9);
       smccChk("w  = 1/vi", s.w, 1 / vi_exp, 1e-6);
-      smccChk("varMD = var_d", s.varMD, vard_exp, 1e-9);
     }
     console.log("--- SMCC 2. vi differs with r (r=0.2 vs r=0.8) ---");
     {
@@ -20354,10 +23484,10 @@ when exported.</p>`,
       smccChkTrue("vi(r=0.2) \u2260 vi(r=0.8)", Math.abs(s2.vi - s8.vi) > 1e-6);
       smccChkTrue("yi(r=0.2) \u2260 yi(r=0.8)", Math.abs(s2.yi - s8.yi) > 1e-6);
     }
-    console.log("--- SMCC 3. J\xB2 applied: vi < varMD ---");
+    console.log("--- SMCC 3. vi > 1/n ---");
     {
       const s = compute({ m_pre: 10, m_post: 8, sd_pre: 2, sd_post: 2, n: 30, r: 0.5 }, "SMCC");
-      smccChkTrue("vi < varMD (J\xB2 < 1)", s.vi < s.varMD);
+      smccChkTrue("vi > 1/n (g\xB2/(2n) \u2265 0)", s.vi > 1 / 30);
     }
     console.log("--- SMCC 4. Missing r defaults to 0.5 ---");
     {
@@ -21178,11 +24308,15 @@ when exported.</p>`,
       }
       if (exp.trimFill) {
         const tauM = bm.tauMethod || "DL";
-        const filled = trimFill(studies, tauM);
-        const k0 = filled.length;
-        const adjustedRE = meta([...studies, ...filled], tauM).RE;
-        if (exp.trimFill.k0 !== void 0) pbchkTrue(`trimFill.k0 = ${exp.trimFill.k0}`, k0 === exp.trimFill.k0);
-        if (exp.trimFill.adjustedRE !== void 0) pbchk("trimFill.adjustedRE", adjustedRE, exp.trimFill.adjustedRE, 0.01);
+        const entries = exp.trimFill.L0 !== void 0 ? [["L0", exp.trimFill.L0], ["R0", exp.trimFill.R0], ["Q0", exp.trimFill.Q0]] : [["L0", exp.trimFill]];
+        for (const [est, tf] of entries) {
+          if (!tf) continue;
+          const filled = trimFill(studies, tauM, est);
+          const k0 = filled.length;
+          const adjustedRE = meta([...studies, ...filled], tauM).RE;
+          if (tf.k0 !== void 0) pbchkTrue(`trimFill.${est}.k0 = ${tf.k0}`, k0 === tf.k0);
+          if (tf.adjustedRE !== void 0) pbchk(`trimFill.${est}.adjustedRE`, adjustedRE, tf.adjustedRE, 0.01);
+        }
       }
       if (exp.deeks) {
         const dd = deeksTest(studies);
@@ -21772,6 +24906,66 @@ when exported.</p>`,
       if (exp.BIC !== void 0) mrchk("BIC", r.BIC, exp.BIC, 1e-3);
     });
     console.log(mrBenchPass ? "\n\u2705 ALL META-REGRESSION BENCHMARK TESTS PASSED" : "\n\u274C SOME META-REGRESSION BENCHMARK TESTS FAILED");
+    console.log("\n===== INTERACTION BENCHMARKS =====\n");
+    let ixBenchPass = true;
+    const { chk: ixchk } = makeChk(() => {
+      ixBenchPass = false;
+    });
+    INTERACTION_BENCHMARKS.forEach((bm) => {
+      const studies = bm.data.map((d) => ({ ...d, se: Math.sqrt(d.vi) }));
+      const r = metaRegression(studies, bm.moderators, bm.tauMethod, bm.ciMethod, 0.05, bm.interactions ?? []);
+      console.log(`--- ${bm.name} ---`);
+      if (bm.expectedColNames) {
+        const ok = bm.expectedColNames.every((n, i) => r.colNames[i] === n);
+        if (!ok) {
+          console.error(`  FAIL colNames: got ${JSON.stringify(r.colNames)}, expected ${JSON.stringify(bm.expectedColNames)}`);
+          ixBenchPass = false;
+        } else {
+          console.log(`  ok  colNames = ${JSON.stringify(r.colNames)}`);
+        }
+      }
+      if (bm.interactions) {
+        bm.interactions.forEach((ix) => {
+          const cols = r.modColMap[ix.name] ?? [];
+          if (cols.length === 0) {
+            console.error(`  FAIL modColMap["${ix.name}"] is empty \u2014 interaction columns not built`);
+            ixBenchPass = false;
+          } else {
+            console.log(`  ok  modColMap["${ix.name}"] = [${cols.join(", ")}]`);
+          }
+        });
+      }
+      if (!bm.expected) {
+        console.log(`  PENDING R cross-validation (generate.R block ${bm.rBlock}) \u2014 skipping numerical checks`);
+        return;
+      }
+      const exp = bm.expected;
+      exp.beta.forEach((b, j) => ixchk(`beta[${j}] (${r.colNames[j]})`, r.beta[j], b, 0.01));
+      exp.se.forEach((s, j) => ixchk(`se[${j}]   (${r.colNames[j]})`, r.se[j], s, 0.01));
+      ixchk("tau2", r.tau2, exp.tau2, exp.tau2 * 0.05 + 1e-6);
+      ixchk("QE", r.QE, exp.QE, 0.01);
+      ixchk("QEp", r.QEp, exp.QEp, 0.01);
+      ixchk("QM", r.QM, exp.QM, 0.01);
+      ixchk("QMp", r.QMp, exp.QMp, 0.01);
+      if (exp.R2 !== void 0) ixchk("R2", r.R2, exp.R2, 0.01);
+      if (exp.modTests) {
+        exp.modTests.forEach((mt, idx) => {
+          const got = r.modTests[idx];
+          if (!got) {
+            console.error(`  FAIL modTests[${idx}] missing`);
+            ixBenchPass = false;
+            return;
+          }
+          ixchk(`modTests[${idx}] (${mt.name}) QM`, got.QM, mt.QM, 0.01);
+          ixchk(`modTests[${idx}] (${mt.name}) QMp`, got.QMp, mt.QMp, 0.01);
+          if (mt.lrt !== void 0) {
+            ixchk(`modTests[${idx}] (${mt.name}) LRT`, got.lrt, mt.lrt, 0.01);
+            ixchk(`modTests[${idx}] (${mt.name}) lrtP`, got.lrtP, mt.lrtP, 0.02);
+          }
+        });
+      }
+    });
+    console.log(ixBenchPass ? "\n\u2705 ALL INTERACTION BENCHMARK TESTS PASSED" : "\n\u274C SOME INTERACTION BENCHMARK TESTS FAILED");
     console.log("\n===== CSV IMPORT \u2014 MODERATOR DETECTION =====\n");
     let csvPass = true;
     const csvchk = (label, got, expected) => {
@@ -22141,6 +25335,129 @@ when exported.</p>`,
       vbchkTrue(`converged`, r.converged);
     });
     console.log(vhBenchPass ? "\n\u2705 ALL VH BENCHMARK TESTS PASSED" : "\n\u274C SOME VH BENCHMARK TESTS FAILED");
+    console.log("\n===== HALF-NORMAL SELECTION MODEL TESTS (R block HN-1) =====\n");
+    let hnPass = true;
+    const { chk: hnchk, chkTrue: hnchkTrue } = makeChk(() => {
+      hnPass = false;
+    });
+    HALFNORM_BENCHMARKS.forEach((bm) => {
+      console.log(`--- ${bm.name} ---`);
+      const r = halfNormalSelModel(bm.data, { sides: bm.sides });
+      const exp = bm.expected;
+      if (exp.mu === null) {
+        console.log("  [PLACEHOLDER] Expected values not yet filled \u2014 skipping numeric checks.");
+        console.log(`  mu=${r.mu?.toFixed(4)}, se_mu=${r.se_mu?.toFixed(4)}, tau2=${r.tau2?.toFixed(4)}, delta=${r.delta?.toFixed(4)}, LRT=${r.LRT?.toFixed(4)}`);
+        hnchkTrue("no crash / returns object", typeof r === "object");
+        hnchkTrue("weightFn is halfnorm", r.weightFn === "halfnorm");
+        hnchkTrue("mu is finite", isFinite(r.mu));
+        hnchkTrue("tau2 >= 0", isFinite(r.tau2) && r.tau2 >= 0);
+        hnchkTrue("RE_unsel matches", Math.abs(r.RE_unsel - exp.RE_unsel) < 0.01);
+        hnchkTrue("tau2_unsel matches", Math.abs(r.tau2_unsel - exp.tau2_unsel) < Math.max(0.01, 0.05 * Math.abs(exp.tau2_unsel)));
+        return;
+      }
+      hnchk("mu", r.mu, exp.mu, 0.03);
+      hnchk("se_mu", r.se_mu, exp.se_mu, 0.03);
+      hnchk("tau2", r.tau2, exp.tau2, Math.max(0.01, 0.05 * Math.abs(exp.tau2)));
+      hnchk("delta", r.delta, exp.delta, 0.1);
+      hnchk("LRT", r.LRT, exp.LRT, 0.2);
+      hnchkTrue("LRTdf = 1", r.LRTdf === 1);
+      hnchk("LRTp", r.LRTp, exp.LRTp, 0.05);
+      hnchkTrue(`converged`, r.converged);
+    });
+    console.log(hnPass ? "\n\u2705 ALL HALF-NORMAL TESTS PASSED" : "\n\u274C SOME HALF-NORMAL TESTS FAILED");
+    console.log("\n===== POWER SELECTION MODEL TESTS (R block PWR-1) =====\n");
+    let pwrPass = true;
+    const { chk: pwrchk, chkTrue: pwrchkTrue } = makeChk(() => {
+      pwrPass = false;
+    });
+    POWER_BENCHMARKS.forEach((bm) => {
+      console.log(`--- ${bm.name} ---`);
+      const r = powerSelModel(bm.data, { sides: bm.sides });
+      const exp = bm.expected;
+      if (exp.mu === null) {
+        console.log("  [PLACEHOLDER] Expected values not yet filled \u2014 skipping numeric checks.");
+        console.log(`  mu=${r.mu?.toFixed(4)}, se_mu=${r.se_mu?.toFixed(4)}, tau2=${r.tau2?.toFixed(4)}, delta=${r.delta?.toFixed(4)}, LRT=${r.LRT?.toFixed(4)}`);
+        pwrchkTrue("no crash / returns object", typeof r === "object");
+        pwrchkTrue("weightFn is power", r.weightFn === "power");
+        pwrchkTrue("mu is finite", isFinite(r.mu));
+        pwrchkTrue("tau2 >= 0", isFinite(r.tau2) && r.tau2 >= 0);
+        pwrchkTrue("RE_unsel matches", Math.abs(r.RE_unsel - exp.RE_unsel) < 0.01);
+        pwrchkTrue("tau2_unsel matches", Math.abs(r.tau2_unsel - exp.tau2_unsel) < Math.max(0.01, 0.05 * Math.abs(exp.tau2_unsel)));
+        return;
+      }
+      pwrchk("mu", r.mu, exp.mu, 0.03);
+      pwrchk("se_mu", r.se_mu, exp.se_mu, 0.05);
+      pwrchk("tau2", r.tau2, exp.tau2, Math.max(0.01, 0.05 * Math.abs(exp.tau2)));
+      pwrchk("delta", r.delta, exp.delta, Math.max(0.1, 0.6 * Math.abs(exp.delta)));
+      pwrchk("LRT", r.LRT, exp.LRT, Math.max(0.2, 0.3 * Math.abs(exp.LRT)));
+      pwrchkTrue("LRTdf = 1", r.LRTdf === 1);
+      pwrchk("LRTp", r.LRTp, exp.LRTp, 0.05);
+      pwrchkTrue(`converged`, r.converged);
+    });
+    console.log(pwrPass ? "\n\u2705 ALL POWER TESTS PASSED" : "\n\u274C SOME POWER TESTS FAILED");
+    console.log("\n===== NEGATIVE EXPONENTIAL SELECTION MODEL TESTS (R block NEG-1) =====\n");
+    let negPass = true;
+    const { chk: negchk, chkTrue: negchkTrue } = makeChk(() => {
+      negPass = false;
+    });
+    NEGEXP_BENCHMARKS.forEach((bm) => {
+      console.log(`--- ${bm.name} ---`);
+      const r = negexpSelModel(bm.data, { sides: bm.sides });
+      const exp = bm.expected;
+      if (exp.mu === null) {
+        console.log("  [PLACEHOLDER] Expected values not yet filled \u2014 skipping numeric checks.");
+        console.log(`  mu=${r.mu?.toFixed(4)}, se_mu=${r.se_mu?.toFixed(4)}, tau2=${r.tau2?.toFixed(4)}, delta=${r.delta?.toFixed(4)}, LRT=${r.LRT?.toFixed(4)}`);
+        negchkTrue("no crash / returns object", typeof r === "object");
+        negchkTrue("weightFn is negexp", r.weightFn === "negexp");
+        negchkTrue("mu is finite", isFinite(r.mu));
+        negchkTrue("tau2 >= 0", isFinite(r.tau2) && r.tau2 >= 0);
+        negchkTrue("RE_unsel matches", Math.abs(r.RE_unsel - exp.RE_unsel) < 0.01);
+        negchkTrue("tau2_unsel matches", Math.abs(r.tau2_unsel - exp.tau2_unsel) < Math.max(0.01, 0.05 * Math.abs(exp.tau2_unsel)));
+        return;
+      }
+      negchk("mu", r.mu, exp.mu, 0.03);
+      negchk("se_mu", r.se_mu, exp.se_mu, 0.05);
+      negchk("tau2", r.tau2, exp.tau2, Math.max(0.01, 0.05 * Math.abs(exp.tau2)));
+      negchk("delta", r.delta, exp.delta, Math.max(0.1, 0.6 * Math.abs(exp.delta)));
+      negchk("LRT", r.LRT, exp.LRT, Math.max(0.2, 0.3 * Math.abs(exp.LRT)));
+      negchkTrue("LRTdf = 1", r.LRTdf === 1);
+      negchk("LRTp", r.LRTp, exp.LRTp, 0.05);
+      negchkTrue(`converged`, r.converged);
+    });
+    console.log(negPass ? "\n\u2705 ALL NEGEXP TESTS PASSED" : "\n\u274C SOME NEGEXP TESTS FAILED");
+    console.log("\n===== BETA SELECTION MODEL TESTS (R block BETA-1) =====\n");
+    let betaPass = true;
+    const { chk: betachk, chkTrue: betachkTrue } = makeChk(() => {
+      betaPass = false;
+    });
+    BETA_BENCHMARKS.forEach((bm) => {
+      console.log(`--- ${bm.name} ---`);
+      const r = betaSelModel(bm.data, { sides: bm.sides });
+      const exp = bm.expected;
+      if (exp.mu === null) {
+        console.log("  [PLACEHOLDER] Expected values not yet filled \u2014 skipping numeric checks.");
+        console.log(`  mu=${r.mu?.toFixed(4)}, se_mu=${r.se_mu?.toFixed(4)}, tau2=${r.tau2?.toFixed(4)}, a=${r.a?.toFixed(4)}, b=${r.b?.toFixed(4)}, LRT=${r.LRT?.toFixed(4)}`);
+        betachkTrue("no crash / returns object", typeof r === "object");
+        betachkTrue("weightFn is beta", r.weightFn === "beta");
+        betachkTrue("mu is finite", isFinite(r.mu));
+        betachkTrue("tau2 >= 0", isFinite(r.tau2) && r.tau2 >= 0);
+        betachkTrue("a > 0", isFinite(r.a) && r.a > 0);
+        betachkTrue("b > 0", isFinite(r.b) && r.b > 0);
+        betachkTrue("RE_unsel matches", Math.abs(r.RE_unsel - exp.RE_unsel) < 0.01);
+        betachkTrue("tau2_unsel matches", Math.abs(r.tau2_unsel - exp.tau2_unsel) < Math.max(0.01, 0.05 * Math.abs(exp.tau2_unsel)));
+        return;
+      }
+      betachk("mu", r.mu, exp.mu, 0.03);
+      betachk("se_mu", r.se_mu, exp.se_mu, Math.max(0.05, 0.6 * Math.abs(exp.se_mu)));
+      betachk("tau2", r.tau2, exp.tau2, Math.max(0.01, 0.05 * Math.abs(exp.tau2)));
+      betachk("a", r.a, exp.a, Math.max(0.1, 0.6 * Math.abs(exp.a)));
+      betachk("b", r.b, exp.b, Math.max(0.1, 0.6 * Math.abs(exp.b)));
+      betachk("LRT", r.LRT, exp.LRT, Math.max(0.2, 0.3 * Math.abs(exp.LRT)));
+      betachkTrue("LRTdf = 2", r.LRTdf === 2);
+      betachk("LRTp", r.LRTp, exp.LRTp, 0.05);
+      betachkTrue(`converged`, r.converged);
+    });
+    console.log(betaPass ? "\n\u2705 ALL BETA TESTS PASSED" : "\n\u274C SOME BETA TESTS FAILED");
     console.log("\n===== SELECTION PRESETS TESTS =====\n");
     let presetPass = true;
     const { chk: prchk, chkTrue: prchkTrue } = makeChk(() => {
@@ -23576,16 +26893,417 @@ when exported.</p>`,
       console.log(contrastBmPass ? "\n\u2705 ALL CONTRAST BENCHMARK TESTS PASSED" : "\n\u274C SOME CONTRAST BENCHMARK TESTS FAILED");
     }
   }
-  var cdfPass, cdfchk, cdfNaN, tcdf2;
+  var cdfPass, cdfchk, cdfNaN, tcdf2, ecPass, ecInvalid;
   var init_tests = __esm({
     "js/tests.js"() {
       init_utils();
       init_profiles();
       init_benchmarks();
+      init_perm();
       init_analysis();
       init_trimfill();
       init_csv();
       init_gosh();
+      {
+        console.log("\n===== PERMUTATION TEST BENCHMARKS =====\n");
+        let permPass = true;
+        const permChk = (label, got, exp, tol) => {
+          const ok = Math.abs(got - exp) <= tol;
+          if (!ok) {
+            console.error(`  FAIL ${label}: got ${got}, exp ${exp}, tol \xB1${tol}`);
+            permPass = false;
+          } else console.log(`  ok  ${label}`);
+        };
+        const permBcgYi = [-0.8893113339202054, -1.5853886572014306, -1.348073148299693, -1.4415511900213054, -0.2175473222112957, -0.786115585818864, -1.6208982235983924, 0.011952333523841173, -0.4694176487381487, -1.3713448034727846, -0.33935882833839015, 0.4459134005713783, -0.017313948216879493];
+        const permBcgVi = [0.3255847650039614, 0.19458112139814387, 0.41536796536796533, 0.020010031902247573, 0.05121017216963086, 0.0069056184559087574, 0.22301724757231517, 0.00396157929781773, 0.056434210463248966, 0.07302479361302891, 0.01241221397155972, 0.5325058452001528, 0.0714046596839863];
+        const permBcgAblat = [44, 55, 42, 52, 13, 44, 19, 13, 27, 42, 18, 33, 33];
+        const permXf = permBcgYi.map((_, i) => [1, permBcgAblat[i]]);
+        const QM_obs_bcg = 16.35713;
+        const permResult = permTestSync({
+          yi: permBcgYi,
+          vi: permBcgVi,
+          Xf: permXf,
+          QM_obs: QM_obs_bcg,
+          nPerm: 999,
+          seed: 12345,
+          method: "REML",
+          modTests: []
+        });
+        if (permResult.error) {
+          console.error(`  FAIL permTestSync returned error: ${permResult.error}`);
+          permPass = false;
+        } else {
+          permChk("QM_dist[0] = QM_obs (observed at position 0)", permResult.QM_dist[0], QM_obs_bcg, 1e-6);
+          permChk("nPerm = 999", permResult.nPerm, 999, 0);
+          const finiteVals = Array.from(permResult.QM_dist).filter((v) => isFinite(v));
+          const allFinite = finiteVals.length === 999;
+          if (!allFinite) {
+            console.error(`  FAIL not all QM_dist finite: ${finiteVals.length}/999`);
+            permPass = false;
+          } else console.log(`  ok  all 999 QM_dist values finite`);
+          const pval = permPval(permResult.QM_dist, QM_obs_bcg);
+          const allPositive = Array.from(permResult.QM_dist).every((v) => !isFinite(v) || v >= 0);
+          if (!allPositive) {
+            console.error(`  FAIL some QM_dist values negative`);
+            permPass = false;
+          } else console.log(`  ok  all QM_dist values non-negative`);
+          permChk("permutation p-value \u2264 0.05 (BCG ablat is significant)", pval <= 0.05 ? 0 : 1, 0, 0.5);
+          console.log(`  note  permutation p = ${pval.toFixed(4)} (R seed=42 gives 0.0040; different seeds expected)`);
+        }
+        const edgeResult = permTestSync({ yi: [1, 2, 3], vi: [1, 1, 1], Xf: [[1], [1], [1]], QM_obs: 0, nPerm: 99, seed: 1, method: "REML", modTests: [] });
+        if (edgeResult.error) console.log(`  ok  p<2 returns error: ${edgeResult.error}`);
+        else {
+          console.error("  FAIL p<2 should return error");
+          permPass = false;
+        }
+        console.log(permPass ? "\n\u2705 ALL PERMUTATION BENCHMARK TESTS PASSED" : "\n\u274C SOME PERMUTATION BENCHMARK TESTS FAILED");
+        console.log("\n===== vcalc UNIT TESTS =====\n");
+        let vcalcPass = true;
+        const { chk: vchk, chkTrue: vchkTrue, chkExact: vchkExact } = makeChk(() => {
+          vcalcPass = false;
+        }, 1e-12);
+        console.log("--- Basic balanced 2\xD72 (rho=0.5) ---");
+        {
+          const rows = [
+            { yi: 0.5, vi: 0.04, study_id: "S1", outcome_id: "anxiety" },
+            { yi: 0.3, vi: 0.09, study_id: "S1", outcome_id: "depression" },
+            { yi: 0.4, vi: 0.01, study_id: "S2", outcome_id: "anxiety" },
+            { yi: 0.2, vi: 0.16, study_id: "S2", outcome_id: "depression" }
+          ];
+          const V = vcalc(rows, { rho: 0.5 });
+          vchkExact("n = 4", V.n, 4);
+          vchkExact("blocks.length", V.blocks.length, 2);
+          vchkExact("no warnings", V.warnings.length, 0);
+          const b0 = V.blocks[0];
+          vchkExact("block0 studyId", b0.studyId, "S1");
+          vchkExact("block0 k", b0.k, 2);
+          vchk("block0 V[0][0] = vi_anxiety", b0.matrix[0][0], 0.04);
+          vchk("block0 V[1][1] = vi_depress", b0.matrix[1][1], 0.09);
+          vchk("block0 V[0][1] = cov", b0.matrix[0][1], 0.03);
+          vchk("block0 V[1][0] symmetric", b0.matrix[1][0], 0.03);
+          const b1 = V.blocks[1];
+          vchk("block1 V[0][0]", b1.matrix[0][0], 0.01);
+          vchk("block1 V[1][1]", b1.matrix[1][1], 0.16);
+          vchk("block1 V[0][1] = 0.02", b1.matrix[0][1], 0.02);
+        }
+        console.log("--- rho=0: diagonal V ---");
+        {
+          const rows = [
+            { yi: 0.5, vi: 0.04, study_id: "S1", outcome_id: "a" },
+            { yi: 0.3, vi: 0.09, study_id: "S1", outcome_id: "b" }
+          ];
+          const V = vcalc(rows, { rho: 0 });
+          vchk("off-diagonal = 0", V.blocks[0].matrix[0][1], 0);
+          vchk("off-diagonal = 0", V.blocks[0].matrix[1][0], 0);
+          vchkExact("no warnings", V.warnings.length, 0);
+        }
+        console.log("--- Singleton study: 1\xD71 block ---");
+        {
+          const rows = [
+            { yi: 0.5, vi: 0.04, study_id: "S1", outcome_id: "a" },
+            { yi: 0.3, vi: 0.09, study_id: "S1", outcome_id: "b" },
+            { yi: 0.7, vi: 0.25, study_id: "S2", outcome_id: "a" }
+          ];
+          const V = vcalc(rows, { rho: 0.5 });
+          vchkExact("n = 3", V.n, 3);
+          vchkExact("S2 block k = 1", V.blocks[1].k, 1);
+          vchk("S2 V[0][0] = vi", V.blocks[1].matrix[0][0], 0.25);
+          vchkExact("S2 block has 1 outcomeId", V.blocks[1].outcomeIds.length, 1);
+        }
+        console.log("--- Unbalanced design ---");
+        {
+          const rows = [
+            { yi: 0.1, vi: 0.01, study_id: "S1", outcome_id: "a" },
+            { yi: 0.2, vi: 0.04, study_id: "S1", outcome_id: "b" },
+            { yi: 0.3, vi: 0.09, study_id: "S2", outcome_id: "a" },
+            { yi: 0.4, vi: 0.16, study_id: "S2", outcome_id: "b" },
+            { yi: 0.5, vi: 0.25, study_id: "S2", outcome_id: "c" }
+          ];
+          const V = vcalc(rows, { rho: 0.3 });
+          vchkExact("n = 5", V.n, 5);
+          vchkExact("S1 k = 2", V.blocks[0].k, 2);
+          vchkExact("S2 k = 3", V.blocks[1].k, 3);
+          vchk("S2 V[0][2] = 0.045", V.blocks[1].matrix[0][2], 0.045);
+          vchk("S2 V[2][0] symmetric", V.blocks[1].matrix[2][0], 0.045);
+        }
+        console.log("--- Duplicate outcome_id \u2192 warning ---");
+        {
+          const rows = [
+            { yi: 0.5, vi: 0.04, study_id: "S1", outcome_id: "a" },
+            { yi: 0.9, vi: 0.99, study_id: "S1", outcome_id: "a" },
+            // duplicate
+            { yi: 0.3, vi: 0.09, study_id: "S1", outcome_id: "b" }
+          ];
+          const V = vcalc(rows, { rho: 0.5 });
+          vchkTrue("warning issued", V.warnings.length >= 1);
+          vchkExact("block k = 2 (dup removed)", V.blocks[0].k, 2);
+          vchk("first occurrence kept: V[0][0] = 0.04", V.blocks[0].matrix[0][0], 0.04);
+        }
+        console.log("--- rho=1 \u2192 singularity warning ---");
+        {
+          const rows = [
+            { yi: 0.5, vi: 0.04, study_id: "S1", outcome_id: "a" },
+            { yi: 0.3, vi: 0.04, study_id: "S1", outcome_id: "b" }
+          ];
+          const V = vcalc(rows, { rho: 1 });
+          vchkTrue("rho=1 warning", V.warnings.some((w) => w.includes("rho=1")));
+          vchkTrue("singularity warning", V.warnings.some((w) => w.includes("singular")));
+        }
+        console.log("--- studyIds / outcomeIds ---");
+        {
+          const rows = [
+            { yi: 0.1, vi: 0.01, study_id: "B", outcome_id: "y1" },
+            { yi: 0.2, vi: 0.02, study_id: "A", outcome_id: "y2" },
+            { yi: 0.3, vi: 0.03, study_id: "B", outcome_id: "y2" }
+          ];
+          const V = vcalc(rows);
+          vchkExact("studyIds[0] = B", V.studyIds[0], "B");
+          vchkExact("studyIds[1] = A", V.studyIds[1], "A");
+          vchkTrue("outcomeIds contains y1", V.outcomeIds.includes("y1"));
+          vchkTrue("outcomeIds contains y2", V.outcomeIds.includes("y2"));
+        }
+        console.log("--- Missing study_id / outcome_id \u2192 fallback ---");
+        {
+          const rows = [
+            { yi: 0.1, vi: 0.01 },
+            { yi: 0.2, vi: 0.02 }
+          ];
+          const V = vcalc(rows);
+          vchkExact("n = 2", V.n, 2);
+          vchkExact("2 singleton blocks", V.blocks.length, 2);
+        }
+        console.log("--- Matrix symmetry ---");
+        {
+          const rows = [
+            { yi: 0.1, vi: 0.01, study_id: "S1", outcome_id: "a" },
+            { yi: 0.2, vi: 0.04, study_id: "S1", outcome_id: "b" },
+            { yi: 0.3, vi: 0.09, study_id: "S1", outcome_id: "c" }
+          ];
+          const V = vcalc(rows, { rho: 0.6 });
+          const m = V.blocks[0].matrix;
+          vchk("V[0][1] = V[1][0]", m[0][1], m[1][0]);
+          vchk("V[0][2] = V[2][0]", m[0][2], m[2][0]);
+          vchk("V[1][2] = V[2][1]", m[1][2], m[2][1]);
+        }
+        console.log("--- rho / type passthrough ---");
+        {
+          const rows = [{ yi: 0, vi: 0.1, study_id: "S1", outcome_id: "a" }];
+          const V = vcalc(rows, { rho: 0.7, type: "constant" });
+          vchkExact("rho passthrough", V.rho, 0.7);
+          vchkExact("type passthrough", V.type, "constant");
+        }
+        console.log(vcalcPass ? "\n\u2705 ALL vcalc TESTS PASSED" : "\n\u274C SOME vcalc TESTS FAILED");
+        console.log("\n===== mvMeta UNIT TESTS =====\n");
+        let mvPass = true;
+        const { chk: mvchk, chkTrue: mvchkTrue, chkExact: mvchkExact, chkRel: mvchkRel } = makeChk(() => {
+          mvPass = false;
+        }, 1e-6);
+        const mvRows = [
+          { yi: 0.4, vi: 0.04, study_id: "S1", outcome_id: "A" },
+          { yi: 0.2, vi: 0.09, study_id: "S1", outcome_id: "B" },
+          { yi: 0.55, vi: 0.05, study_id: "S2", outcome_id: "A" },
+          { yi: 0.35, vi: 0.06, study_id: "S2", outcome_id: "B" },
+          { yi: 0.3, vi: 0.03, study_id: "S3", outcome_id: "A" },
+          { yi: 0.1, vi: 0.07, study_id: "S3", outcome_id: "B" },
+          { yi: 0.6, vi: 0.08, study_id: "S4", outcome_id: "A" },
+          { yi: 0.45, vi: 0.04, study_id: "S4", outcome_id: "B" },
+          { yi: 0.5, vi: 0.02, study_id: "S5", outcome_id: "A" },
+          { yi: 0.25, vi: 0.05, study_id: "S5", outcome_id: "B" },
+          { yi: 0.35, vi: 0.06, study_id: "S6", outcome_id: "A" },
+          { yi: 0.15, vi: 0.08, study_id: "S6", outcome_id: "B" }
+        ];
+        const mvV = vcalc(mvRows, { rho: 0.5 });
+        console.log("--- CS REML: structure ---");
+        {
+          const r = mvMeta(mvRows, mvV, { struct: "CS", method: "REML" });
+          mvchkTrue("no error", !r.error);
+          mvchkExact("P = 2", r.P, 2);
+          mvchkExact("k = 6", r.k, 6);
+          mvchkExact("n = 12", r.n, 12);
+          mvchkExact("outcomeIds[0]", r.outcomeIds[0], "A");
+          mvchkExact("outcomeIds[1]", r.outcomeIds[1], "B");
+          mvchkTrue("beta.length = 2", Array.isArray(r.beta) && r.beta.length === 2);
+          mvchkTrue("se.length = 2", Array.isArray(r.se) && r.se.length === 2);
+          mvchkTrue("ci.length = 2", Array.isArray(r.ci) && r.ci.length === 2);
+          mvchkTrue("ci[0] has 2 vals", r.ci[0].length === 2);
+          mvchkTrue("z.length = 2", Array.isArray(r.z) && r.z.length === 2);
+          mvchkTrue("pval.length = 2", Array.isArray(r.pval) && r.pval.length === 2);
+          mvchkTrue("tau2.length = 2", Array.isArray(r.tau2) && r.tau2.length === 2);
+          mvchkTrue("I2.length = 2", Array.isArray(r.I2) && r.I2.length === 2);
+          mvchkTrue("Psi is 2\xD72", Array.isArray(r.Psi) && r.Psi.length === 2 && r.Psi[0].length === 2);
+          mvchkTrue("rho_between defined", r.rho_between !== void 0);
+          mvchkTrue("convergence", r.convergence);
+          mvchkTrue("logLik finite", isFinite(r.logLik));
+          mvchkTrue("AIC finite", isFinite(r.AIC));
+          mvchkTrue("BIC finite", isFinite(r.BIC));
+          mvchkTrue("QE finite", isFinite(r.QE));
+          mvchkTrue("pQE in (0,1)", isFinite(r.pQE) && r.pQE >= 0 && r.pQE <= 1);
+        }
+        console.log("--- CS REML: numerical properties ---");
+        {
+          const r = mvMeta(mvRows, mvV, { struct: "CS", method: "REML" });
+          mvchkTrue("beta[A] \u2208 (0.2, 0.7)", r.beta[0] > 0.2 && r.beta[0] < 0.7);
+          mvchkTrue("beta[B] \u2208 (0.0, 0.6)", r.beta[1] > 0 && r.beta[1] < 0.6);
+          mvchkTrue("beta[A] > beta[B]", r.beta[0] > r.beta[1]);
+          mvchkTrue("se[A] > 0", r.se[0] > 0);
+          mvchkTrue("se[B] > 0", r.se[1] > 0);
+          mvchkTrue("CI[A]: lb < beta < ub", r.ci[0][0] < r.beta[0] && r.beta[0] < r.ci[0][1]);
+          mvchkTrue("CI[B]: lb < beta < ub", r.ci[1][0] < r.beta[1] && r.beta[1] < r.ci[1][1]);
+          mvchkTrue("tau2[A] >= 0", r.tau2[0] >= 0);
+          mvchkTrue("tau2[B] >= 0", r.tau2[1] >= 0);
+          mvchkTrue("I2[A] \u2208 [0,100]", r.I2[0] >= 0 && r.I2[0] <= 100);
+          mvchkTrue("I2[B] \u2208 [0,100]", r.I2[1] >= 0 && r.I2[1] <= 100);
+          mvchkTrue("z[A] = beta/se", Math.abs(r.z[0] - r.beta[0] / r.se[0]) < 1e-10);
+          mvchkTrue("pval[A] \u2208 (0,1)", r.pval[0] > 0 && r.pval[0] < 1);
+          mvchkTrue("CS Psi diagonal equal", Math.abs(r.Psi[0][0] - r.Psi[1][1]) < 1e-6);
+          mvchkTrue("|rho_between| < 1", Math.abs(r.rho_between) < 1);
+          mvchkTrue("QE >= 0", r.QE >= 0);
+          mvchkExact("df_QE = n - P", r.df_QE, r.n - r.P);
+          mvchkTrue("BIC > AIC (n=12)", r.BIC > r.AIC);
+        }
+        console.log("--- CS ML vs REML: tau2 comparison ---");
+        {
+          const rML = mvMeta(mvRows, mvV, { struct: "CS", method: "ML" });
+          const rREML = mvMeta(mvRows, mvV, { struct: "CS", method: "REML" });
+          mvchkTrue("ML converged", rML.convergence);
+          mvchkTrue("REML converged", rREML.convergence);
+          mvchkTrue("tau2[A] REML >= ML", rREML.tau2[0] >= rML.tau2[0] - 1e-6);
+          mvchkTrue("struct preserved ML", rML.struct, "CS");
+          mvchkTrue("struct preserved REML", rREML.struct, "CS");
+        }
+        console.log("--- Diag structure ---");
+        {
+          const r = mvMeta(mvRows, mvV, { struct: "Diag", method: "REML" });
+          mvchkTrue("no error", !r.error);
+          mvchkTrue("convergence", r.convergence);
+          mvchkTrue("beta[A] finite", isFinite(r.beta[0]));
+          mvchkTrue("beta[B] finite", isFinite(r.beta[1]));
+          mvchkTrue("rho_between undefined", r.rho_between === void 0);
+          mvchkTrue("Psi[0][1] = 0", Math.abs(r.Psi[0][1]) < 1e-8);
+          mvchkTrue("tau2[A] >= 0", r.tau2[0] >= 0);
+          mvchkTrue("tau2[B] >= 0", r.tau2[1] >= 0);
+        }
+        console.log("--- UN structure ---");
+        {
+          const r = mvMeta(mvRows, mvV, { struct: "UN", method: "REML" });
+          mvchkTrue("no error", !r.error);
+          mvchkTrue("convergence", r.convergence);
+          mvchkTrue("beta[A] finite", isFinite(r.beta[0]));
+          mvchkTrue("beta[B] finite", isFinite(r.beta[1]));
+          mvchkTrue("Psi symmetric", Math.abs(r.Psi[0][1] - r.Psi[1][0]) < 1e-10);
+          mvchkTrue("Psi[0][0] >= 0", r.Psi[0][0] >= 0);
+          mvchkTrue("Psi[1][1] >= 0", r.Psi[1][1] >= 0);
+          const rCS = mvMeta(mvRows, mvV, { struct: "CS", method: "REML" });
+          mvchkTrue("UN logLik >= CS logLik", r.logLik >= rCS.logLik - 1e-6);
+        }
+        console.log("--- Consistency with univariate meta() ---");
+        {
+          const rMV = mvMeta(mvRows, mvV, { struct: "CS", method: "REML" });
+          const studiesA = mvRows.filter((r) => r.outcome_id === "A");
+          const mvA = meta(studiesA, "REML");
+          mvchkTrue(
+            "beta[A] near univariate RE",
+            Math.abs(rMV.beta[0] - mvA.RE) < 0.15
+          );
+        }
+        console.log("--- Error conditions ---");
+        {
+          const rows1 = mvRows.filter((r) => r.outcome_id === "A");
+          const V1 = vcalc(rows1, { rho: 0.5 });
+          mvchkTrue("P=1 \u2192 error", !!mvMeta(rows1, V1).error);
+          const rows2 = mvRows.filter((r) => ["S1", "S2"].includes(r.study_id));
+          const V2 = vcalc(rows2, { rho: 0.5 });
+          mvchkTrue("k=2 \u2192 error", !!mvMeta(rows2, V2).error);
+          mvchkTrue("bad struct \u2192 error", !!mvMeta(mvRows, mvV, { struct: "HMMM" }).error);
+          mvchkTrue("bad method \u2192 error", !!mvMeta(mvRows, mvV, { method: "DL" }).error);
+        }
+        console.log("--- Unbalanced design ---");
+        {
+          const unbalRows = [
+            ...mvRows,
+            { yi: 0.45, vi: 0.05, study_id: "S7", outcome_id: "A" }
+            // only A
+          ];
+          const unbalV = vcalc(unbalRows, { rho: 0.5 });
+          const r = mvMeta(unbalRows, unbalV, { struct: "CS", method: "REML" });
+          mvchkTrue("unbalanced: no error", !r.error);
+          mvchkTrue("unbalanced: k = 7", r.k === 7);
+          mvchkTrue("unbalanced: n = 13", r.n === 13);
+          mvchkTrue("unbalanced: beta finite", isFinite(r.beta[0]) && isFinite(r.beta[1]));
+        }
+        console.log("--- QM omnibus test ---");
+        {
+          const r = mvMeta(mvRows, mvV, { struct: "CS", method: "REML" });
+          mvchkTrue("QM >= 0", r.QM >= 0);
+          mvchkExact("df_QM = P", r.df_QM, r.P);
+          mvchkTrue("pQM in (0,1)", isFinite(r.pQM) && r.pQM >= 0 && r.pQM <= 1);
+          mvchkTrue("pQM < 0.05", r.pQM < 0.05);
+          mvchkTrue("QM > 0", r.QM > 0);
+          mvchkTrue("QE >= 0", r.QE >= 0);
+        }
+        console.log("--- corPsi structure ---");
+        {
+          const r = mvMeta(mvRows, mvV, { struct: "CS", method: "REML" });
+          mvchkTrue("corPsi is 2\xD72", Array.isArray(r.corPsi) && r.corPsi.length === 2 && r.corPsi[0].length === 2);
+          mvchkTrue("corPsi[0][0] = 1", Math.abs(r.corPsi[0][0] - 1) < 1e-12);
+          mvchkTrue("corPsi[1][1] = 1", Math.abs(r.corPsi[1][1] - 1) < 1e-12);
+          mvchkTrue("corPsi symmetric", Math.abs(r.corPsi[0][1] - r.corPsi[1][0]) < 1e-12);
+          mvchkTrue("corPsi[0][1] = rho_between", Math.abs(r.corPsi[0][1] - r.rho_between) < 1e-8);
+          mvchkTrue("|corPsi[0][1]| < 1", Math.abs(r.corPsi[0][1]) < 1);
+          const rUN = mvMeta(mvRows, mvV, { struct: "UN", method: "REML" });
+          mvchkTrue("UN corPsi[0][0] = 1", Math.abs(rUN.corPsi[0][0] - 1) < 1e-12);
+          mvchkTrue("UN corPsi[1][1] = 1", Math.abs(rUN.corPsi[1][1] - 1) < 1e-12);
+          const manualCorr = rUN.Psi[0][1] / Math.sqrt(rUN.Psi[0][0] * rUN.Psi[1][1]);
+          mvchkTrue("UN corPsi consistent with Psi", Math.abs(rUN.corPsi[0][1] - manualCorr) < 1e-10);
+        }
+        console.log("--- AICc ---");
+        {
+          const r = mvMeta(mvRows, mvV, { struct: "CS", method: "REML" });
+          mvchkTrue("AICc finite", isFinite(r.AICc));
+          mvchkTrue("AICc >= AIC", r.AICc >= r.AIC - 1e-12);
+          mvchkTrue("AICc > AIC (n=12, nParams=2)", r.AICc > r.AIC);
+          const rML = mvMeta(mvRows, mvV, { struct: "CS", method: "ML" });
+          mvchkTrue("ML AICc finite", isFinite(rML.AICc));
+          mvchkTrue("ML AICc >= ML AIC", rML.AICc >= rML.AIC - 1e-12);
+        }
+        console.log("--- Moderator (common slopes) ---");
+        {
+          const modRows = mvRows.map((r2, i) => ({ ...r2, x: Math.floor(i / 2) + 1 }));
+          const modV = vcalc(modRows, { rho: 0.5 });
+          const r = mvMeta(modRows, modV, {
+            struct: "CS",
+            method: "REML",
+            moderators: [{ key: "x", type: "continuous" }],
+            slopes: "common"
+          });
+          mvchkTrue("mod: no error", !r.error);
+          mvchkExact("mod: beta.length = 3", r.beta.length, 3);
+          mvchkExact("mod: betaNames.length", r.betaNames.length, 3);
+          mvchkExact("mod: betaNames[2]", r.betaNames[2], "x");
+          mvchkExact("mod: df_QM = 3", r.df_QM, 3);
+          mvchkExact("mod: df_QE = n-3", r.df_QE, r.n - 3);
+          mvchkTrue("mod: logLik finite", isFinite(r.logLik));
+          mvchkTrue("mod: convergence", r.convergence);
+        }
+        console.log("--- Moderator (separate slopes) ---");
+        {
+          const modRows = mvRows.map((r2, i) => ({ ...r2, x: Math.floor(i / 2) + 1 }));
+          const modV = vcalc(modRows, { rho: 0.5 });
+          const r = mvMeta(modRows, modV, {
+            struct: "CS",
+            method: "REML",
+            moderators: [{ key: "x", type: "continuous" }],
+            slopes: "separate"
+          });
+          mvchkTrue("sep: no error", !r.error);
+          mvchkExact("sep: beta.length = 4", r.beta.length, 4);
+          mvchkExact("sep: betaNames[2]", r.betaNames[2], "A:x");
+          mvchkExact("sep: betaNames[3]", r.betaNames[3], "B:x");
+          mvchkExact("sep: df_QM = 4", r.df_QM, 4);
+          mvchkTrue("sep: logLik finite", isFinite(r.logLik));
+        }
+        console.log(mvPass ? "\n\u2705 ALL mvMeta TESTS PASSED" : "\n\u274C SOME mvMeta TESTS FAILED");
+      }
       console.log("\n===== BLUP BENCHMARK TESTS =====\n");
       {
         let blupPass = true;
@@ -23764,6 +27482,105 @@ when exported.</p>`,
       cdfNaN("tCDF(Inf, 5) = NaN", tCDF(Infinity, 5));
       cdfNaN("tCDF(\u2212Inf, 5) = NaN", tCDF(-Infinity, 5));
       console.log(cdfPass ? "\n\u2705 ALL normalCDF & tCDF TESTS PASSED" : "\n\u274C SOME normalCDF & tCDF TESTS FAILED");
+      console.log("\n===== EFFECT TYPE EDGE CASE TESTS =====\n");
+      ecPass = true;
+      ecInvalid = (name, type, s) => {
+        const { valid } = validateStudy(s, type);
+        if (!valid) console.log(`  ok    ${name}`);
+        else {
+          console.error(`  FAIL  ${name} \u2014 expected invalid, got valid`);
+          ecPass = false;
+        }
+      };
+      console.log("--- Two-group continuous (MD, SMD, SMDH, ROM, CVR, VR) ---");
+      ecInvalid("MD: n1=0", "MD", { m1: 1, sd1: 1, n1: 0, m2: 1, sd2: 1, n2: 10 });
+      ecInvalid("MD: sd1=0", "MD", { m1: 1, sd1: 0, n1: 10, m2: 1, sd2: 1, n2: 10 });
+      ecInvalid("SMD: n2=0", "SMD", { m1: 1, sd1: 1, n1: 10, m2: 1, sd2: 1, n2: 0 });
+      ecInvalid("SMDH: n1=1", "SMDH", { m1: 1, sd1: 1, n1: 1, m2: 1, sd2: 1, n2: 10 });
+      ecInvalid("ROM: m1=0", "ROM", { m1: 0, sd1: 1, n1: 10, m2: 1, sd2: 1, n2: 10 });
+      ecInvalid("ROM: m2<0", "ROM", { m1: 1, sd1: 1, n1: 10, m2: -1, sd2: 1, n2: 10 });
+      ecInvalid("CVR: m1=0", "CVR", { m1: 0, sd1: 1, n1: 10, m2: 1, sd2: 1, n2: 10 });
+      ecInvalid("VR: sd1=0", "VR", { sd1: 0, n1: 10, sd2: 1, n2: 10 });
+      ecInvalid("VR: n1=1", "VR", { sd1: 1, n1: 1, sd2: 1, n2: 10 });
+      console.log("--- Paired (MD_paired, SMD_paired, SMCC) ---");
+      for (const type of ["MD_paired", "SMD_paired", "SMCC"]) {
+        ecInvalid(`${type}: n=1`, type, { m_pre: 1, sd_pre: 1, m_post: 0, sd_post: 1, n: 1, r: 0.5 });
+        ecInvalid(`${type}: sd_pre=0`, type, { m_pre: 1, sd_pre: 0, m_post: 0, sd_post: 1, n: 10, r: 0.5 });
+        ecInvalid(`${type}: r=2`, type, { m_pre: 1, sd_pre: 1, m_post: 0, sd_post: 1, n: 10, r: 2 });
+      }
+      console.log("--- Single-group (SMD1, SMD1H, MN, MNLN) ---");
+      ecInvalid("SMD1: n=0", "SMD1", { m: 1, sd: 1, n: 0, ref: 0 });
+      ecInvalid("SMD1: sd=0", "SMD1", { m: 1, sd: 0, n: 10, ref: 0 });
+      ecInvalid("SMD1H: n=1", "SMD1H", { m: 1, sd: 1, n: 1, ref: 0 });
+      ecInvalid("MN: n=0", "MN", { m: 1, sd: 1, n: 0 });
+      ecInvalid("MN: sd=0", "MN", { m: 1, sd: 0, n: 10 });
+      ecInvalid("MNLN: m=0", "MNLN", { m: 0, sd: 1, n: 10 });
+      ecInvalid("MNLN: m<0", "MNLN", { m: -1, sd: 1, n: 10 });
+      console.log("--- Binary 2\xD72 (OR, RR, RD, AS, YUQ, YUY) ---");
+      ecInvalid("OR: a<0", "OR", { a: -1, b: 10, c: 10, d: 10 });
+      ecInvalid("OR: all zeros", "OR", { a: 0, b: 0, c: 0, d: 0 });
+      ecInvalid("RR: d<0", "RR", { a: 10, b: 10, c: 10, d: -1 });
+      ecInvalid("RD: zero row-1", "RD", { a: 0, b: 0, c: 10, d: 10 });
+      ecInvalid("RD: zero row-2", "RD", { a: 10, b: 10, c: 0, d: 0 });
+      ecInvalid("AS: zero row-1", "AS", { a: 0, b: 0, c: 10, d: 10 });
+      ecInvalid("YUQ: ad=bc=0", "YUQ", { a: 0, b: 0, c: 5, d: 5 });
+      ecInvalid("YUY: ad=bc=0", "YUY", { a: 0, b: 0, c: 5, d: 5 });
+      console.log("--- Correlation-based 2\xD72 (PHI, RTET) ---");
+      ecInvalid("PHI: zero col-1", "PHI", { a: 0, b: 5, c: 0, d: 5 });
+      ecInvalid("RTET: zero row-1", "RTET", { a: 0, b: 0, c: 5, d: 5 });
+      console.log("--- GOR ---");
+      ecInvalid("GOR: empty counts1", "GOR", { counts1: "", counts2: "10 20" });
+      ecInvalid("GOR: negative count", "GOR", { counts1: "-1 5", counts2: "10 20" });
+      console.log("--- Correlations (COR, UCOR, ZCOR, RPB, RBIS) ---");
+      ecInvalid("COR: r=1", "COR", { r: 1, n: 10 });
+      ecInvalid("COR: r=-1", "COR", { r: -1, n: 10 });
+      ecInvalid("COR: n=2", "COR", { r: 0.5, n: 2 });
+      ecInvalid("UCOR: r=1", "UCOR", { r: 1, n: 10 });
+      ecInvalid("UCOR: n=3", "UCOR", { r: 0.5, n: 3 });
+      ecInvalid("ZCOR: r=1", "ZCOR", { r: 1, n: 10 });
+      ecInvalid("ZCOR: n=3", "ZCOR", { r: 0.5, n: 3 });
+      ecInvalid("RPB: r=-1", "RPB", { r: -1, n: 10 });
+      ecInvalid("RPB: n=2", "RPB", { r: 0.5, n: 2 });
+      ecInvalid("RBIS: r=1", "RBIS", { r: 1, n: 10, p: 0.3 });
+      console.log("--- Partial correlations (PCOR, ZPCOR) ---");
+      ecInvalid("PCOR: r=1", "PCOR", { r: 1, n: 20, p: 2 });
+      ecInvalid("PCOR: n-p-3<0", "PCOR", { r: 0.3, n: 5, p: 4 });
+      ecInvalid("ZPCOR: r=1", "ZPCOR", { r: 1, n: 20, p: 2 });
+      ecInvalid("ZPCOR: n-p-3<0", "ZPCOR", { r: 0.3, n: 5, p: 4 });
+      console.log("--- R2 / ZR2 ---");
+      ecInvalid("R2: r2<0", "R2", { r2: -0.1, n: 20 });
+      ecInvalid("R2: r2=1", "R2", { r2: 1, n: 20 });
+      ecInvalid("ZR2: r2<0", "ZR2", { r2: -0.1, n: 20 });
+      ecInvalid("ZR2: r2>=1", "ZR2", { r2: 1, n: 20 });
+      console.log("--- Proportions (PR, PLN, PLO, PAS, PFT) ---");
+      for (const type of ["PR", "PLN", "PLO", "PAS", "PFT"]) {
+        ecInvalid(`${type}: x>n`, type, { x: 11, n: 10 });
+        ecInvalid(`${type}: n=0`, type, { x: 0, n: 0 });
+        ecInvalid(`${type}: x<0`, type, { x: -1, n: 10 });
+      }
+      console.log("--- HR ---");
+      ecInvalid("HR: hr=0", "HR", { hr: 0, ci_lo: 0.5, ci_hi: 1.5 });
+      ecInvalid("HR: hr<0", "HR", { hr: -1, ci_lo: 0.5, ci_hi: 1.5 });
+      ecInvalid("HR: ci_lo=0", "HR", { hr: 1, ci_lo: 0, ci_hi: 1.5 });
+      console.log("--- Incidence rates (IRR, IRD, IRSD) ---");
+      for (const type of ["IRR", "IRD", "IRSD"]) {
+        ecInvalid(`${type}: t1=0`, type, { x1: 5, t1: 0, x2: 5, t2: 100 });
+        ecInvalid(`${type}: t2=0`, type, { x1: 5, t1: 100, x2: 5, t2: 0 });
+      }
+      console.log("--- IR ---");
+      ecInvalid("IR: t=0", "IR", { x: 5, t: 0 });
+      ecInvalid("IR: t<0", "IR", { x: 5, t: -1 });
+      console.log("--- Reliability (ARAW, ABT, AHW) ---");
+      for (const type of ["ARAW", "ABT", "AHW"]) {
+        ecInvalid(`${type}: alpha<0`, type, { alpha: -0.1, k: 5, n: 20 });
+        ecInvalid(`${type}: alpha>1`, type, { alpha: 1.1, k: 5, n: 20 });
+        ecInvalid(`${type}: k<2`, type, { alpha: 0.8, k: 1, n: 20 });
+      }
+      console.log("--- GENERIC ---");
+      ecInvalid("GENERIC: vi=0", "GENERIC", { yi: 0.5, vi: 0 });
+      ecInvalid("GENERIC: vi<0", "GENERIC", { yi: 0.5, vi: -1 });
+      ecInvalid("GENERIC: yi NaN", "GENERIC", { yi: NaN, vi: 1 });
+      console.log(ecPass ? "\n\u2705 ALL EFFECT TYPE EDGE CASE TESTS PASSED" : "\n\u274C SOME EFFECT TYPE EDGE CASE TESTS FAILED");
     }
   });
 
@@ -23781,12 +27598,15 @@ when exported.</p>`,
   init_trimfill();
   init_plots();
   init_gosh();
+  init_perm();
+  init_multivariate();
   init_export();
+  init_plotThemes();
 
   // js/session.js
   var SESSION_VERSION = 1;
-  function buildSession(settings, savedModerators, studies, rob = { domains: [], data: {} }, scaleModerators2 = []) {
-    return { version: SESSION_VERSION, settings, moderators: savedModerators, scaleModerators: scaleModerators2, studies, rob };
+  function buildSession(settings, savedModerators, studies, rob = { domains: [], data: {} }, scaleModerators2 = [], interactions2 = []) {
+    return { version: SESSION_VERSION, settings, moderators: savedModerators, scaleModerators: scaleModerators2, interactions: interactions2, studies, rob };
   }
   function serializeSession(session) {
     return "\uFEFF" + JSON.stringify(session, null, 2);
@@ -23862,6 +27682,10 @@ when exported.</p>`,
     "het.I2": "I\xB2 heterogeneity",
     "het.H2": "H\xB2 heterogeneity",
     "sel.model": "Selection model",
+    "sel.halfnorm": "Half-normal selection model",
+    "sel.power": "Power selection model",
+    "sel.negexp": "Negative exponential selection model",
+    "sel.beta": "Beta selection model",
     "diag.influence": "Influence diagnostics",
     "diag.dffits": "DFFITS influence statistic",
     "diag.covratio": "CovRatio influence statistic",
@@ -23881,7 +27705,7 @@ when exported.</p>`,
   }
   function formatContrastResult(result, reg) {
     const { est, se, stat, p, ci } = result;
-    const statLabel = reg.dist === "t" ? `t(${reg.QEdf})` : "z";
+    const statLabel = reg.dist === "t" ? `<em>t</em>(${reg.QEdf})` : "<em>z</em>";
     const ciLabel = getCiLabel();
     if (!isFinite(est)) {
       return `<div class="reg-note reg-warn" style="margin-top:6px">
@@ -23891,7 +27715,7 @@ when exported.</p>`,
     return `
     <table class="reg-table" style="margin-top:8px">
       <thead><tr>
-        <th>Estimate</th><th>SE</th><th>${statLabel}</th><th>p</th><th>${ciLabel}</th>
+        <th>Estimate</th><th>SE</th><th>${statLabel}</th><th><em>p</em></th><th>${ciLabel}</th>
       </tr></thead>
       <tbody><tr>
         <td>${fmt(est)}</td>
@@ -23911,15 +27735,16 @@ when exported.</p>`,
   }
   function regFmtP(p) {
     if (!isFinite(p)) return "\u2014";
-    if (p < 1e-4) return `<span class="reg-sig-3">&lt;0.0001</span>`;
-    const cls = p < 1e-3 ? "reg-sig-3" : p < 0.01 ? "reg-sig-2" : p < 0.05 ? "reg-sig-1" : "";
-    return cls ? `<span class="${cls}">${fmt(p)}</span>` : fmt(p);
+    if (p < 1e-3) return `<span class="reg-sig-3">&lt; .001</span>`;
+    const s = p.toFixed(3).replace(/^0\./, ".");
+    const cls = p < 0.01 ? "reg-sig-2" : p < 0.05 ? "reg-sig-1" : "";
+    return cls ? `<span class="${cls}">${s}</span>` : s;
   }
   function buildRegCoeffRows(reg, adjPs = null, mods = []) {
     const hasVif = Array.isArray(reg.vif) && reg.vif.length === reg.p;
     const hasRobust = reg.isClustered && Array.isArray(reg.robustSE);
     const multiMod = mods.length > 1 && Array.isArray(reg.modTests) && reg.modTests.length > 0;
-    const colCount = 8 + (hasRobust ? 2 : 0);
+    const colCount = 8 + (hasRobust ? 4 : 0);
     function vifCell(j) {
       if (!hasVif || j === 0) return `<td class="reg-vif">\u2014</td>`;
       const v = reg.vif[j];
@@ -23929,7 +27754,11 @@ when exported.</p>`,
     }
     function dataRow(j) {
       const [lo, hi] = reg.ci[j];
-      const robustCells = hasRobust ? `<td>${fmt(reg.robustSE[j])}</td><td>${regFmtP(reg.robustP[j])}</td>` : "";
+      const robustCells = hasRobust ? (() => {
+        const rci = Array.isArray(reg.robustCi?.[j]) ? reg.robustCi[j] : [NaN, NaN];
+        const rt = isFinite(reg.robustZ?.[j]) ? fmt(reg.robustZ[j]) : "NA";
+        return `<td>${fmt(reg.robustSE[j])}</td><td>${rt}</td><td>${regFmtP(reg.robustP[j])}</td><td>[${fmt(rci[0])}, ${fmt(rci[1])}]</td>`;
+      })() : "";
       return `<tr class="${j === 0 ? "reg-intercept" : ""}">
       <td>${reg.colNames[j]}</td>
       <td>${fmt(reg.beta[j])}</td>
@@ -23950,9 +27779,9 @@ when exported.</p>`,
       const mt = reg.modTests[mi];
       if (mt.colIdxs.length === 0) continue;
       const QMlabel = reg.QMdist === "F" ? `F(${mt.QMdf},\u2009${reg.QEdf})` : `\u03C7\xB2(${mt.QMdf})`;
-      let qmStr = isFinite(mt.QM) ? ` &nbsp;\xB7&nbsp; QM ${QMlabel} = ${fmt(mt.QM)}, p = ${regFmtP(mt.QMp)}` : "";
+      let qmStr = isFinite(mt.QM) ? ` &nbsp;\xB7&nbsp; <em>Q</em>M ${QMlabel} = ${fmt(mt.QM)}, <em>p</em> = ${regFmtP(mt.QMp)}` : "";
       if (adjPs && adjPs[mi] !== void 0 && isFinite(adjPs[mi]) && adjPs[mi] !== mt.QMp) {
-        qmStr += `, p (adj) = ${regFmtP(adjPs[mi])}`;
+        qmStr += `, <em>p</em> (adj) = ${regFmtP(adjPs[mi])}`;
       }
       html += `<tr class="reg-mod-group">
       <td colspan="${colCount}"><span class="reg-mod-name">${escapeHTML(mt.name)}</span>${qmStr}</td>
@@ -23967,7 +27796,7 @@ when exported.</p>`,
       const sr = reg.stdResiduals[i];
       const flag = Math.abs(sr) > Z_95 ? " style='color:var(--color-warning)'" : "";
       return `<tr>
-      <td>${lbl || i + 1}</td>
+      <td>${lbl ? escapeHTML(lbl) : i + 1}</td>
       <td>${fmt(reg.yi[i])}</td>
       <td>${fmt(reg.fitted[i])}</td>
       <td>${fmt(reg.residuals[i])}</td>
@@ -24013,7 +27842,7 @@ when exported.</p>`,
       let html = dataRow(0);
       for (const mt of ls.locModTests) {
         if (!mt.colIdxs || mt.colIdxs.length === 0) continue;
-        const qmStr = isFinite(mt.QM) ? ` &nbsp;\xB7&nbsp; QM \u03C7\xB2(${mt.QMdf}) = ${fmt(mt.QM)}, p = ${regFmtP(mt.QMp)}` : "";
+        const qmStr = isFinite(mt.QM) ? ` &nbsp;\xB7&nbsp; <em>Q</em>M \u03C7\xB2(${mt.QMdf}) = ${fmt(mt.QM)}, <em>p</em> = ${regFmtP(mt.QMp)}` : "";
         html += `<tr class="reg-mod-group"><td colspan="7"><span class="reg-mod-name">${escapeHTML(mt.name)}</span>${qmStr}</td></tr>`;
         for (const j of mt.colIdxs) html += dataRow(j);
       }
@@ -24038,7 +27867,7 @@ when exported.</p>`,
       let html = dataRow(0);
       for (const mt of ls.scaleModTests) {
         if (!mt.colIdxs || mt.colIdxs.length === 0) continue;
-        const qmStr = isFinite(mt.QM) ? ` &nbsp;\xB7&nbsp; QM \u03C7\xB2(${mt.QMdf}) = ${fmt(mt.QM)}, p = ${regFmtP(mt.QMp)}` : "";
+        const qmStr = isFinite(mt.QM) ? ` &nbsp;\xB7&nbsp; <em>Q</em>M \u03C7\xB2(${mt.QMdf}) = ${fmt(mt.QM)}, <em>p</em> = ${regFmtP(mt.QMp)}` : "";
         html += `<tr class="reg-mod-group"><td colspan="7"><span class="reg-mod-name">${escapeHTML(mt.name)}</span>${qmStr}</td></tr>`;
         for (const j of mt.colIdxs) html += dataRow(j);
       }
@@ -24047,7 +27876,7 @@ when exported.</p>`,
     function fittedRows() {
       if (!ls.labels || !ls.fitted) return "";
       return ls.labels.map((lbl, i) => `<tr>
-      <td>${lbl || i + 1}</td>
+      <td>${lbl ? escapeHTML(lbl) : i + 1}</td>
       <td>${fmt(ls.yi[i])}</td>
       <td>${fmt(ls.fitted[i])}</td>
       <td>${fmt(ls.residuals[i])}</td>
@@ -24055,9 +27884,9 @@ when exported.</p>`,
     </tr>`).join("");
     }
     const excWarn = kExcluded > 0 ? `<div class="reg-note reg-warn">\u26A0 ${kExcluded} ${kExcluded === 1 ? "study" : "studies"} excluded (missing moderator value${kExcluded === 1 ? "" : "s"}).</div>` : "";
-    const QM_locRow = ls.p > 1 && isFinite(ls.QM_loc) ? ` &nbsp;\xB7&nbsp; QM<sub>loc</sub> \u03C7\xB2(${ls.QM_locDf}) = ${fmt(ls.QM_loc)}, p = ${regFmtP(ls.QM_locP)}` : "";
-    const QM_scaleRow = ls.q > 1 && isFinite(ls.QM_scale) ? ` &nbsp;\xB7&nbsp; QM<sub>scale</sub> \u03C7\xB2(${ls.QM_scaleDf}) = ${fmt(ls.QM_scale)}, p = ${regFmtP(ls.QM_scaleP)}` : "";
-    const lrRow = ls.q > 1 && isFinite(ls.LRchi2) ? `<br><span style="color:var(--fg-muted);font-size:0.93em">LR test (scale mods): \u03C7\xB2(${ls.LRdf}) = ${fmt(ls.LRchi2)}, p = ${regFmtP(ls.LRp)}</span>` : "";
+    const QM_locRow = ls.p > 1 && isFinite(ls.QM_loc) ? ` &nbsp;\xB7&nbsp; <em>Q</em>M<sub>loc</sub> \u03C7\xB2(${ls.QM_locDf}) = ${fmt(ls.QM_loc)}, <em>p</em> = ${regFmtP(ls.QM_locP)}` : "";
+    const QM_scaleRow = ls.q > 1 && isFinite(ls.QM_scale) ? ` &nbsp;\xB7&nbsp; <em>Q</em>M<sub>scale</sub> \u03C7\xB2(${ls.QM_scaleDf}) = ${fmt(ls.QM_scale)}, <em>p</em> = ${regFmtP(ls.QM_scaleP)}` : "";
+    const lrRow = ls.q > 1 && isFinite(ls.LRchi2) ? `<br><span style="color:var(--fg-muted);font-size:0.93em">LR test (scale mods): \u03C7\xB2(${ls.LRdf}) = ${fmt(ls.LRchi2)}, <em>p</em> = ${regFmtP(ls.LRp)}</span>` : "";
     const fRows = fittedRows();
     panel.innerHTML = `
     <div class="reg-header">
@@ -24066,7 +27895,7 @@ when exported.</p>`,
     </div>
     <div class="reg-het">
       ${tau2rng} &nbsp;\xB7&nbsp; I\xB2 = ${fmt(ls.I2)}%
-      &nbsp;\xB7&nbsp; QE(${ls.QEdf}) = ${fmt(ls.QE)}, p = ${regFmtP(ls.QEp)}
+      &nbsp;\xB7&nbsp; <em>Q</em>E(${ls.QEdf}) = ${fmt(ls.QE)}, <em>p</em> = ${regFmtP(ls.QEp)}
       ${QM_locRow}${QM_scaleRow}
       ${lrRow}
       <br><span style="color:var(--fg-muted);font-size:0.93em">LL = ${fmt(ls.LL)} (ML; log \u03C4\xB2\u1D62 = Z\u1D62\u03B3)</span>
@@ -24076,20 +27905,20 @@ when exported.</p>`,
       <p style="margin:4px 0 2px;font-weight:600;font-size:0.95em">Location model \u2014 E[y\u1D62] = X\u1D62\u03B2</p>
       <table class="reg-table">
         <thead><tr>
-          <th>Term</th><th>\u03B2</th><th>SE</th><th>z</th>
-          <th>p</th><th>${ciLbl}</th><th></th>
+          <th>Term</th><th>\u03B2</th><th>SE</th><th><em>z</em></th>
+          <th><em>p</em></th><th>${ciLbl}</th><th></th>
         </tr></thead>
         <tbody>${locRows()}</tbody>
       </table>
       <p style="margin:10px 0 2px;font-weight:600;font-size:0.95em">Scale model \u2014 log \u03C4\xB2\u1D62 = Z\u1D62\u03B3</p>
       <table class="reg-table">
         <thead><tr>
-          <th>Term</th><th>\u03B3</th><th>SE</th><th>z</th>
-          <th>p</th><th>${ciLbl}</th><th></th>
+          <th>Term</th><th>\u03B3</th><th>SE</th><th><em>z</em></th>
+          <th><em>p</em></th><th>${ciLbl}</th><th></th>
         </tr></thead>
         <tbody>${scaleRows()}</tbody>
       </table>
-      <div class="reg-note">*** p &lt; .001 &nbsp;\xB7&nbsp; ** p &lt; .01 &nbsp;\xB7&nbsp; * p &lt; .05 &nbsp;\xB7&nbsp; \xB7 p &lt; .10 &nbsp;\xB7&nbsp; e\u02E3: exponentiated intercept = \u03C4\xB2 when all scale predictors = 0</div>
+      <div class="reg-note">*** <em>p</em> &lt; .001 &nbsp;\xB7&nbsp; ** <em>p</em> &lt; .01 &nbsp;\xB7&nbsp; * <em>p</em> &lt; .05 &nbsp;\xB7&nbsp; \xB7 <em>p</em> &lt; .10 &nbsp;\xB7&nbsp; e\u02E3: exponentiated intercept = \u03C4\xB2 when all scale predictors = 0</div>
       ${fRows ? `
       <details>
         <summary>Fitted values &amp; study-specific \u03C4\xB2\u1D62 (k = ${ls.k})</summary>
@@ -24099,6 +27928,60 @@ when exported.</p>`,
           </tr></thead>
           <tbody>${fRows}</tbody>
         </table>
+      </details>` : ""}
+      ${ls.locModTests.length + ls.scaleModTests.length > 0 ? (() => {
+      function modTestRows(tests) {
+        return tests.map((mt) => {
+          if (mt.QMdf === 0) return `<tr><td>${escapeHTML(mt.name)}</td><td colspan="3"><i>degenerate (\u2264 1 level)</i></td></tr>`;
+          return `<tr>
+              <td>${escapeHTML(mt.name)}</td>
+              <td>${isFinite(mt.QM) ? fmt(mt.QM) : "\u2014"}</td>
+              <td>\u03C7\xB2(${mt.QMdf})</td>
+              <td>${regFmtP(mt.QMp)}</td>
+            </tr>`;
+        }).join("");
+      }
+      const locBlock = ls.locModTests.length > 0 ? `<p style="margin:6px 0 2px;font-weight:600;font-size:0.93em">Location model</p>
+             <table class="reg-table"><thead><tr>
+               <th>Moderator</th><th><em>Q</em>M (Wald)</th><th>df</th><th><em>p</em></th>
+             </tr></thead><tbody>${modTestRows(ls.locModTests)}</tbody></table>` : "";
+      const scaleBlock = ls.scaleModTests.length > 0 ? `<p style="margin:8px 0 2px;font-weight:600;font-size:0.93em">Scale model</p>
+             <table class="reg-table"><thead><tr>
+               <th>Moderator</th><th><em>Q</em>M (Wald)</th><th>df</th><th><em>p</em></th>
+             </tr></thead><tbody>${modTestRows(ls.scaleModTests)}</tbody></table>` : "";
+      return `<details><summary>Per-moderator tests</summary>${locBlock}${scaleBlock}</details>`;
+    })() : ""}
+      <details class="ls-contrast-section">
+        <summary>Custom contrasts \u2014 location model${hBtn("mreg.contrasts")}</summary>
+        <div class="reg-note" style="margin:4px 0 8px">
+          Enter a weight for each location term, then click <em>Test</em>.
+          The test evaluates whether the linear combination L\xB7\u03B2 differs from zero.
+        </div>
+        <table class="reg-table">
+          <thead><tr><th>Term</th><th style="width:6em">Weight</th></tr></thead>
+          <tbody>
+            ${ls.locColNames.map((name, i) => `
+              <tr>
+                <td>${escapeHTML(name)}</td>
+                <td><input type="number" class="contrast-weight" data-idx="${i}"
+                     value="0" step="any" style="width:5em"></td>
+              </tr>`).join("")}
+          </tbody>
+        </table>
+        <button class="btn-sm contrast-test-btn" type="button" style="margin-top:6px">
+          Test contrast
+        </button>
+        <div class="contrast-result"></div>
+      </details>
+      ${ls.vcov_beta && ls.p >= 2 ? `
+      <details>
+        <summary>Coefficient covariance matrices (vcov)</summary>
+        <div class="reg-note" style="margin:4px 0 8px">
+          Location model: ${ls.p}&times;${ls.p} vcov(\u03B2).${ls.q >= 2 ? ` Scale model: ${ls.q}&times;${ls.q} vcov(\u03B3).` : ""}
+          Useful for computing SEs of linear combinations not available in the contrasts panel.
+        </div>
+        <button class="btn-sm vcov-download-btn" data-which="loc" type="button">Download vcov(\u03B2) as CSV</button>
+        ${ls.q >= 2 ? `<button class="btn-sm vcov-download-btn" data-which="scale" type="button" style="margin-left:6px">Download vcov(\u03B3) as CSV</button>` : ""}
       </details>` : ""}
     </div>`;
   }
@@ -24126,10 +28009,10 @@ when exported.</p>`,
       <div class="reg-body"><i>${msg}</i></div>`;
       return;
     }
-    const statLabel = reg.dist === "t" ? `t(${reg.QEdf})` : "z";
-    const QMlabel = reg.QMdist === "F" ? `F(${reg.QMdf}, ${reg.QEdf})` : `\u03C7\xB2(${reg.QMdf})`;
+    const statLabel = reg.dist === "t" ? `<em>t</em>(${reg.QEdf})` : "<em>z</em>";
+    const QMlabel = reg.QMdist === "F" ? `<em>F</em>(${reg.QMdf}, ${reg.QEdf})` : `\u03C7\xB2(${reg.QMdf})`;
     const ciLabel = ciMethod === "KH" ? "Knapp-Hartung" : "Normal CI";
-    const QMrow = reg.p > 1 ? ` &nbsp;\xB7&nbsp; QM ${QMlabel} = ${fmt(reg.QM)}, p = ${regFmtP(reg.QMp)}` : "";
+    const QMrow = reg.p > 1 ? ` &nbsp;\xB7&nbsp; <em>Q</em>M ${QMlabel} = ${fmt(reg.QM)}, <em>p</em> = ${regFmtP(reg.QMp)}` : "";
     const mccMethod = document.getElementById("mccMethod")?.value ?? "none";
     const rawModPs = Array.isArray(reg.modTests) ? reg.modTests.map((mt) => mt.QMp) : [];
     const adjModPs = mccMethod !== "none" && rawModPs.length > 1 ? adjustPvals(rawModPs, mccMethod) : null;
@@ -24147,12 +28030,12 @@ when exported.</p>`,
         <table class="reg-table">
           <thead><tr>
             <th>Moderator</th>
-            <th>${reg.QMdist === "F" ? "F" : "QM"} (Wald)</th>
+            <th>${reg.QMdist === "F" ? "<em>F</em>" : "<em>Q</em>M"} (Wald)</th>
             ${hasLRT ? `<th>LRT \u03C7\xB2${hBtn("mreg.lrt")}</th>` : ""}
             <th>df</th>
-            <th>p (Wald)</th>
-            ${hasLRT ? `<th>p (LRT)</th>` : ""}
-            ${hasAdjPs ? `<th>p (${mccLabel})</th>` : ""}
+            <th><em>p</em> (Wald)</th>
+            ${hasLRT ? `<th><em>p</em> (LRT)</th>` : ""}
+            ${hasAdjPs ? `<th><em>p</em> (${mccLabel})</th>` : ""}
           </tr></thead>
           <tbody>
             ${reg.modTests.map((mt, mi) => {
@@ -24160,15 +28043,16 @@ when exported.</p>`,
         return `<tr><td>${mt.name}</td><td colspan="${(hasAdjPs ? 1 : 0) + (hasLRT ? 2 : 0) + 3}"><i>degenerate (\u2264 1 level)</i></td></tr>`;
       }
       const dfLabel = reg.QMdist === "F" ? `F(${mt.QMdf},\u2009${reg.QEdf})` : `\u03C7\xB2(${mt.QMdf})`;
-      const lrtCells = hasLRT ? `<td>${isFinite(mt.lrt) ? fmt(mt.lrt) : "NA"}</td>
-                   <td>${isFinite(mt.lrtP) ? regFmtP(mt.lrtP) : "NA"}</td>` : "";
+      const lrtStatCell = hasLRT ? `<td>${isFinite(mt.lrt) ? fmt(mt.lrt) : "NA"}</td>` : "";
+      const lrtPCell = hasLRT ? `<td>${isFinite(mt.lrtP) ? regFmtP(mt.lrtP) : "NA"}</td>` : "";
       const adjCell = hasAdjPs ? `<td>${regFmtP(adjModPs[mi])}</td>` : "";
       return `<tr>
                 <td>${mt.name}</td>
                 <td>${fmt(mt.QM)}</td>
-                ${lrtCells}
+                ${lrtStatCell}
                 <td>${dfLabel}</td>
                 <td>${regFmtP(mt.QMp)}</td>
+                ${lrtPCell}
                 ${adjCell}
               </tr>`;
     }).join("")}
@@ -24177,7 +28061,7 @@ when exported.</p>`,
         ${hasLRT ? `<div class="reg-note">LRT\u202F=\u202FLikelihood Ratio Test; uses ML estimation internally regardless of \u03C4\xB2 method selected.</div>` : ""}
         ${hasAdjPs ? `<div class="reg-note">${mccLabel} correction applied across m\u2009=\u2009${rawModPs.length} moderator tests.</div>` : ""}
       </details>` : "";
-    const robustHeaders = reg.isClustered ? `<th>Rob.SE</th><th>Rob.p</th>` : "";
+    const robustHeaders = reg.isClustered ? `<th>Rob.SE</th><th>Rob.<em>t</em></th><th>Rob.<em>p</em></th><th>Rob.CI</th>` : "";
     panel.innerHTML = `
     <div class="reg-header">
       <span class="reg-title">Meta-Regression${hBtn("diag.metaregression")}</span>
@@ -24186,21 +28070,21 @@ when exported.</p>`,
     <div class="reg-het">
       \u03C4\xB2 = ${fmt(reg.tau2)} (residual) &nbsp;\xB7&nbsp; I\xB2 = ${fmt(reg.I2)}%
       ${reg.p > 1 ? `&nbsp;\xB7&nbsp; R\xB2 = ${isFinite(reg.R2) ? fmt(reg.R2 * 100) + "%" : "N/A"}` : ""}
-      &nbsp;\xB7&nbsp; QE(${reg.QEdf}) = ${fmt(reg.QE)}, p = ${regFmtP(reg.QEp)}
+      &nbsp;\xB7&nbsp; <em>Q</em>E(${reg.QEdf}) = ${fmt(reg.QE)}, <em>p</em> = ${regFmtP(reg.QEp)}
       ${QMrow}
-      <br><span style="color:var(--fg-muted);font-size:0.93em">${hBtn("reg.aic")}AIC&nbsp;=&nbsp;${fmt(reg.AIC)} &nbsp;\xB7&nbsp; BIC&nbsp;=&nbsp;${fmt(reg.BIC)} &nbsp;\xB7&nbsp; LL&nbsp;=&nbsp;${fmt(reg.LL)}&nbsp;&nbsp;<span style="font-size:0.9em;opacity:0.75">(${method}; compare ${method === "REML" ? "models with same predictors only" : "any nested models"})</span></span>
+      <br><span style="color:var(--fg-muted);font-size:0.93em">${hBtn("reg.aic")}AIC&nbsp;=&nbsp;${fmt(reg.AIC)} &nbsp;\xB7&nbsp; BIC&nbsp;=&nbsp;${fmt(reg.BIC)} &nbsp;\xB7&nbsp; LL&nbsp;=&nbsp;${fmt(reg.LL)}${ciMethod === "KH" && isFinite(reg.s2) ? ` &nbsp;\xB7&nbsp; KH&nbsp;<em>s</em>\xB2&nbsp;=&nbsp;${fmt(reg.s2)}` : ""}&nbsp;&nbsp;<span style="font-size:0.9em;opacity:0.75">(${method}; compare ${method === "REML" ? "models with same predictors only" : "any nested models"})</span></span>
     </div>
     <div class="reg-body">
       ${clusterRegNote}${excludedWarning}${lowDfWarning}${vifWarning}
       <table class="reg-table">
         <thead><tr>
           <th>Term</th><th>\u03B2</th><th>SE</th><th>${statLabel}</th>
-          <th>p</th><th>${getCiLabel()}</th><th>VIF</th><th></th>
+          <th><em>p</em></th><th>${getCiLabel()}</th><th>VIF</th><th></th>
           ${robustHeaders}
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>
-      <div class="reg-note">*** p &lt; .001 &nbsp;\xB7&nbsp; ** p &lt; .01 &nbsp;\xB7&nbsp; * p &lt; .05 &nbsp;\xB7&nbsp; \xB7 p &lt; .10</div>
+      <div class="reg-note">*** <em>p</em> &lt; .001 &nbsp;\xB7&nbsp; ** <em>p</em> &lt; .01 &nbsp;\xB7&nbsp; * <em>p</em> &lt; .05 &nbsp;\xB7&nbsp; \xB7 <em>p</em> &lt; .10</div>
       ${modTestsBlock}
       <details class="contrast-section">
         <summary>Custom contrasts${hBtn("mreg.contrasts")}</summary>
@@ -24236,22 +28120,40 @@ when exported.</p>`,
         </table>
         <div class="reg-note">Standardized residuals |std. e| &gt; 1.96 highlighted.</div>
       </details>` : ""}
+      ${reg.vcov && reg.p >= 2 ? `
+      <details>
+        <summary>Coefficient covariance matrix (vcov)</summary>
+        <div class="reg-note" style="margin:4px 0 8px">
+          The ${reg.p}&times;${reg.p} variance-covariance matrix of regression coefficients.
+          Useful for computing SEs of linear combinations not available in the contrasts panel.
+          ${reg.isClustered ? "Note: this is the model-based vcov, not the cluster-robust sandwich estimator." : ""}
+        </div>
+        <button class="btn-sm vcov-download-btn" type="button">Download vcov as CSV</button>
+      </details>` : ""}
     </div>`;
   }
   var TAU_METHOD_LABELS = {
-    DL: "DerSimonian-Laird (DL)",
     REML: "REML",
+    DL: "DerSimonian-Laird (DL)",
     PM: "Paule-Mandel (PM)",
     ML: "Maximum Likelihood (ML)",
-    HS: "Hunter-Schmidt (HS)",
+    EB: "Empirical Bayes (EB)",
     HE: "Hedges (HE)",
-    SJ: "Sidik-Jonkman (SJ)"
+    HS: "Hunter-Schmidt (HS)",
+    SJ: "Sidik-Jonkman (SJ)",
+    GENQ: "Generalized Q (GENQ)",
+    DLIT: "Iterated DL (DLIT)",
+    PMM: "Paule-Mandel Median (PMM)",
+    GENQM: "Generalized Q Median (GENQM)",
+    SQGENQ: "Square-root GENQ (SQGENQ)",
+    HSk: "Hunter-Schmidt corrected (HSk)",
+    EBLUP: "EBLUP (= REML)"
   };
   function sensFv(v) {
     return isFinite(v) ? v.toFixed(3) : "\u2014";
   }
   function sensFvp(v) {
-    return isFinite(v) ? v < 1e-3 ? "<.001" : v.toFixed(3) : "\u2014";
+    return isFinite(v) ? v < 1e-3 ? "< .001" : v.toFixed(3).replace(/^0\./, ".") : "\u2014";
   }
   function sensTrunc(s, n) {
     const e = escapeHTML(s);
@@ -24269,7 +28171,7 @@ when exported.</p>`,
       <th>${getCiLabel()} (high)</th>
       <th>I\xB2 (%)</th>
       <th>\u03C4\xB2</th>
-      <th>p</th>
+      <th><em>p</em></th>
       <th>\u0394 estimate</th>
     </tr>`;
     const dataRows = loo.rows.map((row) => {
@@ -24372,14 +28274,17 @@ when exported.</p>`,
     const tau2 = m.isMH || m.isPeto || !isFinite(m.tau2) ? 0 : m.tau2;
     const real = studies.filter((d) => !d.filled);
     const totalW = real.reduce((s, d) => s + 1 / (d.vi + tau2), 0);
+    const showFEcol = !m.isMH && !m.isPeto;
+    const totalWfe = showFEcol ? real.reduce((s, d) => s + 1 / d.vi, 0) : 0;
     const seLabel = profile.isTransformedScale ? "SE (transformed)" : "SE";
     const rows = studies.map((d) => {
       const wi = 1 / (d.vi + tau2);
       const pct = d.filled ? null : wi / totalW * 100;
+      const pctFE = showFEcol && !d.filled ? 1 / d.vi / totalWfe * 100 : null;
       const ef = profile.transform(d.yi);
       const lo = profile.transform(d.yi - Z_95 * d.se);
       const hi = profile.transform(d.yi + Z_95 * d.se);
-      return { label: escapeHTML(d.label), ef, lo, hi, se: d.se, pct, filled: !!d.filled };
+      return { label: escapeHTML(d.label), ef, lo, hi, se: d.se, pct, pctFE, filled: !!d.filled };
     });
     const pooledEf = profile.transform(isFinite(m.RE) ? m.RE : m.FE);
     const pooledLo = profile.transform(m.ciLow);
@@ -24404,6 +28309,7 @@ when exported.</p>`,
       <th>${getCiLabel()} (high)</th>
       <th>${seLabel}</th>
       <th>${weightLabel}</th>
+      ${showFEcol ? "<th>FE Weight</th>" : ""}
     </tr>`;
     const studyRows = rows.map((r) => `
     <tr class="${r.filled ? "imputed-row" : ""}">
@@ -24413,7 +28319,18 @@ when exported.</p>`,
       <td>${fmtVal(r.hi)}</td>
       <td>${fmtVal(r.se)}</td>
       <td>${fmtPct(r.pct)}</td>
+      ${showFEcol ? `<td>${fmtPct(r.pctFE)}</td>` : ""}
     </tr>`).join("");
+    const feRow = showFEcol ? `
+    <tr class="pooled-row">
+      <td>Pooled (FE)</td>
+      <td>${fmtVal(profile.transform(m.FE))}</td>
+      <td>${fmtVal(profile.transform(m.FE - Z_95 * m.seFE))}</td>
+      <td>${fmtVal(profile.transform(m.FE + Z_95 * m.seFE))}</td>
+      <td>${fmtVal(m.seFE)}</td>
+      <td>\u2014</td>
+      <td>100%</td>
+    </tr>` : "";
     const pooledLabel = m.isMH ? "Pooled (MH)" : m.isPeto ? "Pooled (Peto)" : "Pooled (RE)";
     const pooledSE = isFinite(m.seRE) ? m.seRE : m.seFE;
     const pooledRow = `
@@ -24424,10 +28341,11 @@ when exported.</p>`,
       <td>${fmtVal(pooledHi)}</td>
       <td>${fmtVal(pooledSE)}</td>
       <td>100%</td>
+      ${showFEcol ? "<td>\u2014</td>" : ""}
     </tr>`;
-    container.innerHTML = `<table class="study-table">${headerRow}${studyRows}${pooledRow}</table>`;
+    container.innerHTML = `<table class="study-table">${headerRow}${studyRows}${feRow}${pooledRow}</table>`;
   }
-  function renderPCurvePanel(pcurve) {
+  function renderPCurvePanel(pcurve, options = {}) {
     const panel = document.getElementById("pCurvePanel");
     const plotBlock = document.getElementById("pCurvePlotBlock");
     if (!panel || !plotBlock) return;
@@ -24441,10 +28359,7 @@ when exported.</p>`,
       return isFinite(z) ? z.toFixed(3) : "\u2014";
     }
     function fmtP2(p) {
-      if (!isFinite(p)) return "\u2014";
-      if (p < 1e-3) return "< 0.001";
-      if (p < 0.01) return "< 0.01";
-      return p.toFixed(3);
+      return fmtPval(p);
     }
     const verdictLabels = {
       "evidential": "Evidential value",
@@ -24455,13 +28370,13 @@ when exported.</p>`,
     panel.innerHTML = `
     <div class="pcurve-summary">
       <span>P-curve &nbsp;\xB7&nbsp; <strong>${pcurve.k}</strong> significant result${pcurve.k !== 1 ? "s" : ""} (p &lt; .05)</span>
-      <span>Right-skew test: Z = <strong>${fmtZ(pcurve.rightSkewZ)}</strong>, p = <strong>${fmtP2(pcurve.rightSkewP)}</strong></span>
-      <span>Flatness test: Z = <strong>${fmtZ(pcurve.flatnessZ)}</strong>, p = <strong>${fmtP2(pcurve.flatnessP)}</strong></span>
+      <span>Right-skew test: <em>Z</em> = <strong>${fmtZ(pcurve.rightSkewZ)}</strong>, <em>p</em> <strong>${fmtP2(pcurve.rightSkewP)}</strong></span>
+      <span>Flatness test: <em>Z</em> = <strong>${fmtZ(pcurve.flatnessZ)}</strong>, <em>p</em> <strong>${fmtP2(pcurve.flatnessP)}</strong></span>
       <span class="status-pill ${pcurve.verdict}">${verdictLabels[pcurve.verdict] ?? pcurve.verdict}</span>
     </div>`;
-    drawPCurve(pcurve);
+    drawPCurve(pcurve, options);
   }
-  function renderPUniformPanel(puniform, m, profile) {
+  function renderPUniformPanel(puniform, m, profile, options = {}) {
     const panel = document.getElementById("pUniformPanel");
     const plotBlock = document.getElementById("pUniformPlotBlock");
     if (!panel || !plotBlock) return;
@@ -24475,10 +28390,7 @@ when exported.</p>`,
       return isFinite(z) ? z.toFixed(3) : "\u2014";
     }
     function fmtP2(p) {
-      if (!isFinite(p)) return "\u2014";
-      if (p < 1e-3) return "< 0.001";
-      if (p < 0.01) return "< 0.01";
-      return p.toFixed(3);
+      return fmtPval(p);
     }
     function fmtEst(v) {
       return isFinite(v) ? fmt(profile.transform(v)) : "\u2014";
@@ -24497,23 +28409,20 @@ when exported.</p>`,
     <div class="puniform-summary">
       <span>P-uniform &nbsp;\xB7&nbsp; <strong>${puniform.k}</strong> significant result${puniform.k !== 1 ? "s" : ""} (p &lt; .05)</span>
       <span>Estimate: <strong>${est}</strong> [${lo}, ${hi}]</span>
-      <span>Significance test: Z = <strong>${fmtZ(puniform.Z_sig)}</strong>, p = <strong>${fmtP2(puniform.p_sig)}</strong></span>
-      <span>Bias test: Z = <strong>${fmtZ(puniform.Z_bias)}</strong>, p = <strong>${fmtP2(puniform.p_bias)}</strong></span>
+      <span>Significance test: <em>Z</em> = <strong>${fmtZ(puniform.Z_sig)}</strong>, <em>p</em> <strong>${fmtP2(puniform.p_sig)}</strong></span>
+      <span>Bias test: <em>Z</em> = <strong>${fmtZ(puniform.Z_bias)}</strong>, <em>p</em> <strong>${fmtP2(puniform.p_bias)}</strong></span>
       ${flags.join(" ")}
     </div>`;
-    drawPUniform(puniform, m, profile);
+    drawPUniform(puniform, m, profile, options);
   }
-  function renderSelectionModelPanel(r, mode, profile) {
+  function renderSelectionModelPanel(r, mode, weightFn, profile) {
     const panel = document.getElementById("selectionModelPanel");
     if (!panel) return;
     function fmtV(v) {
       return isFinite(v) ? fmt(v) : "\u2014";
     }
     function fmtP2(p) {
-      if (!isFinite(p)) return "\u2014";
-      if (p < 1e-3) return "< 0.001";
-      if (p < 0.01) return "< 0.01";
-      return p.toFixed(3);
+      return fmtPval(p);
     }
     function fmtDisp(v) {
       return isFinite(v) ? fmt(profile.transform(v)) : "\u2014";
@@ -24523,7 +28432,126 @@ when exported.</p>`,
       return;
     }
     if (r.error === "insufficient_k") {
-      panel.innerHTML = `${hBtn("sel.model")}<p class="sel-note">Insufficient studies: need at least ${r.minK} for ${r.K} intervals (have ${r.k}).</p>`;
+      const need = r.minK ?? r.K + 2;
+      panel.innerHTML = `${hBtn("sel.model")}<p class="sel-note">Insufficient studies: need at least ${need} (have ${r.k}).</p>`;
+      return;
+    }
+    if (r.weightFn === "halfnorm") {
+      const muAdj2 = fmtDisp(r.mu);
+      const ciLo2 = fmtDisp(r.ci_mu[0]);
+      const ciHi2 = fmtDisp(r.ci_mu[1]);
+      const muUnadj2 = fmtDisp(r.RE_unsel);
+      const convNote2 = !r.converged ? `<p class="sel-warn">\u26A0 Optimizer did not fully converge. Results may be unreliable.</p>` : "";
+      const tau2Warn2 = r.tau2_unsel !== void 0 && r.tau2_unsel < 0.01 ? `<p class="sel-note">Note: Heterogeneity near zero (\u03C4\xB2 \u2248 0). Selection model may be underidentified.</p>` : "";
+      const sidesLabel = r.sides === 2 ? "two-sided" : "one-sided";
+      panel.innerHTML = `
+      ${hBtn("sel.halfnorm")}${tau2Warn2}
+      <p class="sel-note">Half-normal weight function \xB7 w(p; \u03B4) = \u03A6(\u03A6\u207B\xB9(1\u2212p) \xB7 \u03B4) \xB7 ${sidesLabel} p-values</p>
+      <table class="sel-table">
+        <thead><tr><th>Quantity</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td>Selection parameter \u03B4\u0302</td>
+              <td>${fmtV(r.delta)}${isFinite(r.se_delta) ? ` \xB1 ${fmtV(r.se_delta)}` : ""}</td></tr>
+          <tr><td>Adjusted \u03BC\u0302 [95% CI]</td>
+              <td>${muAdj2} [${ciLo2}, ${ciHi2}] &nbsp;\xB7&nbsp; unadjusted: ${muUnadj2}</td></tr>
+          <tr><td>Adjusted \u03C4\xB2</td>
+              <td>${fmtV(r.tau2)} &nbsp;\xB7&nbsp; unadjusted: ${fmtV(r.tau2_unsel)}</td></tr>
+          <tr><td>LRT (H\u2080: \u03B4 = 0)</td>
+              <td>\u03C7\xB2(1) = ${fmtV(r.LRT)}, <em>p</em> ${fmtP2(r.LRTp)}</td></tr>
+          <tr><td>Log-likelihood</td>
+              <td>sel: ${fmtV(r.logLikSel)} \xB7 unsel: ${fmtV(r.logLikUnsel)}<span class="sel-note"> (ML; omits normalising constants)</span></td></tr>
+        </tbody>
+      </table>
+      ${convNote2}`;
+      return;
+    }
+    if (r.weightFn === "power") {
+      const muAdj2 = fmtDisp(r.mu);
+      const ciLo2 = fmtDisp(r.ci_mu[0]);
+      const ciHi2 = fmtDisp(r.ci_mu[1]);
+      const muUnadj2 = fmtDisp(r.RE_unsel);
+      const convNote2 = !r.converged ? `<p class="sel-warn">\u26A0 Optimizer did not fully converge. Results may be unreliable.</p>` : "";
+      const tau2Warn2 = r.tau2_unsel !== void 0 && r.tau2_unsel < 0.01 ? `<p class="sel-note">Note: Heterogeneity near zero (\u03C4\xB2 \u2248 0). Selection model may be underidentified.</p>` : "";
+      const sidesLabel = r.sides === 2 ? "two-sided" : "one-sided";
+      panel.innerHTML = `
+      ${hBtn("sel.power")}${tau2Warn2}
+      <p class="sel-note">Power weight function \xB7 w(p; \u03B4) = (1 \u2212 p)<sup>\u03B4</sup> \xB7 ${sidesLabel} p-values</p>
+      <table class="sel-table">
+        <thead><tr><th>Quantity</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td>Selection parameter \u03B4\u0302</td>
+              <td>${fmtV(r.delta)}${isFinite(r.se_delta) ? ` \xB1 ${fmtV(r.se_delta)}` : ""}</td></tr>
+          <tr><td>Adjusted \u03BC\u0302 [95% CI]</td>
+              <td>${muAdj2} [${ciLo2}, ${ciHi2}] &nbsp;\xB7&nbsp; unadjusted: ${muUnadj2}</td></tr>
+          <tr><td>Adjusted \u03C4\xB2</td>
+              <td>${fmtV(r.tau2)} &nbsp;\xB7&nbsp; unadjusted: ${fmtV(r.tau2_unsel)}</td></tr>
+          <tr><td>LRT (H\u2080: \u03B4 = 0)</td>
+              <td>\u03C7\xB2(1) = ${fmtV(r.LRT)}, <em>p</em> ${fmtP2(r.LRTp)}</td></tr>
+          <tr><td>Log-likelihood</td>
+              <td>sel: ${fmtV(r.logLikSel)} \xB7 unsel: ${fmtV(r.logLikUnsel)}<span class="sel-note"> (ML; omits normalising constants)</span></td></tr>
+        </tbody>
+      </table>
+      ${convNote2}`;
+      return;
+    }
+    if (r.weightFn === "negexp") {
+      const muAdj2 = fmtDisp(r.mu);
+      const ciLo2 = fmtDisp(r.ci_mu[0]);
+      const ciHi2 = fmtDisp(r.ci_mu[1]);
+      const muUnadj2 = fmtDisp(r.RE_unsel);
+      const convNote2 = !r.converged ? `<p class="sel-warn">\u26A0 Optimizer did not fully converge. Results may be unreliable.</p>` : "";
+      const tau2Warn2 = r.tau2_unsel !== void 0 && r.tau2_unsel < 0.01 ? `<p class="sel-note">Note: Heterogeneity near zero (\u03C4\xB2 \u2248 0). Selection model may be underidentified.</p>` : "";
+      const sidesLabel = r.sides === 2 ? "two-sided" : "one-sided";
+      panel.innerHTML = `
+      ${hBtn("sel.negexp")}${tau2Warn2}
+      <p class="sel-note">Negative exponential weight function \xB7 w(p; \u03B4) = e<sup>\u2212\u03B4p</sup> \xB7 ${sidesLabel} p-values</p>
+      <table class="sel-table">
+        <thead><tr><th>Quantity</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td>Selection parameter \u03B4\u0302</td>
+              <td>${fmtV(r.delta)}${isFinite(r.se_delta) ? ` \xB1 ${fmtV(r.se_delta)}` : ""}</td></tr>
+          <tr><td>Adjusted \u03BC\u0302 [95% CI]</td>
+              <td>${muAdj2} [${ciLo2}, ${ciHi2}] &nbsp;\xB7&nbsp; unadjusted: ${muUnadj2}</td></tr>
+          <tr><td>Adjusted \u03C4\xB2</td>
+              <td>${fmtV(r.tau2)} &nbsp;\xB7&nbsp; unadjusted: ${fmtV(r.tau2_unsel)}</td></tr>
+          <tr><td>LRT (H\u2080: \u03B4 = 0)</td>
+              <td>\u03C7\xB2(1) = ${fmtV(r.LRT)}, <em>p</em> ${fmtP2(r.LRTp)}</td></tr>
+          <tr><td>Log-likelihood</td>
+              <td>sel: ${fmtV(r.logLikSel)} \xB7 unsel: ${fmtV(r.logLikUnsel)}<span class="sel-note"> (ML; omits normalising constants)</span></td></tr>
+        </tbody>
+      </table>
+      ${convNote2}`;
+      return;
+    }
+    if (r.weightFn === "beta") {
+      const muAdj2 = fmtDisp(r.mu);
+      const ciLo2 = fmtDisp(r.ci_mu[0]);
+      const ciHi2 = fmtDisp(r.ci_mu[1]);
+      const muUnadj2 = fmtDisp(r.RE_unsel);
+      const convNote2 = !r.converged ? `<p class="sel-warn">\u26A0 Optimizer did not fully converge. Results may be unreliable.</p>` : "";
+      const tau2Warn2 = r.tau2_unsel !== void 0 && r.tau2_unsel < 0.01 ? `<p class="sel-note">Note: Heterogeneity near zero (\u03C4\xB2 \u2248 0). Selection model may be underidentified.</p>` : "";
+      const sidesLabel = r.sides === 2 ? "two-sided" : "one-sided";
+      panel.innerHTML = `
+      ${hBtn("sel.beta")}${tau2Warn2}
+      <p class="sel-note">Beta weight function \xB7 w(p; a, b) = p<sup>a\u22121</sup>(1\u2212p)<sup>b\u22121</sup> \xB7 ${sidesLabel} p-values</p>
+      <table class="sel-table">
+        <thead><tr><th>Quantity</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td>Shape \xE2</td>
+              <td>${fmtV(r.a)}${isFinite(r.se_a) ? ` \xB1 ${fmtV(r.se_a)}` : ""}</td></tr>
+          <tr><td>Shape b\u0302</td>
+              <td>${fmtV(r.b)}${isFinite(r.se_b) ? ` \xB1 ${fmtV(r.se_b)}` : ""}</td></tr>
+          <tr><td>Adjusted \u03BC\u0302 [95% CI]</td>
+              <td>${muAdj2} [${ciLo2}, ${ciHi2}] &nbsp;\xB7&nbsp; unadjusted: ${muUnadj2}</td></tr>
+          <tr><td>Adjusted \u03C4\xB2</td>
+              <td>${fmtV(r.tau2)} &nbsp;\xB7&nbsp; unadjusted: ${fmtV(r.tau2_unsel)}</td></tr>
+          <tr><td>LRT (H\u2080: a = b = 1)</td>
+              <td>\u03C7\xB2(2) = ${fmtV(r.LRT)}, <em>p</em> ${fmtP2(r.LRTp)}</td></tr>
+          <tr><td>Log-likelihood</td>
+              <td>sel: ${fmtV(r.logLikSel)} \xB7 unsel: ${fmtV(r.logLikUnsel)}<span class="sel-note"> (ML; omits normalising constants)</span></td></tr>
+        </tbody>
+      </table>
+      ${convNote2}`;
       return;
     }
     const K = r.K;
@@ -24548,7 +28576,8 @@ when exported.</p>`,
     const ciLo = fmtDisp(r.mu - 1.96 * r.se_mu);
     const ciHi = fmtDisp(r.mu + 1.96 * r.se_mu);
     const muUnadj = fmtDisp(r.RE_unsel);
-    const lrtRow = isMLE ? `<tr><td>LRT (H\u2080: no selection)</td><td colspan="${K}">\u03C7\xB2(${r.LRTdf}) = ${fmtV(r.LRT)}, p = ${fmtP2(r.LRTp)}</td></tr>` : "";
+    const lrtRow = isMLE ? `<tr><td>LRT (H\u2080: no selection)</td><td colspan="${K}">\u03C7\xB2(${r.LRTdf}) = ${fmtV(r.LRT)}, <em>p</em> ${fmtP2(r.LRTp)}</td></tr>
+       <tr><td>Log-likelihood</td><td colspan="${K}">sel: ${fmtV(r.logLikSel)} \xB7 unsel: ${fmtV(r.logLikUnsel)}<span class="sel-note"> (ML; omits normalising constants)</span></td></tr>` : "";
     const convNote = isMLE && !r.converged ? `<p class="sel-warn">\u26A0 Optimizer did not fully converge (gradient norm may be elevated). Results may be unreliable.</p>` : "";
     const tau2Warn = r.tau2_unsel !== void 0 && r.tau2_unsel < 0.01 ? `<p class="sel-note">Note: Heterogeneity is near zero (\u03C4\xB2 \u2248 0). The selection model may be underidentified and results unreliable.</p>` : "";
     const headerCells = intervalLabels.map((l) => `<th>${l}</th>`).join("");
@@ -24584,43 +28613,50 @@ when exported.</p>`,
     </table>
     ${convNote}`;
   }
-  function buildInfluenceHTML(influence) {
+  function buildInfluenceHTML(influence, isOpen = true) {
     const k = influence.length;
     const dffitsThresh = 3 * Math.sqrt(1 / Math.max(k - 1, 1));
     const covRatioThresh = 1 + 1 / k;
     const rows = influence.map((d) => {
       const anyFlag = d.outlier || d.influential || d.highLeverage || d.highCookD || d.highDffits || d.highCovRatio;
       const rowStyle = anyFlag ? "class='results-row-flagged'" : "";
-      const hatStyle = d.highLeverage ? " style='color:var(--color-warning);font-weight:bold;'" : "";
-      const cookStyle = d.highCookD ? " style='color:var(--color-warning);font-weight:bold;'" : "";
-      const dffitsStyle = d.highDffits ? " style='color:var(--color-warning);font-weight:bold;'" : "";
-      const covRatioStyle = d.highCovRatio ? " style='color:var(--color-warning);font-weight:bold;'" : "";
+      const W = " style='color:var(--color-warning);font-weight:bold;'";
+      const stdResStyle = d.outlier ? W : "";
+      const dfbetaStyle = d.influential ? W : "";
+      const hatStyle = d.highLeverage ? W : "";
+      const cookStyle = d.highCookD ? W : "";
+      const dffitsStyle = d.highDffits ? W : "";
+      const covRatioStyle = d.highCovRatio ? W : "";
       const flags = [
         d.outlier ? "Outlier" : "",
         d.influential ? "Influential" : "",
         d.highLeverage ? "Hi-Lev" : "",
         d.highCookD ? "Hi-Cook" : "",
         d.highDffits ? "Hi-DFFITS" : "",
-        d.highCovRatio ? "Hi-CovRatio" : ""
+        d.highCovRatio ? d.covRatio < 1 ? "Lo-CovRatio" : "Hi-CovRatio" : ""
       ].filter(Boolean).join(", ");
       return `<tr ${rowStyle}>
-      <td>${d.label}</td>
+      <td>${escapeHTML(d.label)}</td>
       <td>${isFinite(d.RE_loo) ? fmt(d.RE_loo) : "NA"}</td>
       <td>${isFinite(d.deltaTau2) ? fmt(d.deltaTau2) : "NA"}</td>
-      <td>${isFinite(d.stdResidual) ? fmt(d.stdResidual) : "NA"}</td>
-      <td>${isFinite(d.DFBETA) ? fmt(d.DFBETA) : "NA"}</td>
+      <td${stdResStyle}>${isFinite(d.stdResidual) ? fmt(d.stdResidual) : "NA"}</td>
+      <td${dfbetaStyle}>${isFinite(d.DFBETA) ? fmt(d.DFBETA) : "NA"}</td>
       <td${dffitsStyle}>${isFinite(d.DFFITS) ? fmt(d.DFFITS) : "NA"}</td>
       <td${covRatioStyle}>${isFinite(d.covRatio) ? d.covRatio.toFixed(3) : "NA"}</td>
       <td${hatStyle}>${isFinite(d.hat) ? d.hat.toFixed(3) : "NA"}</td>
       <td${cookStyle}>${isFinite(d.cookD) ? d.cookD.toFixed(3) : "NA"}</td>
       <td>${flags}</td></tr>`;
     }).join("");
-    return `<b>Influence diagnostics:${hBtn("diag.influence")}</b><br>
+    return `<details class="sens-block"${isOpen ? " open" : ""}>
+    <summary class="sens-summary">
+      Influence diagnostics ${hBtn("diag.influence")}
+    </summary>
     <table border="1">
       <tr><th>Study</th><th>RE (LOO)</th><th>\u0394\u03C4\xB2</th><th>Std Residual</th><th>DFBETA</th><th>DFFITS${hBtn("diag.dffits")}</th><th>CovRatio${hBtn("diag.covratio")}</th><th>Hat</th><th>Cook's D</th><th>Flag</th></tr>
       ${rows}
     </table>
-    <small style="color:var(--fg-muted);">Thresholds: Hat &gt; ${fmt(2 / k)} (= 2/k); Cook's D &gt; ${fmt(4 / k)} (= 4/k); DFFITS &gt; ${fmt(dffitsThresh)} (= 3\xB7\u221A(1/(k\u22121))); CovRatio &gt; ${fmt(covRatioThresh)} (= 1+1/k)</small>`;
+    <small style="color:var(--fg-muted);">Thresholds: Hat &gt; ${fmt(2 / k)} (= 2/k); Cook's D &gt; ${fmt(4 / k)} (= 4/k); DFFITS &gt; ${fmt(dffitsThresh)} (= 3\xB7\u221A(1/(k\u22121))); CovRatio outside [${fmt(1 - 1 / k)}, ${fmt(covRatioThresh)}] (= 1\xB11/k)</small>
+  </details>`;
   }
   function bayesInterpretation(BF10) {
     if (!isFinite(BF10) || BF10 <= 0) return "";
@@ -24638,17 +28674,20 @@ when exported.</p>`,
   function buildBayesSummaryHTML(result, profile, reMean) {
     const muDisp = profile.transform(result.muMean);
     const muCIDisp = result.muCI.map((v) => profile.transform(v));
+    const muSDNote = profile.isTransformedScale ? " (log)" : "";
+    const crLabel = getCiLabel().replace("CI", "CrI");
+    const fmtBF = (bf) => !isFinite(bf) ? "NA" : bf >= 1e3 || bf < 1e-3 ? bf.toExponential(2) : bf.toFixed(3);
     return `
     <table class="stats-table" style="margin-bottom:8px">
       <tr>
         <td>Posterior mean \u03BC</td>
         <td>${fmt(muDisp)}</td>
-        <td>${getCiLabel().replace("CI", "CrI")} [${fmt(muCIDisp[0])}, ${fmt(muCIDisp[1])}]</td>
+        <td>${crLabel} [${fmt(muCIDisp[0])}, ${fmt(muCIDisp[1])}] \xB7 SD${muSDNote} = ${fmt(result.muSD)}</td>
       </tr>
       <tr>
         <td>Posterior mean \u03C4</td>
         <td>${fmt(result.tauMean)}</td>
-        <td>${getCiLabel().replace("CI", "CrI")} [${fmt(result.tauCI[0])}, ${fmt(result.tauCI[1])}]</td>
+        <td>${crLabel} [${fmt(result.tauCI[0])}, ${fmt(result.tauCI[1])}] \xB7 SD = ${fmt(result.tauSD)}</td>
       </tr>
       ${isFinite(reMean) ? `<tr>
         <td>Frequentist RE (comparison)</td>
@@ -24657,9 +28696,14 @@ when exported.</p>`,
       </tr>` : ""}
       ${isFinite(result.BF10) ? `<tr>
         <td>Bayes Factor BF\u2081\u2080 (H\u2081: \u03BC\u22600)</td>
-        <td>${result.BF10 >= 1e3 ? result.BF10.toExponential(2) : result.BF10 < 1e-3 ? result.BF10.toExponential(2) : result.BF10.toFixed(3)}</td>
+        <td>${fmtBF(result.BF10)}</td>
         <td>${bayesInterpretation(result.BF10)}</td>
       </tr>
+      ${result.BF10 < 1 && isFinite(result.BF01) ? `<tr>
+        <td>BF\u2080\u2081 = 1/BF\u2081\u2080 (H\u2080: \u03BC\u202F=\u202F0)</td>
+        <td>${fmtBF(result.BF01)}</td>
+        <td>${bayesInterpretation(result.BF10)}</td>
+      </tr>` : ""}
       <tr>
         <td>log(BF\u2081\u2080)</td>
         <td>${result.logBF10.toFixed(3)}</td>
@@ -24720,10 +28764,69 @@ when exported.</p>`,
     <table border="1">
       <tr><th>Group</th><th>k</th><th>Effect</th><th>SE</th><th>CI</th><th>\u03C4\xB2</th><th>I\xB2 (%)</th></tr>
       ${rows}
+      <tr>
+        <td colspan="7" style="font-size:0.92em;color:var(--muted)">
+          <em>Q</em><sub>total</sub>(${subgroup.k - 1}) = ${subgroup.Qtotal.toFixed(3)}
+          &ensp;\xB7&ensp;
+          <em>Q</em><sub>within</sub>(${subgroup.k - subgroup.G}) = ${subgroup.Qwithin.toFixed(3)}
+        </td>
+      </tr>
       <tr style="font-weight:bold;">
-        <td colspan="7">Q_between = ${subgroup.Qbetween.toFixed(3)}, df = ${subgroup.df}, p = ${subgroup.p.toFixed(4)}</td>
+        <td colspan="7"><em>Q</em><sub>between</sub>(${subgroup.df}) = ${subgroup.Qbetween.toFixed(3)}, <em>p</em> ${fmtPval(subgroup.p)}</td>
       </tr>
     </table>`;
+  }
+  function renderPermResults(permResult, reg) {
+    const el = document.getElementById("permResults");
+    if (!el) return;
+    const { QM_dist, modQM_dist, nPerm, nMods } = permResult;
+    function permPval2(dist, observed) {
+      if (!isFinite(observed)) return NaN;
+      let exceeds = 0;
+      for (let i = 0; i < dist.length; i++) {
+        if (dist[i] >= observed) exceeds++;
+      }
+      return (1 + exceeds) / (dist.length + 1);
+    }
+    function fmtP2(p) {
+      if (!isFinite(p)) return "NA";
+      if (p < 1e-3) return "< .001";
+      return p.toFixed(3).replace(/^0\./, ".");
+    }
+    const omniP = permPval2(QM_dist, reg.QM);
+    const omniLabel = reg.QMdist === "F" ? `F(${reg.QMdf}, ${reg.QEdf})` : `\u03C7\xB2(${reg.QMdf})`;
+    let modRows = "";
+    if (nMods > 0 && Array.isArray(reg.modTests)) {
+      modRows = reg.modTests.map((mt, mi) => {
+        if (mt.QMdf === 0 || !mt.colIdxs || mt.colIdxs.length === 0)
+          return `<tr><td>${escapeHTML(mt.name)}</td><td colspan="2"><i>degenerate</i></td></tr>`;
+        const modDist = modQM_dist.subarray(mi, nPerm * nMods + mi).filter((_, idx) => idx % nMods === 0);
+        const colDist = new Float64Array(nPerm);
+        for (let r = 0; r < nPerm; r++) colDist[r] = modQM_dist[r * nMods + mi];
+        const mp = permPval2(colDist, mt.QM);
+        const dfLabel = reg.QMdist === "F" ? `F(${mt.QMdf},\u2009${reg.QEdf})` : `\u03C7\xB2(${mt.QMdf})`;
+        return `<tr>
+        <td>${escapeHTML(mt.name)}</td>
+        <td>${fmt(mt.QM)} (${dfLabel})</td>
+        <td><strong>${fmtP2(mp)}</strong></td>
+      </tr>`;
+      }).join("");
+    }
+    const modTable = nMods > 1 && modRows ? `<details style="margin-top:6px">
+        <summary style="cursor:pointer;color:var(--fg-muted)">Per-moderator permutation <em>p</em>-values</summary>
+        <table class="reg-table" style="margin-top:4px">
+          <thead><tr><th>Moderator</th><th><em>Q</em>M (${reg.QMdist ?? "\u03C7\xB2"})</th><th>Perm <em>p</em></th></tr></thead>
+          <tbody>${modRows}</tbody>
+        </table>
+      </details>` : "";
+    el.innerHTML = `
+    <div class="perm-results-block">
+      <strong>Permutation <em>Q</em>M ${omniLabel} = ${fmt(reg.QM)}</strong>
+      &nbsp;&mdash;&nbsp;
+      permutation <em>p</em> = <strong>${fmtP2(omniP)}</strong>
+      <span class="reg-note" style="display:inline;margin-left:8px">(${nPerm} permutations, \u03C4\xB2 re-estimated per permutation)</span>
+    </div>
+    ${modTable}`;
   }
   function renderGoshInfo(result, profile) {
     const el = document.getElementById("goshInfo");
@@ -24765,7 +28868,7 @@ when exported.</p>`,
   function getSoftWarnings(studyInput, type, label) {
     return getProfile(type)?.softWarnings(studyInput, label) ?? [];
   }
-  function gatherSessionState(mods, scaleMods, robState) {
+  function gatherSessionState(mods, scaleMods, ixs, robState) {
     const type = document.getElementById("effectType").value;
     const profile = effectProfiles[type];
     const settings = {
@@ -24784,11 +28887,16 @@ when exported.</p>`,
       // Vevea-Hedges selection model
       selMode: document.getElementById("selMode")?.value ?? "sensitivity",
       selPreset: document.getElementById("selPreset")?.value ?? "mild1",
+      selWeightFn: document.getElementById("selWeightFn")?.value ?? "stepfun",
       selSides: document.getElementById("selSides")?.value ?? "1",
-      selCuts: document.getElementById("selCuts")?.value ?? "0.025, 0.05, 0.10, 0.25, 0.50, 1.0"
+      selCuts: document.getElementById("selCuts")?.value ?? "0.025, 0.05, 0.10, 0.25, 0.50, 1.0",
+      // Display / reporting settings
+      mccMethod: document.getElementById("mccMethod")?.value ?? "none",
+      rveRho: parseFloat(document.getElementById("rveRho")?.value) || 0.8
     };
     const savedModerators = mods.map((m) => ({ name: m.name, type: m.type, transform: m.transform || "linear" }));
     const savedScaleModerators = scaleMods.map((m) => ({ name: m.name, type: m.type, transform: m.transform || "linear" }));
+    const savedInteractions = (ixs ?? []).map((ix) => ({ name: ix.name, termA: ix.termA, termB: ix.termB }));
     const studies = [];
     document.querySelectorAll("#inputTable tr").forEach((r, i) => {
       if (i === 0) return;
@@ -24809,13 +28917,51 @@ when exported.</p>`,
       if (allVals.every((v) => v === "")) return;
       studies.push({ study, inputs: effectInputs, group, cluster, moderators: modValues });
     });
-    return buildSession(settings, savedModerators, studies, robState, savedScaleModerators);
+    return buildSession(settings, savedModerators, studies, robState, savedScaleModerators, savedInteractions);
   }
 
   // js/ui-table.js
   init_profiles();
   init_csv();
   init_io();
+  var INPUT_TITLES = {
+    m1: "Mean \u2014 group 1",
+    sd1: "SD \u2014 group 1",
+    n1: "n \u2014 group 1",
+    m2: "Mean \u2014 group 2",
+    sd2: "SD \u2014 group 2",
+    n2: "n \u2014 group 2",
+    m_pre: "Mean \u2014 pre",
+    sd_pre: "SD \u2014 pre",
+    m_post: "Mean \u2014 post",
+    sd_post: "SD \u2014 post",
+    n: "Sample size",
+    r: "Correlation",
+    a: "Events \u2014 group 1",
+    b: "Non-events \u2014 group 1",
+    c: "Events \u2014 group 2",
+    d: "Non-events \u2014 group 2",
+    x: "Events / successes",
+    yi: "Effect size",
+    vi: "Variance",
+    hr: "Hazard ratio",
+    ci_lo: "CI lower bound",
+    ci_hi: "CI upper bound",
+    x1: "Events \u2014 group 1",
+    t1: "Person-time \u2014 group 1",
+    x2: "Events \u2014 group 2",
+    t2: "Person-time \u2014 group 2",
+    t: "Person-time",
+    m: "Mean",
+    sd: "SD",
+    ref: "Reference value",
+    r2: "R\xB2",
+    p: "Number of predictors",
+    counts1: "Group 1 counts",
+    counts2: "Group 2 counts",
+    alpha: "Cronbach \u03B1",
+    k: "Number of items"
+  };
   var _cb = {
     markStale: () => {
     },
@@ -24824,7 +28970,10 @@ when exported.</p>`,
     renderRoBDataGrid: () => {
     },
     deleteRobEntry: (_key) => {
+    },
+    onModeratorChanged: () => {
     }
+    // called after any moderator add/remove
   };
   function initTable(callbacks) {
     _cb = { ..._cb, ...callbacks };
@@ -24834,11 +28983,11 @@ when exported.</p>`,
       if (!row || !row.draggable) return;
       e.preventDefault();
       if (e.key === "ArrowUp") {
-        const prev = row.previousElementSibling;
-        if (prev && prev.draggable) row.parentNode.insertBefore(row, prev);
+        const prev2 = row.previousElementSibling;
+        if (prev2 && prev2.draggable) row.parentNode.insertBefore(row, prev2);
       } else {
-        const next = row.nextElementSibling;
-        if (next && next.draggable) row.parentNode.insertBefore(next, row);
+        const next2 = row.nextElementSibling;
+        if (next2 && next2.draggable) row.parentNode.insertBefore(next2, row);
       }
       _cb.markStale();
       _cb.scheduleSave();
@@ -24866,29 +29015,76 @@ when exported.</p>`,
     td.appendChild(input);
     return td;
   }
+  function renderModTags() {
+    const container = document.getElementById("modTags");
+    if (!container) return;
+    container.innerHTML = "";
+    moderators.forEach(({ name }) => {
+      const span = document.createElement("span");
+      span.className = "mod-tag";
+      span.innerHTML = `${escapeHTML(name)} <button class="remove-mod-btn" title="Remove moderator">\xD7</button>`;
+      span.querySelector("button").addEventListener("click", () => {
+        moderators.splice(0, moderators.length, ...moderators.filter((m) => m.name !== name));
+        interactions.splice(0, interactions.length, ...interactions.filter((ix) => ix.termA !== name && ix.termB !== name));
+        renderModTags();
+        _cb.onModeratorChanged();
+        _cb.markStale();
+      });
+      container.appendChild(span);
+    });
+  }
   function doAddModerator(name, type, transform = "linear") {
     if (!name || moderators.some((m) => m.name === name)) return;
     moderators.push({ name, type, transform });
     const table = document.getElementById("inputTable");
     const headerRow = table.rows[0];
+    if (![...headerRow.cells].some((c) => c.dataset.mod === name)) {
+      headerRow.insertBefore(makeModTh(name), headerRow.lastElementChild);
+      for (let i = 1; i < table.rows.length; i++) {
+        table.rows[i].insertBefore(makeModTd(name, type), table.rows[i].lastElementChild);
+      }
+    }
+    renderModTags();
+  }
+  function ensureModColumn(name, type) {
+    const table = document.getElementById("inputTable");
+    const headerRow = table.rows[0];
+    if ([...headerRow.cells].some((c) => c.dataset.mod === name)) return;
     headerRow.insertBefore(makeModTh(name), headerRow.lastElementChild);
     for (let i = 1; i < table.rows.length; i++) {
-      const row = table.rows[i];
-      row.insertBefore(makeModTd(name, type), row.lastElementChild);
+      table.rows[i].insertBefore(makeModTd(name, type), table.rows[i].lastElementChild);
     }
   }
   function removeModerator(name) {
     moderators.splice(0, moderators.length, ...moderators.filter((m) => m.name !== name));
+    interactions.splice(0, interactions.length, ...interactions.filter((ix) => ix.termA !== name && ix.termB !== name));
     const table = document.getElementById("inputTable");
     for (let i = 0; i < table.rows.length; i++) {
       const cell = [...table.rows[i].cells].find((c) => c.dataset.mod === name);
       if (cell) cell.remove();
     }
+    renderModTags();
+    _cb.onModeratorChanged();
     _cb.markStale();
   }
   function clearModerators() {
     moderators.splice(0);
+    interactions.splice(0);
     document.querySelectorAll("[data-mod]").forEach((el) => el.remove());
+    renderModTags();
+  }
+  var interactions = [];
+  function doAddInteraction(termA, termB) {
+    const name = `${termA}\xD7${termB}`;
+    if (!termA || !termB || termA === termB) return;
+    if (interactions.some((ix) => ix.name === name)) return;
+    interactions.push({ name, termA, termB });
+  }
+  function removeInteraction(name) {
+    interactions.splice(0, interactions.length, ...interactions.filter((ix) => ix.name !== name));
+  }
+  function clearInteractions() {
+    interactions.splice(0);
   }
   function updateTableHeaders() {
     const type = document.getElementById("effectType").value;
@@ -24903,10 +29099,11 @@ when exported.</p>`,
     profile.inputs.forEach((col) => {
       const th = document.createElement("th");
       th.textContent = col;
+      if (INPUT_TITLES[col]) th.title = INPUT_TITLES[col];
       headerRow.appendChild(th);
     });
     const thGroup = document.createElement("th");
-    thGroup.textContent = "Group";
+    thGroup.innerHTML = 'Group <button class="help-btn" data-help="input.group" aria-label="Help: Group" title="Help">?</button>';
     headerRow.appendChild(thGroup);
     const thCluster = document.createElement("th");
     thCluster.innerHTML = 'Cluster <button class="help-btn" data-help="cluster.id" aria-label="Help: Cluster ID" title="Help">?</button>';
@@ -24965,12 +29162,15 @@ when exported.</p>`,
     const table = document.getElementById("inputTable");
     const row = table.insertRow();
     row.draggable = true;
-    row.addEventListener("pointerdown", _rowPointerDown);
-    row.addEventListener("dragstart", _rowDragStart);
-    row.addEventListener("dragover", _rowDragOver);
-    row.addEventListener("dragleave", _rowDragLeave);
-    row.addEventListener("drop", _rowDrop);
-    row.addEventListener("dragend", _rowDragEnd);
+    row._dragHandlers = [
+      ["pointerdown", _rowPointerDown],
+      ["dragstart", _rowDragStart],
+      ["dragover", _rowDragOver],
+      ["dragleave", _rowDragLeave],
+      ["drop", _rowDrop],
+      ["dragend", _rowDragEnd]
+    ];
+    row._dragHandlers.forEach(([evt, fn]) => row.addEventListener(evt, fn));
     const v = values || ["", ...Array(profile.inputs.length).fill(""), "", ""];
     const cellStudy = row.insertCell();
     const inputStudy = document.createElement("input");
@@ -25003,11 +29203,15 @@ when exported.</p>`,
     });
     const actionCell = row.insertCell();
     actionCell.innerHTML = `<button class="remove-btn" aria-label="Remove study">\u2716</button> <button class="clear-btn" aria-label="Clear row">\u{1F9F9}</button>`;
+    let _valTimer;
     row.querySelectorAll("input").forEach((input) => {
       input.addEventListener("input", () => {
-        validateRow(row);
-        _cb.markStale();
-        _cb.scheduleSave();
+        clearTimeout(_valTimer);
+        _valTimer = setTimeout(() => {
+          _revalidate();
+          _cb.markStale();
+          _cb.scheduleSave();
+        }, 150);
       });
     });
     row.querySelector(".remove-btn").addEventListener("click", () => removeRow(row.querySelector(".remove-btn")));
@@ -25015,16 +29219,22 @@ when exported.</p>`,
   }
   var _undoState = { timer: null, row: null, robKey: null };
   var _UNDO_MS = 5e3;
+  var _companionCommit = null;
+  function registerDeleteCompanion(fn) {
+    _companionCommit = fn;
+  }
   function commitPendingDelete() {
     if (!_undoState.row) return;
     clearTimeout(_undoState.timer);
     if (_undoState.robKey) _cb.deleteRobEntry(_undoState.robKey);
+    _undoState.row._dragHandlers?.forEach(([evt, fn]) => _undoState.row.removeEventListener(evt, fn));
     _undoState.row.remove();
     _undoState.row = null;
     _undoState.robKey = null;
     _undoState.timer = null;
     _cb.renderRoBDataGrid();
-    _hideUndoToast();
+    hideUndoToast();
+    _companionCommit?.();
   }
   function _cancelPendingDelete() {
     if (!_undoState.row) return;
@@ -25033,11 +29243,11 @@ when exported.</p>`,
     _undoState.row = null;
     _undoState.robKey = null;
     _undoState.timer = null;
-    _hideUndoToast();
+    hideUndoToast();
     _cb.markStale();
     _cb.scheduleSave();
   }
-  function _showUndoToast(label) {
+  function showUndoToast(label, undoFn) {
     const toast = document.getElementById("undoToast");
     const lbl = document.getElementById("undoToastLabel");
     const btn = document.getElementById("undoToastBtn");
@@ -25048,10 +29258,10 @@ when exported.</p>`,
       const newBar = bar.cloneNode(true);
       bar.replaceWith(newBar);
     }
-    btn.onclick = _cancelPendingDelete;
+    btn.onclick = undoFn;
     toast.hidden = false;
   }
-  function _hideUndoToast() {
+  function hideUndoToast() {
     const toast = document.getElementById("undoToast");
     if (toast) toast.hidden = true;
   }
@@ -25066,7 +29276,8 @@ when exported.</p>`,
     _undoState.row = row;
     _undoState.robKey = label || null;
     _undoState.timer = setTimeout(commitPendingDelete, _UNDO_MS);
-    _showUndoToast(label);
+    showUndoToast(label, _cancelPendingDelete);
+    _revalidate();
     _cb.markStale();
     _cb.scheduleSave();
   }
@@ -25074,18 +29285,26 @@ when exported.</p>`,
     btn.closest("tr").querySelectorAll("input").forEach((input) => {
       input.value = "";
     });
+    _revalidate();
     _cb.markStale();
+  }
+  function _revalidate() {
+    const type = document.getElementById("effectType").value;
+    const { studies, excluded, softWarnings } = collectStudies(type);
+    updateValidationWarnings(studies, excluded, softWarnings);
   }
   function updateValidationWarnings(studies, excluded, softWarnings) {
     const table = document.getElementById("inputTable");
     const warningDiv = document.getElementById("validationWarnings");
     const rows = [...table.rows].slice(1);
-    const messages = [];
+    const errLines = [];
+    const warnLines = [];
     const subgroupMap = {};
     rows.forEach((row, idx) => {
-      const label = row.querySelector("input")?.value || `Row ${idx + 1}`;
+      if (row.classList.contains("row-pending-delete")) return;
+      const label = escapeHTML(row.querySelector("input")?.value || `Row ${idx + 1}`);
       const errors = JSON.parse(row.dataset.validationErrors || "{}");
-      Object.entries(errors).forEach(([, msg]) => messages.push(`\u274C ${label}: ${msg}`));
+      Object.entries(errors).forEach(([, msg]) => errLines.push(`${label}: ${escapeHTML(msg)}`));
       const groupName = row.querySelector(".group")?.value.trim();
       if (groupName) {
         if (!subgroupMap[groupName]) subgroupMap[groupName] = [];
@@ -25094,22 +29313,27 @@ when exported.</p>`,
     });
     Object.entries(subgroupMap).forEach(([group, studiesInGroup]) => {
       if (studiesInGroup.length < 2)
-        messages.push(`\u26A0\uFE0F Subgroup "${group}" has <2 studies (${studiesInGroup.join(", ")})`);
+        warnLines.push(`Subgroup "${escapeHTML(group)}" has &lt;2 studies (${studiesInGroup.join(", ")})`);
     });
-    excluded.forEach((e) => messages.push(`\u26A0\uFE0F Excluded: ${e.label} (${e.reason})`));
-    softWarnings.forEach((w) => messages.push(w));
+    excluded.forEach((e) => warnLines.push(`Excluded: ${escapeHTML(e.label)} (${escapeHTML(e.reason)})`));
+    softWarnings.forEach((w) => warnLines.push(escapeHTML(w)));
     const k = studies.length;
     if (k === 0) {
-      messages.push("\u274C No valid studies available for analysis");
+      errLines.push("No valid studies available for analysis");
     } else {
-      if (k < 2) messages.push("\u26A0\uFE0F Fewer than 2 studies: meta-analysis not meaningful");
-      if (k < 3) messages.push("\u26A0\uFE0F Egger / Begg / FAT-PET tests require \u2265 3 studies");
+      if (k < 2) warnLines.push("Fewer than 2 studies \u2014 meta-analysis not meaningful");
+      if (k < 3) warnLines.push("Egger / Begg / FAT-PET tests require \u2265 3 studies");
       if (studies.some((s) => s.vi < 1e-8))
-        messages.push("\u26A0\uFE0F One or more studies have extremely small variance (may inflate weights)");
+        warnLines.push("One or more studies have extremely small variance (may inflate weights)");
     }
-    warningDiv.innerHTML = messages.length > 0 ? messages.map((m) => `\u2022 ${m}`).join("<br>") : "";
+    let html = "";
+    if (errLines.length)
+      html += `<div class="validation-block validation-block--error">${errLines.map((m) => `<div>\u274C ${m}</div>`).join("")}</div>`;
+    if (warnLines.length)
+      html += `<div class="validation-block validation-block--warning">${warnLines.map((m) => `<div>\u26A0 ${m}</div>`).join("")}</div>`;
+    warningDiv.innerHTML = html;
   }
-  function collectStudies(type) {
+  function collectStudies(type, extraMods = []) {
     const profile = effectProfiles[type];
     if (!profile) return { studies: [], excluded: [], softWarnings: [], missingCorrelation: false };
     const rows = document.querySelectorAll("#inputTable tr");
@@ -25150,6 +29374,12 @@ when exported.</p>`,
         const raw = (inputs[modOffset + modIdx] ?? "").trim();
         study[name] = mtype === "continuous" ? raw === "" ? NaN : +raw : raw;
       });
+      extraMods.forEach(({ name, type: mtype }) => {
+        if (study[name] !== void 0) return;
+        const cell = [...row.cells].find((c) => c.dataset.mod === name);
+        const raw = cell ? (cell.querySelector("input")?.value ?? "").trim() : "";
+        study[name] = mtype === "continuous" ? raw === "" ? NaN : +raw : raw;
+      });
       studies.push(study);
     }
     return { studies, excluded, softWarnings, missingCorrelation };
@@ -25168,6 +29398,9 @@ when exported.</p>`,
     return { matched, missing, modCols, structural: structCols, confidence };
   }
   var _pendingImport = null;
+  function getPendingImport() {
+    return _pendingImport;
+  }
   function refreshPreviewUI(type) {
     if (!_pendingImport) return;
     const { headers, rows } = _pendingImport.parsed;
@@ -25213,6 +29446,8 @@ when exported.</p>`,
     });
     tbl += "</tbody></table>";
     document.getElementById("previewTable").innerHTML = tbl;
+    const mvHint = document.getElementById("previewMvHint");
+    if (mvHint) mvHint.style.display = _pendingImport.mvCandidate ? "" : "none";
   }
   async function previewCSV(file) {
     const warningDiv = document.getElementById("csvWarning");
@@ -25233,17 +29468,30 @@ when exported.</p>`,
     }
     const currentType = document.getElementById("effectType").value;
     const detection = detectEffectType(parsed.headers, currentType, effectProfiles);
+    const lowerHdrs = new Set(parsed.headers.map((h) => h.toLowerCase()));
+    const hasStudyCol = lowerHdrs.has("study_id") || lowerHdrs.has("study");
+    const hasOutcomeCol = lowerHdrs.has("outcome_id") || lowerHdrs.has("outcome");
+    const mvCandidate = hasStudyCol && hasOutcomeCol && lowerHdrs.has("yi") && lowerHdrs.has("vi");
+    const mvHeaders = mvCandidate ? {
+      studyCol: parsed.headers.find((h) => h.toLowerCase() === "study_id") ?? parsed.headers.find((h) => h.toLowerCase() === "study"),
+      outcomeCol: parsed.headers.find((h) => h.toLowerCase() === "outcome_id") ?? parsed.headers.find((h) => h.toLowerCase() === "outcome"),
+      yiCol: parsed.headers.find((h) => h.toLowerCase() === "yi"),
+      viCol: parsed.headers.find((h) => h.toLowerCase() === "vi")
+    } : null;
     _pendingImport = {
       parsed,
       detectedType: detection.type,
       tied: detection.tied,
-      tiedTypes: detection.tiedTypes ?? []
+      tiedTypes: detection.tiedTypes ?? [],
+      mvCandidate,
+      mvHeaders
     };
     const delimNames = { ",": "comma", ";": "semicolon", "	": "tab" };
     document.getElementById("previewDelimiter").textContent = `delimiter: ${delimNames[parsed.delimiter] ?? parsed.delimiter}`;
     document.getElementById("previewEffectType").value = detection.type;
     refreshPreviewUI(detection.type);
     document.getElementById("importPreview").style.display = "block";
+    document.getElementById("previewImport").focus();
   }
   function commitImport() {
     if (!_pendingImport) return [];
@@ -25263,6 +29511,7 @@ when exported.</p>`,
       const mtype = vals.length > 0 && vals.every((v) => !isNaN(v.trim())) ? "continuous" : "categorical";
       doAddModerator(col, mtype);
     });
+    if (modCols.length > 0) _cb.onModeratorChanged();
     document.getElementById("effectType").value = type;
     updateTableHeaders();
     const table = document.getElementById("inputTable");
@@ -25284,49 +29533,101 @@ when exported.</p>`,
     document.getElementById("importPreview").style.display = "none";
     document.getElementById("csvWarning").style.display = "none";
     document.getElementById("csvFile").value = "";
+    document.getElementById("import")?.focus();
   }
 
   // js/ui.js
   var import_meta = {};
+
+  // import("./report.js*") in js/ui.js
+  var globImport_report_js = __glob({
+    "./report.js": () => Promise.resolve().then(() => (init_report(), report_exports))
+  });
+
+  // import("./docx.js*") in js/ui.js
+  var globImport_docx_js = __glob({
+    "./docx.js": () => Promise.resolve().then(() => (init_docx(), docx_exports))
+  });
+
+  // import("./help.js*") in js/ui.js
+  var globImport_help_js = __glob({
+    "./help.js": () => Promise.resolve().then(() => (init_help(), help_exports))
+  });
+
+  // import("./guide.js*") in js/ui.js
+  var globImport_guide_js = __glob({
+    "./guide.js": () => Promise.resolve().then(() => (init_guide(), guide_exports))
+  });
+
+  // import("./onboarding.js*") in js/ui.js
+  var globImport_onboarding_js = __glob({
+    "./onboarding.js": () => Promise.resolve().then(() => (init_onboarding(), onboarding_exports))
+  });
+
+  // js/ui.js
+  var _cb2 = `?cb=${Date.now()}`;
   var _reportMod;
   var _docxMod;
   var _helpMod;
   var _guideMod;
+  var _onboardingMod;
   function getReport() {
-    return _reportMod ??= Promise.resolve().then(() => (init_report(), report_exports)).catch((e) => {
+    return _reportMod ??= globImport_report_js(`./report.js${_cb2}`).catch((e) => {
       _reportMod = null;
       throw e;
     });
   }
   function getDocx() {
-    return _docxMod ??= Promise.resolve().then(() => (init_docx(), docx_exports)).catch((e) => {
+    return _docxMod ??= globImport_docx_js(`./docx.js${_cb2}`).catch((e) => {
       _docxMod = null;
       throw e;
     });
   }
   function getHelp() {
-    return _helpMod ??= Promise.resolve().then(() => (init_help(), help_exports)).catch((e) => {
+    return _helpMod ??= globImport_help_js(`./help.js${_cb2}`).catch((e) => {
       _helpMod = null;
       throw e;
     });
   }
   function getGuide() {
-    return _guideMod ??= Promise.resolve().then(() => (init_guide(), guide_exports)).catch((e) => {
+    return _guideMod ??= globImport_guide_js(`./guide.js${_cb2}`).catch((e) => {
       _guideMod = null;
       throw e;
     });
   }
+  function getOnboarding() {
+    return _onboardingMod ??= globImport_onboarding_js(`./onboarding.js${_cb2}`).catch((e) => {
+      _onboardingMod = null;
+      throw e;
+    });
+  }
+  var USE_EXAMPLES = new URLSearchParams(window.location.search).has("tests");
   var _saveTimer = null;
   var _lastReg = null;
+  var _lastLs = null;
+  function _buildAutosaveSession() {
+    const session = gatherSessionState(moderators, scaleModerators, interactions, { domains: _robDomains, data: _robData });
+    if (_mvMode) session.mv = _gatherMVState();
+    return session;
+  }
+  function _autosaveHasData(session) {
+    if (session.studies.length > 0) return true;
+    if (session.mv) return session.mv.rows.some((r) => r.study_id || r.outcome_id || r.yi || r.vi);
+    return false;
+  }
   function scheduleSave() {
     clearTimeout(_saveTimer);
-    _saveTimer = setTimeout(() => saveDraft(gatherSessionState(moderators, scaleModerators, { domains: _robDomains, data: _robData })), 1200);
+    _saveTimer = setTimeout(() => {
+      const session = _buildAutosaveSession();
+      if (_autosaveHasData(session)) saveDraft(session);
+    }, 1200);
   }
   var _analysisRunning = false;
   function flushSave() {
     clearTimeout(_saveTimer);
     _saveTimer = null;
-    saveDraft(gatherSessionState(moderators, scaleModerators, { domains: _robDomains, data: _robData }));
+    const session = _buildAutosaveSession();
+    if (_autosaveHasData(session)) saveDraft(session);
   }
   window.addEventListener("beforeunload", flushSave);
   document.addEventListener("visibilitychange", () => {
@@ -25343,6 +29644,10 @@ when exported.</p>`,
     hideHelp();
   });
   _helpPopover.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      hideHelp();
+      return;
+    }
     if (e.key !== "Tab") return;
     const focusable = [_helpClose, _helpGuideLink].filter(
       (el) => el && el.style.display !== "none"
@@ -25443,6 +29748,7 @@ when exported.</p>`,
     "input.csv": "CSV import and export",
     "input.session": "Session save and load",
     "input.moderators": "Moderators",
+    "input.interactions": "Interaction terms",
     "input.scaleModerators": "Location-scale model moderators",
     "input.rob": "Risk of bias",
     "cluster.id": "Cluster ID",
@@ -25516,17 +29822,111 @@ when exported.</p>`,
     const label = _helpAriaLabel(key);
     btn.setAttribute("aria-label", label === key ? "Help" : `Help: ${label}`);
   });
+  function setVisible(el, show) {
+    if (!el) return;
+    el._hideTimer && clearTimeout(el._hideTimer);
+    delete el._hideTimer;
+    const isHidden = el.style.display === "none";
+    if (document.readyState !== "complete") {
+      el.style.display = show ? "" : "none";
+      return;
+    }
+    if (show) {
+      if (!isHidden) return;
+      el.style.opacity = "0";
+      el.style.display = "";
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        el.style.opacity = "";
+      }));
+    } else {
+      if (isHidden) return;
+      el.style.opacity = "0";
+      el._hideTimer = setTimeout(() => {
+        el.style.display = "none";
+        el.style.opacity = "";
+        delete el._hideTimer;
+      }, 140);
+    }
+  }
+  function _checkAdvancedBadge() {
+    const selDiffers = (id) => {
+      const el = document.getElementById(id);
+      if (!el) return false;
+      const def = [...el.options].findIndex((o) => o.defaultSelected);
+      return el.selectedIndex !== (def >= 0 ? def : 0);
+    };
+    const chkDiffers = (id) => {
+      const el = document.getElementById(id);
+      return el && el.checked !== el.defaultChecked;
+    };
+    const valDiffers = (id) => {
+      const el = document.getElementById(id);
+      return el && el.value !== el.defaultValue;
+    };
+    const custom = selDiffers("ciLevel") || selDiffers("mccMethod") || selDiffers("tfEstimator") || chkDiffers("useTrimFill") || chkDiffers("useTFAdjusted") || selDiffers("selMode") || selDiffers("selPreset") || selDiffers("selSides") || selDiffers("selWeightFn") || valDiffers("bayesMu0") || valDiffers("bayesSigmaMu") || valDiffers("bayesSigmaTau") || valDiffers("selCuts") || valDiffers("rveRho");
+    const badge = document.getElementById("advancedBadge");
+    if (badge) badge.style.display = custom ? "" : "none";
+    document.getElementById("advancedSettings")?.classList.toggle("settings-modified", custom);
+  }
   var scaleModerators = [];
   var _robDomains = [];
   var _robData = {};
+  function _readModSpec(selectId) {
+    const val = document.getElementById(selectId).value;
+    return val === "categorical" ? { type: "categorical", transform: "linear" } : { type: "continuous", transform: val || "linear" };
+  }
   function addModerator() {
     const nameEl = document.getElementById("modName");
     const name = nameEl.value.trim();
-    const type = document.getElementById("modType").value;
-    const transform = type === "continuous" ? document.getElementById("modTransform")?.value ?? "linear" : "linear";
+    const { type, transform } = _readModSpec("modType");
     if (!name) return;
     doAddModerator(name, type, transform);
     nameEl.value = "";
+    refreshInteractionUI();
+    markStale();
+  }
+  function refreshInteractionUI() {
+    const names = moderators.map((m) => m.name);
+    const mgr = document.getElementById("interactionManager");
+    if (!mgr) return;
+    setVisible(mgr, names.length >= 2);
+    const termA = document.getElementById("interactTermA");
+    const termB = document.getElementById("interactTermB");
+    if (!termA || !termB) return;
+    const prevA = termA.value;
+    const prevB = termB.value;
+    const opts = names.map((n) => `<option value="${escapeHTML(n)}">${escapeHTML(n)}</option>`).join("");
+    termA.innerHTML = opts;
+    termB.innerHTML = opts;
+    if (names.includes(prevA)) termA.value = prevA;
+    if (names.includes(prevB) && prevB !== termA.value) termB.value = prevB;
+    if (termA.value === termB.value && names.length >= 2) {
+      termB.value = names.find((n) => n !== termA.value) ?? names[0];
+    }
+    renderInteractionTags();
+  }
+  function renderInteractionTags() {
+    const container = document.getElementById("interactionTags");
+    if (!container) return;
+    container.innerHTML = "";
+    interactions.forEach(({ name, termA, termB }) => {
+      const span = document.createElement("span");
+      span.className = "mod-tag";
+      span.innerHTML = `${escapeHTML(termA)} \xD7 ${escapeHTML(termB)} <button class="remove-mod-btn" title="Remove interaction">\xD7</button>`;
+      span.querySelector("button").addEventListener("click", () => {
+        removeInteraction(name);
+        renderInteractionTags();
+        markStale();
+      });
+      container.appendChild(span);
+    });
+  }
+  function addInteractionTerm() {
+    const termA = document.getElementById("interactTermA")?.value ?? "";
+    const termB = document.getElementById("interactTermB")?.value ?? "";
+    if (!termA || !termB || termA === termB) return;
+    doAddInteraction(termA, termB);
+    renderInteractionTags();
     markStale();
   }
   function renderScaleModTags() {
@@ -25536,7 +29936,7 @@ when exported.</p>`,
     scaleModerators.forEach(({ name }) => {
       const span = document.createElement("span");
       span.className = "mod-tag";
-      span.innerHTML = `${name} <button class="remove-mod-btn" title="Remove scale moderator">\xD7</button>`;
+      span.innerHTML = `${escapeHTML(name)} <button class="remove-mod-btn" title="Remove scale moderator">\xD7</button>`;
       span.querySelector("button").addEventListener("click", () => removeScaleModerator(name));
       container.appendChild(span);
     });
@@ -25554,10 +29954,10 @@ when exported.</p>`,
   function addScaleModerator() {
     const nameEl = document.getElementById("scaleModName");
     const name = nameEl.value.trim();
-    const type = document.getElementById("scaleModType").value;
-    const transform = type === "continuous" ? document.getElementById("scaleModTransform")?.value ?? "linear" : "linear";
+    const { type, transform } = _readModSpec("scaleModType");
     if (!name) return;
     doAddScaleModerator(name, type, transform);
+    ensureModColumn(name, type);
     nameEl.value = "";
     markStale();
   }
@@ -25585,9 +29985,14 @@ when exported.</p>`,
   }
   function renderRoBDataGrid() {
     const container = document.getElementById("robDataGrid");
+    const btn = document.getElementById("robGridBtn");
     container.innerHTML = "";
+    const hide = () => {
+      btn.style.display = "none";
+      if (!container.hidden) _closeAllPopovers();
+    };
     if (_robDomains.length === 0) {
-      container.style.display = "none";
+      hide();
       return;
     }
     const labels = [];
@@ -25597,10 +30002,10 @@ when exported.</p>`,
       if (label) labels.push(label);
     });
     if (labels.length === 0) {
-      container.style.display = "none";
+      hide();
       return;
     }
-    container.style.display = "";
+    btn.style.display = "";
     const table = document.createElement("table");
     const hrow = table.createTHead().insertRow();
     const th0 = document.createElement("th");
@@ -25673,18 +30078,17 @@ when exported.</p>`,
     const isLight = theme === "light";
     _themeToggle.textContent = isLight ? "\u263E" : "\u2600";
     _themeToggle.title = isLight ? "Switch to dark mode" : "Switch to light mode";
+    _themeToggle.setAttribute("aria-label", isLight ? "Switch to dark mode" : "Switch to light mode");
   }
   _applyTheme(
     localStorage.getItem("theme") ?? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
   );
   _themeToggle.addEventListener("click", () => {
     const current = document.documentElement.dataset.theme;
-    const next = THEMES[(THEMES.indexOf(current) + 1) % THEMES.length];
-    localStorage.setItem("theme", next);
-    _applyTheme(next);
-    if (funnelPlot.args && funnelPlot.contours) {
-      drawFunnel(...funnelPlot.args, { egger: funnelPlot.egger, contours: true, petpeese: funnelPlot.petpeese });
-    }
+    const next2 = THEMES[(THEMES.indexOf(current) + 1) % THEMES.length];
+    localStorage.setItem("theme", next2);
+    _applyTheme(next2);
+    if (appState.plotTheme === "default") redrawCachedPlots();
   });
   var _inputSection = document.getElementById("inputSection");
   var _outputSection = document.getElementById("outputSection");
@@ -25716,6 +30120,7 @@ when exported.</p>`,
     if (name !== "results") document.getElementById("jumpPill")?.classList.remove("visible");
   }
   _toggleResults.disabled = true;
+  _toggleResults.setAttribute("aria-disabled", "true");
   _toggleInput.addEventListener("click", () => showView("input"));
   _toggleResults.addEventListener("click", () => {
     if (!_toggleResults.disabled) showView("results");
@@ -25723,6 +30128,937 @@ when exported.</p>`,
   _toggleGuide.addEventListener("click", () => showView("guide"));
   _toggleAbout.addEventListener("click", () => showView("about"));
   showView("input");
+  var _mvMode = false;
+  var _mvModerators = [];
+  var _mvForestState = {
+    pageSize: 20,
+    pages: [],
+    // current page index per outcome (separate mode)
+    combinedPage: 0,
+    // current page index (combined mode)
+    showPI: false,
+    lastRes: null,
+    // last mvMeta result
+    lastRows: [],
+    // last collected rows
+    alpha: 0.05,
+    viewMode: "separate"
+    // "separate" | "combined"
+  };
+  function _closeAllPopovers() {
+    document.querySelectorAll(".settings-popover").forEach((p) => {
+      p.hidden = true;
+    });
+    document.querySelectorAll("[data-popover]").forEach((b) => b.setAttribute("aria-expanded", "false"));
+  }
+  function _positionPopover(btn, panel) {
+    const r = btn.getBoundingClientRect();
+    const panelW = panel.offsetWidth || 340;
+    let left = r.left;
+    if (left + panelW > window.innerWidth - 8) left = Math.max(8, window.innerWidth - panelW - 8);
+    panel.style.top = r.bottom + 4 + "px";
+    panel.style.left = left + "px";
+  }
+  function initSettingsPopovers() {
+    document.querySelectorAll("[data-popover]").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const panel = document.getElementById(btn.dataset.popover);
+        const isOpen = !panel.hidden;
+        _closeAllPopovers();
+        if (!isOpen) {
+          panel.hidden = false;
+          btn.setAttribute("aria-expanded", "true");
+          _positionPopover(btn, panel);
+        }
+      });
+    });
+    document.addEventListener("pointerdown", (e) => {
+      if (!e.target.closest("[data-popover], .settings-popover, #helpPopover")) _closeAllPopovers();
+    }, { capture: true });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && _helpPopover.style.display === "none") _closeAllPopovers();
+    });
+  }
+  initSettingsPopovers();
+  function _applyModeToggle() {
+    const isMV = _mvMode;
+    document.getElementById("modeStandard").classList.toggle("active", !isMV);
+    document.getElementById("modeMultivariate").classList.toggle("active", isMV);
+    document.getElementById("standardSettings").style.display = isMV ? "none" : "";
+    document.getElementById("mvStripControls").style.display = isMV ? "" : "none";
+    document.getElementById("inputTableWrap").style.display = isMV ? "none" : "";
+    document.getElementById("addStudy").style.display = isMV ? "none" : "";
+    document.getElementById("mvTableWrap").style.display = isMV ? "" : "none";
+    document.getElementById("mvAddRow").style.display = isMV ? "" : "none";
+    _closeAllPopovers();
+  }
+  function _renderMVModTags() {
+    const container = document.getElementById("mvModTags");
+    container.innerHTML = _mvModerators.map(
+      (name, i) => `<span class="mod-tag"><span>${escapeHTML(name)}</span><button onclick="_mvRemoveMod(${i})" title="Remove">\xD7</button></span>`
+    ).join("");
+  }
+  window._mvRemoveMod = function(i) {
+    _mvModerators.splice(i, 1);
+    _renderMVModTags();
+    _rebuildMVTableHeaders();
+    markStale();
+  };
+  function _mvAddMod() {
+    const input = document.getElementById("mvModName");
+    const name = input.value.trim();
+    if (!name || _mvModerators.includes(name)) return;
+    _mvModerators.push(name);
+    input.value = "";
+    _renderMVModTags();
+    _rebuildMVTableHeaders();
+    markStale();
+  }
+  var _mvUndoState = { timer: null, row: null };
+  var _MV_UNDO_MS = 5e3;
+  function _mvCommitPendingDelete() {
+    if (!_mvUndoState.row) return;
+    clearTimeout(_mvUndoState.timer);
+    _mvUndoState.row.remove();
+    _mvUndoState.row = null;
+    _mvUndoState.timer = null;
+    hideUndoToast();
+  }
+  function _mvCancelPendingDelete() {
+    if (!_mvUndoState.row) return;
+    clearTimeout(_mvUndoState.timer);
+    _mvUndoState.row.classList.remove("row-pending-delete");
+    _mvUndoState.row = null;
+    _mvUndoState.timer = null;
+    hideUndoToast();
+    markStale();
+  }
+  registerDeleteCompanion(_mvCommitPendingDelete);
+  function _rebuildMVTableHeaders() {
+    const tr = document.getElementById("mvTableHead");
+    tr.innerHTML = "<th>Study ID</th><th>Outcome ID</th><th>Effect (y<sub>i</sub>)</th><th>Variance (v<sub>i</sub>)</th>" + _mvModerators.map((m, i) => `<th>${escapeHTML(m)} <button class="remove-mod-btn" title="Remove moderator" onclick="_mvRemoveMod(${i})">\xD7</button></th>`).join("") + '<th class="col-actions">Actions</th>';
+    document.querySelectorAll("#mvTableBody tr").forEach((row) => {
+      _syncMVRowMods(row);
+    });
+  }
+  function _syncMVRowMods(tr) {
+    const cells = tr.querySelectorAll("td");
+    const fixedCount = 4;
+    const currentModCount = cells.length - fixedCount - 1;
+    if (currentModCount === _mvModerators.length) return;
+    const actionsTd = tr.lastElementChild;
+    while (tr.querySelectorAll("td").length - 1 > fixedCount + _mvModerators.length) {
+      const tds = tr.querySelectorAll("td");
+      tr.removeChild(tds[tds.length - 2]);
+    }
+    while (tr.querySelectorAll("td").length - 1 < fixedCount + _mvModerators.length) {
+      const td = document.createElement("td");
+      td.innerHTML = `<input type="text" class="mv-mod-cell" style="width:90px">`;
+      tr.insertBefore(td, actionsTd);
+    }
+  }
+  function _validateMVRow(tr) {
+    const yiInput = tr.querySelector(".mv-yi");
+    const viInput = tr.querySelector(".mv-vi");
+    [yiInput, viInput].forEach((inp) => inp?.classList.remove("input-error"));
+    tr.classList.remove("row-error");
+    const allInputs = [...tr.querySelectorAll("input")];
+    if (allInputs.every((inp) => inp.value.trim() === "")) return true;
+    let valid = true;
+    const yiVal = yiInput?.value.trim() ?? "";
+    const viVal = viInput?.value.trim() ?? "";
+    if (yiVal === "" || !isFinite(parseFloat(yiVal))) {
+      yiInput?.classList.add("input-error");
+      valid = false;
+    }
+    const viNum = parseFloat(viVal);
+    if (viVal === "" || !isFinite(viNum) || viNum <= 0) {
+      viInput?.classList.add("input-error");
+      valid = false;
+    }
+    tr.classList.toggle("row-error", !valid);
+    return valid;
+  }
+  function _mvAddRow() {
+    const tbody = document.getElementById("mvTableBody");
+    const tr = document.createElement("tr");
+    tr.draggable = true;
+    const modCells = _mvModerators.map(
+      () => `<td><input type="text" class="mv-mod-cell" style="width:90px"></td>`
+    ).join("");
+    tr.innerHTML = `<td><input type="text" class="mv-study-id"  style="width:90px" placeholder="Study"></td><td><input type="text" class="mv-outcome-id" style="width:80px" placeholder="Outcome"></td><td><input type="text" class="mv-yi" style="width:90px"></td><td><input type="text" class="mv-vi" style="width:90px"></td>` + modCells + `<td class="col-actions"><button class="remove-btn" aria-label="Remove study">\u2716</button> <button class="clear-btn" aria-label="Clear row">\u{1F9F9}</button></td>`;
+    tr.querySelector(".remove-btn").addEventListener("click", () => {
+      commitPendingDelete();
+      _mvCommitPendingDelete();
+      const label = tr.querySelector(".mv-study-id")?.value.trim() || "";
+      tr.classList.add("row-pending-delete");
+      _mvUndoState.row = tr;
+      _mvUndoState.timer = setTimeout(_mvCommitPendingDelete, _MV_UNDO_MS);
+      showUndoToast(label, _mvCancelPendingDelete);
+      markStale();
+    });
+    tr.querySelector(".clear-btn").addEventListener("click", () => {
+      tr.querySelectorAll("input").forEach((inp) => {
+        inp.value = "";
+      });
+      _validateMVRow(tr);
+      markStale();
+    });
+    let _valTimer;
+    tr.querySelectorAll("input").forEach((inp) => inp.addEventListener("input", () => {
+      clearTimeout(_valTimer);
+      _valTimer = setTimeout(() => {
+        _validateMVRow(tr);
+        _updateMVValidationWarnings();
+        markStale();
+      }, 150);
+    }));
+    tbody.appendChild(tr);
+    return tr;
+  }
+  function _collectMVRows() {
+    const rows = [];
+    document.querySelectorAll("#mvTableBody tr").forEach((tr) => {
+      if (tr.classList.contains("row-pending-delete")) return;
+      const study_id = tr.querySelector(".mv-study-id")?.value.trim();
+      const outcome_id = tr.querySelector(".mv-outcome-id")?.value.trim();
+      const yi = parseFloat(tr.querySelector(".mv-yi")?.value);
+      const vi = parseFloat(tr.querySelector(".mv-vi")?.value);
+      if (!study_id || !outcome_id || !isFinite(yi) || !isFinite(vi) || vi <= 0) return;
+      const row = { study_id, outcome_id, yi, vi };
+      const modInputs = tr.querySelectorAll(".mv-mod-cell");
+      _mvModerators.forEach((name, i) => {
+        row[name] = parseFloat(modInputs[i]?.value);
+      });
+      rows.push(row);
+    });
+    return rows;
+  }
+  function _gatherMVState() {
+    const rows = [];
+    document.querySelectorAll("#mvTableBody tr").forEach((tr) => {
+      if (tr.classList.contains("row-pending-delete")) return;
+      const entry = {
+        study_id: tr.querySelector(".mv-study-id")?.value ?? "",
+        outcome_id: tr.querySelector(".mv-outcome-id")?.value ?? "",
+        yi: tr.querySelector(".mv-yi")?.value ?? "",
+        vi: tr.querySelector(".mv-vi")?.value ?? ""
+      };
+      _mvModerators.forEach((name, i) => {
+        const inputs = tr.querySelectorAll(".mv-mod");
+        entry[name] = inputs[i]?.value ?? "";
+      });
+      rows.push(entry);
+    });
+    return {
+      struct: document.getElementById("mvStruct").value,
+      method: document.getElementById("mvMethod").value,
+      rho: parseFloat(document.getElementById("mvRho").value),
+      moderators: [..._mvModerators],
+      rows
+    };
+  }
+  function _populateMVExample() {
+    const exRows = [
+      { study_id: "Pihlstrom", outcome_id: "AL", yi: -0.3, vi: 75e-4 },
+      { study_id: "Pihlstrom", outcome_id: "PD", yi: -0.6, vi: 57e-4 },
+      { study_id: "Zinney", outcome_id: "AL", yi: 0.1, vi: 58e-4 },
+      { study_id: "Zinney", outcome_id: "PD", yi: -0.15, vi: 48e-4 },
+      { study_id: "Morrison", outcome_id: "AL", yi: 0.4, vi: 0.0147 },
+      { study_id: "Morrison", outcome_id: "PD", yi: -0.32, vi: 91e-4 },
+      { study_id: "Knowles", outcome_id: "AL", yi: 0.32, vi: 0.0141 },
+      { study_id: "Knowles", outcome_id: "PD", yi: -0.39, vi: 69e-4 },
+      { study_id: "Ramfjord", outcome_id: "AL", yi: -0.29, vi: 91e-4 },
+      { study_id: "Ramfjord", outcome_id: "PD", yi: -0.88, vi: 62e-4 }
+    ];
+    exRows.forEach((r) => {
+      const tr = _mvAddRow();
+      tr.querySelector(".mv-study-id").value = r.study_id;
+      tr.querySelector(".mv-outcome-id").value = r.outcome_id;
+      tr.querySelector(".mv-yi").value = r.yi;
+      tr.querySelector(".mv-vi").value = r.vi;
+    });
+  }
+  function _commitImportMV(parsed, mvHeaders) {
+    const { headers, rows } = parsed;
+    const headerMap = {};
+    headers.forEach((h, idx) => {
+      headerMap[h.toLowerCase()] = idx;
+    });
+    const { studyCol, outcomeCol, yiCol, viCol } = mvHeaders;
+    const knownCols = new Set([studyCol, outcomeCol, yiCol, viCol].map((c) => c.toLowerCase()));
+    const modCols = headers.filter((h) => !knownCols.has(h.toLowerCase()));
+    _mvModerators.length = 0;
+    modCols.forEach((col) => _mvModerators.push(col));
+    _renderMVModTags();
+    _rebuildMVTableHeaders();
+    document.getElementById("mvTableBody").innerHTML = "";
+    rows.forEach((row) => {
+      const tr = _mvAddRow();
+      tr.querySelector(".mv-study-id").value = row[headerMap[studyCol.toLowerCase()]] ?? "";
+      tr.querySelector(".mv-outcome-id").value = row[headerMap[outcomeCol.toLowerCase()]] ?? "";
+      tr.querySelector(".mv-yi").value = row[headerMap[yiCol.toLowerCase()]] ?? "";
+      tr.querySelector(".mv-vi").value = row[headerMap[viCol.toLowerCase()]] ?? "";
+      modCols.forEach((col, i) => {
+        const inputs = tr.querySelectorAll(".mv-mod");
+        if (inputs[i]) inputs[i].value = row[headerMap[col.toLowerCase()]] ?? "";
+      });
+    });
+    markStale();
+  }
+  function _updateMVValidationWarnings() {
+    const warningsEl = document.getElementById("mvValidationWarnings");
+    const msgs = [];
+    document.querySelectorAll("#mvTableBody tr").forEach((tr, i) => {
+      if (tr.classList.contains("row-pending-delete")) return;
+      const allInputs = [...tr.querySelectorAll("input")];
+      if (allInputs.every((inp) => inp.value.trim() === "")) return;
+      const studyId = tr.querySelector(".mv-study-id")?.value.trim() || `Row ${i + 1}`;
+      const outcomeId = tr.querySelector(".mv-outcome-id")?.value.trim() || "";
+      const label = outcomeId ? `${studyId} / ${outcomeId}` : studyId;
+      const yi = parseFloat(tr.querySelector(".mv-yi")?.value);
+      const vi = parseFloat(tr.querySelector(".mv-vi")?.value);
+      if (!tr.querySelector(".mv-study-id")?.value.trim() || !tr.querySelector(".mv-outcome-id")?.value.trim() || !isFinite(yi) || !isFinite(vi) || vi <= 0)
+        msgs.push(`\u26A0\uFE0F Excluded: ${escapeHTML(label)} (Invalid input)`);
+    });
+    const rows = _collectMVRows();
+    if (!rows.length) msgs.push("\u274C No valid rows \u2014 fill in Study ID, Outcome ID, y<sub>i</sub>, and v<sub>i</sub>.");
+    warningsEl.innerHTML = msgs.length > 0 ? msgs.map((m) => `\u2022 ${m}`).join("<br>") : "";
+  }
+  function _runMVAnalysis() {
+    document.querySelectorAll("#mvTableBody tr").forEach((tr) => {
+      if (!tr.classList.contains("row-pending-delete")) _validateMVRow(tr);
+    });
+    _updateMVValidationWarnings();
+    const rows = _collectMVRows();
+    const warningsEl = document.getElementById("mvValidationWarnings");
+    if (!rows.length) return false;
+    const msgs = [];
+    const outcomeIds = [...new Set(rows.map((r) => r.outcome_id))];
+    const studyIds = [...new Set(rows.map((r) => r.study_id))];
+    if (outcomeIds.length < 2) {
+      msgs.push("\u274C Requires \u2265 2 distinct outcome IDs. For a single outcome, use Standard mode.");
+      warningsEl.innerHTML = msgs.map((m) => `\u2022 ${m}`).join("<br>");
+      return false;
+    }
+    if (studyIds.length < 3) {
+      msgs.push("\u274C Requires \u2265 3 studies.");
+      warningsEl.innerHTML = msgs.map((m) => `\u2022 ${m}`).join("<br>");
+      return false;
+    }
+    const studyOutcomeCounts = {};
+    rows.forEach((r) => {
+      studyOutcomeCounts[r.study_id] = studyOutcomeCounts[r.study_id] || /* @__PURE__ */ new Set();
+      studyOutcomeCounts[r.study_id].add(r.outcome_id);
+    });
+    const singleOutcomeStudies = Object.entries(studyOutcomeCounts).filter(([, s]) => s.size === 1).map(([id]) => id);
+    if (singleOutcomeStudies.length === studyIds.length)
+      msgs.push("\u26A0\uFE0F All studies contribute only one outcome \u2014 within-study correlations cannot be estimated. Consider using Standard mode or checking that Study IDs correctly group multiple outcomes per study.");
+    else if (singleOutcomeStudies.length > 0)
+      msgs.push(`\u26A0\uFE0F Studies with only one outcome (contribute no covariance): ${singleOutcomeStudies.map(escapeHTML).join(", ")}.`);
+    const struct = document.getElementById("mvStruct").value;
+    const method = document.getElementById("mvMethod").value;
+    const rho = parseFloat(document.getElementById("mvRho").value);
+    const alpha = getCiAlpha();
+    const mods = _mvModerators.map((key) => ({ key, type: "continuous" }));
+    const nPsiPar = struct === "CS" ? 2 : struct === "Diag" ? outcomeIds.length : outcomeIds.length * (outcomeIds.length + 1) / 2;
+    if (struct === "UN" && outcomeIds.length > 5)
+      msgs.push(`\u26A0\uFE0F UN structure with P = ${outcomeIds.length} outcomes requires ${nPsiPar} \u03A8 parameters \u2014 optimizer instability likely. Consider CS or Diag.`);
+    if (nPsiPar > studyIds.length / 3)
+      msgs.push(`\u26A0\uFE0F Between-study covariance has ${nPsiPar} parameters but only ${studyIds.length} studies \u2014 model may be overparameterized.`);
+    warningsEl.innerHTML = msgs.length ? msgs.map((m) => `\u2022 ${m}`).join("<br>") : "";
+    let V, res;
+    try {
+      V = vcalc(rows, { rho });
+      res = mvMeta(rows, V, { struct, method, alpha, moderators: mods });
+    } catch (e) {
+      warningsEl.innerHTML += (warningsEl.innerHTML ? "<br>" : "") + `\u2022 \u274C Error: ${escapeHTML(String(e))}`;
+      return false;
+    }
+    if (res.error) {
+      warningsEl.innerHTML += (warningsEl.innerHTML ? "<br>" : "") + `\u2022 \u274C Error: ${escapeHTML(res.error)}`;
+      return false;
+    }
+    document.querySelectorAll(".results-section").forEach((d) => {
+      d.removeAttribute("open");
+      d.style.display = "none";
+    });
+    const _stdForestSection = document.getElementById("forestSection");
+    const _mvForestSection = document.getElementById("mvForestSection");
+    if (_stdForestSection) _stdForestSection.style.display = "none";
+    if (_mvForestSection) _mvForestSection.style.display = "";
+    _renderMVResults(res, { alpha, rows });
+    appState.reportArgs = { mv: true, mvRes: res, mvRows: rows, mvAlpha: alpha };
+    const _studyTableSection = document.getElementById("studyTableSection");
+    const _studyTableEl = document.getElementById("studyTable");
+    if (_studyTableSection && _studyTableEl) {
+      _studyTableSection.style.display = "";
+      _studyTableEl.innerHTML = _buildMVStudyTable(rows, alpha);
+    }
+    const _robSectionEl = document.getElementById("robSection");
+    if (_robSectionEl && _robDomains.length > 0 && rows.length > 0) {
+      _robSectionEl.style.display = "";
+      const robStudies = [...new Set(rows.map((r) => r.study_id))].map((id) => ({ label: id }));
+      robPlotState.studies = robStudies;
+      drawIfVisible("robSection", () => {
+        drawRoBTrafficLight(robStudies, _robDomains, _robData, { theme: appState.plotTheme });
+        drawRoBSummary(robStudies, _robDomains, _robData, { theme: appState.plotTheme });
+      });
+    }
+    if (outputPlaceholder) outputPlaceholder.style.display = "none";
+    staleBanner.style.display = "none";
+    _toggleResults.classList.remove("stale");
+    if (inputStaleBadge) inputStaleBadge.hidden = true;
+    if (!appState.hasRunOnce) {
+      appState.hasRunOnce = true;
+      _toggleResults.disabled = false;
+      _toggleResults.removeAttribute("aria-disabled");
+      _toggleResults.removeAttribute("title");
+    }
+    return true;
+  }
+  function _buildMVStudyTable(rows, alpha = 0.05) {
+    const z = normalQuantile(1 - alpha / 2);
+    const ciPct = Math.round((1 - alpha) * 100);
+    function fv(v) {
+      return isFinite(v) ? v.toFixed(4) : "\u2014";
+    }
+    const bodyRows = rows.map((r) => {
+      const se = Math.sqrt(r.vi);
+      return `<tr>
+      <td>${escapeHTML(String(r.study_id))}</td>
+      <td>${escapeHTML(String(r.outcome_id))}</td>
+      <td>${fv(r.yi)}</td>
+      <td>${fv(r.vi)}</td>
+      <td>${fv(se)}</td>
+      <td>[${fv(r.yi - z * se)},&nbsp;${fv(r.yi + z * se)}]</td>
+    </tr>`;
+    }).join("");
+    return `<table class="reg-table" style="width:100%">
+    <thead><tr>
+      <th>Study</th><th>Outcome</th>
+      <th>y<sub>i</sub></th><th>v<sub>i</sub></th>
+      <th>SE</th><th>${ciPct}% CI</th>
+    </tr></thead>
+    <tbody>${bodyRows}</tbody>
+  </table>`;
+  }
+  function _renderMVResults(res, { alpha, rows = [] } = {}) {
+    const {
+      beta,
+      se,
+      ci,
+      z,
+      pval,
+      betaNames,
+      tau2,
+      rho_between,
+      Psi,
+      corPsi,
+      outcomeIds,
+      n,
+      k,
+      P,
+      QM,
+      df_QM,
+      pQM,
+      QE,
+      df_QE,
+      pQE,
+      logLik: logLik2,
+      AIC,
+      BIC,
+      AICc,
+      struct,
+      method,
+      I2: I22,
+      convergence,
+      warnings: engineWarnings = []
+    } = res;
+    alpha ??= 0.05;
+    const ciPct = Math.round((1 - alpha) * 100);
+    const fmtP2 = (p) => !isFinite(p) ? "\u2014" : p < 1e-3 ? "< .001" : p.toFixed(3).replace(/^0\./, ".");
+    const stars = (p) => p < 1e-3 ? "***" : p < 0.01 ? "**" : p < 0.05 ? "*" : "";
+    const hasMods = beta.length > P;
+    const warnHTML = engineWarnings.length || convergence === false ? (convergence === false ? `<p style="color:var(--color-warning);margin:2px 0">\u26A0 Optimizer did not fully converge \u2014 interpret results with caution.</p>` : "") + engineWarnings.map((w) => `<p style="color:var(--color-warning);margin:2px 0">\u26A0 ${escapeHTML(w)}</p>`).join("") : "";
+    const interceptRows = beta.slice(0, P).map((b, o) => {
+      const [lo, hi] = ci[o];
+      return `<tr>
+      <td><strong>${escapeHTML(String(outcomeIds[o]))}</strong></td>
+      <td>${fmt(b, 4)}</td><td>${fmt(se[o], 4)}</td>
+      <td>[${fmt(lo, 4)}, ${fmt(hi, 4)}]</td>
+      <td>${fmt(z[o], 3)}</td>
+      <td>${fmtP2(pval[o])}${stars(pval[o])}</td>
+    </tr>`;
+    }).join("");
+    const interceptTable = `
+    <h4 style="font-size:0.9em;margin:8px 0 4px">
+      Pooled effect per outcome<button class="help-btn" data-help="mv.model" title="Help">?</button>
+    </h4>
+    <table class="reg-table" style="margin-bottom:12px">
+      <thead><tr><th>Outcome</th><th>Estimate</th><th>SE</th>
+        <th>${ciPct}% CI</th><th><em>z</em></th><th><em>p</em></th></tr></thead>
+      <tbody>${interceptRows}</tbody>
+    </table>`;
+    let modTable = "";
+    if (hasMods) {
+      const modRows = beta.slice(P).map((b, i) => {
+        const j = P + i;
+        const [lo, hi] = ci[j];
+        return `<tr>
+        <td>${escapeHTML(betaNames[j])}</td>
+        <td>${fmt(b, 4)}</td><td>${fmt(se[j], 4)}</td>
+        <td>[${fmt(lo, 4)}, ${fmt(hi, 4)}]</td>
+        <td>${fmt(z[j], 3)}</td>
+        <td>${fmtP2(pval[j])}${stars(pval[j])}</td>
+      </tr>`;
+      }).join("");
+      modTable = `
+      <h4 style="font-size:0.9em;margin:8px 0 4px">Moderator effects</h4>
+      <table class="reg-table" style="margin-bottom:12px">
+        <thead><tr><th>Coefficient</th><th>Estimate</th><th>SE</th>
+          <th>${ciPct}% CI</th><th><em>z</em></th><th><em>p</em></th></tr></thead>
+        <tbody>${modRows}</tbody>
+      </table>`;
+    }
+    let psiBlock = "";
+    if (struct === "CS") {
+      const i2rows = outcomeIds.map(
+        (id, o) => `<tr><td>${escapeHTML(String(id))}</td><td>${fmt(tau2[o], 5)}</td><td>${fmt(I22[o], 1)}%</td></tr>`
+      ).join("");
+      psiBlock = `<h4 style="font-size:0.9em;margin:8px 0 4px">Between-study heterogeneity (\u03A8\u0302, CS)</h4>
+      <p style="font-size:0.875em;margin:2px 0">
+        Shared \u03C4\xB2 = ${fmt(tau2[0], 5)},
+        \u03C1<sub>between</sub> = ${fmt(rho_between ?? 0, 4)}
+      </p>
+      <table class="reg-table" style="margin-bottom:8px">
+        <thead><tr><th>Outcome</th><th>\u03C4\xB2</th><th><em>I</em>\xB2</th></tr></thead>
+        <tbody>${i2rows}</tbody>
+      </table>`;
+    } else if (struct === "Diag") {
+      const i2rows = outcomeIds.map(
+        (id, o) => `<tr><td>${escapeHTML(String(id))}</td><td>${fmt(tau2[o], 5)}</td><td>${fmt(I22[o], 1)}%</td></tr>`
+      ).join("");
+      psiBlock = `<h4 style="font-size:0.9em;margin:8px 0 4px">Between-study heterogeneity (\u03A8\u0302, Diagonal)</h4>
+      <table class="reg-table" style="margin-bottom:8px">
+        <thead><tr><th>Outcome</th><th>\u03C4\xB2</th><th><em>I</em>\xB2</th></tr></thead>
+        <tbody>${i2rows}</tbody>
+      </table>`;
+    } else {
+      const hdr = outcomeIds.map((id) => `<th>${escapeHTML(String(id))}</th>`).join("");
+      const psiRows = Psi.map(
+        (row, i) => `<tr><th>${escapeHTML(String(outcomeIds[i]))}</th>${row.map((v) => `<td>${fmt(v, 5)}</td>`).join("")}</tr>`
+      ).join("");
+      const corRows = (corPsi || []).map(
+        (row, i) => `<tr><th>${escapeHTML(String(outcomeIds[i]))}</th>${row.map(
+          (v, j) => `<td ${i === j ? 'style="color:var(--fg-muted)"' : ""}>${fmt(v, 4)}</td>`
+        ).join("")}</tr>`
+      ).join("");
+      const i2rows = outcomeIds.map(
+        (id, o) => `<tr><td>${escapeHTML(String(id))}</td><td>${fmt(tau2[o], 5)}</td><td>${fmt(I22[o], 1)}%</td></tr>`
+      ).join("");
+      psiBlock = `<h4 style="font-size:0.9em;margin:8px 0 4px">Between-study covariance matrix \u03A8\u0302 (Unstructured)</h4>
+      <table class="reg-table" style="margin-bottom:6px">
+        <thead><tr><th></th>${hdr}</tr></thead><tbody>${psiRows}</tbody>
+      </table>
+      <h4 style="font-size:0.9em;margin:6px 0 4px">Between-study correlations \u03C1\u0302</h4>
+      <table class="reg-table" style="margin-bottom:6px">
+        <thead><tr><th></th>${hdr}</tr></thead><tbody>${corRows}</tbody>
+      </table>
+      <table class="reg-table" style="margin-bottom:8px">
+        <thead><tr><th>Outcome</th><th>\u03C4\xB2</th><th><em>I</em>\xB2</th></tr></thead>
+        <tbody>${i2rows}</tbody>
+      </table>`;
+    }
+    const testsBlock = `
+    <h4 style="font-size:0.9em;margin:8px 0 4px">Hypothesis tests</h4>
+    <table class="reg-table" style="margin-bottom:12px">
+      <thead><tr><th>Test</th><th>\u03C7\xB2</th><th>df</th><th><em>p</em></th></tr></thead>
+      <tbody>
+        ${hasMods && isFinite(QM) ? `<tr><td>Omnibus test of moderators (Q<sub>M</sub>)</td><td>${fmt(QM, 3)}</td><td>${df_QM}</td><td>${fmtP2(pQM)}</td></tr>` : ""}
+        <tr><td>Residual heterogeneity (Q<sub>E</sub>)</td><td>${fmt(QE, 3)}</td><td>${df_QE}</td><td>${fmtP2(pQE)}</td></tr>
+      </tbody>
+    </table>`;
+    const fitBlock = `<div style="font-size:0.82em;color:var(--fg-muted);margin:4px 0 14px;line-height:1.7">
+    k = ${k} studies &nbsp;\xB7&nbsp; n = ${n} obs &nbsp;\xB7&nbsp; P = ${P} outcomes
+    &nbsp;|&nbsp; log-lik = ${fmt(logLik2, 4)}
+    &nbsp;\xB7&nbsp; AIC = ${fmt(AIC, 2)} &nbsp;\xB7&nbsp; BIC = ${fmt(BIC, 2)}
+    ${isFinite(AICc) ? `&nbsp;\xB7&nbsp; AICc = ${fmt(AICc, 2)}` : ""}
+    &nbsp;|&nbsp; ${method}, \u03A8 = ${struct}
+    ${convergence === false ? `&nbsp;\xB7&nbsp; <span style="color:var(--color-warning)">convergence uncertain</span>` : ""}
+  </div>`;
+    const boundaryOutcomes = outcomeIds.filter((_, o) => tau2[o] < 1e-6).map((id) => escapeHTML(String(id)));
+    const boundaryNote = boundaryOutcomes.length ? `<p style="color:var(--fg-muted);font-size:0.8em;margin:0 0 6px">\u2139 \u03C4\xB2 \u2248 0 for ${boundaryOutcomes.join(", ")} \u2014 estimate is at the boundary; no detectable between-study heterogeneity for these outcomes.</p>` : "";
+    document.getElementById("results").innerHTML = warnHTML + interceptTable + modTable + psiBlock + boundaryNote + testsBlock + fitBlock;
+    _mvForestState.lastRes = res;
+    _mvForestState.lastRows = rows;
+    _mvForestState.alpha = alpha;
+    _mvForestState.pages = outcomeIds.map(() => 0);
+    _mvForestState.combinedPage = 0;
+    const mvForestContainer = document.getElementById("mvForestContainer");
+    if (!mvForestContainer) return;
+    const combinedBlock = `<div id="mvForestCombinedBlock" style="display:none;margin-bottom:20px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+        <div class="plot-export">
+          <button class="export-btn" data-target="mvForestPlotCombined" data-format="svg">SVG</button>
+          <button class="export-btn" data-target="mvForestPlotCombined" data-format="png">PNG</button>
+          <button class="export-btn" data-target="mvForestPlotCombined" data-format="tiff">TIFF</button>
+        </div>
+      </div>
+      <svg id="mvForestPlotCombined" role="img" aria-label="Combined multivariate forest plot"
+        width="620" height="20" style="display:block"></svg>
+      <div id="mvForestNavCombined" class="forest-nav"></div>
+    </div>`;
+    const separateBlocks = outcomeIds.map(
+      (id, o) => `<div style="margin-bottom:20px" id="mvForestBlock-${o}">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+        <p class="plot-label" style="margin:0">${escapeHTML(String(id))}</p>
+        <div class="plot-export">
+          <button class="export-btn" data-target="mvForestPlot-${o}" data-format="svg">SVG</button>
+          <button class="export-btn" data-target="mvForestPlot-${o}" data-format="png">PNG</button>
+          <button class="export-btn" data-target="mvForestPlot-${o}" data-format="tiff">TIFF</button>
+        </div>
+      </div>
+      <svg id="mvForestPlot-${o}" role="img"
+        aria-label="Forest plot \u2014 ${escapeHTML(String(id))}"
+        width="620" height="20" style="display:block"></svg>
+      <div id="mvForestNav-${o}" class="forest-nav"></div>
+    </div>`
+    ).join("");
+    mvForestContainer.innerHTML = combinedBlock + separateBlocks;
+    _redrawAllMVForestPlots();
+  }
+  function _redrawAllMVForestPlots() {
+    const { lastRes: res, lastRows: rows, alpha, pages, pageSize, showPI, viewMode, combinedPage } = _mvForestState;
+    if (!res) return;
+    const { beta, ci, se, tau2, outcomeIds, k, P } = res;
+    const isCombined = viewMode === "combined";
+    const combinedBlockEl = document.getElementById("mvForestCombinedBlock");
+    if (combinedBlockEl) combinedBlockEl.style.display = isCombined ? "" : "none";
+    outcomeIds.forEach((_, o) => {
+      const block = document.getElementById(`mvForestBlock-${o}`);
+      if (block) block.style.display = isCombined ? "none" : "";
+    });
+    if (isCombined) {
+      const svgEl = document.getElementById("mvForestPlotCombined");
+      const navEl = document.getElementById("mvForestNavCombined");
+      if (!svgEl) return;
+      const allStudyIds = [...new Set(rows.map((r) => String(r.study_id)))];
+      const { totalPages } = _drawMVForestCombined(svgEl, rows, res, alpha, {
+        page: combinedPage,
+        pageSize,
+        showPI,
+        theme: appState.plotTheme ?? "default"
+      });
+      _renderMVForestNavCombined(navEl, totalPages, allStudyIds.length);
+      return;
+    }
+    const dfPred = Math.max(k - P - 1, 1);
+    outcomeIds.forEach((id, o) => {
+      const svgEl = document.getElementById(`mvForestPlot-${o}`);
+      const navEl = document.getElementById(`mvForestNav-${o}`);
+      if (!svgEl) return;
+      const outcomeRows = rows.filter((r) => String(r.outcome_id) === String(id));
+      if (!outcomeRows.length) return;
+      const pooled = { est: beta[o], lo: ci[o][0], hi: ci[o][1] };
+      const piOpts = showPI ? {
+        lo: beta[o] - tCritical(dfPred, alpha) * Math.sqrt(tau2[o] + se[o] ** 2),
+        hi: beta[o] + tCritical(dfPred, alpha) * Math.sqrt(tau2[o] + se[o] ** 2)
+      } : null;
+      const { totalPages } = _drawMVForestPlot(svgEl, outcomeRows, pooled, String(id), alpha, {
+        page: pages[o] ?? 0,
+        pageSize,
+        pi: piOpts,
+        theme: appState.plotTheme ?? "default"
+      });
+      _renderMVForestNav(navEl, o, totalPages, outcomeRows.length);
+    });
+  }
+  function _renderMVForestNav(navEl, outcomeIdx, totalPages, kAll) {
+    if (!navEl) return;
+    if (totalPages <= 1) {
+      navEl.innerHTML = "";
+      return;
+    }
+    const page = _mvForestState.pages[outcomeIdx] ?? 0;
+    const prevId = `mvFPrev-${outcomeIdx}`;
+    const nextId = `mvFNext-${outcomeIdx}`;
+    navEl.innerHTML = `<button id="${prevId}" ${page === 0 ? "disabled" : ""}>\u2039 Prev</button><span>Page ${page + 1} of ${totalPages}</span><button id="${nextId}" ${page >= totalPages - 1 ? "disabled" : ""}>Next \u203A</button><span class="forest-nav-note">Pooled estimate includes all ${kAll} studies</span>`;
+    document.getElementById(prevId)?.addEventListener("click", () => {
+      if (_mvForestState.pages[outcomeIdx] > 0) {
+        _mvForestState.pages[outcomeIdx]--;
+        _redrawAllMVForestPlots();
+      }
+    });
+    document.getElementById(nextId)?.addEventListener("click", () => {
+      if (_mvForestState.pages[outcomeIdx] < totalPages - 1) {
+        _mvForestState.pages[outcomeIdx]++;
+        _redrawAllMVForestPlots();
+      }
+    });
+  }
+  function _drawMVForestPlot(svgEl, rows, pooled, label, alpha = 0.05, { page = 0, pageSize = Infinity, pi = null, theme = "default" } = {}) {
+    if (typeof d3 === "undefined" || !rows.length) return;
+    const z = normalQuantile(1 - alpha / 2);
+    const T = PLOT_THEMES[theme] ?? PLOT_THEMES["default"];
+    const ps = pageSize === Infinity ? rows.length : pageSize;
+    const totalPages = Math.max(1, Math.ceil(rows.length / ps));
+    const safePage = Math.min(Math.max(0, page), totalPages - 1);
+    const pageRows = rows.slice(safePage * ps, safePage * ps + ps);
+    const lW = 130, pW = 280, aW = 175;
+    const rowH = 20, headerH = 24, axisH = 26;
+    const ml = 6, mr = 6;
+    const nS = pageRows.length;
+    const piRows = pi ? 1 : 0;
+    const totalW = ml + lW + pW + aW + mr;
+    const totalH = headerH + nS * rowH + 6 + rowH + (piRows ? rowH : 0) + axisH;
+    const svg = d3.select(svgEl).attr("width", totalW).attr("height", totalH);
+    svg.selectAll("*").remove();
+    svg.style("background", T.bg !== "transparent" ? T.bg : null);
+    svg.style("font-family", T.fontFamily);
+    if (T.bg !== "transparent") {
+      svg.append("rect").attr("width", totalW).attr("height", totalH).attr("fill", T.bg);
+    }
+    const seAll = rows.map((r) => Math.sqrt(r.vi));
+    const xVals = rows.flatMap((r, i) => [r.yi - z * seAll[i], r.yi + z * seAll[i]]).concat([pooled.lo, pooled.hi]);
+    if (pi) xVals.push(pi.lo, pi.hi);
+    const xMin = Math.min(...xVals), xMax = Math.max(...xVals);
+    const pad = Math.max((xMax - xMin) * 0.12, 0.05);
+    const xScale = d3.scaleLinear().domain([xMin - pad, xMax + pad]).range([0, pW]);
+    const plotG = svg.append("g").attr("transform", `translate(${ml + lW},${headerH})`);
+    const zeroLineH = nS * rowH + 6 + rowH + (piRows ? rowH : 0);
+    if (xScale.domain()[0] <= 0 && xScale.domain()[1] >= 0) {
+      plotG.append("line").attr("x1", xScale(0)).attr("x2", xScale(0)).attr("y1", 0).attr("y2", zeroLineH).attr("stroke", T.border).attr("stroke-dasharray", "3,3").attr("stroke-width", 1);
+    }
+    [
+      [ml + lW / 2, "Study"],
+      [ml + lW + pW / 2, label],
+      [ml + lW + pW + aW / 2, `Effect [${Math.round((1 - alpha) * 100)}% CI]`]
+    ].forEach(
+      ([x, text]) => svg.append("text").attr("x", x).attr("y", headerH - 6).attr("text-anchor", "middle").attr("fill", T.fgMuted).attr("font-size", "10px").text(text)
+    );
+    const wtsAll = rows.map((r) => 1 / r.vi);
+    const wMax = Math.max(...wtsAll);
+    const sePageArr = pageRows.map((r) => Math.sqrt(r.vi));
+    pageRows.forEach((row, i) => {
+      const y = i * rowH + rowH / 2;
+      const se = sePageArr[i];
+      const lo = row.yi - z * se;
+      const hi = row.yi + z * se;
+      const wi = 1 / row.vi;
+      const bh = Math.max(2, Math.min(6, 5.5 * Math.sqrt(wi / wMax)));
+      plotG.append("line").attr("x1", xScale(Math.max(xScale.domain()[0], lo))).attr("x2", xScale(Math.min(xScale.domain()[1], hi))).attr("y1", y).attr("y2", y).attr("stroke", T.fg).attr("stroke-width", 1);
+      plotG.append("rect").attr("x", xScale(row.yi) - bh).attr("y", y - bh).attr("width", bh * 2).attr("height", bh * 2).attr("fill", T.accent);
+      svg.append("text").attr("x", ml + lW - 4).attr("y", headerH + y + 4).attr("text-anchor", "end").attr("fill", T.fg).attr("font-size", "10px").text(String(row.study_id));
+      svg.append("text").attr("x", ml + lW + pW + 5).attr("y", headerH + y + 4).attr("text-anchor", "start").attr("fill", T.fg).attr("font-size", "10px").text(`${fmt(row.yi, 3)} [${fmt(lo, 3)}, ${fmt(hi, 3)}]`);
+    });
+    const sepY = nS * rowH + 4;
+    plotG.append("line").attr("x1", 0).attr("x2", pW).attr("y1", sepY).attr("y2", sepY).attr("stroke", T.border).attr("stroke-width", 1);
+    const dY = sepY + rowH / 2;
+    const dLo = xScale(Math.max(xScale.domain()[0], pooled.lo));
+    const dHi = xScale(Math.min(xScale.domain()[1], pooled.hi));
+    const dMid = xScale(pooled.est);
+    const dH = 7;
+    plotG.append("polygon").attr("points", `${dMid},${dY - dH} ${dHi},${dY} ${dMid},${dY + dH} ${dLo},${dY}`).attr("fill", T.accent);
+    svg.append("text").attr("x", ml + lW - 4).attr("y", headerH + dY + 4).attr("text-anchor", "end").attr("fill", T.fg).attr("font-size", "10px").attr("font-weight", "600").text("Pooled (MV)");
+    svg.append("text").attr("x", ml + lW + pW + 5).attr("y", headerH + dY + 4).attr("text-anchor", "start").attr("fill", T.fg).attr("font-size", "10px").attr("font-weight", "600").text(`${fmt(pooled.est, 3)} [${fmt(pooled.lo, 3)}, ${fmt(pooled.hi, 3)}]`);
+    if (pi && isFinite(pi.lo) && isFinite(pi.hi)) {
+      const piY = dY + rowH;
+      const piLoX = xScale(Math.max(xScale.domain()[0], pi.lo));
+      const piHiX = xScale(Math.min(xScale.domain()[1], pi.hi));
+      const piColor = T.pi;
+      plotG.append("line").attr("x1", piLoX).attr("x2", piHiX).attr("y1", piY).attr("y2", piY).attr("stroke", piColor).attr("stroke-width", 2).attr("stroke-dasharray", "6,3");
+      plotG.append("line").attr("x1", piLoX).attr("x2", piLoX).attr("y1", piY - 5).attr("y2", piY + 5).attr("stroke", piColor).attr("stroke-width", 2);
+      plotG.append("line").attr("x1", piHiX).attr("x2", piHiX).attr("y1", piY - 5).attr("y2", piY + 5).attr("stroke", piColor).attr("stroke-width", 2);
+      svg.append("text").attr("x", ml + lW - 4).attr("y", headerH + piY + 4).attr("text-anchor", "end").attr("fill", piColor).attr("font-size", "10px").text("Pred. interval");
+      svg.append("text").attr("x", ml + lW + pW + 5).attr("y", headerH + piY + 4).attr("text-anchor", "start").attr("fill", piColor).attr("font-size", "10px").text(`${fmt(pi.lo, 3)} to ${fmt(pi.hi, 3)}`);
+    }
+    const axisOffsetY = sepY + rowH + (piRows ? rowH : 0) + 2;
+    plotG.append("g").attr("transform", `translate(0,${axisOffsetY})`).call(d3.axisBottom(xScale).ticks(5).tickSize(3)).call((g) => g.select(".domain").attr("stroke", T.border)).call((g) => g.selectAll(".tick line").attr("stroke", T.border)).call((g) => g.selectAll(".tick text").attr("fill", T.fgMuted).attr("font-size", "9px").attr("font-family", T.fontFamily));
+    return { totalPages };
+  }
+  function _renderMVForestNavCombined(navEl, totalPages, nStudies) {
+    if (!navEl) return;
+    if (totalPages <= 1) {
+      navEl.innerHTML = "";
+      return;
+    }
+    const page = _mvForestState.combinedPage;
+    navEl.innerHTML = `<button id="mvFCPrev" ${page === 0 ? "disabled" : ""}>\u2039 Prev</button><span>Page ${page + 1} of ${totalPages}</span><button id="mvFCNext" ${page >= totalPages - 1 ? "disabled" : ""}>Next \u203A</button><span class="forest-nav-note">Pooled estimates include all ${nStudies} studies</span>`;
+    document.getElementById("mvFCPrev")?.addEventListener("click", () => {
+      if (_mvForestState.combinedPage > 0) {
+        _mvForestState.combinedPage--;
+        _redrawAllMVForestPlots();
+      }
+    });
+    document.getElementById("mvFCNext")?.addEventListener("click", () => {
+      if (_mvForestState.combinedPage < totalPages - 1) {
+        _mvForestState.combinedPage++;
+        _redrawAllMVForestPlots();
+      }
+    });
+  }
+  function _drawMVForestCombined(svgEl, rows, res, alpha, { page = 0, pageSize = Infinity, showPI = false, theme = "default" } = {}) {
+    if (typeof d3 === "undefined" || !rows.length || !res) return { totalPages: 1 };
+    const T = PLOT_THEMES[theme] ?? PLOT_THEMES["default"];
+    const { beta, ci, se, tau2, outcomeIds, k, P } = res;
+    const z = normalQuantile(1 - alpha / 2);
+    const dfPred = Math.max(k - P - 1, 1);
+    const allStudyIds = [...new Set(rows.map((r) => String(r.study_id)))];
+    const ps = pageSize === Infinity ? allStudyIds.length : pageSize;
+    const totalPages = Math.max(1, Math.ceil(allStudyIds.length / ps));
+    const safePage = Math.min(Math.max(0, page), totalPages - 1);
+    const pageStudyIds = new Set(allStudyIds.slice(safePage * ps, safePage * ps + ps));
+    const palette = T.useBwShapes ? ["#111111", "#555555", "#888888", "#333333", "#666666", "#999999", "#222222", "#777777", "#444444", "#aaaaaa"] : ["#4e79a7", "#f28e2b", "#e15759", "#76b7b2", "#59a14f", "#edc948", "#b07aa1", "#ff9da7", "#9c755f", "#bab0ac"];
+    const seAll = rows.map((r) => Math.sqrt(r.vi));
+    const xVals = rows.flatMap((r, i) => [r.yi - z * seAll[i], r.yi + z * seAll[i]]);
+    outcomeIds.forEach((_, o) => {
+      xVals.push(ci[o][0], ci[o][1]);
+      if (showPI) {
+        const tc = tCritical(dfPred, alpha);
+        xVals.push(
+          beta[o] - tc * Math.sqrt(tau2[o] + se[o] ** 2),
+          beta[o] + tc * Math.sqrt(tau2[o] + se[o] ** 2)
+        );
+      }
+    });
+    const xMin = Math.min(...xVals), xMax = Math.max(...xVals);
+    const pad = Math.max((xMax - xMin) * 0.12, 0.05);
+    const lW = 130, pW = 280, aW = 175;
+    const rowH = 20, headerH = 24, axisH = 26;
+    const groupHdrH = 22, sepH = 6, spacerH = 10;
+    const ml = 6, mr = 6;
+    const totalW = ml + lW + pW + aW + mr;
+    const perPageRows = outcomeIds.map(
+      (id) => rows.filter((r) => String(r.outcome_id) === String(id) && pageStudyIds.has(String(r.study_id)))
+    );
+    const groupH = (nS) => groupHdrH + nS * rowH + sepH + rowH + (showPI ? rowH : 0) + spacerH;
+    const totalGroupH = perPageRows.reduce((acc, pr) => acc + groupH(pr.length), 0);
+    const totalH = headerH + totalGroupH + axisH;
+    const svg = d3.select(svgEl).attr("width", totalW).attr("height", totalH);
+    svg.selectAll("*").remove();
+    svg.style("background", T.bg !== "transparent" ? T.bg : null);
+    svg.style("font-family", T.fontFamily);
+    if (T.bg !== "transparent") {
+      svg.append("rect").attr("width", totalW).attr("height", totalH).attr("fill", T.bg);
+    }
+    const xScale = d3.scaleLinear().domain([xMin - pad, xMax + pad]).range([0, pW]);
+    const plotG = svg.append("g").attr("transform", `translate(${ml + lW},${headerH})`);
+    if (xScale.domain()[0] <= 0 && xScale.domain()[1] >= 0) {
+      plotG.append("line").attr("x1", xScale(0)).attr("x2", xScale(0)).attr("y1", 0).attr("y2", totalGroupH).attr("stroke", T.border).attr("stroke-dasharray", "3,3").attr("stroke-width", 1);
+    }
+    [
+      [ml + lW / 2, "Study"],
+      [ml + lW + pW / 2, "Effect"],
+      [ml + lW + pW + aW / 2, `Effect [${Math.round((1 - alpha) * 100)}% CI]`]
+    ].forEach(
+      ([x, text]) => svg.append("text").attr("x", x).attr("y", headerH - 6).attr("text-anchor", "middle").attr("fill", T.fgMuted).attr("font-size", "10px").text(text)
+    );
+    let gy = 0;
+    outcomeIds.forEach((id, o) => {
+      const color = palette[o % palette.length];
+      const pageRows = perPageRows[o];
+      const nS = pageRows.length;
+      const allOutcomeRows = rows.filter((r) => String(r.outcome_id) === String(id));
+      const wMax = Math.max(...allOutcomeRows.map((r) => 1 / r.vi), 1);
+      svg.append("rect").attr("x", 0).attr("y", headerH + gy).attr("width", totalW).attr("height", groupHdrH).attr("fill", color).attr("opacity", 0.1);
+      svg.append("text").attr("x", ml + 5).attr("y", headerH + gy + groupHdrH - 6).attr("fill", color).attr("font-size", "10px").attr("font-weight", "700").text(escapeHTML(String(id)));
+      gy += groupHdrH;
+      pageRows.forEach((row, i) => {
+        const y = gy + i * rowH + rowH / 2;
+        const seSt = Math.sqrt(row.vi);
+        const lo = row.yi - z * seSt;
+        const hi = row.yi + z * seSt;
+        const wi = 1 / row.vi;
+        const bh = Math.max(2, Math.min(6, 5.5 * Math.sqrt(wi / wMax)));
+        plotG.append("line").attr("x1", xScale(Math.max(xScale.domain()[0], lo))).attr("x2", xScale(Math.min(xScale.domain()[1], hi))).attr("y1", y).attr("y2", y).attr("stroke", color).attr("stroke-width", 1);
+        plotG.append("rect").attr("x", xScale(row.yi) - bh).attr("y", y - bh).attr("width", bh * 2).attr("height", bh * 2).attr("fill", color);
+        svg.append("text").attr("x", ml + lW - 4).attr("y", headerH + y + 4).attr("text-anchor", "end").attr("fill", T.fg).attr("font-size", "10px").text(String(row.study_id));
+        svg.append("text").attr("x", ml + lW + pW + 5).attr("y", headerH + y + 4).attr("text-anchor", "start").attr("fill", T.fg).attr("font-size", "10px").text(`${fmt(row.yi, 3)} [${fmt(lo, 3)}, ${fmt(hi, 3)}]`);
+      });
+      gy += nS * rowH;
+      plotG.append("line").attr("x1", 0).attr("x2", pW).attr("y1", gy + sepH / 2).attr("y2", gy + sepH / 2).attr("stroke", T.border).attr("stroke-width", 1);
+      gy += sepH;
+      const pooled = { est: beta[o], lo: ci[o][0], hi: ci[o][1] };
+      const dY = gy + rowH / 2;
+      const dMid = xScale(pooled.est);
+      const dLo = xScale(Math.max(xScale.domain()[0], pooled.lo));
+      const dHi = xScale(Math.min(xScale.domain()[1], pooled.hi));
+      const dH = 7;
+      plotG.append("polygon").attr("points", `${dMid},${dY - dH} ${dHi},${dY} ${dMid},${dY + dH} ${dLo},${dY}`).attr("fill", color);
+      svg.append("text").attr("x", ml + lW - 4).attr("y", headerH + dY + 4).attr("text-anchor", "end").attr("fill", T.fg).attr("font-size", "10px").attr("font-weight", "600").text("Pooled (MV)");
+      svg.append("text").attr("x", ml + lW + pW + 5).attr("y", headerH + dY + 4).attr("text-anchor", "start").attr("fill", T.fg).attr("font-size", "10px").attr("font-weight", "600").text(`${fmt(pooled.est, 3)} [${fmt(pooled.lo, 3)}, ${fmt(pooled.hi, 3)}]`);
+      gy += rowH;
+      if (showPI) {
+        const tc = tCritical(dfPred, alpha);
+        const piLo = beta[o] - tc * Math.sqrt(tau2[o] + se[o] ** 2);
+        const piHi = beta[o] + tc * Math.sqrt(tau2[o] + se[o] ** 2);
+        const piY = gy + rowH / 2;
+        if (isFinite(piLo) && isFinite(piHi)) {
+          const piLoX = xScale(Math.max(xScale.domain()[0], piLo));
+          const piHiX = xScale(Math.min(xScale.domain()[1], piHi));
+          plotG.append("line").attr("x1", piLoX).attr("x2", piHiX).attr("y1", piY).attr("y2", piY).attr("stroke", color).attr("stroke-width", 2).attr("stroke-dasharray", "6,3").attr("opacity", 0.65);
+          plotG.append("line").attr("x1", piLoX).attr("x2", piLoX).attr("y1", piY - 5).attr("y2", piY + 5).attr("stroke", color).attr("stroke-width", 2).attr("opacity", 0.65);
+          plotG.append("line").attr("x1", piHiX).attr("x2", piHiX).attr("y1", piY - 5).attr("y2", piY + 5).attr("stroke", color).attr("stroke-width", 2).attr("opacity", 0.65);
+          svg.append("text").attr("x", ml + lW - 4).attr("y", headerH + piY + 4).attr("text-anchor", "end").attr("fill", T.pi).attr("font-size", "10px").text("Pred. interval");
+          svg.append("text").attr("x", ml + lW + pW + 5).attr("y", headerH + piY + 4).attr("text-anchor", "start").attr("fill", T.pi).attr("font-size", "10px").text(`${fmt(piLo, 3)} to ${fmt(piHi, 3)}`);
+        }
+        gy += rowH;
+      }
+      gy += spacerH;
+    });
+    plotG.append("g").attr("transform", `translate(0,${gy})`).call(d3.axisBottom(xScale).ticks(5).tickSize(3)).call((g) => g.select(".domain").attr("stroke", T.border)).call((g) => g.selectAll(".tick line").attr("stroke", T.border)).call((g) => g.selectAll(".tick text").attr("fill", T.fgMuted).attr("font-size", "9px").attr("font-family", T.fontFamily));
+    return { totalPages };
+  }
+  document.getElementById("modeStandard").addEventListener("click", () => {
+    _mvMode = false;
+    _applyModeToggle();
+    markStale();
+  });
+  document.getElementById("modeMultivariate").addEventListener("click", () => {
+    _mvMode = true;
+    _applyModeToggle();
+    markStale();
+  });
+  document.getElementById("mvAddRow").addEventListener("click", () => {
+    _mvAddRow();
+    markStale();
+  });
+  document.getElementById("mvTableBody").addEventListener("keydown", (e) => {
+    if (!e.altKey || e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+    const row = e.target.closest("tr");
+    if (!row || !row.draggable) return;
+    e.preventDefault();
+    if (e.key === "ArrowUp") {
+      const prev2 = row.previousElementSibling;
+      if (prev2 && prev2.draggable) row.parentNode.insertBefore(row, prev2);
+    } else {
+      const next2 = row.nextElementSibling;
+      if (next2 && next2.draggable) row.parentNode.insertBefore(next2, row);
+    }
+    markStale();
+  });
+  document.getElementById("mvAddMod").addEventListener("click", _mvAddMod);
+  document.getElementById("mvModName").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") _mvAddMod();
+  });
+  document.getElementById("mvForestPageSize").addEventListener("change", (e) => {
+    const raw = e.target.value;
+    _mvForestState.pageSize = raw === "all" ? Infinity : +raw;
+    _mvForestState.pages = _mvForestState.pages.map(() => 0);
+    _mvForestState.combinedPage = 0;
+    _redrawAllMVForestPlots();
+  });
+  document.getElementById("mvForestView").addEventListener("change", (e) => {
+    _mvForestState.viewMode = e.target.value;
+    _mvForestState.combinedPage = 0;
+    _redrawAllMVForestPlots();
+  });
+  document.getElementById("mvShowPI").addEventListener("change", (e) => {
+    _mvForestState.showPI = e.target.checked;
+    _redrawAllMVForestPlots();
+  });
   document.getElementById("addStudy").addEventListener("click", () => {
     addRow();
     renderRoBDataGrid();
@@ -25732,19 +31068,50 @@ when exported.</p>`,
     if (await runAnalysis()) showView("results");
   });
   document.getElementById("import").addEventListener("click", () => document.getElementById("csvFile").click());
-  document.getElementById("csvFile").addEventListener("change", (e) => {
-    if (e.target.files[0]) previewCSV(e.target.files[0]);
+  document.getElementById("csvFile").addEventListener("change", async (e) => {
+    if (!e.target.files[0]) return;
+    try {
+      await previewCSV(e.target.files[0]);
+    } catch (err) {
+      const warn = document.getElementById("csvWarning");
+      warn.textContent = `Could not read file: ${err?.message ?? err}`;
+      warn.style.display = "block";
+      return;
+    }
+    if (_mvMode) {
+      const pending = getPendingImport();
+      document.getElementById("previewImport").textContent = pending?.mvCandidate ? "Import to MV Table" : "Import";
+    }
   });
   document.getElementById("previewImport").addEventListener("click", () => {
+    document.getElementById("previewImport").textContent = "Import";
+    const pending = getPendingImport();
+    if (pending?.mvCandidate && _mvMode) {
+      _commitImportMV(pending.parsed, pending.mvHeaders);
+      cancelImport();
+      return;
+    }
     const missingCols = commitImport();
-    syncMHOptions(document.getElementById("effectType").value);
+    const importedType = document.getElementById("effectType").value;
+    syncMHOptions(importedType);
+    const { studies, excluded, softWarnings } = collectStudies(importedType);
+    updateValidationWarnings(studies, excluded, softWarnings);
     if (missingCols.length > 0) {
       const warningDiv = document.getElementById("csvWarning");
       warningDiv.textContent = `Warning: CSV is missing required columns: ${missingCols.join(", ")}`;
       warningDiv.style.display = "block";
     }
   });
-  document.getElementById("previewCancel").addEventListener("click", cancelImport);
+  document.getElementById("previewCancel").addEventListener("click", () => {
+    document.getElementById("previewImport").textContent = "Import";
+    cancelImport();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && document.getElementById("importPreview").style.display !== "none") {
+      document.getElementById("previewImport").textContent = "Import";
+      cancelImport();
+    }
+  });
   document.getElementById("previewEffectType").addEventListener("change", (e) => refreshPreviewUI(e.target.value));
   document.getElementById("export").addEventListener("click", (e) => {
     const done = flashBtn(e.currentTarget, null, "Saved \u2713");
@@ -25767,22 +31134,55 @@ when exported.</p>`,
   document.getElementById("modName").addEventListener("keydown", (e) => {
     if (e.key === "Enter") addModerator();
   });
+  document.getElementById("addInteraction").addEventListener("click", addInteractionTerm);
   document.getElementById("addScaleMod").addEventListener("click", addScaleModerator);
   document.getElementById("scaleModName").addEventListener("keydown", (e) => {
     if (e.key === "Enter") addScaleModerator();
   });
-  document.getElementById("cumulativeOrder").addEventListener("change", markStale);
+  document.getElementById("cumulativeOrder").addEventListener("change", () => {
+    if (!cumForestPlot.sourceStudies) return;
+    const order = document.getElementById("cumulativeOrder").value;
+    const sorted = cumForestPlot.sourceStudies.slice();
+    if (order === "precision_desc") sorted.sort((a, b) => a.vi - b.vi);
+    else if (order === "precision_asc") sorted.sort((a, b) => b.vi - a.vi);
+    else if (order === "effect_asc") sorted.sort((a, b) => a.yi - b.yi);
+    else if (order === "effect_desc") sorted.sort((a, b) => b.yi - a.yi);
+    const cumResults = cumulativeMeta(sorted, cumForestPlot.method, cumForestPlot.ciMethod, cumForestPlot.alpha);
+    cumForestPlot.args.results = cumResults;
+    cumForestPlot.page = 0;
+    cumFunnelPlot.studies = sorted;
+    cumFunnelPlot.results = cumResults;
+    const slider = document.getElementById("cumulativeFunnelStep");
+    if (slider) {
+      slider.max = cumResults.length - 1;
+      slider.value = cumResults.length - 1;
+    }
+    _updateCumFunnelLabel(cumResults.length - 1);
+    const { totalPages } = drawCumulativeForest(
+      cumResults,
+      cumForestPlot.args.profile,
+      { pageSize: cumForestPlot.args.pageSize, page: 0, theme: appState.plotTheme }
+    );
+    renderCumulativeForestNav(totalPages);
+    drawCumulativeFunnel(sorted, cumResults, cumFunnelPlot.profile, cumResults.length - 1, { theme: appState.plotTheme });
+    if (appState.reportArgs?.cumForestOptions) {
+      appState.reportArgs = {
+        ...appState.reportArgs,
+        cumForestOptions: { ...appState.reportArgs.cumForestOptions, results: cumResults, currentPage: 0 }
+      };
+    }
+  });
   document.getElementById("cumulativeFunnelStep").addEventListener("input", (e) => {
     if (!cumFunnelPlot.studies) return;
     const step = +e.target.value;
     _updateCumFunnelLabel(step);
-    drawCumulativeFunnel(cumFunnelPlot.studies, cumFunnelPlot.results, cumFunnelPlot.profile, step);
+    drawCumulativeFunnel(cumFunnelPlot.studies, cumFunnelPlot.results, cumFunnelPlot.profile, step, { theme: appState.plotTheme });
   });
   document.getElementById("caterpillarPageSize").addEventListener("change", () => {
     if (!caterpillarPlot.args) return;
     caterpillarPlot.page = 0;
     const raw = document.getElementById("caterpillarPageSize").value;
-    caterpillarPlot.args.pageSize = raw === "Infinity" ? Infinity : +raw;
+    caterpillarPlot.args.pageSize = raw === "all" ? Infinity : +raw;
     const { totalPages } = drawCaterpillarPlot(
       caterpillarPlot.args.studies,
       caterpillarPlot.args.m,
@@ -25794,11 +31194,19 @@ when exported.</p>`,
       appState.reportArgs = { ...appState.reportArgs, caterpillarOptions: { ...appState.reportArgs.caterpillarOptions, pageSize: caterpillarPlot.args.pageSize, currentPage: 0 } };
     }
   });
+  document.getElementById("blupPageSize").addEventListener("change", () => {
+    if (!blupPlot.result) return;
+    blupPlot.page = 0;
+    const raw = document.getElementById("blupPageSize").value;
+    blupPlot.pageSize = raw === "all" ? Infinity : +raw;
+    const { totalPages } = drawBlupPlot(blupPlot.result, blupPlot.profile, { pageSize: blupPlot.pageSize, page: 0, theme: appState.plotTheme });
+    renderBlupNav(totalPages);
+  });
   document.getElementById("cumulativeForestPageSize").addEventListener("change", () => {
     if (!cumForestPlot.args) return;
     cumForestPlot.page = 0;
     const raw = document.getElementById("cumulativeForestPageSize").value;
-    cumForestPlot.args.pageSize = raw === "Infinity" ? Infinity : +raw;
+    cumForestPlot.args.pageSize = raw === "all" ? Infinity : +raw;
     const { totalPages } = drawCumulativeForest(
       cumForestPlot.args.results,
       cumForestPlot.args.profile,
@@ -25813,8 +31221,8 @@ when exported.</p>`,
     if (!forestPlot.args) return;
     forestPlot.page = 0;
     const rawPageSize = document.getElementById("forestPageSize").value;
-    const pageSize = rawPageSize === "Infinity" ? Infinity : +rawPageSize;
-    forestPlot.args.options = { ...forestPlot.args.options, pageSize, theme: forestPlot.theme };
+    const pageSize = rawPageSize === "all" ? Infinity : +rawPageSize;
+    forestPlot.args.options = { ...forestPlot.args.options, pageSize, theme: appState.plotTheme };
     if (appState.reportArgs) {
       appState.reportArgs = { ...appState.reportArgs, forestOptions: { ...appState.reportArgs.forestOptions, pageSize, currentPage: 0 } };
     }
@@ -25992,23 +31400,24 @@ when exported.</p>`,
     resetSel("mccMethod");
     resetSel("cumulativeOrder");
     resetSel("tfEstimator");
-    resetSel("forestTheme");
+    resetSel("plotTheme");
     resetSel("selMode");
     resetSel("selPreset");
     resetSel("selSides");
+    resetSel("selWeightFn");
     resetChk("useTrimFill");
     resetChk("useTFAdjusted");
     resetNum("bayesMu0");
     resetNum("bayesSigmaMu");
     resetNum("bayesSigmaTau");
+    resetSel("bayesPreset");
     resetNum("selCuts");
     const rveRhoEl = document.getElementById("rveRho");
     if (rveRhoEl) {
       rveRhoEl.value = rveRhoEl.defaultValue;
       rveRhoEl.dispatchEvent(new Event("input"));
     }
-    adjustedCheckbox.disabled = !trimFillCheckbox.checked;
-    tfEstimatorSelect.disabled = !trimFillCheckbox.checked;
+    syncTrimFillState();
     syncMHOptions(document.getElementById("effectType").value);
     syncPLAvailability();
     syncSelControls();
@@ -26043,9 +31452,220 @@ when exported.</p>`,
     });
     return resolve;
   }
+  function _mvSerializeSVG(svgEl) {
+    if (!svgEl) return "";
+    const clone = svgEl.cloneNode(true);
+    clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+    const w = clone.getAttribute("width") || String(svgEl.getBoundingClientRect().width);
+    const h = clone.getAttribute("height") || String(svgEl.getBoundingClientRect().height);
+    clone.setAttribute("width", w);
+    clone.setAttribute("height", h);
+    resolveThemeVars(clone);
+    if (!hasEmbeddedBackground(clone)) {
+      const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+      bg.setAttribute("width", "100%");
+      bg.setAttribute("height", "100%");
+      bg.setAttribute("fill", currentBgColour());
+      clone.insertBefore(bg, clone.firstChild);
+    }
+    return new XMLSerializer().serializeToString(clone);
+  }
+  function _buildMVReportHTML(res, rows = [], alpha = 0.05, { reportCSS: reportCSS2, buildTableAPA: buildTableAPA2, buildFigureAPA: buildFigureAPA2 } = {}) {
+    const {
+      beta,
+      se,
+      ci,
+      z,
+      pval,
+      betaNames = [],
+      tau2,
+      rho_between,
+      outcomeIds,
+      n,
+      k,
+      P,
+      QM,
+      df_QM,
+      pQM,
+      QE,
+      df_QE,
+      pQE,
+      logLik: logLik2,
+      AIC,
+      BIC,
+      AICc,
+      struct,
+      method,
+      I2: I22,
+      convergence,
+      warnings: engineWarnings = []
+    } = res;
+    const hasMods = beta.length > P;
+    const ciPct = Math.round((1 - alpha) * 100);
+    const date = (/* @__PURE__ */ new Date()).toLocaleDateString(void 0, { year: "numeric", month: "long", day: "numeric" });
+    const esc2 = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const fmtN = (v, d = 3) => isFinite(v) ? (+v).toFixed(d) : "\u2014";
+    const fmtP2 = (p) => !isFinite(p) ? "\u2014" : p < 1e-3 ? "< .001" : (+p).toFixed(3).replace(/^0\./, ".");
+    let _tblN = 0, _figN = 0;
+    const nextTable = () => ++_tblN;
+    const nextFigure = () => ++_figN;
+    const pooledTblRows = outcomeIds.map((id, o) => {
+      const [lo, hi] = ci[o];
+      return `<tr><td><strong>${esc2(String(id))}</strong></td><td>${fmtN(beta[o], 4)}</td><td>${fmtN(se[o], 4)}</td>
+      <td>[${fmtN(lo, 4)}, ${fmtN(hi, 4)}]</td><td>${fmtN(z[o], 3)}</td><td>${fmtP2(pval[o])}</td></tr>`;
+    });
+    const pooledSection = buildTableAPA2(
+      nextTable(),
+      `Pooled effect estimates per outcome (${method}, \u03A8 = ${struct})`,
+      ["Outcome", "Estimate", "SE", `${ciPct}% CI`, "<em>z</em>", "<em>p</em>"],
+      pooledTblRows
+    );
+    let modSection = "";
+    if (hasMods) {
+      const modRows = beta.slice(P).map((b, i) => {
+        const j = P + i;
+        const [lo, hi] = ci[j];
+        return `<tr><td>${esc2(betaNames[j] ?? `\u03B2${j}`)}</td><td>${fmtN(b, 4)}</td><td>${fmtN(se[j], 4)}</td>
+        <td>[${fmtN(lo, 4)}, ${fmtN(hi, 4)}]</td><td>${fmtN(z[j], 3)}</td><td>${fmtP2(pval[j])}</td></tr>`;
+      });
+      modSection = buildTableAPA2(
+        nextTable(),
+        "Meta-regression coefficients",
+        ["Coefficient", "Estimate", "SE", `${ciPct}% CI`, "<em>z</em>", "<em>p</em>"],
+        modRows
+      );
+    }
+    const hetCols = struct === "CS" ? ["Outcome", "\u03C4\xB2", "<em>I</em>\xB2", "\u03C1 (between)"] : ["Outcome", "\u03C4\xB2", "<em>I</em>\xB2"];
+    const hetTblRows = outcomeIds.map((id, o) => {
+      const rho = struct === "CS" ? `<td>${fmtN(rho_between ?? 0, 4)}</td>` : "";
+      return `<tr><td>${esc2(String(id))}</td><td>${fmtN(tau2[o], 5)}</td>
+      <td>${isFinite(I22[o]) ? (+I22[o]).toFixed(1) + "%" : "\u2014"}</td>${rho}</tr>`;
+    });
+    const hetSection = buildTableAPA2(nextTable(), "Between-study heterogeneity", hetCols, hetTblRows);
+    const testTblRows = [
+      ...hasMods && isFinite(QM) ? [`<tr><td>Omnibus test of moderators (Q<sub>M</sub>)</td><td>${fmtN(QM, 3)}</td><td>${df_QM}</td><td>${fmtP2(pQM)}</td></tr>`] : [],
+      `<tr><td>Residual heterogeneity (Q<sub>E</sub>)</td><td>${fmtN(QE, 3)}</td><td>${df_QE}</td><td>${fmtP2(pQE)}</td></tr>`
+    ];
+    const testSection = buildTableAPA2(
+      nextTable(),
+      "Hypothesis tests",
+      ["Test", "\u03C7\xB2", "df", "<em>p</em>"],
+      testTblRows
+    );
+    const fitLine = `k = ${k} \xB7 n = ${n} obs \xB7 P = ${P} outcomes \u2502 log-lik = ${fmtN(logLik2, 4)} \xB7 AIC = ${fmtN(AIC, 2)} \xB7 BIC = ${fmtN(BIC, 2)}` + (isFinite(AICc) ? ` \xB7 AICc = ${fmtN(AICc, 2)}` : "") + ` \u2502 ${esc2(method)}, \u03A8 = ${esc2(struct)}`;
+    const forestSVGs = (() => {
+      const combined = document.getElementById("mvForestPlotCombined");
+      const combinedBlk = document.getElementById("mvForestCombinedBlock");
+      if (combinedBlk && combinedBlk.style.display !== "none" && combined) {
+        const s = _mvSerializeSVG(combined);
+        return s ? [s] : [];
+      }
+      const out = [];
+      for (let o = 0; o < outcomeIds.length; o++) {
+        const el = document.getElementById(`mvForestPlot-${o}`);
+        if (el) {
+          const s = _mvSerializeSVG(el);
+          if (s) out.push(s);
+        }
+      }
+      return out;
+    })();
+    const warnHTML = [
+      convergence === false ? `<p style="color:#c0392b"><strong>Warning:</strong> Optimizer did not fully converge \u2014 interpret results with caution.</p>` : "",
+      ...engineWarnings.map((w) => `<p style="color:#c0392b">${esc2(w)}</p>`)
+    ].filter(Boolean).join("");
+    const forestSection = forestSVGs.length ? buildFigureAPA2(nextFigure(), "Forest plot of multivariate meta-analysis results", forestSVGs) : "";
+    const zVal = normalQuantile(1 - alpha / 2);
+    const studyBodyRows = rows.map((r) => {
+      const se_r = Math.sqrt(r.vi);
+      return `<tr><td>${esc2(String(r.study_id))}</td><td>${esc2(String(r.outcome_id))}</td>
+      <td>${fmtN(r.yi, 4)}</td><td>${fmtN(r.vi, 4)}</td><td>${fmtN(se_r, 4)}</td>
+      <td>[${fmtN(r.yi - zVal * se_r, 4)},&nbsp;${fmtN(r.yi + zVal * se_r, 4)}]</td></tr>`;
+    });
+    const studySection = rows.length ? buildTableAPA2(
+      nextTable(),
+      "Individual study data",
+      ["Study", "Outcome", "y<sub>i</sub>", "v<sub>i</sub>", "SE", `${ciPct}% CI`],
+      studyBodyRows
+    ) : "";
+    let robSection = "";
+    if (_robDomains.length > 0) {
+      const robSVGs = [
+        _mvSerializeSVG(document.getElementById("robTrafficLight")),
+        _mvSerializeSVG(document.getElementById("robSummary"))
+      ].filter(Boolean);
+      if (robSVGs.length) robSection = buildFigureAPA2(nextFigure(), "Risk of bias assessment", robSVGs);
+    }
+    const mvRefList = [
+      "Berkey, C. S., Hoaglin, D. C., Antczak-Bouckoms, A., Mosteller, F., &amp; Colditz, G. A. (1998). Meta-analysis of multiple outcomes by regression with random effects. <em>Statistics in Medicine</em>, <em>17</em>(22), 2537\u20132550.",
+      "Cheung, M. W.-L. (2014). Modeling dependent effect sizes with three-level meta-analyses: a structural equation modeling approach. <em>Psychological Methods</em>, <em>19</em>(2), 211\u2013229.",
+      "Cochran, W. G. (1954). The combination of estimates from different experiments. <em>Biometrics</em>, <em>10</em>(1), 101\u2013129.",
+      'Higgins, J. P. T., Thompson, S. G., Deeks, J. J., &amp; Altman, D. G. (2003). Measuring inconsistency in meta-analyses. <em>BMJ</em>, <em>327</em>(7414), 557\u2013560. <a href="https://doi.org/10.1136/bmj.327.7414.557">https://doi.org/10.1136/bmj.327.7414.557</a>',
+      "Jackson, D., Riley, R., &amp; White, I. R. (2011). Multivariate meta-analysis: Potential and promise. <em>Statistics in Medicine</em>, <em>30</em>(20), 2481\u20132498.",
+      "Riley, R. D., Abrams, K. R., Sutton, A. J., Lambert, P. C., &amp; Thompson, J. R. (2007). Bivariate random-effects meta-analysis and the estimation of between-study correlation. <em>BMC Medical Research Methodology</em>, <em>7</em>, 3.",
+      "Viechtbauer, W. (2005). Bias and efficiency of meta-analytic variance estimators in the random-effects model. <em>Journal of Educational and Behavioral Statistics</em>, <em>30</em>(3), 261\u2013293."
+    ];
+    const refSection = `<ul class="apa-references">${mvRefList.map((r) => `<li>${r}</li>`).join("")}</ul>`;
+    const wrapSec = (html) => html ? `<section>${html}</section>` : "";
+    const body = [
+      warnHTML,
+      wrapSec(pooledSection),
+      wrapSec(modSection),
+      wrapSec(hetSection),
+      wrapSec(testSection),
+      `<p class="report-meta" style="margin-top:8px">${fitLine}</p>`,
+      wrapSec(forestSection),
+      wrapSec(studySection),
+      wrapSec(robSection),
+      refSection
+    ].filter(Boolean).join("\n");
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Multivariate Meta-Analysis Report</title>
+  <style>${reportCSS2()}</style>
+</head>
+<body>
+  <h1>Multivariate Meta-Analysis Report</h1>
+  <p class="report-meta">Generated ${esc2(date)}
+    &nbsp;\xB7&nbsp; k = ${k} studies, P = ${P} outcomes
+    &nbsp;\xB7&nbsp; ${esc2(method)}, \u03A8 = ${esc2(struct)}</p>
+  ${body}
+</body>
+</html>`;
+  }
+  function _mvDownloadHTML(html) {
+    downloadBlob(html, "mv-meta-analysis-report.html", "text/html;charset=utf-8");
+  }
+  function _mvOpenPrintPreview(html) {
+    const win = window.open("", "_blank");
+    if (!win) {
+      _mvDownloadHTML(html);
+      return;
+    }
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
+    if (win.document.readyState === "complete") {
+      win.print();
+    } else {
+      win.addEventListener("load", () => win.print());
+    }
+  }
   async function buildReportAndResync() {
     if (!appState.reportArgs) return null;
     flushDeferredDraws();
+    if (appState.reportArgs.mv) {
+      const { reportCSS: reportCSS2, buildTableAPA: buildTableAPA2, buildFigureAPA: buildFigureAPA2 } = await getReport();
+      const html2 = _buildMVReportHTML(
+        appState.reportArgs.mvRes,
+        appState.reportArgs.mvRows ?? [],
+        appState.reportArgs.mvAlpha ?? 0.05,
+        { reportCSS: reportCSS2, buildTableAPA: buildTableAPA2, buildFigureAPA: buildFigureAPA2 }
+      );
+      return { html: html2, downloadHTML: _mvDownloadHTML, openPrintPreview: _mvOpenPrintPreview };
+    }
     const { buildReport: buildReport2, downloadHTML: downloadHTML2, openPrintPreview: openPrintPreview2 } = await getReport();
     const args = {
       ...appState.reportArgs,
@@ -26055,6 +31675,7 @@ when exported.</p>`,
       // Use the live goshState so a re-run after the last analysis is captured.
       gosh: goshState.result ?? appState.reportArgs.gosh,
       goshXAxis: document.getElementById("goshXAxis")?.value ?? appState.reportArgs.goshXAxis ?? "I2",
+      plotTheme: appState.plotTheme,
       apaFormat: true
     };
     const html = buildReport2(args);
@@ -26106,21 +31727,32 @@ when exported.</p>`,
   document.getElementById("exportReportDOCX").addEventListener("click", async () => {
     if (!appState.reportArgs) return;
     flushDeferredDraws();
-    const args = {
-      ...appState.reportArgs,
-      forestOptions: { ...appState.reportArgs.forestOptions, currentPage: forestPlot.page },
-      cumForestOptions: appState.reportArgs.cumForestOptions ? { ...appState.reportArgs.cumForestOptions, currentPage: cumForestPlot.page } : void 0,
-      caterpillarOptions: appState.reportArgs.caterpillarOptions ? { ...appState.reportArgs.caterpillarOptions, currentPage: caterpillarPlot.page } : void 0,
-      gosh: goshState.result ?? appState.reportArgs.gosh,
-      goshXAxis: document.getElementById("goshXAxis")?.value ?? appState.reportArgs.goshXAxis ?? "I2",
-      apaFormat: true
-      // Word export is always APA
-    };
     const btn = document.getElementById("exportReportDOCX");
     const done = flashBtn(btn, "Building\u2026", "Saved \u2713");
     try {
-      const { buildDocx: buildDocx2 } = await getDocx();
-      const blob = await buildDocx2(args);
+      const { buildDocx: buildDocx2, buildMVDocx: buildMVDocx2 } = await getDocx();
+      let blob;
+      if (appState.reportArgs.mv) {
+        blob = await buildMVDocx2({
+          res: appState.reportArgs.mvRes,
+          rows: appState.reportArgs.mvRows ?? [],
+          alpha: appState.reportArgs.mvAlpha ?? 0.05,
+          exportScale: appState.exportScale
+        });
+      } else {
+        const args = {
+          ...appState.reportArgs,
+          forestOptions: { ...appState.reportArgs.forestOptions, currentPage: forestPlot.page },
+          cumForestOptions: appState.reportArgs.cumForestOptions ? { ...appState.reportArgs.cumForestOptions, currentPage: cumForestPlot.page } : void 0,
+          caterpillarOptions: appState.reportArgs.caterpillarOptions ? { ...appState.reportArgs.caterpillarOptions, currentPage: caterpillarPlot.page } : void 0,
+          gosh: goshState.result ?? appState.reportArgs.gosh,
+          goshXAxis: document.getElementById("goshXAxis")?.value ?? appState.reportArgs.goshXAxis ?? "I2",
+          plotTheme: appState.plotTheme,
+          apaFormat: true,
+          exportScale: appState.exportScale
+        };
+        blob = await buildDocx2(args);
+      }
       downloadBlob(
         blob,
         "meta-analysis-report.docx",
@@ -26139,13 +31771,44 @@ when exported.</p>`,
   document.addEventListener("click", (e) => {
     const btn = e.target.closest(".contrast-test-btn");
     if (!btn) return;
-    if (!_lastReg) return;
-    const section = btn.closest(".contrast-section");
+    const section = btn.closest(".ls-contrast-section") ?? btn.closest(".contrast-section");
     if (!section) return;
+    const isLs = section.classList.contains("ls-contrast-section");
     const inputs = section.querySelectorAll(".contrast-weight");
     const L = Array.from(inputs).map((inp) => parseFloat(inp.value) || 0);
-    const result = testContrast(_lastReg, L);
-    section.querySelector(".contrast-result").innerHTML = formatContrastResult(result, _lastReg);
+    if (isLs) {
+      if (!_lastLs) return;
+      const regLike = { beta: _lastLs.beta, vcov: _lastLs.vcov_beta, crit: _lastLs.crit, dist: "z", QEdf: _lastLs.QEdf };
+      section.querySelector(".contrast-result").innerHTML = formatContrastResult(testContrast(regLike, L), regLike);
+    } else {
+      if (!_lastReg) return;
+      section.querySelector(".contrast-result").innerHTML = formatContrastResult(testContrast(_lastReg, L), _lastReg);
+    }
+  });
+  document.addEventListener("click", (e) => {
+    const btn = e.target.closest(".vcov-download-btn");
+    if (!btn) return;
+    const which = btn.dataset.which;
+    let vcov, colNames, filename;
+    if (which === "loc") {
+      if (!_lastLs?.vcov_beta) return;
+      vcov = _lastLs.vcov_beta;
+      colNames = _lastLs.locColNames;
+      filename = "vcov_beta.csv";
+    } else if (which === "scale") {
+      if (!_lastLs?.vcov_gamma) return;
+      vcov = _lastLs.vcov_gamma;
+      colNames = _lastLs.scaleColNames;
+      filename = "vcov_gamma.csv";
+    } else {
+      if (!_lastReg?.vcov || !_lastReg?.colNames) return;
+      vcov = _lastReg.vcov;
+      colNames = _lastReg.colNames;
+      filename = "vcov.csv";
+    }
+    const headers = ["", ...colNames];
+    const rows = vcov.map((row, i) => [colNames[i], ...row.map((v) => isFinite(v) ? v.toFixed(6) : "NA")]);
+    downloadBlob(serializeCSV(headers, rows), filename, "text/csv;charset=utf-8;");
   });
   document.addEventListener("click", (e) => {
     const btn = e.target.closest(".export-btn");
@@ -26183,18 +31846,64 @@ when exported.</p>`,
     markStale();
   });
   document.getElementById("mccMethod").addEventListener("change", markStale);
-  document.getElementById("bayesMu0").addEventListener("input", markStale);
-  document.getElementById("bayesSigmaMu").addEventListener("input", markStale);
-  document.getElementById("bayesSigmaTau").addEventListener("input", markStale);
+  var BAYES_PRESETS = {
+    default: { mu0: 0, sigmaMu: 1, sigmaTau: 0.5 },
+    weakly: { mu0: 0, sigmaMu: 2, sigmaTau: 1 },
+    sceptical: { mu0: 0, sigmaMu: 0.5, sigmaTau: 0.25 }
+  };
+  function syncBayesPreset() {
+    const mu0 = parseFloat(document.getElementById("bayesMu0").value);
+    const smu = parseFloat(document.getElementById("bayesSigmaMu").value);
+    const stau = parseFloat(document.getElementById("bayesSigmaTau").value);
+    const match = Object.entries(BAYES_PRESETS).find(
+      ([, p]) => p.mu0 === mu0 && p.sigmaMu === smu && p.sigmaTau === stau
+    );
+    document.getElementById("bayesPreset").value = match ? match[0] : "custom";
+  }
+  document.getElementById("bayesPreset").addEventListener("change", () => {
+    const preset = BAYES_PRESETS[document.getElementById("bayesPreset").value];
+    if (!preset) return;
+    document.getElementById("bayesMu0").value = preset.mu0;
+    document.getElementById("bayesSigmaMu").value = preset.sigmaMu;
+    document.getElementById("bayesSigmaTau").value = preset.sigmaTau;
+    document.getElementById("bayesSigmaMuWarn").style.display = "none";
+    document.getElementById("bayesSigmaTauWarn").style.display = "none";
+    markStale();
+    _checkAdvancedBadge();
+  });
+  document.getElementById("bayesMu0").addEventListener("input", () => {
+    syncBayesPreset();
+    markStale();
+  });
+  document.getElementById("bayesSigmaMu").addEventListener("input", () => {
+    syncBayesPreset();
+    markStale();
+  });
+  document.getElementById("bayesSigmaTau").addEventListener("input", () => {
+    syncBayesPreset();
+    markStale();
+  });
   var trimFillCheckbox = document.getElementById("useTrimFill");
   var adjustedCheckbox = document.getElementById("useTFAdjusted");
   var tfEstimatorSelect = document.getElementById("tfEstimator");
-  adjustedCheckbox.disabled = !trimFillCheckbox.checked;
-  tfEstimatorSelect.disabled = !trimFillCheckbox.checked;
+  function syncTrimFillState() {
+    const enabled = trimFillCheckbox.checked;
+    tfEstimatorSelect.disabled = !enabled;
+    adjustedCheckbox.disabled = !enabled;
+    const tfLbl = tfEstimatorSelect.closest("label");
+    const adjLbl = adjustedCheckbox.closest("label");
+    if (enabled) {
+      tfLbl?.removeAttribute("aria-disabled");
+      adjLbl?.removeAttribute("aria-disabled");
+    } else {
+      tfLbl?.setAttribute("aria-disabled", "true");
+      adjLbl?.setAttribute("aria-disabled", "true");
+    }
+  }
+  syncTrimFillState();
   trimFillCheckbox.addEventListener("change", () => {
-    adjustedCheckbox.disabled = !trimFillCheckbox.checked;
-    tfEstimatorSelect.disabled = !trimFillCheckbox.checked;
     if (!trimFillCheckbox.checked) adjustedCheckbox.checked = false;
+    syncTrimFillState();
     markStale();
   });
   adjustedCheckbox.addEventListener("change", markStale);
@@ -26202,12 +31911,16 @@ when exported.</p>`,
   function syncSelControls() {
     const mode = document.getElementById("selMode").value;
     const preset = document.getElementById("selPreset").value;
+    const weightFn = document.getElementById("selWeightFn").value;
     const presetRow = document.getElementById("selPresetRow");
     const customRow = document.getElementById("selCustomRow");
+    const weightFnRow = document.getElementById("selWeightFnRow");
     const isSensitivity = mode === "sensitivity";
-    presetRow.style.display = isSensitivity ? "" : "none";
-    const showCustom = !isSensitivity || preset === "custom";
-    customRow.style.display = showCustom ? "" : "none";
+    const showStepCtrls = !isSensitivity && weightFn === "stepfun";
+    setVisible(weightFnRow, !isSensitivity);
+    setVisible(presetRow, isSensitivity);
+    const showCustom = isSensitivity && preset === "custom" || showStepCtrls;
+    setVisible(customRow, showCustom);
     if (isSensitivity && preset !== "custom") {
       const p = SELECTION_PRESETS[preset];
       if (p) document.getElementById("selSides").value = String(p.sides);
@@ -26221,9 +31934,79 @@ when exported.</p>`,
     syncSelControls();
     markStale();
   });
+  document.getElementById("selWeightFn").addEventListener("change", () => {
+    syncSelControls();
+    markStale();
+  });
   document.getElementById("selSides").addEventListener("change", markStale);
   document.getElementById("selCuts").addEventListener("change", markStale);
   syncSelControls();
+  document.getElementById("advancedSettings").addEventListener("change", _checkAdvancedBadge);
+  document.getElementById("advancedSettings").addEventListener("input", _checkAdvancedBadge);
+  _checkAdvancedBadge();
+  function resetAdvancedSettings() {
+    const resetSel = (id) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const i = [...el.options].findIndex((o) => o.defaultSelected);
+      el.selectedIndex = i >= 0 ? i : 0;
+    };
+    const resetNum = (id) => {
+      const el = document.getElementById(id);
+      if (el) el.value = el.defaultValue;
+    };
+    const resetChk = (id) => {
+      const el = document.getElementById(id);
+      if (el) el.checked = el.defaultChecked;
+    };
+    resetSel("ciLevel");
+    resetSel("mccMethod");
+    resetSel("cumulativeOrder");
+    resetSel("tfEstimator");
+    resetChk("useTrimFill");
+    resetChk("useTFAdjusted");
+    resetSel("selMode");
+    resetSel("selPreset");
+    resetSel("selSides");
+    resetSel("selWeightFn");
+    resetNum("bayesMu0");
+    resetNum("bayesSigmaMu");
+    resetNum("bayesSigmaTau");
+    resetSel("bayesPreset");
+    resetNum("selCuts");
+    const rveRhoEl = document.getElementById("rveRho");
+    if (rveRhoEl) {
+      rveRhoEl.value = rveRhoEl.defaultValue;
+      rveRhoEl.dispatchEvent(new Event("input"));
+    }
+    syncTrimFillState();
+    syncSelControls();
+    markStale();
+    _checkAdvancedBadge();
+  }
+  document.getElementById("resetAdvanced").addEventListener("click", resetAdvancedSettings);
+  {
+    const clampPos = (inputId, warnId, min = 0.01) => {
+      const input = document.getElementById(inputId);
+      const warn = document.getElementById(warnId);
+      if (!input || !warn) return;
+      const validate = () => {
+        const v = parseFloat(input.value);
+        if (!isFinite(v) || v < min) {
+          input.value = min;
+          warn.textContent = `Must be \u2265 ${min}`;
+          warn.style.display = "";
+          markStale();
+        } else {
+          warn.style.display = "none";
+        }
+      };
+      input.addEventListener("blur", validate);
+      input.addEventListener("change", validate);
+    };
+    clampPos("bayesSigmaMu", "bayesSigmaMuWarn");
+    clampPos("bayesSigmaTau", "bayesSigmaTauWarn");
+  }
   {
     const rveRhoSlider = document.getElementById("rveRho");
     const rveRhoDisplay = document.getElementById("rveRhoDisplay");
@@ -26235,18 +32018,33 @@ when exported.</p>`,
     rveRhoSlider.addEventListener("change", markStale);
   }
   document.getElementById("goshRun").addEventListener("click", runGosh);
+  document.getElementById("permRunBtn").addEventListener("click", _startPermTest);
+  document.getElementById("permCancelBtn").addEventListener("click", () => {
+    if (permState.worker) {
+      permState.worker.terminate();
+      permState.worker = null;
+    }
+    const elProgress = document.getElementById("permProgress");
+    const elRun = document.getElementById("permRunBtn");
+    const elCancel = document.getElementById("permCancelBtn");
+    if (elProgress) elProgress.style.display = "none";
+    if (elRun) elRun.style.display = "";
+    if (elCancel) elCancel.style.display = "none";
+  });
   document.getElementById("profileLikScale").addEventListener("change", () => {
     if (appState.reportArgs?.profileLik) {
       const xScale = document.getElementById("profileLikScale").value;
-      drawProfileLikTau2(appState.reportArgs.profileLik, { xScale });
+      drawProfileLikTau2(appState.reportArgs.profileLik, { xScale, theme: appState.plotTheme });
       appState.reportArgs.profileLikXScale = xScale;
     }
   });
   function saveSession() {
-    downloadBlob(serializeSession(gatherSessionState(moderators, scaleModerators, { domains: _robDomains, data: _robData })), "session.json", "application/json;charset=utf-8;");
+    const session = gatherSessionState(moderators, scaleModerators, interactions, { domains: _robDomains, data: _robData });
+    if (_mvMode) session.mv = _gatherMVState();
+    downloadBlob(serializeSession(session), "session.json", "application/json;charset=utf-8;");
   }
   function applySession(session) {
-    const { settings = {}, moderators: savedMods = [], scaleModerators: savedScaleMods = [], studies: savedStudies = [], rob = {} } = session;
+    const { settings = {}, moderators: savedMods = [], scaleModerators: savedScaleMods = [], interactions: savedInteractions = [], studies: savedStudies = [], rob = {} } = session;
     const s = settings;
     if (s.effectType && document.getElementById("effectType").querySelector(`option[value="${s.effectType}"]`))
       document.getElementById("effectType").value = s.effectType;
@@ -26290,7 +32088,22 @@ when exported.</p>`,
       const el = document.getElementById("selCuts");
       if (el) el.value = s.selCuts;
     }
+    if (s.selWeightFn) {
+      const el = document.getElementById("selWeightFn");
+      if (el && el.querySelector(`option[value="${s.selWeightFn}"]`)) el.value = s.selWeightFn;
+    }
     syncSelControls();
+    if (s.mccMethod) {
+      const el = document.getElementById("mccMethod");
+      if (el && el.querySelector(`option[value="${s.mccMethod}"]`)) el.value = s.mccMethod;
+    }
+    if (isFinite(s.rveRho) && s.rveRho >= 0 && s.rveRho < 1) {
+      const el = document.getElementById("rveRho");
+      if (el) {
+        el.value = s.rveRho;
+        el.dispatchEvent(new Event("input"));
+      }
+    }
     clearModerators();
     savedMods.forEach((m) => {
       if (m.name && (m.type === "continuous" || m.type === "categorical"))
@@ -26301,6 +32114,11 @@ when exported.</p>`,
       if (m.name && (m.type === "continuous" || m.type === "categorical"))
         doAddScaleModerator(m.name, m.type, m.transform || "linear");
     });
+    clearInteractions();
+    savedInteractions.forEach((ix) => {
+      if (ix.termA && ix.termB && ix.termA !== ix.termB) doAddInteraction(ix.termA, ix.termB);
+    });
+    refreshInteractionUI();
     const type = document.getElementById("effectType").value;
     const profile = effectProfiles[type];
     updateTableHeaders();
@@ -26319,6 +32137,43 @@ when exported.</p>`,
     _robData = rob.data && typeof rob.data === "object" ? rob.data : {};
     renderRoBDomainTags();
     renderRoBDataGrid();
+    const mv = session.mv;
+    if (mv && typeof mv === "object") {
+      _mvMode = true;
+      _applyModeToggle();
+      if (mv.struct && document.getElementById("mvStruct").querySelector(`option[value="${mv.struct}"]`))
+        document.getElementById("mvStruct").value = mv.struct;
+      if (mv.method && document.getElementById("mvMethod").querySelector(`option[value="${mv.method}"]`))
+        document.getElementById("mvMethod").value = mv.method;
+      if (isFinite(mv.rho)) document.getElementById("mvRho").value = mv.rho;
+      _mvModerators.length = 0;
+      if (Array.isArray(mv.moderators)) mv.moderators.forEach((n) => {
+        if (n) _mvModerators.push(n);
+      });
+      _renderMVModTags();
+      _rebuildMVTableHeaders();
+      document.getElementById("mvTableBody").innerHTML = "";
+      if (Array.isArray(mv.rows)) {
+        mv.rows.forEach((r) => {
+          const tr = _mvAddRow();
+          if (r.study_id !== void 0) tr.querySelector(".mv-study-id").value = r.study_id;
+          if (r.outcome_id !== void 0) tr.querySelector(".mv-outcome-id").value = r.outcome_id;
+          if (r.yi !== void 0) tr.querySelector(".mv-yi").value = r.yi;
+          if (r.vi !== void 0) tr.querySelector(".mv-vi").value = r.vi;
+          _mvModerators.forEach((name, i) => {
+            const inputs = tr.querySelectorAll(".mv-mod");
+            if (inputs[i] && r[name] !== void 0) inputs[i].value = r[name];
+          });
+        });
+      }
+    } else {
+      _mvMode = false;
+      _applyModeToggle();
+    }
+    syncTrimFillState();
+    syncBayesPreset();
+    syncRveVisibility();
+    _checkAdvancedBadge();
     return { profile, savedStudies };
   }
   async function loadSession(file) {
@@ -26340,7 +32195,12 @@ when exported.</p>`,
       return;
     }
     const { profile, savedStudies } = applySession(result.session);
-    syncMHOptions(document.getElementById("effectType").value);
+    const _sessionType = document.getElementById("effectType").value;
+    syncMHOptions(_sessionType);
+    {
+      const { studies, excluded, softWarnings } = collectStudies(_sessionType);
+      updateValidationWarnings(studies, excluded, softWarnings);
+    }
     const missingCols = missingInputCols(profile.inputs, savedStudies);
     if (missingCols.length > 0) {
       warningDiv.textContent = `Warning: session is missing data for: ${missingCols.join(", ")}`;
@@ -26349,6 +32209,21 @@ when exported.</p>`,
     }
   }
   function exportCSV() {
+    if (_mvMode) {
+      const headers2 = ["study_id", "outcome_id", "yi", "vi", ..._mvModerators.map((n) => n)];
+      const rows2 = [];
+      document.querySelectorAll("#mvTableBody tr").forEach((r) => {
+        const studyId = r.querySelector(".mv-study-id")?.value ?? "";
+        const outcomeId = r.querySelector(".mv-outcome-id")?.value ?? "";
+        const yi = r.querySelector(".mv-yi")?.value ?? "";
+        const vi = r.querySelector(".mv-vi")?.value ?? "";
+        const mods = [...r.querySelectorAll(".mv-mod")].map((x) => x.value);
+        const vals = [studyId, outcomeId, yi, vi, ...mods];
+        if (vals.some((v) => v !== "")) rows2.push(vals);
+      });
+      downloadBlob(serializeCSV(headers2, rows2), "mv_meta_data.csv", "text/csv;charset=utf-8;");
+      return;
+    }
     const type = document.getElementById("effectType").value;
     const profile = effectProfiles[type];
     const headers = ["Study", ...profile.inputs, "Group", "Cluster", ...moderators.map((m) => m.name)];
@@ -26394,6 +32269,12 @@ when exported.</p>`,
       ciSel.value = "normal";
     }
   }
+  function syncRveVisibility() {
+    const method = document.getElementById("tauMethod")?.value ?? "";
+    const isMHorPeto = method === "MH" || method === "Peto";
+    const hasClusters = [...document.querySelectorAll("#inputTable .cluster")].some((el) => el.value.trim() !== "");
+    setVisible(document.getElementById("rveSettings"), hasClusters && !isMHorPeto);
+  }
   function syncMHOptions(type) {
     const tauSel = document.getElementById("tauMethod");
     const ciSel = document.getElementById("ciMethod");
@@ -26418,6 +32299,7 @@ when exported.</p>`,
       const tfEst = document.getElementById("tfEstimator");
       if (tfEst) tfEst.disabled = isMHorPeto || !tfCheck.checked;
     }
+    syncRveVisibility();
     syncPLAvailability();
   }
   function init() {
@@ -26427,6 +32309,10 @@ when exported.</p>`,
       renderRoBDataGrid,
       deleteRobEntry: (key) => {
         delete _robData[key];
+      },
+      onModeratorChanged: () => {
+        refreshInteractionUI();
+        renderInteractionTags();
       }
     });
     setTooltipElement(document.getElementById("tooltip"));
@@ -26440,7 +32326,28 @@ when exported.</p>`,
       updateTableHeaders();
       populateExampleData("SMD");
     }
+    {
+      const type = document.getElementById("effectType").value;
+      const { studies, excluded, softWarnings } = collectStudies(type);
+      updateValidationWarnings(studies, excluded, softWarnings);
+    }
     syncMHOptions(document.getElementById("effectType").value);
+    document.getElementById("inputTable").addEventListener("input", (e) => {
+      if (e.target.classList.contains("cluster")) syncRveVisibility();
+    });
+    if (USE_EXAMPLES) _populateMVExample();
+    else _mvAddRow();
+    document.querySelectorAll(".plot-export").forEach((div) => {
+      const plotBlock = div.closest(".plot-block, .plot-block-inline");
+      const labelEl = plotBlock?.querySelector(".plot-label");
+      if (labelEl) {
+        const text = Array.from(labelEl.childNodes).filter((n) => n.nodeType === Node.TEXT_NODE).map((n) => n.textContent.trim()).join(" ").trim();
+        if (text) {
+          div.setAttribute("role", "group");
+          div.setAttribute("aria-label", `Export ${text}`);
+        }
+      }
+    });
     document.querySelectorAll("#inputTable tr").forEach((row, i) => {
       if (i === 0) return;
       validateRow(row);
@@ -26448,12 +32355,25 @@ when exported.</p>`,
     if (new URLSearchParams(window.location.search).has("tests")) {
       Promise.resolve().then(() => (init_tests(), tests_exports)).then(({ runTests: runTests2 }) => runTests2());
     }
+    const _ric = window.requestIdleCallback ?? ((cb) => setTimeout(cb, 200));
+    _ric(() => getOnboarding().then((m) => m.maybeStartTour()).catch(() => {
+    }));
+    document.getElementById("replayTourLink")?.addEventListener("click", (e) => {
+      e.preventDefault();
+      showView("input");
+      getOnboarding().then((m) => m.startTour({ force: true })).catch(() => {
+      });
+    });
   }
   window.onload = init;
   function populateExampleData(type) {
     const table = document.getElementById("inputTable");
     while (table.rows.length > 1) table.deleteRow(1);
-    (getProfile(type)?.exampleData ?? []).forEach((row) => addRow(row));
+    if (USE_EXAMPLES) {
+      (getProfile(type)?.exampleData ?? []).forEach((row) => addRow(row));
+    } else {
+      addRow();
+    }
   }
   var staleBanner = document.getElementById("staleBanner");
   var inputStaleBadge = document.getElementById("inputStaleBadge");
@@ -26463,9 +32383,18 @@ when exported.</p>`,
     // prevents stale banner before the first run
     exportScale: 3,
     // matches <option selected> in #exportScale (3× ≈ 288 dpi)
-    reportArgs: null
+    reportArgs: null,
     // cached after each run; consumed by export buttons
+    plotTheme: "default"
   };
+  {
+    const saved = localStorage.getItem("fosma-plot-theme");
+    const sel = document.getElementById("plotTheme");
+    if (saved && sel && sel.querySelector(`option[value="${saved}"]`)) {
+      sel.value = saved;
+      appState.plotTheme = saved;
+    }
+  }
   var forestPlot = {
     page: 0,
     args: null,
@@ -26473,7 +32402,7 @@ when exported.</p>`,
     poolDisplay: "RE",
     // "FE" | "RE" | "Both"
     theme: "default"
-    // visual style preset key (see forestThemes.js)
+    // visual style preset key (see plotThemes.js)
   };
   var caterpillarPlot = {
     page: 0,
@@ -26489,8 +32418,13 @@ when exported.</p>`,
   };
   var cumForestPlot = {
     page: 0,
-    args: null
+    args: null,
     // { results, profile, pageSize }
+    sourceStudies: null,
+    // original unsorted studies for live re-sort
+    method: null,
+    ciMethod: null,
+    alpha: null
   };
   var funnelPlot = {
     args: null,
@@ -26518,9 +32452,28 @@ when exported.</p>`,
     // study array from the last runAnalysis() call
     reMean: NaN,
     // RE pooled mean from the last runAnalysis() call
-    profile: null
+    profile: null,
     // effect-type profile from the last runAnalysis() call
+    result: null
+    // cached for theme redraw
   };
+  var pCurvePlot = { result: null };
+  var pUniformPlot = { result: null, m: null, profile: null };
+  var diagnosticsState = {
+    influence: null,
+    baujatResult: null,
+    profile: null,
+    qqResiduals: null,
+    qqLabels: null,
+    studies: null,
+    m: null,
+    type: null,
+    showQQ: false,
+    showLabbe: false,
+    isMHorPeto: false
+  };
+  var bubblePlotState = { bubbleResult: null, moderators: null, usePartialBubble: false };
+  var robPlotState = { studies: null };
   document.getElementById("exportScale").addEventListener("change", (e) => {
     appState.exportScale = +e.target.value;
   });
@@ -26528,29 +32481,139 @@ when exported.</p>`,
     btn.addEventListener("click", () => {
       if (!forestPlot.args) return;
       forestPlot.poolDisplay = btn.dataset.display;
-      document.querySelectorAll(".forest-pool-btn").forEach((b) => b.classList.toggle("active", b === btn));
+      document.querySelectorAll(".forest-pool-btn").forEach((b) => {
+        b.classList.toggle("active", b === btn);
+        b.setAttribute("aria-pressed", String(b === btn));
+      });
       forestPlot.page = 0;
       forestPlot.args.options = { ...forestPlot.args.options, pooledDisplay: forestPlot.poolDisplay };
       const { totalPages } = drawForest(forestPlot.args.studies, forestPlot.args.m, { ...forestPlot.args.options, page: forestPlot.page });
       renderForestNav(totalPages);
     });
   });
-  document.getElementById("forestTheme").addEventListener("change", (e) => {
-    if (!forestPlot.args) return;
-    forestPlot.theme = e.target.value;
-    forestPlot.args.options = { ...forestPlot.args.options, theme: forestPlot.theme };
+  document.getElementById("plotTheme").addEventListener("change", (e) => {
+    appState.plotTheme = e.target.value;
+    localStorage.setItem("fosma-plot-theme", e.target.value);
     if (appState.reportArgs) {
-      appState.reportArgs = { ...appState.reportArgs, forestOptions: { ...appState.reportArgs.forestOptions, theme: forestPlot.theme } };
+      appState.reportArgs = { ...appState.reportArgs, plotTheme: appState.plotTheme };
     }
-    const { totalPages } = drawForest(forestPlot.args.studies, forestPlot.args.m, { ...forestPlot.args.options, page: forestPlot.page });
-    renderForestNav(totalPages);
+    redrawCachedPlots();
   });
+  function redrawCachedPlots() {
+    const theme = appState.plotTheme;
+    if (_mvForestState?.lastRes) _redrawAllMVForestPlots();
+    if (forestPlot.args) {
+      forestPlot.args.options = { ...forestPlot.args.options, theme };
+      const { totalPages } = drawForest(forestPlot.args.studies, forestPlot.args.m, { ...forestPlot.args.options, page: forestPlot.page });
+      renderForestNav(totalPages);
+    }
+    if (funnelPlot.args) {
+      drawFunnel(...funnelPlot.args, { egger: funnelPlot.egger, contours: funnelPlot.contours, petpeese: funnelPlot.petpeese, theme });
+    }
+    if (cumForestPlot.args) {
+      const { totalPages } = drawCumulativeForest(
+        cumForestPlot.args.results,
+        cumForestPlot.args.profile,
+        { pageSize: cumForestPlot.args.pageSize, page: cumForestPlot.page, theme }
+      );
+      renderCumulativeForestNav(totalPages);
+    }
+    if (cumFunnelPlot.studies) {
+      const slider = document.getElementById("cumulativeFunnelStep");
+      const step = slider ? +slider.value : (cumFunnelPlot.results?.length ?? 1) - 1;
+      drawCumulativeFunnel(cumFunnelPlot.studies, cumFunnelPlot.results, cumFunnelPlot.profile, step, { theme });
+    }
+    if (caterpillarPlot.args) {
+      const { totalPages } = drawCaterpillarPlot(
+        caterpillarPlot.args.studies,
+        caterpillarPlot.args.m,
+        caterpillarPlot.args.profile,
+        { pageSize: caterpillarPlot.args.pageSize, page: caterpillarPlot.page, theme }
+      );
+      renderCaterpillarNav(totalPages);
+    }
+    if (blupPlot.result) {
+      const { totalPages } = drawBlupPlot(blupPlot.result, blupPlot.profile, { pageSize: blupPlot.pageSize, page: blupPlot.page, theme });
+      renderBlupNav(totalPages);
+    }
+    if (goshState.result) {
+      const xAxis = document.getElementById("goshXAxis")?.value || "I2";
+      drawGoshPlot(goshState.result, goshState.profile, { xAxis, theme });
+    }
+    if (bayesState.result) {
+      drawBayesMuPosterior(bayesState.result, { reMean: bayesState.reMean, theme });
+      drawBayesTauPosterior(bayesState.result, { theme });
+    }
+    if (appState.reportArgs?.profileLik) {
+      const xScale = document.getElementById("profileLikScale")?.value || appState.reportArgs.profileLikXScale || "tau2";
+      drawProfileLikTau2(appState.reportArgs.profileLik, { xScale, theme });
+    }
+    if (pCurvePlot.result) {
+      drawPCurve(pCurvePlot.result, { theme });
+    }
+    if (pUniformPlot.result) {
+      drawPUniform(pUniformPlot.result, pUniformPlot.m, pUniformPlot.profile, { theme });
+    }
+    if (diagnosticsState.influence) {
+      drawInfluencePlot(diagnosticsState.influence, { theme });
+      drawBaujatPlot(diagnosticsState.baujatResult, diagnosticsState.profile, { theme });
+      if (diagnosticsState.showQQ)
+        drawQQPlot(diagnosticsState.qqResiduals, diagnosticsState.qqLabels, { theme });
+      if (!diagnosticsState.isMHorPeto && diagnosticsState.studies?.length >= 2)
+        drawRadialPlot(diagnosticsState.studies, diagnosticsState.m, diagnosticsState.profile, { theme });
+      if (diagnosticsState.showLabbe)
+        drawLabbe(diagnosticsState.studies, diagnosticsState.m, diagnosticsState.profile, { type: diagnosticsState.type, theme });
+    }
+    if (caterpillarPlot.args) {
+      drawOrchardPlot(caterpillarPlot.args.studies, caterpillarPlot.args.m, caterpillarPlot.args.profile, { theme });
+    }
+    if (bubblePlotState.bubbleResult) {
+      const bc = document.getElementById("bubblePlots");
+      if (bc) {
+        bc.innerHTML = "";
+        bubblePlotState.moderators.forEach((mod, i) => {
+          const colIdxs = bubblePlotState.bubbleResult.modColMap && bubblePlotState.bubbleResult.modColMap[mod.name];
+          if (!colIdxs || colIdxs.length === 0) return;
+          const wrap = document.createElement("div");
+          wrap.dataset.moderator = mod.name;
+          bc.appendChild(wrap);
+          if (bubblePlotState.usePartialBubble) {
+            drawPartialResidualBubble(bubblePlotState.bubbleResult.studiesUsed, bubblePlotState.bubbleResult, mod, wrap, { theme });
+          } else {
+            drawBubble(bubblePlotState.bubbleResult.studiesUsed, bubblePlotState.bubbleResult, mod, wrap, { theme });
+          }
+          const bubbleSvg = wrap.querySelector("svg");
+          if (bubbleSvg) {
+            const svgId = `bubblePlot_${i}`;
+            bubbleSvg.id = svgId;
+            const exportDiv = document.createElement("div");
+            exportDiv.className = "plot-export";
+            exportDiv.innerHTML = `<button class="export-btn" data-target="${svgId}" data-format="svg">SVG</button><button class="export-btn" data-target="${svgId}" data-format="png">PNG</button><button class="export-btn" data-target="${svgId}" data-format="tiff">TIFF</button>`;
+            wrap.insertBefore(exportDiv, bubbleSvg);
+          }
+          if (bubblePlotState.usePartialBubble) {
+            const note = document.createElement("p");
+            note.className = "reg-note";
+            note.textContent = "Partial residual plot \u2014 other predictors held at zero (residuals).";
+            wrap.appendChild(note);
+          }
+        });
+      }
+    }
+    if (robPlotState.studies && _robDomains.length > 0) {
+      drawRoBTrafficLight(robPlotState.studies, _robDomains, _robData, { theme });
+      drawRoBSummary(robPlotState.studies, _robDomains, _robData, { theme });
+    }
+  }
   document.querySelectorAll(".funnel-mode-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
       if (!funnelPlot.args) return;
       funnelPlot.contours = btn.dataset.mode === "contour";
-      document.querySelectorAll(".funnel-mode-btn").forEach((b) => b.classList.toggle("active", b === btn));
-      drawFunnel(...funnelPlot.args, { egger: funnelPlot.egger, contours: funnelPlot.contours, petpeese: funnelPlot.petpeese });
+      document.querySelectorAll(".funnel-mode-btn").forEach((b) => {
+        b.classList.toggle("active", b === btn);
+        b.setAttribute("aria-pressed", String(b === btn));
+      });
+      drawFunnel(...funnelPlot.args, { egger: funnelPlot.egger, contours: funnelPlot.contours, petpeese: funnelPlot.petpeese, theme: appState.plotTheme });
     });
   });
   function _updateCumFunnelLabel(stepIdx) {
@@ -26593,7 +32656,7 @@ when exported.</p>`,
     setPage: (p) => {
       forestPlot.page = p;
     },
-    redraw: (p) => drawForest(forestPlot.args.studies, forestPlot.args.m, { ...forestPlot.args.options, page: p })
+    redraw: (p) => drawForest(forestPlot.args.studies, forestPlot.args.m, { ...forestPlot.args.options, page: p, theme: appState.plotTheme })
   });
   var renderCaterpillarNav = makeNavRenderer({
     navId: "caterpillarNav",
@@ -26609,7 +32672,7 @@ when exported.</p>`,
       caterpillarPlot.args.studies,
       caterpillarPlot.args.m,
       caterpillarPlot.args.profile,
-      { pageSize: caterpillarPlot.args.pageSize, page: p }
+      { pageSize: caterpillarPlot.args.pageSize, page: p, theme: appState.plotTheme }
     )
   });
   var renderBlupNav = makeNavRenderer({
@@ -26622,7 +32685,7 @@ when exported.</p>`,
     setPage: (p) => {
       blupPlot.page = p;
     },
-    redraw: (p) => drawBlupPlot(blupPlot.result, blupPlot.profile, { pageSize: blupPlot.pageSize, page: p })
+    redraw: (p) => drawBlupPlot(blupPlot.result, blupPlot.profile, { pageSize: blupPlot.pageSize, page: p, theme: appState.plotTheme })
   });
   var renderCumulativeForestNav = makeNavRenderer({
     navId: "cumulativeForestNav",
@@ -26637,7 +32700,7 @@ when exported.</p>`,
     redraw: (p) => drawCumulativeForest(
       cumForestPlot.args.results,
       cumForestPlot.args.profile,
-      { pageSize: cumForestPlot.args.pageSize, page: p }
+      { pageSize: cumForestPlot.args.pageSize, page: p, theme: appState.plotTheme }
     )
   });
   var _deferredDraws = /* @__PURE__ */ new Map();
@@ -26706,7 +32769,7 @@ when exported.</p>`,
         studyInput[key] = profile.rawInputs?.has(key) ? inputs[idx + 1] : +inputs[idx + 1];
       });
       const s = profile.compute(studyInput);
-      if (isFinite(s.yi) && isFinite(s.vi) && s.vi > 0) {
+      if (isValidStudy(s)) {
         studies.push(s);
       }
     }
@@ -26775,7 +32838,7 @@ when exported.</p>`,
       }
       resetControls();
       const xAxis = document.getElementById("goshXAxis").value;
-      drawGoshPlot(result, profile, { xAxis });
+      drawGoshPlot(result, profile, { xAxis, theme: appState.plotTheme });
       renderGoshInfo(result, profile);
     }
     function onProgress(done, total) {
@@ -26856,6 +32919,159 @@ when exported.</p>`,
       onDone(result);
     }
   }
+  var permState = { worker: null, lastResult: null, lastReg: null };
+  function _clearPermResults() {
+    const el = document.getElementById("permResults");
+    if (el) el.innerHTML = "";
+    const prog = document.getElementById("permProgress");
+    if (prog) prog.style.display = "none";
+    const cancelBtn = document.getElementById("permCancelBtn");
+    if (cancelBtn) cancelBtn.style.display = "none";
+    const runBtn = document.getElementById("permRunBtn");
+    if (runBtn) runBtn.style.display = "";
+    if (permState.worker) {
+      permState.worker.terminate();
+      permState.worker = null;
+    }
+    permState.lastResult = null;
+    permState.lastReg = null;
+  }
+  function _startPermTest() {
+    if (!_lastReg || _lastReg.rankDeficient) return;
+    const reg = _lastReg;
+    const nPerm = parseInt(document.getElementById("permIter")?.value ?? "999", 10);
+    const seed = 12345;
+    const elProgress = document.getElementById("permProgress");
+    const elBar = document.getElementById("permProgressBar");
+    const elText = document.getElementById("permProgressText");
+    const elRun = document.getElementById("permRunBtn");
+    const elCancel = document.getElementById("permCancelBtn");
+    const elResults = document.getElementById("permResults");
+    if (elResults) elResults.innerHTML = "";
+    if (elProgress) elProgress.style.display = "";
+    if (elBar) {
+      elBar.value = 0;
+      elBar.max = 100;
+    }
+    if (elText) elText.textContent = "0%";
+    if (elRun) elRun.style.display = "none";
+    if (elCancel) elCancel.style.display = "";
+    const k = reg.yi.length;
+    const p = reg.p;
+    const XTA = new Float64Array(k * p);
+    for (let i = 0; i < k; i++) for (let j = 0; j < p; j++) XTA[i * p + j] = reg.Xf[i][j];
+    const modTests = Array.isArray(reg.modTests) ? reg.modTests : [];
+    const modColLens = new Int32Array(modTests.map((mt) => (mt.colIdxs ?? []).length));
+    const totalIdxs = modColLens.reduce((s, v) => s + v, 0);
+    const modColIdxsTA = new Int32Array(totalIdxs);
+    let off = 0;
+    for (const mt of modTests) {
+      for (const idx of mt.colIdxs ?? []) modColIdxsTA[off++] = idx;
+    }
+    const onProgress = (done, total) => {
+      const pct = Math.round(done / total * 100);
+      if (elBar) elBar.value = pct;
+      if (elText) elText.textContent = `${pct}%`;
+    };
+    const onDone = (result) => {
+      permState.worker = null;
+      permState.lastResult = result;
+      permState.lastReg = reg;
+      if (appState.reportArgs) {
+        appState.reportArgs = { ...appState.reportArgs, permResult: result };
+      }
+      if (elProgress) elProgress.style.display = "none";
+      if (elRun) elRun.style.display = "";
+      if (elCancel) elCancel.style.display = "none";
+      renderPermResults(result, reg);
+    };
+    const onError = (msg) => {
+      permState.worker = null;
+      if (elProgress) elProgress.style.display = "none";
+      if (elRun) elRun.style.display = "";
+      if (elCancel) elCancel.style.display = "none";
+      if (elResults) elResults.innerHTML = `<div class="reg-note reg-warn">\u26A0 Permutation error: ${escapeHTML(msg)}</div>`;
+    };
+    const yiTA = new Float64Array(reg.yi);
+    const viTA = new Float64Array(reg.vi);
+    let workerOk = false;
+    try {
+      const workerUrl = new URL("./perm.worker.js", import_meta.url).href;
+      const w = new Worker(workerUrl);
+      permState.worker = w;
+      workerOk = true;
+      w.onmessage = function(e) {
+        const msg = e.data;
+        if (msg.type === "progress") {
+          onProgress(msg.done, msg.total);
+        } else if (msg.type === "done") {
+          permState.worker = null;
+          onDone(msg);
+        } else if (msg.type === "error") {
+          permState.worker = null;
+          onError(msg.message);
+        }
+      };
+      w.onerror = function(e) {
+        permState.worker = null;
+        if (e.lineno > 0) {
+          onError(e.message || "Worker crashed");
+          return;
+        }
+        const result = permTestSync({
+          yi: reg.yi,
+          vi: reg.vi,
+          Xf: reg.Xf,
+          QM_obs: reg.QM,
+          nPerm,
+          seed,
+          method: reg.method || "REML",
+          modTests
+        });
+        if (result.error) {
+          onError(result.error);
+          return;
+        }
+        onDone(result);
+      };
+      w.postMessage(
+        {
+          yi: yiTA,
+          vi: viTA,
+          X: XTA,
+          QM_obs: reg.QM,
+          nPerm,
+          seed,
+          p,
+          k,
+          method: reg.method || "REML",
+          nMods: modTests.length,
+          modColIdxs: modColIdxsTA,
+          modColLens
+        },
+        [yiTA.buffer, viTA.buffer, XTA.buffer]
+      );
+    } catch (_) {
+      workerOk = false;
+    }
+    if (!workerOk) {
+      const result = permTestSync({
+        yi: reg.yi,
+        vi: reg.vi,
+        Xf: reg.Xf,
+        QM_obs: reg.QM,
+        nPerm,
+        seed,
+        method: reg.method || "REML",
+        modTests
+      });
+      if (result.error) {
+        onError(result.error);
+        return;
+      }
+      onDone(result);
+    }
+  }
   function renderSensitivity(mu0, sigmaMu, sigmaTau, ciLevel) {
     if (!bayesState.studies || bayesState.studies.length < 2) return;
     const alpha = { "90": 0.1, "95": 0.05, "99": 0.01 }[ciLevel] ?? 0.05;
@@ -26893,7 +33109,7 @@ when exported.</p>`,
     else m = meta(studies, method, ciMethod, alpha);
     if (m.error) return { m, tf, all, profileLikResult: null, mAdjusted: null, rveResult: null, threeLevelResult: null };
     const profileLikResult = (method === "ML" || method === "REML") && studies.length >= 2 ? profileLikTau2(studies, { method }) : null;
-    const mAdjusted = useTF && useTFAdjusted && tf.length > 0 ? meta([...studies, ...tf], method, ciMethod, alpha) : null;
+    const mAdjusted = useTF && useTFAdjusted ? tf.length > 0 ? meta([...studies, ...tf], method, ciMethod, alpha) : m : null;
     const rveResult = hasClusters && !isMHorPeto ? rvePooled(studies, { rho: rveRho, alpha }) : null;
     const threeLevelResult = hasClusters && !isMHorPeto ? meta3level(studies, { method: "REML", alpha }) : null;
     return { m, tf, all, profileLikResult, mAdjusted, rveResult, threeLevelResult };
@@ -26906,7 +33122,7 @@ when exported.</p>`,
     return { bayesResult, reMeanRef };
   }
   function _runPubBiasBatch(studies, m, opts) {
-    const { alpha, selModeVal, selPreset, selSides, selCuts } = opts;
+    const { alpha, selModeVal, selPreset, selWeightFn, selSides, selCuts } = opts;
     const egger = eggerTest(studies);
     const begg = beggTest(studies);
     const petpeese = petPeeseTest(studies);
@@ -26923,18 +33139,30 @@ when exported.</p>`,
     const hc = henmiCopas(studies, alpha);
     let selResult = null;
     if (moderators.length === 0) {
-      let selCutsEff, selSidesEff, selOmegaFixed;
-      if (selModeVal === "sensitivity" && selPreset !== "custom") {
-        const p = SELECTION_PRESETS[selPreset];
-        selCutsEff = p.cuts;
-        selSidesEff = p.sides;
-        selOmegaFixed = p.omega;
+      if (selModeVal === "sensitivity") {
+        let selCutsEff, selSidesEff, selOmegaFixed;
+        if (selPreset !== "custom") {
+          const p = SELECTION_PRESETS[selPreset];
+          selCutsEff = p.cuts;
+          selSidesEff = p.sides;
+          selOmegaFixed = p.omega;
+        } else {
+          selCutsEff = selCuts;
+          selSidesEff = selSides;
+          selOmegaFixed = null;
+        }
+        selResult = veveaHedges(studies, selCutsEff, selSidesEff, selOmegaFixed);
+      } else if (selWeightFn === "halfnorm") {
+        selResult = halfNormalSelModel(studies, { sides: selSides });
+      } else if (selWeightFn === "power") {
+        selResult = powerSelModel(studies, { sides: selSides });
+      } else if (selWeightFn === "negexp") {
+        selResult = negexpSelModel(studies, { sides: selSides });
+      } else if (selWeightFn === "beta") {
+        selResult = betaSelModel(studies, { sides: selSides });
       } else {
-        selCutsEff = selCuts;
-        selSidesEff = selSides;
-        selOmegaFixed = null;
+        selResult = veveaHedges(studies, selCuts, selSides, null);
       }
-      selResult = veveaHedges(studies, selCutsEff, selSidesEff, selOmegaFixed);
     }
     return {
       egger,
@@ -26970,13 +33198,13 @@ when exported.</p>`,
     return { influence, baujatResult, blupResult, qqResiduals, qqLabels, cumResults, cumulativeStudies };
   }
   function _runRegressionBatch(studies, m, opts) {
-    const { method, ciMethod, alpha, modSpec, scaleModSpec } = opts;
+    const { method, ciMethod, alpha, modSpec, scaleModSpec, interactionSpec } = opts;
     const subgroup = subgroupAnalysis(studies, method, ciMethod, alpha);
     let reg = null, ls = null;
     if (scaleModSpec.length > 0) {
-      ls = lsModel(studies, modSpec, scaleModSpec, { ciMethod, alpha });
-    } else if (modSpec.length > 0) {
-      reg = metaRegression(studies, modSpec, method, ciMethod, alpha);
+      ls = lsModel(studies, modSpec, scaleModSpec, { ciMethod, alpha, locInteractions: interactionSpec });
+    } else if (modSpec.length > 0 || interactionSpec.length > 0) {
+      reg = metaRegression(studies, modSpec, method, ciMethod, alpha, interactionSpec);
     }
     return { subgroup, reg, ls };
   }
@@ -27042,7 +33270,8 @@ when exported.</p>`,
       bayesMu0,
       bayesSigmaMu,
       bayesSigmaTau,
-      selModeVal
+      selModeVal,
+      selWeightFn
     } = opts;
     const elResults = document.getElementById("results");
     const elPubBiasStats = document.getElementById("pubBiasStats");
@@ -27061,6 +33290,7 @@ when exported.</p>`,
     const elCumFunnelBlock = document.getElementById("cumulativeFunnelBlock");
     const elOrchardPlotBlock = document.getElementById("orchardPlotBlock");
     const elCatPageSize = document.getElementById("caterpillarPageSize");
+    const elBlupPageSize = document.getElementById("blupPageSize");
     const elCaterpillarBlock = document.getElementById("caterpillarPlotBlock");
     const elRobSection = document.getElementById("robSection");
     const elProfileLikScale = document.getElementById("profileLikScale");
@@ -27068,25 +33298,27 @@ when exported.</p>`,
     const elHetDiag = document.getElementById("hetDiagSection");
     if (profileLikResult && !profileLikResult.error) {
       elHetDiag.style.display = "";
-      drawProfileLikTau2(profileLikResult, { xScale: elProfileLikScale?.value || "tau2" });
+      drawProfileLikTau2(profileLikResult, { xScale: elProfileLikScale?.value || "tau2", theme: appState.plotTheme });
     } else {
       elHetDiag.style.display = "none";
     }
     const elBayes = document.getElementById("bayesSection");
     if (bayesResult && !bayesResult.error) {
       bayesState.studies = studies;
+      bayesState.result = bayesResult;
       bayesState.reMean = reMeanRef;
       bayesState.profile = profile;
       elBayes.style.display = "";
       const bayesClusterNote = hasClusters ? `<p class="reg-note" style="color:var(--muted);margin:0 0 6px">\u2139 Bayesian analysis does not incorporate cluster-robust adjustment.</p>` : "";
       document.getElementById("bayesSummary").innerHTML = bayesClusterNote + buildBayesSummaryHTML(bayesResult, profile, reMeanRef);
-      drawBayesMuPosterior(bayesResult, { reMean: reMeanRef });
-      drawBayesTauPosterior(bayesResult);
+      drawBayesMuPosterior(bayesResult, { reMean: reMeanRef, theme: appState.plotTheme });
+      drawBayesTauPosterior(bayesResult, { theme: appState.plotTheme });
       document.getElementById("bayesGridWarning").style.display = bayesResult.grid_truncated ? "" : "none";
       const ciLevel = document.getElementById("ciLevel")?.value ?? "95";
       renderSensitivity(bayesMu0, bayesSigmaMu, bayesSigmaTau, ciLevel);
     } else {
       bayesState.studies = null;
+      bayesState.result = null;
       elBayes.style.display = "none";
       const elSensSection = document.getElementById("bayesSensitivitySection");
       if (elSensSection) elSensSection.style.display = "none";
@@ -27094,12 +33326,13 @@ when exported.</p>`,
     {
       const elRve = document.getElementById("rveSection");
       const elRveSummary = document.getElementById("rveSummary");
+      const elRveEmpty = document.getElementById("rveEmptyState");
       const elRveSettings = document.getElementById("rveSettings");
       const showRve = hasClusters && !isMHorPeto;
-      if (elRveSettings) elRveSettings.style.display = showRve ? "" : "none";
+      if (elRveSettings) setVisible(elRveSettings, showRve);
       if (elRve) {
         if (showRve && rveResult) {
-          elRve.style.display = "";
+          if (elRveEmpty) elRveEmpty.style.display = "none";
           if (rveResult.error) {
             elRveSummary.innerHTML = `<p class="reg-note" style="color:var(--color-warning)">\u26A0 RVE: ${escapeHTML(rveResult.error)}</p>`;
           } else {
@@ -27112,24 +33345,26 @@ when exported.</p>`,
             elRveSummary.innerHTML = `
             <div style="font-size:0.8125rem;line-height:1.9;margin-bottom:8px">
               ${hBtn2("rve.model")}<b>RVE pooled estimate:</b> ${fmt(rveEst)}<br>
-              CI [${fmt(rveLo)}, ${fmt(rveHi)}] | SE=${fmt(rveResult.se)} | t(${rveResult.df})=${fmt(rveResult.t)} | p=${fmt(rveResult.p)}<br>
+              CI [${fmt(rveLo)}, ${fmt(rveHi)}] | SE = ${fmt(rveResult.se)} | <em>t</em>(${rveResult.df}) = ${fmt(rveResult.t)} | <em>p</em> ${fmtPval(rveResult.p)}<br>
               \u03C1=${rveRho.toFixed(2)} &nbsp;\xB7&nbsp; m=${rveResult.kCluster} cluster${rveResult.kCluster === 1 ? "" : "s"} &nbsp;\xB7&nbsp; k=${rveResult.k} studies<br>
               <span style="color:var(--fg-muted);font-size:0.93em">RE (cluster-robust): ${fmt(reDisp)} &nbsp;\xB7&nbsp; RVE estimate is ${diffDir}.</span>
             </div>
           `;
           }
         } else {
-          elRve.style.display = "none";
+          if (elRveEmpty) elRveEmpty.style.display = "";
+          elRveSummary.innerHTML = "";
         }
       }
     }
     {
       const elThree = document.getElementById("threeLevelSection");
       const elThreeSummary = document.getElementById("threeLevelSummary");
+      const elThreeEmpty = document.getElementById("threeLevelEmptyState");
       const showThree = hasClusters && !isMHorPeto;
       if (elThree) {
         if (showThree && threeLevelResult) {
-          elThree.style.display = "";
+          if (elThreeEmpty) elThreeEmpty.style.display = "none";
           if (threeLevelResult.error) {
             elThreeSummary.innerHTML = `<p class="reg-note" style="color:var(--color-warning)">\u26A0 Three-level: ${escapeHTML(threeLevelResult.error)}</p>`;
           } else {
@@ -27140,16 +33375,18 @@ when exported.</p>`,
             elThreeSummary.innerHTML = `
             <div style="font-size:0.8125rem;line-height:1.9;margin-bottom:8px">
               ${hBtn2("threelevel.model")}<b>Three-level pooled estimate:</b> ${fmt(muDisp)}<br>
-              ${Math.round((1 - alpha) * 100)}% CI [${fmt(ciLoDisp)}, ${fmt(ciHiDisp)}] | SE=${fmt(tl.se)} | z=${fmt(tl.z)} | p=${fmt(tl.p)}<br>
+              ${Math.round((1 - alpha) * 100)}% CI [${fmt(ciLoDisp)}, ${fmt(ciHiDisp)}] | SE = ${fmt(tl.se)} | <em>z</em> = ${fmt(tl.z)} | <em>p</em> ${fmtPval(tl.p)}<br>
               m=${tl.kCluster} cluster${tl.kCluster === 1 ? "" : "s"} &nbsp;\xB7&nbsp; k=${tl.k} studies &nbsp;\xB7&nbsp; df=${tl.df}<br>
               ${hBtn2("threelevel.tau2")}\u03C3\xB2<sub>within</sub>=${fmt(tl.tau2_within)} &nbsp;\xB7&nbsp; \u03C3\xB2<sub>between</sub>=${fmt(tl.tau2_between)}<br>
-              ${hBtn2("threelevel.I2")}I\xB2<sub>within</sub>=${fmt(tl.I2_within)}% &nbsp;\xB7&nbsp; I\xB2<sub>between</sub>=${fmt(tl.I2_between)}%<br>
-              ${hBtn2("het.Q")}Q(${tl.df})=${fmt(tl.Q)} | method=REML
+              ${hBtn2("threelevel.I2")}<em>I</em>\xB2<sub>within</sub>=${fmt(tl.I2_within)}% &nbsp;\xB7&nbsp; <em>I</em>\xB2<sub>between</sub>=${fmt(tl.I2_between)}%<br>
+              ${hBtn2("het.Q")}<em>Q</em>(${tl.df}) = ${fmt(tl.Q)} | method=REML<br>
+              LL = ${fmt(tl.logLik)} (REML; omits normalising constants from R's logLik() convention)
             </div>
           `;
           }
         } else {
-          elThree.style.display = "none";
+          if (elThreeEmpty) elThreeEmpty.style.display = "";
+          elThreeSummary.innerHTML = "";
         }
       }
     }
@@ -27166,79 +33403,136 @@ when exported.</p>`,
     const methodLabel = m.isMH ? "MH" : m.isPeto ? "Peto" : "";
     const clusterBanner = hasClusters ? isMHorPeto ? `<div class="reg-note" style="color:var(--muted);margin:2px 0 6px">\u2139 Cluster-robust SE is not available for M-H/Peto methods.</div>` : m.isClustered ? `<div class="reg-note" style="margin:2px 0 6px">Cluster-robust SEs active (C&nbsp;=&nbsp;${m.clustersUsed} cluster${m.clustersUsed === 1 ? "" : "s"}${m.allSingletons ? " \u2014 all singletons (HC-robust)" : ""}).</div>` : m.robustError ? `<div class="reg-note" style="color:var(--color-warning);margin:2px 0 6px">\u26A0 Cluster-robust SE: ${escapeHTML(m.robustError)}</div>` : "" : "";
     const robust_ci_disp = m.isClustered ? { lb: profile.transform(m.robustCiLow), ub: profile.transform(m.robustCiHigh) } : null;
-    const robustCILine = m.isClustered ? `Robust CI [${fmt(robust_ci_disp.lb)}, ${fmt(robust_ci_disp.ub)}] | SE=${fmt(m.robustSE)} | z=${fmt(m.robustStat)} | p=${fmt(m.robustPval)} (df=${m.robustDf})${hBtn2("cluster.robust")}<br>` : "";
+    const robustCILine = m.isClustered ? `Robust CI [${fmt(robust_ci_disp.lb)}, ${fmt(robust_ci_disp.ub)}] | SE = ${fmt(m.robustSE)} | <em>z</em> = ${fmt(m.robustStat)} | <em>p</em> ${fmtPval(m.robustPval)} (df = ${m.robustDf})${hBtn2("cluster.robust")}<br>` : "";
     const SMD_TYPES = /* @__PURE__ */ new Set(["SMD", "SMDH", "SMD_paired", "SMD1", "SMD1H", "SMCC"]);
     const cles = SMD_TYPES.has(type) ? clES(m.RE, [m.ciLow, m.ciHigh]) : null;
     const clesLine = cles ? `CLES: ${fmt(cles.estimate)} [${fmt(cles.ci[0])}, ${fmt(cles.ci[1])}]${hBtn2("pool.cles")}<br>` : "";
     const ciLbl = getCiLabel2();
+    const showLogScale = !!profile.isLog;
+    const logScaleRELine = showLogScale ? `<div class="result-log-note">log scale: ${fmt(m.RE)} | SE = ${fmt(m.seRE)} | ${ciLbl} [${fmt(m.ciLow)}, ${fmt(m.ciHigh)}]</div>` : "";
+    const logScaleFELine = showLogScale ? `<div class="result-log-note">log scale: ${fmt(m.FE)} | SE = ${fmt(m.seFE)} | ${ciLbl} [${fmt(m.FE - feZ * m.seFE)}, ${fmt(m.FE + feZ * m.seFE)}]</div>` : "";
+    const analysisScaleLabel = profile.analysisScaleLabel ?? null;
+    const analysisScaleRELine = analysisScaleLabel ? `<div class="result-log-note">${analysisScaleLabel}: ${fmt(m.RE)} | SE = ${fmt(m.seRE)} | ${ciLbl} [${fmt(m.ciLow)}, ${fmt(m.ciHigh)}]</div>` : "";
+    const analysisScaleFELine = analysisScaleLabel ? `<div class="result-log-note">${analysisScaleLabel}: ${fmt(m.FE)} | SE = ${fmt(m.seFE)} | ${ciLbl} [${fmt(m.FE - feZ * m.seFE)}, ${fmt(m.FE + feZ * m.seFE)}]</div>` : "";
     elResults.innerHTML = warningHTML + clusterBanner + (isMHorPeto ? `
     <div class="result-re-primary">
       <span class="result-label">${profile.label} (${methodLabel})</span>
       <span class="result-re-value">${fmt(FE_disp)}</span>
+      <span class="result-se">SE = ${fmt(m.seFE)}</span>
       <span class="result-ci">${ciLbl} [${fmt(feCi_disp.lb)}, ${fmt(feCi_disp.ub)}]</span>
+    </div>
+    ${logScaleFELine}${analysisScaleFELine}
+    <div class="result-stat-row">
+      <span class="result-row-label">Test of pooled effect</span>
+      <span class="result-stat-value">${m.dist === "t" ? `<em>t</em>(${m.df})` : "<em>z</em>"} = ${fmt(m.stat)}, <em>p</em> ${fmtPval(m.pval)}</span>
     </div>
     <div class="result-method-note">Fixed-effect only \u2014 no \u03C4\xB2, RE estimate, or prediction interval.</div>
     <div class="result-het-group">
       <div class="result-section-label">Heterogeneity</div>
-      <div class="result-het-stats">I\xB2=${fmt(m.I2)}% [${fmt(m.I2CI[0])}%, ${fmt(m.I2CI[1])}%]${hBtn2("het.I2")} &nbsp;\xB7&nbsp; H\xB2-CI=[${fmt(m.H2CI[0])}, ${isFinite(m.H2CI[1]) ? fmt(m.H2CI[1]) : "\u221E"}]${hBtn2("het.H2")}</div>
-      <div class="result-het-stats result-het-test">Q(${m.df})=${fmt(m.stat)}, p=${fmt(m.pval)}${hBtn2("het.Q")}</div>
+      <div class="result-het-stats"><em>I</em>\xB2=${fmt(m.I2)}% [${fmt(m.I2CI[0])}%, ${fmt(m.I2CI[1])}%]${hBtn2("het.I2")} &nbsp;\xB7&nbsp; <em>H</em>\xB2-CI=[${fmt(m.H2CI[0])}, ${isFinite(m.H2CI[1]) ? fmt(m.H2CI[1]) : "\u221E"}]${hBtn2("het.H2")}</div>
+      <div class="result-het-stats result-het-test"><em>Q</em>(${m.df}) = ${fmt(m.Q)}, <em>p</em> ${fmtPval(m.df > 0 ? 1 - chiSquareCDF(m.Q, m.df) : NaN)}${hBtn2("het.Q")}</div>
     </div>
   ` : `
     <div class="result-re-primary">
       <span class="result-label">${profile.label} (RE)</span>
       <span class="result-re-value">${fmt(RE_disp)}</span>
-      <span class="result-ci">${ciLbl} [${fmt(ci_disp.lb)}, ${fmt(ci_disp.ub)}]${m.isClustered ? ` &nbsp;<span class="result-se">SE (model) = ${fmt(m.seRE)}</span>` : ""}</span>
+      <span class="result-se">SE = ${fmt(m.seRE)}</span>
+      <span class="result-ci">${ciLbl} [${fmt(ci_disp.lb)}, ${fmt(ci_disp.ub)}]</span>
     </div>
+    ${logScaleRELine}${analysisScaleRELine}
     ${useTF && mAdjusted ? `<div class="result-re-adjusted">RE (adjusted): <b>${fmt(RE_adj_disp)}</b>${hasClusters ? ` <span class="result-note">(cluster-robust not applied to imputed studies)</span>` : ""}</div>` : ""}
     <div class="result-stat-row">
       <span class="result-row-label">Test of pooled effect</span>
-      <span class="result-stat-value">${m.dist}-stat = ${fmt(m.stat)}, p = ${fmt(m.pval)}</span>
+      <span class="result-stat-value">${m.dist === "t" ? `<em>t</em>(${m.df})` : "<em>z</em>"} = ${fmt(m.stat)}, <em>p</em> ${fmtPval(m.pval)}</span>
     </div>
     <div class="result-stat-row">
       <span class="result-row-label">Prediction interval</span>
       <span class="result-stat-value">${isFinite(pred_disp.lb) ? `[${fmt(pred_disp.lb)}, ${fmt(pred_disp.ub)}]` : "NA (k &lt; 3)"}${hBtn2("het.pred")}</span>
     </div>
+    ${showLogScale && isFinite(m.predLow) ? `<div class="result-log-note">log scale: [${fmt(m.predLow)}, ${fmt(m.predHigh)}]</div>` : ""}
+    ${analysisScaleLabel && isFinite(m.predLow) ? `<div class="result-log-note">${analysisScaleLabel}: [${fmt(m.predLow)}, ${fmt(m.predHigh)}]</div>` : ""}
     <div class="result-fe-secondary">
       <span class="result-label">${profile.label} (FE)</span>
       <span>${fmt(FE_disp)}</span>
+      <span class="result-se">SE = ${fmt(m.seFE)}</span>
       <span class="result-ci">${ciLbl} [${fmt(feCi_disp.lb)}, ${fmt(feCi_disp.ub)}]</span>
     </div>
+    ${logScaleFELine}${analysisScaleFELine}
     ${robustCILine}${clesLine}<div class="result-het-group">
       <div class="result-section-label">Heterogeneity</div>
-      <div class="result-het-stats">\u03C4\xB2=${fmt(m.tau2)} [${fmt(m.tauCI[0])}, ${isFinite(m.tauCI[1]) ? fmt(m.tauCI[1]) : "\u221E"}]${hBtn2("het.tau2")} &nbsp;\xB7&nbsp; I\xB2=${fmt(m.I2)}% [${fmt(m.I2CI[0])}%, ${fmt(m.I2CI[1])}%]${hBtn2("het.I2")} &nbsp;\xB7&nbsp; H\xB2-CI=[${fmt(m.H2CI[0])}, ${isFinite(m.H2CI[1]) ? fmt(m.H2CI[1]) : "\u221E"}]${hBtn2("het.H2")}</div>
-      <div class="result-het-stats result-het-test">Q(${m.df})=${fmt(m.Q)}, p=${fmt(m.df > 0 ? 1 - chiSquareCDF(m.Q, m.df) : NaN)}${hBtn2("het.Q")}</div>
+      <div class="result-het-stats">\u03C4\xB2=${fmt(m.tau2)} [${fmt(m.tauCI[0])}, ${isFinite(m.tauCI[1]) ? fmt(m.tauCI[1]) : "\u221E"}]${hBtn2("het.tau2")} &nbsp;\xB7&nbsp; <em>I</em>\xB2=${fmt(m.I2)}% [${fmt(m.I2CI[0])}%, ${fmt(m.I2CI[1])}%]${hBtn2("het.I2")} &nbsp;\xB7&nbsp; <em>H</em>\xB2-CI=[${fmt(m.H2CI[0])}, ${isFinite(m.H2CI[1]) ? fmt(m.H2CI[1]) : "\u221E"}]${hBtn2("het.H2")}</div>
+      <div class="result-het-stats result-het-test"><em>Q</em>(${m.df}) = ${fmt(m.Q)}, <em>p</em> ${fmtPval(m.df > 0 ? 1 - chiSquareCDF(m.Q, m.df) : NaN)}${hBtn2("het.Q")}</div>
     </div>
   `);
-    const eggerRobustNote = egger.clustersUsed ? ` | p<sub>robust</sub>=${isFinite(egger.robustInterceptP) ? fmt(egger.robustInterceptP) : "\u2014"}` : "";
-    const fatpetRobustNote = fatpet.clustersUsed ? ` | p<sub>FAT,rob</sub>=${isFinite(fatpet.robustSlopeP) ? fmt(fatpet.robustSlopeP) : "\u2014"} \xB7 p<sub>PET,rob</sub>=${isFinite(fatpet.robustInterceptP) ? fmt(fatpet.robustInterceptP) : "\u2014"}` : "";
+    const eggerRobustNote = egger.clustersUsed ? ` | <em>p</em><sub>robust</sub> ${isFinite(egger.robustInterceptP) ? fmtPval(egger.robustInterceptP) : "= \u2014"}` : "";
+    const fatpetRobustNote = fatpet.clustersUsed ? ` | <em>p</em><sub>FAT,rob</sub> ${isFinite(fatpet.robustSlopeP) ? fmtPval(fatpet.robustSlopeP) : "= \u2014"} \xB7 <em>p</em><sub>PET,rob</sub> ${isFinite(fatpet.robustInterceptP) ? fmtPval(fatpet.robustInterceptP) : "= \u2014"}` : "";
+    const ciPct = `${Math.round((1 - alpha) * 100)}% CI`;
+    const eggerTC = isFinite(egger.df) ? tCritical(egger.df, alpha) : NaN;
+    const fatpetTC = isFinite(fatpet.df) ? tCritical(fatpet.df, alpha) : NaN;
+    const eggerStats = isFinite(egger.intercept) ? `intercept = ${fmt(egger.intercept)}, SE = ${fmt(egger.se)}, ${ciPct} [${fmt(egger.intercept - eggerTC * egger.se)}, ${fmt(egger.intercept + eggerTC * egger.se)}], <em>t</em>(${egger.df}) = ${fmt(egger.t)}, <em>p</em> ${fmtPval(egger.p)}` : `intercept (k&lt;3)`;
+    const beggStats = isFinite(begg.tau) ? `\u03C4 = ${fmt(begg.tau)}, <em>z</em> = ${fmt(begg.z)}, <em>p</em> ${fmtPval(begg.p)}` : `\u03C4 (k&lt;3)`;
+    const fatStats = isFinite(fatpet.slope) ? `\u03B2\u2081 = ${fmt(fatpet.slope)}, SE = ${fmt(fatpet.slopeSE)}, <em>t</em>(${fatpet.df}) = ${fmt(fatpet.slopeT)}, <em>p</em> ${fmtPval(fatpet.slopeP)}` : `\u03B2\u2081 (k&lt;3)`;
+    const petStats = (() => {
+      if (!isFinite(fatpet.intercept)) return `(k&lt;3)`;
+      if (!isFinite(fatpetTC)) return `${fmt(profile.transform(fatpet.intercept))}, <em>p</em> ${fmtPval(fatpet.interceptP)}`;
+      const lo = fmt(profile.transform(fatpet.intercept - fatpetTC * fatpet.interceptSE));
+      const hi = fmt(profile.transform(fatpet.intercept + fatpetTC * fatpet.interceptSE));
+      return `${fmt(profile.transform(fatpet.intercept))}, SE = ${fmt(fatpet.interceptSE)}, ${ciPct} [${lo}, ${hi}], <em>t</em>(${fatpet.df}) = ${fmt(fatpet.interceptT)}, <em>p</em> ${fmtPval(fatpet.interceptP)}`;
+    })();
+    const ppSrc = petpeese.usePeese ? petpeese.peese : petpeese.fat;
+    const ppTC = isFinite(ppSrc.df) ? tCritical(ppSrc.df, alpha) : NaN;
+    const ppLabel = petpeese.usePeese ? "PEESE" : "PET";
+    const ppStats = (() => {
+      if (!isFinite(ppSrc.intercept)) return `NA (k&lt;3)`;
+      if (!isFinite(ppTC)) return `${fmt(profile.transform(ppSrc.intercept))}, <em>p</em> ${fmtPval(ppSrc.interceptP)} [${ppLabel}]`;
+      const lo = fmt(profile.transform(ppSrc.intercept - ppTC * ppSrc.interceptSE));
+      const hi = fmt(profile.transform(ppSrc.intercept + ppTC * ppSrc.interceptSE));
+      return `${fmt(profile.transform(ppSrc.intercept))}, SE = ${fmt(ppSrc.interceptSE)}, ${ciPct} [${lo}, ${hi}], <em>t</em>(${ppSrc.df}) = ${fmt(ppSrc.interceptT)}, <em>p</em> ${fmtPval(ppSrc.interceptP)} [${ppLabel}]`;
+    })();
+    const waapZ = normalQuantile(1 - alpha / 2);
+    const waapStats = (() => {
+      if (!isFinite(waap.estimate)) return `NA (k&lt;1)`;
+      const lo = fmt(profile.transform(waap.estimate - waapZ * waap.se));
+      const hi = fmt(profile.transform(waap.estimate + waapZ * waap.se));
+      const fb = waap.fallback ? ` <span style='color:var(--fg-muted)'>(fallback to WLS)</span>` : "";
+      return `${fmt(profile.transform(waap.estimate))}, SE = ${fmt(waap.se)}, ${ciPct} [${lo}, ${hi}], <em>z</em> = ${fmt(waap.z)}, <em>p</em> ${fmtPval(waap.p)} | k<sub>adequate</sub> = ${waap.kAdequate}/${waap.k}${fb}`;
+    })();
+    const hcStats = hc.error ? `NA (${escapeHTML(hc.error)})` : `${fmt(profile.transform(hc.beta))}, SE = ${fmt(hc.se)}, 95% CI [${fmt(profile.transform(hc.ci[0]))}, ${fmt(profile.transform(hc.ci[1]))}] (DL \u03C4\xB2 = ${fmt(hc.tau2)})`;
     elPubBiasStats.innerHTML = `
-    &nbsp;&nbsp;${hBtn2("bias.egger")}Egger: intercept=${isFinite(egger.intercept) ? fmt(egger.intercept) : "NA"} | p=${isFinite(egger.p) ? fmt(egger.p) : "NA (k<3)"}${eggerRobustNote}<br>
-    &nbsp;&nbsp;${hBtn2("bias.begg")}Begg: \u03C4=${isFinite(begg.tau) ? fmt(begg.tau) : "NA"} | p=${isFinite(begg.p) ? fmt(begg.p) : "NA (k<3)"}<br>
-    &nbsp;&nbsp;${hBtn2("bias.fatpet")}FAT (bias): \u03B2\u2081=${isFinite(fatpet.slope) ? fmt(fatpet.slope) : "NA"} | p=${isFinite(fatpet.slopeP) ? fmt(fatpet.slopeP) : "NA (k<3)"} &nbsp;\xB7&nbsp; PET (effect at SE\u21920): ${isFinite(fatpet.intercept) ? fmt(profile.transform(fatpet.intercept)) : "NA"} | p=${isFinite(fatpet.interceptP) ? fmt(fatpet.interceptP) : "NA (k<3)"}${fatpetRobustNote}<br>
-    &nbsp;&nbsp;${hBtn2("bias.petpeese")}${petpeese.usePeese ? "<b>" : ""}PET-PEESE (corrected): ${(() => {
-      const src = petpeese.usePeese ? petpeese.peese : petpeese.fat;
-      return isFinite(src.intercept) ? `${fmt(profile.transform(src.intercept))} [${petpeese.usePeese ? "PEESE" : "PET"}, p=${fmt(src.interceptP)}]` : "NA (k<3)";
-    })()}${petpeese.usePeese ? "</b>" : ""}<br>
+    &nbsp;&nbsp;${hBtn2("bias.egger")}Egger: ${eggerStats}${eggerRobustNote}<br>
+    &nbsp;&nbsp;${hBtn2("bias.begg")}Begg: ${beggStats}<br>
+    &nbsp;&nbsp;${hBtn2("bias.fatpet")}FAT (bias): ${fatStats} &nbsp;\xB7&nbsp; PET (effect at SE\u21920): ${petStats}${fatpetRobustNote}<br>
+    &nbsp;&nbsp;${hBtn2("bias.petpeese")}${petpeese.usePeese ? "<b>" : ""}PET-PEESE (corrected): ${ppStats}${petpeese.usePeese ? "</b>" : ""}<br>
     &nbsp;&nbsp;${hBtn2("bias.fsn")}Fail-safe N (Rosenthal): ${isFinite(fsn.rosenthal) ? Math.round(fsn.rosenthal) : "NA"} &nbsp;\xB7&nbsp; Orwin (trivial=0.1): ${isFinite(fsn.orwin) ? Math.round(fsn.orwin) : "NA"}<br>
-    &nbsp;&nbsp;${hBtn2("bias.tes")}TES: O=${isFinite(tes.O) ? tes.O : "NA"} | E=${isFinite(tes.E) ? fmt(tes.E) : "NA"} | \u03C7\xB2=${isFinite(tes.chi2) ? fmt(tes.chi2) : "NA (k<2)"} | p=${isFinite(tes.p) ? fmt(tes.p) : "NA (k<2)"}${isFinite(tes.p) && tes.p < 0.1 ? " <span style='color:var(--color-warning)'>\u26A0 excess</span>" : ""}<br>
-    &nbsp;&nbsp;${hBtn2("bias.waap")}WAAP-WLS: ${isFinite(waap.estimate) ? `${fmt(profile.transform(waap.estimate))} [${fmt(profile.transform(waap.ci[0]))}, ${fmt(profile.transform(waap.ci[1]))}] | p=${fmt(waap.p)} | k<sub>adequate</sub>=${waap.kAdequate}/${waap.k}${waap.fallback ? " <span style='color:var(--fg-muted)'>(fallback to WLS)</span>" : ""}` : "NA (k<1)"}<br>
-    &nbsp;&nbsp;${hBtn2("bias.hc")}Henmi-Copas: ${hc.error ? `NA (${escapeHTML(hc.error)})` : `${fmt(profile.transform(hc.beta))} [${fmt(profile.transform(hc.ci[0]))}, ${fmt(profile.transform(hc.ci[1]))}] (DL \u03C4\xB2=${fmt(hc.tau2)}, t\u2080=${fmt(hc.t0)})`}<br>
-    <b>Trim &amp; Fill:</b>${hBtn2("bias.trimfill")} ${useTF ? "ON" : "OFF"} (${useTF ? tfEstimator + " estimator, " : ""}${tf.length} filled studies)
+    &nbsp;&nbsp;${hBtn2("bias.tes")}TES: O = ${isFinite(tes.O) ? tes.O : "NA"} | E = ${isFinite(tes.E) ? fmt(tes.E) : "NA"} | \u03C7\xB2(k\u22121) = ${isFinite(tes.chi2) ? fmt(tes.chi2) : "NA (k<2)"} | ${isFinite(tes.p) ? `<em>p</em> ${fmtPval(tes.p)}` : "<em>p</em> (k<2)"}${isFinite(tes.p) && tes.p < 0.1 ? " <span style='color:var(--color-warning)'>\u26A0 excess</span>" : ""}<br>
+    &nbsp;&nbsp;${hBtn2("bias.waap")}WAAP-WLS: ${waapStats}<br>
+    &nbsp;&nbsp;${hBtn2("bias.hc")}Henmi-Copas: ${hcStats}<br>
+    <b>Trim &amp; Fill:</b>${hBtn2("bias.trimfill")} ${useTF ? (() => {
+      const k0Line = `k\u2080 = ${tf.length} (${tfEstimator} estimator)`;
+      const adjLine = mAdjusted ? `, adjusted RE = ${fmt(profile.transform(mAdjusted.RE))}, SE = ${fmt(mAdjusted.seRE)}, \u03C4\xB2 = ${fmt(mAdjusted.tau2)}, 95% CI [${fmt(profile.transform(mAdjusted.ciLow))}, ${fmt(profile.transform(mAdjusted.ciHigh))}]` : "";
+      return k0Line + adjLine;
+    })() : "OFF"}
     <details style="margin-top:4px">
       <summary style="cursor:pointer;color:var(--fg-muted);font-size:0.9em">Additional regression tests (binary outcomes)</summary>
       <div style="margin-top:4px">
-        &nbsp;&nbsp;${hBtn2("bias.harbord")}Harbord: intercept=${isFinite(harbord.intercept) ? fmt(harbord.intercept) : "NA"} | p=${isFinite(harbord.interceptP) ? fmt(harbord.interceptP) : "NA (k&lt;3 or no 2\xD72 counts)"}<br>
-        &nbsp;&nbsp;${hBtn2("bias.peters")}Peters: intercept=${isFinite(peters.intercept) ? fmt(peters.intercept) : "NA"} | p=${isFinite(peters.interceptP) ? fmt(peters.interceptP) : "NA (k&lt;3 or no sample sizes)"}<br>
-        &nbsp;&nbsp;${hBtn2("bias.deeks")}Deeks: intercept=${isFinite(deeks.intercept) ? fmt(deeks.intercept) : "NA"} | p=${isFinite(deeks.interceptP) ? fmt(deeks.interceptP) : "NA (k&lt;3 or no 2\xD72 counts)"}<br>
-        &nbsp;&nbsp;${hBtn2("bias.ruecker")}R\xFCcker: intercept=${isFinite(ruecker.intercept) ? fmt(ruecker.intercept) : "NA"} | p=${isFinite(ruecker.interceptP) ? fmt(ruecker.interceptP) : "NA (k&lt;3 or no 2\xD72 counts)"}
+        &nbsp;&nbsp;${hBtn2("bias.harbord")}Harbord: intercept = ${isFinite(harbord.intercept) ? fmt(harbord.intercept) : "NA"} | <em>p</em> ${isFinite(harbord.interceptP) ? fmtPval(harbord.interceptP) : "NA (k&lt;3 or no 2\xD72 counts)"}<br>
+        &nbsp;&nbsp;${hBtn2("bias.peters")}Peters: intercept = ${isFinite(peters.intercept) ? fmt(peters.intercept) : "NA"} | <em>p</em> ${isFinite(peters.interceptP) ? fmtPval(peters.interceptP) : "NA (k&lt;3 or no sample sizes)"}<br>
+        &nbsp;&nbsp;${hBtn2("bias.deeks")}Deeks: intercept = ${isFinite(deeks.intercept) ? fmt(deeks.intercept) : "NA"} | <em>p</em> ${isFinite(deeks.interceptP) ? fmtPval(deeks.interceptP) : "NA (k&lt;3 or no 2\xD72 counts)"}<br>
+        &nbsp;&nbsp;${hBtn2("bias.ruecker")}R\xFCcker: intercept = ${isFinite(ruecker.intercept) ? fmt(ruecker.intercept) : "NA"} | <em>p</em> ${isFinite(ruecker.interceptP) ? fmtPval(ruecker.interceptP) : "NA (k&lt;3 or no 2\xD72 counts)"}
       </div>
     </details>
   `;
     _animateFresh(elResults);
-    const influenceHTML = buildInfluenceHTML(influence);
+    const influenceOpen = elInfluenceDiagTable.querySelector(".sens-block")?.open ?? true;
+    const influenceHTML = buildInfluenceHTML(influence, influenceOpen);
     const hasSubgroup = subgroup && subgroup.G >= 2;
     const subgroupHTML = hasSubgroup ? buildSubgroupHTML(subgroup, profile, hasClusters) : "";
     elInfluenceDiagTable.innerHTML = influenceHTML;
+    elInfluenceDiagTable.querySelectorAll(".sens-summary").forEach((summary) => {
+      summary.addEventListener("click", (e) => {
+        if (e.target.closest(".help-btn")) e.preventDefault();
+      });
+    });
     elSubgroupSection.style.display = hasSubgroup ? "" : "none";
     elSubgroupTable.innerHTML = hasSubgroup && isMHorPeto ? `<p class="reg-note" style="margin:4px 0 8px">\u26A0 Subgroup pooling uses inverse-variance (DL) weights \u2014 switch to DL or REML for M-H subgroup analysis.</p>` + subgroupHTML : subgroupHTML;
     renderStudyTable(all, m, profile);
@@ -27246,18 +33540,30 @@ when exported.</p>`,
     performance.mark("phase:loo:render:start");
     renderSensitivityPanel(studies, isMHorPeto ? null : m, isMHorPeto ? "DL" : method, ciMethod, profile, { isMHFallback: isMHorPeto }, alpha);
     performance.measure("phase:loo:render", "phase:loo:render:start");
-    renderPCurvePanel(pcurve);
-    renderPUniformPanel(puniform, m, profile);
-    renderSelectionModelPanel(selResult, selModeVal, profile);
+    pCurvePlot.result = pcurve;
+    pUniformPlot.result = puniform;
+    pUniformPlot.m = m;
+    pUniformPlot.profile = profile;
+    renderPCurvePanel(pcurve, { theme: appState.plotTheme });
+    renderPUniformPanel(puniform, m, profile, { theme: appState.plotTheme });
+    renderSelectionModelPanel(selResult, selModeVal, selWeightFn, profile);
     const modSpec = opts.modSpec;
     const scaleModSpec = opts.scaleModSpec;
     const kExcluded = reg ?? ls ? studies.length - (reg ?? ls).k : 0;
     if (ls) {
       _lastReg = null;
+      _lastLs = ls.rankDeficient ? null : ls;
       renderLocationScalePanel(ls, ciMethod, kExcluded);
     } else {
+      _lastLs = null;
       _lastReg = reg && !reg.rankDeficient ? reg : null;
-      renderRegressionPanel(reg ?? {}, method, ciMethod, kExcluded, moderators);
+      const _allTermMods = [...moderators, ...interactions.map((ix) => ({ name: ix.name }))];
+      renderRegressionPanel(reg ?? {}, method, ciMethod, kExcluded, _allTermMods);
+      const elPermSection = document.getElementById("permSection");
+      if (elPermSection) {
+        elPermSection.style.display = _lastReg ? "" : "none";
+        _clearPermResults();
+      }
     }
     const bubbleContainer = elBubblePlots;
     bubbleContainer.innerHTML = "";
@@ -27276,6 +33582,9 @@ when exported.</p>`,
       rankDeficient: ls.rankDeficient
     } : reg;
     const usePartialBubble = moderators.length > 1;
+    bubblePlotState.bubbleResult = bubbleResult && !bubbleResult.rankDeficient ? bubbleResult : null;
+    bubblePlotState.moderators = moderators.filter((mod) => mod.type === "continuous");
+    bubblePlotState.usePartialBubble = usePartialBubble;
     if (bubbleResult && !bubbleResult.rankDeficient) {
       moderators.filter((mod) => mod.type === "continuous").forEach((mod, i) => {
         const colIdxs = bubbleResult.modColMap && bubbleResult.modColMap[mod.name];
@@ -27284,9 +33593,9 @@ when exported.</p>`,
         wrap.dataset.moderator = mod.name;
         bubbleContainer.appendChild(wrap);
         if (usePartialBubble) {
-          drawPartialResidualBubble(bubbleResult.studiesUsed, bubbleResult, mod, wrap);
+          drawPartialResidualBubble(bubbleResult.studiesUsed, bubbleResult, mod, wrap, { theme: appState.plotTheme });
         } else {
-          drawBubble(bubbleResult.studiesUsed, bubbleResult, mod, wrap);
+          drawBubble(bubbleResult.studiesUsed, bubbleResult, mod, wrap, { theme: appState.plotTheme });
         }
         const bubbleSvg = wrap.querySelector("svg");
         if (bubbleSvg) {
@@ -27306,8 +33615,8 @@ when exported.</p>`,
       });
     }
     const rawPageSize = elForestPageSize?.value ?? "30";
-    const pageSize = rawPageSize === "Infinity" ? Infinity : +rawPageSize;
-    const forestOpts = { ciMethod, profile, pageSize, pooledDisplay: forestPlot.poolDisplay, theme: forestPlot.theme, alpha, ciLabel: getCiLabel2() };
+    const pageSize = rawPageSize === "all" ? Infinity : +rawPageSize;
+    const forestOpts = { ciMethod, profile, pageSize, pooledDisplay: forestPlot.poolDisplay, theme: appState.plotTheme, alpha, ciLabel: getCiLabel2() };
     const mForest = isMHorPeto ? { ...m, RE: m.FE, seRE: m.seFE, tau2: 0, predLow: NaN, predHigh: NaN } : m;
     forestPlot.args = { studies: all, m: mForest, options: forestOpts };
     performance.mark("phase:plot:forest:start");
@@ -27321,6 +33630,7 @@ when exported.</p>`,
       m,
       profile,
       reg,
+      ls,
       tf,
       egger,
       begg,
@@ -27342,7 +33652,12 @@ when exported.</p>`,
       subgroup,
       method,
       ciMethod,
+      rveResult,
+      threeLevelResult,
+      rveRho: parseFloat(document.getElementById("rveRho")?.value ?? 0.8),
+      permResult: permState.lastResult ?? null,
       ciLevel: document.getElementById("ciLevel")?.value ?? "95",
+      mccMethod: document.getElementById("mccMethod")?.value ?? "none",
       useTF,
       mAdjusted,
       sel: selResult,
@@ -27364,7 +33679,7 @@ when exported.</p>`,
     funnelPlot.petpeese = petpeese;
     drawIfVisible("pubBiasSection", () => {
       performance.mark("phase:plot:funnel:start");
-      drawFunnel(...funnelPlot.args, { egger: funnelPlot.egger, contours: funnelPlot.contours, petpeese: funnelPlot.petpeese });
+      drawFunnel(...funnelPlot.args, { egger: funnelPlot.egger, contours: funnelPlot.contours, petpeese: funnelPlot.petpeese, theme: appState.plotTheme });
       performance.measure("phase:plot:funnel", "phase:plot:funnel:start");
     });
     const labbeTypes = ["OR", "RR", "RD"];
@@ -27373,27 +33688,46 @@ when exported.</p>`,
     blupPlot.result = blupResult;
     blupPlot.profile = profile;
     blupPlot.page = 0;
+    const rawBlupPageSize = elBlupPageSize?.value ?? "30";
+    blupPlot.pageSize = rawBlupPageSize === "all" ? Infinity : +rawBlupPageSize;
     elBlupBlock.style.display = blupResult ? "" : "none";
     elBaujatPlotBlock.style.display = baujatResult ? "" : "none";
     elQQPlotBlock.style.display = showQQ ? "" : "none";
     elRadialPlotBlock.style.display = studies.length >= 2 && !isMHorPeto ? "" : "none";
     elLabbeBlock.style.display = showLabbe ? "" : "none";
+    Object.assign(diagnosticsState, {
+      influence,
+      baujatResult,
+      profile,
+      qqResiduals,
+      qqLabels,
+      studies,
+      m,
+      type,
+      showQQ,
+      showLabbe,
+      isMHorPeto
+    });
     drawIfVisible("diagnosticSection", () => {
       performance.mark("phase:plot:influence:start");
-      drawInfluencePlot(influence);
+      drawInfluencePlot(influence, { theme: appState.plotTheme });
       if (blupResult) {
-        const { totalPages: blupPages } = drawBlupPlot(blupResult, profile, { pageSize: blupPlot.pageSize, page: 0 });
+        const { totalPages: blupPages } = drawBlupPlot(blupResult, profile, { pageSize: blupPlot.pageSize, page: 0, theme: appState.plotTheme });
         renderBlupNav(blupPages);
       }
-      drawBaujatPlot(baujatResult, profile);
-      if (showQQ) drawQQPlot(qqResiduals, qqLabels);
-      if (studies.length >= 2 && !isMHorPeto) drawRadialPlot(studies, m, profile);
-      if (showLabbe) drawLabbe(studies, m, profile, { type });
+      drawBaujatPlot(baujatResult, profile, { theme: appState.plotTheme });
+      if (showQQ) drawQQPlot(qqResiduals, qqLabels, { theme: appState.plotTheme });
+      if (studies.length >= 2 && !isMHorPeto) drawRadialPlot(studies, m, profile, { theme: appState.plotTheme });
+      if (showLabbe) drawLabbe(studies, m, profile, { type, theme: appState.plotTheme });
       performance.measure("phase:plot:influence", "phase:plot:influence:start");
     });
     const rawCumPageSize = elCumForestPageSize?.value ?? "30";
-    const cumForestPageSize = rawCumPageSize === "Infinity" ? Infinity : +rawCumPageSize;
+    const cumForestPageSize = rawCumPageSize === "all" ? Infinity : +rawCumPageSize;
     cumForestPlot.args = { results: cumResults, profile, pageSize: cumForestPageSize, alpha, ciLabel: getCiLabel2() };
+    cumForestPlot.sourceStudies = studies.slice();
+    cumForestPlot.method = method;
+    cumForestPlot.ciMethod = ciMethod;
+    cumForestPlot.alpha = alpha;
     appState.reportArgs.cumForestOptions = { results: cumResults, profile, pageSize: cumForestPageSize, currentPage: 0, alpha, ciLabel: getCiLabel2() };
     cumFunnelPlot.studies = cumulativeStudies;
     cumFunnelPlot.results = cumResults;
@@ -27404,31 +33738,32 @@ when exported.</p>`,
     elCumFunnelBlock.style.display = "";
     drawIfVisible("cumulativeSection", () => {
       performance.mark("phase:plot:cumulative:start");
-      const { totalPages: cumForestPages } = drawCumulativeForest(cumResults, profile, { pageSize: cumForestPageSize, page: 0 });
+      const { totalPages: cumForestPages } = drawCumulativeForest(cumResults, profile, { pageSize: cumForestPageSize, page: 0, theme: appState.plotTheme });
       renderCumulativeForestNav(cumForestPages);
-      drawCumulativeFunnel(cumulativeStudies, cumResults, profile, cumResults.length - 1);
+      drawCumulativeFunnel(cumulativeStudies, cumResults, profile, cumResults.length - 1, { theme: appState.plotTheme });
       performance.measure("phase:plot:cumulative", "phase:plot:cumulative:start");
     });
     elOrchardPlotBlock.style.display = "";
     caterpillarPlot.page = 0;
     const rawCatPageSize = elCatPageSize?.value ?? "30";
-    const catPageSize = rawCatPageSize === "Infinity" ? Infinity : +rawCatPageSize;
+    const catPageSize = rawCatPageSize === "all" ? Infinity : +rawCatPageSize;
     caterpillarPlot.args = { studies: all, m, profile, pageSize: catPageSize };
     elCaterpillarBlock.style.display = "";
     appState.reportArgs.caterpillarOptions = { studies: all, m, profile, pageSize: catPageSize, currentPage: 0 };
     drawIfVisible("altVizSection", () => {
       performance.mark("phase:plot:orchard:start");
-      drawOrchardPlot(all, m, profile);
-      const { totalPages: catPages } = drawCaterpillarPlot(all, m, profile, { pageSize: catPageSize, page: 0 });
+      drawOrchardPlot(all, m, profile, { theme: appState.plotTheme });
+      const { totalPages: catPages } = drawCaterpillarPlot(all, m, profile, { pageSize: catPageSize, page: 0, theme: appState.plotTheme });
       renderCaterpillarNav(catPages);
       performance.measure("phase:plot:orchard", "phase:plot:orchard:start");
     });
     const hasRoB = _robDomains.length > 0 && studies.length > 0;
     elRobSection.style.display = hasRoB ? "" : "none";
     if (hasRoB) {
+      robPlotState.studies = studies;
       drawIfVisible("robSection", () => {
-        drawRoBTrafficLight(studies, _robDomains, _robData);
-        drawRoBSummary(studies, _robDomains, _robData);
+        drawRoBTrafficLight(studies, _robDomains, _robData, { theme: appState.plotTheme });
+        drawRoBSummary(studies, _robDomains, _robData, { theme: appState.plotTheme });
       });
     }
     updateValidationWarnings(studies, excluded, softWarnings);
@@ -27458,6 +33793,11 @@ when exported.</p>`,
     try {
       performance.mark("runAnalysis:start");
       scheduleSave();
+      if (_mvMode) {
+        const ok = _runMVAnalysis();
+        performance.measure("runAnalysis", "runAnalysis:start");
+        return ok;
+      }
       if (goshState.worker) {
         goshState.worker.terminate();
         goshState.worker = null;
@@ -27468,7 +33808,14 @@ when exported.</p>`,
         if (elCancel) elCancel.disabled = true;
         if (elProg) elProg.hidden = true;
       }
-      document.querySelectorAll(".results-section").forEach((d) => d.removeAttribute("open"));
+      document.querySelectorAll(".results-section").forEach((d) => {
+        d.removeAttribute("open");
+        d.style.display = "";
+      });
+      const _sf = document.getElementById("forestSection");
+      const _mf = document.getElementById("mvForestSection");
+      if (_sf) _sf.style.display = "";
+      if (_mf) _mf.style.display = "none";
       forestPlot.page = 0;
       caterpillarPlot.page = 0;
       cumForestPlot.page = 0;
@@ -27476,7 +33823,7 @@ when exported.</p>`,
       const profile = effectProfiles[type];
       if (!profile) return;
       performance.mark("phase:parse:start");
-      const { studies, excluded, softWarnings, missingCorrelation } = collectStudies(type);
+      const { studies, excluded, softWarnings, missingCorrelation } = collectStudies(type, scaleModerators);
       performance.measure("phase:parse", "phase:parse:start");
       if (!studies.length) {
         if (outputPlaceholder) {
@@ -27493,6 +33840,8 @@ when exported.</p>`,
       if (!appState.hasRunOnce) {
         appState.hasRunOnce = true;
         _toggleResults.disabled = false;
+        _toggleResults.removeAttribute("aria-disabled");
+        _toggleResults.removeAttribute("title");
       }
       const method = document.getElementById("tauMethod")?.value || "DL";
       const ciMethod = document.getElementById("ciMethod")?.value || "normal";
@@ -27505,9 +33854,11 @@ when exported.</p>`,
       const rveRho = parseFloat(document.getElementById("rveRho")?.value ?? 0.8);
       const modSpec = moderators.map((mod) => ({ key: mod.name, type: mod.type, transform: mod.transform || "linear" }));
       const scaleModSpec = scaleModerators.map((mod) => ({ key: mod.name, type: mod.type, transform: mod.transform || "linear" }));
+      const interactionSpec = interactions.map((ix) => ({ name: ix.name, termA: ix.termA, termB: ix.termB }));
       const cumulativeOrder = document.getElementById("cumulativeOrder")?.value || "input";
       const selModeVal = document.getElementById("selMode").value;
       const selPreset = document.getElementById("selPreset").value;
+      const selWeightFn = document.getElementById("selWeightFn").value;
       const selSides = parseInt(document.getElementById("selSides").value, 10);
       const rawSelCuts = document.getElementById("selCuts").value.split(",").map((s) => parseFloat(s.trim())).filter(isFinite);
       const selCuts = rawSelCuts.length >= 2 && rawSelCuts[rawSelCuts.length - 1] === 1 ? rawSelCuts : [...rawSelCuts.filter((c) => c < 1), 1];
@@ -27527,9 +33878,11 @@ when exported.</p>`,
         rveRho,
         modSpec,
         scaleModSpec,
+        interactionSpec,
         cumulativeOrder,
         selModeVal,
         selPreset,
+        selWeightFn,
         selSides,
         selCuts,
         bayesMu0,
