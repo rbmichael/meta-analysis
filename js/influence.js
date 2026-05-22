@@ -361,7 +361,7 @@ export function influenceDiagnostics(studies, method="DL", ciMethod="normal", al
     const highCookD    = cookD > 4 / n;
     const dffitsThresh = 3 * Math.sqrt(1 / (n - 1));
     const highDffits   = isFinite(DFFITS) && Math.abs(DFFITS) > dffitsThresh;
-    const highCovRatio = isFinite(covRatio) && covRatio > 1 + 1 / n;
+    const highCovRatio = isFinite(covRatio) && (covRatio > 1 + 1 / n || covRatio < 1 - 1 / n);
 
     return {
       label: study.label,

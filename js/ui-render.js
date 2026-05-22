@@ -1141,24 +1141,27 @@ export function buildInfluenceHTML(influence, isOpen = true) {
   const rows = influence.map(d => {
     const anyFlag  = d.outlier || d.influential || d.highLeverage || d.highCookD || d.highDffits || d.highCovRatio;
     const rowStyle = anyFlag ? "class='results-row-flagged'" : "";
-    const hatStyle      = d.highLeverage  ? " style='color:var(--color-warning);font-weight:bold;'" : "";
-    const cookStyle     = d.highCookD     ? " style='color:var(--color-warning);font-weight:bold;'" : "";
-    const dffitsStyle   = d.highDffits    ? " style='color:var(--color-warning);font-weight:bold;'" : "";
-    const covRatioStyle = d.highCovRatio  ? " style='color:var(--color-warning);font-weight:bold;'" : "";
+    const W = " style='color:var(--color-warning);font-weight:bold;'";
+    const stdResStyle   = d.outlier       ? W : "";
+    const dfbetaStyle   = d.influential   ? W : "";
+    const hatStyle      = d.highLeverage  ? W : "";
+    const cookStyle     = d.highCookD     ? W : "";
+    const dffitsStyle   = d.highDffits    ? W : "";
+    const covRatioStyle = d.highCovRatio  ? W : "";
     const flags = [
       d.outlier      ? "Outlier"      : "",
       d.influential  ? "Influential"  : "",
       d.highLeverage ? "Hi-Lev"       : "",
       d.highCookD    ? "Hi-Cook"      : "",
       d.highDffits   ? "Hi-DFFITS"    : "",
-      d.highCovRatio ? "Hi-CovRatio"  : "",
+      d.highCovRatio ? (d.covRatio < 1 ? "Lo-CovRatio" : "Hi-CovRatio") : "",
     ].filter(Boolean).join(", ");
     return `<tr ${rowStyle}>
       <td>${escapeHTML(d.label)}</td>
       <td>${isFinite(d.RE_loo)      ? fmt(d.RE_loo)      : "NA"}</td>
       <td>${isFinite(d.deltaTau2)   ? fmt(d.deltaTau2)   : "NA"}</td>
-      <td>${isFinite(d.stdResidual) ? fmt(d.stdResidual) : "NA"}</td>
-      <td>${isFinite(d.DFBETA)      ? fmt(d.DFBETA)      : "NA"}</td>
+      <td${stdResStyle}>${isFinite(d.stdResidual) ? fmt(d.stdResidual) : "NA"}</td>
+      <td${dfbetaStyle}>${isFinite(d.DFBETA)      ? fmt(d.DFBETA)      : "NA"}</td>
       <td${dffitsStyle}>${isFinite(d.DFFITS)     ? fmt(d.DFFITS)         : "NA"}</td>
       <td${covRatioStyle}>${isFinite(d.covRatio) ? d.covRatio.toFixed(3) : "NA"}</td>
       <td${hatStyle}>${isFinite(d.hat)   ? d.hat.toFixed(3)   : "NA"}</td>
@@ -1173,7 +1176,7 @@ export function buildInfluenceHTML(influence, isOpen = true) {
       <tr><th>Study</th><th>RE (LOO)</th><th>Δτ²</th><th>Std Residual</th><th>DFBETA</th><th>DFFITS${hBtn("diag.dffits")}</th><th>CovRatio${hBtn("diag.covratio")}</th><th>Hat</th><th>Cook's D</th><th>Flag</th></tr>
       ${rows}
     </table>
-    <small style="color:var(--fg-muted);">Thresholds: Hat &gt; ${fmt(2/k)} (= 2/k); Cook's D &gt; ${fmt(4/k)} (= 4/k); DFFITS &gt; ${fmt(dffitsThresh)} (= 3·√(1/(k−1))); CovRatio &gt; ${fmt(covRatioThresh)} (= 1+1/k)</small>
+    <small style="color:var(--fg-muted);">Thresholds: Hat &gt; ${fmt(2/k)} (= 2/k); Cook's D &gt; ${fmt(4/k)} (= 4/k); DFFITS &gt; ${fmt(dffitsThresh)} (= 3·√(1/(k−1))); CovRatio outside [${fmt(1 - 1/k)}, ${fmt(covRatioThresh)}] (= 1±1/k)</small>
   </details>`;
 }
 
