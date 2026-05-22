@@ -586,13 +586,21 @@ export function renderRegressionPanel(reg, method, ciMethod, kExcluded = 0, mods
 // ---------------- SENSITIVITY ANALYSIS PANEL ----------------
 
 export const TAU_METHOD_LABELS = {
-  DL:   "DerSimonian-Laird (DL)",
-  REML: "REML",
-  PM:   "Paule-Mandel (PM)",
-  ML:   "Maximum Likelihood (ML)",
-  HS:   "Hunter-Schmidt (HS)",
-  HE:   "Hedges (HE)",
-  SJ:   "Sidik-Jonkman (SJ)",
+  REML:   "REML",
+  DL:     "DerSimonian-Laird (DL)",
+  PM:     "Paule-Mandel (PM)",
+  ML:     "Maximum Likelihood (ML)",
+  EB:     "Empirical Bayes (EB)",
+  HE:     "Hedges (HE)",
+  HS:     "Hunter-Schmidt (HS)",
+  SJ:     "Sidik-Jonkman (SJ)",
+  GENQ:   "Generalized Q (GENQ)",
+  DLIT:   "Iterated DL (DLIT)",
+  PMM:    "Paule-Mandel Median (PMM)",
+  GENQM:  "Generalized Q Median (GENQM)",
+  SQGENQ: "Square-root GENQ (SQGENQ)",
+  HSk:    "Hunter-Schmidt corrected (HSk)",
+  EBLUP:  "EBLUP (= REML)",
 };
 
 function sensFv(v)  { return isFinite(v) ? v.toFixed(3) : "—"; }

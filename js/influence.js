@@ -507,14 +507,11 @@ export function leaveOneOut(studies, method = "DL", ciMethod = "normal", precomp
 // Runs the meta-analysis with every available τ² estimator and returns the
 // results side-by-side so the analyst can judge estimator sensitivity.
 //
-// Returns an array of 12 entries (one per method):
+// Returns an array of 15 entries (one per method):
 //   { method, estimate, lb, ub, tau2, i2 }
-// The first 8 ("DL" … "GENQ") are the standard UI-exposed methods.
-// The remaining 4 ("SQGENQ", "DLIT", "EBLUP", "HSk") are the non-UI
-// estimators documented above; they are included here so the comparison
-// panel can display a complete picture when all estimators are of interest.
+// Order mirrors the τ² dropdown in the UI (REML … EBLUP).
 export function estimatorComparison(studies, ciMethod = "normal") {
-  const methods = ["DL", "REML", "PM", "EB", "PMM", "GENQM", "ML", "HS", "HE", "SJ", "GENQ", "SQGENQ", "DLIT", "EBLUP", "HSk"];
+  const methods = ["REML", "DL", "PM", "ML", "EB", "HE", "HS", "SJ", "GENQ", "DLIT", "PMM", "GENQM", "SQGENQ", "HSk", "EBLUP"];
   return methods.map(method => {
     const m = meta(studies, method, ciMethod);
     return {
