@@ -1381,9 +1381,10 @@ function funnelDrawPeeseLines(svg, petpeese, studies, x, y, T, clipId) {
 }
 
 function funnelDrawAxesAndLabels(svg, x, y, margin, W, H, iW, iH, profile, borderClr, fgColor) {
+  const maxTicksX = Math.max(4, Math.floor(iW / 60));
   const axisX = svg.append("g")
     .attr("transform", `translate(0,${H - margin.bottom})`)
-    .call(d3.axisBottom(x).tickFormat(v => {
+    .call(d3.axisBottom(x).ticks(maxTicksX).tickFormat(v => {
       const t = profile.transform(v);
       return isFinite(t) ? +t.toFixed(3) : "";
     }));
@@ -2138,9 +2139,10 @@ export function drawCumulativeFunnel(cumulativeStudies, cumResults, profile, ste
   }
 
   // ---- Axes ----
+  const maxTicksX = Math.max(4, Math.floor(iW / 60));
   const axisX = svg.append("g")
     .attr("transform", `translate(0,${H - margin.bottom})`)
-    .call(d3.axisBottom(x).tickFormat(v => {
+    .call(d3.axisBottom(x).ticks(maxTicksX).tickFormat(v => {
       const t = profile.transform(v);
       return isFinite(t) ? +t.toFixed(3) : "";
     }));
