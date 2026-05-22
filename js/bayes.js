@@ -160,11 +160,15 @@ export function profileLikTau2(studies, opts = {}) {
   }
 
   // ---- Build grid from 0 to hi, compute shifted log-likelihood ----
+  // Uniform spacing in τ = √τ² so the curve is equally smooth in both display
+  // modes: in τ-space the points are evenly spread; in τ²-space the quadratic
+  // spacing provides finer resolution near 0 where the function is steepest.
   const grid = new Float64Array(nGrid);
   const ll   = new Float64Array(nGrid);
-  const step = hi / (nGrid - 1);
+  const stepTau = Math.sqrt(hi) / (nGrid - 1);
   for (let i = 0; i < nGrid; i++) {
-    const t  = i * step;
+    const tau = i * stepTau;
+    const t   = tau * tau;
     grid[i]  = t;
     ll[i]    = evalProfile(t) - lMax;   // shifted so peak = 0
   }
