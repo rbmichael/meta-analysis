@@ -218,8 +218,6 @@ export function pCurve(studies) {
 //   biasDetected      — p_bias < .05
 export function pUniform(studies, m) {
   const MIN_DENOM  = 1e-10;  // clamp denominator to avoid division by near-zero power
-  const SEARCH_LO  = -10;    // bisection search range for δ (covers any practical effect)
-  const SEARCH_HI  =  10;
 
   // ---- Step 1: significant studies ----
   const sig = studies
@@ -231,6 +229,13 @@ export function pUniform(studies, m) {
     .filter(d => 2 * (1 - normalCDF(d.z)) < 0.05);
 
   const k = sig.length;
+
+  // Search range: SEARCH_HI must exceed max(|yi|) over significant studies so that
+  // sumQ(SEARCH_HI) ≈ k (each qi → 1). The fixed value of 10 fails for unstandardised
+  // effect types (e.g. MD_paired) where |yi| can be much larger than 10.
+  const maxAbsYi = k > 0 ? Math.max(...sig.map(d => d.z * d.se)) : 0; // z*se = |yi|
+  const SEARCH_HI =  Math.max(10, maxAbsYi * 2);
+  const SEARCH_LO = -SEARCH_HI;
 
   // ---- Step 2: conditional quantile q_i(δ) for one study ----
   function qi(z, se, delta) {
