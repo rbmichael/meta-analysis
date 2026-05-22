@@ -56,7 +56,7 @@ export function getSoftWarnings(studyInput, type, label) {
 
 // Gather the current UI state into a versioned session object.
 // Schema is defined in session.js.
-export function gatherSessionState(mods, scaleMods, robState) {
+export function gatherSessionState(mods, scaleMods, ixs, robState) {
   const type    = document.getElementById("effectType").value;
   const profile = effectProfiles[type];
 
@@ -74,14 +74,19 @@ export function gatherSessionState(mods, scaleMods, robState) {
     bayesSigmaMu:    parseFloat(document.getElementById("bayesSigmaMu")?.value) ?? 1,
     bayesSigmaTau:   parseFloat(document.getElementById("bayesSigmaTau")?.value) ?? 0.5,
     // Vevea-Hedges selection model
-    selMode:         document.getElementById("selMode")?.value   ?? "sensitivity",
-    selPreset:       document.getElementById("selPreset")?.value ?? "mild1",
-    selSides:        document.getElementById("selSides")?.value  ?? "1",
-    selCuts:         document.getElementById("selCuts")?.value   ?? "0.025, 0.05, 0.10, 0.25, 0.50, 1.0",
+    selMode:         document.getElementById("selMode")?.value      ?? "sensitivity",
+    selPreset:       document.getElementById("selPreset")?.value    ?? "mild1",
+    selWeightFn:     document.getElementById("selWeightFn")?.value  ?? "stepfun",
+    selSides:        document.getElementById("selSides")?.value     ?? "1",
+    selCuts:         document.getElementById("selCuts")?.value      ?? "0.025, 0.05, 0.10, 0.25, 0.50, 1.0",
+    // Display / reporting settings
+    mccMethod:       document.getElementById("mccMethod")?.value    ?? "none",
+    rveRho:          parseFloat(document.getElementById("rveRho")?.value) || 0.8,
   };
 
   const savedModerators = mods.map(m => ({ name: m.name, type: m.type, transform: m.transform || "linear" }));
   const savedScaleModerators = scaleMods.map(m => ({ name: m.name, type: m.type, transform: m.transform || "linear" }));
+  const savedInteractions = (ixs ?? []).map(ix => ({ name: ix.name, termA: ix.termA, termB: ix.termB }));
 
   const studies = [];
   document.querySelectorAll("#inputTable tr").forEach((r, i) => {
@@ -108,5 +113,5 @@ export function gatherSessionState(mods, scaleMods, robState) {
     studies.push({ study, inputs: effectInputs, group, cluster, moderators: modValues });
   });
 
-  return buildSession(settings, savedModerators, studies, robState, savedScaleModerators);
+  return buildSession(settings, savedModerators, studies, robState, savedScaleModerators, savedInteractions);
 }

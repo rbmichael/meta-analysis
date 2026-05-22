@@ -125,8 +125,38 @@
 
 import { chiSquareCDF, normalQuantile } from "./utils.js";
 import { Z_95 } from "./constants.js";
-import { FOREST_THEMES } from "./forestThemes.js";
-import { rcsBasis } from "./analysis.js";
+import { PLOT_THEMES, ROB_COLORS, BW_DASHES, hashGroupLabel } from "./plotThemes.js";
+import { rcsBasis, validStudies } from "./analysis.js";
+
+// ── Plot style constants ──────────────────────────────────────────────────────
+// Centralised defaults for font sizes, margins, tooltip offsets, and label
+// character widths.  All plot functions consume these; override with a spread
+// when a plot genuinely needs a different value.
+
+const FONT_SIZE = {
+  title:       "12px",   // SVG-internal plot title
+  axisLabel:   "11px",   // axis labels (x/y legends)
+  tickLabel:   "10px",   // axis tick text
+  annot:       "9px",    // small in-plot annotations
+  legendLabel: "10px",   // legend text
+};
+
+// Standard margins for scatter / scatter-like plots (influence, baujat, labbe, qq, radial).
+const MARGIN_STD = { top: 30, right: 24, bottom: 52, left: 60 };
+
+// Margins for density / likelihood plots (profileLikTau2, bayesTau, bayesMu).
+const MARGIN_DENSITY = { top: 34, right: 24, bottom: 56, left: 66 };
+
+// Base margins for paginated row plots (caterpillar, blup, cumulative forest).
+// left is always computed dynamically per-plot and is not defined here.
+const MARGIN_FOREST_LIKE = { top: 28, right: 20, bottom: 46 };
+
+// Tooltip positioning offset from the cursor.
+const TOOLTIP_OFFSET = { x: 12, y: -24 };
+
+// Approximate character widths (px) at common font sizes — used for label
+// truncation.  Bold glyphs are ~10% wider than regular.
+const LABEL_CHAR_PX = { regular10: 6.5, bold10: 7.2, regular11: 7.0 };
 
 // ── Tooltip element (set once by ui.js on load) ───────────────────────────────
 // Decouples plot functions from the specific DOM ID "#tooltip".
@@ -173,9 +203,9 @@ function setSvgSize(sel, w, h) {
 //   fontSize    — optional font-size string (e.g. "10px") for tick labels
 //   fontFamily  — optional font-family string; used by themed forest plots
 function styleAxis(axisG, strokeColor, fillColor, fontSize, fontFamily) {
-  axisG.select(".domain").attr("stroke", strokeColor);
-  axisG.selectAll(".tick line").attr("stroke", strokeColor);
-  const tickText = axisG.selectAll(".tick text").attr("fill", fillColor);
+  axisG.select(".domain").style("stroke", strokeColor);
+  axisG.selectAll(".tick line").style("stroke", strokeColor);
+  const tickText = axisG.selectAll(".tick text").style("fill", fillColor);
   if (fontSize)   tickText.style("font-size",   fontSize);
   if (fontFamily) tickText.style("font-family", fontFamily);
 }
@@ -201,13 +231,102 @@ function paginate(arr, options = {}) {
 function attachTooltip(sel, htmlFn) {
   const tt = selTooltip();
   return sel
+    .attr("tabindex", 0)
+    .attr("role", "button")
     .on("mousemove", (event, d) => {
       tt.style("opacity", 1)
         .html(htmlFn(d))
-        .style("left", (event.pageX + 12) + "px")
-        .style("top",  (event.pageY - 28) + "px");
+        .style("left", (event.pageX + TOOLTIP_OFFSET.x) + "px")
+        .style("top",  (event.pageY + TOOLTIP_OFFSET.y) + "px");
     })
-    .on("mouseout", () => tt.style("opacity", 0));
+    .on("mouseout", () => tt.style("opacity", 0))
+    .on("focus", (event, d) => {
+      const rect = event.target.getBoundingClientRect();
+      tt.style("opacity", 1)
+        .html(htmlFn(d))
+        .style("left", (rect.right  + window.scrollX + TOOLTIP_OFFSET.x) + "px")
+        .style("top",  (rect.top   + window.scrollY + TOOLTIP_OFFSET.y) + "px");
+    })
+    .on("blur",    () => tt.style("opacity", 0))
+    .on("keydown", (event) => { if (event.key === "Escape") tt.style("opacity", 0); });
+}
+
+// truncateLabel(text, maxPx, fontPx, bold)
+// Returns text truncated to fit within maxPx using the LABEL_CHAR_PX widths.
+// Appends "…" when truncated.
+function truncateLabel(text, maxPx, fontPx = 10, bold = false) {
+  const charW = bold
+    ? LABEL_CHAR_PX.bold10
+    : (fontPx >= 11 ? LABEL_CHAR_PX.regular11 : LABEL_CHAR_PX.regular10);
+  const maxChars = Math.floor(maxPx / charW);
+  return text.length > maxChars ? text.slice(0, Math.max(1, maxChars - 1)) + "…" : text;
+}
+
+// drawNoDataPlaceholder(svg, w, h [, message [, T]])
+// Renders a centred muted "No data" message into a blank SVG.
+function drawNoDataPlaceholder(svg, w, h, message = "No data", T = null) {
+  svg.append("text")
+    .attr("x", w / 2).attr("y", h / 2)
+    .attr("text-anchor", "middle")
+    .attr("dominant-baseline", "middle")
+    .style("font-size", FONT_SIZE.axisLabel)
+    .style("font-style", "italic")
+    .attr("fill", T ? T.fgMuted : "var(--fg-muted)")
+    .text(message);
+}
+
+// formatTick(v [, transform])
+// Unified tick formatter: applies profile.transform when supplied, otherwise
+// uses d3's ".3~g" compact-notation formatter.
+function formatTick(v, transform) {
+  if (transform) {
+    const t = transform(v);
+    return isFinite(t) ? String(+t.toFixed(3)) : "";
+  }
+  return d3.format(".3~g")(v);
+}
+
+// Returns "#ffffff" or "#1a1a1a" based on WCAG relative luminance of fillHex.
+function getContrastFg(fillHex) {
+  const r = parseInt(fillHex.slice(1, 3), 16) / 255;
+  const g = parseInt(fillHex.slice(3, 5), 16) / 255;
+  const b = parseInt(fillHex.slice(5, 7), 16) / 255;
+  const lin = c => c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  const L = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+  return L > 0.179 ? "#1a1a1a" : "#ffffff";
+}
+
+// Returns {x, y} for the top-left corner of a legend box within inner-plot g-space.
+// corner: "tr" | "tl" | "br" | "bl"
+function placeLegend(iW, iH, lW, lH, corner = "tr", pad = 6) {
+  if (corner === "tr") return { x: iW - lW - pad, y: pad };
+  if (corner === "tl") return { x: pad, y: pad };
+  if (corner === "br") return { x: iW - lW - pad, y: iH - lH - pad };
+  return { x: pad, y: iH - lH - pad };
+}
+
+// initSvg(selector, ariaLabel)
+// Combines clearAndSelectSVG, aria-label attribute, and SVG <title> in one call.
+// Use instead of the clearAndSelectSVG + svg.attr("aria-label") pattern.
+function initSvg(selector, ariaLabel, T) {
+  const svg = clearAndSelectSVG(selector);
+  svg.attr("aria-label", ariaLabel);
+  svg.append("title").text(ariaLabel);
+  // Always write (or clear) background so switching back to default removes
+  // any inline bg left by a previous journal theme.  null = remove inline style.
+  svg.style("background", (T && T.bg !== "transparent") ? T.bg : null);
+  return svg;
+}
+
+// Returns a D3 symbol path string for BW-mode group differentiation.
+// groupIdx — 0-based group index (cycles through BW_MARKERS)
+// size     — approximate area in px² (default 64 ≈ r 5 circle)
+function bwSymbolPath(groupIdx, size = 64) {
+  const markers = [
+    d3.symbolCircle, d3.symbolSquare, d3.symbolTriangle,
+    d3.symbolDiamond, d3.symbolCross,
+  ];
+  return d3.symbol().type(markers[groupIdx % markers.length]).size(size)();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -234,7 +353,7 @@ function evalModBasis(x, transform, knots) {
 // ŷ(x) = β₀ + Σ_j β_{colIdxs[j]}·basis_j(x) + Σ_{other} β_i·wmean(X_i)
 //
 // mod: { name, type, transform }  (from ui.js moderators state)
-export function drawBubble(studies, reg, mod, container) {
+export function drawBubble(studies, reg, mod, container, options = {}) {
   const modName = mod.name;
   const transform = mod.transform || "linear";
   const W = 460, H = 340;
@@ -247,6 +366,8 @@ export function drawBubble(studies, reg, mod, container) {
   // Guard against any residual edge cases.
   const valid = studies.filter(s => isFinite(s[modName]) && isFinite(s.yi) && isFinite(s.vi));
   if (valid.length < 2) return;
+
+  const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
 
   const tau2  = isFinite(reg.tau2) ? reg.tau2 : 0;
   const wArr  = valid.map(s => 1 / (s.vi + tau2));
@@ -320,7 +441,14 @@ export function drawBubble(studies, reg, mod, container) {
   // ---- SVG ----
   const svg = setSvgSize(d3.select(container).append("svg")
     .attr("role", "img")
-    .attr("aria-label", _bubbleLabel), W, H);
+    .attr("aria-label", _bubbleLabel)
+    .style("background", T.bg !== "transparent" ? T.bg : ""), W, H);
+  svg.append("title").text(_bubbleLabel);
+  if (T.bg && T.bg !== "transparent") {
+    svg.insert("rect", ":first-child")
+      .attr("width", W).attr("height", H).attr("fill", T.bg);
+  }
+  svg.style("font-family", T.fontFamily);
   const g   = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
 
   // Zero line
@@ -329,7 +457,7 @@ export function drawBubble(studies, reg, mod, container) {
     g.append("line")
       .attr("x1", 0).attr("x2", iW)
       .attr("y1", yScale(0)).attr("y2", yScale(0))
-      .attr("stroke", "var(--border-hover)").attr("stroke-dasharray", "4,2");
+      .attr("stroke", T.borderGrid).attr("stroke-dasharray", "4,2");
   }
 
   // Prediction band + regression curve (band drawn first, behind curve)
@@ -347,7 +475,7 @@ export function drawBubble(studies, reg, mod, container) {
         .y1(x => { const f = fitAt(x); return yScale(f + crit * seAt(x)); });
       g.append("path")
         .datum(pts)
-        .attr("fill", "var(--accent-glow)")
+        .attr("fill", T.accentGlow)
         .attr("stroke", "none")
         .attr("d", area);
     }
@@ -357,14 +485,14 @@ export function drawBubble(studies, reg, mod, container) {
       g.append("line")
         .attr("x1", xScale(xl)).attr("y1", yScale(fitAt(xl)))
         .attr("x2", xScale(xr)).attr("y2", yScale(fitAt(xr)))
-        .attr("stroke", "var(--accent)").attr("stroke-width", 2);
+        .attr("stroke", T.accent).attr("stroke-width", 2);
     } else {
       // Smooth curve for nonlinear moderators
       const line = d3.line().x(x => xScale(x)).y(x => yScale(fitAt(x)));
       g.append("path")
         .datum(pts)
         .attr("fill", "none")
-        .attr("stroke", "var(--accent)").attr("stroke-width", 2)
+        .attr("stroke", T.accent).attr("stroke-width", 2)
         .attr("d", line);
     }
   }
@@ -377,32 +505,32 @@ export function drawBubble(studies, reg, mod, container) {
     .attr("cx", s => xScale(s[modName]))
     .attr("cy", s => yScale(s.yi))
     .attr("r",  (s, i) => Math.max(3, rMax * Math.sqrt(wArr[i] / wMax)))
-    .attr("fill",   "var(--bg-surface-hover)")
-    .attr("stroke", "var(--fg-subtle)")
+    .attr("fill",   T.bgSurfaceHover)
+    .attr("stroke", T.fgSubtle)
     .attr("stroke-width", 1.2)
     .on("mousemove", (event, s) => {
       const fitted = fitAt(s[modName]);
       tooltip.style("opacity", 1)
         .html(`<b>${s.label}</b><br>${modName}: ${s[modName]}<br>yi: ${s.yi.toFixed(3)}<br>ŷ: ${fitted.toFixed(3)}`)
-        .style("left", (event.pageX + 12) + "px")
-        .style("top",  (event.pageY - 24) + "px");
+        .style("left", (event.pageX + TOOLTIP_OFFSET.x) + "px")
+        .style("top",  (event.pageY + TOOLTIP_OFFSET.y) + "px");
     })
     .on("mouseout", () => tooltip.style("opacity", 0));
 
   // Axes
-  g.append("g").attr("transform", `translate(0,${iH})`).call(d3.axisBottom(xScale).ticks(5));
-  g.append("g").call(d3.axisLeft(yScale).ticks(5));
+  styleAxis(g.append("g").attr("transform", `translate(0,${iH})`).call(d3.axisBottom(xScale).ticks(5)), T.border, T.fgMuted, FONT_SIZE.tickLabel);
+  styleAxis(g.append("g").call(d3.axisLeft(yScale).ticks(5)), T.border, T.fgMuted, FONT_SIZE.tickLabel);
 
   // Axis labels
   g.append("text")
     .attr("x", iW / 2).attr("y", iH + 42)
-    .attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "12px")
+    .attr("text-anchor", "middle").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.axisLabel)
     .text(modName);
 
   g.append("text")
     .attr("transform", "rotate(-90)")
     .attr("x", -iH / 2).attr("y", -44)
-    .attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "12px")
+    .attr("text-anchor", "middle").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.axisLabel)
     .text("Effect size (yi)");
 
   // Title — for linear show β; for nonlinear show transform label
@@ -412,7 +540,7 @@ export function drawBubble(studies, reg, mod, container) {
     : transform.startsWith("rcs") ? `RCS (${transform.slice(3)} knots)` : transform;
   svg.append("text")
     .attr("x", margin.left + iW / 2).attr("y", 16)
-    .attr("text-anchor", "middle").attr("fill", "var(--fg)").style("font-size", "13px")
+    .attr("text-anchor", "middle").attr("fill", T.fg).style("font-size", FONT_SIZE.title)
     .text(`${modName}  (${titleSuffix})`);
 }
 
@@ -436,7 +564,7 @@ export function drawBubble(studies, reg, mod, container) {
 // For nonlinear moderators the straight line is replaced by a smooth curve.
 //
 // mod: { name, type, transform }  (from ui.js moderators state)
-export function drawPartialResidualBubble(studies, reg, mod, container) {
+export function drawPartialResidualBubble(studies, reg, mod, container, options = {}) {
   const modName = mod.name;
   const transform = mod.transform || "linear";
   const _partialLabel = `Partial-residual bubble plot for ${modName}`;
@@ -447,6 +575,8 @@ export function drawPartialResidualBubble(studies, reg, mod, container) {
 
   const valid = studies.filter(s => isFinite(s[modName]) && isFinite(s.yi) && isFinite(s.vi));
   if (valid.length < 2) return;
+
+  const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
 
   const tau2 = isFinite(reg.tau2) ? reg.tau2 : 0;
   const wArr = valid.map(s => 1 / (s.vi + tau2));
@@ -535,7 +665,14 @@ export function drawPartialResidualBubble(studies, reg, mod, container) {
   // ---- SVG ----
   const svg = setSvgSize(d3.select(container).append("svg")
     .attr("role", "img")
-    .attr("aria-label", _partialLabel), W, H);
+    .attr("aria-label", _partialLabel)
+    .style("background", T.bg !== "transparent" ? T.bg : ""), W, H);
+  svg.append("title").text(_partialLabel);
+  if (T.bg && T.bg !== "transparent") {
+    svg.insert("rect", ":first-child")
+      .attr("width", W).attr("height", H).attr("fill", T.bg);
+  }
+  svg.style("font-family", T.fontFamily);
   const g   = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
 
   // Zero line
@@ -544,7 +681,7 @@ export function drawPartialResidualBubble(studies, reg, mod, container) {
     g.append("line")
       .attr("x1", 0).attr("x2", iW)
       .attr("y1", yScale(0)).attr("y2", yScale(0))
-      .attr("stroke", "var(--border-hover)").attr("stroke-dasharray", "4,2");
+      .attr("stroke", T.borderGrid).attr("stroke-dasharray", "4,2");
   }
 
   // Prediction band + regression curve
@@ -561,7 +698,7 @@ export function drawPartialResidualBubble(studies, reg, mod, container) {
         .y1(x => { const f = partialFitAt(x); return yScale(f + crit * seAt(x)); });
       g.append("path")
         .datum(pts)
-        .attr("fill", "var(--accent-glow)")
+        .attr("fill", T.accentGlow)
         .attr("stroke", "none")
         .attr("d", area);
     }
@@ -570,13 +707,13 @@ export function drawPartialResidualBubble(studies, reg, mod, container) {
       g.append("line")
         .attr("x1", xScale(xl)).attr("y1", yScale(partialFitAt(xl)))
         .attr("x2", xScale(xr)).attr("y2", yScale(partialFitAt(xr)))
-        .attr("stroke", "var(--accent)").attr("stroke-width", 2);
+        .attr("stroke", T.accent).attr("stroke-width", 2);
     } else {
       const line = d3.line().x(x => xScale(x)).y(x => yScale(partialFitAt(x)));
       g.append("path")
         .datum(pts)
         .attr("fill", "none")
-        .attr("stroke", "var(--accent)").attr("stroke-width", 2)
+        .attr("stroke", T.accent).attr("stroke-width", 2)
         .attr("d", line);
     }
   }
@@ -589,33 +726,33 @@ export function drawPartialResidualBubble(studies, reg, mod, container) {
     .attr("cx", s => xScale(s[modName]))
     .attr("cy", (_, i) => yScale(partialY[i]))
     .attr("r",  (_, i) => Math.max(3, rMax * Math.sqrt(wArr[i] / wMax)))
-    .attr("fill",   "var(--bg-surface-hover)")
-    .attr("stroke", "var(--fg-subtle)")
+    .attr("fill",   T.bgSurfaceHover)
+    .attr("stroke", T.fgSubtle)
     .attr("stroke-width", 1.2)
     .on("mousemove", (event, s) => {
       const i      = valid.indexOf(s);
       const fitted = partialFitAt(s[modName]);
       tooltip.style("opacity", 1)
         .html(`<b>${s.label}</b><br>${modName}: ${s[modName]}<br>y*: ${partialY[i].toFixed(3)}<br>ŷ: ${fitted.toFixed(3)}`)
-        .style("left", (event.pageX + 12) + "px")
-        .style("top",  (event.pageY - 24) + "px");
+        .style("left", (event.pageX + TOOLTIP_OFFSET.x) + "px")
+        .style("top",  (event.pageY + TOOLTIP_OFFSET.y) + "px");
     })
     .on("mouseout", () => tooltip.style("opacity", 0));
 
   // Axes
-  g.append("g").attr("transform", `translate(0,${iH})`).call(d3.axisBottom(xScale).ticks(5));
-  g.append("g").call(d3.axisLeft(yScale).ticks(5));
+  styleAxis(g.append("g").attr("transform", `translate(0,${iH})`).call(d3.axisBottom(xScale).ticks(5)), T.border, T.fgMuted, FONT_SIZE.tickLabel);
+  styleAxis(g.append("g").call(d3.axisLeft(yScale).ticks(5)), T.border, T.fgMuted, FONT_SIZE.tickLabel);
 
   // Axis labels
   g.append("text")
     .attr("x", iW / 2).attr("y", iH + 42)
-    .attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "12px")
+    .attr("text-anchor", "middle").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.axisLabel)
     .text(modName);
 
   g.append("text")
     .attr("transform", "rotate(-90)")
     .attr("x", -iH / 2).attr("y", -44)
-    .attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "12px")
+    .attr("text-anchor", "middle").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.axisLabel)
     .text("Partial residual");
 
   // Title
@@ -625,7 +762,7 @@ export function drawPartialResidualBubble(studies, reg, mod, container) {
     : (transform.startsWith("rcs") ? `RCS (${transform.slice(3)} knots)` : transform) + ", partial residual";
   svg.append("text")
     .attr("x", margin.left + iW / 2).attr("y", 16)
-    .attr("text-anchor", "middle").attr("fill", "var(--fg)").style("font-size", "13px")
+    .attr("text-anchor", "middle").attr("fill", T.fg).style("font-size", FONT_SIZE.title)
     .text(`${modName}  (${titleSuffix})`);
 }
 
@@ -700,24 +837,23 @@ function forestDrawStudyRows(ctx, pageStudies, studies, studyCrit, widthCiLabel,
     .attr("stroke-width", T.ciStrokeWidth);
 
   // Weight boxes — wMax uses the full study array so sizes are comparable across pages.
-  svg.selectAll("rect")
-    .data(pageStudies).enter().append("rect")
-    .attr("x", d => x(d.yi) - Math.sqrt(d.w / wMax) * L.boxHalf * 2)
-    .attr("y", d => yPos.get(d) - L.boxHalf)
-    .attr("width",  d => Math.sqrt(d.w / wMax) * L.boxHalf * 4)
-    .attr("height", L.boxHalf * 2)
-    .attr("fill",   d => d.filled ? "none"    : T.accent)
-    .attr("stroke", d => d.filled ? T.fgMuted : T.accent)
-    .on("mousemove", (e, d) => {
+  attachTooltip(
+    svg.selectAll("rect")
+      .data(pageStudies).enter().append("rect")
+      .attr("x", d => x(d.yi) - Math.sqrt(d.w / wMax) * L.boxHalf * 2)
+      .attr("y", d => yPos.get(d) - L.boxHalf)
+      .attr("width",  d => Math.sqrt(d.w / wMax) * L.boxHalf * 4)
+      .attr("height", L.boxHalf * 2)
+      .attr("fill",   d => d.filled ? "none"    : T.accent)
+      .attr("stroke", d => d.filled ? T.fgMuted : T.accent),
+    d => {
       const ef_disp = profile.transform(d.yi);
       const lo_disp = profile.transform(d.yi - studyCrit * d.se);
       const hi_disp = profile.transform(d.yi + studyCrit * d.se);
-      tooltip.style("opacity", 1)
-        .html(`${d.label}<br>Effect: ${isFinite(ef_disp) ? ef_disp.toFixed(3) : "NA"}<br>` +
-              `${widthCiLabel} (${ciMethodLabel}): ${isFinite(lo_disp) ? lo_disp.toFixed(3) : "NA"} – ${isFinite(hi_disp) ? hi_disp.toFixed(3) : "NA"}`)
-        .style("left", (e.pageX + 10) + "px").style("top", (e.pageY - 20) + "px");
-    })
-    .on("mouseout", () => tooltip.style("opacity", 0));
+      return `${d.label}<br>Effect: ${isFinite(ef_disp) ? ef_disp.toFixed(3) : "NA"}<br>` +
+        `${widthCiLabel} (${ciMethodLabel}): ${isFinite(lo_disp) ? lo_disp.toFixed(3) : "NA"} – ${isFinite(hi_disp) ? hi_disp.toFixed(3) : "NA"}`;
+    }
+  );
 }
 
 function forestDrawStudyLabels(ctx, pageStudies, yPos, charW) {
@@ -790,19 +926,21 @@ function forestDrawColumnHeaders(ctx, separators, hY) {
     .attr("y1", L.studyY0).attr("y2", L.studyY1 + 12)
     .attr("stroke", T.border);
 
-  // Group separators — a full-width rule + bold group label per boundary
+  // Group headers — label at top of the header row, rule at bottom.
+  // Every group (including the first) gets its own header.
   separators.forEach(({ y: sepTop, group }) => {
-    const ruleY = sepTop + L.sepH - 3;
+    const labelY = sepTop + Math.round(L.sepH * 0.72);
+    const ruleY  = sepTop + L.sepH - 1;
+    svg.append("text")
+      .attr("x", 8).attr("y", labelY)
+      .attr("text-anchor", "start")
+      .style("font-size", L.labelFontSize).style("font-family", T.fontFamily)
+      .style("font-weight", "bold")
+      .attr("fill", T.groupLabelFill).text(group);
     svg.append("line")
       .attr("x1", 0).attr("x2", L.totalW)
       .attr("y1", ruleY).attr("y2", ruleY)
       .attr("stroke", T.groupSepStroke);
-    svg.append("text")
-      .attr("x", L.labelW - 8).attr("y", ruleY - 3)
-      .attr("text-anchor", "end")
-      .style("font-size", L.annotFontSize).style("font-family", T.fontFamily)
-      .style("font-weight", "bold")
-      .attr("fill", T.groupLabelFill).text(group);
   });
 }
 
@@ -899,21 +1037,24 @@ function forestDrawPredictionInterval(ctx, m, showRE) {
 function forestDrawHetSummary(ctx, m) {
   const { svg, L, T } = ctx;
   const Qp = (isFinite(m.Q) && isFinite(m.df) && m.df > 0) ? 1 - chiSquareCDF(m.Q, m.df) : NaN;
-  svg.append("text")
+  { const t = svg.append("text")
     .attr("x", L.labelW + L.plotW / 2).attr("y", L.hetY).attr("text-anchor", "middle")
     .style("font-size", L.annotFontSize).style("font-family", T.fontFamily)
-    .attr("fill", T.fgMuted)
-    .text(`Heterogeneity:  τ² = ${isFinite(m.tau2) ? m.tau2.toFixed(3) : "NA"},` +
-          `  I² = ${isFinite(m.I2) ? m.I2.toFixed(1) + "%" : "NA"},` +
-          `  Q(df=${isFinite(m.df) ? m.df : "NA"}) = ${isFinite(m.Q) ? m.Q.toFixed(2) : "NA"},` +
-          `  p = ${isFinite(Qp) ? (Qp < 0.001 ? "< 0.001" : Qp.toFixed(3)) : "NA"}`);
+    .attr("fill", T.fgMuted);
+  t.append("tspan").text(`Heterogeneity:  τ² = ${isFinite(m.tau2) ? m.tau2.toFixed(3) : "NA"},  `);
+  t.append("tspan").style("font-style", "italic").text("I");
+  t.append("tspan").text(`² = ${isFinite(m.I2) ? m.I2.toFixed(1) + "%" : "NA"},  `);
+  t.append("tspan").style("font-style", "italic").text("Q");
+  t.append("tspan").text(`(df=${isFinite(m.df) ? m.df : "NA"}) = ${isFinite(m.Q) ? m.Q.toFixed(2) : "NA"},  `);
+  t.append("tspan").style("font-style", "italic").text("p");
+  t.append("tspan").text(` = ${isFinite(Qp) ? (Qp < 0.001 ? "< .001" : Qp.toFixed(3)) : "NA"}`); }
 }
 
 export function drawForest(studies, m, options = {}) {
-  const svg       = clearAndSelectSVG("#forestPlot");
+  const T         = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
+  const svg       = initSvg("#forestPlot", "Forest plot", T);
   const ciMethod  = options.ciMethod || "normal";
   const profile   = options.profile  || { transform: x => x };
-  const T         = FOREST_THEMES[options.theme] ?? FOREST_THEMES["default"];
 
   const pooledDisplay = options.pooledDisplay || "RE";
   const showFE   = pooledDisplay === "FE"   || pooledDisplay === "Both";
@@ -926,9 +1067,37 @@ export function drawForest(studies, m, options = {}) {
   const feCiLow  = isFinite(m.FE) ? m.FE - studyCrit * m.seFE : NaN;
   const feCiHigh = isFinite(m.FE) ? m.FE + studyCrit * m.seFE : NaN;
 
+  // Accessible description with key stats for screen readers
+  { const re_t = isFinite(m.RE) ? profile.transform(m.RE) : NaN;
+    const desc = [
+      `k = ${studies.length} studies`,
+      isFinite(re_t) ? `RE = ${(+re_t.toFixed(3))} [${(+profile.transform(m.ciLow).toFixed(3))}, ${(+profile.transform(m.ciHigh).toFixed(3))}]` : null,
+      isFinite(m.tau2) ? `τ² = ${m.tau2.toFixed(4)}` : null,
+      isFinite(m.I2)   ? `I² = ${m.I2.toFixed(1)}%`  : null,
+    ].filter(Boolean).join("; ");
+    svg.append("desc").text(desc); }
+
   const ciMethodLabel = {
     normal: "Normal (z)", t: "t-distribution", KH: "Knapp-Hartung", PL: "Profile Likelihood"
   }[ciMethod] || ciMethod;
+
+  // Sort by group (stable, preserves first-seen group order and within-group input order).
+  // Ungrouped studies sort to the end. This is plot-only — the input table is unchanged.
+  const hasGroups = studies.some(d => d.group && d.group.trim() !== "");
+  if (hasGroups) {
+    const _groupOrder = [];
+    const _seen = new Set();
+    studies.forEach(d => {
+      const g = (d.group || "").trim();
+      if (g && !_seen.has(g)) { _groupOrder.push(g); _seen.add(g); }
+    });
+    studies = [...studies].sort((a, b) => {
+      const ga = (a.group || "").trim(), gb = (b.group || "").trim();
+      const ia = ga ? _groupOrder.indexOf(ga) : Infinity;
+      const ib = gb ? _groupOrder.indexOf(gb) : Infinity;
+      return ia - ib;
+    });
+  }
 
   const { page, totalPages, items: pageStudies, isLastPage } = paginate(studies, options);
 
@@ -942,28 +1111,28 @@ export function drawForest(studies, m, options = {}) {
   L.plotW = 440; L.annotW = 240; L.headerH = 28;
 
   const _charW          = parseFloat(L.labelFontSize) >= 11 ? 6.5 : parseFloat(L.labelFontSize) >= 10 ? 5.9 : 5.3;
+  const _charW_bold     = parseFloat(L.labelFontSize) >= 11 ? 7.2 : parseFloat(L.labelFontSize) >= 10 ? 6.5 : 5.8;
   const _diamondLabelLen = showBoth ? 6 : 14;
-  const _maxLen         = Math.min(Math.max(
-    studies.reduce((a, d) => Math.max(a, (d.label || "").length), 0),
-    studies.reduce((a, d) => Math.max(a, (d.group || "").length), 0),
-    _diamondLabelLen
-  ), 28);
-  L.labelW  = Math.max(70, Math.min(180, Math.ceil(_maxLen * _charW) + 16));
+  const _maxStudyPx     = studies.reduce((a, d) => Math.max(a, (d.label || "").length * _charW), 0);
+  const _maxGroupPx     = studies.reduce((a, d) => Math.max(a, (d.group || "").length * _charW_bold), 0);
+  const _maxPx          = Math.min(Math.max(_maxStudyPx, _maxGroupPx, _diamondLabelLen * _charW), 28 * _charW);
+  L.labelW  = Math.max(70, Math.min(180, Math.ceil(_maxPx) + 16));
   L.totalW  = L.labelW + L.plotW + L.annotW;
   L.summaryH = isLastPage ? (showBoth ? 152 : 132) : 52;
   L.studyY0  = L.headerH;
-  L.sepH     = Math.max(14, L.rowH);
+  L.sepH     = Math.max(18, L.rowH);
 
   // ----------- Y-POSITION MAP -----------
   // Keyed on study object identity (Map), not label string, so duplicate or
   // empty labels don't collide and overwrite each other.
-  const hasGroups = studies.some(d => d.group && d.group.trim() !== "");
+  // hasGroups already computed above. Each group (including the first) gets a
+  // header separator row; within-group order is preserved from the sorted array.
   const yPos       = new Map();
   const separators = [];
   let cursor = L.studyY0, prevGroup = null;
   pageStudies.forEach(d => {
     const group = (d.group || "").trim();
-    if (hasGroups && prevGroup !== null && group !== prevGroup) {
+    if (hasGroups && group !== prevGroup) {
       separators.push({ y: cursor, group });
       cursor += L.sepH;
     }
@@ -975,6 +1144,7 @@ export function drawForest(studies, m, options = {}) {
   L.studyY1    = cursor;
   L.totalH     = L.studyY1 + L.summaryH;
   L.axisY      = L.totalH - 26;
+  if (isLastPage && profile.isLog) L.totalH += 14;
   L.feDiamondY = L.studyY1 + 18;
   L.diamondY   = showBoth ? L.studyY1 + 36 : L.studyY1 + 18;
   L.piY        = showBoth ? L.studyY1 + 60 : L.studyY1 + 44;
@@ -1024,16 +1194,17 @@ export function drawForest(studies, m, options = {}) {
   forestDrawStudyRows(ctx, pageStudies, studies, studyCrit, widthCiLabel, ciMethodLabel, yPos);
 
   // ----------- AXIS -----------
+  const maxTicks = Math.max(4, Math.floor(L.plotW / 60));
   const axisG = svg.append("g")
     .attr("transform", `translate(0,${L.axisY})`)
-    .call(d3.axisBottom(x).tickFormat(v => {
+    .call(d3.axisBottom(x).ticks(maxTicks).tickFormat(v => {
       const d = profile.transform(v);
       return isFinite(d) ? +d.toFixed(3) : "";
     }));
   styleAxis(axisG, T.border, T.fgMuted, null, T.fontFamily);
   if (profile.isLog) {
     svg.append("text")
-      .attr("x", L.labelW + L.plotW / 2).attr("y", L.axisY + 22)
+      .attr("x", L.labelW + L.plotW / 2).attr("y", L.axisY + 36)
       .attr("text-anchor", "middle")
       .style("font-size", L.annotFontSize).style("font-family", T.fontFamily)
       .attr("fill", T.fgMuted).text("(log scale)");
@@ -1042,12 +1213,17 @@ export function drawForest(studies, m, options = {}) {
   forestDrawStudyLabels(ctx, pageStudies, yPos, _charW);
 
   if (!isLastPage) {
+    // Continuation band: shaded rect + chevrons make the page break clearly visible
+    svg.append("rect")
+      .attr("x", L.labelW + 4).attr("y", L.studyY1 + 4)
+      .attr("width", L.plotW - 8).attr("height", 26)
+      .attr("fill", T.bgSurface).attr("rx", 3);
     svg.append("text")
-      .attr("x", L.labelW + L.plotW / 2).attr("y", L.studyY1 + 18)
+      .attr("x", L.labelW + L.plotW / 2).attr("y", L.studyY1 + 21)
       .attr("text-anchor", "middle")
       .style("font-size", L.annotFontSize).style("font-family", T.fontFamily)
       .attr("fill", T.fgMuted)
-      .text(`— page ${page + 1} of ${totalPages}, continued —`);
+      .text(`▼  page ${page + 1} of ${totalPages}, continued  ▼`);
     svg.attr("height", L.totalH);
     return { totalPages };
   }
@@ -1081,7 +1257,25 @@ export function drawForest(studies, m, options = {}) {
 
 // ---- Funnel sub-renderers ----
 
-function funnelDrawContours(svg, bgColor, BANDS, bandPath, W, H) {
+function funnelDrawContours(svg, bgColor, BANDS, bandPath, W, H, T) {
+  if (BANDS.some(b => b.fill && b.fill.startsWith("url(#hatch-"))) {
+    const defs = svg.append("defs");
+    [
+      { id: "hatch-dense",  size: 4  },
+      { id: "hatch-medium", size: 8  },
+      { id: "hatch-sparse", size: 16 },
+    ].forEach(({ id, size }) => {
+      const pat = defs.append("pattern")
+        .attr("id", id)
+        .attr("patternUnits", "userSpaceOnUse")
+        .attr("width", size).attr("height", size)
+        .attr("patternTransform", "rotate(45)");
+      pat.append("line")
+        .attr("x1", 0).attr("y1", 0)
+        .attr("x2", 0).attr("y2", size)
+        .attr("stroke", T.fgMuted).attr("stroke-width", 1);
+    });
+  }
   svg.append("rect")
     .attr("width", W).attr("height", H)
     .attr("fill", bgColor);
@@ -1093,7 +1287,7 @@ function funnelDrawContours(svg, bgColor, BANDS, bandPath, W, H) {
   });
 }
 
-function funnelDrawFunnelArms(svg, x, y, seMax, xHalf, borderClr, m, contours, isDark) {
+function funnelDrawFunnelArms(svg, x, y, seMax, xHalf, borderClr, m, T) {
   const armRight = Math.min( 1.96 * seMax,  xHalf);
   const armLeft  = Math.max(-1.96 * seMax, -xHalf);
   svg.append("line")
@@ -1104,11 +1298,10 @@ function funnelDrawFunnelArms(svg, x, y, seMax, xHalf, borderClr, m, contours, i
     .attr("x1", x(0)).attr("y1", y(0))
     .attr("x2", x(armLeft)).attr("y2", y(seMax))
     .attr("stroke", borderClr).attr("stroke-width", 1).attr("stroke-dasharray", "4,2");
-  const reLineColor = contours ? (isDark ? "#5588cc" : "#2255aa") : "var(--accent)";
   svg.append("line")
     .attr("x1", x(m.RE)).attr("x2", x(m.RE))
     .attr("y1", y(0)).attr("y2", y(seMax))
-    .attr("stroke", reLineColor)
+    .attr("stroke", T.accent)
     .attr("stroke-dasharray", "4");
 }
 
@@ -1122,7 +1315,7 @@ function funnelDrawStudies(svg, studies, x, y, dotFill, dotStroke, dotFillImp, d
     .attr("stroke", d => d.filled ? dotStrImp  : dotStroke);
 }
 
-function funnelDrawEggerLine(svg, egger, studies, x, y, contours, isDark) {
+function funnelDrawEggerLine(svg, egger, studies, x, y, T, clipId) {
   if (!egger || !isFinite(egger.slope)) return;
   const seMin = d3.min(studies, d => d.se);
   const seMax = d3.max(studies, d => d.se);
@@ -1131,13 +1324,14 @@ function funnelDrawEggerLine(svg, egger, studies, x, y, contours, isDark) {
     yi_hat: egger.intercept * se + egger.slope,
     se,
   }));
-  const eggerColor = contours ? (isDark ? "#cc4444" : "#aa2222") : "var(--color-error)";
+  const eggerDash = T.useBwShapes ? BW_DASHES[2] : "4,2";
   svg.append("path")
     .datum(lineData)
     .attr("fill", "none")
-    .attr("stroke", eggerColor)
+    .attr("stroke", T.colorError)
     .attr("stroke-width", 2)
-    .attr("stroke-dasharray", "4,2")
+    .attr("stroke-dasharray", eggerDash)
+    .attr("clip-path", `url(#${clipId})`)
     .attr("d", d3.line().x(d => x(d.yi_hat)).y(d => y(d.se)));
 }
 
@@ -1145,47 +1339,52 @@ function funnelDrawEggerLine(svg, egger, studies, x, y, contours, isDark) {
 // FAT-PET is a straight line: yi = fat.intercept + fat.slope * se
 // PEESE is a parabola:        yi = peese.intercept + peese.slope * vi = peese.intercept + peese.slope * se²
 // The active estimate (usePeese → solid, inactive → dashed at lower opacity).
-function funnelDrawPeeseLines(svg, petpeese, studies, x, y, contours, isDark) {
+function funnelDrawPeeseLines(svg, petpeese, studies, x, y, T, clipId) {
   const { fat, peese, usePeese } = petpeese;
   const seMin = d3.min(studies, d => d.se);
   const seMax = d3.max(studies, d => d.se);
   if (seMin === seMax) return;
   const pts = d3.range(0, 51).map(i => seMin + (i / 50) * (seMax - seMin));
 
-  const petColor   = contours ? (isDark ? "#cc9944" : "#996600") : "var(--color-warning)";
-  const peeseColor = contours ? (isDark ? "#44cc88" : "#007744") : "var(--color-success, #22aa66)";
+  const petColor   = T.colorWarning;
+  const peeseColor = T.colorSuccess;
 
   // FAT-PET line
   if (isFinite(fat.intercept) && isFinite(fat.slope)) {
     const lineData = pts.map(se => ({ yi_hat: fat.intercept + fat.slope * se, se }));
+    const fatDash = (T.useBwShapes && usePeese) ? BW_DASHES[1] : (usePeese ? "3,3" : "none");
     svg.append("path")
       .datum(lineData)
       .attr("fill", "none")
       .attr("stroke", petColor)
       .attr("stroke-width", usePeese ? 1.5 : 2)
-      .attr("stroke-dasharray", usePeese ? "3,3" : "none")
+      .attr("stroke-dasharray", fatDash)
       .attr("opacity", usePeese ? 0.55 : 1)
+      .attr("clip-path", `url(#${clipId})`)
       .attr("d", d3.line().x(d => x(d.yi_hat)).y(d => y(d.se)));
   }
 
   // PEESE curve (parabola in se, i.e. linear in vi)
   if (isFinite(peese.intercept) && isFinite(peese.slope)) {
     const curveData = pts.map(se => ({ yi_hat: peese.intercept + peese.slope * se * se, se }));
+    const peeseDash = (T.useBwShapes && !usePeese) ? BW_DASHES[3] : (usePeese ? "none" : "3,3");
     svg.append("path")
       .datum(curveData)
       .attr("fill", "none")
       .attr("stroke", peeseColor)
       .attr("stroke-width", usePeese ? 2 : 1.5)
-      .attr("stroke-dasharray", usePeese ? "none" : "3,3")
+      .attr("stroke-dasharray", peeseDash)
       .attr("opacity", usePeese ? 1 : 0.55)
+      .attr("clip-path", `url(#${clipId})`)
       .attr("d", d3.line().x(d => x(d.yi_hat)).y(d => y(d.se)));
   }
 }
 
 function funnelDrawAxesAndLabels(svg, x, y, margin, W, H, iW, iH, profile, borderClr, fgColor) {
+  const maxTicksX = Math.max(4, Math.floor(iW / 60));
   const axisX = svg.append("g")
     .attr("transform", `translate(0,${H - margin.bottom})`)
-    .call(d3.axisBottom(x).tickFormat(v => {
+    .call(d3.axisBottom(x).ticks(maxTicksX).tickFormat(v => {
       const t = profile.transform(v);
       return isFinite(t) ? +t.toFixed(3) : "";
     }));
@@ -1199,7 +1398,7 @@ function funnelDrawAxesAndLabels(svg, x, y, margin, W, H, iW, iH, profile, borde
     .attr("y", H - 4)
     .attr("text-anchor", "middle")
     .attr("fill", fgColor)
-    .style("font-size", "10px")
+    .style("font-size", FONT_SIZE.tickLabel)
     .text(profile.label + (profile.isLog ? " (log scale)" : ""));
   svg.append("text")
     .attr("transform", "rotate(-90)")
@@ -1207,19 +1406,19 @@ function funnelDrawAxesAndLabels(svg, x, y, margin, W, H, iW, iH, profile, borde
     .attr("y", 12)
     .attr("text-anchor", "middle")
     .attr("fill", fgColor)
-    .style("font-size", "11px")
+    .style("font-size", FONT_SIZE.axisLabel)
     .text("Standard Error");
 }
 
-function funnelDrawLegend(svg, W, margin, BANDS, isDark) {
+function funnelDrawLegend(svg, W, margin, BANDS, T, bgColor) {
   const LW  = 120, LH  = 76;
   const PAD = 6,   ROW = 16, SW = 10;
   const legendX = W - margin.right - LW - 8;
   const legendY = margin.top + 8;
   const lg = svg.append("g").attr("transform", `translate(${legendX},${legendY})`);
-  const legendBg     = isDark ? "#1e1e1e" : "#ffffff";
-  const legendBorder = isDark ? "#444444" : "#cccccc";
-  const legendFg     = isDark ? "#cccccc" : "#333333";
+  const legendBg     = T.bg !== "transparent" ? T.bg : (bgColor || T.bgSurface);
+  const legendBorder = T.border;
+  const legendFg     = T.fgMuted;
   const innermostFill = BANDS[BANDS.length - 1].fill;
   lg.append("rect")
     .attr("width", LW).attr("height", LH)
@@ -1236,12 +1435,60 @@ function funnelDrawLegend(svg, W, margin, BANDS, isDark) {
       .attr("fill", fill)
       .attr("stroke", needBorder ? legendBorder : "none")
       .attr("stroke-width", 1);
-    lg.append("text")
+    { const tl = lg.append("text")
       .attr("x", PAD + SW + 5)
       .attr("y", rowY + ROW / 2 + 3)
       .attr("fill", legendFg)
-      .style("font-size", "9px")
-      .text(label);
+      .style("font-size", FONT_SIZE.annot);
+    const pi = label.indexOf("p");
+    if (pi >= 0) {
+      if (pi > 0) tl.append("tspan").text(label.slice(0, pi));
+      tl.append("tspan").style("font-style", "italic").text("p");
+      tl.append("tspan").text(label.slice(pi + 1));
+    } else { tl.text(label); } }
+  });
+}
+
+// Small legend for Egger / FAT-PET / PEESE lines, shown whenever any are drawn.
+// Positioned upper-right; shifted down by contourLegendH when contour legend is also present.
+function funnelDrawBiasLegend(svg, W, margin, egger, petpeese, contours, T, bgColor) {
+  const items = [];
+  if (egger && isFinite(egger.slope)) {
+    items.push({ color: T.colorError,   dash: T.useBwShapes ? BW_DASHES[2] : "4,2", w: 2,   label: "Egger" });
+  }
+  if (petpeese) {
+    const { fat, peese, usePeese } = petpeese;
+    if (isFinite(fat?.intercept) && isFinite(fat?.slope)) {
+      const d = (T.useBwShapes && usePeese) ? BW_DASHES[1] : (usePeese ? "3,3" : "none");
+      items.push({ color: T.colorWarning, dash: d, w: usePeese ? 1.5 : 2, label: "FAT-PET" });
+    }
+    if (isFinite(peese?.intercept) && isFinite(peese?.slope)) {
+      const d = (T.useBwShapes && !usePeese) ? BW_DASHES[3] : (usePeese ? "none" : "3,3");
+      items.push({ color: T.colorSuccess, dash: d, w: usePeese ? 2 : 1.5, label: "PEESE" });
+    }
+  }
+  if (items.length === 0) return;
+
+  const PAD = 7, ROW = 16, SW = 20;
+  const LW  = 92;
+  const LH  = PAD * 2 + items.length * ROW;
+  const legendX = W - margin.right - LW - 6;
+  const legendY = margin.top + 8 + (contours ? 84 : 0);  // shift below contour legend if present
+
+  const lg = svg.append("g").attr("transform", `translate(${legendX},${legendY})`);
+  const bgFill = T.bg && T.bg !== "transparent" ? T.bg : (bgColor || T.bgSurface || "#111");
+  lg.append("rect").attr("width", LW).attr("height", LH)
+    .attr("fill", bgFill).attr("stroke", T.border).attr("rx", 3);
+  items.forEach(({ color, dash, w, label }, i) => {
+    const iy = PAD + i * ROW + ROW / 2;
+    lg.append("line")
+      .attr("x1", PAD).attr("y1", iy).attr("x2", PAD + SW).attr("y2", iy)
+      .attr("stroke", color).attr("stroke-width", w)
+      .attr("stroke-dasharray", dash || "none");
+    lg.append("text")
+      .attr("x", PAD + SW + 5).attr("y", iy + 4)
+      .attr("fill", T.fgMuted).style("font-size", "9px")
+      .style("font-family", T.fontFamily).text(label);
   });
 }
 
@@ -1277,16 +1524,27 @@ function funnelDrawLegend(svg, W, margin, BANDS, isDark) {
 export function drawFunnel(studies, m, profile, options = {}) {
   const egger = options.egger ?? null;
   profile = profile || { transform: x => x };
-  const svg = clearAndSelectSVG("#funnelPlot");
+  const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
+  const svg = initSvg("#funnelPlot", "Funnel plot", T);
 
-  if (!studies || studies.length === 0) return;
+  if (!studies || studies.length === 0) { drawNoDataPlaceholder(svg, +svg.attr("width") || 500, +svg.attr("height") || 400); return; }
 
   // ---- Layout ----
-  const margin = { top: 20, right: 20, bottom: 52, left: 60 };
+  const margin = { top: 34, right: 20, bottom: 52, left: 60 };
   const W = 500, H = 400;
-  const iW = W - margin.left - margin.right;   // 420
-  const iH = H - margin.top  - margin.bottom;  // 328
+  const iW = W - margin.left - margin.right;
+  const iH = H - margin.top  - margin.bottom;
   setSvgSize(svg, W, H);
+  const _funnelClipId = "funnel-plot-clip";
+  svg.append("defs").append("clipPath").attr("id", _funnelClipId)
+    .append("rect")
+    .attr("x", margin.left).attr("y", margin.top)
+    .attr("width", iW).attr("height", iH);
+  if (T.bg && T.bg !== "transparent") {
+    svg.insert("rect", ":first-child")
+      .attr("width", W).attr("height", H).attr("fill", T.bg);
+  }
+  svg.style("font-family", T.fontFamily);
 
   const seMax = d3.max(studies, d => d.se);
 
@@ -1304,17 +1562,16 @@ export function drawFunnel(studies, m, profile, options = {}) {
     .domain([seMax, 0])
     .range([H - margin.bottom, margin.top]);
 
-  // ---- Colour scheme — fixed values in contour mode, CSS vars otherwise ----
+  // ---- Colour scheme ----
   const contours = !!options.contours;
-  const isDark   = contours && document.documentElement.dataset.theme !== "light";
+  const isDark   = T.bg === "transparent" && contours && document.documentElement.dataset.theme !== "light";
 
-  const bgColor    = contours ? (isDark ? "#121212" : "#ffffff") : null;
-  const fgColor    = contours ? (isDark ? "#cccccc" : "#333333") : "var(--fg-muted)";
-  const borderClr  = contours ? (isDark ? "#666666" : "#888888") : "var(--border-hover)";
-  const dotFill    = contours ? (isDark ? "#aaaaaa" : "#444444") : "var(--bg-surface-hover)";
-  const dotStroke  = contours ? (isDark ? "#cccccc" : "#333333") : "var(--fg-subtle)";
+  const fgColor    = T.fgMuted;
+  const borderClr  = T.border;
+  const dotFill    = T.bgSurfaceHover;
+  const dotStroke  = T.fgSubtle;
   const dotFillImp = "none";
-  const dotStrImp  = contours ? (isDark ? "#777777" : "#777777") : "var(--fg-muted)";
+  const dotStrImp  = T.fgMuted;
 
   // ---- Contour bands (Peters et al. 2008) ----
   // Rendered outermost-to-innermost; each polygon overwrites the inner region
@@ -1356,29 +1613,63 @@ export function drawFunnel(studies, m, profile, options = {}) {
   // Significance bands: { z-critical, fill colour, legend label }
   // z values are for a two-tailed test: Φ⁻¹(1 − p/2)
   //   p = 0.01 → z = 2.576,  p = 0.05 → z = 1.960,  p = 0.10 → z = 1.645
-  // Light: bands progress white → dark-gray outward (high significance = darker).
-  // Dark:  bands progress near-black → light-gray outward (high significance = lighter).
-  const BANDS = isDark
-    ? [
-        { z: Infinity, fill: "#505050", label: "p < 0.01"        },
-        { z: 2.576,    fill: "#383838", label: "0.01 ≤ p < 0.05" },
-        { z: 1.960,    fill: "#252525", label: "0.05 ≤ p < 0.10" },
-        { z: 1.645,    fill: "#161616", label: "p ≥ 0.10"         },
-      ]
-    : [
-        { z: Infinity, fill: "#a0a0a0", label: "p < 0.01"        },
-        { z: 2.576,    fill: "#c4c4c4", label: "0.01 ≤ p < 0.05" },
-        { z: 1.960,    fill: "#e4e4e4", label: "0.05 ≤ p < 0.10" },
-        { z: 1.645,    fill: "#ffffff", label: "p ≥ 0.10"         },
+  let bgColor = null;
+  let BANDS = [];
+  if (contours) {
+    if (T.useBwShapes) {
+      bgColor = T.bg;
+      BANDS = [
+        { z: Infinity, fill: "url(#hatch-dense)",  label: "p < 0.01"        },
+        { z: 2.576,    fill: "url(#hatch-medium)", label: "0.01 ≤ p < 0.05" },
+        { z: 1.960,    fill: "url(#hatch-sparse)", label: "0.05 ≤ p < 0.10" },
+        { z: 1.645,    fill: T.bg,                 label: "p ≥ 0.10"         },
       ];
+    } else if (T.bg === "transparent") {
+      // Resolve actual page background from CSS so the opaque rect behind the
+      // bands blends seamlessly, and the innermost band can match it exactly.
+      bgColor = getComputedStyle(document.documentElement)
+        .getPropertyValue("--bg-base").trim() || (isDark ? "#0d0d0d" : "#ffffff");
+      BANDS = isDark
+        ? [
+            { z: Infinity, fill: "#606060", label: "p < 0.01"        },
+            { z: 2.576,    fill: "#404040", label: "0.01 ≤ p < 0.05" },
+            { z: 1.960,    fill: "#262626", label: "0.05 ≤ p < 0.10" },
+            { z: 1.645,    fill: bgColor,   label: "p ≥ 0.10"         },
+          ]
+        : [
+            { z: Infinity, fill: "#a0a0a0", label: "p < 0.01"        },
+            { z: 2.576,    fill: "#c4c4c4", label: "0.01 ≤ p < 0.05" },
+            { z: 1.960,    fill: "#e4e4e4", label: "0.05 ≤ p < 0.10" },
+            { z: 1.645,    fill: bgColor,   label: "p ≥ 0.10"         },
+          ];
+    } else {
+      bgColor = T.bg;
+      BANDS = [
+        { z: Infinity, fill: T.contour01 ?? "#a8a8a8", label: "p < 0.01"        },
+        { z: 2.576,    fill: T.contour05 ?? "#c8c8c8", label: "0.01 ≤ p < 0.05" },
+        { z: 1.960,    fill: T.contour10 ?? "#e4e4e4", label: "0.05 ≤ p < 0.10" },
+        { z: 1.645,    fill: T.bg,                     label: "p ≥ 0.10"         },
+      ];
+    }
+  }
 
-  if (contours) funnelDrawContours(svg, bgColor, BANDS, bandPath, W, H);
-  funnelDrawFunnelArms(svg, x, y, seMax, xHalf, borderClr, m, contours, isDark);
+  if (contours) funnelDrawContours(svg, bgColor, BANDS, bandPath, W, H, T);
+  funnelDrawFunnelArms(svg, x, y, seMax, xHalf, borderClr, m, T);
   funnelDrawStudies(svg, studies, x, y, dotFill, dotStroke, dotFillImp, dotStrImp);
-  funnelDrawEggerLine(svg, egger, studies, x, y, contours, isDark);
-  if (options.petpeese) funnelDrawPeeseLines(svg, options.petpeese, studies, x, y, contours, isDark);
+  // FAT-PET is algebraically identical to Egger (same WLS regression, swapped labels),
+  // so draw the Egger line only when FAT-PET is not present.
+  if (!options.petpeese) funnelDrawEggerLine(svg, egger, studies, x, y, T, _funnelClipId);
+  if (options.petpeese) funnelDrawPeeseLines(svg, options.petpeese, studies, x, y, T, _funnelClipId);
   funnelDrawAxesAndLabels(svg, x, y, margin, W, H, iW, iH, profile, borderClr, fgColor);
-  if (contours) funnelDrawLegend(svg, W, margin, BANDS, isDark);
+  if (contours) funnelDrawLegend(svg, W, margin, BANDS, T, bgColor);
+  // Pass egger to legend only when FAT-PET is absent (they're the same line).
+  funnelDrawBiasLegend(svg, W, margin, options.petpeese ? null : egger, options.petpeese ?? null, contours, T, bgColor);
+
+  svg.append("text")
+    .attr("x", margin.left + iW / 2).attr("y", 18)
+    .attr("text-anchor", "middle").attr("fill", T.fg)
+    .style("font-size", FONT_SIZE.title).style("font-weight", "600")
+    .text(`Funnel plot — k = ${studies.length}`);
 }
 
 // ================= INFLUENCE PLOT (hat vs Cook's D) =================
@@ -1391,10 +1682,11 @@ export function drawFunnel(studies, m, profile, options = {}) {
 // Parameters:
 //   influence — array from influenceDiagnostics(), each entry has
 //               { label, hat, cookD, highLeverage, highCookD }
-export function drawInfluencePlot(influence) {
-  const svg = clearAndSelectSVG("#influencePlot");
+export function drawInfluencePlot(influence, options = {}) {
+  const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
+  const svg = initSvg("#influencePlot", "Influence plot", T);
 
-  if (!influence || influence.length < 2) return;
+  if (!influence || influence.length < 2) { drawNoDataPlaceholder(svg, +svg.attr("width") || 500, +svg.attr("height") || 400, influence?.length === 1 ? "Need ≥ 2 studies" : "No data"); return; }
 
   const k = influence.length;
   const hatThresh  = 2 / k;
@@ -1407,6 +1699,12 @@ export function drawInfluencePlot(influence) {
   const iH = H - margin.top  - margin.bottom;
 
   const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+
+  if (T.bg && T.bg !== "transparent") {
+    svg.insert("rect", ":first-child")
+      .attr("width", W).attr("height", H).attr("fill", T.bg);
+  }
+  svg.style("font-family", T.fontFamily);
 
   // Scales — pad 10% beyond the max on each axis so points aren't clipped
   const xMax = Math.max(d3.max(influence, d => d.hat),  hatThresh  * 1.5);
@@ -1422,7 +1720,8 @@ export function drawInfluencePlot(influence) {
     g.append("rect")
       .attr("x", x2).attr("y", 0)
       .attr("width", iW - x2).attr("height", y2)
-      .attr("fill", "rgba(224,96,96,0.08)");
+      .attr("fill", T.useBwShapes ? "#000000" : T.colorError)
+      .attr("fill-opacity", T.useBwShapes ? 0.05 : 0.08);
   }
 
   // ----------- REFERENCE LINES -----------
@@ -1430,34 +1729,63 @@ export function drawInfluencePlot(influence) {
     g.append("line")
       .attr("x1", x(hatThresh)).attr("x2", x(hatThresh))
       .attr("y1", 0).attr("y2", iH)
-      .attr("stroke", "var(--border-hover)").attr("stroke-dasharray", "4,3")
+      .attr("stroke", T.border).attr("stroke-dasharray", "4,3")
       .append("title").text(`Hat threshold = 2/k = ${hatThresh.toFixed(3)}`);
   }
   if (isFinite(y(cookThresh))) {
     g.append("line")
       .attr("x1", 0).attr("x2", iW)
       .attr("y1", y(cookThresh)).attr("y2", y(cookThresh))
-      .attr("stroke", "var(--border-hover)").attr("stroke-dasharray", "4,3")
+      .attr("stroke", T.border).attr("stroke-dasharray", "4,3")
       .append("title").text(`Cook's D threshold = 4/k = ${cookThresh.toFixed(3)}`);
   }
 
   // ----------- POINTS -----------
-  attachTooltip(
-    g.selectAll("circle")
-      .data(influence)
-      .enter().append("circle")
-      .attr("cx", d => x(d.hat))
-      .attr("cy", d => y(d.cookD))
-      .attr("r", 5)
-      .attr("fill", d => (d.highLeverage && d.highCookD) ? "var(--color-error)"
-                        : (d.highLeverage || d.highCookD) ? "var(--color-warning)"
-                        : "var(--bg-surface-hover)")
-      .attr("stroke", d => (d.highLeverage && d.highCookD) ? "var(--color-error)"
-                          : (d.highLeverage || d.highCookD) ? "var(--color-warning)"
-                          : "var(--fg-muted)")
-      .attr("opacity", 0.85),
-    d => `${d.label}<br>Hat: ${d.hat.toFixed(4)}<br>Cook's D: ${d.cookD.toFixed(4)}`
-  );
+  if (T.useBwShapes) {
+    const symbolSize = 60;
+    attachTooltip(
+      g.selectAll("path.inf-pt")
+        .data(influence)
+        .enter().append("path")
+        .attr("class", "inf-pt")
+        .attr("transform", d => `translate(${x(d.hat)},${y(d.cookD)})`)
+        .attr("d", d => {
+          if (d.highLeverage && d.highCookD) return d3.symbol().type(d3.symbolDiamond).size(symbolSize)();
+          if (d.highLeverage) return d3.symbol().type(d3.symbolSquare).size(symbolSize)();
+          if (d.highCookD)    return d3.symbol().type(d3.symbolTriangle).size(symbolSize)();
+          return d3.symbol().type(d3.symbolCircle).size(symbolSize)();
+        })
+        .attr("fill", d => {
+          if (d.highLeverage && d.highCookD) return "black";
+          if (d.highLeverage || d.highCookD) return T.fgSubtle;
+          return T.bgSurfaceHover;
+        })
+        .attr("stroke", d => {
+          if (d.highLeverage && d.highCookD) return "black";
+          if (d.highLeverage || d.highCookD) return T.fgSubtle;
+          return T.fgMuted;
+        })
+        .attr("opacity", 0.85),
+      d => `${d.label}<br>Hat: ${d.hat.toFixed(4)}<br>Cook's D: ${d.cookD.toFixed(4)}`
+    );
+  } else {
+    attachTooltip(
+      g.selectAll("circle")
+        .data(influence)
+        .enter().append("circle")
+        .attr("cx", d => x(d.hat))
+        .attr("cy", d => y(d.cookD))
+        .attr("r", 5)
+        .attr("fill", d => (d.highLeverage && d.highCookD) ? T.colorError
+                          : (d.highLeverage || d.highCookD) ? T.colorWarning
+                          : T.bgSurfaceHover)
+        .attr("stroke", d => (d.highLeverage && d.highCookD) ? T.colorError
+                            : (d.highLeverage || d.highCookD) ? T.colorWarning
+                            : T.fgMuted)
+        .attr("opacity", 0.85),
+      d => `${d.label}<br>Hat: ${d.hat.toFixed(4)}<br>Cook's D: ${d.cookD.toFixed(4)}`
+    );
+  }
 
   // ----------- LABELS (only flagged studies) -----------
   g.selectAll("text.pt-label")
@@ -1466,31 +1794,35 @@ export function drawInfluencePlot(influence) {
     .attr("class", "pt-label")
     .attr("x", d => x(d.hat) + 7)
     .attr("y", d => y(d.cookD) + 4)
-    .style("font-size", "10px")
-    .attr("fill", d => (d.highLeverage && d.highCookD) ? "var(--color-error)" : "var(--color-warning)")
+    .style("font-size", FONT_SIZE.tickLabel)
+    .attr("fill", d => T.useBwShapes ? T.fg
+                      : (d.highLeverage && d.highCookD) ? T.colorError : T.colorWarning)
     .text(d => d.label);
 
   // ----------- AXES -----------
-  g.append("g").attr("transform", `translate(0,${iH})`).call(d3.axisBottom(x).ticks(5));
-  g.append("g").call(d3.axisLeft(y).ticks(5));
+  styleAxis(g.append("g").attr("transform", `translate(0,${iH})`).call(d3.axisBottom(x).ticks(5)), T.border, T.fgMuted, FONT_SIZE.tickLabel);
+  styleAxis(g.append("g").call(d3.axisLeft(y).ticks(5)), T.border, T.fgMuted, FONT_SIZE.tickLabel);
 
   // Axis labels
   g.append("text")
     .attr("x", iW / 2).attr("y", iH + 38)
-    .attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "12px")
+    .attr("text-anchor", "middle").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.title)
     .text("Hat value (leverage)");
 
   g.append("text")
     .attr("transform", "rotate(-90)")
     .attr("x", -iH / 2).attr("y", -46)
-    .attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "12px")
+    .attr("text-anchor", "middle").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.title)
     .text("Cook's distance");
 
   // Title
+  const titleText = T.useBwShapes
+    ? "Influence plot  (◇ = both flags, □/△ = one flag)"
+    : "Influence plot  (red = both flags, orange = one flag)";
   svg.append("text")
     .attr("x", margin.left + iW / 2).attr("y", 18)
-    .attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "12px")
-    .text("Influence plot  (red = both flags, orange = one flag)");
+    .attr("text-anchor", "middle").attr("fill", T.fg).style("font-size", FONT_SIZE.axisLabel)
+    .text(titleText);
 }
 
 // ================= CUMULATIVE FOREST =================
@@ -1502,12 +1834,15 @@ export function drawInfluencePlot(influence) {
 //   cumulativeResults — array from cumulativeMeta(), already in order
 //   profile           — effect-type profile with .label, .transform
 export function drawCumulativeForest(cumulativeResults, profile, options = {}) {
-  const svg = clearAndSelectSVG("#cumulativePlot");
+  const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
+  const svg = initSvg("#cumulativePlot", "Cumulative forest plot", T);
 
-  if (!cumulativeResults || cumulativeResults.length === 0) return;
+  if (!cumulativeResults || cumulativeResults.length === 0) { drawNoDataPlaceholder(svg, +svg.attr("width") || 580, +svg.attr("height") || 400); return; }
 
-  const rowH   = 22;
-  const margin = { top: 40, right: 90, bottom: 46, left: 200 };
+  const rowH       = 22;
+  const maxLabelLen = cumulativeResults.reduce((m, r) => Math.max(m, (r.addedLabel || "").length), 0);
+  const leftMargin  = Math.max(70, Math.min(220, Math.ceil(maxLabelLen * LABEL_CHAR_PX.regular11) + 14));
+  const margin = { top: 40, right: 90, bottom: 46, left: leftMargin };
   const plotW  = 580;
   const totalW = margin.left + plotW + margin.right;
 
@@ -1528,6 +1863,12 @@ export function drawCumulativeForest(cumulativeResults, profile, options = {}) {
 
   setSvgSize(svg, totalW, totalH);
 
+  if (T.bg && T.bg !== "transparent") {
+    svg.insert("rect", ":first-child")
+      .attr("width", totalW).attr("height", totalH).attr("fill", T.bg);
+  }
+  svg.style("font-family", T.fontFamily);
+
   // X scale across all display-scale CI bounds (all rows, not just this page)
   const allX = rows.flatMap(r => [r.lo_disp, r.re_disp, r.hi_disp]).filter(isFinite);
   const [xMin, xMax] = d3.extent(allX);
@@ -1544,8 +1885,8 @@ export function drawCumulativeForest(cumulativeResults, profile, options = {}) {
   svg.append("text")
     .attr("x", margin.left + plotW / 2).attr("y", 20)
     .attr("text-anchor", "middle")
-    .attr("fill", "var(--fg-muted)")
-    .style("font-size", "12px")
+    .attr("fill", T.fg)
+    .style("font-size", FONT_SIZE.axisLabel)
     .text(`Cumulative meta-analysis${pageNote}`);
 
   // Null reference line (at the back-transformed 0 — e.g. 0 for MD, 1 for OR/RR)
@@ -1554,7 +1895,7 @@ export function drawCumulativeForest(cumulativeResults, profile, options = {}) {
     g.append("line")
       .attr("x1", xScale(nullDisp)).attr("x2", xScale(nullDisp))
       .attr("y1", 0).attr("y2", pk * rowH)
-      .attr("stroke", "var(--border-hover)").attr("stroke-dasharray", "4,3").attr("opacity", 0.6);
+      .attr("stroke", T.border).attr("stroke-dasharray", "4,3").attr("opacity", 0.6);
   }
 
   // One row per cumulative step (current page only)
@@ -1562,13 +1903,13 @@ export function drawCumulativeForest(cumulativeResults, profile, options = {}) {
     const cy          = (i + 0.5) * rowH;
     const globalIdx   = page * pageSize + i;
     const isLast      = globalIdx === k - 1;
-    const colour = isLast ? "var(--color-warning)" : "var(--fg-subtle)";
+    const colour = isLast ? T.colorWarning : T.fgSubtle;
 
     // Label (left panel)
     svg.append("text")
       .attr("x", margin.left - 8).attr("y", margin.top + cy + 4)
       .attr("text-anchor", "end")
-      .style("font-size", "11px")
+      .style("font-size", FONT_SIZE.axisLabel)
       .attr("fill", colour)
       .text(r.addedLabel);
 
@@ -1604,7 +1945,7 @@ export function drawCumulativeForest(cumulativeResults, profile, options = {}) {
     if (isFinite(r.re_disp)) {
       svg.append("text")
         .attr("x", margin.left + plotW + 6).attr("y", margin.top + cy + 4)
-        .style("font-size", "10px")
+        .style("font-size", FONT_SIZE.tickLabel)
         .attr("fill", colour)
         .text(r.re_disp.toFixed(3));
     }
@@ -1630,13 +1971,13 @@ export function drawCumulativeForest(cumulativeResults, profile, options = {}) {
   const axisG = g.append("g")
     .attr("transform", `translate(0,${pk * rowH + 6})`)
     .call(d3.axisBottom(xScale).ticks(5));
-  styleAxis(axisG, "var(--border-hover)", "var(--fg-muted)");
+  styleAxis(axisG, T.border, T.fgMuted);
 
   // X axis label
   svg.append("text")
     .attr("x", margin.left + plotW / 2).attr("y", totalH - 6)
     .attr("text-anchor", "middle")
-    .style("font-size", "11px").attr("fill", "var(--fg-muted)")
+    .style("font-size", FONT_SIZE.axisLabel).attr("fill", T.fgMuted)
     .text(profile.label);
 
   return { totalPages };
@@ -1668,11 +2009,12 @@ export function drawCumulativeForest(cumulativeResults, profile, options = {}) {
 //
 // No Egger line is drawn (per-step Egger is unreliable for small k and the
 // purpose here is visual inspection of the evolving dot pattern).
-export function drawCumulativeFunnel(cumulativeStudies, cumResults, profile, stepIdx) {
+export function drawCumulativeFunnel(cumulativeStudies, cumResults, profile, stepIdx, options = {}) {
   profile = profile || { transform: x => x };
-  const svg = clearAndSelectSVG("#cumulativeFunnelPlot");
+  const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
+  const svg = initSvg("#cumulativeFunnelPlot", "Cumulative funnel plot", T);
 
-  if (!cumulativeStudies || cumulativeStudies.length === 0 || !cumResults) return;
+  if (!cumulativeStudies || cumulativeStudies.length === 0 || !cumResults) { drawNoDataPlaceholder(svg, +svg.attr("width") || 500, +svg.attr("height") || 420); return; }
 
   const k     = cumulativeStudies.length;
   const step  = Math.max(0, Math.min(stepIdx, k - 1));
@@ -1684,6 +2026,12 @@ export function drawCumulativeFunnel(cumulativeStudies, cumResults, profile, ste
   const iW = W - margin.left - margin.right;
   const iH = H - margin.top  - margin.bottom;
   setSvgSize(svg, W, H);
+
+  if (T.bg && T.bg !== "transparent") {
+    svg.insert("rect", ":first-child")
+      .attr("width", W).attr("height", H).attr("fill", T.bg);
+  }
+  svg.style("font-family", T.fontFamily);
 
   const tooltip = selTooltip();
 
@@ -1702,8 +2050,8 @@ export function drawCumulativeFunnel(cumulativeStudies, cumResults, profile, ste
     .domain([seMax, 0])
     .range([H - margin.bottom, margin.top]);
 
-  const fgColor  = "var(--fg-muted)";
-  const borderClr = "var(--border-hover)";
+  const fgColor   = T.fgMuted;
+  const borderClr = T.border;
 
   // ---- Funnel triangle (anchored at null = 0, global seMax) ----
   const armRight = Math.min( 1.96 * seMax,  xHalf);
@@ -1728,7 +2076,7 @@ export function drawCumulativeFunnel(cumulativeStudies, cumResults, profile, ste
     svg.append("line")
       .attr("x1", x(cur.RE)).attr("x2", x(cur.RE))
       .attr("y1", y(0)).attr("y2", y(seMax))
-      .attr("stroke", "var(--accent)")
+      .attr("stroke", T.accent)
       .attr("stroke-dasharray", "4");
   }
 
@@ -1738,39 +2086,29 @@ export function drawCumulativeFunnel(cumulativeStudies, cumResults, profile, ste
   const prevStudies = cumulativeStudies.slice(0, step);
   const newStudy    = cumulativeStudies[step];
 
-  svg.selectAll(".dot-prev")
-    .data(prevStudies).enter().append("circle")
-    .attr("class", "dot-prev")
-    .attr("cx", d => x(d.yi))
-    .attr("cy", d => y(d.se))
-    .attr("r", 4)
-    .attr("fill",   "var(--bg-surface-hover)")
-    .attr("stroke", "var(--fg-subtle)")
-    .on("mousemove", (event, d) => {
-      tooltip.style("opacity", 1)
-        .html(`<b>${d.label ?? ""}</b><br>` +
-              `yi = ${d.yi.toFixed(3)}&nbsp; SE = ${d.se.toFixed(3)}`)
-        .style("left", (event.pageX + 12) + "px")
-        .style("top",  (event.pageY - 28) + "px");
-    })
-    .on("mouseout", () => tooltip.style("opacity", 0));
+  attachTooltip(
+    svg.selectAll(".dot-prev")
+      .data(prevStudies).enter().append("circle")
+      .attr("class", "dot-prev")
+      .attr("cx", d => x(d.yi))
+      .attr("cy", d => y(d.se))
+      .attr("r", 4)
+      .attr("fill",   T.bgSurfaceHover)
+      .attr("stroke", T.fgSubtle),
+    d => `<b>${d.label ?? ""}</b><br>yi = ${d.yi.toFixed(3)}&nbsp; SE = ${d.se.toFixed(3)}`
+  );
 
   if (newStudy) {
-    svg.append("circle")
-      .attr("cx", x(newStudy.yi))
-      .attr("cy", y(newStudy.se))
-      .attr("r", 5)
-      .attr("fill",         "var(--accent-light)")
-      .attr("stroke",       "var(--accent)")
-      .attr("stroke-width", 1.5)
-      .on("mousemove", (event) => {
-        tooltip.style("opacity", 1)
-          .html(`<b>${newStudy.label ?? ""}</b> ← added at this step<br>` +
-                `yi = ${newStudy.yi.toFixed(3)}&nbsp; SE = ${newStudy.se.toFixed(3)}`)
-          .style("left", (event.pageX + 12) + "px")
-          .style("top",  (event.pageY - 28) + "px");
-      })
-      .on("mouseout", () => tooltip.style("opacity", 0));
+    attachTooltip(
+      svg.append("circle").datum(newStudy)
+        .attr("cx", x(newStudy.yi))
+        .attr("cy", y(newStudy.se))
+        .attr("r", 5)
+        .attr("fill",         T.accentLight)
+        .attr("stroke",       T.accent)
+        .attr("stroke-width", 1.5),
+      d => `<b>${d.label ?? ""}</b> ← added at this step<br>yi = ${d.yi.toFixed(3)}&nbsp; SE = ${d.se.toFixed(3)}`
+    );
   }
 
   // ---- Step annotation (top-right) ----
@@ -1779,9 +2117,13 @@ export function drawCumulativeFunnel(cumulativeStudies, cumResults, profile, ste
     .attr("x", W - margin.right)
     .attr("y", annotY)
     .attr("text-anchor", "end")
-    .attr("fill", "var(--fg-muted)")
-    .style("font-size", "10px")
-    .text(`k = ${step + 1} / ${k}\u2003added: ${cur.addedLabel}`);
+    .attr("fill", T.fgMuted)
+    .style("font-size", FONT_SIZE.tickLabel)
+    .text((() => {
+      const prefix = `k = ${step + 1} / ${k}\u2003added: `;
+      const budget = Math.max(20, iW - Math.ceil(prefix.length * LABEL_CHAR_PX.regular10));
+      return prefix + truncateLabel(cur.addedLabel, budget, 10);
+    })());
 
   // ---- RE estimate annotation (right of RE line, near top) ----
   if (isFinite(cur.RE)) {
@@ -1790,16 +2132,17 @@ export function drawCumulativeFunnel(cumulativeStudies, cumResults, profile, ste
       svg.append("text")
         .attr("x", x(cur.RE) + 4)
         .attr("y", y(0) + 12)
-        .attr("fill", "var(--accent)")
-        .style("font-size", "9px")
+        .attr("fill", T.accent)
+        .style("font-size", FONT_SIZE.annot)
         .text(reDisp.toFixed(3));
     }
   }
 
   // ---- Axes ----
+  const maxTicksX = Math.max(4, Math.floor(iW / 60));
   const axisX = svg.append("g")
     .attr("transform", `translate(0,${H - margin.bottom})`)
-    .call(d3.axisBottom(x).tickFormat(v => {
+    .call(d3.axisBottom(x).ticks(maxTicksX).tickFormat(v => {
       const t = profile.transform(v);
       return isFinite(t) ? +t.toFixed(3) : "";
     }));
@@ -1816,7 +2159,7 @@ export function drawCumulativeFunnel(cumulativeStudies, cumResults, profile, ste
     .attr("y", H - 4)
     .attr("text-anchor", "middle")
     .attr("fill", fgColor)
-    .style("font-size", "10px")
+    .style("font-size", FONT_SIZE.tickLabel)
     .text(profile.label + (profile.isLog ? " (log scale)" : ""));
 
   svg.append("text")
@@ -1825,7 +2168,7 @@ export function drawCumulativeFunnel(cumulativeStudies, cumResults, profile, ste
     .attr("y", 12)
     .attr("text-anchor", "middle")
     .attr("fill", fgColor)
-    .style("font-size", "11px")
+    .style("font-size", FONT_SIZE.axisLabel)
     .text("Standard Error");
 }
 
@@ -1841,18 +2184,25 @@ export function drawCumulativeFunnel(cumulativeStudies, cumResults, profile, ste
 //
 // Parameters:
 //   result — object returned by pCurve() in analysis.js
-export function drawPCurve(result) {
-  const svg = clearAndSelectSVG("#pCurvePlot");
+export function drawPCurve(result, options = {}) {
+  const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
+  const svg = initSvg("#pCurvePlot", "p-curve plot", T);
 
-  if (!result || result.k === 0) return;
+  if (!result || result.k === 0) { drawNoDataPlaceholder(svg, +svg.attr("width") || 500, +svg.attr("height") || 380, "No significant p-values"); return; }
 
   const { bins, expected0, expected33 } = result;
 
-  const margin = { top: 24, right: 24, bottom: 52, left: 56 };
+  const margin = { top: 34, right: 24, bottom: 52, left: 56 };
   const W = +svg.attr("width")  || 500;
   const H = +svg.attr("height") || 380;
   const iW = W - margin.left - margin.right;
   const iH = H - margin.top  - margin.bottom;
+
+  if (T.bg && T.bg !== "transparent") {
+    svg.insert("rect", ":first-child")
+      .attr("width", W).attr("height", H).attr("fill", T.bg);
+  }
+  svg.style("font-family", T.fontFamily);
 
   const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
 
@@ -1882,7 +2232,7 @@ export function drawPCurve(result) {
         .tickFormat("")
     )
     .selectAll("line")
-    .attr("stroke", "var(--border)")
+    .attr("stroke", T.borderGrid)
     .attr("stroke-dasharray", "2,3");
   g.select(".grid .domain").remove();
 
@@ -1895,7 +2245,7 @@ export function drawPCurve(result) {
     .attr("y",      d => y(d.prop))
     .attr("width",  x.bandwidth())
     .attr("height", d => iH - y(d.prop))
-    .attr("fill",   "var(--accent)")
+    .attr("fill",   T.accent)
     .attr("opacity", 0.8);
 
   // ---- Bar count labels ----
@@ -1906,15 +2256,15 @@ export function drawPCurve(result) {
     .attr("x", (_, i) => x(binLabels[i]) + x.bandwidth() / 2)
     .attr("y", d => y(d.prop) - 4)
     .attr("text-anchor", "middle")
-    .attr("fill", "var(--fg-muted)")
-    .style("font-size", "10px")
+    .attr("fill", T.fgMuted)
+    .style("font-size", FONT_SIZE.tickLabel)
     .text(d => d.count > 0 ? `n=${d.count}` : "");
 
   // ---- H₀ reference line (20%, dashed) ----
   g.append("line")
     .attr("x1", 0).attr("x2", iW)
     .attr("y1", y(expected0)).attr("y2", y(expected0))
-    .attr("stroke", "var(--fg-subtle)")
+    .attr("stroke", T.fgSubtle)
     .attr("stroke-width", 1.5)
     .attr("stroke-dasharray", "5,3");
 
@@ -1926,7 +2276,7 @@ export function drawPCurve(result) {
   g.append("polyline")
     .attr("points", linePoints.map(p => p.join(",")).join(" "))
     .attr("fill", "none")
-    .attr("stroke", "var(--color-warning)")
+    .attr("stroke", T.colorWarning)
     .attr("stroke-width", 2)
     .attr("stroke-dasharray", "4,2");
   // Circle markers at each bin midpoint
@@ -1937,13 +2287,13 @@ export function drawPCurve(result) {
     .attr("cx", (_, i) => x(binLabels[i]) + x.bandwidth() / 2)
     .attr("cy", d => y(d))
     .attr("r", 3)
-    .attr("fill", "var(--color-warning)");
+    .attr("fill", T.colorWarning);
 
   // ---- Axes ----
   const axisX = g.append("g")
     .attr("transform", `translate(0,${iH})`)
     .call(d3.axisBottom(x));
-  styleAxis(axisX, "var(--border-hover)", "var(--fg-muted)", "11px");
+  styleAxis(axisX, T.border, T.fgMuted, FONT_SIZE.axisLabel);
 
   const axisY = g.append("g")
     .call(
@@ -1951,15 +2301,15 @@ export function drawPCurve(result) {
         .ticks(5)
         .tickFormat(d => `${Math.round(d * 100)}%`)
     );
-  styleAxis(axisY, "var(--border-hover)", "var(--fg-muted)");
+  styleAxis(axisY, T.border, T.fgMuted);
 
   // ---- Axis labels ----
   svg.append("text")
     .attr("x", margin.left + iW / 2)
     .attr("y", H - 6)
     .attr("text-anchor", "middle")
-    .attr("fill", "var(--fg-muted)")
-    .style("font-size", "11px")
+    .attr("fill", T.fgMuted)
+    .style("font-size", FONT_SIZE.axisLabel)
     .text("p-value");
 
   svg.append("text")
@@ -1967,20 +2317,19 @@ export function drawPCurve(result) {
     .attr("x", -(margin.top + iH / 2))
     .attr("y", 14)
     .attr("text-anchor", "middle")
-    .attr("fill", "var(--fg-muted)")
-    .style("font-size", "11px")
+    .attr("fill", T.fgMuted)
+    .style("font-size", FONT_SIZE.axisLabel)
     .text("Proportion of studies");
 
   // ---- Legend ----
   const LW = 172, LH = 46, PAD = 8, ROW = 16;
-  const legendX = iW - LW - 4;
-  const legendY = 4;
+  const { x: legendX, y: legendY } = placeLegend(iW, iH, LW, LH, "tr");
   const lg = g.append("g").attr("transform", `translate(${legendX},${legendY})`);
 
   lg.append("rect")
     .attr("width", LW).attr("height", LH)
-    .attr("fill", "var(--bg-surface)")
-    .attr("stroke", "var(--border)")
+    .attr("fill", T.bgSurface)
+    .attr("stroke", T.borderGrid)
     .attr("stroke-width", 1)
     .attr("rx", 3);
 
@@ -1988,28 +2337,34 @@ export function drawPCurve(result) {
   lg.append("line")
     .attr("x1", PAD).attr("x2", PAD + 18)
     .attr("y1", PAD + ROW * 0 + ROW / 2).attr("y2", PAD + ROW * 0 + ROW / 2)
-    .attr("stroke", "var(--fg-subtle)")
+    .attr("stroke", T.fgSubtle)
     .attr("stroke-width", 1.5)
     .attr("stroke-dasharray", "5,3");
   lg.append("text")
     .attr("x", PAD + 22).attr("y", PAD + ROW * 0 + ROW / 2 + 4)
-    .attr("fill", "var(--fg-muted)").style("font-size", "9px")
+    .attr("fill", T.fgMuted).style("font-size", FONT_SIZE.annot)
     .text("Expected (H₀, no effect)");
 
   // Row 1: 33%-power dashed line + dot
   lg.append("line")
     .attr("x1", PAD).attr("x2", PAD + 18)
     .attr("y1", PAD + ROW * 1 + ROW / 2).attr("y2", PAD + ROW * 1 + ROW / 2)
-    .attr("stroke", "var(--color-warning)")
+    .attr("stroke", T.colorWarning)
     .attr("stroke-width", 2)
     .attr("stroke-dasharray", "4,2");
   lg.append("circle")
     .attr("cx", PAD + 9).attr("cy", PAD + ROW * 1 + ROW / 2)
-    .attr("r", 3).attr("fill", "var(--color-warning)");
+    .attr("r", 3).attr("fill", T.colorWarning);
   lg.append("text")
     .attr("x", PAD + 22).attr("y", PAD + ROW * 1 + ROW / 2 + 4)
-    .attr("fill", "var(--fg-muted)").style("font-size", "9px")
+    .attr("fill", T.fgMuted).style("font-size", FONT_SIZE.annot)
     .text("Expected (33% power)");
+
+  svg.append("text")
+    .attr("x", margin.left + iW / 2).attr("y", 18)
+    .attr("text-anchor", "middle").attr("fill", T.fg)
+    .style("font-size", FONT_SIZE.title).style("font-weight", "600")
+    .text(`p-curve — k = ${result.k}`);
 }
 
 // ================= P-UNIFORM COMPARISON PLOT =================
@@ -2028,19 +2383,26 @@ export function drawPCurve(result) {
 //   result  — object returned by pUniform() in analysis.js
 //   m       — meta() result, used for RE estimate and CI
 //   profile — effect profile (provides .transform and .label)
-export function drawPUniform(result, m, profile) {
-  const svg = clearAndSelectSVG("#pUniformPlot");
+export function drawPUniform(result, m, profile, options = {}) {
+  const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
+  const svg = initSvg("#pUniformPlot", "p-uniform plot", T);
 
-  if (!result || result.k === 0 || !isFinite(result.estimate)) return;
+  if (!result || result.k === 0 || !isFinite(result.estimate)) { drawNoDataPlaceholder(svg, +svg.attr("width") || 500, +svg.attr("height") || 170, "No significant p-values"); return; }
 
   profile = profile || { transform: x => x, label: "Effect" };
 
   // ---- Layout ----
-  const margin = { top: 20, right: 24, bottom: 44, left: 100 };
+  const margin = { top: 34, right: 24, bottom: 44, left: 100 };
   const W = +svg.attr("width")  || 500;
   const H = +svg.attr("height") || 170;
   const iW = W - margin.left - margin.right;
   const iH = H - margin.top  - margin.bottom;
+
+  if (T.bg && T.bg !== "transparent") {
+    svg.insert("rect", ":first-child")
+      .attr("width", W).attr("height", H).attr("fill", T.bg);
+  }
+  svg.style("font-family", T.fontFamily);
 
   const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
 
@@ -2053,7 +2415,7 @@ export function drawPUniform(result, m, profile) {
       estimate: m.RE,
       lo:       m.ciLow,
       hi:       m.ciHigh,
-      color:    "var(--accent)",
+      color:    T.accent,
       shape:    "diamond",
     },
     {
@@ -2061,7 +2423,7 @@ export function drawPUniform(result, m, profile) {
       estimate: result.estimate,
       lo:       result.ciLow,
       hi:       result.ciHigh,
-      color:    "var(--color-info)",
+      color:    T.colorInfo,
       shape:    "circle",
     },
   ].filter(r => isFinite(r.estimate) && isFinite(r.lo) && isFinite(r.hi));
@@ -2081,7 +2443,7 @@ export function drawPUniform(result, m, profile) {
   g.append("line")
     .attr("x1", x(0)).attr("x2", x(0))
     .attr("y1", 0).attr("y2", iH)
-    .attr("stroke", "var(--border-hover)")
+    .attr("stroke", T.border)
     .attr("stroke-width", 1)
     .attr("stroke-dasharray", "4,3");
 
@@ -2125,8 +2487,8 @@ export function drawPUniform(result, m, profile) {
     g.append("text")
       .attr("x", -8).attr("y", cy + 4)
       .attr("text-anchor", "end")
-      .attr("fill", "var(--fg-muted)")
-      .style("font-size", "11px")
+      .attr("fill", T.fgMuted)
+      .style("font-size", FONT_SIZE.axisLabel)
       .text(row.label);
   });
 
@@ -2137,16 +2499,22 @@ export function drawPUniform(result, m, profile) {
       const t = profile.transform(v);
       return isFinite(t) ? +t.toFixed(2) : "";
     }));
-  styleAxis(axisX, "var(--border-hover)", "var(--fg-muted)", "10px");
+  styleAxis(axisX, T.border, T.fgMuted, FONT_SIZE.tickLabel);
 
   // ---- X axis label ----
   svg.append("text")
     .attr("x", margin.left + iW / 2)
     .attr("y", H - 6)
     .attr("text-anchor", "middle")
-    .attr("fill", "var(--fg-muted)")
-    .style("font-size", "11px")
+    .attr("fill", T.fgMuted)
+    .style("font-size", FONT_SIZE.axisLabel)
     .text(profile.label + (profile.isLog ? " (log scale)" : ""));
+
+  svg.append("text")
+    .attr("x", margin.left + iW / 2).attr("y", 18)
+    .attr("text-anchor", "middle").attr("fill", T.fg)
+    .style("font-size", FONT_SIZE.title).style("font-weight", "600")
+    .text(`p-uniform — k = ${result.k}`);
 }
 
 // ================= ORCHARD PLOT =================
@@ -2162,15 +2530,22 @@ export function drawPUniform(result, m, profile) {
 //     • Diamond                 → RE point estimate
 //     • Jittered circles        → individual studies, r ∝ 1/SE
 //   Imputed (trim-fill) studies rendered with reduced opacity.
-export function drawOrchardPlot(studies, m, profile) {
-  const svg = clearAndSelectSVG("#orchardPlot");
+export function drawOrchardPlot(studies, m, profile, options = {}) {
+  const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
+  const svg = initSvg("#orchardPlot", "Orchard plot", T);
 
-  if (!studies || studies.length === 0) return;
+  if (!studies || studies.length === 0) { drawNoDataPlaceholder(svg, +svg.attr("width") || 520, +svg.attr("height") || 340); return; }
 
   profile = profile || { transform: x => x, label: "Effect" };
 
   const W = +svg.attr("width")  || 520;
   const H = +svg.attr("height") || 340;
+
+  if (T.bg && T.bg !== "transparent") {
+    svg.insert("rect", ":first-child")
+      .attr("width", W).attr("height", H).attr("fill", T.bg);
+  }
+  svg.style("font-family", T.fontFamily);
 
   // ---- Group layout (computed before margin so left can scale to label width) ----
   const allGroups = [...new Set(studies.map(s => s.group || "").filter(Boolean))];
@@ -2179,9 +2554,9 @@ export function drawOrchardPlot(studies, m, profile) {
 
   // Dynamic left margin: fits longest group label when groups exist; minimal otherwise
   const leftMargin = hasGroups
-    ? Math.max(60, Math.min(150, Math.ceil(allGroups.reduce((m, g) => Math.max(m, g.length), 0) * 6.8) + 14))
+    ? Math.max(60, Math.min(150, Math.ceil(allGroups.reduce((m, g) => Math.max(m, g.length), 0) * LABEL_CHAR_PX.regular11) + 14))
     : 30;
-  const margin = { top: 28, right: 20, bottom: 48, left: leftMargin };
+  const margin = { top: 34, right: 20, bottom: 48, left: leftMargin };
   const iW = W - margin.left - margin.right;
   const iH = H - margin.top  - margin.bottom;
 
@@ -2193,8 +2568,9 @@ export function drawOrchardPlot(studies, m, profile) {
 
   const laneH = iH / bands.length;
 
-  // Cap the drawing height within each lane (prevents giant bars in single-band plots)
-  const DRAW_CAP = 80;
+  // Scale drawing height with lane — cap higher for single-band layouts where
+  // the fixed 80 px cap leaves most of the lane height as dead space.
+  const DRAW_CAP = Math.min(laneH, Math.max(80, Math.round(laneH * 0.60)));
   const drawH    = Math.min(laneH, DRAW_CAP);
 
   // ---- X scale (internal / untransformed) ----
@@ -2213,14 +2589,17 @@ export function drawOrchardPlot(studies, m, profile) {
   g.append("line")
     .attr("x1", x(0)).attr("x2", x(0))
     .attr("y1", 0).attr("y2", iH)
-    .attr("stroke", "var(--border-hover)")
+    .attr("stroke", T.border)
     .attr("stroke-width", 1)
     .attr("stroke-dasharray", "4,3");
 
   // ---- Bands ----
   bands.forEach((band, bi) => {
-    const cy     = laneH * bi + laneH / 2;   // lane centre
-    const color  = GROUP_COLORS[bi % GROUP_COLORS.length];
+    const cy      = laneH * bi + laneH / 2;   // lane centre
+    const color   = T.useBwShapes ? T.accent : GROUP_COLORS[bi % GROUP_COLORS.length];
+    const dashArr = T.useBwShapes
+      ? BW_DASHES[hashGroupLabel(band) % BW_DASHES.length]
+      : "none";
     const bStudies = bandStudies[bi];
 
     const jitterRange = drawH * 0.40;
@@ -2234,7 +2613,7 @@ export function drawOrchardPlot(studies, m, profile) {
     if (piLow != null && piHigh != null) {
       const piW = Math.max(0, x(piHigh) - x(piLow));
       if (piW > 0) {
-        g.append("rect")
+        const piRect = g.append("rect")
           .attr("x", x(piLow))
           .attr("y", cy - drawH * 0.44)
           .attr("width",  piW)
@@ -2242,6 +2621,10 @@ export function drawOrchardPlot(studies, m, profile) {
           .attr("fill", color)
           .attr("opacity", 0.10)
           .attr("rx", 3);
+        if (T.useBwShapes && dashArr !== "none") {
+          piRect.attr("stroke", color).attr("stroke-width", 1)
+            .attr("stroke-dasharray", dashArr).attr("fill-opacity", 0);
+        }
       }
     }
 
@@ -2249,7 +2632,7 @@ export function drawOrchardPlot(studies, m, profile) {
     if (isFinite(m.ciLow) && isFinite(m.ciHigh)) {
       const ciW = Math.max(0, x(m.ciHigh) - x(m.ciLow));
       if (ciW > 0) {
-        g.append("rect")
+        const ciRect = g.append("rect")
           .attr("x", x(m.ciLow))
           .attr("y", cy - drawH * 0.20)
           .attr("width",  ciW)
@@ -2257,6 +2640,10 @@ export function drawOrchardPlot(studies, m, profile) {
           .attr("fill", color)
           .attr("opacity", 0.35)
           .attr("rx", 2);
+        if (T.useBwShapes && dashArr !== "none") {
+          ciRect.attr("stroke", color).attr("stroke-width", 1.5)
+            .attr("stroke-dasharray", dashArr);
+        }
       }
     }
 
@@ -2266,9 +2653,13 @@ export function drawOrchardPlot(studies, m, profile) {
       const cx  = x(m.RE);
       const pts = [[cx, cy - S],[cx + S, cy],[cx, cy + S],[cx - S, cy]]
         .map(p => p.join(",")).join(" ");
-      g.append("polygon")
+      const diamond = g.append("polygon")
         .attr("points", pts)
         .attr("fill", color);
+      if (T.useBwShapes && dashArr !== "none") {
+        diamond.attr("stroke", color).attr("stroke-width", 1.5)
+          .attr("stroke-dasharray", dashArr).attr("fill-opacity", 0.3);
+      }
     }
 
     // Jittered study circles (spread by index; deterministic)
@@ -2278,34 +2669,32 @@ export function drawOrchardPlot(studies, m, profile) {
       const jitter = n > 1 ? (i / (n - 1) - 0.5) * 2 * jitterRange : 0;
       const r      = R_MIN + (R_MAX - R_MIN) * (invSE[i] / maxInvSE);
 
-      g.append("circle")
-        .attr("cx", x(s.yi))
-        .attr("cy", cy + jitter)
-        .attr("r",  r)
-        .attr("fill", color)
-        .attr("fill-opacity", s.filled ? 0.25 : 0.60)
-        .attr("stroke", "var(--bg-surface)")
-        .attr("stroke-width", 0.8)
-        .on("mousemove", (event) => {
-          const seVal = (s.se || Math.sqrt(Math.max(s.vi, 0))).toFixed(3);
-          const yi_t  = profile.transform(s.yi);
-          tooltip.style("opacity", 1)
-            .html(`<b>${s.label}</b><br>Effect: ${isFinite(yi_t) ? +yi_t.toFixed(3) : "NA"}<br>SE: ${seVal}${s.filled ? "<br><i>(imputed)</i>" : ""}`)
-            .style("left", (event.pageX + 12) + "px")
-            .style("top",  (event.pageY - 24) + "px");
-        })
-        .on("mouseout", () => tooltip.style("opacity", 0));
+      attachTooltip(
+        g.append("circle").datum(s)
+          .attr("cx", x(s.yi))
+          .attr("cy", cy + jitter)
+          .attr("r",  r)
+          .attr("fill", color)
+          .attr("fill-opacity", s.filled ? 0.25 : 0.60)
+          .attr("stroke", T.bgSurface)
+          .attr("stroke-width", 0.8),
+        d => {
+          const seVal = (d.se || Math.sqrt(Math.max(d.vi, 0))).toFixed(3);
+          const yi_t  = profile.transform(d.yi);
+          return `<b>${d.label}</b><br>Effect: ${isFinite(yi_t) ? +yi_t.toFixed(3) : "NA"}<br>SE: ${seVal}${d.filled ? "<br><i>(imputed)</i>" : ""}`;
+        }
+      );
     });
 
     // Group label at lane centre (left margin)
     if (hasGroups) {
-      const maxCharsGroup = Math.floor((margin.left - 8) / 6.8);
+      const maxCharsGroup = Math.floor((margin.left - 8) / LABEL_CHAR_PX.regular11);
       const label = band.length > maxCharsGroup ? band.slice(0, maxCharsGroup - 1) + "…" : band;
       g.append("text")
         .attr("x", -8).attr("y", cy + 4)
         .attr("text-anchor", "end")
-        .attr("fill", "var(--fg-muted)")
-        .style("font-size", "11px")
+        .attr("fill", T.fgMuted)
+        .style("font-size", FONT_SIZE.axisLabel)
         .text(label);
     }
 
@@ -2314,7 +2703,7 @@ export function drawOrchardPlot(studies, m, profile) {
       g.append("line")
         .attr("x1", 0).attr("x2", iW)
         .attr("y1", laneH * (bi + 1)).attr("y2", laneH * (bi + 1))
-        .attr("stroke", "var(--border)")
+        .attr("stroke", T.borderGrid)
         .attr("stroke-width", 0.5)
         .attr("stroke-dasharray", "3,4");
     }
@@ -2323,32 +2712,41 @@ export function drawOrchardPlot(studies, m, profile) {
   // ---- X axis ----
   const axisX = g.append("g")
     .attr("transform", `translate(0,${iH})`)
-    .call(d3.axisBottom(x).ticks(6).tickFormat(v => {
-      const t = profile.transform(v);
-      return isFinite(t) ? +t.toFixed(2) : "";
-    }));
-  styleAxis(axisX, "var(--border-hover)", "var(--fg-muted)", "10px");
+    .call(d3.axisBottom(x).ticks(6).tickFormat(v => formatTick(v, profile.transform)));
+  styleAxis(axisX, T.border, T.fgMuted, FONT_SIZE.tickLabel, T.fontFamily);
 
   // ---- X axis label ----
   svg.append("text")
     .attr("x", margin.left + iW / 2)
     .attr("y", H - 6)
     .attr("text-anchor", "middle")
-    .attr("fill", "var(--fg-muted)")
-    .style("font-size", "11px")
+    .attr("fill", T.fgMuted)
+    .style("font-size", FONT_SIZE.axisLabel)
     .text(profile.label + (profile.isLog ? " (log scale)" : ""));
 
   // ---- Heterogeneity annotation ----
   const hetParts = [];
-  if (isFinite(m.I2))            hetParts.push(`I² = ${(m.I2 * 100).toFixed(1)}%`);
+  if (isFinite(m.I2))            hetParts.push(`I² = ${m.I2.toFixed(1)}%`);
   if (isFinite(m.tau2) && m.tau2 > 0) hetParts.push(`τ² = ${m.tau2.toFixed(3)}`);
   if (hetParts.length) {
-    g.append("text")
+    const ht = g.append("text")
       .attr("x", 4).attr("y", iH - 4)
-      .attr("fill", "var(--fg-muted)")
-      .style("font-size", "10px")
-      .text(hetParts.join("  "));
+      .attr("fill", T.fgMuted)
+      .style("font-size", FONT_SIZE.tickLabel);
+    hetParts.forEach((part, pi) => {
+      if (pi > 0) ht.append("tspan").text("  ");
+      if (part.startsWith("I²")) {
+        ht.append("tspan").style("font-style", "italic").text("I");
+        ht.append("tspan").text(part.slice(1));
+      } else { ht.append("tspan").text(part); }
+    });
   }
+
+  svg.append("text")
+    .attr("x", margin.left + iW / 2).attr("y", 18)
+    .attr("text-anchor", "middle").attr("fill", T.fg)
+    .style("font-size", FONT_SIZE.title).style("font-weight", "600")
+    .text(`Orchard plot — k = ${studies.length}`);
 }
 
 // ================= CATERPILLAR PLOT =================
@@ -2360,9 +2758,10 @@ export function drawOrchardPlot(studies, m, profile) {
 // Studies that don't fit are hidden via an SVG clipPath so the x-axis always
 // remains visible.
 export function drawCaterpillarPlot(studies, m, profile, options = {}) {
-  const svg = clearAndSelectSVG("#caterpillarPlot");
+  const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
+  const svg = initSvg("#caterpillarPlot", "Caterpillar plot", T);
 
-  if (!studies || studies.length === 0) return;
+  if (!studies || studies.length === 0) { drawNoDataPlaceholder(svg, +svg.attr("width") || 520, +svg.attr("height") || 300); return; }
 
   profile = profile || { transform: x => x, label: "Effect" };
 
@@ -2373,7 +2772,7 @@ export function drawCaterpillarPlot(studies, m, profile, options = {}) {
     .sort((a, b) => b.yi - a.yi);
 
   const k = sorted.length;
-  if (k === 0) return;
+  if (k === 0) { drawNoDataPlaceholder(svg, +svg.attr("width") || 520, +svg.attr("height") || 300, "No valid studies", T); return; }
 
   // ---- Pagination ----
   const { page, pageSize, totalPages, items: pageStudies } = paginate(sorted, options);
@@ -2383,25 +2782,40 @@ export function drawCaterpillarPlot(studies, m, profile, options = {}) {
   const W       = +svg.attr("width") || 520;
   // Dynamic left margin fitted to the longest study label (≈6.5px per char at 10px font)
   const maxStudyLen = sorted.reduce((m, s) => Math.max(m, (s.label || "").length), 0);
-  const leftMargin  = Math.max(50, Math.min(160, Math.ceil(maxStudyLen * 6.5) + 14));
-  const margin  = { top: 28, right: 20, bottom: 38, left: leftMargin };
+  const leftMargin  = Math.max(50, Math.min(160, Math.ceil(maxStudyLen * LABEL_CHAR_PX.regular10) + 14));
+
+  // ---- Group colour palette (computed before margin so legend width is known) ----
+  const allGroups = [...new Set(sorted.map(s => s.group || "").filter(Boolean))];
+  const hasGroups = allGroups.length > 1;
+  const groupColor = grp => {
+    if (T.useBwShapes) return T.fg;
+    const idx = allGroups.indexOf(grp);
+    return idx >= 0 ? GROUP_COLORS[idx % GROUP_COLORS.length] : T.fgSubtle;
+  };
+  const groupDash = grp => {
+    if (!T.useBwShapes || !hasGroups) return "none";
+    return BW_DASHES[hashGroupLabel(grp) % BW_DASHES.length];
+  };
+  // Right margin: expand to a gutter wide enough for the group legend when needed
+  const maxGroupLen = hasGroups ? Math.max(...allGroups.map(g => g.length)) : 0;
+  const LEGEND_W    = hasGroups
+    ? Math.max(80, Math.min(140, Math.ceil(maxGroupLen * LABEL_CHAR_PX.regular10) + 26))
+    : 20;
+  const margin  = { top: 28, right: LEGEND_W, bottom: 38, left: leftMargin };
 
   // Height fitted to the studies on this page (no cap needed with pagination)
   const H = margin.top + pk * ROW_H + margin.bottom;
   svg.attr("height", H);
+  if (T.bg && T.bg !== "transparent") {
+    svg.insert("rect", ":first-child")
+      .attr("width", W).attr("height", H).attr("fill", T.bg);
+  }
+  svg.style("font-family", T.fontFamily);
 
   const iW = W - margin.left - margin.right;
   const iH = H - margin.top  - margin.bottom;
 
   const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
-
-  // ---- Group colour palette ----
-  const allGroups = [...new Set(sorted.map(s => s.group || "").filter(Boolean))];
-  const hasGroups = allGroups.length > 1;
-  const groupColor = grp => {
-    const idx = allGroups.indexOf(grp);
-    return idx >= 0 ? GROUP_COLORS[idx % GROUP_COLORS.length] : "var(--fg-subtle)";
-  };
 
   // ---- X scale — domain from ALL sorted studies for stability across pages ----
   // Individual study CI: yi ± Z_95 * se  (always normal, per forest plot convention)
@@ -2417,7 +2831,7 @@ export function drawCaterpillarPlot(studies, m, profile, options = {}) {
   g.append("line")
     .attr("x1", x(0)).attr("x2", x(0))
     .attr("y1", 0).attr("y2", iH)
-    .attr("stroke", "var(--border-hover)")
+    .attr("stroke", T.border)
     .attr("stroke-width", 1)
     .attr("stroke-dasharray", "4,3");
 
@@ -2426,7 +2840,7 @@ export function drawCaterpillarPlot(studies, m, profile, options = {}) {
     g.append("line")
       .attr("x1", x(m.RE)).attr("x2", x(m.RE))
       .attr("y1", 0).attr("y2", iH)
-      .attr("stroke", "var(--accent)")
+      .attr("stroke", T.accent)
       .attr("stroke-width", 1.2)
       .attr("stroke-opacity", 0.55);
   }
@@ -2436,15 +2850,17 @@ export function drawCaterpillarPlot(studies, m, profile, options = {}) {
     const cy    = i * ROW_H + ROW_H / 2;
     const lo    = s.yi - Z_95 * (s.se || Math.sqrt(s.vi));
     const hi    = s.yi + Z_95 * (s.se || Math.sqrt(s.vi));
-    const color = hasGroups ? groupColor(s.group || "") : "var(--fg-subtle)";
+    const color = hasGroups ? groupColor(s.group || "") : T.fgSubtle;
 
     // CI line
+    const ciDash = groupDash(s.group || "");
     g.append("line")
       .attr("x1", x(lo)).attr("x2", x(hi))
       .attr("y1", cy).attr("y2", cy)
       .attr("stroke", color)
       .attr("stroke-width", s.filled ? 1 : 1.4)
-      .attr("stroke-opacity", s.filled ? 0.45 : 0.80);
+      .attr("stroke-opacity", s.filled ? 0.45 : 0.80)
+      .attr("stroke-dasharray", ciDash === "none" ? null : ciDash);
 
     // CI end ticks
     [lo, hi].forEach(v => {
@@ -2457,86 +2873,104 @@ export function drawCaterpillarPlot(studies, m, profile, options = {}) {
     });
 
     // Point estimate circle
+    const showTip = (x0, y0) => {
+      const seVal = (s.se || Math.sqrt(s.vi)).toFixed(3);
+      const yi_t  = profile.transform(s.yi);
+      const lo_t  = profile.transform(lo);
+      const hi_t  = profile.transform(hi);
+      const fmt   = v => isFinite(v) ? +v.toFixed(3) : "NA";
+      tooltip.style("opacity", 1)
+        .html(`<b>${s.label}</b><br>Effect: ${fmt(yi_t)} [${fmt(lo_t)}, ${fmt(hi_t)}]<br>SE: ${seVal}${s.filled ? "<br><i>(imputed)</i>" : ""}`)
+        .style("left", x0 + "px").style("top", y0 + "px");
+    };
     g.append("circle")
       .attr("cx", x(s.yi)).attr("cy", cy)
       .attr("r", s.filled ? 2.5 : 3.2)
       .attr("fill", color)
       .attr("fill-opacity", s.filled ? 0.40 : 1)
-      .on("mousemove", (event) => {
-        const seVal  = (s.se || Math.sqrt(s.vi)).toFixed(3);
-        const yi_t   = profile.transform(s.yi);
-        const lo_t   = profile.transform(lo);
-        const hi_t   = profile.transform(hi);
-        const fmtCI  = v => isFinite(v) ? +v.toFixed(3) : "NA";
-        tooltip.style("opacity", 1)
-          .html(`<b>${s.label}</b><br>Effect: ${fmtCI(yi_t)} [${fmtCI(lo_t)}, ${fmtCI(hi_t)}]<br>SE: ${seVal}${s.filled ? "<br><i>(imputed)</i>" : ""}`)
-          .style("left", (event.pageX + 12) + "px")
-          .style("top",  (event.pageY - 24) + "px");
+      .attr("tabindex", 0)
+      .attr("role", "button")
+      .on("mousemove", (event) => showTip(event.pageX + TOOLTIP_OFFSET.x, event.pageY + TOOLTIP_OFFSET.y))
+      .on("mouseout",  () => tooltip.style("opacity", 0))
+      .on("focus", (event) => {
+        const rect = event.target.getBoundingClientRect();
+        showTip(rect.right + window.scrollX + TOOLTIP_OFFSET.x, rect.top + window.scrollY + TOOLTIP_OFFSET.y);
       })
-      .on("mouseout", () => tooltip.style("opacity", 0));
+      .on("blur",    () => tooltip.style("opacity", 0))
+      .on("keydown", (event) => { if (event.key === "Escape") tooltip.style("opacity", 0); });
 
     // Study label (left margin)
-    const maxChars = Math.floor((margin.left - 12) / 6.5);
+    const maxChars = Math.floor((margin.left - 12) / LABEL_CHAR_PX.regular10);
     const labelTxt = s.label.length > maxChars ? s.label.slice(0, maxChars - 1) + "…" : s.label;
     g.append("text")
       .attr("x", -8).attr("y", cy + 4)
       .attr("text-anchor", "end")
-      .attr("fill", s.filled ? "var(--fg-muted)" : "var(--fg)")
-      .style("font-size", "10px")
+      .attr("fill", s.filled ? T.fgMuted : T.fg)
+      .style("font-size", FONT_SIZE.tickLabel)
       .text(labelTxt);
   });
 
   // ---- X axis ----
   const axisX = g.append("g")
     .attr("transform", `translate(0,${iH})`)
-    .call(d3.axisBottom(x).ticks(6).tickFormat(v => {
-      const t = profile.transform(v);
-      return isFinite(t) ? +t.toFixed(2) : "";
-    }));
-  styleAxis(axisX, "var(--border-hover)", "var(--fg-muted)", "10px");
+    .call(d3.axisBottom(x).ticks(6).tickFormat(v => formatTick(v, profile.transform)));
+  styleAxis(axisX, T.border, T.fgMuted, FONT_SIZE.tickLabel);
 
   // ---- X axis label ----
   svg.append("text")
     .attr("x", margin.left + iW / 2)
     .attr("y", H - 4)
     .attr("text-anchor", "middle")
-    .attr("fill", "var(--fg-muted)")
-    .style("font-size", "11px")
+    .attr("fill", T.fgMuted)
+    .style("font-size", FONT_SIZE.axisLabel)
     .text(profile.label + (profile.isLog ? " (log scale)" : ""));
 
   // ---- Heterogeneity + k annotation (top margin, clear of study rows) ----
   const pageNote = totalPages > 1 ? `  ·  page ${page + 1} of ${totalPages}` : "";
   const hetParts = [`k = ${k}${pageNote}`];
-  if (isFinite(m.I2))                 hetParts.push(`I² = ${(m.I2 * 100).toFixed(1)}%`);
+  if (isFinite(m.I2))                 hetParts.push(`I² = ${m.I2.toFixed(1)}%`);
   if (isFinite(m.tau2) && m.tau2 > 0) hetParts.push(`τ² = ${m.tau2.toFixed(3)}`);
-  svg.append("text")
+  { const ht = svg.append("text")
     .attr("x", margin.left + 4)
     .attr("y", 16)
-    .attr("fill", "var(--fg-muted)")
-    .style("font-size", "10px")
-    .text(hetParts.join("  "));
+    .attr("fill", T.fgMuted)
+    .style("font-size", FONT_SIZE.tickLabel);
+  hetParts.forEach((part, pi) => {
+    if (pi > 0) ht.append("tspan").text("  ");
+    if (part.startsWith("I²")) {
+      ht.append("tspan").style("font-style", "italic").text("I");
+      ht.append("tspan").text(part.slice(1));
+    } else { ht.append("tspan").text(part); }
+  }); }
 
-  // ---- Legend (groups only) ----
+  // ---- Legend (groups only — right gutter, outside inner plot area) ----
   if (hasGroups) {
+    const lx = margin.left + iW + 8;   // left edge of legend gutter
     allGroups.forEach((grp, gi) => {
-      const color = GROUP_COLORS[gi % GROUP_COLORS.length];
-      const lx = iW - 4;
-      const ly = gi * 14;
-      g.append("line")
-        .attr("x1", lx - 20).attr("x2", lx - 6)
+      const color = T.useBwShapes ? T.fg : GROUP_COLORS[gi % GROUP_COLORS.length];
+      const dash  = groupDash(grp);
+      const ly = margin.top + gi * 14;
+      svg.append("line")
+        .attr("x1", lx).attr("x2", lx + 14)
         .attr("y1", ly + 5).attr("y2", ly + 5)
-        .attr("stroke", color).attr("stroke-width", 2);
-      g.append("circle")
-        .attr("cx", lx - 13).attr("cy", ly + 5)
+        .attr("stroke", color).attr("stroke-width", 2)
+        .attr("stroke-dasharray", dash === "none" ? null : dash);
+      svg.append("circle")
+        .attr("cx", lx + 7).attr("cy", ly + 5)
         .attr("r", 3).attr("fill", color);
-      g.append("text")
-        .attr("x", lx - 24).attr("y", ly + 9)
-        .attr("text-anchor", "end")
-        .attr("fill", "var(--fg-muted)")
-        .style("font-size", "10px")
-        .text(grp.length > 14 ? grp.slice(0, 13) + "…" : grp);
+      svg.append("text")
+        .attr("x", lx + 18).attr("y", ly + 9)
+        .attr("fill", T.fgMuted)
+        .style("font-size", FONT_SIZE.tickLabel)
+        .text(truncateLabel(grp, LEGEND_W - 26, 10));
     });
   }
+
+  svg.append("text")
+    .attr("x", margin.left + iW / 2).attr("y", 16)
+    .attr("text-anchor", "middle").attr("fill", T.fgMuted)
+    .style("font-size", FONT_SIZE.axisLabel).style("font-weight", "600")
+    .text("Caterpillar plot");
 
   return { totalPages };
 }
@@ -2550,7 +2984,8 @@ export function drawCaterpillarPlot(studies, m, profile, options = {}) {
 // options — { page, pageSize }
 // Returns { totalPages }.
 export function drawBlupPlot(result, profile, options = {}) {
-  const svg = clearAndSelectSVG("#blupPlot");
+  const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
+  const svg = initSvg("#blupPlot", "BLUP forest plot", T);
   if (!result || !result.studies || result.studies.length === 0) return { totalPages: 1 };
 
   profile = profile || { transform: x => x, label: "Effect" };
@@ -2564,12 +2999,21 @@ export function drawBlupPlot(result, profile, options = {}) {
   const ROW_H = 18;
   const W = +svg.attr("width") || 560;
 
+  // Accessible description
+  { const tau2Str = isFinite(result.tau2) ? `τ² = ${result.tau2.toFixed(4)}` : null;
+    svg.append("desc").text([`k = ${result.k} studies`, tau2Str].filter(Boolean).join("; ")); }
+
   const maxLabelLen = sorted.reduce((mx, s) => Math.max(mx, (s.label || "").length), 0);
-  const leftMargin  = Math.max(60, Math.min(180, Math.ceil(maxLabelLen * 6.5) + 14));
+  const leftMargin  = Math.max(60, Math.min(180, Math.ceil(maxLabelLen * LABEL_CHAR_PX.regular10) + 14));
   const margin = { top: 30, right: 24, bottom: 46, left: leftMargin };
 
   const H = margin.top + pk * ROW_H + margin.bottom;
   svg.attr("height", H);
+  if (T.bg && T.bg !== "transparent") {
+    svg.insert("rect", ":first-child")
+      .attr("width", W).attr("height", H).attr("fill", T.bg);
+  }
+  svg.style("font-family", T.fontFamily);
 
   const iW = W - margin.left - margin.right;
   const iH = H - margin.top  - margin.bottom;
@@ -2594,7 +3038,7 @@ export function drawBlupPlot(result, profile, options = {}) {
   g.append("line")
     .attr("x1", x(0)).attr("x2", x(0))
     .attr("y1", 0).attr("y2", iH)
-    .attr("stroke", "var(--border-hover)")
+    .attr("stroke", T.border)
     .attr("stroke-width", 1)
     .attr("stroke-dasharray", "4,3");
 
@@ -2603,7 +3047,7 @@ export function drawBlupPlot(result, profile, options = {}) {
     g.append("line")
       .attr("x1", x(result.mu)).attr("x2", x(result.mu))
       .attr("y1", 0).attr("y2", iH)
-      .attr("stroke", "var(--accent)")
+      .attr("stroke", T.accent)
       .attr("stroke-width", 1.2)
       .attr("stroke-opacity", 0.55);
   }
@@ -2619,12 +3063,12 @@ export function drawBlupPlot(result, profile, options = {}) {
       g.append("line")
         .attr("x1", x(obsLow)).attr("x2", x(obsHigh))
         .attr("y1", cy).attr("y2", cy)
-        .attr("stroke", "var(--fg-subtle)")
+        .attr("stroke", T.fgSubtle)
         .attr("stroke-width", 1.5)
         .attr("opacity", 0.55);
       g.append("circle")
         .attr("cx", x(s.yi)).attr("cy", cy).attr("r", 3)
-        .attr("fill", "var(--fg-subtle)").attr("opacity", 0.7);
+        .attr("fill", T.fgSubtle).attr("opacity", 0.7);
     }
 
     // Shrinkage connector (dashed, muted)
@@ -2632,7 +3076,7 @@ export function drawBlupPlot(result, profile, options = {}) {
       g.append("line")
         .attr("x1", x(s.yi)).attr("x2", x(s.blup))
         .attr("y1", cy).attr("y2", cy)
-        .attr("stroke", "var(--fg-muted)")
+        .attr("stroke", T.fgMuted)
         .attr("stroke-width", 0.8)
         .attr("stroke-dasharray", "2,2")
         .attr("opacity", 0.5);
@@ -2643,45 +3087,41 @@ export function drawBlupPlot(result, profile, options = {}) {
       g.append("line")
         .attr("x1", x(s.ci_lb)).attr("x2", x(s.ci_ub))
         .attr("y1", cy).attr("y2", cy)
-        .attr("stroke", "var(--accent)").attr("stroke-width", 2);
+        .attr("stroke", T.accent).attr("stroke-width", 2);
       // End-tick caps
       [s.ci_lb, s.ci_ub].forEach(v => {
         g.append("line")
           .attr("x1", x(v)).attr("x2", x(v))
           .attr("y1", cy - 3).attr("y2", cy + 3)
-          .attr("stroke", "var(--accent)").attr("stroke-width", 1.5);
+          .attr("stroke", T.accent).attr("stroke-width", 1.5);
       });
     }
 
     // BLUP point (with tooltip)
     if (isFinite(s.blup)) {
-      const effDisplay = profile.transform(s.blup);
-      const obsDisplay = profile.transform(s.yi);
-      g.append("circle")
-        .attr("cx", x(s.blup)).attr("cy", cy).attr("r", 4)
-        .attr("fill", "var(--accent)")
-        .attr("stroke", "var(--bg-surface)").attr("stroke-width", 1)
-        .on("mousemove", (event) => {
-          tooltip.style("opacity", 1)
-            .html(
-              `<b>${s.label}</b>` +
-              `<br>Observed: ${isFinite(obsDisplay) ? (+obsDisplay.toFixed(3)) : "NA"}` +
-              `<br>BLUP: ${isFinite(effDisplay) ? (+effDisplay.toFixed(3)) : "NA"}` +
-              `<br>Random effect (û): ${(+s.ranef.toFixed(4))}` +
-              `<br>Shrinkage (λ): ${(+(s.lambda * 100).toFixed(1))}%`
-            )
-            .style("left", (event.pageX + 12) + "px")
-            .style("top",  (event.pageY - 24) + "px");
-        })
-        .on("mouseout", () => tooltip.style("opacity", 0));
+      attachTooltip(
+        g.append("circle").datum(s)
+          .attr("cx", x(s.blup)).attr("cy", cy).attr("r", 4)
+          .attr("fill", T.accent)
+          .attr("stroke", T.bgSurface).attr("stroke-width", 1),
+        d => {
+          const effDisplay = profile.transform(d.blup);
+          const obsDisplay = profile.transform(d.yi);
+          return `<b>${d.label}</b>` +
+            `<br>Observed: ${isFinite(obsDisplay) ? (+obsDisplay.toFixed(3)) : "NA"}` +
+            `<br>BLUP: ${isFinite(effDisplay) ? (+effDisplay.toFixed(3)) : "NA"}` +
+            `<br>Random effect (û): ${(+d.ranef.toFixed(4))}` +
+            `<br>Shrinkage (λ): ${(+(d.lambda * 100).toFixed(1))}%`;
+        }
+      );
     }
 
     // Study label
     g.append("text")
       .attr("x", -6).attr("y", cy + 4)
       .attr("text-anchor", "end")
-      .attr("fill", "var(--fg-muted)").style("font-size", "10px")
-      .text((s.label || "").length > 18 ? (s.label || "").slice(0, 17) + "…" : (s.label || ""));
+      .attr("fill", T.fgMuted).style("font-size", FONT_SIZE.tickLabel)
+      .text(truncateLabel(s.label || "", leftMargin - 8, 10));
   });
 
   // X axis
@@ -2692,12 +3132,12 @@ export function drawBlupPlot(result, profile, options = {}) {
     xAxisG.call(
       d3.axisBottom(x)
         .tickValues(ticks)
-        .tickFormat(v => { const t = profile.transform(v); return isFinite(t) ? (+t.toFixed(2)).toString() : ""; })
+        .tickFormat(v => formatTick(v, profile.transform))
     );
   } else {
     xAxisG.call(d3.axisBottom(x).ticks(6).tickFormat(d3.format(".3~g")));
   }
-  styleAxis(xAxisG, "var(--border-hover)", "var(--fg-muted)", "10px");
+  styleAxis(xAxisG, T.border, T.fgMuted, FONT_SIZE.tickLabel);
 
   // Axis label
   const xLabel = isTransformed
@@ -2705,7 +3145,7 @@ export function drawBlupPlot(result, profile, options = {}) {
     : (profile.label || "Effect size");
   svg.append("text")
     .attr("x", margin.left + iW / 2).attr("y", H - 4)
-    .attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "11px")
+    .attr("text-anchor", "middle").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.axisLabel)
     .text(xLabel);
 
   // Title annotation
@@ -2714,25 +3154,24 @@ export function drawBlupPlot(result, profile, options = {}) {
     : "τ² = 0";
   svg.append("text")
     .attr("x", margin.left + iW / 2).attr("y", 16)
-    .attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "10px")
+    .attr("text-anchor", "middle").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.tickLabel)
     .text(`BLUPs  k = ${result.k}   ${tau2Str}`);
 
-  // Legend
-  const legY = H - 28;
-  const legX = margin.left + 4;
-  svg.append("line").attr("x1", legX).attr("x2", legX + 16).attr("y1", legY + 5).attr("y2", legY + 5)
-    .attr("stroke", "var(--fg-subtle)").attr("stroke-width", 1.5).attr("opacity", 0.7);
-  svg.append("circle").attr("cx", legX + 8).attr("cy", legY + 5).attr("r", 3)
-    .attr("fill", "var(--fg-subtle)").attr("opacity", 0.7);
-  svg.append("text").attr("x", legX + 20).attr("y", legY + 9)
-    .attr("fill", "var(--fg-muted)").style("font-size", "10px").text("Observed");
+  // Legend — top-right header band (clears the axis / tick-label space)
+  const legX = W - margin.right - 4;
+  svg.append("line").attr("x1", legX - 82).attr("x2", legX - 66).attr("y1", 11).attr("y2", 11)
+    .attr("stroke", T.fgSubtle).attr("stroke-width", 1.5).attr("opacity", 0.7);
+  svg.append("circle").attr("cx", legX - 74).attr("cy", 11).attr("r", 2.5)
+    .attr("fill", T.fgSubtle).attr("opacity", 0.7);
+  svg.append("text").attr("x", legX - 62).attr("y", 15)
+    .attr("fill", T.fgMuted).style("font-size", FONT_SIZE.annot).text("Observed");
 
-  svg.append("line").attr("x1", legX + 82).attr("x2", legX + 98).attr("y1", legY + 5).attr("y2", legY + 5)
-    .attr("stroke", "var(--accent)").attr("stroke-width", 2);
-  svg.append("circle").attr("cx", legX + 90).attr("cy", legY + 5).attr("r", 4)
-    .attr("fill", "var(--accent)").attr("stroke", "var(--bg-surface)").attr("stroke-width", 1);
-  svg.append("text").attr("x", legX + 102).attr("y", legY + 9)
-    .attr("fill", "var(--fg-muted)").style("font-size", "10px").text("BLUP (shrunken)");
+  svg.append("line").attr("x1", legX - 82).attr("x2", legX - 66).attr("y1", 25).attr("y2", 25)
+    .attr("stroke", T.accent).attr("stroke-width", 2);
+  svg.append("circle").attr("cx", legX - 74).attr("cy", 25).attr("r", 3.5)
+    .attr("fill", T.accent).attr("stroke", T.bgSurface).attr("stroke-width", 1);
+  svg.append("text").attr("x", legX - 62).attr("y", 29)
+    .attr("fill", T.fgMuted).style("font-size", FONT_SIZE.annot).text("BLUP (shrunken)");
 
   return { totalPages };
 }
@@ -2744,10 +3183,11 @@ export function drawBlupPlot(result, profile, options = {}) {
 // Studies in the top-right quadrant are both highly heterogeneous AND highly
 // influential — the primary targets for sensitivity investigation.
 // Reference: Baujat et al. (2002) Statistics in Medicine 21:2442–2456.
-export function drawBaujatPlot(result, profile) {
-  const svg = clearAndSelectSVG("#baujatPlot");
+export function drawBaujatPlot(result, profile, options = {}) {
+  const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
+  const svg = initSvg("#baujatPlot", "Baujat plot", T);
 
-  if (!result || result.k < 2) return;
+  if (!result || result.k < 2) { drawNoDataPlaceholder(svg, +svg.attr("width") || 500, +svg.attr("height") || 420, result?.k === 1 ? "Need ≥ 2 studies" : "No data"); return; }
 
   profile = profile || { transform: x => x, label: "Effect" };
 
@@ -2756,6 +3196,12 @@ export function drawBaujatPlot(result, profile) {
   const margin = { top: 30, right: 24, bottom: 58, left: 62 };
   const iW = W - margin.left - margin.right;
   const iH = H - margin.top  - margin.bottom;
+
+  if (T.bg && T.bg !== "transparent") {
+    svg.insert("rect", ":first-child")
+      .attr("width", W).attr("height", H).attr("fill", T.bg);
+  }
+  svg.style("font-family", T.fontFamily);
 
   const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
 
@@ -2771,9 +3217,9 @@ export function drawBaujatPlot(result, profile) {
   const allGroups = [...new Set(points.map(p => p.group || "").filter(Boolean))];
   const hasGroups = allGroups.length > 1;
   const pointColor = p => {
-    if (!hasGroups) return "var(--accent)";
+    if (T.useBwShapes || !hasGroups) return T.accent;
     const idx = allGroups.indexOf(p.group || "");
-    return idx >= 0 ? GROUP_COLORS[idx % GROUP_COLORS.length] : "var(--fg-subtle)";
+    return idx >= 0 ? GROUP_COLORS[idx % GROUP_COLORS.length] : T.fgSubtle;
   };
 
   // ---- Quadrant guide lines at mean x and mean y ----
@@ -2788,7 +3234,7 @@ export function drawBaujatPlot(result, profile) {
     g.append("line")
       .attr("x1", x1).attr("x2", x2)
       .attr("y1", y1).attr("y2", y2)
-      .attr("stroke", "var(--border-hover)")
+      .attr("stroke", T.border)
       .attr("stroke-width", 1)
       .attr("stroke-dasharray", "5,3");
   });
@@ -2802,34 +3248,34 @@ export function drawBaujatPlot(result, profile) {
     const cx = x(p.x);
     const cy = y(p.influence);
     const color = pointColor(p);
+    const gi    = hasGroups ? allGroups.indexOf(p.group || "") : 0;
+    const useSym = T.useBwShapes && hasGroups;
 
-    g.append("circle")
-      .attr("cx", cx).attr("cy", cy)
-      .attr("r", 5)
-      .attr("fill", color)
-      .attr("fill-opacity", 0.75)
-      .attr("stroke", "var(--bg-surface)")
-      .attr("stroke-width", 1)
-      .on("mousemove", (event) => {
-        const yi_t = profile.transform(p.yi);
-        tooltip.style("opacity", 1)
-          .html(
-            `<b>${p.label}</b>` +
-            `<br>Q contribution: ${p.x.toFixed(3)}` +
-            `<br>Influence: ${p.influence.toFixed(4)}` +
-            `<br>Effect (${profile.label}): ${isFinite(yi_t) ? +yi_t.toFixed(3) : "NA"}`
-          )
-          .style("left", (event.pageX + 12) + "px")
-          .style("top",  (event.pageY - 24) + "px");
-      })
-      .on("mouseout", () => tooltip.style("opacity", 0));
+    // BW mode: D3 symbol shapes per group; color mode: filled circles
+    const dot = useSym
+      ? g.append("path").datum(p).attr("transform", `translate(${cx},${cy})`).attr("d", bwSymbolPath(gi, 64))
+      : g.append("circle").datum(p).attr("cx", cx).attr("cy", cy).attr("r", 5);
+    attachTooltip(
+      dot
+        .attr("fill", color)
+        .attr("fill-opacity", 0.75)
+        .attr("stroke", T.bgSurface)
+        .attr("stroke-width", 1),
+      d => {
+        const yi_t = profile.transform(d.yi);
+        return `<b>${d.label}</b>` +
+          `<br>Q contribution: ${d.x.toFixed(3)}` +
+          `<br>Influence: ${d.influence.toFixed(4)}` +
+          `<br>Effect (${profile.label}): ${isFinite(yi_t) ? +yi_t.toFixed(3) : "NA"}`;
+      }
+    );
 
     if (showLabels) {
       const abbr = p.label.length > 9 ? p.label.slice(0, 8) + "…" : p.label;
       g.append("text")
         .attr("x", cx + 7).attr("y", cy + 4)
-        .attr("fill", "var(--fg-muted)")
-        .style("font-size", "9px")
+        .attr("fill", T.fgMuted)
+        .style("font-size", FONT_SIZE.annot)
         .style("pointer-events", "none")
         .text(abbr);
     }
@@ -2839,19 +3285,19 @@ export function drawBaujatPlot(result, profile) {
   const axisX = g.append("g")
     .attr("transform", `translate(0,${iH})`)
     .call(d3.axisBottom(x).ticks(5).tickFormat(d3.format(".3~g")));
-  styleAxis(axisX, "var(--border-hover)", "var(--fg-muted)", "10px");
+  styleAxis(axisX, T.border, T.fgMuted, FONT_SIZE.tickLabel);
 
   const axisY = g.append("g")
     .call(d3.axisLeft(y).ticks(5).tickFormat(d3.format(".3~g")));
-  styleAxis(axisY, "var(--border-hover)", "var(--fg-muted)", "10px");
+  styleAxis(axisY, T.border, T.fgMuted, FONT_SIZE.tickLabel);
 
   // ---- Axis labels ----
   svg.append("text")
     .attr("x", margin.left + iW / 2)
     .attr("y", H - 8)
     .attr("text-anchor", "middle")
-    .attr("fill", "var(--fg-muted)")
-    .style("font-size", "11px")
+    .attr("fill", T.fgMuted)
+    .style("font-size", FONT_SIZE.axisLabel)
     .text("Contribution to Cochran's Q");
 
   svg.append("text")
@@ -2859,8 +3305,8 @@ export function drawBaujatPlot(result, profile) {
     .attr("x", -(margin.top + iH / 2))
     .attr("y", 14)
     .attr("text-anchor", "middle")
-    .attr("fill", "var(--fg-muted)")
-    .style("font-size", "11px")
+    .attr("fill", T.fgMuted)
+    .style("font-size", FONT_SIZE.axisLabel)
     .text("Influence on pooled estimate");
 
   // ---- Summary annotation: Q and FE estimate ----
@@ -2870,26 +3316,39 @@ export function drawBaujatPlot(result, profile) {
   g.append("text")
     .attr("x", iW - 2).attr("y", iH - 4)
     .attr("text-anchor", "end")
-    .attr("fill", "var(--fg-muted)")
-    .style("font-size", "10px")
+    .attr("fill", T.fgMuted)
+    .style("font-size", FONT_SIZE.tickLabel)
     .text(annotParts.join("   "));
 
   // ---- Legend (groups only) ----
   if (hasGroups) {
     allGroups.forEach((grp, gi) => {
-      const color = GROUP_COLORS[gi % GROUP_COLORS.length];
+      const color = T.useBwShapes ? T.fg : GROUP_COLORS[gi % GROUP_COLORS.length];
       const lx = iW - 4;
       const ly = gi * 16;
-      g.append("circle")
-        .attr("cx", lx - 80).attr("cy", ly + 5)
-        .attr("r", 5).attr("fill", color).attr("fill-opacity", 0.75);
+      if (T.useBwShapes) {
+        g.append("path")
+          .attr("transform", `translate(${lx - 80},${ly + 5})`)
+          .attr("d", bwSymbolPath(gi, 64))
+          .attr("fill", color).attr("fill-opacity", 0.75);
+      } else {
+        g.append("circle")
+          .attr("cx", lx - 80).attr("cy", ly + 5)
+          .attr("r", 5).attr("fill", color).attr("fill-opacity", 0.75);
+      }
       g.append("text")
         .attr("x", lx - 72).attr("y", ly + 9)
-        .attr("fill", "var(--fg-muted)")
-        .style("font-size", "10px")
+        .attr("fill", T.fgMuted)
+        .style("font-size", FONT_SIZE.tickLabel)
         .text(grp.length > 10 ? grp.slice(0, 9) + "…" : grp);
     });
   }
+
+  svg.append("text")
+    .attr("x", margin.left + iW / 2).attr("y", 18)
+    .attr("text-anchor", "middle").attr("fill", T.fg)
+    .style("font-size", FONT_SIZE.title).style("font-weight", "600")
+    .text(`Baujat plot — k = ${result.k}`);
 }
 
 // ── drawLabbe ────────────────────────────────────────────────────────────────
@@ -2907,8 +3366,9 @@ export function drawBaujatPlot(result, profile) {
 // type     — "OR" | "RR" | "RD"
 export function drawLabbe(studies, m, profile, options = {}) {
   const type = options.type ?? "OR";
-  const svg = clearAndSelectSVG("#labbePlot");
-  if (!studies || studies.length === 0) return;
+  const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
+  const svg = initSvg("#labbePlot", "L'Abbé plot", T);
+  if (!studies || studies.length === 0) { drawNoDataPlaceholder(svg, +svg.attr("width") || 500, +svg.attr("height") || 420); return; }
 
   // Only meaningful for studies with a/b/c/d cell counts.
   const pts = studies
@@ -2924,13 +3384,19 @@ export function drawLabbe(studies, m, profile, options = {}) {
       vi: s.vi,
     }));
 
-  if (pts.length === 0) return;
+  if (pts.length === 0) { drawNoDataPlaceholder(svg, +svg.attr("width") || 500, +svg.attr("height") || 420, "No studies with 2×2 data", T); return; }
 
   const W = +svg.attr("width")  || 500;
   const H = +svg.attr("height") || 420;
   const margin = { top: 30, right: 24, bottom: 60, left: 64 };
   const iW = W - margin.left - margin.right;
   const iH = H - margin.top  - margin.bottom;
+
+  if (T.bg && T.bg !== "transparent") {
+    svg.insert("rect", ":first-child")
+      .attr("width", W).attr("height", H).attr("fill", T.bg);
+  }
+  svg.style("font-family", T.fontFamily);
 
   const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
 
@@ -2945,7 +3411,7 @@ export function drawLabbe(studies, m, profile, options = {}) {
   g.append("line")
     .attr("x1", x(0)).attr("y1", y(0))
     .attr("x2", x(1)).attr("y2", y(1))
-    .attr("stroke", "var(--fg-muted)")
+    .attr("stroke", T.fgMuted)
     .attr("stroke-width", 1)
     .attr("stroke-dasharray", "4,3");
 
@@ -2987,7 +3453,7 @@ export function drawLabbe(studies, m, profile, options = {}) {
         .datum(curveData)
         .attr("d", line)
         .attr("fill", "none")
-        .attr("stroke", "var(--accent)")
+        .attr("stroke", T.accent)
         .attr("stroke-width", 1.5)
         .attr("stroke-dasharray", "6,3")
         .attr("opacity", 0.7);
@@ -2998,9 +3464,9 @@ export function drawLabbe(studies, m, profile, options = {}) {
   const allGroups  = [...new Set(pts.map(p => p.group).filter(Boolean))];
   const hasGroups  = allGroups.length > 1;
   const pointColor = p => {
-    if (!hasGroups) return "var(--accent)";
+    if (T.useBwShapes || !hasGroups) return T.accent;
     const idx = allGroups.indexOf(p.group);
-    return idx >= 0 ? GROUP_COLORS[idx % GROUP_COLORS.length] : "var(--fg-subtle)";
+    return idx >= 0 ? GROUP_COLORS[idx % GROUP_COLORS.length] : T.fgSubtle;
   };
 
   // ---- Bubbles ----
@@ -3012,36 +3478,37 @@ export function drawLabbe(studies, m, profile, options = {}) {
     const cy = y(p.py);
     const r  = Math.max(rScale(p.N), 3);
     const color = pointColor(p);
+    const gi     = hasGroups ? allGroups.indexOf(p.group) : 0;
+    const useSym = T.useBwShapes && hasGroups;
+    // Symbol area ≈ π r² for a comparable visual footprint to the bubble radius
+    const symSize = Math.PI * r * r;
 
-    g.append("circle")
-      .attr("cx", cx).attr("cy", cy)
-      .attr("r", r)
-      .attr("fill", color)
-      .attr("fill-opacity", 0.65)
-      .attr("stroke", "var(--bg-surface)")
-      .attr("stroke-width", 1)
-      .on("mousemove", (event) => {
-        const effVal = profile ? profile.transform(p.yi) : p.yi;
-        tooltip.style("opacity", 1)
-          .html(
-            `<b>${p.label}</b>` +
-            `<br>Control rate: ${(p.px * 100).toFixed(1)}%` +
-            `<br>Treatment rate: ${(p.py * 100).toFixed(1)}%` +
-            `<br>N: ${p.N}` +
-            (isFinite(effVal) ? `<br>Effect: ${(+effVal.toFixed(3))}` : "")
-          )
-          .style("left", (event.pageX + 12) + "px")
-          .style("top",  (event.pageY - 24) + "px");
-      })
-      .on("mouseout", () => tooltip.style("opacity", 0));
+    const dot = useSym
+      ? g.append("path").datum(p).attr("transform", `translate(${cx},${cy})`).attr("d", bwSymbolPath(gi, symSize))
+      : g.append("circle").datum(p).attr("cx", cx).attr("cy", cy).attr("r", r);
+    attachTooltip(
+      dot
+        .attr("fill", color)
+        .attr("fill-opacity", 0.65)
+        .attr("stroke", T.bgSurface)
+        .attr("stroke-width", 1),
+      d => {
+        const effVal = profile ? profile.transform(d.yi) : d.yi;
+        return `<b>${d.label}</b>` +
+          `<br>Control rate: ${(d.px * 100).toFixed(1)}%` +
+          `<br>Treatment rate: ${(d.py * 100).toFixed(1)}%` +
+          `<br>N: ${d.N}` +
+          (isFinite(effVal) ? `<br>Effect: ${(+effVal.toFixed(3))}` : "");
+      }
+    );
 
     if (showLabels) {
       const abbr = p.label.length > 9 ? p.label.slice(0, 8) + "…" : p.label;
       g.append("text")
         .attr("x", cx + r + 2)
         .attr("y", cy + 4)
-        .attr("fill", "var(--fg-muted)")
-        .style("font-size", "9px")
+        .attr("fill", T.fgMuted)
+        .style("font-size", FONT_SIZE.annot)
         .style("pointer-events", "none")
         .text(abbr);
     }
@@ -3051,19 +3518,19 @@ export function drawLabbe(studies, m, profile, options = {}) {
   const axisX = g.append("g")
     .attr("transform", `translate(0,${iH})`)
     .call(d3.axisBottom(x).ticks(5).tickFormat(d3.format(".0%")));
-  styleAxis(axisX, "var(--border-hover)", "var(--fg-muted)", "10px");
+  styleAxis(axisX, T.border, T.fgMuted, FONT_SIZE.tickLabel);
 
   const axisY = g.append("g")
     .call(d3.axisLeft(y).ticks(5).tickFormat(d3.format(".0%")));
-  styleAxis(axisY, "var(--border-hover)", "var(--fg-muted)", "10px");
+  styleAxis(axisY, T.border, T.fgMuted, FONT_SIZE.tickLabel);
 
   // ---- Axis labels ----
   svg.append("text")
     .attr("x", margin.left + iW / 2)
     .attr("y", H - 10)
     .attr("text-anchor", "middle")
-    .attr("fill", "var(--fg-muted)")
-    .style("font-size", "11px")
+    .attr("fill", T.fgMuted)
+    .style("font-size", FONT_SIZE.axisLabel)
     .text("Control event rate");
 
   svg.append("text")
@@ -3071,48 +3538,55 @@ export function drawLabbe(studies, m, profile, options = {}) {
     .attr("x", -(margin.top + iH / 2))
     .attr("y", 15)
     .attr("text-anchor", "middle")
-    .attr("fill", "var(--fg-muted)")
-    .style("font-size", "11px")
+    .attr("fill", T.fgMuted)
+    .style("font-size", FONT_SIZE.axisLabel)
     .text("Treatment event rate");
 
-  // ---- Pooled-estimate label ----
+  // ---- Top-right legend: RE label then group items (stacked to avoid overlap) ----
+  let legendY = 12;
   if (reMu !== null && profile) {
     const reDisplay = profile.transform(reMu);
     if (isFinite(reDisplay)) {
       const typeLabel = type === "OR" ? "OR" : type === "RR" ? "RR" : "RD";
       g.append("text")
-        .attr("x", iW - 2).attr("y", 12)
+        .attr("x", iW - 2).attr("y", legendY)
         .attr("text-anchor", "end")
-        .attr("fill", "var(--accent)")
-        .style("font-size", "10px")
+        .attr("fill", T.accent)
+        .style("font-size", FONT_SIZE.tickLabel)
         .text(`RE ${typeLabel} = ${(+reDisplay.toFixed(3))}`);
+      legendY += 18;
     }
   }
 
-  // ---- Legend (groups) ----
   if (hasGroups) {
     allGroups.forEach((grp, gi) => {
-      const color = GROUP_COLORS[gi % GROUP_COLORS.length];
+      const color = T.useBwShapes ? T.fg : GROUP_COLORS[gi % GROUP_COLORS.length];
       const lx = iW - 4;
-      const ly = gi * 16 + 26;
+      const ly = gi * 16 + legendY;
       g.append("circle")
         .attr("cx", lx - 80).attr("cy", ly + 5)
         .attr("r", 5).attr("fill", color).attr("fill-opacity", 0.65);
       g.append("text")
         .attr("x", lx - 72).attr("y", ly + 9)
-        .attr("fill", "var(--fg-muted)")
-        .style("font-size", "10px")
+        .attr("fill", T.fgMuted)
+        .style("font-size", FONT_SIZE.tickLabel)
         .text(grp.length > 10 ? grp.slice(0, 9) + "…" : grp);
     });
   }
 
-  // ---- Reference annotation ----
+  // ---- Reference annotation (mid-diagonal, away from top-right RE label) ----
   g.append("text")
-    .attr("x", x(0.95)).attr("y", y(0.95) - 6)
-    .attr("text-anchor", "end")
-    .attr("fill", "var(--fg-muted)")
-    .style("font-size", "9px")
+    .attr("x", x(0.55)).attr("y", y(0.55) - 7)
+    .attr("text-anchor", "middle")
+    .attr("fill", T.fgMuted)
+    .style("font-size", FONT_SIZE.annot)
     .text("no effect");
+
+  svg.append("text")
+    .attr("x", margin.left + iW / 2).attr("y", 18)
+    .attr("text-anchor", "middle").attr("fill", T.fg)
+    .style("font-size", FONT_SIZE.title).style("font-weight", "600")
+    .text(`L'Abbé plot — k = ${pts.length}`);
 }
 
 // ── drawRoBTrafficLight ──────────────────────────────────────────────────────
@@ -3120,16 +3594,10 @@ export function drawLabbe(studies, m, profile, options = {}) {
 // studies  — array of study objects (used for labels)
 // domains  — string[]
 // robData  — { [studyLabel]: { [domain]: string } }  ("Low"|"Some concerns"|"High"|"NI"|"")
-export function drawRoBTrafficLight(studies, domains, robData) {
-  const svg = clearAndSelectSVG("#robTrafficLight");
-  if (!studies || !domains || domains.length === 0) return;
-
-  const ROB_COLORS = {
-    "Low":           "#4caf50",
-    "Some concerns": "#ff9800",
-    "High":          "#e53935",
-    "NI":            "#9e9e9e",
-  };
+export function drawRoBTrafficLight(studies, domains, robData, options = {}) {
+  const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
+  const svg = initSvg("#robTrafficLight", "Risk of bias traffic light", T);
+  if (!studies || !domains || domains.length === 0) { drawNoDataPlaceholder(svg, +svg.attr("width") || 500, +svg.attr("height") || 300); return; }
 
   const CELL_W   = 44;
   const CELL_H   = 22;
@@ -3139,16 +3607,22 @@ export function drawRoBTrafficLight(studies, domains, robData) {
   const k        = studies.length;
   const d        = domains.length;
 
-  // LEFT: sized to the longest study label (≈6.5px per char at 11px font), clamped [60, 160]
+  // LEFT: sized to the longest study label at 11px font, clamped [60, 160]
   const maxLabelLen = studies.reduce((m, s) => Math.max(m, (s.label ?? s.study ?? "").length), 0);
-  const LEFT = Math.max(60, Math.min(160, Math.ceil(maxLabelLen * 6.5) + 14));
+  const LEFT = Math.max(60, Math.min(160, Math.ceil(maxLabelLen * LABEL_CHAR_PX.regular11) + 14));
 
   // Legend needs LEFT + 290 + ~25px for "NI" text; content needs LEFT + d*CELL_W + 10
   const LEGEND_MIN_W = LEFT + 315;
   const svgW     = Math.max(LEGEND_MIN_W, LEFT + d * CELL_W + 10);
-  const svgH     = TOP + k * CELL_H + LEGEND_H + 10;
+  const svgH     = TOP + k * CELL_H + LEGEND_H + 10 + (T.signalColorNote ? 14 : 0);
 
   setSvgSize(svg, svgW, svgH);
+
+  if (T.bg && T.bg !== "transparent") {
+    svg.insert("rect", ":first-child")
+      .attr("width", svgW).attr("height", svgH).attr("fill", T.bg);
+  }
+  svg.style("font-family", T.fontFamily);
 
   const tooltip = selTooltip();
 
@@ -3158,8 +3632,8 @@ export function drawRoBTrafficLight(studies, domains, robData) {
     svg.append("text")
       .attr("transform", `translate(${cx},${TOP - 4}) rotate(-45)`)
       .attr("text-anchor", "start")
-      .attr("fill", "var(--fg)")
-      .style("font-size", "11px")
+      .attr("fill", T.fg)
+      .style("font-size", FONT_SIZE.axisLabel)
       .text(dom.length > 14 ? dom.slice(0, 13) + "…" : dom);
   });
 
@@ -3173,9 +3647,9 @@ export function drawRoBTrafficLight(studies, domains, robData) {
       .attr("x", LEFT - 6)
       .attr("y", cy + 4)
       .attr("text-anchor", "end")
-      .attr("fill", "var(--fg)")
-      .style("font-size", "11px")
-      .text(label.length > 18 ? label.slice(0, 17) + "…" : label);
+      .attr("fill", T.fg)
+      .style("font-size", FONT_SIZE.axisLabel)
+      .text(truncateLabel(label, LEFT - 8, 11));
 
     // Cells
     domains.forEach((dom, di) => {
@@ -3183,27 +3657,20 @@ export function drawRoBTrafficLight(studies, domains, robData) {
       const cx     = LEFT + di * CELL_W + CELL_W / 2;
 
       if (rating && ROB_COLORS[rating]) {
-        svg.append("circle")
-          .attr("cx", cx).attr("cy", cy)
-          .attr("r", 7)
-          .attr("fill", ROB_COLORS[rating])
-          .attr("fill-opacity", 0.85)
-          .on("mouseover", (event) => {
-            tooltip.style("opacity", 1)
-              .html(`<strong>${label}</strong><br>${dom}<br>${rating}`);
-          })
-          .on("mousemove", (event) => {
-            tooltip
-              .style("left", (event.pageX + 12) + "px")
-              .style("top",  (event.pageY - 28) + "px");
-          })
-          .on("mouseout", () => tooltip.style("opacity", 0));
+        attachTooltip(
+          svg.append("circle").datum({ label, dom, rating })
+            .attr("cx", cx).attr("cy", cy)
+            .attr("r", 7)
+            .attr("fill", ROB_COLORS[rating])
+            .attr("fill-opacity", 0.85),
+          d => `<strong>${d.label}</strong><br>${d.dom}<br>${d.rating}`
+        );
       } else {
         // Unrated dash
         svg.append("line")
           .attr("x1", cx - 5).attr("x2", cx + 5)
           .attr("y1", cy).attr("y2", cy)
-          .attr("stroke", "var(--fg-muted)")
+          .attr("stroke", T.fgMuted)
           .attr("stroke-width", 1.5);
       }
     });
@@ -3211,17 +3678,27 @@ export function drawRoBTrafficLight(studies, domains, robData) {
 
   // ── Legend ──
   const legendY = TOP + k * CELL_H + 14;
-  const items   = [["Low", "#4caf50"], ["Some concerns", "#ff9800"], ["High", "#e53935"], ["NI", "#9e9e9e"]];
+  const items   = Object.entries(ROB_COLORS);
   let lx = LEFT;
   items.forEach(([label, color]) => {
     svg.append("circle").attr("cx", lx + 6).attr("cy", legendY).attr("r", 6).attr("fill", color).attr("fill-opacity", 0.85);
     svg.append("text")
       .attr("x", lx + 15).attr("y", legendY + 4)
-      .attr("fill", "var(--fg-muted)")
-      .style("font-size", "10px")
+      .attr("fill", T.fgMuted)
+      .style("font-size", FONT_SIZE.tickLabel)
       .text(label);
     lx += label === "Some concerns" ? 110 : 60;
   });
+
+  if (T.signalColorNote) {
+    svg.append("text")
+      .attr("x", svgW / 2)
+      .attr("y", svgH - 4)
+      .attr("text-anchor", "middle")
+      .attr("fill", T.fgMuted)
+      .style("font-size", FONT_SIZE.annot)
+      .text(T.signalColorNote);
+  }
 }
 
 // ── drawRoBSummary ───────────────────────────────────────────────────────────
@@ -3230,16 +3707,11 @@ export function drawRoBTrafficLight(studies, domains, robData) {
 // studies  — array of study objects (for count)
 // domains  — string[]
 // robData  — { [studyLabel]: { [domain]: string } }
-export function drawRoBSummary(studies, domains, robData) {
-  const svg = clearAndSelectSVG("#robSummary");
-  if (!studies || !domains || domains.length === 0) return;
+export function drawRoBSummary(studies, domains, robData, options = {}) {
+  const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
+  const svg = initSvg("#robSummary", "Risk of bias summary", T);
+  if (!studies || !domains || domains.length === 0) { drawNoDataPlaceholder(svg, +svg.attr("width") || 500, +svg.attr("height") || 300); return; }
 
-  const ROB_COLORS = {
-    "Low":           "#4caf50",
-    "Some concerns": "#ff9800",
-    "High":          "#e53935",
-    "NI":            "#9e9e9e",
-  };
   const RATINGS   = ["Low", "Some concerns", "High", "NI"];
 
   const BAR_H    = 22;
@@ -3250,14 +3722,20 @@ export function drawRoBSummary(studies, domains, robData) {
 
   const d   = domains.length;
 
-  // LEFT: sized to the longest domain label (≈6.5px per char at 11px font), clamped [60, 160]
+  // LEFT: sized to the longest domain label at 11px font, clamped [60, 160]
   const maxDomLen = domains.reduce((m, dom) => Math.max(m, dom.length), 0);
-  const LEFT = Math.max(60, Math.min(160, Math.ceil(maxDomLen * 6.5) + 14));
+  const LEFT = Math.max(60, Math.min(160, Math.ceil(maxDomLen * LABEL_CHAR_PX.regular11) + 14));
 
   const svgW = Math.max(LEFT + 320, LEFT + 300 + RIGHT);
-  const svgH = TOP + d * (BAR_H + BAR_GAP) + LEGEND_H + 10;
+  const svgH = TOP + d * (BAR_H + BAR_GAP) + LEGEND_H + 10 + (T.signalColorNote ? 14 : 0);
 
   setSvgSize(svg, svgW, svgH);
+
+  if (T.bg && T.bg !== "transparent") {
+    svg.insert("rect", ":first-child")
+      .attr("width", svgW).attr("height", svgH).attr("fill", T.bg);
+  }
+  svg.style("font-family", T.fontFamily);
 
   const barW = svgW - LEFT - RIGHT;
   const xScale = d3.scaleLinear().domain([0, 1]).range([0, barW]);
@@ -3277,9 +3755,9 @@ export function drawRoBSummary(studies, domains, robData) {
     svg.append("text")
       .attr("x", LEFT - 6).attr("y", y + BAR_H / 2 + 4)
       .attr("text-anchor", "end")
-      .attr("fill", "var(--fg)")
-      .style("font-size", "11px")
-      .text(dom.length > 18 ? dom.slice(0, 17) + "…" : dom);
+      .attr("fill", T.fg)
+      .style("font-size", FONT_SIZE.axisLabel)
+      .text(truncateLabel(dom, LEFT - 8, 11));
 
     // Stacked bars
     let xOffset = 0;
@@ -3287,29 +3765,22 @@ export function drawRoBSummary(studies, domains, robData) {
       const prop = counts[rating] / total;
       if (prop === 0) return;
       const w = xScale(prop);
-      svg.append("rect")
-        .attr("x", LEFT + xOffset).attr("y", y)
-        .attr("width", w).attr("height", BAR_H)
-        .attr("fill", ROB_COLORS[rating])
-        .attr("fill-opacity", 0.85)
-        .on("mouseover", (event) => {
-          selTooltip().style("opacity", 1)
-            .html(`<strong>${dom}</strong><br>${rating}: ${counts[rating]} / ${total} (${Math.round(prop * 100)}%)`);
-        })
-        .on("mousemove", (event) => {
-          selTooltip()
-            .style("left", (event.pageX + 12) + "px")
-            .style("top",  (event.pageY - 28) + "px");
-        })
-        .on("mouseout", () => selTooltip().style("opacity", 0));
+      attachTooltip(
+        svg.append("rect").datum({ dom, rating, n: counts[rating], total, pct: Math.round(prop * 100) })
+          .attr("x", LEFT + xOffset).attr("y", y)
+          .attr("width", w).attr("height", BAR_H)
+          .attr("fill", ROB_COLORS[rating])
+          .attr("fill-opacity", 0.85),
+        d => `<strong>${d.dom}</strong><br>${d.rating}: ${d.n} / ${d.total} (${d.pct}%)`
+      );
 
       // Percentage label inside bar (if wide enough)
       if (w >= 24) {
         svg.append("text")
           .attr("x", LEFT + xOffset + w / 2).attr("y", y + BAR_H / 2 + 4)
           .attr("text-anchor", "middle")
-          .attr("fill", "#fff")
-          .style("font-size", "10px")
+          .attr("fill", getContrastFg(ROB_COLORS[rating] ?? "#888888"))
+          .style("font-size", FONT_SIZE.tickLabel)
           .style("pointer-events", "none")
           .text(`${Math.round(prop * 100)}%`);
       }
@@ -3322,24 +3793,34 @@ export function drawRoBSummary(studies, domains, robData) {
       svg.append("rect")
         .attr("x", LEFT + xOffset).attr("y", y)
         .attr("width", xScale(1 - ratedProp)).attr("height", BAR_H)
-        .attr("fill", "var(--border)")
+        .attr("fill", T.border)
         .attr("fill-opacity", 0.5);
     }
   });
 
   // ── Legend ──
   const legendY = TOP + d * (BAR_H + BAR_GAP) + 14;
-  const items   = [["Low", "#4caf50"], ["Some concerns", "#ff9800"], ["High", "#e53935"], ["NI", "#9e9e9e"]];
+  const items   = Object.entries(ROB_COLORS);
   let lx = LEFT;
   items.forEach(([label, color]) => {
     svg.append("rect").attr("x", lx).attr("y", legendY - 8).attr("width", 12).attr("height", 12).attr("fill", color).attr("fill-opacity", 0.85);
     svg.append("text")
       .attr("x", lx + 15).attr("y", legendY + 2)
-      .attr("fill", "var(--fg-muted)")
-      .style("font-size", "10px")
+      .attr("fill", T.fgMuted)
+      .style("font-size", FONT_SIZE.tickLabel)
       .text(label);
     lx += label === "Some concerns" ? 110 : 60;
   });
+
+  if (T.signalColorNote) {
+    svg.append("text")
+      .attr("x", svgW / 2)
+      .attr("y", svgH - 4)
+      .attr("text-anchor", "middle")
+      .attr("fill", T.fgMuted)
+      .style("font-size", FONT_SIZE.annot)
+      .text(T.signalColorNote);
+  }
 }
 // ================= GOSH PLOT =================
 // Graphical Display of Study Heterogeneity (Harbord & Higgins, 2008).
@@ -3365,8 +3846,9 @@ export function drawRoBSummary(studies, domains, robData) {
 const GOSH_SVG_REPORT_MAX = 3000;
 
 export function drawGoshPlot(result, profile, options = {}) {
-  const svg = clearAndSelectSVG("#goshPlot");
-  if (!result || result.error || !result.count) return;
+  const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
+  const svg = initSvg("#goshPlot", "GOSH plot", T);
+  if (!result || result.error || !result.count) { drawNoDataPlaceholder(svg, +svg.attr("width") || 500, +svg.attr("height") || 400, result?.error || "No data"); return; }
 
   profile = profile || { transform: x => x, label: "Effect" };
 
@@ -3379,6 +3861,12 @@ export function drawGoshPlot(result, profile, options = {}) {
   const margin = { top: 34, right: 88, bottom: 56, left: 62 };
   const iW = W - margin.left - margin.right;
   const iH = H - margin.top  - margin.bottom;
+
+  if (T.bg && T.bg !== "transparent") {
+    svg.insert("rect", ":first-child")
+      .attr("width", W).attr("height", H).attr("fill", T.bg);
+  }
+  svg.style("font-family", T.fontFamily);
 
   const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
 
@@ -3432,8 +3920,10 @@ export function drawGoshPlot(result, profile, options = {}) {
     .nice()
     .range([iH, 0]);
 
-  // ---- Viridis colour scale: n = 1 (purple) … k (yellow) ----
-  const colorScale = d3.scaleSequential(d3.interpolateViridis).domain([1, k]);
+  // ---- Colour scale: Viridis by default; greyscale in BW mode ----
+  const colorScale = d3.scaleSequential(
+    T.useBwShapes ? (t => d3.interpolateGreys(0.15 + t * 0.75)) : d3.interpolateViridis
+  ).domain([1, k]);
 
   // ---- Render points ----
   const SVG_THRESHOLD = 5000;
@@ -3503,8 +3993,8 @@ export function drawGoshPlot(result, profile, options = {}) {
             : `Q = ${xval.toFixed(2)}`;
         tt.style("opacity", 1)
           .html(`${xStr}<br>${profile.label}: ${(+muval.toFixed(3))}`)
-          .style("left", (event.pageX + 12) + "px")
-          .style("top",  (event.pageY - 24) + "px");
+          .style("left", (event.pageX + TOOLTIP_OFFSET.x) + "px")
+          .style("top",  (event.pageY + TOOLTIP_OFFSET.y) + "px");
       })
       .on("mouseout", () => tt.style("opacity", 0));
 
@@ -3553,22 +4043,25 @@ export function drawGoshPlot(result, profile, options = {}) {
   const axisX = g.append("g")
     .attr("transform", `translate(0,${iH})`)
     .call(xAxisGen);
-  styleAxis(axisX, "var(--border-hover)", "var(--fg-muted)", "10px");
+  styleAxis(axisX, T.border, T.fgMuted, FONT_SIZE.tickLabel, T.fontFamily);
 
   const axisY = g.append("g")
     .call(d3.axisLeft(yScale).ticks(5).tickFormat(d3.format(".3~g")));
-  styleAxis(axisY, "var(--border-hover)", "var(--fg-muted)", "10px");
+  styleAxis(axisY, T.border, T.fgMuted, FONT_SIZE.tickLabel, T.fontFamily);
 
   // ---- Axis labels ----
-  svg.append("text")
+  { const xl = svg.append("text")
     .attr("x", margin.left + iW / 2).attr("y", H - 8)
-    .attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "11px")
-    .text(xLabel);
+    .attr("text-anchor", "middle").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.axisLabel);
+  if (xLabel.startsWith("I²")) {
+    xl.append("tspan").style("font-style", "italic").text("I");
+    xl.append("tspan").text(xLabel.slice(1));
+  } else { xl.text(xLabel); } }
 
   svg.append("text")
     .attr("transform", "rotate(-90)")
     .attr("x", -(margin.top + iH / 2)).attr("y", 14)
-    .attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "11px")
+    .attr("text-anchor", "middle").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.axisLabel)
     .text(profile.label);
 
   // ---- Title ----
@@ -3577,10 +4070,10 @@ export function drawGoshPlot(result, profile, options = {}) {
     : `all 2^${k}−1 = ${count.toLocaleString()}`;
   svg.append("text")
     .attr("x", margin.left + iW / 2).attr("y", 18)
-    .attr("text-anchor", "middle").attr("fill", "var(--fg)").style("font-size", "12px")
+    .attr("text-anchor", "middle").attr("fill", T.fg).style("font-size", FONT_SIZE.title)
     .text(`GOSH — k = ${k}  (${subsetNote} subsets)`);
 
-  // ---- Colour legend: vertical Viridis bar for n ----
+  // ---- Colour legend: vertical gradient bar for n ----
   const legH  = Math.min(iH * 0.65, 110);
   const legW  = 11;
   const legX  = iW + 20;
@@ -3590,8 +4083,8 @@ export function drawGoshPlot(result, profile, options = {}) {
   const defs   = svg.append("defs");
   const grad   = defs.append("linearGradient")
     .attr("id", gradId)
-    .attr("x1", "0%").attr("y1", "100%")   // bottom = n=1 (purple)
-    .attr("x2", "0%").attr("y2", "0%");    // top    = n=k (yellow)
+    .attr("x1", "0%").attr("y1", "100%")   // bottom = n=1
+    .attr("x2", "0%").attr("y2", "0%");    // top    = n=k
 
   const stops = Math.min(k - 1, 8);
   for (let s = 0; s <= stops; s++) {
@@ -3606,7 +4099,7 @@ export function drawGoshPlot(result, profile, options = {}) {
   lg.append("rect")
     .attr("width", legW).attr("height", legH)
     .attr("fill", `url(#${gradId})`)
-    .attr("stroke", "var(--border-hover)").attr("stroke-width", 0.5);
+    .attr("stroke", T.border).attr("stroke-width", 0.5);
 
   // Tick marks and labels: k (top), midpoint, 1 (bottom)
   [
@@ -3616,10 +4109,10 @@ export function drawGoshPlot(result, profile, options = {}) {
   ].forEach(({ y, label }) => {
     lg.append("line")
       .attr("x1", legW).attr("x2", legW + 3).attr("y1", y).attr("y2", y)
-      .attr("stroke", "var(--fg-muted)").attr("stroke-width", 0.8);
+      .attr("stroke", T.fgMuted).attr("stroke-width", 0.8);
     lg.append("text")
       .attr("x", legW + 5).attr("y", y)
-      .attr("dominant-baseline", "middle").attr("fill", "var(--fg-muted)").style("font-size", "9px")
+      .attr("dominant-baseline", "middle").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.annot)
       .text(label);
   });
 
@@ -3627,7 +4120,7 @@ export function drawGoshPlot(result, profile, options = {}) {
   svg.append("text")
     .attr("transform",
       `rotate(-90) translate(${-(margin.top + legY + legH / 2)},${margin.left + legX + legW + 30})`)
-    .attr("text-anchor", "middle").attr("fill", "var(--fg-muted)").style("font-size", "9px")
+    .attr("text-anchor", "middle").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.annot)
     .text("n (subset size)");
 }
 
@@ -3645,17 +4138,24 @@ export function drawGoshPlot(result, profile, options = {}) {
 //   profile curve → peak dot → axes → labels → title.
 // =============================================================================
 export function drawProfileLikTau2(result, options = {}) {
-  const svg = clearAndSelectSVG("#profileLikTau2Plot");
-  if (!result || result.error) return;
+  const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
+  const svg = initSvg("#profileLikTau2Plot", "Profile likelihood plot for τ²", T);
+  if (!result || result.error) { drawNoDataPlaceholder(svg, +svg.attr("width") || 500, +svg.attr("height") || 340, result?.error || "No data"); return; }
 
   const xScale = options.xScale || "tau2";
   const { grid, ll, tau2hat, lCritRel, ciLow, ciHigh, method, k } = result;
 
-  const margin = { top: 34, right: 24, bottom: 56, left: 66 };
+  const margin = { ...MARGIN_DENSITY };
   const W  = +svg.attr("width")  || 500;
   const H  = +svg.attr("height") || 380;
   const iW = W - margin.left - margin.right;
   const iH = H - margin.top  - margin.bottom;
+
+  if (T.bg && T.bg !== "transparent") {
+    svg.insert("rect", ":first-child")
+      .attr("width", W).attr("height", H).attr("fill", T.bg);
+  }
+  svg.style("font-family", T.fontFamily);
 
   // ---- Clip path so the curve doesn't bleed into margins ----
   const clipId = "profileLikClip";
@@ -3682,7 +4182,7 @@ export function drawProfileLikTau2(result, options = {}) {
     .attr("class", "grid")
     .call(d3.axisLeft(y).ticks(5).tickSize(-iW).tickFormat(""))
     .selectAll("line")
-    .attr("stroke", "var(--border)")
+    .attr("stroke", T.borderGrid)
     .attr("stroke-dasharray", "2,3");
   g.select(".grid .domain").remove();
 
@@ -3693,7 +4193,7 @@ export function drawProfileLikTau2(result, options = {}) {
     .attr("x", bandX1).attr("y", 0)
     .attr("width",  Math.max(0, bandX2 - bandX1))
     .attr("height", iH)
-    .attr("fill", "var(--accent)")
+    .attr("fill", T.accent)
     .attr("fill-opacity", 0.10);
 
   // ---- 2. Horizontal threshold line (dashed) ----
@@ -3701,14 +4201,16 @@ export function drawProfileLikTau2(result, options = {}) {
   g.append("line")
     .attr("x1", 0).attr("x2", iW)
     .attr("y1", yCrit).attr("y2", yCrit)
-    .attr("stroke", "var(--fg-subtle)")
+    .attr("stroke", T.fgSubtle)
     .attr("stroke-width", 1.2)
     .attr("stroke-dasharray", "5,3");
+  // If the cutoff line is near the top, place label below to avoid τ̂ label collision
+  const cutoffBelow = yCrit < 20;
   g.append("text")
-    .attr("x", iW - 2).attr("y", yCrit - 4)
+    .attr("x", iW - 2).attr("y", cutoffBelow ? yCrit + 12 : yCrit - 4)
     .attr("text-anchor", "end")
-    .attr("fill", "var(--fg-muted)")
-    .style("font-size", "9px")
+    .attr("fill", T.fgMuted)
+    .style("font-size", FONT_SIZE.annot)
     .text("95% CI cutoff");
 
   // ---- 3. Vertical τ²_hat line ----
@@ -3716,13 +4218,13 @@ export function drawProfileLikTau2(result, options = {}) {
   g.append("line")
     .attr("x1", xHat).attr("x2", xHat)
     .attr("y1", 0).attr("y2", iH)
-    .attr("stroke", "var(--accent)")
+    .attr("stroke", T.accent)
     .attr("stroke-width", 1.2);
   g.append("text")
     .attr("x", xHat).attr("y", -6)
     .attr("text-anchor", "middle")
-    .attr("fill", "var(--accent)")
-    .style("font-size", "9px")
+    .attr("fill", T.accent)
+    .style("font-size", FONT_SIZE.annot)
     .text(xScale === "tau"
       ? `τ̂ = ${Math.sqrt(tau2hat).toPrecision(3)}`
       : `τ̂² = ${tau2hat.toPrecision(3)}`);
@@ -3733,14 +4235,14 @@ export function drawProfileLikTau2(result, options = {}) {
     g.append("line")
       .attr("x1", xb).attr("x2", xb)
       .attr("y1", 0).attr("y2", iH)
-      .attr("stroke", "var(--fg-subtle)")
+      .attr("stroke", T.fgSubtle)
       .attr("stroke-width", 1)
       .attr("stroke-dasharray", "4,3");
     g.append("text")
       .attr("x", xb).attr("y", iH + 30)
       .attr("text-anchor", "middle")
-      .attr("fill", "var(--fg-muted)")
-      .style("font-size", "8.5px")
+      .attr("fill", T.fgMuted)
+      .style("font-size", FONT_SIZE.annot)
       .text(label);
   }
   if (ciLow > 0) drawCIBound(ciLow, toX(ciLow).toPrecision(3));
@@ -3756,7 +4258,7 @@ export function drawProfileLikTau2(result, options = {}) {
     .append("path")
     .datum(ll)
     .attr("fill", "none")
-    .attr("stroke", "var(--accent)")
+    .attr("stroke", T.accent)
     .attr("stroke-width", 2)
     .attr("d", lineGen);
 
@@ -3765,7 +4267,7 @@ export function drawProfileLikTau2(result, options = {}) {
     .attr("cx", xHat)
     .attr("cy", y(0))
     .attr("r", 4)
-    .attr("fill", "var(--accent)");
+    .attr("fill", T.accent);
 
   // ---- 7. Axes ----
   const fmt = xScale === "tau"
@@ -3775,11 +4277,11 @@ export function drawProfileLikTau2(result, options = {}) {
   const axisX = g.append("g")
     .attr("transform", `translate(0,${iH})`)
     .call(d3.axisBottom(x).ticks(5).tickFormat(fmt));
-  styleAxis(axisX, "var(--border-hover)", "var(--fg-muted)", "10px");
+  styleAxis(axisX, T.border, T.fgMuted, FONT_SIZE.tickLabel);
 
   const axisY = g.append("g")
     .call(d3.axisLeft(y).ticks(5).tickFormat(d3.format(".2f")));
-  styleAxis(axisY, "var(--border-hover)", "var(--fg-muted)", "10px");
+  styleAxis(axisY, T.border, T.fgMuted, FONT_SIZE.tickLabel);
 
   // ---- 8. Axis labels ----
   const xLabel = xScale === "tau"
@@ -3789,8 +4291,8 @@ export function drawProfileLikTau2(result, options = {}) {
     .attr("x", margin.left + iW / 2)
     .attr("y", H - 8)
     .attr("text-anchor", "middle")
-    .attr("fill", "var(--fg-muted)")
-    .style("font-size", "11px")
+    .attr("fill", T.fgMuted)
+    .style("font-size", FONT_SIZE.axisLabel)
     .text(xLabel);
 
   svg.append("text")
@@ -3798,8 +4300,8 @@ export function drawProfileLikTau2(result, options = {}) {
     .attr("x", -(margin.top + iH / 2))
     .attr("y", 14)
     .attr("text-anchor", "middle")
-    .attr("fill", "var(--fg-muted)")
-    .style("font-size", "11px")
+    .attr("fill", T.fgMuted)
+    .style("font-size", FONT_SIZE.axisLabel)
     .text("Profile log-likelihood (relative)");
 
   // ---- 9. Title ----
@@ -3807,8 +4309,8 @@ export function drawProfileLikTau2(result, options = {}) {
     .attr("x", margin.left + iW / 2)
     .attr("y", 14)
     .attr("text-anchor", "middle")
-    .attr("fill", "var(--fg)")
-    .style("font-size", "11px")
+    .attr("fill", T.fg)
+    .style("font-size", FONT_SIZE.axisLabel)
     .style("font-weight", "600")
     .text(`Profile likelihood \u2014 \u03C4\u00B2 \u2014 ${method} \u2014 k\u202F=\u202F${k}`);
 }
@@ -3824,18 +4326,25 @@ export function drawProfileLikTau2(result, options = {}) {
 //   density curve → CI bound lines → posterior mean line → axes → labels → title
 // =============================================================================
 export function drawBayesTauPosterior(result, options = {}) {
-  const svg = clearAndSelectSVG("#bayesTauPlot");
-  if (!result || result.error) return;
+  const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
+  const svg = initSvg("#bayesTauPlot", "Bayesian posterior for τ", T);
+  if (!result || result.error) { drawNoDataPlaceholder(svg, +svg.attr("width") || 500, +svg.attr("height") || 340, result?.error || "No data"); return; }
 
   const { tauGrid, tauWeights, tauMean, tauCI, sigma_tau, k } = result;
   const nGrid = tauGrid.length;
   const dtau  = nGrid > 1 ? tauGrid[1] - tauGrid[0] : 1;
 
-  const margin = { top: 34, right: 24, bottom: 56, left: 66 };
+  const margin = { ...MARGIN_DENSITY };
   const W  = +svg.attr("width")  || 500;
   const H  = +svg.attr("height") || 340;
   const iW = W - margin.left - margin.right;
   const iH = H - margin.top  - margin.bottom;
+
+  if (T.bg && T.bg !== "transparent") {
+    svg.insert("rect", ":first-child")
+      .attr("width", W).attr("height", H).attr("fill", T.bg);
+  }
+  svg.style("font-family", T.fontFamily);
 
   const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
 
@@ -3852,7 +4361,7 @@ export function drawBayesTauPosterior(result, options = {}) {
   // ---- Gridlines ----
   g.append("g").attr("class", "grid")
     .call(d3.axisLeft(y).ticks(4).tickSize(-iW).tickFormat(""))
-    .selectAll("line").attr("stroke", "var(--border)").attr("stroke-dasharray", "2,3");
+    .selectAll("line").attr("stroke", T.borderGrid).attr("stroke-dasharray", "2,3");
   g.select(".grid .domain").remove();
 
   // ---- Helper: linearly interpolate density at arbitrary τ ----
@@ -3872,7 +4381,7 @@ export function drawBayesTauPosterior(result, options = {}) {
 
   g.append("path")
     .datum(ciPts)
-    .attr("fill", "var(--accent)").attr("fill-opacity", 0.20).attr("stroke", "none")
+    .attr("fill", T.accent).attr("fill-opacity", 0.20).attr("stroke", "none")
     .attr("d", d3.area().x(d => x(d[0])).y0(iH).y1(d => y(d[1])));
 
   // ---- 2. Full density area (very light background fill) ----
@@ -3880,13 +4389,13 @@ export function drawBayesTauPosterior(result, options = {}) {
 
   g.append("path")
     .datum(allPts)
-    .attr("fill", "var(--accent)").attr("fill-opacity", 0.06).attr("stroke", "none")
+    .attr("fill", T.accent).attr("fill-opacity", 0.06).attr("stroke", "none")
     .attr("d", d3.area().x(d => x(d[0])).y0(iH).y1(d => y(d[1])));
 
   // ---- 3. Density curve ----
   g.append("path")
     .datum(allPts)
-    .attr("fill", "none").attr("stroke", "var(--accent)").attr("stroke-width", 2)
+    .attr("fill", "none").attr("stroke", T.accent).attr("stroke-width", 2)
     .attr("d", d3.line().x(d => x(d[0])).y(d => y(d[1])));
 
   // ---- 4. CI bound tick lines ----
@@ -3894,7 +4403,7 @@ export function drawBayesTauPosterior(result, options = {}) {
     g.append("line")
       .attr("x1", x(t)).attr("x2", x(t))
       .attr("y1", 0).attr("y2", iH)
-      .attr("stroke", "var(--accent)").attr("stroke-width", 1)
+      .attr("stroke", T.accent).attr("stroke-width", 1)
       .attr("stroke-dasharray", "3,3").attr("opacity", 0.7);
   });
 
@@ -3904,44 +4413,44 @@ export function drawBayesTauPosterior(result, options = {}) {
   g.append("line")
     .attr("x1", meanX).attr("x2", meanX)
     .attr("y1", 0).attr("y2", iH)
-    .attr("stroke", "var(--accent)").attr("stroke-width", 2)
+    .attr("stroke", T.accent).attr("stroke-width", 2)
     .attr("stroke-dasharray", "6,3");
 
   g.append("text")
     .attr("x", meanX + (meanRight ? -4 : 4))
     .attr("y", 22)
     .attr("text-anchor", meanRight ? "end" : "start")
-    .attr("fill", "var(--fg-muted)").style("font-size", "9px")
+    .attr("fill", T.fgMuted).style("font-size", FONT_SIZE.annot)
     .text(`mean\u202F=\u202F${tauMean.toFixed(3)}`);
 
   // ---- 6. Axes ----
   const axisX = g.append("g").attr("transform", `translate(0,${iH})`)
     .call(d3.axisBottom(x).ticks(5).tickFormat(d3.format(".2~g")));
-  styleAxis(axisX, "var(--border-hover)", "var(--fg-muted)", "10px");
+  styleAxis(axisX, T.border, T.fgMuted, FONT_SIZE.tickLabel);
 
   const axisY = g.append("g")
     .call(d3.axisLeft(y).ticks(4).tickFormat(d3.format(".2~g")));
-  styleAxis(axisY, "var(--border-hover)", "var(--fg-muted)", "10px");
+  styleAxis(axisY, T.border, T.fgMuted, FONT_SIZE.tickLabel);
 
   // ---- 7. Axis labels ----
   svg.append("text")
     .attr("x", margin.left + iW / 2).attr("y", H - 8)
-    .attr("text-anchor", "middle").attr("fill", "var(--fg-muted)")
-    .style("font-size", "11px")
+    .attr("text-anchor", "middle").attr("fill", T.fgMuted)
+    .style("font-size", FONT_SIZE.axisLabel)
     .text("\u03C4 (between-study SD)");
 
   svg.append("text")
     .attr("transform", "rotate(-90)")
     .attr("x", -(margin.top + iH / 2)).attr("y", 14)
-    .attr("text-anchor", "middle").attr("fill", "var(--fg-muted)")
-    .style("font-size", "11px")
+    .attr("text-anchor", "middle").attr("fill", T.fgMuted)
+    .style("font-size", FONT_SIZE.axisLabel)
     .text("Posterior density");
 
   // ---- 8. Title ----
   svg.append("text")
     .attr("x", margin.left + iW / 2).attr("y", 14)
-    .attr("text-anchor", "middle").attr("fill", "var(--fg)")
-    .style("font-size", "11px").style("font-weight", "600")
+    .attr("text-anchor", "middle").attr("fill", T.fg)
+    .style("font-size", FONT_SIZE.title).style("font-weight", "600")
     .text(`Posterior of \u03C4 \u2014 HalfNormal(\u03C3_\u03C4\u202F=\u202F${sigma_tau}) \u2014 k\u202F=\u202F${k}`);
 }
 
@@ -3958,8 +4467,9 @@ export function drawBayesTauPosterior(result, options = {}) {
 //   RE comparison line (if options.reMean provided) → axes → labels → title
 // =============================================================================
 export function drawBayesMuPosterior(result, options = {}) {
-  const svg = clearAndSelectSVG("#bayesMuPlot");
-  if (!result || result.error) return;
+  const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
+  const svg = initSvg("#bayesMuPlot", "Bayesian posterior for μ", T);
+  if (!result || result.error) { drawNoDataPlaceholder(svg, +svg.attr("width") || 500, +svg.attr("height") || 340, result?.error || "No data"); return; }
 
   const { muGrid, muDensity, muMean, muCI, mu0, sigma_mu, k } = result;
   const nMu   = muGrid.length;
@@ -3968,11 +4478,17 @@ export function drawBayesMuPosterior(result, options = {}) {
   const muMax = muGrid[nMu - 1];
   const reMean = options.reMean;
 
-  const margin = { top: 34, right: 24, bottom: 56, left: 66 };
+  const margin = { ...MARGIN_DENSITY };
   const W  = +svg.attr("width")  || 500;
   const H  = +svg.attr("height") || 340;
   const iW = W - margin.left - margin.right;
   const iH = H - margin.top  - margin.bottom;
+
+  if (T.bg && T.bg !== "transparent") {
+    svg.insert("rect", ":first-child")
+      .attr("width", W).attr("height", H).attr("fill", T.bg);
+  }
+  svg.style("font-family", T.fontFamily);
 
   const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
 
@@ -3984,7 +4500,7 @@ export function drawBayesMuPosterior(result, options = {}) {
   // ---- Gridlines ----
   g.append("g").attr("class", "grid")
     .call(d3.axisLeft(y).ticks(4).tickSize(-iW).tickFormat(""))
-    .selectAll("line").attr("stroke", "var(--border)").attr("stroke-dasharray", "2,3");
+    .selectAll("line").attr("stroke", T.borderGrid).attr("stroke-dasharray", "2,3");
   g.select(".grid .domain").remove();
 
   // ---- Helper: linearly interpolate muDensity at arbitrary μ ----
@@ -4004,7 +4520,7 @@ export function drawBayesMuPosterior(result, options = {}) {
 
   g.append("path")
     .datum(ciPts)
-    .attr("fill", "var(--accent)").attr("fill-opacity", 0.20).attr("stroke", "none")
+    .attr("fill", T.accent).attr("fill-opacity", 0.20).attr("stroke", "none")
     .attr("d", d3.area().x(d => x(d[0])).y0(iH).y1(d => y(d[1])));
 
   // ---- 2. Full density area (very light background fill) ----
@@ -4012,13 +4528,13 @@ export function drawBayesMuPosterior(result, options = {}) {
 
   g.append("path")
     .datum(allPts)
-    .attr("fill", "var(--accent)").attr("fill-opacity", 0.06).attr("stroke", "none")
+    .attr("fill", T.accent).attr("fill-opacity", 0.06).attr("stroke", "none")
     .attr("d", d3.area().x(d => x(d[0])).y0(iH).y1(d => y(d[1])));
 
   // ---- 3. Density curve ----
   g.append("path")
     .datum(allPts)
-    .attr("fill", "none").attr("stroke", "var(--accent)").attr("stroke-width", 2)
+    .attr("fill", "none").attr("stroke", T.accent).attr("stroke-width", 2)
     .attr("d", d3.line().x(d => x(d[0])).y(d => y(d[1])));
 
   // ---- 4. CI bound tick lines ----
@@ -4026,7 +4542,7 @@ export function drawBayesMuPosterior(result, options = {}) {
     g.append("line")
       .attr("x1", x(m)).attr("x2", x(m))
       .attr("y1", 0).attr("y2", iH)
-      .attr("stroke", "var(--accent)").attr("stroke-width", 1)
+      .attr("stroke", T.accent).attr("stroke-width", 1)
       .attr("stroke-dasharray", "3,3").attr("opacity", 0.7);
   });
 
@@ -4036,62 +4552,71 @@ export function drawBayesMuPosterior(result, options = {}) {
   g.append("line")
     .attr("x1", meanX).attr("x2", meanX)
     .attr("y1", 0).attr("y2", iH)
-    .attr("stroke", "var(--accent)").attr("stroke-width", 2)
+    .attr("stroke", T.accent).attr("stroke-width", 2)
     .attr("stroke-dasharray", "6,3");
 
+  // ---- 6. Frequentist RE comparison line (dotted) ----
+  const hasRE   = reMean !== undefined && isFinite(reMean) && reMean >= muMin && reMean <= muMax;
+  const reX     = hasRE ? x(reMean) : null;
+  // When lines are close, share a label anchor to prevent horizontal overlap
+  const labelsClose  = hasRE && Math.abs(meanX - reX) < 40;
+  const sharedX      = labelsClose ? (meanX + reX) / 2 : null;
+  const sharedRight  = labelsClose ? sharedX > iW * 0.6 : null;
+  const mLabelX      = sharedX !== null ? sharedX : meanX;
+  const mRight       = sharedRight !== null ? sharedRight : meanRight;
+
   g.append("text")
-    .attr("x", meanX + (meanRight ? -4 : 4))
+    .attr("x", mLabelX + (mRight ? -4 : 4))
     .attr("y", 22)
-    .attr("text-anchor", meanRight ? "end" : "start")
-    .attr("fill", "var(--fg-muted)").style("font-size", "9px")
+    .attr("text-anchor", mRight ? "end" : "start")
+    .attr("fill", T.fgMuted).style("font-size", FONT_SIZE.annot)
     .text(`posterior mean\u202F=\u202F${muMean.toFixed(3)}`);
 
-  // ---- 6. Frequentist RE comparison line (dotted) ----
-  if (reMean !== undefined && isFinite(reMean) && reMean >= muMin && reMean <= muMax) {
-    const reX     = x(reMean);
-    const reRight = reX > iW * 0.6;
+  if (hasRE) {
+    const reRight = sharedRight !== null ? sharedRight : reX > iW * 0.6;
+    const rLabelX = sharedX !== null ? sharedX : reX;
     g.append("line")
       .attr("x1", reX).attr("x2", reX)
       .attr("y1", 0).attr("y2", iH)
-      .attr("stroke", "var(--fg-muted)").attr("stroke-width", 1.5)
+      .attr("stroke", T.fgMuted).attr("stroke-width", 1.5)
       .attr("stroke-dasharray", "3,2");
 
     g.append("text")
-      .attr("x", reX + (reRight ? -4 : 4))
+      .attr("x", rLabelX + (reRight ? -4 : 4))
       .attr("y", 34)
       .attr("text-anchor", reRight ? "end" : "start")
-      .attr("fill", "var(--fg-muted)").style("font-size", "9px")
+      .attr("fill", T.fgMuted).style("font-size", FONT_SIZE.annot)
       .text(`RE\u202F=\u202F${reMean.toFixed(3)}`);
   }
 
   // ---- 7. Axes ----
   const axisX = g.append("g").attr("transform", `translate(0,${iH})`)
     .call(d3.axisBottom(x).ticks(5).tickFormat(d3.format(".3~g")));
-  styleAxis(axisX, "var(--border-hover)", "var(--fg-muted)", "10px");
+  styleAxis(axisX, T.border, T.fgMuted, FONT_SIZE.tickLabel);
 
   const axisY = g.append("g")
     .call(d3.axisLeft(y).ticks(4).tickFormat(d3.format(".2~g")));
-  styleAxis(axisY, "var(--border-hover)", "var(--fg-muted)", "10px");
+  styleAxis(axisY, T.border, T.fgMuted, FONT_SIZE.tickLabel);
 
   // ---- 8. Axis labels ----
   svg.append("text")
     .attr("x", margin.left + iW / 2).attr("y", H - 8)
-    .attr("text-anchor", "middle").attr("fill", "var(--fg-muted)")
-    .style("font-size", "11px")
+    .attr("text-anchor", "middle").attr("fill", T.fgMuted)
+    .style("font-size", FONT_SIZE.axisLabel)
     .text("\u03BC (pooled effect, analysis scale)");
 
   svg.append("text")
     .attr("transform", "rotate(-90)")
     .attr("x", -(margin.top + iH / 2)).attr("y", 14)
-    .attr("text-anchor", "middle").attr("fill", "var(--fg-muted)")
-    .style("font-size", "11px")
+    .attr("text-anchor", "middle").attr("fill", T.fgMuted)
+    .style("font-size", FONT_SIZE.axisLabel)
     .text("Posterior density");
 
   // ---- 9. Title ----
   svg.append("text")
     .attr("x", margin.left + iW / 2).attr("y", 14)
-    .attr("text-anchor", "middle").attr("fill", "var(--fg)")
-    .style("font-size", "11px").style("font-weight", "600")
+    .attr("text-anchor", "middle").attr("fill", T.fg)
+    .style("font-size", FONT_SIZE.title).style("font-weight", "600")
     .text(`Posterior of \u03BC \u2014 N(\u03BC\u2080\u202F=\u202F${mu0},\u202F\u03C3_\u03BC\u202F=\u202F${sigma_mu}) \u2014 k\u202F=\u202F${k}`);
 }
 
@@ -4108,16 +4633,23 @@ export function drawBayesMuPosterior(result, options = {}) {
 // =============================================================================
 export function drawQQPlot(stdResiduals, labels, options = {}) {
   const containerId = options.containerId || "#qqPlot";
-  const svg = clearAndSelectSVG(containerId);
+  const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
+  const svg = initSvg(containerId, "Normal Q-Q plot of standardised residuals", T);
 
   const k = stdResiduals.length;
-  if (k < 3) return;
+  if (k < 3) { drawNoDataPlaceholder(svg, +svg.attr("width") || 420, +svg.attr("height") || 380, "Need ≥ 3 studies"); return; }
 
   const W = +svg.attr("width")  || 420;
   const H = +svg.attr("height") || 380;
   const margin = { top: 30, right: 24, bottom: 56, left: 62 };
   const iW = W - margin.left - margin.right;
   const iH = H - margin.top  - margin.bottom;
+
+  if (T.bg && T.bg !== "transparent") {
+    svg.insert("rect", ":first-child")
+      .attr("width", W).attr("height", H).attr("fill", T.bg);
+  }
+  svg.style("font-family", T.fontFamily);
 
   // ---- 1. Compute theoretical quantiles (Blom's formula) ----
   // Sort indices by residual value to pair with quantiles.
@@ -4176,7 +4708,7 @@ export function drawQQPlot(stdResiduals, labels, options = {}) {
     if (x1 < 0 || x1 > iW || y1 < 0 || y1 > iH) return; // out of range
     g.append("line")
       .attr("x1", x1).attr("x2", x2).attr("y1", y1).attr("y2", y2)
-      .attr("stroke", "var(--border)")
+      .attr("stroke", T.borderGrid)
       .attr("stroke-width", 1)
       .attr("stroke-dasharray", "3,3");
   });
@@ -4189,71 +4721,60 @@ export function drawQQPlot(stdResiduals, labels, options = {}) {
   g.append("line")
     .attr("x1", x(lineX1)).attr("x2", x(lineX2))
     .attr("y1", y(lineY1)).attr("y2", y(lineY2))
-    .attr("stroke", "var(--accent)")
+    .attr("stroke", T.accent)
     .attr("stroke-width", 1.5)
     .attr("stroke-dasharray", "6,3");
 
   // ---- 6. Points ----
-  const tooltip = selTooltip();
-
-  points.forEach(pt => {
-    const cx = x(pt.theory);
-    const cy = y(pt.observed);
-    const isOutlier = Math.abs(pt.observed) > 2;
-
-    g.append("circle")
-      .attr("cx", cx).attr("cy", cy)
+  attachTooltip(
+    g.selectAll("circle.qq-pt")
+      .data(points)
+      .enter().append("circle")
+      .attr("class", "qq-pt")
+      .attr("cx", pt => x(pt.theory))
+      .attr("cy", pt => y(pt.observed))
       .attr("r", 5)
-      .attr("fill", isOutlier ? "var(--color-warning)" : "var(--accent)")
+      .attr("fill", pt => Math.abs(pt.observed) > 2 ? T.colorWarning : T.accent)
       .attr("fill-opacity", 0.80)
-      .attr("stroke", "var(--bg-surface)")
-      .attr("stroke-width", 1)
-      .on("mousemove", (event) => {
-        tooltip.style("opacity", 1)
-          .html(
-            `<b>${pt.label}</b>` +
-            `<br>Theoretical quantile: ${pt.theory.toFixed(3)}` +
-            `<br>Std. residual: ${pt.observed.toFixed(3)}` +
-            (isOutlier ? `<br><i>Potential outlier (|z| > 2)</i>` : "")
-          )
-          .style("left", (event.pageX + 12) + "px")
-          .style("top",  (event.pageY - 24) + "px");
-      })
-      .on("mouseout", () => tooltip.style("opacity", 0));
-  });
+      .attr("stroke", T.bgSurface)
+      .attr("stroke-width", 1),
+    pt => {
+      const isOutlier = Math.abs(pt.observed) > 2;
+      return `<b>${pt.label}</b>` +
+        `<br>Theoretical quantile: ${pt.theory.toFixed(3)}` +
+        `<br>Std. residual: ${pt.observed.toFixed(3)}` +
+        (isOutlier ? `<br><i>Potential outlier (|z| > 2)</i>` : "");
+    }
+  );
 
   // ---- 7. Axes ----
   const xAxis = d3.axisBottom(x).ticks(5).tickSize(4);
   const yAxis = d3.axisLeft(y).ticks(5).tickSize(4);
 
-  const isDark = document.documentElement.classList.contains("dark");
-  const strokeColor = isDark ? "#aaa" : "#555";
-  const fillColor   = isDark ? "#ccc" : "#333";
-
   const xAxisG = g.append("g").attr("transform", `translate(0,${iH})`).call(xAxis);
-  styleAxis(xAxisG, strokeColor, fillColor, 10, "sans-serif");
+  styleAxis(xAxisG, T.border, T.fgMuted, FONT_SIZE.tickLabel);
   const yAxisG = g.append("g").call(yAxis);
-  styleAxis(yAxisG, strokeColor, fillColor, 10, "sans-serif");
+  styleAxis(yAxisG, T.border, T.fgMuted, FONT_SIZE.tickLabel);
 
   // ---- 8. Axis labels ----
   g.append("text")
     .attr("x", iW / 2).attr("y", iH + 42)
-    .attr("text-anchor", "middle").attr("fill", "var(--fg-muted)")
-    .style("font-size", "11px")
+    .attr("text-anchor", "middle").attr("fill", T.fgMuted)
+    .style("font-size", FONT_SIZE.axisLabel)
     .text("Theoretical quantiles");
 
   g.append("text")
     .attr("transform", "rotate(-90)")
     .attr("x", -(iH / 2)).attr("y", -48)
-    .attr("text-anchor", "middle").attr("fill", "var(--fg-muted)")
-    .style("font-size", "11px")
+    .attr("text-anchor", "middle").attr("fill", T.fgMuted)
+    .style("font-size", FONT_SIZE.axisLabel)
     .text("Standardised residuals");
 
   // ---- 9. Title ----
   svg.append("text")
     .attr("x", margin.left + iW / 2).attr("y", 18)
-    .attr("text-anchor", "middle").attr("fill", "var(--fg)")
-    .style("font-size", "11px").style("font-weight", "600")
+    .attr("text-anchor", "middle").attr("fill", T.fg)
+    .style("font-size", FONT_SIZE.title).style("font-weight", "600")
     .text(`Normal Q-Q plot \u2014 k\u202F=\u202F${k}`);
 }
 
@@ -4270,17 +4791,24 @@ export function drawQQPlot(stdResiduals, labels, options = {}) {
 //   options  — { containerId: "#radialPlot" }
 export function drawRadialPlot(studies, m, profile, options = {}) {
   const containerId = options.containerId || "#radialPlot";
-  const svg = clearAndSelectSVG(containerId);
+  const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
+  const svg = initSvg(containerId, "Radial (Galbraith) plot", T);
 
-  const valid = studies.filter(s => isFinite(s.yi) && isFinite(s.vi) && s.vi > 0);
+  const valid = validStudies(studies);
   const k = valid.length;
-  if (k < 2) return;
+  if (k < 2) { drawNoDataPlaceholder(svg, +svg.attr("width") || 500, +svg.attr("height") || 400, "Need ≥ 2 studies"); return; }
 
   const W = +svg.attr("width")  || 500;
   const H = +svg.attr("height") || 400;
   const margin = { top: 30, right: 80, bottom: 54, left: 60 };
   const iW = W - margin.left - margin.right;
   const iH = H - margin.top  - margin.bottom;
+
+  if (T.bg && T.bg !== "transparent") {
+    svg.insert("rect", ":first-child")
+      .attr("width", W).attr("height", H).attr("fill", T.bg);
+  }
+  svg.style("font-family", T.fontFamily);
 
   // ---- 1. Compute radial coordinates ----
   const pts = valid.map(s => {
@@ -4322,7 +4850,7 @@ export function drawRadialPlot(studies, m, profile, options = {}) {
     g.append("line")
       .attr("x1", 0).attr("x2", iW)
       .attr("y1", yScale(0)).attr("y2", yScale(0))
-      .attr("stroke", "var(--border)").attr("stroke-dasharray", "3,3").attr("stroke-width", 1);
+      .attr("stroke", T.borderGrid).attr("stroke-dasharray", "3,3").attr("stroke-width", 1);
   }
 
   // ---- 4. ±2 band lines (dashed) ----
@@ -4336,7 +4864,7 @@ export function drawRadialPlot(studies, m, profile, options = {}) {
     g.append("line")
       .attr("x1", px0).attr("y1", py0)
       .attr("x2", px1).attr("y2", py1)
-      .attr("stroke", "var(--border-hover)")
+      .attr("stroke", T.border)
       .attr("stroke-dasharray", "5,3")
       .attr("stroke-width", 1.2);
     // Label: "±2" at right edge (if in view)
@@ -4344,7 +4872,7 @@ export function drawRadialPlot(studies, m, profile, options = {}) {
     if (labelY >= 0 && labelY <= iH) {
       g.append("text")
         .attr("x", px1 + 4).attr("y", labelY + 4)
-        .attr("fill", "var(--fg-muted)").style("font-size", "10px")
+        .attr("fill", T.fgMuted).style("font-size", FONT_SIZE.tickLabel)
         .text(offset > 0 ? "+2" : "−2");
     }
   });
@@ -4356,7 +4884,7 @@ export function drawRadialPlot(studies, m, profile, options = {}) {
     g.append("line")
       .attr("x1", xScale(lx0)).attr("y1", yScale(ly0))
       .attr("x2", xScale(lx1)).attr("y2", yScale(ly1))
-      .attr("stroke", "var(--accent)").attr("stroke-width", 1.5);
+      .attr("stroke", T.accent).attr("stroke-width", 1.5);
   }
 
   // ---- 6. Points ----
@@ -4368,9 +4896,9 @@ export function drawRadialPlot(studies, m, profile, options = {}) {
       .attr("cx", d => xScale(d.xi))
       .attr("cy", d => yScale(d.yi))
       .attr("r", 5)
-      .attr("fill", d => d.outlier ? "var(--color-warning)" : "var(--accent)")
+      .attr("fill", d => d.outlier ? T.colorWarning : T.accent)
       .attr("fill-opacity", 0.82)
-      .attr("stroke", "var(--bg)")
+      .attr("stroke", T.bg)
       .attr("stroke-width", 0.8),
     d => {
       const thetaHat = d.yi / d.xi;   // study-specific estimate = yi
@@ -4381,7 +4909,7 @@ export function drawRadialPlot(studies, m, profile, options = {}) {
         `y/SE = ${fmt4(d.yi)}<br>` +
         `1/SE = ${fmt4(d.xi)}<br>` +
         `Effect (yᵢ) = ${disp}<br>` +
-        (d.outlier ? `<span style="color:var(--color-warning)">⚠ Potential outlier (|residual| > 2)</span>` : "");
+        (d.outlier ? `<span style="color:${T.colorWarning}">⚠ Potential outlier (|residual| > 2)</span>` : "");
     }
   );
 
@@ -4389,24 +4917,22 @@ export function drawRadialPlot(studies, m, profile, options = {}) {
   const xAxis = d3.axisBottom(xScale).ticks(6);
   const yAxis = d3.axisLeft(yScale).ticks(7);
 
-  g.append("g").attr("transform", `translate(0,${iH})`).call(xAxis)
-    .selectAll("text").style("font-size", "10px");
-  g.append("g").call(yAxis)
-    .selectAll("text").style("font-size", "10px");
+  styleAxis(g.append("g").attr("transform", `translate(0,${iH})`).call(xAxis), T.border, T.fgMuted, FONT_SIZE.tickLabel);
+  styleAxis(g.append("g").call(yAxis), T.border, T.fgMuted, FONT_SIZE.tickLabel);
 
   // X-axis label
   g.append("text")
     .attr("x", iW / 2).attr("y", iH + 42)
-    .attr("text-anchor", "middle").attr("fill", "var(--fg)")
-    .style("font-size", "11px")
+    .attr("text-anchor", "middle").attr("fill", T.fgMuted)
+    .style("font-size", FONT_SIZE.axisLabel)
     .text("Precision (1/SE)");
 
   // Y-axis label
   g.append("text")
     .attr("transform", "rotate(-90)")
     .attr("x", -iH / 2).attr("y", -46)
-    .attr("text-anchor", "middle").attr("fill", "var(--fg)")
-    .style("font-size", "11px")
+    .attr("text-anchor", "middle").attr("fill", T.fgMuted)
+    .style("font-size", FONT_SIZE.axisLabel)
     .text("Standardised effect (y/SE)");
 
   // ---- 8. Right axis: effect-size scale ----
@@ -4426,7 +4952,7 @@ export function drawRadialPlot(studies, m, profile, options = {}) {
     g.append("line")
       .attr("x1", iW).attr("x2", iW)
       .attr("y1", 0).attr("y2", iH)
-      .attr("stroke", "var(--border)").attr("stroke-width", 1);
+      .attr("stroke", T.border).attr("stroke-width", 1);
 
     thetaTicks.forEach(θ => {
       const yPx = yScale(θ * xRight);
@@ -4436,10 +4962,10 @@ export function drawRadialPlot(studies, m, profile, options = {}) {
       g.append("line")
         .attr("x1", iW).attr("x2", iW + 4)
         .attr("y1", yPx).attr("y2", yPx)
-        .attr("stroke", "var(--border)").attr("stroke-width", 1);
+        .attr("stroke", T.border).attr("stroke-width", 1);
       g.append("text")
         .attr("x", iW + 7).attr("y", yPx + 4)
-        .attr("fill", "var(--fg-muted)").style("font-size", "9px")
+        .attr("fill", T.fgMuted).style("font-size", FONT_SIZE.annot)
         .text(label);
     });
 
@@ -4448,8 +4974,8 @@ export function drawRadialPlot(studies, m, profile, options = {}) {
     g.append("text")
       .attr("transform", "rotate(90)")
       .attr("x", iH / 2).attr("y", -(iW + margin.right - 10))
-      .attr("text-anchor", "middle").attr("fill", "var(--fg-muted)")
-      .style("font-size", "10px")
+      .attr("text-anchor", "middle").attr("fill", T.fgMuted)
+      .style("font-size", FONT_SIZE.axisLabel)
       .text(axisLabel);
   }
 
@@ -4458,7 +4984,7 @@ export function drawRadialPlot(studies, m, profile, options = {}) {
   const outNote = nOut > 0 ? ` \u2014 ${nOut} outlier${nOut > 1 ? "s" : ""}` : "";
   svg.append("text")
     .attr("x", margin.left + iW / 2).attr("y", 18)
-    .attr("text-anchor", "middle").attr("fill", "var(--fg)")
-    .style("font-size", "11px").style("font-weight", "600")
+    .attr("text-anchor", "middle").attr("fill", T.fg)
+    .style("font-size", FONT_SIZE.title).style("font-weight", "600")
     .text(`Radial (Galbraith) plot \u2014 k\u202F=\u202F${k}${outNote}`);
 }

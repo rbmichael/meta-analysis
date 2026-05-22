@@ -29,6 +29,7 @@
     <span id="appTitle">Free and Open-Source Meta-Analysis (FOSMA)</span>
     <button id="themeToggle" class="theme-toggle-btn" title="Switch to light mode" aria-label="Toggle colour theme"></button>
   </div>
+  <span id="appTitle"><span class="app-title-main">FOSMA</span><span class="app-title-sub">Free and Open-Source Meta-Analysis</span></span>
   <div id="appHeaderTabs">
     <div id="viewToggleGroup">
       <button class="toggle-btn active" id="toggleInput"   data-view="input">Input</button>
@@ -37,6 +38,7 @@
       <button class="toggle-btn"        id="toggleAbout"   data-view="about">About</button>
     </div>
   </div>
+  <button id="themeToggle" class="theme-toggle-btn" title="Switch to light mode" aria-label="Toggle colour theme"></button>
 </header>
 
 <!-- ===================== APP LAYOUT ===================== -->
@@ -45,23 +47,9 @@
   <!-- =========== INPUT =========== -->
     <div class="section" id="inputSection">
       <div id="inputControls">
-      <!-- File controls inline with section heading -->
-      <div class="section-title-row">
-        <p class="section-title">Input</p>
-        <div id="inputFileControls">
-          <input type="file" id="csvFile" accept=".csv" style="display:none">
-          <button id="import">Import CSV</button>
-          <button id="export">Export CSV</button><button class="help-btn" data-help="input.csv" title="Help">?</button>
-          <span class="io-sep" role="separator" aria-hidden="true"></span>
-          <input type="file" id="sessionFile" accept=".json" style="display:none">
-          <button id="saveSession">Save Session</button>
-          <button id="loadSession">Load Session</button><button class="help-btn" data-help="input.session" title="Help">?</button>
-        </div>
-      </div>
-      <div id="csvWarning"></div>
 
       <!-- ---- Import preview panel (hidden until a file is chosen) ---- -->
-      <div id="importPreview" style="display:none">
+      <div id="importPreview" role="region" aria-label="CSV import preview" style="display:none">
 
         <!-- Detected settings row -->
         <div class="preview-meta">
@@ -81,6 +69,11 @@
         <!-- First 5 data rows -->
         <div id="previewTable" class="preview-table-wrap"></div>
 
+        <!-- MV hint (shown when study_id/outcome_id/yi/vi detected) -->
+        <div id="previewMvHint" style="display:none">
+          ℹ Multivariate data detected (study_id / outcome_id / yi / vi). Switch to <strong>Multivariate</strong> mode before importing to populate the multivariate input table.
+        </div>
+
         <!-- Action buttons -->
         <div class="preview-actions">
           <button id="previewImport" class="preview-import-btn">Import</button>
@@ -88,167 +81,197 @@
         </div>
       </div>
 
-      <!-- Primary settings: always visible -->
-      <div class="settings-row">
-        <label>
-          <span>Effect type<button class="help-btn" data-help-select="effectType" data-help-prefix="effect." title="Help">?</button></span>
-          <select id="effectType"></select>
-        </label>
-        <label>
-          <span>τ² estimator<button class="help-btn" data-help-select="tauMethod" data-help-prefix="tau." title="Help">?</button></span>
-          <select id="tauMethod">
-            <option value="REML" selected>REML</option>
-            <option value="DL">DerSimonian-Laird (DL)</option>
-            <option value="PM">Paule-Mandel (PM)</option>
-            <option value="EB">Empirical Bayes (EB)</option>
-            <option value="PMM">Paule-Mandel Median (PMM)</option>
-            <option value="GENQM">Generalized Q Median (GENQM)</option>
-            <option value="ML">Maximum Likelihood (ML)</option>
-            <option value="HS">Hunter-Schmidt (HS)</option>
-            <option value="HE">Hedges (HE)</option>
-            <option value="SJ">Sidik-Jonkman (SJ)</option>
-            <option value="GENQ">Generalized Q (GENQ)</option>
-            <option value="DLIT">Iterated DL (DLIT)</option>
-            <option value="HSk">Hunter-Schmidt corrected (HSk)</option>
-            <option value="SQGENQ">Square-root GENQ (SQGENQ)</option>
-            <option value="EBLUP">EBLUP (= REML)</option>
-            <option value="MH">Mantel-Haenszel (MH)</option>
-            <option value="Peto">Peto OR</option>
-          </select>
-        </label>
-        <label>
-          <span>CI method<button class="help-btn" data-help-select="ciMethod" data-help-prefix="ci." title="Help">?</button></span>
-          <select id="ciMethod">
+      <!-- Settings strip: single-row primary controls -->
+      <div id="settingsStrip">
+        <div id="analysisModeTabs">
+          <button id="modeStandard"      class="toggle-btn active">Standard</button>
+          <button id="modeMultivariate"  class="toggle-btn">Multivariate</button>
+        </div>
+
+        <!-- Standard mode: effect/τ²/CI selects + Variables + Settings popover triggers -->
+        <div id="standardSettings">
+          <span class="io-sep" role="separator" aria-hidden="true"></span>
+          <label class="strip-label">Effect<button class="help-btn" data-help-select="effectType" data-help-prefix="effect." title="Help">?</button><select id="effectType"></select></label>
+          <label class="strip-label">τ²<button class="help-btn" data-help-select="tauMethod" data-help-prefix="tau." title="Help">?</button><select id="tauMethod">
+            <optgroup label="Recommended">
+              <option value="REML" selected>REML</option>
+              <option value="DL">DerSimonian-Laird (DL)</option>
+              <option value="PM">Paule-Mandel (PM)</option>
+            </optgroup>
+            <optgroup label="Likelihood-based">
+              <option value="ML">Maximum Likelihood (ML)</option>
+              <option value="EB">Empirical Bayes (EB)</option>
+            </optgroup>
+            <optgroup label="Moment-based">
+              <option value="HE">Hedges (HE)</option>
+              <option value="HS">Hunter-Schmidt (HS)</option>
+              <option value="SJ">Sidik-Jonkman (SJ)</option>
+              <option value="GENQ">Generalized Q (GENQ)</option>
+            </optgroup>
+            <optgroup label="Iterated / Median">
+              <option value="DLIT">Iterated DL (DLIT)</option>
+              <option value="PMM">Paule-Mandel Median (PMM)</option>
+              <option value="GENQM">Generalized Q Median (GENQM)</option>
+              <option value="SQGENQ">Square-root GENQ (SQGENQ)</option>
+              <option value="HSk">Hunter-Schmidt corrected (HSk)</option>
+            </optgroup>
+            <optgroup label="Alias">
+              <option value="EBLUP">EBLUP (= REML)</option>
+            </optgroup>
+            <optgroup label="Fixed effects">
+              <option value="MH">Mantel-Haenszel (MH)</option>
+              <option value="Peto">Peto OR</option>
+            </optgroup>
+          </select></label>
+          <label class="strip-label">CI<button class="help-btn" data-help-select="ciMethod" data-help-prefix="ci." title="Help">?</button><select id="ciMethod">
             <option value="normal">Normal CI</option>
             <option value="KH">Knapp-Hartung</option>
             <option value="t">t-distribution</option>
             <option value="PL">Profile Likelihood</option>
-          </select>
-        </label>
+          </select></label>
+          <button id="robGridBtn" class="strip-popover-btn" style="display:none" aria-expanded="false" data-popover="robDataGrid">RoB ▾</button>
+          <button id="variablesPanelBtn" class="strip-popover-btn" aria-expanded="false" data-popover="variablesPanel">Variables ▾</button>
+          <button id="advancedSettingsBtn" class="strip-popover-btn" aria-expanded="false" data-popover="advancedSettings">Settings<span id="advancedBadge" class="advanced-badge" style="display:none" title="Some settings differ from defaults" aria-label="settings customized">●</span> ▾</button>
+        </div>
+
+        <!-- MV mode: MV settings popover trigger (shown only in multivariate mode) -->
+        <div id="mvStripControls" style="display:none">
+          <span class="io-sep" role="separator" aria-hidden="true"></span>
+          <button id="mvSettingsBtn" class="strip-popover-btn" aria-expanded="false" data-popover="mvSettings">MV settings ▾</button>
+        </div>
       </div>
 
-      <!-- Collapsible advanced settings -->
-      <details id="advancedSettings" class="advanced-settings">
-        <summary>Advanced settings</summary>
+      <!-- Variables panel popover -->
+      <div id="variablesPanel" class="settings-popover" hidden>
         <div class="advanced-settings-body">
 
-          <!-- Three-group settings bar -->
-          <div class="settings-groups">
+          <!-- Moderator manager -->
+          <div id="moderatorManager">
+            <strong>Moderators:</strong>
+            <input type="text" id="modName" placeholder="Column name">
+            <select id="modType" title="Moderator type and transform">
+              <optgroup label="Continuous">
+                <option value="linear">Linear</option>
+                <option value="poly2">Quadratic (x²)</option>
+                <option value="poly3">Cubic (x², x³)</option>
+                <option value="rcs3">RCS (3 knots)</option>
+                <option value="rcs4">RCS (4 knots)</option>
+                <option value="rcs5">RCS (5 knots)</option>
+              </optgroup>
+              <optgroup label="Categorical">
+                <option value="categorical">Categorical</option>
+              </optgroup>
+            </select>
+            <button id="addMod">+ Add</button><button class="help-btn" data-help="input.moderators" title="Help">?</button>
+            <div id="modTags"></div>
+          </div>
 
-            <!-- Group: Model -->
-            <div class="settings-group">
-              <span class="settings-group-label">Model</span>
-              <div class="settings-group-controls">
-                <label>
-                  <span>CI width<button class="help-btn" data-help="ci.width" title="Help">?</button></span>
-                  <select id="ciLevel">
-                    <option value="90">90%</option>
-                    <option value="95" selected>95%</option>
-                    <option value="99">99%</option>
-                  </select>
-                </label>
-                <label>
-                  <span>Correction (regression)<button class="help-btn" data-help="reg.mcc" title="Help">?</button></span>
-                  <select id="mccMethod">
-                    <option value="none" selected>None</option>
-                    <option value="bonferroni">Bonferroni</option>
-                    <option value="holm">Holm</option>
-                  </select>
-                </label>
-              </div>
-            </div>
+          <!-- Interaction term manager (shown when ≥2 moderators exist) -->
+          <div id="interactionManager" style="display:none">
+            <strong>Interaction terms:</strong>
+            <select id="interactTermA"></select>
+            <span style="margin:0 2px">×</span>
+            <select id="interactTermB"></select>
+            <button id="addInteraction">+ Add</button><button class="help-btn" data-help="input.interactions" title="Help">?</button>
+            <div id="interactionTags"></div>
+          </div>
 
-            <div class="settings-group-sep" role="separator"></div>
+          <!-- Scale moderator manager (location-scale model) -->
+          <div id="scaleModManager">
+            <strong>Location-scale model moderators:</strong>
+            <input type="text" id="scaleModName" placeholder="Column name">
+            <select id="scaleModType" title="Moderator type and transform">
+              <optgroup label="Continuous">
+                <option value="linear">Linear</option>
+                <option value="poly2">Quadratic (x²)</option>
+                <option value="poly3">Cubic (x², x³)</option>
+                <option value="rcs3">RCS (3 knots)</option>
+                <option value="rcs4">RCS (4 knots)</option>
+                <option value="rcs5">RCS (5 knots)</option>
+              </optgroup>
+              <optgroup label="Categorical">
+                <option value="categorical">Categorical</option>
+              </optgroup>
+            </select>
+            <button id="addScaleMod">+ Add</button><button class="help-btn" data-help="input.scaleModerators" title="Help">?</button>
+            <div id="scaleModTags"></div>
+          </div>
 
-            <!-- Group: Analysis -->
-            <div class="settings-group">
-              <span class="settings-group-label">Analysis</span>
-              <div class="settings-group-controls">
-                <label>
-                  <span>Cumulative order<button class="help-btn" data-help-select="cumulativeOrder" data-help-prefix="cumorder." title="Help">?</button></span>
-                  <select id="cumulativeOrder">
-                    <option value="input">Input order</option>
-                    <option value="precision_desc">Most precise first</option>
-                    <option value="precision_asc">Least precise first</option>
-                    <option value="effect_asc">Effect ascending</option>
-                    <option value="effect_desc">Effect descending</option>
-                  </select>
-                </label>
-                <label class="inline">
-                  <input type="checkbox" id="useTrimFill">
-                  Trim-and-fill<button class="help-btn" data-help="bias.trimfill" title="Help">?</button>
-                </label>
-                <label class="inline">
-                  Estimator:
-                  <select id="tfEstimator" title="Trim-and-fill k₀ estimator">
-                    <option value="L0">L0</option>
-                    <option value="R0">R0</option>
-                    <option value="Q0">Q0</option>
-                  </select>
-                </label>
-                <label class="inline">
-                  <input type="checkbox" id="useTFAdjusted">
-                  Show adjusted RE<button class="help-btn" data-help="bias.trimfill" title="Help">?</button>
-                </label>
-                <p class="settings-hint">Results appear in the Publication Bias section.</p>
-              </div>
-            </div>
+          <!-- Risk-of-bias domain manager -->
+          <div id="robManager">
+            <strong>Risk-of-bias domains:</strong>
+            <input type="text" id="robDomainInput" placeholder="Domain name">
+            <button id="addRobDomain">+ Add</button><button class="help-btn" data-help="input.rob" title="Help">?</button>
+            <div id="robDomainTags"></div>
+          </div>
 
-            <div class="settings-group-sep" role="separator"></div>
+        </div><!-- /.advanced-settings-body -->
+      </div>
 
-            <!-- Group: Display -->
-            <div class="settings-group">
-              <span class="settings-group-label">Display</span>
-              <div class="settings-group-controls">
-                <label>
-                  <span>Forest style</span>
-                  <select id="forestTheme">
-                    <option value="default">App default</option>
-                    <option value="cochrane">Cochrane</option>
-                    <option value="jama">JAMA</option>
-                    <option value="bw">Black &amp; white</option>
-                  </select>
-                </label>
-              </div>
-            </div>
+      <!-- Advanced settings popover -->
+      <div id="advancedSettings" class="settings-popover advanced-settings" hidden>
+        <div class="advanced-settings-body">
 
-          </div><!-- /.settings-groups -->
-
-          <!-- Bayesian priors subsection -->
-          <div class="settings-subsection">
-            <span class="settings-group-label">Bayesian priors<button class="help-btn" data-help="bayes.model" title="Help">?</button></span>
-            <div class="settings-subsection-controls">
-              <label class="inline">μ prior mean (μ₀):
-                <input type="number" id="bayesMu0" value="0" step="0.1">
+          <!-- Analysis & display: CI width, MCC -->
+          <div class="settings-section">
+            <span class="settings-group-label">Analysis &amp; display</span>
+            <div class="settings-section-controls">
+              <label class="inline">CI width:
+                <select id="ciLevel" title="Confidence interval width">
+                  <option value="90">90%</option>
+                  <option value="95" selected>95%</option>
+                  <option value="99">99%</option>
+                </select>
               </label>
-              <label class="inline">μ prior SD (σ_μ):
-                <input type="number" id="bayesSigmaMu" value="1" min="0.01" step="0.1">
-              </label>
-              <label class="inline">τ prior scale (σ_τ):
-                <input type="number" id="bayesSigmaTau" value="0.5" min="0.01" step="0.05">
+              <label class="inline">Multiple-test correction:
+                <select id="mccMethod" title="Multiple-test correction for meta-regression coefficients">
+                  <option value="none" selected>None</option>
+                  <option value="bonferroni">Bonferroni</option>
+                  <option value="holm">Holm</option>
+                </select>
               </label>
             </div>
           </div>
 
-          <!-- RVE (Robust Variance Estimation) subsection -->
-          <div class="settings-subsection" id="rveSettings" style="display:none">
-            <span class="settings-group-label">RVE (robust variance estimation)</span>
-            <div class="settings-subsection-controls">
-              <label class="inline">Assumed within-cluster correlation ρ:
-                <input type="range" id="rveRho" min="0" max="0.999" step="0.01" value="0.8" style="width:120px;vertical-align:middle">
-                <span id="rveRhoDisplay" style="font-variant-numeric:tabular-nums;min-width:2.5em;display:inline-block">0.80</span>
+          <!-- Trim & Fill -->
+          <div class="settings-section">
+            <span class="settings-group-label">Trim &amp; Fill<button class="help-btn" data-help="bias.trimfill" title="Help">?</button></span>
+            <div class="settings-section-controls">
+              <label class="inline">
+                <input type="checkbox" id="useTrimFill">
+                Enable
+              </label>
+              <label class="inline">Estimator:
+                <select id="tfEstimator" title="Trim-and-fill k₀ estimator">
+                  <option value="L0">L0</option>
+                  <option value="R0">R0</option>
+                  <option value="Q0">Q0</option>
+                </select>
+              </label>
+              <label class="inline">
+                <input type="checkbox" id="useTFAdjusted">
+                Show trim-fill-adjusted RE estimate
               </label>
             </div>
           </div>
 
-          <!-- Selection model (Vevea-Hedges) subsection -->
-          <div class="settings-subsection">
+          <!-- Selection model -->
+          <div class="settings-section">
             <span class="settings-group-label">Selection model<button class="help-btn" data-help="sel.model" title="Help">?</button></span>
-            <div class="settings-subsection-controls">
+            <div class="settings-section-controls">
               <label class="inline">Mode:
                 <select id="selMode">
                   <option value="sensitivity">Sensitivity (fixed ω)</option>
                   <option value="mle">MLE (estimate weights)</option>
+                </select>
+              </label>
+              <label class="inline" id="selWeightFnRow">Weight function:
+                <select id="selWeightFn">
+                  <option value="stepfun">Step function (Vevea-Hedges)</option>
+                  <option value="halfnorm">Half-normal</option>
+                  <option value="power">Power</option>
+                  <option value="negexp">Negative exponential</option>
+                  <option value="beta">Beta</option>
                 </select>
               </label>
               <label class="inline" id="selPresetRow">Weight scheme:
@@ -269,86 +292,120 @@
                   </select>
                 </label>
                 <label class="inline">Cutpoints:
-                  <input type="text" id="selCuts" value="0.025, 0.05, 0.10, 0.25, 0.50, 1.0" style="width:220px">
+                  <input type="text" id="selCuts" value="0.025, 0.05, 0.10, 0.25, 0.50, 1.0">
                 </label>
               </span>
             </div>
           </div>
 
-          <!-- Moderator manager -->
-          <div id="moderatorManager">
-            <strong>Moderators:</strong>
-            <input type="text" id="modName" placeholder="Column name" style="width:110px">
-            <select id="modType" onchange="document.getElementById('modTransformWrap').style.display=this.value==='continuous'?'':'none'">
-              <option value="continuous">Continuous</option>
-              <option value="categorical">Categorical</option>
-            </select>
-            <span id="modTransformWrap" title="Transform applied to this continuous moderator">
-              <select id="modTransform">
-                <option value="linear">Linear</option>
-                <option value="poly2">Poly ²</option>
-                <option value="poly3">Poly ³</option>
-                <option value="rcs3">RCS (3 knots)</option>
-                <option value="rcs4">RCS (4 knots)</option>
-                <option value="rcs5">RCS (5 knots)</option>
-              </select>
-            </span>
-            <button id="addMod">+ Add</button><button class="help-btn" data-help="input.moderators" title="Help">?</button>
+          <!-- Bayesian priors -->
+          <div class="settings-section">
+            <span class="settings-group-label">Bayesian priors<button class="help-btn" data-help="bayes.model" title="Help">?</button></span>
+            <div class="settings-section-controls">
+              <label class="inline">Preset:
+                <select id="bayesPreset">
+                  <option value="default" selected>Default</option>
+                  <option value="weakly">Weakly informative</option>
+                  <option value="sceptical">Sceptical</option>
+                  <option value="custom">Custom</option>
+                </select>
+              </label>
+              <label class="inline">μ prior mean (μ₀):
+                <input type="number" id="bayesMu0" value="0" step="0.1">
+              </label>
+              <label class="inline">μ prior SD (σ_μ):
+                <input type="number" id="bayesSigmaMu" value="1" min="0.01" step="0.1">
+                <span id="bayesSigmaMuWarn" class="prior-warn" style="display:none" role="alert"></span>
+              </label>
+              <label class="inline">τ prior scale (σ_τ):
+                <input type="number" id="bayesSigmaTau" value="0.5" min="0.01" step="0.05">
+                <span id="bayesSigmaTauWarn" class="prior-warn" style="display:none" role="alert"></span>
+              </label>
+            </div>
           </div>
 
-          <!-- Scale moderator manager (location-scale model) -->
-          <div id="scaleModManager">
-            <strong>Location-scale model moderators:</strong>
-            <input type="text" id="scaleModName" placeholder="Column name" style="width:110px">
-            <select id="scaleModType" onchange="document.getElementById('scaleModTransformWrap').style.display=this.value==='continuous'?'':'none'">
-              <option value="continuous">Continuous</option>
-              <option value="categorical">Categorical</option>
-            </select>
-            <span id="scaleModTransformWrap" title="Transform applied to this continuous scale moderator">
-              <select id="scaleModTransform">
-                <option value="linear">Linear</option>
-                <option value="poly2">Poly ²</option>
-                <option value="poly3">Poly ³</option>
-                <option value="rcs3">RCS (3 knots)</option>
-                <option value="rcs4">RCS (4 knots)</option>
-                <option value="rcs5">RCS (5 knots)</option>
-              </select>
-            </span>
-            <button id="addScaleMod">+ Add</button><button class="help-btn" data-help="input.scaleModerators" title="Help">?</button>
-            <div id="scaleModTags"></div>
+          <!-- RVE (shown when clusters present) -->
+          <div class="settings-section" id="rveSettings" style="display:none">
+            <span class="settings-group-label">RVE (robust variance estimation)</span>
+            <div class="settings-section-controls">
+              <label class="inline">Assumed within-cluster correlation ρ:
+                <input type="range" id="rveRho" min="0" max="0.999" step="0.01" value="0.8" list="rveRhoTicks">
+                <span id="rveRhoDisplay" class="rve-rho-display" aria-live="polite">0.80</span>
+              </label>
+            </div>
+            <datalist id="rveRhoTicks">
+              <option value="0.4"></option>
+              <option value="0.8"></option>
+              <option value="0.95"></option>
+            </datalist>
+            <p class="settings-hint">0.4 = mild &nbsp;·&nbsp; 0.8 = moderate (default) &nbsp;·&nbsp; 0.95 = strong</p>
           </div>
 
-          <!-- Risk-of-bias domain manager -->
-          <div id="robManager">
-            <strong>Risk-of-bias domains:</strong>
-            <input type="text" id="robDomainInput" placeholder="Domain name" style="width:160px">
-            <button id="addRobDomain">+ Add</button><button class="help-btn" data-help="input.rob" title="Help">?</button>
-            <div id="robDomainTags"></div>
+          <!-- Reset button -->
+          <div class="settings-footer">
+            <button id="resetAdvanced" class="settings-reset-btn">Reset to defaults</button>
           </div>
 
         </div><!-- /.advanced-settings-body -->
-      </details>
+      </div>
 
-      <!-- Risk-of-bias data entry grid (shown when domains + studies are present) -->
-      <div id="robDataGrid" style="display:none"></div>
-
-      <!-- Draft restore banner (hidden until a saved draft is found on load) -->
-      <div id="draftBanner" style="display:none">
-        <span id="draftBannerText"></span>
-        <div class="draft-banner-actions">
-          <button id="draftStartFresh">Discard draft</button>
-          <button id="draftDismiss" aria-label="Dismiss">×</button>
+      <!-- MV settings popover -->
+      <div id="mvSettings" class="settings-popover" hidden>
+        <div class="settings-row">
+          <label>
+            <span>Ψ structure<button class="help-btn" data-help="mv.struct" title="Help">?</button></span>
+            <select id="mvStruct">
+              <option value="CS">Compound symmetric (CS)</option>
+              <option value="Diag">Diagonal (Diag)</option>
+              <option value="UN">Unstructured (UN)</option>
+            </select>
+          </label>
+          <label>
+            <span>Estimation<button class="help-btn" data-help="mv.method" title="Help">?</button></span>
+            <select id="mvMethod">
+              <option value="REML" selected>REML</option>
+              <option value="ML">ML</option>
+            </select>
+          </label>
+          <label class="inline mv-rho-label">
+            Within-study correlation ρ<button class="help-btn" data-help="mv.rho" title="Help">?</button>:
+            <input type="number" id="mvRho" value="0.5" min="-0.999" max="0.999" step="0.05" style="width:70px">
+          </label>
+        </div>
+        <div class="settings-section settings-section--no-top">
+          <div class="settings-section-controls">
+            <strong>Moderators:</strong>
+            <input type="text" id="mvModName" placeholder="Column name" style="width:120px">
+            <button id="mvAddMod">+ Add</button>
+            <p class="settings-hint settings-hint--flush">Moderators are added as columns to the table.</p>
+          </div>
+          <div id="mvModTags"></div>
         </div>
       </div>
 
+      <!-- Risk-of-bias data entry grid popover -->
+      <div id="robDataGrid" class="settings-popover" hidden></div>
+
+      </div><!-- /#inputControls -->
+
       <div id="inputTableToolbar">
         <button id="addStudy">Add Study</button>
+        <button id="mvAddRow" style="display:none">Add Row</button>
+        <span class="io-sep" role="separator" aria-hidden="true"></span>
         <button id="run" title="Run analysis (Ctrl+Enter)">Run <kbd class="run-kbd">(Ctrl+Enter)</kbd></button>
         <button class="help-btn" data-help="keyboard.shortcuts" title="Keyboard shortcuts">⌨</button>
-        <span id="inputStaleBadge" hidden>Results out of date</span>
+        <span id="inputStaleBadge" hidden>Results out of date — click Run</span>
+        <div id="inputFileControls">
+          <input type="file" id="csvFile" accept=".csv" style="display:none">
+          <button id="import">Import CSV</button>
+          <button id="export">Export CSV</button><button class="help-btn" data-help="input.csv" title="Help">?</button>
+          <span class="io-sep" role="separator" aria-hidden="true"></span>
+          <input type="file" id="sessionFile" accept=".json" style="display:none">
+          <button id="saveSession">Save Session</button>
+          <button id="loadSession">Load Session</button><button class="help-btn" data-help="input.session" title="Help">?</button>
+        </div>
       </div>
       <div id="runProgress" role="progressbar" aria-label="Running analysis" aria-live="polite" hidden><div id="runProgressBar"></div></div>
-      </div><!-- /#inputControls -->
 
       <!-- Data table -->
       <div id="inputTableWrap">
@@ -362,8 +419,28 @@
         </tr>
       </table>
 
-      <div id="validationWarnings"></div>
+      <div id="validationWarnings" aria-live="polite"></div>
       </div><!-- /#inputTableWrap -->
+
+      <!-- Multivariate input table (hidden in standard mode) -->
+      <div id="mvTableWrap" style="display:none">
+        <div id="mvTableScroll" style="overflow-x:auto">
+          <table id="mvTable">
+            <thead>
+              <tr id="mvTableHead">
+                <th>Study ID</th>
+                <th>Outcome ID</th>
+                <th>Effect (y<sub>i</sub>)</th>
+                <th>Variance (v<sub>i</sub>)</th>
+                <th class="col-actions">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="mvTableBody"></tbody>
+          </table>
+        </div>
+        <div id="mvValidationWarnings"></div>
+      </div>
+
     </div>
   <!-- =========== OUTPUT =========== -->
     <div id="outputSection">
@@ -371,6 +448,15 @@
         <div class="section-title-row">
           <p class="section-title">Results</p>
           <div class="report-export">
+            <label class="export-scale-label">
+              Plot style<button class="help-btn" data-help="plot.theme" title="Help">?</button>
+              <select id="plotTheme">
+                <option value="default">App default</option>
+                <option value="cochrane">Cochrane</option>
+                <option value="jama">JAMA</option>
+                <option value="bw">Black &amp; white</option>
+              </select>
+            </label>
             <label class="export-scale-label" title="Output resolution for PNG and TIFF exports">
               Resolution
               <select id="exportScale">
@@ -407,9 +493,9 @@
               <button class="export-btn" data-target="forestPlot" data-format="png">PNG</button>
               <button class="export-btn" data-target="forestPlot" data-format="tiff">TIFF</button>
               <div class="forest-pool-toggle" role="group" aria-label="Pooled estimate display">
-                <button class="forest-pool-btn" data-display="FE">FE</button>
-                <button class="forest-pool-btn active" data-display="RE">RE</button>
-                <button class="forest-pool-btn" data-display="Both">Both</button>
+                <button class="forest-pool-btn" data-display="FE" aria-pressed="false" title="Show fixed-effect pooled estimate">FE</button>
+                <button class="forest-pool-btn active" data-display="RE" aria-pressed="true" title="Show random-effects pooled estimate">RE</button>
+                <button class="forest-pool-btn" data-display="Both" aria-pressed="false" title="Show both FE and RE pooled estimates">Both</button>
               </div>
               <label class="forest-pagesize-label">
                 Studies per page
@@ -417,12 +503,41 @@
                   <option value="20">20</option>
                   <option value="30" selected>30</option>
                   <option value="50">50</option>
-                  <option value="Infinity">All</option>
+                  <option value="all">All</option>
                 </select>
               </label>
             </div>
             <svg id="forestPlot" role="img" aria-label="Forest plot" width="900" height="420"></svg>
             <div id="forestNav"></div>
+          </div>
+        </div>
+
+        <!-- ── MV forest plots (shown instead of #forestSection in MV mode) ── -->
+        <div id="mvForestSection" style="display:none">
+          <div class="plot-block">
+            <div class="mv-forest-toolbar">
+              <p class="plot-label settings-hint--flush">Forest plots<button class="help-btn" data-help="mv.forest" title="Help">?</button></p>
+              <label class="inline mv-forest-label">
+                Studies per page
+                <select id="mvForestPageSize">
+                  <option value="20" selected>20</option>
+                  <option value="30">30</option>
+                  <option value="50">50</option>
+                  <option value="all">All</option>
+                </select>
+              </label>
+              <label class="inline mv-forest-label">
+                View
+                <select id="mvForestView">
+                  <option value="separate" selected>Separate panels</option>
+                  <option value="combined">Combined</option>
+                </select>
+              </label>
+              <label class="inline mv-forest-label">
+                <input type="checkbox" id="mvShowPI"> Prediction interval
+              </label>
+            </div>
+            <div id="mvForestContainer"></div>
           </div>
         </div>
 
@@ -491,18 +606,20 @@
           </div>
         </details>
 
-        <!-- ── RVE section (collapsed, shown when cluster IDs present) ── -->
-        <details class="results-section" id="rveSection" style="display:none">
+        <!-- ── RVE section (always visible; empty state shown when no cluster IDs) ── -->
+        <details class="results-section" id="rveSection">
           <summary class="results-section-header">RVE (Robust Variance Estimation)</summary>
           <div class="results-section-body">
+            <p id="rveEmptyState" class="section-empty-state">Assign a Cluster ID to each study (in the input table) to enable RVE analysis.</p>
             <div id="rveSummary"></div>
           </div>
         </details>
 
-        <!-- ── Three-level section (collapsed, shown when cluster IDs present) ── -->
-        <details class="results-section" id="threeLevelSection" style="display:none">
+        <!-- ── Three-level section (always visible; empty state shown when no cluster IDs) ── -->
+        <details class="results-section" id="threeLevelSection">
           <summary class="results-section-header">Three-Level Meta-Analysis</summary>
           <div class="results-section-body">
+            <p id="threeLevelEmptyState" class="section-empty-state">Assign a Cluster ID to each study (in the input table) to enable three-level meta-analysis.</p>
             <div id="threeLevelSummary"></div>
           </div>
         </details>
@@ -520,8 +637,8 @@
               <button class="export-btn" data-target="funnelPlot" data-format="png">PNG</button>
               <button class="export-btn" data-target="funnelPlot" data-format="tiff">TIFF</button>
               <div class="funnel-mode-toggle" role="group" aria-label="Funnel plot mode">
-                <button class="funnel-mode-btn active" data-mode="standard">Standard</button>
-                <button class="funnel-mode-btn"        data-mode="contour">Contour</button>
+                <button class="funnel-mode-btn active" data-mode="standard" aria-pressed="true" title="Standard funnel plot">Standard</button>
+                <button class="funnel-mode-btn"        data-mode="contour"  aria-pressed="false" title="Contour-enhanced funnel plot">Contour</button>
               </div>
             </div>
             <svg id="funnelPlot" role="img" aria-label="Funnel plot" width="500" height="400"></svg>
@@ -563,8 +680,17 @@
               <button class="export-btn" data-target="blupPlot" data-format="svg">SVG</button>
               <button class="export-btn" data-target="blupPlot" data-format="png">PNG</button>
               <button class="export-btn" data-target="blupPlot" data-format="tiff">TIFF</button>
+              <label class="forest-pagesize-label">
+                Studies per page
+                <select id="blupPageSize">
+                  <option value="20">20</option>
+                  <option value="30" selected>30</option>
+                  <option value="50">50</option>
+                  <option value="all">All</option>
+                </select>
+              </label>
             </div>
-            <svg id="blupPlot" role="img" aria-label="BLUP caterpillar plot" width="560" height="300"></svg>
+            <svg id="blupPlot" role="img" aria-label="BLUP caterpillar plot" width="560"></svg>
             <div id="blupNav"></div>
           </div>
           <div class="plot-block" id="baujatPlotBlock" style="display:none">
@@ -608,6 +734,18 @@
         <!-- ── Section 6: Cumulative Analysis (collapsed) ── -->
         <details class="results-section" id="cumulativeSection">
           <summary class="results-section-header">Cumulative Analysis</summary>
+          <div class="cumulative-controls">
+            <label class="inline">Sort by:
+              <select id="cumulativeOrder">
+                <option value="input" selected>Input order</option>
+                <option value="precision_desc">Most precise first</option>
+                <option value="precision_asc">Least precise first</option>
+                <option value="effect_asc">Effect ascending</option>
+                <option value="effect_desc">Effect descending</option>
+              </select>
+              <button class="help-btn" data-help-select="cumulativeOrder" data-help-prefix="cumorder." title="Help">?</button>
+            </label>
+          </div>
           <div class="plot-block">
             <p class="plot-label">Cumulative forest plot<button class="help-btn" data-help="plot.cumulative" title="Help">?</button></p>
             <div class="plot-export">
@@ -620,7 +758,7 @@
                   <option value="20">20</option>
                   <option value="30" selected>30</option>
                   <option value="50">50</option>
-                  <option value="Infinity">All</option>
+                  <option value="all">All</option>
                 </select>
               </label>
             </div>
@@ -668,7 +806,7 @@
                   <option value="20">20</option>
                   <option value="30" selected>30</option>
                   <option value="50">50</option>
-                  <option value="Infinity">All</option>
+                  <option value="all">All</option>
                 </select>
               </label>
             </div>
@@ -680,7 +818,6 @@
         <!-- ── Section 8: P-value Analyses (collapsed) ── -->
         <details class="results-section" id="pvalSection">
           <summary class="results-section-header">P-value Analyses</summary>
-          <div id="pCurvePanel"></div>
           <div class="plot-block" id="pCurvePlotBlock" style="display:none">
             <p class="plot-label">P-curve<button class="help-btn" data-help="bias.pcurve" title="Help">?</button></p>
             <div class="plot-export">
@@ -690,7 +827,7 @@
             </div>
             <svg id="pCurvePlot" role="img" aria-label="P-curve plot" width="500" height="380"></svg>
           </div>
-          <div id="pUniformPanel"></div>
+          <div id="pCurvePanel"></div>
           <div class="plot-block" id="pUniformPlotBlock" style="display:none">
             <p class="plot-label">P-uniform<button class="help-btn" data-help="bias.puniform" title="Help">?</button></p>
             <div class="plot-export">
@@ -700,11 +837,12 @@
             </div>
             <svg id="pUniformPlot" role="img" aria-label="P-uniform plot" width="500" height="170"></svg>
           </div>
+          <div id="pUniformPanel"></div>
         </details>
 
-        <!-- ── Section 9: Selection Model (Vevea-Hedges) ── -->
+        <!-- ── Section 9: Selection Model ── -->
         <details class="results-section" id="selectionModelSection">
-          <summary class="results-section-header">Selection Model (Vevea-Hedges)</summary>
+          <summary class="results-section-header">Selection Model</summary>
           <div id="selectionModelPanel"></div>
         </details>
 
@@ -729,8 +867,8 @@
             <button id="goshRun" class="run-btn">Compute</button><button class="help-btn" data-help="diag.gosh" title="Help">?</button>
           </div>
           <p id="goshEmptyState" class="section-empty-state">GOSH enumerates all k-subsets of studies — this can be slow for large datasets, so results are not computed automatically. Click <strong>Compute</strong> when ready.</p>
-          <div id="goshProgress" hidden>
-            <progress id="goshProgressBar" value="0" max="100" style="width:100%"></progress>
+          <div id="goshProgress" aria-live="polite" hidden>
+            <progress id="goshProgressBar" value="0" max="100" style="width:100%" aria-label="GOSH computation progress"></progress>
             <span id="goshProgressLabel"></span>
             <button id="goshCancel" style="margin-left:8px">Cancel</button>
           </div>
@@ -769,10 +907,28 @@
           </div>
         </details>
 
-        <!-- ── Section 10: Meta-regression (collapsed, hidden until moderators present) ── -->
+        <!-- ── Section 12: Meta-regression (collapsed, hidden until moderators present) ── -->
         <details class="results-section" id="regressionSection" style="display:none">
           <summary class="results-section-header">Meta-regression</summary>
           <div id="regressionPanel"></div>
+          <!-- Permutation test controls (shown when a valid regression result exists) -->
+          <div id="permSection" style="display:none">
+            <div class="perm-controls">
+              <label for="permIter" data-help="perm.iter">Permutations:</label>
+              <select id="permIter">
+                <option value="99">99</option>
+                <option value="999" selected>999</option>
+                <option value="4999">4999</option>
+              </select>
+              <button id="permRunBtn" class="run-btn" data-help="perm.run">Run permutation test</button>
+              <button id="permCancelBtn" class="run-btn" style="display:none">Cancel</button>
+            </div>
+            <div id="permProgress" aria-live="polite" style="display:none">
+              <progress id="permProgressBar" value="0" max="100" style="width:180px;vertical-align:middle" aria-label="Permutation test progress"></progress>
+              <span id="permProgressText" style="margin-left:6px;font-size:0.9em"></span>
+            </div>
+            <div id="permResults"></div>
+          </div>
           <div id="bubblePlots"></div>
         </details>
 
@@ -794,6 +950,11 @@
       <p class="about-intro">A browser-based meta-analysis tool. No installation, no server, no
       dependencies beyond a modern browser. All computation runs locally in JavaScript — data
       never leaves the machine.</p>
+
+      <p class="about-quickstart">
+        <strong>Keyboard shortcuts</strong> — <kbd>Ctrl+Enter</kbd> runs the analysis &middot; <kbd>Alt+↑</kbd>&thinsp;/&thinsp;<kbd>Alt+↓</kbd> reorders table rows.
+        <a href="#" id="replayTourLink" class="about-tour-link">Replay introduction tour →</a>
+      </p>
 
       <!-- ---- Effect types ---- -->
       <h2>Effect types</h2>
@@ -873,7 +1034,15 @@
         <li><strong>Henmi-Copas bias-robust CI</strong> — confidence interval robust to publication bias; always uses DL τ² and fixed-effect weights; centred on the FE estimate with half-width u₀ × SE, where u₀ = SDR × t₀ and t₀ is solved by numerical integration over the conditional distribution of Q given R; wider than the standard RE CI when small-study effects are present (Henmi &amp; Copas, 2010)</li>
         <li><strong>Trim-and-fill</strong> (L0, R0, Q0 estimators) — imputes missing studies and reports the adjusted pooled estimate; estimator selectable in the UI</li>
         <li><strong>Funnel plot</strong> — standard or contour-enhanced (α = .10, .05, .01 regions)</li>
-        <li><strong>Selection model (Vevea–Hedges)</strong> — ω-weighted likelihood model; MLE mode (k ≥ 8) estimates selection weights jointly with μ and τ²; fixed-ω sensitivity presets (Mild / Moderate / Severe, Vevea &amp; Woods 2005) available from k ≥ 3</li>
+        <li><strong>Selection model (Vevea–Hedges step function)</strong> — ω-weighted likelihood model; MLE mode (k ≥ 8) estimates selection weights jointly with μ and τ²; fixed-ω sensitivity presets (Mild / Moderate / Severe, Vevea &amp; Woods 2005) available from k ≥ 3</li>
+        <li><strong>Continuous selection models</strong> — four smooth weight functions estimated by ML alongside μ and τ²; LRT against unweighted RE model (requires k ≥ 6):
+          <ul>
+            <li><em>Half-normal</em> — w(p; δ) = exp(−δ·[Φ⁻¹(1−p)]²/2); matches Andrews &amp; Kasy (2019)</li>
+            <li><em>Power</em> — w(p; δ) = (1−p)<sup>δ</sup></li>
+            <li><em>Negative exponential</em> — w(p; δ) = e<sup>−δp</sup></li>
+            <li><em>Beta</em> — w(p; a, b) = p<sup>a−1</sup>(1−p)<sup>b−1</sup>; two free parameters, LRT χ²(2)</li>
+          </ul>
+        </li>
       </ul>
 
       <!-- ---- P-value analyses ---- -->
@@ -904,7 +1073,10 @@
       <em>p</em>-values, <em>R</em>² (proportion of heterogeneity explained), and model-fit
       indices AIC, BIC, and log-likelihood (ML and REML conventions; matches metafor's
       <code>AIC.rma()</code> / <code>BIC.rma()</code>).
-      Bubble plots are generated per continuous moderator.</p>
+      Bubble plots are generated per continuous moderator.
+      When ≥ 2 moderators are present, a <strong>Download vcov CSV</strong> button exports
+      the full coefficient covariance matrix (rows and columns labelled by predictor name),
+      useful for custom contrasts and replication.</p>
       <p>When two or more moderators are present, the per-moderator tests panel shows
       both a <strong>Wald QM</strong> statistic and a <strong>Likelihood Ratio Test
       (LRT)</strong> for each moderator. LRT = 2·(LL<sub>ML,full</sub> −
@@ -916,8 +1088,8 @@
       the transform dropdown when adding a moderator:</p>
       <ul>
         <li><strong>Linear</strong> (default) — standard single-column predictor</li>
-        <li><strong>Poly ²</strong> — adds x² to the design matrix (quadratic curve)</li>
-        <li><strong>Poly ³</strong> — adds x² and x³ (cubic curve)</li>
+        <li><strong>Quadratic (x²)</strong> — adds x² to the design matrix (quadratic curve)</li>
+        <li><strong>Cubic (x², x³)</strong> — adds x² and x³ (cubic curve)</li>
         <li><strong>RCS (3–5 knots)</strong> — restricted cubic spline; knots placed at
         Harrell's recommended percentiles (10/50/90 for 3 knots, etc.). Produces a smooth
         curve that is linear outside the outermost knots. The per-moderator Wald test covers
@@ -930,6 +1102,21 @@
       more powerful than Bonferroni) correction is applied to the per-moderator omnibus QM
       p-values. Adjusted p-values appear alongside raw values in the per-moderator tests table.
       Matches R's <code>p.adjust(method="bonferroni"/"holm")</code>.</p>
+
+      <p><strong>Permutation tests</strong> — after running meta-regression, click
+      <em>Run permutation test</em> to compute non-parametric p-values for the omnibus
+      Q<sub>M</sub> and each per-moderator Q<sub>M</sub>. Labels y<sub>i</sub> are shuffled
+      across studies (v<sub>i</sub> and τ² held fixed) to build the null distribution.
+      Permutation p = (1 + #{Q<sub>M,perm</sub> ≥ Q<sub>M,obs</sub>}) / (nPerm + 1).
+      Recommended when k &lt; 20 and parametric approximations may be unreliable
+      (Higgins &amp; Thompson, 2004). Runs in a Web Worker with a live progress bar;
+      equivalent to <code>metafor::permutest(res, iter=999)</code>.</p>
+
+      <p><strong>Custom contrasts</strong> — after running a meta-regression, expand the
+      <em>Custom contrasts</em> panel to test any linear combination of coefficients:
+      H₀: L·β = 0, where L is a weight vector you supply. SE = √(L′VL) using the full
+      variance–covariance matrix. Typical use: set +1 and −1 weights on two categorical
+      levels to directly compare them.</p>
 
       <p><strong>Location-scale model</strong> — add scale moderators (log τ² = Zγ) to
       model heterogeneity simultaneously with mean effects. Each study gets its own
@@ -996,6 +1183,25 @@
       <p>Not available with M-H or Peto pooling methods.
       Based on Hedges, Tipton &amp; Johnson (2010) and Van den Noortgate et al. (2013).</p>
 
+      <!-- ---- Multivariate meta-analysis ---- -->
+      <h2>Multivariate meta-analysis</h2>
+      <p>Switch to <strong>Multivariate</strong> mode to jointly synthesise <strong>P ≥ 2 correlated outcomes</strong>
+      observed within the same studies. Within-study covariance is imputed via <code>vcalc</code>
+      (V<sub>jk</sub> = ρ·√v<sub>j</sub>·√v<sub>k</sub>, constant-ρ assumption); between-study
+      heterogeneity is modelled through a P × P matrix Ψ.</p>
+      <table class="stat-table" style="margin:8px 0 12px">
+        <thead><tr><th>Ψ structure</th><th>Parameters</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><strong>CS</strong></td><td>2</td><td>Compound symmetry: shared τ² and between-study correlation ρ̂</td></tr>
+          <tr><td><strong>Diag</strong></td><td>P</td><td>Diagonal: independent τ²<sub>p</sub> per outcome; no between-study correlation</td></tr>
+          <tr><td><strong>UN</strong></td><td>P(P+1)/2</td><td>Unstructured: full Cholesky-parameterised Ψ; all correlations free</td></tr>
+        </tbody>
+      </table>
+      <p>Estimation by REML or ML via BFGS. Optional meta-regression adds common moderator slopes.
+      Reports per-outcome pooled estimates, the Ψ̂ matrix, per-outcome I², residual heterogeneity
+      Q<sub>E</sub>, omnibus moderator test Q<sub>M</sub>, AIC / BIC / log-likelihood, and per-outcome
+      forest plots. Based on Berkey et al. (1998) and Jackson, Riley &amp; White (2011).</p>
+
       <!-- ---- Plots ---- -->
       <h2>Plots</h2>
       <p>All plots export as SVG, PNG, or TIFF.</p>
@@ -1003,7 +1209,7 @@
         <table class="stat-table">
           <thead><tr><th>Plot</th><th>Description</th></tr></thead>
           <tbody>
-            <tr><td>Forest plot</td><td>Study CIs + pooled diamond(s). Toggle FE / RE / both. Four visual themes. Paginated.</td></tr>
+            <tr><td>Forest plot</td><td>Study CIs + pooled diamond(s). Toggle FE / RE / both. Paginated.</td></tr>
             <tr><td>Funnel plot</td><td>Effect vs. SE with Egger regression line. Standard or contour-enhanced (p-value regions).</td></tr>
             <tr><td>Influence plot</td><td>Per-study leverage and Cook's distance visualised as a bubble chart.</td></tr>
             <tr><td>BLUPs</td><td>Dual caterpillar: observed <em>y</em><sub>i</sub> (gray) vs. shrunken BLUP (accent) per study. Shrinkage lines and hover tooltips. Only shown when τ² > 0.</td></tr>
@@ -1048,16 +1254,22 @@
         <li><strong>PDF</strong> — via the browser's print dialog</li>
         <li><strong>SVG / PNG / TIFF</strong> — individual plot export from each plot's toolbar</li>
         <li><strong>APA tables</strong> — checkbox to format all tables to APA 7th edition style (no vertical lines, merged CI columns, <em>Note</em> paragraphs); applies to both HTML and Word exports</li>
+        <li><strong>Plot style presets</strong> — a single dropdown (App default / Cochrane / JAMA / Black &amp; white) applies a consistent visual theme to every plot simultaneously; journal presets produce self-contained SVGs with resolved colours suitable for Word and PDF submission</li>
+        <li>All tables use <strong>APA 7th edition style</strong> — no vertical lines, merged CI columns, <em>Note</em> paragraphs</li>
       </ul>
 
       <!-- ---- References ---- -->
       <h2>Statistical references</h2>
       <ol class="about-refs">
+        <li>Agresti A (1980). Generalized odds ratios for ordinal data. <em>Biometrics,</em> 36(1), 59–67.</li>
         <li>Akaike H (1974). A new look at the statistical model identification. <em>IEEE Trans Autom Control,</em> 19(6), 716–723.</li>
+        <li>Andrews I, Kasy M (2019). Identification of and correction for publication bias. <em>Am Econ Rev,</em> 109(8), 2766–2794.</li>
+        <li>Berkey CS, Hoaglin DC, Antczak-Bouckoms A, Mosteller F, Colditz GA (1998). Meta-analysis of multiple outcomes by regression with random effects. <em>Stat Med,</em> 17(22), 2537–2550.</li>
         <li>Blom G (1958). <em>Statistical Estimates and Transformed Beta-Variables.</em> Wiley.</li>
         <li>Bonett DG (2002). Sample size requirements for estimating intraclass correlations with desired precision. <em>Stat Med,</em> 21(9), 1331–1335.</li>
         <li>Borenstein M, Hedges LV, Higgins JPT, Rothstein HR (2009). <em>Introduction to Meta-Analysis.</em> Wiley.</li>
         <li>Burnham KP, Anderson DR (2002). <em>Model Selection and Multimodel Inference</em> (2nd ed.). Springer.</li>
+        <li>Cheung MWL (2014). Modeling dependent effect sizes with three-level meta-analyses: A structural equation modeling approach. <em>Psychol Methods,</em> 19(2), 211–229.</li>
         <li>Deeks JJ, Macaskill P, Irwig L (2005). The performance of tests of publication bias and other sample size effects in systematic reviews of diagnostic test accuracy was assessed. <em>J Clin Epidemiol,</em> 58(9), 882–893.</li>
         <li>DerSimonian R, Laird N (1986). Meta-analysis in clinical trials. <em>Controlled Clinical Trials,</em> 7, 177–188.</li>
         <li>Feldt LS (1965). The approximate sampling distribution of Kuder-Richardson reliability coefficient twenty. <em>Psychometrika,</em> 30(3), 357–370.</li>
@@ -1068,10 +1280,12 @@
         <li>Harville DA (1977). Maximum likelihood approaches to variance component estimation and to related problems. <em>J Am Stat Assoc,</em> 72(358), 320–338.</li>
         <li>Hedges LV, Olkin I (1985). <em>Statistical Methods for Meta-Analysis.</em> Academic Press.</li>
         <li>Hedges LV, Tipton E, Johnson MC (2010). Robust variance estimation in meta-regression with dependent effect size estimates. <em>Res Synth Methods,</em> 1, 39–65.</li>
+        <li>Higgins JPT, Thompson SG (2004). Controlling the risk of spurious findings from meta-regression. <em>Stat Med,</em> 23(11), 1663–1682.</li>
         <li>Higgins JPT, Thompson SG, Spiegelhalter DJ (2009). A re-evaluation of random-effects meta-analysis. <em>J R Stat Soc A,</em> 172, 137–159.</li>
         <li>Henmi M, Copas JB (2010). Confidence intervals for random effects meta-analysis and robustness to publication bias. <em>Stat Med,</em> 29(29), 2969–2983.</li>
         <li>Holm S (1979). A simple sequentially rejective multiple test procedure. <em>Scand J Stat,</em> 6(2), 65–70.</li>
         <li>Ioannidis JPA, Trikalinos TA (2007). An exploratory test for an excess of significant findings. <em>Clin Trials,</em> 4(3), 245–253.</li>
+        <li>Jackson D, Riley R, White IR (2011). Multivariate meta-analysis: Potential and promise. <em>Stat Med,</em> 30(20), 2333–2351.</li>
         <li>Jeffreys H (1961). <em>Theory of Probability</em> (3rd ed.). Oxford University Press.</li>
         <li>Kraemer HC (1975). On estimation and hypothesis testing problems for correlation coefficients. <em>Psychometrika,</em> 40(4), 473–485.</li>
         <li>Knapp G, Hartung J (2003). Improved tests for a random effects meta-regression with a single covariate. <em>Stat Med,</em> 22, 2693–2710.</li>
@@ -1082,13 +1296,16 @@
         <li>Olkin I, Pratt JW (1958). Unbiased estimation of certain correlation coefficients. <em>Ann Math Stat,</em> 29(1), 201–211.</li>
         <li>Olkin I, Dahabreh IJ, Trikalinos TA (2012). GOSH — a graphical display of study heterogeneity. <em>Res Synth Methods,</em> 3(3), 214–223.</li>
         <li>Paule RC, Mandel J (1982). Consensus values and weighting factors. <em>J Res Natl Bur Stand,</em> 87, 377–385.</li>
+        <li>Pearson K (1900). Mathematical contributions to the theory of evolution. VII. On the correlation of characters not quantitatively measurable. <em>Phil Trans R Soc Lond A,</em> 195, 1–47.</li>
         <li>Peters JL, Sutton AJ, Jones DR, Abrams KR, Rushton L (2006). Comparison of two methods to detect publication bias in meta-analysis. <em>JAMA,</em> 295(6), 676–680.</li>
         <li>Peto R, Pike MC, Armitage P, et al. (1976). Design and analysis of randomized clinical trials requiring prolonged observation of each patient. <em>Br J Cancer,</em> 34, 585–612.</li>
+        <li>Riley RD, Abrams KR, Lambert PC, Sutton AJ, Thompson JR (2007). An evaluation of bivariate random-effects meta-analysis for the joint synthesis of two correlated outcomes. <em>Stat Med,</em> 26(1), 78–97.</li>
         <li>Rücker G, Schwarzer G, Carpenter J (2008). Arcsine test for publication bias in meta-analyses with binary outcomes. <em>Stat Med,</em> 27(19), 4450–4465.</li>
         <li>Schwarz G (1978). Estimating the dimension of a model. <em>Ann Stat,</em> 6(2), 461–464.</li>
         <li>Simonsohn U, Nelson LD, Simmons JP (2014). P-curve: A key to the file-drawer. <em>J Exp Psychol Gen,</em> 143(2), 534–547.</li>
         <li>Stanley TD, Doucouliagos H (2014). Meta-regression approximations to reduce publication selection bias. <em>Res Synth Methods,</em> 5(1), 60–78.</li>
         <li>Stanley TD, Doucouliagos H (2015). Neither fixed nor random: Weighted least squares meta-regression. <em>Res Synth Methods,</em> 6(1), 67–87.</li>
+        <li>Stone CJ, Koo C-Y (1985). Additive splines in statistics. <em>ASA Proceedings of the Statistical Computing Section,</em> 45–48.</li>
         <li>van Assen MALM, van Aert RCM, Wicherts JM (2015). Meta-analysis using effect size distributions of only statistically significant studies. <em>Psychol Methods,</em> 20(3), 293–309.</li>
         <li>Van den Noortgate W, López-López JA, Marín-Martínez F, Sánchez-Meca J (2013). Three-level meta-analysis of dependent effect sizes. <em>Behav Res Methods,</em> 45(2), 576–594.</li>
         <li>Vevea JL, Hedges LV (1995). A general linear model for estimating effect size in the presence of publication bias. <em>Psychometrika,</em> 60(3), 419–435.</li>
@@ -1128,6 +1345,18 @@
   <button id="undoToastBtn">Undo</button>
   <div class="undo-toast-bar"></div>
 </div>
+
+<!-- Draft restore toast (fixed bottom-left) -->
+<div id="draftBanner" style="display:none">
+  <span id="draftBannerText"></span>
+  <div class="draft-banner-actions">
+    <button id="draftStartFresh">Discard draft</button>
+    <button id="draftDismiss" aria-label="Dismiss">×</button>
+  </div>
+</div>
+
+<!-- CSV / session error toast (fixed bottom-right) -->
+<div id="csvWarning"></div>
 
 </body>
 </html>

@@ -19,3 +19,4 @@ package-lock.json
 package.json
 benchmark_reference.json
 diff_benchmarks.mjs
+comparisons/

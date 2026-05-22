@@ -23,9 +23,11 @@
 //
 // Dependencies
 // ------------
-//   analysis.js  meta(), wls()
+//   analysis.js  meta()
+//   linalg.js    wls()
 
-import { meta, wls } from "./analysis.js";
+import { meta } from "./analysis.js";
+import { wls } from "./linalg.js";
 
 // ---------------------------------------------------------------------------
 // Internal helper: stable argsort (ascending yi)

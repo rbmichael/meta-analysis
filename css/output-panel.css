@@ -161,6 +161,17 @@
   flex-wrap: wrap;
 }
 
+.result-log-note {
+  font-size: 0.8125rem;
+  color: var(--fg-muted);
+  font-style: italic;
+  margin-top: -2px;
+  margin-bottom: 4px;
+  padding-left: 0.5em;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
 /* Override legacy border="1" attribute on JS-generated tables */
 #results table {
   border-collapse: collapse;
@@ -425,7 +436,12 @@
   color: var(--accent-light);
   font-weight: 600;
   background: var(--accent-subtle);
-  border-top: 1px solid var(--border-accent);
+  border-top: 2px solid var(--border-accent);
+}
+
+/* consecutive pooled rows form one visual block — drop the divider between them */
+.study-table .pooled-row + .pooled-row td {
+  border-top: none;
 }
 
 /* ================================================================
@@ -536,4 +552,22 @@
   margin: 6px 0;
   font-size: 0.8125rem;
   color: var(--fg-muted);
+}
+
+/* ---- Permutation test controls ---- */
+#permSection {
+  margin: 10px 0 4px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--border-color, #ddd);
+}
+.perm-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 0.875rem;
+}
+.perm-results-block {
+  margin: 8px 0 2px;
+  font-size: 0.875rem;
 }

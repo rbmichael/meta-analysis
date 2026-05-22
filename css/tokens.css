@@ -39,6 +39,12 @@
   --border-accent:         rgba(94,106,210,0.35);
   --border-accent-strong:  rgba(94,106,210,0.45);
 
+  /* ── Plot structural lines (SVG axes, grid, reference lines) */
+  /* Darker than UI border tokens so axis rules are legible on  */
+  /* the white SVG backgrounds used in light mode.              */
+  --plot-border:           rgba(0,0,0,0.30);
+  --plot-border-grid:      rgba(0,0,0,0.13);
+
   /* ── Semantic colours ────────────────────────────────────── */
   --color-success:    #1a7a50;
   --color-warning:    #8a6000;
@@ -155,6 +161,9 @@
   --border-hover:          rgba(255,255,255,0.10);
   --border-accent:         rgba(94,106,210,0.30);
   --border-accent-strong:  rgba(94,106,210,0.55);
+
+  --plot-border:           rgba(255,255,255,0.10);
+  --plot-border-grid:      rgba(255,255,255,0.06);
 
   --color-success:    #4caf82;
   --color-warning:    #f0c060;

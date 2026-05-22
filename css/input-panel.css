@@ -114,29 +114,49 @@
   margin-top: 8px;
   font-size: 0.8rem;
   line-height: 1.8;
-  color: var(--fg-muted);
 }
 
-/* ❌ error lines */
-#validationWarnings br + *,
-#validationWarnings {
-  /* messages separated by <br> — color whole block, emoji handles distinction */
+.validation-block {
+  border-radius: var(--radius-sm);
+  padding: 4px 10px;
+  margin-top: 4px;
+}
+
+.validation-block--error {
+  background: var(--badge-error-bg-faint);
+  border-left: 3px solid var(--color-error);
+  color: var(--color-error);
+}
+
+.validation-block--warning {
+  background: var(--badge-warning-bg-faint);
+  border-left: 3px solid var(--color-warning);
+  color: var(--color-warning);
 }
 
 /* ---- CSV import warning ---- */
 #csvWarning {
+  position: fixed;
+  bottom: 24px;
+  right: 20px;
+  z-index: 9500;
+  max-width: min(400px, calc(100vw - 40px));
   font-size: 0.8125rem;
   color: var(--color-error);
   background: var(--badge-error-bg-faint);
   border: 1px solid var(--badge-error-border);
   border-radius: var(--radius-md);
   padding: 6px 12px;
-  margin-bottom: 10px;
   display: none;
 }
 
-/* ---- Draft restore banner ---- */
+/* ---- Draft restore toast ---- */
 #draftBanner {
+  position: fixed;
+  bottom: 24px;
+  left: 20px;
+  z-index: 9500;
+  max-width: min(400px, calc(100vw - 40px));
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -145,9 +165,9 @@
   border: 1px solid var(--border-accent);
   border-radius: var(--radius-md);
   padding: 8px 10px 8px 14px;
-  margin-bottom: 14px;
   font-size: 0.8125rem;
   color: var(--color-info);
+  box-shadow: var(--shadow-md);
 }
 
 #draftBannerText {
@@ -267,6 +287,44 @@ input[type="file"]::file-selector-button:hover {
   color: var(--fg-muted);
 }
 
+/* ---- Interaction term manager (shown when ≥2 moderators exist) ---- */
+#interactionManager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 0 14px;
+  border-top: 1px solid var(--border);
+  margin-top: 2px;
+}
+
+#interactionManager strong {
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+}
+
+/* ---- Scale moderator manager (location-scale model) ---- */
+#scaleModManager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 0 14px;
+  border-top: 1px solid var(--border);
+  margin-top: 2px;
+}
+
+#scaleModManager strong {
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+}
+
 /* ---- Risk-of-bias domain manager ---- */
 #robManager {
   display: flex;
@@ -284,6 +342,18 @@ input[type="file"]::file-selector-button:hover {
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--fg-muted);
+}
+
+/* Replace fixed pixel widths in manager inputs with responsive min/max pairs */
+#modName,
+#scaleModName {
+  min-width: 80px;
+  max-width: 110px;
+}
+
+#robDomainInput {
+  min-width: 100px;
+  max-width: 160px;
 }
 
 .mod-tag,
@@ -317,11 +387,7 @@ input[type="file"]::file-selector-button:hover {
 
 /* ---- Risk-of-bias data entry grid ---- */
 #robDataGrid {
-  margin-top: 4px;
-  margin-bottom: 8px;
   overflow-x: auto;
-  border-top: 1px solid var(--border);
-  padding-top: 10px;
 }
 
 #robDataGrid table {
@@ -420,6 +486,7 @@ input[type="file"]::file-selector-button:hover {
   background: var(--accent-subtle);
   overflow: hidden;
   margin-top: 3px;
+  flex-shrink: 0;
 }
 
 #runProgress[hidden] { display: none; }
@@ -479,4 +546,95 @@ tr.row-pending-delete input {
 
 #inputTable tbody tr.drag-over-bottom {
   box-shadow: inset 0 -2px 0 0 var(--accent);
+}
+
+/* ================================================================
+   MULTIVARIATE INPUT TABLE
+   ================================================================ */
+
+#mvTable {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 12px;
+  font-size: 0.8125rem;
+}
+
+#mvTable th {
+  background: var(--bg-elevated);
+  color: var(--fg-muted);
+  font-weight: 500;
+  font-size: 0.75rem;
+  letter-spacing: 0.03em;
+  padding: 7px 8px;
+  border: 1px solid var(--border);
+  text-align: center;
+  white-space: nowrap;
+  box-shadow: inset 0 -1px 0 var(--border);
+}
+
+#mvTable td {
+  padding: 2px;
+  border: 1px solid var(--border);
+  background: transparent;
+  text-align: center;
+}
+
+#mvTable td input {
+  width: 100%;
+  box-sizing: border-box;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  color: var(--fg);
+  font-size: 0.8125rem;
+  padding: 5px 6px;
+  text-align: center;
+  transition: background var(--t-fast);
+}
+
+#mvTable td input:focus {
+  outline: none;
+  background: var(--accent-subtle);
+  box-shadow: none;
+}
+
+#mvTable td:first-child input { text-align: left; }
+#mvTable td:nth-child(2) input { text-align: left; }
+
+.del-btn {
+  padding: 2px 6px;
+  font-size: 0.7rem;
+  margin: 0 1px;
+  border-radius: var(--radius-xs);
+  line-height: 1.4;
+  min-width: 0;
+}
+
+.del-btn:hover {
+  background: var(--badge-error-bg-hover);
+  color: var(--color-error);
+  border-color: var(--badge-error-border-hover);
+}
+
+#mvTableWrap {
+  overflow-x: auto;
+}
+
+#mvValidationWarnings {
+  margin-top: 6px;
+  font-size: 0.85rem;
+}
+
+/* ---- RVE ρ slider value display ---- */
+.rve-rho-display {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  min-width: 2.5em;
+  display: inline-block;
+  background: var(--accent-subtle);
+  border: 1px solid var(--border-accent);
+  border-radius: var(--radius-sm, 4px);
+  padding: 1px 5px;
+  text-align: center;
+  color: var(--accent);
 }

@@ -92,8 +92,9 @@
 //
 // Persistence layer
 // -----------------
-//   localStorage["meta-draft"]   autosave.js  — survives tab/browser close
-//   localStorage["theme"]        ui.js        — light/dark preference
+//   localStorage["meta-draft"]     autosave.js  — survives tab/browser close
+//   localStorage["theme"]          ui.js        — light/dark preference
+//   localStorage["fosma-plot-theme"] ui.js       — plot theme preset (default/cochrane/jama/bw)
 //   <input type="file"> (hidden) csv.js       — CSV import
 //   Blob download                io.js        — CSV export, session JSON,
 //                                               HTML report, SVG, PNG
@@ -105,24 +106,33 @@
 //   ui.js calls init() on DOMContentLoaded, which populates dropdowns,
 //   restores any autosave draft, and attaches all event listeners.
 // =============================================================================
-import { eggerTest, beggTest, fatPetTest, petPeeseTest, failSafeN, tesTest, waapWls, clES, pCurve, pUniform, baujat, blupMeta, meta, metaMH, metaPeto, robustMeta, influenceDiagnostics, subgroupAnalysis, metaRegression, testContrast, cumulativeMeta, veveaHedges, SELECTION_PRESETS, profileLikTau2, bayesMeta, priorSensitivity, rvePooled, meta3level, harbordTest, petersTest, deeksTest, rueckerTest, lsModel, henmiCopas } from "./analysis.js";
-import { fmt, normalQuantile, chiSquareCDF } from "./utils.js";
+import { eggerTest, beggTest, fatPetTest, petPeeseTest, failSafeN, tesTest, waapWls, clES, pCurve, pUniform, baujat, blupMeta, meta, metaMH, metaPeto, robustMeta, influenceDiagnostics, subgroupAnalysis, metaRegression, testContrast, cumulativeMeta, veveaHedges, SELECTION_PRESETS, halfNormalSelModel, powerSelModel, negexpSelModel, betaSelModel, profileLikTau2, bayesMeta, priorSensitivity, rvePooled, meta3level, harbordTest, petersTest, deeksTest, rueckerTest, lsModel, henmiCopas, isValidStudy } from "./analysis.js";
+import { fmt, fmtPval, normalQuantile, normalCDF, chiSquareCDF, tCritical } from "./utils.js";
 import { escapeHTML } from "./utils-html.js";
 import { effectProfiles, getProfile } from "./profiles.js";
 import { trimFill } from "./trimfill.js";
-import { drawForest, drawFunnel, drawBubble, drawPartialResidualBubble, drawInfluencePlot, drawCumulativeForest, drawCumulativeFunnel, drawOrchardPlot, drawCaterpillarPlot, drawBlupPlot, drawBaujatPlot, drawLabbe, drawRoBTrafficLight, drawRoBSummary, drawGoshPlot, drawProfileLikTau2, drawBayesTauPosterior, drawBayesMuPosterior, drawQQPlot, drawRadialPlot, setTooltipElement } from "./plots.js";
+import { drawForest, drawFunnel, drawBubble, drawPartialResidualBubble, drawInfluencePlot, drawCumulativeForest, drawCumulativeFunnel, drawOrchardPlot, drawCaterpillarPlot, drawBlupPlot, drawBaujatPlot, drawLabbe, drawRoBTrafficLight, drawRoBSummary, drawGoshPlot, drawProfileLikTau2, drawBayesTauPosterior, drawBayesMuPosterior, drawQQPlot, drawRadialPlot, drawPCurve, drawPUniform, setTooltipElement } from "./plots.js";
 import { goshCompute, GOSH_MAX_K } from "./gosh.js";
-import { exportSVG, exportPNG, exportTIFF } from "./export.js";
+import { permTestSync, permPval } from "./perm.js";
+import { vcalc, mvMeta } from "./multivariate.js";
+import { exportSVG, exportPNG, exportTIFF, resolveThemeVars, hasEmbeddedBackground, currentBgColour } from "./export.js";
+import { PLOT_THEMES } from "./plotThemes.js";
 // report.js (81 KB) and docx.js (51 KB) are loaded on first export click.
 // guide.js (166 KB) and help.js (76 KB) are loaded on first use so they don't
 // block startup.
 // Each getter caches the resolved promise. On rejection the cache is cleared so
 // the next call retries the import rather than re-throwing the stale failure.
-let _reportMod, _docxMod, _helpMod, _guideMod;
-function getReport() { return (_reportMod ??= import("./report.js").catch(e => { _reportMod = null; throw e; })); }
-function getDocx()   { return (_docxMod   ??= import("./docx.js"  ).catch(e => { _docxMod   = null; throw e; })); }
-function getHelp()   { return (_helpMod   ??= import("./help.js"  ).catch(e => { _helpMod   = null; throw e; })); }
-function getGuide()  { return (_guideMod  ??= import("./guide.js" ).catch(e => { _guideMod  = null; throw e; })); }
+// The ?cb= suffix is a per-session cache-buster: ES module registries key by
+// exact URL, so appending a timestamp forces a fresh fetch on every page load
+// without re-fetching within the same session. Python's http.server strips
+// query strings before translating paths, so static serving is unaffected.
+const _cb = `?cb=${Date.now()}`;
+let _reportMod, _docxMod, _helpMod, _guideMod, _onboardingMod;
+function getReport()     { return (_reportMod     ??= import(`./report.js${_cb}`    ).catch(e => { _reportMod     = null; throw e; })); }
+function getDocx()       { return (_docxMod       ??= import(`./docx.js${_cb}`      ).catch(e => { _docxMod       = null; throw e; })); }
+function getHelp()       { return (_helpMod       ??= import(`./help.js${_cb}`      ).catch(e => { _helpMod       = null; throw e; })); }
+function getGuide()      { return (_guideMod      ??= import(`./guide.js${_cb}`     ).catch(e => { _guideMod      = null; throw e; })); }
+function getOnboarding() { return (_onboardingMod ??= import(`./onboarding.js${_cb}`).catch(e => { _onboardingMod = null; throw e; })); }
 import { serializeSession, parseSession, missingInputCols } from "./session.js";
 import { saveDraft, loadDraft, clearDraft } from "./autosave.js";
 import { downloadBlob, readTextFile, serializeCSV } from "./io.js";
@@ -133,29 +143,53 @@ import { regStars, regFmtP, buildRegCoeffRows, buildRegFittedRows,
          renderPCurvePanel, renderPUniformPanel, renderSelectionModelPanel,
          buildInfluenceHTML, bayesInterpretation, buildBayesSummaryHTML,
          buildSensitivityHTML, buildSubgroupHTML, renderGoshInfo,
-         formatContrastResult }
+         formatContrastResult, renderPermResults }
   from "./ui-render.js";
 import { validateRow, gatherSessionState } from "./ui-state.js";
 import { initTable, moderators, doAddModerator, removeModerator, clearModerators,
+         interactions, doAddInteraction, removeInteraction, clearInteractions,
          updateTableHeaders, addRow, commitPendingDelete, removeRow, clearRow,
-         updateValidationWarnings, collectStudies,
-         refreshPreviewUI, previewCSV, commitImport, cancelImport }
+         updateValidationWarnings, collectStudies, ensureModColumn,
+         refreshPreviewUI, previewCSV, commitImport, cancelImport, getPendingImport,
+         registerDeleteCompanion, showUndoToast, hideUndoToast }
   from "./ui-table.js";
+
+const USE_EXAMPLES = new URLSearchParams(window.location.search).has("tests");
 
 // ---------------- AUTOSAVE ----------------
 
 let _saveTimer = null;
 
-// Last successful metaRegression result — referenced by the contrast test handler.
+// Last successful metaRegression / lsModel result — referenced by contrast and vcov handlers.
 let _lastReg = null;
+let _lastLs  = null;
 
 // scheduleSave()
 // Debounced autosave trigger. Resets the 1.2 s idle timer on every call; the
 // actual save fires once the user pauses for 1.2 s. Does NOT call runAnalysis()
 // — analysis is triggered separately by the callers.
+// Build a complete session object for autosave, including MV state when active.
+function _buildAutosaveSession() {
+  const session = gatherSessionState(moderators, scaleModerators, interactions, { domains: _robDomains, data: _robData });
+  if (_mvMode) session.mv = _gatherMVState();
+  return session;
+}
+
+// Return true if the session has any data worth preserving.
+// Prevents an effect-type change (which clears the standard table) from
+// overwriting a valid draft with an empty one.
+function _autosaveHasData(session) {
+  if (session.studies.length > 0) return true;
+  if (session.mv) return session.mv.rows.some(r => r.study_id || r.outcome_id || r.yi || r.vi);
+  return false;
+}
+
 function scheduleSave() {
   clearTimeout(_saveTimer);
-  _saveTimer = setTimeout(() => saveDraft(gatherSessionState(moderators, scaleModerators, { domains: _robDomains, data: _robData })), 1200);
+  _saveTimer = setTimeout(() => {
+    const session = _buildAutosaveSession();
+    if (_autosaveHasData(session)) saveDraft(session);
+  }, 1200);
 }
 
 // ---------------- DEBOUNCED ANALYSIS ----------------
@@ -168,7 +202,8 @@ let _analysisRunning = false;
 function flushSave() {
   clearTimeout(_saveTimer);
   _saveTimer = null;
-  saveDraft(gatherSessionState(moderators, scaleModerators, { domains: _robDomains, data: _robData }));
+  const session = _buildAutosaveSession();
+  if (_autosaveHasData(session)) saveDraft(session);
 }
 
 window.addEventListener("beforeunload", flushSave);
@@ -194,6 +229,7 @@ _helpClose.addEventListener("click", () => {
 
 // Focus trap: Tab/Shift+Tab cycles within the popover while it is open.
 _helpPopover.addEventListener("keydown", e => {
+  if (e.key === "Escape") { hideHelp(); return; }
   if (e.key !== "Tab") return;
   // Collect currently visible focusable elements in DOM order.
   const focusable = [_helpClose, _helpGuideLink].filter(
@@ -326,6 +362,7 @@ const HELP_LABELS = {
   "input.csv":             "CSV import and export",
   "input.session":         "Session save and load",
   "input.moderators":      "Moderators",
+  "input.interactions":    "Interaction terms",
   "input.scaleModerators": "Location-scale model moderators",
   "input.rob":             "Risk of bias",
   "cluster.id":            "Cluster ID",
@@ -407,6 +444,57 @@ document.querySelectorAll(".help-btn").forEach(btn => {
   btn.setAttribute("aria-label", label === key ? "Help" : `Help: ${label}`);
 });
 
+// ---------------- FADE SHOW/HIDE UTILITY ----------------
+// Fades el in or out using a CSS opacity transition (defined in layout.css).
+// Cancels any in-progress hide timer so rapid toggling is safe.
+function setVisible(el, show) {
+  if (!el) return;
+  el._hideTimer && clearTimeout(el._hideTimer);
+  delete el._hideTimer;
+  const isHidden = el.style.display === "none";
+  // Skip animation during initial page setup (document not yet fully loaded).
+  if (document.readyState !== "complete") {
+    el.style.display = show ? "" : "none";
+    return;
+  }
+  if (show) {
+    if (!isHidden) return;
+    el.style.opacity = "0";
+    el.style.display = "";
+    requestAnimationFrame(() => requestAnimationFrame(() => { el.style.opacity = ""; }));
+  } else {
+    if (isHidden) return;
+    el.style.opacity = "0";
+    el._hideTimer = setTimeout(() => {
+      el.style.display = "none";
+      el.style.opacity = "";
+      delete el._hideTimer;
+    }, 140);
+  }
+}
+
+// ---------------- CUSTOMIZED BADGE ----------------
+function _checkAdvancedBadge() {
+  const selDiffers = id => {
+    const el = document.getElementById(id); if (!el) return false;
+    const def = [...el.options].findIndex(o => o.defaultSelected);
+    return el.selectedIndex !== (def >= 0 ? def : 0);
+  };
+  const chkDiffers = id => { const el = document.getElementById(id); return el && el.checked !== el.defaultChecked; };
+  const valDiffers = id => { const el = document.getElementById(id); return el && el.value !== el.defaultValue; };
+
+  const custom =
+    selDiffers("ciLevel") || selDiffers("mccMethod") ||
+    selDiffers("tfEstimator") || chkDiffers("useTrimFill") || chkDiffers("useTFAdjusted") ||
+    selDiffers("selMode") || selDiffers("selPreset") || selDiffers("selSides") || selDiffers("selWeightFn") ||
+    valDiffers("bayesMu0") || valDiffers("bayesSigmaMu") || valDiffers("bayesSigmaTau") ||
+    valDiffers("selCuts") || valDiffers("rveRho");
+
+  const badge = document.getElementById("advancedBadge");
+  if (badge) badge.style.display = custom ? "" : "none";
+  document.getElementById("advancedSettings")?.classList.toggle("settings-modified", custom);
+}
+
 // ---------------- MODERATOR STATE ----------------
 // moderators[] is owned by ui-table.js (imported above) — a live array mutated
 // in place by doAddModerator / removeModerator / clearModerators.
@@ -419,16 +507,74 @@ let _robData    = {};  // { [studyLabel]: { [domain]: "Low"|"Some concerns"|"Hig
 // doAddModerator / clearModerators / removeModerator / makeModTh / makeModTd
 // all live in ui-table.js (imported above).
 
+function _readModSpec(selectId) {
+  const val = document.getElementById(selectId).value;
+  return val === "categorical"
+    ? { type: "categorical", transform: "linear" }
+    : { type: "continuous", transform: val || "linear" };
+}
+
 function addModerator() {
   const nameEl = document.getElementById("modName");
   const name = nameEl.value.trim();
-  const type = document.getElementById("modType").value;
-  const transform = type === "continuous"
-    ? (document.getElementById("modTransform")?.value ?? "linear")
-    : "linear";
+  const { type, transform } = _readModSpec("modType");
   if (!name) return;
   doAddModerator(name, type, transform);
   nameEl.value = "";
+  refreshInteractionUI();
+  markStale();
+}
+
+// ---- Interaction term manager ----
+
+function refreshInteractionUI() {
+  const names = moderators.map(m => m.name);
+  const mgr = document.getElementById("interactionManager");
+  if (!mgr) return;
+  setVisible(mgr, names.length >= 2);
+
+  const termA = document.getElementById("interactTermA");
+  const termB = document.getElementById("interactTermB");
+  if (!termA || !termB) return;
+
+  const prevA = termA.value;
+  const prevB = termB.value;
+  const opts = names.map(n => `<option value="${escapeHTML(n)}">${escapeHTML(n)}</option>`).join("");
+  termA.innerHTML = opts;
+  termB.innerHTML = opts;
+  if (names.includes(prevA)) termA.value = prevA;
+  if (names.includes(prevB) && prevB !== termA.value) termB.value = prevB;
+  // Ensure the two selects default to different moderators when possible.
+  if (termA.value === termB.value && names.length >= 2) {
+    termB.value = names.find(n => n !== termA.value) ?? names[0];
+  }
+
+  renderInteractionTags();
+}
+
+function renderInteractionTags() {
+  const container = document.getElementById("interactionTags");
+  if (!container) return;
+  container.innerHTML = "";
+  interactions.forEach(({ name, termA, termB }) => {
+    const span = document.createElement("span");
+    span.className = "mod-tag";
+    span.innerHTML = `${escapeHTML(termA)} × ${escapeHTML(termB)} <button class="remove-mod-btn" title="Remove interaction">×</button>`;
+    span.querySelector("button").addEventListener("click", () => {
+      removeInteraction(name);
+      renderInteractionTags();
+      markStale();
+    });
+    container.appendChild(span);
+  });
+}
+
+function addInteractionTerm() {
+  const termA = document.getElementById("interactTermA")?.value ?? "";
+  const termB = document.getElementById("interactTermB")?.value ?? "";
+  if (!termA || !termB || termA === termB) return;
+  doAddInteraction(termA, termB);
+  renderInteractionTags();
   markStale();
 }
 
@@ -442,7 +588,7 @@ function renderScaleModTags() {
   scaleModerators.forEach(({ name }) => {
     const span = document.createElement("span");
     span.className = "mod-tag";
-    span.innerHTML = `${name} <button class="remove-mod-btn" title="Remove scale moderator">×</button>`;
+    span.innerHTML = `${escapeHTML(name)} <button class="remove-mod-btn" title="Remove scale moderator">×</button>`;
     span.querySelector("button").addEventListener("click", () => removeScaleModerator(name));
     container.appendChild(span);
   });
@@ -463,12 +609,10 @@ function removeScaleModerator(name) {
 function addScaleModerator() {
   const nameEl = document.getElementById("scaleModName");
   const name = nameEl.value.trim();
-  const type = document.getElementById("scaleModType").value;
-  const transform = type === "continuous"
-    ? (document.getElementById("scaleModTransform")?.value ?? "linear")
-    : "linear";
+  const { type, transform } = _readModSpec("scaleModType");
   if (!name) return;
   doAddScaleModerator(name, type, transform);
+  ensureModColumn(name, type);
   nameEl.value = "";
   markStale();
 }
@@ -501,9 +645,15 @@ function renderRoBDomainTags() {
 
 function renderRoBDataGrid() {
   const container = document.getElementById("robDataGrid");
+  const btn       = document.getElementById("robGridBtn");
   container.innerHTML = "";
 
-  if (_robDomains.length === 0) { container.style.display = "none"; return; }
+  const hide = () => {
+    btn.style.display = "none";
+    if (!container.hidden) _closeAllPopovers();
+  };
+
+  if (_robDomains.length === 0) { hide(); return; }
 
   // Collect current (non-empty) study labels from the input table.
   const labels = [];
@@ -513,9 +663,9 @@ function renderRoBDataGrid() {
     if (label) labels.push(label);
   });
 
-  if (labels.length === 0) { container.style.display = "none"; return; }
+  if (labels.length === 0) { hide(); return; }
 
-  container.style.display = "";
+  btn.style.display = "";
 
   const table = document.createElement("table");
 
@@ -603,8 +753,9 @@ const _themeToggle = document.getElementById("themeToggle");
 function _applyTheme(theme) {
   document.documentElement.dataset.theme = theme;
   const isLight = theme === "light";
-  _themeToggle.textContent = isLight ? "☾" : "☀";
-  _themeToggle.title       = isLight ? "Switch to dark mode" : "Switch to light mode";
+  _themeToggle.textContent  = isLight ? "☾" : "☀";
+  _themeToggle.title        = isLight ? "Switch to dark mode" : "Switch to light mode";
+  _themeToggle.setAttribute("aria-label", isLight ? "Switch to dark mode" : "Switch to light mode");
 }
 
 // On load: honour localStorage, fall back to OS preference.
@@ -618,9 +769,11 @@ _themeToggle.addEventListener("click", () => {
   const next = THEMES[(THEMES.indexOf(current) + 1) % THEMES.length];
   localStorage.setItem("theme", next);
   _applyTheme(next);
-  if (funnelPlot.args && funnelPlot.contours) {
-    drawFunnel(...funnelPlot.args, { egger: funnelPlot.egger, contours: true, petpeese: funnelPlot.petpeese });
-  }
+  // "App default" plots embed var(--xxx) colour references that are resolved at
+  // paint time.  Re-rendering after the page theme changes ensures computed fills
+  // (contour regions, background clearing, etc.) use the new token values.
+  // Journal presets use hardcoded colours and don't need a redraw here.
+  if (appState.plotTheme === "default") redrawCachedPlots();
 });
 
 // ---------------- VIEW TOGGLE ----------------
@@ -660,6 +813,7 @@ function showView(name) {
 }
 
 _toggleResults.disabled = true;
+_toggleResults.setAttribute("aria-disabled", "true");
 
 _toggleInput.addEventListener("click",   () => showView("input"));
 _toggleResults.addEventListener("click", () => { if (!_toggleResults.disabled) showView("results"); });
@@ -669,21 +823,1236 @@ _toggleAbout.addEventListener("click",   () => showView("about"));
 // Show input view by default; output hidden until first run switches to it.
 showView("input");
 
+// ---------------- MULTIVARIATE MODE ----------------
+
+let _mvMode = false;
+
+// Moderator list for multivariate mode (array of name strings).
+const _mvModerators = [];
+
+// Forest plot state for MV mode — persists across page/PI-toggle redraws.
+const _mvForestState = {
+  pageSize:     20,
+  pages:        [],    // current page index per outcome (separate mode)
+  combinedPage: 0,     // current page index (combined mode)
+  showPI:       false,
+  lastRes:      null,  // last mvMeta result
+  lastRows:     [],    // last collected rows
+  alpha:        0.05,
+  viewMode:     "separate", // "separate" | "combined"
+};
+
+// ── Settings-strip popovers ───────────────────────────────────────────────────
+
+function _closeAllPopovers() {
+  document.querySelectorAll(".settings-popover").forEach(p => { p.hidden = true; });
+  document.querySelectorAll("[data-popover]").forEach(b => b.setAttribute("aria-expanded", "false"));
+}
+
+function _positionPopover(btn, panel) {
+  const r = btn.getBoundingClientRect();
+  const panelW = panel.offsetWidth || 340;
+  let left = r.left;
+  if (left + panelW > window.innerWidth - 8) left = Math.max(8, window.innerWidth - panelW - 8);
+  panel.style.top  = (r.bottom + 4) + "px";
+  panel.style.left = left + "px";
+}
+
+function initSettingsPopovers() {
+  document.querySelectorAll("[data-popover]").forEach(btn => {
+    btn.addEventListener("click", e => {
+      e.stopPropagation();
+      const panel  = document.getElementById(btn.dataset.popover);
+      const isOpen = !panel.hidden;
+      _closeAllPopovers();
+      if (!isOpen) {
+        panel.hidden = false;
+        btn.setAttribute("aria-expanded", "true");
+        _positionPopover(btn, panel);
+      }
+    });
+  });
+
+  document.addEventListener("pointerdown", e => {
+    if (!e.target.closest("[data-popover], .settings-popover, #helpPopover")) _closeAllPopovers();
+  }, { capture: true });
+
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape" && _helpPopover.style.display === "none") _closeAllPopovers();
+  });
+}
+
+initSettingsPopovers();
+
+function _applyModeToggle() {
+  const isMV = _mvMode;
+  document.getElementById("modeStandard").classList.toggle("active", !isMV);
+  document.getElementById("modeMultivariate").classList.toggle("active", isMV);
+  document.getElementById("standardSettings").style.display  = isMV ? "none" : "";
+  document.getElementById("mvStripControls").style.display   = isMV ? ""     : "none";
+  document.getElementById("inputTableWrap").style.display    = isMV ? "none" : "";
+  document.getElementById("addStudy").style.display          = isMV ? "none" : "";
+  document.getElementById("mvTableWrap").style.display       = isMV ? ""     : "none";
+  document.getElementById("mvAddRow").style.display          = isMV ? ""     : "none";
+  _closeAllPopovers();
+}
+
+// ── MV moderator management ───────────────────────────────────────────────────
+
+function _renderMVModTags() {
+  const container = document.getElementById("mvModTags");
+  container.innerHTML = _mvModerators.map((name, i) =>
+    `<span class="mod-tag">` +
+    `<span>${escapeHTML(name)}</span>` +
+    `<button onclick="_mvRemoveMod(${i})" title="Remove">×</button>` +
+    `</span>`
+  ).join("");
+}
+
+// Exposed to inline onclick (inside tag HTML)
+window._mvRemoveMod = function(i) {
+  _mvModerators.splice(i, 1);
+  _renderMVModTags();
+  _rebuildMVTableHeaders();
+  markStale();
+};
+
+function _mvAddMod() {
+  const input = document.getElementById("mvModName");
+  const name = input.value.trim();
+  if (!name || _mvModerators.includes(name)) return;
+  _mvModerators.push(name);
+  input.value = "";
+  _renderMVModTags();
+  _rebuildMVTableHeaders();
+  markStale();
+}
+
+// ── MV table management ───────────────────────────────────────────────────────
+
+const _mvUndoState = { timer: null, row: null };
+const _MV_UNDO_MS  = 5000;
+
+function _mvCommitPendingDelete() {
+  if (!_mvUndoState.row) return;
+  clearTimeout(_mvUndoState.timer);
+  _mvUndoState.row.remove();
+  _mvUndoState.row   = null;
+  _mvUndoState.timer = null;
+  hideUndoToast();
+}
+
+function _mvCancelPendingDelete() {
+  if (!_mvUndoState.row) return;
+  clearTimeout(_mvUndoState.timer);
+  _mvUndoState.row.classList.remove("row-pending-delete");
+  _mvUndoState.row   = null;
+  _mvUndoState.timer = null;
+  hideUndoToast();
+  markStale();
+}
+
+registerDeleteCompanion(_mvCommitPendingDelete);
+
+function _rebuildMVTableHeaders() {
+  const tr = document.getElementById("mvTableHead");
+  // Fixed columns + moderator columns + actions
+  tr.innerHTML =
+    "<th>Study ID</th><th>Outcome ID</th><th>Effect (y<sub>i</sub>)</th><th>Variance (v<sub>i</sub>)</th>" +
+    _mvModerators.map((m, i) => `<th>${escapeHTML(m)} <button class="remove-mod-btn" title="Remove moderator" onclick="_mvRemoveMod(${i})">×</button></th>`).join("") +
+    '<th class="col-actions">Actions</th>';
+  // Also rebuild each row's moderator cells if count changed
+  document.querySelectorAll("#mvTableBody tr").forEach(row => {
+    _syncMVRowMods(row);
+  });
+}
+
+function _syncMVRowMods(tr) {
+  // Ensure each row has exactly _mvModerators.length mod inputs after vi cell.
+  // Fixed cells: study_id(0), outcome_id(1), yi(2), vi(3), ...mods, actions(last)
+  const cells = tr.querySelectorAll("td");
+  const fixedCount = 4;
+  const currentModCount = cells.length - fixedCount - 1; // subtract actions td
+  if (currentModCount === _mvModerators.length) return;
+
+  const actionsTd = tr.lastElementChild;
+  // Remove excess mod tds
+  while (tr.querySelectorAll("td").length - 1 > fixedCount + _mvModerators.length) {
+    const tds = tr.querySelectorAll("td");
+    tr.removeChild(tds[tds.length - 2]); // remove last before actions
+  }
+  // Add missing mod tds
+  while (tr.querySelectorAll("td").length - 1 < fixedCount + _mvModerators.length) {
+    const td = document.createElement("td");
+    td.innerHTML = `<input type="text" class="mv-mod-cell" style="width:90px">`;
+    tr.insertBefore(td, actionsTd);
+  }
+}
+
+function _validateMVRow(tr) {
+  const yiInput = tr.querySelector(".mv-yi");
+  const viInput = tr.querySelector(".mv-vi");
+  [yiInput, viInput].forEach(inp => inp?.classList.remove("input-error"));
+  tr.classList.remove("row-error");
+
+  const allInputs = [...tr.querySelectorAll("input")];
+  if (allInputs.every(inp => inp.value.trim() === "")) return true; // blank row — no errors
+
+  let valid = true;
+  const yiVal = yiInput?.value.trim() ?? "";
+  const viVal = viInput?.value.trim() ?? "";
+
+  if (yiVal === "" || !isFinite(parseFloat(yiVal))) {
+    yiInput?.classList.add("input-error");
+    valid = false;
+  }
+  const viNum = parseFloat(viVal);
+  if (viVal === "" || !isFinite(viNum) || viNum <= 0) {
+    viInput?.classList.add("input-error");
+    valid = false;
+  }
+  tr.classList.toggle("row-error", !valid);
+  return valid;
+}
+
+function _mvAddRow() {
+  const tbody = document.getElementById("mvTableBody");
+  const tr = document.createElement("tr");
+  tr.draggable = true;
+  const modCells = _mvModerators.map(() =>
+    `<td><input type="text" class="mv-mod-cell" style="width:90px"></td>`
+  ).join("");
+  tr.innerHTML =
+    `<td><input type="text" class="mv-study-id"  style="width:90px" placeholder="Study"></td>` +
+    `<td><input type="text" class="mv-outcome-id" style="width:80px" placeholder="Outcome"></td>` +
+    `<td><input type="text" class="mv-yi" style="width:90px"></td>` +
+    `<td><input type="text" class="mv-vi" style="width:90px"></td>` +
+    modCells +
+    `<td class="col-actions"><button class="remove-btn" aria-label="Remove study">✖</button> <button class="clear-btn" aria-label="Clear row">🧹</button></td>`;
+  tr.querySelector(".remove-btn").addEventListener("click", () => {
+    commitPendingDelete();
+    _mvCommitPendingDelete();
+    const label = tr.querySelector(".mv-study-id")?.value.trim() || "";
+    tr.classList.add("row-pending-delete");
+    _mvUndoState.row   = tr;
+    _mvUndoState.timer = setTimeout(_mvCommitPendingDelete, _MV_UNDO_MS);
+    showUndoToast(label, _mvCancelPendingDelete);
+    markStale();
+  });
+  tr.querySelector(".clear-btn").addEventListener("click", () => {
+    tr.querySelectorAll("input").forEach(inp => { inp.value = ""; });
+    _validateMVRow(tr);
+    markStale();
+  });
+  let _valTimer;
+  tr.querySelectorAll("input").forEach(inp => inp.addEventListener("input", () => {
+    clearTimeout(_valTimer);
+    _valTimer = setTimeout(() => { _validateMVRow(tr); _updateMVValidationWarnings(); markStale(); }, 150);
+  }));
+  tbody.appendChild(tr);
+  return tr;
+}
+
+function _collectMVRows() {
+  const rows = [];
+  document.querySelectorAll("#mvTableBody tr").forEach(tr => {
+    if (tr.classList.contains("row-pending-delete")) return;
+    const study_id   = tr.querySelector(".mv-study-id")?.value.trim();
+    const outcome_id = tr.querySelector(".mv-outcome-id")?.value.trim();
+    const yi = parseFloat(tr.querySelector(".mv-yi")?.value);
+    const vi = parseFloat(tr.querySelector(".mv-vi")?.value);
+    if (!study_id || !outcome_id || !isFinite(yi) || !isFinite(vi) || vi <= 0) return;
+    const row = { study_id, outcome_id, yi, vi };
+    const modInputs = tr.querySelectorAll(".mv-mod-cell");
+    _mvModerators.forEach((name, i) => {
+      row[name] = parseFloat(modInputs[i]?.value);
+    });
+    rows.push(row);
+  });
+  return rows;
+}
+
+function _gatherMVState() {
+  const rows = [];
+  document.querySelectorAll("#mvTableBody tr").forEach(tr => {
+    if (tr.classList.contains("row-pending-delete")) return;
+    const entry = {
+      study_id:   tr.querySelector(".mv-study-id")?.value  ?? "",
+      outcome_id: tr.querySelector(".mv-outcome-id")?.value ?? "",
+      yi: tr.querySelector(".mv-yi")?.value ?? "",
+      vi: tr.querySelector(".mv-vi")?.value ?? "",
+    };
+    _mvModerators.forEach((name, i) => {
+      const inputs = tr.querySelectorAll(".mv-mod");
+      entry[name] = inputs[i]?.value ?? "";
+    });
+    rows.push(entry);
+  });
+  return {
+    struct:     document.getElementById("mvStruct").value,
+    method:     document.getElementById("mvMethod").value,
+    rho:        parseFloat(document.getElementById("mvRho").value),
+    moderators: [..._mvModerators],
+    rows,
+  };
+}
+
+function _populateMVExample() {
+  // Berkey 1998 — 5 trials, 2 dental outcomes (AL and PD)
+  const exRows = [
+    { study_id: "Pihlstrom", outcome_id: "AL", yi: -0.30, vi: 0.0075 },
+    { study_id: "Pihlstrom", outcome_id: "PD", yi: -0.60, vi: 0.0057 },
+    { study_id: "Zinney",    outcome_id: "AL", yi:  0.10, vi: 0.0058 },
+    { study_id: "Zinney",    outcome_id: "PD", yi: -0.15, vi: 0.0048 },
+    { study_id: "Morrison",  outcome_id: "AL", yi:  0.40, vi: 0.0147 },
+    { study_id: "Morrison",  outcome_id: "PD", yi: -0.32, vi: 0.0091 },
+    { study_id: "Knowles",   outcome_id: "AL", yi:  0.32, vi: 0.0141 },
+    { study_id: "Knowles",   outcome_id: "PD", yi: -0.39, vi: 0.0069 },
+    { study_id: "Ramfjord",  outcome_id: "AL", yi: -0.29, vi: 0.0091 },
+    { study_id: "Ramfjord",  outcome_id: "PD", yi: -0.88, vi: 0.0062 },
+  ];
+  exRows.forEach(r => {
+    const tr = _mvAddRow();
+    tr.querySelector(".mv-study-id").value  = r.study_id;
+    tr.querySelector(".mv-outcome-id").value = r.outcome_id;
+    tr.querySelector(".mv-yi").value = r.yi;
+    tr.querySelector(".mv-vi").value = r.vi;
+  });
+}
+
+function _commitImportMV(parsed, mvHeaders) {
+  const { headers, rows } = parsed;
+  const headerMap = {};
+  headers.forEach((h, idx) => { headerMap[h.toLowerCase()] = idx; });
+
+  const { studyCol, outcomeCol, yiCol, viCol } = mvHeaders;
+  const knownCols = new Set([studyCol, outcomeCol, yiCol, viCol].map(c => c.toLowerCase()));
+  const modCols = headers.filter(h => !knownCols.has(h.toLowerCase()));
+
+  // Register MV moderators
+  _mvModerators.length = 0;
+  modCols.forEach(col => _mvModerators.push(col));
+  _renderMVModTags();
+  _rebuildMVTableHeaders();
+
+  // Clear and populate MV table
+  document.getElementById("mvTableBody").innerHTML = "";
+  rows.forEach(row => {
+    const tr = _mvAddRow();
+    tr.querySelector(".mv-study-id").value   = row[headerMap[studyCol.toLowerCase()]]  ?? "";
+    tr.querySelector(".mv-outcome-id").value = row[headerMap[outcomeCol.toLowerCase()]] ?? "";
+    tr.querySelector(".mv-yi").value         = row[headerMap[yiCol.toLowerCase()]]      ?? "";
+    tr.querySelector(".mv-vi").value         = row[headerMap[viCol.toLowerCase()]]      ?? "";
+    modCols.forEach((col, i) => {
+      const inputs = tr.querySelectorAll(".mv-mod");
+      if (inputs[i]) inputs[i].value = row[headerMap[col.toLowerCase()]] ?? "";
+    });
+  });
+  markStale();
+}
+
+// ── MV analysis & rendering ───────────────────────────────────────────────────
+
+function _updateMVValidationWarnings() {
+  const warningsEl = document.getElementById("mvValidationWarnings");
+  const msgs = [];
+  document.querySelectorAll("#mvTableBody tr").forEach((tr, i) => {
+    if (tr.classList.contains("row-pending-delete")) return;
+    const allInputs = [...tr.querySelectorAll("input")];
+    if (allInputs.every(inp => inp.value.trim() === "")) return;
+    const studyId   = tr.querySelector(".mv-study-id")?.value.trim()  || `Row ${i + 1}`;
+    const outcomeId = tr.querySelector(".mv-outcome-id")?.value.trim() || "";
+    const label     = outcomeId ? `${studyId} / ${outcomeId}` : studyId;
+    const yi = parseFloat(tr.querySelector(".mv-yi")?.value);
+    const vi = parseFloat(tr.querySelector(".mv-vi")?.value);
+    if (!tr.querySelector(".mv-study-id")?.value.trim() ||
+        !tr.querySelector(".mv-outcome-id")?.value.trim() ||
+        !isFinite(yi) || !isFinite(vi) || vi <= 0)
+      msgs.push(`⚠️ Excluded: ${escapeHTML(label)} (Invalid input)`);
+  });
+  const rows = _collectMVRows();
+  if (!rows.length) msgs.push("❌ No valid rows — fill in Study ID, Outcome ID, y<sub>i</sub>, and v<sub>i</sub>.");
+  warningsEl.innerHTML = msgs.length > 0 ? msgs.map(m => `• ${m}`).join("<br>") : "";
+}
+
+function _runMVAnalysis() {
+  // Validate all rows → CSS feedback
+  document.querySelectorAll("#mvTableBody tr").forEach(tr => {
+    if (!tr.classList.contains("row-pending-delete")) _validateMVRow(tr);
+  });
+  _updateMVValidationWarnings();
+
+  const rows = _collectMVRows();
+  const warningsEl = document.getElementById("mvValidationWarnings");
+
+  if (!rows.length) return false;
+
+  const msgs = [];
+  const outcomeIds = [...new Set(rows.map(r => r.outcome_id))];
+  const studyIds   = [...new Set(rows.map(r => r.study_id))];
+
+  if (outcomeIds.length < 2) {
+    msgs.push("❌ Requires ≥ 2 distinct outcome IDs. For a single outcome, use Standard mode.");
+    warningsEl.innerHTML = msgs.map(m => `• ${m}`).join("<br>");
+    return false;
+  }
+  if (studyIds.length < 3) {
+    msgs.push("❌ Requires ≥ 3 studies.");
+    warningsEl.innerHTML = msgs.map(m => `• ${m}`).join("<br>");
+    return false;
+  }
+
+  // Warn: studies with only 1 outcome
+  const studyOutcomeCounts = {};
+  rows.forEach(r => { studyOutcomeCounts[r.study_id] = (studyOutcomeCounts[r.study_id] || new Set()); studyOutcomeCounts[r.study_id].add(r.outcome_id); });
+  const singleOutcomeStudies = Object.entries(studyOutcomeCounts).filter(([,s]) => s.size === 1).map(([id]) => id);
+  if (singleOutcomeStudies.length === studyIds.length)
+    msgs.push("⚠️ All studies contribute only one outcome — within-study correlations cannot be estimated. Consider using Standard mode or checking that Study IDs correctly group multiple outcomes per study.");
+  else if (singleOutcomeStudies.length > 0)
+    msgs.push(`⚠️ Studies with only one outcome (contribute no covariance): ${singleOutcomeStudies.map(escapeHTML).join(", ")}.`);
+
+  const struct = document.getElementById("mvStruct").value;
+  const method = document.getElementById("mvMethod").value;
+  const rho    = parseFloat(document.getElementById("mvRho").value);
+  const alpha  = getCiAlpha();
+  const mods   = _mvModerators.map(key => ({ key, type: "continuous" }));
+
+  // Warn UN + many outcomes
+  const nPsiPar = struct === "CS" ? 2 : struct === "Diag" ? outcomeIds.length : outcomeIds.length * (outcomeIds.length + 1) / 2;
+  if (struct === "UN" && outcomeIds.length > 5)
+    msgs.push(`⚠️ UN structure with P = ${outcomeIds.length} outcomes requires ${nPsiPar} Ψ parameters — optimizer instability likely. Consider CS or Diag.`);
+
+  // Warn overparameterized
+  if (nPsiPar > studyIds.length / 3)
+    msgs.push(`⚠️ Between-study covariance has ${nPsiPar} parameters but only ${studyIds.length} studies — model may be overparameterized.`);
+
+  warningsEl.innerHTML = msgs.length ? msgs.map(m => `• ${m}`).join("<br>") : "";
+
+  let V, res;
+  try {
+    V   = vcalc(rows, { rho });
+    res = mvMeta(rows, V, { struct, method, alpha, moderators: mods });
+  } catch (e) {
+    warningsEl.innerHTML += (warningsEl.innerHTML ? "<br>" : "") + `• ❌ Error: ${escapeHTML(String(e))}`;
+    return false;
+  }
+
+  if (res.error) {
+    warningsEl.innerHTML += (warningsEl.innerHTML ? "<br>" : "") + `• ❌ Error: ${escapeHTML(res.error)}`;
+    return false;
+  }
+
+  // Hide all collapsible result sections (they belong to standard mode)
+  document.querySelectorAll(".results-section").forEach(d => { d.removeAttribute("open"); d.style.display = "none"; });
+
+  // Swap forest areas: hide standard forest plot, show MV forest section
+  const _stdForestSection = document.getElementById("forestSection");
+  const _mvForestSection  = document.getElementById("mvForestSection");
+  if (_stdForestSection) _stdForestSection.style.display = "none";
+  if (_mvForestSection)  _mvForestSection.style.display  = "";
+
+  _renderMVResults(res, { alpha, rows });
+
+  // Store for HTML/PDF/DOCX export
+  appState.reportArgs = { mv: true, mvRes: res, mvRows: rows, mvAlpha: alpha };
+
+  // ── Individual Studies table ───────────────────────────────────────────────
+  const _studyTableSection = document.getElementById("studyTableSection");
+  const _studyTableEl      = document.getElementById("studyTable");
+  if (_studyTableSection && _studyTableEl) {
+    _studyTableSection.style.display = "";
+    _studyTableEl.innerHTML = _buildMVStudyTable(rows, alpha);
+  }
+
+  // ── RoB section (only when domains + data present) ────────────────────────
+  const _robSectionEl = document.getElementById("robSection");
+  if (_robSectionEl && _robDomains.length > 0 && rows.length > 0) {
+    _robSectionEl.style.display = "";
+    const robStudies = [...new Set(rows.map(r => r.study_id))].map(id => ({ label: id }));
+    robPlotState.studies = robStudies;
+    drawIfVisible("robSection", () => {
+      drawRoBTrafficLight(robStudies, _robDomains, _robData, { theme: appState.plotTheme });
+      drawRoBSummary(robStudies, _robDomains, _robData, { theme: appState.plotTheme });
+    });
+  }
+
+  // Clear stale markers, unlock results panel
+  if (outputPlaceholder) outputPlaceholder.style.display = "none";
+  staleBanner.style.display = "none";
+  _toggleResults.classList.remove("stale");
+  if (inputStaleBadge) inputStaleBadge.hidden = true;
+  if (!appState.hasRunOnce) {
+    appState.hasRunOnce = true;
+    _toggleResults.disabled = false;
+    _toggleResults.removeAttribute("aria-disabled");
+    _toggleResults.removeAttribute("title");
+  }
+  return true;
+}
+
+function _buildMVStudyTable(rows, alpha = 0.05) {
+  const z    = normalQuantile(1 - alpha / 2);
+  const ciPct = Math.round((1 - alpha) * 100);
+  function fv(v) { return isFinite(v) ? v.toFixed(4) : "—"; }
+
+  const bodyRows = rows.map(r => {
+    const se = Math.sqrt(r.vi);
+    return `<tr>
+      <td>${escapeHTML(String(r.study_id))}</td>
+      <td>${escapeHTML(String(r.outcome_id))}</td>
+      <td>${fv(r.yi)}</td>
+      <td>${fv(r.vi)}</td>
+      <td>${fv(se)}</td>
+      <td>[${fv(r.yi - z * se)},&nbsp;${fv(r.yi + z * se)}]</td>
+    </tr>`;
+  }).join("");
+
+  return `<table class="reg-table" style="width:100%">
+    <thead><tr>
+      <th>Study</th><th>Outcome</th>
+      <th>y<sub>i</sub></th><th>v<sub>i</sub></th>
+      <th>SE</th><th>${ciPct}% CI</th>
+    </tr></thead>
+    <tbody>${bodyRows}</tbody>
+  </table>`;
+}
+
+function _renderMVResults(res, { alpha, rows = [] } = {}) {
+  const { beta, se, ci, z, pval, betaNames, tau2, rho_between, Psi, corPsi, outcomeIds,
+          n, k, P, QM, df_QM, pQM, QE, df_QE, pQE, logLik, AIC, BIC, AICc,
+          struct, method, I2, convergence, warnings: engineWarnings = [] } = res;
+
+  alpha ??= 0.05;
+  const ciPct  = Math.round((1 - alpha) * 100);
+  const fmtP   = p => !isFinite(p) ? "—" : p < 0.001 ? "< .001" : p.toFixed(3).replace(/^0\./, ".");
+  const stars  = p => p < 0.001 ? "***" : p < 0.01 ? "**" : p < 0.05 ? "*" : "";
+  const hasMods = beta.length > P;
+
+  // ── Engine warnings ────────────────────────────────────────────────────────
+  const warnHTML = (engineWarnings.length || convergence === false)
+    ? (convergence === false
+        ? `<p style="color:var(--color-warning);margin:2px 0">⚠ Optimizer did not fully converge — interpret results with caution.</p>`
+        : "") +
+      engineWarnings.map(w => `<p style="color:var(--color-warning);margin:2px 0">⚠ ${escapeHTML(w)}</p>`).join("")
+    : "";
+
+  // ── Intercept table (one row per outcome) ──────────────────────────────────
+  const interceptRows = beta.slice(0, P).map((b, o) => {
+    const [lo, hi] = ci[o];
+    return `<tr>
+      <td><strong>${escapeHTML(String(outcomeIds[o]))}</strong></td>
+      <td>${fmt(b, 4)}</td><td>${fmt(se[o], 4)}</td>
+      <td>[${fmt(lo, 4)}, ${fmt(hi, 4)}]</td>
+      <td>${fmt(z[o], 3)}</td>
+      <td>${fmtP(pval[o])}${stars(pval[o])}</td>
+    </tr>`;
+  }).join("");
+
+  const interceptTable = `
+    <h4 style="font-size:0.9em;margin:8px 0 4px">
+      Pooled effect per outcome<button class="help-btn" data-help="mv.model" title="Help">?</button>
+    </h4>
+    <table class="reg-table" style="margin-bottom:12px">
+      <thead><tr><th>Outcome</th><th>Estimate</th><th>SE</th>
+        <th>${ciPct}% CI</th><th><em>z</em></th><th><em>p</em></th></tr></thead>
+      <tbody>${interceptRows}</tbody>
+    </table>`;
+
+  // ── Moderator table ────────────────────────────────────────────────────────
+  let modTable = "";
+  if (hasMods) {
+    const modRows = beta.slice(P).map((b, i) => {
+      const j = P + i;
+      const [lo, hi] = ci[j];
+      return `<tr>
+        <td>${escapeHTML(betaNames[j])}</td>
+        <td>${fmt(b, 4)}</td><td>${fmt(se[j], 4)}</td>
+        <td>[${fmt(lo, 4)}, ${fmt(hi, 4)}]</td>
+        <td>${fmt(z[j], 3)}</td>
+        <td>${fmtP(pval[j])}${stars(pval[j])}</td>
+      </tr>`;
+    }).join("");
+    modTable = `
+      <h4 style="font-size:0.9em;margin:8px 0 4px">Moderator effects</h4>
+      <table class="reg-table" style="margin-bottom:12px">
+        <thead><tr><th>Coefficient</th><th>Estimate</th><th>SE</th>
+          <th>${ciPct}% CI</th><th><em>z</em></th><th><em>p</em></th></tr></thead>
+        <tbody>${modRows}</tbody>
+      </table>`;
+  }
+
+  // ── Between-study Ψ̂ ───────────────────────────────────────────────────────
+  let psiBlock = "";
+  if (struct === "CS") {
+    const i2rows = outcomeIds.map((id, o) =>
+      `<tr><td>${escapeHTML(String(id))}</td><td>${fmt(tau2[o], 5)}</td><td>${fmt(I2[o], 1)}%</td></tr>`
+    ).join("");
+    psiBlock = `<h4 style="font-size:0.9em;margin:8px 0 4px">Between-study heterogeneity (Ψ̂, CS)</h4>
+      <p style="font-size:0.875em;margin:2px 0">
+        Shared τ² = ${fmt(tau2[0], 5)},
+        ρ<sub>between</sub> = ${fmt(rho_between ?? 0, 4)}
+      </p>
+      <table class="reg-table" style="margin-bottom:8px">
+        <thead><tr><th>Outcome</th><th>τ²</th><th><em>I</em>²</th></tr></thead>
+        <tbody>${i2rows}</tbody>
+      </table>`;
+  } else if (struct === "Diag") {
+    const i2rows = outcomeIds.map((id, o) =>
+      `<tr><td>${escapeHTML(String(id))}</td><td>${fmt(tau2[o], 5)}</td><td>${fmt(I2[o], 1)}%</td></tr>`
+    ).join("");
+    psiBlock = `<h4 style="font-size:0.9em;margin:8px 0 4px">Between-study heterogeneity (Ψ̂, Diagonal)</h4>
+      <table class="reg-table" style="margin-bottom:8px">
+        <thead><tr><th>Outcome</th><th>τ²</th><th><em>I</em>²</th></tr></thead>
+        <tbody>${i2rows}</tbody>
+      </table>`;
+  } else { // UN
+    const hdr = outcomeIds.map(id => `<th>${escapeHTML(String(id))}</th>`).join("");
+    const psiRows = Psi.map((row, i) =>
+      `<tr><th>${escapeHTML(String(outcomeIds[i]))}</th>${row.map(v => `<td>${fmt(v, 5)}</td>`).join("")}</tr>`
+    ).join("");
+    const corRows = (corPsi || []).map((row, i) =>
+      `<tr><th>${escapeHTML(String(outcomeIds[i]))}</th>${row.map((v, j) =>
+        `<td ${i === j ? 'style="color:var(--fg-muted)"' : ""}>${fmt(v, 4)}</td>`
+      ).join("")}</tr>`
+    ).join("");
+    const i2rows = outcomeIds.map((id, o) =>
+      `<tr><td>${escapeHTML(String(id))}</td><td>${fmt(tau2[o], 5)}</td><td>${fmt(I2[o], 1)}%</td></tr>`
+    ).join("");
+    psiBlock = `<h4 style="font-size:0.9em;margin:8px 0 4px">Between-study covariance matrix Ψ̂ (Unstructured)</h4>
+      <table class="reg-table" style="margin-bottom:6px">
+        <thead><tr><th></th>${hdr}</tr></thead><tbody>${psiRows}</tbody>
+      </table>
+      <h4 style="font-size:0.9em;margin:6px 0 4px">Between-study correlations ρ̂</h4>
+      <table class="reg-table" style="margin-bottom:6px">
+        <thead><tr><th></th>${hdr}</tr></thead><tbody>${corRows}</tbody>
+      </table>
+      <table class="reg-table" style="margin-bottom:8px">
+        <thead><tr><th>Outcome</th><th>τ²</th><th><em>I</em>²</th></tr></thead>
+        <tbody>${i2rows}</tbody>
+      </table>`;
+  }
+
+  // ── Hypothesis tests ───────────────────────────────────────────────────────
+  const testsBlock = `
+    <h4 style="font-size:0.9em;margin:8px 0 4px">Hypothesis tests</h4>
+    <table class="reg-table" style="margin-bottom:12px">
+      <thead><tr><th>Test</th><th>χ²</th><th>df</th><th><em>p</em></th></tr></thead>
+      <tbody>
+        ${hasMods && isFinite(QM)
+          ? `<tr><td>Omnibus test of moderators (Q<sub>M</sub>)</td><td>${fmt(QM, 3)}</td><td>${df_QM}</td><td>${fmtP(pQM)}</td></tr>`
+          : ""}
+        <tr><td>Residual heterogeneity (Q<sub>E</sub>)</td><td>${fmt(QE, 3)}</td><td>${df_QE}</td><td>${fmtP(pQE)}</td></tr>
+      </tbody>
+    </table>`;
+
+  // ── Fit stats ──────────────────────────────────────────────────────────────
+  const fitBlock = `<div style="font-size:0.82em;color:var(--fg-muted);margin:4px 0 14px;line-height:1.7">
+    k = ${k} studies &nbsp;·&nbsp; n = ${n} obs &nbsp;·&nbsp; P = ${P} outcomes
+    &nbsp;|&nbsp; log-lik = ${fmt(logLik, 4)}
+    &nbsp;·&nbsp; AIC = ${fmt(AIC, 2)} &nbsp;·&nbsp; BIC = ${fmt(BIC, 2)}
+    ${isFinite(AICc) ? `&nbsp;·&nbsp; AICc = ${fmt(AICc, 2)}` : ""}
+    &nbsp;|&nbsp; ${method}, Ψ = ${struct}
+    ${convergence === false ? `&nbsp;·&nbsp; <span style="color:var(--color-warning)">convergence uncertain</span>` : ""}
+  </div>`;
+
+  // Near-zero τ² boundary note
+  const boundaryOutcomes = outcomeIds.filter((_, o) => tau2[o] < 1e-6).map(id => escapeHTML(String(id)));
+  const boundaryNote = boundaryOutcomes.length
+    ? `<p style="color:var(--fg-muted);font-size:0.8em;margin:0 0 6px">ℹ τ² ≈ 0 for ${boundaryOutcomes.join(", ")} — estimate is at the boundary; no detectable between-study heterogeneity for these outcomes.</p>`
+    : "";
+
+  // Render summary into the shared #results div (same slot as standard analysis)
+  document.getElementById("results").innerHTML =
+    warnHTML + interceptTable + modTable + psiBlock + boundaryNote + testsBlock + fitBlock;
+
+  // ── Persist state for re-draws (page nav, PI toggle, page size) ──────────
+  _mvForestState.lastRes      = res;
+  _mvForestState.lastRows     = rows;
+  _mvForestState.alpha        = alpha;
+  _mvForestState.pages        = outcomeIds.map(() => 0);
+  _mvForestState.combinedPage = 0;
+
+  // ── Forest plots → #mvForestContainer ────────────────────────────────────
+  const mvForestContainer = document.getElementById("mvForestContainer");
+  if (!mvForestContainer) return;
+
+  const combinedBlock =
+    `<div id="mvForestCombinedBlock" style="display:none;margin-bottom:20px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+        <div class="plot-export">
+          <button class="export-btn" data-target="mvForestPlotCombined" data-format="svg">SVG</button>
+          <button class="export-btn" data-target="mvForestPlotCombined" data-format="png">PNG</button>
+          <button class="export-btn" data-target="mvForestPlotCombined" data-format="tiff">TIFF</button>
+        </div>
+      </div>
+      <svg id="mvForestPlotCombined" role="img" aria-label="Combined multivariate forest plot"
+        width="620" height="20" style="display:block"></svg>
+      <div id="mvForestNavCombined" class="forest-nav"></div>
+    </div>`;
+
+  const separateBlocks = outcomeIds.map((id, o) =>
+    `<div style="margin-bottom:20px" id="mvForestBlock-${o}">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+        <p class="plot-label" style="margin:0">${escapeHTML(String(id))}</p>
+        <div class="plot-export">
+          <button class="export-btn" data-target="mvForestPlot-${o}" data-format="svg">SVG</button>
+          <button class="export-btn" data-target="mvForestPlot-${o}" data-format="png">PNG</button>
+          <button class="export-btn" data-target="mvForestPlot-${o}" data-format="tiff">TIFF</button>
+        </div>
+      </div>
+      <svg id="mvForestPlot-${o}" role="img"
+        aria-label="Forest plot — ${escapeHTML(String(id))}"
+        width="620" height="20" style="display:block"></svg>
+      <div id="mvForestNav-${o}" class="forest-nav"></div>
+    </div>`
+  ).join("");
+
+  mvForestContainer.innerHTML = combinedBlock + separateBlocks;
+
+  _redrawAllMVForestPlots();
+}
+
+function _redrawAllMVForestPlots() {
+  const { lastRes: res, lastRows: rows, alpha, pages, pageSize, showPI, viewMode, combinedPage } = _mvForestState;
+  if (!res) return;
+  const { beta, ci, se, tau2, outcomeIds, k, P } = res;
+
+  const isCombined = viewMode === "combined";
+  const combinedBlockEl = document.getElementById("mvForestCombinedBlock");
+  if (combinedBlockEl) combinedBlockEl.style.display = isCombined ? "" : "none";
+  outcomeIds.forEach((_, o) => {
+    const block = document.getElementById(`mvForestBlock-${o}`);
+    if (block) block.style.display = isCombined ? "none" : "";
+  });
+
+  if (isCombined) {
+    const svgEl = document.getElementById("mvForestPlotCombined");
+    const navEl = document.getElementById("mvForestNavCombined");
+    if (!svgEl) return;
+    const allStudyIds = [...new Set(rows.map(r => String(r.study_id)))];
+    const { totalPages } = _drawMVForestCombined(svgEl, rows, res, alpha, {
+      page: combinedPage, pageSize, showPI, theme: appState.plotTheme ?? "default",
+    });
+    _renderMVForestNavCombined(navEl, totalPages, allStudyIds.length);
+    return;
+  }
+
+  // Separate mode
+  const dfPred = Math.max(k - P - 1, 1);
+  outcomeIds.forEach((id, o) => {
+    const svgEl = document.getElementById(`mvForestPlot-${o}`);
+    const navEl = document.getElementById(`mvForestNav-${o}`);
+    if (!svgEl) return;
+    const outcomeRows = rows.filter(r => String(r.outcome_id) === String(id));
+    if (!outcomeRows.length) return;
+    const pooled = { est: beta[o], lo: ci[o][0], hi: ci[o][1] };
+    const piOpts = showPI ? {
+      lo: beta[o] - tCritical(dfPred, alpha) * Math.sqrt(tau2[o] + se[o] ** 2),
+      hi: beta[o] + tCritical(dfPred, alpha) * Math.sqrt(tau2[o] + se[o] ** 2),
+    } : null;
+    const { totalPages } = _drawMVForestPlot(svgEl, outcomeRows, pooled, String(id), alpha, {
+      page: pages[o] ?? 0, pageSize, pi: piOpts, theme: appState.plotTheme ?? "default",
+    });
+    _renderMVForestNav(navEl, o, totalPages, outcomeRows.length);
+  });
+}
+
+function _renderMVForestNav(navEl, outcomeIdx, totalPages, kAll) {
+  if (!navEl) return;
+  if (totalPages <= 1) { navEl.innerHTML = ""; return; }
+  const page = _mvForestState.pages[outcomeIdx] ?? 0;
+  const prevId = `mvFPrev-${outcomeIdx}`;
+  const nextId = `mvFNext-${outcomeIdx}`;
+  navEl.innerHTML =
+    `<button id="${prevId}" ${page === 0 ? "disabled" : ""}>‹ Prev</button>` +
+    `<span>Page ${page + 1} of ${totalPages}</span>` +
+    `<button id="${nextId}" ${page >= totalPages - 1 ? "disabled" : ""}>Next ›</button>` +
+    `<span class="forest-nav-note">Pooled estimate includes all ${kAll} studies</span>`;
+  document.getElementById(prevId)?.addEventListener("click", () => {
+    if (_mvForestState.pages[outcomeIdx] > 0) {
+      _mvForestState.pages[outcomeIdx]--;
+      _redrawAllMVForestPlots();
+    }
+  });
+  document.getElementById(nextId)?.addEventListener("click", () => {
+    if (_mvForestState.pages[outcomeIdx] < totalPages - 1) {
+      _mvForestState.pages[outcomeIdx]++;
+      _redrawAllMVForestPlots();
+    }
+  });
+}
+
+function _drawMVForestPlot(svgEl, rows, pooled, label, alpha = 0.05, { page = 0, pageSize = Infinity, pi = null, theme = "default" } = {}) {
+  if (typeof d3 === "undefined" || !rows.length) return;
+
+  const z = normalQuantile(1 - alpha / 2);
+  const T = PLOT_THEMES[theme] ?? PLOT_THEMES["default"];
+
+  // Pagination
+  const ps = pageSize === Infinity ? rows.length : pageSize;
+  const totalPages = Math.max(1, Math.ceil(rows.length / ps));
+  const safePage   = Math.min(Math.max(0, page), totalPages - 1);
+  const pageRows   = rows.slice(safePage * ps, safePage * ps + ps);
+
+  // Layout — extra row when PI shown
+  const lW = 130, pW = 280, aW = 175;
+  const rowH = 20, headerH = 24, axisH = 26;
+  const ml = 6, mr = 6;
+  const nS = pageRows.length;
+  const piRows  = pi ? 1 : 0;
+  const totalW  = ml + lW + pW + aW + mr;
+  const totalH  = headerH + nS * rowH + 6 + rowH + (piRows ? rowH : 0) + axisH;
+
+  const svg = d3.select(svgEl)
+    .attr("width", totalW)
+    .attr("height", totalH);
+  svg.selectAll("*").remove();
+  svg.style("background", (T.bg !== "transparent") ? T.bg : null);
+  svg.style("font-family", T.fontFamily);
+  if (T.bg !== "transparent") {
+    svg.append("rect").attr("width", totalW).attr("height", totalH).attr("fill", T.bg);
+  }
+
+  // X scale — use all rows (not just page) so domain stays stable across pages
+  const seAll = rows.map(r => Math.sqrt(r.vi));
+  const xVals = rows.flatMap((r, i) => [r.yi - z * seAll[i], r.yi + z * seAll[i]])
+    .concat([pooled.lo, pooled.hi]);
+  if (pi) xVals.push(pi.lo, pi.hi);
+  const xMin = Math.min(...xVals), xMax = Math.max(...xVals);
+  const pad  = Math.max((xMax - xMin) * 0.12, 0.05);
+  const xScale = d3.scaleLinear()
+    .domain([xMin - pad, xMax + pad])
+    .range([0, pW]);
+
+  const plotG = svg.append("g").attr("transform", `translate(${ml + lW},${headerH})`);
+
+  // Zero reference line
+  const zeroLineH = nS * rowH + 6 + rowH + (piRows ? rowH : 0);
+  if (xScale.domain()[0] <= 0 && xScale.domain()[1] >= 0) {
+    plotG.append("line")
+      .attr("x1", xScale(0)).attr("x2", xScale(0))
+      .attr("y1", 0).attr("y2", zeroLineH)
+      .attr("stroke", T.border).attr("stroke-dasharray", "3,3").attr("stroke-width", 1);
+  }
+
+  // Column headers
+  [
+    [ml + lW / 2,           "Study"],
+    [ml + lW + pW / 2,      label],
+    [ml + lW + pW + aW / 2, `Effect [${Math.round((1 - alpha) * 100)}% CI]`],
+  ].forEach(([x, text]) =>
+    svg.append("text")
+      .attr("x", x).attr("y", headerH - 6)
+      .attr("text-anchor", "middle")
+      .attr("fill", T.fgMuted).attr("font-size", "10px")
+      .text(text)
+  );
+
+  // Study rows (current page only)
+  const wtsAll  = rows.map(r => 1 / r.vi);
+  const wMax    = Math.max(...wtsAll);
+  const sePageArr = pageRows.map(r => Math.sqrt(r.vi));
+
+  pageRows.forEach((row, i) => {
+    const y  = i * rowH + rowH / 2;
+    const se = sePageArr[i];
+    const lo = row.yi - z * se;
+    const hi = row.yi + z * se;
+    const wi = 1 / row.vi;
+    const bh = Math.max(2, Math.min(6, 5.5 * Math.sqrt(wi / wMax)));
+
+    plotG.append("line")
+      .attr("x1", xScale(Math.max(xScale.domain()[0], lo)))
+      .attr("x2", xScale(Math.min(xScale.domain()[1], hi)))
+      .attr("y1", y).attr("y2", y)
+      .attr("stroke", T.fg).attr("stroke-width", 1);
+    plotG.append("rect")
+      .attr("x", xScale(row.yi) - bh).attr("y", y - bh)
+      .attr("width", bh * 2).attr("height", bh * 2)
+      .attr("fill", T.accent);
+
+    svg.append("text")
+      .attr("x", ml + lW - 4).attr("y", headerH + y + 4)
+      .attr("text-anchor", "end")
+      .attr("fill", T.fg).attr("font-size", "10px")
+      .text(String(row.study_id));
+
+    svg.append("text")
+      .attr("x", ml + lW + pW + 5).attr("y", headerH + y + 4)
+      .attr("text-anchor", "start")
+      .attr("fill", T.fg).attr("font-size", "10px")
+      .text(`${fmt(row.yi, 3)} [${fmt(lo, 3)}, ${fmt(hi, 3)}]`);
+  });
+
+  // Separator
+  const sepY = nS * rowH + 4;
+  plotG.append("line")
+    .attr("x1", 0).attr("x2", pW)
+    .attr("y1", sepY).attr("y2", sepY)
+    .attr("stroke", T.border).attr("stroke-width", 1);
+
+  // Pooled diamond
+  const dY   = sepY + rowH / 2;
+  const dLo  = xScale(Math.max(xScale.domain()[0], pooled.lo));
+  const dHi  = xScale(Math.min(xScale.domain()[1], pooled.hi));
+  const dMid = xScale(pooled.est);
+  const dH   = 7;
+  plotG.append("polygon")
+    .attr("points", `${dMid},${dY - dH} ${dHi},${dY} ${dMid},${dY + dH} ${dLo},${dY}`)
+    .attr("fill", T.accent);
+
+  svg.append("text")
+    .attr("x", ml + lW - 4).attr("y", headerH + dY + 4)
+    .attr("text-anchor", "end")
+    .attr("fill", T.fg).attr("font-size", "10px").attr("font-weight", "600")
+    .text("Pooled (MV)");
+  svg.append("text")
+    .attr("x", ml + lW + pW + 5).attr("y", headerH + dY + 4)
+    .attr("text-anchor", "start")
+    .attr("fill", T.fg).attr("font-size", "10px").attr("font-weight", "600")
+    .text(`${fmt(pooled.est, 3)} [${fmt(pooled.lo, 3)}, ${fmt(pooled.hi, 3)}]`);
+
+  // Prediction interval row (below diamond, only when pi != null)
+  if (pi && isFinite(pi.lo) && isFinite(pi.hi)) {
+    const piY   = dY + rowH;
+    const piLoX = xScale(Math.max(xScale.domain()[0], pi.lo));
+    const piHiX = xScale(Math.min(xScale.domain()[1], pi.hi));
+    const piColor = T.pi;
+    // Dashed line + endcap ticks
+    plotG.append("line")
+      .attr("x1", piLoX).attr("x2", piHiX)
+      .attr("y1", piY).attr("y2", piY)
+      .attr("stroke", piColor).attr("stroke-width", 2).attr("stroke-dasharray", "6,3");
+    plotG.append("line").attr("x1", piLoX).attr("x2", piLoX)
+      .attr("y1", piY - 5).attr("y2", piY + 5)
+      .attr("stroke", piColor).attr("stroke-width", 2);
+    plotG.append("line").attr("x1", piHiX).attr("x2", piHiX)
+      .attr("y1", piY - 5).attr("y2", piY + 5)
+      .attr("stroke", piColor).attr("stroke-width", 2);
+    // Label
+    svg.append("text")
+      .attr("x", ml + lW - 4).attr("y", headerH + piY + 4)
+      .attr("text-anchor", "end")
+      .attr("fill", piColor).attr("font-size", "10px")
+      .text("Pred. interval");
+    svg.append("text")
+      .attr("x", ml + lW + pW + 5).attr("y", headerH + piY + 4)
+      .attr("text-anchor", "start")
+      .attr("fill", piColor).attr("font-size", "10px")
+      .text(`${fmt(pi.lo, 3)} to ${fmt(pi.hi, 3)}`);
+  }
+
+  // X-axis
+  const axisOffsetY = sepY + rowH + (piRows ? rowH : 0) + 2;
+  plotG.append("g")
+    .attr("transform", `translate(0,${axisOffsetY})`)
+    .call(d3.axisBottom(xScale).ticks(5).tickSize(3))
+    .call(g => g.select(".domain").attr("stroke", T.border))
+    .call(g => g.selectAll(".tick line").attr("stroke", T.border))
+    .call(g => g.selectAll(".tick text")
+      .attr("fill", T.fgMuted).attr("font-size", "9px").attr("font-family", T.fontFamily));
+
+  return { totalPages };
+}
+
+function _renderMVForestNavCombined(navEl, totalPages, nStudies) {
+  if (!navEl) return;
+  if (totalPages <= 1) { navEl.innerHTML = ""; return; }
+  const page = _mvForestState.combinedPage;
+  navEl.innerHTML =
+    `<button id="mvFCPrev" ${page === 0 ? "disabled" : ""}>‹ Prev</button>` +
+    `<span>Page ${page + 1} of ${totalPages}</span>` +
+    `<button id="mvFCNext" ${page >= totalPages - 1 ? "disabled" : ""}>Next ›</button>` +
+    `<span class="forest-nav-note">Pooled estimates include all ${nStudies} studies</span>`;
+  document.getElementById("mvFCPrev")?.addEventListener("click", () => {
+    if (_mvForestState.combinedPage > 0) { _mvForestState.combinedPage--; _redrawAllMVForestPlots(); }
+  });
+  document.getElementById("mvFCNext")?.addEventListener("click", () => {
+    if (_mvForestState.combinedPage < totalPages - 1) { _mvForestState.combinedPage++; _redrawAllMVForestPlots(); }
+  });
+}
+
+function _drawMVForestCombined(svgEl, rows, res, alpha, { page = 0, pageSize = Infinity, showPI = false, theme = "default" } = {}) {
+  if (typeof d3 === "undefined" || !rows.length || !res) return { totalPages: 1 };
+  const T = PLOT_THEMES[theme] ?? PLOT_THEMES["default"];
+  const { beta, ci, se, tau2, outcomeIds, k, P } = res;
+  const z = normalQuantile(1 - alpha / 2);
+  const dfPred = Math.max(k - P - 1, 1);
+
+  // Unique study IDs for pagination
+  const allStudyIds = [...new Set(rows.map(r => String(r.study_id)))];
+  const ps = pageSize === Infinity ? allStudyIds.length : pageSize;
+  const totalPages = Math.max(1, Math.ceil(allStudyIds.length / ps));
+  const safePage = Math.min(Math.max(0, page), totalPages - 1);
+  const pageStudyIds = new Set(allStudyIds.slice(safePage * ps, safePage * ps + ps));
+
+  // Distinct colors per outcome — monochrome shades for BW theme, Tableau-10 otherwise
+  const palette = T.useBwShapes
+    ? ["#111111","#555555","#888888","#333333","#666666","#999999","#222222","#777777","#444444","#aaaaaa"]
+    : ["#4e79a7","#f28e2b","#e15759","#76b7b2","#59a14f","#edc948","#b07aa1","#ff9da7","#9c755f","#bab0ac"];
+
+  // X domain from all rows + all pooled CIs ± PI
+  const seAll = rows.map(r => Math.sqrt(r.vi));
+  const xVals = rows.flatMap((r, i) => [r.yi - z * seAll[i], r.yi + z * seAll[i]]);
+  outcomeIds.forEach((_, o) => {
+    xVals.push(ci[o][0], ci[o][1]);
+    if (showPI) {
+      const tc = tCritical(dfPred, alpha);
+      xVals.push(beta[o] - tc * Math.sqrt(tau2[o] + se[o] ** 2),
+                 beta[o] + tc * Math.sqrt(tau2[o] + se[o] ** 2));
+    }
+  });
+  const xMin = Math.min(...xVals), xMax = Math.max(...xVals);
+  const pad = Math.max((xMax - xMin) * 0.12, 0.05);
+
+  // Layout constants
+  const lW = 130, pW = 280, aW = 175;
+  const rowH = 20, headerH = 24, axisH = 26;
+  const groupHdrH = 22, sepH = 6, spacerH = 10;
+  const ml = 6, mr = 6;
+  const totalW = ml + lW + pW + aW + mr;
+
+  // Per-outcome page rows (pre-computed for height)
+  const perPageRows = outcomeIds.map(id =>
+    rows.filter(r => String(r.outcome_id) === String(id) && pageStudyIds.has(String(r.study_id)))
+  );
+  const groupH = (nS) => groupHdrH + nS * rowH + sepH + rowH + (showPI ? rowH : 0) + spacerH;
+  const totalGroupH = perPageRows.reduce((acc, pr) => acc + groupH(pr.length), 0);
+  const totalH = headerH + totalGroupH + axisH;
+
+  const svg = d3.select(svgEl).attr("width", totalW).attr("height", totalH);
+  svg.selectAll("*").remove();
+  svg.style("background", (T.bg !== "transparent") ? T.bg : null);
+  svg.style("font-family", T.fontFamily);
+  if (T.bg !== "transparent") {
+    svg.append("rect").attr("width", totalW).attr("height", totalH).attr("fill", T.bg);
+  }
+
+  const xScale = d3.scaleLinear().domain([xMin - pad, xMax + pad]).range([0, pW]);
+  const plotG = svg.append("g").attr("transform", `translate(${ml + lW},${headerH})`);
+
+  // Full-height zero reference line
+  if (xScale.domain()[0] <= 0 && xScale.domain()[1] >= 0) {
+    plotG.append("line")
+      .attr("x1", xScale(0)).attr("x2", xScale(0))
+      .attr("y1", 0).attr("y2", totalGroupH)
+      .attr("stroke", T.border).attr("stroke-dasharray", "3,3").attr("stroke-width", 1);
+  }
+
+  // Column headers
+  [
+    [ml + lW / 2,           "Study"],
+    [ml + lW + pW / 2,      "Effect"],
+    [ml + lW + pW + aW / 2, `Effect [${Math.round((1 - alpha) * 100)}% CI]`],
+  ].forEach(([x, text]) =>
+    svg.append("text").attr("x", x).attr("y", headerH - 6)
+      .attr("text-anchor", "middle").attr("fill", T.fgMuted).attr("font-size", "10px").text(text)
+  );
+
+  let gy = 0; // y cursor in plotG coords
+
+  outcomeIds.forEach((id, o) => {
+    const color = palette[o % palette.length];
+    const pageRows = perPageRows[o];
+    const nS = pageRows.length;
+    const allOutcomeRows = rows.filter(r => String(r.outcome_id) === String(id));
+    const wMax = Math.max(...allOutcomeRows.map(r => 1 / r.vi), 1);
+
+    // Shaded group header band
+    svg.append("rect")
+      .attr("x", 0).attr("y", headerH + gy)
+      .attr("width", totalW).attr("height", groupHdrH)
+      .attr("fill", color).attr("opacity", 0.1);
+    svg.append("text")
+      .attr("x", ml + 5).attr("y", headerH + gy + groupHdrH - 6)
+      .attr("fill", color).attr("font-size", "10px").attr("font-weight", "700")
+      .text(escapeHTML(String(id)));
+    gy += groupHdrH;
+
+    // Study rows
+    pageRows.forEach((row, i) => {
+      const y = gy + i * rowH + rowH / 2;
+      const seSt = Math.sqrt(row.vi);
+      const lo = row.yi - z * seSt;
+      const hi = row.yi + z * seSt;
+      const wi = 1 / row.vi;
+      const bh = Math.max(2, Math.min(6, 5.5 * Math.sqrt(wi / wMax)));
+
+      plotG.append("line")
+        .attr("x1", xScale(Math.max(xScale.domain()[0], lo)))
+        .attr("x2", xScale(Math.min(xScale.domain()[1], hi)))
+        .attr("y1", y).attr("y2", y)
+        .attr("stroke", color).attr("stroke-width", 1);
+      plotG.append("rect")
+        .attr("x", xScale(row.yi) - bh).attr("y", y - bh)
+        .attr("width", bh * 2).attr("height", bh * 2)
+        .attr("fill", color);
+      svg.append("text")
+        .attr("x", ml + lW - 4).attr("y", headerH + y + 4)
+        .attr("text-anchor", "end").attr("fill", T.fg).attr("font-size", "10px")
+        .text(String(row.study_id));
+      svg.append("text")
+        .attr("x", ml + lW + pW + 5).attr("y", headerH + y + 4)
+        .attr("text-anchor", "start").attr("fill", T.fg).attr("font-size", "10px")
+        .text(`${fmt(row.yi, 3)} [${fmt(lo, 3)}, ${fmt(hi, 3)}]`);
+    });
+    gy += nS * rowH;
+
+    // Separator
+    plotG.append("line")
+      .attr("x1", 0).attr("x2", pW)
+      .attr("y1", gy + sepH / 2).attr("y2", gy + sepH / 2)
+      .attr("stroke", T.border).attr("stroke-width", 1);
+    gy += sepH;
+
+    // Pooled diamond
+    const pooled = { est: beta[o], lo: ci[o][0], hi: ci[o][1] };
+    const dY = gy + rowH / 2;
+    const dMid = xScale(pooled.est);
+    const dLo  = xScale(Math.max(xScale.domain()[0], pooled.lo));
+    const dHi  = xScale(Math.min(xScale.domain()[1], pooled.hi));
+    const dH   = 7;
+    plotG.append("polygon")
+      .attr("points", `${dMid},${dY - dH} ${dHi},${dY} ${dMid},${dY + dH} ${dLo},${dY}`)
+      .attr("fill", color);
+    svg.append("text")
+      .attr("x", ml + lW - 4).attr("y", headerH + dY + 4)
+      .attr("text-anchor", "end").attr("fill", T.fg).attr("font-size", "10px").attr("font-weight", "600")
+      .text("Pooled (MV)");
+    svg.append("text")
+      .attr("x", ml + lW + pW + 5).attr("y", headerH + dY + 4)
+      .attr("text-anchor", "start").attr("fill", T.fg).attr("font-size", "10px").attr("font-weight", "600")
+      .text(`${fmt(pooled.est, 3)} [${fmt(pooled.lo, 3)}, ${fmt(pooled.hi, 3)}]`);
+    gy += rowH;
+
+    // Prediction interval
+    if (showPI) {
+      const tc = tCritical(dfPred, alpha);
+      const piLo = beta[o] - tc * Math.sqrt(tau2[o] + se[o] ** 2);
+      const piHi = beta[o] + tc * Math.sqrt(tau2[o] + se[o] ** 2);
+      const piY = gy + rowH / 2;
+      if (isFinite(piLo) && isFinite(piHi)) {
+        const piLoX = xScale(Math.max(xScale.domain()[0], piLo));
+        const piHiX = xScale(Math.min(xScale.domain()[1], piHi));
+        plotG.append("line")
+          .attr("x1", piLoX).attr("x2", piHiX).attr("y1", piY).attr("y2", piY)
+          .attr("stroke", color).attr("stroke-width", 2).attr("stroke-dasharray", "6,3").attr("opacity", 0.65);
+        plotG.append("line").attr("x1", piLoX).attr("x2", piLoX)
+          .attr("y1", piY - 5).attr("y2", piY + 5).attr("stroke", color).attr("stroke-width", 2).attr("opacity", 0.65);
+        plotG.append("line").attr("x1", piHiX).attr("x2", piHiX)
+          .attr("y1", piY - 5).attr("y2", piY + 5).attr("stroke", color).attr("stroke-width", 2).attr("opacity", 0.65);
+        svg.append("text")
+          .attr("x", ml + lW - 4).attr("y", headerH + piY + 4)
+          .attr("text-anchor", "end").attr("fill", T.pi).attr("font-size", "10px")
+          .text("Pred. interval");
+        svg.append("text")
+          .attr("x", ml + lW + pW + 5).attr("y", headerH + piY + 4)
+          .attr("text-anchor", "start").attr("fill", T.pi).attr("font-size", "10px")
+          .text(`${fmt(piLo, 3)} to ${fmt(piHi, 3)}`);
+      }
+      gy += rowH;
+    }
+
+    gy += spacerH;
+  });
+
+  // X-axis
+  plotG.append("g")
+    .attr("transform", `translate(0,${gy})`)
+    .call(d3.axisBottom(xScale).ticks(5).tickSize(3))
+    .call(g => g.select(".domain").attr("stroke", T.border))
+    .call(g => g.selectAll(".tick line").attr("stroke", T.border))
+    .call(g => g.selectAll(".tick text")
+      .attr("fill", T.fgMuted).attr("font-size", "9px").attr("font-family", T.fontFamily));
+
+  return { totalPages };
+}
+
 // ---------------- INITIALIZE ----------------
+document.getElementById("modeStandard").addEventListener("click",     () => { _mvMode = false; _applyModeToggle(); markStale(); });
+document.getElementById("modeMultivariate").addEventListener("click", () => { _mvMode = true;  _applyModeToggle(); markStale(); });
+document.getElementById("mvAddRow").addEventListener("click", () => { _mvAddRow(); markStale(); });
+document.getElementById("mvTableBody").addEventListener("keydown", e => {
+  if (!e.altKey || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
+  const row = e.target.closest("tr");
+  if (!row || !row.draggable) return;
+  e.preventDefault();
+  if (e.key === "ArrowUp") {
+    const prev = row.previousElementSibling;
+    if (prev && prev.draggable) row.parentNode.insertBefore(row, prev);
+  } else {
+    const next = row.nextElementSibling;
+    if (next && next.draggable) row.parentNode.insertBefore(next, row);
+  }
+  markStale();
+});
+document.getElementById("mvAddMod").addEventListener("click", _mvAddMod);
+document.getElementById("mvModName").addEventListener("keydown", e => { if (e.key === "Enter") _mvAddMod(); });
+document.getElementById("mvForestPageSize").addEventListener("change", e => {
+  const raw = e.target.value;
+  _mvForestState.pageSize     = raw === "all" ? Infinity : +raw;
+  _mvForestState.pages        = _mvForestState.pages.map(() => 0);
+  _mvForestState.combinedPage = 0;
+  _redrawAllMVForestPlots();
+});
+document.getElementById("mvForestView").addEventListener("change", e => {
+  _mvForestState.viewMode     = e.target.value;
+  _mvForestState.combinedPage = 0;
+  _redrawAllMVForestPlots();
+});
+document.getElementById("mvShowPI").addEventListener("change", e => {
+  _mvForestState.showPI = e.target.checked;
+  _redrawAllMVForestPlots();
+});
 document.getElementById("addStudy").addEventListener("click", () => { addRow(); renderRoBDataGrid(); markStale(); });
 document.getElementById("run").addEventListener("click", async () => { if (await runAnalysis()) showView("results"); });
 document.getElementById("import").addEventListener("click", () => document.getElementById("csvFile").click());
-document.getElementById("csvFile").addEventListener("change", e => { if (e.target.files[0]) previewCSV(e.target.files[0]); });
+document.getElementById("csvFile").addEventListener("change", async e => {
+  if (!e.target.files[0]) return;
+  try {
+    await previewCSV(e.target.files[0]);
+  } catch (err) {
+    const warn = document.getElementById("csvWarning");
+    warn.textContent = `Could not read file: ${err?.message ?? err}`;
+    warn.style.display = "block";
+    return;
+  }
+  if (_mvMode) {
+    const pending = getPendingImport();
+    document.getElementById("previewImport").textContent =
+      pending?.mvCandidate ? "Import to MV Table" : "Import";
+  }
+});
 document.getElementById("previewImport").addEventListener("click", () => {
+  document.getElementById("previewImport").textContent = "Import";
+  const pending = getPendingImport();
+  if (pending?.mvCandidate && _mvMode) {
+    _commitImportMV(pending.parsed, pending.mvHeaders);
+    cancelImport();
+    return;
+  }
   const missingCols = commitImport();
-  syncMHOptions(document.getElementById("effectType").value);
+  const importedType = document.getElementById("effectType").value;
+  syncMHOptions(importedType);
+  const { studies, excluded, softWarnings } = collectStudies(importedType);
+  updateValidationWarnings(studies, excluded, softWarnings);
   if (missingCols.length > 0) {
     const warningDiv = document.getElementById("csvWarning");
     warningDiv.textContent = `Warning: CSV is missing required columns: ${missingCols.join(", ")}`;
     warningDiv.style.display = "block";
   }
 });
-document.getElementById("previewCancel").addEventListener("click", cancelImport);
+document.getElementById("previewCancel").addEventListener("click", () => {
+  document.getElementById("previewImport").textContent = "Import";
+  cancelImport();
+});
+
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape" && document.getElementById("importPreview").style.display !== "none") {
+    document.getElementById("previewImport").textContent = "Import";
+    cancelImport();
+  }
+});
 document.getElementById("previewEffectType").addEventListener("change", e => refreshPreviewUI(e.target.value));
 document.getElementById("export").addEventListener("click", e => {
   const done = flashBtn(e.currentTarget, null, "Saved \u2713");
@@ -699,20 +2068,45 @@ document.getElementById("loadSession").addEventListener("click", () => document.
 document.getElementById("sessionFile").addEventListener("change", e => { if (e.target.files[0]) { loadSession(e.target.files[0]); e.target.value = ""; } });
 document.getElementById("addMod").addEventListener("click", addModerator);
 document.getElementById("modName").addEventListener("keydown", e => { if (e.key === "Enter") addModerator(); });
+document.getElementById("addInteraction").addEventListener("click", addInteractionTerm);
 document.getElementById("addScaleMod").addEventListener("click", addScaleModerator);
 document.getElementById("scaleModName").addEventListener("keydown", e => { if (e.key === "Enter") addScaleModerator(); });
-document.getElementById("cumulativeOrder").addEventListener("change", markStale);
+document.getElementById("cumulativeOrder").addEventListener("change", () => {
+  if (!cumForestPlot.sourceStudies) return;
+  const order = document.getElementById("cumulativeOrder").value;
+  const sorted = cumForestPlot.sourceStudies.slice();
+  if      (order === "precision_desc") sorted.sort((a, b) => a.vi - b.vi);
+  else if (order === "precision_asc")  sorted.sort((a, b) => b.vi - a.vi);
+  else if (order === "effect_asc")     sorted.sort((a, b) => a.yi - b.yi);
+  else if (order === "effect_desc")    sorted.sort((a, b) => b.yi - a.yi);
+  const cumResults = cumulativeMeta(sorted, cumForestPlot.method, cumForestPlot.ciMethod, cumForestPlot.alpha);
+  cumForestPlot.args.results = cumResults;
+  cumForestPlot.page = 0;
+  cumFunnelPlot.studies = sorted;
+  cumFunnelPlot.results = cumResults;
+  const slider = document.getElementById("cumulativeFunnelStep");
+  if (slider) { slider.max = cumResults.length - 1; slider.value = cumResults.length - 1; }
+  _updateCumFunnelLabel(cumResults.length - 1);
+  const { totalPages } = drawCumulativeForest(cumResults, cumForestPlot.args.profile,
+    { pageSize: cumForestPlot.args.pageSize, page: 0, theme: appState.plotTheme });
+  renderCumulativeForestNav(totalPages);
+  drawCumulativeFunnel(sorted, cumResults, cumFunnelPlot.profile, cumResults.length - 1, { theme: appState.plotTheme });
+  if (appState.reportArgs?.cumForestOptions) {
+    appState.reportArgs = { ...appState.reportArgs,
+      cumForestOptions: { ...appState.reportArgs.cumForestOptions, results: cumResults, currentPage: 0 } };
+  }
+});
 document.getElementById("cumulativeFunnelStep").addEventListener("input", e => {
   if (!cumFunnelPlot.studies) return;
   const step = +e.target.value;
   _updateCumFunnelLabel(step);
-  drawCumulativeFunnel(cumFunnelPlot.studies, cumFunnelPlot.results, cumFunnelPlot.profile, step);
+  drawCumulativeFunnel(cumFunnelPlot.studies, cumFunnelPlot.results, cumFunnelPlot.profile, step, { theme: appState.plotTheme });
 });
 document.getElementById("caterpillarPageSize").addEventListener("change", () => {
   if (!caterpillarPlot.args) return;
   caterpillarPlot.page = 0;
   const raw = document.getElementById("caterpillarPageSize").value;
-  caterpillarPlot.args.pageSize = raw === "Infinity" ? Infinity : +raw;
+  caterpillarPlot.args.pageSize = raw === "all" ? Infinity : +raw;
   const { totalPages } = drawCaterpillarPlot(
     caterpillarPlot.args.studies, caterpillarPlot.args.m, caterpillarPlot.args.profile,
     { pageSize: caterpillarPlot.args.pageSize, page: caterpillarPlot.page }
@@ -723,11 +2117,20 @@ document.getElementById("caterpillarPageSize").addEventListener("change", () => 
   }
 });
 
+document.getElementById("blupPageSize").addEventListener("change", () => {
+  if (!blupPlot.result) return;
+  blupPlot.page = 0;
+  const raw = document.getElementById("blupPageSize").value;
+  blupPlot.pageSize = raw === "all" ? Infinity : +raw;
+  const { totalPages } = drawBlupPlot(blupPlot.result, blupPlot.profile, { pageSize: blupPlot.pageSize, page: 0, theme: appState.plotTheme });
+  renderBlupNav(totalPages);
+});
+
 document.getElementById("cumulativeForestPageSize").addEventListener("change", () => {
   if (!cumForestPlot.args) return;
   cumForestPlot.page = 0;
   const raw = document.getElementById("cumulativeForestPageSize").value;
-  cumForestPlot.args.pageSize = raw === "Infinity" ? Infinity : +raw;
+  cumForestPlot.args.pageSize = raw === "all" ? Infinity : +raw;
   const { totalPages } = drawCumulativeForest(
     cumForestPlot.args.results, cumForestPlot.args.profile,
     { pageSize: cumForestPlot.args.pageSize, page: cumForestPlot.page }
@@ -742,8 +2145,8 @@ document.getElementById("forestPageSize").addEventListener("change", () => {
   if (!forestPlot.args) return;
   forestPlot.page = 0;
   const rawPageSize = document.getElementById("forestPageSize").value;
-  const pageSize    = rawPageSize === "Infinity" ? Infinity : +rawPageSize;
-  forestPlot.args.options = { ...forestPlot.args.options, pageSize, theme: forestPlot.theme };
+  const pageSize    = rawPageSize === "all" ? Infinity : +rawPageSize;
+  forestPlot.args.options = { ...forestPlot.args.options, pageSize, theme: appState.plotTheme };
   if (appState.reportArgs) {
     appState.reportArgs = { ...appState.reportArgs, forestOptions: { ...appState.reportArgs.forestOptions, pageSize, currentPage: 0 } };
   }
@@ -941,18 +2344,18 @@ document.getElementById("draftStartFresh").addEventListener("click", () => {
 
   resetSel("effectType"); resetSel("tauMethod"); resetSel("ciMethod");
   resetSel("ciLevel");    resetSel("mccMethod"); resetSel("cumulativeOrder");
-  resetSel("tfEstimator"); resetSel("forestTheme");
-  resetSel("selMode");    resetSel("selPreset"); resetSel("selSides");
+  resetSel("tfEstimator"); resetSel("plotTheme");
+  resetSel("selMode");    resetSel("selPreset"); resetSel("selSides"); resetSel("selWeightFn");
   resetChk("useTrimFill"); resetChk("useTFAdjusted");
   resetNum("bayesMu0"); resetNum("bayesSigmaMu"); resetNum("bayesSigmaTau");
+  resetSel("bayesPreset");
   resetNum("selCuts");
   // RVE rho: reset value then fire input event so the block-scoped display updater runs.
   const rveRhoEl = document.getElementById("rveRho");
   if (rveRhoEl) { rveRhoEl.value = rveRhoEl.defaultValue; rveRhoEl.dispatchEvent(new Event("input")); }
 
   // Sync dependent UI state.
-  adjustedCheckbox.disabled = !trimFillCheckbox.checked;
-  tfEstimatorSelect.disabled = !trimFillCheckbox.checked;
+  syncTrimFillState();
   syncMHOptions(document.getElementById("effectType").value);
   syncPLAvailability();
   syncSelControls();
@@ -995,6 +2398,201 @@ function flashBtn(btn, workingLabel, doneLabel, durationMs = 1500) {
 }
 
 // ---------------- PLOT EXPORT ----------------
+// ---------------- MV REPORT BUILDER ----------------
+// Defined here (not in lazy-loaded report.js) so it is always available even
+// when the browser's ES-module registry holds a cached pre-buildMVReport version
+// of report.js (which can happen if report.js was imported earlier in the session).
+
+function _mvSerializeSVG(svgEl) {
+  if (!svgEl) return "";
+  const clone = svgEl.cloneNode(true);
+  clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+  const w = clone.getAttribute("width")  || String(svgEl.getBoundingClientRect().width);
+  const h = clone.getAttribute("height") || String(svgEl.getBoundingClientRect().height);
+  clone.setAttribute("width", w);
+  clone.setAttribute("height", h);
+  resolveThemeVars(clone);
+  if (!hasEmbeddedBackground(clone)) {
+    const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    bg.setAttribute("width", "100%"); bg.setAttribute("height", "100%");
+    bg.setAttribute("fill", currentBgColour());
+    clone.insertBefore(bg, clone.firstChild);
+  }
+  return new XMLSerializer().serializeToString(clone);
+}
+
+
+function _buildMVReportHTML(res, rows = [], alpha = 0.05, { reportCSS, buildTableAPA, buildFigureAPA } = {}) {
+  const { beta, se, ci, z, pval, betaNames = [], tau2, rho_between,
+          outcomeIds, n, k, P, QM, df_QM, pQM, QE, df_QE, pQE,
+          logLik, AIC, BIC, AICc, struct, method, I2, convergence,
+          warnings: engineWarnings = [] } = res;
+  const hasMods = beta.length > P;
+  const ciPct = Math.round((1 - alpha) * 100);
+  const date  = new Date().toLocaleDateString(undefined, { year:"numeric", month:"long", day:"numeric" });
+  const esc   = s => String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  const fmtN  = (v, d = 3) => isFinite(v) ? (+v).toFixed(d) : "—";
+  const fmtP  = p => !isFinite(p) ? "—" : p < 0.001 ? "< .001" : (+p).toFixed(3).replace(/^0\./, ".");
+
+  let _tblN = 0, _figN = 0;
+  const nextTable  = () => ++_tblN;
+  const nextFigure = () => ++_figN;
+
+  // Pooled estimates
+  const pooledTblRows = outcomeIds.map((id, o) => {
+    const [lo, hi] = ci[o];
+    return `<tr><td><strong>${esc(String(id))}</strong></td><td>${fmtN(beta[o],4)}</td><td>${fmtN(se[o],4)}</td>
+      <td>[${fmtN(lo,4)}, ${fmtN(hi,4)}]</td><td>${fmtN(z[o],3)}</td><td>${fmtP(pval[o])}</td></tr>`;
+  });
+  const pooledSection = buildTableAPA(nextTable(),
+    `Pooled effect estimates per outcome (${method}, Ψ = ${struct})`,
+    ["Outcome","Estimate","SE",`${ciPct}% CI`,"<em>z</em>","<em>p</em>"],
+    pooledTblRows);
+
+  // Moderators
+  let modSection = "";
+  if (hasMods) {
+    const modRows = beta.slice(P).map((b, i) => {
+      const j = P + i;
+      const [lo, hi] = ci[j];
+      return `<tr><td>${esc(betaNames[j] ?? `β${j}`)}</td><td>${fmtN(b,4)}</td><td>${fmtN(se[j],4)}</td>
+        <td>[${fmtN(lo,4)}, ${fmtN(hi,4)}]</td><td>${fmtN(z[j],3)}</td><td>${fmtP(pval[j])}</td></tr>`;
+    });
+    modSection = buildTableAPA(nextTable(), "Meta-regression coefficients",
+      ["Coefficient","Estimate","SE",`${ciPct}% CI`,"<em>z</em>","<em>p</em>"], modRows);
+  }
+
+  // Heterogeneity
+  const hetCols = struct === "CS"
+    ? ["Outcome","τ²","<em>I</em>²","ρ (between)"]
+    : ["Outcome","τ²","<em>I</em>²"];
+  const hetTblRows = outcomeIds.map((id, o) => {
+    const rho = struct === "CS" ? `<td>${fmtN(rho_between ?? 0, 4)}</td>` : "";
+    return `<tr><td>${esc(String(id))}</td><td>${fmtN(tau2[o],5)}</td>
+      <td>${isFinite(I2[o]) ? (+I2[o]).toFixed(1)+"%" : "—"}</td>${rho}</tr>`;
+  });
+  const hetSection = buildTableAPA(nextTable(), "Between-study heterogeneity", hetCols, hetTblRows);
+
+  // Tests
+  const testTblRows = [
+    ...(hasMods && isFinite(QM)
+      ? [`<tr><td>Omnibus test of moderators (Q<sub>M</sub>)</td><td>${fmtN(QM,3)}</td><td>${df_QM}</td><td>${fmtP(pQM)}</td></tr>`]
+      : []),
+    `<tr><td>Residual heterogeneity (Q<sub>E</sub>)</td><td>${fmtN(QE,3)}</td><td>${df_QE}</td><td>${fmtP(pQE)}</td></tr>`,
+  ];
+  const testSection = buildTableAPA(nextTable(), "Hypothesis tests",
+    ["Test","χ²","df","<em>p</em>"], testTblRows);
+
+  const fitLine = `k = ${k} · n = ${n} obs · P = ${P} outcomes`
+    + ` │ log-lik = ${fmtN(logLik,4)} · AIC = ${fmtN(AIC,2)} · BIC = ${fmtN(BIC,2)}`
+    + (isFinite(AICc) ? ` · AICc = ${fmtN(AICc,2)}` : "")
+    + ` │ ${esc(method)}, Ψ = ${esc(struct)}`;
+
+  // MV forest SVGs
+  const forestSVGs = (() => {
+    const combined    = document.getElementById("mvForestPlotCombined");
+    const combinedBlk = document.getElementById("mvForestCombinedBlock");
+    if (combinedBlk && combinedBlk.style.display !== "none" && combined) {
+      const s = _mvSerializeSVG(combined); return s ? [s] : [];
+    }
+    const out = [];
+    for (let o = 0; o < outcomeIds.length; o++) {
+      const el = document.getElementById(`mvForestPlot-${o}`);
+      if (el) { const s = _mvSerializeSVG(el); if (s) out.push(s); }
+    }
+    return out;
+  })();
+
+  const warnHTML = [
+    convergence === false ? `<p style="color:#c0392b"><strong>Warning:</strong> Optimizer did not fully converge — interpret results with caution.</p>` : "",
+    ...engineWarnings.map(w => `<p style="color:#c0392b">${esc(w)}</p>`),
+  ].filter(Boolean).join("");
+
+  const forestSection = forestSVGs.length
+    ? buildFigureAPA(nextFigure(), "Forest plot of multivariate meta-analysis results", forestSVGs)
+    : "";
+
+  // Individual Studies
+  const zVal = normalQuantile(1 - alpha / 2);
+  const studyBodyRows = rows.map(r => {
+    const se_r = Math.sqrt(r.vi);
+    return `<tr><td>${esc(String(r.study_id))}</td><td>${esc(String(r.outcome_id))}</td>
+      <td>${fmtN(r.yi,4)}</td><td>${fmtN(r.vi,4)}</td><td>${fmtN(se_r,4)}</td>
+      <td>[${fmtN(r.yi - zVal*se_r,4)},&nbsp;${fmtN(r.yi + zVal*se_r,4)}]</td></tr>`;
+  });
+  const studySection = rows.length
+    ? buildTableAPA(nextTable(), "Individual study data",
+        ["Study","Outcome","y<sub>i</sub>","v<sub>i</sub>","SE",`${ciPct}% CI`], studyBodyRows)
+    : "";
+
+  // Risk of Bias (only if domains configured)
+  let robSection = "";
+  if (_robDomains.length > 0) {
+    const robSVGs = [
+      _mvSerializeSVG(document.getElementById("robTrafficLight")),
+      _mvSerializeSVG(document.getElementById("robSummary")),
+    ].filter(Boolean);
+    if (robSVGs.length) robSection = buildFigureAPA(nextFigure(), "Risk of bias assessment", robSVGs);
+  }
+
+  // References
+  const mvRefList = [
+    "Berkey, C. S., Hoaglin, D. C., Antczak-Bouckoms, A., Mosteller, F., &amp; Colditz, G. A. (1998). Meta-analysis of multiple outcomes by regression with random effects. <em>Statistics in Medicine</em>, <em>17</em>(22), 2537–2550.",
+    "Cheung, M. W.-L. (2014). Modeling dependent effect sizes with three-level meta-analyses: a structural equation modeling approach. <em>Psychological Methods</em>, <em>19</em>(2), 211–229.",
+    "Cochran, W. G. (1954). The combination of estimates from different experiments. <em>Biometrics</em>, <em>10</em>(1), 101–129.",
+    "Higgins, J. P. T., Thompson, S. G., Deeks, J. J., &amp; Altman, D. G. (2003). Measuring inconsistency in meta-analyses. <em>BMJ</em>, <em>327</em>(7414), 557–560. <a href=\"https://doi.org/10.1136/bmj.327.7414.557\">https://doi.org/10.1136/bmj.327.7414.557</a>",
+    "Jackson, D., Riley, R., &amp; White, I. R. (2011). Multivariate meta-analysis: Potential and promise. <em>Statistics in Medicine</em>, <em>30</em>(20), 2481–2498.",
+    "Riley, R. D., Abrams, K. R., Sutton, A. J., Lambert, P. C., &amp; Thompson, J. R. (2007). Bivariate random-effects meta-analysis and the estimation of between-study correlation. <em>BMC Medical Research Methodology</em>, <em>7</em>, 3.",
+    "Viechtbauer, W. (2005). Bias and efficiency of meta-analytic variance estimators in the random-effects model. <em>Journal of Educational and Behavioral Statistics</em>, <em>30</em>(3), 261–293.",
+  ];
+  const refSection = `<ul class="apa-references">${
+    mvRefList.map(r => `<li>${r}</li>`).join("")
+  }</ul>`;
+
+  const wrapSec = html => html ? `<section>${html}</section>` : "";
+
+  const body = [
+    warnHTML,
+    wrapSec(pooledSection),
+    wrapSec(modSection),
+    wrapSec(hetSection),
+    wrapSec(testSection),
+    `<p class="report-meta" style="margin-top:8px">${fitLine}</p>`,
+    wrapSec(forestSection),
+    wrapSec(studySection),
+    wrapSec(robSection),
+    refSection,
+  ].filter(Boolean).join("\n");
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Multivariate Meta-Analysis Report</title>
+  <style>${reportCSS()}</style>
+</head>
+<body>
+  <h1>Multivariate Meta-Analysis Report</h1>
+  <p class="report-meta">Generated ${esc(date)}
+    &nbsp;·&nbsp; k = ${k} studies, P = ${P} outcomes
+    &nbsp;·&nbsp; ${esc(method)}, Ψ = ${esc(struct)}</p>
+  ${body}
+</body>
+</html>`;
+}
+// Thin wrappers matching report.js downloadHTML / openPrintPreview signatures
+// so the MV path doesn't need to lazy-load report.js at all.
+function _mvDownloadHTML(html) {
+  downloadBlob(html, "mv-meta-analysis-report.html", "text/html;charset=utf-8");
+}
+function _mvOpenPrintPreview(html) {
+  const win = window.open("", "_blank");
+  if (!win) { _mvDownloadHTML(html); return; }
+  win.document.open(); win.document.write(html); win.document.close();
+  if (win.document.readyState === "complete") { win.print(); }
+  else { win.addEventListener("load", () => win.print()); }
+}
+
 // ---------------- REPORT EXPORT BUTTONS ----------------
 // buildReport internally re-renders every forest page into a hidden element
 // then restores the live view.  After it returns we re-render the live forest
@@ -1002,10 +2600,22 @@ function flashBtn(btn, workingLabel, doneLabel, durationMs = 1500) {
 // access to renderForestNav.
 async function buildReportAndResync() {
   if (!appState.reportArgs) return null;
-  // Ensure all lazily-deferred plots have been drawn before SVGs are serialised.
   flushDeferredDraws();
+
+  if (appState.reportArgs.mv) {
+    const { reportCSS, buildTableAPA, buildFigureAPA } = await getReport();
+    const html = _buildMVReportHTML(
+      appState.reportArgs.mvRes,
+      appState.reportArgs.mvRows ?? [],
+      appState.reportArgs.mvAlpha ?? 0.05,
+      { reportCSS, buildTableAPA, buildFigureAPA },
+    );
+    return { html, downloadHTML: _mvDownloadHTML, openPrintPreview: _mvOpenPrintPreview };
+  }
+
   const { buildReport, downloadHTML, openPrintPreview } = await getReport();
-  // Pass the live forestPlot.page so the restore inside collectForestSVGs lands on
+
+  // Pass the live forestPlot.page so the restore inside collectPagedSVGs lands on
   // the correct page rather than always page 0 (which was the value at cache time).
   const args = {
     ...appState.reportArgs,
@@ -1019,6 +2629,7 @@ async function buildReportAndResync() {
     // Use the live goshState so a re-run after the last analysis is captured.
     gosh:     goshState.result ?? appState.reportArgs.gosh,
     goshXAxis: document.getElementById("goshXAxis")?.value ?? appState.reportArgs.goshXAxis ?? "I2",
+    plotTheme: appState.plotTheme,
     apaFormat: true,
   };
   const html = buildReport(args);
@@ -1063,26 +2674,37 @@ document.getElementById("exportReportPDF").addEventListener("click", async e => 
 
 document.getElementById("exportReportDOCX").addEventListener("click", async () => {
   if (!appState.reportArgs) return;
-  // Ensure all lazily-deferred plots have been drawn before SVGs are serialised.
   flushDeferredDraws();
-  const args = {
-    ...appState.reportArgs,
-    forestOptions:      { ...appState.reportArgs.forestOptions, currentPage: forestPlot.page },
-    cumForestOptions:   appState.reportArgs.cumForestOptions
-      ? { ...appState.reportArgs.cumForestOptions,   currentPage: cumForestPlot.page }
-      : undefined,
-    caterpillarOptions: appState.reportArgs.caterpillarOptions
-      ? { ...appState.reportArgs.caterpillarOptions, currentPage: caterpillarPlot.page }
-      : undefined,
-    gosh:     goshState.result ?? appState.reportArgs.gosh,
-    goshXAxis: document.getElementById("goshXAxis")?.value ?? appState.reportArgs.goshXAxis ?? "I2",
-    apaFormat: true,   // Word export is always APA
-  };
-  const btn = document.getElementById("exportReportDOCX");
+  const btn  = document.getElementById("exportReportDOCX");
   const done = flashBtn(btn, "Building\u2026", "Saved \u2713");
   try {
-    const { buildDocx } = await getDocx();
-    const blob = await buildDocx(args);
+    const { buildDocx, buildMVDocx } = await getDocx();
+    let blob;
+    if (appState.reportArgs.mv) {
+      blob = await buildMVDocx({
+        res:         appState.reportArgs.mvRes,
+        rows:        appState.reportArgs.mvRows ?? [],
+        alpha:       appState.reportArgs.mvAlpha ?? 0.05,
+        exportScale: appState.exportScale,
+      });
+    } else {
+      const args = {
+        ...appState.reportArgs,
+        forestOptions:      { ...appState.reportArgs.forestOptions, currentPage: forestPlot.page },
+        cumForestOptions:   appState.reportArgs.cumForestOptions
+          ? { ...appState.reportArgs.cumForestOptions,   currentPage: cumForestPlot.page }
+          : undefined,
+        caterpillarOptions: appState.reportArgs.caterpillarOptions
+          ? { ...appState.reportArgs.caterpillarOptions, currentPage: caterpillarPlot.page }
+          : undefined,
+        gosh:      goshState.result ?? appState.reportArgs.gosh,
+        goshXAxis: document.getElementById("goshXAxis")?.value ?? appState.reportArgs.goshXAxis ?? "I2",
+        plotTheme:   appState.plotTheme,
+        apaFormat:   true,
+        exportScale: appState.exportScale,
+      };
+      blob = await buildDocx(args);
+    }
     downloadBlob(blob, "meta-analysis-report.docx",
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
     done();
@@ -1098,13 +2720,40 @@ document.getElementById("exportReportDOCX").addEventListener("click", async () =
 document.addEventListener("click", e => {
   const btn = e.target.closest(".contrast-test-btn");
   if (!btn) return;
-  if (!_lastReg) return;
-  const section = btn.closest(".contrast-section");
+  const section = btn.closest(".ls-contrast-section") ?? btn.closest(".contrast-section");
   if (!section) return;
+  const isLs = section.classList.contains("ls-contrast-section");
   const inputs = section.querySelectorAll(".contrast-weight");
   const L = Array.from(inputs).map(inp => parseFloat(inp.value) || 0);
-  const result = testContrast(_lastReg, L);
-  section.querySelector(".contrast-result").innerHTML = formatContrastResult(result, _lastReg);
+  if (isLs) {
+    if (!_lastLs) return;
+    const regLike = { beta: _lastLs.beta, vcov: _lastLs.vcov_beta, crit: _lastLs.crit, dist: "z", QEdf: _lastLs.QEdf };
+    section.querySelector(".contrast-result").innerHTML = formatContrastResult(testContrast(regLike, L), regLike);
+  } else {
+    if (!_lastReg) return;
+    section.querySelector(".contrast-result").innerHTML = formatContrastResult(testContrast(_lastReg, L), _lastReg);
+  }
+});
+
+// Delegated listener for vcov CSV download button (injected into regression panel).
+document.addEventListener("click", e => {
+  const btn = e.target.closest(".vcov-download-btn");
+  if (!btn) return;
+  const which = btn.dataset.which;
+  let vcov, colNames, filename;
+  if (which === "loc") {
+    if (!_lastLs?.vcov_beta) return;
+    vcov = _lastLs.vcov_beta; colNames = _lastLs.locColNames; filename = "vcov_beta.csv";
+  } else if (which === "scale") {
+    if (!_lastLs?.vcov_gamma) return;
+    vcov = _lastLs.vcov_gamma; colNames = _lastLs.scaleColNames; filename = "vcov_gamma.csv";
+  } else {
+    if (!_lastReg?.vcov || !_lastReg?.colNames) return;
+    vcov = _lastReg.vcov; colNames = _lastReg.colNames; filename = "vcov.csv";
+  }
+  const headers = ["", ...colNames];
+  const rows = vcov.map((row, i) => [colNames[i], ...row.map(v => isFinite(v) ? v.toFixed(6) : "NA")]);
+  downloadBlob(serializeCSV(headers, rows), filename, "text/csv;charset=utf-8;");
 });
 
 // Single delegated listener covers all static plot-export buttons and any
@@ -1149,19 +2798,63 @@ document.getElementById("ciMethod").addEventListener("change", () => {
 });
 document.getElementById("ciLevel").addEventListener("change", () => { scheduleSave(); markStale(); });
 document.getElementById("mccMethod").addEventListener("change", markStale);
-document.getElementById("bayesMu0").addEventListener("input", markStale);
-document.getElementById("bayesSigmaMu").addEventListener("input", markStale);
-document.getElementById("bayesSigmaTau").addEventListener("input", markStale);
+// ---------------- BAYESIAN PRESETS ----------------
+const BAYES_PRESETS = {
+  default:   { mu0: 0,   sigmaMu: 1,    sigmaTau: 0.5  },
+  weakly:    { mu0: 0,   sigmaMu: 2,    sigmaTau: 1.0  },
+  sceptical: { mu0: 0,   sigmaMu: 0.5,  sigmaTau: 0.25 },
+};
+
+function syncBayesPreset() {
+  const mu0  = parseFloat(document.getElementById("bayesMu0").value);
+  const smu  = parseFloat(document.getElementById("bayesSigmaMu").value);
+  const stau = parseFloat(document.getElementById("bayesSigmaTau").value);
+  const match = Object.entries(BAYES_PRESETS).find(([, p]) =>
+    p.mu0 === mu0 && p.sigmaMu === smu && p.sigmaTau === stau
+  );
+  document.getElementById("bayesPreset").value = match ? match[0] : "custom";
+}
+
+document.getElementById("bayesPreset").addEventListener("change", () => {
+  const preset = BAYES_PRESETS[document.getElementById("bayesPreset").value];
+  if (!preset) return; // "custom" — leave inputs alone
+  document.getElementById("bayesMu0").value      = preset.mu0;
+  document.getElementById("bayesSigmaMu").value  = preset.sigmaMu;
+  document.getElementById("bayesSigmaTau").value = preset.sigmaTau;
+  // Clear any lingering validation warnings
+  document.getElementById("bayesSigmaMuWarn").style.display  = "none";
+  document.getElementById("bayesSigmaTauWarn").style.display = "none";
+  markStale();
+  _checkAdvancedBadge();
+});
+
+document.getElementById("bayesMu0").addEventListener("input", () => { syncBayesPreset(); markStale(); });
+document.getElementById("bayesSigmaMu").addEventListener("input", () => { syncBayesPreset(); markStale(); });
+document.getElementById("bayesSigmaTau").addEventListener("input", () => { syncBayesPreset(); markStale(); });
 
 const trimFillCheckbox = document.getElementById("useTrimFill");
 const adjustedCheckbox = document.getElementById("useTFAdjusted");
 const tfEstimatorSelect = document.getElementById("tfEstimator");
-adjustedCheckbox.disabled = !trimFillCheckbox.checked;
-tfEstimatorSelect.disabled = !trimFillCheckbox.checked;
+
+function syncTrimFillState() {
+  const enabled = trimFillCheckbox.checked;
+  tfEstimatorSelect.disabled = !enabled;
+  adjustedCheckbox.disabled  = !enabled;
+  const tfLbl  = tfEstimatorSelect.closest("label");
+  const adjLbl = adjustedCheckbox.closest("label");
+  if (enabled) {
+    tfLbl?.removeAttribute("aria-disabled");
+    adjLbl?.removeAttribute("aria-disabled");
+  } else {
+    tfLbl?.setAttribute("aria-disabled", "true");
+    adjLbl?.setAttribute("aria-disabled", "true");
+  }
+}
+
+syncTrimFillState();
 trimFillCheckbox.addEventListener("change", () => {
-  adjustedCheckbox.disabled = !trimFillCheckbox.checked;
-  tfEstimatorSelect.disabled = !trimFillCheckbox.checked;
   if (!trimFillCheckbox.checked) adjustedCheckbox.checked = false;
+  syncTrimFillState();
   markStale();
 });
 adjustedCheckbox.addEventListener("change", markStale);
@@ -1169,16 +2862,21 @@ document.getElementById("tfEstimator").addEventListener("change", markStale);
 
 // ---------------- SELECTION MODEL CONTROLS ----------------
 function syncSelControls() {
-  const mode   = document.getElementById("selMode").value;
-  const preset = document.getElementById("selPreset").value;
-  const presetRow  = document.getElementById("selPresetRow");
-  const customRow  = document.getElementById("selCustomRow");
+  const mode     = document.getElementById("selMode").value;
+  const preset   = document.getElementById("selPreset").value;
+  const weightFn = document.getElementById("selWeightFn").value;
+  const presetRow   = document.getElementById("selPresetRow");
+  const customRow   = document.getElementById("selCustomRow");
+  const weightFnRow = document.getElementById("selWeightFnRow");
 
   const isSensitivity = mode === "sensitivity";
-  presetRow.style.display  = isSensitivity ? "" : "none";
-  // Show sides/cuts when MLE, or when sensitivity with custom preset
-  const showCustom = !isSensitivity || preset === "custom";
-  customRow.style.display  = showCustom ? "" : "none";
+  const showStepCtrls = !isSensitivity && weightFn === "stepfun";
+
+  setVisible(weightFnRow, !isSensitivity);
+  setVisible(presetRow,   isSensitivity);
+  // Show sides/cuts for: sensitivity custom preset, or MLE step function
+  const showCustom = (isSensitivity && preset === "custom") || showStepCtrls;
+  setVisible(customRow, showCustom);
 
   // When a named preset is selected, mirror its sides into the (hidden) selSides field
   if (isSensitivity && preset !== "custom") {
@@ -1189,9 +2887,69 @@ function syncSelControls() {
 
 document.getElementById("selMode").addEventListener("change", () => { syncSelControls(); markStale(); });
 document.getElementById("selPreset").addEventListener("change", () => { syncSelControls(); markStale(); });
+document.getElementById("selWeightFn").addEventListener("change", () => { syncSelControls(); markStale(); });
 document.getElementById("selSides").addEventListener("change", markStale);
 document.getElementById("selCuts").addEventListener("change", markStale);
 syncSelControls();
+
+// ---------------- ADVANCED SETTINGS: BADGE + RESET ----------------
+
+// Delegated listeners so the badge updates whenever any advanced control changes.
+document.getElementById("advancedSettings").addEventListener("change", _checkAdvancedBadge);
+document.getElementById("advancedSettings").addEventListener("input",  _checkAdvancedBadge);
+_checkAdvancedBadge();
+
+function resetAdvancedSettings() {
+  const resetSel = id => {
+    const el = document.getElementById(id); if (!el) return;
+    const i = [...el.options].findIndex(o => o.defaultSelected);
+    el.selectedIndex = i >= 0 ? i : 0;
+  };
+  const resetNum = id => { const el = document.getElementById(id); if (el) el.value = el.defaultValue; };
+  const resetChk = id => { const el = document.getElementById(id); if (el) el.checked = el.defaultChecked; };
+
+  resetSel("ciLevel"); resetSel("mccMethod"); resetSel("cumulativeOrder");
+  resetSel("tfEstimator");
+  resetChk("useTrimFill"); resetChk("useTFAdjusted");
+  resetSel("selMode"); resetSel("selPreset"); resetSel("selSides"); resetSel("selWeightFn");
+  resetNum("bayesMu0"); resetNum("bayesSigmaMu"); resetNum("bayesSigmaTau");
+  resetSel("bayesPreset");
+  resetNum("selCuts");
+  const rveRhoEl = document.getElementById("rveRho");
+  if (rveRhoEl) { rveRhoEl.value = rveRhoEl.defaultValue; rveRhoEl.dispatchEvent(new Event("input")); }
+
+  syncTrimFillState();
+  syncSelControls();
+  markStale();
+  _checkAdvancedBadge();
+}
+
+document.getElementById("resetAdvanced").addEventListener("click", resetAdvancedSettings);
+
+
+// ---------------- BAYESIAN PRIOR VALIDATION ----------------
+{
+  const clampPos = (inputId, warnId, min = 0.01) => {
+    const input = document.getElementById(inputId);
+    const warn  = document.getElementById(warnId);
+    if (!input || !warn) return;
+    const validate = () => {
+      const v = parseFloat(input.value);
+      if (!isFinite(v) || v < min) {
+        input.value = min;
+        warn.textContent = `Must be ≥ ${min}`;
+        warn.style.display = "";
+        markStale();
+      } else {
+        warn.style.display = "none";
+      }
+    };
+    input.addEventListener("blur",   validate);
+    input.addEventListener("change", validate);
+  };
+  clampPos("bayesSigmaMu",  "bayesSigmaMuWarn");
+  clampPos("bayesSigmaTau", "bayesSigmaTauWarn");
+}
 
 // ---------------- RVE ρ SLIDER ----------------
 {
@@ -1208,11 +2966,23 @@ syncSelControls();
 // ---------------- GOSH ----------------
 document.getElementById("goshRun").addEventListener("click", runGosh);
 
+// ---------------- PERMUTATION TEST ----------------
+document.getElementById("permRunBtn").addEventListener("click", _startPermTest);
+document.getElementById("permCancelBtn").addEventListener("click", () => {
+  if (permState.worker) { permState.worker.terminate(); permState.worker = null; }
+  const elProgress = document.getElementById("permProgress");
+  const elRun      = document.getElementById("permRunBtn");
+  const elCancel   = document.getElementById("permCancelBtn");
+  if (elProgress) elProgress.style.display = "none";
+  if (elRun)    elRun.style.display = "";
+  if (elCancel) elCancel.style.display = "none";
+});
+
 // ---------------- PROFILE LIKELIHOOD SCALE TOGGLE ----------------
 document.getElementById("profileLikScale").addEventListener("change", () => {
   if (appState.reportArgs?.profileLik) {
     const xScale = document.getElementById("profileLikScale").value;
-    drawProfileLikTau2(appState.reportArgs.profileLik, { xScale });
+    drawProfileLikTau2(appState.reportArgs.profileLik, { xScale, theme: appState.plotTheme });
     appState.reportArgs.profileLikXScale = xScale;
   }
 });
@@ -1227,7 +2997,9 @@ document.getElementById("profileLikScale").addEventListener("change", () => {
 // ---------------- SESSION SAVE ----------------
 
 function saveSession() {
-  downloadBlob(serializeSession(gatherSessionState(moderators, scaleModerators, { domains: _robDomains, data: _robData })), "session.json", "application/json;charset=utf-8;");
+  const session = gatherSessionState(moderators, scaleModerators, interactions, { domains: _robDomains, data: _robData });
+  if (_mvMode) session.mv = _gatherMVState();
+  downloadBlob(serializeSession(session), "session.json", "application/json;charset=utf-8;");
 }
 
 // ---------------- SESSION APPLY ----------------
@@ -1236,7 +3008,7 @@ function saveSession() {
 // Returns { profile, savedStudies } so callers can inspect missing columns etc.
 
 function applySession(session) {
-  const { settings = {}, moderators: savedMods = [], scaleModerators: savedScaleMods = [], studies: savedStudies = [], rob = {} } = session;
+  const { settings = {}, moderators: savedMods = [], scaleModerators: savedScaleMods = [], interactions: savedInteractions = [], studies: savedStudies = [], rob = {} } = session;
 
   // Apply settings
   const s = settings;
@@ -1274,7 +3046,21 @@ function applySession(session) {
     if (el && el.querySelector(`option[value="${s.selSides}"]`)) el.value = s.selSides;
   }
   if (s.selCuts) { const el = document.getElementById("selCuts"); if (el) el.value = s.selCuts; }
+  if (s.selWeightFn) {
+    const el = document.getElementById("selWeightFn");
+    if (el && el.querySelector(`option[value="${s.selWeightFn}"]`)) el.value = s.selWeightFn;
+  }
   syncSelControls();
+
+  // Display / reporting settings
+  if (s.mccMethod) {
+    const el = document.getElementById("mccMethod");
+    if (el && el.querySelector(`option[value="${s.mccMethod}"]`)) el.value = s.mccMethod;
+  }
+  if (isFinite(s.rveRho) && s.rveRho >= 0 && s.rveRho < 1) {
+    const el = document.getElementById("rveRho");
+    if (el) { el.value = s.rveRho; el.dispatchEvent(new Event("input")); }
+  }
 
   // Rebuild moderators
   clearModerators();
@@ -1289,6 +3075,13 @@ function applySession(session) {
     if (m.name && (m.type === "continuous" || m.type === "categorical"))
       doAddScaleModerator(m.name, m.type, m.transform || "linear");
   });
+
+  // Rebuild interaction terms (after moderators are restored)
+  clearInteractions();
+  savedInteractions.forEach(ix => {
+    if (ix.termA && ix.termB && ix.termA !== ix.termB) doAddInteraction(ix.termA, ix.termB);
+  });
+  refreshInteractionUI();
 
   // Rebuild table
   const type    = document.getElementById("effectType").value;
@@ -1313,6 +3106,43 @@ function applySession(session) {
   renderRoBDomainTags();
   renderRoBDataGrid();
 
+  // Restore MV mode
+  const mv = session.mv;
+  if (mv && typeof mv === "object") {
+    _mvMode = true;
+    _applyModeToggle();
+    if (mv.struct && document.getElementById("mvStruct").querySelector(`option[value="${mv.struct}"]`))
+      document.getElementById("mvStruct").value = mv.struct;
+    if (mv.method && document.getElementById("mvMethod").querySelector(`option[value="${mv.method}"]`))
+      document.getElementById("mvMethod").value = mv.method;
+    if (isFinite(mv.rho)) document.getElementById("mvRho").value = mv.rho;
+    _mvModerators.length = 0;
+    if (Array.isArray(mv.moderators)) mv.moderators.forEach(n => { if (n) _mvModerators.push(n); });
+    _renderMVModTags();
+    _rebuildMVTableHeaders();
+    document.getElementById("mvTableBody").innerHTML = "";
+    if (Array.isArray(mv.rows)) {
+      mv.rows.forEach(r => {
+        const tr = _mvAddRow();
+        if (r.study_id   !== undefined) tr.querySelector(".mv-study-id").value   = r.study_id;
+        if (r.outcome_id !== undefined) tr.querySelector(".mv-outcome-id").value = r.outcome_id;
+        if (r.yi         !== undefined) tr.querySelector(".mv-yi").value = r.yi;
+        if (r.vi         !== undefined) tr.querySelector(".mv-vi").value = r.vi;
+        _mvModerators.forEach((name, i) => {
+          const inputs = tr.querySelectorAll(".mv-mod");
+          if (inputs[i] && r[name] !== undefined) inputs[i].value = r[name];
+        });
+      });
+    }
+  } else {
+    _mvMode = false;
+    _applyModeToggle();
+  }
+
+  syncTrimFillState();
+  syncBayesPreset();
+  syncRveVisibility();
+  _checkAdvancedBadge();
   return { profile, savedStudies };
 }
 
@@ -1342,7 +3172,9 @@ async function loadSession(file) {
   }
 
   const { profile, savedStudies } = applySession(result.session);
-  syncMHOptions(document.getElementById("effectType").value);
+  const _sessionType = document.getElementById("effectType").value;
+  syncMHOptions(_sessionType);
+  { const { studies, excluded, softWarnings } = collectStudies(_sessionType); updateValidationWarnings(studies, excluded, softWarnings); }
 
   // Warn about any effect-input columns absent from the saved data.
   const missingCols = missingInputCols(profile.inputs, savedStudies);
@@ -1356,6 +3188,22 @@ async function loadSession(file) {
 // ---------------- CSV EXPORT ----------------
 
 function exportCSV() {
+  if (_mvMode) {
+    const headers = ["study_id", "outcome_id", "yi", "vi", ..._mvModerators.map(n => n)];
+    const rows    = [];
+    document.querySelectorAll("#mvTableBody tr").forEach(r => {
+      const studyId   = r.querySelector(".mv-study-id")?.value  ?? "";
+      const outcomeId = r.querySelector(".mv-outcome-id")?.value ?? "";
+      const yi        = r.querySelector(".mv-yi")?.value         ?? "";
+      const vi        = r.querySelector(".mv-vi")?.value         ?? "";
+      const mods      = [...r.querySelectorAll(".mv-mod")].map(x => x.value);
+      const vals      = [studyId, outcomeId, yi, vi, ...mods];
+      if (vals.some(v => v !== "")) rows.push(vals);
+    });
+    downloadBlob(serializeCSV(headers, rows), "mv_meta_data.csv", "text/csv;charset=utf-8;");
+    return;
+  }
+
   const type    = document.getElementById("effectType").value;
   const profile = effectProfiles[type];
 
@@ -1420,6 +3268,17 @@ function syncPLAvailability() {
 
 // MH is available for OR, RR, RD; Peto is available for OR only.
 // When MH or Peto is selected: lock CI method to "normal" and disable trim-and-fill.
+// Show #rveSettings whenever the table has any non-empty cluster cell and the
+// current method is not MH/Peto.  Called eagerly on table edits, CSV import,
+// session restore, and method change — not gated on a Run.
+function syncRveVisibility() {
+  const method = document.getElementById("tauMethod")?.value ?? "";
+  const isMHorPeto = method === "MH" || method === "Peto";
+  const hasClusters = [...document.querySelectorAll("#inputTable .cluster")]
+    .some(el => el.value.trim() !== "");
+  setVisible(document.getElementById("rveSettings"), hasClusters && !isMHorPeto);
+}
+
 function syncMHOptions(type) {
   const tauSel  = document.getElementById("tauMethod");
   const ciSel   = document.getElementById("ciMethod");
@@ -1454,6 +3313,7 @@ function syncMHOptions(type) {
     if (tfEst) tfEst.disabled = isMHorPeto || !tfCheck.checked;
   }
 
+  syncRveVisibility();
   syncPLAvailability();
 }
 
@@ -1464,6 +3324,7 @@ function init() {
     scheduleSave,
     renderRoBDataGrid,
     deleteRobEntry: key => { delete _robData[key]; },
+    onModeratorChanged: () => { refreshInteractionUI(); renderInteractionTags(); },
   });
 
   // Wire the shared tooltip element into plots.js (removes "#tooltip" coupling)
@@ -1483,9 +3344,40 @@ function init() {
     updateTableHeaders();
     populateExampleData("SMD");
   }
+  // Run validation after table is populated (draft restore or example data).
+  {
+    const type = document.getElementById("effectType").value;
+    const { studies, excluded, softWarnings } = collectStudies(type);
+    updateValidationWarnings(studies, excluded, softWarnings);
+  }
 
   // Initialise MH/Peto and PL availability based on default/restored settings.
   syncMHOptions(document.getElementById("effectType").value);
+
+  // Update RVE visibility whenever a cluster cell changes (no Run required).
+  document.getElementById("inputTable").addEventListener("input", e => {
+    if (e.target.classList.contains("cluster")) syncRveVisibility();
+  });
+
+  // Populate MV example data (Berkey 1998: 5 trials, 2 outcomes)
+  if (USE_EXAMPLES) _populateMVExample(); else _mvAddRow();
+
+  // Label all export button groups for accessibility
+  document.querySelectorAll(".plot-export").forEach(div => {
+    const plotBlock = div.closest(".plot-block, .plot-block-inline");
+    const labelEl   = plotBlock?.querySelector(".plot-label");
+    if (labelEl) {
+      const text = Array.from(labelEl.childNodes)
+        .filter(n => n.nodeType === Node.TEXT_NODE)
+        .map(n => n.textContent.trim())
+        .join(" ")
+        .trim();
+      if (text) {
+        div.setAttribute("role", "group");
+        div.setAttribute("aria-label", `Export ${text}`);
+      }
+    }
+  });
 
   // Validate all rows
   document.querySelectorAll("#inputTable tr").forEach((row, i) => {
@@ -1496,6 +3388,18 @@ function init() {
   if (new URLSearchParams(window.location.search).has("tests")) {
     import("./tests.js").then(({ runTests }) => runTests());
   }
+
+  // Fire the onboarding tour after idle — never blocks initial render.
+  const _ric = window.requestIdleCallback ?? (cb => setTimeout(cb, 200));
+  _ric(() => getOnboarding().then(m => m.maybeStartTour()).catch(() => {}));
+
+  // Replay link in the About tab: switch to Input view first so tour anchors
+  // are visible (all Input elements have zero dimensions while hidden).
+  document.getElementById("replayTourLink")?.addEventListener("click", e => {
+    e.preventDefault();
+    showView("input");
+    getOnboarding().then(m => m.startTour({ force: true })).catch(() => {});
+  });
 }
 
 window.onload = init;
@@ -1504,7 +3408,11 @@ window.onload = init;
 function populateExampleData(type) {
   const table = document.getElementById("inputTable");
   while (table.rows.length > 1) table.deleteRow(1);
-  (getProfile(type)?.exampleData ?? []).forEach(row => addRow(row));
+  if (USE_EXAMPLES) {
+    (getProfile(type)?.exampleData ?? []).forEach(row => addRow(row));
+  } else {
+    addRow();
+  }
 }
 
 // ---------------- OUTPUT SECTION VISIBILITY ----------------
@@ -1520,13 +3428,24 @@ const appState = {
   hasRunOnce:  false,  // prevents stale banner before the first run
   exportScale: 3,      // matches <option selected> in #exportScale (3× ≈ 288 dpi)
   reportArgs:  null,   // cached after each run; consumed by export buttons
+  plotTheme:   "default",
 };
+
+// Restore plot theme from localStorage so the user's visual preference survives reload.
+{
+  const saved = localStorage.getItem("fosma-plot-theme");
+  const sel   = document.getElementById("plotTheme");
+  if (saved && sel && sel.querySelector(`option[value="${saved}"]`)) {
+    sel.value          = saved;
+    appState.plotTheme = saved;
+  }
+}
 
 const forestPlot = {
   page:        0,
   args:        null,        // { studies, m, options } — cached for page-nav re-renders
   poolDisplay: "RE",        // "FE" | "RE" | "Both"
-  theme:       "default",   // visual style preset key (see forestThemes.js)
+  theme:       "default",   // visual style preset key (see plotThemes.js)
 };
 
 const caterpillarPlot = {
@@ -1544,6 +3463,10 @@ const blupPlot = {
 const cumForestPlot = {
   page: 0,
   args: null,               // { results, profile, pageSize }
+  sourceStudies: null,      // original unsorted studies for live re-sort
+  method:   null,
+  ciMethod: null,
+  alpha:    null,
 };
 
 const funnelPlot = {
@@ -1567,7 +3490,20 @@ const bayesState = {
   studies: null,   // study array from the last runAnalysis() call
   reMean:  NaN,    // RE pooled mean from the last runAnalysis() call
   profile: null,   // effect-type profile from the last runAnalysis() call
+  result:  null,   // cached for theme redraw
 };
+
+const pCurvePlot  = { result: null };
+const pUniformPlot = { result: null, m: null, profile: null };
+
+const diagnosticsState = {
+  influence: null, baujatResult: null, profile: null,
+  qqResiduals: null, qqLabels: null,
+  studies: null, m: null, type: null,
+  showQQ: false, showLabbe: false, isMHorPeto: false,
+};
+const bubblePlotState = { bubbleResult: null, moderators: null, usePartialBubble: false };
+const robPlotState    = { studies: null };   // _robDomains/_robData are already module-level
 
 document.getElementById("exportScale").addEventListener("change", e => {
   appState.exportScale = +e.target.value;
@@ -1577,7 +3513,10 @@ document.querySelectorAll(".forest-pool-btn").forEach(btn => {
   btn.addEventListener("click", () => {
     if (!forestPlot.args) return;
     forestPlot.poolDisplay = btn.dataset.display;
-    document.querySelectorAll(".forest-pool-btn").forEach(b => b.classList.toggle("active", b === btn));
+    document.querySelectorAll(".forest-pool-btn").forEach(b => {
+      b.classList.toggle("active", b === btn);
+      b.setAttribute("aria-pressed", String(b === btn));
+    });
     forestPlot.page = 0;
     forestPlot.args.options = { ...forestPlot.args.options, pooledDisplay: forestPlot.poolDisplay };
     const { totalPages } = drawForest(forestPlot.args.studies, forestPlot.args.m, { ...forestPlot.args.options, page: forestPlot.page });
@@ -1585,23 +3524,131 @@ document.querySelectorAll(".forest-pool-btn").forEach(btn => {
   });
 });
 
-document.getElementById("forestTheme").addEventListener("change", e => {
-  if (!forestPlot.args) return;
-  forestPlot.theme = e.target.value;
-  forestPlot.args.options = { ...forestPlot.args.options, theme: forestPlot.theme };
+document.getElementById("plotTheme").addEventListener("change", e => {
+  appState.plotTheme = e.target.value;
+  localStorage.setItem("fosma-plot-theme", e.target.value);
   if (appState.reportArgs) {
-    appState.reportArgs = { ...appState.reportArgs, forestOptions: { ...appState.reportArgs.forestOptions, theme: forestPlot.theme } };
+    appState.reportArgs = { ...appState.reportArgs, plotTheme: appState.plotTheme };
   }
-  const { totalPages } = drawForest(forestPlot.args.studies, forestPlot.args.m, { ...forestPlot.args.options, page: forestPlot.page });
-  renderForestNav(totalPages);
+  redrawCachedPlots();
 });
+
+function redrawCachedPlots() {
+  const theme = appState.plotTheme;
+  if (_mvForestState?.lastRes) _redrawAllMVForestPlots();
+  if (forestPlot.args) {
+    forestPlot.args.options = { ...forestPlot.args.options, theme };
+    const { totalPages } = drawForest(forestPlot.args.studies, forestPlot.args.m, { ...forestPlot.args.options, page: forestPlot.page });
+    renderForestNav(totalPages);
+  }
+  if (funnelPlot.args) {
+    drawFunnel(...funnelPlot.args, { egger: funnelPlot.egger, contours: funnelPlot.contours, petpeese: funnelPlot.petpeese, theme });
+  }
+  if (cumForestPlot.args) {
+    const { totalPages } = drawCumulativeForest(
+      cumForestPlot.args.results, cumForestPlot.args.profile,
+      { pageSize: cumForestPlot.args.pageSize, page: cumForestPlot.page, theme }
+    );
+    renderCumulativeForestNav(totalPages);
+  }
+  if (cumFunnelPlot.studies) {
+    const slider = document.getElementById("cumulativeFunnelStep");
+    const step = slider ? +slider.value : (cumFunnelPlot.results?.length ?? 1) - 1;
+    drawCumulativeFunnel(cumFunnelPlot.studies, cumFunnelPlot.results, cumFunnelPlot.profile, step, { theme });
+  }
+  if (caterpillarPlot.args) {
+    const { totalPages } = drawCaterpillarPlot(
+      caterpillarPlot.args.studies, caterpillarPlot.args.m, caterpillarPlot.args.profile,
+      { pageSize: caterpillarPlot.args.pageSize, page: caterpillarPlot.page, theme }
+    );
+    renderCaterpillarNav(totalPages);
+  }
+  if (blupPlot.result) {
+    const { totalPages } = drawBlupPlot(blupPlot.result, blupPlot.profile, { pageSize: blupPlot.pageSize, page: blupPlot.page, theme });
+    renderBlupNav(totalPages);
+  }
+  if (goshState.result) {
+    const xAxis = document.getElementById("goshXAxis")?.value || "I2";
+    drawGoshPlot(goshState.result, goshState.profile, { xAxis, theme });
+  }
+  if (bayesState.result) {
+    drawBayesMuPosterior(bayesState.result, { reMean: bayesState.reMean, theme });
+    drawBayesTauPosterior(bayesState.result, { theme });
+  }
+  if (appState.reportArgs?.profileLik) {
+    const xScale = document.getElementById("profileLikScale")?.value || appState.reportArgs.profileLikXScale || "tau2";
+    drawProfileLikTau2(appState.reportArgs.profileLik, { xScale, theme });
+  }
+  if (pCurvePlot.result) {
+    drawPCurve(pCurvePlot.result, { theme });
+  }
+  if (pUniformPlot.result) {
+    drawPUniform(pUniformPlot.result, pUniformPlot.m, pUniformPlot.profile, { theme });
+  }
+  if (diagnosticsState.influence) {
+    drawInfluencePlot(diagnosticsState.influence, { theme });
+    drawBaujatPlot(diagnosticsState.baujatResult, diagnosticsState.profile, { theme });
+    if (diagnosticsState.showQQ)
+      drawQQPlot(diagnosticsState.qqResiduals, diagnosticsState.qqLabels, { theme });
+    if (!diagnosticsState.isMHorPeto && diagnosticsState.studies?.length >= 2)
+      drawRadialPlot(diagnosticsState.studies, diagnosticsState.m, diagnosticsState.profile, { theme });
+    if (diagnosticsState.showLabbe)
+      drawLabbe(diagnosticsState.studies, diagnosticsState.m, diagnosticsState.profile, { type: diagnosticsState.type, theme });
+  }
+  if (caterpillarPlot.args) {
+    drawOrchardPlot(caterpillarPlot.args.studies, caterpillarPlot.args.m, caterpillarPlot.args.profile, { theme });
+  }
+  if (bubblePlotState.bubbleResult) {
+    const bc = document.getElementById("bubblePlots");
+    if (bc) {
+      bc.innerHTML = "";
+      bubblePlotState.moderators.forEach((mod, i) => {
+        const colIdxs = bubblePlotState.bubbleResult.modColMap && bubblePlotState.bubbleResult.modColMap[mod.name];
+        if (!colIdxs || colIdxs.length === 0) return;
+        const wrap = document.createElement("div");
+        wrap.dataset.moderator = mod.name;
+        bc.appendChild(wrap);
+        if (bubblePlotState.usePartialBubble) {
+          drawPartialResidualBubble(bubblePlotState.bubbleResult.studiesUsed, bubblePlotState.bubbleResult, mod, wrap, { theme });
+        } else {
+          drawBubble(bubblePlotState.bubbleResult.studiesUsed, bubblePlotState.bubbleResult, mod, wrap, { theme });
+        }
+        const bubbleSvg = wrap.querySelector("svg");
+        if (bubbleSvg) {
+          const svgId = `bubblePlot_${i}`;
+          bubbleSvg.id = svgId;
+          const exportDiv = document.createElement("div");
+          exportDiv.className = "plot-export";
+          exportDiv.innerHTML =
+            `<button class="export-btn" data-target="${svgId}" data-format="svg">SVG</button>` +
+            `<button class="export-btn" data-target="${svgId}" data-format="png">PNG</button>` +
+            `<button class="export-btn" data-target="${svgId}" data-format="tiff">TIFF</button>`;
+          wrap.insertBefore(exportDiv, bubbleSvg);
+        }
+        if (bubblePlotState.usePartialBubble) {
+          const note = document.createElement("p");
+          note.className = "reg-note";
+          note.textContent = "Partial residual plot — other predictors held at zero (residuals).";
+          wrap.appendChild(note);
+        }
+      });
+    }
+  }
+  if (robPlotState.studies && _robDomains.length > 0) {
+    drawRoBTrafficLight(robPlotState.studies, _robDomains, _robData, { theme });
+    drawRoBSummary(robPlotState.studies, _robDomains, _robData, { theme });
+  }
+}
 
 document.querySelectorAll(".funnel-mode-btn").forEach(btn => {
   btn.addEventListener("click", () => {
     if (!funnelPlot.args) return;
     funnelPlot.contours = btn.dataset.mode === "contour";
-    document.querySelectorAll(".funnel-mode-btn").forEach(b => b.classList.toggle("active", b === btn));
-    drawFunnel(...funnelPlot.args, { egger: funnelPlot.egger, contours: funnelPlot.contours, petpeese: funnelPlot.petpeese });
+    document.querySelectorAll(".funnel-mode-btn").forEach(b => {
+      b.classList.toggle("active", b === btn);
+      b.setAttribute("aria-pressed", String(b === btn));
+    });
+    drawFunnel(...funnelPlot.args, { egger: funnelPlot.egger, contours: funnelPlot.contours, petpeese: funnelPlot.petpeese, theme: appState.plotTheme });
   });
 });
 
@@ -1652,7 +3699,7 @@ const renderForestNav = makeNavRenderer({
   getKAll: () => forestPlot.args?.studies?.length ?? "?",
   getPage: () => forestPlot.page,
   setPage: p  => { forestPlot.page = p; },
-  redraw:  p  => drawForest(forestPlot.args.studies, forestPlot.args.m, { ...forestPlot.args.options, page: p }),
+  redraw:  p  => drawForest(forestPlot.args.studies, forestPlot.args.m, { ...forestPlot.args.options, page: p, theme: appState.plotTheme }),
 });
 
 const renderCaterpillarNav = makeNavRenderer({
@@ -1665,7 +3712,7 @@ const renderCaterpillarNav = makeNavRenderer({
   setPage: p  => { caterpillarPlot.page = p; },
   redraw:  p  => drawCaterpillarPlot(
     caterpillarPlot.args.studies, caterpillarPlot.args.m, caterpillarPlot.args.profile,
-    { pageSize: caterpillarPlot.args.pageSize, page: p }
+    { pageSize: caterpillarPlot.args.pageSize, page: p, theme: appState.plotTheme }
   ),
 });
 
@@ -1677,7 +3724,7 @@ const renderBlupNav = makeNavRenderer({
   getKAll: () => blupPlot.result?.k ?? "?",
   getPage: () => blupPlot.page,
   setPage: p  => { blupPlot.page = p; },
-  redraw:  p  => drawBlupPlot(blupPlot.result, blupPlot.profile, { pageSize: blupPlot.pageSize, page: p }),
+  redraw:  p  => drawBlupPlot(blupPlot.result, blupPlot.profile, { pageSize: blupPlot.pageSize, page: p, theme: appState.plotTheme }),
 });
 
 const renderCumulativeForestNav = makeNavRenderer({
@@ -1690,7 +3737,7 @@ const renderCumulativeForestNav = makeNavRenderer({
   setPage: p  => { cumForestPlot.page = p; },
   redraw:  p  => drawCumulativeForest(
     cumForestPlot.args.results, cumForestPlot.args.profile,
-    { pageSize: cumForestPlot.args.pageSize, page: p }
+    { pageSize: cumForestPlot.args.pageSize, page: p, theme: appState.plotTheme }
   ),
 });
 
@@ -1794,7 +3841,7 @@ function runGosh() {
       studyInput[key] = profile.rawInputs?.has(key) ? inputs[idx + 1] : +inputs[idx + 1];
     });
     const s = profile.compute(studyInput);
-    if (isFinite(s.yi) && isFinite(s.vi) && s.vi > 0) {
+    if (isValidStudy(s)) {
       studies.push(s);
     }
   }
@@ -1850,7 +3897,7 @@ function runGosh() {
     if (elPlot) { elPlot.style.display = ""; }
     resetControls();
     const xAxis = document.getElementById("goshXAxis").value;
-    drawGoshPlot(result, profile, { xAxis });
+    drawGoshPlot(result, profile, { xAxis, theme: appState.plotTheme });
     renderGoshInfo(result, profile);
   }
 
@@ -1948,6 +3995,142 @@ function runGosh() {
 
 
 // -----------------------------------------------------------------------------
+// Permutation test state and runner
+// -----------------------------------------------------------------------------
+const permState = { worker: null, lastResult: null, lastReg: null };
+
+function _clearPermResults() {
+  const el = document.getElementById("permResults");
+  if (el) el.innerHTML = "";
+  const prog = document.getElementById("permProgress");
+  if (prog) prog.style.display = "none";
+  const cancelBtn = document.getElementById("permCancelBtn");
+  if (cancelBtn) cancelBtn.style.display = "none";
+  const runBtn = document.getElementById("permRunBtn");
+  if (runBtn) runBtn.style.display = "";
+  if (permState.worker) { permState.worker.terminate(); permState.worker = null; }
+  permState.lastResult = null;
+  permState.lastReg    = null;
+}
+
+function _startPermTest() {
+  if (!_lastReg || _lastReg.rankDeficient) return;
+  const reg = _lastReg;
+
+  const nPerm = parseInt(document.getElementById("permIter")?.value ?? "999", 10);
+  const seed  = 12345;
+
+  const elProgress = document.getElementById("permProgress");
+  const elBar      = document.getElementById("permProgressBar");
+  const elText     = document.getElementById("permProgressText");
+  const elRun      = document.getElementById("permRunBtn");
+  const elCancel   = document.getElementById("permCancelBtn");
+  const elResults  = document.getElementById("permResults");
+
+  if (elResults) elResults.innerHTML = "";
+  if (elProgress) elProgress.style.display = "";
+  if (elBar) { elBar.value = 0; elBar.max = 100; }
+  if (elText) elText.textContent = "0%";
+  if (elRun) elRun.style.display = "none";
+  if (elCancel) elCancel.style.display = "";
+
+  // Flatten design matrix to Float64Array for worker transfer
+  const k = reg.yi.length;
+  const p = reg.p;
+  const XTA = new Float64Array(k * p);
+  for (let i = 0; i < k; i++) for (let j = 0; j < p; j++) XTA[i * p + j] = reg.Xf[i][j];
+
+  // Per-moderator colIdxs
+  const modTests = Array.isArray(reg.modTests) ? reg.modTests : [];
+  const modColLens  = new Int32Array(modTests.map(mt => (mt.colIdxs ?? []).length));
+  const totalIdxs   = modColLens.reduce((s, v) => s + v, 0);
+  const modColIdxsTA = new Int32Array(totalIdxs);
+  let off = 0;
+  for (const mt of modTests) {
+    for (const idx of (mt.colIdxs ?? [])) modColIdxsTA[off++] = idx;
+  }
+
+  const onProgress = (done, total) => {
+    const pct = Math.round(done / total * 100);
+    if (elBar)  elBar.value = pct;
+    if (elText) elText.textContent = `${pct}%`;
+  };
+
+  const onDone = (result) => {
+    permState.worker = null;
+    permState.lastResult = result;
+    permState.lastReg    = reg;
+    if (appState.reportArgs) {
+      appState.reportArgs = { ...appState.reportArgs, permResult: result };
+    }
+    if (elProgress) elProgress.style.display = "none";
+    if (elRun)    elRun.style.display = "";
+    if (elCancel) elCancel.style.display = "none";
+    renderPermResults(result, reg);
+  };
+
+  const onError = (msg) => {
+    permState.worker = null;
+    if (elProgress) elProgress.style.display = "none";
+    if (elRun)    elRun.style.display = "";
+    if (elCancel) elCancel.style.display = "none";
+    if (elResults) elResults.innerHTML = `<div class="reg-note reg-warn">⚠ Permutation error: ${escapeHTML(msg)}</div>`;
+  };
+
+  // Try Worker first
+  const yiTA = new Float64Array(reg.yi);
+  const viTA = new Float64Array(reg.vi);
+
+  let workerOk = false;
+  try {
+    const workerUrl = new URL("./perm.worker.js", import.meta.url).href;
+    const w = new Worker(workerUrl);
+    permState.worker = w;
+    workerOk = true;
+
+    w.onmessage = function (e) {
+      const msg = e.data;
+      if (msg.type === "progress") {
+        onProgress(msg.done, msg.total);
+      } else if (msg.type === "done") {
+        permState.worker = null;
+        onDone(msg);
+      } else if (msg.type === "error") {
+        permState.worker = null;
+        onError(msg.message);
+      }
+    };
+    w.onerror = function (e) {
+      permState.worker = null;
+      if (e.lineno > 0) {
+        onError(e.message || "Worker crashed");
+        return;
+      }
+      // file:// load failure — synchronous fallback
+      const result = permTestSync({ yi: reg.yi, vi: reg.vi, Xf: reg.Xf,
+        QM_obs: reg.QM, nPerm, seed, method: reg.method || 'REML', modTests });
+      if (result.error) { onError(result.error); return; }
+      onDone(result);
+    };
+    w.postMessage(
+      { yi: yiTA, vi: viTA, X: XTA, QM_obs: reg.QM, nPerm, seed, p, k,
+        method: reg.method || 'REML',
+        nMods: modTests.length, modColIdxs: modColIdxsTA, modColLens },
+      [yiTA.buffer, viTA.buffer, XTA.buffer]
+    );
+  } catch (_) {
+    workerOk = false;
+  }
+
+  if (!workerOk) {
+    const result = permTestSync({ yi: reg.yi, vi: reg.vi, Xf: reg.Xf,
+      QM_obs: reg.QM, nPerm, seed, method: reg.method || 'REML', modTests });
+    if (result.error) { onError(result.error); return; }
+    onDone(result);
+  }
+}
+
+// -----------------------------------------------------------------------------
 // renderSensitivity(mu0, sigmaMu, sigmaTau, ciLevel)
 // -----------------------------------------------------------------------------
 // Runs priorSensitivity() using the cached bayesState studies and renders the
@@ -2011,8 +4194,8 @@ function _runCoreMeta(studies, opts) {
       ? profileLikTau2(studies, { method })
       : null;
 
-  const mAdjusted = (useTF && useTFAdjusted && tf.length > 0)
-    ? meta([...studies, ...tf], method, ciMethod, alpha)
+  const mAdjusted = (useTF && useTFAdjusted)
+    ? (tf.length > 0 ? meta([...studies, ...tf], method, ciMethod, alpha) : m)
     : null;
 
   const rveResult = (hasClusters && !isMHorPeto)
@@ -2037,7 +4220,7 @@ function _runBayesBatch(studies, m, opts) {
 
 // ── Helper: publication bias batch ───────────────────────────────────────────
 function _runPubBiasBatch(studies, m, opts) {
-  const { alpha, selModeVal, selPreset, selSides, selCuts } = opts;
+  const { alpha, selModeVal, selPreset, selWeightFn, selSides, selCuts } = opts;
 
   const egger    = eggerTest(studies);
   const begg     = beggTest(studies);
@@ -2057,18 +4240,31 @@ function _runPubBiasBatch(studies, m, opts) {
   // Selection model — skip when meta-regression moderators are active
   let selResult = null;
   if (moderators.length === 0) {
-    let selCutsEff, selSidesEff, selOmegaFixed;
-    if (selModeVal === "sensitivity" && selPreset !== "custom") {
-      const p       = SELECTION_PRESETS[selPreset];
-      selCutsEff    = p.cuts;
-      selSidesEff   = p.sides;
-      selOmegaFixed = p.omega;
+    if (selModeVal === "sensitivity") {
+      let selCutsEff, selSidesEff, selOmegaFixed;
+      if (selPreset !== "custom") {
+        const p    = SELECTION_PRESETS[selPreset];
+        selCutsEff    = p.cuts;
+        selSidesEff   = p.sides;
+        selOmegaFixed = p.omega;
+      } else {
+        selCutsEff    = selCuts;
+        selSidesEff   = selSides;
+        selOmegaFixed = null;
+      }
+      selResult = veveaHedges(studies, selCutsEff, selSidesEff, selOmegaFixed);
+    } else if (selWeightFn === "halfnorm") {
+      selResult = halfNormalSelModel(studies, { sides: selSides });
+    } else if (selWeightFn === "power") {
+      selResult = powerSelModel(studies, { sides: selSides });
+    } else if (selWeightFn === "negexp") {
+      selResult = negexpSelModel(studies, { sides: selSides });
+    } else if (selWeightFn === "beta") {
+      selResult = betaSelModel(studies, { sides: selSides });
     } else {
-      selCutsEff    = selCuts;
-      selSidesEff   = selSides;
-      selOmegaFixed = null;
+      // Default MLE: Vevea-Hedges step function
+      selResult = veveaHedges(studies, selCuts, selSides, null);
     }
-    selResult = veveaHedges(studies, selCutsEff, selSidesEff, selOmegaFixed);
   }
 
   return { egger, begg, petpeese, fatpet, fsn, tes, waap, pcurve, puniform,
@@ -2100,14 +4296,14 @@ function _runSensitivityBatch(studies, m, opts) {
 
 // ── Helper: meta-regression / subgroup batch ─────────────────────────────────
 function _runRegressionBatch(studies, m, opts) {
-  const { method, ciMethod, alpha, modSpec, scaleModSpec } = opts;
+  const { method, ciMethod, alpha, modSpec, scaleModSpec, interactionSpec } = opts;
 
   const subgroup = subgroupAnalysis(studies, method, ciMethod, alpha);
   let reg = null, ls = null;
   if (scaleModSpec.length > 0) {
-    ls = lsModel(studies, modSpec, scaleModSpec, { ciMethod, alpha });
-  } else if (modSpec.length > 0) {
-    reg = metaRegression(studies, modSpec, method, ciMethod, alpha);
+    ls = lsModel(studies, modSpec, scaleModSpec, { ciMethod, alpha, locInteractions: interactionSpec });
+  } else if (modSpec.length > 0 || interactionSpec.length > 0) {
+    reg = metaRegression(studies, modSpec, method, ciMethod, alpha, interactionSpec);
   }
   return { subgroup, reg, ls };
 }
@@ -2134,7 +4330,7 @@ function _renderAllResults(ctx) {
   } = ctx;
 
   const { method, ciMethod, alpha, isMHorPeto, hasClusters, useTF, tfEstimator,
-          useTFAdjusted, bayesMu0, bayesSigmaMu, bayesSigmaTau, selModeVal } = opts;
+          useTFAdjusted, bayesMu0, bayesSigmaMu, bayesSigmaTau, selModeVal, selWeightFn } = opts;
 
   // ── DOM element refs ────────────────────────────────────────────────────────
   const elResults            = document.getElementById("results");
@@ -2154,6 +4350,7 @@ function _renderAllResults(ctx) {
   const elCumFunnelBlock     = document.getElementById("cumulativeFunnelBlock");
   const elOrchardPlotBlock   = document.getElementById("orchardPlotBlock");
   const elCatPageSize        = document.getElementById("caterpillarPageSize");
+  const elBlupPageSize       = document.getElementById("blupPageSize");
   const elCaterpillarBlock   = document.getElementById("caterpillarPlotBlock");
   const elRobSection         = document.getElementById("robSection");
   const elProfileLikScale    = document.getElementById("profileLikScale");
@@ -2163,7 +4360,7 @@ function _renderAllResults(ctx) {
   const elHetDiag = document.getElementById("hetDiagSection");
   if (profileLikResult && !profileLikResult.error) {
     elHetDiag.style.display = "";
-    drawProfileLikTau2(profileLikResult, { xScale: elProfileLikScale?.value || "tau2" });
+    drawProfileLikTau2(profileLikResult, { xScale: elProfileLikScale?.value || "tau2", theme: appState.plotTheme });
   } else {
     elHetDiag.style.display = "none";
   }
@@ -2172,6 +4369,7 @@ function _renderAllResults(ctx) {
   const elBayes      = document.getElementById("bayesSection");
   if (bayesResult && !bayesResult.error) {
     bayesState.studies = studies;
+    bayesState.result  = bayesResult;
     bayesState.reMean  = reMeanRef;
     bayesState.profile = profile;
     elBayes.style.display = "";
@@ -2180,14 +4378,15 @@ function _renderAllResults(ctx) {
       : "";
     document.getElementById("bayesSummary").innerHTML =
       bayesClusterNote + buildBayesSummaryHTML(bayesResult, profile, reMeanRef);
-    drawBayesMuPosterior(bayesResult, { reMean: reMeanRef });
-    drawBayesTauPosterior(bayesResult);
+    drawBayesMuPosterior(bayesResult, { reMean: reMeanRef, theme: appState.plotTheme });
+    drawBayesTauPosterior(bayesResult, { theme: appState.plotTheme });
     document.getElementById("bayesGridWarning").style.display =
       bayesResult.grid_truncated ? "" : "none";
     const ciLevel = document.getElementById("ciLevel")?.value ?? "95";
     renderSensitivity(bayesMu0, bayesSigmaMu, bayesSigmaTau, ciLevel);
   } else {
     bayesState.studies = null;
+    bayesState.result  = null;
     elBayes.style.display = "none";
     const elSensSection = document.getElementById("bayesSensitivitySection");
     if (elSensSection) elSensSection.style.display = "none";
@@ -2197,12 +4396,13 @@ function _renderAllResults(ctx) {
   {
     const elRve         = document.getElementById("rveSection");
     const elRveSummary  = document.getElementById("rveSummary");
+    const elRveEmpty    = document.getElementById("rveEmptyState");
     const elRveSettings = document.getElementById("rveSettings");
     const showRve = hasClusters && !isMHorPeto;
-    if (elRveSettings) elRveSettings.style.display = showRve ? "" : "none";
+    if (elRveSettings) setVisible(elRveSettings, showRve);
     if (elRve) {
       if (showRve && rveResult) {
-        elRve.style.display = "";
+        if (elRveEmpty) elRveEmpty.style.display = "none";
         if (rveResult.error) {
           elRveSummary.innerHTML = `<p class="reg-note" style="color:var(--color-warning)">⚠ RVE: ${escapeHTML(rveResult.error)}</p>`;
         } else {
@@ -2215,14 +4415,15 @@ function _renderAllResults(ctx) {
           elRveSummary.innerHTML = `
             <div style="font-size:0.8125rem;line-height:1.9;margin-bottom:8px">
               ${hBtn("rve.model")}<b>RVE pooled estimate:</b> ${fmt(rveEst)}<br>
-              CI [${fmt(rveLo)}, ${fmt(rveHi)}] | SE=${fmt(rveResult.se)} | t(${rveResult.df})=${fmt(rveResult.t)} | p=${fmt(rveResult.p)}<br>
+              CI [${fmt(rveLo)}, ${fmt(rveHi)}] | SE = ${fmt(rveResult.se)} | <em>t</em>(${rveResult.df}) = ${fmt(rveResult.t)} | <em>p</em> ${fmtPval(rveResult.p)}<br>
               ρ=${rveRho.toFixed(2)} &nbsp;·&nbsp; m=${rveResult.kCluster} cluster${rveResult.kCluster === 1 ? "" : "s"} &nbsp;·&nbsp; k=${rveResult.k} studies<br>
               <span style="color:var(--fg-muted);font-size:0.93em">RE (cluster-robust): ${fmt(reDisp)} &nbsp;·&nbsp; RVE estimate is ${diffDir}.</span>
             </div>
           `;
         }
       } else {
-        elRve.style.display = "none";
+        if (elRveEmpty) elRveEmpty.style.display = "";
+        elRveSummary.innerHTML = "";
       }
     }
   }
@@ -2231,10 +4432,11 @@ function _renderAllResults(ctx) {
   {
     const elThree        = document.getElementById("threeLevelSection");
     const elThreeSummary = document.getElementById("threeLevelSummary");
+    const elThreeEmpty   = document.getElementById("threeLevelEmptyState");
     const showThree = hasClusters && !isMHorPeto;
     if (elThree) {
       if (showThree && threeLevelResult) {
-        elThree.style.display = "";
+        if (elThreeEmpty) elThreeEmpty.style.display = "none";
         if (threeLevelResult.error) {
           elThreeSummary.innerHTML = `<p class="reg-note" style="color:var(--color-warning)">⚠ Three-level: ${escapeHTML(threeLevelResult.error)}</p>`;
         } else {
@@ -2245,16 +4447,18 @@ function _renderAllResults(ctx) {
           elThreeSummary.innerHTML = `
             <div style="font-size:0.8125rem;line-height:1.9;margin-bottom:8px">
               ${hBtn("threelevel.model")}<b>Three-level pooled estimate:</b> ${fmt(muDisp)}<br>
-              ${Math.round((1 - alpha) * 100)}% CI [${fmt(ciLoDisp)}, ${fmt(ciHiDisp)}] | SE=${fmt(tl.se)} | z=${fmt(tl.z)} | p=${fmt(tl.p)}<br>
+              ${Math.round((1 - alpha) * 100)}% CI [${fmt(ciLoDisp)}, ${fmt(ciHiDisp)}] | SE = ${fmt(tl.se)} | <em>z</em> = ${fmt(tl.z)} | <em>p</em> ${fmtPval(tl.p)}<br>
               m=${tl.kCluster} cluster${tl.kCluster === 1 ? "" : "s"} &nbsp;·&nbsp; k=${tl.k} studies &nbsp;·&nbsp; df=${tl.df}<br>
               ${hBtn("threelevel.tau2")}σ²<sub>within</sub>=${fmt(tl.tau2_within)} &nbsp;·&nbsp; σ²<sub>between</sub>=${fmt(tl.tau2_between)}<br>
-              ${hBtn("threelevel.I2")}I²<sub>within</sub>=${fmt(tl.I2_within)}% &nbsp;·&nbsp; I²<sub>between</sub>=${fmt(tl.I2_between)}%<br>
-              ${hBtn("het.Q")}Q(${tl.df})=${fmt(tl.Q)} | method=REML
+              ${hBtn("threelevel.I2")}<em>I</em>²<sub>within</sub>=${fmt(tl.I2_within)}% &nbsp;·&nbsp; <em>I</em>²<sub>between</sub>=${fmt(tl.I2_between)}%<br>
+              ${hBtn("het.Q")}<em>Q</em>(${tl.df}) = ${fmt(tl.Q)} | method=REML<br>
+              LL = ${fmt(tl.logLik)} (REML; omits normalising constants from R's logLik() convention)
             </div>
           `;
         }
       } else {
-        elThree.style.display = "none";
+        if (elThreeEmpty) elThreeEmpty.style.display = "";
+        elThreeSummary.innerHTML = "";
       }
     }
   }
@@ -2289,7 +4493,7 @@ function _renderAllResults(ctx) {
     ? { lb: profile.transform(m.robustCiLow), ub: profile.transform(m.robustCiHigh) }
     : null;
   const robustCILine = m.isClustered
-    ? `Robust CI [${fmt(robust_ci_disp.lb)}, ${fmt(robust_ci_disp.ub)}] | SE=${fmt(m.robustSE)} | z=${fmt(m.robustStat)} | p=${fmt(m.robustPval)} (df=${m.robustDf})${hBtn("cluster.robust")}<br>`
+    ? `Robust CI [${fmt(robust_ci_disp.lb)}, ${fmt(robust_ci_disp.ub)}] | SE = ${fmt(m.robustSE)} | <em>z</em> = ${fmt(m.robustStat)} | <em>p</em> ${fmtPval(m.robustPval)} (df = ${m.robustDf})${hBtn("cluster.robust")}<br>`
     : "";
 
   const SMD_TYPES = new Set(["SMD","SMDH","SMD_paired","SMD1","SMD1H","SMCC"]);
@@ -2299,77 +4503,168 @@ function _renderAllResults(ctx) {
     : "";
 
   const ciLbl = getCiLabel();
+  const showLogScale = !!profile.isLog;
+  const logScaleRELine = showLogScale
+    ? `<div class="result-log-note">log scale: ${fmt(m.RE)} | SE = ${fmt(m.seRE)} | ${ciLbl} [${fmt(m.ciLow)}, ${fmt(m.ciHigh)}]</div>`
+    : "";
+  const logScaleFELine = showLogScale
+    ? `<div class="result-log-note">log scale: ${fmt(m.FE)} | SE = ${fmt(m.seFE)} | ${ciLbl} [${fmt(m.FE - feZ * m.seFE)}, ${fmt(m.FE + feZ * m.seFE)}]</div>`
+    : "";
+  const analysisScaleLabel = profile.analysisScaleLabel ?? null;
+  const analysisScaleRELine = analysisScaleLabel
+    ? `<div class="result-log-note">${analysisScaleLabel}: ${fmt(m.RE)} | SE = ${fmt(m.seRE)} | ${ciLbl} [${fmt(m.ciLow)}, ${fmt(m.ciHigh)}]</div>`
+    : "";
+  const analysisScaleFELine = analysisScaleLabel
+    ? `<div class="result-log-note">${analysisScaleLabel}: ${fmt(m.FE)} | SE = ${fmt(m.seFE)} | ${ciLbl} [${fmt(m.FE - feZ * m.seFE)}, ${fmt(m.FE + feZ * m.seFE)}]</div>`
+    : "";
   elResults.innerHTML = warningHTML + clusterBanner + (isMHorPeto ? `
     <div class="result-re-primary">
       <span class="result-label">${profile.label} (${methodLabel})</span>
       <span class="result-re-value">${fmt(FE_disp)}</span>
+      <span class="result-se">SE = ${fmt(m.seFE)}</span>
       <span class="result-ci">${ciLbl} [${fmt(feCi_disp.lb)}, ${fmt(feCi_disp.ub)}]</span>
+    </div>
+    ${logScaleFELine}${analysisScaleFELine}
+    <div class="result-stat-row">
+      <span class="result-row-label">Test of pooled effect</span>
+      <span class="result-stat-value">${m.dist === "t" ? `<em>t</em>(${m.df})` : "<em>z</em>"} = ${fmt(m.stat)}, <em>p</em> ${fmtPval(m.pval)}</span>
     </div>
     <div class="result-method-note">Fixed-effect only — no τ², RE estimate, or prediction interval.</div>
     <div class="result-het-group">
       <div class="result-section-label">Heterogeneity</div>
-      <div class="result-het-stats">I²=${fmt(m.I2)}% [${fmt(m.I2CI[0])}%, ${fmt(m.I2CI[1])}%]${hBtn("het.I2")} &nbsp;·&nbsp; H²-CI=[${fmt(m.H2CI[0])}, ${isFinite(m.H2CI[1])?fmt(m.H2CI[1]):"∞"}]${hBtn("het.H2")}</div>
-      <div class="result-het-stats result-het-test">Q(${m.df})=${fmt(m.stat)}, p=${fmt(m.pval)}${hBtn("het.Q")}</div>
+      <div class="result-het-stats"><em>I</em>²=${fmt(m.I2)}% [${fmt(m.I2CI[0])}%, ${fmt(m.I2CI[1])}%]${hBtn("het.I2")} &nbsp;·&nbsp; <em>H</em>²-CI=[${fmt(m.H2CI[0])}, ${isFinite(m.H2CI[1])?fmt(m.H2CI[1]):"∞"}]${hBtn("het.H2")}</div>
+      <div class="result-het-stats result-het-test"><em>Q</em>(${m.df}) = ${fmt(m.Q)}, <em>p</em> ${fmtPval(m.df > 0 ? 1 - chiSquareCDF(m.Q, m.df) : NaN)}${hBtn("het.Q")}</div>
     </div>
   ` : `
     <div class="result-re-primary">
       <span class="result-label">${profile.label} (RE)</span>
       <span class="result-re-value">${fmt(RE_disp)}</span>
-      <span class="result-ci">${ciLbl} [${fmt(ci_disp.lb)}, ${fmt(ci_disp.ub)}]${m.isClustered ? ` &nbsp;<span class="result-se">SE (model) = ${fmt(m.seRE)}</span>` : ""}</span>
+      <span class="result-se">SE = ${fmt(m.seRE)}</span>
+      <span class="result-ci">${ciLbl} [${fmt(ci_disp.lb)}, ${fmt(ci_disp.ub)}]</span>
     </div>
+    ${logScaleRELine}${analysisScaleRELine}
     ${useTF && mAdjusted ? `<div class="result-re-adjusted">RE (adjusted): <b>${fmt(RE_adj_disp)}</b>${hasClusters ? ` <span class="result-note">(cluster-robust not applied to imputed studies)</span>` : ""}</div>` : ""}
     <div class="result-stat-row">
       <span class="result-row-label">Test of pooled effect</span>
-      <span class="result-stat-value">${m.dist}-stat = ${fmt(m.stat)}, p = ${fmt(m.pval)}</span>
+      <span class="result-stat-value">${m.dist === "t" ? `<em>t</em>(${m.df})` : "<em>z</em>"} = ${fmt(m.stat)}, <em>p</em> ${fmtPval(m.pval)}</span>
     </div>
     <div class="result-stat-row">
       <span class="result-row-label">Prediction interval</span>
       <span class="result-stat-value">${isFinite(pred_disp.lb) ? `[${fmt(pred_disp.lb)}, ${fmt(pred_disp.ub)}]` : "NA (k &lt; 3)"}${hBtn("het.pred")}</span>
     </div>
+    ${showLogScale && isFinite(m.predLow) ? `<div class="result-log-note">log scale: [${fmt(m.predLow)}, ${fmt(m.predHigh)}]</div>` : ""}
+    ${analysisScaleLabel && isFinite(m.predLow) ? `<div class="result-log-note">${analysisScaleLabel}: [${fmt(m.predLow)}, ${fmt(m.predHigh)}]</div>` : ""}
     <div class="result-fe-secondary">
       <span class="result-label">${profile.label} (FE)</span>
       <span>${fmt(FE_disp)}</span>
+      <span class="result-se">SE = ${fmt(m.seFE)}</span>
       <span class="result-ci">${ciLbl} [${fmt(feCi_disp.lb)}, ${fmt(feCi_disp.ub)}]</span>
     </div>
+    ${logScaleFELine}${analysisScaleFELine}
     ${robustCILine}${clesLine}<div class="result-het-group">
       <div class="result-section-label">Heterogeneity</div>
-      <div class="result-het-stats">τ²=${fmt(m.tau2)} [${fmt(m.tauCI[0])}, ${isFinite(m.tauCI[1])?fmt(m.tauCI[1]):"∞"}]${hBtn("het.tau2")} &nbsp;·&nbsp; I²=${fmt(m.I2)}% [${fmt(m.I2CI[0])}%, ${fmt(m.I2CI[1])}%]${hBtn("het.I2")} &nbsp;·&nbsp; H²-CI=[${fmt(m.H2CI[0])}, ${isFinite(m.H2CI[1])?fmt(m.H2CI[1]):"∞"}]${hBtn("het.H2")}</div>
-      <div class="result-het-stats result-het-test">Q(${m.df})=${fmt(m.Q)}, p=${fmt(m.df > 0 ? 1 - chiSquareCDF(m.Q, m.df) : NaN)}${hBtn("het.Q")}</div>
+      <div class="result-het-stats">τ²=${fmt(m.tau2)} [${fmt(m.tauCI[0])}, ${isFinite(m.tauCI[1])?fmt(m.tauCI[1]):"∞"}]${hBtn("het.tau2")} &nbsp;·&nbsp; <em>I</em>²=${fmt(m.I2)}% [${fmt(m.I2CI[0])}%, ${fmt(m.I2CI[1])}%]${hBtn("het.I2")} &nbsp;·&nbsp; <em>H</em>²-CI=[${fmt(m.H2CI[0])}, ${isFinite(m.H2CI[1])?fmt(m.H2CI[1]):"∞"}]${hBtn("het.H2")}</div>
+      <div class="result-het-stats result-het-test"><em>Q</em>(${m.df}) = ${fmt(m.Q)}, <em>p</em> ${fmtPval(m.df > 0 ? 1 - chiSquareCDF(m.Q, m.df) : NaN)}${hBtn("het.Q")}</div>
     </div>
   `);
 
   // ── Publication bias panel ─────────────────────────────────────────────────
-  const eggerRobustNote  = egger.clustersUsed  ? ` | p<sub>robust</sub>=${isFinite(egger.robustInterceptP)  ? fmt(egger.robustInterceptP)  : "—"}` : "";
-  const fatpetRobustNote = fatpet.clustersUsed ? ` | p<sub>FAT,rob</sub>=${isFinite(fatpet.robustSlopeP) ? fmt(fatpet.robustSlopeP) : "—"} · p<sub>PET,rob</sub>=${isFinite(fatpet.robustInterceptP) ? fmt(fatpet.robustInterceptP) : "—"}` : "";
+  const eggerRobustNote  = egger.clustersUsed  ? ` | <em>p</em><sub>robust</sub> ${isFinite(egger.robustInterceptP)  ? fmtPval(egger.robustInterceptP)  : "= —"}` : "";
+  const fatpetRobustNote = fatpet.clustersUsed ? ` | <em>p</em><sub>FAT,rob</sub> ${isFinite(fatpet.robustSlopeP) ? fmtPval(fatpet.robustSlopeP) : "= —"} · <em>p</em><sub>PET,rob</sub> ${isFinite(fatpet.robustInterceptP) ? fmtPval(fatpet.robustInterceptP) : "= —"}` : "";
+
+  const ciPct    = `${Math.round((1 - alpha) * 100)}% CI`;
+  const eggerTC  = isFinite(egger.df)  ? tCritical(egger.df,  alpha) : NaN;
+  const fatpetTC = isFinite(fatpet.df) ? tCritical(fatpet.df, alpha) : NaN;
+
+  // Egger: intercept, SE, CI, t(df), p
+  const eggerStats = isFinite(egger.intercept)
+    ? `intercept = ${fmt(egger.intercept)}, SE = ${fmt(egger.se)}, ${ciPct} [${fmt(egger.intercept - eggerTC * egger.se)}, ${fmt(egger.intercept + eggerTC * egger.se)}], <em>t</em>(${egger.df}) = ${fmt(egger.t)}, <em>p</em> ${fmtPval(egger.p)}`
+    : `intercept (k&lt;3)`;
+
+  // Begg: τ, z, p
+  const beggStats = isFinite(begg.tau)
+    ? `τ = ${fmt(begg.tau)}, <em>z</em> = ${fmt(begg.z)}, <em>p</em> ${fmtPval(begg.p)}`
+    : `τ (k&lt;3)`;
+
+  // FAT slope: β₁, SE, t(df), p  (bias indicator — no CI)
+  const fatStats = isFinite(fatpet.slope)
+    ? `β₁ = ${fmt(fatpet.slope)}, SE = ${fmt(fatpet.slopeSE)}, <em>t</em>(${fatpet.df}) = ${fmt(fatpet.slopeT)}, <em>p</em> ${fmtPval(fatpet.slopeP)}`
+    : `β₁ (k&lt;3)`;
+
+  // PET intercept: estimate (display scale), SE, CI, t(df), p
+  const petStats = (() => {
+    if (!isFinite(fatpet.intercept)) return `(k&lt;3)`;
+    if (!isFinite(fatpetTC)) return `${fmt(profile.transform(fatpet.intercept))}, <em>p</em> ${fmtPval(fatpet.interceptP)}`;
+    const lo = fmt(profile.transform(fatpet.intercept - fatpetTC * fatpet.interceptSE));
+    const hi = fmt(profile.transform(fatpet.intercept + fatpetTC * fatpet.interceptSE));
+    return `${fmt(profile.transform(fatpet.intercept))}, SE = ${fmt(fatpet.interceptSE)}, ${ciPct} [${lo}, ${hi}], <em>t</em>(${fatpet.df}) = ${fmt(fatpet.interceptT)}, <em>p</em> ${fmtPval(fatpet.interceptP)}`;
+  })();
+
+  // PET-PEESE: active source (PET or PEESE), estimate (display scale), SE, CI, t(df), p
+  const ppSrc   = petpeese.usePeese ? petpeese.peese : petpeese.fat;
+  const ppTC    = isFinite(ppSrc.df) ? tCritical(ppSrc.df, alpha) : NaN;
+  const ppLabel = petpeese.usePeese ? "PEESE" : "PET";
+  const ppStats = (() => {
+    if (!isFinite(ppSrc.intercept)) return `NA (k&lt;3)`;
+    if (!isFinite(ppTC)) return `${fmt(profile.transform(ppSrc.intercept))}, <em>p</em> ${fmtPval(ppSrc.interceptP)} [${ppLabel}]`;
+    const lo = fmt(profile.transform(ppSrc.intercept - ppTC * ppSrc.interceptSE));
+    const hi = fmt(profile.transform(ppSrc.intercept + ppTC * ppSrc.interceptSE));
+    return `${fmt(profile.transform(ppSrc.intercept))}, SE = ${fmt(ppSrc.interceptSE)}, ${ciPct} [${lo}, ${hi}], <em>t</em>(${ppSrc.df}) = ${fmt(ppSrc.interceptT)}, <em>p</em> ${fmtPval(ppSrc.interceptP)} [${ppLabel}]`;
+  })();
+
+  // WAAP-WLS: estimate (display scale), SE, CI, z, p, k_adequate
+  const waapZ     = normalQuantile(1 - alpha / 2);
+  const waapStats = (() => {
+    if (!isFinite(waap.estimate)) return `NA (k&lt;1)`;
+    const lo = fmt(profile.transform(waap.estimate - waapZ * waap.se));
+    const hi = fmt(profile.transform(waap.estimate + waapZ * waap.se));
+    const fb = waap.fallback ? ` <span style='color:var(--fg-muted)'>(fallback to WLS)</span>` : "";
+    return `${fmt(profile.transform(waap.estimate))}, SE = ${fmt(waap.se)}, ${ciPct} [${lo}, ${hi}], <em>z</em> = ${fmt(waap.z)}, <em>p</em> ${fmtPval(waap.p)} | k<sub>adequate</sub> = ${waap.kAdequate}/${waap.k}${fb}`;
+  })();
+
+  // Henmi-Copas: estimate (display scale), SE, 95% CI (HC-computed, always 95%), DL τ²
+  const hcStats = hc.error
+    ? `NA (${escapeHTML(hc.error)})`
+    : `${fmt(profile.transform(hc.beta))}, SE = ${fmt(hc.se)}, 95% CI [${fmt(profile.transform(hc.ci[0]))}, ${fmt(profile.transform(hc.ci[1]))}] (DL τ² = ${fmt(hc.tau2)})`;
 
   elPubBiasStats.innerHTML = `
-    &nbsp;&nbsp;${hBtn("bias.egger")}Egger: intercept=${isFinite(egger.intercept)?fmt(egger.intercept):"NA"} | p=${isFinite(egger.p)?fmt(egger.p):"NA (k<3)"}${eggerRobustNote}<br>
-    &nbsp;&nbsp;${hBtn("bias.begg")}Begg: τ=${isFinite(begg.tau)?fmt(begg.tau):"NA"} | p=${isFinite(begg.p)?fmt(begg.p):"NA (k<3)"}<br>
-    &nbsp;&nbsp;${hBtn("bias.fatpet")}FAT (bias): β₁=${isFinite(fatpet.slope)?fmt(fatpet.slope):"NA"} | p=${isFinite(fatpet.slopeP)?fmt(fatpet.slopeP):"NA (k<3)"} &nbsp;·&nbsp; PET (effect at SE→0): ${isFinite(fatpet.intercept)?fmt(profile.transform(fatpet.intercept)):"NA"} | p=${isFinite(fatpet.interceptP)?fmt(fatpet.interceptP):"NA (k<3)"}${fatpetRobustNote}<br>
-    &nbsp;&nbsp;${hBtn("bias.petpeese")}${petpeese.usePeese?"<b>":""}PET-PEESE (corrected): ${(()=>{const src=petpeese.usePeese?petpeese.peese:petpeese.fat;return isFinite(src.intercept)?`${fmt(profile.transform(src.intercept))} [${petpeese.usePeese?"PEESE":"PET"}, p=${fmt(src.interceptP)}]`:"NA (k<3)";})()}${petpeese.usePeese?"</b>":""}<br>
+    &nbsp;&nbsp;${hBtn("bias.egger")}Egger: ${eggerStats}${eggerRobustNote}<br>
+    &nbsp;&nbsp;${hBtn("bias.begg")}Begg: ${beggStats}<br>
+    &nbsp;&nbsp;${hBtn("bias.fatpet")}FAT (bias): ${fatStats} &nbsp;·&nbsp; PET (effect at SE→0): ${petStats}${fatpetRobustNote}<br>
+    &nbsp;&nbsp;${hBtn("bias.petpeese")}${petpeese.usePeese?"<b>":""}PET-PEESE (corrected): ${ppStats}${petpeese.usePeese?"</b>":""}<br>
     &nbsp;&nbsp;${hBtn("bias.fsn")}Fail-safe N (Rosenthal): ${isFinite(fsn.rosenthal)?Math.round(fsn.rosenthal):"NA"} &nbsp;·&nbsp; Orwin (trivial=0.1): ${isFinite(fsn.orwin)?Math.round(fsn.orwin):"NA"}<br>
-    &nbsp;&nbsp;${hBtn("bias.tes")}TES: O=${isFinite(tes.O)?tes.O:"NA"} | E=${isFinite(tes.E)?fmt(tes.E):"NA"} | χ²=${isFinite(tes.chi2)?fmt(tes.chi2):"NA (k<2)"} | p=${isFinite(tes.p)?fmt(tes.p):"NA (k<2)"}${isFinite(tes.p)&&tes.p<0.1?" <span style='color:var(--color-warning)'>⚠ excess</span>":""}<br>
-    &nbsp;&nbsp;${hBtn("bias.waap")}WAAP-WLS: ${isFinite(waap.estimate)?`${fmt(profile.transform(waap.estimate))} [${fmt(profile.transform(waap.ci[0]))}, ${fmt(profile.transform(waap.ci[1]))}] | p=${fmt(waap.p)} | k<sub>adequate</sub>=${waap.kAdequate}/${waap.k}${waap.fallback?" <span style='color:var(--fg-muted)'>(fallback to WLS)</span>":""}`:"NA (k<1)"}<br>
-    &nbsp;&nbsp;${hBtn("bias.hc")}Henmi-Copas: ${hc.error ? `NA (${escapeHTML(hc.error)})` : `${fmt(profile.transform(hc.beta))} [${fmt(profile.transform(hc.ci[0]))}, ${fmt(profile.transform(hc.ci[1]))}] (DL τ²=${fmt(hc.tau2)}, t₀=${fmt(hc.t0)})`}<br>
-    <b>Trim &amp; Fill:</b>${hBtn("bias.trimfill")} ${useTF?"ON":"OFF"} (${useTF?tfEstimator+" estimator, ":""}${tf.length} filled studies)
+    &nbsp;&nbsp;${hBtn("bias.tes")}TES: O = ${isFinite(tes.O)?tes.O:"NA"} | E = ${isFinite(tes.E)?fmt(tes.E):"NA"} | χ²(k−1) = ${isFinite(tes.chi2)?fmt(tes.chi2):"NA (k<2)"} | ${isFinite(tes.p)?`<em>p</em> ${fmtPval(tes.p)}`:"<em>p</em> (k<2)"}${isFinite(tes.p)&&tes.p<0.1?" <span style='color:var(--color-warning)'>⚠ excess</span>":""}<br>
+    &nbsp;&nbsp;${hBtn("bias.waap")}WAAP-WLS: ${waapStats}<br>
+    &nbsp;&nbsp;${hBtn("bias.hc")}Henmi-Copas: ${hcStats}<br>
+    <b>Trim &amp; Fill:</b>${hBtn("bias.trimfill")} ${useTF ? (() => {
+      const k0Line = `k₀ = ${tf.length} (${tfEstimator} estimator)`;
+      const adjLine = mAdjusted
+        ? `, adjusted RE = ${fmt(profile.transform(mAdjusted.RE))}, SE = ${fmt(mAdjusted.seRE)}, τ² = ${fmt(mAdjusted.tau2)}, 95% CI [${fmt(profile.transform(mAdjusted.ciLow))}, ${fmt(profile.transform(mAdjusted.ciHigh))}]`
+        : "";
+      return k0Line + adjLine;
+    })() : "OFF"}
     <details style="margin-top:4px">
       <summary style="cursor:pointer;color:var(--fg-muted);font-size:0.9em">Additional regression tests (binary outcomes)</summary>
       <div style="margin-top:4px">
-        &nbsp;&nbsp;${hBtn("bias.harbord")}Harbord: intercept=${isFinite(harbord.intercept)?fmt(harbord.intercept):"NA"} | p=${isFinite(harbord.interceptP)?fmt(harbord.interceptP):"NA (k&lt;3 or no 2×2 counts)"}<br>
-        &nbsp;&nbsp;${hBtn("bias.peters")}Peters: intercept=${isFinite(peters.intercept)?fmt(peters.intercept):"NA"} | p=${isFinite(peters.interceptP)?fmt(peters.interceptP):"NA (k&lt;3 or no sample sizes)"}<br>
-        &nbsp;&nbsp;${hBtn("bias.deeks")}Deeks: intercept=${isFinite(deeks.intercept)?fmt(deeks.intercept):"NA"} | p=${isFinite(deeks.interceptP)?fmt(deeks.interceptP):"NA (k&lt;3 or no 2×2 counts)"}<br>
-        &nbsp;&nbsp;${hBtn("bias.ruecker")}Rücker: intercept=${isFinite(ruecker.intercept)?fmt(ruecker.intercept):"NA"} | p=${isFinite(ruecker.interceptP)?fmt(ruecker.interceptP):"NA (k&lt;3 or no 2×2 counts)"}
+        &nbsp;&nbsp;${hBtn("bias.harbord")}Harbord: intercept = ${isFinite(harbord.intercept)?fmt(harbord.intercept):"NA"} | <em>p</em> ${isFinite(harbord.interceptP)?fmtPval(harbord.interceptP):"NA (k&lt;3 or no 2×2 counts)"}<br>
+        &nbsp;&nbsp;${hBtn("bias.peters")}Peters: intercept = ${isFinite(peters.intercept)?fmt(peters.intercept):"NA"} | <em>p</em> ${isFinite(peters.interceptP)?fmtPval(peters.interceptP):"NA (k&lt;3 or no sample sizes)"}<br>
+        &nbsp;&nbsp;${hBtn("bias.deeks")}Deeks: intercept = ${isFinite(deeks.intercept)?fmt(deeks.intercept):"NA"} | <em>p</em> ${isFinite(deeks.interceptP)?fmtPval(deeks.interceptP):"NA (k&lt;3 or no 2×2 counts)"}<br>
+        &nbsp;&nbsp;${hBtn("bias.ruecker")}Rücker: intercept = ${isFinite(ruecker.intercept)?fmt(ruecker.intercept):"NA"} | <em>p</em> ${isFinite(ruecker.interceptP)?fmtPval(ruecker.interceptP):"NA (k&lt;3 or no 2×2 counts)"}
       </div>
     </details>
   `;
   _animateFresh(elResults);
 
   // ── Influence diagnostics + subgroup ──────────────────────────────────────
-  const influenceHTML = buildInfluenceHTML(influence);
+  const influenceOpen = elInfluenceDiagTable.querySelector(".sens-block")?.open ?? true;
+  const influenceHTML = buildInfluenceHTML(influence, influenceOpen);
   const hasSubgroup   = subgroup && subgroup.G >= 2;
   const subgroupHTML  = hasSubgroup ? buildSubgroupHTML(subgroup, profile, hasClusters) : "";
 
   elInfluenceDiagTable.innerHTML = influenceHTML;
+  elInfluenceDiagTable.querySelectorAll(".sens-summary").forEach(summary => {
+    summary.addEventListener("click", e => { if (e.target.closest(".help-btn")) e.preventDefault(); });
+  });
   elSubgroupSection.style.display = hasSubgroup ? "" : "none";
   elSubgroupTable.innerHTML = (hasSubgroup && isMHorPeto)
     ? `<p class="reg-note" style="margin:4px 0 8px">⚠ Subgroup pooling uses inverse-variance (DL) weights — switch to DL or REML for M-H subgroup analysis.</p>` + subgroupHTML
@@ -2383,9 +4678,11 @@ function _renderAllResults(ctx) {
   renderSensitivityPanel(studies, isMHorPeto ? null : m, isMHorPeto ? "DL" : method, ciMethod, profile, { isMHFallback: isMHorPeto }, alpha);
   performance.measure("phase:loo:render", "phase:loo:render:start");
 
-  renderPCurvePanel(pcurve);
-  renderPUniformPanel(puniform, m, profile);
-  renderSelectionModelPanel(selResult, selModeVal, profile);
+  pCurvePlot.result = pcurve;
+  pUniformPlot.result = puniform; pUniformPlot.m = m; pUniformPlot.profile = profile;
+  renderPCurvePanel(pcurve, { theme: appState.plotTheme });
+  renderPUniformPanel(puniform, m, profile, { theme: appState.plotTheme });
+  renderSelectionModelPanel(selResult, selModeVal, selWeightFn, profile);
 
   // ── Regression panel + bubble plots ───────────────────────────────────────
   const modSpec      = opts.modSpec;
@@ -2393,10 +4690,21 @@ function _renderAllResults(ctx) {
   const kExcluded    = (reg ?? ls) ? studies.length - (reg ?? ls).k : 0;
   if (ls) {
     _lastReg = null;
+    _lastLs  = ls.rankDeficient ? null : ls;
     renderLocationScalePanel(ls, ciMethod, kExcluded);
   } else {
+    _lastLs  = null;
     _lastReg = (reg && !reg.rankDeficient) ? reg : null;
-    renderRegressionPanel(reg ?? {}, method, ciMethod, kExcluded, moderators);
+    // Pass moderators + interaction pseudo-entries so the panel sees the full term count.
+    const _allTermMods = [...moderators, ...interactions.map(ix => ({ name: ix.name }))];
+    renderRegressionPanel(reg ?? {}, method, ciMethod, kExcluded, _allTermMods);
+
+    // Show permutation controls when a valid regression result exists
+    const elPermSection = document.getElementById("permSection");
+    if (elPermSection) {
+      elPermSection.style.display = _lastReg ? "" : "none";
+      _clearPermResults();
+    }
   }
 
   const bubbleContainer = elBubblePlots;
@@ -2416,6 +4724,10 @@ function _renderAllResults(ctx) {
     rankDeficient: ls.rankDeficient,
   } : reg;
   const usePartialBubble = moderators.length > 1;
+  bubblePlotState.bubbleResult     = (bubbleResult && !bubbleResult.rankDeficient) ? bubbleResult : null;
+  bubblePlotState.moderators       = moderators.filter(mod => mod.type === "continuous");
+  bubblePlotState.usePartialBubble = usePartialBubble;
+
   if (bubbleResult && !bubbleResult.rankDeficient) {
     moderators
       .filter(mod => mod.type === "continuous")
@@ -2426,9 +4738,9 @@ function _renderAllResults(ctx) {
         wrap.dataset.moderator = mod.name;
         bubbleContainer.appendChild(wrap);
         if (usePartialBubble) {
-          drawPartialResidualBubble(bubbleResult.studiesUsed, bubbleResult, mod, wrap);
+          drawPartialResidualBubble(bubbleResult.studiesUsed, bubbleResult, mod, wrap, { theme: appState.plotTheme });
         } else {
-          drawBubble(bubbleResult.studiesUsed, bubbleResult, mod, wrap);
+          drawBubble(bubbleResult.studiesUsed, bubbleResult, mod, wrap, { theme: appState.plotTheme });
         }
         const bubbleSvg = wrap.querySelector("svg");
         if (bubbleSvg) {
@@ -2453,8 +4765,8 @@ function _renderAllResults(ctx) {
 
   // ── Forest plot ───────────────────────────────────────────────────────────
   const rawPageSize = elForestPageSize?.value ?? "30";
-  const pageSize    = rawPageSize === "Infinity" ? Infinity : +rawPageSize;
-  const forestOpts  = { ciMethod, profile, pageSize, pooledDisplay: forestPlot.poolDisplay, theme: forestPlot.theme, alpha, ciLabel: getCiLabel() };
+  const pageSize    = rawPageSize === "all" ? Infinity : +rawPageSize;
+  const forestOpts  = { ciMethod, profile, pageSize, pooledDisplay: forestPlot.poolDisplay, theme: appState.plotTheme, alpha, ciLabel: getCiLabel() };
   const mForest     = isMHorPeto
     ? { ...m, RE: m.FE, seRE: m.seFE, tau2: 0, predLow: NaN, predHigh: NaN }
     : m;
@@ -2473,11 +4785,15 @@ function _renderAllResults(ctx) {
       : "Custom";
 
   appState.reportArgs = {
-    studies: all, m, profile, reg,
+    studies: all, m, profile, reg, ls,
     tf, egger, begg, fatpet, petpeese, fsn, tes, waap, cles, pcurve, puniform,
     harbord, peters, deeks, ruecker, hc, baujatResult,
     influence, subgroup, method, ciMethod,
-    ciLevel: document.getElementById("ciLevel")?.value ?? "95",
+    rveResult, threeLevelResult,
+    rveRho: parseFloat(document.getElementById("rveRho")?.value ?? 0.8),
+    permResult: permState.lastResult ?? null,
+    ciLevel:   document.getElementById("ciLevel")?.value   ?? "95",
+    mccMethod: document.getElementById("mccMethod")?.value ?? "none",
     useTF, mAdjusted,
     sel: selResult, selMode: selModeVal, selLabel: _selLabel,
     gosh: goshState.result,
@@ -2496,7 +4812,7 @@ function _renderAllResults(ctx) {
   funnelPlot.petpeese = petpeese;
   drawIfVisible("pubBiasSection", () => {
     performance.mark("phase:plot:funnel:start");
-    drawFunnel(...funnelPlot.args, { egger: funnelPlot.egger, contours: funnelPlot.contours, petpeese: funnelPlot.petpeese });
+    drawFunnel(...funnelPlot.args, { egger: funnelPlot.egger, contours: funnelPlot.contours, petpeese: funnelPlot.petpeese, theme: appState.plotTheme });
     performance.measure("phase:plot:funnel", "phase:plot:funnel:start");
   });
 
@@ -2505,33 +4821,46 @@ function _renderAllResults(ctx) {
   const showLabbe   = labbeTypes.includes(type);
   const showQQ      = qqResiduals.length >= 3;
 
-  blupPlot.result  = blupResult;
-  blupPlot.profile = profile;
-  blupPlot.page    = 0;
+  blupPlot.result   = blupResult;
+  blupPlot.profile  = profile;
+  blupPlot.page     = 0;
+  const rawBlupPageSize = elBlupPageSize?.value ?? "30";
+  blupPlot.pageSize = rawBlupPageSize === "all" ? Infinity : +rawBlupPageSize;
   elBlupBlock.style.display      = blupResult ? "" : "none";
   elBaujatPlotBlock.style.display = baujatResult ? "" : "none";
   elQQPlotBlock.style.display     = showQQ ? "" : "none";
   elRadialPlotBlock.style.display = studies.length >= 2 && !isMHorPeto ? "" : "none";
   elLabbeBlock.style.display      = showLabbe ? "" : "none";
 
+  Object.assign(diagnosticsState, {
+    influence, baujatResult, profile,
+    qqResiduals, qqLabels,
+    studies, m, type,
+    showQQ, showLabbe, isMHorPeto,
+  });
+
   drawIfVisible("diagnosticSection", () => {
     performance.mark("phase:plot:influence:start");
-    drawInfluencePlot(influence);
+    drawInfluencePlot(influence, { theme: appState.plotTheme });
     if (blupResult) {
-      const { totalPages: blupPages } = drawBlupPlot(blupResult, profile, { pageSize: blupPlot.pageSize, page: 0 });
+      const { totalPages: blupPages } = drawBlupPlot(blupResult, profile, { pageSize: blupPlot.pageSize, page: 0, theme: appState.plotTheme });
       renderBlupNav(blupPages);
     }
-    drawBaujatPlot(baujatResult, profile);
-    if (showQQ)  drawQQPlot(qqResiduals, qqLabels);
-    if (studies.length >= 2 && !isMHorPeto) drawRadialPlot(studies, m, profile);
-    if (showLabbe) drawLabbe(studies, m, profile, { type });
+    drawBaujatPlot(baujatResult, profile, { theme: appState.plotTheme });
+    if (showQQ)  drawQQPlot(qqResiduals, qqLabels, { theme: appState.plotTheme });
+    if (studies.length >= 2 && !isMHorPeto) drawRadialPlot(studies, m, profile, { theme: appState.plotTheme });
+    if (showLabbe) drawLabbe(studies, m, profile, { type, theme: appState.plotTheme });
     performance.measure("phase:plot:influence", "phase:plot:influence:start");
   });
 
   // ── Cumulative meta-analysis ──────────────────────────────────────────────
   const rawCumPageSize    = elCumForestPageSize?.value ?? "30";
-  const cumForestPageSize = rawCumPageSize === "Infinity" ? Infinity : +rawCumPageSize;
-  cumForestPlot.args  = { results: cumResults, profile, pageSize: cumForestPageSize, alpha, ciLabel: getCiLabel() };
+  const cumForestPageSize = rawCumPageSize === "all" ? Infinity : +rawCumPageSize;
+  cumForestPlot.args          = { results: cumResults, profile, pageSize: cumForestPageSize, alpha, ciLabel: getCiLabel() };
+  cumForestPlot.sourceStudies = studies.slice();
+  cumForestPlot.method        = method;
+  cumForestPlot.ciMethod      = ciMethod;
+  cumForestPlot.alpha         = alpha;
   appState.reportArgs.cumForestOptions = { results: cumResults, profile, pageSize: cumForestPageSize, currentPage: 0, alpha, ciLabel: getCiLabel() };
 
   cumFunnelPlot.studies = cumulativeStudies;
@@ -2544,9 +4873,9 @@ function _renderAllResults(ctx) {
 
   drawIfVisible("cumulativeSection", () => {
     performance.mark("phase:plot:cumulative:start");
-    const { totalPages: cumForestPages } = drawCumulativeForest(cumResults, profile, { pageSize: cumForestPageSize, page: 0 });
+    const { totalPages: cumForestPages } = drawCumulativeForest(cumResults, profile, { pageSize: cumForestPageSize, page: 0, theme: appState.plotTheme });
     renderCumulativeForestNav(cumForestPages);
-    drawCumulativeFunnel(cumulativeStudies, cumResults, profile, cumResults.length - 1);
+    drawCumulativeFunnel(cumulativeStudies, cumResults, profile, cumResults.length - 1, { theme: appState.plotTheme });
     performance.measure("phase:plot:cumulative", "phase:plot:cumulative:start");
   });
 
@@ -2554,15 +4883,15 @@ function _renderAllResults(ctx) {
   elOrchardPlotBlock.style.display = "";
   caterpillarPlot.page = 0;
   const rawCatPageSize = elCatPageSize?.value ?? "30";
-  const catPageSize    = rawCatPageSize === "Infinity" ? Infinity : +rawCatPageSize;
+  const catPageSize    = rawCatPageSize === "all" ? Infinity : +rawCatPageSize;
   caterpillarPlot.args = { studies: all, m, profile, pageSize: catPageSize };
   elCaterpillarBlock.style.display = "";
   appState.reportArgs.caterpillarOptions = { studies: all, m, profile, pageSize: catPageSize, currentPage: 0 };
 
   drawIfVisible("altVizSection", () => {
     performance.mark("phase:plot:orchard:start");
-    drawOrchardPlot(all, m, profile);
-    const { totalPages: catPages } = drawCaterpillarPlot(all, m, profile, { pageSize: catPageSize, page: 0 });
+    drawOrchardPlot(all, m, profile, { theme: appState.plotTheme });
+    const { totalPages: catPages } = drawCaterpillarPlot(all, m, profile, { pageSize: catPageSize, page: 0, theme: appState.plotTheme });
     renderCaterpillarNav(catPages);
     performance.measure("phase:plot:orchard", "phase:plot:orchard:start");
   });
@@ -2571,9 +4900,10 @@ function _renderAllResults(ctx) {
   const hasRoB = _robDomains.length > 0 && studies.length > 0;
   elRobSection.style.display = hasRoB ? "" : "none";
   if (hasRoB) {
+    robPlotState.studies = studies;
     drawIfVisible("robSection", () => {
-      drawRoBTrafficLight(studies, _robDomains, _robData);
-      drawRoBSummary(studies, _robDomains, _robData);
+      drawRoBTrafficLight(studies, _robDomains, _robData, { theme: appState.plotTheme });
+      drawRoBSummary(studies, _robDomains, _robData, { theme: appState.plotTheme });
     });
   }
 
@@ -2609,6 +4939,13 @@ async function runAnalysis() {
     performance.mark("runAnalysis:start");
     scheduleSave();
 
+    // Multivariate mode — separate pipeline
+    if (_mvMode) {
+      const ok = _runMVAnalysis();
+      performance.measure("runAnalysis", "runAnalysis:start");
+      return ok;
+    }
+
     // Cancel any in-progress GOSH computation.
     if (goshState.worker) {
       goshState.worker.terminate();
@@ -2620,7 +4957,12 @@ async function runAnalysis() {
       if (elCancel) elCancel.disabled = true;
       if (elProg)   elProg.hidden     = true;
     }
-    document.querySelectorAll(".results-section").forEach(d => d.removeAttribute("open"));
+    document.querySelectorAll(".results-section").forEach(d => { d.removeAttribute("open"); d.style.display = ""; });
+    // Restore standard forest area (may have been hidden by a prior MV run)
+    const _sf = document.getElementById("forestSection");
+    const _mf = document.getElementById("mvForestSection");
+    if (_sf) _sf.style.display = "";
+    if (_mf) _mf.style.display = "none";
     forestPlot.page = 0;
     caterpillarPlot.page = 0;
     cumForestPlot.page = 0;
@@ -2631,7 +4973,7 @@ async function runAnalysis() {
 
     // ── Phase 1: Parse input table ────────────────────────────────────────
     performance.mark("phase:parse:start");
-    const { studies, excluded, softWarnings, missingCorrelation } = collectStudies(type);
+    const { studies, excluded, softWarnings, missingCorrelation } = collectStudies(type, scaleModerators);
     performance.measure("phase:parse", "phase:parse:start");
 
     if (!studies.length) {
@@ -2651,6 +4993,8 @@ async function runAnalysis() {
     if (!appState.hasRunOnce) {
       appState.hasRunOnce = true;
       _toggleResults.disabled = false;
+      _toggleResults.removeAttribute("aria-disabled");
+      _toggleResults.removeAttribute("title");
     }
 
     // ── Shared settings ───────────────────────────────────────────────────
@@ -2665,13 +5009,15 @@ async function runAnalysis() {
     const rveRho        = parseFloat(document.getElementById("rveRho")?.value ?? 0.8);
     const modSpec       = moderators.map(mod => ({ key: mod.name, type: mod.type, transform: mod.transform || "linear" }));
     const scaleModSpec  = scaleModerators.map(mod => ({ key: mod.name, type: mod.type, transform: mod.transform || "linear" }));
+    const interactionSpec = interactions.map(ix => ({ name: ix.name, termA: ix.termA, termB: ix.termB }));
     const cumulativeOrder = document.getElementById("cumulativeOrder")?.value || "input";
 
     // Selection model settings (read up front so _runPubBiasBatch is pure)
-    const selModeVal = document.getElementById("selMode").value;
-    const selPreset  = document.getElementById("selPreset").value;
-    const selSides   = parseInt(document.getElementById("selSides").value, 10);
-    const rawSelCuts = document.getElementById("selCuts").value
+    const selModeVal  = document.getElementById("selMode").value;
+    const selPreset   = document.getElementById("selPreset").value;
+    const selWeightFn = document.getElementById("selWeightFn").value;
+    const selSides    = parseInt(document.getElementById("selSides").value, 10);
+    const rawSelCuts  = document.getElementById("selCuts").value
       .split(",").map(s => parseFloat(s.trim())).filter(isFinite);
     const selCuts = rawSelCuts.length >= 2 && rawSelCuts[rawSelCuts.length - 1] === 1.0
       ? rawSelCuts
@@ -2684,8 +5030,8 @@ async function runAnalysis() {
 
     const opts = {
       method, ciMethod, alpha, type, useTF, tfEstimator, useTFAdjusted,
-      isMHorPeto, hasClusters, rveRho, modSpec, scaleModSpec, cumulativeOrder,
-      selModeVal, selPreset, selSides, selCuts,
+      isMHorPeto, hasClusters, rveRho, modSpec, scaleModSpec, interactionSpec, cumulativeOrder,
+      selModeVal, selPreset, selWeightFn, selSides, selCuts,
       bayesMu0, bayesSigmaMu, bayesSigmaTau,
     };
 

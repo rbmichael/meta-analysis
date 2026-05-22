@@ -25,7 +25,8 @@
 //   utils.js     normalCDF, normalQuantile, tCDF, regularizedGammaP
 //   constants.js BISECTION_ITERS
 
-import { wls, robustWlsResult } from "./analysis.js";
+import { robustWlsResult, validStudies, resolveClusterIds } from "./analysis.js";
+import { wls } from "./linalg.js";
 import { normalCDF, normalQuantile, tCDF, regularizedGammaP } from "./utils.js";
 import { BISECTION_ITERS } from "./constants.js";
 
@@ -49,8 +50,8 @@ export function eggerTest(studies){
   const result = { intercept, slope, se, t, df, p };
 
   // Cluster-robust extension: reads study.cluster (set by ui.js)
-  const clusters = studies.map(s => s.cluster?.trim() || null);
-  if (clusters.some(id => id)) {
+  if (studies.some(s => s.cluster?.trim())) {
+    const clusters = resolveClusterIds(studies);
     const X2d = studies.map((_, i) => [1, X[i]]);
     const wUnit = Array(k).fill(1);
     const rob = robustWlsResult(X2d, wUnit, Z, [intercept, slope], clusters);
@@ -81,7 +82,7 @@ export function eggerTest(studies){
 //   z   — continuity-corrected normal z
 //   p   — two-tailed p-value
 export function beggTest(studies) {
-  const valid = studies.filter(s => isFinite(s.yi) && isFinite(s.vi) && s.vi > 0);
+  const valid = validStudies(studies);
   const k = valid.length;
   if (k < 3) return { tau: NaN, S: NaN, z: NaN, p: NaN };
 
@@ -172,7 +173,7 @@ function _wlsFinish(beta, vcov, ys, xs, ws, df) {
 // Returns: { intercept, interceptSE, interceptT, interceptP,
 //            slope,     slopeSE,     slopeT,     slopeP,     df }
 export function fatPetTest(studies) {
-  const valid = studies.filter(s => isFinite(s.yi) && isFinite(s.vi) && s.vi > 0);
+  const valid = validStudies(studies);
   const k = valid.length;
   if (k < 3) return _pubBiasNaN(k - 2);
 
@@ -187,8 +188,8 @@ export function fatPetTest(studies) {
   const result = _wlsFinish(beta, vcov, ys, xs, ws, k - 2);
 
   // Cluster-robust extension: reads study.cluster (set by ui.js)
-  const clusters = valid.map(s => s.cluster?.trim() || null);
-  if (clusters.some(id => id)) {
+  if (valid.some(s => s.cluster?.trim())) {
+    const clusters = resolveClusterIds(valid);
     const rob = robustWlsResult(X, ws, ys, beta, clusters);
     if (!rob.error) {
       result.robustInterceptSE = rob.robustSE[0];
@@ -225,7 +226,7 @@ export function fatPetTest(studies) {
 //   fat/peese each have the same shape as _wlsFinish output.
 export function petPeeseTest(studies) {
   const fat = fatPetTest(studies);
-  const valid = studies.filter(s => isFinite(s.yi) && isFinite(s.vi) && s.vi > 0);
+  const valid = validStudies(studies);
   const k = valid.length;
   let peese = _pubBiasNaN(k - 2);
   if (k >= 3 && !isNaN(fat.intercept)) {
@@ -425,7 +426,7 @@ export function rueckerTest(studies) {
 //
 // Returns: { rosenthal, orwin, sumZ, z_crit, k }
 export function failSafeN(studies, alpha = 0.05, trivial = 0.1) {
-  const valid = studies.filter(s => isFinite(s.yi) && isFinite(s.vi) && s.vi > 0);
+  const valid = validStudies(studies);
   const k = valid.length;
   if (k < 1) return { rosenthal: NaN, orwin: NaN, sumZ: NaN, z_crit: NaN, k: 0 };
 
@@ -463,7 +464,7 @@ export function failSafeN(studies, alpha = 0.05, trivial = 0.1) {
 /**
  * Henmi & Copas (2010) confidence interval robust to publication bias.
  *
- * Always uses DL tau² and FE weights (wi = 1/vi), matching metafor::hc().
+ * Always uses DL τ² and FE weights (wi = 1/vi), matching metafor::hc().
  * The CI is centred on the FE estimate but accounts for potential small-study
  * bias by integrating over the conditional distribution of Q given the
  * ratio R = (theta_hat - mu) / sqrt(vb).
@@ -478,7 +479,7 @@ export function failSafeN(studies, alpha = 0.05, trivial = 0.1) {
  * Returns: { beta, se, ci, tau2, t0, u0, k } or { error }
  */
 export function henmiCopas(studies, alpha = 0.05) {
-  const valid = studies.filter(s => isFinite(s.yi) && isFinite(s.vi) && s.vi > 0);
+  const valid = validStudies(studies);
   const k = valid.length;
   if (k < 3) return { error: "k < 3" };
 
@@ -496,7 +497,7 @@ export function henmiCopas(studies, alpha = 0.05) {
   const beta = yi.reduce((s, y, i) => s + wi[i] * y, 0) / W1;
   const Q    = yi.reduce((s, y, i) => s + wi[i] * (y - beta) ** 2, 0);
 
-  // DL tau² (always DL in HC, matching metafor)
+  // DL τ² (always DL in HC, matching metafor)
   const tau2 = Math.max(0, (Q - (k - 1)) / (W1 - W2));
 
   // Variance of beta under RE model
@@ -612,7 +613,7 @@ export function henmiCopas(studies, alpha = 0.05) {
  *             powers: number[], sig: boolean[] }}
  */
 export function tesTest(studies, m) {
-  const valid = studies.filter(s => isFinite(s.yi) && isFinite(s.vi) && s.vi > 0);
+  const valid = validStudies(studies);
   const k = valid.length;
   const nan = { O: NaN, E: NaN, Var: NaN, z: NaN, chi2: NaN, p: NaN, k, theta: NaN, powers: [], sig: [] };
   if (k < 2 || !m || !isFinite(m.RE)) return nan;
@@ -663,7 +664,7 @@ export function tesTest(studies, m) {
  * @returns {{ estimate, se, ci, z, p, k, kAdequate, wlsEstimate, fallback }}
  */
 export function waapWls(studies) {
-  const valid = studies.filter(s => isFinite(s.yi) && isFinite(s.vi) && s.vi > 0);
+  const valid = validStudies(studies);
   const k     = valid.length;
   const nan   = { estimate: NaN, se: NaN, ci: [NaN, NaN], z: NaN, p: NaN,
                   k, kAdequate: 0, wlsEstimate: NaN, fallback: false };

@@ -4,24 +4,31 @@
 // Schema (version 1):
 //   version       — integer, bumped on breaking changes
 //   settings      — UI controls that govern analysis behaviour:
-//                     effectType, tauMethod, ciMethod, cumulativeOrder,
-//                     useTrimFill, useTFAdjusted,
-//                     bayesMu0, bayesSigmaMu, bayesSigmaTau  (Bayesian priors),
-//                     selMode, selPreset, selSides, selCuts   (selection model)
+//                     effectType, tauMethod, ciMethod, ciLevel, cumulativeOrder,
+//                     useTrimFill, tfEstimator, useTFAdjusted,
+//                     bayesMu0, bayesSigmaMu, bayesSigmaTau    (Bayesian priors),
+//                     selMode, selPreset, selWeightFn,
+//                     selSides, selCuts                         (selection model),
+//                     mccMethod                                 (multiple-comparison correction),
+//                     rveRho                                    (RVE within-cluster correlation)
 //   moderators    — array of { name, type } objects
+//   interactions  — array of { name, termA, termB } interaction term specs
 //   studies       — array of { study, inputs: {col: value}, group, cluster, moderators: {name: value} }
 
 export const SESSION_VERSION = 1;
 
 // Build a versioned session object from explicit plain-JS arguments.
-// settings        — { effectType, tauMethod, ciMethod, cumulativeOrder, useTrimFill, useTFAdjusted,
-//                     bayesMu0, bayesSigmaMu, bayesSigmaTau, selMode, selPreset, selSides, selCuts }
+// settings        — { effectType, tauMethod, ciMethod, ciLevel, cumulativeOrder, useTrimFill,
+//                     tfEstimator, useTFAdjusted, bayesMu0, bayesSigmaMu, bayesSigmaTau,
+//                     selMode, selPreset, selWeightFn, selSides, selCuts, mccMethod, rveRho }
 // savedModerators — array of { name, type }
 // studies         — array of { study, inputs, group, moderators }
 // rob             — { domains: string[], data: { [label]: { [domain]: string } } }
 //                   Optional; omitted fields default to empty on load.
-export function buildSession(settings, savedModerators, studies, rob = { domains: [], data: {} }, scaleModerators = []) {
-  return { version: SESSION_VERSION, settings, moderators: savedModerators, scaleModerators, studies, rob };
+// scaleModerators — array of { name, type }
+// interactions    — array of { name, termA, termB }
+export function buildSession(settings, savedModerators, studies, rob = { domains: [], data: {} }, scaleModerators = [], interactions = []) {
+  return { version: SESSION_VERSION, settings, moderators: savedModerators, scaleModerators, interactions, studies, rob };
 }
 
 // Serialize a session object to a BOM-prefixed JSON string.

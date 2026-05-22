@@ -201,8 +201,10 @@ when you want to compare variability independently of the mean — e.g. to test
 whether an intervention homogenises or disperses outcomes beyond any shift
 in the mean.</p>
 <p><strong>Formula:</strong><br>
-<code>yi = log(CV₁ / CV₂)</code><br>
+<code>yi = log(CV₁ / CV₂) + 1/(2(n₁−1)) − 1/(2(n₂−1))</code>&ensp;(bias-corrected)<br>
 <code>vi = 1/(2(n₁−1)) + CV₁²/n₁ + 1/(2(n₂−1)) + CV₂²/n₂</code></p>
+<p>The bias correction accounts for the fact that E[log S] ≈ log σ − 1/(2(n−1)); adding
+1/(2(n−1)) per group recovers an unbiased estimate of the log CV ratio (Nakagawa et al., 2015, eq. 1).</p>
 <p><strong>When to use:</strong> Both means are strictly positive; you are
 specifically interested in dispersion differences after controlling for the
 mean.</p>
@@ -220,8 +222,9 @@ where the variance approximation degrades. For absolute spread, use VR.</p>`,
 scale. Measures absolute dispersion rather than relative dispersion (CVR).
 Unusually, the variance depends only on sample sizes, not on the SDs.</p>
 <p><strong>Formula:</strong><br>
-<code>yi = log(s₁ / s₂)</code><br>
+<code>yi = log(s₁ / s₂) + 1/(2(n₁−1)) − 1/(2(n₂−1))</code>&ensp;(bias-corrected)<br>
 <code>vi = 1/(2(n₁−1)) + 1/(2(n₂−1))</code></p>
+<p>The bias correction is the same as for CVR: E[log S] ≈ log σ − 1/(2(n−1)) (Nakagawa et al., 2015, eq. 1).</p>
 <p><strong>When to use:</strong> The outcome scale is fixed and meaningful, and
 you want to compare spread without reference to group means.</p>
 <p><strong>When to avoid:</strong> When means differ substantially and you want
@@ -351,11 +354,26 @@ interpreted cautiously.</p>`,
 
       {
         id: "guide-yuq",
-        title: "Yule's Q and Yule's Y",
-        body: `<p>Two association measures for 2×2 tables derived from the cross-product
-ratio (odds ratio). Both lie on [−1, +1] and are symmetric around 0 (no
-association). They pre-date the log-odds ratio but are still used in
-bibliometric, epidemiological, and psychological research.</p>
+        title: "Yule's Q, Yule's Y, and Generalised Odds Ratio (GOR)",
+        body: `<p>Three non-parametric association measures for ordered categorical outcomes.</p>
+
+<h4>Generalised Odds Ratio — ordinal (GOR)</h4>
+<p>Extends the odds ratio to outcomes with more than two ordered categories
+(Agresti 1980). GOR = P(Y₁ &gt; Y₂) / P(Y₁ &lt; Y₂): the odds that a randomly
+drawn participant from group 1 scores higher than one from group 2, relative
+to the reverse. GOR &gt; 1 means group 1 tends to score higher.</p>
+<p><strong>Inputs:</strong> category counts from lowest to highest, entered as
+comma- or space-separated integers for each group (e.g. <code>15,28,22,10</code>).
+Both groups must have the same number of categories. Stored on the log scale;
+displayed back-transformed as the ratio.</p>
+<p><strong>When undefined:</strong> when one group has zero probability of scoring
+strictly above or below the other (complete separation).</p>
+
+<hr style="margin:1em 0">
+<p>Yule's Q and Yule's Y are two bounded association measures for 2×2 tables
+derived from the cross-product ratio (odds ratio). Both lie on [−1, +1] and are
+symmetric around 0 (no association). They pre-date the log-odds ratio but are
+still used in bibliometric, epidemiological, and psychological research.</p>
 
 <h4>Formulas</h4>
 <p>For a 2×2 table with cells a (events, group 1), b (non-events, group 1),
@@ -403,6 +421,7 @@ provided the denominator is positive; a warning is shown in that case.</p>
         citations: [
           "Yule, G. U. (1900). On the association of attributes in statistics. <em>Philosophical Transactions of the Royal Society of London, Series A, 194</em>, 257–319.",
           "Yule, G. U. (1912). On the methods of measuring association between two attributes. <em>Journal of the Royal Statistical Society, 75</em>(6), 579–642.",
+          "Agresti, A. (1980). Generalized odds ratios for ordinal data. <em>Biometrics, 36</em>(1), 59–67.",
           "Viechtbauer, W. (2010). Conducting meta-analyses in R with the metafor package. <em>Journal of Statistical Software, 36</em>(3), 1–48.",
         ],
       },
@@ -598,7 +617,7 @@ COR and ZCOR are nearly identical; either is acceptable.</p>`,
 
       {
         id: "guide-rpb",
-        title: "Point-biserial and biserial correlations (RPB / RBIS)",
+        title: "Point-biserial, biserial, and tetrachoric correlations (RPB / RBIS / RTET)",
         body: `<p><strong>Point-biserial (RPB)</strong> is the Pearson correlation between a
 continuous variable and a binary grouping variable. Computed from an
 independent-samples t-test as r<sub>pb</sub> = t / √(t² + n−2). Unlike the standard
@@ -615,10 +634,25 @@ r<sub>bis</sub> ≈ 1.25 · r<sub>pb</sub>. For very unequal splits r<sub>bis</s
 can exceed ±1, which signals unreliable estimation.</p>
 
 <p><strong>Inputs:</strong> RPB takes r<sub>pb</sub> and n.
-RBIS additionally takes p, the proportion of participants in group 1.</p>`,
+RBIS additionally takes p, the proportion of participants in group 1.</p>
+
+<p><strong>Tetrachoric Correlation (RTET)</strong> estimates the latent Pearson
+correlation between two underlying continuous, bivariate-normal variables from
+their dichotomisation in a 2×2 table (Pearson 1900). Thresholds
+h = Φ⁻¹((a+b)/N) and k = Φ⁻¹((a+c)/N) are computed from the marginal
+proportions; the tetrachoric ρ is then found by bisecting Φ₂(h, k; ρ) = a/N.
+Variance uses the delta-method approximation
+p<sub>r</sub>(1−p<sub>r</sub>)·p<sub>c</sub>(1−p<sub>c</sub>) / (N·φ₂(h,k;ρ)²).
+A zero cell triggers a +0.5 continuity correction to all cells before estimation.</p>
+<p>Key properties: |ρ<sub>tet</sub>| ≥ |φ| for the same table; ρ<sub>tet</sub> = φ
+only when marginals are 50/50. Appropriate when binary outcomes reflect an
+underlying continuous normal construct. Contrast with PHI (distribution-free)
+and COR/ZCOR (continuous r input). Same 2×2 inputs as OR/RR/PHI: a, b, c, d ≥ 0
+with all four marginal totals &gt; 0.</p>`,
         citations: [
           "Kraemer, H. C. (1975). On estimation and hypothesis testing problems for correlation coefficients. <em>Psychometrika, 40</em>(4), 473–485.",
           "Borenstein, M., Hedges, L. V., Higgins, J. P. T., & Rothstein, H. R. (2009). <em>Introduction to meta-analysis</em>. Wiley.",
+          "Pearson, K. (1900). Mathematical contributions to the theory of evolution. VII. On the correlation of characters not quantitatively measurable. <em>Philosophical Transactions of the Royal Society of London, Series A, 195</em>, 1–47.",
         ],
       },
 
@@ -1367,7 +1401,13 @@ of the weighted regression. Produces wider, better-calibrated intervals
 when k is small.</p>
 <p><strong>Recommendation:</strong> Use KH when using REML and k &lt; 40.
 Simulations consistently show better nominal coverage than the Normal CI
-for small k.</p>`,
+for small k.</p>
+<p><strong>Diagnostic:</strong> When KH is active, the model-fit line in the
+meta-regression panel displays <em>s²</em>, the KH variance-inflation factor
+(s² = max(1, RSS<sub>RE</sub> / df<sub>E</sub>)). Values substantially above 1
+indicate that observed residual variability exceeds what is expected under the
+fitted model, justifying the wider KH intervals. Values at or near 1 mean the
+KH and Normal CIs will be similar.</p>`,
         citations: [
           "Knapp, G., & Hartung, J. (2003). Improved tests for a random effects meta-regression with a single covariate. <em>Statistics in Medicine, 22</em>(17), 2693–2710.",
           "IntHout, J., Ioannidis, J. P. A., & Borm, G. F. (2014). The Hartung-Knapp-Sidik-Jonkman method for random effects meta-analysis is straightforward and considerably outperforms the standard DerSimonian-Laird method. <em>BMC Medical Research Methodology, 14</em>, 25.",
@@ -1751,6 +1791,10 @@ the result is robust to publication bias. If the HC CI includes zero
 while the RE CI excludes it, publication bias may explain the apparent
 effect. As a sensitivity analysis, it complements rather than replaces
 the standard RE analysis.</p>
+<p><strong>Output:</strong> The bias-robust point estimate, its CI, and the DL τ²
+used internally are reported in the publication-bias table. The τ² value
+reflects the heterogeneity assumption baked into the HC correction, not the
+τ² from the main analysis estimator.</p>
 <p>Matched against <code>metafor::hc()</code> to ≤ 0.005.</p>`,
         citations: [
           "Henmi, M., & Copas, J. B. (2010). Confidence intervals for random effects meta-analysis and robustness to publication bias. <em>Statistics in Medicine, 29</em>(29), 2969–2983.",
@@ -1866,6 +1910,97 @@ fixed-ω sensitivity presets are more reliable in that case.</p>`,
           "Vevea, J. L., & Woods, C. M. (2005). Publication bias in research synthesis: Sensitivity analysis using a priori weight functions. <em>Psychological Methods, 10</em>(4), 428–443.",
         ],
       },
+
+      {
+        id: "guide-sel-halfnorm",
+        title: "Half-normal selection model",
+        body: `<p>The half-normal selection model (Andrews &amp; Kasy, 2019; implemented in
+metafor as <code>type="halfnorm"</code>) uses a continuous weight function based
+on the probit transform of the one- or two-sided p-value:</p>
+<p style="margin-left:1.5em"><em>w(p; δ) = exp(−δ · [Φ⁻¹(1−p)]² / 2)</em></p>
+<p>where δ ≥ 0 is estimated by maximum likelihood alongside μ and τ².</p>
+<ul>
+  <li><strong>δ = 0</strong> — no selection (reduces to standard RE).</li>
+  <li><strong>δ &gt; 0</strong> — exponentially less weight on non-significant
+  studies; the penalty grows with the probit distance from significance.</li>
+</ul>
+<p><strong>Normalising constant:</strong> Each study contributes a per-study
+integral A<sub>i</sub>(μ, τ², δ) = ∫ w(p(y)) · φ((y−μ)/σ<sub>i</sub>) / σ<sub>i</sub> dy
+computed by 20-point Gauss-Hermite quadrature.</p>
+<p><strong>Inference:</strong> A likelihood-ratio test (LRT) against the
+unweighted RE model (H₀: δ = 0) has χ²(1) distribution under the null. SE of
+δ̂ is from the numerical Hessian; 95% CI for μ̂ uses ±1.96 × SE.</p>
+<p><strong>Requires k ≥ 6.</strong></p>`,
+        citations: [
+          "Andrews, I., & Kasy, M. (2019). Identification of and correction for publication bias. <em>American Economic Review, 109</em>(8), 2766–2794.",
+          "Vevea, J. L., & Hedges, L. V. (1995). A general linear model for estimating effect size in the presence of publication bias. <em>Psychometrika, 60</em>(3), 419–435.",
+        ],
+      },
+
+      {
+        id: "guide-sel-power",
+        title: "Power selection model",
+        body: `<p>The power selection model uses a simple polynomial weight function:</p>
+<p style="margin-left:1.5em"><em>w(p; δ) = (1 − p)<sup>δ</sup></em></p>
+<p>where δ ≥ 0 is estimated jointly with μ and τ² by ML (metafor
+<code>type="power"</code>).</p>
+<ul>
+  <li><strong>δ = 0</strong> — uniform weight (no selection).</li>
+  <li><strong>δ &gt; 0</strong> — less weight on studies with larger p-values;
+  weight decreases as a power of (1 − p).</li>
+</ul>
+<p><strong>Interpretation:</strong> δ̂ reflects how steeply the probability of
+being observed falls as p increases. A LRT against the unweighted RE model
+(H₀: δ = 0) provides a formal test of selection. Requires k ≥ 6.</p>`,
+        citations: [
+          "Vevea, J. L., & Hedges, L. V. (1995). A general linear model for estimating effect size in the presence of publication bias. <em>Psychometrika, 60</em>(3), 419–435.",
+        ],
+      },
+
+      {
+        id: "guide-sel-negexp",
+        title: "Negative exponential selection model",
+        body: `<p>The negative exponential selection model uses an exponential weight
+function in p directly:</p>
+<p style="margin-left:1.5em"><em>w(p; δ) = e<sup>−δp</sup></em></p>
+<p>where δ ≥ 0 (metafor <code>type="negexp"</code>).</p>
+<ul>
+  <li><strong>δ = 0</strong> — uniform weight.</li>
+  <li><strong>δ &gt; 0</strong> — studies with small p-values (significant
+  results) are relatively more likely to be published; the penalty for large
+  p is exponential in p rather than in the probit of p (cf. half-normal).</li>
+</ul>
+<p>LRT against the unweighted RE model (H₀: δ = 0) has χ²(1) distribution.
+Requires k ≥ 6.</p>`,
+        citations: [
+          "Vevea, J. L., & Hedges, L. V. (1995). A general linear model for estimating effect size in the presence of publication bias. <em>Psychometrika, 60</em>(3), 419–435.",
+        ],
+      },
+
+      {
+        id: "guide-sel-beta",
+        title: "Beta selection model",
+        body: `<p>The beta selection model uses an unnormalised beta density as the weight
+function (metafor <code>type="beta"</code>):</p>
+<p style="margin-left:1.5em"><em>w(p; a, b) = p<sup>a−1</sup>(1−p)<sup>b−1</sup></em></p>
+<p>Both shape parameters a &gt; 0 and b &gt; 0 are estimated jointly with μ and
+τ² by ML. This is the most flexible of the four continuous weight functions and
+can represent a wider range of selection mechanisms.</p>
+<ul>
+  <li><strong>a = 1, b = 1</strong> — uniform weight (no selection).</li>
+  <li><strong>a = 1, b &gt; 1</strong> — weight decreases with p (power-type
+  selection favouring small p).</li>
+  <li><strong>a &gt; 1, b = 1</strong> — weight increases with p (unusual;
+  publication of null results preferred).</li>
+</ul>
+<p><strong>LRT</strong> against the unweighted RE model (H₀: a = 1, b = 1)
+has χ²(2) distribution (two free parameters). SE of â and b̂ from the
+numerical Hessian. Requires k ≥ 7 (two selection parameters).</p>`,
+        citations: [
+          "Vevea, J. L., & Hedges, L. V. (1995). A general linear model for estimating effect size in the presence of publication bias. <em>Psychometrika, 60</em>(3), 419–435.",
+        ],
+      },
+
     ],
   },
 
@@ -1956,6 +2091,12 @@ wᵢ = 1/(vᵢ + τ²), with τ² estimated by REML or the selected estimator.</
     but can differ in small samples; LRT is generally preferred when k is
     small because Wald tests can be anti-conservative.</li>
   </ul></li>
+  <li><strong>Coefficient covariance matrix (vcov)</strong> — when ≥ 2
+  moderators are present, a <em>Download vcov CSV</em> button appears in the
+  regression panel. The CSV contains the full p×p covariance matrix of the
+  estimated coefficients (rows and columns labelled by predictor name).
+  Off-diagonal entries are needed for linear contrasts and for replicating
+  the app's own contrast-test calculations.</li>
 </ul>
 <p><strong>Cautionary notes:</strong></p>
 <ul>
@@ -1970,6 +2111,88 @@ wᵢ = 1/(vᵢ + τ²), with τ² estimated by REML or the selected estimator.</
           "Knapp, G., & Hartung, J. (2003). Improved tests for a random effects meta-regression with a single covariate. <em>Statistics in Medicine, 22</em>(17), 2693–2710.",
           "Higgins, J. P. T., & Thompson, S. G. (2004). Controlling the risk of spurious findings from meta-regression. <em>Statistics in Medicine, 23</em>(11), 1663–1682.",
           "Thompson, S. G., & Higgins, J. P. T. (2002). How should meta-regression analyses be undertaken and interpreted? <em>Statistics in Medicine, 21</em>(11), 1559–1573.",
+        ],
+      },
+
+      {
+        id: "guide-permutation-test",
+        title: "Permutation tests (meta-regression)",
+        body: `<p>Permutation tests provide non-parametric p-values for the omnibus
+moderator test (Q<sub>M</sub>) in meta-regression. They are especially useful
+when the number of studies k is small (< 20), where the chi-square and F
+approximations used by the standard Wald test can be anti-conservative.</p>
+<p><strong>How it works:</strong></p>
+<ol>
+  <li>Fit the meta-regression model and record the observed Q<sub>M</sub>.</li>
+  <li>Shuffle the moderator values across studies (permuting rows of the design
+  matrix X) while keeping each study's effect size y<sub>i</sub> and sampling
+  variance v<sub>i</sub> together. Re-estimate τ² for the permuted data using
+  the same method as the original model, then refit WLS.</li>
+  <li>Repeat nPerm times to build the null distribution of Q<sub>M</sub> under
+  H₀: no moderator relationship.</li>
+  <li>Permutation p-value = #{Q<sub>M,perm</sub> ≥ Q<sub>M,obs</sub>} / nPerm
+  (the observed Q<sub>M</sub> is placed at position 0, so it always counts once).</li>
+</ol>
+<p><strong>Interpretation:</strong> The permutation p-value is exact (up to Monte
+Carlo error) for the null hypothesis that there is no relationship between the
+moderator and the true effects — regardless of sample size. A significant result
+(p < 0.05) means the observed Q<sub>M</sub> is unusually large relative to what
+would arise by chance under the null.</p>
+<p><strong>Limitations:</strong></p>
+<ul>
+  <li>Permuting moderator assignments assumes studies are exchangeable under the
+  null — the effect sizes and sampling variances remain paired, only the
+  moderator labels are shuffled.</li>
+  <li>Very small k (< 5) limits the minimum achievable p-value:
+  with k = 5 there are only 5! = 120 distinct permutations, so p < 0.01 is
+  impossible without ties.</li>
+  <li>Re-estimating τ² per permutation matches the default behaviour of
+  metafor's <code>permutest()</code> and gives exact inference under the
+  random-effects model.</li>
+</ul>
+<p>Per-moderator permutation p-values (shown when 2+ moderators) test each
+moderator's Q<sub>M</sub> contribution separately using the same permutation
+draws.</p>`,
+        citations: [
+          "Higgins, J. P. T., & Thompson, S. G. (2004). Controlling the risk of spurious findings from meta-regression. <em>Statistics in Medicine, 23</em>(11), 1663–1682.",
+          "Follmann, D. A., & Proschan, M. A. (1999). Valid inference in random effects meta-analysis. <em>Biometrics, 55</em>(3), 732–737.",
+        ],
+      },
+
+      {
+        id: "guide-interactions",
+        title: "Interaction terms",
+        body: `<p>An <strong>interaction term</strong> A×B tests whether the slope of A differs
+across levels of B (or equivalently, whether B's effect differs across values of A).</p>
+<p><strong>How to add:</strong> once two or more moderators exist, the <em>Interaction
+terms</em> row appears below the Moderators row. Select two moderators from the
+dropdowns and click + Add. No extra data column is required — the columns are
+computed automatically as the outer product of the parent moderators' design-matrix
+columns.</p>
+<p><strong>Design matrix columns produced:</strong></p>
+<ul>
+  <li><strong>Continuous × continuous</strong> — one column: x₁ · x₂.
+    Coefficient β₃ in <code>y = β₀ + β₁x₁ + β₂x₂ + β₃(x₁·x₂)</code> is the
+    change in the slope of x₁ per unit increase in x₂.</li>
+  <li><strong>Continuous × categorical (k levels)</strong> — k−1 columns, one per
+    non-reference level. Each coefficient is the difference in slope between that
+    level and the reference level.</li>
+  <li><strong>Categorical × categorical (j, k levels)</strong> — (j−1)×(k−1)
+    columns.</li>
+</ul>
+<p><strong>Main effects must be included.</strong> An interaction is only
+interpretable alongside the main effects of both terms. The app includes them
+automatically when you add the interaction, but removing a main-effect moderator
+will also remove any interaction that references it.</p>
+<p><strong>Tests:</strong> each interaction term receives its own omnibus Wald test
+(Q<sub>M</sub>) and Likelihood Ratio Test in the per-term table, using the same
+logic as simple moderator tests.</p>
+<p><strong>Power caution:</strong> interaction tests require substantially more
+power than main-effect tests. With k &lt; 20 studies, interactions are usually
+underpowered and results are exploratory.</p>`,
+        citations: [
+          "Borenstein, M., Hedges, L. V., Higgins, J. P. T., & Rothstein, H. R. (2009). <em>Introduction to Meta-Analysis.</em> Wiley.",
+          "Higgins, J. P. T., & Thompson, S. G. (2004). Controlling the risk of spurious findings from meta-regression. <em>Statistics in Medicine, 23</em>(11), 1663–1682.",
         ],
       },
 
@@ -2295,6 +2518,36 @@ overall pooled estimates are shown separately.</p>`,
         citations: [
           "Lewis, S., & Clarke, M. (2001). Forest plots: Trying to see the wood and the trees. <em>BMJ, 322</em>(7300), 1479–1480.",
         ],
+      },
+
+      {
+        id: "guide-plot-themes",
+        title: "Plot style presets",
+        body: `<p>The <strong>Plot style</strong> dropdown applies a visual theme to every plot — forest,
+funnel, bubble, caterpillar, BLUP, Baujat, L'Abbé, GOSH, p-curve, p-uniform, orchard,
+cumulative forest/funnel, influence, profile-likelihood, Bayesian posteriors, Q-Q, radial,
+and risk-of-bias plots.</p>
+<p><strong>Available presets:</strong></p>
+<ul>
+  <li><strong>App default</strong> — reads CSS custom properties; adapts automatically to the
+  page's light/dark mode toggle. SVG exports from this preset contain unresolved
+  <code>var(--…)</code> references; use a journal preset for self-contained exports.</li>
+  <li><strong>Cochrane</strong> — white background, Times New Roman, near-black data elements,
+  mid-grey for structural chrome and the fixed-effects diamond. Matches the RevMan 5 output
+  convention (Cochrane Handbook §I.2).</li>
+  <li><strong>JAMA</strong> — white background, Arial/Helvetica, near-black data, lighter grey
+  for chrome. Matches JAMA Network and most North American clinical journal figure
+  guidelines.</li>
+  <li><strong>Black &amp; white</strong> — strict monochrome for journals that prohibit colour
+  and grey shading. Where colour carries categorical information (influence severity, orchard
+  group densities, funnel contour regions), shapes and hatch patterns are substituted.
+  Risk-of-bias traffic-light colours (green/amber/red) are preserved across every preset,
+  including Black &amp; white, because those colours are part of the published Cochrane
+  RoB 2 / ROBINS-I convention (Sterne et al., 2019; Sterne et al., 2016).</li>
+</ul>
+<p>Changing the preset immediately redraws all cached plots. Plots without a cached result
+(e.g., influence, Baujat, orchard) update on the next Run.</p>`,
+        citations: [],
       },
 
       {
@@ -2821,9 +3074,9 @@ BF<sub>10</sub>. Reporting σ<sub>μ</sub> alongside BF<sub>10</sub>
 ensures reproducibility.</p>
 <p><strong>Outputs:</strong></p>
 <ul>
-  <li>Posterior mean and 95 % credible interval for μ (overall effect)</li>
-  <li>Posterior mean and 95 % credible interval for τ (heterogeneity SD)</li>
-  <li>BF<sub>10</sub>, log(BF<sub>10</sub>), and Jeffreys-scale interpretation</li>
+  <li>Posterior mean, posterior SD, and 95 % credible interval for μ (overall effect)</li>
+  <li>Posterior mean, posterior SD, and 95 % credible interval for τ (heterogeneity SD)</li>
+  <li>BF<sub>10</sub>, log(BF<sub>10</sub>), and Jeffreys-scale interpretation; BF<sub>01</sub> = 1/BF<sub>10</sub> is additionally shown when BF<sub>10</sub> &lt; 1 (evidence favouring the null)</li>
   <li>Plots of the marginal posterior densities for μ and τ</li>
 </ul>
 <p><strong>Prior inputs</strong> are accessible in the
@@ -2983,12 +3236,110 @@ when exported.</p>`,
     ],
   },
 
+  // ------------------------------------------------------------------ //
+  // Multivariate Meta-Analysis                                           //
+  // ------------------------------------------------------------------ //
+  {
+    id: "multivariate-ma",
+    heading: "Multivariate Meta-Analysis",
+    topics: [
+
+      {
+        id: "guide-multivariate",
+        title: "Multivariate Meta-Analysis (known within-study covariance)",
+        body: `<p>Multivariate meta-analysis models multiple correlated outcomes from the same
+set of studies jointly, explicitly accounting for their within-study and between-study
+covariance. Treating correlated outcomes as independent (three-level or RVE) ignores
+the sign and magnitude of those correlations; the multivariate model estimates them
+from the data and produces correctly calibrated standard errors.</p>
+
+<p><strong>When to use:</strong> A study contributes two or more outcome types
+(e.g. pain and function, anxiety and depression, two laboratory endpoints) and the
+within-study covariance between those outcomes can be estimated from the reported
+data or assumed from the literature.</p>
+
+<p><strong>Model:</strong> Stack all observations from all studies into a single vector
+<em>y</em> (length ≤ k·P, where k = studies, P = outcomes). The marginal covariance is</p>
+<pre>  Ω = V + Z Ψ Zʹ</pre>
+<p>where <strong>V</strong> is a known block-diagonal sampling covariance matrix (one
+block per study), <strong>Z</strong> is the study indicator matrix, and <strong>Ψ</strong> is
+the unknown P×P between-study covariance matrix estimated from the data.</p>
+
+<p><strong>Estimation:</strong> REML (default) or ML via BFGS optimizer. REML is preferred
+because it accounts for uncertainty in the fixed effects when estimating Ψ; ML is
+required when comparing models with different fixed-effect structures (e.g. via LRT).</p>
+
+<p><strong>Ψ structures:</strong></p>
+<ul>
+  <li><strong>CS (Compound Symmetric):</strong> Ψ = τ²[(1−ρ)I + ρ11ʹ]. All outcomes share
+    a common variance τ² and a common between-study correlation ρ. Two parameters. The
+    most parsimonious and numerically stable choice; recommended when the number of studies
+    is small relative to the number of outcomes.</li>
+  <li><strong>Diagonal (Diag):</strong> Ψ = diag(τ²₁, …, τ²ₚ). Separate variances per
+    outcome but zero between-study correlation. P parameters. Useful when outcomes are
+    conceptually independent at the between-study level.</li>
+  <li><strong>Unstructured (UN):</strong> Ψ = LLʹ (Cholesky parameterisation, P(P+1)/2
+    parameters). Each variance and covariance is estimated freely. Most flexible but
+    requires many studies to estimate reliably; can produce near-singular Ψ with sparse data.</li>
+</ul>
+
+<p><strong>Within-study covariance (vcalc):</strong> When raw individual-level data are
+unavailable, the within-study covariance between outcomes j and k in study i is
+estimated as</p>
+<pre>  V_jk = ρ · √(v_j · v_k)</pre>
+<p>where ρ is an assumed within-study correlation (typically obtained from the
+literature or a sensitivity range) and v_j, v_k are the sampling variances. This is
+the constant-ρ approximation implemented by metafor's <code>vcalc()</code> function
+(Viechtbauer et al., 2021).</p>
+
+<p><strong>Fixed effects (β):</strong> The pooled effect for each outcome is estimated by
+generalised least squares: β̂ = (XʹΩ⁻¹X)⁻¹ XʹΩ⁻¹y, with standard errors from the
+diagonal of (XʹΩ⁻¹X)⁻¹.</p>
+
+<p><strong>Meta-regression:</strong> Continuous moderators may be added with either
+common slopes (one β per moderator, shared across all outcomes) or separate slopes
+(one β per moderator per outcome). In rma.mv() terms, common slopes correspond to
+<code>mods = ~ outcome + x - 1</code> and separate slopes to
+<code>mods = ~ outcome + outcome:x - 1</code>.</p>
+
+<p><strong>Heterogeneity statistics:</strong></p>
+<ul>
+  <li><strong>Q<sub>E</sub></strong> — residual Cochran Q, evaluated at Ψ = 0 (V-only).
+    Tests whether the observed spread of effects exceeds sampling error after accounting
+    for fixed effects. df = n − q (n = observations, q = fixed-effect parameters).</li>
+  <li><strong>I²</strong> — per-outcome I²: τ²_j / (τ²_j + median v_ij), generalising
+    Higgins' I² to the multivariate setting (Cheung, 2014).</li>
+  <li><strong>Q<sub>M</sub></strong> — omnibus Wald test of β = 0; χ²(q) where q is the
+    number of fixed-effect parameters. Shown only when moderators are present.</li>
+</ul>
+
+<p><strong>Caution on over-parameterisation:</strong> The UN structure requires
+P(P+1)/2 parameters to estimate Ψ. As a rough guideline, each variance parameter
+needs at least 3–5 studies to estimate reliably; the app will warn when the ratio
+is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
+        citations: [
+          "Berkey, C. S., Hoaglin, D. C., Antczak-Bouckoms, A., Mosteller, F., &amp; Colditz, G. A. (1998). Meta-analysis of multiple outcomes by regression with random effects. <em>Statistics in Medicine</em>, 17(22), 2537–2550.",
+          "Cheung, M. W.-L. (2014). Modeling dependent effect sizes with three-level meta-analyses: a structural equation modeling approach. <em>Psychological Methods</em>, 19(2), 211–229.",
+          "Jackson, D., Riley, R., &amp; White, I. R. (2011). Multivariate meta-analysis: Potential and promise. <em>Statistics in Medicine</em>, 30(20), 2481–2498.",
+          "Riley, R. D., Abrams, K. R., Sutton, A. J., Lambert, P. C., &amp; Thompson, J. R. (2007). Bivariate random-effects meta-analysis and the estimation of between-study correlation. <em>BMC Medical Research Methodology</em>, 7, 3.",
+          "Viechtbauer, W. (2010). Conducting meta-analyses in R with the metafor package. <em>Journal of Statistical Software</em>, 36(3), 1–48.",
+        ],
+      },
+
+    ],
+  },
+
 ];
 
 // ------------------------------------------------------------------ //
 // Cross-link map: help.js key → guide topic id                        //
 // ------------------------------------------------------------------ //
 export const HELP_TO_GUIDE = {
+  "mv.model":         "guide-multivariate",
+  "mv.struct":        "guide-multivariate",
+  "mv.forest":        "guide-multivariate",
+  "mv.method":        "guide-multivariate",
+  "mv.rho":           "guide-multivariate",
   "effect.SMD":       "guide-smd",
   "effect.SMDH":      "guide-smdh",
   "effect.SMD1":      "guide-smd1",
@@ -3023,13 +3374,13 @@ export const HELP_TO_GUIDE = {
   "effect.R2":        "guide-r2",
   "effect.ZR2":       "guide-r2",
   "effect.PHI":       "guide-proportions",
-  "effect.RTET":      "guide-proportions",
+  "effect.RTET":      "guide-rpb",
   "effect.PR":        "guide-proportions",
   "effect.PLN":       "guide-proportions",
   "effect.PLO":       "guide-proportions",
   "effect.PAS":       "guide-proportions",
   "effect.PFT":       "guide-proportions",
-  "effect.GOR":       "guide-or",
+  "effect.GOR":       "guide-yuq",
   "effect.GENERIC":   "guide-generic",
   "tau.DL":           "guide-dl",
   "tau.REML":         "guide-reml",
@@ -3050,6 +3401,7 @@ export const HELP_TO_GUIDE = {
   "ci.KH":            "guide-ci-kh",
   "ci.t":             "guide-ci-t",
   "ci.PL":            "guide-ci-pl",
+  "ci.width":         "guide-ci-normal",
   "het.Q":            "guide-cochran-q",
   "het.I2":           "guide-i2",
   "het.tau2":         "guide-tau2",
@@ -3079,6 +3431,10 @@ export const HELP_TO_GUIDE = {
   "bias.pcurve":      "guide-pcurve",
   "bias.puniform":    "guide-puniform",
   "sel.model":        "guide-selection-model",
+  "sel.halfnorm":     "guide-sel-halfnorm",
+  "sel.power":        "guide-sel-power",
+  "sel.negexp":       "guide-sel-negexp",
+  "sel.beta":         "guide-sel-beta",
   "diag.blup":        "guide-blup",
   "diag.baujat":      "guide-baujat",
   "diag.labbe":       "guide-labbe",
@@ -3091,7 +3447,8 @@ export const HELP_TO_GUIDE = {
   "diag.metaregression": "guide-metaregression",
   "mreg.lrt":            "guide-metaregression",
   "mreg.contrasts":      "guide-custom-contrasts",
-  "diag.nonlinear-reg":  "guide-nonlinear-reg",
+  "perm.run":            "guide-permutation-test",
+  "perm.iter":           "guide-permutation-test",
   "diag.locationscale":  "guide-location-scale",
   "input.scaleModerators": "guide-location-scale",
   "diag.qqplot":         "guide-qqplot",
@@ -3099,10 +3456,12 @@ export const HELP_TO_GUIDE = {
   "reg.aic":             "guide-aic-bic",
   "reg.mcc":             "guide-mcc",
   "input.moderators":    "guide-subgroup",
+  "input.interactions":  "guide-interactions",
   "input.rob":           "guide-rob",
   "bayes.model":         "guide-bayes-meta",
   "bayes.tau":           "guide-bayes-meta",
   "bayes.sensitivity":   "guide-prior-sensitivity",
+  "plot.theme":          "guide-plot-themes",
   "plot.forest":         "guide-forest",
   "plot.funnel":         "guide-funnel-plot",
   "plot.cumulative":     "guide-cumulative",
@@ -3113,6 +3472,7 @@ export const HELP_TO_GUIDE = {
   "tau.Peto":            "guide-mantel-haenszel",
   "cluster.id":          "guide-cluster-robust",
   "cluster.robust":      "guide-cluster-robust",
+  "rve.model":           "guide-rve",
   "threelevel.model":    "guide-three-level",
   "threelevel.tau2":     "guide-three-level",
   "threelevel.I2":       "guide-three-level",

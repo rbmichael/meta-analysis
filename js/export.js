@@ -1,7 +1,14 @@
 // =============================================================================
 // export.js — SVG, PNG, and TIFF plot export
 // =============================================================================
-// Exports three public functions:
+// Exports
+//
+//   serializeSVG(svgEl) → string
+//     Clone + self-contained SVG string (shared by report.js, docx.js).
+//
+//   collectPagedSVGs(svgId, drawFn, drawArgs, options) → string[]
+//     Render every page of a paginated plot into SVG strings.
+//     Replaces the three near-identical collectors that lived in report.js.
 //
 //   exportSVG(svgEl, filename)
 //     Clones the SVG, makes it self-contained, and downloads it as a .svg file.
@@ -150,6 +157,60 @@ function prepareSVGClone(svgEl) {
   }
 
   return clone;
+}
+
+// Serialize a live SVG element to a self-contained SVG string.
+// Shared by report.js (HTML report) and docx.js (OOXML export) so both
+// produce identical output — resolves CSS vars, injects background if absent,
+// and sets explicit width/height from getBoundingClientRect when not present.
+export function serializeSVG(svgEl) {
+  if (!svgEl) return "";
+  const clone = svgEl.cloneNode(true);
+  clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+  const w = clone.getAttribute("width")  || String(svgEl.getBoundingClientRect().width);
+  const h = clone.getAttribute("height") || String(svgEl.getBoundingClientRect().height);
+  clone.setAttribute("width",  w);
+  clone.setAttribute("height", h);
+  resolveThemeVars(clone);
+  if (!hasEmbeddedBackground(clone)) {
+    const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    bg.setAttribute("width",  "100%");
+    bg.setAttribute("height", "100%");
+    bg.setAttribute("fill", currentBgColour());
+    clone.insertBefore(bg, clone.firstChild);
+  }
+  return new XMLSerializer().serializeToString(clone);
+}
+
+// Render every page of a paginated plot into SVG strings.
+// drawFn is called as drawFn(...drawArgs, { ...options, page: p }).
+// The originally-displayed page is restored before returning.
+export function collectPagedSVGs(svgId, drawFn, drawArgs, options) {
+  const svgEl = document.getElementById(svgId);
+  if (!svgEl) return [];
+  const svgs = [];
+  let totalPages = 1;
+  try {
+    ({ totalPages } = drawFn(...drawArgs, { ...options, page: 0 }));
+    svgs.push(serializeSVG(svgEl));
+  } catch (e) {
+    console.error(`collectPagedSVGs(${svgId}): failed to render page 0`, e);
+    return [];
+  }
+  for (let p = 1; p < totalPages; p++) {
+    try {
+      drawFn(...drawArgs, { ...options, page: p });
+      svgs.push(serializeSVG(svgEl));
+    } catch (e) {
+      console.error(`collectPagedSVGs(${svgId}): failed to render page ${p}`, e);
+    }
+  }
+  try {
+    drawFn(...drawArgs, { ...options, page: options.currentPage ?? 0 });
+  } catch (e) {
+    console.error(`collectPagedSVGs(${svgId}): failed to restore page`, e);
+  }
+  return svgs;
 }
 
 // ----------- public API -----------

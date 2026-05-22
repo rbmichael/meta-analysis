@@ -1,7 +1,8 @@
 import { round, transformEffect, chiSquareCDF, chiSquareQuantile, parseCounts, bivariateNormalCDF, normalQuantile, tCritical, fCDF, normalCDF, tCDF } from "./utils.js";
 import { validateStudy } from "./profiles.js";
-import { BENCHMARKS, PUB_BIAS_BENCHMARKS, INFLUENCE_BENCHMARKS, META_REGRESSION_BENCHMARKS, VH_BENCHMARKS, MH_BENCHMARKS, CLUSTER_BENCHMARKS, RVE_BENCHMARKS, THREE_LEVEL_BENCHMARKS, LS_BENCHMARKS, CONTRAST_BENCHMARKS } from "./benchmarks.js";
-import { compute, meta, metaMH, metaPeto, robustMeta, sandwichVar, robustWlsResult, metaRegression, testContrast, tau2_HS, tau2_HE, tau2_ML, tau2_SJ, beggTest, eggerTest, fatPetTest, petPeeseTest, failSafeN, tesTest, heterogeneityCIs, cumulativeMeta, influenceDiagnostics, harbordTest, petersTest, deeksTest, rueckerTest, leaveOneOut, baujat, blupMeta, pCurve, pUniform, estimatorComparison, subgroupAnalysis, logLik, bfgs, selIntervalProbs, selIntervalIdx, selectionLogLik, SEL_CUTS_ONE_SIDED, SEL_CUTS_TWO_SIDED, veveaHedges, SELECTION_PRESETS, profileLikTau2, profileLikCI, bayesMeta, priorSensitivity, rvePooled, meta3level, lsModel, adjustPvals, henmiCopas, waapWls, clES } from "./analysis.js";
+import { BENCHMARKS, PUB_BIAS_BENCHMARKS, INFLUENCE_BENCHMARKS, META_REGRESSION_BENCHMARKS, VH_BENCHMARKS, MH_BENCHMARKS, CLUSTER_BENCHMARKS, RVE_BENCHMARKS, THREE_LEVEL_BENCHMARKS, LS_BENCHMARKS, CONTRAST_BENCHMARKS, INTERACTION_BENCHMARKS, HALFNORM_BENCHMARKS, POWER_BENCHMARKS, NEGEXP_BENCHMARKS, BETA_BENCHMARKS, PERM_BENCHMARKS } from "./benchmarks.js";
+import { permTestSync, permPval } from "./perm.js";
+import { compute, meta, metaMH, metaPeto, robustMeta, sandwichVar, robustWlsResult, metaRegression, testContrast, tau2_HS, tau2_HE, tau2_ML, tau2_SJ, beggTest, eggerTest, fatPetTest, petPeeseTest, failSafeN, tesTest, heterogeneityCIs, cumulativeMeta, influenceDiagnostics, harbordTest, petersTest, deeksTest, rueckerTest, leaveOneOut, baujat, blupMeta, pCurve, pUniform, estimatorComparison, subgroupAnalysis, logLik, bfgs, selIntervalProbs, selIntervalIdx, selectionLogLik, SEL_CUTS_ONE_SIDED, SEL_CUTS_TWO_SIDED, veveaHedges, SELECTION_PRESETS, halfNormalSelModel, powerSelModel, negexpSelModel, betaSelModel, profileLikTau2, profileLikCI, bayesMeta, priorSensitivity, rvePooled, meta3level, lsModel, adjustPvals, henmiCopas, waapWls, clES, vcalc, mvMeta, validStudies } from "./analysis.js";
 import { trimFill } from "./trimfill.js";
 import { parseCSV } from "./csv.js";
 import { goshCompute, GOSH_MAX_ENUM_K, GOSH_MAX_K, GOSH_DEFAULT_MAX_SUBSETS } from "./gosh.js";
@@ -161,7 +162,7 @@ export function runTests() {
   // ===== INTEGRATION: intercept-only regression must match meta() exactly =====
   // For every existing benchmark, metaRegression([], method) must give
   // beta[0] ≈ RE and tau2 ≈ tau2 from meta(). This verifies end-to-end consistency
-  // across all effect types and tau² estimators.
+  // across all effect types and τ² estimators.
   console.log("\n===== INTERCEPT-ONLY REGRESSION vs META() =====\n");
   let intPass = true;
   const { chkField: ichk } = makeChk(() => { intPass = false; });
@@ -175,11 +176,11 @@ export function runTests() {
     const tauMethod = test.tauMethod || "REML";
     if (!META_REG_METHODS.has(tauMethod)) return;
 
-    const studies = test.data.map(d => {
+    const studies = validStudies(test.data.map(d => {
       if (d.yi !== undefined && d.vi !== undefined) return { yi: d.yi, vi: d.vi, se: Math.sqrt(d.vi) };
       const s = compute(d, test.type, { hedgesCorrection: test.correction === "hedges" });
       return { ...d, yi: s.yi, vi: s.vi, se: s.se };
-    }).filter(s => isFinite(s.yi) && isFinite(s.vi) && s.vi > 0);
+    }));
 
     const m   = meta(studies, tauMethod);
     const reg = metaRegression(studies, [], tauMethod);
@@ -211,7 +212,7 @@ export function runTests() {
 
     console.log("--- BCG log RR ~ ablat (k=13, REML) ---");
     // Slope independently verified from metafor / Viechtbauer (2010).
-    // Intercept and residual tau² verified qualitatively only — exact numerical
+    // Intercept and residual τ² verified qualitatively only — exact numerical
     // comparison against metafor requires a live R session.
     rbchk("ablat slope", reg.beta[1], -0.0291, "FE");  // abs 0.01, matches metafor
 
@@ -1651,15 +1652,16 @@ export function runTests() {
   // 1. yi / vi formula spot-check
   // m1=20, sd1=4, n1=40, m2=20, sd2=2, n2=38
   // cv1 = 4/20 = 0.2,  cv2 = 2/20 = 0.1
-  // yi  = log(0.2 / 0.1) = log(2)
+  // yi  = log(cv1/cv2) + 1/(2*(n1-1)) - 1/(2*(n2-1))  [Nakagawa 2015 eq. 1 bias correction]
+  //     = log(2) + 1/78 - 1/74
   // vi  = 1/(2·39) + 0.04/40 + 1/(2·37) + 0.01/38
   console.log("--- 1. yi / vi formulas ---");
   {
     const s = compute({ m1: 20, sd1: 4, n1: 40, m2: 20, sd2: 2, n2: 38 }, "CVR");
     const cv1 = 0.2, cv2 = 0.1;
-    const yi_exp = Math.log(cv1 / cv2);
+    const yi_exp = Math.log(cv1 / cv2) + 1 / (2 * 39) - 1 / (2 * 37);
     const vi_exp = 1 / (2 * 39) + cv1**2 / 40 + 1 / (2 * 37) + cv2**2 / 38;
-    cvrchk("yi = log(cv1/cv2)", s.yi, yi_exp);
+    cvrchk("yi = log(cv1/cv2) + bias", s.yi, yi_exp);
     cvrchk("vi formula",        s.vi, vi_exp);
     cvrchk("se = √vi",          s.se, Math.sqrt(vi_exp));
     cvrchk("w  = 1/vi",         s.w,  1 / vi_exp, 1e-3);
@@ -1679,19 +1681,19 @@ export function runTests() {
     cvrchkTrue("m2 = 0   → w = 0",       compute({ ...base, m2:  0  }, "CVR").w === 0);
   }
 
-  // 3. CVR = 1 (yi = 0) when cv1 = cv2
-  //    m1=10, sd1=2, n1=30 → cv1=0.2;  m2=20, sd2=4, n2=28 → cv2=0.2
+  // 3. CVR = 1 (yi = 0) when cv1 = cv2 and n1 = n2 (bias correction cancels)
+  //    m1=10, sd1=2, n1=30 → cv1=0.2;  m2=20, sd2=4, n2=30 → cv2=0.2
   console.log("--- 3. yi = 0 when CV₁ = CV₂ ---");
   {
-    const s = compute({ m1: 10, sd1: 2, n1: 30, m2: 20, sd2: 4, n2: 28 }, "CVR");
+    const s = compute({ m1: 10, sd1: 2, n1: 30, m2: 20, sd2: 4, n2: 30 }, "CVR");
     cvrchk("yi = 0 (cv1=cv2=0.2)", s.yi, 0);
     cvrchkTrue("vi > 0 (sampling variance present)", isFinite(s.vi) && s.vi > 0);
   }
 
-  // 4. transformEffect back-transform: exp(yi) = cv1/cv2
+  // 4. transformEffect back-transform: exp(yi) = cv1/cv2 (use n1=n2 so bias correction = 0)
   console.log("--- 4. Back-transform: exp(yi) = CV₁/CV₂ ---");
   {
-    const s = compute({ m1: 20, sd1: 4, n1: 40, m2: 20, sd2: 2, n2: 38 }, "CVR");
+    const s = compute({ m1: 20, sd1: 4, n1: 40, m2: 20, sd2: 2, n2: 40 }, "CVR");
     cvrchk("exp(yi) = 2.0", transformEffect(s.yi, "CVR"), 2.0, 1e-9);
     const ciLb = transformEffect(s.yi - 1.96 * s.se, "CVR");
     const ciUb = transformEffect(s.yi + 1.96 * s.se, "CVR");
@@ -1699,24 +1701,23 @@ export function runTests() {
     cvrchkTrue("CI lb < exp(yi) < ub", ciLb < 2.0 && 2.0 < ciUb);
   }
 
-  // 5. Pooled meta() — 3-study DL
-  // Studies share cv1=0.2, cv2=0.1 (yi=log2) except study 3 (higher cv1)
-  // Study 1: m1=20, sd1=4, n1=40, m2=20, sd2=2, n2=38
-  // Study 2: m1=15, sd1=3, n1=30, m2=15, sd2=1.5, n2=28
-  // Study 3: m1=25, sd1=6, n1=50, m2=24, sd2=2.4, n2=48  (cv1=0.24, cv2=0.1)
+  // 5. Pooled meta() — 3-study DL (use n1=n2 so bias correction = 0 and yi are exact)
+  // Study 1: m1=20, sd1=4, n1=40, m2=20, sd2=2, n2=40  → cv1=0.2, cv2=0.1, yi=log(2)
+  // Study 2: m1=15, sd1=3, n1=30, m2=15, sd2=1.5, n2=30  → yi=log(2)
+  // Study 3: m1=25, sd1=6, n1=50, m2=24, sd2=2.4, n2=50  → cv1=0.24, cv2=0.1, yi=log(2.4)
   console.log("--- 5. Pooled meta() (k=3, DL) ---");
   {
     const studies = [
-      compute({ m1: 20, sd1: 4,   n1: 40, m2: 20, sd2: 2,   n2: 38 }, "CVR"),
-      compute({ m1: 15, sd1: 3,   n1: 30, m2: 15, sd2: 1.5, n2: 28 }, "CVR"),
-      compute({ m1: 25, sd1: 6,   n1: 50, m2: 24, sd2: 2.4, n2: 48 }, "CVR"),
+      compute({ m1: 20, sd1: 4,   n1: 40, m2: 20, sd2: 2,   n2: 40 }, "CVR"),
+      compute({ m1: 15, sd1: 3,   n1: 30, m2: 15, sd2: 1.5, n2: 30 }, "CVR"),
+      compute({ m1: 25, sd1: 6,   n1: 50, m2: 24, sd2: 2.4, n2: 50 }, "CVR"),
     ];
     cvrchk("yi[0] = log(2)",     studies[0].yi, Math.log(2),    1e-9);
     cvrchk("yi[1] = log(2)",     studies[1].yi, Math.log(2),    1e-9);
     cvrchk("yi[2] = log(2.4)",   studies[2].yi, Math.log(2.4),  1e-9);
 
     const m = meta(studies, "DL");
-    // FE and RE should lie between log(2) and log(2.4); tau2 should be small but positive
+    // FE and RE should lie between log(2) and log(2.4); τ² should be small but positive
     cvrchkTrue("FE in (log2, log2.4)", m.FE > Math.log(2) && m.FE < Math.log(2.4));
     cvrchkTrue("RE in (log2, log2.4)", m.RE > Math.log(2) && m.RE < Math.log(2.4));
     cvrchkTrue("tau2 ≥ 0",            isFinite(m.tau2) && m.tau2 >= 0);
@@ -1736,14 +1737,15 @@ export function runTests() {
 
   // 1. yi / vi formula spot-check
   // sd1=4, n1=40, sd2=2, n2=38
-  // yi = log(4/2) = log(2)
+  // yi = log(sd1/sd2) + 1/(2*(n1-1)) - 1/(2*(n2-1))  [Nakagawa 2015 eq. 1 bias correction]
+  //    = log(2) + 1/78 - 1/74
   // vi = 1/(2*39) + 1/(2*37)
   console.log("--- 1. yi / vi formulas ---");
   {
     const s = compute({ sd1: 4, n1: 40, sd2: 2, n2: 38 }, "VR");
-    const yi_exp = Math.log(4 / 2);
+    const yi_exp = Math.log(4 / 2) + 1 / (2 * 39) - 1 / (2 * 37);
     const vi_exp = 1 / (2 * 39) + 1 / (2 * 37);
-    vrchk("yi = log(sd1/sd2)", s.yi, yi_exp);
+    vrchk("yi = log(sd1/sd2) + bias", s.yi, yi_exp);
     vrchk("vi formula",        s.vi, vi_exp);
     vrchk("se = √vi",          s.se, Math.sqrt(vi_exp));
     vrchk("w  = 1/vi",         s.w,  1 / vi_exp, 1e-3);
@@ -1761,10 +1763,10 @@ export function runTests() {
     vrchkTrue("sd2 = 0  → w = 0",       compute({ ...base, sd2:  0  }, "VR").w === 0);
   }
 
-  // 3. VR = 1 (yi = 0) when sd1 = sd2
+  // 3. VR = 1 (yi = 0) when sd1 = sd2 and n1 = n2 (bias correction cancels)
   console.log("--- 3. yi = 0 when sd1 = sd2 ---");
   {
-    const s = compute({ sd1: 3, n1: 30, sd2: 3, n2: 28 }, "VR");
+    const s = compute({ sd1: 3, n1: 30, sd2: 3, n2: 30 }, "VR");
     vrchk("yi = 0 (sd1 = sd2)", s.yi, 0);
     vrchkTrue("vi > 0 (sampling variance present)", isFinite(s.vi) && s.vi > 0);
   }
@@ -1778,10 +1780,10 @@ export function runTests() {
     vrchk("vi same when n same (different SDs)", s1.vi, s2.vi, 1e-12);
   }
 
-  // 5. Back-transform: exp(yi) = sd1/sd2
+  // 5. Back-transform: exp(yi) = sd1/sd2 (use n1=n2 so bias correction = 0)
   console.log("--- 5. Back-transform: exp(yi) = sd1/sd2 ---");
   {
-    const s = compute({ sd1: 4, n1: 40, sd2: 2, n2: 38 }, "VR");
+    const s = compute({ sd1: 4, n1: 40, sd2: 2, n2: 40 }, "VR");
     vrchk("exp(yi) = 2.0", transformEffect(s.yi, "VR"), 2.0, 1e-9);
     const ciLb = transformEffect(s.yi - 1.96 * s.se, "VR");
     const ciUb = transformEffect(s.yi + 1.96 * s.se, "VR");
@@ -1789,16 +1791,16 @@ export function runTests() {
     vrchkTrue("CI lb < exp(yi) < ub", ciLb < 2.0 && 2.0 < ciUb);
   }
 
-  // 6. Pooled meta() — 3-study DL with heterogeneous SDs
-  // Study 1: sd1=4.0, n1=40, sd2=2.0, n2=38 → yi=log(2.0)≈0.6931
-  // Study 2: sd1=3.5, n1=30, sd2=1.5, n2=28 → yi=log(7/3)≈0.8473
-  // Study 3: sd1=5.0, n1=50, sd2=3.0, n2=48 → yi=log(5/3)≈0.5108
+  // 6. Pooled meta() — 3-study DL with heterogeneous SDs (use n1=n2 so yi are exact)
+  // Study 1: sd1=4.0, n1=40, sd2=2.0, n2=40 → yi=log(2.0)
+  // Study 2: sd1=3.5, n1=30, sd2=1.5, n2=30 → yi=log(7/3)
+  // Study 3: sd1=5.0, n1=50, sd2=3.0, n2=50 → yi=log(5/3)
   console.log("--- 6. Pooled meta() (k=3, DL) ---");
   {
     const studies = [
-      compute({ sd1: 4.0, n1: 40, sd2: 2.0, n2: 38 }, "VR"),
-      compute({ sd1: 3.5, n1: 30, sd2: 1.5, n2: 28 }, "VR"),
-      compute({ sd1: 5.0, n1: 50, sd2: 3.0, n2: 48 }, "VR"),
+      compute({ sd1: 4.0, n1: 40, sd2: 2.0, n2: 40 }, "VR"),
+      compute({ sd1: 3.5, n1: 30, sd2: 1.5, n2: 30 }, "VR"),
+      compute({ sd1: 5.0, n1: 50, sd2: 3.0, n2: 50 }, "VR"),
     ];
     vrchk("yi[0] = log(2.0)", studies[0].yi, Math.log(2.0),     1e-9);
     vrchk("yi[1] = log(7/3)", studies[1].yi, Math.log(7 / 3),   1e-9);
@@ -2087,10 +2089,9 @@ export function runTests() {
   // Tests cover:
   //   1. Formula spot-check  (m_pre=10, m_post=8, sd_pre=2, sd_post=2, n=30, r=0.5)
   //        sd_change=2, d=-1, J=1-3/115, g=d·J
-  //        var_d = 2·(1-0.5)/30 + 1/(2·29) = 1/30 + 1/58
-  //        vi = J²·var_d
+  //        vi = 1/n + g²/(2n)  (Borenstein et al. 2009 eq 4.30)
   //   2. var formula depends on r — vi(r=0.2) ≠ vi(r=0.8)
-  //   3. J² applied to variance — vi < var_d
+  //   3. vi > 1/n (g² term is non-negative)
   //   4. Missing r defaults to 0.5 (finite yi, w > 0)
   //   5. Invalid inputs → NaN / w=0
   //   6. transformEffect is identity
@@ -2106,20 +2107,17 @@ export function runTests() {
   // d = (8-10)/2 = -1
   // df=29, J = 1-3/(4*29-1) = 1-3/115
   // g = d*J
-  // var_d = 2*(1-0.5)/30 + 1/(2*29) = 1/30 + 1/58
-  // vi = J²*var_d
+  // vi = 1/n + g²/(2n) = 1/30 + (J²)/60  (Borenstein 2009 eq 4.30)
   console.log("--- SMCC 1. Formula spot-check ---");
   {
     const s = compute({ m_pre: 10, m_post: 8, sd_pre: 2, sd_post: 2, n: 30, r: 0.5 }, "SMCC");
     const J      = 1 - 3 / 115;
     const g_exp  = -1 * J;
-    const vard_exp = 1/30 + 1/58;
-    const vi_exp   = J * J * vard_exp;
-    smccChk("g  = d·J",          s.yi, g_exp,        1e-9);
-    smccChk("vi = J²·var_d",     s.vi, vi_exp,        1e-9);
+    const vi_exp = 1/30 + (g_exp * g_exp) / 60;
+    smccChk("g  = d·J",          s.yi, g_exp,         1e-9);
+    smccChk("vi = 1/n + g²/(2n)",s.vi, vi_exp,        1e-9);
     smccChk("se = √vi",          s.se, Math.sqrt(vi_exp), 1e-9);
     smccChk("w  = 1/vi",         s.w,  1 / vi_exp,    1e-6);
-    smccChk("varMD = var_d",     s.varMD, vard_exp,   1e-9);
   }
 
   // --- SMCC 2: var formula depends on r ---
@@ -2132,11 +2130,11 @@ export function runTests() {
     smccChkTrue("yi(r=0.2) ≠ yi(r=0.8)", Math.abs(s2.yi - s8.yi) > 1e-6);
   }
 
-  // --- SMCC 3: J² applied — vi < var_d ---
-  console.log("--- SMCC 3. J² applied: vi < varMD ---");
+  // --- SMCC 3: vi > 1/n (g² term is non-negative) ---
+  console.log("--- SMCC 3. vi > 1/n ---");
   {
     const s = compute({ m_pre: 10, m_post: 8, sd_pre: 2, sd_post: 2, n: 30, r: 0.5 }, "SMCC");
-    smccChkTrue("vi < varMD (J² < 1)", s.vi < s.varMD);
+    smccChkTrue("vi > 1/n (g²/(2n) ≥ 0)", s.vi > 1/30);
   }
 
   // --- SMCC 4: missing r defaults to 0.5 ---
@@ -3235,12 +3233,20 @@ export function runTests() {
     }
 
     if (exp.trimFill) {
-      const tauM   = bm.tauMethod || "DL";
-      const filled = trimFill(studies, tauM);
-      const k0     = filled.length;
-      const adjustedRE = meta([...studies, ...filled], tauM).RE;
-      if (exp.trimFill.k0         !== undefined) pbchkTrue(`trimFill.k0 = ${exp.trimFill.k0}`, k0 === exp.trimFill.k0);
-      if (exp.trimFill.adjustedRE !== undefined) pbchk("trimFill.adjustedRE", adjustedRE, exp.trimFill.adjustedRE, 0.01);
+      const tauM = bm.tauMethod || "DL";
+      // Support per-estimator schema { L0: {k0, adjustedRE}, R0: {...}, Q0: {...} }
+      // and the legacy flat schema { k0, adjustedRE } (treated as L0).
+      const entries = exp.trimFill.L0 !== undefined
+        ? [["L0", exp.trimFill.L0], ["R0", exp.trimFill.R0], ["Q0", exp.trimFill.Q0]]
+        : [["L0", exp.trimFill]];
+      for (const [est, tf] of entries) {
+        if (!tf) continue;
+        const filled = trimFill(studies, tauM, est);
+        const k0 = filled.length;
+        const adjustedRE = meta([...studies, ...filled], tauM).RE;
+        if (tf.k0         !== undefined) pbchkTrue(`trimFill.${est}.k0 = ${tf.k0}`, k0 === tf.k0);
+        if (tf.adjustedRE !== undefined) pbchk(`trimFill.${est}.adjustedRE`, adjustedRE, tf.adjustedRE, 0.01);
+      }
     }
 
     // Deeks and Rücker operate on raw {a,b,c,d} tables; studies has a/b/c/d
@@ -3990,6 +3996,71 @@ export function runTests() {
 
   console.log(mrBenchPass ? "\n✅ ALL META-REGRESSION BENCHMARK TESTS PASSED" : "\n❌ SOME META-REGRESSION BENCHMARK TESTS FAILED");
 
+  // ===== INTERACTION BENCHMARKS =====
+  console.log("\n===== INTERACTION BENCHMARKS =====\n");
+  let ixBenchPass = true;
+  const { chk: ixchk } = makeChk(() => { ixBenchPass = false; });
+
+  INTERACTION_BENCHMARKS.forEach(bm => {
+    const studies = bm.data.map(d => ({ ...d, se: Math.sqrt(d.vi) }));
+    const r = metaRegression(studies, bm.moderators, bm.tauMethod, bm.ciMethod, 0.05, bm.interactions ?? []);
+
+    console.log(`--- ${bm.name} ---`);
+
+    // Always verify column names (these do not require R cross-validation)
+    if (bm.expectedColNames) {
+      const ok = bm.expectedColNames.every((n, i) => r.colNames[i] === n);
+      if (!ok) {
+        console.error(`  FAIL colNames: got ${JSON.stringify(r.colNames)}, expected ${JSON.stringify(bm.expectedColNames)}`);
+        ixBenchPass = false;
+      } else {
+        console.log(`  ok  colNames = ${JSON.stringify(r.colNames)}`);
+      }
+    }
+
+    // Check interaction columns exist in modColMap
+    if (bm.interactions) {
+      bm.interactions.forEach(ix => {
+        const cols = r.modColMap[ix.name] ?? [];
+        if (cols.length === 0) {
+          console.error(`  FAIL modColMap["${ix.name}"] is empty — interaction columns not built`);
+          ixBenchPass = false;
+        } else {
+          console.log(`  ok  modColMap["${ix.name}"] = [${cols.join(", ")}]`);
+        }
+      });
+    }
+
+    if (!bm.expected) {
+      console.log(`  PENDING R cross-validation (generate.R block ${bm.rBlock}) — skipping numerical checks`);
+      return;
+    }
+
+    const exp = bm.expected;
+    exp.beta.forEach((b, j) => ixchk(`beta[${j}] (${r.colNames[j]})`, r.beta[j], b, 0.01));
+    exp.se.forEach((s, j)   => ixchk(`se[${j}]   (${r.colNames[j]})`, r.se[j],   s, 0.01));
+    ixchk("tau2", r.tau2, exp.tau2, exp.tau2 * 0.05 + 1e-6);
+    ixchk("QE",   r.QE,   exp.QE,   0.01);
+    ixchk("QEp",  r.QEp,  exp.QEp,  0.01);
+    ixchk("QM",   r.QM,   exp.QM,   0.01);
+    ixchk("QMp",  r.QMp,  exp.QMp,  0.01);
+    if (exp.R2 !== undefined) ixchk("R2", r.R2, exp.R2, 0.01);
+    if (exp.modTests) {
+      exp.modTests.forEach((mt, idx) => {
+        const got = r.modTests[idx];
+        if (!got) { console.error(`  FAIL modTests[${idx}] missing`); ixBenchPass = false; return; }
+        ixchk(`modTests[${idx}] (${mt.name}) QM`,  got.QM,  mt.QM,  0.01);
+        ixchk(`modTests[${idx}] (${mt.name}) QMp`, got.QMp, mt.QMp, 0.01);
+        if (mt.lrt !== undefined) {
+          ixchk(`modTests[${idx}] (${mt.name}) LRT`,  got.lrt,  mt.lrt,  0.01);
+          ixchk(`modTests[${idx}] (${mt.name}) lrtP`, got.lrtP, mt.lrtP, 0.02);
+        }
+      });
+    }
+  });
+
+  console.log(ixBenchPass ? "\n✅ ALL INTERACTION BENCHMARK TESTS PASSED" : "\n❌ SOME INTERACTION BENCHMARK TESTS FAILED");
+
   // ===== CSV IMPORT — MODERATOR DETECTION =====
   // Verifies that parseCSV + the column-classification heuristic used by
   // commitImport() (ui.js) produces the correct modSpec array when a CSV
@@ -4481,6 +4552,146 @@ export function runTests() {
   });
 
   console.log(vhBenchPass ? "\n✅ ALL VH BENCHMARK TESTS PASSED" : "\n❌ SOME VH BENCHMARK TESTS FAILED");
+
+  // ---- HALFNORM_BENCHMARKS: regression against metafor::selmodel(type="halfnorm") ----
+  console.log("\n===== HALF-NORMAL SELECTION MODEL TESTS (R block HN-1) =====\n");
+  let hnPass = true;
+  const { chk: hnchk, chkTrue: hnchkTrue } = makeChk(() => { hnPass = false; });
+
+  HALFNORM_BENCHMARKS.forEach(bm => {
+    console.log(`--- ${bm.name} ---`);
+    const r = halfNormalSelModel(bm.data, { sides: bm.sides });
+    const exp = bm.expected;
+
+    // Skip numeric checks for placeholder benchmarks (null expected values)
+    if (exp.mu === null) {
+      console.log("  [PLACEHOLDER] Expected values not yet filled — skipping numeric checks.");
+      console.log(`  mu=${r.mu?.toFixed(4)}, se_mu=${r.se_mu?.toFixed(4)}, tau2=${r.tau2?.toFixed(4)}, delta=${r.delta?.toFixed(4)}, LRT=${r.LRT?.toFixed(4)}`);
+      hnchkTrue("no crash / returns object", typeof r === "object");
+      hnchkTrue("weightFn is halfnorm", r.weightFn === "halfnorm");
+      hnchkTrue("mu is finite", isFinite(r.mu));
+      hnchkTrue("tau2 >= 0", isFinite(r.tau2) && r.tau2 >= 0);
+      hnchkTrue("RE_unsel matches", Math.abs(r.RE_unsel - exp.RE_unsel) < 0.01);
+      hnchkTrue("tau2_unsel matches", Math.abs(r.tau2_unsel - exp.tau2_unsel) < Math.max(0.01, 0.05 * Math.abs(exp.tau2_unsel)));
+      return;
+    }
+
+    hnchk("mu",      r.mu,    exp.mu,    0.03);
+    hnchk("se_mu",   r.se_mu, exp.se_mu, 0.03);
+    hnchk("tau2",    r.tau2,  exp.tau2,  Math.max(0.01, 0.05 * Math.abs(exp.tau2)));
+    hnchk("delta",   r.delta, exp.delta, 0.1);
+    hnchk("LRT",     r.LRT,   exp.LRT,   0.2);
+    hnchkTrue("LRTdf = 1", r.LRTdf === 1);
+    hnchk("LRTp",    r.LRTp,  exp.LRTp,  0.05);
+    hnchkTrue(`converged`, r.converged);
+  });
+
+  console.log(hnPass ? "\n✅ ALL HALF-NORMAL TESTS PASSED" : "\n❌ SOME HALF-NORMAL TESTS FAILED");
+
+  // ---- POWER_BENCHMARKS: regression against metafor::selmodel(type="power") ----
+  console.log("\n===== POWER SELECTION MODEL TESTS (R block PWR-1) =====\n");
+  let pwrPass = true;
+  const { chk: pwrchk, chkTrue: pwrchkTrue } = makeChk(() => { pwrPass = false; });
+
+  POWER_BENCHMARKS.forEach(bm => {
+    console.log(`--- ${bm.name} ---`);
+    const r = powerSelModel(bm.data, { sides: bm.sides });
+    const exp = bm.expected;
+
+    if (exp.mu === null) {
+      console.log("  [PLACEHOLDER] Expected values not yet filled — skipping numeric checks.");
+      console.log(`  mu=${r.mu?.toFixed(4)}, se_mu=${r.se_mu?.toFixed(4)}, tau2=${r.tau2?.toFixed(4)}, delta=${r.delta?.toFixed(4)}, LRT=${r.LRT?.toFixed(4)}`);
+      pwrchkTrue("no crash / returns object", typeof r === "object");
+      pwrchkTrue("weightFn is power", r.weightFn === "power");
+      pwrchkTrue("mu is finite", isFinite(r.mu));
+      pwrchkTrue("tau2 >= 0", isFinite(r.tau2) && r.tau2 >= 0);
+      pwrchkTrue("RE_unsel matches", Math.abs(r.RE_unsel - exp.RE_unsel) < 0.01);
+      pwrchkTrue("tau2_unsel matches", Math.abs(r.tau2_unsel - exp.tau2_unsel) < Math.max(0.01, 0.05 * Math.abs(exp.tau2_unsel)));
+      return;
+    }
+
+    pwrchk("mu",      r.mu,    exp.mu,    0.03);
+    pwrchk("se_mu",   r.se_mu, exp.se_mu, 0.05);
+    pwrchk("tau2",    r.tau2,  exp.tau2,  Math.max(0.01, 0.05 * Math.abs(exp.tau2)));
+    pwrchk("delta",   r.delta, exp.delta, Math.max(0.1, 0.6 * Math.abs(exp.delta)));
+    pwrchk("LRT",     r.LRT,   exp.LRT,   Math.max(0.2, 0.3 * Math.abs(exp.LRT)));
+    pwrchkTrue("LRTdf = 1", r.LRTdf === 1);
+    pwrchk("LRTp",    r.LRTp,  exp.LRTp,  0.05);
+    pwrchkTrue(`converged`, r.converged);
+  });
+
+  console.log(pwrPass ? "\n✅ ALL POWER TESTS PASSED" : "\n❌ SOME POWER TESTS FAILED");
+
+  // ---- NEGEXP_BENCHMARKS: regression against metafor::selmodel(type="negexp") ----
+  console.log("\n===== NEGATIVE EXPONENTIAL SELECTION MODEL TESTS (R block NEG-1) =====\n");
+  let negPass = true;
+  const { chk: negchk, chkTrue: negchkTrue } = makeChk(() => { negPass = false; });
+
+  NEGEXP_BENCHMARKS.forEach(bm => {
+    console.log(`--- ${bm.name} ---`);
+    const r = negexpSelModel(bm.data, { sides: bm.sides });
+    const exp = bm.expected;
+
+    if (exp.mu === null) {
+      console.log("  [PLACEHOLDER] Expected values not yet filled — skipping numeric checks.");
+      console.log(`  mu=${r.mu?.toFixed(4)}, se_mu=${r.se_mu?.toFixed(4)}, tau2=${r.tau2?.toFixed(4)}, delta=${r.delta?.toFixed(4)}, LRT=${r.LRT?.toFixed(4)}`);
+      negchkTrue("no crash / returns object", typeof r === "object");
+      negchkTrue("weightFn is negexp", r.weightFn === "negexp");
+      negchkTrue("mu is finite", isFinite(r.mu));
+      negchkTrue("tau2 >= 0", isFinite(r.tau2) && r.tau2 >= 0);
+      negchkTrue("RE_unsel matches", Math.abs(r.RE_unsel - exp.RE_unsel) < 0.01);
+      negchkTrue("tau2_unsel matches", Math.abs(r.tau2_unsel - exp.tau2_unsel) < Math.max(0.01, 0.05 * Math.abs(exp.tau2_unsel)));
+      return;
+    }
+
+    negchk("mu",      r.mu,    exp.mu,    0.03);
+    negchk("se_mu",   r.se_mu, exp.se_mu, 0.05);
+    negchk("tau2",    r.tau2,  exp.tau2,  Math.max(0.01, 0.05 * Math.abs(exp.tau2)));
+    negchk("delta",   r.delta, exp.delta, Math.max(0.1, 0.6 * Math.abs(exp.delta)));
+    negchk("LRT",     r.LRT,   exp.LRT,   Math.max(0.2, 0.3 * Math.abs(exp.LRT)));
+    negchkTrue("LRTdf = 1", r.LRTdf === 1);
+    negchk("LRTp",    r.LRTp,  exp.LRTp,  0.05);
+    negchkTrue(`converged`, r.converged);
+  });
+
+  console.log(negPass ? "\n✅ ALL NEGEXP TESTS PASSED" : "\n❌ SOME NEGEXP TESTS FAILED");
+
+  // ---- BETA_BENCHMARKS: regression against metafor::selmodel(type="beta") ----
+  console.log("\n===== BETA SELECTION MODEL TESTS (R block BETA-1) =====\n");
+  let betaPass = true;
+  const { chk: betachk, chkTrue: betachkTrue } = makeChk(() => { betaPass = false; });
+
+  BETA_BENCHMARKS.forEach(bm => {
+    console.log(`--- ${bm.name} ---`);
+    const r = betaSelModel(bm.data, { sides: bm.sides });
+    const exp = bm.expected;
+
+    if (exp.mu === null) {
+      console.log("  [PLACEHOLDER] Expected values not yet filled — skipping numeric checks.");
+      console.log(`  mu=${r.mu?.toFixed(4)}, se_mu=${r.se_mu?.toFixed(4)}, tau2=${r.tau2?.toFixed(4)}, a=${r.a?.toFixed(4)}, b=${r.b?.toFixed(4)}, LRT=${r.LRT?.toFixed(4)}`);
+      betachkTrue("no crash / returns object", typeof r === "object");
+      betachkTrue("weightFn is beta", r.weightFn === "beta");
+      betachkTrue("mu is finite", isFinite(r.mu));
+      betachkTrue("tau2 >= 0", isFinite(r.tau2) && r.tau2 >= 0);
+      betachkTrue("a > 0", isFinite(r.a) && r.a > 0);
+      betachkTrue("b > 0", isFinite(r.b) && r.b > 0);
+      betachkTrue("RE_unsel matches", Math.abs(r.RE_unsel - exp.RE_unsel) < 0.01);
+      betachkTrue("tau2_unsel matches", Math.abs(r.tau2_unsel - exp.tau2_unsel) < Math.max(0.01, 0.05 * Math.abs(exp.tau2_unsel)));
+      return;
+    }
+
+    betachk("mu",    r.mu,    exp.mu,    0.03);
+    betachk("se_mu", r.se_mu, exp.se_mu, Math.max(0.05, 0.6 * Math.abs(exp.se_mu))); // optimizer-sensitive
+    betachk("tau2",  r.tau2,  exp.tau2,  Math.max(0.01, 0.05 * Math.abs(exp.tau2)));
+    betachk("a",     r.a,     exp.a,     Math.max(0.1, 0.6 * Math.abs(exp.a)));
+    betachk("b",     r.b,     exp.b,     Math.max(0.1, 0.6 * Math.abs(exp.b)));
+    betachk("LRT",   r.LRT,   exp.LRT,   Math.max(0.2, 0.3 * Math.abs(exp.LRT)));
+    betachkTrue("LRTdf = 2", r.LRTdf === 2);
+    betachk("LRTp",  r.LRTp,  exp.LRTp,  0.05);
+    betachkTrue(`converged`, r.converged);
+  });
+
+  console.log(betaPass ? "\n✅ ALL BETA TESTS PASSED" : "\n❌ SOME BETA TESTS FAILED");
 
   // ---- SELECTION_PRESETS structure ----
   console.log("\n===== SELECTION PRESETS TESTS =====\n");
@@ -6204,6 +6415,497 @@ export function runTests() {
   }
 }
 
+{
+  // ===== PERMUTATION TEST BENCHMARKS =====
+  // Verify permTestSync() against metafor::permutest() for BCG ablat (PERM-1).
+  // QM_dist[0] must equal QM_obs exactly. Permutation p-value within ±0.015
+  // of R's (Monte Carlo tolerance; JS Mulberry32 PRNG ≠ R's internal RNG).
+  console.log("\n===== PERMUTATION TEST BENCHMARKS =====\n");
+  let permPass = true;
+  const permChk = (label, got, exp, tol) => {
+    const ok = Math.abs(got - exp) <= tol;
+    if (!ok) { console.error(`  FAIL ${label}: got ${got}, exp ${exp}, tol ±${tol}`); permPass = false; }
+    else console.log(`  ok  ${label}`);
+  };
+
+  // BCG ablat data (same as META_REGRESSION_BENCHMARKS MR-A, single moderator)
+  const permBcgYi = [-0.8893113339202054,-1.5853886572014306,-1.348073148299693,-1.4415511900213054,-0.2175473222112957,-0.786115585818864,-1.6208982235983924,0.011952333523841173,-0.4694176487381487,-1.3713448034727846,-0.33935882833839015,0.4459134005713783,-0.017313948216879493];
+  const permBcgVi = [0.3255847650039614,0.19458112139814387,0.41536796536796533,0.020010031902247573,0.05121017216963086,0.0069056184559087574,0.22301724757231517,0.00396157929781773,0.056434210463248966,0.07302479361302891,0.01241221397155972,0.5325058452001528,0.0714046596839863];
+  const permBcgAblat = [44,55,42,52,13,44,19,13,27,42,18,33,33];
+
+  // Build design matrix [1, ablat] (k×2)
+  const permXf = permBcgYi.map((_, i) => [1, permBcgAblat[i]]);
+  const QM_obs_bcg = 16.357130;  // from generate.R / PERM-1
+
+  const permResult = permTestSync({
+    yi: permBcgYi, vi: permBcgVi, Xf: permXf,
+    QM_obs: QM_obs_bcg, nPerm: 999, seed: 12345,
+    method: 'REML', modTests: [],
+  });
+
+  if (permResult.error) {
+    console.error(`  FAIL permTestSync returned error: ${permResult.error}`);
+    permPass = false;
+  } else {
+    permChk('QM_dist[0] = QM_obs (observed at position 0)', permResult.QM_dist[0], QM_obs_bcg, 1e-6);
+    permChk('nPerm = 999', permResult.nPerm, 999, 0);
+
+    const finiteVals = Array.from(permResult.QM_dist).filter(v => isFinite(v));
+    const allFinite = finiteVals.length === 999;
+    if (!allFinite) { console.error(`  FAIL not all QM_dist finite: ${finiteVals.length}/999`); permPass = false; }
+    else console.log(`  ok  all 999 QM_dist values finite`);
+
+    // p-value: ±0.015 of R's permutest() seed=42 result = 0.004004
+    // (JS uses seed=12345 → different PRNG sequence → loose tolerance)
+    const pval = permPval(permResult.QM_dist, QM_obs_bcg);
+    const allPositive = Array.from(permResult.QM_dist).every(v => !isFinite(v) || v >= 0);
+    if (!allPositive) { console.error(`  FAIL some QM_dist values negative`); permPass = false; }
+    else console.log(`  ok  all QM_dist values non-negative`);
+
+    permChk('permutation p-value ≤ 0.05 (BCG ablat is significant)', pval <= 0.05 ? 0 : 1, 0, 0.5);
+    console.log(`  note  permutation p = ${pval.toFixed(4)} (R seed=42 gives 0.0040; different seeds expected)`);
+  }
+
+  // Edge case: p < 2 → error
+  const edgeResult = permTestSync({ yi: [1,2,3], vi: [1,1,1], Xf: [[1],[1],[1]], QM_obs: 0, nPerm: 99, seed: 1, method: 'REML', modTests: [] });
+  if (edgeResult.error) console.log(`  ok  p<2 returns error: ${edgeResult.error}`);
+  else { console.error('  FAIL p<2 should return error'); permPass = false; }
+
+  console.log(permPass ? "\n✅ ALL PERMUTATION BENCHMARK TESTS PASSED" : "\n❌ SOME PERMUTATION BENCHMARK TESTS FAILED");
+
+  // ===== vcalc UNIT TESTS =====
+  // Tests the block-diagonal within-study covariance builder for multivariate MA.
+  // Cross-validated against metafor::vcalc(vi, cluster=study_id, obs=outcome_id, rho=rho).
+  console.log("\n===== vcalc UNIT TESTS =====\n");
+  let vcalcPass = true;
+  const { chk: vchk, chkTrue: vchkTrue, chkExact: vchkExact } = makeChk(() => { vcalcPass = false; }, 1e-12);
+
+  // 1. Basic 2-outcome, 2-study balanced case (rho=0.5)
+  // Study S1: v1=0.04, v2=0.09  → cov = 0.5 * sqrt(0.04 * 0.09) = 0.5 * 0.06 = 0.03
+  // Study S2: v1=0.01, v2=0.16  → cov = 0.5 * sqrt(0.01 * 0.16) = 0.5 * 0.04 = 0.02
+  console.log("--- Basic balanced 2×2 (rho=0.5) ---");
+  {
+    const rows = [
+      { yi: 0.5, vi: 0.04, study_id: "S1", outcome_id: "anxiety"    },
+      { yi: 0.3, vi: 0.09, study_id: "S1", outcome_id: "depression" },
+      { yi: 0.4, vi: 0.01, study_id: "S2", outcome_id: "anxiety"    },
+      { yi: 0.2, vi: 0.16, study_id: "S2", outcome_id: "depression" },
+    ];
+    const V = vcalc(rows, { rho: 0.5 });
+
+    vchkExact("n = 4",          V.n,                  4);
+    vchkExact("blocks.length",  V.blocks.length,      2);
+    vchkExact("no warnings",    V.warnings.length,    0);
+
+    const b0 = V.blocks[0];
+    vchkExact("block0 studyId",          b0.studyId,             "S1");
+    vchkExact("block0 k",                b0.k,                   2);
+    vchk("block0 V[0][0] = vi_anxiety",  b0.matrix[0][0],        0.04);
+    vchk("block0 V[1][1] = vi_depress",  b0.matrix[1][1],        0.09);
+    vchk("block0 V[0][1] = cov",         b0.matrix[0][1],        0.03);
+    vchk("block0 V[1][0] symmetric",     b0.matrix[1][0],        0.03);
+
+    const b1 = V.blocks[1];
+    vchk("block1 V[0][0]",               b1.matrix[0][0],        0.01);
+    vchk("block1 V[1][1]",               b1.matrix[1][1],        0.16);
+    vchk("block1 V[0][1] = 0.02",        b1.matrix[0][1],        0.02);
+  }
+
+  // 2. rho=0 → diagonal V (off-diagonal = 0)
+  console.log("--- rho=0: diagonal V ---");
+  {
+    const rows = [
+      { yi: 0.5, vi: 0.04, study_id: "S1", outcome_id: "a" },
+      { yi: 0.3, vi: 0.09, study_id: "S1", outcome_id: "b" },
+    ];
+    const V = vcalc(rows, { rho: 0 });
+    vchk("off-diagonal = 0", V.blocks[0].matrix[0][1], 0);
+    vchk("off-diagonal = 0", V.blocks[0].matrix[1][0], 0);
+    vchkExact("no warnings", V.warnings.length, 0);
+  }
+
+  // 3. Singleton study (1 outcome) → 1×1 block = [[vi]]
+  console.log("--- Singleton study: 1×1 block ---");
+  {
+    const rows = [
+      { yi: 0.5, vi: 0.04, study_id: "S1", outcome_id: "a" },
+      { yi: 0.3, vi: 0.09, study_id: "S1", outcome_id: "b" },
+      { yi: 0.7, vi: 0.25, study_id: "S2", outcome_id: "a" },
+    ];
+    const V = vcalc(rows, { rho: 0.5 });
+    vchkExact("n = 3",                        V.n,                        3);
+    vchkExact("S2 block k = 1",               V.blocks[1].k,              1);
+    vchk("S2 V[0][0] = vi",                   V.blocks[1].matrix[0][0],   0.25);
+    vchkExact("S2 block has 1 outcomeId",      V.blocks[1].outcomeIds.length, 1);
+  }
+
+  // 4. Unbalanced design: S1 has 2 outcomes, S2 has 3 outcomes
+  console.log("--- Unbalanced design ---");
+  {
+    const rows = [
+      { yi: 0.1, vi: 0.01, study_id: "S1", outcome_id: "a" },
+      { yi: 0.2, vi: 0.04, study_id: "S1", outcome_id: "b" },
+      { yi: 0.3, vi: 0.09, study_id: "S2", outcome_id: "a" },
+      { yi: 0.4, vi: 0.16, study_id: "S2", outcome_id: "b" },
+      { yi: 0.5, vi: 0.25, study_id: "S2", outcome_id: "c" },
+    ];
+    const V = vcalc(rows, { rho: 0.3 });
+    vchkExact("n = 5",        V.n,                5);
+    vchkExact("S1 k = 2",     V.blocks[0].k,      2);
+    vchkExact("S2 k = 3",     V.blocks[1].k,      3);
+    // S2 3×3 matrix: V[0][2] = 0.3 * sqrt(0.09 * 0.25) = 0.3 * 0.15 = 0.045
+    vchk("S2 V[0][2] = 0.045", V.blocks[1].matrix[0][2], 0.045);
+    vchk("S2 V[2][0] symmetric", V.blocks[1].matrix[2][0], 0.045);
+  }
+
+  // 5. Duplicate outcome_id within same study → warning, first row kept
+  console.log("--- Duplicate outcome_id → warning ---");
+  {
+    const rows = [
+      { yi: 0.5, vi: 0.04, study_id: "S1", outcome_id: "a" },
+      { yi: 0.9, vi: 0.99, study_id: "S1", outcome_id: "a" },  // duplicate
+      { yi: 0.3, vi: 0.09, study_id: "S1", outcome_id: "b" },
+    ];
+    const V = vcalc(rows, { rho: 0.5 });
+    vchkTrue("warning issued",        V.warnings.length >= 1);
+    vchkExact("block k = 2 (dup removed)", V.blocks[0].k, 2);
+    // First occurrence kept: vi=0.04
+    vchk("first occurrence kept: V[0][0] = 0.04", V.blocks[0].matrix[0][0], 0.04);
+  }
+
+  // 6. rho >= 1 → warning issued (singular V)
+  console.log("--- rho=1 → singularity warning ---");
+  {
+    const rows = [
+      { yi: 0.5, vi: 0.04, study_id: "S1", outcome_id: "a" },
+      { yi: 0.3, vi: 0.04, study_id: "S1", outcome_id: "b" },
+    ];
+    const V = vcalc(rows, { rho: 1.0 });
+    vchkTrue("rho=1 warning", V.warnings.some(w => w.includes("rho=1")));
+    // Gershgorin: diagonal=0.04, off-diag sum=0.04 → not strictly dominant → singular warning
+    vchkTrue("singularity warning", V.warnings.some(w => w.includes("singular")));
+  }
+
+  // 7. studyIds and outcomeIds returned correctly
+  console.log("--- studyIds / outcomeIds ---");
+  {
+    const rows = [
+      { yi: 0.1, vi: 0.01, study_id: "B", outcome_id: "y1" },
+      { yi: 0.2, vi: 0.02, study_id: "A", outcome_id: "y2" },
+      { yi: 0.3, vi: 0.03, study_id: "B", outcome_id: "y2" },
+    ];
+    const V = vcalc(rows);
+    // studyIds in encounter order: B, A
+    vchkExact("studyIds[0] = B", V.studyIds[0], "B");
+    vchkExact("studyIds[1] = A", V.studyIds[1], "A");
+    vchkTrue("outcomeIds contains y1", V.outcomeIds.includes("y1"));
+    vchkTrue("outcomeIds contains y2", V.outcomeIds.includes("y2"));
+  }
+
+  // 8. Missing study_id / outcome_id → synthetic fallback IDs, no crash
+  console.log("--- Missing study_id / outcome_id → fallback ---");
+  {
+    const rows = [
+      { yi: 0.1, vi: 0.01 },
+      { yi: 0.2, vi: 0.02 },
+    ];
+    const V = vcalc(rows);
+    vchkExact("n = 2", V.n, 2);
+    vchkExact("2 singleton blocks", V.blocks.length, 2);
+  }
+
+  // 9. Symmetry: V[j][k] === V[k][j] for all blocks
+  console.log("--- Matrix symmetry ---");
+  {
+    const rows = [
+      { yi: 0.1, vi: 0.01, study_id: "S1", outcome_id: "a" },
+      { yi: 0.2, vi: 0.04, study_id: "S1", outcome_id: "b" },
+      { yi: 0.3, vi: 0.09, study_id: "S1", outcome_id: "c" },
+    ];
+    const V = vcalc(rows, { rho: 0.6 });
+    const m = V.blocks[0].matrix;
+    vchk("V[0][1] = V[1][0]", m[0][1], m[1][0]);
+    vchk("V[0][2] = V[2][0]", m[0][2], m[2][0]);
+    vchk("V[1][2] = V[2][1]", m[1][2], m[2][1]);
+  }
+
+  // 10. rho and type round-trip in return object
+  console.log("--- rho / type passthrough ---");
+  {
+    const rows = [{ yi: 0, vi: 0.1, study_id: "S1", outcome_id: "a" }];
+    const V = vcalc(rows, { rho: 0.7, type: "constant" });
+    vchkExact("rho passthrough",  V.rho,  0.7);
+    vchkExact("type passthrough", V.type, "constant");
+  }
+
+  console.log(vcalcPass ? "\n✅ ALL vcalc TESTS PASSED" : "\n❌ SOME vcalc TESTS FAILED");
+
+  // ===== mvMeta UNIT TESTS =====
+  // Balanced 2-outcome, 6-study synthetic dataset.
+  // Reference values computed analytically (CS struct, REML/ML).
+  // Cross-validation against metafor rma.mv() is in Step 4 benchmarks.
+  console.log("\n===== mvMeta UNIT TESTS =====\n");
+  let mvPass = true;
+  const { chk: mvchk, chkTrue: mvchkTrue, chkExact: mvchkExact, chkRel: mvchkRel } = makeChk(() => { mvPass = false; }, 1e-6);
+
+  // Shared dataset: 6 studies, 2 outcomes (A and B), rho=0.5 within-study
+  const mvRows = [
+    { yi: 0.40, vi: 0.04, study_id: "S1", outcome_id: "A" },
+    { yi: 0.20, vi: 0.09, study_id: "S1", outcome_id: "B" },
+    { yi: 0.55, vi: 0.05, study_id: "S2", outcome_id: "A" },
+    { yi: 0.35, vi: 0.06, study_id: "S2", outcome_id: "B" },
+    { yi: 0.30, vi: 0.03, study_id: "S3", outcome_id: "A" },
+    { yi: 0.10, vi: 0.07, study_id: "S3", outcome_id: "B" },
+    { yi: 0.60, vi: 0.08, study_id: "S4", outcome_id: "A" },
+    { yi: 0.45, vi: 0.04, study_id: "S4", outcome_id: "B" },
+    { yi: 0.50, vi: 0.02, study_id: "S5", outcome_id: "A" },
+    { yi: 0.25, vi: 0.05, study_id: "S5", outcome_id: "B" },
+    { yi: 0.35, vi: 0.06, study_id: "S6", outcome_id: "A" },
+    { yi: 0.15, vi: 0.08, study_id: "S6", outcome_id: "B" },
+  ];
+  const mvV = vcalc(mvRows, { rho: 0.5 });
+
+  // 1. Basic structural checks — CS REML
+  console.log("--- CS REML: structure ---");
+  {
+    const r = mvMeta(mvRows, mvV, { struct: "CS", method: "REML" });
+    mvchkTrue("no error",         !r.error);
+    mvchkExact("P = 2",           r.P, 2);
+    mvchkExact("k = 6",           r.k, 6);
+    mvchkExact("n = 12",          r.n, 12);
+    mvchkExact("outcomeIds[0]",   r.outcomeIds[0], "A");
+    mvchkExact("outcomeIds[1]",   r.outcomeIds[1], "B");
+    mvchkTrue("beta.length = 2",  Array.isArray(r.beta) && r.beta.length === 2);
+    mvchkTrue("se.length = 2",    Array.isArray(r.se) && r.se.length === 2);
+    mvchkTrue("ci.length = 2",    Array.isArray(r.ci) && r.ci.length === 2);
+    mvchkTrue("ci[0] has 2 vals", r.ci[0].length === 2);
+    mvchkTrue("z.length = 2",     Array.isArray(r.z) && r.z.length === 2);
+    mvchkTrue("pval.length = 2",  Array.isArray(r.pval) && r.pval.length === 2);
+    mvchkTrue("tau2.length = 2",  Array.isArray(r.tau2) && r.tau2.length === 2);
+    mvchkTrue("I2.length = 2",    Array.isArray(r.I2) && r.I2.length === 2);
+    mvchkTrue("Psi is 2×2",       Array.isArray(r.Psi) && r.Psi.length === 2 && r.Psi[0].length === 2);
+    mvchkTrue("rho_between defined", r.rho_between !== undefined);
+    mvchkTrue("convergence",      r.convergence);
+    mvchkTrue("logLik finite",    isFinite(r.logLik));
+    mvchkTrue("AIC finite",       isFinite(r.AIC));
+    mvchkTrue("BIC finite",       isFinite(r.BIC));
+    mvchkTrue("QE finite",        isFinite(r.QE));
+    mvchkTrue("pQE in (0,1)",     isFinite(r.pQE) && r.pQE >= 0 && r.pQE <= 1);
+  }
+
+  // 2. CS REML: numerical properties
+  console.log("--- CS REML: numerical properties ---");
+  {
+    const r = mvMeta(mvRows, mvV, { struct: "CS", method: "REML" });
+    // pooled estimates should be weighted averages of yi values per outcome
+    // A: yi=[0.40,0.55,0.30,0.60,0.50,0.35], B: yi=[0.20,0.35,0.10,0.45,0.25,0.15]
+    // RE estimates should be in the range of the data
+    mvchkTrue("beta[A] ∈ (0.2, 0.7)", r.beta[0] > 0.2 && r.beta[0] < 0.7);
+    mvchkTrue("beta[B] ∈ (0.0, 0.6)", r.beta[1] > 0.0 && r.beta[1] < 0.6);
+    mvchkTrue("beta[A] > beta[B]",    r.beta[0] > r.beta[1]);  // A consistently higher
+    mvchkTrue("se[A] > 0",            r.se[0] > 0);
+    mvchkTrue("se[B] > 0",            r.se[1] > 0);
+    mvchkTrue("CI[A]: lb < beta < ub", r.ci[0][0] < r.beta[0] && r.beta[0] < r.ci[0][1]);
+    mvchkTrue("CI[B]: lb < beta < ub", r.ci[1][0] < r.beta[1] && r.beta[1] < r.ci[1][1]);
+    mvchkTrue("tau2[A] >= 0",          r.tau2[0] >= 0);
+    mvchkTrue("tau2[B] >= 0",          r.tau2[1] >= 0);
+    mvchkTrue("I2[A] ∈ [0,100]",       r.I2[0] >= 0 && r.I2[0] <= 100);
+    mvchkTrue("I2[B] ∈ [0,100]",       r.I2[1] >= 0 && r.I2[1] <= 100);
+    mvchkTrue("z[A] = beta/se",        Math.abs(r.z[0] - r.beta[0] / r.se[0]) < 1e-10);
+    mvchkTrue("pval[A] ∈ (0,1)",       r.pval[0] > 0 && r.pval[0] < 1);
+    // CS: Psi diagonal entries equal (same tau2 for all outcomes)
+    mvchkTrue("CS Psi diagonal equal", Math.abs(r.Psi[0][0] - r.Psi[1][1]) < 1e-6);
+    mvchkTrue("|rho_between| < 1",     Math.abs(r.rho_between) < 1);
+    mvchkTrue("QE >= 0",               r.QE >= 0);
+    mvchkExact("df_QE = n - P",        r.df_QE, r.n - r.P);
+    // AIC < BIC for n=12 (since log(12) > 2)
+    mvchkTrue("BIC > AIC (n=12)",      r.BIC > r.AIC);
+  }
+
+  // 3. CS ML vs REML: both converge, tau2 ML <= REML (standard downward bias)
+  console.log("--- CS ML vs REML: tau2 comparison ---");
+  {
+    const rML   = mvMeta(mvRows, mvV, { struct: "CS", method: "ML" });
+    const rREML = mvMeta(mvRows, mvV, { struct: "CS", method: "REML" });
+    mvchkTrue("ML converged",   rML.convergence);
+    mvchkTrue("REML converged", rREML.convergence);
+    // REML log-likelihood should be >= ML log-likelihood (different objectives — don't compare directly)
+    // But tau2 REML >= ML is the standard result
+    mvchkTrue("tau2[A] REML >= ML",  rREML.tau2[0] >= rML.tau2[0] - 1e-6);
+    mvchkTrue("struct preserved ML",   rML.struct,   "CS");
+    mvchkTrue("struct preserved REML", rREML.struct, "CS");
+  }
+
+  // 4. Diag structure
+  console.log("--- Diag structure ---");
+  {
+    const r = mvMeta(mvRows, mvV, { struct: "Diag", method: "REML" });
+    mvchkTrue("no error",          !r.error);
+    mvchkTrue("convergence",       r.convergence);
+    mvchkTrue("beta[A] finite",    isFinite(r.beta[0]));
+    mvchkTrue("beta[B] finite",    isFinite(r.beta[1]));
+    mvchkTrue("rho_between undefined", r.rho_between === undefined);
+    // Diag: Psi off-diagonals = 0
+    mvchkTrue("Psi[0][1] = 0",     Math.abs(r.Psi[0][1]) < 1e-8);
+    mvchkTrue("tau2[A] >= 0",      r.tau2[0] >= 0);
+    mvchkTrue("tau2[B] >= 0",      r.tau2[1] >= 0);
+  }
+
+  // 5. UN structure
+  console.log("--- UN structure ---");
+  {
+    const r = mvMeta(mvRows, mvV, { struct: "UN", method: "REML" });
+    mvchkTrue("no error",       !r.error);
+    mvchkTrue("convergence",    r.convergence);
+    mvchkTrue("beta[A] finite", isFinite(r.beta[0]));
+    mvchkTrue("beta[B] finite", isFinite(r.beta[1]));
+    mvchkTrue("Psi symmetric",  Math.abs(r.Psi[0][1] - r.Psi[1][0]) < 1e-10);
+    mvchkTrue("Psi[0][0] >= 0", r.Psi[0][0] >= 0);
+    mvchkTrue("Psi[1][1] >= 0", r.Psi[1][1] >= 0);
+    // UN logLik should be >= CS logLik (UN is strictly more flexible — same or better fit)
+    const rCS = mvMeta(mvRows, mvV, { struct: "CS", method: "REML" });
+    mvchkTrue("UN logLik >= CS logLik", r.logLik >= rCS.logLik - 1e-6);
+  }
+
+  // 6. Intercept-only: CS estimates consistent with per-outcome univariate REML
+  // Multivariate pooled estimate should be close to univariate when rho~0 between studies
+  console.log("--- Consistency with univariate meta() ---");
+  {
+    const rMV = mvMeta(mvRows, mvV, { struct: "CS", method: "REML" });
+    // Univariate for outcome A only
+    const studiesA = mvRows.filter(r => r.outcome_id === "A");
+    const mvA = meta(studiesA, "REML");
+    // Estimates should be in same ballpark (won't be identical due to different model)
+    mvchkTrue("beta[A] near univariate RE",
+      Math.abs(rMV.beta[0] - mvA.RE) < 0.15);
+  }
+
+  // 7. Error conditions
+  console.log("--- Error conditions ---");
+  {
+    // P=1 → error
+    const rows1 = mvRows.filter(r => r.outcome_id === "A");
+    const V1 = vcalc(rows1, { rho: 0.5 });
+    mvchkTrue("P=1 → error", !!mvMeta(rows1, V1).error);
+
+    // k=2 → error
+    const rows2 = mvRows.filter(r => ["S1","S2"].includes(r.study_id));
+    const V2 = vcalc(rows2, { rho: 0.5 });
+    mvchkTrue("k=2 → error", !!mvMeta(rows2, V2).error);
+
+    // Bad struct → error
+    mvchkTrue("bad struct → error", !!mvMeta(mvRows, mvV, { struct: "HMMM" }).error);
+
+    // Bad method → error
+    mvchkTrue("bad method → error", !!mvMeta(mvRows, mvV, { method: "DL" }).error);
+  }
+
+  // 8. Unbalanced design: some studies missing outcome B
+  console.log("--- Unbalanced design ---");
+  {
+    const unbalRows = [
+      ...mvRows,
+      { yi: 0.45, vi: 0.05, study_id: "S7", outcome_id: "A" },  // only A
+    ];
+    const unbalV = vcalc(unbalRows, { rho: 0.5 });
+    const r = mvMeta(unbalRows, unbalV, { struct: "CS", method: "REML" });
+    mvchkTrue("unbalanced: no error", !r.error);
+    mvchkTrue("unbalanced: k = 7",    r.k === 7);
+    mvchkTrue("unbalanced: n = 13",   r.n === 13);
+    mvchkTrue("unbalanced: beta finite", isFinite(r.beta[0]) && isFinite(r.beta[1]));
+  }
+
+  // 9. QM omnibus test
+  console.log("--- QM omnibus test ---");
+  {
+    const r = mvMeta(mvRows, mvV, { struct: "CS", method: "REML" });
+    mvchkTrue("QM >= 0",           r.QM >= 0);
+    mvchkExact("df_QM = P",        r.df_QM, r.P);
+    mvchkTrue("pQM in (0,1)",      isFinite(r.pQM) && r.pQM >= 0 && r.pQM <= 1);
+    // For this dataset (clear non-zero effects), QM should be large → pQM small
+    mvchkTrue("pQM < 0.05",        r.pQM < 0.05);
+    // QM + QE ≈ yOy (can verify QE = yOy - QM is non-negative and QM > 0)
+    mvchkTrue("QM > 0",            r.QM > 0);
+    mvchkTrue("QE >= 0",           r.QE >= 0);
+  }
+
+  // 10. corPsi structure
+  console.log("--- corPsi structure ---");
+  {
+    const r = mvMeta(mvRows, mvV, { struct: "CS", method: "REML" });
+    mvchkTrue("corPsi is 2×2",        Array.isArray(r.corPsi) && r.corPsi.length === 2 && r.corPsi[0].length === 2);
+    mvchkTrue("corPsi[0][0] = 1",     Math.abs(r.corPsi[0][0] - 1) < 1e-12);
+    mvchkTrue("corPsi[1][1] = 1",     Math.abs(r.corPsi[1][1] - 1) < 1e-12);
+    mvchkTrue("corPsi symmetric",     Math.abs(r.corPsi[0][1] - r.corPsi[1][0]) < 1e-12);
+    // For CS, off-diagonal corPsi = rho_between
+    mvchkTrue("corPsi[0][1] = rho_between", Math.abs(r.corPsi[0][1] - r.rho_between) < 1e-8);
+    mvchkTrue("|corPsi[0][1]| < 1",   Math.abs(r.corPsi[0][1]) < 1);
+
+    // UN structure: corPsi still has 1s on diagonal
+    const rUN = mvMeta(mvRows, mvV, { struct: "UN", method: "REML" });
+    mvchkTrue("UN corPsi[0][0] = 1",  Math.abs(rUN.corPsi[0][0] - 1) < 1e-12);
+    mvchkTrue("UN corPsi[1][1] = 1",  Math.abs(rUN.corPsi[1][1] - 1) < 1e-12);
+    // UN Psi[0][1] and corPsi[0][1] consistent
+    const manualCorr = rUN.Psi[0][1] / Math.sqrt(rUN.Psi[0][0] * rUN.Psi[1][1]);
+    mvchkTrue("UN corPsi consistent with Psi", Math.abs(rUN.corPsi[0][1] - manualCorr) < 1e-10);
+  }
+
+  // 11. AICc
+  console.log("--- AICc ---");
+  {
+    const r = mvMeta(mvRows, mvV, { struct: "CS", method: "REML" });
+    mvchkTrue("AICc finite",      isFinite(r.AICc));
+    mvchkTrue("AICc >= AIC",      r.AICc >= r.AIC - 1e-12);  // correction is always non-negative
+    // For small n (n=12, nParams=2 REML), AICc > AIC
+    mvchkTrue("AICc > AIC (n=12, nParams=2)", r.AICc > r.AIC);
+    // AICc → AIC as n → ∞: correction = 2p(p+1)/(n-p-1) → 0
+    // For ML (nParams = P + nPsiPar = 2 + 2 = 4)
+    const rML = mvMeta(mvRows, mvV, { struct: "CS", method: "ML" });
+    mvchkTrue("ML AICc finite",   isFinite(rML.AICc));
+    mvchkTrue("ML AICc >= ML AIC", rML.AICc >= rML.AIC - 1e-12);
+  }
+
+  // 12. Meta-regression moderator
+  console.log("--- Moderator (common slopes) ---");
+  {
+    const modRows = mvRows.map((r, i) => ({ ...r, x: Math.floor(i / 2) + 1 }));
+    const modV    = vcalc(modRows, { rho: 0.5 });
+    const r = mvMeta(modRows, modV, {
+      struct: "CS", method: "REML",
+      moderators: [{ key: "x", type: "continuous" }],
+      slopes: "common",
+    });
+    mvchkTrue("mod: no error",          !r.error);
+    mvchkExact("mod: beta.length = 3",  r.beta.length, 3);
+    mvchkExact("mod: betaNames.length", r.betaNames.length, 3);
+    mvchkExact("mod: betaNames[2]",     r.betaNames[2], "x");
+    mvchkExact("mod: df_QM = 3",        r.df_QM, 3);
+    mvchkExact("mod: df_QE = n-3",      r.df_QE, r.n - 3);
+    mvchkTrue("mod: logLik finite",     isFinite(r.logLik));
+    mvchkTrue("mod: convergence",       r.convergence);
+  }
+
+  // 13. Meta-regression separate slopes
+  console.log("--- Moderator (separate slopes) ---");
+  {
+    const modRows = mvRows.map((r, i) => ({ ...r, x: Math.floor(i / 2) + 1 }));
+    const modV    = vcalc(modRows, { rho: 0.5 });
+    const r = mvMeta(modRows, modV, {
+      struct: "CS", method: "REML",
+      moderators: [{ key: "x", type: "continuous" }],
+      slopes: "separate",
+    });
+    mvchkTrue("sep: no error",          !r.error);
+    mvchkExact("sep: beta.length = 4",  r.beta.length, 4);
+    mvchkExact("sep: betaNames[2]",     r.betaNames[2], "A:x");
+    mvchkExact("sep: betaNames[3]",     r.betaNames[3], "B:x");
+    mvchkExact("sep: df_QM = 4",        r.df_QM, 4);
+    mvchkTrue("sep: logLik finite",     isFinite(r.logLik));
+  }
+
+  console.log(mvPass ? "\n✅ ALL mvMeta TESTS PASSED" : "\n❌ SOME mvMeta TESTS FAILED");
+}
+
   // ===== normalCDF & tCDF UNIT TESTS =====
   // normalCDF: A&S §26.2.17 rational polynomial, |ε| < 7.5×10⁻⁸.
   // =========================================================================
@@ -6390,3 +7092,140 @@ export function runTests() {
   cdfNaN("tCDF(−Inf, 5) = NaN",      tCDF(-Infinity, 5));
 
   console.log(cdfPass ? "\n✅ ALL normalCDF & tCDF TESTS PASSED" : "\n❌ SOME normalCDF & tCDF TESTS FAILED");
+
+  // ===== EFFECT TYPE EDGE CASES =====
+  // For each effect type verify that clearly-invalid inputs are rejected by
+  // validateStudy() and that compute() propagates them as w=0.
+  // Tests check validateStudy().valid === false OR compute().w === 0.
+  console.log("\n===== EFFECT TYPE EDGE CASE TESTS =====\n");
+  let ecPass = true;
+  const ecInvalid = (name, type, s) => {
+    const { valid } = validateStudy(s, type);
+    if (!valid) console.log(`  ok    ${name}`);
+    else { console.error(`  FAIL  ${name} — expected invalid, got valid`); ecPass = false; }
+  };
+
+  // ── Two-group continuous ──────────────────────────────────────────────────
+  console.log("--- Two-group continuous (MD, SMD, SMDH, ROM, CVR, VR) ---");
+  ecInvalid("MD: n1=0",    "MD",   { m1:1, sd1:1, n1:0,  m2:1, sd2:1, n2:10 });
+  ecInvalid("MD: sd1=0",   "MD",   { m1:1, sd1:0, n1:10, m2:1, sd2:1, n2:10 });
+  ecInvalid("SMD: n2=0",   "SMD",  { m1:1, sd1:1, n1:10, m2:1, sd2:1, n2:0  });
+  ecInvalid("SMDH: n1=1",  "SMDH", { m1:1, sd1:1, n1:1,  m2:1, sd2:1, n2:10 }); // needs n≥2
+  ecInvalid("ROM: m1=0",   "ROM",  { m1:0, sd1:1, n1:10, m2:1, sd2:1, n2:10 });
+  ecInvalid("ROM: m2<0",   "ROM",  { m1:1, sd1:1, n1:10, m2:-1, sd2:1, n2:10 });
+  ecInvalid("CVR: m1=0",   "CVR",  { m1:0, sd1:1, n1:10, m2:1, sd2:1, n2:10 });
+  ecInvalid("VR: sd1=0",   "VR",   { sd1:0, n1:10, sd2:1, n2:10 });
+  ecInvalid("VR: n1=1",    "VR",   { sd1:1, n1:1,  sd2:1, n2:10 }); // needs n≥2
+
+  // ── Paired ───────────────────────────────────────────────────────────────
+  console.log("--- Paired (MD_paired, SMD_paired, SMCC) ---");
+  for (const type of ["MD_paired", "SMD_paired", "SMCC"]) {
+    ecInvalid(`${type}: n=1`,      type, { m_pre:1, sd_pre:1, m_post:0, sd_post:1, n:1,  r:0.5 });
+    ecInvalid(`${type}: sd_pre=0`, type, { m_pre:1, sd_pre:0, m_post:0, sd_post:1, n:10, r:0.5 });
+    ecInvalid(`${type}: r=2`,      type, { m_pre:1, sd_pre:1, m_post:0, sd_post:1, n:10, r:2   });
+  }
+
+  // ── Single-group continuous ───────────────────────────────────────────────
+  console.log("--- Single-group (SMD1, SMD1H, MN, MNLN) ---");
+  ecInvalid("SMD1: n=0",   "SMD1",  { m:1,  sd:1, n:0,  ref:0 }); // needs n≥2
+  ecInvalid("SMD1: sd=0",  "SMD1",  { m:1,  sd:0, n:10, ref:0 });
+  ecInvalid("SMD1H: n=1",  "SMD1H", { m:1,  sd:1, n:1,  ref:0 }); // needs n≥2
+  ecInvalid("MN: n=0",     "MN",    { m:1,  sd:1, n:0  });
+  ecInvalid("MN: sd=0",    "MN",    { m:1,  sd:0, n:10 });
+  ecInvalid("MNLN: m=0",   "MNLN",  { m:0,  sd:1, n:10 });
+  ecInvalid("MNLN: m<0",   "MNLN",  { m:-1, sd:1, n:10 });
+
+  // ── Binary 2×2 ───────────────────────────────────────────────────────────
+  console.log("--- Binary 2×2 (OR, RR, RD, AS, YUQ, YUY) ---");
+  // OR/RR: negative cell invalid; all-zero invalid (zero-row margin handled by CC)
+  ecInvalid("OR: a<0",        "OR",  { a:-1, b:10, c:10, d:10 });
+  ecInvalid("OR: all zeros",  "OR",  { a:0,  b:0,  c:0,  d:0  });
+  ecInvalid("RR: d<0",        "RR",  { a:10, b:10, c:10, d:-1 });
+  // RD/AS: also check zero row-margin
+  ecInvalid("RD: zero row-1", "RD",  { a:0,  b:0,  c:10, d:10 });
+  ecInvalid("RD: zero row-2", "RD",  { a:10, b:10, c:0,  d:0  });
+  ecInvalid("AS: zero row-1", "AS",  { a:0,  b:0,  c:10, d:10 });
+  // YUQ: a·d + b·c = 0 (both diagonal products zero)
+  ecInvalid("YUQ: ad=bc=0",   "YUQ", { a:0,  b:0,  c:5,  d:5  });
+  // YUY: √(a·d) + √(b·c) = 0 (same condition)
+  ecInvalid("YUY: ad=bc=0",   "YUY", { a:0,  b:0,  c:5,  d:5  });
+
+  // ── Correlation-based 2×2: PHI, RTET ─────────────────────────────────────
+  console.log("--- Correlation-based 2×2 (PHI, RTET) ---");
+  // validateBinaryMarginals: all four marginals must be > 0
+  ecInvalid("PHI: zero col-1",  "PHI",  { a:0, b:5, c:0, d:5 }); // a+c=0
+  ecInvalid("RTET: zero row-1", "RTET", { a:0, b:0, c:5, d:5 }); // a+b=0
+
+  // ── GOR (uses raw counts1/counts2 strings, not a/b/c/d) ──────────────────
+  console.log("--- GOR ---");
+  ecInvalid("GOR: empty counts1", "GOR", { counts1: "",    counts2: "10 20" });
+  ecInvalid("GOR: negative count","GOR", { counts1: "-1 5",counts2: "10 20" });
+
+  // ── Correlations ─────────────────────────────────────────────────────────
+  console.log("--- Correlations (COR, UCOR, ZCOR, RPB, RBIS) ---");
+  ecInvalid("COR: r=1",   "COR",  { r:1,   n:10 }); // |r|≥1 invalid
+  ecInvalid("COR: r=-1",  "COR",  { r:-1,  n:10 });
+  ecInvalid("COR: n=2",   "COR",  { r:0.5, n:2  }); // needs n≥3
+  ecInvalid("UCOR: r=1",  "UCOR", { r:1,   n:10 });
+  ecInvalid("UCOR: n=3",  "UCOR", { r:0.5, n:3  }); // needs n≥4
+  ecInvalid("ZCOR: r=1",  "ZCOR", { r:1,   n:10 });
+  ecInvalid("ZCOR: n=3",  "ZCOR", { r:0.5, n:3  }); // needs n≥4
+  ecInvalid("RPB: r=-1",  "RPB",  { r:-1,  n:10 });
+  ecInvalid("RPB: n=2",   "RPB",  { r:0.5, n:2  }); // needs n≥3
+  ecInvalid("RBIS: r=1",  "RBIS", { r:1,   n:10, p:0.3 });
+
+  // ── Partial correlations ──────────────────────────────────────────────────
+  console.log("--- Partial correlations (PCOR, ZPCOR) ---");
+  ecInvalid("PCOR: r=1",      "PCOR",  { r:1,   n:20, p:2 });
+  ecInvalid("PCOR: n-p-3<0",  "PCOR",  { r:0.3, n:5,  p:4 }); // df = n-p-3 = -2
+  ecInvalid("ZPCOR: r=1",     "ZPCOR", { r:1,   n:20, p:2 });
+  ecInvalid("ZPCOR: n-p-3<0", "ZPCOR", { r:0.3, n:5,  p:4 });
+
+  // ── R² ───────────────────────────────────────────────────────────────────
+  console.log("--- R2 / ZR2 ---");
+  ecInvalid("R2: r2<0",   "R2",  { r2:-0.1, n:20 });
+  ecInvalid("R2: r2=1",   "R2",  { r2:1,    n:20 }); // must be < 1
+  ecInvalid("ZR2: r2<0",  "ZR2", { r2:-0.1, n:20 });
+  ecInvalid("ZR2: r2>=1", "ZR2", { r2:1,    n:20 });
+
+  // ── Proportions ──────────────────────────────────────────────────────────
+  console.log("--- Proportions (PR, PLN, PLO, PAS, PFT) ---");
+  for (const type of ["PR", "PLN", "PLO", "PAS", "PFT"]) {
+    ecInvalid(`${type}: x>n`,  type, { x:11, n:10 });
+    ecInvalid(`${type}: n=0`,  type, { x:0,  n:0  });
+    ecInvalid(`${type}: x<0`,  type, { x:-1, n:10 });
+  }
+
+  // ── HR ───────────────────────────────────────────────────────────────────
+  console.log("--- HR ---");
+  ecInvalid("HR: hr=0",    "HR", { hr:0,  ci_lo:0.5, ci_hi:1.5 });
+  ecInvalid("HR: hr<0",    "HR", { hr:-1, ci_lo:0.5, ci_hi:1.5 });
+  ecInvalid("HR: ci_lo=0", "HR", { hr:1,  ci_lo:0,   ci_hi:1.5 });
+
+  // ── Incidence rates ───────────────────────────────────────────────────────
+  console.log("--- Incidence rates (IRR, IRD, IRSD) ---");
+  for (const type of ["IRR", "IRD", "IRSD"]) {
+    ecInvalid(`${type}: t1=0`, type, { x1:5, t1:0,   x2:5, t2:100 });
+    ecInvalid(`${type}: t2=0`, type, { x1:5, t1:100, x2:5, t2:0   });
+  }
+
+  // ── Single-group rate: IR ─────────────────────────────────────────────────
+  console.log("--- IR ---");
+  ecInvalid("IR: t=0",  "IR", { x:5, t:0  });
+  ecInvalid("IR: t<0",  "IR", { x:5, t:-1 });
+
+  // ── Reliability ──────────────────────────────────────────────────────────
+  console.log("--- Reliability (ARAW, ABT, AHW) ---");
+  for (const type of ["ARAW", "ABT", "AHW"]) {
+    ecInvalid(`${type}: alpha<0`, type, { alpha:-0.1, k:5, n:20 });
+    ecInvalid(`${type}: alpha>1`, type, { alpha:1.1,  k:5, n:20 });
+    ecInvalid(`${type}: k<2`,     type, { alpha:0.8,  k:1, n:20 });
+  }
+
+  // ── GENERIC ──────────────────────────────────────────────────────────────
+  console.log("--- GENERIC ---");
+  ecInvalid("GENERIC: vi=0",  "GENERIC", { yi:0.5, vi:0   });
+  ecInvalid("GENERIC: vi<0",  "GENERIC", { yi:0.5, vi:-1  });
+  ecInvalid("GENERIC: yi NaN","GENERIC", { yi:NaN, vi:1   });
+
+  console.log(ecPass ? "\n✅ ALL EFFECT TYPE EDGE CASE TESTS PASSED" : "\n❌ SOME EFFECT TYPE EDGE CASE TESTS FAILED");

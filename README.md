@@ -48,7 +48,8 @@ A browser-based meta-analysis tool. No installation, no server, no dependencies 
 - **Fail-safe N** — Rosenthal and Orwin estimators
 - **Trim-and-fill** (L0, R0, Q0 estimators) — imputes missing studies and reports the adjusted pooled estimate; estimator selectable in the UI
 - **Funnel plot** — standard or contour-enhanced (p-value regions at α = .10, .05, .01)
-- **Selection model (Vevea-Hedges)** — ω-weighted likelihood model for publication bias; MLE mode (k ≥ 8) estimates selection weights jointly with μ and τ²; fixed-ω sensitivity presets (Mild / Moderate / Severe, Vevea & Woods 2005) available from k ≥ 3
+- **Selection model (Vevea-Hedges step function)** — ω-weighted likelihood model for publication bias; MLE mode (k ≥ 8) estimates selection weights jointly with μ and τ²; fixed-ω sensitivity presets (Mild / Moderate / Severe, Vevea & Woods 2005) available from k ≥ 3
+- **Continuous selection models** (k ≥ 6) — four smooth weight functions estimated by ML with LRT against unweighted RE: half-normal w(p; δ) = exp(−δ·[Φ⁻¹(1−p)]²/2) (Andrews & Kasy 2019), power (1−p)<sup>δ</sup>, negative exponential e<sup>−δp</sup>, beta p<sup>a−1</sup>(1−p)<sup>b−1</sup>
 
 ### P-value analyses
 
@@ -81,6 +82,18 @@ When a primary study contributes multiple effect sizes (different outcomes, subg
 
 The three-level model fits the marginal covariance Σ<sub>i</sub> = diag(v<sub>ij</sub> + σ²<sub>within</sub>) + σ²<sub>between</sub>·**1**·**1**ᵀ per cluster and reports decomposed I²<sub>within</sub> and I²<sub>between</sub>.
 
+### Multivariate meta-analysis
+
+A dedicated **Multivariate** mode jointly synthesises P ≥ 2 correlated outcomes from the same studies. Within-study covariance is imputed via the constant-ρ `vcalc` formula (V_jk = ρ·√v_j·√v_k). Between-study heterogeneity is modelled through a P×P matrix Ψ with three structures:
+
+| Ψ structure | Parameters | Description |
+|---|---|---|
+| **CS** (compound symmetry) | 2 | Shared τ² and between-study correlation |
+| **Diag** (diagonal) | P | Independent τ²_p per outcome; zero between-study correlation |
+| **UN** (unstructured) | P(P+1)/2 | Full Cholesky-parameterised Ψ |
+
+Estimation by REML or ML via BFGS. Optional meta-regression adds common moderator slopes. Reports per-outcome pooled estimates, Ψ̂, per-outcome I², Q_E (residual heterogeneity), Q_M (omnibus moderator test), AIC/BIC, and per-outcome forest plots. Based on Berkey et al. (1998) and Jackson, Riley & White (2011).
+
 ### Meta-regression
 
 Continuous and categorical moderators. Multiple moderators may be added simultaneously. Results include coefficients, standard errors, *z*/*t* statistics, *p*-values, *R*² (proportion of heterogeneity explained), and model-fit indices (AIC, BIC, log-likelihood) for comparing competing models. Bubble plots are generated per continuous moderator.
@@ -91,7 +104,11 @@ Continuous and categorical moderators. Multiple moderators may be added simultan
 
 **Multiple comparison correction** — Bonferroni or Holm adjustment of per-moderator omnibus QM p-values when m ≥ 2 moderators are tested simultaneously. Adjusted p-values displayed alongside raw values in the per-moderator tests table. Matches `p.adjust(method="bonferroni"/"holm")` in R (Holm, 1979).
 
+**Coefficient covariance matrix export** — when ≥ 2 moderators are present, a *Download vcov CSV* button exports the full p×p covariance matrix of estimated coefficients (rows and columns labelled by predictor name). Off-diagonal entries are required for custom contrasts and for replicating SE calculations externally.
+
 **Custom contrasts** — test any linear combination of coefficients H₀: L·β = 0, where L is a weight vector you supply (one weight per model term). SE = √(L′VL) using the full variance–covariance matrix. Typical use: set +1 and −1 on two categorical levels to directly compare them.
+
+**Permutation tests** — after running meta-regression, click *Run permutation test* to compute non-parametric p-values for the omnibus Q_M and per-moderator Q_M statistics. Shuffles y_i labels across studies (v_i and τ² held fixed) to build an exact null distribution. Recommended when k < 20 where parametric χ²/F approximations may be anti-conservative (Higgins & Thompson, 2004). Runs in a Web Worker with progress bar; equivalent to `metafor::permutest(res, iter=999)`.
 
 **Location-scale model** — add scale moderators (log τ² = Zγ) to model heterogeneity simultaneously with the mean effect. Each study gets its own τ̂²ᵢ = exp(Zᵢγ̂). Estimated by ML via profile likelihood. Equivalent to `rma(..., scale = ~ ..., method = "ML")` in metafor (Viechtbauer, 2021).
 
@@ -114,11 +131,11 @@ Conjugate normal-normal random-effects model fit via grid approximation (300 poi
 
 ## Plots
 
-All plots export as SVG, PNG, or TIFF. Log-scale effect types label the axis in the display scale (e.g. OR, RR).
+All plots export as SVG, PNG, or TIFF. Log-scale effect types label the axis in the display scale (e.g. OR, RR). A single **Plot style** dropdown applies a visual preset (App default, Cochrane, JAMA, Black & white) to every plot simultaneously; journal presets produce self-contained SVGs with resolved colours suitable for Word and PDF submission.
 
 | Plot | Description |
 |---|---|
-| Forest plot | Study CIs + pooled diamond(s). Toggle FE only, RE only, or both. Four visual themes (default, Cochrane, JAMA, black & white). Paginated for large datasets. |
+| Forest plot | Study CIs + pooled diamond(s). Toggle FE only, RE only, or both. Paginated for large datasets. |
 | Funnel plot | Effect vs. SE with Egger regression line. Toggle between standard and contour-enhanced modes. |
 | Influence plot | Per-study leverage and Cook's distance visualised as a bubble chart. |
 | BLUPs | Dual caterpillar: observed yi (gray) vs. shrunken BLUP (accent) per study. Shrinkage lines, hover tooltips. Only when τ² > 0. |
@@ -136,6 +153,8 @@ All plots export as SVG, PNG, or TIFF. Log-scale effect types label the axis in 
 | RoB summary | Stacked bar chart showing domain-level rating distributions. |
 | GOSH plot | Fixed-effects μ̂ and I² for every non-empty subset of studies. Exact for k ≤ 15; sampled for k ≤ 30. |
 | Profile likelihood (τ²) | Profile log-likelihood curve for τ² with LRT-based 95% CI. x-axis toggles between τ² and τ. ML/REML only. |
+| Bayesian posterior (μ) | Marginal posterior density of the overall effect μ with 95% credible interval shaded. |
+| Bayesian posterior (τ) | Marginal posterior density of the heterogeneity SD τ with 95% credible interval shaded. |
 | Bubble plots | Meta-regression fit per continuous moderator, bubbles sized by weight. |
 
 ---
@@ -169,6 +188,7 @@ CSV column names match the input fields for each effect type (e.g. `m1,sd1,n1,m2
 - **Collapsible results sections** — sections are collapsed by default; only core results and the forest plot are open on load, reducing visual overwhelm on large analyses
 - **Light and dark themes** — follows system preference by default; toggle available in the settings bar
 - **In-app methodology guide** — reference documentation for every statistical method in the tool, accessible from the Guide tab or via contextual help buttons (?) throughout the interface
+- **First-visit onboarding tour** — a three-step inline tour (effect type → columns → Run) fires automatically on first visit; dismissed with Skip or Esc, and replayable from the About tab
 
 ---
 
@@ -228,8 +248,15 @@ git commit -m "Rebuild bundle after sync with main"
 
 ## Statistical references
 
+- Agresti A (1980). Generalized odds ratios for ordinal data. *Biometrics*, 36(1), 59–67.
+- Akaike H (1974). A new look at the statistical model identification. *IEEE Trans Autom Control*, 19(6), 716–723.
+- Andrews I, Kasy M (2019). Identification of and correction for publication bias. *Am Econ Rev*, 109(8), 2766–2794.
+- Berkey CS, Hoaglin DC, Antczak-Bouckoms A, Mosteller F, Colditz GA (1998). Meta-analysis of multiple outcomes by regression with random effects. *Stat Med*, 17(22), 2537–2550.
+- Blom G (1958). *Statistical Estimates and Transformed Beta-Variables*. Wiley.
 - Bonett DG (2002). Sample size requirements for estimating intraclass correlations with desired precision. *Stat Med*, 21(9), 1331–1335.
 - Borenstein M, Hedges LV, Higgins JPT, Rothstein HR (2009). *Introduction to Meta-Analysis*. Wiley.
+- Burnham KP, Anderson DR (2002). *Model Selection and Multimodel Inference* (2nd ed.). Springer.
+- Cheung MWL (2014). Modeling dependent effect sizes with three-level meta-analyses: A structural equation modeling approach. *Psychol Methods*, 19(2), 211–229.
 - Deeks JJ, Macaskill P, Irwig L (2005). The performance of tests of publication bias and other sample size effects in systematic reviews of diagnostic test accuracy was assessed. *J Clin Epidemiol*, 58(9), 882–893.
 - DerSimonian R, Laird N (1986). Meta-analysis in clinical trials. *Controlled Clinical Trials*, 7, 177–188.
 - Feldt LS (1965). The approximate sampling distribution of Kuder-Richardson reliability coefficient twenty. *Psychometrika*, 30(3), 357–370.
@@ -242,9 +269,11 @@ git commit -m "Rebuild bundle after sync with main"
 - Hedges LV, Olkin I (1985). *Statistical Methods for Meta-Analysis*. Academic Press.
 - Hedges LV, Tipton E, Johnson MC (2010). Robust variance estimation in meta-regression with dependent effect size estimates. *Res Synth Methods*, 1, 39–65.
 - Henmi M, Copas JB (2010). Confidence intervals for random effects meta-analysis and robustness to publication bias. *Stat Med*, 29(29), 2969–2983.
+- Higgins JPT, Thompson SG (2004). Controlling the risk of spurious findings from meta-regression. *Stat Med*, 23(11), 1663–1682.
 - Higgins JPT, Thompson SG, Spiegelhalter DJ (2009). A re-evaluation of random-effects meta-analysis. *J R Stat Soc A*, 172, 137–159.
 - Holm S (1979). A simple sequentially rejective multiple test procedure. *Scand J Stat*, 6(2), 65–70.
 - Ioannidis JPA, Trikalinos TA (2007). An exploratory test for an excess of significant findings. *Clin Trials*, 4(3), 245–253.
+- Jackson D, Riley R, White IR (2011). Multivariate meta-analysis: Potential and promise. *Stat Med*, 30(20), 2333–2351.
 - Jeffreys H (1961). *Theory of Probability* (3rd ed.). Oxford University Press.
 - Knapp G, Hartung J (2003). Improved tests for a random effects meta-regression with a single covariate. *Stat Med*, 22, 2693–2710.
 - Kraemer HC (1975). On estimation and hypothesis testing problems for correlation coefficients. *Psychometrika*, 40(4), 473–485.
@@ -255,9 +284,12 @@ git commit -m "Rebuild bundle after sync with main"
 - Olkin I, Dahabreh IJ, Trikalinos TA (2012). GOSH — a graphical display of study heterogeneity. *Res Synth Methods*, 3(3), 214–223.
 - Olkin I, Pratt JW (1958). Unbiased estimation of certain correlation coefficients. *Ann Math Stat*, 29(1), 201–211.
 - Paule RC, Mandel J (1982). Consensus values and weighting factors. *J Res Natl Bur Stand*, 87, 377–385.
+- Pearson K (1900). Mathematical contributions to the theory of evolution. VII. On the correlation of characters not quantitatively measurable. *Phil Trans R Soc Lond A*, 195, 1–47.
 - Peters JL, Sutton AJ, Jones DR, Abrams KR, Rushton L (2006). Comparison of two methods to detect publication bias in meta-analysis. *JAMA*, 295(6), 676–680.
 - Peto R, Pike MC, Armitage P, et al. (1976). Design and analysis of randomized clinical trials requiring prolonged observation of each patient. *Br J Cancer*, 34, 585–612.
+- Riley RD, Abrams KR, Lambert PC, Sutton AJ, Thompson JR (2007). An evaluation of bivariate random-effects meta-analysis for the joint synthesis of two correlated outcomes. *Stat Med*, 26(1), 78–97.
 - Rücker G, Schwarzer G, Carpenter J (2008). Arcsine test for publication bias in meta-analyses with binary outcomes. *Stat Med*, 27(19), 4450–4465.
+- Schwarz G (1978). Estimating the dimension of a model. *Ann Stat*, 6(2), 461–464.
 - Simonsohn U, Nelson LD, Simmons JP (2014). P-curve: A key to the file-drawer. *J Exp Psychol Gen*, 143(2), 534–547.
 - Stanley TD, Doucouliagos H (2014). Meta-regression approximations to reduce publication selection bias. *Res Synth Methods*, 5(1), 60–78.
 - Stanley TD, Doucouliagos H (2015). Neither fixed nor random: Weighted least squares meta-regression. *Res Synth Methods*, 6(1), 67–87.
@@ -265,6 +297,7 @@ git commit -m "Rebuild bundle after sync with main"
 - van Assen MALM, van Aert RCM, Wicherts JM (2015). Meta-analysis using effect size distributions of only statistically significant studies. *Psychol Methods*, 20(3), 293–309.
 - Van den Noortgate W, López-López JA, Marín-Martínez F, Sánchez-Meca J (2013). Three-level meta-analysis of dependent effect sizes. *Behav Res Methods*, 45(2), 576–594.
 - Vevea JL, Hedges LV (1995). A general linear model for estimating effect size in the presence of publication bias. *Psychometrika*, 60(3), 419–435.
+- Vevea JL, Woods CM (2005). Publication bias in research synthesis: Sensitivity analysis using a priori weight functions. *Psychol Methods*, 10(4), 428–443.
 - Viechtbauer W (2005). Bias and efficiency of meta-analytic variance estimators in the random-effects model. *J Educ Behav Stat*, 30, 261–293.
 - Viechtbauer W (2007). Confidence intervals for the amount of heterogeneity in meta-analysis. *Stat Med*, 26(1), 37–52.
 - Viechtbauer W (2010). Conducting meta-analyses in R with the metafor package. *J Stat Softw*, 36(3), 1–48.

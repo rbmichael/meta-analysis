@@ -1,4 +1,4 @@
-// =============================================================================
+﻿// =============================================================================
 // docx.js — Word (.docx) export
 // =============================================================================
 // Exports buildDocx(args) → Promise<Blob>.
@@ -9,62 +9,29 @@
 //
 // Dependencies
 // ------------
-//   plots.js     drawForest, drawCumulativeForest, drawCaterpillarPlot, drawGoshPlot
-//   export.js    resolveThemeVars, hasEmbeddedBackground
+//   format.js    fmt, fmtP_APA, fmtCI_APA
+//   plots.js     drawForest, drawCumulativeForest, drawCaterpillarPlot
+//   export.js    serializeSVG, collectPagedSVGs
 //   constants.js Z_95
 //   report.js    CITATIONS, collectCitations
 
-import { drawForest, drawCumulativeForest, drawCaterpillarPlot, drawGoshPlot } from "./plots.js";
-import { resolveThemeVars, hasEmbeddedBackground, currentBgColour } from "./export.js";
+import { fmt, fmtP_APA, fmtCI_APA } from "./format.js";
+import { drawForest, drawCumulativeForest, drawCaterpillarPlot } from "./plots.js";
+import { serializeSVG, collectPagedSVGs } from "./export.js";
 import { Z_95 } from "./constants.js";
 import { normalQuantile } from "./utils.js";
+import { adjustPvals } from "./regression.js";
 import { CITATIONS, collectCitations } from "./report.js";
+import { summaryData, pubBiasData, pCurveData, puniformData, selModelData,
+         influenceData, subgroupData, studyTableData, regressionData,
+         regressionFittedData, locationScaleData, permutationData,
+         rveData, threeLevelData, sensitivityData } from "./sections.js";
 
-// ---------------------------------------------------------------------------
-// SVG serialization (mirrors report.js)
-// ---------------------------------------------------------------------------
-
-function serializeSVG(svgEl) {
-  if (!svgEl) return "";
-  const clone = svgEl.cloneNode(true);
-  clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
-  const w = clone.getAttribute("width")  || String(svgEl.getBoundingClientRect().width);
-  const h = clone.getAttribute("height") || String(svgEl.getBoundingClientRect().height);
-  clone.setAttribute("width",  w);
-  clone.setAttribute("height", h);
-  resolveThemeVars(clone);
-  if (!hasEmbeddedBackground(clone)) {
-    const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-    bg.setAttribute("width",  "100%");
-    bg.setAttribute("height", "100%");
-    bg.setAttribute("fill", currentBgColour());
-    clone.insertBefore(bg, clone.firstChild);
-  }
-  return new XMLSerializer().serializeToString(clone);
-}
+// serializeSVG and collectPagedSVGs are imported from export.js.
 
 function liveSVGString(id) {
   const el = document.getElementById(id);
-  return el ? serializeSVG(el) : "";
-}
-
-// Collect all pages of a paginated plot into SVG strings (mirrors collectForestSVGs).
-function collectPagedSVGs(svgId, drawFn, drawArgs, options) {
-  const svgEl = document.getElementById(svgId);
-  if (!svgEl) return [];
-  const svgs = [];
-  let totalPages = 1;
-  try {
-    ({ totalPages } = drawFn(...drawArgs, { ...options, page: 0 }));
-    svgs.push(serializeSVG(svgEl));
-  } catch (e) { return []; }
-  for (let p = 1; p < totalPages; p++) {
-    try { drawFn(...drawArgs, { ...options, page: p }); svgs.push(serializeSVG(svgEl)); }
-    catch (e) {}
-  }
-  try { drawFn(...drawArgs, { ...options, page: options.currentPage ?? 0 }); }
-  catch (e) {}
-  return svgs;
+  return (el && el.childElementCount > 0) ? serializeSVG(el) : "";
 }
 
 // ---------------------------------------------------------------------------
@@ -162,6 +129,23 @@ function italic(text) {
   return `<w:r><w:rPr><w:i/></w:rPr><w:t xml:space="preserve">${xmlEsc(String(text))}</w:t></w:r>`;
 }
 
+// Render a string that may contain <em>…</em> tags as a sequence of plain runs
+// with italic runs for the tagged portions. Used for table headers and notes.
+function richRuns(text, { bold: isBold = false } = {}) {
+  if (!text) return "";
+  const bTag = isBold ? "<w:b/>" : "";
+  const parts = String(text).split(/(<em>[^<]*<\/em>)/);
+  return parts.map(part => {
+    if (part.startsWith("<em>")) {
+      const inner = xmlEsc(part.slice(4, -5));
+      return `<w:r><w:rPr>${bTag}<w:i/></w:rPr><w:t xml:space="preserve">${inner}</w:t></w:r>`;
+    }
+    const escaped = xmlEsc(part);
+    if (!escaped) return "";
+    return `<w:r><w:rPr>${bTag}</w:rPr><w:t xml:space="preserve">${escaped}</w:t></w:r>`;
+  }).join("");
+}
+
 // External hyperlink. rId must be registered in document.xml.rels.
 function hyperlink(rId, text) {
   return `<w:hyperlink r:id="${rId}" w:history="1"><w:r><w:rPr><w:rStyle w:val="Hyperlink"/></w:rPr><w:t xml:space="preserve">${xmlEsc(String(text))}</w:t></w:r></w:hyperlink>`;
@@ -218,20 +202,6 @@ function inlineImage(rId, svgW, svgH, imgIdx) {
 </w:drawing></w:r></w:p>`;
 }
 
-// ---------------------------------------------------------------------------
-// Formatting helpers
-// ---------------------------------------------------------------------------
-
-function fmt(v, d = 3) { return isFinite(v) ? (+v).toFixed(d) : "\u2014"; }
-
-function fmtP_APA(p) {
-  if (!isFinite(p)) return "\u2014";
-  if (p < 0.001) return "< .001";
-  return "= " + (+p).toFixed(3).replace(/^0\./, ".");
-}
-
-function fmtCI_APA(lo, hi, d = 3) { return `[${fmt(lo, d)}, ${fmt(hi, d)}]`; }
-
 // Convert an HTML citation string (from CITATIONS) to OOXML run+hyperlink XML.
 // Handles: <em>…</em>, <a href="…">…</a>, <br>, &amp;, &lt;, &gt;
 function citationToRunXML(htmlStr, linkMgr) {
@@ -281,7 +251,7 @@ function apaTableDocx(tableNum, subtitle, headers, rows, note) {
     <w:tcPr><w:tcBorders>
       <w:bottom w:val="single" w:sz="6" w:space="0" w:color="000000"/>
     </w:tcBorders></w:tcPr>
-    <w:p><w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">${xmlEsc(h)}</w:t></w:r></w:p>
+    <w:p>${richRuns(h, { bold: true })}</w:p>
   </w:tc>`).join("")}
 </w:tr>`;
 
@@ -307,7 +277,7 @@ ${bodyRowsXML}
 </w:tbl>`;
 
   const notePara = note
-    ? `<w:p><w:pPr><w:pStyle w:val="APANote"/></w:pPr>${italic("Note.")}${run(" " + note)}</w:p>`
+    ? `<w:p><w:pPr><w:pStyle w:val="APANote"/></w:pPr>${italic("Note.")}${richRuns(" " + note)}</w:p>`
     : "";
 
   return [
@@ -344,335 +314,201 @@ function apaFigureDocx(figNum, title, imgs, note) {
 // ---------------------------------------------------------------------------
 
 function docSummary(args, ctx) {
-  const { m, profile, method, ciMethod, useTF, tf, mAdjusted, studies, cles = null, widthCiLabel, ciLevel } = args;
-  const k = studies.filter(d => !d.filled).length;
-  const isMHorPeto = m.isMH || m.isPeto;
-  const FE_disp  = profile.transform(m.FE);
-  const RE_disp  = isMHorPeto ? null : profile.transform(m.RE);
-  const ci       = { lb: profile.transform(m.ciLow),   ub: profile.transform(m.ciHigh) };
-  const pred     = { lb: profile.transform(m.predLow), ub: profile.transform(m.predHigh) };
-  const RE_adj   = (!isMHorPeto && useTF && mAdjusted) ? profile.transform(mAdjusted.RE) : null;
-  const feAlpha  = { "90": 0.10, "95": 0.05, "99": 0.01 }[ciLevel] ?? 0.05;
-  const feZ      = normalQuantile(1 - feAlpha / 2);
-  const feCi     = { lb: profile.transform(m.FE - feZ * m.seFE), ub: profile.transform(m.FE + feZ * m.seFE) };
-  const tauCI1   = fmt(m.tauCI?.[0]);
-  const tauCI2   = isFinite(m.tauCI?.[1]) ? fmt(m.tauCI[1]) : "\u221E";
-  const H2hi     = isFinite(m.H2CI?.[1])  ? fmt(m.H2CI[1])  : "\u221E";
-  const ciLabel  = ciMethod === "KH" ? "Knapp-Hartung"
-                 : ciMethod === "t"  ? "t-distribution"
-                 : ciMethod === "PL" ? "Profile Likelihood"
-                 : "Normal (z)";
-  const methodLabel = m.isMH ? "Mantel-Haenszel" : m.isPeto ? "Peto" : method;
-
-  const settings = `Effect type: ${profile.label}  \u00B7  Pooling: ${methodLabel}  \u00B7  CI method: ${ciLabel}  \u00B7  k\u202F=\u202F${k}${tf.length > 0 ? ` + ${tf.length} imputed (trim\u202F&\u202Ffill)` : ""}`;
-
-  const rows = [
-    [`${profile.label} \u2014 Fixed Effects (FE)`, fmt(FE_disp)],
-    [`FE ${widthCiLabel}`,         fmtCI_APA(feCi.lb, feCi.ub)],
-    ...(!isMHorPeto ? [[`${profile.label} \u2014 Random Effects (RE)`, fmt(RE_disp)]] : []),
-    ...(!isMHorPeto ? [[`RE ${widthCiLabel}`,       fmtCI_APA(ci.lb, ci.ub)]] : []),
-    ...(isMHorPeto  ? [[widthCiLabel,               fmtCI_APA(ci.lb, ci.ub)]] : []),
-    ...(cles        ? [["CLES (RE)",                `${fmt(cles.estimate)} [${fmt(cles.ci[0])}, ${fmt(cles.ci[1])}]`]] : []),
-    ...(RE_adj !== null ? [["RE (trim-and-fill adjusted)", fmt(RE_adj)]] : []),
-    ...(!isMHorPeto ? [["95% Prediction interval (PI)", fmtCI_APA(pred.lb, pred.ub)]] : []),
-    ...(!isMHorPeto ? [["\u03C4\u00B2", `${fmt(m.tau2)} [${tauCI1}, ${tauCI2}]`]] : []),
-    ["I\u00B2",                   `${fmt(m.I2)}% [${fmt(m.I2CI?.[0])}%, ${fmt(m.I2CI?.[1])}%]`],
-    ...(!isMHorPeto ? [["H\u00B2-CI", `[${fmt(m.H2CI?.[0])}, ${H2hi}]`]] : []),
-    [`Q (df\u202F=\u202F${m.df})`, fmt(m.Q)],
-    ...(m.dist ? [[`${m.dist}-statistic`, `${fmt(m.stat)}, p ${fmtP_APA(m.pval)}`]] : []),
-    // Cluster-robust SE (shown when cluster IDs are present)
-    ...(m.isClustered ? [
-      [`Robust CI (C\u202F=\u202F${m.clustersUsed} clusters)`,
-       `${fmtCI_APA(profile.transform(m.robustCiLow), profile.transform(m.robustCiHigh))}  \u00B7  SE\u202F=\u202F${fmt(m.robustSE)}  \u00B7  z\u202F=\u202F${fmt(m.robustStat)}, p ${fmtP_APA(m.robustPval)}`],
-    ] : []),
-  ];
-
-  const note = isMHorPeto
-    ? `Fixed-effect pooling (${methodLabel}) — RE estimate, \u03C4\u00B2, and prediction interval not applicable. FE = fixed effects; CI = confidence interval.`
-    : `FE = fixed effects; RE = random effects; CI = confidence interval; PI = prediction interval.${cles ? " CLES = common language effect size = \u03A6(g/\u221A2); probability that a randomly drawn score from group 1 exceeds group 2 (McGraw & Wong, 1992)." : ""}${m.isClustered ? " Robust CI uses cluster-robust (sandwich) standard errors." : ""}`;
-
+  const d = summaryData(args);
   return [
     paraText("Summary", "Heading1"),
-    paraText(settings),
-    ...apaTableDocx(ctx.nextTable(),
-      `Summary of Meta-Analysis Results (${profile.label})`,
-      ["Statistic", "Value"],
-      rows.map(([s, v]) => [run(s), run(v)]),
-      note),
+    paraText(d.settings),
+    ...apaTableDocx(ctx.nextTable(), d.subtitle, d.headers,
+      d.rows.map(r => r.map(run)), d.note),
   ];
 }
 
 function docPubBias(args, ctx) {
-  const { egger, begg, fatpet, fsn, tes, hc, useTF, tf, profile } = args;
-  const petEff = isFinite(fatpet?.intercept) ? fmt(profile.transform(fatpet.intercept)) : "\u2014";
-
-  const tesRow = tes && isFinite(tes.chi2)
-    ? [`TES \u2014 \u03C7\u00B2 (O=${tes.O}, E=${fmt(tes.E)})`, fmt(tes.chi2), fmtP_APA(tes.p)]
-    : ["TES (excess significance)", "\u2014", "NA"];
-
-  const hcRow = hc && !hc.error
-    ? [`Henmi-Copas CI`, `${fmt(profile.transform(hc.beta))} [${fmt(profile.transform(hc.ci[0]))}, ${fmt(profile.transform(hc.ci[1]))}]`, "\u2014"]
-    : ["Henmi-Copas CI", "\u2014", "NA (k < 3)"];
-
-  const rows = [
-    ["Egger\u2019s test (intercept)",          isFinite(egger?.intercept)   ? fmt(egger.intercept)   : "\u2014", isFinite(egger?.p)         ? fmtP_APA(egger.p)         : "NA (k < 3)"],
-    ["Begg\u2019s test (rank correlation \u03C4)", isFinite(begg?.tau)      ? fmt(begg.tau)          : "\u2014", isFinite(begg?.p)          ? fmtP_APA(begg.p)          : "NA (k < 3)"],
-    ["FAT \u2014 \u03B2\u2081 (bias)",         isFinite(fatpet?.slope)      ? fmt(fatpet.slope)      : "\u2014", isFinite(fatpet?.slopeP)   ? fmtP_APA(fatpet.slopeP)   : "NA (k < 3)"],
-    ["PET \u2014 effect at SE \u2192 0",       petEff,                                                            isFinite(fatpet?.interceptP) ? fmtP_APA(fatpet.interceptP) : "NA (k < 3)"],
-    tesRow,
-    hcRow,
-  ];
-
-  const fsnLine = [
-    `Fail-safe N (Rosenthal): ${isFinite(fsn?.rosenthal) ? Math.round(fsn.rosenthal) : "\u2014"}`,
-    `Fail-safe N (Orwin): ${isFinite(fsn?.orwin) ? Math.round(fsn.orwin) : "\u2014"}`,
-    `Trim\u202F&\u202FFill: ${useTF ? "ON" : "OFF"}${tf?.length > 0 ? ` (${tf.length} filled)` : ""}`,
-  ].join("  \u00B7  ");
-
+  const d = pubBiasData(args);
   return [
     paraText("Publication Bias", "Heading1"),
     ...apaTableDocx(ctx.nextTable(), "Tests of Publication Bias",
-      ["Test", "Statistic", "p"],
-      rows.map(r => r.map(run)),
-      "FAT = funnel asymmetry test; PET = precision-effect test; TES = test of excess significance; Henmi-Copas = bias-robust CI centred on FE estimate (DL \u03C4\u00B2). NA = fewer than 3 studies."),
-    paraText(fsnLine),
+      d.headers, d.rows.map(r => r.map(run)), d.note),
+    paraText(d.fsnLine),
+  ];
+}
+
+function docPCurve(args, ctx) {
+  const d = pCurveData(args.pcurve);
+  if (!d) return [];
+  return [
+    paraText("P-curve (Simonsohn et al., 2014)", "Heading1"),
+    paraText(`${d.kLine}  ·  Verdict: ${d.verdict}`),
+    ...apaTableDocx(ctx.nextTable(), "P-curve Test Statistics",
+      d.headers, d.rows.map(r => r.map(run)), d.note),
   ];
 }
 
 function docPUniform(args, ctx) {
-  const { puniform, m, profile, widthCiLabel } = args;
-  if (!puniform || puniform.k < 3 || !isFinite(puniform.estimate)) return [];
-
-  function tr(v) { return profile.transform(v); }
-
-  const noteExtra = [
-    puniform.biasDetected      ? "Bias detected (p < .05)." : "",
-    puniform.significantEffect ? "Significant effect after correction (p < .05)." : "",
-  ].filter(Boolean).join(" ");
-
-  const rows = [
-    ["RE (uncorrected)",           fmt(tr(m.RE)),              fmtCI_APA(tr(m.ciLow), tr(m.ciHigh)), fmt(puniform.Z_bias), fmtP_APA(puniform.p_bias)],
-    ["P-uniform (bias-corrected)", fmt(tr(puniform.estimate)), fmtCI_APA(tr(puniform.ciLow), tr(puniform.ciHigh)), fmt(puniform.Z_sig), fmtP_APA(puniform.p_sig)],
-  ];
-
-  const note = "RE row: bias test (H\u2080: RE = true effect). P-uniform row: significance test (H\u2080: \u03B4\u202F=\u202F0). CI = confidence interval."
-    + (noteExtra ? " " + noteExtra : "");
-
+  const d = puniformData(args);
+  if (!d) return [];
   return [
     paraText("P-uniform (van Assen et al., 2015)", "Heading1"),
-    paraText(`${puniform.k} significant result${puniform.k !== 1 ? "s" : ""} (p\u202F<\u202F.05) used  \u00B7  effect scale: ${profile.label}`),
+    paraText(d.kLine),
     ...apaTableDocx(ctx.nextTable(), "P-uniform Bias-Corrected Estimates",
-      ["Method", "Estimate", widthCiLabel, "Z", "p"],
-      rows.map(r => r.map(run)), note),
+      d.headers, d.rows.map(r => r.map(run)), d.note),
   ];
 }
 
 function docSelectionModel(args, ctx) {
-  const { sel, selMode, selLabel, profile, widthCiLabel } = args;
-  if (!sel || sel.error) return [];
-
-  const isMLE = selMode === "mle";
-  function fmtDisp(v) { return isFinite(v) ? fmt(profile.transform(v)) : "\u2014"; }
-  function fmtV(v)    { return isFinite(v) ? fmt(v) : "\u2014"; }
-
-  const cuts = sel.cuts;
-  const intervalLabels = cuts.map((c, j) => `(${j === 0 ? "0" : cuts[j - 1]}, ${c}]`);
-  const headers = ["Quantity", ...intervalLabels];
-
-  const muAdj = fmtDisp(sel.mu);
-  const ciLo  = fmtDisp(sel.mu - 1.96 * sel.se_mu);
-  const ciHi  = fmtDisp(sel.mu + 1.96 * sel.se_mu);
-
-  const tableRows = [
-    ["Selection weight \u03C9", ...sel.omega.map((w, j) => {
-      if (!isMLE || j === 0) return `${fmtV(w)} (fixed)`;
-      const se = isFinite(sel.se_omega[j]) ? ` \u00B1 ${fmtV(sel.se_omega[j])}` : "";
-      return `${fmtV(w)}${se}`;
-    })],
-    ["Studies per interval", ...sel.nPerInterval.map(String)],
-    [`Adjusted \u03BC\u0302 [${widthCiLabel}]`, `${muAdj} [${ciLo}, ${ciHi}]  \u00B7  unadjusted: ${fmtDisp(sel.RE_unsel)}`],
-    ["Adjusted \u03C4\u00B2",          `${fmtV(sel.tau2)}  \u00B7  unadjusted: ${fmtV(sel.tau2_unsel)}`],
-    ...(isMLE && isFinite(sel.LRT) ? [["LRT (H\u2080: no selection)", `\u03C7\u00B2(${sel.LRTdf})\u202F=\u202F${fmtV(sel.LRT)}, p ${fmtP_APA(sel.LRTp)}`]] : []),
-  ];
-
-  // Pad rows to header count (first row has all columns; others may span)
-  const N = headers.length;
-  const normalizedRows = tableRows.map(r => {
+  const d = selModelData(args);
+  if (!d) return [];
+  const N = d.nCols;
+  const normalizedRows = d.rows.map(r => {
     const padded = [...r];
     while (padded.length < N) padded.push("");
     return padded.slice(0, N).map(run);
   });
-
-  const modeLabel  = isMLE ? "MLE (estimated weights)" : `Sensitivity \u2014 ${selLabel}`;
-  const sidesLabel = sel.sides === 2 ? "two-sided" : "one-sided";
-
   return [
     paraText("Selection Model (Vevea-Hedges, 1995)", "Heading1"),
-    paraText(`Mode: ${modeLabel}  \u00B7  p-values: ${sidesLabel}  \u00B7  k\u202F=\u202F${sel.k}`),
-    ...apaTableDocx(ctx.nextTable(), "Selection Model Results", headers, normalizedRows,
-      "\u03C9 = selection weight. CI = confidence interval."),
+    paraText(d.metaLine),
+    ...apaTableDocx(ctx.nextTable(), d.subtitle, d.headers, normalizedRows, d.note),
   ];
 }
 
 function docInfluence(args, ctx) {
-  const { influence, studies } = args;
-  if (!influence || !influence.length) return [];
-
-  const k       = studies.filter(d => !d.filled).length;
-  const thresh2k = fmt(2 / k);
-  const thresh4k = fmt(4 / k);
-
-  const headers = ["Study", "RE (LOO)", "\u0394\u03C4\u00B2", "Std. Residual", "DFBETA", "Hat", "Cook\u2019s D", "Flag"];
-
-  const rows = influence.map(d => [
-    d.label,
-    isFinite(d.RE_loo)      ? fmt(d.RE_loo)      : "\u2014",
-    isFinite(d.deltaTau2)   ? fmt(d.deltaTau2)   : "\u2014",
-    isFinite(d.stdResidual) ? fmt(d.stdResidual) : "\u2014",
-    isFinite(d.DFBETA)      ? fmt(d.DFBETA)      : "\u2014",
-    isFinite(d.hat)         ? d.hat.toFixed(3)   : "\u2014",
-    isFinite(d.cookD)       ? d.cookD.toFixed(3) : "\u2014",
-    [d.outlier ? "Outlier" : "", d.influential ? "Influential" : "",
-     d.highLeverage ? "Hi-Lev" : "", d.highCookD ? "Hi-Cook" : ""].filter(Boolean).join(", "),
-  ].map(run));
-
+  const d = influenceData(args);
+  if (!d) return [];
   return [
     paraText("Influence Diagnostics", "Heading1"),
-    ...apaTableDocx(ctx.nextTable(), "Leave-One-Out Influence Diagnostics", headers, rows,
-      `LOO = leave-one-out. Threshold: Hat\u202F>\u202F${thresh2k} (= 2/k); Cook\u2019s D\u202F>\u202F${thresh4k} (= 4/k).`),
+    ...apaTableDocx(ctx.nextTable(), "Leave-One-Out Influence Diagnostics",
+      d.headers, d.rows.map(r => r.map(run)), d.note),
   ];
 }
 
-function docSubgroup(args, ctx) {
-  const { subgroup, profile, widthCiLabel } = args;
-  if (!subgroup || subgroup.G < 2) return [];
-
-  const headers = ["Group", "k", "Effect size", "SE", widthCiLabel, "\u03C4\u00B2", "I\u00B2 (%)"];
-
-  const rows = Object.entries(subgroup.groups).map(([g, r]) => {
-    const single = r.k === 1;
-    const y_disp = profile.transform(r.y);
-    const ci_lb  = profile.transform(r.ci.lb);
-    const ci_ub  = profile.transform(r.ci.ub);
-    return [
-      g, String(r.k),
-      isFinite(y_disp) ? fmt(y_disp) : "\u2014",
-      single ? "\u2014" : (isFinite(r.se)   ? fmt(r.se)        : "\u2014"),
-      single ? "\u2014" : fmtCI_APA(ci_lb, ci_ub),
-      single ? "\u2014" : (isFinite(r.tau2) ? r.tau2.toFixed(3) : "0"),
-      single ? "\u2014" : (isFinite(r.I2)   ? r.I2.toFixed(1)   : "0"),
-    ].map(run);
+function docSensitivity(args, ctx) {
+  const d = sensitivityData(args);
+  if (!d) return [];
+  const looRows = d.loo.rows.map((r, i) => {
+    const cells = r.map(run);
+    if (d.loo.sigChanges[i]) cells[0] = run(r[0] + " *");
+    return cells;
   });
+  const estRows = d.est.rows.map(r => r.map(run));
+  const chunks = [paraText("Sensitivity Analysis", "Heading1")];
+  if (d.loo.rows.length > 0) {
+    chunks.push(...apaTableDocx(ctx.nextTable(), "Leave-one-out analysis",
+      d.loo.headers, looRows, d.loo.note));
+  }
+  chunks.push(...apaTableDocx(ctx.nextTable(), "τ² Estimator comparison",
+    d.est.headers, estRows, d.est.note));
+  return chunks;
+}
 
-  const note = `CI = confidence interval. Q_between\u202F=\u202F${subgroup.Qbetween.toFixed(3)}, df\u202F=\u202F${subgroup.df}, p ${fmtP_APA(subgroup.p)}.`;
-
+function docSubgroup(args, ctx) {
+  const d = subgroupData(args);
+  if (!d) return [];
   return [
     paraText("Subgroup Analysis", "Heading1"),
-    ...apaTableDocx(ctx.nextTable(), `Subgroup Analysis Results (${profile.label})`, headers, rows, note),
+    ...apaTableDocx(ctx.nextTable(), d.subtitle, d.headers,
+      d.rows.map(r => r.map(run)), d.note),
   ];
 }
 
 function docStudyTable(args, ctx) {
-  const { studies, m, profile, widthCiLabel } = args;
-  const tau2   = isFinite(m.tau2) ? m.tau2 : 0;
-  const real   = studies.filter(d => !d.filled);
-  const totalW = real.reduce((s, d) => s + 1 / (d.vi + tau2), 0);
-
-  const transformedScale = ["Ratio", "Hazard", "Rate", "log", "logit", "arcsine", "Freeman", "Fisher"]
-    .some(t => profile.label.includes(t));
-  const seLabel = transformedScale ? "SE (transformed)" : "SE";
-
-  function fmtV(v)   { return isFinite(v) ? (+v).toFixed(3) : "\u2014"; }
-  function fmtPct(v) { return (v !== null && isFinite(v)) ? v.toFixed(1) + "%" : "\u2014"; }
-
-  const pooledEf = profile.transform(m.RE);
-  const pooledLo = profile.transform(m.ciLow);
-  const pooledHi = profile.transform(m.ciHigh);
-
-  const headers = ["Study", `Effect size (${profile.label})`, seLabel, widthCiLabel, "RE Weight (%)"];
-
-  const rows = studies.map(d => {
-    const wi  = 1 / (d.vi + tau2);
-    const pct = d.filled ? null : wi / totalW * 100;
-    const ef  = profile.transform(d.yi);
-    const lo  = profile.transform(d.yi - Z_95 * d.se);
-    const hi  = profile.transform(d.yi + Z_95 * d.se);
-    const lbl = d.label.length > 40 ? d.label.slice(0, 39) + "\u2026" : d.label;
-    return [run(lbl), run(fmtV(ef)), run(fmtV(d.se)), run(fmtCI_APA(lo, hi)), run(fmtPct(pct))];
-  });
-
-  // Pooled row — bold cells
-  rows.push([bold("Pooled (RE)"), bold(fmtV(pooledEf)), bold(fmtV(m.seRE)), bold(fmtCI_APA(pooledLo, pooledHi)), bold("100%")]);
-
-  const note = `Effect size = ${profile.label}. SE = standard error. CI = confidence interval. RE weights shown.`
-    + (studies.some(d => d.filled) ? " Trim-and-fill imputed rows are included." : "");
-
+  const d = studyTableData(args);
+  const bodyRows = [
+    ...d.rows.map(r => r.map(run)),
+    d.pooledRow.map(bold),
+  ];
   return [
     paraText("Study-Level Results", "Heading1"),
-    ...apaTableDocx(ctx.nextTable(), "Study-Level Effect Sizes and Weights", headers, rows, note),
+    ...apaTableDocx(ctx.nextTable(), "Study-Level Effect Sizes and Weights",
+      d.headers, bodyRows, d.note),
   ];
 }
 
 function docRegression(args, ctx) {
-  const { reg, method, ciMethod, widthCiLabel } = args;
-  if (!reg || reg.rankDeficient || !reg.colNames) return [];
-
-  const ciLabel   = ciMethod === "KH" ? "Knapp-Hartung" : "Normal CI";
-  const statLabel = reg.dist === "t" ? `t(${reg.QEdf})` : "z";
-  const QMlabel   = reg.QMdist === "F" ? `F(${reg.QMdf},\u202F${reg.QEdf})` : `\u03C7\u00B2(${reg.QMdf})`;
-  const hasVif    = Array.isArray(reg.vif) && reg.vif.some(v => isFinite(v));
-
-  const coefHeaders = ["Predictor", "\u03B2", "SE", statLabel, "p", widthCiLabel];
-  if (hasVif) coefHeaders.push("VIF");
-
-  const coefRows = reg.colNames.map((name, j) => {
-    const [lo, hi] = reg.ci[j];
-    const cells = [run(name), run(fmt(reg.beta[j])), run(fmt(reg.se[j])),
-                   run(fmt(reg.zval[j])), run(fmtP_APA(reg.pval[j])), run(fmtCI_APA(lo, hi))];
-    if (hasVif) cells.push(run(j === 0 ? "\u2014" : (isFinite(reg.vif?.[j]) ? fmt(reg.vif[j]) : "\u2014")));
-    return cells;
-  });
-
-  const R2row = reg.p > 1 && isFinite(reg.R2) ? ` R\u00B2\u202F=\u202F${fmt(reg.R2 * 100)}%.` : "";
-  const coefNote = `\u03B2 = unstandardised regression coefficient. SE = standard error. CI = confidence interval. `
-    + `QE(${reg.QEdf})\u202F=\u202F${fmt(reg.QE)}, p ${fmtP_APA(reg.QEp)}.`
-    + (reg.p > 1 ? ` QM ${QMlabel}\u202F=\u202F${fmt(reg.QM)}, p ${fmtP_APA(reg.QMp)}.` : "")
-    + R2row;
-
+  const d = regressionData(args);
+  if (!d) return [];
   const chunks = [
     paraText("Meta-Regression", "Heading1"),
-    paraText(`k\u202F=\u202F${reg.k}  \u00B7  ${method}  \u00B7  ${ciLabel}  \u00B7  \u03C4\u00B2\u202F=\u202F${fmt(reg.tau2)}  \u00B7  I\u00B2\u202F=\u202F${fmt(reg.I2)}%`),
-    ...apaTableDocx(ctx.nextTable(), "Meta-Regression Coefficients", coefHeaders, coefRows, coefNote),
+    paraText(d.metaLine),
+    ...apaTableDocx(ctx.nextTable(), "Meta-Regression Coefficients",
+      d.coef.headers, d.coef.rows.map(r => r.map(run)), d.coef.note),
   ];
-
-  if (reg.modTests && reg.modTests.length > 1) {
-    const modQlabel = reg.QMdist === "F" ? "F" : "\u03C7\u00B2";
-    const hasLRT_docx = reg.modTests.some(mt => isFinite(mt.lrt));
-    const modHeaders = [
-      "Moderator",
-      `${modQlabel} (Wald)`,
-      ...(hasLRT_docx ? ["LRT \u03C7\u00B2"] : []),
-      "df",
-      "p (Wald)",
-      ...(hasLRT_docx ? ["p (LRT)"] : []),
-    ];
-    const modRows = reg.modTests.map(mt => [
-      run(mt.name),
-      run(fmt(mt.QM)),
-      ...(hasLRT_docx ? [run(isFinite(mt.lrt) ? fmt(mt.lrt) : "NA")] : []),
-      run(String(mt.QMdf)),
-      run(fmtP_APA(mt.QMp)),
-      ...(hasLRT_docx ? [run(isFinite(mt.lrtP) ? fmtP_APA(mt.lrtP) : "NA")] : []),
-    ]);
+  if (d.modTests) {
     chunks.push(
       paraText("Per-moderator omnibus tests", "Heading2"),
       ...apaTableDocx(ctx.nextTable(), "Per-Moderator Omnibus Tests",
-        modHeaders, modRows,
-        hasLRT_docx ? "LRT = Likelihood Ratio Test; uses ML estimation internally regardless of \u03C4\u00B2 method." : ""),
+        d.modTests.headers, d.modTests.rows.map(r => r.map(run)), d.modTests.note),
     );
   }
-
+  const fd = regressionFittedData(args.reg);
+  if (fd) {
+    chunks.push(
+      paraText("Fitted values & residuals", "Heading2"),
+      ...apaTableDocx(ctx.nextTable(), "Meta-Regression Fitted Values and Residuals",
+        fd.headers, fd.rows.map(({ cells }) => cells.map(run)), fd.note),
+    );
+  }
   return chunks;
+}
+function docRve(args, ctx) {
+  const d = rveData(args);
+  if (!d) return [];
+  return [
+    paraText("Robust Variance Estimation (RVE)", "Heading1"),
+    ...apaTableDocx(ctx.nextTable(), "RVE Pooled Estimate",
+      d.headers, d.rows.map(r => r.map(run)), d.note),
+  ];
+}
+
+function docThreeLevel(args, ctx) {
+  const d = threeLevelData(args);
+  if (!d) return [];
+  return [
+    paraText("Three-Level Meta-Analysis", "Heading1"),
+    ...apaTableDocx(ctx.nextTable(), "Three-Level Model Estimates",
+      d.headers, d.rows.map(r => r.map(run)), d.note),
+  ];
+}
+
+function docLocationScale(args, ctx) {
+  const d = locationScaleData(args.ls, args.ciLevel ?? "95");
+  if (!d) return [];
+  const chunks = [
+    paraText("Location-Scale Model", "Heading1"),
+    paraText(d.metaLine),
+    ...apaTableDocx(ctx.nextTable(), "Location Model Coefficients",
+      d.locCoef.headers, d.locCoef.rows.map(r => r.map(run)), d.locCoef.note),
+    ...apaTableDocx(ctx.nextTable(), "Scale Model Coefficients",
+      d.scaleCoef.headers, d.scaleCoef.rows.map(r => r.map(run)), d.scaleCoef.note),
+  ];
+  if (d.fitted) {
+    chunks.push(
+      paraText("Fitted values & study-specific τ²ᵢ", "Heading2"),
+      ...apaTableDocx(ctx.nextTable(), "Location-Scale Fitted Values",
+        d.fitted.headers, d.fitted.rows.map(r => r.map(run)), d.fitted.note),
+    );
+  }
+  return chunks;
+}
+
+function docPermutation(args, ctx) {
+  const { permResult, reg } = args;
+  const d = permutationData(permResult, reg);
+  if (!d) return [];
+
+  const headers = ["Test", "Statistic", "Observed", "p (perm.)"];
+  const stripEm = s => s.replace(/<\/?em>/g, "");
+  const omniRow = ["Omnibus QM", stripEm(d.omniLabel), fmt(d.omniObserved), fmtP_APA(d.omniP)];
+  const modRows = d.mods.map(m => [
+    m.name, stripEm(m.label),
+    isFinite(m.observed) ? fmt(m.observed) : "—",
+    isFinite(m.p) ? fmtP_APA(m.p) : "—",
+  ]);
+  const rows = [omniRow, ...modRows].map(r => r.map(run));
+  const note = `${d.nPerm} permutations; τ\xB2 re-estimated per permutation. Permutation p = (1 + #≥observed) / (B + 1).`;
+  return [
+    paraText("Permutation Test", "Heading1"),
+    ...apaTableDocx(ctx.nextTable(), "Permutation Test Results", headers, rows, note),
+  ];
 }
 
 function docReferences(args, linkMgr) {
@@ -842,13 +678,22 @@ export async function buildDocx(args) {
     gosh, goshXAxis,
     bayesResult, bayesReMean,
     sensitivityRows,
+    plotTheme,
+    mccMethod = "none",
+    exportScale = 3,
   } = args;
+
+  const theme = plotTheme ?? "default";
 
   const widthCiLabel = (ciLevel ?? "95") + "% CI";
   const widthCrLabel = (ciLevel ?? "95") + "% CrI";
 
-  // Augment args so section helpers can access CI width labels
-  const docArgs = { ...args, widthCiLabel, widthCrLabel };
+  const mccLabel  = mccMethod === "bonferroni" ? "Bonferroni" : mccMethod === "holm" ? "Holm" : "";
+  const rawModPs  = Array.isArray(reg?.modTests) ? reg.modTests.map(mt => mt.QMp) : [];
+  const adjPs     = mccMethod !== "none" && rawModPs.length > 1 ? adjustPvals(rawModPs, mccMethod) : null;
+
+  // Augment args so section helpers can access CI width labels and MCC data
+  const docArgs = { ...args, widthCiLabel, widthCrLabel, adjPs, mccLabel };
 
   // ── 1. Collect all SVG strings synchronously ────────────────────────────
 
@@ -857,18 +702,21 @@ export async function buildDocx(args) {
 
   svgArrays.set("forest",
     forestOptions
-      ? collectPagedSVGs("forestPlot", drawForest, [studies, m], forestOptions)
+      ? collectPagedSVGs("forestPlot", drawForest, [studies, m], { ...forestOptions, theme })
       : [liveSVGString("forestPlot")].filter(Boolean));
 
   svgArrays.set("funnel",       [liveSVGString("funnelPlot")].filter(Boolean));
   svgArrays.set("influence",    [liveSVGString("influencePlot")].filter(Boolean));
+  svgArrays.set("blup",         [liveSVGString("blupPlot")].filter(Boolean));
   svgArrays.set("baujat",       [liveSVGString("baujatPlot")].filter(Boolean));
   svgArrays.set("qqplot",       [liveSVGString("qqPlot")].filter(Boolean));
+  svgArrays.set("radial",       [liveSVGString("radialPlot")].filter(Boolean));
+  svgArrays.set("labbe",        [liveSVGString("labbePlot")].filter(Boolean));
 
   svgArrays.set("cumForest",
     cumForestOptions
       ? collectPagedSVGs("cumulativePlot", drawCumulativeForest,
-          [cumForestOptions.results, cumForestOptions.profile ?? profile], cumForestOptions)
+          [cumForestOptions.results, cumForestOptions.profile ?? profile], { ...cumForestOptions, theme })
       : [liveSVGString("cumulativePlot")].filter(Boolean));
 
   svgArrays.set("cumFunnel",    [liveSVGString("cumulativeFunnelPlot")].filter(Boolean));
@@ -880,7 +728,7 @@ export async function buildDocx(args) {
     caterpillarOptions
       ? collectPagedSVGs("caterpillarPlot", drawCaterpillarPlot,
           [caterpillarOptions.studies ?? studies, caterpillarOptions.m ?? m, caterpillarOptions.profile ?? profile],
-          caterpillarOptions)
+          { ...caterpillarOptions, theme })
       : [liveSVGString("caterpillarPlot")].filter(Boolean));
 
   svgArrays.set("robTL",        [liveSVGString("robTrafficLight")].filter(Boolean));
@@ -905,11 +753,8 @@ export async function buildDocx(args) {
     bubbleMods.push({ key, mod: allBubbles[i].mod });
   }
 
-  // GOSH (needs re-render to SVG circles)
   if (gosh && !gosh.error) {
-    drawGoshPlot(gosh, profile, { xAxis: goshXAxis ?? "I2", forReport: true });
     svgArrays.set("gosh", [liveSVGString("goshPlot")].filter(Boolean));
-    drawGoshPlot(gosh, profile, { xAxis: goshXAxis ?? "I2" });
   }
 
   // Profile likelihood + Bayesian
@@ -934,7 +779,7 @@ export async function buildDocx(args) {
     for (const svg of svgs) flatSVGs.push(svg);
   }
 
-  const pngResults = await Promise.all(flatSVGs.map(svg => svgStringToPng(svg)));
+  const pngResults = await Promise.all(flatSVGs.map(svg => svgStringToPng(svg, exportScale)));
 
   // Build image registry: key → [{blob, svgW, svgH, rId, idx}]
   const imgReg = new Map();
@@ -974,13 +819,29 @@ export async function buildDocx(args) {
   const bodyChunks = [
     // Title + metadata
     paraText("Meta-Analysis Report", "Heading1"),
-    paraText(`Generated ${date}  \u00B7  k\u202F=\u202F${k}${tf.length > 0 ? ` + ${tf.length} imputed` : ""}  \u00B7  ${profile.label}  \u00B7  ${method}  \u00B7  ${ciLabel}`),
+    paraText(`Generated ${date}  ·  k = ${k}${tf.length > 0 ? ` + ${tf.length} imputed` : ""}  ·  ${profile.label}  ·  ${method}  ·  ${ciLabel}`),
 
-    // Statistical sections
+    // Summary statistics
     ...docSummary(docArgs, ctx),
-    ...docPubBias(docArgs, ctx),
-    ...docPUniform(docArgs, ctx),
-    ...docSelectionModel(docArgs, ctx),
+
+    // Forest plot
+    ...figSection("Forest Plot", "forest",
+      `Forest plot of ${profile.label}, k = ${k} studies`,
+      `RE = random effects. Error bars = ${widthCiLabel} (${ciLabel}). τ² estimated by ${method}. Diamond = pooled estimate and ${widthCiLabel}.`),
+
+    // Individual studies table
+    ...docStudyTable(docArgs, ctx),
+
+    // Profile likelihood
+    ...(() => {
+      const imgs = getImgs("profileLik");
+      if (!imgs.length) return [];
+      return [
+        paraText("Profile Likelihood for τ²", "Heading1"),
+        ...apaFigureDocx(ctx.nextFigure(), "Profile likelihood curve for τ²", imgs,
+          `Shaded region = ${widthCiLabel} from likelihood-ratio inversion (LRT).`),
+      ];
+    })(),
 
     // Bayesian
     ...(() => {
@@ -991,11 +852,15 @@ export async function buildDocx(args) {
       const muDisp   = profile.transform(bayesResult.muMean);
       const muCIDisp = bayesResult.muCI.map(v => profile.transform(v));
       const reDisp   = isFinite(bayesReMean) ? profile.transform(bayesReMean) : NaN;
-      const priorLine = `Prior: \u03BC\u202F~\u202FN(${bayesResult.mu0},\u202F${bayesResult.sigma_mu}\u00B2)  \u00B7  \u03C4\u202F~\u202FHalfNormal(${bayesResult.sigma_tau})  \u00B7  k\u202F=\u202F${bayesResult.k} studies`;
+      const priorLine = `Prior: μ ~ N(${bayesResult.mu0}, ${bayesResult.sigma_mu}²)  ·  τ ~ HalfNormal(${bayesResult.sigma_tau})  ·  k = ${bayesResult.k} studies`;
+      const muSDNote = profile.isTransformedScale ? " (log)" : "";
+      const fmtBF = bf => !isFinite(bf) ? "NA" : bf >= 1000 || bf < 0.001 ? bf.toExponential(2) : bf.toFixed(3);
       const bayesRows = [
-        [`Posterior mean \u03BC`, `${fmt(muDisp)}  ·  ${widthCrLabel} ${fmtCI_APA(muCIDisp[0], muCIDisp[1])}`],
-        [`Posterior mean \u03C4`, `${fmt(bayesResult.tauMean)}  ·  ${widthCrLabel} ${fmtCI_APA(bayesResult.tauCI[0], bayesResult.tauCI[1])}`],
+        [`Posterior mean μ`, `${fmt(muDisp)}  ·  ${widthCrLabel} ${fmtCI_APA(muCIDisp[0], muCIDisp[1])}  ·  SD${muSDNote} = ${fmt(bayesResult.muSD)}`],
+        [`Posterior mean τ`, `${fmt(bayesResult.tauMean)}  ·  ${widthCrLabel} ${fmtCI_APA(bayesResult.tauCI[0], bayesResult.tauCI[1])}  ·  SD = ${fmt(bayesResult.tauSD)}`],
         ...(isFinite(reDisp) ? [["Frequentist RE (comparison)", fmt(reDisp)]] : []),
+        ...(isFinite(bayesResult.BF10) ? [[`Bayes Factor BF₁₀ (H₁: μ≠0)`, fmtBF(bayesResult.BF10)]] : []),
+        ...(bayesResult.BF10 < 1 && isFinite(bayesResult.BF01) ? [[`BF₀₁ = 1/BF₁₀ (H₀: μ = 0)`, fmtBF(bayesResult.BF01)]] : []),
       ];
       const chunks = [
         paraText("Bayesian Meta-Analysis", "Heading1"),
@@ -1004,10 +869,10 @@ export async function buildDocx(args) {
           `Bayesian Meta-Analysis Results (${profile.label})`,
           ["Statistic", "Value"],
           bayesRows.map(r => r.map(run)),
-          `CrI = credible interval. Posterior mean \u03BC on ${profile.label} scale. Frequentist RE shown for comparison only.`),
+          `CrI = credible interval. Posterior mean μ on ${profile.label} scale. Frequentist RE shown for comparison only.`),
       ];
-      if (muImgs.length)  chunks.push(...apaFigureDocx(ctx.nextFigure(), `Posterior distribution of pooled effect \u03BC (${profile.label})`, muImgs, priorLine));
-      if (tauImgs.length) chunks.push(...apaFigureDocx(ctx.nextFigure(), "Posterior distribution of between-study standard deviation \u03C4", tauImgs, `Prior: \u03C4\u202F~\u202FHalfNormal(${bayesResult.sigma_tau}).`));
+      if (muImgs.length)  chunks.push(...apaFigureDocx(ctx.nextFigure(), `Posterior distribution of pooled effect μ (${profile.label})`, muImgs, priorLine));
+      if (tauImgs.length) chunks.push(...apaFigureDocx(ctx.nextFigure(), "Posterior distribution of between-study standard deviation τ", tauImgs, `Prior: τ ~ HalfNormal(${bayesResult.sigma_tau}).`));
       if (sensitivityRows && sensitivityRows.length) {
         const sensRows = sensitivityRows.map(row => {
           const muDisp2   = profile.transform(row.muMean);
@@ -1022,42 +887,39 @@ export async function buildDocx(args) {
         });
         chunks.push(...apaTableDocx(ctx.nextTable(),
           "Prior Sensitivity Analysis",
-          ["\u03C3_\u03BC", "\u03C3_\u03C4", "Post. \u03BC", `${widthCrLabel}`, "BF\u2081\u2080"],
+          ["σ_μ", "σ_τ", "Post. μ", `${widthCrLabel}`, "BF₁₀"],
           sensRows,
-          "Grid: \u03C3_\u03BC \u2208 {0.5, 1, 2}, \u03C3_\u03C4 \u2208 {0.25, 0.5, 1}. Diffuse priors approach the frequentist RE estimate."));
+          "Grid: σ_μ ∈ {0.5, 1, 2}, σ_τ ∈ {0.25, 0.5, 1}. Diffuse priors approach the frequentist RE estimate."));
       }
       return chunks;
     })(),
 
-    // Profile likelihood
-    ...(() => {
-      const imgs = getImgs("profileLik");
-      if (!imgs.length) return [];
-      return [
-        paraText("Profile Likelihood for \u03C4\u00B2", "Heading1"),
-        ...apaFigureDocx(ctx.nextFigure(), "Profile likelihood curve for \u03C4\u00B2", imgs,
-          `Shaded region = ${widthCiLabel} from likelihood-ratio inversion (LRT).`),
-      ];
-    })(),
+    // RVE and three-level (cluster-dependent results)
+    ...docRve(docArgs, ctx),
+    ...docThreeLevel(docArgs, ctx),
 
-    // Influence, subgroup, study table, regression
-    ...docInfluence(docArgs, ctx),
+    // Publication bias
+    ...docPubBias(docArgs, ctx),
+    ...(getImgs("funnel").length ? apaFigureDocx(ctx.nextFigure(),
+        `Funnel plot of ${profile.label} against standard error`,
+        getImgs("funnel"),
+        "Each point = one study. Asymmetry may indicate publication bias or between-study heterogeneity.") : []),
+
+    // Sensitivity analysis
+    ...docSensitivity(docArgs, ctx),
+
     ...docSubgroup(docArgs, ctx),
-    ...docStudyTable(docArgs, ctx),
-    ...docRegression(docArgs, ctx),
 
-    // Plot figures
-    ...figSection("Forest Plot", "forest",
-      `Forest plot of ${profile.label}, k\u202F=\u202F${k} studies`,
-      `RE = random effects. Error bars = ${widthCiLabel} (${ciLabel}). \u03C4\u00B2 estimated by ${method}. Diamond = pooled estimate and ${widthCiLabel}.`),
-
-    ...figSection("Funnel Plot", "funnel",
-      `Funnel plot of ${profile.label} against standard error`,
-      "Each point = one study. Asymmetry may indicate publication bias or between-study heterogeneity."),
+    // Influence diagnostics
+    ...docInfluence(docArgs, ctx),
 
     ...figSection("Influence Plot", "influence",
-      `Influence diagnostics for k\u202F=\u202F${k} studies`,
+      `Influence diagnostics for k = ${k} studies`,
       `Left panel: standardised residuals. Right panel: leave-one-out (LOO) random-effects estimates with ${widthCiLabel}.`),
+
+    ...figSection("BLUPs", "blup",
+      `Best linear unbiased predictions (BLUPs) for k = ${k} studies`,
+      "Shrunken study-level estimates sorted by effect size."),
 
     ...figSection("Baujat Plot", "baujat",
       "Baujat plot of contribution to Q statistic against overall influence on the pooled estimate", ""),
@@ -1066,18 +928,22 @@ export async function buildDocx(args) {
       "Normal Q-Q plot of internally standardised residuals from the random-effects model",
       "Points near the reference line support the normality assumption. Orange points have |z| > 2."),
 
+    ...figSection("Radial (Galbraith) Plot", "radial",
+      "Radial (Galbraith) plot of standardised effect against reciprocal of standard error",
+      "Points near the reference line support homogeneity. Outliers may indicate heterogeneity."),
+
+    ...figSection("L'Abbé Plot", "labbe",
+      `L'Abbé plot of event rates for ${profile.label}`,
+      "Each point = one study. Point area proportional to study weight. Applicable to OR, RR, and RD only."),
+
+    // Cumulative analysis
     ...figSection("Cumulative Forest Plot", "cumForest",
       `Cumulative forest plot of ${profile.label}`,
       `Studies added in dataset order. Effect and ${widthCiLabel} shown at each cumulative step.`),
 
     ...figSection("Cumulative Funnel Plot", "cumFunnel", "Cumulative funnel plot", ""),
 
-    ...figSection("P-curve", "pcurve",
-      "P-curve of statistically significant results (p\u202F<\u202F.05)",
-      "Simonsohn et al. (2014). Only studies with p\u202F<\u202F.05 included."),
-
-    ...figSection("P-uniform", "puniformPlot", "P-uniform plot (van Assen et al., 2015)", ""),
-
+    // Alternative visualisations
     ...figSection("Orchard Plot", "orchard",
       `Orchard plot of ${profile.label}`,
       `Points scaled by random-effects weight. Thick bar = ${widthCiLabel}; thin bar = ${(ciLevel ?? "95")}% prediction interval.`),
@@ -1086,8 +952,36 @@ export async function buildDocx(args) {
       `Caterpillar plot of study-level ${profile.label}, sorted by effect size`,
       `Error bars = ${widthCiLabel}.`),
 
+    // P-value analyses
+    ...docPCurve(docArgs, ctx),
+
+    ...figSection("P-curve", "pcurve",
+      "P-curve of statistically significant results (p < .05)",
+      "Simonsohn et al. (2014). Only studies with p < .05 included."),
+    ...docPUniform(docArgs, ctx),
+
+    ...figSection("P-uniform", "puniformPlot", "P-uniform plot (van Assen et al., 2015)", ""),
+
+    // Selection model
+    ...docSelectionModel(docArgs, ctx),
+
+    // GOSH plot
+    ...figSection("GOSH Plot", "gosh",
+      `Graphical Display of Study Heterogeneity (GOSH) plot, k = ${k} studies`,
+      `Each point = one non-empty subset. x-axis: ${goshXAxis === "Q" ? "Q (Cochran's Q)" : goshXAxis === "n" ? "n (subset size)" : "I² (%)"}.`),
+
+    // Risk of bias
     ...figSection("Risk-of-bias Traffic Light", "robTL", "Risk-of-bias traffic-light plot", ""),
     ...figSection("Risk-of-bias Summary",        "robSummary", "Risk-of-bias summary plot",  ""),
+
+    // Location-scale model
+    ...docLocationScale(docArgs, ctx),
+
+    // Meta-regression
+    ...docRegression(docArgs, ctx),
+
+    // Permutation test
+    ...docPermutation(docArgs, ctx),
 
     // Bubble plots (one figure per moderator)
     ...bubbleMods.flatMap(({ key, mod }) => {
@@ -1097,15 +991,11 @@ export async function buildDocx(args) {
         ? `Bubble plot of ${mod} against ${profile.label}`
         : `Bubble plot of meta-regression moderator against ${profile.label}`;
       return [
-        paraText(mod ? `Bubble Plot \u2014 ${mod}` : "Bubble Plot", "Heading1"),
+        paraText(mod ? `Bubble Plot — ${mod}` : "Bubble Plot", "Heading1"),
         ...apaFigureDocx(ctx.nextFigure(), title, imgs,
           "Line = meta-regression fit. Point area proportional to random-effects weight."),
       ];
     }),
-
-    ...figSection("GOSH Plot", "gosh",
-      `Graphical Display of Study Heterogeneity (GOSH) plot, k\u202F=\u202F${k} studies`,
-      `Each point = one non-empty subset. x-axis: ${goshXAxis === "Q" ? "Q (Cochran\u2019s Q)" : goshXAxis === "n" ? "n (subset size)" : "I\u00B2 (%)"}.`),
 
     // References
     ...docReferences(args, linkMgr),
@@ -1131,6 +1021,179 @@ export async function buildDocx(args) {
       }
     }
   }
+
+  return zip.generateAsync({ type: "blob" });
+}
+
+// ---------------------------------------------------------------------------
+// Multivariate DOCX builder
+// ---------------------------------------------------------------------------
+
+export async function buildMVDocx({ res, rows = [], alpha = 0.05, exportScale = 3 }) {
+  const { beta, se, ci, z, pval, betaNames = [], tau2, rho_between,
+          outcomeIds, n, k, P, QM, df_QM, pQM, QE, df_QE, pQE,
+          logLik, AIC, BIC, AICc, struct, method, I2, convergence,
+          warnings: engineWarnings = [] } = res;
+  const hasMods = beta.length > P;
+  const ciPct   = Math.round((1 - alpha) * 100);
+  const fP      = p => !isFinite(p) ? "—" : p < 0.001 ? "< .001" : "= " + (+p).toFixed(3).replace(/^0\./, ".");
+
+  // Collect MV forest SVG strings from DOM
+  const forestSVGStrings = (() => {
+    const combined = document.getElementById("mvForestPlotCombined");
+    const combinedBlock = document.getElementById("mvForestCombinedBlock");
+    if (combinedBlock && combinedBlock.style.display !== "none" && combined) {
+      const s = serializeSVG(combined); return s ? [s] : [];
+    }
+    const result = [];
+    for (let o = 0; o < outcomeIds.length; o++) {
+      const el = document.getElementById(`mvForestPlot-${o}`);
+      if (el) { const s = serializeSVG(el); if (s) result.push(s); }
+    }
+    return result;
+  })();
+
+  // Convert SVGs to PNGs
+  const pngResults = await Promise.all(forestSVGStrings.map(s => svgStringToPng(s, exportScale)));
+  let imgCounter = 0;
+  const forestImgs = pngResults.map(png => {
+    if (!png || !png.blob) return null;
+    imgCounter++;
+    return { ...png, rId: `rId${imgCounter}`, idx: imgCounter };
+  }).filter(Boolean);
+
+  // APA counters
+  let _tblN = 0, _figN = 0;
+  const nextTable  = () => ++_tblN;
+  const nextFigure = () => ++_figN;
+
+  // Pooled estimates table
+  const pooledHeaders = ["Outcome", "Estimate", "SE", `${ciPct}% CI`, "z", "p"];
+  const pooledRows = outcomeIds.map((id, o) => {
+    const [lo, hi] = ci[o];
+    return [run(String(id)), run(fmt(beta[o], 4)), run(fmt(se[o], 4)),
+            run(`[${fmt(lo, 4)}, ${fmt(hi, 4)}]`), run(fmt(z[o], 3)), run(fP(pval[o]))];
+  });
+
+  // Heterogeneity table
+  const hetHeaders = struct === "CS"
+    ? ["Outcome", "τ²", "I²", "ρ (between)"]
+    : ["Outcome", "τ²", "I²"];
+  const hetRows = outcomeIds.map((id, o) => {
+    const cells = [run(String(id)), run(fmt(tau2[o], 5)),
+                   run(isFinite(I2[o]) ? (+I2[o]).toFixed(1) + "%" : "—")];
+    if (struct === "CS") cells.push(run(fmt(rho_between ?? 0, 4)));
+    return cells;
+  });
+
+  // Tests table
+  const testHeaders = ["Test", "χ²", "df", "p"];
+  const testRows = [
+    ...(hasMods && isFinite(QM)
+      ? [[run("Omnibus test of moderators (QM)"), run(fmt(QM, 3)), run(String(df_QM)), run(fP(pQM))]]
+      : []),
+    [run("Residual heterogeneity (QE)"), run(fmt(QE, 3)), run(String(df_QE)), run(fP(pQE))],
+  ];
+
+  // Moderator table
+  let modChunks = [];
+  if (hasMods) {
+    const modHeaders = ["Coefficient", "Estimate", "SE", `${ciPct}% CI`, "z", "p"];
+    const modRows = beta.slice(P).map((b, i) => {
+      const j = P + i;
+      const [lo, hi] = ci[j];
+      return [run(betaNames[j] ?? `β${j}`), run(fmt(b, 4)), run(fmt(se[j], 4)),
+              run(`[${fmt(lo, 4)}, ${fmt(hi, 4)}]`), run(fmt(z[j], 3)), run(fP(pval[j]))];
+    });
+    modChunks = [...apaTableDocx(nextTable(), "Meta-regression coefficients", modHeaders, modRows), para("")];
+  }
+
+  const fitText = `k = ${k} · n = ${n} obs · P = ${P} outcomes`
+    + ` | log-lik = ${fmt(logLik, 4)} · AIC = ${fmt(AIC, 2)} · BIC = ${fmt(BIC, 2)}`
+    + (isFinite(AICc) ? ` · AICc = ${fmt(AICc, 2)}` : "")
+    + ` | ${method}, Ψ = ${struct}`;
+
+  // Individual Studies table
+  const zVal = normalQuantile(1 - alpha / 2);
+  const studyHeaders = ["Study", "Outcome", "yi", "vi", "SE", `${ciPct}% CI`];
+  const studyDocxRows = rows.map(r => {
+    const se_r = Math.sqrt(r.vi);
+    return [run(String(r.study_id)), run(String(r.outcome_id)),
+            run(fmt(r.yi, 4)), run(fmt(r.vi, 4)), run(fmt(se_r, 4)),
+            run(`[${fmt(r.yi - zVal * se_r, 4)}, ${fmt(r.yi + zVal * se_r, 4)}]`)];
+  });
+  const studyChunks = rows.length
+    ? [...apaTableDocx(nextTable(), "Individual study effect sizes", studyHeaders, studyDocxRows), para("")]
+    : [];
+
+  // RoB images
+  const robSVGStrings = (() => {
+    const result = [];
+    ["robTrafficLight", "robSummary"].forEach(id => {
+      const el = document.getElementById(id);
+      if (el && el.children.length > 0) { const s = serializeSVG(el); if (s) result.push(s); }
+    });
+    return result;
+  })();
+  const robPngResults = await Promise.all(robSVGStrings.map(s => svgStringToPng(s, exportScale)));
+  const robImgs = robPngResults.map(png => {
+    if (!png || !png.blob) return null;
+    imgCounter++;
+    return { ...png, rId: `rId${imgCounter}`, idx: imgCounter };
+  }).filter(Boolean);
+  const robChunks = robImgs.length
+    ? [...robImgs.flatMap(img => apaFigureDocx(nextFigure(), "Risk of bias assessment", [img], "")), para("")]
+    : [];
+
+  // References
+  const linkMgr = new HyperlinkManager();
+  const mvCitationHTMLs = [
+    `Berkey, C. S., Hoaglin, D. C., Antczak-Bouckoms, A., Mosteller, F., &amp; Colditz, G. A. (1998). Meta-analysis of multiple outcomes by regression with random effects. <em>Statistics in Medicine</em>, <em>17</em>(22), 2537–2550.`,
+    `Cheung, M. W.-L. (2014). Modeling dependent effect sizes with three-level meta-analyses: a structural equation modeling approach. <em>Psychological Methods</em>, <em>19</em>(2), 211–229.`,
+    `Cochran, W. G. (1954). The combination of estimates from different experiments. <em>Biometrics</em>, <em>10</em>(1), 101–129.`,
+    `Higgins, J. P. T., Thompson, S. G., Deeks, J. J., &amp; Altman, D. G. (2003). Measuring inconsistency in meta-analyses. <em>BMJ</em>, <em>327</em>(7414), 557–560.`,
+    `Jackson, D., Riley, R., &amp; White, I. R. (2011). Multivariate meta-analysis: Potential and promise. <em>Statistics in Medicine</em>, <em>30</em>(20), 2481–2498.`,
+    `Riley, R. D., Abrams, K. R., Sutton, A. J., Lambert, P. C., &amp; Thompson, J. R. (2007). Bivariate random-effects meta-analysis and the estimation of between-study correlation. <em>BMC Medical Research Methodology</em>, <em>7</em>, 3.`,
+    `Viechtbauer, W. (2005). Bias and efficiency of meta-analytic variance estimators in the random-effects model. <em>Journal of Educational and Behavioral Statistics</em>, <em>30</em>(3), 261–293.`,
+  ];
+  const refChunks = [
+    paraText("References", "Heading1"),
+    ...mvCitationHTMLs.map(html =>
+      `<w:p><w:pPr><w:pStyle w:val="APAReference"/></w:pPr>${citationToRunXML(html, linkMgr)}</w:p>`
+    ),
+  ];
+
+  const allImgs = [...forestImgs, ...robImgs];
+
+  const bodyChunks = [
+    para(bold("Multivariate Meta-Analysis Report"), "Heading1"),
+    paraText(`Generated ${new Date().toLocaleDateString()} · k = ${k} studies, P = ${P} outcomes · ${method}, Ψ = ${struct}`, "APANote"),
+    ...(convergence === false ? [paraText("Warning: Optimizer did not fully converge — interpret results with caution.")] : []),
+    para(""),
+    ...apaTableDocx(nextTable(), `Pooled effect estimates per outcome (${method}, Ψ = ${struct})`, pooledHeaders, pooledRows),
+    para(""),
+    ...apaTableDocx(nextTable(), "Between-study heterogeneity", hetHeaders, hetRows),
+    para(""),
+    ...apaTableDocx(nextTable(), "Hypothesis tests", testHeaders, testRows),
+    para(""),
+    ...modChunks,
+    paraText(fitText, "APANote"),
+    para(""),
+    ...forestImgs.flatMap(img => apaFigureDocx(nextFigure(), "Forest plot of multivariate meta-analysis results", [img], "")),
+    para(""),
+    ...studyChunks,
+    ...robChunks,
+    ...refChunks,
+  ].filter(Boolean);
+
+  const zip = new window.JSZip();
+  zip.file("[Content_Types].xml", contentTypesXML(imgCounter));
+  zip.file("_rels/.rels",          rootRelsXML());
+  zip.file("word/document.xml",    wrapDocumentXML(bodyChunks.join("\n")));
+  zip.file("word/styles.xml",      stylesXML());
+  zip.file("word/settings.xml",    settingsXML());
+  zip.file("word/_rels/document.xml.rels", docRelsXML(imgCounter, linkMgr));
+  allImgs.forEach((img, i) => zip.file(`word/media/image${i + 1}.png`, img.blob));
 
   return zip.generateAsync({ type: "blob" });
 }

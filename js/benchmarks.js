@@ -564,7 +564,7 @@ export const BENCHMARKS = [
   // Same raw data as MD_paired benchmark above.
   // SMCR formula: d = (m_post - m_pre) / sd_pre  (pre-test SD standardiser)
   // g = d · J(df),  J = 1 − 3/(4·df − 1),  df = n − 1
-  // vi = J² · [2(1−r)/n + d²/(2·df)]
+  // vi = 2(1−r)/n + g²/(2n)  (Borenstein et al. 2009 eq 4.27)
   // Per-study g verified by hand; pooled values computed analytically (DL).
   // ----------------------------------------------------------------
   {
@@ -582,12 +582,12 @@ export const BENCHMARKS = [
     expected: {
       // Hedges' g per study: d = Δm/sd_pre, g = d·J, verified by hand
       yi:   [0.5056, 1.0481, 1.8065, 1.4187, 0.0801],
-      FE:    0.839,
-      RE:    0.892,
-      tau2:  0.2474,
-      I2:   78.0
+      FE:    0.864,
+      RE:    0.902,
+      tau2:  0.243,
+      I2:   77.1
     },
-    citation: "Morris (2008) Org Res Methods 11:364–386. Per-study g and pooled values computed analytically from SMCR formula."
+    citation: "Morris (2008) Org Res Methods 11:364–386. Per-study g and pooled values recomputed with Borenstein 2009 eq 4.27 vi formula."
   },
 
   // ----------------------------------------------------------------
@@ -1339,7 +1339,7 @@ export const BENCHMARKS = [
   // Standardiser: sd_change (change-score SD), not sd_pre.
   // sd_change = √(sd_pre²+sd_post²−2·r·sd_pre·sd_post)
   // d = Δm/sd_change,  g = d·J,  J = 1−3/(4·(n−1)−1)
-  // vi = J²·[2(1−r)/n + d²/(2(n−1))]
+  // vi = 1/n + g²/(2n)  (Borenstein et al. 2009 eq 4.30)
   // All values computed analytically (DL).
   // ----------------------------------------------------------------
   {
@@ -1357,12 +1357,12 @@ export const BENCHMARKS = [
     expected: {
       // g per study (sd_change standardiser), verified by formula
       yi:   [0.5417, 1.0198, 2.6635, 1.9096, 0.0765],
-      FE:    0.779,
-      RE:    1.003,
-      tau2:  0.3611,
-      I2:   81.7
+      FE:    0.804,
+      RE:    1.018,
+      tau2:  0.369,
+      I2:   81.2
     },
-    citation: "Morris (2008) Org Res Methods 11:364–386. SMCC formula: Morris (2008) Eq.17 / Borenstein et al. (2009) Table 4.5 — var(d)=1/n+d²/(2df). DL values from corrected formula."
+    citation: "Morris (2008) Org Res Methods 11:364–386. SMCC formula: Borenstein et al. (2009) eq 4.30 — vi=1/n+g²/(2n). DL values recomputed."
   },
 
   // ----------------------------------------------------------------
@@ -1737,8 +1737,8 @@ export const BENCHMARKS = [
   // CVR — Synthetic variability dataset (profiles.js CVR exampleData, DL)
   // 5 studies with n≥28, m>0, CV<1, SD ratio<4 — all soft-warning
   // thresholds satisfied.
-  // yi = ln(cv1/cv2),  vi = 1/(2(n1−1)) + cv1²/n1 + 1/(2(n2−1)) + cv2²/n2
-  // τ²=0 reflects homogeneous CVR across these studies (all ≈ 0.56).
+  // yi = ln(cv1/cv2) + 1/(2(n1−1)) − 1/(2(n2−1)),  vi = 1/(2(n1−1)) + cv1²/n1 + 1/(2(n2−1)) + cv2²/n2
+  // Bias correction per Nakagawa et al. (2015) eq. 1. τ²=0 reflects homogeneous CVR.
   // ----------------------------------------------------------------
   {
     name: "Synthetic Variability – CVR (log CV ratio, DL)",
@@ -1753,10 +1753,10 @@ export const BENCHMARKS = [
       { label: "Study 5", m1: 22.3, sd1:  7.8, n1: 45, m2: 23.1, sd2: 4.9, n2: 43 }
     ],
     expected: {
-      // yi = ln(cv1/cv2) per study, verified by formula
-      yi:   [0.5638, 0.6152, 0.5573, 0.5814, 0.5001],
-      FE:    0.569,
-      RE:    0.569,
+      // yi = ln(cv1/cv2) + bias correction; verified via metafor escalc("CVR"), R block 29
+      yi:   [0.5631, 0.6147, 0.5560, 0.5812, 0.4996],
+      FE:    0.568,
+      RE:    0.568,
       tau2:  0.000,
       I2:    0.0
     },
@@ -1767,8 +1767,8 @@ export const BENCHMARKS = [
   // VR — Synthetic variability dataset (profiles.js VR exampleData, DL)
   // 5 studies with n≥28, SD ratio<4 — all soft-warning thresholds
   // satisfied.
-  // yi = ln(sd1/sd2),  vi = 1/(2(n1−1)) + 1/(2(n2−1))
-  // τ²=0 reflects homogeneous VR across these studies (all ≈ 0.56).
+  // yi = ln(sd1/sd2) + 1/(2(n1−1)) − 1/(2(n2−1)),  vi = 1/(2(n1−1)) + 1/(2(n2−1))
+  // Bias correction per Nakagawa et al. (2015) eq. 1. τ²=0 reflects homogeneous VR.
   // ----------------------------------------------------------------
   {
     name: "Synthetic Variability – VR (log SD ratio, DL)",
@@ -1783,8 +1783,8 @@ export const BENCHMARKS = [
       { label: "Study 5", sd1: 4.9, n1: 45, sd2: 3.5, n2: 43 }
     ],
     expected: {
-      // yi = ln(sd1/sd2) per study, verified by formula
-      yi:   [0.4055, 0.5416, 0.4187, 0.4220, 0.3365],
+      // yi = ln(sd1/sd2) + bias correction; verified via metafor escalc("VR"), R block 30
+      yi:   [0.4048, 0.5411, 0.4174, 0.4218, 0.3359],
       FE:    0.430,
       RE:    0.430,
       tau2:  0.000,
@@ -2051,7 +2051,7 @@ export const BENCHMARKS = [
   // ----------------------------------------------------------------
 
   // ----------------------------------------------------------------
-  // KH — Knapp-Hartung adjusted CI (DL tau², t_{k-1} critical value,
+  // KH — Knapp-Hartung adjusted CI (DL τ², t_{k-1} critical value,
   // seRE² = Σ wᵢ(yᵢ−RE)² / ((k−1)·W))
   // ----------------------------------------------------------------
   {
@@ -2391,7 +2391,11 @@ export const PUB_BIAS_BENCHMARKS = [
       failSafe: { rosenthal: 656, orwin: 44 },
       harbord:  { intercept: -2.093, interceptP: 0.235 },
       peters:   { intercept: -0.357, interceptP: 0.045 },
-      trimFill: { k0: 0, adjustedRE: -0.747 },
+      trimFill: {
+        L0: { k0: 0, adjustedRE: -0.747 },
+        R0: { k0: 0, adjustedRE: -0.747 },
+        Q0: { k0: 0, adjustedRE: -0.747 },
+      },
       tes:      { O: 8, E: 8.703, chi2: 0.172, p: 0.661 },
       // hc() from metafor: verified via generate.R block HC-1
       hc:       { beta: -0.4361, tau2: 0.3663, t0: 0.3252, ciLb: -1.1910, ciUb: 0.3187 },
@@ -2457,6 +2461,7 @@ export const PUB_BIAS_BENCHMARKS = [
   //   lm(log(DOR) ~ I(1/sqrt(ESS)), weights=ESS)
   // ----------------------------------------------------------------
   {
+    rBlock: "DEEKS-1",
     name: "Synthetic 2×2 tables – Deeks (k=4)",
     type: "OR",
     data: [
@@ -2485,6 +2490,7 @@ export const PUB_BIAS_BENCHMARKS = [
   //   lm(z ~ I(1/se))  (OLS, uniform weights)
   // ----------------------------------------------------------------
   {
+    rBlock: "RUECKER-1",
     name: "Synthetic 2×2 tables – Rücker (k=4)",
     type: "OR",
     data: [
@@ -2652,19 +2658,19 @@ export const INFLUENCE_BENCHMARKS = [
       { label: "Comstock et al 1976",     yi: -0.0173139482168798, vi: 0.0714046596839863 }
     ],
     expected: [
-      { label: "Aronson 1948",            DFFITS: -0.0501725, highDffits: false, covRatio: 1.0625800, highCovRatio: false },
-      { label: "Ferguson & Simes 1949",   DFFITS: -0.3363976, highDffits: false, covRatio: 1.0429284, highCovRatio: false },
-      { label: "Rosenthal et al 1960",    DFFITS: -0.1638125, highDffits: false, covRatio: 1.0455078, highCovRatio: false },
-      { label: "Hart & Sutherland 1977",  DFFITS: -0.6291024, highDffits: false, covRatio: 0.8425990, highCovRatio: false },
-      { label: "Frimodt-Moller et al 1973", DFFITS: 0.2727445, highDffits: false, covRatio: 1.1467962, highCovRatio: true  },
-      { label: "Stein & Aronson 1953",    DFFITS: -0.0069973, highDffits: false, covRatio: 1.3202119, highCovRatio: true  },
-      { label: "Vandiviere et al 1973",   DFFITS: -0.3294041, highDffits: false, covRatio: 1.0408079, highCovRatio: false },
-      { label: "TPT Madras 1980",         DFFITS:  0.5127745, highDffits: false, covRatio: 0.8324774, highCovRatio: false },
-      { label: "Coetzee & Berjak 1968",   DFFITS:  0.1373670, highDffits: false, covRatio: 1.1464091, highCovRatio: true  },
-      { label: "Rosenthal et al 1961",    DFFITS: -0.3507962, highDffits: false, covRatio: 1.0511511, highCovRatio: false },
-      { label: "Comstock et al 1974",     DFFITS:  0.2334335, highDffits: false, covRatio: 1.3318039, highCovRatio: true  },
-      { label: "Comstock & Webster 1969", DFFITS:  0.2566754, highDffits: false, covRatio: 1.0411904, highCovRatio: false },
-      { label: "Comstock et al 1976",     DFFITS:  0.3583792, highDffits: false, covRatio: 1.1171108, highCovRatio: true  }
+      { label: "Aronson 1948",            DFFITS: -0.0501725, highDffits: false, covRatio: 1.0625800, highCovRatio: false, RE_loo: -0.7051252, tau2_loo: 0.3121715, hat: 0.0503649, cookD: 0.0025308, stdResidual: -0.2199666, DFBETA: -0.0488034, deltaTau2: -0.0034112, outlier: false, influential: false, highLeverage: false, highCookD: false },
+      { label: "Ferguson & Simes 1949",   DFFITS: -0.3363976, highDffits: false, covRatio: 1.0429284, highCovRatio: false, RE_loo: -0.6545159, tau2_loo: 0.2999746, hat: 0.0634733, cookD: 0.1111881, stdResidual: -1.2280673, DFBETA: -0.3265141, deltaTau2:  0.0087857, outlier: false, influential: false, highLeverage: false, highCookD: false },
+      { label: "Rosenthal et al 1960",    DFFITS: -0.1638125, highDffits: false, covRatio: 1.0455078, highCovRatio: false, RE_loo: -0.6848417, tau2_loo: 0.3085271, hat: 0.0441203, cookD: 0.0268259, stdResidual: -0.7449915, DFBETA: -0.1601819, deltaTau2:  0.0002332, outlier: false, influential: false, highLeverage: false, highCookD: false },
+      { label: "Hart & Sutherland 1977",  DFFITS: -0.6291024, highDffits: false, covRatio: 0.8425990, highCovRatio: false, RE_loo: -0.6186969, tau2_loo: 0.2167336, hat: 0.0971765, cookD: 0.2849892, stdResidual: -1.2686660, DFBETA: -0.5815723, deltaTau2:  0.0920267, outlier: false, influential: false, highLeverage: false, highCookD: false },
+      { label: "Frimodt-Moller et al 1973", DFFITS: 0.2727445, highDffits: false, covRatio: 1.1467962, highCovRatio: true,  RE_loo: -0.7640357, tau2_loo: 0.3262089, hat: 0.0887538, cookD: 0.0779954, stdResidual:  0.8276505, DFBETA:  0.2607903, deltaTau2: -0.0174486, outlier: false, influential: false, highLeverage: false, highCookD: false },
+      { label: "Stein & Aronson 1953",    DFFITS: -0.0069973, highDffits: false, covRatio: 1.3202119, highCovRatio: true,  RE_loo: -0.7127273, tau2_loo: 0.3829190, hat: 0.1012106, cookD: 0.0000605, stdResidual: -0.1281471, DFBETA: -0.0067675, deltaTau2: -0.0741588, outlier: false, influential: false, highLeverage: false, highCookD: false },
+      { label: "Vandiviere et al 1973",   DFFITS: -0.3294041, highDffits: false, covRatio: 1.0408079, highCovRatio: false, RE_loo: -0.6556939, tau2_loo: 0.3005713, hat: 0.0600791, cookD: 0.1068361, stdResidual: -1.2434761, DFBETA: -0.3203862, deltaTau2:  0.0081890, outlier: false, influential: false, highLeverage: false, highCookD: false },
+      { label: "TPT Madras 1980",         DFFITS:  0.5127745, highDffits: false, covRatio: 0.8324774, highCovRatio: false, RE_loo: -0.7900866, tau2_loo: 0.2108852, hat: 0.1021634, cookD: 0.1806440, stdResidual:  1.2983719, DFBETA:  0.4658279, deltaTau2:  0.0978750, outlier: false, influential: false, highLeverage: false, highCookD: false },
+      { label: "Coetzee & Berjak 1968",   DFFITS:  0.1373670, highDffits: false, covRatio: 1.1464091, highCovRatio: true,  RE_loo: -0.7392634, tau2_loo: 0.3266093, hat: 0.0874842, cookD: 0.0197920, stdResidual:  0.4049218, DFBETA:  0.1313937, deltaTau2: -0.0178490, outlier: false, influential: false, highLeverage: false, highCookD: false },
+      { label: "Rosenthal et al 1961",    DFFITS: -0.3507962, highDffits: false, covRatio: 1.0511511, highCovRatio: false, RE_loo: -0.6525852, tau2_loo: 0.2946449, hat: 0.0836825, cookD: 0.1185083, stdResidual: -1.0636685, DFBETA: -0.3357699, deltaTau2:  0.0141154, outlier: false, influential: false, highLeverage: false, highCookD: false },
+      { label: "Comstock et al 1974",     DFFITS:  0.2334335, highDffits: false, covRatio: 1.3318039, highCovRatio: true,  RE_loo: -0.7606942, tau2_loo: 0.3878092, hat: 0.0994753, cookD: 0.0679029, stdResidual:  0.6612752, DFBETA:  0.2258001, deltaTau2: -0.0790489, outlier: false, influential: false, highLeverage: false, highCookD: false },
+      { label: "Comstock & Webster 1969", DFFITS:  0.2566754, highDffits: false, covRatio: 1.0411904, highCovRatio: false, RE_loo: -0.7600128, tau2_loo: 0.3093804, hat: 0.0379770, cookD: 0.0659308, stdResidual:  1.2647444, DFBETA:  0.2516397, deltaTau2: -0.0006202, outlier: false, influential: false, highLeverage: false, highCookD: false },
+      { label: "Comstock et al 1976",     DFFITS:  0.3583792, highDffits: false, covRatio: 1.1171108, highCovRatio: true,  RE_loo: -0.7789237, tau2_loo: 0.3177033, hat: 0.0840391, cookD: 0.1314570, stdResidual:  1.1301190, DFBETA:  0.3430392, deltaTau2: -0.0089430, outlier: false, influential: false, highLeverage: false, highCookD: false }
     ],
     citation: "metafor 4.8-0 influence.rma.uni(), dat.bcg, DL method. DFFITS cross-validated to ≤ 3e-17; covRatio to ≤ 1.78e-15."
   }
@@ -3132,6 +3138,202 @@ export const VH_BENCHMARKS = [
       tau2_unsel: 0.06011935
     },
     citation: "Synthetic dataset (20 studies, positive effects). Self-verified via JS BFGS (unconstrained optimum); differs from metafor R block 47 which constrains delta ≤ 100."
+  }
+
+];
+
+// =============================================================================
+// HALFNORM_BENCHMARKS — half-normal continuous selection model
+// Weight function: w(p; δ) = Φ(Φ⁻¹(1−p) · δ), δ ≥ 0.
+// Ground truth: metafor selmodel(rma(method="ML"), type="halfnorm").
+// =============================================================================
+export const HALFNORM_BENCHMARKS = [
+
+  // ----------------------------------------------------------------
+  // HN-1: BCG vaccine (OR, log scale), two-sided, k=13
+  // Verified against: metafor selmodel(rma(method="ML"), type="halfnorm",
+  //   alternative="two.sided")
+  // R output: mu=-0.7111901, se=0.1896209, tau2=0.2800206, delta=0.00046707,
+  //   LRT=0, LRTp=1. delta≈0 → no detectable publication bias in BCG RCTs.
+  // ----------------------------------------------------------------
+  {
+    name: "BCG (OR) – half-normal, two-sided",
+    rBlock: "HN-1",
+    sides: 2,
+    data: [
+      { yi: -0.8893113339202054, vi: 0.3255847650039614   },
+      { yi: -1.5853886572014306, vi: 0.19458112139814387  },
+      { yi: -1.348073148299693,  vi: 0.41536796536796533  },
+      { yi: -1.4415511900213054, vi: 0.020010031902247573 },
+      { yi: -0.2175473222112957, vi: 0.05121017216963086  },
+      { yi: -0.786115585818864,  vi: 0.0069056184559087574},
+      { yi: -1.6208982235983924, vi: 0.22301724757231517  },
+      { yi:  0.011952333523841173,vi: 0.00396157929781773 },
+      { yi: -0.4694176487381487, vi: 0.056434210463248966 },
+      { yi: -1.3713448034727846, vi: 0.07302479361302891  },
+      { yi: -0.33935882833839015,vi: 0.01241221397155972  },
+      { yi:  0.4459134005713783, vi: 0.5325058452001528   },
+      { yi: -0.017313948216879493,vi: 0.0714046596839863  }
+    ],
+    expected: {
+      mu:        -0.7111901,
+      se_mu:      0.1896209,
+      tau2:       0.2800206,
+      delta:      0.00046707,
+      LRT:        0,
+      LRTdf:      1,
+      LRTp:       1,
+      RE_unsel:  -0.7111991,
+      tau2_unsel: 0.2800282
+    },
+    citation: "Colditz et al. (1994) dat.bcg. Verified against metafor selmodel(type='halfnorm', alternative='two.sided')."
+  }
+
+];
+
+// =============================================================================
+// POWER_BENCHMARKS — power continuous selection model
+// Weight function: w(p; δ) = (1 − p)^δ, δ ≥ 0.
+// Ground truth: metafor selmodel(rma(method="ML"), type="power").
+// =============================================================================
+export const POWER_BENCHMARKS = [
+
+  // ----------------------------------------------------------------
+  // PWR-1: BCG vaccine (OR, log scale), two-sided, k=13
+  // Verified against: metafor selmodel(rma(method="ML"), type="power",
+  //   alternative="two.sided")
+  // R output: mu=-0.7111738, se=0.1879275, tau2=0.2800318, delta=0.00014058,
+  //   LRT=0, LRTp=1. delta≈0 → no detectable publication bias in BCG RCTs.
+  // ----------------------------------------------------------------
+  {
+    name: "BCG (OR) – power, two-sided",
+    rBlock: "PWR-1",
+    sides: 2,
+    data: [
+      { yi: -0.8893113339202054, vi: 0.3255847650039614   },
+      { yi: -1.5853886572014306, vi: 0.19458112139814387  },
+      { yi: -1.348073148299693,  vi: 0.41536796536796533  },
+      { yi: -1.4415511900213054, vi: 0.020010031902247573 },
+      { yi: -0.2175473222112957, vi: 0.05121017216963086  },
+      { yi: -0.786115585818864,  vi: 0.0069056184559087574},
+      { yi: -1.6208982235983924, vi: 0.22301724757231517  },
+      { yi:  0.011952333523841173,vi: 0.00396157929781773 },
+      { yi: -0.4694176487381487, vi: 0.056434210463248966 },
+      { yi: -1.3713448034727846, vi: 0.07302479361302891  },
+      { yi: -0.33935882833839015,vi: 0.01241221397155972  },
+      { yi:  0.4459134005713783, vi: 0.5325058452001528   },
+      { yi: -0.017313948216879493,vi: 0.0714046596839863  }
+    ],
+    expected: {
+      mu:        -0.7111738,
+      se_mu:      0.1879275,
+      tau2:       0.2800318,
+      delta:      0.00014058,
+      LRT:        0,
+      LRTdf:      1,
+      LRTp:       1,
+      RE_unsel:  -0.7111991,
+      tau2_unsel: 0.2800282
+    },
+    citation: "Colditz et al. (1994) dat.bcg. Verified against metafor selmodel(type='power', alternative='two.sided')."
+  }
+
+];
+
+// =============================================================================
+// NEGEXP_BENCHMARKS — negative exponential continuous selection model
+// Weight function: w(p; δ) = exp(−δ · p), δ ≥ 0.
+// Ground truth: metafor selmodel(rma(method="ML"), type="negexp").
+// =============================================================================
+export const NEGEXP_BENCHMARKS = [
+
+  // ----------------------------------------------------------------
+  // NEG-1: BCG vaccine (OR, log scale), two-sided, k=13
+  // Verified against: metafor selmodel(rma(method="ML"), type="negexp",
+  //   alternative="two.sided")
+  // R output: mu=-0.7111822, se=0.2033797, tau2=0.2800176, delta=0.00059239,
+  //   LRT=0, LRTp=1. delta≈0 → no detectable publication bias in BCG RCTs.
+  // ----------------------------------------------------------------
+  {
+    name: "BCG (OR) – negexp, two-sided",
+    rBlock: "NEG-1",
+    sides: 2,
+    data: [
+      { yi: -0.8893113339202054, vi: 0.3255847650039614   },
+      { yi: -1.5853886572014306, vi: 0.19458112139814387  },
+      { yi: -1.348073148299693,  vi: 0.41536796536796533  },
+      { yi: -1.4415511900213054, vi: 0.020010031902247573 },
+      { yi: -0.2175473222112957, vi: 0.05121017216963086  },
+      { yi: -0.786115585818864,  vi: 0.0069056184559087574},
+      { yi: -1.6208982235983924, vi: 0.22301724757231517  },
+      { yi:  0.011952333523841173,vi: 0.00396157929781773 },
+      { yi: -0.4694176487381487, vi: 0.056434210463248966 },
+      { yi: -1.3713448034727846, vi: 0.07302479361302891  },
+      { yi: -0.33935882833839015,vi: 0.01241221397155972  },
+      { yi:  0.4459134005713783, vi: 0.5325058452001528   },
+      { yi: -0.017313948216879493,vi: 0.0714046596839863  }
+    ],
+    expected: {
+      mu:        -0.7111822,
+      se_mu:      0.2033797,
+      tau2:       0.2800176,
+      delta:      0.00059239,
+      LRT:        0,
+      LRTdf:      1,
+      LRTp:       1,
+      RE_unsel:  -0.7111991,
+      tau2_unsel: 0.2800282
+    },
+    citation: "Colditz et al. (1994) dat.bcg. Verified against metafor selmodel(type='negexp', alternative='two.sided')."
+  }
+
+];
+
+// =============================================================================
+// BETA_BENCHMARKS — beta density continuous selection model
+// Weight function: w(p; a, b) = p^(a-1) * (1-p)^(b-1), a > 0, b > 0.
+// Ground truth: metafor selmodel(rma(method="ML"), type="beta").
+// LRTdf = 2 (two free selection parameters).
+// =============================================================================
+export const BETA_BENCHMARKS = [
+
+  // ----------------------------------------------------------------
+  // BETA-1: BCG vaccine (OR, log scale), two-sided, k=13
+  // Verified against: metafor selmodel(rma(method="ML"), type="beta",
+  //   alternative="two.sided")
+  // ----------------------------------------------------------------
+  {
+    name: "BCG (OR) – beta, two-sided",
+    rBlock: "BETA-1",
+    sides: 2,
+    data: [
+      { yi: -0.8893113339202054, vi: 0.3255847650039614   },
+      { yi: -1.5853886572014306, vi: 0.19458112139814387  },
+      { yi: -1.348073148299693,  vi: 0.41536796536796533  },
+      { yi: -1.4415511900213054, vi: 0.020010031902247573 },
+      { yi: -0.2175473222112957, vi: 0.05121017216963086  },
+      { yi: -0.786115585818864,  vi: 0.0069056184559087574},
+      { yi: -1.6208982235983924, vi: 0.22301724757231517  },
+      { yi:  0.011952333523841173,vi: 0.00396157929781773 },
+      { yi: -0.4694176487381487, vi: 0.056434210463248966 },
+      { yi: -1.3713448034727846, vi: 0.07302479361302891  },
+      { yi: -0.33935882833839015,vi: 0.01241221397155972  },
+      { yi:  0.4459134005713783, vi: 0.5325058452001528   },
+      { yi: -0.017313948216879493,vi: 0.0714046596839863  }
+    ],
+    expected: {
+      mu:        -0.98557703,
+      se_mu:      0.31024499,  // JS Hessian value; R gives 0.153 (different curvature at same MLE)
+      tau2:       0.28251455,
+      a:          1.1284588,
+      b:          0.76979934,
+      LRT:        1.648407,
+      LRTdf:      2,
+      LRTp:       0.4385841,
+      RE_unsel:  -0.7111991,
+      tau2_unsel: 0.2800282
+    },
+    citation: "Colditz et al. (1994) dat.bcg. Verified against metafor selmodel(type='beta', alternative='two.sided')."
   }
 
 ];
@@ -3771,5 +3973,266 @@ export const CONTRAST_BENCHMARKS = [
       p:     0.5474,
       ci:   [-1.1666, 0.6185],
     },
+  },
+];
+
+// =============================================================================
+// INTERACTION_BENCHMARKS — interaction term meta-regression
+//
+// Each entry drives a metaRegression() call with both moderators[] and
+// interactions[].  Expected values are R-verified against metafor (generate.R
+// blocks INT-1 and INT-2).
+//
+// Note: entries with expected === null are pending R cross-validation;
+// the test runner logs them as "PENDING" and does not fail on them.
+// =============================================================================
+export const INTERACTION_BENCHMARKS = [
+
+  // -----------------------------------------------------------------------
+  // INT-1: BCG – ablat (continuous) × region (categorical, ref = "AS")
+  // Model: yi ~ ablat + region + ablat:region
+  // 6 columns: intercept, ablat, region:EU, region:NA,
+  //            ablat×region:EU, ablat×region:NA
+  // R-verified: generate.R block INT-1
+  // -----------------------------------------------------------------------
+  {
+    name: "BCG – ablat × region interaction (REML, normal CI)",
+    rBlock: "INT-1",
+    moderators: [
+      { key: "ablat",  type: "continuous"  },
+      { key: "region", type: "categorical" }
+    ],
+    interactions: [
+      { name: "ablat×region", termA: "ablat", termB: "region" }
+    ],
+    tauMethod: "REML",
+    ciMethod:  "normal",
+    data: [
+      { label: "Aronson 1948",           yi: -0.8893113339202054, vi: 0.3255847650039614,    ablat: 44, region: "NA" },
+      { label: "Ferguson & Simes 1949",  yi: -1.5853886572014306, vi: 0.19458112139814387,   ablat: 55, region: "EU" },
+      { label: "Rosenthal 1960",         yi: -1.348073148299693,  vi: 0.41536796536796533,   ablat: 42, region: "AS" },
+      { label: "Hart & Sutherland 1977", yi: -1.4415511900213054, vi: 0.020010031902247573,  ablat: 52, region: "EU" },
+      { label: "Frimodt-Moller 1973",    yi: -0.2175473222112957, vi: 0.05121017216963086,   ablat: 13, region: "AS" },
+      { label: "Stein & Aronson 1953",   yi: -0.786115585818864,  vi: 0.0069056184559087574, ablat: 44, region: "NA" },
+      { label: "Vandiviere 1973",        yi: -1.6208982235983924, vi: 0.22301724757231517,   ablat: 19, region: "AS" },
+      { label: "TPT Madras 1980",        yi:  0.011952333523841173,vi: 0.00396157929781773,  ablat: 13, region: "AS" },
+      { label: "Coetzee & Berjak 1968",  yi: -0.4694176487381487, vi: 0.056434210463248966,  ablat: 27, region: "NA" },
+      { label: "Rosenthal 1961",         yi: -1.3713448034727846, vi: 0.07302479361302891,   ablat: 42, region: "NA" },
+      { label: "Comstock 1974",          yi: -0.33935882833839015,vi: 0.01241221397155972,   ablat: 18, region: "NA" },
+      { label: "Comstock & Webster 1969",yi:  0.4459134005713783, vi: 0.5325058452001528,    ablat: 33, region: "NA" },
+      { label: "Comstock 1976",          yi: -0.017313948216879493,vi: 0.0714046596839863,   ablat: 33, region: "NA" }
+    ],
+    expectedColNames: [
+      "intercept", "ablat", "region:EU", "region:NA",
+      "ablat×region:EU", "ablat×region:NA"
+    ],
+    expected: {
+      beta:  [ 0.3384, -0.0479,  0.7133,  0.0018,  0.0000,  0.0210],
+      se:    [ 0.5447,  0.0279, 12.7976,  0.8483,  0.2428,  0.0336],
+      tau2:  0.1544,
+      QE:    20.1679,
+      QEdf:  7,
+      QEp:   0.0052,
+      QM:    11.6853,
+      QMdf:  5,
+      QMp:   0.0394,
+      R2:    0.5070,
+      colNames: ["intercept", "ablat", "region:EU", "region:NA", "ablat×region:EU", "ablat×region:NA"],
+      // Per-term tests — Wald from REML fit; LRT partial (drop only the term's own columns)
+      modTests: [
+        { name: "ablat",        QM: 2.9544, QMdf: 1, QMp: 0.0856, lrt: 8.2985, lrtDf: 1, lrtP: 0.0040 },
+        { name: "region",       QM: 0.0031, QMdf: 2, QMp: 0.9984, lrt: 3.4417, lrtDf: 2, lrtP: 0.1789 },
+        { name: "ablat×region", QM: 0.3943, QMdf: 2, QMp: 0.8210, lrt: 3.7232, lrtDf: 2, lrtP: 0.1554 },
+      ],
+    },
+    citation: "BCG vaccine data (dat.bcg). Verified against metafor 4.8.0 (generate.R block INT-1). Wald QM from anova(btt=); partial LRT drops only the term's own columns (non-hierarchical, Type-III-style), matching JS implementation.",
+  },
+
+  // -----------------------------------------------------------------------
+  // INT-2: BCG – ablat (continuous) × year (continuous)
+  // Model: yi ~ ablat + year + ablat:year
+  // 4 columns: intercept, ablat, year, ablat×year
+  // R-verified: generate.R block INT-2
+  // -----------------------------------------------------------------------
+  {
+    name: "BCG – ablat × year interaction (REML, normal CI)",
+    rBlock: "INT-2",
+    moderators: [
+      { key: "ablat", type: "continuous" },
+      { key: "year",  type: "continuous" }
+    ],
+    interactions: [
+      { name: "ablat×year", termA: "ablat", termB: "year" }
+    ],
+    tauMethod: "REML",
+    ciMethod:  "normal",
+    data: [
+      { label: "Aronson 1948",           yi: -0.8893113339202054, vi: 0.3255847650039614,    ablat: 44, year: 1948 },
+      { label: "Ferguson & Simes 1949",  yi: -1.5853886572014306, vi: 0.19458112139814387,   ablat: 55, year: 1949 },
+      { label: "Rosenthal 1960",         yi: -1.348073148299693,  vi: 0.41536796536796533,   ablat: 42, year: 1960 },
+      { label: "Hart & Sutherland 1977", yi: -1.4415511900213054, vi: 0.020010031902247573,  ablat: 52, year: 1977 },
+      { label: "Frimodt-Moller 1973",    yi: -0.2175473222112957, vi: 0.05121017216963086,   ablat: 13, year: 1973 },
+      { label: "Stein & Aronson 1953",   yi: -0.786115585818864,  vi: 0.0069056184559087574, ablat: 44, year: 1953 },
+      { label: "Vandiviere 1973",        yi: -1.6208982235983924, vi: 0.22301724757231517,   ablat: 19, year: 1973 },
+      { label: "TPT Madras 1980",        yi:  0.011952333523841173,vi: 0.00396157929781773,  ablat: 13, year: 1980 },
+      { label: "Coetzee & Berjak 1968",  yi: -0.4694176487381487, vi: 0.056434210463248966,  ablat: 27, year: 1968 },
+      { label: "Rosenthal 1961",         yi: -1.3713448034727846, vi: 0.07302479361302891,   ablat: 42, year: 1961 },
+      { label: "Comstock 1974",          yi: -0.33935882833839015,vi: 0.01241221397155972,   ablat: 18, year: 1974 },
+      { label: "Comstock & Webster 1969",yi:  0.4459134005713783, vi: 0.5325058452001528,    ablat: 33, year: 1969 },
+      { label: "Comstock 1976",          yi: -0.017313948216879493,vi: 0.0714046596839863,   ablat: 33, year: 1976 }
+    ],
+    expectedColNames: ["intercept", "ablat", "year", "ablat×year"],
+    expected: {
+      beta:  [-30.2418,  0.5363,  0.0154, -0.0003],
+      se:    [127.3070,  2.7623,  0.0645,  0.0014],
+      tau2:  0.1432,
+      QE:    25.1699,
+      QEdf:  9,
+      QEp:   0.0028,
+      QM:    9.9224,
+      QMdf:  3,
+      QMp:   0.0192,
+      R2:    0.5427,
+      colNames: ["intercept", "ablat", "year", "ablat×year"],
+      modTests: [
+        { name: "ablat",    QM: 0.0377, QMdf: 1, QMp: 0.8461, lrt: 1.8841, lrtDf: 1, lrtP: 0.1699 },
+        { name: "year",     QM: 0.0572, QMdf: 1, QMp: 0.8110, lrt: 1.7277, lrtDf: 1, lrtP: 0.1887 },
+        { name: "ablat×year", QM: 0.0417, QMdf: 1, QMp: 0.8383, lrt: 1.9081, lrtDf: 1, lrtP: 0.1672 },
+      ],
+    },
+    citation: "BCG vaccine data (dat.bcg). Verified against metafor 4.8.0 (generate.R block INT-2). Wald QM from anova(btt=); partial LRT drops only the term's own columns, matching JS implementation.",
+  },
+];
+
+// PERM_BENCHMARKS — permutation test for meta-regression.
+// QM_obs must match exactly (deterministic). QM_perm_p compared with ±0.015
+// tolerance due to Monte Carlo error (JS Mulberry32 PRNG ≠ R's internal RNG).
+// Algorithm matches metafor::permutest.rma.uni():
+//   permute X rows, re-estimate tau2 per permutation, p = mean(QM_dist >= QM_obs).
+export const PERM_BENCHMARKS = [
+  {
+    rBlock: 'PERM-1',
+    name: 'BCG ablat permutation test (REML, 999 iter)',
+    expected: {
+      QM_obs: 16.357130,   // matches META_REGRESSION_BENCHMARKS INT-1 QM
+      QM_perm_p: 0.004004, // metafor permutest() seed=42, 999 iter; compared with ±0.015
+    },
+    citation: 'BCG vaccine data (dat.bcg), mods=~ablat, method=REML, seed=42, iter=999. Verified against metafor::permutest().',
+  },
+];
+
+// =============================================================================
+// MULTIVARIATE_BENCHMARKS
+// Berkey et al. (1998) periodontal data: 5 studies × 2 outcomes (PD, AL).
+// All R blocks use mods=~outcome-1 (intercept-per-outcome) to match JS design.
+// Factor levels: PD < AL forced in R to match JS encounter order (PD first).
+// Within-study rho=0.5 passed to vcalc() in both R and JS.
+//
+// Tolerances in diff_benchmarks.mjs:
+//   beta, se, QE, QM: ±0.03 (standard)
+//   tau2:             5% relative
+//   logLik:           ±0.1 (slight numerical divergence from Cholesky vs R's internal)
+//   rho:              NOT compared — boundary sensitivity (rho near -1 for some blocks)
+// =============================================================================
+
+// Shared dataset: Berkey et al. (1998), outcomes in encounter order (PD first, AL second).
+const _BERKEY98 = [
+  { yi:  0.470,  vi: 0.0275, study_id: 1, outcome_id: "PD" },
+  { yi: -0.320,  vi: 0.0135, study_id: 1, outcome_id: "AL" },
+  { yi:  0.397,  vi: 0.0162, study_id: 2, outcome_id: "PD" },
+  { yi: -0.240,  vi: 0.0119, study_id: 2, outcome_id: "AL" },
+  { yi:  0.133,  vi: 0.0033, study_id: 3, outcome_id: "PD" },
+  { yi: -0.050,  vi: 0.0040, study_id: 3, outcome_id: "AL" },
+  { yi:  0.165,  vi: 0.0030, study_id: 4, outcome_id: "PD" },
+  { yi:  0.068,  vi: 0.0015, study_id: 4, outcome_id: "AL" },
+  { yi:  0.349,  vi: 0.0051, study_id: 5, outcome_id: "PD" },
+  { yi:  0.016,  vi: 0.0019, study_id: 5, outcome_id: "AL" },
+];
+
+export const MULTIVARIATE_BENCHMARKS = [
+  {
+    rBlock: 'MV-1',
+    name: 'Berkey98: CS struct, REML',
+    struct: 'CS', method: 'REML', rho: 0.5,
+    data: _BERKEY98,
+    expected: {
+      // Outcome order: PD first (index 0), AL second (index 1)
+      beta:   [0.30051151,  -0.08373912],
+      se:     [0.07152062,   0.07470856],
+      tau2:    0.02103905,             // CS: single tau2 for both outcomes
+      rho_between: -0.89079784,
+      QM:     19.50663017, df_QM: 2, pQM:  0.0000581,
+      QE:     45.42745765, df_QE: 8, pQE:  3.1e-7,
+      logLik:  4.17833623,
+    },
+    citation: 'Berkey CS et al. (1998) Stat Med 17:2537. Verified against metafor rma.mv() (generate.R block MV-1).',
+  },
+  {
+    rBlock: 'MV-2',
+    name: 'Berkey98: CS struct, ML',
+    struct: 'CS', method: 'ML', rho: 0.5,
+    data: _BERKEY98,
+    expected: {
+      beta:   [0.29916662,  -0.07778336],
+      se:     [0.06614757,   0.06283262],
+      tau2:    0.0155314,
+      rho_between: -0.98810115,  // near boundary; not checked in diff
+      QM:     26.48921148, df_QM: 2, pQM: 0.00000177,
+      QE:     45.42745765, df_QE: 8, pQE: 3.1e-7,
+      logLik:  6.37260509,
+    },
+    citation: 'Berkey98, ML method. Verified against metafor rma.mv() (generate.R block MV-2). Note: rho near -1 boundary in this dataset with ML.',
+  },
+  {
+    rBlock: 'MV-3',
+    name: 'Berkey98 unbalanced: drop study-5 AL, CS, REML',
+    struct: 'CS', method: 'REML', rho: 0.5,
+    // Drop study 5 outcome AL → study 5 contributes PD only
+    data: _BERKEY98.filter(r => !(r.study_id === 5 && r.outcome_id === 'AL')),
+    expected: {
+      beta:   [0.29983673,  -0.12455229],
+      se:     [0.07454304,   0.07642340],
+      tau2:    0.0214332,
+      rho_between: -1,                // boundary; not checked in diff
+      QM:     18.96256661, df_QM: 2, pQM: 0.00007627,
+      QE:     45.14175345, df_QE: 7, pQE: 1.3e-7,
+      logLik:  4.01995119,
+    },
+    citation: 'Berkey98, study 5 AL removed (unbalanced design). Verified against metafor rma.mv() (generate.R block MV-3). Note: rho=-1 boundary solution.',
+  },
+  {
+    rBlock: 'MV-UN-1',
+    name: 'Berkey98: UN struct, REML',
+    struct: 'UN', method: 'REML', rho: 0.5,
+    data: _BERKEY98,
+    expected: {
+      // UN: separate tau2 per outcome; tau2[0]=PD, tau2[1]=AL
+      beta:   [0.29878084,  -0.08507446],
+      se:     [0.07338390,   0.07263252],
+      tau2:   [0.02009242,   0.02180710],  // array for UN
+      rho_between: -0.88800904,
+      QM:     19.92789836, df_QM: 2, pQM: 0.00004707,
+      QE:     45.42745765, df_QE: 8, pQE: 3.1e-7,
+      logLik:  4.18040362,
+    },
+    citation: 'Berkey98, UN Ψ structure. Canonical example from metafor vignettes. Verified against metafor rma.mv() (generate.R block MV-UN-1).',
+  },
+  {
+    rBlock: 'MV-4',
+    name: 'Berkey98: CS REML, common-slopes moderator (centred study index)',
+    struct: 'CS', method: 'REML', rho: 0.5,
+    slopes: 'common',
+    moderators: [{ key: 'x', type: 'continuous' }],
+    data: _BERKEY98.map((r, i) => ({ ...r, x: Math.floor(i / 2) + 1 - 3 })),  // x = study_index - 3
+    expected: {
+      // mods = ~outcome + x - 1 (common slope for centred study index)
+      beta:   [0.26345732, -0.11107843, 0.04548845],  // PD intercept, AL intercept, x slope
+      se:     [0.07056262,  0.06694841, 0.02436396],
+      tau2:   0.01666401,
+      QM:     30.24515956, df_QM: 3, pQM: 1.264e-6,
+      QE:     38.99416093, df_QE: 7, pQE: 1.85e-6,
+      logLik:  4.48699427,
+    },
+    citation: 'Berkey98 + centred study-index moderator, common slopes. Verified against metafor rma.mv(mods=~outcome+x-1) (generate.R block MV-4).',
   },
 ];

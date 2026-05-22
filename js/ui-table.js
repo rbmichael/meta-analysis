@@ -16,12 +16,33 @@ import { escapeHTML } from "./utils-html.js";
 import { parseCSV, detectEffectType } from "./csv.js";
 import { readTextFile } from "./io.js";
 
+// Descriptive titles for each input column name, used as <th title="..."> tooltips.
+const INPUT_TITLES = {
+  m1: "Mean — group 1",      sd1: "SD — group 1",      n1: "n — group 1",
+  m2: "Mean — group 2",      sd2: "SD — group 2",      n2: "n — group 2",
+  m_pre: "Mean — pre",       sd_pre: "SD — pre",
+  m_post: "Mean — post",     sd_post: "SD — post",
+  n:  "Sample size",         r:  "Correlation",
+  a:  "Events — group 1",    b:  "Non-events — group 1",
+  c:  "Events — group 2",    d:  "Non-events — group 2",
+  x:  "Events / successes",
+  yi: "Effect size",         vi: "Variance",
+  hr: "Hazard ratio",        ci_lo: "CI lower bound",  ci_hi: "CI upper bound",
+  x1: "Events — group 1",    t1: "Person-time — group 1",
+  x2: "Events — group 2",    t2: "Person-time — group 2",
+  t:  "Person-time",         m:  "Mean",               sd: "SD",
+  ref: "Reference value",    r2: "R²",                 p:  "Number of predictors",
+  counts1: "Group 1 counts", counts2: "Group 2 counts",
+  alpha: "Cronbach α",       k:  "Number of items",
+};
+
 // ── Injected callbacks (set by initTable) ────────────────────────────────────
 let _cb = {
-  markStale:        () => {},
-  scheduleSave:     () => {},
-  renderRoBDataGrid: () => {},
-  deleteRobEntry:   (_key) => {},
+  markStale:            () => {},
+  scheduleSave:         () => {},
+  renderRoBDataGrid:    () => {},
+  deleteRobEntry:       (_key) => {},
+  onModeratorChanged:   () => {},  // called after any moderator add/remove
 };
 
 /**
@@ -89,35 +110,99 @@ export function makeModTd(name, type) {
  * Low-level: add one moderator to state + DOM.
  * Does not read form inputs; does not call runAnalysis.
  */
+function renderModTags() {
+  const container = document.getElementById("modTags");
+  if (!container) return;
+  container.innerHTML = "";
+  moderators.forEach(({ name }) => {
+    const span = document.createElement("span");
+    span.className = "mod-tag";
+    span.innerHTML = `${escapeHTML(name)} <button class="remove-mod-btn" title="Remove moderator">×</button>`;
+    span.querySelector("button").addEventListener("click", () => {
+      // Remove from analysis state only; keep the table column so the data isn't lost.
+      moderators.splice(0, moderators.length, ...moderators.filter(m => m.name !== name));
+      interactions.splice(0, interactions.length, ...interactions.filter(ix => ix.termA !== name && ix.termB !== name));
+      renderModTags();
+      _cb.onModeratorChanged();
+      _cb.markStale();
+    });
+    container.appendChild(span);
+  });
+}
+
 export function doAddModerator(name, type, transform = "linear") {
   if (!name || moderators.some(m => m.name === name)) return;
   moderators.push({ name, type, transform });
 
   const table = document.getElementById("inputTable");
   const headerRow = table.rows[0];
-  headerRow.insertBefore(makeModTh(name), headerRow.lastElementChild);
+  if (![...headerRow.cells].some(c => c.dataset.mod === name)) {
+    headerRow.insertBefore(makeModTh(name), headerRow.lastElementChild);
+    for (let i = 1; i < table.rows.length; i++) {
+      table.rows[i].insertBefore(makeModTd(name, type), table.rows[i].lastElementChild);
+    }
+  }
+  renderModTags();
+}
 
+/** Add a moderator column to the table without touching moderators[] state. No-op if already present. */
+export function ensureModColumn(name, type) {
+  const table = document.getElementById("inputTable");
+  const headerRow = table.rows[0];
+  if ([...headerRow.cells].some(c => c.dataset.mod === name)) return;
+  headerRow.insertBefore(makeModTh(name), headerRow.lastElementChild);
   for (let i = 1; i < table.rows.length; i++) {
-    const row = table.rows[i];
-    row.insertBefore(makeModTd(name, type), row.lastElementChild);
+    table.rows[i].insertBefore(makeModTd(name, type), table.rows[i].lastElementChild);
   }
 }
 
 /** Remove a moderator from state and from every table row. */
 export function removeModerator(name) {
   moderators.splice(0, moderators.length, ...moderators.filter(m => m.name !== name));
+  // Remove any interaction terms that reference this moderator.
+  interactions.splice(0, interactions.length, ...interactions.filter(ix => ix.termA !== name && ix.termB !== name));
   const table = document.getElementById("inputTable");
   for (let i = 0; i < table.rows.length; i++) {
     const cell = [...table.rows[i].cells].find(c => c.dataset.mod === name);
     if (cell) cell.remove();
   }
+  renderModTags();
+  _cb.onModeratorChanged();
   _cb.markStale();
 }
 
 /** Reset all moderators: clears state and removes all [data-mod] DOM elements. */
 export function clearModerators() {
   moderators.splice(0);
+  interactions.splice(0);
   document.querySelectorAll("[data-mod]").forEach(el => el.remove());
+  renderModTags();
+}
+
+// =============================================================================
+// INTERACTION TERM STATE
+// Derived terms (A×B outer product) — no table column, computed at analysis time.
+// =============================================================================
+
+/** @type {{ name: string, termA: string, termB: string }[]} */
+export const interactions = [];
+
+/** Add an interaction between two existing moderators (no-op if already exists). */
+export function doAddInteraction(termA, termB) {
+  const name = `${termA}×${termB}`;
+  if (!termA || !termB || termA === termB) return;
+  if (interactions.some(ix => ix.name === name)) return;
+  interactions.push({ name, termA, termB });
+}
+
+/** Remove a single interaction by its composite name. */
+export function removeInteraction(name) {
+  interactions.splice(0, interactions.length, ...interactions.filter(ix => ix.name !== name));
+}
+
+/** Reset all interactions. */
+export function clearInteractions() {
+  interactions.splice(0);
 }
 
 // =============================================================================
@@ -143,12 +228,13 @@ export function updateTableHeaders() {
   profile.inputs.forEach(col => {
     const th = document.createElement("th");
     th.textContent = col;
+    if (INPUT_TITLES[col]) th.title = INPUT_TITLES[col];
     headerRow.appendChild(th);
   });
 
   // Group column
   const thGroup = document.createElement("th");
-  thGroup.textContent = "Group";
+  thGroup.innerHTML = 'Group <button class="help-btn" data-help="input.group" aria-label="Help: Group" title="Help">?</button>';
   headerRow.appendChild(thGroup);
 
   // Cluster column — inline help button (avoids importing hBtn from ui.js)
@@ -234,12 +320,15 @@ export function addRow(values) {
   const table = document.getElementById("inputTable");
   const row = table.insertRow();
   row.draggable = true;
-  row.addEventListener("pointerdown", _rowPointerDown);
-  row.addEventListener("dragstart",   _rowDragStart);
-  row.addEventListener("dragover",    _rowDragOver);
-  row.addEventListener("dragleave",   _rowDragLeave);
-  row.addEventListener("drop",        _rowDrop);
-  row.addEventListener("dragend",     _rowDragEnd);
+  row._dragHandlers = [
+    ["pointerdown", _rowPointerDown],
+    ["dragstart",   _rowDragStart],
+    ["dragover",    _rowDragOver],
+    ["dragleave",   _rowDragLeave],
+    ["drop",        _rowDrop],
+    ["dragend",     _rowDragEnd],
+  ];
+  row._dragHandlers.forEach(([evt, fn]) => row.addEventListener(evt, fn));
 
   const v = values || ["", ...Array(profile.inputs.length).fill(""), "", ""];
 
@@ -287,11 +376,15 @@ export function addRow(values) {
   actionCell.innerHTML = `<button class="remove-btn" aria-label="Remove study">✖</button> <button class="clear-btn" aria-label="Clear row">🧹</button>`;
 
   // Input listeners
+  let _valTimer;
   row.querySelectorAll("input").forEach(input => {
     input.addEventListener("input", () => {
-      validateRow(row);
-      _cb.markStale();
-      _cb.scheduleSave();
+      clearTimeout(_valTimer);
+      _valTimer = setTimeout(() => {
+        _revalidate();
+        _cb.markStale();
+        _cb.scheduleSave();
+      }, 150);
     });
   });
 
@@ -309,16 +402,21 @@ export function addRow(values) {
 const _undoState = { timer: null, row: null, robKey: null };
 const _UNDO_MS   = 5000;
 
+let _companionCommit = null;
+export function registerDeleteCompanion(fn) { _companionCommit = fn; }
+
 export function commitPendingDelete() {
   if (!_undoState.row) return;
   clearTimeout(_undoState.timer);
   if (_undoState.robKey) _cb.deleteRobEntry(_undoState.robKey);
+  _undoState.row._dragHandlers?.forEach(([evt, fn]) => _undoState.row.removeEventListener(evt, fn));
   _undoState.row.remove();
   _undoState.row    = null;
   _undoState.robKey = null;
   _undoState.timer  = null;
   _cb.renderRoBDataGrid();
-  _hideUndoToast();
+  hideUndoToast();
+  _companionCommit?.();
 }
 
 function _cancelPendingDelete() {
@@ -328,12 +426,12 @@ function _cancelPendingDelete() {
   _undoState.row    = null;
   _undoState.robKey = null;
   _undoState.timer  = null;
-  _hideUndoToast();
+  hideUndoToast();
   _cb.markStale();
   _cb.scheduleSave();
 }
 
-function _showUndoToast(label) {
+export function showUndoToast(label, undoFn) {
   const toast = document.getElementById("undoToast");
   const lbl   = document.getElementById("undoToastLabel");
   const btn   = document.getElementById("undoToastBtn");
@@ -341,11 +439,11 @@ function _showUndoToast(label) {
   if (!toast) return;
   if (lbl) lbl.textContent = label ? `"${label}" removed` : "Study removed";
   if (bar) { const newBar = bar.cloneNode(true); bar.replaceWith(newBar); }
-  btn.onclick = _cancelPendingDelete;
+  btn.onclick = undoFn;
   toast.hidden = false;
 }
 
-function _hideUndoToast() {
+export function hideUndoToast() {
   const toast = document.getElementById("undoToast");
   if (toast) toast.hidden = true;
 }
@@ -369,14 +467,22 @@ export function removeRow(btn) {
   _undoState.robKey = label || null;
   _undoState.timer  = setTimeout(commitPendingDelete, _UNDO_MS);
 
-  _showUndoToast(label);
+  showUndoToast(label, _cancelPendingDelete);
+  _revalidate();
   _cb.markStale();
   _cb.scheduleSave();
 }
 
 export function clearRow(btn) {
   btn.closest("tr").querySelectorAll("input").forEach(input => { input.value = ""; });
+  _revalidate();
   _cb.markStale();
+}
+
+function _revalidate() {
+  const type = document.getElementById("effectType").value;
+  const { studies, excluded, softWarnings } = collectStudies(type);
+  updateValidationWarnings(studies, excluded, softWarnings);
 }
 
 // =============================================================================
@@ -388,14 +494,16 @@ export function updateValidationWarnings(studies, excluded, softWarnings) {
   const warningDiv = document.getElementById("validationWarnings");
   const rows       = [...table.rows].slice(1);
 
-  const messages    = [];
+  const errLines  = [];
+  const warnLines = [];
   const subgroupMap = {};
 
   // Input errors
   rows.forEach((row, idx) => {
-    const label  = row.querySelector("input")?.value || `Row ${idx + 1}`;
+    if (row.classList.contains("row-pending-delete")) return;
+    const label  = escapeHTML(row.querySelector("input")?.value || `Row ${idx + 1}`);
     const errors = JSON.parse(row.dataset.validationErrors || "{}");
-    Object.entries(errors).forEach(([, msg]) => messages.push(`❌ ${label}: ${msg}`));
+    Object.entries(errors).forEach(([, msg]) => errLines.push(`${label}: ${escapeHTML(msg)}`));
 
     const groupName = row.querySelector(".group")?.value.trim();
     if (groupName) {
@@ -407,29 +515,32 @@ export function updateValidationWarnings(studies, excluded, softWarnings) {
   // Subgroup warnings
   Object.entries(subgroupMap).forEach(([group, studiesInGroup]) => {
     if (studiesInGroup.length < 2)
-      messages.push(`⚠️ Subgroup "${group}" has <2 studies (${studiesInGroup.join(", ")})`);
+      warnLines.push(`Subgroup "${escapeHTML(group)}" has &lt;2 studies (${studiesInGroup.join(", ")})`);
   });
 
   // Excluded studies
-  excluded.forEach(e => messages.push(`⚠️ Excluded: ${e.label} (${e.reason})`));
+  excluded.forEach(e => warnLines.push(`Excluded: ${escapeHTML(e.label)} (${escapeHTML(e.reason)})`));
 
-  // Soft warnings
-  softWarnings.forEach(w => messages.push(w));
+  // Soft warnings (already carry descriptive text from profiles.js)
+  softWarnings.forEach(w => warnLines.push(escapeHTML(w)));
 
-  // Analysis-level warnings
+  // Analysis-level
   const k = studies.length;
   if (k === 0) {
-    messages.push("❌ No valid studies available for analysis");
+    errLines.push("No valid studies available for analysis");
   } else {
-    if (k < 2) messages.push("⚠️ Fewer than 2 studies: meta-analysis not meaningful");
-    if (k < 3) messages.push("⚠️ Egger / Begg / FAT-PET tests require ≥ 3 studies");
+    if (k < 2) warnLines.push("Fewer than 2 studies — meta-analysis not meaningful");
+    if (k < 3) warnLines.push("Egger / Begg / FAT-PET tests require ≥ 3 studies");
     if (studies.some(s => s.vi < 1e-8))
-      messages.push("⚠️ One or more studies have extremely small variance (may inflate weights)");
+      warnLines.push("One or more studies have extremely small variance (may inflate weights)");
   }
 
-  warningDiv.innerHTML = messages.length > 0
-    ? messages.map(m => `• ${m}`).join("<br>")
-    : "";
+  let html = "";
+  if (errLines.length)
+    html += `<div class="validation-block validation-block--error">${errLines.map(m => `<div>❌ ${m}</div>`).join("")}</div>`;
+  if (warnLines.length)
+    html += `<div class="validation-block validation-block--warning">${warnLines.map(m => `<div>⚠ ${m}</div>`).join("")}</div>`;
+  warningDiv.innerHTML = html;
 }
 
 // =============================================================================
@@ -445,7 +556,7 @@ export function updateValidationWarnings(studies, excluded, softWarnings) {
  * @returns {{ studies: object[], excluded: object[], softWarnings: string[],
  *             missingCorrelation: boolean }}
  */
-export function collectStudies(type) {
+export function collectStudies(type, extraMods = []) {
   const profile = effectProfiles[type];
   if (!profile) return { studies: [], excluded: [], softWarnings: [], missingCorrelation: false };
 
@@ -498,6 +609,15 @@ export function collectStudies(type) {
 
     moderators.forEach(({ name, type: mtype }, modIdx) => {
       const raw = (inputs[modOffset + modIdx] ?? "").trim();
+      study[name] = mtype === "continuous" ? (raw === "" ? NaN : +raw) : raw;
+    });
+
+    // Read scale-moderator (and other extra-mod) values from named columns when
+    // they are not already present as a regular moderator column.
+    extraMods.forEach(({ name, type: mtype }) => {
+      if (study[name] !== undefined) return;
+      const cell = [...row.cells].find(c => c.dataset.mod === name);
+      const raw  = cell ? (cell.querySelector("input")?.value ?? "").trim() : "";
       study[name] = mtype === "continuous" ? (raw === "" ? NaN : +raw) : raw;
     });
 
@@ -591,6 +711,9 @@ export function refreshPreviewUI(type) {
   });
   tbl += "</tbody></table>";
   document.getElementById("previewTable").innerHTML = tbl;
+
+  const mvHint = document.getElementById("previewMvHint");
+  if (mvHint) mvHint.style.display = _pendingImport.mvCandidate ? "" : "none";
 }
 
 /** Phase 1 — parse the file and show the preview panel without touching the table. */
@@ -617,11 +740,27 @@ export async function previewCSV(file) {
   const currentType = document.getElementById("effectType").value;
   const detection   = detectEffectType(parsed.headers, currentType, effectProfiles);
 
+  // Detect multivariate data: study_id/study + outcome_id/outcome + yi + vi
+  const lowerHdrs   = new Set(parsed.headers.map(h => h.toLowerCase()));
+  const hasStudyCol  = lowerHdrs.has("study_id") || lowerHdrs.has("study");
+  const hasOutcomeCol = lowerHdrs.has("outcome_id") || lowerHdrs.has("outcome");
+  const mvCandidate  = hasStudyCol && hasOutcomeCol && lowerHdrs.has("yi") && lowerHdrs.has("vi");
+  const mvHeaders    = mvCandidate ? {
+    studyCol:   parsed.headers.find(h => h.toLowerCase() === "study_id") ??
+                parsed.headers.find(h => h.toLowerCase() === "study"),
+    outcomeCol: parsed.headers.find(h => h.toLowerCase() === "outcome_id") ??
+                parsed.headers.find(h => h.toLowerCase() === "outcome"),
+    yiCol:      parsed.headers.find(h => h.toLowerCase() === "yi"),
+    viCol:      parsed.headers.find(h => h.toLowerCase() === "vi"),
+  } : null;
+
   _pendingImport = {
     parsed,
     detectedType: detection.type,
     tied:         detection.tied,
     tiedTypes:    detection.tiedTypes ?? [],
+    mvCandidate,
+    mvHeaders,
   };
 
   const delimNames = { ",": "comma", ";": "semicolon", "\t": "tab" };
@@ -632,6 +771,7 @@ export async function previewCSV(file) {
 
   refreshPreviewUI(detection.type);
   document.getElementById("importPreview").style.display = "block";
+  document.getElementById("previewImport").focus();
 }
 
 /**
@@ -661,6 +801,7 @@ export function commitImport() {
     const mtype = vals.length > 0 && vals.every(v => !isNaN(v.trim())) ? "continuous" : "categorical";
     doAddModerator(col, mtype);
   });
+  if (modCols.length > 0) _cb.onModeratorChanged();
 
   document.getElementById("effectType").value = type;
   updateTableHeaders();
@@ -688,4 +829,5 @@ export function cancelImport() {
   document.getElementById("importPreview").style.display  = "none";
   document.getElementById("csvWarning").style.display     = "none";
   document.getElementById("csvFile").value                = "";
+  document.getElementById("import")?.focus();
 }

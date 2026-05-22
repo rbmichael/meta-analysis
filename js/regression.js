@@ -6,7 +6,9 @@
 // =============================================================================
 
 // Circular imports — safe: these are only called inside function bodies.
-import { meta, wls, matInverse, robustWlsResult, logLik, logDet } from "./analysis.js";
+import { meta, robustWlsResult, logLik, validStudies, resolveClusterIds, groupByCluster } from "./analysis.js";
+import { tau2Core_REML, tau2Core_ML, tau2Core_PM, tau2Core_DL, tau2Core_HS, tau2Core_HE, tau2Core_SJ } from "./tau2.js";
+import { wls, wlsCholesky, matInverse, logDet, numericalHessian } from "./linalg.js";
 import { normalCDF, normalQuantile, tCDF, tCritical, fCDF, chiSquareCDF, chiSquareQuantile } from "./utils.js";
 import { MIN_VAR, REML_TOL, BISECTION_ITERS } from "./constants.js";
 import { bfgs } from "./selection.js";
@@ -44,18 +46,19 @@ export function subgroupAnalysis(studies, method="REML", ciMethod="normal", alph
     results[g] = {
       k: groupStudies.length,
       y: res.RE,
-      se: res.se ?? Math.sqrt(res.vi ?? 0),
+      se: res.seRE ?? res.se ?? Math.sqrt(res.vi ?? 0),
       ci: { lb: res.ciLow, ub: res.ciHigh },
       tau2: res.tau2 ?? 0,
       I2: res.I2 ?? 0
     };
     if(isFinite(res.Q)) Qwithin_sum += res.Q;
   });
-  let Qbetween = overall.Q - Qwithin_sum;
+  const Qtotal = isFinite(overall.Q) ? overall.Q : 0;
+  let Qbetween = Qtotal - Qwithin_sum;
   if(!isFinite(Qbetween) || Qbetween < 0) Qbetween = 0;
   const df = groupNames.length - 1;
   const p = 1 - chiSquareCDF(Qbetween, df);
-  return { groups: results, Qbetween, df, p, k: valid.length, G: groupNames.length, kNoGroup };
+  return { groups: results, Qtotal, Qwithin: Qwithin_sum, Qbetween, df, p, k: valid.length, G: groupNames.length, kNoGroup };
 }
 
 // ================= Q-PROFILE HETEROGENEITY CIs =================
@@ -126,15 +129,18 @@ export function heterogeneityCIs(studies, tau2, alpha = 0.05) {
 
   // --- I² and H² CIs ---
   // Convert τ²CI bounds to I²/H²CI using the τ²-based formula
-  // (Higgins & Thompson 2002, Stat Med 21:1539–1558, eq. 9 rearranged):
-  //   σ²_typical = (k−1) / Σ(1/vᵢ)   — "typical" within-study variance
-  //   I² = τ² / (τ² + σ²_typical) × 100 %
-  //   H² = τ² / σ²_typical + 1
-  // This τ²-based form is used here (not the Q-based formula used in meta())
-  // because the input is already a τ² value from the Q-profile inversion.
-  // The two formulas agree when τ² = τ²_DL; they diverge for REML/ML.
-  const sumWFE = studies.reduce((acc, d) => acc + 1 / d.vi, 0);
-  const sigma2 = df / sumWFE;
+  // (Higgins & Thompson 2002, Stat Med 21:1539–1558, eq. 6 and 9):
+  //   c          = Σwᵢ − Σwᵢ²/Σwᵢ        — H&T eq. 6 (wᵢ = 1/vᵢ)
+  //   σ²_typical = (k−1) / c              — H&T eq. 9 rearranged
+  //   I²         = τ² / (τ² + σ²_typical) × 100 %
+  //   H²         = τ² / σ²_typical + 1
+  // Using c (not Σwᵢ) in the denominator matches metafor's confint() and the
+  // Higgins & Thompson paper; it gives larger σ²_typical, hence smaller I²/H²
+  // CI upper bounds, especially when study weights are heterogeneous.
+  const sumWFE  = studies.reduce((acc, d) => acc + 1 / d.vi,          0);
+  const sumWFE2 = studies.reduce((acc, d) => acc + 1 / (d.vi * d.vi), 0);
+  const c       = sumWFE - sumWFE2 / sumWFE;
+  const sigma2  = c > 0 ? df / c : df / sumWFE;
 
   const toI2 = t => 100 * t / (t + sigma2);
   const toH2 = t => t / sigma2 + 1;
@@ -170,12 +176,18 @@ export function rcsKnots(values, nKnots) {
   const n = sorted.length;
   if (n === 0) return pcts.map(() => NaN);
 
-  return pcts.map(p => {
+  const knots = pcts.map(p => {
     const idx = (p / 100) * (n - 1);
     const lo  = Math.floor(idx);
     const hi  = Math.ceil(idx);
     return lo === hi ? sorted[lo] : sorted[lo] + (idx - lo) * (sorted[hi] - sorted[lo]);
   });
+
+  // rcsBasis divides by (last knot − second-to-last knot); guard before caller hits NaN.
+  if (knots[nKnots - 1] === knots[nKnots - 2])
+    throw new Error(`RCS requires ${nKnots} distinct knot positions — moderator has too few unique values. Use fewer knots or a linear term.`);
+
+  return knots;
 }
 
 /**
@@ -226,6 +238,12 @@ export function rcsBasis(x, knots) {
 //   type      — "continuous" (read as number) or "categorical" (dummy-coded)
 //   transform — nonlinear transform for continuous moderators (default "linear")
 //
+// interactions: array of { name: string, termA: string, termB: string }
+//   name      — display name (e.g. "age×region"); used as key in modColMap
+//   termA/B   — keys of moderators already processed above; outer product of
+//               their columns is appended to the design matrix.
+//               Poly/RCS moderators: all basis columns participate in the product.
+//
 // Returns:
 //   X         — k×p row-major matrix (array of k rows, each a p-length array)
 //   colNames  — p column labels; first is always "intercept"
@@ -235,10 +253,11 @@ export function rcsBasis(x, knots) {
 //                    continuous "age" (poly2)  → [2, 3]  (x, x²)
 //                    categorical "type" (3 lvl)→ [3, 4]
 //               degenerate moderators (< 2 levels) map to []
+//               interaction "age×region"        → [5, 6]  (one per level pair)
 //   modKnots  — maps moderator key to knot array (only set for rcs* transforms)
 //   validMask — k booleans; true when all entries in that row are finite
 //   k, p      — matrix dimensions
-export function buildDesignMatrix(studies, moderators = []) {
+export function buildDesignMatrix(studies, moderators = [], interactions = []) {
   const k = studies.length;
 
   // Build column-by-column, then transpose to row-major at the end.
@@ -318,6 +337,23 @@ export function buildDesignMatrix(studies, moderators = []) {
     }
   }
 
+  // ---- Interaction terms (outer product of parent moderator columns) ----
+  for (const { name, termA, termB } of interactions) {
+    const colsA = modColMap[termA] ?? [];
+    const colsB = modColMap[termB] ?? [];
+    modColMap[name] = [];
+    if (colsA.length === 0 || colsB.length === 0) continue;
+    for (const ia of colsA) {
+      for (const ib of colsB) {
+        const ca = columns[ia], cb = columns[ib];
+        columns.push(ca.map((a, i) => a * cb[i]));
+        // Name each product column from its parent column names.
+        colNames.push(`${colNames[ia]}×${colNames[ib]}`);
+        modColMap[name].push(nextColIdx++);
+      }
+    }
+  }
+
   const p = columns.length;
 
   // Transpose: X[i][j] = study i, column j.
@@ -339,156 +375,52 @@ function quadForm(A, x) {
   return dot(x, A.map(row => dot(row, x)));
 }
 
-function tau2Reg_DL(yi, vi, X) {
-  const k = vi.length, p = X[0].length;
-  const df = k - p;
-  if (df <= 0) return 0;
-  const w0 = vi.map(v => 1 / v);
-  const { beta, vcov, rankDeficient } = wls(X, yi, w0);
-  if (rankDeficient) return 0;
-  const QE = yi.reduce((acc, y, i) => {
-    const e = y - dot(X[i], beta);
-    return acc + w0[i] * e * e;
-  }, 0);
-  const c = w0.reduce((acc, wi, i) => acc + wi * (1 - wi * quadForm(vcov, X[i])), 0);
-  return c > 0 ? Math.max(0, (QE - df) / c) : 0;
-}
-
-function tau2Reg_REML(yi, vi, X, tol = REML_TOL, maxIter = 100) {
-  const k = vi.length, p = X[0].length;
-  if (k - p <= 0) return 0;
-  let tau2 = tau2Reg_DL(yi, vi, X);
-  for (let iter = 0; iter < maxIter; iter++) {
-    const w = vi.map(v => 1 / (v + tau2));
-    const { beta, vcov, rankDeficient } = wls(X, yi, w);
-    if (rankDeficient) break;
-    const h = X.map((xi, i) => w[i] * quadForm(vcov, xi));
-    const e = yi.map((y, i) => y - dot(X[i], beta));
-    let score = 0, info = 0;
-    for (let i = 0; i < k; i++) {
-      const pi = w[i] * (1 - h[i]);
-      score += w[i] * w[i] * e[i] * e[i] - pi;
-      info  += w[i] * pi;
-    }
-    if (info <= 0) break;
-    let step = score / info;
-    let newTau2 = tau2 + step;
-    let sh = 0;
-    while (newTau2 < 0 && sh++ < 20) { step /= 2; newTau2 = tau2 + step; }
-    newTau2 = Math.max(0, newTau2);
-    if (Math.abs(newTau2 - tau2) < tol) { tau2 = newTau2; break; }
-    tau2 = newTau2;
-  }
-  return tau2;
-}
-
-function tau2Reg_PM(yi, vi, X, tol = REML_TOL, maxIter = 100) {
-  const k = vi.length, p = X[0].length;
-  const df = k - p;
-  if (df <= 0) return 0;
-  let tau2 = 0;
-  for (let iter = 0; iter < maxIter; iter++) {
-    const w = vi.map(v => 1 / (v + tau2));
-    const { beta, rankDeficient } = wls(X, yi, w);
-    if (rankDeficient) break;
-    const QE = yi.reduce((acc, y, i) => {
-      const e = y - dot(X[i], beta);
-      return acc + w[i] * e * e;
-    }, 0);
-    const sumW = w.reduce((acc, b) => acc + b, 0);
-    const newTau2 = Math.max(0, tau2 + (QE - df) / sumW);
-    if (Math.abs(newTau2 - tau2) < tol) return newTau2;
-    tau2 = newTau2;
-  }
-  return tau2;
-}
-
-// HS regression: same as DL but denominator is Σwᵢ (FE weights)
-function tau2Reg_HS(yi, vi, X) {
-  const k = vi.length, p = X[0].length;
-  const df = k - p;
-  if (df <= 0) return 0;
-  const w0 = vi.map(v => 1 / v);
-  const { beta, rankDeficient } = wls(X, yi, w0);
-  if (rankDeficient) return 0;
-  const QE  = yi.reduce((acc, y, i) => acc + w0[i] * (y - dot(X[i], beta)) ** 2, 0);
-  const sumW = w0.reduce((acc, b) => acc + b, 0);
-  return sumW > 0 ? Math.max(0, (QE - df) / sumW) : 0;
-}
-
-// HE regression: unweighted — residuals from unweighted OLS fit
-function tau2Reg_HE(yi, vi, X) {
-  const k = vi.length, p = X[0].length;
-  const df = k - p;
-  if (df <= 0) return 0;
-  // Unweighted OLS: wᵢ = 1 for all i
-  const w1 = vi.map(() => 1);
-  const { beta, rankDeficient } = wls(X, yi, w1);
-  if (rankDeficient) return 0;
-  const SS   = yi.reduce((acc, y, i) => acc + (y - dot(X[i], beta)) ** 2, 0);
-  const meanV = vi.reduce((acc, b) => acc + b, 0) / k;
-  return Math.max(0, SS / df - meanV);
-}
-
-// SJ regression: iterative, seeded from unweighted residual variance
-function tau2Reg_SJ(yi, vi, X, tol = REML_TOL, maxIter = 200) {
-  const k = vi.length, p = X[0].length;
-  if (k - p <= 0) return 0;
-  // Seed from unweighted OLS residuals
-  const w1 = vi.map(() => 1);
-  const { beta: beta0, rankDeficient } = wls(X, yi, w1);
-  if (rankDeficient) return 0;
-  let tau2 = yi.reduce((acc, y, i) => acc + (y - dot(X[i], beta0)) ** 2, 0) / k;
-  if (tau2 === 0) return 0;
-  for (let iter = 0; iter < maxIter; iter++) {
-    const w  = vi.map(v => 1 / (v + tau2));
-    const { beta, rankDeficient: rd } = wls(X, yi, w);
-    if (rd) break;
-    const newTau2 = yi.reduce((acc, y, i) => {
-      return acc + vi[i] * (y - dot(X[i], beta)) ** 2 / (vi[i] + tau2);
-    }, 0) / k;
-    if (Math.abs(newTau2 - tau2) < tol) return Math.max(0, newTau2);
-    tau2 = Math.max(0, newTau2);
-  }
-  return tau2;
-}
-
-// ML regression: Fisher scoring without leverage correction
-function tau2Reg_ML(yi, vi, X, tol = REML_TOL, maxIter = 100) {
-  const k = vi.length, p = X[0].length;
-  if (k - p <= 0) return 0;
-  let tau2 = tau2Reg_DL(yi, vi, X);
-  for (let iter = 0; iter < maxIter; iter++) {
-    const w = vi.map(v => 1 / (v + tau2));
-    const { beta, rankDeficient } = wls(X, yi, w);
-    if (rankDeficient) break;
-    const e = yi.map((y, i) => y - dot(X[i], beta));
-    let score = 0, info = 0;
-    for (let i = 0; i < k; i++) {
-      const vi_tau = vi[i] + tau2;
-      score += e[i] * e[i] / (vi_tau * vi_tau) - 1 / vi_tau;
-      info  += 1 / (vi_tau * vi_tau);
-    }
-    if (info <= 0) break;
-    let step = score / info;
-    let newTau2 = tau2 + step;
-    let sh = 0;
-    while (newTau2 < 0 && sh++ < 20) { step /= 2; newTau2 = tau2 + step; }
-    newTau2 = Math.max(0, newTau2);
-    if (Math.abs(newTau2 - tau2) < tol) { tau2 = newTau2; break; }
-    tau2 = newTau2;
-  }
-  return tau2;
-}
-
 export function tau2_metaReg(yi, vi, X, method = "REML", tol = REML_TOL, maxIter = 100) {
-  if (method === "REML") return tau2Reg_REML(yi, vi, X, tol, maxIter);
-  if (method === "PM")   return tau2Reg_PM  (yi, vi, X, tol, maxIter);
-  if (method === "ML")   return tau2Reg_ML  (yi, vi, X, tol, maxIter);
-  if (method === "HS")   return tau2Reg_HS  (yi, vi, X);
-  if (method === "HE")   return tau2Reg_HE  (yi, vi, X);
-  if (method === "SJ")   return tau2Reg_SJ  (yi, vi, X, tol, maxIter);
-  return tau2Reg_DL(yi, vi, X);
+  const k = vi.length, p = X[0].length, df = k - p;
+  if (df <= 0) return 0;
+
+  const reFitFn = (tau2) => {
+    const w = vi.map(v => 1 / (v + tau2));
+    const { beta, vcov, rankDeficient } = wlsCholesky(X, yi, w);
+    if (rankDeficient) return null;
+    const W = w.reduce((s, v) => s + v, 0);
+    return {
+      e: yi.map((y, i) => y - dot(X[i], beta)),
+      h: X.map((xi, i) => w[i] * quadForm(vcov, xi)),
+      W
+    };
+  };
+
+  const feFitFn = () => {
+    const w0 = vi.map(v => 1 / v);
+    const { beta, vcov, rankDeficient } = wlsCholesky(X, yi, w0);
+    if (rankDeficient) return null;
+    const W = w0.reduce((s, v) => s + v, 0);
+    return {
+      e: yi.map((y, i) => y - dot(X[i], beta)),
+      h: X.map((xi, i) => w0[i] * quadForm(vcov, xi)),
+      W
+    };
+  };
+
+  const uwFitFn = () => {
+    const { beta, rankDeficient } = wls(X, yi, vi.map(() => 1));
+    if (rankDeficient) return null;
+    return { e: yi.map((y, i) => y - dot(X[i], beta)) };
+  };
+
+  if (method === "REML") return tau2Core_REML(vi, reFitFn, tau2Core_DL(vi, feFitFn, df), tol, maxIter);
+  if (method === "ML")   return tau2Core_ML  (vi, reFitFn, tau2Core_DL(vi, feFitFn, df), tol, maxIter);
+  if (method === "PM")   return tau2Core_PM  (vi, reFitFn, df, 0, tol, maxIter);
+  if (method === "HS")   return tau2Core_HS  (vi, feFitFn, df);
+  if (method === "HE")   return tau2Core_HE  (vi, uwFitFn, df);
+  if (method === "SJ") {
+    const fit0 = uwFitFn();
+    if (!fit0) return 0;
+    const seed = fit0.e.reduce((s, ei) => s + ei * ei, 0) / k;
+    return tau2Core_SJ(vi, reFitFn, seed, tol, maxIter);
+  }
+  return tau2Core_DL(vi, feFitFn, df);
 }
 
 // ================= META-REGRESSION =================
@@ -497,7 +429,7 @@ export function tau2_metaReg(yi, vi, X, method = "REML", tol = REML_TOL, maxIter
 // Parameters:
 //   studies    — array of study objects, each with { yi, vi, ... }
 //   moderators — array of { key, type } passed to buildDesignMatrix
-//   method     — tau² estimator: "REML" (default), "DL", "PM"
+//   method     — τ² estimator: "REML" (default), "DL", "PM"
 //   ciMethod   — "normal" (default) or "KH" (Knapp-Hartung)
 //
 // Returns:
@@ -542,12 +474,12 @@ export function tau2_metaReg(yi, vi, X, method = "REML", tol = REML_TOL, maxIter
  *             I2: number, R2: number|null, vif: number[], maxVIF: number,
  *             colNames: string[], k: number, p: number, rankDeficient: boolean }}
  */
-export function metaRegression(studies, moderators = [], method = "REML", ciMethod = "normal", alpha = 0.05) {
+export function metaRegression(studies, moderators = [], method = "REML", ciMethod = "normal", alpha = 0.05, interactions = []) {
   // Filter to studies with finite yi and vi
-  const valid = studies.filter(s => isFinite(s.yi) && isFinite(s.vi) && s.vi > 0);
+  const valid = validStudies(studies);
   const k = valid.length;
 
-  const { X, colNames, modColMap, modKnots, validMask, p } = buildDesignMatrix(valid, moderators);
+  const { X, colNames, modColMap, modKnots, validMask, p } = buildDesignMatrix(valid, moderators, interactions);
 
   // Further filter rows where all moderator values are finite
   const rows   = valid.filter((_, i) => validMask[i]);
@@ -568,7 +500,7 @@ export function metaRegression(studies, moderators = [], method = "REML", ciMeth
 
   if (kf < p + 1) return { ...empty, rankDeficientCause: "insufficient_k" };
 
-  // ---- tau² ----
+  // ---- τ² ----
   const tau2 = tau2_metaReg(yi, vi, Xf, method);
 
   // ---- pseudo-R² (proportion of heterogeneity explained by moderators) ----
@@ -669,10 +601,15 @@ export function metaRegression(studies, moderators = [], method = "REML", ciMeth
   }
 
   // ---- Per-moderator omnibus tests ----
-  // One Wald test per input moderator, restricted to the columns that moderator
-  // contributed to the design matrix.  Same chi-sq / F logic as the global QM
-  // above.  When there is exactly one moderator, modTests[0] equals the global QM.
-  const modTests = moderators.map(({ key }) => {
+  // One Wald test per input moderator (and per interaction term), restricted to
+  // the columns that term contributed to the design matrix.  Same chi-sq / F
+  // logic as the global QM above.  When there is exactly one moderator (and no
+  // interactions), modTests[0] equals the global QM.
+  const _allTermKeys = [
+    ...moderators.map(m => m.key),
+    ...interactions.map(ix => ix.name),
+  ];
+  const modTests = _allTermKeys.map(key => {
     const colIdxs = modColMap[key] ?? [];
     const df = colIdxs.length;
     if (df === 0) return { name: key, colIdxs, QM: NaN, QMdf: 0, QMp: NaN };
@@ -735,9 +672,9 @@ export function metaRegression(studies, moderators = [], method = "REML", ciMeth
 
   // ---- Cluster-robust SEs for regression coefficients ----
   // Reads study.cluster from each study in rows (the filtered set used in the fit).
-  const clusters = rows.map(s => s.cluster?.trim() || null);
   let robustSE, robustZ, robustP, robustCi, robustDf, robustC, robustError, allSingletons;
-  if (clusters.some(id => id)) {
+  if (rows.some(s => s.cluster?.trim())) {
+    const clusters = resolveClusterIds(rows);
     const rob = robustWlsResult(Xf, w, yi, beta, clusters);
     if (!rob.error) {
       robustSE      = rob.robustSE;
@@ -788,8 +725,10 @@ export function metaRegression(studies, moderators = [], method = "REML", ciMeth
   // Augments each modTest entry in-place with {lrt, lrtDf, lrtP}.
   {
     // --- ML fit of the full model (used as LRT baseline for all moderators) ---
-    const _mlFit = (X_) => {
-      const t2 = Math.max(0, tau2_metaReg(yi, vi, X_, "ML"));
+    // Always checks tau2=0 (boundary) as well as the Fisher-scoring optimum,
+    // then returns the higher LL. This handles cases where the true ML estimate
+    // is at the boundary (tau2=0) but the iterative solver converges elsewhere.
+    const _llAt = (X_, t2) => {
       const w_ = vi.map(v => 1 / (v + t2));
       const { beta: b_, rankDeficient: rd_ } = wls(X_, yi, w_);
       if (rd_ || !b_) return NaN;
@@ -800,6 +739,13 @@ export function metaRegression(studies, moderators = [], method = "REML", ciMeth
         ll -= 0.5 * (Math.log(2 * Math.PI) + Math.log(v) + (yi[i] - fit) ** 2 / v);
       }
       return ll;
+    };
+    const _mlFit = (X_) => {
+      const t2_opt = Math.max(0, tau2_metaReg(yi, vi, X_, "ML"));
+      const ll_opt = _llAt(X_, t2_opt);
+      if (t2_opt === 0) return ll_opt;
+      const ll_bnd = _llAt(X_, 0);
+      return isFinite(ll_bnd) && ll_bnd > ll_opt ? ll_bnd : ll_opt;
     };
     const LL_ML_full = _mlFit(Xf);
     for (const mt of modTests) {
@@ -842,9 +788,11 @@ export function metaRegression(studies, moderators = [], method = "REML", ciMeth
     QM, QMdf, QMp, QMdist: useKH ? "F" : "chi2",
     modTests, vif, maxVIF,
     I2, colNames, modColMap, modKnots, k: kf, p, rankDeficient: false, dist,
+    method,
     fitted, residuals: eRE, stdResiduals,
     labels: rows.map(s => s.label || ""),
     studiesUsed: rows,   // exact set used in the fit (for bubble plot)
+    Xf,        // filtered design matrix (k×p) — used by permutation worker
     yi, vi,    // pass through for display
     // Model-fit indices
     LL, LL_ML, LL_REML, AIC, BIC, npar, kBIC,
@@ -938,15 +886,16 @@ export function adjustPvals(pvals, method) {
  * @returns structured result object
  */
 export function lsModel(studies, locMods = [], scaleMods = [], opts = {}) {
-  const ciMethod = opts.ciMethod ?? "normal";
-  const alpha    = opts.alpha    ?? 0.05;
+  const ciMethod    = opts.ciMethod    ?? "normal";
+  const alpha       = opts.alpha       ?? 0.05;
+  const locInteractions = opts.locInteractions ?? [];
 
   // ---- Filter valid studies ----
-  const valid = studies.filter(s => isFinite(s.yi) && isFinite(s.vi) && s.vi > 0);
+  const valid = validStudies(studies);
   const k = valid.length;
 
   // ---- Build design matrices ----
-  const locDM   = buildDesignMatrix(valid, locMods);
+  const locDM   = buildDesignMatrix(valid, locMods, locInteractions);
   const scaleDM = buildDesignMatrix(valid, scaleMods);
 
   const validMask = locDM.validMask.map((v, i) => v && scaleDM.validMask[i]);
@@ -1019,29 +968,7 @@ export function lsModel(studies, locMods = [], scaleMods = [], opts = {}) {
   if (rdBeta) return emptyResult;
 
   // ---- SE for γ: numerical Hessian of negLL at γ̂ ----
-  // Central-difference second-order partial derivatives.
-  const H_gamma = Array.from({ length: q }, () => Array(q).fill(0));
-  for (let j = 0; j < q; j++) {
-    for (let l = j; l < q; l++) {
-      const hj = Math.max(1e-4, 1e-4 * Math.abs(gamma_hat[j]));
-      const hl = Math.max(1e-4, 1e-4 * Math.abs(gamma_hat[l]));
-      let val;
-      if (j === l) {
-        // Second diagonal: (f(x+h) - 2f(x) + f(x-h)) / h²
-        const gp = gamma_hat.slice(); gp[j] += hj;
-        const gm = gamma_hat.slice(); gm[j] -= hj;
-        val = (negLL(gp) - 2 * negLL(gamma_hat) + negLL(gm)) / (hj * hj);
-      } else {
-        // Mixed partial: (f(x+hj,x+hl) - f(x+hj,x-hl) - f(x-hj,x+hl) + f(x-hj,x-hl)) / (4·hj·hl)
-        const gpp = gamma_hat.slice(); gpp[j] += hj; gpp[l] += hl;
-        const gpm = gamma_hat.slice(); gpm[j] += hj; gpm[l] -= hl;
-        const gmp = gamma_hat.slice(); gmp[j] -= hj; gmp[l] += hl;
-        const gmm = gamma_hat.slice(); gmm[j] -= hj; gmm[l] -= hl;
-        val = (negLL(gpp) - negLL(gpm) - negLL(gmp) + negLL(gmm)) / (4 * hj * hl);
-      }
-      H_gamma[j][l] = H_gamma[l][j] = val;
-    }
-  }
+  const H_gamma = numericalHessian(negLL, gamma_hat);
 
   const vcov_gamma_raw = matInverse(H_gamma);
   const vcov_gamma = vcov_gamma_raw ?? Array.from({ length: q }, () => Array(q).fill(NaN));
@@ -1125,8 +1052,12 @@ export function lsModel(studies, locMods = [], scaleMods = [], opts = {}) {
     return Math.max(0, tau2_mean / (tau2_mean + QEdf / c) * 100);
   })() : 0;
 
-  // ---- Per-location-moderator Wald tests ----
-  const locModTests = locMods.map(({ key }) => {
+  // ---- Per-location-moderator Wald tests (includes interaction terms) ----
+  const _allLocTermKeys = [
+    ...locMods.map(m => m.key),
+    ...locInteractions.map(ix => ix.name),
+  ];
+  const locModTests = _allLocTermKeys.map(key => {
     const colIdxs = locDM.modColMap[key] ?? [];
     const df = colIdxs.length;
     if (df === 0) return { name: key, colIdxs, QM: NaN, QMdf: 0, QMp: NaN };
@@ -1159,7 +1090,7 @@ export function lsModel(studies, locMods = [], scaleMods = [], opts = {}) {
     beta, se_beta, zval_beta, pval_beta, ci_beta,
     gamma: gamma_hat, se_gamma, zval_gamma, pval_gamma, ci_gamma,
     tau2_i, tau2_mean,
-    vcov_beta,
+    vcov_beta, vcov_gamma,
     QE, QEdf, QEp,
     QM_loc, QM_locDf, QM_locP,
     QM_scale, QM_scaleDf, QM_scaleP,
@@ -1240,14 +1171,7 @@ export function rvePooled(studies, opts = {}) {
   if (k < 2) return { error: "Need at least 2 valid studies." };
 
   // Group studies by cluster; studies without a cluster ID are singletons.
-  const clusterMap = new Map();
-  valid.forEach((s, idx) => {
-    const id = (s.cluster !== null && s.cluster !== undefined && String(s.cluster).trim() !== "")
-      ? String(s.cluster).trim()
-      : `__s${idx}`;
-    if (!clusterMap.has(id)) clusterMap.set(id, []);
-    clusterMap.get(id).push(s);
-  });
+  const clusterMap = groupByCluster(valid);
   const m = clusterMap.size;
   if (m < 2) return { error: "Need at least 2 clusters for RVE." };
 
@@ -1389,12 +1313,7 @@ export function meta3level(studies, opts = {}) {
     return { error: "Three-level meta-analysis requires at least 3 studies" };
 
   // Group studies by cluster; singletons get a unique synthetic key.
-  const clusterMap = new Map();
-  studies.forEach((s, i) => {
-    const key = (s.cluster != null && s.cluster !== "") ? String(s.cluster) : `__s${i}`;
-    if (!clusterMap.has(key)) clusterMap.set(key, []);
-    clusterMap.get(key).push(s);
-  });
+  const clusterMap = groupByCluster(studies);
   const clusters = [...clusterMap.values()];
   const m = clusters.length;
   const k = studies.length;

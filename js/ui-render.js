@@ -8,7 +8,7 @@
 // Extracted from ui.js (item 4.2.1 of TECHNICAL IMPROVEMENT ROADMAP).
 // =============================================================================
 
-import { fmt } from "./utils.js";
+import { fmt, fmtPval } from "./utils.js";
 import { effectProfiles } from "./profiles.js";
 import { Z_95 } from "./constants.js";
 import { leaveOneOut, estimatorComparison } from "./influence.js";
@@ -28,6 +28,10 @@ const _RENDER_HELP_LABELS = {
   "het.I2":              "I² heterogeneity",
   "het.H2":              "H² heterogeneity",
   "sel.model":           "Selection model",
+  "sel.halfnorm":        "Half-normal selection model",
+  "sel.power":           "Power selection model",
+  "sel.negexp":          "Negative exponential selection model",
+  "sel.beta":            "Beta selection model",
   "diag.influence":      "Influence diagnostics",
   "diag.dffits":         "DFFITS influence statistic",
   "diag.covratio":       "CovRatio influence statistic",
@@ -56,7 +60,7 @@ function getCiLabel() {
  */
 export function formatContrastResult(result, reg) {
   const { est, se, stat, p, ci } = result;
-  const statLabel = reg.dist === "t" ? `t(${reg.QEdf})` : "z";
+  const statLabel = reg.dist === "t" ? `<em>t</em>(${reg.QEdf})` : "<em>z</em>";
   const ciLabel   = getCiLabel();
   if (!isFinite(est)) {
     return `<div class="reg-note reg-warn" style="margin-top:6px">
@@ -66,7 +70,7 @@ export function formatContrastResult(result, reg) {
   return `
     <table class="reg-table" style="margin-top:8px">
       <thead><tr>
-        <th>Estimate</th><th>SE</th><th>${statLabel}</th><th>p</th><th>${ciLabel}</th>
+        <th>Estimate</th><th>SE</th><th>${statLabel}</th><th><em>p</em></th><th>${ciLabel}</th>
       </tr></thead>
       <tbody><tr>
         <td>${fmt(est)}</td>
@@ -88,9 +92,10 @@ export function regStars(p) {
 
 export function regFmtP(p) {
   if (!isFinite(p)) return "—";
-  if (p < 0.0001) return `<span class="reg-sig-3">&lt;0.0001</span>`;
-  const cls = p < 0.001 ? "reg-sig-3" : p < 0.01 ? "reg-sig-2" : p < 0.05 ? "reg-sig-1" : "";
-  return cls ? `<span class="${cls}">${fmt(p)}</span>` : fmt(p);
+  if (p < 0.001) return `<span class="reg-sig-3">&lt; .001</span>`;
+  const s   = p.toFixed(3).replace(/^0\./, ".");
+  const cls = p < 0.01 ? "reg-sig-2" : p < 0.05 ? "reg-sig-1" : "";
+  return cls ? `<span class="${cls}">${s}</span>` : s;
 }
 
 export function buildRegCoeffRows(reg, adjPs = null, mods = []) {
@@ -100,7 +105,7 @@ export function buildRegCoeffRows(reg, adjPs = null, mods = []) {
   // column indices are tracked in modTests.
   const multiMod = mods.length > 1
     && Array.isArray(reg.modTests) && reg.modTests.length > 0;
-  const colCount = 8 + (hasRobust ? 2 : 0);  // Term + β + SE + stat + p + CI + VIF + stars [+ Rob.SE + Rob.p]
+  const colCount = 8 + (hasRobust ? 4 : 0);  // Term + β + SE + stat + p + CI + VIF + stars [+ Rob.SE + Rob.t + Rob.p + Rob.CI]
 
   function vifCell(j) {
     if (!hasVif || j === 0) return `<td class="reg-vif">—</td>`;
@@ -112,9 +117,14 @@ export function buildRegCoeffRows(reg, adjPs = null, mods = []) {
 
   function dataRow(j) {
     const [lo, hi] = reg.ci[j];
-    const robustCells = hasRobust
-      ? `<td>${fmt(reg.robustSE[j])}</td><td>${regFmtP(reg.robustP[j])}</td>`
-      : "";
+    const robustCells = hasRobust ? (() => {
+      const rci = Array.isArray(reg.robustCi?.[j]) ? reg.robustCi[j] : [NaN, NaN];
+      const rt  = isFinite(reg.robustZ?.[j]) ? fmt(reg.robustZ[j]) : "NA";
+      return `<td>${fmt(reg.robustSE[j])}</td>`
+           + `<td>${rt}</td>`
+           + `<td>${regFmtP(reg.robustP[j])}</td>`
+           + `<td>[${fmt(rci[0])}, ${fmt(rci[1])}]</td>`;
+    })() : "";
     return `<tr class="${j === 0 ? "reg-intercept" : ""}">
       <td>${reg.colNames[j]}</td>
       <td>${fmt(reg.beta[j])}</td>
@@ -141,10 +151,10 @@ export function buildRegCoeffRows(reg, adjPs = null, mods = []) {
       ? `F(${mt.QMdf},\u2009${reg.QEdf})`
       : `χ²(${mt.QMdf})`;
     let qmStr = isFinite(mt.QM)
-      ? ` &nbsp;·&nbsp; QM ${QMlabel} = ${fmt(mt.QM)}, p = ${regFmtP(mt.QMp)}`
+      ? ` &nbsp;·&nbsp; <em>Q</em>M ${QMlabel} = ${fmt(mt.QM)}, <em>p</em> = ${regFmtP(mt.QMp)}`
       : "";
     if (adjPs && adjPs[mi] !== undefined && isFinite(adjPs[mi]) && adjPs[mi] !== mt.QMp) {
-      qmStr += `, p (adj) = ${regFmtP(adjPs[mi])}`;
+      qmStr += `, <em>p</em> (adj) = ${regFmtP(adjPs[mi])}`;
     }
     html += `<tr class="reg-mod-group">
       <td colspan="${colCount}"><span class="reg-mod-name">${escapeHTML(mt.name)}</span>${qmStr}</td>
@@ -160,7 +170,7 @@ export function buildRegFittedRows(reg) {
     const sr   = reg.stdResiduals[i];
     const flag = Math.abs(sr) > Z_95 ? " style='color:var(--color-warning)'" : "";
     return `<tr>
-      <td>${lbl || i + 1}</td>
+      <td>${lbl ? escapeHTML(lbl) : i + 1}</td>
       <td>${fmt(reg.yi[i])}</td>
       <td>${fmt(reg.fitted[i])}</td>
       <td>${fmt(reg.residuals[i])}</td>
@@ -218,7 +228,7 @@ export function renderLocationScalePanel(ls, ciMethod, kExcluded = 0) {
     for (const mt of ls.locModTests) {
       if (!mt.colIdxs || mt.colIdxs.length === 0) continue;
       const qmStr = isFinite(mt.QM)
-        ? ` &nbsp;·&nbsp; QM χ²(${mt.QMdf}) = ${fmt(mt.QM)}, p = ${regFmtP(mt.QMp)}`
+        ? ` &nbsp;·&nbsp; <em>Q</em>M χ²(${mt.QMdf}) = ${fmt(mt.QM)}, <em>p</em> = ${regFmtP(mt.QMp)}`
         : "";
       html += `<tr class="reg-mod-group"><td colspan="7"><span class="reg-mod-name">${escapeHTML(mt.name)}</span>${qmStr}</td></tr>`;
       for (const j of mt.colIdxs) html += dataRow(j);
@@ -247,7 +257,7 @@ export function renderLocationScalePanel(ls, ciMethod, kExcluded = 0) {
     for (const mt of ls.scaleModTests) {
       if (!mt.colIdxs || mt.colIdxs.length === 0) continue;
       const qmStr = isFinite(mt.QM)
-        ? ` &nbsp;·&nbsp; QM χ²(${mt.QMdf}) = ${fmt(mt.QM)}, p = ${regFmtP(mt.QMp)}`
+        ? ` &nbsp;·&nbsp; <em>Q</em>M χ²(${mt.QMdf}) = ${fmt(mt.QM)}, <em>p</em> = ${regFmtP(mt.QMp)}`
         : "";
       html += `<tr class="reg-mod-group"><td colspan="7"><span class="reg-mod-name">${escapeHTML(mt.name)}</span>${qmStr}</td></tr>`;
       for (const j of mt.colIdxs) html += dataRow(j);
@@ -259,7 +269,7 @@ export function renderLocationScalePanel(ls, ciMethod, kExcluded = 0) {
   function fittedRows() {
     if (!ls.labels || !ls.fitted) return "";
     return ls.labels.map((lbl, i) => `<tr>
-      <td>${lbl || i + 1}</td>
+      <td>${lbl ? escapeHTML(lbl) : i + 1}</td>
       <td>${fmt(ls.yi[i])}</td>
       <td>${fmt(ls.fitted[i])}</td>
       <td>${fmt(ls.residuals[i])}</td>
@@ -272,13 +282,13 @@ export function renderLocationScalePanel(ls, ciMethod, kExcluded = 0) {
     : "";
 
   const QM_locRow = ls.p > 1 && isFinite(ls.QM_loc)
-    ? ` &nbsp;·&nbsp; QM<sub>loc</sub> χ²(${ls.QM_locDf}) = ${fmt(ls.QM_loc)}, p = ${regFmtP(ls.QM_locP)}`
+    ? ` &nbsp;·&nbsp; <em>Q</em>M<sub>loc</sub> χ²(${ls.QM_locDf}) = ${fmt(ls.QM_loc)}, <em>p</em> = ${regFmtP(ls.QM_locP)}`
     : "";
   const QM_scaleRow = ls.q > 1 && isFinite(ls.QM_scale)
-    ? ` &nbsp;·&nbsp; QM<sub>scale</sub> χ²(${ls.QM_scaleDf}) = ${fmt(ls.QM_scale)}, p = ${regFmtP(ls.QM_scaleP)}`
+    ? ` &nbsp;·&nbsp; <em>Q</em>M<sub>scale</sub> χ²(${ls.QM_scaleDf}) = ${fmt(ls.QM_scale)}, <em>p</em> = ${regFmtP(ls.QM_scaleP)}`
     : "";
   const lrRow = ls.q > 1 && isFinite(ls.LRchi2)
-    ? `<br><span style="color:var(--fg-muted);font-size:0.93em">LR test (scale mods): χ²(${ls.LRdf}) = ${fmt(ls.LRchi2)}, p = ${regFmtP(ls.LRp)}</span>`
+    ? `<br><span style="color:var(--fg-muted);font-size:0.93em">LR test (scale mods): χ²(${ls.LRdf}) = ${fmt(ls.LRchi2)}, <em>p</em> = ${regFmtP(ls.LRp)}</span>`
     : "";
 
   const fRows = fittedRows();
@@ -290,7 +300,7 @@ export function renderLocationScalePanel(ls, ciMethod, kExcluded = 0) {
     </div>
     <div class="reg-het">
       ${tau2rng} &nbsp;·&nbsp; I² = ${fmt(ls.I2)}%
-      &nbsp;·&nbsp; QE(${ls.QEdf}) = ${fmt(ls.QE)}, p = ${regFmtP(ls.QEp)}
+      &nbsp;·&nbsp; <em>Q</em>E(${ls.QEdf}) = ${fmt(ls.QE)}, <em>p</em> = ${regFmtP(ls.QEp)}
       ${QM_locRow}${QM_scaleRow}
       ${lrRow}
       <br><span style="color:var(--fg-muted);font-size:0.93em">LL = ${fmt(ls.LL)} (ML; log τ²ᵢ = Zᵢγ)</span>
@@ -300,20 +310,20 @@ export function renderLocationScalePanel(ls, ciMethod, kExcluded = 0) {
       <p style="margin:4px 0 2px;font-weight:600;font-size:0.95em">Location model — E[yᵢ] = Xᵢβ</p>
       <table class="reg-table">
         <thead><tr>
-          <th>Term</th><th>β</th><th>SE</th><th>z</th>
-          <th>p</th><th>${ciLbl}</th><th></th>
+          <th>Term</th><th>β</th><th>SE</th><th><em>z</em></th>
+          <th><em>p</em></th><th>${ciLbl}</th><th></th>
         </tr></thead>
         <tbody>${locRows()}</tbody>
       </table>
       <p style="margin:10px 0 2px;font-weight:600;font-size:0.95em">Scale model — log τ²ᵢ = Zᵢγ</p>
       <table class="reg-table">
         <thead><tr>
-          <th>Term</th><th>γ</th><th>SE</th><th>z</th>
-          <th>p</th><th>${ciLbl}</th><th></th>
+          <th>Term</th><th>γ</th><th>SE</th><th><em>z</em></th>
+          <th><em>p</em></th><th>${ciLbl}</th><th></th>
         </tr></thead>
         <tbody>${scaleRows()}</tbody>
       </table>
-      <div class="reg-note">*** p &lt; .001 &nbsp;·&nbsp; ** p &lt; .01 &nbsp;·&nbsp; * p &lt; .05 &nbsp;·&nbsp; · p &lt; .10 &nbsp;·&nbsp; eˣ: exponentiated intercept = τ² when all scale predictors = 0</div>
+      <div class="reg-note">*** <em>p</em> &lt; .001 &nbsp;·&nbsp; ** <em>p</em> &lt; .01 &nbsp;·&nbsp; * <em>p</em> &lt; .05 &nbsp;·&nbsp; · <em>p</em> &lt; .10 &nbsp;·&nbsp; eˣ: exponentiated intercept = τ² when all scale predictors = 0</div>
       ${fRows ? `
       <details>
         <summary>Fitted values &amp; study-specific τ²ᵢ (k = ${ls.k})</summary>
@@ -323,6 +333,62 @@ export function renderLocationScalePanel(ls, ciMethod, kExcluded = 0) {
           </tr></thead>
           <tbody>${fRows}</tbody>
         </table>
+      </details>` : ""}
+      ${(ls.locModTests.length + ls.scaleModTests.length) > 0 ? (() => {
+        function modTestRows(tests) {
+          return tests.map(mt => {
+            if (mt.QMdf === 0) return `<tr><td>${escapeHTML(mt.name)}</td><td colspan="3"><i>degenerate (≤ 1 level)</i></td></tr>`;
+            return `<tr>
+              <td>${escapeHTML(mt.name)}</td>
+              <td>${isFinite(mt.QM) ? fmt(mt.QM) : "—"}</td>
+              <td>χ²(${mt.QMdf})</td>
+              <td>${regFmtP(mt.QMp)}</td>
+            </tr>`;
+          }).join("");
+        }
+        const locBlock = ls.locModTests.length > 0
+          ? `<p style="margin:6px 0 2px;font-weight:600;font-size:0.93em">Location model</p>
+             <table class="reg-table"><thead><tr>
+               <th>Moderator</th><th><em>Q</em>M (Wald)</th><th>df</th><th><em>p</em></th>
+             </tr></thead><tbody>${modTestRows(ls.locModTests)}</tbody></table>` : "";
+        const scaleBlock = ls.scaleModTests.length > 0
+          ? `<p style="margin:8px 0 2px;font-weight:600;font-size:0.93em">Scale model</p>
+             <table class="reg-table"><thead><tr>
+               <th>Moderator</th><th><em>Q</em>M (Wald)</th><th>df</th><th><em>p</em></th>
+             </tr></thead><tbody>${modTestRows(ls.scaleModTests)}</tbody></table>` : "";
+        return `<details><summary>Per-moderator tests</summary>${locBlock}${scaleBlock}</details>`;
+      })() : ""}
+      <details class="ls-contrast-section">
+        <summary>Custom contrasts — location model${hBtn("mreg.contrasts")}</summary>
+        <div class="reg-note" style="margin:4px 0 8px">
+          Enter a weight for each location term, then click <em>Test</em>.
+          The test evaluates whether the linear combination L·β differs from zero.
+        </div>
+        <table class="reg-table">
+          <thead><tr><th>Term</th><th style="width:6em">Weight</th></tr></thead>
+          <tbody>
+            ${ls.locColNames.map((name, i) => `
+              <tr>
+                <td>${escapeHTML(name)}</td>
+                <td><input type="number" class="contrast-weight" data-idx="${i}"
+                     value="0" step="any" style="width:5em"></td>
+              </tr>`).join("")}
+          </tbody>
+        </table>
+        <button class="btn-sm contrast-test-btn" type="button" style="margin-top:6px">
+          Test contrast
+        </button>
+        <div class="contrast-result"></div>
+      </details>
+      ${ls.vcov_beta && ls.p >= 2 ? `
+      <details>
+        <summary>Coefficient covariance matrices (vcov)</summary>
+        <div class="reg-note" style="margin:4px 0 8px">
+          Location model: ${ls.p}&times;${ls.p} vcov(β).${ls.q >= 2 ? ` Scale model: ${ls.q}&times;${ls.q} vcov(γ).` : ""}
+          Useful for computing SEs of linear combinations not available in the contrasts panel.
+        </div>
+        <button class="btn-sm vcov-download-btn" data-which="loc" type="button">Download vcov(β) as CSV</button>
+        ${ls.q >= 2 ? `<button class="btn-sm vcov-download-btn" data-which="scale" type="button" style="margin-left:6px">Download vcov(γ) as CSV</button>` : ""}
       </details>` : ""}
     </div>`;
 }
@@ -356,14 +422,14 @@ export function renderRegressionPanel(reg, method, ciMethod, kExcluded = 0, mods
     return;
   }
 
-  const statLabel = reg.dist === "t" ? `t(${reg.QEdf})` : "z";
+  const statLabel = reg.dist === "t" ? `<em>t</em>(${reg.QEdf})` : "<em>z</em>";
   const QMlabel   = reg.QMdist === "F"
-    ? `F(${reg.QMdf}, ${reg.QEdf})`
+    ? `<em>F</em>(${reg.QMdf}, ${reg.QEdf})`
     : `χ²(${reg.QMdf})`;
   const ciLabel   = ciMethod === "KH" ? "Knapp-Hartung" : "Normal CI";
 
   const QMrow = reg.p > 1
-    ? ` &nbsp;·&nbsp; QM ${QMlabel} = ${fmt(reg.QM)}, p = ${regFmtP(reg.QMp)}`
+    ? ` &nbsp;·&nbsp; <em>Q</em>M ${QMlabel} = ${fmt(reg.QM)}, <em>p</em> = ${regFmtP(reg.QMp)}`
     : "";
 
   const mccMethod = document.getElementById("mccMethod")?.value ?? "none";
@@ -402,12 +468,12 @@ export function renderRegressionPanel(reg, method, ciMethod, kExcluded = 0, mods
         <table class="reg-table">
           <thead><tr>
             <th>Moderator</th>
-            <th>${reg.QMdist === "F" ? "F" : "QM"} (Wald)</th>
+            <th>${reg.QMdist === "F" ? "<em>F</em>" : "<em>Q</em>M"} (Wald)</th>
             ${hasLRT ? `<th>LRT χ²${hBtn("mreg.lrt")}</th>` : ""}
             <th>df</th>
-            <th>p (Wald)</th>
-            ${hasLRT ? `<th>p (LRT)</th>` : ""}
-            ${hasAdjPs ? `<th>p (${mccLabel})</th>` : ""}
+            <th><em>p</em> (Wald)</th>
+            ${hasLRT ? `<th><em>p</em> (LRT)</th>` : ""}
+            ${hasAdjPs ? `<th><em>p</em> (${mccLabel})</th>` : ""}
           </tr></thead>
           <tbody>
             ${reg.modTests.map((mt, mi) => {
@@ -417,18 +483,21 @@ export function renderRegressionPanel(reg, method, ciMethod, kExcluded = 0, mods
               const dfLabel = reg.QMdist === "F"
                 ? `F(${mt.QMdf},\u2009${reg.QEdf})`
                 : `χ²(${mt.QMdf})`;
-              const lrtCells = hasLRT
-                ? `<td>${isFinite(mt.lrt) ? fmt(mt.lrt) : "NA"}</td>
-                   <td>${isFinite(mt.lrtP) ? regFmtP(mt.lrtP) : "NA"}</td>`
+              const lrtStatCell = hasLRT
+                ? `<td>${isFinite(mt.lrt) ? fmt(mt.lrt) : "NA"}</td>`
+                : "";
+              const lrtPCell = hasLRT
+                ? `<td>${isFinite(mt.lrtP) ? regFmtP(mt.lrtP) : "NA"}</td>`
                 : "";
               const adjCell = hasAdjPs
                 ? `<td>${regFmtP(adjModPs[mi])}</td>` : "";
               return `<tr>
                 <td>${mt.name}</td>
                 <td>${fmt(mt.QM)}</td>
-                ${lrtCells}
+                ${lrtStatCell}
                 <td>${dfLabel}</td>
                 <td>${regFmtP(mt.QMp)}</td>
+                ${lrtPCell}
                 ${adjCell}
               </tr>`;
             }).join("")}
@@ -440,7 +509,7 @@ export function renderRegressionPanel(reg, method, ciMethod, kExcluded = 0, mods
     : "";
 
   const robustHeaders = reg.isClustered
-    ? `<th>Rob.SE</th><th>Rob.p</th>`
+    ? `<th>Rob.SE</th><th>Rob.<em>t</em></th><th>Rob.<em>p</em></th><th>Rob.CI</th>`
     : "";
 
   panel.innerHTML = `
@@ -451,21 +520,21 @@ export function renderRegressionPanel(reg, method, ciMethod, kExcluded = 0, mods
     <div class="reg-het">
       τ² = ${fmt(reg.tau2)} (residual) &nbsp;·&nbsp; I² = ${fmt(reg.I2)}%
       ${reg.p > 1 ? `&nbsp;·&nbsp; R² = ${isFinite(reg.R2) ? fmt(reg.R2 * 100) + "%" : "N/A"}` : ""}
-      &nbsp;·&nbsp; QE(${reg.QEdf}) = ${fmt(reg.QE)}, p = ${regFmtP(reg.QEp)}
+      &nbsp;·&nbsp; <em>Q</em>E(${reg.QEdf}) = ${fmt(reg.QE)}, <em>p</em> = ${regFmtP(reg.QEp)}
       ${QMrow}
-      <br><span style="color:var(--fg-muted);font-size:0.93em">${hBtn("reg.aic")}AIC&nbsp;=&nbsp;${fmt(reg.AIC)} &nbsp;·&nbsp; BIC&nbsp;=&nbsp;${fmt(reg.BIC)} &nbsp;·&nbsp; LL&nbsp;=&nbsp;${fmt(reg.LL)}&nbsp;&nbsp;<span style="font-size:0.9em;opacity:0.75">(${method}; compare ${method === "REML" ? "models with same predictors only" : "any nested models"})</span></span>
+      <br><span style="color:var(--fg-muted);font-size:0.93em">${hBtn("reg.aic")}AIC&nbsp;=&nbsp;${fmt(reg.AIC)} &nbsp;·&nbsp; BIC&nbsp;=&nbsp;${fmt(reg.BIC)} &nbsp;·&nbsp; LL&nbsp;=&nbsp;${fmt(reg.LL)}${ciMethod === "KH" && isFinite(reg.s2) ? ` &nbsp;·&nbsp; KH&nbsp;<em>s</em>²&nbsp;=&nbsp;${fmt(reg.s2)}` : ""}&nbsp;&nbsp;<span style="font-size:0.9em;opacity:0.75">(${method}; compare ${method === "REML" ? "models with same predictors only" : "any nested models"})</span></span>
     </div>
     <div class="reg-body">
       ${clusterRegNote}${excludedWarning}${lowDfWarning}${vifWarning}
       <table class="reg-table">
         <thead><tr>
           <th>Term</th><th>β</th><th>SE</th><th>${statLabel}</th>
-          <th>p</th><th>${getCiLabel()}</th><th>VIF</th><th></th>
+          <th><em>p</em></th><th>${getCiLabel()}</th><th>VIF</th><th></th>
           ${robustHeaders}
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>
-      <div class="reg-note">*** p &lt; .001 &nbsp;·&nbsp; ** p &lt; .01 &nbsp;·&nbsp; * p &lt; .05 &nbsp;·&nbsp; · p &lt; .10</div>
+      <div class="reg-note">*** <em>p</em> &lt; .001 &nbsp;·&nbsp; ** <em>p</em> &lt; .01 &nbsp;·&nbsp; * <em>p</em> &lt; .05 &nbsp;·&nbsp; · <em>p</em> &lt; .10</div>
       ${modTestsBlock}
       <details class="contrast-section">
         <summary>Custom contrasts${hBtn("mreg.contrasts")}</summary>
@@ -501,23 +570,41 @@ export function renderRegressionPanel(reg, method, ciMethod, kExcluded = 0, mods
         </table>
         <div class="reg-note">Standardized residuals |std. e| &gt; 1.96 highlighted.</div>
       </details>` : ""}
+      ${reg.vcov && reg.p >= 2 ? `
+      <details>
+        <summary>Coefficient covariance matrix (vcov)</summary>
+        <div class="reg-note" style="margin:4px 0 8px">
+          The ${reg.p}&times;${reg.p} variance-covariance matrix of regression coefficients.
+          Useful for computing SEs of linear combinations not available in the contrasts panel.
+          ${reg.isClustered ? "Note: this is the model-based vcov, not the cluster-robust sandwich estimator." : ""}
+        </div>
+        <button class="btn-sm vcov-download-btn" type="button">Download vcov as CSV</button>
+      </details>` : ""}
     </div>`;
 }
 
 // ---------------- SENSITIVITY ANALYSIS PANEL ----------------
 
 export const TAU_METHOD_LABELS = {
-  DL:   "DerSimonian-Laird (DL)",
-  REML: "REML",
-  PM:   "Paule-Mandel (PM)",
-  ML:   "Maximum Likelihood (ML)",
-  HS:   "Hunter-Schmidt (HS)",
-  HE:   "Hedges (HE)",
-  SJ:   "Sidik-Jonkman (SJ)",
+  REML:   "REML",
+  DL:     "DerSimonian-Laird (DL)",
+  PM:     "Paule-Mandel (PM)",
+  ML:     "Maximum Likelihood (ML)",
+  EB:     "Empirical Bayes (EB)",
+  HE:     "Hedges (HE)",
+  HS:     "Hunter-Schmidt (HS)",
+  SJ:     "Sidik-Jonkman (SJ)",
+  GENQ:   "Generalized Q (GENQ)",
+  DLIT:   "Iterated DL (DLIT)",
+  PMM:    "Paule-Mandel Median (PMM)",
+  GENQM:  "Generalized Q Median (GENQM)",
+  SQGENQ: "Square-root GENQ (SQGENQ)",
+  HSk:    "Hunter-Schmidt corrected (HSk)",
+  EBLUP:  "EBLUP (= REML)",
 };
 
 function sensFv(v)  { return isFinite(v) ? v.toFixed(3) : "—"; }
-function sensFvp(v) { return isFinite(v) ? (v < 0.001 ? "<.001" : v.toFixed(3)) : "—"; }
+function sensFvp(v) { return isFinite(v) ? (v < 0.001 ? "< .001" : v.toFixed(3).replace(/^0\./, ".")) : "—"; }
 function sensTrunc(s, n) { const e = escapeHTML(s); return e.length > n ? e.slice(0, n - 1) + "\u2026" : e; }
 
 function buildLooBody(loo, fullSig, fullEst, profile) {
@@ -532,7 +619,7 @@ function buildLooBody(loo, fullSig, fullEst, profile) {
       <th>${getCiLabel()} (high)</th>
       <th>I² (%)</th>
       <th>τ²</th>
-      <th>p</th>
+      <th><em>p</em></th>
       <th>Δ estimate</th>
     </tr>`;
   const dataRows = loo.rows.map(row => {
@@ -653,9 +740,12 @@ export function renderStudyTable(studies, m, profile) {
   if (!container) return;
 
   // For MH/Peto use FE (τ²=0) weights; for RE use τ²-inflated weights.
-  const tau2   = (m.isMH || m.isPeto || !isFinite(m.tau2)) ? 0 : m.tau2;
-  const real   = studies.filter(d => !d.filled);
-  const totalW = real.reduce((s, d) => s + 1 / (d.vi + tau2), 0);
+  const tau2      = (m.isMH || m.isPeto || !isFinite(m.tau2)) ? 0 : m.tau2;
+  const real      = studies.filter(d => !d.filled);
+  const totalW    = real.reduce((s, d) => s + 1 / (d.vi + tau2), 0);
+  // Show a separate FE weight column only for RE models (MH/Peto already uses FE weights).
+  const showFEcol = !m.isMH && !m.isPeto;
+  const totalWfe  = showFEcol ? real.reduce((s, d) => s + 1 / d.vi, 0) : 0;
 
   // SE column header: label the scale when yi is stored on a transformed scale.
   const seLabel = profile.isTransformedScale ? "SE (transformed)" : "SE";
@@ -664,10 +754,11 @@ export function renderStudyTable(studies, m, profile) {
   const rows = studies.map(d => {
     const wi    = 1 / (d.vi + tau2);
     const pct   = d.filled ? null : wi / totalW * 100;
+    const pctFE = (showFEcol && !d.filled) ? (1 / d.vi) / totalWfe * 100 : null;
     const ef    = profile.transform(d.yi);
     const lo    = profile.transform(d.yi - Z_95 * d.se);
     const hi    = profile.transform(d.yi + Z_95 * d.se);
-    return { label: escapeHTML(d.label), ef, lo, hi, se: d.se, pct, filled: !!d.filled };
+    return { label: escapeHTML(d.label), ef, lo, hi, se: d.se, pct, pctFE, filled: !!d.filled };
   });
 
   // Pooled row values — use FE for MH/Peto (RE is NaN)
@@ -692,6 +783,7 @@ export function renderStudyTable(studies, m, profile) {
       <th>${getCiLabel()} (high)</th>
       <th>${seLabel}</th>
       <th>${weightLabel}</th>
+      ${showFEcol ? "<th>FE Weight</th>" : ""}
     </tr>`;
 
   const studyRows = rows.map(r => `
@@ -702,7 +794,19 @@ export function renderStudyTable(studies, m, profile) {
       <td>${fmtVal(r.hi)}</td>
       <td>${fmtVal(r.se)}</td>
       <td>${fmtPct(r.pct)}</td>
+      ${showFEcol ? `<td>${fmtPct(r.pctFE)}</td>` : ""}
     </tr>`).join("");
+
+  const feRow = showFEcol ? `
+    <tr class="pooled-row">
+      <td>Pooled (FE)</td>
+      <td>${fmtVal(profile.transform(m.FE))}</td>
+      <td>${fmtVal(profile.transform(m.FE - Z_95 * m.seFE))}</td>
+      <td>${fmtVal(profile.transform(m.FE + Z_95 * m.seFE))}</td>
+      <td>${fmtVal(m.seFE)}</td>
+      <td>—</td>
+      <td>100%</td>
+    </tr>` : "";
 
   const pooledLabel = m.isMH ? "Pooled (MH)" : m.isPeto ? "Pooled (Peto)" : "Pooled (RE)";
   const pooledSE    = isFinite(m.seRE) ? m.seRE : m.seFE;
@@ -714,13 +818,14 @@ export function renderStudyTable(studies, m, profile) {
       <td>${fmtVal(pooledHi)}</td>
       <td>${fmtVal(pooledSE)}</td>
       <td>100%</td>
+      ${showFEcol ? "<td>—</td>" : ""}
     </tr>`;
 
-  container.innerHTML = `<table class="study-table">${headerRow}${studyRows}${pooledRow}</table>`;
+  container.innerHTML = `<table class="study-table">${headerRow}${studyRows}${feRow}${pooledRow}</table>`;
 }
 
 // ---------------- P-CURVE PANEL ----------------
-export function renderPCurvePanel(pcurve) {
+export function renderPCurvePanel(pcurve, options = {}) {
   const panel     = document.getElementById("pCurvePanel");
   const plotBlock = document.getElementById("pCurvePlotBlock");
   if (!panel || !plotBlock) return;
@@ -734,12 +839,7 @@ export function renderPCurvePanel(pcurve) {
   }
 
   function fmtZ(z) { return isFinite(z) ? z.toFixed(3) : "—"; }
-  function fmtP(p) {
-    if (!isFinite(p)) return "—";
-    if (p < 0.001)  return "< 0.001";
-    if (p < 0.01)   return "< 0.01";
-    return p.toFixed(3);
-  }
+  function fmtP(p) { return fmtPval(p); }
 
   const verdictLabels = {
     "evidential":     "Evidential value",
@@ -751,16 +851,16 @@ export function renderPCurvePanel(pcurve) {
   panel.innerHTML = `
     <div class="pcurve-summary">
       <span>P-curve &nbsp;·&nbsp; <strong>${pcurve.k}</strong> significant result${pcurve.k !== 1 ? "s" : ""} (p &lt; .05)</span>
-      <span>Right-skew test: Z = <strong>${fmtZ(pcurve.rightSkewZ)}</strong>, p = <strong>${fmtP(pcurve.rightSkewP)}</strong></span>
-      <span>Flatness test: Z = <strong>${fmtZ(pcurve.flatnessZ)}</strong>, p = <strong>${fmtP(pcurve.flatnessP)}</strong></span>
+      <span>Right-skew test: <em>Z</em> = <strong>${fmtZ(pcurve.rightSkewZ)}</strong>, <em>p</em> <strong>${fmtP(pcurve.rightSkewP)}</strong></span>
+      <span>Flatness test: <em>Z</em> = <strong>${fmtZ(pcurve.flatnessZ)}</strong>, <em>p</em> <strong>${fmtP(pcurve.flatnessP)}</strong></span>
       <span class="status-pill ${pcurve.verdict}">${verdictLabels[pcurve.verdict] ?? pcurve.verdict}</span>
     </div>`;
 
-  drawPCurve(pcurve);
+  drawPCurve(pcurve, options);
 }
 
 // ---------------- P-UNIFORM PANEL ----------------
-export function renderPUniformPanel(puniform, m, profile) {
+export function renderPUniformPanel(puniform, m, profile, options = {}) {
   const panel     = document.getElementById("pUniformPanel");
   const plotBlock = document.getElementById("pUniformPlotBlock");
   if (!panel || !plotBlock) return;
@@ -774,12 +874,7 @@ export function renderPUniformPanel(puniform, m, profile) {
   }
 
   function fmtZ(z) { return isFinite(z) ? z.toFixed(3) : "—"; }
-  function fmtP(p) {
-    if (!isFinite(p)) return "—";
-    if (p < 0.001) return "< 0.001";
-    if (p < 0.01)  return "< 0.01";
-    return p.toFixed(3);
-  }
+  function fmtP(p) { return fmtPval(p); }
   function fmtEst(v) { return isFinite(v) ? fmt(profile.transform(v)) : "—"; }
 
   const est = fmtEst(puniform.estimate);
@@ -798,26 +893,21 @@ export function renderPUniformPanel(puniform, m, profile) {
     <div class="puniform-summary">
       <span>P-uniform &nbsp;·&nbsp; <strong>${puniform.k}</strong> significant result${puniform.k !== 1 ? "s" : ""} (p &lt; .05)</span>
       <span>Estimate: <strong>${est}</strong> [${lo}, ${hi}]</span>
-      <span>Significance test: Z = <strong>${fmtZ(puniform.Z_sig)}</strong>, p = <strong>${fmtP(puniform.p_sig)}</strong></span>
-      <span>Bias test: Z = <strong>${fmtZ(puniform.Z_bias)}</strong>, p = <strong>${fmtP(puniform.p_bias)}</strong></span>
+      <span>Significance test: <em>Z</em> = <strong>${fmtZ(puniform.Z_sig)}</strong>, <em>p</em> <strong>${fmtP(puniform.p_sig)}</strong></span>
+      <span>Bias test: <em>Z</em> = <strong>${fmtZ(puniform.Z_bias)}</strong>, <em>p</em> <strong>${fmtP(puniform.p_bias)}</strong></span>
       ${flags.join(" ")}
     </div>`;
 
-  drawPUniform(puniform, m, profile);
+  drawPUniform(puniform, m, profile, options);
 }
 
 // ---------------- SELECTION MODEL PANEL ----------------
-export function renderSelectionModelPanel(r, mode, profile) {
+export function renderSelectionModelPanel(r, mode, weightFn, profile) {
   const panel = document.getElementById("selectionModelPanel");
   if (!panel) return;
 
   function fmtV(v) { return isFinite(v) ? fmt(v) : "—"; }
-  function fmtP(p) {
-    if (!isFinite(p)) return "—";
-    if (p < 0.001) return "< 0.001";
-    if (p < 0.01)  return "< 0.01";
-    return p.toFixed(3);
-  }
+  function fmtP(p) { return fmtPval(p); }
   function fmtDisp(v) { return isFinite(v) ? fmt(profile.transform(v)) : "—"; }
 
   // Not run (meta-regression active)
@@ -826,9 +916,152 @@ export function renderSelectionModelPanel(r, mode, profile) {
     return;
   }
 
-  // Insufficient k
+  // Insufficient k (both step-function and continuous models)
   if (r.error === "insufficient_k") {
-    panel.innerHTML = `${hBtn("sel.model")}<p class="sel-note">Insufficient studies: need at least ${r.minK} for ${r.K} intervals (have ${r.k}).</p>`;
+    const need = r.minK ?? r.K + 2;
+    panel.innerHTML = `${hBtn("sel.model")}<p class="sel-note">Insufficient studies: need at least ${need} (have ${r.k}).</p>`;
+    return;
+  }
+
+  // ── Half-normal (and future continuous models) branch ──
+  if (r.weightFn === "halfnorm") {
+    const muAdj  = fmtDisp(r.mu);
+    const ciLo   = fmtDisp(r.ci_mu[0]);
+    const ciHi   = fmtDisp(r.ci_mu[1]);
+    const muUnadj = fmtDisp(r.RE_unsel);
+    const convNote = !r.converged
+      ? `<p class="sel-warn">⚠ Optimizer did not fully converge. Results may be unreliable.</p>`
+      : "";
+    const tau2Warn = (r.tau2_unsel !== undefined && r.tau2_unsel < 0.01)
+      ? `<p class="sel-note">Note: Heterogeneity near zero (τ² ≈ 0). Selection model may be underidentified.</p>`
+      : "";
+    const sidesLabel = r.sides === 2 ? "two-sided" : "one-sided";
+    panel.innerHTML = `
+      ${hBtn("sel.halfnorm")}${tau2Warn}
+      <p class="sel-note">Half-normal weight function · w(p; δ) = Φ(Φ⁻¹(1−p) · δ) · ${sidesLabel} p-values</p>
+      <table class="sel-table">
+        <thead><tr><th>Quantity</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td>Selection parameter δ̂</td>
+              <td>${fmtV(r.delta)}${isFinite(r.se_delta) ? ` ± ${fmtV(r.se_delta)}` : ""}</td></tr>
+          <tr><td>Adjusted μ̂ [95% CI]</td>
+              <td>${muAdj} [${ciLo}, ${ciHi}] &nbsp;·&nbsp; unadjusted: ${muUnadj}</td></tr>
+          <tr><td>Adjusted τ²</td>
+              <td>${fmtV(r.tau2)} &nbsp;·&nbsp; unadjusted: ${fmtV(r.tau2_unsel)}</td></tr>
+          <tr><td>LRT (H₀: δ = 0)</td>
+              <td>χ²(1) = ${fmtV(r.LRT)}, <em>p</em> ${fmtP(r.LRTp)}</td></tr>
+          <tr><td>Log-likelihood</td>
+              <td>sel: ${fmtV(r.logLikSel)} · unsel: ${fmtV(r.logLikUnsel)}<span class="sel-note"> (ML; omits normalising constants)</span></td></tr>
+        </tbody>
+      </table>
+      ${convNote}`;
+    return;
+  }
+
+  // ── Power branch ──
+  if (r.weightFn === "power") {
+    const muAdj  = fmtDisp(r.mu);
+    const ciLo   = fmtDisp(r.ci_mu[0]);
+    const ciHi   = fmtDisp(r.ci_mu[1]);
+    const muUnadj = fmtDisp(r.RE_unsel);
+    const convNote = !r.converged
+      ? `<p class="sel-warn">⚠ Optimizer did not fully converge. Results may be unreliable.</p>`
+      : "";
+    const tau2Warn = (r.tau2_unsel !== undefined && r.tau2_unsel < 0.01)
+      ? `<p class="sel-note">Note: Heterogeneity near zero (τ² ≈ 0). Selection model may be underidentified.</p>`
+      : "";
+    const sidesLabel = r.sides === 2 ? "two-sided" : "one-sided";
+    panel.innerHTML = `
+      ${hBtn("sel.power")}${tau2Warn}
+      <p class="sel-note">Power weight function · w(p; δ) = (1 − p)<sup>δ</sup> · ${sidesLabel} p-values</p>
+      <table class="sel-table">
+        <thead><tr><th>Quantity</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td>Selection parameter δ̂</td>
+              <td>${fmtV(r.delta)}${isFinite(r.se_delta) ? ` ± ${fmtV(r.se_delta)}` : ""}</td></tr>
+          <tr><td>Adjusted μ̂ [95% CI]</td>
+              <td>${muAdj} [${ciLo}, ${ciHi}] &nbsp;·&nbsp; unadjusted: ${muUnadj}</td></tr>
+          <tr><td>Adjusted τ²</td>
+              <td>${fmtV(r.tau2)} &nbsp;·&nbsp; unadjusted: ${fmtV(r.tau2_unsel)}</td></tr>
+          <tr><td>LRT (H₀: δ = 0)</td>
+              <td>χ²(1) = ${fmtV(r.LRT)}, <em>p</em> ${fmtP(r.LRTp)}</td></tr>
+          <tr><td>Log-likelihood</td>
+              <td>sel: ${fmtV(r.logLikSel)} · unsel: ${fmtV(r.logLikUnsel)}<span class="sel-note"> (ML; omits normalising constants)</span></td></tr>
+        </tbody>
+      </table>
+      ${convNote}`;
+    return;
+  }
+
+  // ── Negative exponential branch ──
+  if (r.weightFn === "negexp") {
+    const muAdj  = fmtDisp(r.mu);
+    const ciLo   = fmtDisp(r.ci_mu[0]);
+    const ciHi   = fmtDisp(r.ci_mu[1]);
+    const muUnadj = fmtDisp(r.RE_unsel);
+    const convNote = !r.converged
+      ? `<p class="sel-warn">⚠ Optimizer did not fully converge. Results may be unreliable.</p>`
+      : "";
+    const tau2Warn = (r.tau2_unsel !== undefined && r.tau2_unsel < 0.01)
+      ? `<p class="sel-note">Note: Heterogeneity near zero (τ² ≈ 0). Selection model may be underidentified.</p>`
+      : "";
+    const sidesLabel = r.sides === 2 ? "two-sided" : "one-sided";
+    panel.innerHTML = `
+      ${hBtn("sel.negexp")}${tau2Warn}
+      <p class="sel-note">Negative exponential weight function · w(p; δ) = e<sup>−δp</sup> · ${sidesLabel} p-values</p>
+      <table class="sel-table">
+        <thead><tr><th>Quantity</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td>Selection parameter δ̂</td>
+              <td>${fmtV(r.delta)}${isFinite(r.se_delta) ? ` ± ${fmtV(r.se_delta)}` : ""}</td></tr>
+          <tr><td>Adjusted μ̂ [95% CI]</td>
+              <td>${muAdj} [${ciLo}, ${ciHi}] &nbsp;·&nbsp; unadjusted: ${muUnadj}</td></tr>
+          <tr><td>Adjusted τ²</td>
+              <td>${fmtV(r.tau2)} &nbsp;·&nbsp; unadjusted: ${fmtV(r.tau2_unsel)}</td></tr>
+          <tr><td>LRT (H₀: δ = 0)</td>
+              <td>χ²(1) = ${fmtV(r.LRT)}, <em>p</em> ${fmtP(r.LRTp)}</td></tr>
+          <tr><td>Log-likelihood</td>
+              <td>sel: ${fmtV(r.logLikSel)} · unsel: ${fmtV(r.logLikUnsel)}<span class="sel-note"> (ML; omits normalising constants)</span></td></tr>
+        </tbody>
+      </table>
+      ${convNote}`;
+    return;
+  }
+
+  // ── Beta branch ──
+  if (r.weightFn === "beta") {
+    const muAdj   = fmtDisp(r.mu);
+    const ciLo    = fmtDisp(r.ci_mu[0]);
+    const ciHi    = fmtDisp(r.ci_mu[1]);
+    const muUnadj = fmtDisp(r.RE_unsel);
+    const convNote = !r.converged
+      ? `<p class="sel-warn">⚠ Optimizer did not fully converge. Results may be unreliable.</p>`
+      : "";
+    const tau2Warn = (r.tau2_unsel !== undefined && r.tau2_unsel < 0.01)
+      ? `<p class="sel-note">Note: Heterogeneity near zero (τ² ≈ 0). Selection model may be underidentified.</p>`
+      : "";
+    const sidesLabel = r.sides === 2 ? "two-sided" : "one-sided";
+    panel.innerHTML = `
+      ${hBtn("sel.beta")}${tau2Warn}
+      <p class="sel-note">Beta weight function · w(p; a, b) = p<sup>a−1</sup>(1−p)<sup>b−1</sup> · ${sidesLabel} p-values</p>
+      <table class="sel-table">
+        <thead><tr><th>Quantity</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td>Shape â</td>
+              <td>${fmtV(r.a)}${isFinite(r.se_a) ? ` ± ${fmtV(r.se_a)}` : ""}</td></tr>
+          <tr><td>Shape b̂</td>
+              <td>${fmtV(r.b)}${isFinite(r.se_b) ? ` ± ${fmtV(r.se_b)}` : ""}</td></tr>
+          <tr><td>Adjusted μ̂ [95% CI]</td>
+              <td>${muAdj} [${ciLo}, ${ciHi}] &nbsp;·&nbsp; unadjusted: ${muUnadj}</td></tr>
+          <tr><td>Adjusted τ²</td>
+              <td>${fmtV(r.tau2)} &nbsp;·&nbsp; unadjusted: ${fmtV(r.tau2_unsel)}</td></tr>
+          <tr><td>LRT (H₀: a = b = 1)</td>
+              <td>χ²(2) = ${fmtV(r.LRT)}, <em>p</em> ${fmtP(r.LRTp)}</td></tr>
+          <tr><td>Log-likelihood</td>
+              <td>sel: ${fmtV(r.logLikSel)} · unsel: ${fmtV(r.logLikUnsel)}<span class="sel-note"> (ML; omits normalising constants)</span></td></tr>
+        </tbody>
+      </table>
+      ${convNote}`;
     return;
   }
 
@@ -869,9 +1102,10 @@ export function renderSelectionModelPanel(r, mode, profile) {
   const ciHi    = fmtDisp(r.mu + 1.96 * r.se_mu);
   const muUnadj = fmtDisp(r.RE_unsel);
 
-  // ---- LRT row (MLE only) ----
+  // ---- LRT + LL rows (MLE only) ----
   const lrtRow = isMLE
-    ? `<tr><td>LRT (H₀: no selection)</td><td colspan="${K}">χ²(${r.LRTdf}) = ${fmtV(r.LRT)}, p = ${fmtP(r.LRTp)}</td></tr>`
+    ? `<tr><td>LRT (H₀: no selection)</td><td colspan="${K}">χ²(${r.LRTdf}) = ${fmtV(r.LRT)}, <em>p</em> ${fmtP(r.LRTp)}</td></tr>
+       <tr><td>Log-likelihood</td><td colspan="${K}">sel: ${fmtV(r.logLikSel)} · unsel: ${fmtV(r.logLikUnsel)}<span class="sel-note"> (ML; omits normalising constants)</span></td></tr>`
     : "";
 
   // ---- Convergence note (MLE only) ----
@@ -919,43 +1153,50 @@ export function renderSelectionModelPanel(r, mode, profile) {
     ${convNote}`;
 }
 
-export function buildInfluenceHTML(influence) {
+export function buildInfluenceHTML(influence, isOpen = true) {
   const k    = influence.length;
   const dffitsThresh   = 3 * Math.sqrt(1 / Math.max(k - 1, 1));
   const covRatioThresh = 1 + 1 / k;
   const rows = influence.map(d => {
     const anyFlag  = d.outlier || d.influential || d.highLeverage || d.highCookD || d.highDffits || d.highCovRatio;
     const rowStyle = anyFlag ? "class='results-row-flagged'" : "";
-    const hatStyle      = d.highLeverage  ? " style='color:var(--color-warning);font-weight:bold;'" : "";
-    const cookStyle     = d.highCookD     ? " style='color:var(--color-warning);font-weight:bold;'" : "";
-    const dffitsStyle   = d.highDffits    ? " style='color:var(--color-warning);font-weight:bold;'" : "";
-    const covRatioStyle = d.highCovRatio  ? " style='color:var(--color-warning);font-weight:bold;'" : "";
+    const W = " style='color:var(--color-warning);font-weight:bold;'";
+    const stdResStyle   = d.outlier       ? W : "";
+    const dfbetaStyle   = d.influential   ? W : "";
+    const hatStyle      = d.highLeverage  ? W : "";
+    const cookStyle     = d.highCookD     ? W : "";
+    const dffitsStyle   = d.highDffits    ? W : "";
+    const covRatioStyle = d.highCovRatio  ? W : "";
     const flags = [
       d.outlier      ? "Outlier"      : "",
       d.influential  ? "Influential"  : "",
       d.highLeverage ? "Hi-Lev"       : "",
       d.highCookD    ? "Hi-Cook"      : "",
       d.highDffits   ? "Hi-DFFITS"    : "",
-      d.highCovRatio ? "Hi-CovRatio"  : "",
+      d.highCovRatio ? (d.covRatio < 1 ? "Lo-CovRatio" : "Hi-CovRatio") : "",
     ].filter(Boolean).join(", ");
     return `<tr ${rowStyle}>
-      <td>${d.label}</td>
+      <td>${escapeHTML(d.label)}</td>
       <td>${isFinite(d.RE_loo)      ? fmt(d.RE_loo)      : "NA"}</td>
       <td>${isFinite(d.deltaTau2)   ? fmt(d.deltaTau2)   : "NA"}</td>
-      <td>${isFinite(d.stdResidual) ? fmt(d.stdResidual) : "NA"}</td>
-      <td>${isFinite(d.DFBETA)      ? fmt(d.DFBETA)      : "NA"}</td>
+      <td${stdResStyle}>${isFinite(d.stdResidual) ? fmt(d.stdResidual) : "NA"}</td>
+      <td${dfbetaStyle}>${isFinite(d.DFBETA)      ? fmt(d.DFBETA)      : "NA"}</td>
       <td${dffitsStyle}>${isFinite(d.DFFITS)     ? fmt(d.DFFITS)         : "NA"}</td>
       <td${covRatioStyle}>${isFinite(d.covRatio) ? d.covRatio.toFixed(3) : "NA"}</td>
       <td${hatStyle}>${isFinite(d.hat)   ? d.hat.toFixed(3)   : "NA"}</td>
       <td${cookStyle}>${isFinite(d.cookD) ? d.cookD.toFixed(3) : "NA"}</td>
       <td>${flags}</td></tr>`;
   }).join("");
-  return `<b>Influence diagnostics:${hBtn("diag.influence")}</b><br>
+  return `<details class="sens-block"${isOpen ? " open" : ""}>
+    <summary class="sens-summary">
+      Influence diagnostics ${hBtn("diag.influence")}
+    </summary>
     <table border="1">
       <tr><th>Study</th><th>RE (LOO)</th><th>Δτ²</th><th>Std Residual</th><th>DFBETA</th><th>DFFITS${hBtn("diag.dffits")}</th><th>CovRatio${hBtn("diag.covratio")}</th><th>Hat</th><th>Cook's D</th><th>Flag</th></tr>
       ${rows}
     </table>
-    <small style="color:var(--fg-muted);">Thresholds: Hat &gt; ${fmt(2/k)} (= 2/k); Cook's D &gt; ${fmt(4/k)} (= 4/k); DFFITS &gt; ${fmt(dffitsThresh)} (= 3·√(1/(k−1))); CovRatio &gt; ${fmt(covRatioThresh)} (= 1+1/k)</small>`;
+    <small style="color:var(--fg-muted);">Thresholds: Hat &gt; ${fmt(2/k)} (= 2/k); Cook's D &gt; ${fmt(4/k)} (= 4/k); DFFITS &gt; ${fmt(dffitsThresh)} (= 3·√(1/(k−1))); CovRatio outside [${fmt(1 - 1/k)}, ${fmt(covRatioThresh)}] (= 1±1/k)</small>
+  </details>`;
 }
 
 // Jeffreys (1961) interpretation scale for BF₁₀
@@ -976,17 +1217,20 @@ export function bayesInterpretation(BF10) {
 export function buildBayesSummaryHTML(result, profile, reMean) {
   const muDisp   = profile.transform(result.muMean);
   const muCIDisp = result.muCI.map(v => profile.transform(v));
+  const muSDNote = profile.isTransformedScale ? " (log)" : "";
+  const crLabel  = getCiLabel().replace("CI", "CrI");
+  const fmtBF    = bf => !isFinite(bf) ? "NA" : bf >= 1000 || bf < 0.001 ? bf.toExponential(2) : bf.toFixed(3);
   return `
     <table class="stats-table" style="margin-bottom:8px">
       <tr>
         <td>Posterior mean μ</td>
         <td>${fmt(muDisp)}</td>
-        <td>${getCiLabel().replace("CI","CrI")} [${fmt(muCIDisp[0])}, ${fmt(muCIDisp[1])}]</td>
+        <td>${crLabel} [${fmt(muCIDisp[0])}, ${fmt(muCIDisp[1])}] · SD${muSDNote} = ${fmt(result.muSD)}</td>
       </tr>
       <tr>
         <td>Posterior mean τ</td>
         <td>${fmt(result.tauMean)}</td>
-        <td>${getCiLabel().replace("CI","CrI")} [${fmt(result.tauCI[0])}, ${fmt(result.tauCI[1])}]</td>
+        <td>${crLabel} [${fmt(result.tauCI[0])}, ${fmt(result.tauCI[1])}] · SD = ${fmt(result.tauSD)}</td>
       </tr>
       ${isFinite(reMean) ? `<tr>
         <td>Frequentist RE (comparison)</td>
@@ -995,9 +1239,14 @@ export function buildBayesSummaryHTML(result, profile, reMean) {
       </tr>` : ""}
       ${isFinite(result.BF10) ? `<tr>
         <td>Bayes Factor BF\u2081\u2080 (H\u2081: \u03BC\u22600)</td>
-        <td>${result.BF10 >= 1000 ? result.BF10.toExponential(2) : result.BF10 < 0.001 ? result.BF10.toExponential(2) : result.BF10.toFixed(3)}</td>
+        <td>${fmtBF(result.BF10)}</td>
         <td>${bayesInterpretation(result.BF10)}</td>
       </tr>
+      ${result.BF10 < 1 && isFinite(result.BF01) ? `<tr>
+        <td>BF\u2080\u2081 = 1/BF\u2081\u2080 (H\u2080: \u03BC\u202F=\u202F0)</td>
+        <td>${fmtBF(result.BF01)}</td>
+        <td>${bayesInterpretation(result.BF10)}</td>
+      </tr>` : ""}
       <tr>
         <td>log(BF\u2081\u2080)</td>
         <td>${result.logBF10.toFixed(3)}</td>
@@ -1067,8 +1316,15 @@ export function buildSubgroupHTML(subgroup, profile, hasClusters) {
     <table border="1">
       <tr><th>Group</th><th>k</th><th>Effect</th><th>SE</th><th>CI</th><th>τ²</th><th>I² (%)</th></tr>
       ${rows}
+      <tr>
+        <td colspan="7" style="font-size:0.92em;color:var(--muted)">
+          <em>Q</em><sub>total</sub>(${subgroup.k - 1}) = ${subgroup.Qtotal.toFixed(3)}
+          &ensp;·&ensp;
+          <em>Q</em><sub>within</sub>(${subgroup.k - subgroup.G}) = ${subgroup.Qwithin.toFixed(3)}
+        </td>
+      </tr>
       <tr style="font-weight:bold;">
-        <td colspan="7">Q_between = ${subgroup.Qbetween.toFixed(3)}, df = ${subgroup.df}, p = ${subgroup.p.toFixed(4)}</td>
+        <td colspan="7"><em>Q</em><sub>between</sub>(${subgroup.df}) = ${subgroup.Qbetween.toFixed(3)}, <em>p</em> ${fmtPval(subgroup.p)}</td>
       </tr>
     </table>`;
 }
@@ -1076,6 +1332,73 @@ export function buildSubgroupHTML(subgroup, profile, hasClusters) {
 // -----------------------------------------------------------------------------
 // renderGoshInfo(result, profile)
 // -----------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// renderPermResults — render permutation test p-values into #permResults.
+// ---------------------------------------------------------------------------
+export function renderPermResults(permResult, reg) {
+  const el = document.getElementById("permResults");
+  if (!el) return;
+
+  const { QM_dist, modQM_dist, nPerm, nMods } = permResult;
+
+  function permPval(dist, observed) {
+    if (!isFinite(observed)) return NaN;
+    let exceeds = 0;
+    for (let i = 0; i < dist.length; i++) { if (dist[i] >= observed) exceeds++; }
+    return (1 + exceeds) / (dist.length + 1);
+  }
+  function fmtP(p) {
+    if (!isFinite(p)) return "NA";
+    if (p < 0.001) return "< .001";
+    return p.toFixed(3).replace(/^0\./, ".");
+  }
+
+  const omniP   = permPval(QM_dist, reg.QM);
+  const omniLabel = reg.QMdist === "F"
+    ? `F(${reg.QMdf}, ${reg.QEdf})`
+    : `χ²(${reg.QMdf})`;
+
+  let modRows = "";
+  if (nMods > 0 && Array.isArray(reg.modTests)) {
+    modRows = reg.modTests.map((mt, mi) => {
+      if (mt.QMdf === 0 || !mt.colIdxs || mt.colIdxs.length === 0)
+        return `<tr><td>${escapeHTML(mt.name)}</td><td colspan="2"><i>degenerate</i></td></tr>`;
+      const modDist = modQM_dist.subarray(mi, nPerm * nMods + mi).filter((_, idx) => idx % nMods === 0);
+      // Extract column mi from the nPerm×nMods matrix
+      const colDist = new Float64Array(nPerm);
+      for (let r = 0; r < nPerm; r++) colDist[r] = modQM_dist[r * nMods + mi];
+      const mp = permPval(colDist, mt.QM);
+      const dfLabel = reg.QMdist === "F"
+        ? `F(${mt.QMdf}, ${reg.QEdf})`
+        : `χ²(${mt.QMdf})`;
+      return `<tr>
+        <td>${escapeHTML(mt.name)}</td>
+        <td>${fmt(mt.QM)} (${dfLabel})</td>
+        <td><strong>${fmtP(mp)}</strong></td>
+      </tr>`;
+    }).join("");
+  }
+
+  const modTable = nMods > 1 && modRows
+    ? `<details style="margin-top:6px">
+        <summary style="cursor:pointer;color:var(--fg-muted)">Per-moderator permutation <em>p</em>-values</summary>
+        <table class="reg-table" style="margin-top:4px">
+          <thead><tr><th>Moderator</th><th><em>Q</em>M (${reg.QMdist ?? "χ²"})</th><th>Perm <em>p</em></th></tr></thead>
+          <tbody>${modRows}</tbody>
+        </table>
+      </details>`
+    : "";
+
+  el.innerHTML = `
+    <div class="perm-results-block">
+      <strong>Permutation <em>Q</em>M ${omniLabel} = ${fmt(reg.QM)}</strong>
+      &nbsp;&mdash;&nbsp;
+      permutation <em>p</em> = <strong>${fmtP(omniP)}</strong>
+      <span class="reg-note" style="display:inline;margin-left:8px">(${nPerm} permutations, τ² re-estimated per permutation)</span>
+    </div>
+    ${modTable}`;
+}
+
 export function renderGoshInfo(result, profile) {
   const el = document.getElementById("goshInfo");
   if (!el) return;

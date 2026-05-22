@@ -58,6 +58,7 @@ function profileTau2(studies, mu, tol = REML_TOL) {
 //   { μ : 2[L(μ̂,τ̂²) − L_p(μ)] ≤ χ²_{1,1−α} }
 // where L_p(μ) = L(μ, profileTau2(μ)).
 // Always uses ML internally regardless of the selected τ² estimator.
+// Hardy & Thompson (1996) Stat Med 15:619–629.
 // Returns [lower, upper].
 export function profileLikCI(studies, alpha = 0.05) {
   const k = studies.length;
@@ -159,11 +160,15 @@ export function profileLikTau2(studies, opts = {}) {
   }
 
   // ---- Build grid from 0 to hi, compute shifted log-likelihood ----
+  // Uniform spacing in τ = √τ² so the curve is equally smooth in both display
+  // modes: in τ-space the points are evenly spread; in τ²-space the quadratic
+  // spacing provides finer resolution near 0 where the function is steepest.
   const grid = new Float64Array(nGrid);
   const ll   = new Float64Array(nGrid);
-  const step = hi / (nGrid - 1);
+  const stepTau = Math.sqrt(hi) / (nGrid - 1);
   for (let i = 0; i < nGrid; i++) {
-    const t  = i * step;
+    const tau = i * stepTau;
+    const t   = tau * tau;
     grid[i]  = t;
     ll[i]    = evalProfile(t) - lMax;   // shifted so peak = 0
   }
@@ -292,15 +297,20 @@ export function bayesMeta(studies, opts = {}) {
 
   let tauWeights = normalise(logW);
 
-  // ---- Grid truncation check: double tauMax once if needed ----
-  const maxW = tauWeights.reduce((m, v) => Math.max(m, v), 0);
-  let grid_truncated = tauWeights[nGrid - 1] > 1e-4 * maxW;
-  if (grid_truncated) {
+  // ---- Grid truncation check: double tauMax up to 3 times if needed ----
+  let grid_truncated = false;
+  for (let _expand = 0; _expand < 3; _expand++) {
+    const maxW = tauWeights.reduce((m, v) => Math.max(m, v), 0);
+    if (tauWeights[nGrid - 1] <= 1e-4 * maxW) break;
     tauMax *= 2;
     ({ tauGrid, condMeans, condVars, logW, dtau } = computeGrid(tauMax));
     tauWeights = normalise(logW);
-    const maxW2 = tauWeights.reduce((m, v) => Math.max(m, v), 0);
-    grid_truncated = tauWeights[nGrid - 1] > 1e-4 * maxW2;
+    grid_truncated = true;   // at least one expansion occurred; flag for callers
+  }
+  // Final check: still truncated after expansions?
+  {
+    const maxW = tauWeights.reduce((m, v) => Math.max(m, v), 0);
+    grid_truncated = tauWeights[nGrid - 1] > 1e-4 * maxW;
   }
 
   // ---- Marginal posterior of τ ----

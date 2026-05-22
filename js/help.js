@@ -23,10 +23,25 @@ export const HELP = {
   "input.session": {
     title: "Save / Load Session",
     body:  "Save Session: serialises the full application state — data, effect type, " +
-           "τ² estimator, CI method, moderators, and RoB ratings — to a JSON file. " +
+           "τ² estimator, CI method, moderators, scale moderators, interaction terms, " +
+           "cumulative order, trim-and-fill toggles, Bayesian priors, selection-model settings, " +
+           "and RoB ratings — to a JSON file. " +
            "Load Session: restores a previously saved session from that JSON file. " +
            "Sessions are also auto-saved to browser localStorage; a recovery banner " +
            "appears on next load if unsaved changes are detected.",
+  },
+
+  "input.group": {
+    title: "Group",
+    body:  "An optional label that assigns a study to a named subgroup. " +
+           "When at least two distinct group labels are present, subgroup analysis runs automatically: " +
+           "a separate pooled estimate is computed for each group, and a between-group heterogeneity test " +
+           "(Q_between) is reported. " +
+           "Studies with a blank Group field are included in the overall pooled estimate " +
+           "but excluded from subgroup-specific estimates. " +
+           "In the forest plot, studies are sorted by group into labelled blocks " +
+           "(first-seen group order; within-group order matches the table). " +
+           "Group labels do not change the overall pooled estimate.",
   },
 
   "input.moderators": {
@@ -37,6 +52,17 @@ export const HELP = {
            "Multiple moderators may be added simultaneously. " +
            "Enter a column name, select Continuous or Categorical, then click + Add. " +
            "Values are entered in the moderator columns of the data table.",
+  },
+
+  "input.interactions": {
+    title: "Interaction terms",
+    body:  "An interaction term A×B tests whether the effect of A on the outcome differs across levels of B. " +
+           "Select two existing moderators and click + Add. No new data column is needed — values are computed as the outer product of the parent moderator columns. " +
+           "Continuous×continuous: one product column (x₁·x₂). " +
+           "Continuous×categorical (k levels): k−1 product columns. " +
+           "Categorical×categorical (j, k levels): (j−1)×(k−1) product columns. " +
+           "Each interaction receives its own Wald test and LRT in the per-term table. " +
+           "Caution: interaction tests have low power unless k is large; include main effects of both terms alongside any interaction.",
   },
 
   "input.scaleModerators": {
@@ -52,7 +78,7 @@ export const HELP = {
   "input.rob": {
     title: "Risk-of-bias domains",
     body:  "User-defined assessment domains (e.g. Randomisation, Blinding, Attrition). " +
-           "Each domain gets a Low / Some concerns / High / Not reported rating per study, " +
+           "Each domain gets a Low / Some concerns / High / NI (no information) rating per study, " +
            "entered in the RoB grid that appears below the data table once domains are added. " +
            "Results are visualised as a per-study traffic light grid and a per-domain summary bar chart " +
            "in the Risk of Bias section of the Results pane.",
@@ -151,7 +177,9 @@ export const HELP = {
            "d = (m − ref) / sd; yi = d · J; vi = 1/n + yi² / (2(n−1)). " +
            "Use when studies report a single group measured against an external norm " +
            "or established threshold with no control group. " +
-           "Corresponds to measure=\"SMD1\" in metafor.",
+           "Formula follows Hedges & Olkin (1985) for a one-sample design where the reference is a fixed constant. " +
+           "Note: metafor's escalc(\"SMD1\") expects a two-group design (group 2 provides the standardizer SD) " +
+           "and applies a different vi formula; FE and Q will differ when mapping single-group data.",
   },
 
   "effect.SMD1H": {
@@ -160,7 +188,8 @@ export const HELP = {
            "vi = J² · (1/n + d² / (2(n−1))). " +
            "SMD1 and SMD1H are identical for large n (J → 1) but differ for n < 20. " +
            "Prefer SMD1H when consistency with the heteroscedastic two-group SMDH is desired. " +
-           "Corresponds to measure=\"SMD1H\" in metafor.",
+           "Note: metafor's escalc(\"SMD1H\") uses a different vi formula suited to two-group designs; " +
+           "direct numerical comparison requires awareness of this distinction.",
   },
 
   "effect.MD_paired": {
@@ -775,7 +804,8 @@ export const HELP = {
     body:  "Regresses the standardised effect size on precision (1 / SE). " +
            "A significant non-zero intercept indicates funnel-plot asymmetry, " +
            "which may reflect publication bias. Has inflated Type I error for " +
-           "ratio measures (OR, RR) and requires at least 10 studies for adequate power.",
+           "ratio measures (OR, RR). Has low power below ~10 studies; the app accepts k ≥ 3 " +
+           "but small-k results should be treated as exploratory.",
   },
 
   "bias.begg": {
@@ -974,11 +1004,11 @@ export const HELP = {
 
   "sens.estimator": {
     title: "τ² estimator comparison",
-    body:  "Runs the random-effects model with all seven available τ² estimators " +
-           "(DL, REML, PM, ML, HS, HE, SJ) and displays their pooled estimates side " +
-           "by side. If results differ substantially across estimators, the conclusion " +
-           "is sensitive to the choice of heterogeneity estimation method. The " +
-           "currently selected estimator is highlighted.",
+    body:  "Runs the random-effects model with all 15 available τ² estimators " +
+           "(DL, REML, EB, PM, PMM, GENQM, ML, HS, HE, SJ, GENQ, SQGENQ, DLIT, EBLUP, HSk) " +
+           "and displays their pooled estimates side by side. If results differ substantially " +
+           "across estimators, the conclusion is sensitive to the choice of heterogeneity " +
+           "estimation method. The currently selected estimator is highlighted.",
   },
 
   // ------------------------------------------------------------------ //
@@ -1019,6 +1049,56 @@ export const HELP = {
            "(requires k ≥ 3). " +
            "A μ substantially lower than the standard RE estimate indicates publication bias. " +
            "Vevea & Hedges (1995); presets from Vevea & Woods (2005).",
+  },
+
+  "sel.halfnorm": {
+    title: "Half-normal selection model",
+    body:  "A continuous selection model where the probability of observing a study " +
+           "with p-value p is proportional to w(p; δ) = Φ(Φ⁻¹(1−p) · δ), where Φ is " +
+           "the standard normal CDF. " +
+           "δ = 0 gives uniform selection (reduces exactly to the RE model); " +
+           "δ > 0 gives progressively more weight to studies with smaller p-values. " +
+           "The selection-corrected μ̂ and τ² are obtained by MLE jointly with δ. " +
+           "The likelihood ratio test (H₀: δ = 0) tests for selective reporting. " +
+           "Normalising constants are computed by 20-point Gauss-Hermite quadrature. " +
+           "Requires k ≥ 4. Matches metafor selmodel(type='halfnorm').",
+  },
+
+  "sel.power": {
+    title: "Power selection model",
+    body:  "A continuous selection model where the probability of observing a study " +
+           "with p-value p is proportional to w(p; δ) = (1 − p)^δ. " +
+           "δ = 0 gives uniform selection (reduces exactly to the RE model); " +
+           "δ > 0 gives more weight to studies with smaller p-values. " +
+           "The selection-corrected μ̂ and τ² are obtained by MLE jointly with δ. " +
+           "The likelihood ratio test (H₀: δ = 0) tests for selective reporting. " +
+           "Normalising constants are computed by 20-point Gauss-Hermite quadrature. " +
+           "Requires k ≥ 4. Matches metafor selmodel(type='power').",
+  },
+
+  "sel.beta": {
+    title: "Beta selection model",
+    body:  "A continuous selection model using an unnormalised beta density as the weight: " +
+           "w(p; a, b) = p^(a−1) · (1−p)^(b−1), a > 0, b > 0. " +
+           "When a = b = 1 the weight is uniform (reduces exactly to the RE model). " +
+           "When a = 1 and b > 1 the model resembles power selection (small p preferred). " +
+           "The two-parameter shape allows flexible asymmetric selection patterns. " +
+           "The selection-corrected μ̂ and τ² are obtained by MLE jointly with a and b. " +
+           "The likelihood ratio test (H₀: a = b = 1) uses df = 2. " +
+           "Normalising constants are computed by 20-point Gauss-Hermite quadrature. " +
+           "Requires k ≥ 4. Matches metafor selmodel(type='beta').",
+  },
+
+  "sel.negexp": {
+    title: "Negative exponential selection model",
+    body:  "A continuous selection model where the probability of observing a study " +
+           "with p-value p is proportional to w(p; δ) = exp(−δ · p). " +
+           "δ = 0 gives uniform selection (reduces exactly to the RE model); " +
+           "δ > 0 gives more weight to studies with smaller p-values. " +
+           "The selection-corrected μ̂ and τ² are obtained by MLE jointly with δ. " +
+           "The likelihood ratio test (H₀: δ = 0) tests for selective reporting. " +
+           "Normalising constants are computed by 20-point Gauss-Hermite quadrature. " +
+           "Requires k ≥ 4. Matches metafor selmodel(type='negexp').",
   },
 
   // ------------------------------------------------------------------ //
@@ -1106,7 +1186,7 @@ export const HELP = {
            "(continuous or categorical) using weighted least squares with RE weights. " +
            "Reports β coefficients with SEs, z/t statistics, p-values, and 95% CIs; " +
            "Q_M (omnibus moderator test); Q_E (residual heterogeneity); " +
-           "R² (proportion of variance explained); and VIFs (collinearity). " +
+           "R² (proportion of variance explained). " +
            "Bubble plots are generated per continuous moderator. " +
            "Rule of thumb: ≥ 10 studies per predictor for adequate power.",
   },
@@ -1134,6 +1214,26 @@ export const HELP = {
            "anti-conservative when the number of studies k is small. " +
            "df = number of columns contributed by the moderator (1 for a continuous " +
            "predictor; levels − 1 for a categorical predictor).",
+  },
+
+  "perm.run": {
+    title: "Permutation test",
+    body:  "Non-parametric test of the omnibus moderator effect (QM). " +
+           "Shuffles the observed effect sizes yi across studies while keeping sampling " +
+           "variances vi fixed, refits the WLS regression, and records the resulting QM statistic. " +
+           "Repeating this nPerm times builds a null distribution; the permutation p-value is " +
+           "(1 + #{QM_perm ≥ QM_obs}) / (nPerm + 1). " +
+           "τ² is fixed at the observed value (no re-estimation per permutation), " +
+           "matching metafor's permutest() default. " +
+           "Useful when k is small (< 20) and parametric χ² or F approximations are unreliable.",
+  },
+
+  "perm.iter": {
+    title: "Number of permutations",
+    body:  "Number of random label permutations used to build the null QM distribution. " +
+           "More permutations give a more precise p-value: with nPerm = 999 the Monte Carlo " +
+           "standard error of a p = 0.05 result is ≈ 0.007; with nPerm = 4999 it is ≈ 0.003. " +
+           "The minimum achievable p-value is 1/(nPerm + 1).",
   },
 
   "mreg.contrasts": {
@@ -1319,6 +1419,19 @@ export const HELP = {
   },
 
   // Plots                                                               //
+  "plot.theme": {
+    title: "Plot style",
+    body:  "Applies a visual theme to every plot — forest, funnel, bubble, caterpillar, orchard, " +
+           "BLUP, Baujat, L’Abbé, GOSH, p-curve, p-uniform, profile-likelihood, " +
+           "Bayesian posteriors, Q-Q, radial, cumulative forest/funnel, influence, " +
+           "and risk-of-bias plots. " +
+           "App default reads CSS variables and adapts to light/dark mode but produces " +
+           "unresolved var(--…) references in standalone SVG exports. " +
+           "Cochrane, JAMA, and Black & white are fixed-colour journal presets that produce " +
+           "self-contained SVGs suitable for Word and PDF submission. " +
+           "Risk-of-bias traffic-light colours are preserved in all presets.",
+  },
+
   "plot.forest": {
     title: "Forest plot",
     body:  "Each row shows one study's effect estimate (square, area ∝ weight) " +
@@ -1392,8 +1505,8 @@ export const HELP = {
 
   "bayes.model": {
     title: "Bayesian meta-analysis",
-    body:  "Fits a conjugate normal-normal random-effects model using a grid " +
-           "approximation over τ (300 points). " +
+    body:  "Fits a conjugate normal-normal random-effects model using an " +
+           "adaptive grid approximation over τ (100–300 points, scaled to k). " +
            "Prior on μ: N(μ₀, σ_μ²); prior on τ: HalfNormal(σ_τ). " +
            "Because the prior on μ is conjugate given τ, the marginal " +
            "posterior of μ is an analytic mixture of normals — no MCMC required. " +
@@ -1404,6 +1517,60 @@ export const HELP = {
            "Bayesian Meta-Analysis section of the Results tab. " +
            "With diffuse priors (σ_μ, σ_τ large) the posterior mean of μ " +
            "approaches the REML random-effects estimate.",
+  },
+
+  // ------------------------------------------------------------------ //
+  // Multivariate meta-analysis                                           //
+  // ------------------------------------------------------------------ //
+
+  "mv.model": {
+    title: "Multivariate Meta-Analysis",
+    body:  "Models multiple correlated outcomes from the same studies jointly. " +
+           "The marginal covariance Ω = V + ZΨZʹ decomposes into a known within-study " +
+           "block V (estimated via the assumed within-study correlation ρ) and an " +
+           "unknown between-study covariance Ψ estimated by REML or ML. " +
+           "Pooled effects (one per outcome) are obtained by generalised least squares. " +
+           "Continuous moderators may be included with common or separate slopes across outcomes. " +
+           "Switch to this mode using the Standard / Multivariate toggle above the data table.",
+  },
+
+  "mv.struct": {
+    title: "Ψ structure",
+    body:  "Determines how many parameters describe the between-study covariance matrix Ψ. " +
+           "CS (Compound Symmetric): all outcomes share one variance τ² and one correlation ρ — 2 parameters, most parsimonious. " +
+           "Diag (Diagonal): separate τ²ⱼ per outcome, zero between-study correlation — P parameters. " +
+           "UN (Unstructured): freely estimated P×P Cholesky Ψ — P(P+1)/2 parameters; requires many studies. " +
+           "Prefer CS when k is small relative to P; UN is appropriate only when k ≫ P.",
+  },
+
+  "mv.method": {
+    title: "Estimation method",
+    body:  "REML (Restricted Maximum Likelihood) estimates the between-study covariance matrix Ψ " +
+           "from the residual likelihood after profiling out the fixed effects — less biased than ML " +
+           "for variance components and the default choice. " +
+           "ML (Maximum Likelihood) estimates all parameters jointly; " +
+           "it underestimates variance components in small samples but is required when " +
+           "comparing models with different fixed-effect structures via likelihood-ratio tests.",
+  },
+
+  "mv.forest": {
+    title: "MV forest plot",
+    body:  "One forest plot per outcome. Each study's effect estimate (square, sized by inverse-variance weight) " +
+           "and 95% CI whisker are shown. The pooled multivariate estimate appears as a diamond below the separator. " +
+           "Prediction interval (optional): expected range for a new study's true effect, " +
+           "computed as β̂_p ± t_{k−P−1} · √(τ̂²_p + SE²_p). " +
+           "Studies per page: limits rows displayed per plot; the pooled diamond always uses all studies regardless of page.",
+  },
+
+  "mv.rho": {
+    title: "Within-study correlation ρ",
+    body:  "Assumed correlation between outcomes measured within the same study. " +
+           "Used by vcalc to impute the within-study covariance matrix V: " +
+           "Cov(yⱼ, yₖ) = ρ · √vⱼ · √vₖ for j ≠ k within the same study. " +
+           "This value is rarely reported in primary studies and must be assumed. " +
+           "ρ = 0 treats outcomes as independent within studies (conservative); " +
+           "ρ = 0.5 is the app default and is commonly used in practice. " +
+           "Sensitivity to this assumption can be checked by re-running with ρ = 0 and ρ = 0.8.",
   },
 
 };

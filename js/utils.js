@@ -11,17 +11,19 @@
 //                    chiSquareCDF(), chiSquareQuantile(), fCDF(),
 //                    regularizedBeta(), regularizedGammaP(), logGamma()
 //   Bivariate        bivariateNormalCDF()
-//   Effect sizes     hedgesG(), tetrachoricFromCounts(), gorFromCounts()
+//   Effect sizes     hedgesG(), tetrachoricFromCounts(), gorFromCounts(),
+//                    continuityCorrect()
 //   Parsing          parseCounts()
 //   Display          transformEffect()
 //
 // All numerical approximations cite their source algorithm in the function
 // comment.  No function in this file has side effects.
 //
-// Dependencies: constants.js
+// Dependencies: constants.js, quadrature.js
 // =============================================================================
 
 import { MIN_VAR, BISECTION_ITERS, Z_95 } from "./constants.js";
+import { GL20_X, GL20_W } from "./quadrature.js";
 
 // ================= ROUNDING =================
 
@@ -39,11 +41,24 @@ export function fmt(value, digits = 3) {
  return round(value, digits).toFixed(digits);
 }
 
+// APA-style inline p-value for use as "p ${fmtPval(p)}".
+// Omits leading zero (APA convention for statistics bounded by 1).
+// Examples: p < .001  |  p = .047  |  p = .234
+export function fmtPval(p) {
+  if (!isFinite(p)) return "= NA";
+  if (p < 0.001) return "< .001";
+  return "= " + p.toFixed(3).replace(/^0\./, ".");
+}
+
 // ================= T CRITICAL =================
 // Two-tailed 95% critical value via bisection on tCDF.
+const _tCriticalCache = new Map();
 export function tCritical(df, alpha = 0.05) {
   const target = 1 - alpha / 2;
   if (!isFinite(df) || df <= 0) return normalQuantile(target);
+
+  const key = `${df}:${alpha}`;
+  if (_tCriticalCache.has(key)) return _tCriticalCache.get(key);
 
   let lo = 0, hi = 20;  // t_{0.975,1} ≈ 12.706; 20 is a safe upper bound
 
@@ -53,7 +68,9 @@ export function tCritical(df, alpha = 0.05) {
     else hi = mid;
   }
 
-  return (lo + hi) / 2;
+  const result = (lo + hi) / 2;
+  _tCriticalCache.set(key, result);
+  return result;
 }
 
 // ================= NORMAL CDF =================
@@ -269,21 +286,19 @@ export function logGamma(z) {
 // gamma ratio Γ(df/2) / (√(df/2) · Γ((df−1)/2)) — this approximation matches
 // to < 0.1% for df ≥ 3. See also Hedges & Olkin (1985, pp. 80–81).
 //
-// Variance: uses the large-sample formula Var(g) ≈ (n1+n2)/(n1·n2) + d²/(2·N)
-// (Hedges & Olkin 1985, p. 79, eq. 14), where N = n1+n2. Two approximations:
-//   1. d² in place of g² (differ by J²; negligible when J ≈ 1, i.e. df ≥ 10).
-//   2. N in the denominator instead of df = N−2 (negligible for N ≥ 20).
-// The strict formula is J² × [(n1+n2)/(n1·n2) + d²/(2·(n1+n2−2))];
-// both forms agree with metafor output to within benchmark tolerances.
+// Variance: Var(g) ≈ (n1+n2)/(n1·n2) + g²/(2·N)  where N = n1+n2.
+// Uses g² (the bias-corrected estimator, not raw d²), matching metafor's
+// escalc(measure="SMD"): vyi = 1/n1 + 1/n2 + yi^2 / (2*(n1+n2)).
 export function hedgesG(s, options = {}) {
   const n1 = s.n1, n2 = s.n2;
   const df = n1 + n2 - 2;
+  if (df < 1) return { es: NaN, var: NaN };
   const sp = Math.sqrt(((n1 - 1) * s.sd1 ** 2 + (n2 - 1) * s.sd2 ** 2) / df);
   const d  = (s.m1 - s.m2) / sp;
   const applyHedges = options.hedgesCorrection ?? true;
   const J  = 1 - (3 / (4 * df - 1));
   const g  = applyHedges ? d * J : d;
-  const varBase = (n1 + n2) / (n1 * n2) + (d * d) / (2 * (n1 + n2));
+  const varBase = (n1 + n2) / (n1 * n2) + (g * g) / (2 * (n1 + n2));
   return { es: g, var: Math.max(varBase, MIN_VAR) };
 }
 
@@ -416,21 +431,7 @@ export function normalQuantile(p) {
 // Φ₂(h, k; ρ) via Pearson's formula:
 //   Φ₂(h,k;ρ) = Φ(h)Φ(k) + ∫₀^ρ φ₂(h,k;t) dt
 // where φ₂(h,k;t) = exp(−(h²−2thk+k²)/(2(1−t²))) / (2π√(1−t²))
-// Integral evaluated by 20-point Gauss-Legendre on [0, ρ].
-const _GL20_X = [
-  -0.9931285991850949, -0.9639719272779138, -0.9122344282513259, -0.8391169718222188,
-  -0.7463064833401189, -0.6360536807265150, -0.5108670019508271, -0.3737060887154195,
-  -0.2277858511416451, -0.0765265211334973,  0.0765265211334973,  0.2277858511416451,
-   0.3737060887154195,  0.5108670019508271,  0.6360536807265150,  0.7463064833401189,
-   0.8391169718222188,  0.9122344282513259,  0.9639719272779138,  0.9931285991850949,
-];
-const _GL20_W = [
-  0.0176140071391521, 0.0406014298003869, 0.0626720483341091, 0.0832767415767048,
-  0.1019301198172404, 0.1181945319615184, 0.1316886384491766, 0.1420961093183820,
-  0.1491729864726037, 0.1527533871307258, 0.1527533871307258, 0.1491729864726037,
-  0.1420961093183820, 0.1316886384491766, 0.1181945319615184, 0.1019301198172404,
-  0.0832767415767048, 0.0626720483341091, 0.0406014298003869, 0.0176140071391521,
-];
+// Integral evaluated by 20-point Gauss-Legendre on [0, ρ]; tables from quadrature.js.
 export function bivariateNormalCDF(h, k, rho) {
   if (!isFinite(h) || !isFinite(k) || !isFinite(rho)) return NaN;
   rho = Math.max(-1 + 1e-10, Math.min(1 - 1e-10, rho));
@@ -440,14 +441,26 @@ export function bivariateNormalCDF(h, k, rho) {
   const TWO_PI = 2 * Math.PI;
   let sum = 0;
   for (let i = 0; i < 20; i++) {
-    const t  = rho * (_GL20_X[i] + 1) / 2;
+    const t  = rho * (GL20_X[i] + 1) / 2;
     const r2 = 1 - t * t;
-    sum += _GL20_W[i] * Math.exp(-(hh + kk - 2*t*hk) / (2*r2)) / (TWO_PI * Math.sqrt(r2));
+    sum += GL20_W[i] * Math.exp(-(hh + kk - 2*t*hk) / (2*r2)) / (TWO_PI * Math.sqrt(r2));
   }
   return normalCDF(h) * normalCDF(k) + (rho / 2) * sum;
 }
 
 // ================= TETRACHORIC CORRELATION =================
+
+// continuityCorrect({a, b, c, d}) → {a, b, c, d}
+// Standard Haldane-Anscombe 0.5 continuity correction for 2×2 tables.
+// Adds 0.5 to all four cells when any is zero, preventing log(0) and
+// division-by-zero in OR, RR, and tetrachoric calculations.
+export function continuityCorrect({ a, b, c, d }) {
+  if (a === 0 || b === 0 || c === 0 || d === 0) {
+    return { a: a + 0.5, b: b + 0.5, c: c + 0.5, d: d + 0.5 };
+  }
+  return { a, b, c, d };
+}
+
 // Estimates the latent Pearson correlation from a 2×2 table (a,b,c,d).
 // Finds ρ by bisecting bivariateNormalCDF(h, k; ρ) = a/N.
 // Variance: p_r(1−p_r)·p_c(1−p_c) / (N · φ₂(h,k;ρ)²)  — delta method.
@@ -456,11 +469,7 @@ export function tetrachoricFromCounts(a, b, c, d) {
   const nan = { rho: NaN, var: NaN };
   if (!isFinite(a) || !isFinite(b) || !isFinite(c) || !isFinite(d)) return nan;
 
-  // Continuity correction when any cell is zero
-  let aa = a, bb = b, cc = c, dd = d;
-  if (aa === 0 || bb === 0 || cc === 0 || dd === 0) {
-    aa += 0.5; bb += 0.5; cc += 0.5; dd += 0.5;
-  }
+  let { a: aa, b: bb, c: cc, d: dd } = continuityCorrect({ a, b, c, d });
 
   const N     = aa + bb + cc + dd;
   const p_row = (aa + bb) / N;

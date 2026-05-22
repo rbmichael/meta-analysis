@@ -5,8 +5,37 @@
 // Extracted from analysis.js (item 4.1.6 of TECHNICAL IMPROVEMENT ROADMAP).
 // =============================================================================
 
-import { chiSquareQuantile } from "./utils.js";
+import { chiSquareQuantile, chiSquareCDF } from "./utils.js";
 import { REML_TOL } from "./constants.js";
+import { GL20_X, GL20_W } from "./quadrature.js";
+
+function iterate(seed, updateFn, maxIter = 200, tol = REML_TOL) {
+  let tau2 = seed;
+  for (let iter = 0; iter < maxIter; iter++) {
+    const newTau2 = updateFn(tau2);
+    if (Math.abs(newTau2 - tau2) < tol) return newTau2;
+    tau2 = newTau2;
+  }
+  return tau2;
+}
+
+// ================= DERSIMONIAN-LAIRD (DL) TAU² =================
+// Classic method-of-moments estimator (DerSimonian & Laird 1986, Controlled
+// Clinical Trials 7:177–188).  τ² = max(0, (Q − (k−1)) / C) where
+//   Q = Σwᵢ(yᵢ − ȳ_FE)²  (Cochran's Q, using FE weights wᵢ = 1/vᵢ)
+//   C = W − Σwᵢ²/W        (bias-corrected denominator)
+export function tau2_DL(studies) {
+  const k = studies.length;
+  if (k <= 1) return 0;
+  let W = 0, WY = 0, WY2 = 0, W2 = 0;
+  for (const d of studies) {
+    const wi = 1 / d.vi;
+    W += wi; WY += wi * d.yi; WY2 += wi * d.yi * d.yi; W2 += wi * wi;
+  }
+  const Q = WY2 - WY * WY / W;   // Σwᵢ(yᵢ − ȳ_FE)² by algebraic identity
+  const C = W - W2 / W;
+  return C > 0 ? Math.max(0, (Q - (k - 1)) / C) : 0;
+}
 
 // ================= HUNTER-SCHMIDT TAU² =================
 // Method-of-moments. Identical to DL except the denominator is Σwᵢ
@@ -26,16 +55,15 @@ export function tau2_HS(studies) {
 // Fixed-point iteration of the DL formula using RE-updated weights.
 // τ²_{new} = max(0, (Q(τ²) − (k−1)) / c(τ²))
 // Converges to a self-consistent solution; usually 2-3 iterations suffice.
+// DerSimonian & Kacker (2007) Contemp Clin Trials 28:105–114.
 //
 // NOTE: Removed from the UI dropdown (rarely used in practice; inflates the
 // options list). Preserved here so it can be re-exposed if needed.
 export function tau2_DLIT(studies, tol = REML_TOL, maxIter = 200, tau2Init = null) {
   const k = studies.length;
   if (k <= 1) return 0;
-
-  let tau2 = tau2Init !== null ? Math.max(0, tau2Init) : tau2_GENQ(studies);  // seed from DL unless warm-started
-
-  for (let iter = 0; iter < maxIter; iter++) {
+  const seed = tau2Init !== null ? Math.max(0, tau2Init) : tau2_GENQ(studies);
+  return iterate(seed, tau2 => {
     let W = 0, W2 = 0, Wmu = 0;
     for (const d of studies) {
       const wi = 1 / (d.vi + tau2);
@@ -48,12 +76,8 @@ export function tau2_DLIT(studies, tol = REML_TOL, maxIter = 200, tau2Init = nul
       Q += r * r / (d.vi + tau2);
     }
     const c = W - W2 / W;
-    const newTau2 = Math.max(0, (Q - (k - 1)) / c);
-    if (Math.abs(newTau2 - tau2) < tol) return newTau2;
-    tau2 = newTau2;
-  }
-
-  return tau2;
+    return Math.max(0, (Q - (k - 1)) / c);
+  }, maxIter, tol);
 }
 
 // ================= HUNTER-SCHMIDT (small-sample corrected) TAU² =================
@@ -119,46 +143,22 @@ export function tau2_SJ(studies, tol = REML_TOL, maxIter = 200, tau2Init = null)
   return tau2;
 }
 
-// ================= ML TAU² =================
-// Maximum Likelihood estimator via Fisher scoring. Same algorithm as REML
-// but without the leverage correction in the score/information terms:
-//   score = Σ [(yᵢ−μ)²/(vᵢ+τ²)² − 1/(vᵢ+τ²)]
-//   info  = Σ [1/(vᵢ+τ²)²]
-// ML is asymptotically unbiased but has greater downward bias than REML
-// in small samples. Useful when comparing nested models via LRT.
-export function tau2_ML(studies, tol = REML_TOL, maxIter = 100, tau2Init = null) {
-  const k = studies.length;
-  if (k <= 1) return 0;
-  let tau2;
-  if (tau2Init !== null) {
-    tau2 = Math.max(0, tau2Init);
-  } else {
-    // Seed with DL estimate
-    let W0 = 0, W02 = 0, W0mu = 0;
-    for (const d of studies) {
-      const wi = 1 / d.vi;
-      W0 += wi; W02 += wi * wi; W0mu += wi * d.yi;
-    }
-    const ybar0 = W0mu / W0;
-    let Q0 = 0;
-    for (const d of studies) Q0 += (d.yi - ybar0) ** 2 / d.vi;
-    const c0 = W0 - W02 / W0;
-    tau2 = Math.max(0, (Q0 - (k - 1)) / c0);
-  }
-
+// ================= FISHER SCORING CORE =================
+// Shared loop for REML (useHat=true) and ML (useHat=false).
+// fitFn(tau2) → { e: residual[], h: hat-diagonal[], W: sumW } | null
+function fisherScoringCore(vi, fitFn, seed, tol, maxIter, useHat) {
+  const k = vi.length;
+  let tau2 = seed;
   for (let iter = 0; iter < maxIter; iter++) {
-    let W = 0, Wmu = 0;
-    for (const d of studies) {
-      const wi = 1 / (d.vi + tau2);
-      W += wi; Wmu += wi * d.yi;
-    }
-    const mu = Wmu / W;
+    const fit = fitFn(tau2);
+    if (!fit) break;
+    const { e, h } = fit;
     let score = 0, info = 0;
-    for (const d of studies) {
-      const vi_tau = d.vi + tau2;
-      const r = d.yi - mu;
-      score += r * r / (vi_tau * vi_tau) - 1 / vi_tau;
-      info  += 1 / (vi_tau * vi_tau);
+    for (let i = 0; i < k; i++) {
+      const wi = 1 / (vi[i] + tau2);
+      const c = useHat ? 1 - h[i] : 1;
+      score += wi * wi * e[i] * e[i] - c * wi;
+      info  += c * wi * wi;
     }
     if (info <= 0) break;
     let step = score / info;
@@ -170,6 +170,27 @@ export function tau2_ML(studies, tol = REML_TOL, maxIter = 100, tau2Init = null)
     tau2 = newTau2;
   }
   return tau2;
+}
+
+// ================= ML TAU² =================
+// Maximum Likelihood estimator via Fisher scoring. Same algorithm as REML
+// but without the leverage correction in the score/information terms:
+//   score = Σ [(yᵢ−μ)²/(vᵢ+τ²)² − 1/(vᵢ+τ²)]
+//   info  = Σ [1/(vᵢ+τ²)²]
+// ML is asymptotically unbiased but has greater downward bias than REML
+// in small samples. Useful when comparing nested models via LRT.
+export function tau2_ML(studies, tol = REML_TOL, maxIter = 100, tau2Init = null) {
+  const k = studies.length;
+  if (k <= 1) return 0;
+  const vi = studies.map(d => d.vi);
+  const yi = studies.map(d => d.yi);
+  const seed = tau2Init !== null ? Math.max(0, tau2Init) : tau2_DL(studies);
+  return fisherScoringCore(vi, tau2 => {
+    let W = 0, Wmu = 0;
+    for (let i = 0; i < k; i++) { const wi = 1/(vi[i]+tau2); W+=wi; Wmu+=wi*yi[i]; }
+    const mu = Wmu / W;
+    return { e: yi.map(y => y - mu), W };
+  }, seed, tol, maxIter, false);
 }
 
 // ================= LOG-LIKELIHOOD =================
@@ -190,76 +211,25 @@ export function logLik(studies, mu, tau2) {
 // already have yi and vi set (as produced by compute()). Uses the DL
 // estimator as the starting value and refines via Fisher scoring.
 export function tau2_REML(studies, tol = REML_TOL, maxIter = 100, tau2Init = null) {
-
   const k = studies.length;
   if (k <= 1) return 0;
-
-  let tau2;
-  if (tau2Init !== null) {
-    tau2 = Math.max(0, tau2Init);
-  } else {
-    // --- 1️⃣ Initial tau² (DL seed) ---
-    let W0 = 0, W02 = 0, W0mu = 0;
-    for (const d of studies) {
-      const wi = 1 / d.vi;
-      W0 += wi; W02 += wi * wi; W0mu += wi * d.yi;
-    }
-    const ybar = W0mu / W0;
-    let Qseed = 0;
-    for (const d of studies) Qseed += (d.yi - ybar) ** 2 / d.vi;
-    const c = W0 - W02 / W0;
-    tau2 = Math.max(0, (Qseed - (k - 1)) / c);
-  }
-
-  // --- 2️⃣ Fisher scoring iteration ---
-  for (let iter = 0; iter < maxIter; iter++) {
+  const vi = studies.map(d => d.vi);
+  const yi = studies.map(d => d.yi);
+  const seed = tau2Init !== null ? Math.max(0, tau2Init) : tau2_DL(studies);
+  return fisherScoringCore(vi, tau2 => {
     let W = 0, Wmu = 0;
-    for (const d of studies) {
-      const wi = 1 / (d.vi + tau2);
-      W += wi; Wmu += wi * d.yi;
-    }
+    for (let i = 0; i < k; i++) { const wi = 1/(vi[i]+tau2); W+=wi; Wmu+=wi*yi[i]; }
     const mu = Wmu / W;
-
-    let score = 0, info = 0;
-    for (const d of studies) {
-      const vi_tau = d.vi + tau2;
-      const hi = 1 / (vi_tau * W);  // h[i] = w[i]/W = 1/(vi_tau·W)
-      const ri = d.yi - mu;
-      score += ri * ri / (vi_tau * vi_tau) - (1 - hi) / vi_tau;
-      info  += (1 - hi) / (vi_tau * vi_tau);
-    }
-
-    let step = score / info;
-    let newTau2 = tau2 + step;
-
-    // Step-halving to keep tau² non-negative
-    let halveIter = 0;
-    while (newTau2 < 0 && halveIter < 20) {
-      step /= 2;
-      newTau2 = tau2 + step;
-      halveIter++;
-    }
-    newTau2 = Math.max(0, newTau2);
-
-    if (Math.abs(newTau2 - tau2) < tol) {
-      tau2 = newTau2;
-      break;
-    }
-
-    tau2 = newTau2;
-  }
-
-  return tau2;
+    return { e: yi.map(y => y - mu), h: vi.map(v => 1/(W*(v+tau2))), W };
+  }, seed, tol, maxIter, true);
 }
 
 // ================= TAU² PAULE-MANDEL =================
 export function tau2_PM(studies, tol = REML_TOL, maxIter = 100, tau2Init = null) {
   const k = studies.length;
   if (k <= 1) return 0;
-
-  let tau2 = tau2Init !== null ? Math.max(0, tau2Init) : 0;
-
-  for (let iter = 0; iter < maxIter; iter++) {
+  const seed = tau2Init !== null ? Math.max(0, tau2Init) : 0;
+  return iterate(seed, tau2 => {
     let W = 0, Wmu = 0;
     for (const d of studies) {
       const wi = 1 / (d.vi + tau2);
@@ -271,12 +241,8 @@ export function tau2_PM(studies, tol = REML_TOL, maxIter = 100, tau2Init = null)
       const r = d.yi - mu;
       Q += r * r / (d.vi + tau2);
     }
-    const newTau2 = Math.max(0, tau2 + (Q - (k - 1)) / W);
-    if (Math.abs(newTau2 - tau2) < tol) return newTau2;
-    tau2 = newTau2;
-  }
-
-  return tau2;
+    return Math.max(0, tau2 + (Q - (k - 1)) / W);
+  }, maxIter, tol);
 }
 
 // ================= EB (EMPIRICAL BAYES) TAU² =================
@@ -293,11 +259,9 @@ export function tau2_PM(studies, tol = REML_TOL, maxIter = 100, tau2Init = null)
 export function tau2_EB(studies, tol = REML_TOL, maxIter = 200, tau2Init = null) {
   const k = studies.length;
   if (k <= 1) return 0;
-
-  const df = k - 1;
-  let tau2 = tau2Init !== null ? Math.max(0, tau2Init) : 0;
-
-  for (let iter = 0; iter < maxIter; iter++) {
+  const df   = k - 1;
+  const seed = tau2Init !== null ? Math.max(0, tau2Init) : 0;
+  return iterate(seed, tau2 => {
     let W = 0, Wmu = 0;
     for (const d of studies) {
       const wi = 1 / (d.vi + tau2);
@@ -309,12 +273,8 @@ export function tau2_EB(studies, tol = REML_TOL, maxIter = 200, tau2Init = null)
       const r = d.yi - mu;
       Q += r * r / (d.vi + tau2);
     }
-    const adj = (Q * k / df - k) / W;
-    const newTau2 = Math.max(0, tau2 + adj);
-    if (Math.abs(newTau2 - tau2) < tol) return newTau2;
-    tau2 = newTau2;
-  }
-  return tau2;
+    return Math.max(0, tau2 + (Q * k / df - k) / W);
+  }, maxIter, tol);
 }
 
 // ================= PMM (PAULE-MANDEL MEDIAN) TAU² =================
@@ -330,11 +290,9 @@ export function tau2_EB(studies, tol = REML_TOL, maxIter = 200, tau2Init = null)
 export function tau2_PMM(studies, tol = REML_TOL, maxIter = 200, tau2Init = null) {
   const k = studies.length;
   if (k <= 1) return 0;
-
   const target = chiSquareQuantile(0.5, k - 1);
-  let tau2 = tau2Init !== null ? Math.max(0, tau2Init) : 0;
-
-  for (let iter = 0; iter < maxIter; iter++) {
+  const seed   = tau2Init !== null ? Math.max(0, tau2Init) : 0;
+  return iterate(seed, tau2 => {
     let W = 0, Wmu = 0;
     for (const d of studies) {
       const wi = 1 / (d.vi + tau2);
@@ -346,11 +304,8 @@ export function tau2_PMM(studies, tol = REML_TOL, maxIter = 200, tau2Init = null
       const r = d.yi - mu;
       Q += r * r / (d.vi + tau2);
     }
-    const newTau2 = Math.max(0, tau2 + (Q - target) / W);
-    if (Math.abs(newTau2 - tau2) < tol) return newTau2;
-    tau2 = newTau2;
-  }
-  return tau2;
+    return Math.max(0, tau2 + (Q - target) / W);
+  }, maxIter, tol);
 }
 
 // ================= GENQM (GENERALISED Q, MEDIAN-UNBIASED) TAU² =================
@@ -363,11 +318,10 @@ export function tau2_PMM(studies, tol = REML_TOL, maxIter = 200, tau2Init = null
 // For intercept-only models (p=1) S·P·S is a rank-1 perturbed diagonal matrix;
 // its k−1 positive eigenvalues are found via the secular equation
 //   Σ bᵢ²/(dᵢ − λ) = W,   dᵢ = (vᵢ+τ²)/vᵢ,   bᵢ² = (vᵢ+τ²)/vᵢ²
-// The median of the weighted chi-square is approximated by a scaled χ²(ν)
-// (Patnaik/Satterthwaite 2-moment method):   c·χ²₀.₅(ν),
-// where c = Σλ²/(Σλ), ν = (Σλ)²/Σλ².
-// This approximation introduces ~3–4 % error vs the exact Farebrother CDF
-// but stays within the 5 % relative tolerance used by the benchmark tests.
+// The CDF of Σλᵢ χ²(1) is evaluated via the exact Imhof (1961) formula:
+// P(Q≤q) = ½−(1/π)∫₀^∞ sin(θ(u)−uq/2)/(u·ρ(u)) du, computed by composite
+// 20-point Gauss-Legendre quadrature (16 subintervals; truncation at amplitude < 1e-10).
+// Replaces the previous Patnaik/Satterthwaite 2-moment approximation (3–4 % error).
 export function tau2_GENQM(studies, tol = REML_TOL, maxIter = 200) {
   const k = studies.length;
   if (k <= 1) return 0;
@@ -398,8 +352,9 @@ export function tau2_GENQM(studies, tol = REML_TOL, maxIter = 200) {
 
     const lams = [];
     for (let i = 0; i < k - 1; i++) {
-      const lo = ds[i + 1] + 1e-14;
-      const hi = ds[i]     - 1e-14;
+      const pad = Math.max(1e-14, Math.abs(ds[i]) * 1e-14);
+      const lo = ds[i + 1] + pad;
+      const hi = ds[i]     - pad;
       if (secular(lo) >= 0 || secular(hi) <= 0) continue; // degenerate interval
       let a = lo, b = hi;
       for (let j = 0; j < 64; j++) {
@@ -411,28 +366,59 @@ export function tau2_GENQM(studies, tol = REML_TOL, maxIter = 200) {
     return lams;
   }
 
-  // 2-moment chi-sq approximation for median of Σλᵢ χ²(1)
-  function approxMedian(tau2) {
-    const lams = eigenvalues(tau2);
-    if (lams.length === 0) return chiSquareQuantile(0.5, k - 1);
-    const mu   = lams.reduce((s, l) => s + l, 0);
-    const sig2 = 2 * lams.reduce((s, l) => s + l * l, 0);
-    if (sig2 <= 0) return mu;
-    const c = sig2 / (2 * mu);
-    const nu = (2 * mu * mu) / sig2;
-    return c * chiSquareQuantile(0.5, nu);
+  // Exact Imhof (1961) CDF for Q = Σ lams[i]·χ²(1) evaluated at q.
+  // P(Q ≤ q) = ½ − (1/π)·∫₀^∞ sin(θ(u)−u·q/2) / (u·ρ(u)) du
+  // θ(u) = ½·Σ arctan(λⱼ·u),  log ρ(u) = ¼·Σ log(1+λⱼ²u²).
+  // Upper limit T is found by doubling until the integrand amplitude 1/(T·ρ(T)) < 1e-10;
+  // the integral is evaluated via composite 20-point Gauss-Legendre with 16 subintervals.
+  function imhofCDF(lams, q) {
+    if (lams.length === 0) return chiSquareCDF(q, k - 1);
+    if (lams.length === 1) return chiSquareCDF(q / lams[0], 1);
+    if (q <= 0) return 0;
+    const n = lams.length;
+
+    function integrand(u) {
+      let theta = 0, logRho = 0;
+      for (let j = 0; j < n; j++) {
+        const lu = lams[j] * u;
+        theta  += Math.atan(lu);
+        logRho += Math.log1p(lu * lu);
+      }
+      return Math.sin(theta * 0.5 - u * q * 0.5) / (u * Math.exp(logRho * 0.25));
+    }
+
+    // Find T s.t. amplitude 1/(T·ρ(T)) < 1e-10
+    let T = Math.max(4 / Math.max(...lams), 1e-3);
+    for (let it = 0; it < 50; it++) {
+      let logRho = 0;
+      for (let j = 0; j < n; j++) { const lu = lams[j] * T; logRho += Math.log1p(lu * lu); }
+      if (Math.exp(-logRho * 0.25) / T < 1e-10) break;
+      T *= 2;
+    }
+
+    // Composite GL20 on [0, T] with 16 equal subintervals
+    const halfH = T / 32; // h/2 where h = T/16
+    let s = 0;
+    for (let m = 0; m < 16; m++) {
+      const mid = (m + 0.5) * halfH * 2;
+      for (let i = 0; i < 20; i++) s += GL20_W[i] * integrand(mid + halfH * GL20_X[i]);
+    }
+
+    return Math.min(1, Math.max(0, 0.5 - s * halfH / Math.PI));
   }
 
-  if (approxMedian(0) >= Q_obs) return 0;
+  // Return 0 if Q_obs is at or below the median of Q_FE at τ²=0
+  if (imhofCDF(eigenvalues(0), Q_obs) <= 0.5) return 0;
 
-  // Bisect on τ² to find where approxMedian(τ²) = Q_obs
+  // Bisect on τ²: find where P(Q_FE(τ²) ≤ Q_obs) crosses 0.5 from above.
+  // imhofCDF is decreasing in τ² (larger τ² → heavier distribution → lower CDF at fixed Q_obs).
   let lo = 0, hi = 1;
-  while (approxMedian(hi) < Q_obs && hi < 1e6) hi *= 2;
+  while (imhofCDF(eigenvalues(hi), Q_obs) > 0.5 && hi < 1e6) hi *= 2;
   if (hi >= 1e6) return hi / 2; // fallback
 
   for (let i = 0; i < maxIter; i++) {
     const mid = (lo + hi) / 2;
-    if (approxMedian(mid) < Q_obs) lo = mid; else hi = mid;
+    if (imhofCDF(eigenvalues(mid), Q_obs) > 0.5) lo = mid; else hi = mid;
     if (hi - lo < tol) break;
   }
 
@@ -507,7 +493,91 @@ export function tau2_GENQ(studies, weights) {
   return genqCore(studies, w);
 }
 
-// Compute RE mean given tau²
+// ================= REGRESSION TAU² CORES =================
+// Unified estimator cores for meta-regression (regression.js).
+// Each function accepts a fitFn callback that supplies residuals + hat diagonals,
+// allowing the same algorithm to serve both intercept-only and regression paths.
+
+// REML core: Fisher scoring with leverage correction.
+// fitFn(tau2) → { e: residual[], h: hat-diagonal[], W: sumW } | null
+export function tau2Core_REML(vi, fitFn, seed = 0, tol = REML_TOL, maxIter = 100) {
+  return fisherScoringCore(vi, fitFn, seed, tol, maxIter, true);
+}
+
+// ML core: Fisher scoring without leverage correction.
+// fitFn(tau2) → { e: residual[], W: sumW } | null
+export function tau2Core_ML(vi, fitFn, seed = 0, tol = REML_TOL, maxIter = 100) {
+  return fisherScoringCore(vi, fitFn, seed, tol, maxIter, false);
+}
+
+// PM core: fixed-point iteration. df = k − p.
+// fitFn(tau2) → { e: residual[], W: sumW } | null
+export function tau2Core_PM(vi, fitFn, df, seed = 0, tol = REML_TOL, maxIter = 100) {
+  let tau2 = seed;
+  for (let iter = 0; iter < maxIter; iter++) {
+    const fit = fitFn(tau2);
+    if (!fit) break;
+    const { e, W } = fit;
+    const QE = vi.reduce((s, v, i) => s + e[i] * e[i] / (v + tau2), 0);
+    const newTau2 = Math.max(0, tau2 + (QE - df) / W);
+    if (Math.abs(newTau2 - tau2) < tol) return newTau2;
+    tau2 = newTau2;
+  }
+  return tau2;
+}
+
+// DL core: one-shot with leverage correction. fitFn0 uses FE weights. df = k − p.
+// fitFn0() → { e: residual[], h: hat-diagonal[], W: sumW } | null
+export function tau2Core_DL(vi, fitFn0, df) {
+  if (df <= 0) return 0;
+  const fit = fitFn0();
+  if (!fit) return 0;
+  const { e, h } = fit;
+  const QE = vi.reduce((s, v, i) => s + e[i] * e[i] / v, 0);
+  const c  = vi.reduce((s, v, i) => s + (1 - h[i]) / v, 0);
+  return c > 0 ? Math.max(0, (QE - df) / c) : 0;
+}
+
+// HS core: one-shot, W denominator (no leverage). fitFn0 uses FE weights. df = k − p.
+// fitFn0() → { e: residual[], W: sumW } | null
+export function tau2Core_HS(vi, fitFn0, df) {
+  if (df <= 0) return 0;
+  const fit = fitFn0();
+  if (!fit) return 0;
+  const { e, W } = fit;
+  const QE = vi.reduce((s, v, i) => s + e[i] * e[i] / v, 0);
+  return W > 0 ? Math.max(0, (QE - df) / W) : 0;
+}
+
+// HE core: one-shot, unweighted OLS. df = k − p.
+// fitFn0() → { e: residual[] } | null
+export function tau2Core_HE(vi, fitFn0, df) {
+  if (df <= 0) return 0;
+  const fit = fitFn0();
+  if (!fit) return 0;
+  const SS   = fit.e.reduce((s, ei) => s + ei * ei, 0);
+  const meanV = vi.reduce((s, v) => s + v, 0) / vi.length;
+  return Math.max(0, SS / df - meanV);
+}
+
+// SJ core: iterative Sidik-Jonkman. fitFn uses RE weights.
+// fitFn(tau2) → { e: residual[] } | null
+export function tau2Core_SJ(vi, fitFn, seed, tol = REML_TOL, maxIter = 200) {
+  const k = vi.length;
+  let tau2 = seed;
+  if (tau2 === 0) return 0;
+  for (let iter = 0; iter < maxIter; iter++) {
+    const fit = fitFn(tau2);
+    if (!fit) break;
+    const { e } = fit;
+    const newTau2 = vi.reduce((s, v, i) => s + v * e[i] * e[i] / (v + tau2), 0) / k;
+    if (Math.abs(newTau2 - tau2) < tol) return Math.max(0, newTau2);
+    tau2 = Math.max(0, newTau2);
+  }
+  return tau2;
+}
+
+// Compute RE mean given τ²
 export function RE_mean(corrected, tau2) {
   const wRE = corrected.map(d => 1 / (d.vi + tau2));
   const WRE = wRE.reduce((acc, b) => acc + b, 0);
