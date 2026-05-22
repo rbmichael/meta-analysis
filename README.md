@@ -226,22 +226,15 @@ npx serve .
 
 **Option 3 — Fully offline (no server, no internet required):**
 
-The repository has an `offline` branch that contains a pre-built single-file bundle with all dependencies vendored locally. Once cloned, it works by opening `index.html` directly in a browser — no server or internet connection needed.
+The easiest path is to download the pre-built zip from the [latest release](https://github.com/rbmichael/meta-analysis/releases/latest), unzip it, and open `index.html` directly in a browser — no installation, server, or internet connection needed.
+
+Alternatively, clone the `offline` branch directly:
 
 ```bash
 git clone https://github.com/rbmichael/meta-analysis.git
 cd meta-analysis
 git checkout offline
 # open index.html directly in your browser
-```
-
-To keep the offline branch up to date as the main branch changes:
-```bash
-git checkout offline
-git merge main
-npx esbuild js/ui.js --bundle --outfile=bundle.js --format=iife --global-name=App
-git add bundle.js
-git commit -m "Rebuild bundle after sync with main"
 ```
 
 ---
