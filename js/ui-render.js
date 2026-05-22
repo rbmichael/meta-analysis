@@ -797,6 +797,17 @@ export function renderStudyTable(studies, m, profile) {
       ${showFEcol ? `<td>${fmtPct(r.pctFE)}</td>` : ""}
     </tr>`).join("");
 
+  const feRow = showFEcol ? `
+    <tr class="pooled-row">
+      <td>Pooled (FE)</td>
+      <td>${fmtVal(profile.transform(m.FE))}</td>
+      <td>${fmtVal(profile.transform(m.FE - Z_95 * m.seFE))}</td>
+      <td>${fmtVal(profile.transform(m.FE + Z_95 * m.seFE))}</td>
+      <td>${fmtVal(m.seFE)}</td>
+      <td>—</td>
+      <td>100%</td>
+    </tr>` : "";
+
   const pooledLabel = m.isMH ? "Pooled (MH)" : m.isPeto ? "Pooled (Peto)" : "Pooled (RE)";
   const pooledSE    = isFinite(m.seRE) ? m.seRE : m.seFE;
   const pooledRow = `
@@ -807,10 +818,10 @@ export function renderStudyTable(studies, m, profile) {
       <td>${fmtVal(pooledHi)}</td>
       <td>${fmtVal(pooledSE)}</td>
       <td>100%</td>
-      ${showFEcol ? "<td>100%</td>" : ""}
+      ${showFEcol ? "<td>—</td>" : ""}
     </tr>`;
 
-  container.innerHTML = `<table class="study-table">${headerRow}${studyRows}${pooledRow}</table>`;
+  container.innerHTML = `<table class="study-table">${headerRow}${studyRows}${feRow}${pooledRow}</table>`;
 }
 
 // ---------------- P-CURVE PANEL ----------------

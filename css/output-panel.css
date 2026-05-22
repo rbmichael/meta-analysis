@@ -436,7 +436,12 @@
   color: var(--accent-light);
   font-weight: 600;
   background: var(--accent-subtle);
-  border-top: 1px solid var(--border-accent);
+  border-top: 2px solid var(--border-accent);
+}
+
+/* consecutive pooled rows form one visual block — drop the divider between them */
+.study-table .pooled-row + .pooled-row td {
+  border-top: none;
 }
 
 /* ================================================================
