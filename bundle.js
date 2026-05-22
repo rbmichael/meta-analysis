@@ -29565,7 +29565,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
   });
 
   // js/ui.js
-  var _cb2 = `?cb=${Date.now()}`;
+  var _cb2 = "";
   var _reportMod;
   var _docxMod;
   var _helpMod;
