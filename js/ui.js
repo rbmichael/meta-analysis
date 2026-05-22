@@ -484,7 +484,7 @@ function _checkAdvancedBadge() {
   const valDiffers = id => { const el = document.getElementById(id); return el && el.value !== el.defaultValue; };
 
   const custom =
-    selDiffers("ciLevel") || selDiffers("mccMethod") || selDiffers("cumulativeOrder") ||
+    selDiffers("ciLevel") || selDiffers("mccMethod") ||
     selDiffers("tfEstimator") || chkDiffers("useTrimFill") || chkDiffers("useTFAdjusted") ||
     selDiffers("selMode") || selDiffers("selPreset") || selDiffers("selSides") || selDiffers("selWeightFn") ||
     valDiffers("bayesMu0") || valDiffers("bayesSigmaMu") || valDiffers("bayesSigmaTau") ||
@@ -2071,7 +2071,31 @@ document.getElementById("modName").addEventListener("keydown", e => { if (e.key 
 document.getElementById("addInteraction").addEventListener("click", addInteractionTerm);
 document.getElementById("addScaleMod").addEventListener("click", addScaleModerator);
 document.getElementById("scaleModName").addEventListener("keydown", e => { if (e.key === "Enter") addScaleModerator(); });
-document.getElementById("cumulativeOrder").addEventListener("change", markStale);
+document.getElementById("cumulativeOrder").addEventListener("change", () => {
+  if (!cumForestPlot.sourceStudies) return;
+  const order = document.getElementById("cumulativeOrder").value;
+  const sorted = cumForestPlot.sourceStudies.slice();
+  if      (order === "precision_desc") sorted.sort((a, b) => a.vi - b.vi);
+  else if (order === "precision_asc")  sorted.sort((a, b) => b.vi - a.vi);
+  else if (order === "effect_asc")     sorted.sort((a, b) => a.yi - b.yi);
+  else if (order === "effect_desc")    sorted.sort((a, b) => b.yi - a.yi);
+  const cumResults = cumulativeMeta(sorted, cumForestPlot.method, cumForestPlot.ciMethod, cumForestPlot.alpha);
+  cumForestPlot.args.results = cumResults;
+  cumForestPlot.page = 0;
+  cumFunnelPlot.studies = sorted;
+  cumFunnelPlot.results = cumResults;
+  const slider = document.getElementById("cumulativeFunnelStep");
+  if (slider) { slider.max = cumResults.length - 1; slider.value = cumResults.length - 1; }
+  _updateCumFunnelLabel(cumResults.length - 1);
+  const { totalPages } = drawCumulativeForest(cumResults, cumForestPlot.args.profile,
+    { pageSize: cumForestPlot.args.pageSize, page: 0, theme: appState.plotTheme });
+  renderCumulativeForestNav(totalPages);
+  drawCumulativeFunnel(sorted, cumResults, cumFunnelPlot.profile, cumResults.length - 1, { theme: appState.plotTheme });
+  if (appState.reportArgs?.cumForestOptions) {
+    appState.reportArgs = { ...appState.reportArgs,
+      cumForestOptions: { ...appState.reportArgs.cumForestOptions, results: cumResults, currentPage: 0 } };
+  }
+});
 document.getElementById("cumulativeFunnelStep").addEventListener("input", e => {
   if (!cumFunnelPlot.studies) return;
   const step = +e.target.value;
@@ -3439,6 +3463,10 @@ const blupPlot = {
 const cumForestPlot = {
   page: 0,
   args: null,               // { results, profile, pageSize }
+  sourceStudies: null,      // original unsorted studies for live re-sort
+  method:   null,
+  ciMethod: null,
+  alpha:    null,
 };
 
 const funnelPlot = {
@@ -4828,7 +4856,11 @@ function _renderAllResults(ctx) {
   // ── Cumulative meta-analysis ──────────────────────────────────────────────
   const rawCumPageSize    = elCumForestPageSize?.value ?? "30";
   const cumForestPageSize = rawCumPageSize === "all" ? Infinity : +rawCumPageSize;
-  cumForestPlot.args  = { results: cumResults, profile, pageSize: cumForestPageSize, alpha, ciLabel: getCiLabel() };
+  cumForestPlot.args          = { results: cumResults, profile, pageSize: cumForestPageSize, alpha, ciLabel: getCiLabel() };
+  cumForestPlot.sourceStudies = studies.slice();
+  cumForestPlot.method        = method;
+  cumForestPlot.ciMethod      = ciMethod;
+  cumForestPlot.alpha         = alpha;
   appState.reportArgs.cumForestOptions = { results: cumResults, profile, pageSize: cumForestPageSize, currentPage: 0, alpha, ciLabel: getCiLabel() };
 
   cumFunnelPlot.studies = cumulativeStudies;

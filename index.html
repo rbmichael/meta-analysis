@@ -219,7 +219,7 @@
       <div id="advancedSettings" class="settings-popover advanced-settings" hidden>
         <div class="advanced-settings-body">
 
-          <!-- Analysis & display: CI width, MCC, cumulative order -->
+          <!-- Analysis & display: CI width, MCC -->
           <div class="settings-section">
             <span class="settings-group-label">Analysis &amp; display</span>
             <div class="settings-section-controls">
@@ -236,16 +236,6 @@
                   <option value="bonferroni">Bonferroni</option>
                   <option value="holm">Holm</option>
                 </select>
-              </label>
-              <label class="inline">Cumulative order:
-                <select id="cumulativeOrder">
-                  <option value="input">Input order</option>
-                  <option value="precision_desc">Most precise first</option>
-                  <option value="precision_asc">Least precise first</option>
-                  <option value="effect_asc">Effect ascending</option>
-                  <option value="effect_desc">Effect descending</option>
-                </select>
-                <button class="help-btn" data-help-select="cumulativeOrder" data-help-prefix="cumorder." title="Help">?</button>
               </label>
             </div>
           </div>
@@ -751,6 +741,18 @@
         <!-- ── Section 6: Cumulative Analysis (collapsed) ── -->
         <details class="results-section" id="cumulativeSection">
           <summary class="results-section-header">Cumulative Analysis</summary>
+          <div class="cumulative-controls">
+            <label class="inline">Sort by:
+              <select id="cumulativeOrder">
+                <option value="input" selected>Input order</option>
+                <option value="precision_desc">Most precise first</option>
+                <option value="precision_asc">Least precise first</option>
+                <option value="effect_asc">Effect ascending</option>
+                <option value="effect_desc">Effect descending</option>
+              </select>
+              <button class="help-btn" data-help-select="cumulativeOrder" data-help-prefix="cumorder." title="Help">?</button>
+            </label>
+          </div>
           <div class="plot-block">
             <p class="plot-label">Cumulative forest plot<button class="help-btn" data-help="plot.cumulative" title="Help">?</button></p>
             <div class="plot-export">
