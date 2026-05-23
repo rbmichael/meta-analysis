@@ -579,17 +579,17 @@ export function regressionFittedData(reg) {
 // Permutation test
 // ---------------------------------------------------------------------------
 
+export function permPval(dist, observed) {
+  if (!isFinite(observed)) return NaN;
+  let exceeds = 0;
+  for (let i = 0; i < dist.length; i++) { if (dist[i] >= observed) exceeds++; }
+  return (1 + exceeds) / (dist.length + 1);
+}
+
 export function permutationData(permResult, reg) {
   if (!permResult || !reg) return null;
   const { QM_dist, modQM_dist, nPerm, nMods } = permResult;
   if (!QM_dist || !nPerm) return null;
-
-  function permPval(dist, observed) {
-    if (!isFinite(observed)) return NaN;
-    let exceeds = 0;
-    for (let i = 0; i < dist.length; i++) { if (dist[i] >= observed) exceeds++; }
-    return (1 + exceeds) / (dist.length + 1);
-  }
 
   const omniLabel = reg.QMdist === "F"
     ? `<em>F</em>(${reg.QMdf}, ${reg.QEdf})`

@@ -13,6 +13,7 @@ import { effectProfiles } from "./profiles.js";
 import { Z_95 } from "./constants.js";
 import { leaveOneOut, estimatorComparison } from "./influence.js";
 import { adjustPvals } from "./regression.js";
+import { permPval } from "./sections.js";
 import { drawPCurve, drawPUniform } from "./plots.js";
 import { escapeHTML } from "./utils-html.js";
 
@@ -1356,12 +1357,6 @@ export function renderPermResults(permResult, reg) {
 
   const { QM_dist, modQM_dist, nPerm, nMods } = permResult;
 
-  function permPval(dist, observed) {
-    if (!isFinite(observed)) return NaN;
-    let exceeds = 0;
-    for (let i = 0; i < dist.length; i++) { if (dist[i] >= observed) exceeds++; }
-    return (1 + exceeds) / (dist.length + 1);
-  }
   function fmtP(p) {
     if (!isFinite(p)) return "NA";
     if (p < 0.001) return "< .001";

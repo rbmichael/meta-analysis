@@ -45,7 +45,7 @@
 // Dependencies: utils.js, constants.js
 // =============================================================================
 
-import { hedgesG, parseCounts, gorFromCounts, tetrachoricFromCounts, continuityCorrect, hyperg2F1_ucor, normalQuantile } from "./utils.js";
+import { hedgesG, parseCounts, gorFromCounts, tetrachoricFromCounts, continuityCorrect, hyperg2F1_ucor, normalQuantile, hedgesJ, clamp01 } from "./utils.js";
 import { MIN_VAR, Z_95 } from "./constants.js";
 
 function clampVi(x) { return x < MIN_VAR ? MIN_VAR : x; }
@@ -241,7 +241,7 @@ const _profileSpecs = {
       const sdi2 = (sd1 ** 2 + sd2 ** 2) / 2;
       const sdi  = Math.sqrt(sdi2);
       const d    = (m1 - m2) / sdi;
-      const J    = 1 - 3 / (4 * df - 1);
+      const J    = hedgesJ(df);
       const g    = d * J;
       // Bonett (2009) Eq. 7: variance of g using n−1 denominators (delta method).
       const vi_g = Math.max(
@@ -1398,7 +1398,7 @@ const _profileSpecs = {
       const vi = clampVi(p * (1 - p) / n);
       return { yi, vi };
     },
-    transform:   (x) => Math.min(1, Math.max(0, x)),
+    transform:   (x) => clamp01(x),
 
     validate: validateProportion,
     softWarnings: (s, label) => softWarnProportion(s, label, true),
@@ -1427,7 +1427,7 @@ const _profileSpecs = {
       const vi = clampVi((1 - p) / (n * p));
       return { yi, vi };
     },
-    transform:   (x) => Math.min(1, Math.max(0, Math.exp(x))),
+    transform:   (x) => clamp01(Math.exp(x)),
 
     validate: validateProportion,
     softWarnings: softWarnProportion,
@@ -1456,7 +1456,7 @@ const _profileSpecs = {
       const vi = clampVi(1 / (n * p * (1 - p)));
       return { yi, vi };
     },
-    transform:   (x) => Math.min(1, Math.max(0, 1 / (1 + Math.exp(-x)))),
+    transform:   (x) => clamp01(1 / (1 + Math.exp(-x))),
 
     validate: validateProportion,
     softWarnings: softWarnProportion,
@@ -1484,7 +1484,7 @@ const _profileSpecs = {
       const vi = clampVi(1 / (4 * n));
       return { yi, vi };
     },
-    transform:   (x) => Math.min(1, Math.max(0, Math.sin(x) ** 2)),
+    transform:   (x) => clamp01(Math.sin(x) ** 2),
 
     validate: validateProportion,
     softWarnings: softWarnProportion,
@@ -1511,7 +1511,7 @@ const _profileSpecs = {
       const vi = clampVi(1 / (n + 0.5));
       return { yi, vi };
     },
-    transform:   (x) => Math.min(1, Math.max(0, Math.sin(x / 2) ** 2)),
+    transform:   (x) => clamp01(Math.sin(x / 2) ** 2),
 
     validate: validateProportion,
     softWarnings: softWarnProportion,
@@ -1798,7 +1798,7 @@ const _profileSpecs = {
       const ref = isFinite(s.ref) ? s.ref : 0;
       const d   = (m - ref) / sd;
       const df  = n - 1;
-      const J   = 1 - 3 / (4 * df - 1);
+      const J   = hedgesJ(df);
       const yi  = d * J;
       const vi  = clampVi(1 / n + yi * yi / (2 * df));
       return { yi, vi };
@@ -1840,7 +1840,7 @@ const _profileSpecs = {
       const ref  = isFinite(s.ref) ? s.ref : 0;
       const d    = (m - ref) / sd;
       const df   = n - 1;
-      const J    = 1 - 3 / (4 * df - 1);
+      const J    = hedgesJ(df);
       const yi   = d * J;
       const vi_d = 1 / n + d * d / (2 * df);
       const vi   = clampVi(J * J * vi_d);

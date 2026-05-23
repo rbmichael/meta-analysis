@@ -9,7 +9,7 @@
 import { meta, robustWlsResult, logLik, validStudies, resolveClusterIds, groupByCluster } from "./analysis.js";
 import { tau2Core_REML, tau2Core_ML, tau2Core_PM, tau2Core_DL, tau2Core_HS, tau2Core_HE, tau2Core_SJ } from "./tau2.js";
 import { wls, wlsCholesky, matInverse, logDet, numericalHessian, diagSE } from "./linalg.js";
-import { normalCDF, normalQuantile, tCDF, tCritical, fCDF, chiSquareCDF, chiSquareQuantile, median } from "./utils.js";
+import { normalCDF, normalQuantile, tCDF, tCritical, fCDF, chiSquareCDF, chiSquareQuantile, median, sum, bisect } from "./utils.js";
 import { MIN_VAR, REML_TOL, BISECTION_ITERS } from "./constants.js";
 import { bfgs } from "./selection.js";
 
@@ -66,7 +66,7 @@ export function subgroupAnalysis(studies, method="REML", ciMethod="normal", alph
 // equals Q_FE when τ² = 0.
 function qProfile(tau2, studies) {
   const w  = studies.map(d => 1 / (d.vi + tau2));
-  const W  = w.reduce((acc, b) => acc + b, 0);
+  const W  = sum(w);
   const mu = studies.reduce((acc, d, i) => acc + w[i] * d.yi, 0) / W;
   return studies.reduce((acc, d, i) => acc + w[i] * (d.yi - mu) ** 2, 0);
 }
@@ -100,11 +100,7 @@ export function heterogeneityCIs(studies, tau2, alpha = 0.05) {
     if (qProfile(hi, studies) > chiHi) {
       tau2_lo = NaN;  // bracket not found within MAX_BOUND
     } else {
-      for (let i = 0; i < BISECTION_ITERS; i++) {
-        const mid = (lo + hi) / 2;
-        if (qProfile(mid, studies) > chiHi) lo = mid; else hi = mid;
-      }
-      tau2_lo = (lo + hi) / 2;
+      tau2_lo = bisect(mid => qProfile(mid, studies) - chiHi, lo, hi);
     }
   }
 
@@ -119,11 +115,7 @@ export function heterogeneityCIs(studies, tau2, alpha = 0.05) {
     if (qProfile(hi, studies) > chiLo) {
       tau2_hi = NaN;  // bracket not found within MAX_BOUND
     } else {
-      for (let i = 0; i < BISECTION_ITERS; i++) {
-        const mid = (lo + hi) / 2;
-        if (qProfile(mid, studies) > chiLo) lo = mid; else hi = mid;
-      }
-      tau2_hi = (lo + hi) / 2;
+      tau2_hi = bisect(mid => qProfile(mid, studies) - chiLo, lo, hi);
     }
   }
 

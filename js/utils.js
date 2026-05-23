@@ -41,6 +41,22 @@ export function median(arr) {
   return s.length % 2 === 0 ? (s[m - 1] + s[m]) / 2 : s[m];
 }
 
+export function sum(arr) { return arr.reduce((acc, b) => acc + b, 0); }
+export function mean(arr) { return sum(arr) / arr.length; }
+export function weightedMean(values, weights) {
+  const W = sum(weights);
+  return W > 0 ? values.reduce((acc, v, i) => acc + v * weights[i], 0) / W : NaN;
+}
+export function clamp01(v) { return Math.min(1, Math.max(0, v)); }
+export function hedgesJ(df) { return 1 - 3 / (4 * df - 1); }
+export function bisect(f, lo, hi, iters = BISECTION_ITERS) {
+  for (let i = 0; i < iters; i++) {
+    const mid = (lo + hi) / 2;
+    if (f(mid) > 0) lo = mid; else hi = mid;
+  }
+  return (lo + hi) / 2;
+}
+
 // ================= T CRITICAL =================
 // Two-tailed 95% critical value via bisection on tCDF.
 const _tCriticalCache = new Map();

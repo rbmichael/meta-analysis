@@ -5,7 +5,7 @@
 // Extracted from analysis.js (item 4.1.6 of TECHNICAL IMPROVEMENT ROADMAP).
 // =============================================================================
 
-import { chiSquareQuantile, chiSquareCDF } from "./utils.js";
+import { chiSquareQuantile, chiSquareCDF, sum, clamp01 } from "./utils.js";
 import { REML_TOL } from "./constants.js";
 import { GL20_X, GL20_W } from "./quadrature.js";
 
@@ -45,7 +45,7 @@ export function tau2_HS(studies) {
   const k = studies.length;
   if (k <= 1) return 0;
   const w = studies.map(d => 1 / d.vi);
-  const W = w.reduce((acc, b) => acc + b, 0);
+  const W = sum(w);
   const ybar = studies.reduce((acc, d, i) => acc + w[i] * d.yi, 0) / W;
   const Q = studies.reduce((acc, d, i) => acc + w[i] * (d.yi - ybar) ** 2, 0);
   return Math.max(0, (Q - (k - 1)) / W);
@@ -398,7 +398,7 @@ export function tau2_GENQM(studies, tol = REML_TOL, maxIter = 200) {
       for (let i = 0; i < 20; i++) s += GL20_W[i] * integrand(mid + halfH * GL20_X[i]);
     }
 
-    return Math.min(1, Math.max(0, 0.5 - s * halfH / Math.PI));
+    return clamp01(0.5 - s * halfH / Math.PI);
   }
 
   // Return 0 if Q_obs is at or below the median of Q_FE at τ²=0
@@ -563,31 +563,4 @@ export function tau2Core_SJ(vi, fitFn, seed, tol = REML_TOL, maxIter = 200) {
   return tau2;
 }
 
-// Compute RE mean given τ²
-export function RE_mean(corrected, tau2) {
-  const wRE = corrected.map(d => 1 / (d.vi + tau2));
-  const WRE = wRE.reduce((acc, b) => acc + b, 0);
-  return corrected.reduce((acc, d, i) => acc + wRE[i]*d.yi,0)/WRE;
-}
-
-// -------------------------------
-// Compute FE mean
-export function FE_mean(corrected) {
-  const wFE = corrected.map(d => 1 / d.vi);
-  const WFE = wFE.reduce((acc, b) => acc + b, 0);
-  return corrected.reduce((acc, d, i) => acc + wFE[i]*d.yi,0)/WFE;
-}
-
-// -------------------------------
-// Compute I² using fixed-effect weights (1/vi), matching metafor convention.
-// tau2 is unused but kept for API compatibility.
-export function I2(corrected, tau2) {
-  const k = corrected.length;
-  if (k <= 1) return 0;
-  const wFE = corrected.map(d => 1 / d.vi);
-  const W = wFE.reduce((acc, b) => acc + b, 0);
-  const mu = corrected.reduce((acc, d, i) => acc + wFE[i] * d.yi, 0) / W;
-  const Q = corrected.reduce((acc, d, i) => acc + wFE[i] * (d.yi - mu) ** 2, 0);
-  return Math.max(0, Math.min(100, ((Q - (k - 1)) / Q) * 100));
-}
 

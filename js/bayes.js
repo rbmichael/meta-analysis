@@ -18,7 +18,7 @@
 //   constants.js REML_TOL, BISECTION_ITERS, MIN_VAR
 
 import { logLik, tau2_REML, tau2_ML } from "./tau2.js";
-import { chiSquareQuantile } from "./utils.js";
+import { chiSquareQuantile, sum, bisect } from "./utils.js";
 import { REML_TOL, BISECTION_ITERS, MIN_VAR } from "./constants.js";
 
 // ================= PROFILE TAU² =================
@@ -66,7 +66,7 @@ export function profileLikCI(studies, alpha = 0.05) {
 
   const tau2ml = tau2_ML(studies);
   const w      = studies.map(d => 1 / (d.vi + tau2ml));
-  const W      = w.reduce((acc, b) => acc + b, 0);
+  const W      = sum(w);
   const muHat  = studies.reduce((acc, d, i) => acc + w[i] * d.yi, 0) / W;
   const lMax   = logLik(studies, muHat, tau2ml);
   const cutoff = chiSquareQuantile(1 - alpha, 1) / 2;  // ½ χ²_{1,1−α}
@@ -139,25 +139,11 @@ export function profileLikTau2(studies, opts = {}) {
   if (evalProfile(0) >= lCrit) {
     ciLow = 0;
   } else {
-    // Bisect on [0, tau2hat]: find root of evalProfile(t) - lCrit = 0
-    let lo = 0, bhi = tau2hat;
-    for (let i = 0; i < BISECTION_ITERS; i++) {
-      const mid = (lo + bhi) / 2;
-      if (evalProfile(mid) >= lCrit) bhi = mid; else lo = mid;
-    }
-    ciLow = (lo + bhi) / 2;
+    ciLow = bisect(mid => lCrit - evalProfile(mid), 0, tau2hat);
   }
 
   // ---- CI upper bound: bisect on [tau2hat, hi] ----
-  let ciHigh;
-  {
-    let lo = tau2hat, bhi = hi;
-    for (let i = 0; i < BISECTION_ITERS; i++) {
-      const mid = (lo + bhi) / 2;
-      if (evalProfile(mid) >= lCrit) lo = mid; else bhi = mid;
-    }
-    ciHigh = (lo + bhi) / 2;
-  }
+  const ciHigh = bisect(mid => evalProfile(mid) - lCrit, tau2hat, hi);
 
   // ---- Build grid from 0 to hi, compute shifted log-likelihood ----
   // Uniform spacing in τ = √τ² so the curve is equally smooth in both display

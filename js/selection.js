@@ -29,7 +29,7 @@
 
 import { meta, logLik, validStudies } from "./analysis.js";
 import { inverseWithRidge, numericalHessian } from "./linalg.js";
-import { normalCDF, normalQuantile, chiSquareCDF } from "./utils.js";
+import { normalCDF, normalQuantile, chiSquareCDF, bisect } from "./utils.js";
 import { Z_95, BISECTION_ITERS } from "./constants.js";
 import { GL20_X, GL20_W, GH20_X, GH20_W } from "./quadrature.js";
 
@@ -98,12 +98,7 @@ export function pCurve(studies) {
   function power(lambda) {
     return (1 - normalCDF(Z_95 - lambda)) + normalCDF(-Z_95 - lambda);
   }
-  let lo33 = 0, hi33 = 10;
-  for (let i = 0; i < BISECTION_ITERS; i++) {
-    const mid = (lo33 + hi33) / 2;
-    power(mid) < POWER_33 ? (lo33 = mid) : (hi33 = mid);
-  }
-  const lambda33 = (lo33 + hi33) / 2;  // ≈ 0.8406
+  const lambda33 = bisect(mid => POWER_33 - power(mid), 0, 10);  // ≈ 0.8406
 
   // pp33 CDF: probability that p-value ≤ p, conditional on p < .05, under 33% power.
   // pp33(p) = ([1 − Φ(z_p − λ₃₃)] + Φ(−z_p − λ₃₃)) / POWER_33
@@ -269,12 +264,7 @@ export function pUniform(studies, m) {
     const lo0 = sumQ(SEARCH_LO);
     const hi0 = sumQ(SEARCH_HI);
     if (target < lo0 || target > hi0) return NaN;
-    let lo = SEARCH_LO, hi = SEARCH_HI;
-    for (let i = 0; i < BISECTION_ITERS; i++) {
-      const mid = (lo + hi) / 2;
-      sumQ(mid) < target ? (lo = mid) : (hi = mid);
-    }
-    return (lo + hi) / 2;
+    return bisect(mid => target - sumQ(mid), SEARCH_LO, SEARCH_HI);
   }
 
   // ---- Step 5: effect estimate and 95% CI ----

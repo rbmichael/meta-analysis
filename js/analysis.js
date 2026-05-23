@@ -42,11 +42,11 @@
 // calls only happen inside function bodies, never at module initialisation time.
 // =============================================================================
 
-import { tCritical, normalCDF, normalQuantile, tCDF } from "./utils.js";
+import { tCritical, normalCDF, normalQuantile, tCDF, sum } from "./utils.js";
 import { MIN_VAR, REML_TOL } from "./constants.js";
 import { tau2_DL, tau2_HS, tau2_DLIT, tau2_HSk, tau2_HE, tau2_SJ, tau2_ML,
          logLik, tau2_REML, tau2_PM, tau2_EB, tau2_PMM, tau2_GENQM,
-         tau2_SQGENQ, tau2_GENQ, RE_mean, FE_mean, I2 } from "./tau2.js";
+         tau2_SQGENQ, tau2_GENQ } from "./tau2.js";
 import { getProfile, autoDetectType } from "./profiles.js";
 // Circular imports — safe: these are only called inside function bodies, never at
 // module initialisation time.
@@ -209,7 +209,7 @@ export function meta(studies, method="DL", ciMethod="normal", alpha=0.05, tau2In
 
   // ---------- FIXED EFFECT ----------
   const wFE = studies.map(d => 1 / Math.max(d.vi, MIN_VAR));
-  const W = wFE.reduce((acc, b) => acc + b, 0);
+  const W = sum(wFE);
   const FE = W > 0 ? studies.reduce((acc, d, i) => acc + d.yi * wFE[i], 0)/W : NaN;
   const seFE = W > 0 ? Math.sqrt(1/W) : NaN;
 
@@ -240,7 +240,7 @@ export function meta(studies, method="DL", ciMethod="normal", alpha=0.05, tau2In
 
   // ---------- RANDOM EFFECT ----------
   const wRE = studies.map(d => 1 / Math.max(d.vi + tau2, MIN_VAR));
-  const WRE = wRE.reduce((acc, b) => acc + b, 0);
+  const WRE = sum(wRE);
   const RE = WRE>0 ? studies.reduce((acc, d, i) => acc + d.yi * wRE[i], 0)/WRE : NaN;
   const seRE_base = WRE>0 ? Math.sqrt(1/WRE) : NaN;  // used for prediction interval
   let seRE = seRE_base;

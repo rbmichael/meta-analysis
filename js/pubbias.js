@@ -27,7 +27,7 @@
 
 import { robustWlsResult, validStudies, resolveClusterIds } from "./analysis.js";
 import { wls, diagSE } from "./linalg.js";
-import { normalCDF, normalQuantile, tCDF, regularizedGammaP } from "./utils.js";
+import { normalCDF, normalQuantile, tCDF, regularizedGammaP, sum, mean, bisect } from "./utils.js";
 import { BISECTION_ITERS } from "./constants.js";
 
 // ================= EGGER TEST =================
@@ -36,7 +36,7 @@ export function eggerTest(studies){
   if(k < 3) return { intercept: NaN, slope: NaN, se: NaN, t: NaN, df: NaN, p: NaN };
   const Z = studies.map(d => d.yi / d.se);
   const X = studies.map(d => 1 / d.se);
-  const meanX = X.reduce((acc, b) => acc + b, 0)/X.length, meanZ = Z.reduce((acc, b) => acc + b, 0)/Z.length;
+  const meanX = mean(X), meanZ = mean(Z);
   let num=0, den=0;
   for(let i=0;i<k;i++){ num += (X[i]-meanX)*(Z[i]-meanZ); den += (X[i]-meanX)**2; }
   const slope = num/den;
@@ -438,21 +438,13 @@ export function failSafeN(studies, alpha = 0.05, trivial = 0.1) {
   // Critical z for the chosen alpha (two-tailed → one-sided z_α/2... but
   // Rosenthal uses one-tailed z_α; for α=0.05, z_crit = 1.6449)
   // We derive it by inversion: z such that normalCDF(z) = 1 − alpha
-  const z_crit = (() => {
-    const target = 1 - alpha;
-    let lo = 0, hi = 10;
-    for (let i = 0; i < BISECTION_ITERS; i++) {
-      const mid = (lo + hi) / 2;
-      normalCDF(mid) < target ? lo = mid : hi = mid;
-    }
-    return (lo + hi) / 2;
-  })();
+  const z_crit = bisect(mid => (1 - alpha) - normalCDF(mid), 0, 10);
 
   const rosenthal = Math.max(0, (sumZ / z_crit) ** 2 - k);
 
   // Orwin: uses FE pooled estimate (Orwin 1983 predates RE meta-analysis)
   const w0 = valid.map(s => 1 / s.vi);
-  const W  = w0.reduce((acc, b) => acc + b, 0);
+  const W  = sum(w0);
   const FE = valid.reduce((acc, d, i) => acc + w0[i] * d.yi, 0) / W;
   const orwin = Math.max(0, k * (Math.abs(FE) - Math.abs(trivial)) / Math.abs(trivial));
 
