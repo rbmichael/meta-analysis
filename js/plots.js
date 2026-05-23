@@ -1221,8 +1221,8 @@ function funnelDrawContours(svg, bgColor, BANDS, bandPath, W, H, T) {
 }
 
 function funnelDrawFunnelArms(svg, x, y, seMax, xHalf, borderClr, m, T) {
-  const armRight = Math.min( 1.96 * seMax,  xHalf);
-  const armLeft  = Math.max(-1.96 * seMax, -xHalf);
+  const armRight = Math.min( Z_95 * seMax,  xHalf);
+  const armLeft  = Math.max(-Z_95 * seMax, -xHalf);
   svg.append("line")
     .attr("x1", x(0)).attr("y1", y(0))
     .attr("x2", x(armRight)).attr("y2", y(seMax))
@@ -1554,7 +1554,7 @@ export function drawFunnel(studies, m, profile, options = {}) {
       BANDS = [
         { z: Infinity, fill: "url(#hatch-dense)",  label: "p < 0.01"        },
         { z: 2.576,    fill: "url(#hatch-medium)", label: "0.01 ≤ p < 0.05" },
-        { z: 1.960,    fill: "url(#hatch-sparse)", label: "0.05 ≤ p < 0.10" },
+        { z: Z_95,     fill: "url(#hatch-sparse)", label: "0.05 ≤ p < 0.10" },
         { z: 1.645,    fill: T.bg,                 label: "p ≥ 0.10"         },
       ];
     } else {
@@ -1564,7 +1564,7 @@ export function drawFunnel(studies, m, profile, options = {}) {
       BANDS = [
         { z: Infinity, fill: T.contour01 ?? "#a8a8a8", label: "p < 0.01"        },
         { z: 2.576,    fill: T.contour05 ?? "#c8c8c8", label: "0.01 ≤ p < 0.05" },
-        { z: 1.960,    fill: T.contour10 ?? "#e4e4e4", label: "0.05 ≤ p < 0.10" },
+        { z: Z_95,     fill: T.contour10 ?? "#e4e4e4", label: "0.05 ≤ p < 0.10" },
         { z: 1.645,    fill: bgColor,                  label: "p ≥ 0.10"         },
       ];
     }
@@ -1971,8 +1971,8 @@ export function drawCumulativeFunnel(cumulativeStudies, cumResults, profile, ste
   const borderClr = T.border;
 
   // ---- Funnel triangle (anchored at null = 0, global seMax) ----
-  const armRight = Math.min( 1.96 * seMax,  xHalf);
-  const armLeft  = Math.max(-1.96 * seMax, -xHalf);
+  const armRight = Math.min( Z_95 * seMax,  xHalf);
+  const armLeft  = Math.max(-Z_95 * seMax, -xHalf);
 
   svg.append("line")
     .attr("x1", x(0)).attr("y1", y(0))

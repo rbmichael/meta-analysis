@@ -107,7 +107,8 @@
 //   restores any autosave draft, and attaches all event listeners.
 // =============================================================================
 import { eggerTest, beggTest, fatPetTest, petPeeseTest, failSafeN, tesTest, waapWls, clES, pCurve, pUniform, baujat, blupMeta, meta, metaMH, metaPeto, robustMeta, influenceDiagnostics, subgroupAnalysis, metaRegression, testContrast, cumulativeMeta, veveaHedges, SELECTION_PRESETS, halfNormalSelModel, powerSelModel, negexpSelModel, betaSelModel, profileLikTau2, bayesMeta, priorSensitivity, rvePooled, meta3level, harbordTest, petersTest, deeksTest, rueckerTest, lsModel, henmiCopas, isValidStudy } from "./analysis.js";
-import { fmt, fmtPval, normalQuantile, normalCDF, chiSquareCDF, tCritical } from "./utils.js";
+import { normalQuantile, normalCDF, chiSquareCDF, tCritical } from "./utils.js";
+import { fmt, fmtP_APA as fmtPval } from "./format.js";
 import { escapeHTML } from "./utils-html.js";
 import { effectProfiles, getProfile } from "./profiles.js";
 import { trimFill } from "./trimfill.js";

@@ -8,7 +8,7 @@
 // Extracted from ui.js (item 4.2.1 of TECHNICAL IMPROVEMENT ROADMAP).
 // =============================================================================
 
-import { fmt, fmtPval } from "./utils.js";
+import { fmt, fmtP_APA as fmtPval } from "./format.js";
 import { effectProfiles } from "./profiles.js";
 import { Z_95 } from "./constants.js";
 import { leaveOneOut, estimatorComparison } from "./influence.js";
@@ -1113,8 +1113,8 @@ export function renderSelectionModelPanel(r, mode, weightFn, profile) {
 
   // ---- Adjusted vs unadjusted μ ----
   const muAdj   = fmtDisp(r.mu);
-  const ciLo    = fmtDisp(r.mu - 1.96 * r.se_mu);
-  const ciHi    = fmtDisp(r.mu + 1.96 * r.se_mu);
+  const ciLo    = fmtDisp(r.mu - Z_95 * r.se_mu);
+  const ciHi    = fmtDisp(r.mu + Z_95 * r.se_mu);
   const muUnadj = fmtDisp(r.RE_unsel);
 
   // ---- LRT + LL rows (MLE only) ----

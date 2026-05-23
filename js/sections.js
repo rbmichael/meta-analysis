@@ -240,8 +240,8 @@ export function selModelData(args) {
   const intervalLabels = cuts.map((c, j) => `(${j === 0 ? "0" : cuts[j - 1]}, ${c}]`);
 
   const muAdj = fmtDisp(sel.mu);
-  const ciLo  = fmtDisp(sel.mu - 1.96 * sel.se_mu);
-  const ciHi  = fmtDisp(sel.mu + 1.96 * sel.se_mu);
+  const ciLo  = fmtDisp(sel.mu - Z_95 * sel.se_mu);
+  const ciHi  = fmtDisp(sel.mu + Z_95 * sel.se_mu);
 
   const omegaRow = [
     "Selection weight ω",
@@ -568,7 +568,7 @@ export function regressionFittedData(reg) {
   const headers = ["Study", "<em>y</em>ᵢ", "<em>ŷ</em>ᵢ", "<em>e</em>ᵢ", "Std. <em>e</em>ᵢ"];
   const rows = reg.labels.map((lbl, i) => {
     const sr    = reg.stdResiduals[i];
-    const flag  = isFinite(sr) && Math.abs(sr) > 1.96;
+    const flag  = isFinite(sr) && Math.abs(sr) > Z_95;
     return { cells: [lbl || String(i + 1), fmt(reg.yi[i]), fmt(reg.fitted[i]), fmt(reg.residuals[i]), fmt(sr)], flag };
   });
   const note = "Std. <em>e</em>ᵢ = standardized residual. |Std. <em>e</em>ᵢ| > 1.96 may indicate outliers.";

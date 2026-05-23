@@ -36,10 +36,4 @@ export function fmtCI_APA(lo, hi, d = 3) {
   return `[${fmt(lo, d)}, ${fmt(hi, d)}]`;
 }
 
-export function escHTML(s) {
-  return String(s)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
+export { escapeHTML as escHTML } from "./utils-html.js";
