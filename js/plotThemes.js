@@ -56,9 +56,14 @@
 // --------------------------------------------------
 //   fontFamily      Applied via style("font-family") to every text element.
 //                   Concrete stack required (not "inherit") for export fidelity.
-//   ciStrokeWidth   Stroke width (px) for individual study CI lines.
-//   headerRuleWidth Stroke width (px) for the horizontal header rule.
-//   nullLineDash    stroke-dasharray string for the vertical null reference line.
+//   ciStrokeWidth      Stroke width (px) for individual study CI lines.
+//   headerRuleWidth    Stroke width (px) for the horizontal header rule.
+//   nullLineDash       stroke-dasharray string for the vertical null reference line.
+//   axisFontSize       Font size string for axis tick labels (null = D3 default).
+//   axisLineWidth      Stroke width (px) for axis domain line + tick marks.
+//   diamondStrokeWidth Stroke width (px) for pooled-estimate diamond polygons.
+//   piStrokeWidth      Stroke width (px) for the prediction interval line + end-caps.
+//   piDash             stroke-dasharray string for the prediction interval line.
 //
 // Theme field reference — Behavioural flags (BW-specific)
 // --------------------------------------------------------
@@ -124,10 +129,15 @@ export const PLOT_THEMES = {
     colorInfo:       "var(--color-info)",
     colorSuccess:    "var(--color-success, #22aa66)",
 
-    fontFamily:      "system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif",
-    ciStrokeWidth:   1.5,
-    headerRuleWidth: 1,
-    nullLineDash:    "4",
+    fontFamily:         "system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif",
+    ciStrokeWidth:      1.5,
+    headerRuleWidth:    1,
+    nullLineDash:       "4",
+    axisFontSize:       null,
+    axisLineWidth:      1,
+    diamondStrokeWidth: 1.5,
+    piStrokeWidth:      2,
+    piDash:             "6,3",
 
     useBwShapes:          false,
     preserveSignalColors: false,
@@ -173,10 +183,15 @@ export const PLOT_THEMES = {
     contour05:       "#c8c8c8",   // second band fill   (0.01 ≤ p < 0.05)
     contour10:       "#e4e4e4",   // third band fill    (0.05 ≤ p < 0.10)
 
-    fontFamily:      "'Times New Roman', Times, serif",
-    ciStrokeWidth:   1.5,
-    headerRuleWidth: 1,
-    nullLineDash:    "4",
+    fontFamily:         "'Times New Roman', Times, serif",
+    ciStrokeWidth:      1.5,
+    headerRuleWidth:    1,
+    nullLineDash:       "4",
+    axisFontSize:       null,
+    axisLineWidth:      1,
+    diamondStrokeWidth: 1.5,
+    piStrokeWidth:      2,
+    piDash:             "6,3",
 
     useBwShapes:          false,
     preserveSignalColors: false,
@@ -222,10 +237,15 @@ export const PLOT_THEMES = {
     contour05:       "#c8c8c8",
     contour10:       "#e4e4e4",
 
-    fontFamily:      "Arial, Helvetica, sans-serif",
-    ciStrokeWidth:   1.5,
-    headerRuleWidth: 1,
-    nullLineDash:    "4",
+    fontFamily:         "Arial, Helvetica, sans-serif",
+    ciStrokeWidth:      1.5,
+    headerRuleWidth:    1,
+    nullLineDash:       "4",
+    axisFontSize:       null,
+    axisLineWidth:      1,
+    diamondStrokeWidth: 1.5,
+    piStrokeWidth:      2,
+    piDash:             "6,3",
 
     useBwShapes:          false,
     preserveSignalColors: false,
@@ -276,10 +296,15 @@ export const PLOT_THEMES = {
     colorInfo:       "#555555",
     colorSuccess:    "#333333",
 
-    fontFamily:      "Arial, Helvetica, sans-serif",
-    ciStrokeWidth:   1,           // Slightly thinner lines for print legibility
-    headerRuleWidth: 1,
-    nullLineDash:    "4",
+    fontFamily:         "Arial, Helvetica, sans-serif",
+    ciStrokeWidth:      1,
+    headerRuleWidth:    1,
+    nullLineDash:       "4",
+    axisFontSize:       null,
+    axisLineWidth:      1,
+    diamondStrokeWidth: 1,        // thinner for print legibility (matches ciStrokeWidth)
+    piStrokeWidth:      1.5,
+    piDash:             "6,3",
 
     useBwShapes:          true,
     preserveSignalColors: true,

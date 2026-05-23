@@ -197,15 +197,20 @@ function setSvgSize(sel, w, h) {
   return sel.attr("width", w).attr("height", h).attr("viewBox", `0 0 ${w} ${h}`);
 }
 
-// styleAxis(axisG, strokeColor, fillColor [, fontSize [, fontFamily]])
+// styleAxis(axisG, strokeColor, fillColor [, fontSize [, fontFamily [, lineWidth]]])
 // Applies consistent styling to a D3 axis group produced by d3.axis*().
 //   strokeColor — .domain line and each .tick line stroke
 //   fillColor   — .tick text fill
 //   fontSize    — optional font-size string (e.g. "10px") for tick labels
 //   fontFamily  — optional font-family string; used by themed forest plots
-function styleAxis(axisG, strokeColor, fillColor, fontSize, fontFamily) {
-  axisG.select(".domain").style("stroke", strokeColor);
-  axisG.selectAll(".tick line").style("stroke", strokeColor);
+//   lineWidth   — optional stroke-width for the domain line and tick marks
+function styleAxis(axisG, strokeColor, fillColor, fontSize, fontFamily, lineWidth) {
+  const domainSel = axisG.select(".domain").style("stroke", strokeColor);
+  const tickLines = axisG.selectAll(".tick line").style("stroke", strokeColor);
+  if (lineWidth) {
+    domainSel.style("stroke-width", lineWidth);
+    tickLines.style("stroke-width", lineWidth);
+  }
   const tickText = axisG.selectAll(".tick text").style("fill", fillColor);
   if (fontSize)   tickText.style("font-size",   fontSize);
   if (fontFamily) tickText.style("font-family", fontFamily);
@@ -891,7 +896,7 @@ function forestDrawDiamond(ctx, center, ciLow, ciHigh, yMid, fillColor, strokeDa
   svg.append("polygon")
     .attr("points", pts.map(p => p.join(",")).join(" "))
     .attr("fill",   fillColor).attr("stroke", fillColor)
-    .attr("stroke-width", strokeDash ? 2.5 : 1.5)
+    .attr("stroke-width", strokeDash ? T.diamondStrokeWidth + 1 : T.diamondStrokeWidth)
     .attr("stroke-dasharray", strokeDash || "0")
     .append("title").text(tooltipText);
 
@@ -1015,17 +1020,17 @@ function forestDrawPredictionInterval(ctx, m, showRE) {
   svg.append("line")
     .attr("x1", x(m.predLow)).attr("x2", x(m.predHigh))
     .attr("y1", L.piY).attr("y2", L.piY)
-    .attr("stroke", T.pi).attr("stroke-width", 2).attr("stroke-dasharray", "6,3")
+    .attr("stroke", T.pi).attr("stroke-width", T.piStrokeWidth).attr("stroke-dasharray", T.piDash)
     .append("title").text("Prediction interval: expected range of true effects in future studies");
 
   svg.append("line")
     .attr("x1", x(m.predLow)).attr("x2", x(m.predLow))
     .attr("y1", L.piY - 5).attr("y2", L.piY + 5)
-    .attr("stroke", T.pi).attr("stroke-width", 2);
+    .attr("stroke", T.pi).attr("stroke-width", T.piStrokeWidth);
   svg.append("line")
     .attr("x1", x(m.predHigh)).attr("x2", x(m.predHigh))
     .attr("y1", L.piY - 5).attr("y2", L.piY + 5)
-    .attr("stroke", T.pi).attr("stroke-width", 2);
+    .attr("stroke", T.pi).attr("stroke-width", T.piStrokeWidth);
 
   const pi_disp = { lb: profile.transform(m.predLow), ub: profile.transform(m.predHigh) };
   svg.append("text")
@@ -1203,7 +1208,7 @@ export function drawForest(studies, m, options = {}) {
       const d = profile.transform(v);
       return isFinite(d) ? +d.toFixed(3) : "";
     }));
-  styleAxis(axisG, T.border, T.fgMuted, null, T.fontFamily);
+  styleAxis(axisG, T.border, T.fgMuted, T.axisFontSize, T.fontFamily, T.axisLineWidth);
   if (profile.isLog) {
     svg.append("text")
       .attr("x", L.labelW + L.plotW / 2).attr("y", L.axisY + 36)
