@@ -1418,7 +1418,7 @@ export function meta3level(studies, opts = {}) {
   //   I²_within  = τ²ᵤ / (τ²ᵤ + τ²ₜ + vi_typical)
   //   I²_between = τ²ₜ / (τ²ᵤ + τ²ₜ + vi_typical)
   // ------------------------------------------------------------------
-  const Q      = studies.reduce((a, s) => a + (s.yi - muFE0) ** 2 / s.vi, 0);
+  const Q      = Q0;
   const vi_typ = 1 / W0;  // 1 / Σ(1/vi)
   const tot    = tau2u + tau2t + vi_typ;
   const I2_within  = tot > 0 ? 100 * tau2u / tot : 0;

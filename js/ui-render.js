@@ -141,7 +141,7 @@ export function buildRegCoeffRows(reg, adjPs = null, mods = []) {
            + `<td>[${fmt(rci[0])}, ${fmt(rci[1])}]</td>`;
     })() : "";
     return `<tr class="${j === 0 ? "reg-intercept" : ""}">
-      <td>${reg.colNames[j]}</td>
+      <td>${escapeHTML(reg.colNames[j])}</td>
       <td>${fmt(reg.beta[j])}</td>
       <td>${fmt(reg.se[j])}</td>
       <td>${fmt(reg.zval[j])}</td>
@@ -229,7 +229,7 @@ export function renderLocationScalePanel(ls, ciMethod, kExcluded = 0) {
     function dataRow(j) {
       const [lo, hi] = ls.ci_beta[j];
       return `<tr class="${j === 0 ? "reg-intercept" : ""}">
-        <td>${ls.locColNames[j]}</td>
+        <td>${escapeHTML(ls.locColNames[j])}</td>
         <td>${fmt(ls.beta[j])}</td>
         <td>${fmt(ls.se_beta[j])}</td>
         <td>${fmt(ls.zval_beta[j])}</td>
@@ -258,7 +258,7 @@ export function renderLocationScalePanel(ls, ciMethod, kExcluded = 0) {
       const [lo, hi] = ls.ci_gamma[j];
       const tau2val  = fmt(Math.exp(ls.gamma[j]));
       return `<tr class="${j === 0 ? "reg-intercept" : ""}">
-        <td>${ls.scaleColNames[j]}</td>
+        <td>${escapeHTML(ls.scaleColNames[j])}</td>
         <td>${fmt(ls.gamma[j])}</td>
         <td>${fmt(ls.se_gamma[j])}</td>
         <td>${fmt(ls.zval_gamma[j])}</td>
@@ -493,7 +493,7 @@ export function renderRegressionPanel(reg, method, ciMethod, kExcluded = 0, mods
           <tbody>
             ${reg.modTests.map((mt, mi) => {
               if (mt.QMdf === 0) {
-                return `<tr><td>${mt.name}</td><td colspan="${(hasAdjPs ? 1 : 0) + (hasLRT ? 2 : 0) + 3}"><i>degenerate (≤ 1 level)</i></td></tr>`;
+                return `<tr><td>${escapeHTML(mt.name)}</td><td colspan="${(hasAdjPs ? 1 : 0) + (hasLRT ? 2 : 0) + 3}"><i>degenerate (≤ 1 level)</i></td></tr>`;
               }
               const dfLabel = reg.QMdist === "F"
                 ? `F(${mt.QMdf},\u2009${reg.QEdf})`
@@ -507,7 +507,7 @@ export function renderRegressionPanel(reg, method, ciMethod, kExcluded = 0, mods
               const adjCell = hasAdjPs
                 ? `<td>${regFmtP(adjModPs[mi])}</td>` : "";
               return `<tr>
-                <td>${mt.name}</td>
+                <td>${escapeHTML(mt.name)}</td>
                 <td>${fmt(mt.QM)}</td>
                 ${lrtStatCell}
                 <td>${dfLabel}</td>
@@ -563,7 +563,7 @@ export function renderRegressionPanel(reg, method, ciMethod, kExcluded = 0, mods
           <tbody>
             ${reg.colNames.map((name, i) => `
               <tr>
-                <td>${name}</td>
+                <td>${escapeHTML(name)}</td>
                 <td><input type="number" class="contrast-weight" data-idx="${i}"
                      value="0" step="any" style="width:5em"></td>
               </tr>`).join("")}
@@ -1378,8 +1378,6 @@ export function renderPermResults(permResult, reg) {
     modRows = reg.modTests.map((mt, mi) => {
       if (mt.QMdf === 0 || !mt.colIdxs || mt.colIdxs.length === 0)
         return `<tr><td>${escapeHTML(mt.name)}</td><td colspan="2"><i>degenerate</i></td></tr>`;
-      const modDist = modQM_dist.subarray(mi, nPerm * nMods + mi).filter((_, idx) => idx % nMods === 0);
-      // Extract column mi from the nPerm×nMods matrix
       const colDist = new Float64Array(nPerm);
       for (let r = 0; r < nPerm; r++) colDist[r] = modQM_dist[r * nMods + mi];
       const mp = permPval(colDist, mt.QM);

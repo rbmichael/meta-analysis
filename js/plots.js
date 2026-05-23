@@ -128,6 +128,7 @@ import { Z_95 } from "./constants.js";
 import { PLOT_THEMES, ROB_COLORS, BW_DASHES, hashGroupLabel } from "./plotThemes.js";
 import { rcsBasis, validStudies } from "./analysis.js";
 import { fmt, fmtP_APA } from "./format.js";
+import { escapeHTML } from "./utils-html.js";
 
 // ── Plot style constants ──────────────────────────────────────────────────────
 // Centralised defaults for font sizes, margins, tooltip offsets, and label
@@ -550,7 +551,7 @@ export function drawBubble(studies, reg, mod, container, options = {}) {
     .on("mousemove", (event, s) => {
       const fitted = fitAt(s[modName]);
       tooltip.style("opacity", 1)
-        .html(`<b>${s.label}</b><br>${modName}: ${s[modName]}<br>yi: ${s.yi.toFixed(3)}<br>ŷ: ${fitted.toFixed(3)}`)
+        .html(`<b>${escapeHTML(s.label)}</b><br>${escapeHTML(modName)}: ${escapeHTML(String(s[modName]))}<br>yi: ${s.yi.toFixed(3)}<br>ŷ: ${fitted.toFixed(3)}`)
         .style("left", (event.pageX + TOOLTIP_OFFSET.x) + "px")
         .style("top",  (event.pageY + TOOLTIP_OFFSET.y) + "px");
     })
@@ -682,7 +683,7 @@ export function drawPartialResidualBubble(studies, reg, mod, container, options 
       const i      = valid.indexOf(s);
       const fitted = partialFitAt(s[modName]);
       tooltip.style("opacity", 1)
-        .html(`<b>${s.label}</b><br>${modName}: ${s[modName]}<br>y*: ${partialY[i].toFixed(3)}<br>ŷ: ${fitted.toFixed(3)}`)
+        .html(`<b>${escapeHTML(s.label)}</b><br>${escapeHTML(modName)}: ${escapeHTML(String(s[modName]))}<br>y*: ${partialY[i].toFixed(3)}<br>ŷ: ${fitted.toFixed(3)}`)
         .style("left", (event.pageX + TOOLTIP_OFFSET.x) + "px")
         .style("top",  (event.pageY + TOOLTIP_OFFSET.y) + "px");
     })
@@ -781,7 +782,7 @@ function forestDrawStudyRows(ctx, pageStudies, studies, studyCrit, widthCiLabel,
       const ef_disp = profile.transform(d.yi);
       const lo_disp = profile.transform(d.yi - studyCrit * d.se);
       const hi_disp = profile.transform(d.yi + studyCrit * d.se);
-      return `${d.label}<br>Effect: ${fmt(ef_disp)}<br>` +
+      return `${escapeHTML(d.label)}<br>Effect: ${fmt(ef_disp)}<br>` +
         `${widthCiLabel} (${ciMethodLabel}): ${fmt(lo_disp)} – ${fmt(hi_disp)}`;
     }
   );
@@ -1682,7 +1683,7 @@ export function drawInfluencePlot(influence, options = {}) {
           return T.fgMuted;
         })
         .attr("opacity", 0.85),
-      d => `${d.label}<br>Hat: ${d.hat.toFixed(4)}<br>Cook's D: ${d.cookD.toFixed(4)}`
+      d => `${escapeHTML(d.label)}<br>Hat: ${d.hat.toFixed(4)}<br>Cook's D: ${d.cookD.toFixed(4)}`
     );
   } else {
     attachTooltip(
@@ -1699,7 +1700,7 @@ export function drawInfluencePlot(influence, options = {}) {
                             : (d.highLeverage || d.highCookD) ? T.colorWarning
                             : T.fgMuted)
         .attr("opacity", 0.85),
-      d => `${d.label}<br>Hat: ${d.hat.toFixed(4)}<br>Cook's D: ${d.cookD.toFixed(4)}`
+      d => `${escapeHTML(d.label)}<br>Hat: ${d.hat.toFixed(4)}<br>Cook's D: ${d.cookD.toFixed(4)}`
     );
   }
 
@@ -2597,7 +2598,7 @@ export function drawOrchardPlot(studies, m, profile, options = {}) {
         d => {
           const seVal = (d.se || Math.sqrt(Math.max(d.vi, 0))).toFixed(3);
           const yi_t  = profile.transform(d.yi);
-          return `<b>${d.label}</b><br>Effect: ${fmt(yi_t)}<br>SE: ${seVal}${d.filled ? "<br><i>(imputed)</i>" : ""}`;
+          return `<b>${escapeHTML(d.label)}</b><br>Effect: ${fmt(yi_t)}<br>SE: ${seVal}${d.filled ? "<br><i>(imputed)</i>" : ""}`;
         }
       );
     });
@@ -2794,9 +2795,8 @@ export function drawCaterpillarPlot(studies, m, profile, options = {}) {
       const yi_t  = profile.transform(s.yi);
       const lo_t  = profile.transform(lo);
       const hi_t  = profile.transform(hi);
-      const fmt   = v => fmt(v);
       tooltip.style("opacity", 1)
-        .html(`<b>${s.label}</b><br>Effect: ${fmt(yi_t)} [${fmt(lo_t)}, ${fmt(hi_t)}]<br>SE: ${seVal}${s.filled ? "<br><i>(imputed)</i>" : ""}`)
+        .html(`<b>${escapeHTML(s.label)}</b><br>Effect: ${fmt(yi_t)} [${fmt(lo_t)}, ${fmt(hi_t)}]<br>SE: ${seVal}${s.filled ? "<br><i>(imputed)</i>" : ""}`)
         .style("left", x0 + "px").style("top", y0 + "px");
     };
     g.append("circle")
@@ -3026,7 +3026,7 @@ export function drawBlupPlot(result, profile, options = {}) {
         d => {
           const effDisplay = profile.transform(d.blup);
           const obsDisplay = profile.transform(d.yi);
-          return `<b>${d.label}</b>` +
+          return `<b>${escapeHTML(d.label)}</b>` +
             `<br>Observed: ${fmt(obsDisplay)}` +
             `<br>BLUP: ${fmt(effDisplay)}` +
             `<br>Random effect (û): ${(+d.ranef.toFixed(4))}` +
@@ -3182,7 +3182,7 @@ export function drawBaujatPlot(result, profile, options = {}) {
         .attr("stroke-width", 1),
       d => {
         const yi_t = profile.transform(d.yi);
-        return `<b>${d.label}</b>` +
+        return `<b>${escapeHTML(d.label)}</b>` +
           `<br>Q contribution: ${d.x.toFixed(3)}` +
           `<br>Influence: ${d.influence.toFixed(4)}` +
           `<br>Effect (${profile.label}): ${fmt(yi_t)}`;
@@ -3413,7 +3413,7 @@ export function drawLabbe(studies, m, profile, options = {}) {
         .attr("stroke-width", 1),
       d => {
         const effVal = profile ? profile.transform(d.yi) : d.yi;
-        return `<b>${d.label}</b>` +
+        return `<b>${escapeHTML(d.label)}</b>` +
           `<br>Control rate: ${(d.px * 100).toFixed(1)}%` +
           `<br>Treatment rate: ${(d.py * 100).toFixed(1)}%` +
           `<br>N: ${d.N}` +
@@ -3582,7 +3582,7 @@ export function drawRoBTrafficLight(studies, domains, robData, options = {}) {
             .attr("r", 7)
             .attr("fill", ROB_COLORS[rating])
             .attr("fill-opacity", 0.85),
-          d => `<strong>${d.label}</strong><br>${d.dom}<br>${d.rating}`
+          d => `<strong>${escapeHTML(d.label)}</strong><br>${escapeHTML(d.dom)}<br>${escapeHTML(d.rating)}`
         );
       } else {
         // Unrated dash

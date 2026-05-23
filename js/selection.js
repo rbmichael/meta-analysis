@@ -1231,10 +1231,10 @@ export function veveaHedges(studies, cuts = SEL_CUTS_ONE_SIDED, sides = 1, fixed
   if (nPerInterval[0] === 0) {
     const alpha0 = new Array(K).fill(0);
     const omega0 = new Array(K).fill(1);
-    const zval_mu0 = mUnsel.RE / mUnsel.se;
+    const zval_mu0 = mUnsel.RE / mUnsel.seRE;
     const pval_mu0 = 2 * (1 - normalCDF(Math.abs(zval_mu0)));
     return {
-      mu: mUnsel.RE, se_mu: mUnsel.se, zval_mu: zval_mu0, pval_mu: pval_mu0,
+      mu: mUnsel.RE, se_mu: mUnsel.seRE, zval_mu: zval_mu0, pval_mu: pval_mu0,
       ci_mu: [mUnsel.ciLow, mUnsel.ciHigh],
       tau2: mUnsel.tau2, se_tau2: NaN,
       omega: omega0, se_omega: new Array(K).fill(NaN),
