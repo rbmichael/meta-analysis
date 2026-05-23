@@ -4644,10 +4644,14 @@ function _renderAllResults(ctx) {
     <details style="margin-top:4px">
       <summary style="cursor:pointer;color:var(--fg-muted);font-size:0.9em">Additional regression tests (binary outcomes)</summary>
       <div style="margin-top:4px">
-        &nbsp;&nbsp;${hBtn("bias.harbord")}Harbord: intercept = ${isFinite(harbord.intercept)?fmt(harbord.intercept):"NA"} | <em>p</em> ${isFinite(harbord.interceptP)?fmtPval(harbord.interceptP):"NA (k&lt;3 or no 2×2 counts)"}<br>
-        &nbsp;&nbsp;${hBtn("bias.peters")}Peters: intercept = ${isFinite(peters.intercept)?fmt(peters.intercept):"NA"} | <em>p</em> ${isFinite(peters.interceptP)?fmtPval(peters.interceptP):"NA (k&lt;3 or no sample sizes)"}<br>
-        &nbsp;&nbsp;${hBtn("bias.deeks")}Deeks: intercept = ${isFinite(deeks.intercept)?fmt(deeks.intercept):"NA"} | <em>p</em> ${isFinite(deeks.interceptP)?fmtPval(deeks.interceptP):"NA (k&lt;3 or no 2×2 counts)"}<br>
-        &nbsp;&nbsp;${hBtn("bias.ruecker")}Rücker: intercept = ${isFinite(ruecker.intercept)?fmt(ruecker.intercept):"NA"} | <em>p</em> ${isFinite(ruecker.interceptP)?fmtPval(ruecker.interceptP):"NA (k&lt;3 or no 2×2 counts)"}
+        ${[
+          ["bias.harbord", "Harbord",  harbord,  "k&lt;3 or no 2×2 counts"],
+          ["bias.peters",  "Peters",   peters,   "k&lt;3 or no sample sizes"],
+          ["bias.deeks",   "Deeks",    deeks,    "k&lt;3 or no 2×2 counts"],
+          ["bias.ruecker", "Rücker", ruecker,  "k&lt;3 or no 2×2 counts"],
+        ].map(([key, name, r, naMsg]) =>
+          `&nbsp;&nbsp;${hBtn(key)}${name}: intercept = ${isFinite(r.intercept)?fmt(r.intercept):"NA"} | <em>p</em> ${isFinite(r.interceptP)?fmtPval(r.interceptP):`NA (${naMsg})`}`
+        ).join("<br>\n        ")}
       </div>
     </details>
   `;

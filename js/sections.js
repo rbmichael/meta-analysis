@@ -95,10 +95,12 @@ export function pubBiasData(args) {
          fmt(profile.transform(petpeese.peese.intercept)),
          naP(petpeese.peese.interceptP)]
       : ["PEESE", "—", "NA"],
-    ["Harbord (intercept)",                         na(harbord?.intercept), naP(harbord?.interceptP)],
-    ["Peters (intercept)",                          na(peters?.intercept),  naP(peters?.interceptP)],
-    ["Deeks (intercept)",                           na(deeks?.intercept),   naP(deeks?.interceptP)],
-    ["Rücker (intercept)",                    na(ruecker?.intercept), naP(ruecker?.interceptP)],
+    ...([
+      ["Harbord (intercept)", harbord],
+      ["Peters (intercept)",  peters],
+      ["Deeks (intercept)",   deeks],
+      ["Rücker (intercept)", ruecker],
+    ].map(([label, r]) => [label, na(r?.intercept), naP(r?.interceptP)])),
     tes && isFinite(tes.chi2)
       ? [`TES — χ² (O=${tes.O}, E=${fmt(tes.E)})`, fmt(tes.chi2), naP(tes.p)]
       : ["TES (test of excess significance)", "—", "NA"],

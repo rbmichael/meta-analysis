@@ -47,7 +47,7 @@ export function eggerTest(studies){
   const se = Math.sqrt(rss/df) * Math.sqrt(1/k + (meanX*meanX)/den);
   const t = intercept/se;
   const p = 2 * (1 - tCDF(Math.abs(t), df));
-  const result = { intercept, slope, se, t, df, p };
+  const result = { intercept, slope, se, t, df, p, interceptSE: se, interceptT: t, interceptP: p };
 
   // Cluster-robust extension: reads study.cluster (set by ui.js)
   if (studies.some(s => s.cluster?.trim())) {
