@@ -575,7 +575,7 @@
               <button class="export-btn" data-target="profileLikTau2Plot" data-format="tiff">TIFF</button>
             </div>
             <svg id="profileLikTau2Plot" role="img" aria-label="Profile likelihood plot for τ²" width="500" height="380"></svg>
-            <p class="plot-label" style="font-weight:normal;font-size:0.82em;margin-top:4px">95% CI from likelihood-ratio inversion (LRT). Note: the τ² CI shown in the summary table uses the Q-profile method, which is moment-based and will differ.</p>
+            <p class="plot-note">95% CI from likelihood-ratio inversion (LRT). Note: the τ² CI shown in the summary table uses the Q-profile method, which is moment-based and will differ.</p>
           </div>
         </details>
 
@@ -607,7 +607,7 @@
               <button class="export-btn" data-target="bayesTauPlot" data-format="tiff">TIFF</button>
             </div>
             <svg id="bayesTauPlot" role="img" aria-label="Bayesian posterior for heterogeneity (τ)" width="500" height="340"></svg>
-            <p id="bayesGridWarning" style="display:none;color:var(--color-warning);font-size:0.82em;margin-top:4px">
+            <p id="bayesGridWarning" class="warn-banner" style="display:none">
               ⚠ Posterior did not fully decay at the grid boundary — the τ credible interval upper bound may be underestimated. Consider increasing σ_τ.
             </p>
           </div>
@@ -1167,7 +1167,7 @@
       <p>When a primary study contributes multiple effect sizes (different outcomes, subgroups, or time
       points), assigning a <strong>Cluster ID</strong> activates three complementary analyses in the
       results panel:</p>
-      <table class="stat-table" style="margin:8px 0 12px">
+      <table class="stat-table">
         <thead><tr><th>Method</th><th>What changes</th><th>User parameter</th></tr></thead>
         <tbody>
           <tr>
@@ -1196,7 +1196,7 @@
       observed within the same studies. Within-study covariance is imputed via <code>vcalc</code>
       (V<sub>jk</sub> = ρ·√v<sub>j</sub>·√v<sub>k</sub>, constant-ρ assumption); between-study
       heterogeneity is modelled through a P × P matrix Ψ.</p>
-      <table class="stat-table" style="margin:8px 0 12px">
+      <table class="stat-table">
         <thead><tr><th>Ψ structure</th><th>Parameters</th><th>Description</th></tr></thead>
         <tbody>
           <tr><td><strong>CS</strong></td><td>2</td><td>Compound symmetry: shared τ² and between-study correlation ρ̂</td></tr>

@@ -23,6 +23,14 @@
   margin: 0 0 8px;
 }
 
+/* Caption/note beneath a plot (e.g. CI method note under profile likelihood) */
+.plot-note {
+  font-size: 0.82em;
+  font-weight: normal;
+  margin-top: 4px;
+  color: var(--fg-muted);
+}
+
 /* SVG elements rendered directly inside a plot block */
 .plot-block > svg {
   display: block;

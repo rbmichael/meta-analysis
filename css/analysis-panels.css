@@ -268,3 +268,10 @@
   color: var(--fg-muted);
   font-style: italic;
 }
+
+/* Inline warning message beneath a plot (e.g. posterior grid boundary warning) */
+.warn-banner {
+  color: var(--color-warning);
+  font-size: 0.82em;
+  margin-top: 4px;
+}

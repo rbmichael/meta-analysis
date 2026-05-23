@@ -1104,6 +1104,7 @@ export function drawForest(studies, m, options = {}) {
 
   // ----------- LAYOUT -----------
   const k = studies.length;
+  if (k === 0) { drawNoDataPlaceholder(svg, +svg.attr("width") || 600, +svg.attr("height") || 200); return; }
   const L = k <= 20
     ? { rowH: 22, labelFontSize: "11px", annotFontSize: "10px", titleFontSize: "12px", boxHalf: 5, diamondHH: 8 }
     : k <= 40
@@ -1566,7 +1567,6 @@ export function drawFunnel(studies, m, profile, options = {}) {
 
   // ---- Colour scheme ----
   const contours = !!options.contours;
-  const isDark   = T.bg === "transparent" && contours && document.documentElement.dataset.theme !== "light";
 
   const fgColor    = T.fgMuted;
   const borderClr  = T.border;
@@ -1626,31 +1626,15 @@ export function drawFunnel(studies, m, profile, options = {}) {
         { z: 1.960,    fill: "url(#hatch-sparse)", label: "0.05 ≤ p < 0.10" },
         { z: 1.645,    fill: T.bg,                 label: "p ≥ 0.10"         },
       ];
-    } else if (T.bg === "transparent") {
-      // Resolve actual page background from CSS so the opaque rect behind the
-      // bands blends seamlessly, and the innermost band can match it exactly.
-      bgColor = getComputedStyle(document.documentElement)
-        .getPropertyValue("--bg-base").trim() || (isDark ? "#0d0d0d" : "#ffffff");
-      BANDS = isDark
-        ? [
-            { z: Infinity, fill: "#606060", label: "p < 0.01"        },
-            { z: 2.576,    fill: "#404040", label: "0.01 ≤ p < 0.05" },
-            { z: 1.960,    fill: "#262626", label: "0.05 ≤ p < 0.10" },
-            { z: 1.645,    fill: bgColor,   label: "p ≥ 0.10"         },
-          ]
-        : [
-            { z: Infinity, fill: "#a0a0a0", label: "p < 0.01"        },
-            { z: 2.576,    fill: "#c4c4c4", label: "0.01 ≤ p < 0.05" },
-            { z: 1.960,    fill: "#e4e4e4", label: "0.05 ≤ p < 0.10" },
-            { z: 1.645,    fill: bgColor,   label: "p ≥ 0.10"         },
-          ];
     } else {
-      bgColor = T.bg;
+      bgColor = T.bg === "transparent"
+        ? getComputedStyle(document.documentElement).getPropertyValue("--bg-base").trim() || "#ffffff"
+        : T.bg;
       BANDS = [
         { z: Infinity, fill: T.contour01 ?? "#a8a8a8", label: "p < 0.01"        },
         { z: 2.576,    fill: T.contour05 ?? "#c8c8c8", label: "0.01 ≤ p < 0.05" },
         { z: 1.960,    fill: T.contour10 ?? "#e4e4e4", label: "0.05 ≤ p < 0.10" },
-        { z: 1.645,    fill: T.bg,                     label: "p ≥ 0.10"         },
+        { z: 1.645,    fill: bgColor,                  label: "p ≥ 0.10"         },
       ];
     }
   }
@@ -2988,7 +2972,10 @@ export function drawCaterpillarPlot(studies, m, profile, options = {}) {
 export function drawBlupPlot(result, profile, options = {}) {
   const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
   const svg = initSvg("#blupPlot", "BLUP forest plot", T);
-  if (!result || !result.studies || result.studies.length === 0) return { totalPages: 1 };
+  if (!result || !result.studies || result.studies.length === 0) {
+    drawNoDataPlaceholder(svg, +svg.attr("width") || 560, +svg.attr("height") || 300);
+    return { totalPages: 1 };
+  }
 
   profile = profile || { transform: x => x, label: "Effect" };
 

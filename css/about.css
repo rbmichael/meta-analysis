@@ -92,6 +92,11 @@
 .about-table-wrap::-webkit-scrollbar-track { background: transparent; }
 .about-table-wrap::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 9999px; }
 
+/* Stat tables used inline in prose (outside .about-table-wrap scrollers) */
+.stat-table {
+  margin: 8px 0 12px;
+}
+
 /* Tables — override the global table/th/td reset (center alignment, 20px margin) */
 #aboutContent table {
   width: 100%;

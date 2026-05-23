@@ -115,6 +115,10 @@ export const PLOT_THEMES = {
     groupSepStroke:  "var(--border-accent)",
     groupLabelFill:  "var(--color-info)",
 
+    contour01:       "var(--funnel-contour-01)",
+    contour05:       "var(--funnel-contour-05)",
+    contour10:       "var(--funnel-contour-10)",
+
     colorError:      "var(--color-error)",
     colorWarning:    "var(--color-warning)",
     colorInfo:       "var(--color-info)",
