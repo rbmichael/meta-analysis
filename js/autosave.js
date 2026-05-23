@@ -22,6 +22,15 @@ export function saveDraft(sessionObj) {
   }
 }
 
+function validateDraft(d) {
+  return (
+    d !== null && typeof d === "object" &&
+    Array.isArray(d.studies) &&
+    typeof d.settings === "object" && d.settings !== null &&
+    typeof d.settings.effectType === "string"
+  );
+}
+
 // Read and validate the stored draft.
 // Returns the parsed session object (including _savedAt) on success,
 // or null if nothing is stored, the entry is corrupt, or the version is
@@ -34,6 +43,11 @@ export function loadDraft() {
     const parsed = JSON.parse(raw);
 
     if (typeof parsed.version !== "number" || parsed.version > SESSION_VERSION) {
+      clearDraft();
+      return null;
+    }
+
+    if (!validateDraft(parsed)) {
       clearDraft();
       return null;
     }

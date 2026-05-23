@@ -428,7 +428,7 @@ function docRegression(args, ctx) {
   if (!d) return [];
   const chunks = [
     paraText("Meta-Regression", "Heading1"),
-    paraText(d.metaLine),
+    paraText(d.metaLine + (d.metaExtra || "")),
     ...apaTableDocx(ctx.nextTable(), "Meta-Regression Coefficients",
       d.coef.headers, d.coef.rows.map(r => r.map(run)), d.coef.note),
   ];
@@ -496,14 +496,13 @@ function docPermutation(args, ctx) {
   if (!d) return [];
 
   const headers = ["Test", "Statistic", "Observed", "p (perm.)"];
-  const stripEm = s => s.replace(/<\/?em>/g, "");
-  const omniRow = ["Omnibus QM", stripEm(d.omniLabel), fmt(d.omniObserved), fmtP_APA(d.omniP)];
+  const omniRow = [run("Omnibus QM"), richRuns(d.omniLabel), run(fmt(d.omniObserved)), run(fmtP_APA(d.omniP))];
   const modRows = d.mods.map(m => [
-    m.name, stripEm(m.label),
-    isFinite(m.observed) ? fmt(m.observed) : "—",
-    isFinite(m.p) ? fmtP_APA(m.p) : "—",
+    run(m.name), richRuns(m.label),
+    run(isFinite(m.observed) ? fmt(m.observed) : "—"),
+    run(isFinite(m.p) ? fmtP_APA(m.p) : "—"),
   ]);
-  const rows = [omniRow, ...modRows].map(r => r.map(run));
+  const rows = [omniRow, ...modRows];
   const note = `${d.nPerm} permutations; τ\xB2 re-estimated per permutation. Permutation p = (1 + #≥observed) / (B + 1).`;
   return [
     paraText("Permutation Test", "Heading1"),

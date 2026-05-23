@@ -4989,10 +4989,10 @@ export function runTests() {
     plChkTrue("no error",             !r.error);
     plChkTrue("all ll ≤ 1e-9",        Array.from(r.ll).every(v => v <= 1e-9));
     plChkTrue("ll[0] ≤ 0",            r.ll[0] <= 0);
-    // Grid point nearest tau2hat should be within ~1e-3 of 0 (grid step ≈ hi/199)
-    const step = r.grid[1] - r.grid[0];
-    const nearPeak = Math.round(r.tau2hat / step);
-    const idx = Math.min(Math.max(nearPeak, 0), r.ll.length - 1);
+    // Nearest grid point to tau2hat should have ll ≈ 0 (curve normalized to 0 at peak).
+    // Search for argmax rather than using a linear-grid formula (grid is quadratic in τ).
+    let idx = 0;
+    for (let i = 1; i < r.ll.length; i++) if (r.ll[i] > r.ll[idx]) idx = i;
     plChkTrue("ll near tau2hat ≈ 0",  Math.abs(r.ll[idx]) < 0.05);
   }
 

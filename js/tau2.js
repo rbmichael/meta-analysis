@@ -56,9 +56,6 @@ export function tau2_HS(studies) {
 // τ²_{new} = max(0, (Q(τ²) − (k−1)) / c(τ²))
 // Converges to a self-consistent solution; usually 2-3 iterations suffice.
 // DerSimonian & Kacker (2007) Contemp Clin Trials 28:105–114.
-//
-// NOTE: Removed from the UI dropdown (rarely used in practice; inflates the
-// options list). Preserved here so it can be re-exposed if needed.
 export function tau2_DLIT(studies, tol = REML_TOL, maxIter = 200, tau2Init = null) {
   const k = studies.length;
   if (k <= 1) return 0;
@@ -83,9 +80,6 @@ export function tau2_DLIT(studies, tol = REML_TOL, maxIter = 200, tau2Init = nul
 // ================= HUNTER-SCHMIDT (small-sample corrected) TAU² =================
 // HSk applies a k/(k−1) correction factor to the HS estimate to reduce
 // downward bias in small samples.
-//
-// NOTE: Removed from the UI dropdown (niche use; standard HS is already
-// available). Preserved here so it can be re-exposed if needed.
 export function tau2_HSk(studies) {
   const k = studies.length;
   if (k <= 1) return 0;
@@ -465,10 +459,6 @@ function genqCore(studies, weights) {
 // instead of the standard inverse-variance weights aᵢ = 1/vᵢ used by DL.
 // Down-weights high-precision studies more aggressively than DL and is
 // less sensitive to outlying within-study variances.
-//
-// NOTE: Removed from the UI dropdown (rarely preferred over DL or standard
-// GENQ in practice). Available programmatically via meta("SQGENQ", ...) and
-// included in estimatorComparison(). Preserved for completeness.
 export function tau2_SQGENQ(studies) {
   const weights = studies.map(d => Math.sqrt(1 / d.vi));
   return genqCore(studies, weights);
@@ -481,12 +471,8 @@ export function tau2_SQGENQ(studies) {
 // framing (per-study effects uᵢ are treated as random deviates); "REML"
 // refers to the estimation criterion on the marginal likelihood.  Both labels
 // converge to the same numerical estimate, so the dispatch in meta() simply
-// aliases "EBLUP" → tau2_REML.
-//
-// NOTE: Removed from the UI dropdown (redundant with REML; the EBLUP label
-// appears in some multilevel / longitudinal software output and is retained
-// here so that datasets using that terminology can still be dispatched
-// correctly). Included in estimatorComparison() alongside the other methods.
+// aliases "EBLUP" → tau2_REML. Included in estimatorComparison() alongside
+// the other methods.
 
 export function tau2_GENQ(studies, weights) {
   const w = weights ?? studies.map(d => 1 / d.vi);

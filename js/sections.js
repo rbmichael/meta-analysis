@@ -442,7 +442,12 @@ export function regressionData(args) {
     + (reg.p > 1 ? ` <em>Q</em>M ${QMlabel} = ${fmt(reg.QM)}, <em>p</em> ${fmtP_APA(reg.QMp)}.` : "")
     + R2str + clusterNote;
 
-  const metaLine = `k = ${reg.k}  ·  ${method}  ·  ${ciLabel}  ·  τ² = ${fmt(reg.tau2)}  ·  I² = ${fmt(reg.I2)}%`;
+  const metaLine  = `k = ${reg.k}  ·  ${method}  ·  ${ciLabel}  ·  τ² = ${fmt(reg.tau2)}  ·  I² = ${fmt(reg.I2)}%`;
+  const metaExtra = (reg.p > 1 && isFinite(reg.R2) ? ` · R² = ${fmt(reg.R2 * 100)}%` : "")
+    + (isFinite(reg.AIC)
+      ? ` · AIC = ${fmt(reg.AIC)} · BIC = ${fmt(reg.BIC)} · LL = ${fmt(reg.LL)}`
+        + (ciMethod === "KH" && isFinite(reg.s2) ? ` · KH s² = ${fmt(reg.s2)}` : "")
+      : "");
 
   let modTests = null;
   if (reg.modTests && reg.modTests.length > 1) {
@@ -474,6 +479,7 @@ export function regressionData(args) {
 
   return {
     metaLine,
+    metaExtra,
     coef: { headers: coefHeaders, rows: coefRows, note: coefNote },
     modTests,
   };

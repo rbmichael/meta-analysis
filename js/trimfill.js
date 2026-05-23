@@ -62,8 +62,8 @@ function detectSide(studies, center) {
     const X = studies.map(s => [1, Math.sqrt(s.vi)]);
     const y = studies.map(s => s.yi);
     const w = studies.map(s => 1 / s.vi);
-    const beta = wls(X, y, w);
-    if (isFinite(beta[1])) return beta[1] < 0 ? "right" : "left";
+    const { beta, rankDeficient } = wls(X, y, w);
+    if (!rankDeficient && isFinite(beta[1])) return beta[1] < 0 ? "right" : "left";
   } catch (_) { /* fall through */ }
   // Fallback: count which side of the current center has more studies.
   // "left" means right-side excess → fill on left; "right" means left excess → fill right.

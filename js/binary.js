@@ -58,8 +58,8 @@ export function metaMH(studies, type, alpha = 0.05) {
     }
 
     if (kEff < 2) return { error: "Fewer than 2 studies contributed to the M-H OR estimate." };
-    if (sumR === 0) return { error: "M-H OR is undefined: no events in the treatment arm across all studies." };
-    if (sumS === 0) return { error: "M-H OR is undefined: no events in the control arm across all studies." };
+    if (sumR <= 0) return { error: "M-H OR is undefined: no events in the treatment arm across all studies." };
+    if (sumS <= 0) return { error: "M-H OR is undefined: no events in the control arm across all studies." };
 
     est     = Math.log(sumR / sumS);
     varEst  = sumPR / (2 * sumR * sumR)
@@ -84,8 +84,8 @@ export function metaMH(studies, type, alpha = 0.05) {
     }
 
     if (kEff < 2) return { error: "Fewer than 2 studies contributed to the M-H RR estimate." };
-    if (sumR === 0) return { error: "M-H RR is undefined: no events in the treatment arm across all studies." };
-    if (sumS === 0) return { error: "M-H RR is undefined: no events in the control arm across all studies." };
+    if (sumR <= 0) return { error: "M-H RR is undefined: no events in the treatment arm across all studies." };
+    if (sumS <= 0) return { error: "M-H RR is undefined: no events in the control arm across all studies." };
 
     est    = Math.log(sumR / sumS);
     varEst = sumC / (sumR * sumS);

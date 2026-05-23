@@ -1226,19 +1226,23 @@ function _runMVAnalysis() {
   if (nPsiPar > studyIds.length / 3)
     msgs.push(`⚠️ Between-study covariance has ${nPsiPar} parameters but only ${studyIds.length} studies — model may be overparameterized.`);
 
-  warningsEl.innerHTML = msgs.length ? msgs.map(m => `• ${m}`).join("<br>") : "";
+  const errorLines = [...msgs.map(m => `• ${m}`)];
+  const flushWarnings = () => { warningsEl.innerHTML = errorLines.join("<br>"); };
+  flushWarnings();
 
   let V, res;
   try {
     V   = vcalc(rows, { rho });
     res = mvMeta(rows, V, { struct, method, alpha, moderators: mods });
   } catch (e) {
-    warningsEl.innerHTML += (warningsEl.innerHTML ? "<br>" : "") + `• ❌ Error: ${escapeHTML(String(e))}`;
+    errorLines.push(`• ❌ Error: ${escapeHTML(String(e))}`);
+    flushWarnings();
     return false;
   }
 
   if (res.error) {
-    warningsEl.innerHTML += (warningsEl.innerHTML ? "<br>" : "") + `• ❌ Error: ${escapeHTML(res.error)}`;
+    errorLines.push(`• ❌ Error: ${escapeHTML(res.error)}`);
+    flushWarnings();
     return false;
   }
 
@@ -5006,7 +5010,7 @@ async function runAnalysis() {
     const useTFAdjusted = document.getElementById("useTFAdjusted")?.checked;
     const isMHorPeto    = method === "MH" || method === "Peto";
     const hasClusters   = studies.some(s => s.cluster);
-    const rveRho        = parseFloat(document.getElementById("rveRho")?.value ?? 0.8);
+    const rveRho        = parseFloat(document.getElementById("rveRho")?.value) || 0.8;
     const modSpec       = moderators.map(mod => ({ key: mod.name, type: mod.type, transform: mod.transform || "linear" }));
     const scaleModSpec  = scaleModerators.map(mod => ({ key: mod.name, type: mod.type, transform: mod.transform || "linear" }));
     const interactionSpec = interactions.map(ix => ({ name: ix.name, termA: ix.termA, termB: ix.termB }));
@@ -5019,7 +5023,7 @@ async function runAnalysis() {
     const selSides    = parseInt(document.getElementById("selSides").value, 10);
     const rawSelCuts  = document.getElementById("selCuts").value
       .split(",").map(s => parseFloat(s.trim())).filter(isFinite);
-    const selCuts = rawSelCuts.length >= 2 && rawSelCuts[rawSelCuts.length - 1] === 1.0
+    const selCuts = rawSelCuts.length >= 2 && Math.abs(rawSelCuts[rawSelCuts.length - 1] - 1) < 1e-9
       ? rawSelCuts
       : [...rawSelCuts.filter(c => c < 1), 1.0];
 

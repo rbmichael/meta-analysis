@@ -1547,6 +1547,7 @@ export function drawFunnel(studies, m, profile, options = {}) {
   svg.style("font-family", T.fontFamily);
 
   const seMax = d3.max(studies, d => d.se);
+  if (!isFinite(seMax) || seMax === 0) { drawNoDataPlaceholder(svg, W, H); return; }
 
   // Symmetric x domain centred on the null (yi = 0).
   const xHalf = Math.max(

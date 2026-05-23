@@ -70,9 +70,9 @@ export function gatherSessionState(mods, scaleMods, ixs, robState) {
     tfEstimator:     document.getElementById("tfEstimator").value,
     useTFAdjusted:   document.getElementById("useTFAdjusted").checked,
     // Bayesian priors
-    bayesMu0:        parseFloat(document.getElementById("bayesMu0")?.value)     ?? 0,
-    bayesSigmaMu:    parseFloat(document.getElementById("bayesSigmaMu")?.value) ?? 1,
-    bayesSigmaTau:   parseFloat(document.getElementById("bayesSigmaTau")?.value) ?? 0.5,
+    bayesMu0:        parseFloat(document.getElementById("bayesMu0")?.value)     || 0,
+    bayesSigmaMu:    parseFloat(document.getElementById("bayesSigmaMu")?.value) || 1,
+    bayesSigmaTau:   parseFloat(document.getElementById("bayesSigmaTau")?.value) || 0.5,
     // Vevea-Hedges selection model
     selMode:         document.getElementById("selMode")?.value      ?? "sensitivity",
     selPreset:       document.getElementById("selPreset")?.value    ?? "mild1",
