@@ -12,6 +12,22 @@ import { Z_95 } from "./constants.js";
 import { leaveOneOut, estimatorComparison } from "./influence.js";
 
 // ---------------------------------------------------------------------------
+// cellRich — renderer-agnostic run parser
+// ---------------------------------------------------------------------------
+// Parse a string that may contain <em>…</em> spans into an array of runs.
+// Returns Array<{text: string, italic?: true}>.
+// Renderers (report.js, docx.js) convert each run to their output format.
+export function cellRich(s) {
+  const str = s == null ? "" : String(s);
+  const runs = [];
+  for (const part of str.split(/(<em>[^<]*<\/em>)/)) {
+    if (part.startsWith("<em>")) runs.push({ text: part.slice(4, -5), italic: true });
+    else if (part)               runs.push({ text: part });
+  }
+  return runs.length ? runs : [{ text: str }];
+}
+
+// ---------------------------------------------------------------------------
 // Summary
 // ---------------------------------------------------------------------------
 

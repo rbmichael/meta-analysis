@@ -41,7 +41,7 @@ import { serializeSVG, collectPagedSVGs } from "./export.js";
 import { summaryData, pubBiasData, pCurveData, puniformData, selModelData,
          influenceData, subgroupData, studyTableData, regressionData,
          regressionFittedData, locationScaleData, permutationData,
-         rveData, threeLevelData, sensitivityData } from "./sections.js";
+         rveData, threeLevelData, sensitivityData, cellRich } from "./sections.js";
 
 // serializeSVG and collectPagedSVGs are imported from export.js.
 
@@ -54,8 +54,11 @@ import { summaryData, pubBiasData, pCurveData, puniformData, selModelData,
 function fmtP(p)     { return escHTML(_fmtP(p)); }
 function fmtP_APA(p) { return escHTML(_fmtP_APA(p)); }
 const esc = escHTML;
-// Escape < that is NOT part of <em> or </em> markup (safe for innerHTML notes).
-function escNote(s) { return String(s).replace(/<(?!\/?em>)/g, "&lt;"); }
+// Render a string that may contain <em>…</em> spans as safe HTML.
+// Uses cellRich() from sections.js so the parsing logic lives in one place.
+function renderRich(s) {
+  return cellRich(s).map(r => r.italic ? `<em>${esc(r.text)}</em>` : esc(r.text)).join("");
+}
 
 // buildTable(headers, rows, opts) → HTML string
 // Shared helper for every stat-table in the report.
@@ -337,10 +340,10 @@ function sectionSummary(args) {
 
   const d = summaryData(args);
   const statsRows = d.rows.map(([label, value], i) => {
-    const valCell = i === d.reRowIdx ? `<strong>${esc(value)}</strong>` : esc(value);
-    return `<tr><td>${esc(label)}</td><td>${valCell}</td></tr>`;
+    const valCell = i === d.reRowIdx ? `<strong>${renderRich(value)}</strong>` : renderRich(value);
+    return `<tr><td>${renderRich(label)}</td><td>${valCell}</td></tr>`;
   });
-  const statsTable = buildTableAPA(nextTable(), d.subtitle, d.headers, statsRows, escNote(d.note));
+  const statsTable = buildTableAPA(nextTable(), d.subtitle, d.headers, statsRows, renderRich(d.note));
 
   return `
 <section>
@@ -371,9 +374,9 @@ function sectionPubBias(args) {
 
   const d = pubBiasData(args);
   const rows = d.rows.map(([t, s, p]) =>
-    `<tr><td>${esc(t)}</td><td>${esc(s)}</td><td>${esc(p)}</td></tr>`);
+    `<tr><td>${renderRich(t)}</td><td>${renderRich(s)}</td><td>${renderRich(p)}</td></tr>`);
   const table = buildTableAPA(nextTable(), "Tests of Publication Bias",
-    d.headers, rows, esc(d.note));
+    d.headers, rows, renderRich(d.note));
 
   const { funnelSVG } = args;
   const funnelFig = funnelSVG
@@ -395,24 +398,24 @@ function sectionPubBias(args) {
 function sectionPCurve(pcurve, nextTable) {
   const d = pCurveData(pcurve);
   if (!d) return "";
-  const rows = d.rows.map(r => `<tr>${r.map(c => `<td>${esc(c)}</td>`).join("")}</tr>`);
+  const rows = d.rows.map(r => `<tr>${r.map(c => `<td>${renderRich(c)}</td>`).join("")}</tr>`);
   return `
 <section>
   <h2>P-curve (Simonsohn et al., 2014)</h2>
-  <p class="meta-line">${escNote(d.kLine)}  ·  Verdict: <strong>${esc(d.verdict)}</strong></p>
-  ${buildTableAPA(nextTable(), "P-curve Test Statistics", d.headers, rows, escNote(d.note))}
+  <p class="meta-line">${renderRich(d.kLine)}  ·  Verdict: <strong>${esc(d.verdict)}</strong></p>
+  ${buildTableAPA(nextTable(), "P-curve Test Statistics", d.headers, rows, renderRich(d.note))}
 </section>`;
 }
 
 function sectionPUniform(puniform, m, profile, nextTable, widthCiLabel = "95% CI") {
   if (!puniform || puniform.k < 3 || !isFinite(puniform.estimate)) return "";
   const d = puniformData({ puniform, m, profile, ciLevel: widthCiLabel.replace("% CI", "") });
-  const rows = d.rows.map(r => `<tr>${r.map(c => `<td>${esc(c)}</td>`).join("")}</tr>`);
+  const rows = d.rows.map(r => `<tr>${r.map(c => `<td>${renderRich(c)}</td>`).join("")}</tr>`);
   return `
 <section>
   <h2>P-uniform (van Assen et al., 2015)</h2>
-  <p class="meta-line">${escNote(d.kLine)}</p>
-  ${buildTableAPA(nextTable(), "P-uniform Bias-Corrected Estimates", d.headers, rows, escNote(d.note))}
+  <p class="meta-line">${renderRich(d.kLine)}</p>
+  ${buildTableAPA(nextTable(), "P-uniform Bias-Corrected Estimates", d.headers, rows, renderRich(d.note))}
 </section>`;
 }
 
@@ -423,11 +426,11 @@ function sectionSelectionModel(sel, profile, selMode, selLabel, nextTable, width
   const K = d.nCols - 1;
   const htmlRows = d.rows.map((r, ri) => {
     if (r.length === 2) {
-      return `<tr><td>${esc(r[0])}</td><td colspan="${K}">${esc(r[1])}</td></tr>`;
+      return `<tr><td>${renderRich(r[0])}</td><td colspan="${K}">${renderRich(r[1])}</td></tr>`;
     }
     return `<tr>${r.map((c, ci) => {
       if (ci > 0 && ri === 1 && c === "0") return `<td class="flagged">${c}</td>`;
-      return `<td>${esc(c)}</td>`;
+      return `<td>${renderRich(c)}</td>`;
     }).join("")}</tr>`;
   });
   const emptyWarning = (() => {
@@ -444,11 +447,11 @@ function sectionSelectionModel(sel, profile, selMode, selLabel, nextTable, width
     + (d.isMLE && isFinite(d.LRTp) && d.LRTp < 0.05
         ? ` The LRT rejects the null of no selection (<em>p</em> ${fmtP_APA(d.LRTp)}).`
         : "");
-  const note = escNote(d.note) + " " + interpNote + emptyWarning + convWarning;
+  const note = renderRich(d.note) + " " + interpNote + emptyWarning + convWarning;
   return `
 <section>
   <h2>Selection Model (Vevea-Hedges, 1995)</h2>
-  <p class="meta-line">${escNote(d.metaLine)}</p>
+  <p class="meta-line">${renderRich(d.metaLine)}</p>
   ${buildTableAPA(nextTable(), "Vevea-Hedges Selection Model Results", d.headers, htmlRows, note)}
 </section>`;
 }
@@ -458,12 +461,12 @@ function sectionInfluence(influence, k, nextTable) {
   const d = influenceData({ influence, studies: Array.from({ length: k }, () => ({ filled: false })) });
   const apaRows = d.rows.map((r, i) => {
     const cls = d.flagged[i] ? ' class="flagged"' : "";
-    return `<tr${cls}>${r.map(c => `<td>${esc(c)}</td>`).join("")}</tr>`;
+    return `<tr${cls}>${r.map(c => `<td>${renderRich(c)}</td>`).join("")}</tr>`;
   });
   return `
 <section>
   <h2>Influence Diagnostics</h2>
-  ${buildTableAPA(nextTable(), "Leave-One-Out Influence Diagnostics", d.headers, apaRows, escNote(d.note))}
+  ${buildTableAPA(nextTable(), "Leave-One-Out Influence Diagnostics", d.headers, apaRows, renderRich(d.note))}
 </section>`;
 }
 
@@ -475,13 +478,13 @@ function sectionSensitivity(args, nextTable) {
   const looRows = d.loo.rows.map((r, i) => {
     const flag = d.loo.sigChanges[i] ? ` title="Removing this study changes statistical significance"` : "";
     const mark = d.loo.sigChanges[i] ? " *" : "";
-    return `<tr${flag}><td>${esc(r[0])}${mark}</td>${r.slice(1).map(c => `<td>${c}</td>`).join("")}</tr>`;
+    return `<tr${flag}><td>${renderRich(r[0])}${mark}</td>${r.slice(1).map(c => `<td>${renderRich(c)}</td>`).join("")}</tr>`;
   });
   const looSection = d.loo.rows.length > 0
     ? buildTableAPA(nextTable(), "Leave-one-out analysis", d.loo.headers, looRows, d.loo.note)
     : `<p class="table-note">Need at least 3 studies for leave-one-out analysis.</p>`;
 
-  const estRows = d.est.rows.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join("")}</tr>`);
+  const estRows = d.est.rows.map(r => `<tr>${r.map(c => `<td>${renderRich(c)}</td>`).join("")}</tr>`);
   const estSection = buildTableAPA(nextTable(), `τ² estimator comparison (${widthCiLabel})`, d.est.headers, estRows, d.est.note);
 
   return `
@@ -495,8 +498,8 @@ function sectionSensitivity(args, nextTable) {
 function sectionSubgroup(subgroup, profile, nextTable, widthCiLabel = "95% CI") {
   if (!subgroup || subgroup.G < 2) return "";
   const d = subgroupData({ subgroup, profile, ciLevel: widthCiLabel.replace("% CI", "") });
-  const apaRows = d.rows.map(r => `<tr>${r.map(c => `<td>${esc(c)}</td>`).join("")}</tr>`);
-  const note = escNote(d.note)
+  const apaRows = d.rows.map(r => `<tr>${r.map(c => `<td>${renderRich(c)}</td>`).join("")}</tr>`);
+  const note = renderRich(d.note)
     .replace("<em>Q</em>_total",   "<em>Q</em><sub>total</sub>")
     .replace("<em>Q</em>_within",  "<em>Q</em><sub>within</sub>")
     .replace("<em>Q</em>_between", "<em>Q</em><sub>between</sub>");
@@ -512,15 +515,15 @@ function sectionStudyTable(args) {
   const d = studyTableData({ studies, m, profile, ciLevel: ciLevel ?? "95" });
   const bodyRows = d.rows.map((r, i) => {
     const cls = d.filled[i] ? ' class="imputed"' : "";
-    return `<tr${cls}>${r.map(c => `<td>${esc(c)}</td>`).join("")}</tr>`;
+    return `<tr${cls}>${r.map(c => `<td>${renderRich(c)}</td>`).join("")}</tr>`;
   });
   const ncols = d.headers.length;
-  const pooled = `<tr class="pooled">${d.pooledRow.map(c => `<td>${esc(c)}</td>`).join("")}</tr>`;
-  const head = `<thead><tr>${d.headers.map(h => `<th>${esc(h)}</th>`).join("")}</tr></thead>`;
+  const pooled = `<tr class="pooled">${d.pooledRow.map(c => `<td>${renderRich(c)}</td>`).join("")}</tr>`;
+  const head = `<thead><tr>${d.headers.map(h => `<th>${renderRich(h)}</th>`).join("")}</tr></thead>`;
   const body = `<tbody>${bodyRows.join("")}</tbody>`;
   const foot = `<tfoot>
     ${pooled}
-    <tr><td colspan="${ncols}"><span class="apa-note"><em>Note.</em> ${escNote(d.note)}</span></td></tr>
+    <tr><td colspan="${ncols}"><span class="apa-note"><em>Note.</em> ${renderRich(d.note)}</span></td></tr>
   </tfoot>`;
   return `
 <section>
@@ -543,15 +546,15 @@ function sectionRegression(reg, method, ciMethod, nextTable, widthCiLabel = "95%
   if (!d) return "";
   const coefRows = d.coef.rows.map((r, j) => {
     const cls = j === 0 ? ' class="intercept"' : "";
-    return `<tr${cls}>${r.map(c => `<td>${esc(c)}</td>`).join("")}</tr>`;
+    return `<tr${cls}>${r.map(c => `<td>${renderRich(c)}</td>`).join("")}</tr>`;
   });
-  const coefTable = buildTableAPA(nextTable(), "Meta-Regression Coefficients", d.coef.headers, coefRows, escNote(d.coef.note));
+  const coefTable = buildTableAPA(nextTable(), "Meta-Regression Coefficients", d.coef.headers, coefRows, renderRich(d.coef.note));
   const modTestsTable = d.modTests
     ? `<h3>Per-moderator omnibus tests</h3>
   ${buildTableAPA(nextTable(), "Per-Moderator Omnibus Tests",
     d.modTests.headers,
-    d.modTests.rows.map(r => `<tr>${r.map(c => `<td>${esc(c)}</td>`).join("")}</tr>`),
-    escNote(d.modTests.note))}`
+    d.modTests.rows.map(r => `<tr>${r.map(c => `<td>${renderRich(c)}</td>`).join("")}</tr>`),
+    renderRich(d.modTests.note))}`
     : "";
 
   const fd = regressionFittedData(reg);
@@ -561,15 +564,15 @@ function sectionRegression(reg, method, ciMethod, nextTable, widthCiLabel = "95%
     fd.headers,
     fd.rows.map(({ cells, flag }) => {
       const flagAttr = flag ? ' class="outlier"' : "";
-      return `<tr${flagAttr}>${cells.map(c => `<td>${esc(c)}</td>`).join("")}</tr>`;
+      return `<tr${flagAttr}>${cells.map(c => `<td>${renderRich(c)}</td>`).join("")}</tr>`;
     }),
-    esc(fd.note))}`
+    renderRich(fd.note))}`
     : "";
 
   return `
 <section>
   <h2>Meta-Regression</h2>
-  <p class="meta-line">${escNote(d.metaLine)}${R2row}${aicRow}</p>
+  <p class="meta-line">${renderRich(d.metaLine)}${R2row}${aicRow}</p>
   ${coefTable}
   ${modTestsTable}
   ${fittedTable}
@@ -579,7 +582,7 @@ function sectionRegression(reg, method, ciMethod, nextTable, widthCiLabel = "95%
 function sectionRve(args, nextTable) {
   const d = rveData(args);
   if (!d) return "";
-  const bodyRows = d.rows.map(r => `<tr>${r.map(c => `<td>${escNote(c)}</td>`).join("")}</tr>`);
+  const bodyRows = d.rows.map(r => `<tr>${r.map(c => `<td>${renderRich(c)}</td>`).join("")}</tr>`);
   return `
 <section>
   <h2>Robust Variance Estimation (RVE)</h2>
@@ -590,7 +593,7 @@ function sectionRve(args, nextTable) {
 function sectionThreeLevel(args, nextTable) {
   const d = threeLevelData(args);
   if (!d) return "";
-  const bodyRows = d.rows.map(r => `<tr>${r.map(c => `<td>${escNote(c)}</td>`).join("")}</tr>`);
+  const bodyRows = d.rows.map(r => `<tr>${r.map(c => `<td>${renderRich(c)}</td>`).join("")}</tr>`);
   return `
 <section>
   <h2>Three-Level Meta-Analysis</h2>
@@ -605,25 +608,25 @@ function sectionLocationScale(ls, nextTable, widthCiLabel = "95% CI") {
 
   const locRows = d.locCoef.rows.map((r, j) => {
     const cls = j === 0 ? ' class="intercept"' : "";
-    return `<tr${cls}>${r.map(c => `<td>${esc(c)}</td>`).join("")}</tr>`;
+    return `<tr${cls}>${r.map(c => `<td>${renderRich(c)}</td>`).join("")}</tr>`;
   });
   const scaleRows = d.scaleCoef.rows.map((r, j) => {
     const cls = j === 0 ? ' class="intercept"' : "";
-    return `<tr${cls}>${r.map(c => `<td>${esc(c)}</td>`).join("")}</tr>`;
+    return `<tr${cls}>${r.map(c => `<td>${renderRich(c)}</td>`).join("")}</tr>`;
   });
-  const locTable   = buildTableAPA(nextTable(), "Location Model Coefficients",   d.locCoef.headers,   locRows,   escNote(d.locCoef.note));
-  const scaleTable = buildTableAPA(nextTable(), "Scale Model Coefficients",       d.scaleCoef.headers, scaleRows, escNote(d.scaleCoef.note));
+  const locTable   = buildTableAPA(nextTable(), "Location Model Coefficients",   d.locCoef.headers,   locRows,   renderRich(d.locCoef.note));
+  const scaleTable = buildTableAPA(nextTable(), "Scale Model Coefficients",       d.scaleCoef.headers, scaleRows, renderRich(d.scaleCoef.note));
   const fittedTable = d.fitted
     ? `<h3>Fitted values &amp; study-specific τ²ᵢ</h3>
   ${buildTableAPA(nextTable(), "Location-Scale Fitted Values", d.fitted.headers,
-    d.fitted.rows.map(r => `<tr>${r.map(c => `<td>${esc(c)}</td>`).join("")}</tr>`),
-    esc(d.fitted.note))}`
+    d.fitted.rows.map(r => `<tr>${r.map(c => `<td>${renderRich(c)}</td>`).join("")}</tr>`),
+    renderRich(d.fitted.note))}`
     : "";
 
   return `
 <section>
   <h2>Location-Scale Model</h2>
-  <p class="meta-line">${escNote(d.metaLine)}</p>
+  <p class="meta-line">${renderRich(d.metaLine)}</p>
   ${locTable}
   ${scaleTable}
   ${fittedTable}
@@ -637,9 +640,9 @@ function sectionPermutation(permResult, reg, nextTable) {
 
   const headers = ["Test", "Statistic", "Observed", "<em>p</em> (perm.)"];
   const allRows = [
-    `<tr><td>Omnibus <em>Q</em>M</td><td>${escNote(d.omniLabel)}</td><td>${fmt(d.omniObserved)}</td><td>${fmtP_APA(d.omniP)}</td></tr>`,
+    `<tr><td>Omnibus <em>Q</em>M</td><td>${renderRich(d.omniLabel)}</td><td>${fmt(d.omniObserved)}</td><td>${fmtP_APA(d.omniP)}</td></tr>`,
     ...d.mods.map(m =>
-      `<tr><td>${esc(m.name)}</td><td>${escNote(m.label)}</td><td>${isFinite(m.observed) ? fmt(m.observed) : "—"}</td><td>${isFinite(m.p) ? fmtP_APA(m.p) : "—"}</td></tr>`
+      `<tr><td>${esc(m.name)}</td><td>${renderRich(m.label)}</td><td>${isFinite(m.observed) ? fmt(m.observed) : "—"}</td><td>${isFinite(m.p) ? fmtP_APA(m.p) : "—"}</td></tr>`
     ),
   ];
   const note = `${d.nPerm} permutations; τ² re-estimated per permutation. Permutation p = (1 + #≥observed) / (B + 1).`;

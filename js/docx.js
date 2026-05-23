@@ -25,7 +25,7 @@ import { CITATIONS, collectCitations } from "./report.js";
 import { summaryData, pubBiasData, pCurveData, puniformData, selModelData,
          influenceData, subgroupData, studyTableData, regressionData,
          regressionFittedData, locationScaleData, permutationData,
-         rveData, threeLevelData, sensitivityData } from "./sections.js";
+         rveData, threeLevelData, sensitivityData, cellRich } from "./sections.js";
 
 // serializeSVG and collectPagedSVGs are imported from export.js.
 
@@ -129,20 +129,16 @@ function italic(text) {
   return `<w:r><w:rPr><w:i/></w:rPr><w:t xml:space="preserve">${xmlEsc(String(text))}</w:t></w:r>`;
 }
 
-// Render a string that may contain <em>…</em> tags as a sequence of plain runs
-// with italic runs for the tagged portions. Used for table headers and notes.
+// Render a string that may contain <em>…</em> tags as OOXML runs.
+// Delegates parsing to cellRich() from sections.js.
 function richRuns(text, { bold: isBold = false } = {}) {
   if (!text) return "";
   const bTag = isBold ? "<w:b/>" : "";
-  const parts = String(text).split(/(<em>[^<]*<\/em>)/);
-  return parts.map(part => {
-    if (part.startsWith("<em>")) {
-      const inner = xmlEsc(part.slice(4, -5));
-      return `<w:r><w:rPr>${bTag}<w:i/></w:rPr><w:t xml:space="preserve">${inner}</w:t></w:r>`;
-    }
-    const escaped = xmlEsc(part);
-    if (!escaped) return "";
-    return `<w:r><w:rPr>${bTag}</w:rPr><w:t xml:space="preserve">${escaped}</w:t></w:r>`;
+  return cellRich(text).map(r => {
+    const t = xmlEsc(r.text);
+    if (!t) return "";
+    const iTag = r.italic ? "<w:i/>" : "";
+    return `<w:r><w:rPr>${bTag}${iTag}</w:rPr><w:t xml:space="preserve">${t}</w:t></w:r>`;
   }).join("");
 }
 
@@ -319,7 +315,7 @@ function docSummary(args, ctx) {
     paraText("Summary", "Heading1"),
     paraText(d.settings),
     ...apaTableDocx(ctx.nextTable(), d.subtitle, d.headers,
-      d.rows.map(r => r.map(run)), d.note),
+      d.rows.map(r => r.map(richRuns)), d.note),
   ];
 }
 
@@ -328,7 +324,7 @@ function docPubBias(args, ctx) {
   return [
     paraText("Publication Bias", "Heading1"),
     ...apaTableDocx(ctx.nextTable(), "Tests of Publication Bias",
-      d.headers, d.rows.map(r => r.map(run)), d.note),
+      d.headers, d.rows.map(r => r.map(richRuns)), d.note),
     paraText(d.fsnLine),
   ];
 }
@@ -340,7 +336,7 @@ function docPCurve(args, ctx) {
     paraText("P-curve (Simonsohn et al., 2014)", "Heading1"),
     paraText(`${d.kLine}  ·  Verdict: ${d.verdict}`),
     ...apaTableDocx(ctx.nextTable(), "P-curve Test Statistics",
-      d.headers, d.rows.map(r => r.map(run)), d.note),
+      d.headers, d.rows.map(r => r.map(richRuns)), d.note),
   ];
 }
 
@@ -351,7 +347,7 @@ function docPUniform(args, ctx) {
     paraText("P-uniform (van Assen et al., 2015)", "Heading1"),
     paraText(d.kLine),
     ...apaTableDocx(ctx.nextTable(), "P-uniform Bias-Corrected Estimates",
-      d.headers, d.rows.map(r => r.map(run)), d.note),
+      d.headers, d.rows.map(r => r.map(richRuns)), d.note),
   ];
 }
 
@@ -362,7 +358,7 @@ function docSelectionModel(args, ctx) {
   const normalizedRows = d.rows.map(r => {
     const padded = [...r];
     while (padded.length < N) padded.push("");
-    return padded.slice(0, N).map(run);
+    return padded.slice(0, N).map(richRuns);
   });
   return [
     paraText("Selection Model (Vevea-Hedges, 1995)", "Heading1"),
@@ -377,7 +373,7 @@ function docInfluence(args, ctx) {
   return [
     paraText("Influence Diagnostics", "Heading1"),
     ...apaTableDocx(ctx.nextTable(), "Leave-One-Out Influence Diagnostics",
-      d.headers, d.rows.map(r => r.map(run)), d.note),
+      d.headers, d.rows.map(r => r.map(richRuns)), d.note),
   ];
 }
 
@@ -385,11 +381,11 @@ function docSensitivity(args, ctx) {
   const d = sensitivityData(args);
   if (!d) return [];
   const looRows = d.loo.rows.map((r, i) => {
-    const cells = r.map(run);
-    if (d.loo.sigChanges[i]) cells[0] = run(r[0] + " *");
+    const cells = r.map(richRuns);
+    if (d.loo.sigChanges[i]) cells[0] = richRuns(r[0] + " *");
     return cells;
   });
-  const estRows = d.est.rows.map(r => r.map(run));
+  const estRows = d.est.rows.map(r => r.map(richRuns));
   const chunks = [paraText("Sensitivity Analysis", "Heading1")];
   if (d.loo.rows.length > 0) {
     chunks.push(...apaTableDocx(ctx.nextTable(), "Leave-one-out analysis",
@@ -406,14 +402,14 @@ function docSubgroup(args, ctx) {
   return [
     paraText("Subgroup Analysis", "Heading1"),
     ...apaTableDocx(ctx.nextTable(), d.subtitle, d.headers,
-      d.rows.map(r => r.map(run)), d.note),
+      d.rows.map(r => r.map(richRuns)), d.note),
   ];
 }
 
 function docStudyTable(args, ctx) {
   const d = studyTableData(args);
   const bodyRows = [
-    ...d.rows.map(r => r.map(run)),
+    ...d.rows.map(r => r.map(richRuns)),
     d.pooledRow.map(bold),
   ];
   return [
@@ -430,13 +426,13 @@ function docRegression(args, ctx) {
     paraText("Meta-Regression", "Heading1"),
     paraText(d.metaLine + (d.metaExtra || "")),
     ...apaTableDocx(ctx.nextTable(), "Meta-Regression Coefficients",
-      d.coef.headers, d.coef.rows.map(r => r.map(run)), d.coef.note),
+      d.coef.headers, d.coef.rows.map(r => r.map(richRuns)), d.coef.note),
   ];
   if (d.modTests) {
     chunks.push(
       paraText("Per-moderator omnibus tests", "Heading2"),
       ...apaTableDocx(ctx.nextTable(), "Per-Moderator Omnibus Tests",
-        d.modTests.headers, d.modTests.rows.map(r => r.map(run)), d.modTests.note),
+        d.modTests.headers, d.modTests.rows.map(r => r.map(richRuns)), d.modTests.note),
     );
   }
   const fd = regressionFittedData(args.reg);
@@ -444,7 +440,7 @@ function docRegression(args, ctx) {
     chunks.push(
       paraText("Fitted values & residuals", "Heading2"),
       ...apaTableDocx(ctx.nextTable(), "Meta-Regression Fitted Values and Residuals",
-        fd.headers, fd.rows.map(({ cells }) => cells.map(run)), fd.note),
+        fd.headers, fd.rows.map(({ cells }) => cells.map(richRuns)), fd.note),
     );
   }
   return chunks;
@@ -455,7 +451,7 @@ function docRve(args, ctx) {
   return [
     paraText("Robust Variance Estimation (RVE)", "Heading1"),
     ...apaTableDocx(ctx.nextTable(), "RVE Pooled Estimate",
-      d.headers, d.rows.map(r => r.map(run)), d.note),
+      d.headers, d.rows.map(r => r.map(richRuns)), d.note),
   ];
 }
 
@@ -465,7 +461,7 @@ function docThreeLevel(args, ctx) {
   return [
     paraText("Three-Level Meta-Analysis", "Heading1"),
     ...apaTableDocx(ctx.nextTable(), "Three-Level Model Estimates",
-      d.headers, d.rows.map(r => r.map(run)), d.note),
+      d.headers, d.rows.map(r => r.map(richRuns)), d.note),
   ];
 }
 
@@ -476,15 +472,15 @@ function docLocationScale(args, ctx) {
     paraText("Location-Scale Model", "Heading1"),
     paraText(d.metaLine),
     ...apaTableDocx(ctx.nextTable(), "Location Model Coefficients",
-      d.locCoef.headers, d.locCoef.rows.map(r => r.map(run)), d.locCoef.note),
+      d.locCoef.headers, d.locCoef.rows.map(r => r.map(richRuns)), d.locCoef.note),
     ...apaTableDocx(ctx.nextTable(), "Scale Model Coefficients",
-      d.scaleCoef.headers, d.scaleCoef.rows.map(r => r.map(run)), d.scaleCoef.note),
+      d.scaleCoef.headers, d.scaleCoef.rows.map(r => r.map(richRuns)), d.scaleCoef.note),
   ];
   if (d.fitted) {
     chunks.push(
       paraText("Fitted values & study-specific τ²ᵢ", "Heading2"),
       ...apaTableDocx(ctx.nextTable(), "Location-Scale Fitted Values",
-        d.fitted.headers, d.fitted.rows.map(r => r.map(run)), d.fitted.note),
+        d.fitted.headers, d.fitted.rows.map(r => r.map(richRuns)), d.fitted.note),
     );
   }
   return chunks;
@@ -867,7 +863,7 @@ export async function buildDocx(args) {
         ...apaTableDocx(ctx.nextTable(),
           `Bayesian Meta-Analysis Results (${profile.label})`,
           ["Statistic", "Value"],
-          bayesRows.map(r => r.map(run)),
+          bayesRows.map(r => r.map(richRuns)),
           `CrI = credible interval. Posterior mean μ on ${profile.label} scale. Frequentist RE shown for comparison only.`),
       ];
       if (muImgs.length)  chunks.push(...apaFigureDocx(ctx.nextFigure(), `Posterior distribution of pooled effect μ (${profile.label})`, muImgs, priorLine));
