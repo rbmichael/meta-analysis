@@ -36,12 +36,16 @@ export function readTextFile(file) {
 
 // Escape a single field per RFC 4180: wrap in double-quotes if the value
 // contains a comma, double-quote, or newline; escape internal quotes by doubling.
+// Also prefix formula-injection triggers (=, +, -, @, tab, CR) with a single
+// quote so Excel/LibreOffice treat the cell as literal text, not a formula.
+const CSV_FORMULA_RE = /^[=+\-@\t\r]/;
 export function csvField(value) {
   const s = String(value ?? "");
-  if (s.includes(",") || s.includes('"') || s.includes("\n") || s.includes("\r")) {
-    return '"' + s.replace(/"/g, '""') + '"';
+  const safe = CSV_FORMULA_RE.test(s) ? "'" + s : s;
+  if (safe.includes(",") || safe.includes('"') || safe.includes("\n") || safe.includes("\r")) {
+    return '"' + safe.replace(/"/g, '""') + '"';
   }
-  return s;
+  return safe;
 }
 
 // Join an array of values into a single comma-separated CSV row string.
