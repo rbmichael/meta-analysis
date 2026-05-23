@@ -199,6 +199,7 @@ export function meta(studies, method="DL", ciMethod="normal", alpha=0.05, tau2In
   if (_byMethod?.has(_cacheKey)) return _byMethod.get(_cacheKey);
 
   const valid = validStudies(studies);
+  const studies0 = studies;                              // original reference — preserved for cache keying
   if (valid.length < studies.length) studies = valid;
 
   const k = studies.length;
@@ -328,7 +329,7 @@ export function meta(studies, method="DL", ciMethod="normal", alpha=0.05, tau2In
     pval,
     dist
   };
-  if (!_byMethod) { _byMethod = new Map(); _metaCache.set(studies, _byMethod); }
+  if (!_byMethod) { _byMethod = new Map(); _metaCache.set(studies0, _byMethod); }
   _byMethod.set(_cacheKey, _result);
   return _result;
 }

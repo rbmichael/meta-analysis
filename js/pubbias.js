@@ -571,7 +571,8 @@ export function henmiCopas(studies, alpha = 0.05) {
   const eqn = x => integrate(x) - halfAlpha;
 
   let lo = 1e-4, hi = 10;
-  if (!isFinite(eqn(lo)) || !isFinite(eqn(hi)) || eqn(lo) < 0) {
+  const vLo = eqn(lo), vHi = eqn(hi);
+  if (!isFinite(vLo) || !isFinite(vHi) || vLo < 0 || vHi > 0) {
     return { error: "HC: failed to bracket root" };
   }
 

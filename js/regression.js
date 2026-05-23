@@ -9,7 +9,7 @@
 import { meta, robustWlsResult, logLik, validStudies, resolveClusterIds, groupByCluster } from "./analysis.js";
 import { tau2Core_REML, tau2Core_ML, tau2Core_PM, tau2Core_DL, tau2Core_HS, tau2Core_HE, tau2Core_SJ } from "./tau2.js";
 import { wls, wlsCholesky, matInverse, logDet, numericalHessian, diagSE } from "./linalg.js";
-import { normalCDF, normalQuantile, tCDF, tCritical, fCDF, chiSquareCDF, chiSquareQuantile } from "./utils.js";
+import { normalCDF, normalQuantile, tCDF, tCritical, fCDF, chiSquareCDF, chiSquareQuantile, median } from "./utils.js";
 import { MIN_VAR, REML_TOL, BISECTION_ITERS } from "./constants.js";
 import { bfgs } from "./selection.js";
 
@@ -933,7 +933,7 @@ export function lsModel(studies, locMods = [], scaleMods = [], opts = {}) {
   // ---- Profile likelihood over γ ----
   // Returns { beta, tau2_i, LL } for a given gamma vector.
   function profileAt(gamma) {
-    const tau2_i = Zscale.map(z => Math.exp(dot(z, gamma)));
+    const tau2_i = Zscale.map(z => Math.max(MIN_VAR, Math.exp(dot(z, gamma))));
     const w      = vi.map((v, i) => 1 / (v + tau2_i[i]));
     const { beta, rankDeficient } = wls(Xloc, yi, w);
     if (rankDeficient) return null;
@@ -951,7 +951,7 @@ export function lsModel(studies, locMods = [], scaleMods = [], opts = {}) {
   }
 
   // ---- Starting point: γ₀ = [log(median vi), 0, 0, …] ----
-  const medVi  = vi.slice().sort((a, b) => a - b)[Math.floor(kf / 2)];
+  const medVi  = median(vi);
   const gamma0 = Array(q).fill(0);
   gamma0[0]    = Math.log(Math.max(medVi * 0.1, 1e-6));
 

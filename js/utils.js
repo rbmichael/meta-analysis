@@ -35,6 +35,12 @@ export function round(value, digits = 3) {
  return Math.round((value + Number.EPSILON) * factor) / factor;
 }
 
+export function median(arr) {
+  const s = arr.slice().sort((a, b) => a - b);
+  const m = Math.floor(s.length / 2);
+  return s.length % 2 === 0 ? (s[m - 1] + s[m]) / 2 : s[m];
+}
+
 // ================= T CRITICAL =================
 // Two-tailed 95% critical value via bisection on tCDF.
 const _tCriticalCache = new Map();
