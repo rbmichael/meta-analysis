@@ -140,6 +140,52 @@
   font-size: 1em;
 }
 
+/* ---- Modifier classes (composable with specific button classes) ---- */
+
+/* Primary accent action — composable onto any <button> */
+.btn--primary {
+  background: var(--accent);
+  color: var(--fg-on-accent);
+  border-color: var(--border-accent-strong);
+  box-shadow: var(--shadow-btn-accent);
+  font-weight: 600;
+}
+.btn--primary:hover {
+  background: var(--accent-bright);
+  border-color: var(--border-accent-strong);
+  box-shadow: var(--shadow-btn-accent-hover);
+  color: var(--fg-on-accent);
+}
+
+/* Ghost — transparent background, border visible on hover only */
+.btn--ghost {
+  background: transparent;
+  margin: 0;
+}
+.btn--ghost:hover {
+  background: var(--bg-surface);
+  color: var(--fg);
+  border-color: var(--border-hover);
+}
+
+/* Danger — base styling unchanged; destructive hover state */
+.btn--danger:hover {
+  background: var(--badge-error-bg-hover);
+  color: var(--color-error);
+  border-color: var(--badge-error-border-hover);
+}
+
+/* Icon — fixed square, no text padding */
+.btn--icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: var(--radius-full);
+}
+
+/* ---- Named button classes ---- */
+
 .report-btn {
   padding: 3px 10px;
   font-size: 0.75rem;
