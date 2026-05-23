@@ -160,9 +160,6 @@ const USE_EXAMPLES = new URLSearchParams(window.location.search).has("tests");
 
 let _saveTimer = null;
 
-// Last successful metaRegression / lsModel result — referenced by contrast and vcov handlers.
-let _lastReg = null;
-let _lastLs  = null;
 
 // scheduleSave()
 // Debounced autosave trigger. Resets the 1.2 s idle timer on every call; the
@@ -170,8 +167,8 @@ let _lastLs  = null;
 // — analysis is triggered separately by the callers.
 // Build a complete session object for autosave, including MV state when active.
 function _buildAutosaveSession() {
-  const session = gatherSessionState(moderators, scaleModerators, interactions, { domains: _robDomains, data: _robData });
-  if (_mvMode) session.mv = _gatherMVState();
+  const session = gatherSessionState(moderators, scaleModerators, interactions, { domains: robPlotState.domains, data: robPlotState.data });
+  if (mvState.active) session.mv = _gatherMVState();
   return session;
 }
 
@@ -500,9 +497,6 @@ function _checkAdvancedBadge() {
 // in place by doAddModerator / removeModerator / clearModerators.
 let scaleModerators = []; // { name: string, type: "continuous"|"categorical", transform: string }
 
-// ---- Risk-of-bias state ----
-let _robDomains = [];  // string[] — ordered domain names
-let _robData    = {};  // { [studyLabel]: { [domain]: "Low"|"Some concerns"|"High"|"NI"|"" } }
 
 // doAddModerator / clearModerators / removeModerator / makeModTh / makeModTd
 // all live in ui-table.js (imported above).
@@ -624,7 +618,7 @@ function _applyRoBClass(selectEl, value) {
 function renderRoBDomainTags() {
   const container = document.getElementById("robDomainTags");
   container.innerHTML = "";
-  _robDomains.forEach(name => {
+  robPlotState.domains.forEach(name => {
     const tag = document.createElement("span");
     tag.className = "rob-domain-tag";
     tag.textContent = name + " ";
@@ -647,7 +641,7 @@ function renderRoBDataGrid() {
     if (!container.hidden) _closeAllPopovers();
   };
 
-  if (_robDomains.length === 0) { hide(); return; }
+  if (robPlotState.domains.length === 0) { hide(); return; }
 
   // Collect current (non-empty) study labels from the input table.
   const labels = [];
@@ -668,7 +662,7 @@ function renderRoBDataGrid() {
   const th0 = document.createElement("th");
   th0.textContent = "Study";
   hrow.appendChild(th0);
-  _robDomains.forEach(domain => {
+  robPlotState.domains.forEach(domain => {
     const th = document.createElement("th");
     th.textContent = domain;
     hrow.appendChild(th);
@@ -682,7 +676,7 @@ function renderRoBDataGrid() {
     td0.textContent = label;
     td0.className = "rob-study-label";
 
-    _robDomains.forEach(domain => {
+    robPlotState.domains.forEach(domain => {
       const td = row.insertCell();
       const sel = document.createElement("select");
       ["", "Low", "Some concerns", "High", "NI"].forEach(opt => {
@@ -691,13 +685,13 @@ function renderRoBDataGrid() {
         o.textContent = opt || "—";
         sel.appendChild(o);
       });
-      const current = _robData[label]?.[domain] ?? "";
+      const current = robPlotState.data[label]?.[domain] ?? "";
       sel.value = current;
       _applyRoBClass(sel, current);
 
       sel.addEventListener("change", () => {
-        if (!_robData[label]) _robData[label] = {};
-        _robData[label][domain] = sel.value;
+        if (!robPlotState.data[label]) robPlotState.data[label] = {};
+        robPlotState.data[label][domain] = sel.value;
         _applyRoBClass(sel, sel.value);
         markStale();
         scheduleSave();
@@ -713,8 +707,8 @@ function renderRoBDataGrid() {
 function addRoBDomain() {
   const input = document.getElementById("robDomainInput");
   const name  = input.value.trim();
-  if (!name || _robDomains.includes(name)) return;
-  _robDomains.push(name);
+  if (!name || robPlotState.domains.includes(name)) return;
+  robPlotState.domains.push(name);
   input.value = "";
   renderRoBDomainTags();
   renderRoBDataGrid();
@@ -723,8 +717,8 @@ function addRoBDomain() {
 }
 
 function removeRoBDomain(name) {
-  _robDomains = _robDomains.filter(d => d !== name);
-  Object.values(_robData).forEach(ratings => { delete ratings[name]; });
+  robPlotState.domains = robPlotState.domains.filter(d => d !== name);
+  Object.values(robPlotState.data).forEach(ratings => { delete ratings[name]; });
   renderRoBDomainTags();
   renderRoBDataGrid();
   markStale();
@@ -819,7 +813,7 @@ showView("input");
 
 // ---------------- MULTIVARIATE MODE ----------------
 
-let _mvMode = false;
+const mvState = { active: false };
 
 // Moderator list for multivariate mode (array of name strings).
 const _mvModerators = [];
@@ -879,7 +873,7 @@ function initSettingsPopovers() {
 initSettingsPopovers();
 
 function _applyModeToggle() {
-  const isMV = _mvMode;
+  const isMV = mvState.active;
   document.getElementById("modeStandard").classList.toggle("active", !isMV);
   document.getElementById("modeMultivariate").classList.toggle("active", isMV);
   document.getElementById("standardSettings").style.display  = isMV ? "none" : "";
@@ -1262,17 +1256,8 @@ function _runMVAnalysis() {
     _studyTableEl.innerHTML = _buildMVStudyTable(rows, alpha);
   }
 
-  // ── RoB section (only when domains + data present) ────────────────────────
-  const _robSectionEl = document.getElementById("robSection");
-  if (_robSectionEl && _robDomains.length > 0 && rows.length > 0) {
-    _robSectionEl.style.display = "";
-    const robStudies = [...new Set(rows.map(r => r.study_id))].map(id => ({ label: id }));
-    robPlotState.studies = robStudies;
-    drawIfVisible("robSection", () => {
-      drawRoBTrafficLight(robStudies, _robDomains, _robData, { theme: appState.plotTheme });
-      drawRoBSummary(robStudies, _robDomains, _robData, { theme: appState.plotTheme });
-    });
-  }
+  // ROB section belongs to Standard mode input — hide it in MV output.
+  document.getElementById("robSection")?.style.setProperty("display", "none");
 
   // Clear stale markers, unlock results panel
   if (outputPlaceholder) outputPlaceholder.style.display = "none";
@@ -1967,8 +1952,8 @@ function _drawMVForestCombined(svgEl, rows, res, alpha, { page = 0, pageSize = I
 }
 
 // ---------------- INITIALIZE ----------------
-document.getElementById("modeStandard").addEventListener("click",     () => { _mvMode = false; _applyModeToggle(); markStale(); });
-document.getElementById("modeMultivariate").addEventListener("click", () => { _mvMode = true;  _applyModeToggle(); markStale(); });
+document.getElementById("modeStandard").addEventListener("click",     () => { mvState.active = false; _applyModeToggle(); markStale(); });
+document.getElementById("modeMultivariate").addEventListener("click", () => { mvState.active = true;  _applyModeToggle(); markStale(); });
 document.getElementById("mvAddRow").addEventListener("click", () => { _mvAddRow(); markStale(); });
 document.getElementById("mvTableBody").addEventListener("keydown", e => {
   if (!e.altKey || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
@@ -2015,7 +2000,7 @@ document.getElementById("csvFile").addEventListener("change", async e => {
     warn.style.display = "block";
     return;
   }
-  if (_mvMode) {
+  if (mvState.active) {
     const pending = getPendingImport();
     document.getElementById("previewImport").textContent =
       pending?.mvCandidate ? "Import to MV Table" : "Import";
@@ -2024,7 +2009,7 @@ document.getElementById("csvFile").addEventListener("change", async e => {
 document.getElementById("previewImport").addEventListener("click", () => {
   document.getElementById("previewImport").textContent = "Import";
   const pending = getPendingImport();
-  if (pending?.mvCandidate && _mvMode) {
+  if (pending?.mvCandidate && mvState.active) {
     _commitImportMV(pending.parsed, pending.mvHeaders);
     cancelImport();
     return;
@@ -2361,8 +2346,8 @@ document.getElementById("draftStartFresh").addEventListener("click", () => {
   // Reset table and moderators.
   clearDraft();
   clearModerators();
-  _robDomains = [];
-  _robData    = {};
+  robPlotState.domains = [];
+  robPlotState.data    = {};
   renderRoBDomainTags();
   renderRoBDataGrid();
   updateTableHeaders();
@@ -2525,7 +2510,7 @@ function _buildMVReportHTML(res, rows = [], alpha = 0.05, { reportCSS, buildTabl
 
   // Risk of Bias (only if domains configured)
   let robSection = "";
-  if (_robDomains.length > 0) {
+  if (robPlotState.domains.length > 0) {
     const robSVGs = [
       _mvSerializeSVG(document.getElementById("robTrafficLight")),
       _mvSerializeSVG(document.getElementById("robSummary")),
@@ -2724,12 +2709,12 @@ document.addEventListener("click", e => {
   const inputs = section.querySelectorAll(".contrast-weight");
   const L = Array.from(inputs).map(inp => parseFloat(inp.value) || 0);
   if (isLs) {
-    if (!_lastLs) return;
-    const regLike = { beta: _lastLs.beta, vcov: _lastLs.vcov_beta, crit: _lastLs.crit, dist: "z", QEdf: _lastLs.QEdf };
+    if (!appState.results.ls) return;
+    const regLike = { beta: appState.results.ls.beta, vcov: appState.results.ls.vcov_beta, crit: appState.results.ls.crit, dist: "z", QEdf: appState.results.ls.QEdf };
     section.querySelector(".contrast-result").innerHTML = formatContrastResult(testContrast(regLike, L), regLike);
   } else {
-    if (!_lastReg) return;
-    section.querySelector(".contrast-result").innerHTML = formatContrastResult(testContrast(_lastReg, L), _lastReg);
+    if (!appState.results.reg) return;
+    section.querySelector(".contrast-result").innerHTML = formatContrastResult(testContrast(appState.results.reg, L), appState.results.reg);
   }
 });
 
@@ -2740,14 +2725,14 @@ document.addEventListener("click", e => {
   const which = btn.dataset.which;
   let vcov, colNames, filename;
   if (which === "loc") {
-    if (!_lastLs?.vcov_beta) return;
-    vcov = _lastLs.vcov_beta; colNames = _lastLs.locColNames; filename = "vcov_beta.csv";
+    if (!appState.results.ls?.vcov_beta) return;
+    vcov = appState.results.ls.vcov_beta; colNames = appState.results.ls.locColNames; filename = "vcov_beta.csv";
   } else if (which === "scale") {
-    if (!_lastLs?.vcov_gamma) return;
-    vcov = _lastLs.vcov_gamma; colNames = _lastLs.scaleColNames; filename = "vcov_gamma.csv";
+    if (!appState.results.ls?.vcov_gamma) return;
+    vcov = appState.results.ls.vcov_gamma; colNames = appState.results.ls.scaleColNames; filename = "vcov_gamma.csv";
   } else {
-    if (!_lastReg?.vcov || !_lastReg?.colNames) return;
-    vcov = _lastReg.vcov; colNames = _lastReg.colNames; filename = "vcov.csv";
+    if (!appState.results.reg?.vcov || !appState.results.reg?.colNames) return;
+    vcov = appState.results.reg.vcov; colNames = appState.results.reg.colNames; filename = "vcov.csv";
   }
   const headers = ["", ...colNames];
   const rows = vcov.map((row, i) => [colNames[i], ...row.map(v => isFinite(v) ? v.toFixed(6) : "NA")]);
@@ -2995,8 +2980,8 @@ document.getElementById("profileLikScale").addEventListener("change", () => {
 // ---------------- SESSION SAVE ----------------
 
 function saveSession() {
-  const session = gatherSessionState(moderators, scaleModerators, interactions, { domains: _robDomains, data: _robData });
-  if (_mvMode) session.mv = _gatherMVState();
+  const session = gatherSessionState(moderators, scaleModerators, interactions, { domains: robPlotState.domains, data: robPlotState.data });
+  if (mvState.active) session.mv = _gatherMVState();
   downloadBlob(serializeSession(session), "session.json", "application/json;charset=utf-8;");
 }
 
@@ -3099,15 +3084,15 @@ function applySession(session) {
   });
 
   // Restore risk-of-bias state
-  _robDomains = Array.isArray(rob.domains) ? [...rob.domains] : [];
-  _robData    = (rob.data && typeof rob.data === "object") ? rob.data : {};
+  robPlotState.domains = Array.isArray(rob.domains) ? [...rob.domains] : [];
+  robPlotState.data    = (rob.data && typeof rob.data === "object") ? rob.data : {};
   renderRoBDomainTags();
   renderRoBDataGrid();
 
   // Restore MV mode
   const mv = session.mv;
   if (mv && typeof mv === "object") {
-    _mvMode = true;
+    mvState.active = true;
     _applyModeToggle();
     if (mv.struct && document.getElementById("mvStruct").querySelector(`option[value="${mv.struct}"]`))
       document.getElementById("mvStruct").value = mv.struct;
@@ -3133,7 +3118,7 @@ function applySession(session) {
       });
     }
   } else {
-    _mvMode = false;
+    mvState.active = false;
     _applyModeToggle();
   }
 
@@ -3186,7 +3171,7 @@ async function loadSession(file) {
 // ---------------- CSV EXPORT ----------------
 
 function exportCSV() {
-  if (_mvMode) {
+  if (mvState.active) {
     const headers = ["study_id", "outcome_id", "yi", "vi", ..._mvModerators.map(n => n)];
     const rows    = [];
     document.querySelectorAll("#mvTableBody tr").forEach(r => {
@@ -3321,7 +3306,7 @@ function init() {
     markStale,
     scheduleSave,
     renderRoBDataGrid,
-    deleteRobEntry: key => { delete _robData[key]; },
+    deleteRobEntry: key => { delete robPlotState.data[key]; },
     onModeratorChanged: () => { refreshInteractionUI(); renderInteractionTags(); },
   });
 
@@ -3427,6 +3412,7 @@ const appState = {
   exportScale: 3,      // matches <option selected> in #exportScale (3× ≈ 288 dpi)
   reportArgs:  null,   // cached after each run; consumed by export buttons
   plotTheme:   "default",
+  results: { reg: null, ls: null }, // last successful metaRegression / lsModel result
 };
 
 // Restore plot theme from localStorage so the user's visual preference survives reload.
@@ -3501,7 +3487,11 @@ const diagnosticsState = {
   showQQ: false, showLabbe: false, isMHorPeto: false,
 };
 const bubblePlotState = { bubbleResult: null, moderators: null, usePartialBubble: false };
-const robPlotState    = { studies: null };   // _robDomains/_robData are already module-level
+const robPlotState    = {
+  studies: null,
+  domains: [],  // string[] — ordered domain names
+  data:    {},  // { [studyLabel]: { [domain]: "Low"|"Some concerns"|"High"|"NI"|"" } }
+};
 
 document.getElementById("exportScale").addEventListener("change", e => {
   appState.exportScale = +e.target.value;
@@ -3632,9 +3622,9 @@ function redrawCachedPlots() {
       });
     }
   }
-  if (robPlotState.studies && _robDomains.length > 0) {
-    drawRoBTrafficLight(robPlotState.studies, _robDomains, _robData, { theme });
-    drawRoBSummary(robPlotState.studies, _robDomains, _robData, { theme });
+  if (robPlotState.studies && robPlotState.domains.length > 0) {
+    drawRoBTrafficLight(robPlotState.studies, robPlotState.domains, robPlotState.data, { theme });
+    drawRoBSummary(robPlotState.studies, robPlotState.domains, robPlotState.data, { theme });
   }
 }
 
@@ -4012,8 +4002,8 @@ function _clearPermResults() {
 }
 
 function _startPermTest() {
-  if (!_lastReg || _lastReg.rankDeficient) return;
-  const reg = _lastReg;
+  if (!appState.results.reg || appState.results.reg.rankDeficient) return;
+  const reg = appState.results.reg;
 
   const nPerm = parseInt(document.getElementById("permIter")?.value ?? "999", 10);
   const seed  = 12345;
@@ -4691,12 +4681,12 @@ function _renderAllResults(ctx) {
   const scaleModSpec = opts.scaleModSpec;
   const kExcluded    = (reg ?? ls) ? studies.length - (reg ?? ls).k : 0;
   if (ls) {
-    _lastReg = null;
-    _lastLs  = ls.rankDeficient ? null : ls;
+    appState.results.reg = null;
+    appState.results.ls  = ls.rankDeficient ? null : ls;
     renderLocationScalePanel(ls, ciMethod, kExcluded);
   } else {
-    _lastLs  = null;
-    _lastReg = (reg && !reg.rankDeficient) ? reg : null;
+    appState.results.ls  = null;
+    appState.results.reg = (reg && !reg.rankDeficient) ? reg : null;
     // Pass moderators + interaction pseudo-entries so the panel sees the full term count.
     const _allTermMods = [...moderators, ...interactions.map(ix => ({ name: ix.name }))];
     renderRegressionPanel(reg ?? {}, method, ciMethod, kExcluded, _allTermMods);
@@ -4704,7 +4694,7 @@ function _renderAllResults(ctx) {
     // Show permutation controls when a valid regression result exists
     const elPermSection = document.getElementById("permSection");
     if (elPermSection) {
-      elPermSection.style.display = _lastReg ? "" : "none";
+      elPermSection.style.display = appState.results.reg ? "" : "none";
       _clearPermResults();
     }
   }
@@ -4899,13 +4889,13 @@ function _renderAllResults(ctx) {
   });
 
   // ── Risk-of-bias plots ─────────────────────────────────────────────────────
-  const hasRoB = _robDomains.length > 0 && studies.length > 0;
+  const hasRoB = robPlotState.domains.length > 0 && studies.length > 0;
   elRobSection.style.display = hasRoB ? "" : "none";
   if (hasRoB) {
     robPlotState.studies = studies;
     drawIfVisible("robSection", () => {
-      drawRoBTrafficLight(studies, _robDomains, _robData, { theme: appState.plotTheme });
-      drawRoBSummary(studies, _robDomains, _robData, { theme: appState.plotTheme });
+      drawRoBTrafficLight(studies, robPlotState.domains, robPlotState.data, { theme: appState.plotTheme });
+      drawRoBSummary(studies, robPlotState.domains, robPlotState.data, { theme: appState.plotTheme });
     });
   }
 
@@ -4942,7 +4932,7 @@ async function runAnalysis() {
     scheduleSave();
 
     // Multivariate mode — separate pipeline
-    if (_mvMode) {
+    if (mvState.active) {
       const ok = _runMVAnalysis();
       performance.measure("runAnalysis", "runAnalysis:start");
       return ok;
