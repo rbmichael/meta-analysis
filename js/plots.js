@@ -354,6 +354,118 @@ function evalModBasis(x, transform, knots) {
   return [x];  // linear (default)
 }
 
+// ── Bubble/scatter-plot scaffolding ──────────────────────────────────────────
+// Shared constants and helpers for drawBubble and drawPartialResidualBubble.
+// Both produce 460 × 340 themed scatter plots with identical SVG setup,
+// axis styling, and curve-rendering logic.
+
+const BUBBLE_W      = 460;
+const BUBBLE_H      = 340;
+const BUBBLE_MARGIN = { top: 34, right: 18, bottom: 52, left: 56 };
+const BUBBLE_IW     = BUBBLE_W - BUBBLE_MARGIN.left - BUBBLE_MARGIN.right;
+const BUBBLE_IH     = BUBBLE_H - BUBBLE_MARGIN.top  - BUBBLE_MARGIN.bottom;
+const BUBBLE_RMAX   = 15;
+
+// Create the SVG element, background rect, <title>, and plot-area <g>.
+function buildBubbleSVG(container, ariaLabel, T) {
+  const svg = setSvgSize(d3.select(container).append("svg")
+    .attr("role", "img")
+    .attr("aria-label", ariaLabel)
+    .style("background", T.bg !== "transparent" ? T.bg : ""), BUBBLE_W, BUBBLE_H);
+  svg.append("title").text(ariaLabel);
+  if (T.bg && T.bg !== "transparent") {
+    svg.insert("rect", ":first-child")
+      .attr("width", BUBBLE_W).attr("height", BUBBLE_H).attr("fill", T.bg);
+  }
+  svg.style("font-family", T.fontFamily);
+  const g = svg.append("g").attr("transform", `translate(${BUBBLE_MARGIN.left},${BUBBLE_MARGIN.top})`);
+  return { svg, g };
+}
+
+// Linear scales with standard bubble-plot padding.
+function bubbleXScale(xVals) {
+  const [xMin, xMax] = d3.extent(xVals);
+  const xPad = (xMax - xMin) * 0.12 || 0.5;
+  return d3.scaleLinear().domain([xMin - xPad, xMax + xPad]).range([0, BUBBLE_IW]);
+}
+function bubbleYScale(yVals) {
+  const [yMin, yMax] = d3.extent(yVals);
+  const yPad = (yMax - yMin) * 0.15 || 0.2;
+  return d3.scaleLinear().domain([yMin - yPad, yMax + yPad]).nice().range([BUBBLE_IH, 0]);
+}
+
+// Dashed zero line (drawn only when domain straddles zero).
+function addBubbleZeroLine(g, yScale, T) {
+  const [yd0, yd1] = yScale.domain();
+  if (yd0 < 0 && yd1 > 0) {
+    g.append("line")
+      .attr("x1", 0).attr("x2", BUBBLE_IW)
+      .attr("y1", yScale(0)).attr("y2", yScale(0))
+      .attr("stroke", T.borderGrid).attr("stroke-dasharray", "4,2");
+  }
+}
+
+// Delta-method SE factory — identical implementation in both bubble functions.
+function makeBubbleSeAt(vcov, wmeans, colIdxs, transform, knots, s2) {
+  return function seAt(x) {
+    if (!vcov) return NaN;
+    const l = wmeans.slice();
+    const basis = evalModBasis(x, transform, knots);
+    colIdxs.forEach((ci, j) => { l[ci] = basis[j]; });
+    let q = 0;
+    for (let r = 0; r < l.length; r++)
+      for (let c = 0; c < l.length; c++)
+        q += l[r] * vcov[r][c] * l[c];
+    return Math.sqrt(Math.max(0, q) * s2);
+  };
+}
+
+// Shaded CI band + fitted line or smooth curve.
+function drawBubbleCurve(g, { xScale, yScale, fitFn, seAt, vcov, crit, isLinear, T }) {
+  const [xl, xr] = xScale.domain();
+  const pts = Array.from({ length: 120 }, (_, i) => xl + i * (xr - xl) / 119);
+  if (vcov && isFinite(crit)) {
+    const area = d3.area()
+      .x(x  => xScale(x))
+      .y0(x => { const f = fitFn(x); return yScale(f - crit * seAt(x)); })
+      .y1(x => { const f = fitFn(x); return yScale(f + crit * seAt(x)); });
+    g.append("path").datum(pts).attr("fill", T.accentGlow).attr("stroke", "none").attr("d", area);
+  }
+  if (isLinear) {
+    g.append("line")
+      .attr("x1", xScale(xl)).attr("y1", yScale(fitFn(xl)))
+      .attr("x2", xScale(xr)).attr("y2", yScale(fitFn(xr)))
+      .attr("stroke", T.accent).attr("stroke-width", 2);
+  } else {
+    g.append("path")
+      .datum(pts)
+      .attr("fill", "none")
+      .attr("stroke", T.accent).attr("stroke-width", 2)
+      .attr("d", d3.line().x(x => xScale(x)).y(x => yScale(fitFn(x))));
+  }
+}
+
+// Axes, axis labels, and plot title.
+function drawBubbleDecoration(svg, g, { xScale, yScale, modName, yLabel, titleText, T }) {
+  styleAxis(g.append("g").attr("transform", `translate(0,${BUBBLE_IH})`).call(d3.axisBottom(xScale).ticks(5)), T.border, T.fgMuted, FONT_SIZE.tickLabel);
+  styleAxis(g.append("g").call(d3.axisLeft(yScale).ticks(5)), T.border, T.fgMuted, FONT_SIZE.tickLabel);
+  g.append("text")
+    .attr("x", BUBBLE_IW / 2).attr("y", BUBBLE_IH + 42)
+    .attr("text-anchor", "middle").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.axisLabel)
+    .text(modName);
+  g.append("text")
+    .attr("transform", "rotate(-90)")
+    .attr("x", -BUBBLE_IH / 2).attr("y", -44)
+    .attr("text-anchor", "middle").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.axisLabel)
+    .text(yLabel);
+  svg.append("text")
+    .attr("x", BUBBLE_MARGIN.left + BUBBLE_IW / 2).attr("y", 16)
+    .attr("text-anchor", "middle").attr("fill", T.fg).style("font-size", FONT_SIZE.title)
+    .text(titleText);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 // ================= BUBBLE PLOT =================
 // One bubble chart per continuous moderator.
 // Bubble radius ∝ √(RE weight).  Regression line is the marginal fit:
@@ -363,14 +475,8 @@ function evalModBasis(x, transform, knots) {
 export function drawBubble(studies, reg, mod, container, options = {}) {
   const modName = mod.name;
   const transform = mod.transform || "linear";
-  const W = 460, H = 340;
-  const margin = { top: 34, right: 18, bottom: 52, left: 56 };
-  const _bubbleLabel = `Bubble plot for ${modName}`;
-  const iW = W - margin.left - margin.right;
-  const iH = H - margin.top - margin.bottom;
 
   // studies is already the regression's studiesUsed set (all moderators valid).
-  // Guard against any residual edge cases.
   const valid = studies.filter(s => isFinite(s[modName]) && isFinite(s.yi) && isFinite(s.vi));
   if (valid.length < 2) return;
 
@@ -380,11 +486,10 @@ export function drawBubble(studies, reg, mod, container, options = {}) {
   const wArr  = valid.map(s => 1 / (s.vi + tau2));
   const wSum  = wArr.reduce((a, b) => a + b, 0);
   const wMax  = Math.max(...wArr);
-  const rMax  = 15;
 
   // ---- Nonlinear setup ----
-  const colIdxs = (reg.modColMap && reg.modColMap[modName]) || [];
-  const knots   = reg.modKnots && reg.modKnots[modName];
+  const colIdxs  = (reg.modColMap && reg.modColMap[modName]) || [];
+  const knots    = reg.modKnots && reg.modKnots[modName];
   const isLinear = transform === "linear" || colIdxs.length <= 1;
 
   // ---- Marginal line: hold every other predictor at its RE-weighted mean ----
@@ -399,110 +504,37 @@ export function drawBubble(studies, reg, mod, container, options = {}) {
   }
 
   // wmeans[i] = weighted mean of column i.
-  // Skip intercept (always 1) and ALL focal moderator columns (set in seAt per x).
+  // Skip intercept (always 1) and ALL focal moderator columns (set per x).
   const colIdxSet = new Set(colIdxs);
   const wmeans = new Array(colNames.length).fill(0);
   wmeans[0] = 1;
 
   let intercept0 = beta[0];
   for (let i = 1; i < colNames.length; i++) {
-    if (colIdxSet.has(i)) continue;  // focal moderator columns — handled per x
+    if (colIdxSet.has(i)) continue;
     const vals = colValues(colNames[i]);
     const wm   = vals.reduce((s, v, k) => s + wArr[k] * v, 0) / wSum;
     wmeans[i]  = wm;
     intercept0 += beta[i] * wm;
   }
 
-  // fitAt(x): fitted value of the marginal curve at x
-  // = intercept0 + Σ_j beta[colIdxs[j]] · basis[j](x)
   function fitAt(x) {
     if (!isFinite(intercept0)) return NaN;
     const basis = evalModBasis(x, transform, knots);
     return colIdxs.reduce((acc, ci, j) => acc + beta[ci] * basis[j], intercept0);
   }
 
-  // seAt(x): delta-method SE of the marginal fitted value at x.
-  function seAt(x) {
-    if (!vcov) return NaN;
-    const l = wmeans.slice();
-    const basis = evalModBasis(x, transform, knots);
-    colIdxs.forEach((ci, j) => { l[ci] = basis[j]; });
-    let q = 0;
-    for (let r = 0; r < l.length; r++)
-      for (let c = 0; c < l.length; c++)
-        q += l[r] * vcov[r][c] * l[c];
-    return Math.sqrt(Math.max(0, q) * s2);
-  }
+  const seAt = makeBubbleSeAt(vcov, wmeans, colIdxs, transform, knots, s2);
 
-  // ---- Scales ----
-  const xVals = valid.map(s => s[modName]);
-  const [xMin, xMax] = d3.extent(xVals);
-  const xPad = (xMax - xMin) * 0.12 || 0.5;
-  const xScale = d3.scaleLinear().domain([xMin - xPad, xMax + xPad]).range([0, iW]);
+  // ---- Scales + SVG ----
+  const xScale = bubbleXScale(valid.map(s => s[modName]));
+  const yScale = bubbleYScale(valid.map(s => s.yi));
+  const { svg, g } = buildBubbleSVG(container, `Bubble plot for ${modName}`, T);
+  addBubbleZeroLine(g, yScale, T);
 
-  const yVals = valid.map(s => s.yi);
-  const [yMin, yMax] = d3.extent(yVals);
-  const yPad = (yMax - yMin) * 0.15 || 0.2;
-  const yScale = d3.scaleLinear().domain([yMin - yPad, yMax + yPad]).nice().range([iH, 0]);
-
-  // ---- SVG ----
-  const svg = setSvgSize(d3.select(container).append("svg")
-    .attr("role", "img")
-    .attr("aria-label", _bubbleLabel)
-    .style("background", T.bg !== "transparent" ? T.bg : ""), W, H);
-  svg.append("title").text(_bubbleLabel);
-  if (T.bg && T.bg !== "transparent") {
-    svg.insert("rect", ":first-child")
-      .attr("width", W).attr("height", H).attr("fill", T.bg);
-  }
-  svg.style("font-family", T.fontFamily);
-  const g   = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
-
-  // Zero line
-  const [yd0, yd1] = yScale.domain();
-  if (yd0 < 0 && yd1 > 0) {
-    g.append("line")
-      .attr("x1", 0).attr("x2", iW)
-      .attr("y1", yScale(0)).attr("y2", yScale(0))
-      .attr("stroke", T.borderGrid).attr("stroke-dasharray", "4,2");
-  }
-
-  // Prediction band + regression curve (band drawn first, behind curve)
-  if (colIdxs.length > 0 && isFinite(intercept0)) {
-    const [xl, xr] = xScale.domain();
-    const nPts = 120;
-    const step = (xr - xl) / (nPts - 1);
-    const pts  = Array.from({ length: nPts }, (_, i) => xl + i * step);
-
-    // Shaded band
-    if (vcov && isFinite(crit)) {
-      const area = d3.area()
-        .x(x  => xScale(x))
-        .y0(x => { const f = fitAt(x); return yScale(f - crit * seAt(x)); })
-        .y1(x => { const f = fitAt(x); return yScale(f + crit * seAt(x)); });
-      g.append("path")
-        .datum(pts)
-        .attr("fill", T.accentGlow)
-        .attr("stroke", "none")
-        .attr("d", area);
-    }
-
-    if (isLinear) {
-      // Straight line for linear moderators
-      g.append("line")
-        .attr("x1", xScale(xl)).attr("y1", yScale(fitAt(xl)))
-        .attr("x2", xScale(xr)).attr("y2", yScale(fitAt(xr)))
-        .attr("stroke", T.accent).attr("stroke-width", 2);
-    } else {
-      // Smooth curve for nonlinear moderators
-      const line = d3.line().x(x => xScale(x)).y(x => yScale(fitAt(x)));
-      g.append("path")
-        .datum(pts)
-        .attr("fill", "none")
-        .attr("stroke", T.accent).attr("stroke-width", 2)
-        .attr("d", line);
-    }
-  }
+  // Prediction band + regression curve
+  if (colIdxs.length > 0 && isFinite(intercept0))
+    drawBubbleCurve(g, { xScale, yScale, fitFn: fitAt, seAt, vcov, crit, isLinear, T });
 
   // Bubbles
   const tooltip = selTooltip();
@@ -511,7 +543,7 @@ export function drawBubble(studies, reg, mod, container, options = {}) {
     .enter().append("circle")
     .attr("cx", s => xScale(s[modName]))
     .attr("cy", s => yScale(s.yi))
-    .attr("r",  (s, i) => Math.max(3, rMax * Math.sqrt(wArr[i] / wMax)))
+    .attr("r",  (s, i) => Math.max(3, BUBBLE_RMAX * Math.sqrt(wArr[i] / wMax)))
     .attr("fill",   T.bgSurfaceHover)
     .attr("stroke", T.fgSubtle)
     .attr("stroke-width", 1.2)
@@ -524,31 +556,13 @@ export function drawBubble(studies, reg, mod, container, options = {}) {
     })
     .on("mouseout", () => tooltip.style("opacity", 0));
 
-  // Axes
-  styleAxis(g.append("g").attr("transform", `translate(0,${iH})`).call(d3.axisBottom(xScale).ticks(5)), T.border, T.fgMuted, FONT_SIZE.tickLabel);
-  styleAxis(g.append("g").call(d3.axisLeft(yScale).ticks(5)), T.border, T.fgMuted, FONT_SIZE.tickLabel);
-
-  // Axis labels
-  g.append("text")
-    .attr("x", iW / 2).attr("y", iH + 42)
-    .attr("text-anchor", "middle").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.axisLabel)
-    .text(modName);
-
-  g.append("text")
-    .attr("transform", "rotate(-90)")
-    .attr("x", -iH / 2).attr("y", -44)
-    .attr("text-anchor", "middle").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.axisLabel)
-    .text("Effect size (yi)");
-
-  // Title — for linear show β; for nonlinear show transform label
-  const linearBeta = () => fmt(beta[colIdxs[0]]);
   const titleSuffix = isLinear
-    ? `β = ${colIdxs.length ? linearBeta() : "NA"}`
+    ? `β = ${colIdxs.length ? fmt(beta[colIdxs[0]]) : "NA"}`
     : transform.startsWith("rcs") ? `RCS (${transform.slice(3)} knots)` : transform;
-  svg.append("text")
-    .attr("x", margin.left + iW / 2).attr("y", 16)
-    .attr("text-anchor", "middle").attr("fill", T.fg).style("font-size", FONT_SIZE.title)
-    .text(`${modName}  (${titleSuffix})`);
+  drawBubbleDecoration(svg, g, {
+    xScale, yScale, modName, yLabel: "Effect size (yi)",
+    titleText: `${modName}  (${titleSuffix})`, T,
+  });
 }
 
 // ================= PARTIAL-RESIDUAL BUBBLE PLOT =================
@@ -574,11 +588,6 @@ export function drawBubble(studies, reg, mod, container, options = {}) {
 export function drawPartialResidualBubble(studies, reg, mod, container, options = {}) {
   const modName = mod.name;
   const transform = mod.transform || "linear";
-  const _partialLabel = `Partial-residual bubble plot for ${modName}`;
-  const W = 460, H = 340;
-  const margin = { top: 34, right: 18, bottom: 52, left: 56 };
-  const iW = W - margin.left - margin.right;
-  const iH = H - margin.top - margin.bottom;
 
   const valid = studies.filter(s => isFinite(s[modName]) && isFinite(s.yi) && isFinite(s.vi));
   if (valid.length < 2) return;
@@ -589,11 +598,10 @@ export function drawPartialResidualBubble(studies, reg, mod, container, options 
   const wArr = valid.map(s => 1 / (s.vi + tau2));
   const wSum = wArr.reduce((a, b) => a + b, 0);
   const wMax = Math.max(...wArr);
-  const rMax = 15;
 
   // ---- Nonlinear setup ----
-  const colIdxs = (reg.modColMap && reg.modColMap[modName]) || [];
-  const knots   = reg.modKnots && reg.modKnots[modName];
+  const colIdxs  = (reg.modColMap && reg.modColMap[modName]) || [];
+  const knots    = reg.modKnots && reg.modKnots[modName];
   const isLinear = transform === "linear" || colIdxs.length <= 1;
 
   const { beta, colNames, vcov, crit, s2 } = reg;
@@ -615,18 +623,7 @@ export function drawPartialResidualBubble(studies, reg, mod, container, options 
     wmeans[i] = vals.reduce((s, v, k) => s + wArr[k] * v, 0) / wSum;
   }
 
-  // seAt(x): delta-method SE at moderator value x.
-  function seAt(x) {
-    if (!vcov) return NaN;
-    const l = wmeans.slice();
-    const basis = evalModBasis(x, transform, knots);
-    colIdxs.forEach((ci, j) => { l[ci] = basis[j]; });
-    let q = 0;
-    for (let r = 0; r < l.length; r++)
-      for (let c = 0; c < l.length; c++)
-        q += l[r] * vcov[r][c] * l[c];
-    return Math.sqrt(Math.max(0, q) * s2);
-  }
+  const seAt = makeBubbleSeAt(vcov, wmeans, colIdxs, transform, knots, s2);
 
   // ---- Partial residuals ----
   // y*_i = residuals_i + focalContrib_i
@@ -660,70 +657,15 @@ export function drawPartialResidualBubble(studies, reg, mod, container, options 
     return isFinite(yIntercept) ? yIntercept + focalContrib(x) : NaN;
   }
 
-  // ---- Scales ----
-  const [xMin, xMax] = d3.extent(xVals);
-  const xPad = (xMax - xMin) * 0.12 || 0.5;
-  const xScale = d3.scaleLinear().domain([xMin - xPad, xMax + xPad]).range([0, iW]);
-
-  const [yMin, yMax] = d3.extent(partialY);
-  const yPad = (yMax - yMin) * 0.15 || 0.2;
-  const yScale = d3.scaleLinear().domain([yMin - yPad, yMax + yPad]).nice().range([iH, 0]);
-
-  // ---- SVG ----
-  const svg = setSvgSize(d3.select(container).append("svg")
-    .attr("role", "img")
-    .attr("aria-label", _partialLabel)
-    .style("background", T.bg !== "transparent" ? T.bg : ""), W, H);
-  svg.append("title").text(_partialLabel);
-  if (T.bg && T.bg !== "transparent") {
-    svg.insert("rect", ":first-child")
-      .attr("width", W).attr("height", H).attr("fill", T.bg);
-  }
-  svg.style("font-family", T.fontFamily);
-  const g   = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
-
-  // Zero line
-  const [yd0, yd1] = yScale.domain();
-  if (yd0 < 0 && yd1 > 0) {
-    g.append("line")
-      .attr("x1", 0).attr("x2", iW)
-      .attr("y1", yScale(0)).attr("y2", yScale(0))
-      .attr("stroke", T.borderGrid).attr("stroke-dasharray", "4,2");
-  }
+  // ---- Scales + SVG ----
+  const xScale = bubbleXScale(xVals);
+  const yScale = bubbleYScale(partialY);
+  const { svg, g } = buildBubbleSVG(container, `Partial-residual bubble plot for ${modName}`, T);
+  addBubbleZeroLine(g, yScale, T);
 
   // Prediction band + regression curve
-  if (isFinite(yIntercept) && colIdxs.length > 0) {
-    const [xl, xr] = xScale.domain();
-    const nPts = 120;
-    const step = (xr - xl) / (nPts - 1);
-    const pts  = Array.from({ length: nPts }, (_, i) => xl + i * step);
-
-    if (vcov && isFinite(crit)) {
-      const area = d3.area()
-        .x(x  => xScale(x))
-        .y0(x => { const f = partialFitAt(x); return yScale(f - crit * seAt(x)); })
-        .y1(x => { const f = partialFitAt(x); return yScale(f + crit * seAt(x)); });
-      g.append("path")
-        .datum(pts)
-        .attr("fill", T.accentGlow)
-        .attr("stroke", "none")
-        .attr("d", area);
-    }
-
-    if (isLinear) {
-      g.append("line")
-        .attr("x1", xScale(xl)).attr("y1", yScale(partialFitAt(xl)))
-        .attr("x2", xScale(xr)).attr("y2", yScale(partialFitAt(xr)))
-        .attr("stroke", T.accent).attr("stroke-width", 2);
-    } else {
-      const line = d3.line().x(x => xScale(x)).y(x => yScale(partialFitAt(x)));
-      g.append("path")
-        .datum(pts)
-        .attr("fill", "none")
-        .attr("stroke", T.accent).attr("stroke-width", 2)
-        .attr("d", line);
-    }
-  }
+  if (isFinite(yIntercept) && colIdxs.length > 0)
+    drawBubbleCurve(g, { xScale, yScale, fitFn: partialFitAt, seAt, vcov, crit, isLinear, T });
 
   // Bubbles
   const tooltip = selTooltip();
@@ -732,7 +674,7 @@ export function drawPartialResidualBubble(studies, reg, mod, container, options 
     .enter().append("circle")
     .attr("cx", s => xScale(s[modName]))
     .attr("cy", (_, i) => yScale(partialY[i]))
-    .attr("r",  (_, i) => Math.max(3, rMax * Math.sqrt(wArr[i] / wMax)))
+    .attr("r",  (_, i) => Math.max(3, BUBBLE_RMAX * Math.sqrt(wArr[i] / wMax)))
     .attr("fill",   T.bgSurfaceHover)
     .attr("stroke", T.fgSubtle)
     .attr("stroke-width", 1.2)
@@ -746,31 +688,13 @@ export function drawPartialResidualBubble(studies, reg, mod, container, options 
     })
     .on("mouseout", () => tooltip.style("opacity", 0));
 
-  // Axes
-  styleAxis(g.append("g").attr("transform", `translate(0,${iH})`).call(d3.axisBottom(xScale).ticks(5)), T.border, T.fgMuted, FONT_SIZE.tickLabel);
-  styleAxis(g.append("g").call(d3.axisLeft(yScale).ticks(5)), T.border, T.fgMuted, FONT_SIZE.tickLabel);
-
-  // Axis labels
-  g.append("text")
-    .attr("x", iW / 2).attr("y", iH + 42)
-    .attr("text-anchor", "middle").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.axisLabel)
-    .text(modName);
-
-  g.append("text")
-    .attr("transform", "rotate(-90)")
-    .attr("x", -iH / 2).attr("y", -44)
-    .attr("text-anchor", "middle").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.axisLabel)
-    .text("Partial residual");
-
-  // Title
-  const slope = fmt(beta[colIdxs[0]]);
   const titleSuffix = isLinear
-    ? `β = ${slope}, partial residual`
+    ? `β = ${fmt(beta[colIdxs[0]])}, partial residual`
     : (transform.startsWith("rcs") ? `RCS (${transform.slice(3)} knots)` : transform) + ", partial residual";
-  svg.append("text")
-    .attr("x", margin.left + iW / 2).attr("y", 16)
-    .attr("text-anchor", "middle").attr("fill", T.fg).style("font-size", FONT_SIZE.title)
-    .text(`${modName}  (${titleSuffix})`);
+  drawBubbleDecoration(svg, g, {
+    xScale, yScale, modName, yLabel: "Partial residual",
+    titleText: `${modName}  (${titleSuffix})`, T,
+  });
 }
 
 // -----------------------------------------------------------------------------
