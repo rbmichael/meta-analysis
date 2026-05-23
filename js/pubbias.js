@@ -26,7 +26,7 @@
 //   constants.js BISECTION_ITERS
 
 import { robustWlsResult, validStudies, resolveClusterIds } from "./analysis.js";
-import { wls } from "./linalg.js";
+import { wls, diagSE } from "./linalg.js";
 import { normalCDF, normalQuantile, tCDF, regularizedGammaP } from "./utils.js";
 import { BISECTION_ITERS } from "./constants.js";
 
@@ -149,8 +149,7 @@ function _wlsFinish(beta, vcov, ys, xs, ws, df) {
     rss += ws[i] * e * e;
   }
   const s2          = df > 0 ? rss / df : NaN;
-  const interceptSE = Math.sqrt(s2 * vcov[0][0]);
-  const slopeSE     = Math.sqrt(s2 * vcov[1][1]);
+  const [interceptSE, slopeSE] = diagSE(vcov, s2);
   const interceptT  = beta[0] / interceptSE;
   const slopeT      = beta[1] / slopeSE;
   const interceptP  = 2 * (1 - tCDF(Math.abs(interceptT), df));

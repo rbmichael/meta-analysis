@@ -15,6 +15,21 @@ import { leaveOneOut, estimatorComparison } from "./influence.js";
 import { adjustPvals } from "./regression.js";
 import { drawPCurve, drawPUniform } from "./plots.js";
 import { escapeHTML } from "./utils-html.js";
+
+// Build a <span class="mod-tag"> with label text and a remove button.
+// onRemove: function called when the button is clicked.
+export function buildTag(label, onRemove, title = "Remove") {
+  const span = document.createElement("span");
+  span.className = "mod-tag";
+  const btn = document.createElement("button");
+  btn.className = "remove-mod-btn";
+  btn.title = title;
+  btn.textContent = "×";
+  btn.addEventListener("click", onRemove);
+  span.append(label, " ", btn);
+  return span;
+}
+
 // Keep in sync with HELP_LABELS in ui.js.
 const _RENDER_HELP_LABELS = {
   "diag.locationscale":  "Location-scale model",

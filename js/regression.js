@@ -8,7 +8,7 @@
 // Circular imports — safe: these are only called inside function bodies.
 import { meta, robustWlsResult, logLik, validStudies, resolveClusterIds, groupByCluster } from "./analysis.js";
 import { tau2Core_REML, tau2Core_ML, tau2Core_PM, tau2Core_DL, tau2Core_HS, tau2Core_HE, tau2Core_SJ } from "./tau2.js";
-import { wls, wlsCholesky, matInverse, logDet, numericalHessian } from "./linalg.js";
+import { wls, wlsCholesky, matInverse, logDet, numericalHessian, diagSE } from "./linalg.js";
 import { normalCDF, normalQuantile, tCDF, tCritical, fCDF, chiSquareCDF, chiSquareQuantile } from "./utils.js";
 import { MIN_VAR, REML_TOL, BISECTION_ITERS } from "./constants.js";
 import { bfgs } from "./selection.js";
@@ -563,14 +563,14 @@ export function metaRegression(studies, moderators = [], method = "REML", ciMeth
   let se, crit, zval, pval, ci, dist;
 
   if (useKH) {
-    se    = vcov.map((row, j) => Math.sqrt(Math.max(0, row[j]) * s2));
+    se    = diagSE(vcov, s2);
     crit  = tCritical(QEdf, alpha);
     dist  = "t";
     zval  = beta.map((b, j) => b / se[j]);
     pval  = zval.map(t => 2 * (1 - tCDF(Math.abs(t), QEdf)));
     ci    = beta.map((b, j) => [b - crit * se[j], b + crit * se[j]]);
   } else {
-    se    = vcov.map((row, j) => Math.sqrt(Math.max(0, row[j])));
+    se    = diagSE(vcov);
     crit  = normalQuantile(1 - alpha / 2);
     dist  = "z";
     zval  = beta.map((b, j) => b / se[j]);
@@ -976,13 +976,13 @@ export function lsModel(studies, locMods = [], scaleMods = [], opts = {}) {
 
   // ---- Inference for β ----
   const crit = normalQuantile(1 - alpha / 2);
-  const se_beta  = vcov_beta.map((row, j) => Math.sqrt(Math.max(0, row[j])));
+  const se_beta  = diagSE(vcov_beta);
   const zval_beta = beta.map((b, j) => b / se_beta[j]);
   const pval_beta = zval_beta.map(z => 2 * (1 - normalCDF(Math.abs(z))));
   const ci_beta   = beta.map((b, j) => [b - crit * se_beta[j], b + crit * se_beta[j]]);
 
   // ---- Inference for γ ----
-  const se_gamma   = vcov_gamma.map((row, j) => Math.sqrt(Math.max(0, row[j])));
+  const se_gamma   = diagSE(vcov_gamma);
   const zval_gamma = gamma_hat.map((g, j) => g / se_gamma[j]);
   const pval_gamma = zval_gamma.map(z => 2 * (1 - normalCDF(Math.abs(z))));
   const ci_gamma   = gamma_hat.map((g, j) => [g - crit * se_gamma[j], g + crit * se_gamma[j]]);

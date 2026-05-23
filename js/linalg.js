@@ -8,6 +8,7 @@
 // -------
 //   wls(X, y, w)              — weighted least squares; returns { beta, vcov, rankDeficient }
 //   wlsCholesky(X, y, w)      — wls via Cholesky (2× faster for SPD); falls back to wls
+//   diagSE(vcov, s2)          — diagonal SEs: √max(0, vcov[j][j]·s2) for each j
 //   matInverse(A)             — Gauss-Jordan inverse; returns null if singular
 //   logDet(A)                 — log|det(A)| via Gaussian elimination
 //   inverseWithRidge(H)       — matInverse with progressive diagonal ridge fallback
@@ -277,4 +278,10 @@ export function logDet(A) {
     }
   }
   return logd;
+}
+
+// Extract diagonal standard errors from a variance-covariance matrix.
+// Returns p-vector: √max(0, vcov[j][j] · s2) for each j.
+export function diagSE(vcov, s2 = 1) {
+  return vcov.map((row, j) => Math.sqrt(Math.max(0, row[j] * s2)));
 }

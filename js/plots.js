@@ -127,6 +127,7 @@ import { chiSquareCDF, normalQuantile } from "./utils.js";
 import { Z_95 } from "./constants.js";
 import { PLOT_THEMES, ROB_COLORS, BW_DASHES, hashGroupLabel } from "./plotThemes.js";
 import { rcsBasis, validStudies } from "./analysis.js";
+import { fmt, fmtP_APA } from "./format.js";
 
 // ── Plot style constants ──────────────────────────────────────────────────────
 // Centralised defaults for font sizes, margins, tooltip offsets, and label
@@ -534,7 +535,7 @@ export function drawBubble(studies, reg, mod, container, options = {}) {
     .text("Effect size (yi)");
 
   // Title — for linear show β; for nonlinear show transform label
-  const linearBeta = () => isFinite(beta[colIdxs[0]]) ? beta[colIdxs[0]].toFixed(3) : "NA";
+  const linearBeta = () => fmt(beta[colIdxs[0]]);
   const titleSuffix = isLinear
     ? `β = ${colIdxs.length ? linearBeta() : "NA"}`
     : transform.startsWith("rcs") ? `RCS (${transform.slice(3)} knots)` : transform;
@@ -756,7 +757,7 @@ export function drawPartialResidualBubble(studies, reg, mod, container, options 
     .text("Partial residual");
 
   // Title
-  const slope = isFinite(beta[colIdxs[0]]) ? beta[colIdxs[0]].toFixed(3) : "NA";
+  const slope = fmt(beta[colIdxs[0]]);
   const titleSuffix = isLinear
     ? `β = ${slope}, partial residual`
     : (transform.startsWith("rcs") ? `RCS (${transform.slice(3)} knots)` : transform) + ", partial residual";
@@ -850,8 +851,8 @@ function forestDrawStudyRows(ctx, pageStudies, studies, studyCrit, widthCiLabel,
       const ef_disp = profile.transform(d.yi);
       const lo_disp = profile.transform(d.yi - studyCrit * d.se);
       const hi_disp = profile.transform(d.yi + studyCrit * d.se);
-      return `${d.label}<br>Effect: ${isFinite(ef_disp) ? ef_disp.toFixed(3) : "NA"}<br>` +
-        `${widthCiLabel} (${ciMethodLabel}): ${isFinite(lo_disp) ? lo_disp.toFixed(3) : "NA"} – ${isFinite(hi_disp) ? hi_disp.toFixed(3) : "NA"}`;
+      return `${d.label}<br>Effect: ${fmt(ef_disp)}<br>` +
+        `${widthCiLabel} (${ciMethodLabel}): ${fmt(lo_disp)} – ${fmt(hi_disp)}`;
     }
   );
 }
@@ -968,11 +969,11 @@ function forestDrawAnnotations(ctx, pageStudies, yPos, studies, studyCrit, m,
     const ef  = profile.transform(d.yi);
     const lo  = profile.transform(d.yi - studyCrit * d.se);
     const hi  = profile.transform(d.yi + studyCrit * d.se);
-    const efStr = isFinite(ef) ? ef.toFixed(3) : "NA";
-    const ciStr = `[${isFinite(lo) ? lo.toFixed(3) : "NA"}, ${isFinite(hi) ? hi.toFixed(3) : "NA"}]`;
+    const efStr = fmt(ef);
+    const ciStr = `[${fmt(lo)}, ${fmt(hi)}]`;
     const wPct  = d.filled
       ? "\u2014"
-      : (isFinite(d.w) && totalW_annot > 0) ? (d.w / totalW_annot * 100).toFixed(1) + "%" : "NA";
+      : (isFinite(d.w) && totalW_annot > 0) ? fmt(d.w / totalW_annot * 100, 1) + "%" : "—";
 
     svg.append("text")
       .attr("x", efAnnotX).attr("y", rowMid)
@@ -991,8 +992,8 @@ function forestDrawAnnotations(ctx, pageStudies, yPos, studies, studyCrit, m,
     const efT   = profile.transform(ef);
     const loT   = profile.transform(lo);
     const hiT   = profile.transform(hi);
-    const efStr = isFinite(efT) ? efT.toFixed(3) : "NA";
-    const ciStr = `[${isFinite(loT) ? loT.toFixed(3) : "NA"}, ${isFinite(hiT) ? hiT.toFixed(3) : "NA"}]`;
+    const efStr = fmt(efT);
+    const ciStr = `[${fmt(loT)}, ${fmt(hiT)}]`;
     svg.append("text")
       .attr("x", efAnnotX).attr("y", yMid + 4)
       .style("font-size", L.annotFontSize).style("font-family", T.fontFamily)
@@ -1031,7 +1032,7 @@ function forestDrawPredictionInterval(ctx, m, showRE) {
     .attr("x", x(m.RE)).attr("y", L.piY + 15).attr("text-anchor", "middle")
     .style("font-size", L.labelFontSize).style("font-family", T.fontFamily)
     .attr("fill", T.pi)
-    .text(`Prediction interval: ${isFinite(pi_disp.lb) ? pi_disp.lb.toFixed(3) : "NA"} to ${isFinite(pi_disp.ub) ? pi_disp.ub.toFixed(3) : "NA"}`);
+    .text(`Prediction interval: ${fmt(pi_disp.lb)} to ${fmt(pi_disp.ub)}`);
 }
 
 function forestDrawHetSummary(ctx, m) {
@@ -1041,13 +1042,13 @@ function forestDrawHetSummary(ctx, m) {
     .attr("x", L.labelW + L.plotW / 2).attr("y", L.hetY).attr("text-anchor", "middle")
     .style("font-size", L.annotFontSize).style("font-family", T.fontFamily)
     .attr("fill", T.fgMuted);
-  t.append("tspan").text(`Heterogeneity:  τ² = ${isFinite(m.tau2) ? m.tau2.toFixed(3) : "NA"},  `);
+  t.append("tspan").text(`Heterogeneity:  τ² = ${fmt(m.tau2)},  `);
   t.append("tspan").style("font-style", "italic").text("I");
-  t.append("tspan").text(`² = ${isFinite(m.I2) ? m.I2.toFixed(1) + "%" : "NA"},  `);
+  t.append("tspan").text(`² = ${isFinite(m.I2) ? fmt(m.I2, 1) + "%" : "—"},  `);
   t.append("tspan").style("font-style", "italic").text("Q");
-  t.append("tspan").text(`(df=${isFinite(m.df) ? m.df : "NA"}) = ${isFinite(m.Q) ? m.Q.toFixed(2) : "NA"},  `);
+  t.append("tspan").text(`(df=${isFinite(m.df) ? m.df : "—"}) = ${fmt(m.Q, 2)},  `);
   t.append("tspan").style("font-style", "italic").text("p");
-  t.append("tspan").text(` = ${isFinite(Qp) ? (Qp < 0.001 ? "< .001" : Qp.toFixed(3)) : "NA"}`); }
+  t.append("tspan").text(` = ${fmtP_APA(Qp)}`); }
 }
 
 export function drawForest(studies, m, options = {}) {
@@ -1960,11 +1961,11 @@ export function drawCumulativeForest(cumulativeResults, profile, options = {}) {
         .attr("width", Math.max(hitX2 - hitX1 + 8, 20)).attr("height", rowH)
         .attr("fill", "transparent"),
       () => `<b>After: ${r.addedLabel}</b> (k = ${r.k})<br>` +
-            `RE = ${isFinite(r.re_disp)  ? r.re_disp.toFixed(3)  : "NA"}&nbsp; ` +
-            `${options.ciLabel ?? "95% CI"} [${isFinite(r.lo_disp) ? r.lo_disp.toFixed(3) : "NA"}, ` +
-                `${isFinite(r.hi_disp) ? r.hi_disp.toFixed(3) : "NA"}]<br>` +
-            `τ² = ${isFinite(r.tau2) ? r.tau2.toFixed(3) : "NA"}&nbsp; ` +
-            `I² = ${isFinite(r.I2)   ? r.I2.toFixed(1)   : "NA"}%`
+            `RE = ${fmt(r.re_disp)}&nbsp; ` +
+            `${options.ciLabel ?? "95% CI"} [${fmt(r.lo_disp)}, ` +
+                `${fmt(r.hi_disp)}]<br>` +
+            `τ² = ${fmt(r.tau2)}&nbsp; ` +
+            `I² = ${fmt(r.I2, 1)}%`
     );
   });
 
@@ -2682,7 +2683,7 @@ export function drawOrchardPlot(studies, m, profile, options = {}) {
         d => {
           const seVal = (d.se || Math.sqrt(Math.max(d.vi, 0))).toFixed(3);
           const yi_t  = profile.transform(d.yi);
-          return `<b>${d.label}</b><br>Effect: ${isFinite(yi_t) ? +yi_t.toFixed(3) : "NA"}<br>SE: ${seVal}${d.filled ? "<br><i>(imputed)</i>" : ""}`;
+          return `<b>${d.label}</b><br>Effect: ${fmt(yi_t)}<br>SE: ${seVal}${d.filled ? "<br><i>(imputed)</i>" : ""}`;
         }
       );
     });
@@ -2879,7 +2880,7 @@ export function drawCaterpillarPlot(studies, m, profile, options = {}) {
       const yi_t  = profile.transform(s.yi);
       const lo_t  = profile.transform(lo);
       const hi_t  = profile.transform(hi);
-      const fmt   = v => isFinite(v) ? +v.toFixed(3) : "NA";
+      const fmt   = v => fmt(v);
       tooltip.style("opacity", 1)
         .html(`<b>${s.label}</b><br>Effect: ${fmt(yi_t)} [${fmt(lo_t)}, ${fmt(hi_t)}]<br>SE: ${seVal}${s.filled ? "<br><i>(imputed)</i>" : ""}`)
         .style("left", x0 + "px").style("top", y0 + "px");
@@ -3109,8 +3110,8 @@ export function drawBlupPlot(result, profile, options = {}) {
           const effDisplay = profile.transform(d.blup);
           const obsDisplay = profile.transform(d.yi);
           return `<b>${d.label}</b>` +
-            `<br>Observed: ${isFinite(obsDisplay) ? (+obsDisplay.toFixed(3)) : "NA"}` +
-            `<br>BLUP: ${isFinite(effDisplay) ? (+effDisplay.toFixed(3)) : "NA"}` +
+            `<br>Observed: ${fmt(obsDisplay)}` +
+            `<br>BLUP: ${fmt(effDisplay)}` +
             `<br>Random effect (û): ${(+d.ranef.toFixed(4))}` +
             `<br>Shrinkage (λ): ${(+(d.lambda * 100).toFixed(1))}%`;
         }
@@ -3267,7 +3268,7 @@ export function drawBaujatPlot(result, profile, options = {}) {
         return `<b>${d.label}</b>` +
           `<br>Q contribution: ${d.x.toFixed(3)}` +
           `<br>Influence: ${d.influence.toFixed(4)}` +
-          `<br>Effect (${profile.label}): ${isFinite(yi_t) ? +yi_t.toFixed(3) : "NA"}`;
+          `<br>Effect (${profile.label}): ${fmt(yi_t)}`;
       }
     );
 

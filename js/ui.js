@@ -143,7 +143,7 @@ import { regStars, regFmtP, buildRegCoeffRows, buildRegFittedRows,
          renderPCurvePanel, renderPUniformPanel, renderSelectionModelPanel,
          buildInfluenceHTML, bayesInterpretation, buildBayesSummaryHTML,
          buildSensitivityHTML, buildSubgroupHTML, renderGoshInfo,
-         formatContrastResult, renderPermResults }
+         formatContrastResult, renderPermResults, buildTag }
   from "./ui-render.js";
 import { validateRow, gatherSessionState } from "./ui-state.js";
 import { initTable, moderators, doAddModerator, removeModerator, clearModerators,
@@ -557,14 +557,11 @@ function renderInteractionTags() {
   if (!container) return;
   container.innerHTML = "";
   interactions.forEach(({ name, termA, termB }) => {
-    const span = document.createElement("span");
-    span.className = "mod-tag";
-    span.innerHTML = `${escapeHTML(termA)} × ${escapeHTML(termB)} <button class="remove-mod-btn" title="Remove interaction">×</button>`;
-    span.querySelector("button").addEventListener("click", () => {
+    const span = buildTag(`${termA} × ${termB}`, () => {
       removeInteraction(name);
       renderInteractionTags();
       markStale();
-    });
+    }, "Remove interaction");
     container.appendChild(span);
   });
 }
@@ -586,10 +583,7 @@ function renderScaleModTags() {
   if (!container) return;
   container.innerHTML = "";
   scaleModerators.forEach(({ name }) => {
-    const span = document.createElement("span");
-    span.className = "mod-tag";
-    span.innerHTML = `${escapeHTML(name)} <button class="remove-mod-btn" title="Remove scale moderator">×</button>`;
-    span.querySelector("button").addEventListener("click", () => removeScaleModerator(name));
+    const span = buildTag(name, () => removeScaleModerator(name), "Remove scale moderator");
     container.appendChild(span);
   });
 }

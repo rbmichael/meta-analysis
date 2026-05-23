@@ -13,6 +13,7 @@
 import { effectProfiles } from "./profiles.js";
 import { validateRow, getSoftWarnings } from "./ui-state.js";
 import { escapeHTML } from "./utils-html.js";
+import { buildTag } from "./ui-render.js";
 import { parseCSV, detectEffectType } from "./csv.js";
 import { readTextFile } from "./io.js";
 
@@ -115,17 +116,13 @@ function renderModTags() {
   if (!container) return;
   container.innerHTML = "";
   moderators.forEach(({ name }) => {
-    const span = document.createElement("span");
-    span.className = "mod-tag";
-    span.innerHTML = `${escapeHTML(name)} <button class="remove-mod-btn" title="Remove moderator">×</button>`;
-    span.querySelector("button").addEventListener("click", () => {
-      // Remove from analysis state only; keep the table column so the data isn't lost.
+    const span = buildTag(name, () => {
       moderators.splice(0, moderators.length, ...moderators.filter(m => m.name !== name));
       interactions.splice(0, interactions.length, ...interactions.filter(ix => ix.termA !== name && ix.termB !== name));
       renderModTags();
       _cb.onModeratorChanged();
       _cb.markStale();
-    });
+    }, "Remove moderator");
     container.appendChild(span);
   });
 }

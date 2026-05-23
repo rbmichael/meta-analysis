@@ -8,7 +8,7 @@
 
 import { MIN_VAR } from "./constants.js";
 import { normalCDF, normalQuantile, chiSquareCDF } from "./utils.js";
-import { cholFactor, cholLogDet, cholSolveVec, cholInverse, matInverse, logDet } from "./linalg.js";
+import { cholFactor, cholLogDet, cholSolveVec, cholInverse, matInverse, logDet, diagSE } from "./linalg.js";
 // bfgs is imported from selection.js to avoid a circular dep through analysis.js.
 // Safe: bfgs is only called inside mvMeta (a function body), never at module init.
 import { bfgs } from "./selection.js";
@@ -442,7 +442,7 @@ export function mvMeta(rows, V, opts = {}) {
 
   // Fixed effects β̂ = (X'Ω⁻¹X)⁻¹ X'Ω⁻¹y
   const beta = XOXinv.map(row => row.reduce((s, v, j) => s + v * XOy[j], 0));
-  const se   = XOXinv.map((row, j) => Math.sqrt(Math.max(0, row[j])));
+  const se   = diagSE(XOXinv);
 
   const zcrit = normalQuantile(1 - alpha / 2);
   const ci   = beta.map((b, j) => [b - zcrit * se[j], b + zcrit * se[j]]);

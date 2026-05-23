@@ -55,7 +55,7 @@
 // Theme field reference — Typography / stroke slots
 // --------------------------------------------------
 //   fontFamily      Applied via style("font-family") to every text element.
-//                   Use "inherit" for the app default (picks up page CSS).
+//                   Concrete stack required (not "inherit") for export fidelity.
 //   ciStrokeWidth   Stroke width (px) for individual study CI lines.
 //   headerRuleWidth Stroke width (px) for the horizontal header rule.
 //   nullLineDash    stroke-dasharray string for the vertical null reference line.
@@ -120,7 +120,7 @@ export const PLOT_THEMES = {
     colorInfo:       "var(--color-info)",
     colorSuccess:    "var(--color-success, #22aa66)",
 
-    fontFamily:      "inherit",
+    fontFamily:      "system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif",
     ciStrokeWidth:   1.5,
     headerRuleWidth: 1,
     nullLineDash:    "4",

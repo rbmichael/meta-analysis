@@ -119,15 +119,9 @@ export function groupByCluster(studies) {
  */
 export function compute(s, type, options = {}) {
   const resolvedType = type || autoDetectType(s);
-  if (!resolvedType) {
-    console.warn("compute(): cannot auto-detect effect type", s);
-    return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
-  }
+  if (!resolvedType) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
   const profile = getProfile(resolvedType);
-  if (!profile) {
-    console.warn(`compute(): unknown effect type "${resolvedType}"`);
-    return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
-  }
+  if (!profile) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
   return profile.compute(s);
 }
 
@@ -205,10 +199,7 @@ export function meta(studies, method="DL", ciMethod="normal", alpha=0.05, tau2In
   if (_byMethod?.has(_cacheKey)) return _byMethod.get(_cacheKey);
 
   const valid = validStudies(studies);
-  if (valid.length < studies.length) {
-    console.warn(`meta(): dropped ${studies.length - valid.length} study/studies with non-finite or non-positive vi/yi`);
-    studies = valid;
-  }
+  if (valid.length < studies.length) studies = valid;
 
   const k = studies.length;
   if(k === 0){

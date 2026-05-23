@@ -14,7 +14,8 @@
   max-width: 700px;
 }
 
-.pcurve-summary {
+.pcurve-summary,
+.puniform-summary {
   display: flex;
   align-items: baseline;
   flex-wrap: wrap;
@@ -29,7 +30,8 @@
   margin-bottom: 6px;
 }
 
-.pcurve-summary strong {
+.pcurve-summary strong,
+.puniform-summary strong {
   color: var(--fg);
 }
 
@@ -82,24 +84,6 @@
   max-width: 700px;
 }
 
-.puniform-summary {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 8px 16px;
-  padding: 10px 14px;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
-  font-size: 0.8125rem;
-  color: var(--fg-muted);
-  margin-bottom: 6px;
-}
-
-.puniform-summary strong {
-  color: var(--fg);
-}
 
 /* ================================================================
    SENSITIVITY ANALYSIS PANEL
