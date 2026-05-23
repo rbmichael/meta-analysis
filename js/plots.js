@@ -134,12 +134,13 @@ import { fmt, fmtP_APA } from "./format.js";
 // character widths.  All plot functions consume these; override with a spread
 // when a plot genuinely needs a different value.
 
+// Mirror of css/tokens.css --plot-font-* (SVG px; keep in sync if tokens change).
 const FONT_SIZE = {
   title:       "12px",   // SVG-internal plot title
-  axisLabel:   "11px",   // axis labels (x/y legends)
-  tickLabel:   "10px",   // axis tick text
-  annot:       "9px",    // small in-plot annotations
-  legendLabel: "10px",   // legend text
+  axisLabel:   "11px",   // axis labels (x/y legends) — mirrors --plot-font-base
+  tickLabel:   "10px",   // axis tick text            — mirrors --plot-font-sm
+  annot:       "9px",    // small in-plot annotations — mirrors --plot-font-xs
+  legendLabel: "10px",   // legend text               — mirrors --plot-font-sm
 };
 
 // Standard margins for scatter / scatter-like plots (influence, baujat, labbe, qq, radial).
@@ -1111,10 +1112,10 @@ export function drawForest(studies, m, options = {}) {
   const k = studies.length;
   if (k === 0) { drawNoDataPlaceholder(svg, +svg.attr("width") || 600, +svg.attr("height") || 200); return; }
   const L = k <= 20
-    ? { rowH: 22, labelFontSize: "11px", annotFontSize: "10px", titleFontSize: "12px", boxHalf: 5, diamondHH: 8 }
+    ? { rowH: 22, labelFontSize: FONT_SIZE.axisLabel, annotFontSize: FONT_SIZE.tickLabel, titleFontSize: FONT_SIZE.title,     boxHalf: 5, diamondHH: 8 }
     : k <= 40
-    ? { rowH: 18, labelFontSize: "10px", annotFontSize: "9px",  titleFontSize: "11px", boxHalf: 4, diamondHH: 7 }
-    : { rowH: 14, labelFontSize: "9px",  annotFontSize: "8px",  titleFontSize: "10px", boxHalf: 3, diamondHH: 6 };
+    ? { rowH: 18, labelFontSize: FONT_SIZE.tickLabel, annotFontSize: FONT_SIZE.annot,     titleFontSize: FONT_SIZE.axisLabel, boxHalf: 4, diamondHH: 7 }
+    : { rowH: 14, labelFontSize: FONT_SIZE.annot,     annotFontSize: "8px",               titleFontSize: FONT_SIZE.tickLabel, boxHalf: 3, diamondHH: 6 };
   L.plotW = 440; L.annotW = 240; L.headerH = 28;
 
   const _charW          = parseFloat(L.labelFontSize) >= 11 ? 6.5 : parseFloat(L.labelFontSize) >= 10 ? 5.9 : 5.3;
@@ -1494,7 +1495,7 @@ function funnelDrawBiasLegend(svg, W, margin, egger, petpeese, contours, T, bgCo
       .attr("stroke-dasharray", dash || "none");
     lg.append("text")
       .attr("x", PAD + SW + 5).attr("y", iy + 4)
-      .attr("fill", T.fgMuted).style("font-size", "9px")
+      .attr("fill", T.fgMuted).style("font-size", FONT_SIZE.annot)
       .style("font-family", T.fontFamily).text(label);
   });
 }

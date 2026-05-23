@@ -9,7 +9,7 @@
   color: var(--accent);
   border: 2px solid var(--accent);
   border-radius: var(--radius-sm);
-  font-size: 0.875rem;
+  font-size: var(--font-size-lg);
   font-weight: 600;
   text-decoration: none;
   transition: none;
@@ -128,7 +128,7 @@
   display: flex;
   align-items: center;
   gap: 5px;
-  font-size: 0.75rem;
+  font-size: var(--font-size-sm);
   font-weight: 500;
   color: var(--fg-muted);
   margin-right: 6px;
@@ -188,7 +188,7 @@
 
 .report-btn {
   padding: 3px 10px;
-  font-size: 0.75rem;
+  font-size: var(--font-size-sm);
   background: var(--bg-surface);
   border-radius: var(--radius-sm);
   margin: 0;
@@ -269,7 +269,7 @@
   display: flex;
   flex-direction: column;
   gap: 5px;
-  font-size: 0.75rem;
+  font-size: var(--font-size-sm);
   font-weight: 500;
   color: var(--fg-muted);
 }
@@ -280,7 +280,7 @@
   align-items: center;
   gap: 7px;
   color: var(--fg);
-  font-size: 0.875rem;
+  font-size: var(--font-size-lg);
   font-weight: 400;
   cursor: pointer;
 }
@@ -324,7 +324,7 @@
   align-items: center;
   gap: 7px;
   color: var(--fg);
-  font-size: 0.875rem;
+  font-size: var(--font-size-lg);
   font-weight: 400;
   cursor: pointer;
 }
@@ -364,7 +364,7 @@
 /* Inline hint beneath a settings section */
 .settings-hint {
   margin: 4px 0 0;
-  font-size: 0.75rem;
+  font-size: var(--font-size-sm);
   color: var(--fg-muted);
   font-style: italic;
 }
@@ -377,7 +377,7 @@
 
 .prior-warn {
   margin-left: 4px;
-  font-size: 0.75rem;
+  font-size: var(--font-size-sm);
   color: var(--color-error, #c0392b);
 }
 
@@ -621,7 +621,7 @@
   height: 30px;
   padding: 0;
   margin: 0;
-  font-size: 0.875rem;
+  font-size: var(--font-size-lg);
   line-height: 1;
   background: transparent;
   border-radius: var(--radius-full);
@@ -663,7 +663,7 @@
 /* ---- Output placeholder (shown before first run) ---- */
 #outputPlaceholder {
   color: var(--fg-muted);
-  font-size: 0.875rem;
+  font-size: var(--font-size-lg);
   padding: 48px 0 24px;
   text-align: center;
   opacity: 0.5;
@@ -686,7 +686,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  font-size: 0.875rem;
+  font-size: var(--font-size-lg);
   color: var(--fg);
 }
 
@@ -703,7 +703,7 @@
   border: none;
   border-radius: var(--radius-sm);
   padding: 3px 10px;
-  font-size: 0.8125rem;
+  font-size: var(--font-size-base);
   font-weight: 600;
   cursor: pointer;
 }
@@ -834,13 +834,13 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 0.75rem;
+  font-size: var(--font-size-sm);
   color: var(--fg-muted);
   white-space: nowrap;
 }
 
 .strip-label select {
-  font-size: 0.8125rem;
+  font-size: var(--font-size-base);
   max-width: 180px;
 }
 
@@ -899,7 +899,7 @@
 
 /* ---- MV-hint banner (item 20: promote from inline style) ---- */
 #previewMvHint {
-  font-size: 0.8125rem;
+  font-size: var(--font-size-base);
   color: var(--color-info);
   background: var(--accent-subtle);
   border: 1px solid var(--border-accent);
@@ -925,7 +925,7 @@
 
 /* ---- MV forest toolbar labels (item 20: promote from inline style) ---- */
 .mv-forest-label {
-  font-size: 0.8125rem;
+  font-size: var(--font-size-base);
   font-weight: normal;
   gap: 4px;
 }

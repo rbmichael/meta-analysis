@@ -121,6 +121,24 @@
   --reg-sig-2-color: #ca8a04;
   --reg-sig-1-color: #16a34a;
 
+  /* ── Spacing scale ──────────────────────────────────────── */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+
+  /* ── Font sizes ──────────────────────────────────────────── */
+  --font-size-sm:   0.75rem;   /* ~12px — labels, captions, dense UI */
+  --font-size-base: 0.8125rem; /* ~13px — default body/input text */
+  --font-size-lg:   0.875rem;  /* ~14px — slightly larger body text */
+
+  /* ── Plot font sizes (SVG px — not subject to rem scaling) ── */
+  --plot-font-base: 11px;
+  --plot-font-sm:   10px;
+  --plot-font-xs:    9px;
+
   /* ── Radius ──────────────────────────────────────────────── */
   --radius-xs:   3px;
   --radius-sm:   4px;

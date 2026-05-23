@@ -23,7 +23,7 @@
 .preview-badge {
   display: inline-block;
   font-family: var(--font-mono);
-  font-size: 0.75rem;
+  font-size: var(--font-size-sm);
   background: var(--bg-elevated);
   color: var(--fg-muted);
   border: 1px solid var(--border);
@@ -38,7 +38,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 0.75rem;
+  font-size: var(--font-size-sm);
   font-weight: 500;
   color: var(--fg-muted);
 }
@@ -50,7 +50,7 @@
 
 /* Base pill — shared by confidence indicator and column mapping chips */
 .badge-pill {
-  font-size: 0.75rem;
+  font-size: var(--font-size-sm);
   font-weight: 500;
   padding: 3px 10px;
   border-radius: var(--radius-full);
@@ -105,7 +105,7 @@
   background: var(--bg-th);
   color: var(--fg-muted);
   font-weight: 500;
-  font-size: 0.75rem;
+  font-size: var(--font-size-sm);
   padding: 6px 10px;
   border: 1px solid var(--border);
   text-align: left;
