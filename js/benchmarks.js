@@ -2388,7 +2388,7 @@ export const PUB_BIAS_BENCHMARKS = [
       petPeese: { usePeese: false,
                   fat:   { intercept: -0.157, interceptP: 0.521, slope: -2.345, slopeP: 0.160 },
                   peese: { intercept: -0.379, interceptP: 0.048, slope: -2.477, slopeP: 0.396 } },
-      failSafe: { rosenthal: 656, orwin: 44 },
+      failSafe: { rosenthal: 607, orwin: 44 },
       harbord:  { intercept: -2.093, interceptP: 0.235 },
       peters:   { intercept: -0.357, interceptP: 0.045 },
       trimFill: {

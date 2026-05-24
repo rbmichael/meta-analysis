@@ -416,7 +416,16 @@ export function rueckerTest(studies) {
 // Rosenthal's (1979) file-drawer number: how many null studies (effect = 0)
 // would be needed to push the combined p-value above alpha.
 //
-//   Nfs = (Σzᵢ / z_α)² − k   where zᵢ = Φ⁻¹(1 − pᵢ/2)  ≥ 0
+//   Nfs = (Σzᵢ / z_α)² − k   where zᵢ = yᵢ/seᵢ (signed)
+//
+// direction controls sign convention for zᵢ:
+//   "positive" (default) — zᵢ = yᵢ/seᵢ; positive effects support the hypothesis
+//   "negative"           — zᵢ = −yᵢ/seᵢ; negative effects support the hypothesis
+//   "auto"               — sign from FE pooled estimate; sumZ is always ≥ 0
+//
+// Mixed-direction studies contribute with opposite sign (cancel instead of
+// inflate), matching metafor::fsn(). Previous absolute-value formula inflated
+// Nfs when some studies ran counter to the dominant direction.
 //
 // Also computes Orwin's (1983) fail-safe N: studies needed to bring the
 // pooled RE below a trivial threshold |effect_trivial|.
@@ -424,28 +433,30 @@ export function rueckerTest(studies) {
 //   N_orwin = k · (|RE| − |trivial|) / |trivial|   (clamped to 0)
 //
 // Returns: { rosenthal, orwin, sumZ, z_crit, k }
-export function failSafeN(studies, alpha = 0.05, trivial = 0.1) {
+export function failSafeN(studies, alpha = 0.05, trivial = 0.1, direction = "positive") {
   const valid = validStudies(studies);
   const k = valid.length;
   if (k < 1) return { rosenthal: NaN, orwin: NaN, sumZ: NaN, z_crit: NaN, k: 0 };
 
-  // One-sided z for each study: z = |yi| / se  (using study-level statistic)
-  const sumZ = valid.reduce((acc, d) => {
-    const z = Math.abs(d.yi) / Math.sqrt(d.vi);
-    return acc + z;
-  }, 0);
-
-  // Critical z for the chosen alpha (two-tailed → one-sided z_α/2... but
-  // Rosenthal uses one-tailed z_α; for α=0.05, z_crit = 1.6449)
-  // We derive it by inversion: z such that normalCDF(z) = 1 − alpha
-  const z_crit = bisect(mid => (1 - alpha) - normalCDF(mid), 0, 10);
-
-  const rosenthal = Math.max(0, (sumZ / z_crit) ** 2 - k);
-
-  // Orwin: uses FE pooled estimate (Orwin 1983 predates RE meta-analysis)
+  // FE pooled estimate — needed for Orwin and "auto" direction
   const w0 = valid.map(s => 1 / s.vi);
   const W  = sum(w0);
   const FE = valid.reduce((acc, d, i) => acc + w0[i] * d.yi, 0) / W;
+
+  // Sign multiplier: "auto" aligns with FE direction so sumZ ≥ 0
+  const signMul = direction === "negative" ? -1
+                : direction === "auto"     ? (FE >= 0 ? 1 : -1)
+                : 1;  // "positive"
+
+  // Signed z for each study (Rosenthal 1979; matches metafor::fsn)
+  const sumZ = valid.reduce((acc, d) => acc + signMul * d.yi / Math.sqrt(d.vi), 0);
+
+  // Critical z for the chosen alpha (one-tailed; for α=0.05, z_crit ≈ 1.6449)
+  const z_crit = bisect(mid => (1 - alpha) - normalCDF(mid), 0, 10);
+
+  // Squaring means sign of sumZ does not affect rosenthal — both directions give same N
+  const rosenthal = Math.max(0, (sumZ / z_crit) ** 2 - k);
+
   const orwin = Math.max(0, k * (Math.abs(FE) - Math.abs(trivial)) / Math.abs(trivial));
 
   return { rosenthal, orwin, sumZ, z_crit, k };
