@@ -177,9 +177,13 @@ let _saveTimer = null;
 // actual save fires once the user pauses for 1.2 s. Does NOT call runAnalysis()
 // — analysis is triggered separately by the callers.
 // Build a complete session object for autosave, including MV state when active.
+// MV data is preserved even in Standard mode (active:false) so switching back
+// and forth between modes doesn't silently drop rows.
 function _buildAutosaveSession() {
   const session = gatherSessionState(moderators, scaleModerators, interactions, { domains: robPlotState.domains, data: robPlotState.data });
-  if (mvState.active) session.mv = gatherMVState();
+  const mvData = gatherMVState();
+  const mvHasData = mvData.rows.some(r => r.study_id || r.outcome_id || r.yi || r.vi);
+  if (mvState.active || mvHasData) session.mv = { ...mvData, active: mvState.active };
   return session;
 }
 
@@ -1678,7 +1682,9 @@ document.getElementById("profileLikScale").addEventListener("change", () => {
 
 function saveSession() {
   const session = gatherSessionState(moderators, scaleModerators, interactions, { domains: robPlotState.domains, data: robPlotState.data });
-  if (mvState.active) session.mv = gatherMVState();
+  const mvData = gatherMVState();
+  const mvHasData = mvData.rows.some(r => r.study_id || r.outcome_id || r.yi || r.vi);
+  if (mvState.active || mvHasData) session.mv = { ...mvData, active: mvState.active };
   downloadBlob(serializeSession(session), "session.json", "application/json;charset=utf-8;");
 }
 
@@ -1789,7 +1795,9 @@ function applySession(session) {
   // Restore MV mode
   const mv = session.mv;
   if (mv && typeof mv === "object") {
-    mvState.active = true;
+    // mv.active is false when user was in Standard mode but had MV data.
+    // Absent in old sessions — treat as true for backward compat.
+    mvState.active = mv.active !== false;
     _applyModeToggle();
     if (mv.struct && document.getElementById("mvStruct").querySelector(`option[value="${mv.struct}"]`))
       document.getElementById("mvStruct").value = mv.struct;
