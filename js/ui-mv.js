@@ -106,18 +106,20 @@ export function renderMVModTags() {
   container.innerHTML = mvModerators.map((name, i) =>
     `<span class="mod-tag">` +
     `<span>${escapeHTML(name)}</span>` +
-    `<button onclick="_mvRemoveMod(${i})" title="Remove">×</button>` +
+    `<button data-mod-idx="${i}" title="Remove">×</button>` +
     `</span>`
   ).join("");
+  container.querySelectorAll("button[data-mod-idx]").forEach(btn => {
+    btn.addEventListener("click", () => _mvRemoveMod(Number(btn.dataset.modIdx)));
+  });
 }
 
-// Exposed to inline onclick (inside tag HTML)
-window._mvRemoveMod = function(i) {
+function _mvRemoveMod(i) {
   mvModerators.splice(i, 1);
   renderMVModTags();
   rebuildMVTableHeaders();
   _markStale();
-};
+}
 
 function _mvAddMod() {
   const input = document.getElementById("mvModName");
@@ -158,8 +160,11 @@ export function rebuildMVTableHeaders() {
   const tr = document.getElementById("mvTableHead");
   tr.innerHTML =
     "<th>Study ID</th><th>Outcome ID</th><th>Effect (y<sub>i</sub>)</th><th>Variance (v<sub>i</sub>)</th>" +
-    mvModerators.map((m, i) => `<th>${escapeHTML(m)} <button class="remove-mod-btn" title="Remove moderator" onclick="_mvRemoveMod(${i})">×</button></th>`).join("") +
+    mvModerators.map((m, i) => `<th>${escapeHTML(m)} <button class="remove-mod-btn" data-mod-idx="${i}" title="Remove moderator">×</button></th>`).join("") +
     '<th class="col-actions">Actions</th>';
+  tr.querySelectorAll("button[data-mod-idx]").forEach(btn => {
+    btn.addEventListener("click", () => _mvRemoveMod(Number(btn.dataset.modIdx)));
+  });
   document.querySelectorAll("#mvTableBody tr").forEach(row => {
     _syncMVRowMods(row);
   });
