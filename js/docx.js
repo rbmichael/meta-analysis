@@ -1008,7 +1008,6 @@ export async function buildMVDocx({ res, rows = [], alpha = 0.05, exportScale = 
           warnings: engineWarnings = [] } = res;
   const hasMods = beta.length > P;
   const ciPct   = Math.round((1 - alpha) * 100);
-  const fP      = p => !isFinite(p) ? "—" : p < 0.001 ? "< .001" : "= " + (+p).toFixed(3).replace(/^0\./, ".");
 
   // Collect MV forest SVG strings from DOM
   const forestSVGStrings = (() => {
@@ -1044,7 +1043,7 @@ export async function buildMVDocx({ res, rows = [], alpha = 0.05, exportScale = 
   const pooledRows = outcomeIds.map((id, o) => {
     const [lo, hi] = ci[o];
     return [run(String(id)), run(fmt(beta[o], 4)), run(fmt(se[o], 4)),
-            run(`[${fmt(lo, 4)}, ${fmt(hi, 4)}]`), run(fmt(z[o], 3)), run(fP(pval[o]))];
+            run(`[${fmt(lo, 4)}, ${fmt(hi, 4)}]`), run(fmt(z[o], 3)), run(fmtP_APA(pval[o]))];
   });
 
   // Heterogeneity table
@@ -1062,9 +1061,9 @@ export async function buildMVDocx({ res, rows = [], alpha = 0.05, exportScale = 
   const testHeaders = ["Test", "χ²", "df", "p"];
   const testRows = [
     ...(hasMods && isFinite(QM)
-      ? [[run("Omnibus test of moderators (QM)"), run(fmt(QM, 3)), run(String(df_QM)), run(fP(pQM))]]
+      ? [[run("Omnibus test of moderators (QM)"), run(fmt(QM, 3)), run(String(df_QM)), run(fmtP_APA(pQM))]]
       : []),
-    [run("Residual heterogeneity (QE)"), run(fmt(QE, 3)), run(String(df_QE)), run(fP(pQE))],
+    [run("Residual heterogeneity (QE)"), run(fmt(QE, 3)), run(String(df_QE)), run(fmtP_APA(pQE))],
   ];
 
   // Moderator table
@@ -1075,7 +1074,7 @@ export async function buildMVDocx({ res, rows = [], alpha = 0.05, exportScale = 
       const j = P + i;
       const [lo, hi] = ci[j];
       return [run(betaNames[j] ?? `β${j}`), run(fmt(b, 4)), run(fmt(se[j], 4)),
-              run(`[${fmt(lo, 4)}, ${fmt(hi, 4)}]`), run(fmt(z[j], 3)), run(fP(pval[j]))];
+              run(`[${fmt(lo, 4)}, ${fmt(hi, 4)}]`), run(fmt(z[j], 3)), run(fmtP_APA(pval[j]))];
     });
     modChunks = [...apaTableDocx(nextTable(), "Meta-regression coefficients", modHeaders, modRows), para("")];
   }
