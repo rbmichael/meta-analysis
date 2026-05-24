@@ -487,10 +487,11 @@ export function metaRegression(studies, moderators = [], method = "REML", ciMeth
     tau2: NaN, QE: NaN, QEdf: kf - p, QEp: NaN,
     QM: NaN, QMdf: p - 1, QMp: NaN, modTests: [],
     vif: Array(p).fill(NaN), maxVIF: NaN, I2: NaN,
-    colNames, modColMap, modKnots, k: kf, p, rankDeficient: true, rankDeficientCause: "collinear"
+    colNames, modColMap, modKnots, k: kf, p, rankDeficient: true, rankDeficientCause: "collinear",
+    error: "Collinear moderators"
   };
 
-  if (kf < p + 1) return { ...empty, rankDeficientCause: "insufficient_k" };
+  if (kf < p + 1) return { ...empty, rankDeficientCause: "insufficient_k", error: "Insufficient studies for regression" };
 
   // ---- τ² ----
   const tau2 = tau2_metaReg(yi, vi, Xf, method);
@@ -1299,10 +1300,17 @@ export function meta3level(studies, opts = {}) {
   const method = opts.method ?? "REML";
   const alpha  = opts.alpha  ?? 0.05;
 
+  const t3Err = msg => ({
+    error: msg, mu: NaN, se: NaN, ci: [NaN, NaN], z: NaN, p: NaN,
+    tau2_within: NaN, tau2_between: NaN, I2_within: NaN, I2_between: NaN,
+    Q: NaN, df: NaN, k: Array.isArray(studies) ? studies.length : NaN,
+    kCluster: NaN, logLik: NaN, convergence: false,
+  });
+
   if (method !== "REML" && method !== "ML")
-    return { error: `method must be "REML" or "ML" (got "${method}")` };
+    return t3Err(`method must be "REML" or "ML" (got "${method}")`);
   if (!Array.isArray(studies) || studies.length < 3)
-    return { error: "Three-level meta-analysis requires at least 3 studies" };
+    return t3Err("Three-level meta-analysis requires at least 3 studies");
 
   // Group studies by cluster; singletons get a unique synthetic key.
   const clusterMap = groupByCluster(studies);
@@ -1310,7 +1318,7 @@ export function meta3level(studies, opts = {}) {
   const m = clusters.length;
   const k = studies.length;
 
-  if (m < 2) return { error: "Three-level meta-analysis requires at least 2 clusters" };
+  if (m < 2) return t3Err("Three-level meta-analysis requires at least 2 clusters");
 
   // ------------------------------------------------------------------
   // Concentrated log-likelihood at (tau2u, tau2t).

@@ -234,22 +234,27 @@ export function mvMeta(rows, V, opts = {}) {
     slopes    = "separate",  // "separate" (one slope per outcome) | "common" (shared slope)
   } = opts;
 
+  const mvErr = msg => ({
+    error: msg, beta: [], se: [], ci: [], z: [], pval: [], tau2: [],
+    Psi: null, QM: NaN, QE: NaN, k: NaN, convergence: false,
+  });
+
   // ---- Validate inputs ----
   if (!V || !Array.isArray(V.blocks) || V.blocks.length === 0)
-    return { error: 'V must be a vcalc() result with at least one block' };
+    return mvErr('V must be a vcalc() result with at least one block');
   if (!["CS", "Diag", "UN"].includes(struct))
-    return { error: `struct must be "CS", "Diag", or "UN" (got "${struct}")` };
+    return mvErr(`struct must be "CS", "Diag", or "UN" (got "${struct}")`);
   if (!["REML", "ML"].includes(method))
-    return { error: `method must be "REML" or "ML" (got "${method}")` };
+    return mvErr(`method must be "REML" or "ML" (got "${method}")`);
 
   const k = V.blocks.length;    // number of studies
   const P = V.outcomeIds.length; // number of unique outcomes
   const n = V.n;                 // total observations
 
   if (P < 2)
-    return { error: 'mvMeta requires at least 2 outcomes; use meta() for univariate analysis' };
+    return mvErr('mvMeta requires at least 2 outcomes; use meta() for univariate analysis');
   if (k < 3)
-    return { error: 'mvMeta requires at least 3 studies' };
+    return mvErr('mvMeta requires at least 3 studies');
 
   // Warn if model may be overparameterised
   const nPsiPar = _nPsiParams(struct, P);
@@ -261,7 +266,7 @@ export function mvMeta(rows, V, opts = {}) {
   for (const block of V.blocks) {
     for (const r of block.rows) {
       if (!isFinite(r.yi) || !isFinite(r.vi) || r.vi <= 0)
-        return { error: `Invalid yi=${r.yi} or vi=${r.vi} in study "${block.studyId}", outcome "${r._oid}"` };
+        return mvErr(`Invalid yi=${r.yi} or vi=${r.vi} in study "${block.studyId}", outcome "${r._oid}"`);
     }
   }
 
@@ -414,7 +419,7 @@ export function mvMeta(rows, V, opts = {}) {
       Array.from({ length: p }, (_, kk) => Vmat[j][kk] + Psi[idx[j]][idx[kk]])
     );
     const L = cholFactor(Sigma);
-    if (L === null) return { error: 'Cholesky factorisation failed at converged parameters' };
+    if (L === null) return mvErr('Cholesky factorisation failed at converged parameters');
     logDetSum += cholLogDet(L);
     const Oiy = cholSolveVec(L, y);
     for (let j = 0; j < p; j++) yOy += y[j] * Oiy[j];
@@ -438,7 +443,7 @@ export function mvMeta(rows, V, opts = {}) {
   }
 
   const XOXinv = matInverse(XOX);
-  if (XOXinv === null) return { error: 'Singular information matrix X\'Ω⁻¹X at converged parameters' };
+  if (XOXinv === null) return mvErr('Singular information matrix X\'Ω⁻¹X at converged parameters');
 
   // Fixed effects β̂ = (X'Ω⁻¹X)⁻¹ X'Ω⁻¹y
   const beta = XOXinv.map(row => row.reduce((s, v, j) => s + v * XOy[j], 0));

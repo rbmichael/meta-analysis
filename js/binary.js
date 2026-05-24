@@ -24,15 +24,17 @@ import { heterogeneityCIs } from "./regression.js";
 // Q for heterogeneity: IV weights (1/vi) with M-H estimate as reference.
 export function metaMH(studies, type, alpha = 0.05) {
   const k = studies.length;
-  if (k < 2) return { error: "Mantel-Haenszel requires at least 2 studies." };
+  const mhErr = msg => ({
+    error: msg, FE: NaN, seFE: NaN, RE: NaN, seRE: NaN, tau2: NaN,
+    Q: NaN, df: NaN, I2: NaN, stat: NaN, pval: NaN, k, isMH: true,
+  });
+  if (k < 2) return mhErr("Mantel-Haenszel requires at least 2 studies.");
 
   const MH_TYPES = ["OR", "RR", "RD"];
-  if (!MH_TYPES.includes(type)) {
-    return { error: `Mantel-Haenszel pooling is only available for OR, RR, and RD (got "${type}").` };
-  }
-  if (studies[0]?.a === undefined) {
-    return { error: "Mantel-Haenszel requires raw cell counts (a, b, c, d)." };
-  }
+  if (!MH_TYPES.includes(type))
+    return mhErr(`Mantel-Haenszel pooling is only available for OR, RR, and RD (got "${type}").`);
+  if (studies[0]?.a === undefined)
+    return mhErr("Mantel-Haenszel requires raw cell counts (a, b, c, d).");
 
   let est, varEst;
   let kEff = 0;  // studies that passed the per-type guard
@@ -57,9 +59,9 @@ export function metaMH(studies, type, alpha = 0.05) {
       kEff++;
     }
 
-    if (kEff < 2) return { error: "Fewer than 2 studies contributed to the M-H OR estimate." };
-    if (sumR <= 0) return { error: "M-H OR is undefined: no events in the treatment arm across all studies." };
-    if (sumS <= 0) return { error: "M-H OR is undefined: no events in the control arm across all studies." };
+    if (kEff < 2) return mhErr("Fewer than 2 studies contributed to the M-H OR estimate.");
+    if (sumR <= 0) return mhErr("M-H OR is undefined: no events in the treatment arm across all studies.");
+    if (sumS <= 0) return mhErr("M-H OR is undefined: no events in the control arm across all studies.");
 
     est     = Math.log(sumR / sumS);
     varEst  = sumPR / (2 * sumR * sumR)
@@ -83,9 +85,9 @@ export function metaMH(studies, type, alpha = 0.05) {
       kEff++;
     }
 
-    if (kEff < 2) return { error: "Fewer than 2 studies contributed to the M-H RR estimate." };
-    if (sumR <= 0) return { error: "M-H RR is undefined: no events in the treatment arm across all studies." };
-    if (sumS <= 0) return { error: "M-H RR is undefined: no events in the control arm across all studies." };
+    if (kEff < 2) return mhErr("Fewer than 2 studies contributed to the M-H RR estimate.");
+    if (sumR <= 0) return mhErr("M-H RR is undefined: no events in the treatment arm across all studies.");
+    if (sumS <= 0) return mhErr("M-H RR is undefined: no events in the control arm across all studies.");
 
     est    = Math.log(sumR / sumS);
     varEst = sumC / (sumR * sumS);
@@ -105,8 +107,8 @@ export function metaMH(studies, type, alpha = 0.05) {
       kEff++;
     }
 
-    if (kEff < 2) return { error: "Fewer than 2 studies contributed to the M-H RD estimate." };
-    if (sumW === 0) return { error: "M-H RD is undefined: total weight is zero." };
+    if (kEff < 2) return mhErr("Fewer than 2 studies contributed to the M-H RD estimate.");
+    if (sumW === 0) return mhErr("M-H RD is undefined: total weight is zero.");
 
     est = sumNum1 / sumW;
 
@@ -121,9 +123,8 @@ export function metaMH(studies, type, alpha = 0.05) {
     varEst = (est * sumNum2 + sumB / 2) / (sumW * sumW);
   }
 
-  if (!isFinite(est) || !isFinite(varEst) || varEst <= 0) {
-    return { error: "M-H estimate is not finite — check for degenerate cell counts." };
-  }
+  if (!isFinite(est) || !isFinite(varEst) || varEst <= 0)
+    return mhErr("M-H estimate is not finite — check for degenerate cell counts.");
 
   const se = Math.sqrt(varEst);
 
@@ -168,10 +169,13 @@ export function metaMH(studies, type, alpha = 0.05) {
 // Q for heterogeneity: IV weights (1/vi) with Peto estimate as reference.
 export function metaPeto(studies, alpha = 0.05) {
   const k = studies.length;
-  if (k < 2) return { error: "Peto OR requires at least 2 studies." };
-  if (studies[0]?.a === undefined) {
-    return { error: "Peto OR requires raw cell counts (a, b, c, d)." };
-  }
+  const petoErr = msg => ({
+    error: msg, FE: NaN, seFE: NaN, RE: NaN, seRE: NaN, tau2: NaN,
+    Q: NaN, df: NaN, I2: NaN, stat: NaN, pval: NaN, k, isPeto: true,
+  });
+  if (k < 2) return petoErr("Peto OR requires at least 2 studies.");
+  if (studies[0]?.a === undefined)
+    return petoErr("Peto OR requires raw cell counts (a, b, c, d).");
 
   let sumOmE = 0, sumV = 0, sumOmE2V = 0;
   let kEff   = 0;
@@ -193,15 +197,14 @@ export function metaPeto(studies, alpha = 0.05) {
     kEff++;
   }
 
-  if (kEff < 2) return { error: "Fewer than 2 studies contributed to the Peto OR estimate." };
-  if (sumV  === 0) return { error: "Peto OR is undefined: total hypergeometric variance is zero." };
+  if (kEff < 2) return petoErr("Fewer than 2 studies contributed to the Peto OR estimate.");
+  if (sumV  === 0) return petoErr("Peto OR is undefined: total hypergeometric variance is zero.");
 
   const est    = sumOmE / sumV;
   const varEst = 1 / sumV;
 
-  if (!isFinite(est) || varEst <= 0) {
-    return { error: "Peto OR estimate is not finite — check for degenerate cell counts." };
-  }
+  if (!isFinite(est) || varEst <= 0)
+    return petoErr("Peto OR estimate is not finite — check for degenerate cell counts.");
 
   const se = Math.sqrt(varEst);
 

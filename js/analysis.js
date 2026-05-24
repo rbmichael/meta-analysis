@@ -23,6 +23,18 @@
 //               crit, stat, pval, dist, tauCI, I2CI, H2CI }.
 //     Results are shallow-memoised per studies-array reference.
 //
+// Return-shape contract (two patterns — do not mix)
+// -------------------------------------------------
+//   Per-study (compute / profiles.js):
+//     { yi: NaN, vi: NaN, se: NaN, w: 0 }  on validation failure.
+//     Callers pass these to meta(); meta() skips w=0 rows automatically.
+//
+//   Top-level analyses (meta, metaRegression, metaMH, metaPeto, meta3level,
+//     mvMeta, goshCompute, …):
+//     { error: string, …NaN fields }  on any error.
+//     Always check `if (result.error)` first; remaining fields are NaN (not
+//     undefined) so accidental access fails gracefully rather than silently.
+//
 //   clES(d, ci)
 //     Common Language Effect Size Φ(d/√2); transforms d CI endpoints.
 //
