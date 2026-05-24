@@ -378,12 +378,23 @@ export function runMVAnalysis() {
   });
   _updateMVValidationWarnings();
 
-  const rows = _collectMVRows();
+  let rows = _collectMVRows();
   const warningsEl = document.getElementById("mvValidationWarnings");
 
   if (!rows.length) return false;
 
   const msgs = [];
+
+  if (mvModerators.length) {
+    const before = rows.length;
+    rows = rows.filter(r => mvModerators.every(name => isFinite(r[name])));
+    const dropped = before - rows.length;
+    if (dropped) msgs.push(`⚠️ ${dropped} row${dropped > 1 ? "s" : ""} excluded: missing or non-numeric moderator value${dropped > 1 ? "s" : ""}.`);
+    if (!rows.length) {
+      warningsEl.innerHTML = msgs.map(m => `• ${m}`).join("<br>");
+      return false;
+    }
+  }
   const outcomeIds = [...new Set(rows.map(r => r.outcome_id))];
   const studyIds   = [...new Set(rows.map(r => r.study_id))];
 
