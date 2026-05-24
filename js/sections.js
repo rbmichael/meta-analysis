@@ -735,3 +735,63 @@ export function sensitivityData(args) {
 
   return { loo: { headers: looHeaders, rows: looRows, sigChanges, note: looNote }, est: { headers: estHeaders, rows: estRows, note: estNote } };
 }
+
+// ---------------------------------------------------------------------------
+// Bayesian meta-analysis
+// ---------------------------------------------------------------------------
+
+function _fmtBF(bf) {
+  if (!isFinite(bf)) return "NA";
+  return (bf >= 1000 || bf < 0.001) ? bf.toExponential(2) : bf.toFixed(3);
+}
+
+export function bayesData(args) {
+  const { bayesResult, bayesReMean, profile, ciLevel = "95" } = args;
+  if (!bayesResult || bayesResult.error) return null;
+  const widthCrLabel = ciLevel + "% CrI";
+  const muDisp   = profile.transform(bayesResult.muMean);
+  const muCIDisp = bayesResult.muCI.map(v => profile.transform(v));
+  const reDisp   = isFinite(bayesReMean) ? profile.transform(bayesReMean) : NaN;
+  const muSDNote = profile.isTransformedScale ? " (log)" : "";
+  const priorLine = `Prior: μ ~ N(${bayesResult.mu0}, ${bayesResult.sigma_mu}²)  ·  τ ~ HalfNormal(${bayesResult.sigma_tau})  ·  k = ${bayesResult.k} studies`;
+  const rows = [
+    [`Posterior mean μ`,
+     `${fmt(muDisp)}  ·  ${widthCrLabel} ${fmtCI_APA(muCIDisp[0], muCIDisp[1])}  ·  SD${muSDNote} = ${fmt(bayesResult.muSD)}`],
+    [`Posterior mean τ`,
+     `${fmt(bayesResult.tauMean)}  ·  ${widthCrLabel} ${fmtCI_APA(bayesResult.tauCI[0], bayesResult.tauCI[1])}  ·  SD = ${fmt(bayesResult.tauSD)}`],
+    ...(isFinite(reDisp)
+      ? [["Frequentist RE (comparison)", fmt(reDisp)]] : []),
+    ...(isFinite(bayesResult.BF10)
+      ? [[`Bayes Factor BF₁₀ (H₁: μ≠0)`, _fmtBF(bayesResult.BF10)]] : []),
+    ...(bayesResult.BF10 < 1 && isFinite(bayesResult.BF01)
+      ? [[`BF₀₁ = 1/BF₁₀ (H₀: μ = 0)`, _fmtBF(bayesResult.BF01)]] : []),
+  ];
+  return {
+    priorLine,
+    muSDNote,
+    tableName: `Bayesian Meta-Analysis Results (${profile.label})`,
+    headers: ["Statistic", "Value"],
+    rows,
+    note: `CrI = credible interval. Posterior mean μ on ${profile.label} scale. Frequentist RE shown for comparison only.`,
+    muPriorNote: `Prior: μ ~ N(${bayesResult.mu0}, ${bayesResult.sigma_mu}²); τ ~ HalfNormal(${bayesResult.sigma_tau}). Vertical line = posterior mean; shaded region = ${widthCrLabel}.`,
+    tauPriorNote: `Prior: τ ~ HalfNormal(${bayesResult.sigma_tau}).`,
+    profileLabel: profile.label,
+  };
+}
+
+export function bayesSensitivityData(sensitivityRows, profile, ciLevel = "95") {
+  if (!sensitivityRows || !sensitivityRows.length) return null;
+  const widthCrLabel = ciLevel + "% CrI";
+  const rows = sensitivityRows.map(row => {
+    const muDisp   = profile.transform(row.muMean);
+    const muCIDisp = row.muCI.map(v => profile.transform(v));
+    const ciStr = `[${isFinite(muCIDisp[0]) ? fmt(muCIDisp[0]) : "NA"}, ${isFinite(muCIDisp[1]) ? fmt(muCIDisp[1]) : "NA"}]`;
+    return [String(row.sigma_mu), String(row.sigma_tau), isFinite(muDisp) ? fmt(muDisp) : "NA", ciStr, _fmtBF(row.BF10)];
+  });
+  return {
+    tableName: "Prior Sensitivity Analysis",
+    headers: ["σ_μ", "σ_τ", "Post. μ", widthCrLabel, "BF₁₀"],
+    rows,
+    note: "Grid: σ_μ ∈ {0.5, 1, 2}, σ_τ ∈ {0.25, 0.5, 1}. Diffuse priors approach the frequentist RE estimate.",
+  };
+}

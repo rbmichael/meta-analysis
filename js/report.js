@@ -41,7 +41,8 @@ import { serializeSVG, collectPagedSVGs } from "./export.js";
 import { summaryData, pubBiasData, pCurveData, puniformData, selModelData,
          influenceData, subgroupData, studyTableData, regressionData,
          regressionFittedData, locationScaleData, permutationData,
-         rveData, threeLevelData, sensitivityData, cellRich } from "./sections.js";
+         rveData, threeLevelData, sensitivityData,
+         bayesData, bayesSensitivityData, cellRich } from "./sections.js";
 
 // serializeSVG and collectPagedSVGs are imported from export.js.
 
@@ -579,6 +580,35 @@ function sectionRegression(reg, method, ciMethod, nextTable, widthCiLabel = "95%
 </section>`;
 }
 
+function sectionBayes(args) {
+  const { nextTable, nextFigure, sensitivityRows, svgBayesMu, svgBayesTau } = args;
+  const d = bayesData(args);
+  if (!d) return "";
+  if (!svgBayesMu && !svgBayesTau) return "";
+  const bodyRows = d.rows.map(r => `<tr>${r.map(c => `<td>${renderRich(c)}</td>`).join("")}</tr>`);
+  const sensD    = bayesSensitivityData(sensitivityRows, args.profile, args.ciLevel);
+  const sensitivitySection = sensD ? (() => {
+    const sensRows = sensD.rows.map(r => `<tr>${r.map(c => `<td>${renderRich(c)}</td>`).join("")}</tr>`);
+    return `<h3>Prior Sensitivity Analysis</h3>
+  ${buildTableAPA(nextTable(), sensD.tableName, sensD.headers, sensRows, renderRich(sensD.note))}`;
+  })() : "";
+  const plotMu = svgBayesMu
+    ? buildFigureAPA(nextFigure(), `Posterior distribution of pooled effect μ (${esc(d.profileLabel)})`, [svgBayesMu], esc(d.muPriorNote))
+    : "";
+  const plotTau = svgBayesTau
+    ? buildFigureAPA(nextFigure(), "Posterior distribution of between-study standard deviation τ", [svgBayesTau], esc(d.tauPriorNote))
+    : "";
+  return `
+<section>
+  <h2>Bayesian Meta-Analysis</h2>
+  <p class="meta-line">${esc(d.priorLine)}</p>
+  ${buildTableAPA(nextTable(), d.tableName, d.headers, bodyRows, renderRich(d.note))}
+  ${sensitivitySection}
+  ${plotMu}
+  ${plotTau}
+</section>`;
+}
+
 function sectionRve(args, nextTable) {
   const d = rveData(args);
   if (!d) return "";
@@ -1070,7 +1100,8 @@ export function buildReport(args) {
   const adjRegPs  = mccMethod !== "none" && rawModPs.length > 1 ? adjustPvals(rawModPs, mccMethod) : null;
 
   // Augmented args passed to every section builder.
-  const rArgs = { ...args, nextTable, nextFigure, funnelSVG: liveSVG("funnelPlot") };
+  const rArgs = { ...args, nextTable, nextFigure, funnelSVG: liveSVG("funnelPlot"),
+                  svgBayesMu: liveSVG("bayesMuPlot"), svgBayesTau: liveSVG("bayesTauPlot") };
 
   const body = [
     sectionSummary(rArgs),
@@ -1088,65 +1119,7 @@ export function buildReport(args) {
   ${buildFigureAPA(nextFigure(), `Profile likelihood curve for τ²`, [svg], note)}
 </section>`;
     })(),
-    (() => {
-      if (!bayesResult || bayesResult.error) return "";
-      const svgMu  = liveSVG("bayesMuPlot");
-      const svgTau = liveSVG("bayesTauPlot");
-      if (!svgMu && !svgTau) return "";
-      const muDisp   = profile.transform(bayesResult.muMean);
-      const muCIDisp = bayesResult.muCI.map(v => profile.transform(v));
-      const reDisp   = isFinite(bayesReMean) ? profile.transform(bayesReMean) : NaN;
-      const priorLine = `Prior: μ ~ N(${esc(bayesResult.mu0)}, ${esc(bayesResult.sigma_mu)}²) τ ~ HalfNormal(${esc(bayesResult.sigma_tau)}) k = ${bayesResult.k} studies`;
-      const muSDNote = profile.isTransformedScale ? " (log)" : "";
-      const fmtBF = bf => !isFinite(bf) ? "NA" : bf >= 1000 || bf < 0.001 ? bf.toExponential(2) : bf.toFixed(3);
-      const statsTable = `
-  <table class="stats-table">
-    <tr><td>Posterior mean μ</td><td>${fmt(muDisp)}</td><td>${widthCrLabel} [${fmt(muCIDisp[0])}, ${fmt(muCIDisp[1])}] · SD${muSDNote} = ${fmt(bayesResult.muSD)}</td></tr>
-    <tr><td>Posterior mean τ</td><td>${fmt(bayesResult.tauMean)}</td><td>${widthCrLabel} [${fmt(bayesResult.tauCI[0])}, ${fmt(bayesResult.tauCI[1])}] · SD = ${fmt(bayesResult.tauSD)}</td></tr>
-    ${isFinite(reDisp) ? `<tr><td>Frequentist RE (comparison)</td><td>${fmt(reDisp)}</td><td></td></tr>` : ""}
-    ${isFinite(bayesResult.BF10) ? `<tr><td>Bayes Factor BF₁₀ (H₁: μ≠0)</td><td>${fmtBF(bayesResult.BF10)}</td><td></td></tr>` : ""}
-    ${bayesResult.BF10 < 1 && isFinite(bayesResult.BF01) ? `<tr><td>BF₀₁ = 1/BF₁₀ (H₀: μ = 0)</td><td>${fmtBF(bayesResult.BF01)}</td><td></td></tr>` : ""}
-  </table>`;
-      const bayesPriorNote = `Prior: μ ~ N(${esc(bayesResult.mu0)}, ${esc(bayesResult.sigma_mu)}²); τ ~ HalfNormal(${esc(bayesResult.sigma_tau)}). Vertical line = posterior mean; shaded region = 95% credible interval.`;
-      const plotsMu  = svgMu
-        ? buildFigureAPA(nextFigure(),
-            `Posterior distribution of pooled effect μ (${esc(profile.label)})`,
-            [svgMu], bayesPriorNote)
-        : "";
-      const plotsTau = svgTau
-        ? buildFigureAPA(nextFigure(),
-            `Posterior distribution of between-study standard deviation τ`,
-            [svgTau],
-            `Prior: τ ~ HalfNormal(${esc(bayesResult.sigma_tau)}).`)
-        : "";
-      const sensitivityTable = (() => {
-        if (!sensitivityRows || !sensitivityRows.length) return "";
-        const crLabel = widthCrLabel;
-        const header = `<tr><th>σ_μ</th><th>σ_τ</th><th>Post. μ</th><th>${crLabel}</th><th>BF₁₀</th></tr>`;
-        const rows2 = sensitivityRows.map(row => {
-          const muDisp   = profile.transform(row.muMean);
-          const muCIDisp = row.muCI.map(v => profile.transform(v));
-          const bf = row.BF10;
-          const bfStr = !isFinite(bf) ? "NA"
-            : bf >= 1000 ? bf.toExponential(2)
-            : bf < 0.001 ? bf.toExponential(2)
-            : bf.toFixed(3);
-          return `<tr><td>${row.sigma_mu}</td><td>${row.sigma_tau}</td><td>${isFinite(muDisp) ? fmt(muDisp) : "NA"}</td><td>[${isFinite(muCIDisp[0]) ? fmt(muCIDisp[0]) : "NA"}, ${isFinite(muCIDisp[1]) ? fmt(muCIDisp[1]) : "NA"}]</td><td>${bfStr}</td></tr>`;
-        }).join("");
-        return `<h3>Prior Sensitivity Analysis</h3>
-  <table class="stats-table"><thead>${header}</thead><tbody>${rows2}</tbody></table>
-  <p class="note">Grid: σ_μ ∈ {0.5, 1, 2}, σ_τ ∈ {0.25, 0.5, 1}. Diffuse priors approach the frequentist RE estimate.</p>`;
-      })();
-      return `
-<section>
-  <h2>Bayesian Meta-Analysis</h2>
-  <p class="meta-line">${priorLine}</p>
-  ${statsTable}
-  ${sensitivityTable}
-  ${plotsMu}
-  ${plotsTau}
-</section>`;
-    })(),
+    sectionBayes(rArgs),
     sectionRve({ ...rArgs, rveResult, rveRho }, nextTable),
     sectionThreeLevel({ ...rArgs, threeLevelResult }, nextTable),
     sectionPubBias(rArgs),
