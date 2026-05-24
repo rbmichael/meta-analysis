@@ -2017,7 +2017,8 @@ export const BENCHMARKS = [
   // correlation between the two binary traits.
   // yi = rho_tet: bisect Φ₂(h,k;ρ) = a/N over 64 iterations.
   //   h = Φ⁻¹(p_row),  k = Φ⁻¹(p_col),  p11 = a/N
-  // vi = p_row(1−p_row)·p_col(1−p_col) / (N·φ₂(h,k;ρ)²)
+  // vi = √(p₁₁·p₁₂·p₂₁·p₂₂) / (N·φ₂(h,k;ρ)²)
+  //   (Pearson 1913 / Brown & Benedetti 1977 / metafor convention)
   //   φ₂ = bivariate normal density at (h,k;ρ)  (delta method)
   // Spot-check: rho(40,10,10,40) = sin(0.3π) ≈ 0.8090 exactly.
   // ----------------------------------------------------------------
@@ -2034,13 +2035,14 @@ export const BENCHMARKS = [
     ],
     expected: {
       // yi = rho_tet per study, verified by bisection + analytic spot-check
-      yi:   [0.8090, 0.6545, 0.7765, 0.7485],
-      FE:    0.756,
-      RE:    0.756,
+      // vi from cell-product formula matching metafor escalc("RTET")
+      yi:   [0.809018, 0.654514, 0.776535, 0.748453],
+      FE:    0.760,
+      RE:    0.760,
       tau2:  0.000,
       I2:    0.0
     },
-    citation: "Synthetic dataset (profiles.js RTET exampleData). Bisection via bivariateNormalCDF (utils.js). τ²=0 reflects consistent latent correlation."
+    citation: "Synthetic dataset. R-verified (metafor 4.8-0, generate.R block 34). vi uses cell-product formula √(p₁₁p₁₂p₂₁p₂₂)/(N·φ₂²) matching metafor escalc('RTET'). τ²=0 reflects consistent latent correlation."
   },
 
   // ----------------------------------------------------------------

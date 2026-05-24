@@ -48,7 +48,14 @@ export function weightedMean(values, weights) {
   return W > 0 ? values.reduce((acc, v, i) => acc + v * weights[i], 0) / W : NaN;
 }
 export function clamp01(v) { return Math.min(1, Math.max(0, v)); }
-export function hedgesJ(df) { return 1 - 3 / (4 * df - 1); }
+// Exact Hedges' J correction factor using the log-gamma recurrence.
+// Γ(df/2) / [√(df/2) · Γ((df-1)/2)] — matches metafor escalc() exactly.
+// Falls back to the 1-3/(4df-1) approximation when df ≤ 0 (should not occur).
+export function hedgesJ(df) {
+  if (df <= 0) return 1 - 3 / (4 * df - 1);
+  const half = df / 2;
+  return Math.exp(logGamma(half) - 0.5 * Math.log(half) - logGamma(half - 0.5));
+}
 export function bisect(f, lo, hi, iters = BISECTION_ITERS) {
   for (let i = 0; i < iters; i++) {
     const mid = (lo + hi) / 2;
@@ -470,7 +477,9 @@ export function continuityCorrect({ a, b, c, d }) {
 
 // Estimates the latent Pearson correlation from a 2×2 table (a,b,c,d).
 // Finds ρ by bisecting bivariateNormalCDF(h, k; ρ) = a/N.
-// Variance: p_r(1−p_r)·p_c(1−p_c) / (N · φ₂(h,k;ρ)²)  — delta method.
+// Variance (Pearson 1913 / Brown & Benedetti 1977 / metafor convention):
+//   v = √(p₁₁·p₁₂·p₂₁·p₂₂) / (N · φ₂(h,k;ρ)²)
+// where p₁₁..p₂₂ are the four cell proportions (after continuity correction).
 // Returns { rho, var } or { rho: NaN, var: NaN } when the model cannot fit.
 export function tetrachoricFromCounts(a, b, c, d) {
   const nan = { rho: NaN, var: NaN };
@@ -482,6 +491,9 @@ export function tetrachoricFromCounts(a, b, c, d) {
   const p_row = (aa + bb) / N;
   const p_col = (aa + cc) / N;
   const p11   = aa / N;
+  const p12   = bb / N;
+  const p21   = cc / N;
+  const p22   = dd / N;
 
   if (p_row <= 0 || p_row >= 1 || p_col <= 0 || p_col >= 1) return nan;
 
@@ -499,11 +511,11 @@ export function tetrachoricFromCounts(a, b, c, d) {
   }
   const rho = (lo + hi) / 2;
 
-  // Delta-method variance
+  // Delta-method variance (cell-product formula matching metafor escalc("RTET"))
   const r2  = 1 - rho * rho;
   const bvd = Math.exp(-(h*h + k*k - 2*rho*h*k) / (2*r2)) / (2 * Math.PI * Math.sqrt(r2));
   if (!isFinite(bvd) || bvd === 0) return nan;
-  const v = p_row*(1 - p_row) * p_col*(1 - p_col) / (N * bvd * bvd);
+  const v = Math.sqrt(p11 * p12 * p21 * p22) / (N * bvd * bvd);
 
   return { rho, var: Math.max(v, MIN_VAR) };
 }
