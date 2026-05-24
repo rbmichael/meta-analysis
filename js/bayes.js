@@ -103,9 +103,9 @@ export function profileLikCI(studies, alpha = 0.05) {
 // found by bisection. The lower bound is clipped to 0.
 export function profileLikTau2(studies, opts = {}) {
   const k      = studies.length;
-  const method = opts.method !== undefined ? opts.method : "REML";
-  const nGrid  = opts.nGrid  !== undefined ? opts.nGrid  : 200;
-  const alpha  = opts.alpha  !== undefined ? opts.alpha  : 0.05;
+  const method = opts.method ?? "REML";
+  const nGrid  = opts.nGrid  ?? 200;
+  const alpha  = opts.alpha  ?? 0.05;
 
   if (k < 2)
     return { error: "Profile likelihood requires at least 2 studies (got " + k + ")" };
@@ -198,16 +198,14 @@ export function profileLikTau2(studies, opts = {}) {
 //   p(μ | y) = Σ_g w_g · N(μ; m_g, V_g)
 export function bayesMeta(studies, opts = {}) {
   const k         = studies.length;
-  const mu0       = opts.mu0       !== undefined ? opts.mu0       : 0;
-  const sigma_mu  = opts.sigma_mu  !== undefined ? opts.sigma_mu  : 1;
-  const sigma_tau = opts.sigma_tau !== undefined ? opts.sigma_tau : 0.5;
-  const alpha     = opts.alpha     !== undefined ? opts.alpha     : 0.05;
+  const mu0       = opts.mu0       ?? 0;
+  const sigma_mu  = opts.sigma_mu  ?? 1;
+  const sigma_tau = opts.sigma_tau ?? 0.5;
+  const alpha     = opts.alpha     ?? 0.05;
   // Grid density adapts to k: coarser grid for large k (smooth posterior).
   // Manual overrides via opts.nGrid / opts.nMu are respected.
-  const nGrid = opts.nGrid !== undefined ? opts.nGrid
-    : Math.round(Math.max(100, Math.min(300, 4500 / k)));
-  const nMu   = opts.nMu   !== undefined ? opts.nMu
-    : Math.round(Math.max(200, Math.min(500, 100000 / k)));
+  const nGrid = opts.nGrid ?? Math.round(Math.max(100, Math.min(300, 4500 / k)));
+  const nMu   = opts.nMu   ?? Math.round(Math.max(200, Math.min(500, 100000 / k)));
 
   if (k < 2)         return { error: "Bayesian meta-analysis requires at least 2 studies." };
   if (sigma_mu  <= 0) return { error: "sigma_mu must be positive." };
