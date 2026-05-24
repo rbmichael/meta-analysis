@@ -144,7 +144,7 @@
         <!-- MV mode: MV settings popover trigger (shown only in multivariate mode) -->
         <div id="mvStripControls" style="display:none">
           <span class="io-sep" role="separator" aria-hidden="true"></span>
-          <button id="mvSettingsBtn" class="strip-popover-btn" aria-expanded="false" data-popover="mvSettings">MV settings ▾</button>
+          <button id="mvSettingsBtn" class="strip-popover-btn" aria-expanded="false" data-popover="mvSettings">MV settings<span id="mvBadge" class="advanced-badge" style="display:none" title="Some MV settings differ from defaults" aria-label="MV settings customized">●</span> ▾</button>
         </div>
       </div>
 
@@ -387,6 +387,9 @@
             <p class="settings-hint settings-hint--flush">Moderators are added as columns to the table.</p>
           </div>
           <div id="mvModTags"></div>
+        </div>
+        <div class="settings-footer">
+          <button id="resetMv" class="settings-reset-btn">Reset to defaults</button>
         </div>
       </div>
 

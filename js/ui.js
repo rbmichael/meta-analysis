@@ -1540,6 +1540,41 @@ function resetAdvancedSettings() {
 
 document.getElementById("resetAdvanced").addEventListener("click", resetAdvancedSettings);
 
+function _checkMvBadge() {
+  const selDiffers = id => {
+    const el = document.getElementById(id); if (!el) return false;
+    const def = [...el.options].findIndex(o => o.defaultSelected);
+    return el.selectedIndex !== (def >= 0 ? def : 0);
+  };
+  const valDiffers = id => { const el = document.getElementById(id); return el && el.value !== el.defaultValue; };
+
+  const custom = selDiffers("mvStruct") || selDiffers("mvMethod") || valDiffers("mvRho");
+
+  const badge = document.getElementById("mvBadge");
+  if (badge) badge.style.display = custom ? "" : "none";
+  document.getElementById("mvSettings")?.classList.toggle("settings-modified", custom);
+}
+
+document.getElementById("mvSettings").addEventListener("change", _checkMvBadge);
+document.getElementById("mvSettings").addEventListener("input",  _checkMvBadge);
+_checkMvBadge();
+
+function resetMvSettings() {
+  const resetSel = id => {
+    const el = document.getElementById(id); if (!el) return;
+    const i = [...el.options].findIndex(o => o.defaultSelected);
+    el.selectedIndex = i >= 0 ? i : 0;
+  };
+  resetSel("mvStruct");
+  resetSel("mvMethod");
+  const rho = document.getElementById("mvRho");
+  if (rho) rho.value = rho.defaultValue;
+  markStale();
+  _checkMvBadge();
+}
+
+document.getElementById("resetMv").addEventListener("click", resetMvSettings);
+
 
 // ---------------- BAYESIAN PRIOR VALIDATION ----------------
 {

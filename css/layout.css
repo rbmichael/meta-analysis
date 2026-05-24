@@ -947,7 +947,8 @@
 }
 
 /* ---- Settings reset button: promote when custom settings are active (item 23) ---- */
-.advanced-settings.settings-modified .settings-reset-btn {
+.advanced-settings.settings-modified .settings-reset-btn,
+#mvSettings.settings-modified .settings-reset-btn {
   color: var(--accent);
   border-color: var(--border-accent);
   background: var(--accent-subtle);
