@@ -340,13 +340,13 @@ export function runTests() {
     pchk("vi = 1/400",             s.vi, 1 / 400);
   }
 
-  // 5. PFT: yi = arcsin(sqrt(x/(n+1))) + arcsin(sqrt((x+1)/(n+1))), vi = 1/(n+0.5)
+  // 5. PFT: yi = ½(arcsin(sqrt(x/(n+1))) + arcsin(sqrt((x+1)/(n+1)))), vi = 1/(4(n+0.5))
   console.log("--- PFT compute() ---");
   {
     const s = compute({ x: 20, n: 100 }, "PFT");
-    const expected_yi = Math.asin(Math.sqrt(20 / 101)) + Math.asin(Math.sqrt(21 / 101));
-    pchk("yi = arcsin(sqrt(20/101)) + arcsin(sqrt(21/101))", s.yi, expected_yi);
-    pchk("vi = 1/100.5", s.vi, 1 / 100.5);
+    const expected_yi = 0.5 * (Math.asin(Math.sqrt(20 / 101)) + Math.asin(Math.sqrt(21 / 101)));
+    pchk("yi = ½(arcsin(sqrt(20/101)) + arcsin(sqrt(21/101)))", s.yi, expected_yi);
+    pchk("vi = 1/402", s.vi, 1 / 402);
   }
 
   // 6. Back-transforms: transformEffect
@@ -356,7 +356,7 @@ export function runTests() {
   pchk("PLO back-transform logistic(-1.386)", transformEffect(Math.log(0.2/0.8), "PLO"), 0.2, 1e-10);
   pchk("PAS back-transform sin²(arcsin(√0.2))", transformEffect(Math.asin(Math.sqrt(0.2)), "PAS"), 0.2, 1e-10);
   {
-    const yiFT = Math.asin(Math.sqrt(20/101)) + Math.asin(Math.sqrt(21/101));
+    const yiFT = 0.5 * (Math.asin(Math.sqrt(20/101)) + Math.asin(Math.sqrt(21/101)));
     pchk("PFT back-transform ≈ 0.2", transformEffect(yiFT, "PFT"), 0.2, 0.01);
   }
 

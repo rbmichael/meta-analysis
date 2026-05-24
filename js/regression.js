@@ -1305,7 +1305,7 @@ export function meta3level(studies, opts = {}) {
     error: msg, mu: NaN, se: NaN, ci: [NaN, NaN], z: NaN, p: NaN,
     tau2_within: NaN, tau2_between: NaN, I2_within: NaN, I2_between: NaN,
     Q: NaN, df: NaN, k: Array.isArray(studies) ? studies.length : NaN,
-    kCluster: NaN, logLik: NaN, convergence: false,
+    kCluster: NaN, logLik: NaN, logLikFull: NaN, convergence: false,
   });
 
   if (method !== "REML" && method !== "ML")
@@ -1425,6 +1425,13 @@ export function meta3level(studies, opts = {}) {
   const I2_within  = tot > 0 ? 100 * tau2u / tot : 0;
   const I2_between = tot > 0 ? 100 * tau2t / tot : 0;
 
+  // Full Gaussian logLik: add −(k−p)/2·log(2π) omitted during optimisation.
+  // For REML (p=1 intercept): full = logLik − (k−1)/2·log(2π); for ML: − k/2·log(2π).
+  // logLikFull matches metafor logLik(res) output.
+  const logLik     = -res.fval;
+  const kAdj       = method === "REML" ? k - 1 : k;
+  const logLikFull = logLik - kAdj / 2 * Math.log(2 * Math.PI);
+
   return {
     mu, se, ci, z: zval, p: pval,
     tau2_within:  tau2u,
@@ -1432,7 +1439,7 @@ export function meta3level(studies, opts = {}) {
     I2_within, I2_between,
     Q, df: k - 1,
     k, kCluster: m,
-    logLik: -res.fval,
+    logLik, logLikFull,
     convergence: res.converged,
   };
 }

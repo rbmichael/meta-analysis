@@ -305,7 +305,8 @@ export const HELP = {
     title: "Incidence Rate — log (IR)",
     body:  "Single-group incidence rate modelled on the log scale. " +
            "Requires an event count (x) and person-time denominator (t). " +
-           "Use for single-arm studies or prevalence estimates expressed as rates.",
+           "Use for single-arm studies or prevalence estimates expressed as rates. " +
+           "Corresponds to metafor escalc(\"IRLN\") — metafor's \"IR\" returns the raw rate.",
   },
 
   "effect.MN": {

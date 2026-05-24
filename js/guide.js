@@ -512,7 +512,10 @@ Use for single-arm studies or prevalence estimates expressed as rates.</p>
 <code>yi = log(x/t)</code>,&ensp;
 <code>vi = 1/x</code></p>
 <p><strong>When to use:</strong> Single-arm designs with event count and
-person-time denominator.</p>`,
+person-time denominator.</p>
+<p><strong>Correspondence with metafor:</strong> This effect type corresponds
+to <code>escalc("IRLN")</code> in metafor (log incidence rate). metafor's
+<code>"IR"</code> measure returns the raw rate, not the log.</p>`,
         citations: [
           "Borenstein, M., Hedges, L. V., Higgins, J. P. T., & Rothstein, H. R. (2009). <em>Introduction to meta-analysis</em>. Wiley.",
         ],

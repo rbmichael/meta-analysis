@@ -671,8 +671,10 @@ export const BENCHMARKS = [
 
   // ----------------------------------------------------------------
   // PFT — Synthetic proportion dataset (Freeman-Tukey double-arcsine)
-  // Same 4 studies. yi = arcsin(√(x/(n+1))) + arcsin(√((x+1)/(n+1)))
-  // vi = 1/(n+0.5). Equal vi => RE = FE. tau2/I2 analytic (DL).
+  // Same 4 studies. Half-sum convention (metafor escalc("PFT")):
+  // yi = ½(arcsin(√(x/(n+1))) + arcsin(√((x+1)/(n+1)))), vi = 1/(4(n+0.5)).
+  // Equal vi => RE = FE. tau2/I2 analytic (DL).
+  // FE/RE/ciLow/ciHigh = full-sum/2; tau2 = full-sum-tau2/4; I2 unchanged.
   // ----------------------------------------------------------------
   {
     name: "Synthetic Proportion – PFT (DL)",
@@ -686,13 +688,13 @@ export const BENCHMARKS = [
       { label: "Study 4", x: 40, n: 100 }
     ],
     expected: {
-      yi:   [0.656, 1.1636, 0.934, 1.371],
-      FE:    1.031,
-      RE:    1.031,
-      tau2:  0.08445,
+      yi:   [0.3282, 0.5818, 0.4673, 0.6857],
+      FE:    0.5158,
+      RE:    0.5158,
+      tau2:  0.02110,
       I2:   89.4549
     },
-    citation: "Synthetic dataset. Expected values computed analytically from PFT (Freeman-Tukey) formulas."
+    citation: "Synthetic dataset. Expected values match metafor escalc(\"PFT\") half-sum convention. Verified against R block 12."
   },
 
   // ================================================================

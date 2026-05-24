@@ -1507,11 +1507,13 @@ const _profileSpecs = {
     inputs: ["x", "n"],
     compute(s) {
       const { x, n } = s;
-      const yi = Math.asin(Math.sqrt(x / (n + 1))) + Math.asin(Math.sqrt((x + 1) / (n + 1)));
-      const vi = clampVi(1 / (n + 0.5));
+      // Half-sum convention: yi = ½(arcsin(√(x/(n+1))) + arcsin(√((x+1)/(n+1)))),
+      // vi = 1/(4(n+0.5)). Matches metafor escalc("PFT"). Back-transform: sin²(yi).
+      const yi = 0.5 * (Math.asin(Math.sqrt(x / (n + 1))) + Math.asin(Math.sqrt((x + 1) / (n + 1))));
+      const vi = clampVi(1 / (4 * (n + 0.5)));
       return { yi, vi };
     },
-    transform:   (x) => clamp01(Math.sin(x / 2) ** 2),
+    transform:   (x) => clamp01(Math.sin(x) ** 2),
 
     validate: validateProportion,
     softWarnings: softWarnProportion,

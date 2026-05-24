@@ -664,7 +664,7 @@ export function threeLevelData(args) {
     [`<em>Q</em>(${tl.df})`, fmt(tl.Q)],
     ["m (clusters)", String(tl.kCluster)],
     ["<em>k</em> (studies)", String(tl.k)],
-    ["Log-likelihood (REML)", fmt(tl.logLik)],
+    ["Log-likelihood", fmt(tl.logLikFull ?? tl.logLik)],
   ];
   const note = "Three-level model: studies nested within clusters. σ²_within = within-cluster, σ²_between = between-cluster between-study heterogeneity. REML estimation.";
   return { headers: ["Parameter", "Value"], rows, note };

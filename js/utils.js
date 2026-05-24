@@ -561,7 +561,7 @@ const _TRANSFORMS = {
   PLN: x => _clamp01(Math.exp(x)),
   PLO: x => _clamp01(1 / (1 + Math.exp(-x))),
   PAS: x => _clamp01(Math.sin(x) ** 2),
-  PFT: x => _clamp01(Math.sin(x / 2) ** 2),
+  PFT: x => _clamp01(Math.sin(x) ** 2),
 };
 
 export function transformEffect(x, type) {
