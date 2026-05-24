@@ -13,10 +13,10 @@ function iterate(seed, updateFn, maxIter = 200, tol = REML_TOL) {
   let tau2 = seed;
   for (let iter = 0; iter < maxIter; iter++) {
     const newTau2 = updateFn(tau2);
-    if (Math.abs(newTau2 - tau2) < tol) return newTau2;
+    if (Math.abs(newTau2 - tau2) < tol) return { tau2: newTau2, converged: true, iters: iter + 1 };
     tau2 = newTau2;
   }
-  return tau2;
+  return { tau2, converged: false, iters: maxIter };
 }
 
 // ================= DERSIMONIAN-LAIRD (DL) TAU² =================

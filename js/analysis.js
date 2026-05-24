@@ -236,7 +236,9 @@ export function meta(studies, method="DL", ciMethod="normal", alpha=0.05, tau2In
   if(Q>dfQ && Q>0) I2 = ((Q-dfQ)/Q)*100;
   I2 = Math.max(0, Math.min(100,I2));
 
-  const tau2 = (TAU2_FN[method] ?? TAU2_FN.DL)(studies, tau2Init);
+  const _tau2Result   = (TAU2_FN[method] ?? TAU2_FN.DL)(studies, tau2Init);
+  const tau2          = typeof _tau2Result === "object" ? _tau2Result.tau2      : _tau2Result;
+  const tau2Converged = typeof _tau2Result === "object" ? _tau2Result.converged : true;
 
   // ---------- RANDOM EFFECT ----------
   const wRE = studies.map(d => 1 / Math.max(d.vi + tau2, MIN_VAR));
@@ -314,6 +316,7 @@ export function meta(studies, method="DL", ciMethod="normal", alpha=0.05, tau2In
     RE,
     seRE,
     tau2,
+    tau2Converged,
     Q,
     df: dfQ,
     I2,

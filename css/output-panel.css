@@ -151,6 +151,17 @@
   color: var(--fg-muted);
 }
 
+.badge-warn {
+  font-size: 0.78em;
+  font-weight: 600;
+  color: var(--color-warning, #8a6000);
+  background: var(--badge-warning-bg);
+  border: 1px solid var(--badge-warning-border);
+  border-radius: 3px;
+  padding: 1px 5px;
+  vertical-align: middle;
+}
+
 .result-fe-secondary {
   font-size: var(--font-size-base);
   color: var(--fg-muted);
