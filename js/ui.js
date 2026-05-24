@@ -1782,7 +1782,7 @@ function applySession(session) {
         if (r.yi         !== undefined) tr.querySelector(".mv-yi").value = r.yi;
         if (r.vi         !== undefined) tr.querySelector(".mv-vi").value = r.vi;
         mvModerators.forEach((name, i) => {
-          const inputs = tr.querySelectorAll(".mv-mod");
+          const inputs = tr.querySelectorAll(".mv-mod-cell");
           if (inputs[i] && r[name] !== undefined) inputs[i].value = r[name];
         });
       });

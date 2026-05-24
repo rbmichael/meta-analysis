@@ -219,7 +219,7 @@ export function addMVRow() {
   const tr = document.createElement("tr");
   tr.draggable = true;
   const modCells = mvModerators.map(() =>
-    `<td><input type="text" class="mv-mod-cell" style="width:90px"></td>`
+    `<td><input type="text" class="mv-mod-cell" placeholder="0" style="width:90px"></td>`
   ).join("");
   tr.innerHTML =
     `<td><input type="text" class="mv-study-id"  style="width:90px" placeholder="Study"></td>` +
@@ -282,7 +282,7 @@ export function gatherMVState() {
       vi: tr.querySelector(".mv-vi")?.value ?? "",
     };
     mvModerators.forEach((name, i) => {
-      const inputs = tr.querySelectorAll(".mv-mod");
+      const inputs = tr.querySelectorAll(".mv-mod-cell");
       entry[name] = inputs[i]?.value ?? "";
     });
     rows.push(entry);
@@ -341,7 +341,7 @@ export function commitImportMV(parsed, mvHeaders) {
     tr.querySelector(".mv-yi").value         = row[headerMap[yiCol.toLowerCase()]]      ?? "";
     tr.querySelector(".mv-vi").value         = row[headerMap[viCol.toLowerCase()]]      ?? "";
     modCols.forEach((col, i) => {
-      const inputs = tr.querySelectorAll(".mv-mod");
+      const inputs = tr.querySelectorAll(".mv-mod-cell");
       if (inputs[i]) inputs[i].value = row[headerMap[col.toLowerCase()]] ?? "";
     });
   });
