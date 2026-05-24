@@ -538,24 +538,21 @@ export function drawBubble(studies, reg, mod, container, options = {}) {
     drawBubbleCurve(g, { xScale, yScale, fitFn: fitAt, seAt, vcov, crit, isLinear, T });
 
   // Bubbles
-  const tooltip = selTooltip();
-  g.selectAll("circle")
-    .data(valid)
-    .enter().append("circle")
-    .attr("cx", s => xScale(s[modName]))
-    .attr("cy", s => yScale(s.yi))
-    .attr("r",  (s, i) => Math.max(3, BUBBLE_RMAX * Math.sqrt(wArr[i] / wMax)))
-    .attr("fill",   T.bgSurfaceHover)
-    .attr("stroke", T.fgSubtle)
-    .attr("stroke-width", 1.2)
-    .on("mousemove", (event, s) => {
+  attachTooltip(
+    g.selectAll("circle")
+      .data(valid)
+      .enter().append("circle")
+      .attr("cx", s => xScale(s[modName]))
+      .attr("cy", s => yScale(s.yi))
+      .attr("r",  (s, i) => Math.max(3, BUBBLE_RMAX * Math.sqrt(wArr[i] / wMax)))
+      .attr("fill",   T.bgSurfaceHover)
+      .attr("stroke", T.fgSubtle)
+      .attr("stroke-width", 1.2),
+    s => {
       const fitted = fitAt(s[modName]);
-      tooltip.style("opacity", 1)
-        .html(`<b>${escapeHTML(s.label)}</b><br>${escapeHTML(modName)}: ${escapeHTML(String(s[modName]))}<br>yi: ${s.yi.toFixed(3)}<br>ŷ: ${fitted.toFixed(3)}`)
-        .style("left", (event.pageX + TOOLTIP_OFFSET.x) + "px")
-        .style("top",  (event.pageY + TOOLTIP_OFFSET.y) + "px");
-    })
-    .on("mouseout", () => tooltip.style("opacity", 0));
+      return `<b>${escapeHTML(s.label)}</b><br>${escapeHTML(modName)}: ${escapeHTML(String(s[modName]))}<br>yi: ${s.yi.toFixed(3)}<br>ŷ: ${fitted.toFixed(3)}`;
+    }
+  );
 
   const titleSuffix = isLinear
     ? `β = ${colIdxs.length ? fmt(beta[colIdxs[0]]) : "NA"}`
@@ -669,25 +666,22 @@ export function drawPartialResidualBubble(studies, reg, mod, container, options 
     drawBubbleCurve(g, { xScale, yScale, fitFn: partialFitAt, seAt, vcov, crit, isLinear, T });
 
   // Bubbles
-  const tooltip = selTooltip();
-  g.selectAll("circle")
-    .data(valid)
-    .enter().append("circle")
-    .attr("cx", s => xScale(s[modName]))
-    .attr("cy", (_, i) => yScale(partialY[i]))
-    .attr("r",  (_, i) => Math.max(3, BUBBLE_RMAX * Math.sqrt(wArr[i] / wMax)))
-    .attr("fill",   T.bgSurfaceHover)
-    .attr("stroke", T.fgSubtle)
-    .attr("stroke-width", 1.2)
-    .on("mousemove", (event, s) => {
+  attachTooltip(
+    g.selectAll("circle")
+      .data(valid)
+      .enter().append("circle")
+      .attr("cx", s => xScale(s[modName]))
+      .attr("cy", (_, i) => yScale(partialY[i]))
+      .attr("r",  (_, i) => Math.max(3, BUBBLE_RMAX * Math.sqrt(wArr[i] / wMax)))
+      .attr("fill",   T.bgSurfaceHover)
+      .attr("stroke", T.fgSubtle)
+      .attr("stroke-width", 1.2),
+    s => {
       const i      = valid.indexOf(s);
       const fitted = partialFitAt(s[modName]);
-      tooltip.style("opacity", 1)
-        .html(`<b>${escapeHTML(s.label)}</b><br>${escapeHTML(modName)}: ${escapeHTML(String(s[modName]))}<br>y*: ${partialY[i].toFixed(3)}<br>ŷ: ${fitted.toFixed(3)}`)
-        .style("left", (event.pageX + TOOLTIP_OFFSET.x) + "px")
-        .style("top",  (event.pageY + TOOLTIP_OFFSET.y) + "px");
-    })
-    .on("mouseout", () => tooltip.style("opacity", 0));
+      return `<b>${escapeHTML(s.label)}</b><br>${escapeHTML(modName)}: ${escapeHTML(String(s[modName]))}<br>y*: ${partialY[i].toFixed(3)}<br>ŷ: ${fitted.toFixed(3)}`;
+    }
+  );
 
   const titleSuffix = isLinear
     ? `β = ${fmt(beta[colIdxs[0]])}, partial residual`
