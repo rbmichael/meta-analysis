@@ -34,6 +34,7 @@
 // =============================================================================
 
 import { matInverse, wls, wlsCholesky } from "./linalg.js";
+import { tau2Core_DL, tau2Core_HS, tau2Core_HE, tau2Core_REML, tau2Core_ML, tau2Core_PM } from "./tau2.js";
 
 // ---------------------------------------------------------------------------
 // Mulberry32 PRNG (same as gosh.js / perm.worker.js)
@@ -80,152 +81,56 @@ function quadForm(A, v) {
 }
 
 // ---------------------------------------------------------------------------
-// DL tau2 seed for meta-regression (array-of-arrays X).
+// Build FE fitFn0 for tau2Core_DL / tau2Core_HS: FE-weighted WLS residuals.
 // ---------------------------------------------------------------------------
-function tau2DL(X, yi, vi) {
-  const k = yi.length, p = X[0].length, df = k - p;
-  if (df <= 0) return 0;
-  const w0 = vi.map(v => 1 / v);
-  const { beta: b0, vcov: V0, rankDeficient: rd0 } = wlsCholesky(X, yi, w0);
-  if (rd0) return 0;
-  const QE = yi.reduce((s, y, i) => {
-    const e = y - X[i].reduce((a, xi, j) => a + xi * b0[j], 0);
-    return s + w0[i] * e * e;
-  }, 0);
-  const c = w0.reduce((s, wi, i) => s + wi * (1 - wi * quadForm(V0, X[i])), 0);
-  return c > 0 ? Math.max(0, (QE - df) / c) : 0;
+function buildFeFit0(X, yi, vi) {
+  return function () {
+    const w0 = vi.map(v => 1 / v);
+    const { beta, vcov: V, rankDeficient: rd } = wlsCholesky(X, yi, w0);
+    if (rd) return null;
+    const e = yi.map((y, i) => y - X[i].reduce((a, xi, j) => a + xi * beta[j], 0));
+    const h = vi.map((v, i) => (1 / v) * quadForm(V, X[i]));
+    const W = w0.reduce((s, wi) => s + wi, 0);
+    return { e, h, W };
+  };
 }
 
 // ---------------------------------------------------------------------------
-// REML tau2 via Fisher scoring (matches regression.js tau2Reg_REML).
+// Build RE fitFn for tau2Core_REML / tau2Core_ML / tau2Core_PM: RE-weighted WLS residuals.
 // ---------------------------------------------------------------------------
-function tau2REML(X, yi, vi, tol = 1e-10, maxIter = 100) {
-  const k = yi.length, p = X[0].length;
-  if (k - p <= 0) return 0;
-  let tau2 = tau2DL(X, yi, vi);
-  for (let iter = 0; iter < maxIter; iter++) {
+function buildReFitFn(X, yi, vi) {
+  return function (tau2) {
     const w = vi.map(v => 1 / (v + tau2));
     const { beta, vcov: V, rankDeficient: rd } = wlsCholesky(X, yi, w);
-    if (rd) break;
-    let score = 0, info = 0;
-    for (let i = 0; i < k; i++) {
-      const h = w[i] * quadForm(V, X[i]);
-      const e = yi[i] - X[i].reduce((a, xi, j) => a + xi * beta[j], 0);
-      const pi = w[i] * (1 - h);
-      score += w[i] * w[i] * e * e - pi;
-      info  += w[i] * pi;
-    }
-    if (info <= 0) break;
-    let step = score / info;
-    let newTau2 = tau2 + step;
-    let sh = 0;
-    while (newTau2 < 0 && sh++ < 20) { step /= 2; newTau2 = tau2 + step; }
-    newTau2 = Math.max(0, newTau2);
-    if (Math.abs(newTau2 - tau2) < tol) { tau2 = newTau2; break; }
-    tau2 = newTau2;
-  }
-  return tau2;
-}
-
-// ---------------------------------------------------------------------------
-// ML tau2 via Fisher scoring.
-// ---------------------------------------------------------------------------
-function tau2ML(X, yi, vi, tol = 1e-10, maxIter = 100) {
-  const k = yi.length, p = X[0].length;
-  if (k - p <= 0) return 0;
-  let tau2 = tau2DL(X, yi, vi);
-  for (let iter = 0; iter < maxIter; iter++) {
-    const w = vi.map(v => 1 / (v + tau2));
-    const { beta, rankDeficient: rd } = wlsCholesky(X, yi, w);
-    if (rd) break;
-    let score = 0, info = 0;
-    for (let i = 0; i < k; i++) {
-      const vit = vi[i] + tau2;
-      const e = yi[i] - X[i].reduce((a, xi, j) => a + xi * beta[j], 0);
-      score += e * e / (vit * vit) - 1 / vit;
-      info  += 1 / (vit * vit);
-    }
-    if (info <= 0) break;
-    let step = score / info;
-    let newTau2 = tau2 + step;
-    let sh = 0;
-    while (newTau2 < 0 && sh++ < 20) { step /= 2; newTau2 = tau2 + step; }
-    newTau2 = Math.max(0, newTau2);
-    if (Math.abs(newTau2 - tau2) < tol) { tau2 = newTau2; break; }
-    tau2 = newTau2;
-  }
-  return tau2;
-}
-
-// ---------------------------------------------------------------------------
-// PM tau2 for meta-regression.
-// ---------------------------------------------------------------------------
-function tau2PM(X, yi, vi, tol = 1e-10, maxIter = 100) {
-  const k = yi.length, p = X[0].length, df = k - p;
-  if (df <= 0) return 0;
-  let tau2 = 0;
-  for (let iter = 0; iter < maxIter; iter++) {
-    const w = vi.map(v => 1 / (v + tau2));
-    const { beta, rankDeficient: rd } = wlsCholesky(X, yi, w);
-    if (rd) break;
-    const QE = yi.reduce((s, y, i) => {
-      const e = y - X[i].reduce((a, xi, j) => a + xi * beta[j], 0);
-      return s + w[i] * e * e;
-    }, 0);
-    const sumW = w.reduce((a, b) => a + b, 0);
-    const newTau2 = Math.max(0, tau2 + (QE - df) / sumW);
-    if (Math.abs(newTau2 - tau2) < tol) return newTau2;
-    tau2 = newTau2;
-  }
-  return tau2;
-}
-
-// ---------------------------------------------------------------------------
-// HS tau2 (FE-weight denominator).
-// ---------------------------------------------------------------------------
-function tau2HS(X, yi, vi) {
-  const k = yi.length, p = X[0].length, df = k - p;
-  if (df <= 0) return 0;
-  const w0 = vi.map(v => 1 / v);
-  const { beta, rankDeficient: rd } = wls(X, yi, w0);
-  if (rd) return 0;
-  let QE = 0, sumW = 0;
-  for (let i = 0; i < k; i++) {
-    const e = yi[i] - X[i].reduce((a, xi, j) => a + xi * beta[j], 0);
-    QE += w0[i] * e * e;
-    sumW += w0[i];
-  }
-  return sumW > 0 ? Math.max(0, (QE - df) / sumW) : 0;
-}
-
-// ---------------------------------------------------------------------------
-// HE tau2 (unweighted OLS).
-// ---------------------------------------------------------------------------
-function tau2HE(X, yi, vi) {
-  const k = yi.length, p = X[0].length, df = k - p;
-  if (df <= 0) return 0;
-  const w1 = vi.map(() => 1);
-  const { beta, rankDeficient: rd } = wls(X, yi, w1);
-  if (rd) return 0;
-  let SS = 0;
-  for (let i = 0; i < k; i++) {
-    const e = yi[i] - X[i].reduce((a, xi, j) => a + xi * beta[j], 0);
-    SS += e * e;
-  }
-  const meanV = vi.reduce((a, b) => a + b, 0) / k;
-  return Math.max(0, SS / df - meanV);
+    if (rd) return null;
+    const e = yi.map((y, i) => y - X[i].reduce((a, xi, j) => a + xi * beta[j], 0));
+    const h = w.map((wi, i) => wi * quadForm(V, X[i]));
+    const W = w.reduce((s, wi) => s + wi, 0);
+    return { e, h, W };
+  };
 }
 
 // ---------------------------------------------------------------------------
 // Dispatch tau2 estimation by method name.
+// Delegates to tau2Core_* (tau2.js); fitFns built from the X matrix.
 // ---------------------------------------------------------------------------
 function estimateTau2(X, yi, vi, method) {
-  if (method === 'REML') return tau2REML(X, yi, vi);
-  if (method === 'ML')   return tau2ML  (X, yi, vi);
-  if (method === 'PM')   return tau2PM  (X, yi, vi);
-  if (method === 'HS')   return tau2HS  (X, yi, vi);
-  if (method === 'HE')   return tau2HE  (X, yi, vi);
-  return tau2DL(X, yi, vi);  // DL and all others
+  const k = yi.length, p = X[0].length, df = k - p;
+  if (df <= 0) return 0;
+  const feFit0  = buildFeFit0(X, yi, vi);
+  const reFitFn = buildReFitFn(X, yi, vi);
+  if (method === 'REML') return tau2Core_REML(vi, reFitFn, tau2Core_DL(vi, feFit0, df));
+  if (method === 'ML')   return tau2Core_ML  (vi, reFitFn, tau2Core_DL(vi, feFit0, df));
+  if (method === 'PM')   return tau2Core_PM  (vi, reFitFn, df, 0);
+  if (method === 'HS')   return tau2Core_HS  (vi, feFit0, df);
+  if (method === 'HE') {
+    const w1 = vi.map(() => 1);
+    const { beta, rankDeficient: rd } = wls(X, yi, w1);
+    if (rd) return 0;
+    const e = yi.map((y, i) => y - X[i].reduce((a, xi, j) => a + xi * beta[j], 0));
+    return tau2Core_HE(vi, () => ({ e }), df);
+  }
+  return tau2Core_DL(vi, feFit0, df);  // DL and all others
 }
 
 // ---------------------------------------------------------------------------
