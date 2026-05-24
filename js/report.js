@@ -698,62 +698,91 @@ function sectionPlot(label, svgStrings, nextFigure, apaTitle = "", apaNote = "")
 // ---------------------------------------------------------------------------
 // Embedded CSS
 // ---------------------------------------------------------------------------
-
-export function reportCSS() {
-  const isLight = document.documentElement.dataset.theme === "light";
-
+// ---------------------------------------------------------------------------
+// Report CSS helpers
+// ---------------------------------------------------------------------------
+// CSS variables resolved from the current app theme. Injected as a :root {}
+// block ahead of _REPORT_STATIC_CSS so the structural rules can use var(--).
+function _reportCSSVars(isLight) {
   const v = isLight ? {
-    bodyBg:       "#f5f5f8",
-    bodyColor:    "#1a1a1a",
-    metaColor:    "#888",
-    h2Color:      "#555",
-    h2Border:     "#d0d0d0",
-    sectionBg:    "#ffffff",
-    sectionBorder:"#ddd",
-    thBg:         "#e8e8f0",
-    thColor:      "#333",
-    thBorder:     "#ddd",
-    tdBorder:     "#e0e0e0",
-    tdColor:      "#222",
-    tdAltBg:      "#f5f5f8",
-    imputedColor: "#999",
-    pooledColor:  "#6a5000",
-    pooledBg:     "#fffff0",
-    pooledBorder: "#bbb",
-    interceptColor:"#777",
-    flaggedBg:    "#fff5f5",
-    metaLine:     "#555",
-    noteColor:    "#888",
+    bodyBg:         "#f5f5f8",
+    bodyColor:      "#1a1a1a",
+    metaColor:      "#888",
+    h2Color:        "#555",
+    h2Border:       "#d0d0d0",
+    sectionBg:      "#ffffff",
+    sectionBorder:  "#ddd",
+    thBg:           "#e8e8f0",
+    thColor:        "#333",
+    thBorder:       "#ddd",
+    tdBorder:       "#e0e0e0",
+    tdColor:        "#222",
+    tdAltBg:        "#f5f5f8",
+    imputedColor:   "#999",
+    pooledColor:    "#6a5000",
+    pooledBg:       "#fffff0",
+    pooledBorder:   "#bbb",
+    interceptColor: "#777",
+    flaggedBg:      "#fff5f5",
+    metaLine:       "#555",
+    noteColor:      "#888",
   } : {
-    bodyBg:       "#121212",
-    bodyColor:    "#eee",
-    metaColor:    "#666",
-    h2Color:      "#888",
-    h2Border:     "#2e2e2e",
-    sectionBg:    "#1a1a1a",
-    sectionBorder:"#333",
-    thBg:         "#1e2840",
-    thColor:      "#aac",
-    thBorder:     "#333",
-    tdBorder:     "#2a2a2a",
-    tdColor:      "#ddd",
-    tdAltBg:      "#171727",
-    imputedColor: "#555",
-    pooledColor:  "#ffd740",
-    pooledBg:     "#1e1e10",
-    pooledBorder: "#555",
-    interceptColor:"#999",
-    flaggedBg:    "#2a1a1a",
-    metaLine:     "#aaa",
-    noteColor:    "#666",
+    bodyBg:         "#121212",
+    bodyColor:      "#eee",
+    metaColor:      "#666",
+    h2Color:        "#888",
+    h2Border:       "#2e2e2e",
+    sectionBg:      "#1a1a1a",
+    sectionBorder:  "#333",
+    thBg:           "#1e2840",
+    thColor:        "#aac",
+    thBorder:       "#333",
+    tdBorder:       "#2a2a2a",
+    tdColor:        "#ddd",
+    tdAltBg:        "#171727",
+    imputedColor:   "#555",
+    pooledColor:    "#ffd740",
+    pooledBg:       "#1e1e10",
+    pooledBorder:   "#555",
+    interceptColor: "#999",
+    flaggedBg:      "#2a1a1a",
+    metaLine:       "#aaa",
+    noteColor:      "#666",
   };
+  return `:root {
+    --report-body-bg:         ${v.bodyBg};
+    --report-body-color:      ${v.bodyColor};
+    --report-meta-color:      ${v.metaColor};
+    --report-h2-color:        ${v.h2Color};
+    --report-h2-border:       ${v.h2Border};
+    --report-section-bg:      ${v.sectionBg};
+    --report-section-border:  ${v.sectionBorder};
+    --report-th-bg:           ${v.thBg};
+    --report-th-color:        ${v.thColor};
+    --report-th-border:       ${v.thBorder};
+    --report-td-border:       ${v.tdBorder};
+    --report-td-color:        ${v.tdColor};
+    --report-td-alt-bg:       ${v.tdAltBg};
+    --report-imputed-color:   ${v.imputedColor};
+    --report-pooled-color:    ${v.pooledColor};
+    --report-pooled-bg:       ${v.pooledBg};
+    --report-pooled-border:   ${v.pooledBorder};
+    --report-intercept-color: ${v.interceptColor};
+    --report-flagged-bg:      ${v.flaggedBg};
+    --report-meta-line:       ${v.metaLine};
+    --report-note-color:      ${v.noteColor};
+  }`;
+}
 
-  return `
+// Structural CSS for the standalone HTML report.
+// Keep in sync with css/report.css — that file is the canonical source;
+// edit there first, then mirror changes here.
+const _REPORT_STATIC_CSS = `
     *, *::before, *::after { box-sizing: border-box; }
     body {
       font-family: Arial, sans-serif;
-      background: ${v.bodyBg};
-      color: ${v.bodyColor};
+      background: var(--report-body-bg);
+      color: var(--report-body-color);
       margin: 0;
       padding: 24px 32px;
       font-size: 14px;
@@ -764,19 +793,24 @@ export function reportCSS() {
       font-weight: bold;
       letter-spacing: 0.1em;
       text-transform: uppercase;
-      color: ${v.h2Color};
+      color: var(--report-h2-color);
       margin: 0 0 12px 0;
       padding-bottom: 6px;
-      border-bottom: 1px solid ${v.h2Border};
+      border-bottom: 1px solid var(--report-h2-border);
     }
-    .report-meta { font-size: 0.82em; color: ${v.metaColor}; margin-bottom: 28px; }
+    .report-meta { font-size: 0.82em; color: var(--report-meta-color); margin-bottom: 28px; }
     section {
-      background: ${v.sectionBg};
-      border: 1px solid ${v.sectionBorder};
+      background: var(--report-section-bg);
+      border: 1px solid var(--report-section-border);
       border-radius: 8px;
       padding: 16px 20px;
       margin-bottom: 24px;
     }
+    p { margin: 4px 0; }
+    .meta-line { font-size: 0.84em; color: var(--report-meta-line); margin: 0 0 8px 0; }
+    .note { font-size: 0.78em; color: var(--report-note-color); margin-top: 6px; }
+    .svg-wrap { margin-bottom: 12px; overflow-x: auto; }
+    .svg-wrap svg { display: block; }
     .stat-table {
       border-collapse: collapse;
       font-size: 0.88em;
@@ -784,36 +818,29 @@ export function reportCSS() {
       max-width: 900px;
     }
     .stat-table th {
-      background: ${v.thBg};
-      color: ${v.thColor};
+      background: var(--report-th-bg);
+      color: var(--report-th-color);
       font-weight: normal;
       text-align: left;
       padding: 5px 10px;
-      border: 1px solid ${v.thBorder};
+      border: 1px solid var(--report-th-border);
     }
     .stat-table td {
       padding: 5px 10px;
-      border: 1px solid ${v.tdBorder};
-      color: ${v.tdColor};
+      border: 1px solid var(--report-td-border);
+      color: var(--report-td-color);
     }
-    .stat-table tbody tr:nth-child(even) td { background: ${v.tdAltBg}; }
+    .stat-table tbody tr:nth-child(even) td { background: var(--report-td-alt-bg); }
     .study-tbl td:first-child { font-family: monospace; }
-    .imputed td { color: ${v.imputedColor}; font-style: italic; }
-    .pooled td {
-      color: ${v.pooledColor};
+    .imputed td   { color: var(--report-imputed-color); font-style: italic; }
+    .pooled td    {
+      color: var(--report-pooled-color);
       font-weight: bold;
-      background: ${v.pooledBg} !important;
-      border-top: 2px solid ${v.pooledBorder};
+      background: var(--report-pooled-bg) !important;
+      border-top: 2px solid var(--report-pooled-border);
     }
-    .intercept td { color: ${v.interceptColor}; font-style: italic; }
-    .flagged td { background: ${v.flaggedBg} !important; }
-    .meta-line { font-size: 0.84em; color: ${v.metaLine}; margin: 0 0 8px 0; }
-    .note { font-size: 0.78em; color: ${v.noteColor}; margin-top: 6px; }
-    p { margin: 4px 0; }
-    .svg-wrap { margin-bottom: 12px; overflow-x: auto; }
-    .svg-wrap svg { display: block; }
-
-    /* ---- APA table styles ---- */
+    .intercept td { color: var(--report-intercept-color); font-style: italic; }
+    .flagged td   { background: var(--report-flagged-bg) !important; }
     .apa-table {
       border-collapse: collapse;
       font-size: 0.88em;
@@ -821,10 +848,10 @@ export function reportCSS() {
       max-width: 900px;
     }
     .apa-table thead th {
-      border-top: 2px solid ${v.bodyColor};
-      border-bottom: 1px solid ${v.bodyColor};
+      border-top: 2px solid var(--report-body-color);
+      border-bottom: 1px solid var(--report-body-color);
       background: none;
-      color: ${v.tdColor};
+      color: var(--report-td-color);
       font-weight: bold;
       text-align: left;
       padding: 4px 8px;
@@ -832,33 +859,31 @@ export function reportCSS() {
     .apa-table td {
       padding: 3px 8px;
       border: none;
-      color: ${v.tdColor};
+      color: var(--report-td-color);
     }
     .apa-table tfoot td {
-      border-top: 2px solid ${v.bodyColor};
+      border-top: 2px solid var(--report-body-color);
       padding-top: 5px;
     }
-    /* Rule 3 (closing rule) when no tfoot present */
     .apa-table:not(:has(tfoot)) > tbody > tr:last-child > td {
-      border-bottom: 2px solid ${v.bodyColor};
+      border-bottom: 2px solid var(--report-body-color);
     }
-    .apa-table .imputed td { color: ${v.imputedColor}; font-style: italic; }
-    .apa-table .pooled td  { font-weight: bold; background: none !important; border-top: none; color: ${v.tdColor}; }
-    .apa-table .flagged td { font-style: italic; }
-    .apa-table .intercept td { color: ${v.interceptColor}; font-style: italic; }
+    .apa-table .imputed td  { color: var(--report-imputed-color); font-style: italic; }
+    .apa-table .pooled td   { font-weight: bold; background: none !important; border-top: none; color: var(--report-td-color); }
+    .apa-table .flagged td  { font-style: italic; }
+    .apa-table .intercept td { color: var(--report-intercept-color); font-style: italic; }
     .apa-table-title    { font-weight: bold; margin: 16px 0 2px 0; font-size: 0.88em; }
     .apa-table-subtitle { font-style: italic; margin: 0 0 4px 0; font-size: 0.88em; }
-    .apa-note           { font-size: 0.82em; color: ${v.noteColor}; }
+    .apa-note           { font-size: 0.82em; color: var(--report-note-color); }
     .apa-note em        { font-style: italic; }
     .apa-figure-num     { font-weight: bold; font-size: 0.88em; margin: 16px 0 2px 0; }
     .apa-figure-title   { font-style: italic; font-size: 0.88em; margin: 0 0 4px 0; }
-    .apa-figure-note    { font-size: 0.82em; color: ${v.noteColor}; margin-top: 4px; }
+    .apa-figure-note    { font-size: 0.82em; color: var(--report-note-color); margin-top: 4px; }
     .apa-figure-note em { font-style: italic; }
     .apa-references     { padding-left: 0; list-style: none; }
-    .apa-references li  { font-size: 0.85em; color: ${v.tdColor}; margin-bottom: 6px;
+    .apa-references li  { font-size: 0.85em; color: var(--report-td-color); margin-bottom: 6px;
                           padding-left: 2em; text-indent: -2em; }
     .apa-references a   { color: inherit; }
-
     @media print {
       body { background: #fff; color: #000; padding: 12px 16px; }
       section { background: #fff; border-color: #ccc; page-break-inside: avoid; }
@@ -889,6 +914,10 @@ export function reportCSS() {
       .apa-references a           { color: #000; }
     }
   `;
+
+export function reportCSS() {
+  const isLight = document.documentElement.dataset.theme === "light";
+  return _reportCSSVars(isLight) + _REPORT_STATIC_CSS;
 }
 
 // ---------------------------------------------------------------------------
