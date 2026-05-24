@@ -16,6 +16,7 @@ import { adjustPvals } from "./regression.js";
 import { permPval } from "./sections.js";
 import { drawPCurve, drawPUniform } from "./plots.js";
 import { escapeHTML } from "./utils-html.js";
+import { HELP_LABELS } from "./help-labels.js";
 
 // Build a <span class="mod-tag"> with label text and a remove button.
 // onRemove: function called when the button is clicked.
@@ -31,34 +32,9 @@ export function buildTag(label, onRemove, title = "Remove") {
   return span;
 }
 
-// Keep in sync with HELP_LABELS in ui.js.
-const _RENDER_HELP_LABELS = {
-  "diag.locationscale":  "Location-scale model",
-  "diag.metaregression": "Meta-regression",
-  "mreg.lrt":            "Likelihood ratio test",
-  "reg.aic":             "Model fit statistics (AIC/BIC/LL)",
-  "sens.loo":            "Leave-one-out analysis",
-  "sens.estimator":      "Estimator comparison",
-  "het.tau2":            "τ² between-study variance",
-  "het.Q":               "Q heterogeneity statistic",
-  "het.I2":              "I² heterogeneity",
-  "het.H2":              "H² heterogeneity",
-  "sel.model":           "Selection model",
-  "sel.halfnorm":        "Half-normal selection model",
-  "sel.power":           "Power selection model",
-  "sel.negexp":          "Negative exponential selection model",
-  "sel.beta":            "Beta selection model",
-  "diag.influence":      "Influence diagnostics",
-  "diag.dffits":         "DFFITS influence statistic",
-  "diag.covratio":       "CovRatio influence statistic",
-  "diag.subgroup":       "Subgroup analysis",
-  "bayes.sensitivity":   "Bayesian prior sensitivity",
-  "pool.cles":           "Common language effect size",
-  "cluster.robust":      "Robust confidence interval",
-};
 function hBtn(key) {
   const base  = key.replace(/\.$/, "").split(".")[0];
-  const label = _RENDER_HELP_LABELS[key] ?? _RENDER_HELP_LABELS[base] ?? key;
+  const label = HELP_LABELS[key] ?? HELP_LABELS[base] ?? key;
   const aria  = label === key ? "Help" : `Help: ${label}`;
   return `<button class="help-btn" data-help="${key}" aria-label="${aria}" title="Help">?</button>`;
 }

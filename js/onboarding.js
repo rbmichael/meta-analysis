@@ -322,13 +322,9 @@ function _goTo(idx) {
 
   const step = STEPS[idx];
 
-  // Resolve anchor; if element missing, skip forward.
+  // Resolve anchor; if element missing or hidden (display:none on self or ancestor), skip forward.
   const el = document.querySelector(step.anchor);
-  if (!el) { _goTo(idx + 1); return; }
-
-  // Element exists but has no rendered size (e.g. empty hint span) — skip forward.
-  const r = el.getBoundingClientRect();
-  if (r.width === 0 && r.height === 0) { _goTo(idx + 1); return; }
+  if (!el || el.offsetParent === null) { _goTo(idx + 1); return; }
 
   _stepIdx = idx;
   const total = STEPS.length;
