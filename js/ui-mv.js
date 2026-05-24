@@ -183,7 +183,7 @@ function _syncMVRowMods(tr) {
   }
   while (tr.querySelectorAll("td").length - 1 < fixedCount + mvModerators.length) {
     const td = document.createElement("td");
-    td.innerHTML = `<input type="text" class="mv-mod-cell" style="width:90px">`;
+    td.innerHTML = `<input type="text" class="mv-mod-cell" placeholder="0" style="width:90px">`;
     tr.insertBefore(td, actionsTd);
   }
 }
