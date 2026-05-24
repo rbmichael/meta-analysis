@@ -5,7 +5,7 @@
 // Extracted from analysis.js (item 4.1.6 of TECHNICAL IMPROVEMENT ROADMAP).
 // =============================================================================
 
-import { chiSquareQuantile, chiSquareCDF, sum, clamp01 } from "./utils.js";
+import { chiSquareQuantile, chiSquareCDF, clamp01 } from "./utils.js";
 import { REML_TOL } from "./constants.js";
 import { GL20_X, GL20_W } from "./quadrature.js";
 
@@ -27,14 +27,12 @@ function iterate(seed, updateFn, maxIter = 200, tol = REML_TOL) {
 export function tau2_DL(studies) {
   const k = studies.length;
   if (k <= 1) return 0;
-  let W = 0, WY = 0, WY2 = 0, W2 = 0;
-  for (const d of studies) {
-    const wi = 1 / d.vi;
-    W += wi; WY += wi * d.yi; WY2 += wi * d.yi * d.yi; W2 += wi * wi;
-  }
-  const Q = WY2 - WY * WY / W;   // Σwᵢ(yᵢ − ȳ_FE)² by algebraic identity
-  const C = W - W2 / W;
-  return C > 0 ? Math.max(0, (Q - (k - 1)) / C) : 0;
+  const vi = studies.map(d => d.vi);
+  const yi = studies.map(d => d.yi);
+  let W = 0, Wmu = 0;
+  for (let i = 0; i < k; i++) { const wi = 1/vi[i]; W += wi; Wmu += wi * yi[i]; }
+  const mu = Wmu / W;
+  return tau2Core_DL(vi, () => ({ e: yi.map(y => y - mu), h: vi.map(v => 1/(W*v)), W }), k - 1);
 }
 
 // ================= HUNTER-SCHMIDT TAU² =================
@@ -44,11 +42,12 @@ export function tau2_DL(studies) {
 export function tau2_HS(studies) {
   const k = studies.length;
   if (k <= 1) return 0;
-  const w = studies.map(d => 1 / d.vi);
-  const W = sum(w);
-  const ybar = studies.reduce((acc, d, i) => acc + w[i] * d.yi, 0) / W;
-  const Q = studies.reduce((acc, d, i) => acc + w[i] * (d.yi - ybar) ** 2, 0);
-  return Math.max(0, (Q - (k - 1)) / W);
+  const vi = studies.map(d => d.vi);
+  const yi = studies.map(d => d.yi);
+  let W = 0, Wmu = 0;
+  for (let i = 0; i < k; i++) { const wi = 1/vi[i]; W += wi; Wmu += wi * yi[i]; }
+  const mu = Wmu / W;
+  return tau2Core_HS(vi, () => ({ e: yi.map(y => y - mu), W }), k - 1);
 }
 
 // ================= DL WITH ITERATION (DLIT) TAU² =================
@@ -95,10 +94,10 @@ export function tau2_HSk(studies) {
 export function tau2_HE(studies) {
   const k = studies.length;
   if (k <= 1) return 0;
-  const ybar = studies.reduce((acc, d) => acc + d.yi, 0) / k;
-  const SS   = studies.reduce((acc, d) => acc + (d.yi - ybar) ** 2, 0);
-  const meanV = studies.reduce((acc, d) => acc + d.vi, 0) / k;
-  return Math.max(0, SS / (k - 1) - meanV);
+  const vi = studies.map(d => d.vi);
+  const yi = studies.map(d => d.yi);
+  const mu = yi.reduce((s, y) => s + y, 0) / k;
+  return tau2Core_HE(vi, () => ({ e: yi.map(y => y - mu) }), k - 1);
 }
 
 // ================= SIDIK-JONKMAN TAU² =================
@@ -179,12 +178,13 @@ export function tau2_ML(studies, tol = REML_TOL, maxIter = 100, tau2Init = null)
   const vi = studies.map(d => d.vi);
   const yi = studies.map(d => d.yi);
   const seed = tau2Init !== null ? Math.max(0, tau2Init) : tau2_DL(studies);
-  return fisherScoringCore(vi, tau2 => {
+  const reFitFn = tau2 => {
     let W = 0, Wmu = 0;
-    for (let i = 0; i < k; i++) { const wi = 1/(vi[i]+tau2); W+=wi; Wmu+=wi*yi[i]; }
+    for (let i = 0; i < k; i++) { const wi = 1/(vi[i]+tau2); W += wi; Wmu += wi * yi[i]; }
     const mu = Wmu / W;
     return { e: yi.map(y => y - mu), W };
-  }, seed, tol, maxIter, false);
+  };
+  return tau2Core_ML(vi, reFitFn, seed, tol, maxIter);
 }
 
 // ================= LOG-LIKELIHOOD =================
@@ -210,12 +210,13 @@ export function tau2_REML(studies, tol = REML_TOL, maxIter = 100, tau2Init = nul
   const vi = studies.map(d => d.vi);
   const yi = studies.map(d => d.yi);
   const seed = tau2Init !== null ? Math.max(0, tau2Init) : tau2_DL(studies);
-  return fisherScoringCore(vi, tau2 => {
+  const reFitFn = tau2 => {
     let W = 0, Wmu = 0;
-    for (let i = 0; i < k; i++) { const wi = 1/(vi[i]+tau2); W+=wi; Wmu+=wi*yi[i]; }
+    for (let i = 0; i < k; i++) { const wi = 1/(vi[i]+tau2); W += wi; Wmu += wi * yi[i]; }
     const mu = Wmu / W;
     return { e: yi.map(y => y - mu), h: vi.map(v => 1/(W*(v+tau2))), W };
-  }, seed, tol, maxIter, true);
+  };
+  return tau2Core_REML(vi, reFitFn, seed, tol, maxIter);
 }
 
 // ================= TAU² PAULE-MANDEL =================
