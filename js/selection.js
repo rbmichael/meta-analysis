@@ -1139,9 +1139,8 @@ export function veveaHedges(studies, cuts = SEL_CUTS_ONE_SIDED, sides = 1, fixed
   const logLikUnsel = logLik(valid, mUnsel.RE, mUnsel.tau2);
 
   // ---- Shared helper: invert Hessian with progressive ridge fallback ----
-  function invertHess(H, fval, f2) {
-    // Recompute H with fresh fval to avoid stale-fval bugs
-    const hess = numericalHessian(f2, H, fval);
+  function invertHess(params, fval, f2) {
+    const hess = numericalHessian(f2, params, fval);
     return { hess, inv: inverseWithRidge(hess) };
   }
 
