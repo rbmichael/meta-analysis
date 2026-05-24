@@ -159,25 +159,43 @@ export function clES(d, ci) {
 // (i.e. after each runAnalysis() cycle), so no manual invalidation is needed.
 const _metaCache = new WeakMap();
 
-// Dispatch table for τ² estimators.  All entries accept (studies, tau2Init).
+// Per-family iteration caps. Not exported — callers go through meta().
+// REML/EBLUP: 500 — Fisher scoring with REML correction converges slowly
+//   near the τ²=0 boundary; extra headroom avoids false non-convergence flags.
+// ML: 100 — same algorithm without the REML leverage correction; converges
+//   roughly 2–3× faster in practice.
+// PM: 100 — fixed-point update is simple (Q-target)/W; converges in <20 iters
+//   for well-behaved data.
+// EB/PMM/SJ/DLIT: 200 — moderately complex updates or unusual seed geometry
+//   (SJ starts from raw between-study variance, not DL) need more room.
+const _ITER_REML = 500;
+const _ITER_ML   = 100;
+const _ITER_PM   = 100;
+const _ITER_STD  = 200;
+
+// Dispatch table for τ² estimators.
+// Uniform signature: (s, t0) => result, where t0 is the warm-start τ² (or null).
+// Closed-form estimators accept t0 for signature uniformity but do not forward it.
 // DL is the default fallback (TAU2_FN[method] ?? TAU2_FN.DL).
 // EBLUP is an alias for REML — see legacy estimator notes in benchmark-data.md.
 const TAU2_FN = {
-  DL:     s       => tau2_DL   (s),
-  REML:   (s, t0) => tau2_REML (s, REML_TOL, 500, t0),
-  PM:     (s, t0) => tau2_PM   (s, REML_TOL, 100, t0),
-  EB:     (s, t0) => tau2_EB   (s, REML_TOL, 200, t0),
-  PMM:    (s, t0) => tau2_PMM  (s, REML_TOL, 200, t0),
-  ML:     (s, t0) => tau2_ML   (s, REML_TOL, 100, t0),
-  SJ:     (s, t0) => tau2_SJ   (s, REML_TOL, 200, t0),
-  DLIT:   (s, t0) => tau2_DLIT (s, REML_TOL, 200, t0),
-  EBLUP:  (s, t0) => tau2_REML (s, REML_TOL, 500, t0),
-  GENQM:  s       => tau2_GENQM(s),
-  HS:     s       => tau2_HS   (s),
-  HE:     s       => tau2_HE   (s),
-  GENQ:   s       => tau2_GENQ (s),
-  SQGENQ: s       => tau2_SQGENQ(s),
-  HSk:    s       => tau2_HSk  (s),
+  // ---- closed-form (t0 accepted, not forwarded) ----
+  DL:     (s, t0) => tau2_DL    (s),
+  HS:     (s, t0) => tau2_HS    (s),
+  HE:     (s, t0) => tau2_HE    (s),
+  GENQ:   (s, t0) => tau2_GENQ  (s),
+  GENQM:  (s, t0) => tau2_GENQM (s),
+  SQGENQ: (s, t0) => tau2_SQGENQ(s),
+  HSk:    (s, t0) => tau2_HSk   (s),
+  // ---- iterative (t0 forwarded as warm start) ----
+  REML:   (s, t0) => tau2_REML (s, REML_TOL, _ITER_REML, t0),
+  EBLUP:  (s, t0) => tau2_REML (s, REML_TOL, _ITER_REML, t0),
+  ML:     (s, t0) => tau2_ML   (s, REML_TOL, _ITER_ML,   t0),
+  PM:     (s, t0) => tau2_PM   (s, REML_TOL, _ITER_PM,   t0),
+  EB:     (s, t0) => tau2_EB   (s, REML_TOL, _ITER_STD,  t0),
+  PMM:    (s, t0) => tau2_PMM  (s, REML_TOL, _ITER_STD,  t0),
+  SJ:     (s, t0) => tau2_SJ   (s, REML_TOL, _ITER_STD,  t0),
+  DLIT:   (s, t0) => tau2_DLIT (s, REML_TOL, _ITER_STD,  t0),
 };
 
 /**
