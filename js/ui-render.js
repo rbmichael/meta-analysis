@@ -195,6 +195,64 @@ export function buildRegFittedRows(reg) {
   }).join("");
 }
 
+// ── Shared panel helpers ──────────────────────────────────────────────────────
+
+// Renders coefficient table rows with optional per-moderator group headers.
+// colNames   string[]        row labels
+// coefs/ses/zvals/pvals  number[]
+// cis        [lo,hi][]
+// modTests   modTest[]|null  when non-null and length > 0, group rows are emitted
+// extraCell  (j) => string   HTML for the trailing cell (stars or special content)
+function _lsCoefRows(colNames, coefs, ses, zvals, pvals, cis, modTests, extraCell) {
+  function dataRow(j) {
+    const [lo, hi] = cis[j];
+    return `<tr class="${j === 0 ? "reg-intercept" : ""}">
+      <td>${escapeHTML(colNames[j])}</td>
+      <td>${fmt(coefs[j])}</td>
+      <td>${fmt(ses[j])}</td>
+      <td>${fmt(zvals[j])}</td>
+      <td>${regFmtP(pvals[j])}</td>
+      <td>[${fmt(lo)}, ${fmt(hi)}]</td>
+      <td>${extraCell(j)}</td>
+    </tr>`;
+  }
+  const multiMod = modTests && modTests.length > 0;
+  if (!multiMod) return colNames.map((_, j) => dataRow(j)).join("");
+  let html = dataRow(0);
+  for (const mt of modTests) {
+    if (!mt.colIdxs || mt.colIdxs.length === 0) continue;
+    const qmStr = isFinite(mt.QM)
+      ? ` &nbsp;·&nbsp; <em>Q</em>M χ²(${mt.QMdf}) = ${fmt(mt.QM)}, <em>p</em> = ${regFmtP(mt.QMp)}`
+      : "";
+    html += `<tr class="reg-mod-group"><td colspan="7"><span class="reg-mod-name">${escapeHTML(mt.name)}</span>${qmStr}</td></tr>`;
+    for (const j of mt.colIdxs) html += dataRow(j);
+  }
+  return html;
+}
+
+// Renders the contrast <details> block shared by LS and regression panels.
+function _contrastBlock(colNames, detailsClass, summaryHTML, noteHTML) {
+  return `<details class="${detailsClass}">
+      <summary>${summaryHTML}</summary>
+      <div class="reg-note" style="margin:4px 0 8px">${noteHTML}</div>
+      <table class="reg-table">
+        <thead><tr><th>Term</th><th style="width:6em">Weight</th></tr></thead>
+        <tbody>
+          ${colNames.map((name, i) => `
+            <tr>
+              <td>${escapeHTML(name)}</td>
+              <td><input type="number" class="contrast-weight" data-idx="${i}"
+                   value="0" step="any" style="width:5em"></td>
+            </tr>`).join("")}
+        </tbody>
+      </table>
+      <button class="btn-sm contrast-test-btn" type="button" style="margin-top:6px">
+        Test contrast
+      </button>
+      <div class="contrast-result"></div>
+    </details>`;
+}
+
 // ---- Location-scale model panel ----
 export function renderLocationScalePanel(ls, ciMethod, kExcluded = 0) {
   const panel   = document.getElementById("regressionPanel");
@@ -225,61 +283,20 @@ export function renderLocationScalePanel(ls, ciMethod, kExcluded = 0) {
     : `τ² = ${fmt(ls.tau2_mean)}`;
 
   // Location coefficient rows
-  function locRows() {
-    const multiMod = ls.p > 1 && Array.isArray(ls.locModTests) && ls.locModTests.length > 0;
-    function dataRow(j) {
-      const [lo, hi] = ls.ci_beta[j];
-      return `<tr class="${j === 0 ? "reg-intercept" : ""}">
-        <td>${escapeHTML(ls.locColNames[j])}</td>
-        <td>${fmt(ls.beta[j])}</td>
-        <td>${fmt(ls.se_beta[j])}</td>
-        <td>${fmt(ls.zval_beta[j])}</td>
-        <td>${regFmtP(ls.pval_beta[j])}</td>
-        <td>[${fmt(lo)}, ${fmt(hi)}]</td>
-        <td>${regStars(ls.pval_beta[j])}</td>
-      </tr>`;
-    }
-    if (!multiMod) return ls.locColNames.map((_, j) => dataRow(j)).join("");
-    let html = dataRow(0);
-    for (const mt of ls.locModTests) {
-      if (!mt.colIdxs || mt.colIdxs.length === 0) continue;
-      const qmStr = isFinite(mt.QM)
-        ? ` &nbsp;·&nbsp; <em>Q</em>M χ²(${mt.QMdf}) = ${fmt(mt.QM)}, <em>p</em> = ${regFmtP(mt.QMp)}`
-        : "";
-      html += `<tr class="reg-mod-group"><td colspan="7"><span class="reg-mod-name">${escapeHTML(mt.name)}</span>${qmStr}</td></tr>`;
-      for (const j of mt.colIdxs) html += dataRow(j);
-    }
-    return html;
-  }
+  const locRows = () => _lsCoefRows(
+    ls.locColNames, ls.beta, ls.se_beta, ls.zval_beta, ls.pval_beta, ls.ci_beta,
+    ls.p > 1 ? ls.locModTests : null,
+    j => regStars(ls.pval_beta[j])
+  );
 
   // Scale coefficient rows (log τ² = Zγ)
-  function scaleRows() {
-    const multiMod = ls.q > 1 && Array.isArray(ls.scaleModTests) && ls.scaleModTests.length > 0;
-    function dataRow(j) {
-      const [lo, hi] = ls.ci_gamma[j];
-      const tau2val  = fmt(Math.exp(ls.gamma[j]));
-      return `<tr class="${j === 0 ? "reg-intercept" : ""}">
-        <td>${escapeHTML(ls.scaleColNames[j])}</td>
-        <td>${fmt(ls.gamma[j])}</td>
-        <td>${fmt(ls.se_gamma[j])}</td>
-        <td>${fmt(ls.zval_gamma[j])}</td>
-        <td>${regFmtP(ls.pval_gamma[j])}</td>
-        <td>[${fmt(lo)}, ${fmt(hi)}]</td>
-        <td>${j === 0 ? `<span title="exp(γ₀) = τ²">eˣ=${tau2val}</span>` : regStars(ls.pval_gamma[j])}</td>
-      </tr>`;
-    }
-    if (!multiMod) return ls.scaleColNames.map((_, j) => dataRow(j)).join("");
-    let html = dataRow(0);
-    for (const mt of ls.scaleModTests) {
-      if (!mt.colIdxs || mt.colIdxs.length === 0) continue;
-      const qmStr = isFinite(mt.QM)
-        ? ` &nbsp;·&nbsp; <em>Q</em>M χ²(${mt.QMdf}) = ${fmt(mt.QM)}, <em>p</em> = ${regFmtP(mt.QMp)}`
-        : "";
-      html += `<tr class="reg-mod-group"><td colspan="7"><span class="reg-mod-name">${escapeHTML(mt.name)}</span>${qmStr}</td></tr>`;
-      for (const j of mt.colIdxs) html += dataRow(j);
-    }
-    return html;
-  }
+  const scaleRows = () => _lsCoefRows(
+    ls.scaleColNames, ls.gamma, ls.se_gamma, ls.zval_gamma, ls.pval_gamma, ls.ci_gamma,
+    ls.q > 1 ? ls.scaleModTests : null,
+    j => j === 0
+      ? `<span title="exp(γ₀) = τ²">eˣ=${fmt(Math.exp(ls.gamma[j]))}</span>`
+      : regStars(ls.pval_gamma[j])
+  );
 
   // Fitted values table with study-specific τ²ᵢ
   function fittedRows() {
@@ -374,28 +391,13 @@ export function renderLocationScalePanel(ls, ciMethod, kExcluded = 0) {
              </tr></thead><tbody>${modTestRows(ls.scaleModTests)}</tbody></table>` : "";
         return `<details><summary>Per-moderator tests</summary>${locBlock}${scaleBlock}</details>`;
       })() : ""}
-      <details class="ls-contrast-section">
-        <summary>Custom contrasts — location model${hBtn("mreg.contrasts")}</summary>
-        <div class="reg-note" style="margin:4px 0 8px">
-          Enter a weight for each location term, then click <em>Test</em>.
-          The test evaluates whether the linear combination L·β differs from zero.
-        </div>
-        <table class="reg-table">
-          <thead><tr><th>Term</th><th style="width:6em">Weight</th></tr></thead>
-          <tbody>
-            ${ls.locColNames.map((name, i) => `
-              <tr>
-                <td>${escapeHTML(name)}</td>
-                <td><input type="number" class="contrast-weight" data-idx="${i}"
-                     value="0" step="any" style="width:5em"></td>
-              </tr>`).join("")}
-          </tbody>
-        </table>
-        <button class="btn-sm contrast-test-btn" type="button" style="margin-top:6px">
-          Test contrast
-        </button>
-        <div class="contrast-result"></div>
-      </details>
+      ${_contrastBlock(
+        ls.locColNames,
+        "ls-contrast-section",
+        `Custom contrasts — location model${hBtn("mreg.contrasts")}`,
+        `Enter a weight for each location term, then click <em>Test</em>.
+          The test evaluates whether the linear combination L·β differs from zero.`
+      )}
       ${ls.vcov_beta && ls.p >= 2 ? `
       <details>
         <summary>Coefficient covariance matrices (vcov)</summary>
@@ -552,29 +554,14 @@ export function renderRegressionPanel(reg, method, ciMethod, kExcluded = 0, mods
       </table>
       <div class="reg-note">*** <em>p</em> &lt; .001 &nbsp;·&nbsp; ** <em>p</em> &lt; .01 &nbsp;·&nbsp; * <em>p</em> &lt; .05 &nbsp;·&nbsp; · <em>p</em> &lt; .10</div>
       ${modTestsBlock}
-      <details class="contrast-section">
-        <summary>Custom contrasts${hBtn("mreg.contrasts")}</summary>
-        <div class="reg-note" style="margin:4px 0 8px">
-          Enter a weight for each term, then click <em>Test</em>.
+      ${_contrastBlock(
+        reg.colNames,
+        "contrast-section",
+        `Custom contrasts${hBtn("mreg.contrasts")}`,
+        `Enter a weight for each term, then click <em>Test</em>.
           The test evaluates whether the linear combination L·β differs from zero.
-          Example: to compare two categorical levels, set their weights to 1 and −1.
-        </div>
-        <table class="reg-table">
-          <thead><tr><th>Term</th><th style="width:6em">Weight</th></tr></thead>
-          <tbody>
-            ${reg.colNames.map((name, i) => `
-              <tr>
-                <td>${escapeHTML(name)}</td>
-                <td><input type="number" class="contrast-weight" data-idx="${i}"
-                     value="0" step="any" style="width:5em"></td>
-              </tr>`).join("")}
-          </tbody>
-        </table>
-        <button class="btn-sm contrast-test-btn" type="button" style="margin-top:6px">
-          Test contrast
-        </button>
-        <div class="contrast-result"></div>
-      </details>
+          Example: to compare two categorical levels, set their weights to 1 and −1.`
+      )}
       ${fittedRows ? `
       <details>
         <summary>Fitted values &amp; residuals (k = ${reg.k})</summary>
