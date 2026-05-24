@@ -1,19 +1,19 @@
-// =============================================================================
-// gosh.worker.js — Web Worker for GOSH plot computation
+﻿// =============================================================================
+// gosh.worker.js â€” Web Worker for GOSH plot computation
 // =============================================================================
 // Runs the GOSH subset enumeration/sampling on a background thread so the UI
-// stays responsive.  Self-contained: no import/importScripts — all math is
+// stays responsive.  Self-contained: no import/importScripts â€” all math is
 // inlined from gosh.js so this file works as a classic Worker from file://.
 //
 // Protocol
 // --------
-// Main thread → Worker (one message to start):
+// Main thread â†’ Worker (one message to start):
 //   postMessage({ yi, vi, maxSubsets?, seed? })
-//     yi, vi      — plain Arrays or Float64Arrays of k values
-//     maxSubsets  — max subsets when sampling k > 20  (default 50 000)
-//     seed        — integer PRNG seed                  (default 12 345)
+//     yi, vi      â€” plain Arrays or Float64Arrays of k values
+//     maxSubsets  â€” max subsets when sampling k > 20  (default 50 000)
+//     seed        â€” integer PRNG seed                  (default 12 345)
 //
-// Worker → Main thread (zero or more progress, then exactly one terminal):
+// Worker â†’ Main thread (zero or more progress, then exactly one terminal):
 //   { type: 'progress', done: number, total: number, pct: number }
 //       Sent roughly every 1 % of total work.  pct is in [0, 1).
 //   { type: 'done', mu, I2, Q, n, count, k, sampled }
@@ -42,14 +42,14 @@
 // run_tests.mjs verifies the PRNG constant and the GOSH_* values.
 //
 //   Worker symbol              Upstream                       Lines (upstream)
-//   ─────────────────────────  ─────────────────────────────  ────────────────
-//   GOSH_MAX_ENUM_K            gosh.js — exported constants   65–67
-//   GOSH_MAX_K                 gosh.js — exported constants   65–67
-//   GOSH_DEFAULT_MAX_SUBSETS   gosh.js — exported constants   65–67
-//   mulberry32                 gosh.js — mulberry32           72–80
-//   processSubset (inline)     gosh.js — processSubset        128–147
-//   enumeration loop           gosh.js — !sampled branch      149–154
-//   sampling loop              gosh.js — sampled branch       155–172
+//   â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€  â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€  â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+//   GOSH_MAX_ENUM_K            gosh.js â€” exported constants   65â€“67
+//   GOSH_MAX_K                 gosh.js â€” exported constants   65â€“67
+//   GOSH_DEFAULT_MAX_SUBSETS   gosh.js â€” exported constants   65â€“67
+//   mulberry32                 gosh.js â€” mulberry32           72â€“80
+//   processSubset (inline)     gosh.js â€” processSubset        128â€“147
+//   enumeration loop           gosh.js â€” !sampled branch      149â€“154
+//   sampling loop              gosh.js â€” sampled branch       155â€“172
 // =============================================================================
 
 'use strict';
@@ -57,19 +57,19 @@
 // ---------------------------------------------------------------------------
 // Constants (mirrors gosh.js)
 // ---------------------------------------------------------------------------
-var GOSH_MAX_ENUM_K          = 15;   // 2^15−1 = 32 767 max enumerated subsets
-var GOSH_MAX_K               = 30;
-var GOSH_DEFAULT_MAX_SUBSETS = 50000;
+const GOSH_MAX_ENUM_K          = 15;   // 2^15−1 = 32 767 max enumerated subsets
+const GOSH_MAX_K               = 30;
+const GOSH_DEFAULT_MAX_SUBSETS = 50000;
 
 // ---------------------------------------------------------------------------
-// Mulberry32 PRNG — seedable, fast; returns doubles in [0, 1).
-// (Identical to gosh.js — inlined to keep this file self-contained.)
+// Mulberry32 PRNG â€” seedable, fast; returns doubles in [0, 1).
+// (Identical to gosh.js â€” inlined to keep this file self-contained.)
 // ---------------------------------------------------------------------------
 function mulberry32(seed) {
-  var s = seed >>> 0;
+  let s = seed >>> 0;
   return function () {
     s = (s + 0x6D2B79F5) >>> 0;
-    var t = Math.imul(s ^ (s >>> 15), 1 | s);
+    let t = Math.imul(s ^ (s >>> 15), 1 | s);
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
@@ -79,13 +79,13 @@ function mulberry32(seed) {
 // Message handler
 // ---------------------------------------------------------------------------
 self.onmessage = function (e) {
-  var data       = e.data;
-  var yi         = data.yi;
-  var vi         = data.vi;
-  var maxSubsets = data.maxSubsets !== undefined ? data.maxSubsets : GOSH_DEFAULT_MAX_SUBSETS;
-  var seed       = data.seed       !== undefined ? data.seed       : 12345;
+  let data       = e.data;
+  let yi         = data.yi;
+  let vi         = data.vi;
+  let maxSubsets = data.maxSubsets !== undefined ? data.maxSubsets : GOSH_DEFAULT_MAX_SUBSETS;
+  let seed       = data.seed       !== undefined ? data.seed       : 12345;
 
-  var k = yi.length;
+  let k = yi.length;
 
   // ---- Input validation ----
   if (k !== vi.length) {
@@ -102,35 +102,35 @@ self.onmessage = function (e) {
   }
 
   // ---- Precompute per-study quantities ----
-  var wi    = new Float64Array(k);
-  var yiwi  = new Float64Array(k);
-  var yi2wi = new Float64Array(k);
-  for (var i = 0; i < k; i++) {
-    var w   = vi[i] > 0 ? 1 / vi[i] : 0;
+  let wi    = new Float64Array(k);
+  let yiwi  = new Float64Array(k);
+  let yi2wi = new Float64Array(k);
+  for (let i = 0; i < k; i++) {
+    let w   = vi[i] > 0 ? 1 / vi[i] : 0;
     wi[i]   = w;
     yiwi[i] = yi[i] * w;
     yi2wi[i] = yi[i] * yi[i] * w;
   }
 
   // ---- Determine strategy ----
-  var N       = Math.pow(2, k) - 1;      // total non-empty subsets
-  var sampled = k > GOSH_MAX_ENUM_K;
-  var count   = sampled ? Math.min(maxSubsets, N) : N;
+  let N       = Math.pow(2, k) - 1;      // total non-empty subsets
+  let sampled = k > GOSH_MAX_ENUM_K;
+  let count   = sampled ? Math.min(maxSubsets, N) : N;
 
   // ---- Output buffers ----
   // Float32 for mu/I2 (display precision), Float64 for Q (accuracy), Uint8 for n.
-  var muArr = new Float32Array(count);
-  var I2Arr = new Float32Array(count);
-  var QArr  = new Float64Array(count);
-  var nArr  = new Uint8Array(count);
+  let muArr = new Float32Array(count);
+  let I2Arr = new Float32Array(count);
+  let QArr  = new Float64Array(count);
+  let nArr  = new Uint8Array(count);
 
   // ---- Adaptive progress chunk: aim for ~100 updates total ----
-  var progressChunk = Math.max(1000, Math.floor(count / 100));
+  let progressChunk = Math.max(1000, Math.floor(count / 100));
 
   // ---- Inner computation for one mask ----
   function processSubset(mask, idx) {
-    var W = 0, Wmu = 0, Wmu2 = 0, n = 0;
-    for (var i = 0; i < k; i++) {
+    let W = 0, Wmu = 0, Wmu2 = 0, n = 0;
+    for (let i = 0; i < k; i++) {
       if ((mask >>> i) & 1) {
         W    += wi[i];
         Wmu  += yiwi[i];
@@ -139,9 +139,9 @@ self.onmessage = function (e) {
       }
     }
     if (W === 0) return;
-    var mu = Wmu / W;
-    var Q  = n > 1 ? Math.max(0, Wmu2 - Wmu * Wmu / W) : 0;
-    var I2 = (n > 1 && Q > 0) ? Math.max(0, (Q - (n - 1)) / Q) * 100 : 0;
+    let mu = Wmu / W;
+    let Q  = n > 1 ? Math.max(0, Wmu2 - Wmu * Wmu / W) : 0;
+    let I2 = (n > 1 && Q > 0) ? Math.max(0, (Q - (n - 1)) / Q) * 100 : 0;
     muArr[idx] = mu;
     QArr[idx]  = Q;
     I2Arr[idx] = I2;
@@ -150,7 +150,7 @@ self.onmessage = function (e) {
 
   if (!sampled) {
     // ---- Full enumeration ----
-    for (var mask = 1; mask <= N; mask++) {
+    for (let mask = 1; mask <= N; mask++) {
       processSubset(mask, mask - 1);
       if (mask % progressChunk === 0) {
         self.postMessage({ type: 'progress', done: mask, total: count, pct: mask / count });
@@ -158,12 +158,12 @@ self.onmessage = function (e) {
     }
   } else {
     // ---- Random sampling without replacement ----
-    var rand = mulberry32(seed);
-    var seen = new Set();
-    var idx  = 0;
+    let rand = mulberry32(seed);
+    let seen = new Set();
+    let idx  = 0;
     while (idx < count) {
-      var mask = 0;
-      for (var j = 0; j < k; j++) {
+      let mask = 0;
+      for (let j = 0; j < k; j++) {
         if (rand() < 0.5) mask |= (1 << j);
       }
       if (mask === 0 || seen.has(mask)) continue;
