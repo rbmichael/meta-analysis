@@ -2188,6 +2188,8 @@ export function getProfile(type) {
 }
 
 export function validateStudy(s, type) {
+  // Unknown type: returns { valid: false, errors: {} } — empty errors is intentional;
+  // callers that display errors.* fields will show nothing, silently excluding the row.
   return getProfile(type)?.validate(s) ?? { valid: false, errors: {} };
 }
 
