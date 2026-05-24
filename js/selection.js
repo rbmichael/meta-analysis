@@ -26,6 +26,16 @@
 //   analysis.js  meta(), logLik(), validStudies()
 //   utils.js     normalCDF, normalQuantile
 //   constants.js Z_95, BISECTION_ITERS
+//
+// Naming convention
+// -----------------
+// Selection-model result objects use snake_case for statistical parameter fields
+// (se_mu, zval_mu, pval_mu, ci_mu, se_tau2, se_omega, se_alpha, RE_unsel,
+// tau2_unsel, ciLow_unsel, ciHigh_unsel).  The underscore separates the role
+// prefix (se_, zval_, …) from the Greek parameter name (mu, tau2, omega, alpha)
+// and reads naturally as "standard error of μ".  This is intentional — do not
+// rename to camelCase without updating benchmarks.js, tests.js, ui-render.js,
+// sections.js, and report.js in the same commit.
 
 import { meta, logLik, validStudies } from "./analysis.js";
 import { inverseWithRidge, numericalHessian } from "./linalg.js";
