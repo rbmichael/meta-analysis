@@ -38,9 +38,7 @@ function hBtn(key) {
   const aria  = label === key ? "Help" : `Help: ${label}`;
   return `<button class="help-btn" data-help="${key}" aria-label="${aria}" title="Help">?</button>`;
 }
-function getCiLabel() {
-  return (document.getElementById("ciLevel")?.value ?? "95") + "% CI";
-}
+const _ciLabel = alpha => Math.round((1 - alpha) * 100) + "% CI";
 
 // ---------------- META-REGRESSION RESULTS PANEL ----------------
 
@@ -50,10 +48,10 @@ function getCiLabel() {
  * @param {{ est, se, stat, p, ci }} result  from testContrast()
  * @param {{ dist: string, QEdf: number }} reg  the regression result object
  */
-export function formatContrastResult(result, reg) {
+export function formatContrastResult(result, reg, alpha = 0.05) {
   const { est, se, stat, p, ci } = result;
   const statLabel = reg.dist === "t" ? `<em>t</em>(${reg.QEdf})` : "<em>z</em>";
-  const ciLabel   = getCiLabel();
+  const ciLabel   = _ciLabel(alpha);
   if (!isFinite(est)) {
     return `<div class="reg-note reg-warn" style="margin-top:6px">
       ⚠ Contrast SE is zero — all weights may be zero or the contrast is not estimable.
@@ -230,7 +228,7 @@ function _contrastBlock(colNames, detailsClass, summaryHTML, noteHTML) {
 }
 
 // ---- Location-scale model panel ----
-export function renderLocationScalePanel(ls, ciMethod, kExcluded = 0) {
+export function renderLocationScalePanel(ls, ciMethod, kExcluded = 0, alpha = 0.05) {
   const panel   = document.getElementById("regressionPanel");
   const section = document.getElementById("regressionSection");
   section.style.display = "";
@@ -251,7 +249,7 @@ export function renderLocationScalePanel(ls, ciMethod, kExcluded = 0) {
   }
 
   const crit   = ls.crit;
-  const ciLbl  = getCiLabel();
+  const ciLbl  = _ciLabel(alpha);
   const tau2min = Math.min(...ls.tau2_i);
   const tau2max = Math.max(...ls.tau2_i);
   const tau2rng = ls.q > 1
@@ -387,7 +385,7 @@ export function renderLocationScalePanel(ls, ciMethod, kExcluded = 0) {
     </div>`;
 }
 
-export function renderRegressionPanel(reg, method, ciMethod, kExcluded = 0, mods = []) {
+export function renderRegressionPanel(reg, method, ciMethod, kExcluded = 0, mods = [], alpha = 0.05) {
   const panel = document.getElementById("regressionPanel");
   const section = document.getElementById("regressionSection");
 
@@ -523,7 +521,7 @@ export function renderRegressionPanel(reg, method, ciMethod, kExcluded = 0, mods
       <table class="reg-table">
         <thead><tr>
           <th>Term</th><th>β</th><th>SE</th><th>${statLabel}</th>
-          <th><em>p</em></th><th>${getCiLabel()}</th><th>VIF</th><th></th>
+          <th><em>p</em></th><th>${_ciLabel(alpha)}</th><th>VIF</th><th></th>
           ${robustHeaders}
         </tr></thead>
         <tbody>${rows}</tbody>
@@ -586,7 +584,7 @@ function sensFv(v)  { return isFinite(v) ? v.toFixed(3) : "—"; }
 function sensFvp(v) { return isFinite(v) ? (v < 0.001 ? "< .001" : v.toFixed(3).replace(/^0\./, ".")) : "—"; }
 function sensTrunc(s, n) { const e = escapeHTML(s); return e.length > n ? e.slice(0, n - 1) + "\u2026" : e; }
 
-function buildLooBody(loo, fullSig, fullEst, profile) {
+function buildLooBody(loo, fullSig, fullEst, profile, alpha) {
   if (loo.rows.length === 0) {
     return `<p class="sens-placeholder">Need at least 3 studies for leave-one-out analysis.</p>`;
   }
@@ -594,8 +592,8 @@ function buildLooBody(loo, fullSig, fullEst, profile) {
     <tr>
       <th>Study omitted</th>
       <th>Estimate</th>
-      <th>${getCiLabel()} (low)</th>
-      <th>${getCiLabel()} (high)</th>
+      <th>${_ciLabel(alpha)} (low)</th>
+      <th>${_ciLabel(alpha)} (high)</th>
       <th>I² (%)</th>
       <th>τ²</th>
       <th><em>p</em></th>
@@ -631,7 +629,7 @@ function buildLooBody(loo, fullSig, fullEst, profile) {
     </div>`;
 }
 
-function buildEstimatorBody(estData, method, profile) {
+function buildEstimatorBody(estData, method, profile, alpha) {
   const rows = estData.map(row => {
     const est       = profile.transform(row.estimate);
     const ci        = { lb: profile.transform(row.lb), ub: profile.transform(row.ub) };
@@ -653,8 +651,8 @@ function buildEstimatorBody(estData, method, profile) {
         <tr>
           <th>τ² estimator</th>
           <th>Estimate</th>
-          <th>${getCiLabel()} (low)</th>
-          <th>${getCiLabel()} (high)</th>
+          <th>${_ciLabel(alpha)} (low)</th>
+          <th>${_ciLabel(alpha)} (high)</th>
           <th>τ²</th>
           <th>I² (%)</th>
         </tr>
@@ -678,10 +676,10 @@ export function renderSensitivityPanel(studies, m, method, ciMethod, profile, { 
   const loo     = leaveOneOut(studies, method, ciMethod, m, alpha);
   const fullSig = loo.full.pval < 0.05;
   const fullEst = profile.transform(loo.full.RE);
-  const looBody = buildLooBody(loo, fullSig, fullEst, profile);
+  const looBody = buildLooBody(loo, fullSig, fullEst, profile, alpha);
 
   // ---- Estimator comparison ----
-  const estBody = buildEstimatorBody(estimatorComparison(studies, ciMethod), method, profile);
+  const estBody = buildEstimatorBody(estimatorComparison(studies, ciMethod), method, profile, alpha);
 
   const ivNote = isMHFallback
     ? `<p class="reg-note" style="margin:4px 0 8px">⚠ Leave-one-out and estimator comparison use inverse-variance (DL) weights — M-H/Peto per-fold pooling is not yet supported.</p>`
@@ -714,7 +712,7 @@ export function renderSensitivityPanel(studies, m, method, ciMethod, profile, { 
 }
 
 // ---------------- STUDY-LEVEL RESULTS TABLE ----------------
-export function renderStudyTable(studies, m, profile) {
+export function renderStudyTable(studies, m, profile, alpha = 0.05) {
   const container = document.getElementById("studyTable");
   if (!container) return;
 
@@ -758,8 +756,8 @@ export function renderStudyTable(studies, m, profile) {
     <tr>
       <th>Study</th>
       <th>Effect ${effectHelpBtn}</th>
-      <th>${getCiLabel()} (low)</th>
-      <th>${getCiLabel()} (high)</th>
+      <th>${_ciLabel(alpha)} (low)</th>
+      <th>${_ciLabel(alpha)} (high)</th>
       <th>${seLabel}</th>
       <th>${weightLabel}</th>
       ${showFEcol ? "<th>FE Weight</th>" : ""}
@@ -1193,11 +1191,11 @@ export function bayesInterpretation(BF10) {
   return `${label} for ${dir}`;
 }
 
-export function buildBayesSummaryHTML(result, profile, reMean) {
+export function buildBayesSummaryHTML(result, profile, reMean, alpha = 0.05) {
   const muDisp   = profile.transform(result.muMean);
   const muCIDisp = result.muCI.map(v => profile.transform(v));
   const muSDNote = profile.isTransformedScale ? " (log)" : "";
-  const crLabel  = getCiLabel().replace("CI", "CrI");
+  const crLabel  = _ciLabel(alpha).replace("CI", "CrI");
   const fmtBF    = bf => !isFinite(bf) ? "NA" : bf >= 1000 || bf < 0.001 ? bf.toExponential(2) : bf.toFixed(3);
   return `
     <table class="stats-table" style="margin-bottom:8px">

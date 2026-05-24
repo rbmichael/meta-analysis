@@ -730,10 +730,6 @@ function getCiAlpha() {
   const v = document.getElementById("ciLevel")?.value ?? "95";
   return { "90": 0.10, "95": 0.05, "99": 0.01 }[v] ?? 0.05;
 }
-function getCiLabel() {
-  return (document.getElementById("ciLevel")?.value ?? "95") + "% CI";
-}
-
 function showView(name) {
   _inputSection.style.display  = name === "input"   ? "" : "none";
   _outputSection.style.display = name === "results" ? "" : "none";
@@ -1346,10 +1342,10 @@ document.addEventListener("click", e => {
   if (isLs) {
     if (!appState.results.ls) return;
     const regLike = { beta: appState.results.ls.beta, vcov: appState.results.ls.vcov_beta, crit: appState.results.ls.crit, dist: "z", QEdf: appState.results.ls.QEdf };
-    section.querySelector(".contrast-result").innerHTML = formatContrastResult(testContrast(regLike, L), regLike);
+    section.querySelector(".contrast-result").innerHTML = formatContrastResult(testContrast(regLike, L), regLike, getCiAlpha());
   } else {
     if (!appState.results.reg) return;
-    section.querySelector(".contrast-result").innerHTML = formatContrastResult(testContrast(appState.results.reg, L), appState.results.reg);
+    section.querySelector(".contrast-result").innerHTML = formatContrastResult(testContrast(appState.results.reg, L), appState.results.reg, getCiAlpha());
   }
 });
 
@@ -3044,7 +3040,7 @@ function _renderPooledPanel(ctx) {
       ? `<p class="reg-note" style="color:var(--muted);margin:0 0 6px">ℹ Bayesian analysis does not incorporate cluster-robust adjustment.</p>`
       : "";
     document.getElementById("bayesSummary").innerHTML =
-      bayesClusterNote + buildBayesSummaryHTML(bayesResult, profile, reMeanRef);
+      bayesClusterNote + buildBayesSummaryHTML(bayesResult, profile, reMeanRef, alpha);
     drawBayesMuPosterior(bayesResult, { reMean: reMeanRef, theme: appState.plotTheme });
     drawBayesTauPosterior(bayesResult, { theme: appState.plotTheme });
     document.getElementById("bayesGridWarning").style.display =
@@ -3101,7 +3097,7 @@ function _renderPooledPanel(ctx) {
     ? `CLES: ${fmt(cles.estimate)} [${fmt(cles.ci[0])}, ${fmt(cles.ci[1])}]${hBtn("pool.cles")}<br>`
     : "";
 
-  const ciLbl = getCiLabel();
+  const ciLbl = Math.round((1 - alpha) * 100) + "% CI";
   const showLogScale = !!profile.isLog;
   const logScaleRELine = showLogScale
     ? `<div class="result-log-note">log scale: ${fmt(m.RE)} | SE = ${fmt(m.seRE)} | ${ciLbl} [${fmt(m.ciLow)}, ${fmt(m.ciHigh)}]</div>`
@@ -3330,7 +3326,7 @@ function _renderForestAndBubbles(ctx) {
   const elForestPageSize = document.getElementById("forestPageSize");
   const rawPageSize = elForestPageSize?.value ?? "30";
   const pageSize    = rawPageSize === "all" ? Infinity : +rawPageSize;
-  const forestOpts  = { ciMethod, profile, pageSize, pooledDisplay: forestPlot.poolDisplay, theme: appState.plotTheme, alpha, ciLabel: getCiLabel() };
+  const forestOpts  = { ciMethod, profile, pageSize, pooledDisplay: forestPlot.poolDisplay, theme: appState.plotTheme, alpha, ciLabel: Math.round((1 - alpha) * 100) + "% CI" };
   const mForest     = isMHorPeto
     ? { ...m, RE: m.FE, seRE: m.seFE, tau2: 0, predLow: NaN, predHigh: NaN }
     : m;
@@ -3428,12 +3424,13 @@ function _renderForestAndBubbles(ctx) {
   const elCumFunnelBlock    = document.getElementById("cumulativeFunnelBlock");
   const rawCumPageSize    = elCumForestPageSize?.value ?? "30";
   const cumForestPageSize = rawCumPageSize === "all" ? Infinity : +rawCumPageSize;
-  cumForestPlot.args          = { results: cumResults, profile, pageSize: cumForestPageSize, alpha, ciLabel: getCiLabel() };
+  const ciLabel = Math.round((1 - alpha) * 100) + "% CI";
+  cumForestPlot.args          = { results: cumResults, profile, pageSize: cumForestPageSize, alpha, ciLabel };
   cumForestPlot.sourceStudies = studies.slice();
   cumForestPlot.method        = method;
   cumForestPlot.ciMethod      = ciMethod;
   cumForestPlot.alpha         = alpha;
-  appState.reportArgs.cumForestOptions = { results: cumResults, profile, pageSize: cumForestPageSize, currentPage: 0, alpha, ciLabel: getCiLabel() };
+  appState.reportArgs.cumForestOptions = { results: cumResults, profile, pageSize: cumForestPageSize, currentPage: 0, alpha, ciLabel };
 
   cumFunnelPlot.studies = cumulativeStudies;
   cumFunnelPlot.results = cumResults;
@@ -3526,7 +3523,7 @@ function _renderAllResults(ctx) {
   elSubgroupTable.innerHTML = (hasSubgroup && isMHorPeto)
     ? `<p class="reg-note" style="margin:4px 0 8px">⚠ Subgroup pooling uses inverse-variance (DL) weights — switch to DL or REML for M-H subgroup analysis.</p>` + subgroupHTML
     : subgroupHTML;
-  renderStudyTable(all, m, profile);
+  renderStudyTable(all, m, profile, alpha);
   _animateFresh(document.getElementById("studyTable"));
 
   // ── Sensitivity panel (LOO) + p-curve + selection model ─────────────────────
@@ -3544,12 +3541,12 @@ function _renderAllResults(ctx) {
   if (ls) {
     appState.results.reg = null;
     appState.results.ls  = ls.rankDeficient ? null : ls;
-    renderLocationScalePanel(ls, ciMethod, kExcluded);
+    renderLocationScalePanel(ls, ciMethod, kExcluded, alpha);
   } else {
     appState.results.ls  = null;
     appState.results.reg = (reg && !reg.rankDeficient) ? reg : null;
     const _allTermMods = [...moderators, ...interactions.map(ix => ({ name: ix.name }))];
-    renderRegressionPanel(reg ?? {}, method, ciMethod, kExcluded, _allTermMods);
+    renderRegressionPanel(reg ?? {}, method, ciMethod, kExcluded, _allTermMods, alpha);
     const elPermSection = document.getElementById("permSection");
     if (elPermSection) {
       elPermSection.style.display = appState.results.reg ? "" : "none";
