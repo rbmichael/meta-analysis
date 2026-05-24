@@ -661,7 +661,8 @@ function buildEstimatorBody(estData, method, profile, alpha) {
     </table>
     <div class="sens-note">★ = currently selected estimator.</div>`;
 }
-export function renderSensitivityPanel(studies, m, method, ciMethod, profile, { isMHFallback = false } = {}, alpha = 0.05) {
+export function renderSensitivityPanel(studies, m, method, ciMethod, profile, alpha = 0.05, opts = {}) {
+  const { isMHFallback = false } = opts;
   const container = document.getElementById("sensitivityPanel");
   if (!container) return;
 
@@ -673,7 +674,7 @@ export function renderSensitivityPanel(studies, m, method, ciMethod, profile, { 
 
   // ---- Leave-one-out ----
   // Pass the already-computed meta result to avoid rerunning meta() for the full set.
-  const loo     = leaveOneOut(studies, method, ciMethod, m, alpha);
+  const loo     = leaveOneOut(studies, method, ciMethod, m, { alpha });
   const fullSig = loo.full.pval < 0.05;
   const fullEst = profile.transform(loo.full.RE);
   const looBody = buildLooBody(loo, fullSig, fullEst, profile, alpha);

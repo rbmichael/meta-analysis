@@ -2922,7 +2922,7 @@ function _runRegressionBatch(studies, m, opts) {
   if (scaleModSpec.length > 0) {
     ls = lsModel(studies, modSpec, scaleModSpec, { ciMethod, alpha, locInteractions: interactionSpec });
   } else if (modSpec.length > 0 || interactionSpec.length > 0) {
-    reg = metaRegression(studies, modSpec, method, ciMethod, alpha, interactionSpec);
+    reg = metaRegression(studies, modSpec, method, ciMethod, { alpha, interactions: interactionSpec });
   }
   return { subgroup, reg, ls };
 }
@@ -3528,7 +3528,7 @@ function _renderAllResults(ctx) {
 
   // ── Sensitivity panel (LOO) + p-curve + selection model ─────────────────────
   performance.mark("phase:loo:render:start");
-  renderSensitivityPanel(studies, isMHorPeto ? null : m, isMHorPeto ? "DL" : method, ciMethod, profile, { isMHFallback: isMHorPeto }, alpha);
+  renderSensitivityPanel(studies, isMHorPeto ? null : m, isMHorPeto ? "DL" : method, ciMethod, profile, alpha, { isMHFallback: isMHorPeto });
   performance.measure("phase:loo:render", "phase:loo:render:start");
   pCurvePlot.result = pcurve;
   pUniformPlot.result = puniform; pUniformPlot.m = m; pUniformPlot.profile = profile;

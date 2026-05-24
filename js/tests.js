@@ -4003,7 +4003,7 @@ export function runTests() {
 
   INTERACTION_BENCHMARKS.forEach(bm => {
     const studies = bm.data.map(d => ({ ...d, se: Math.sqrt(d.vi) }));
-    const r = metaRegression(studies, bm.moderators, bm.tauMethod, bm.ciMethod, 0.05, bm.interactions ?? []);
+    const r = metaRegression(studies, bm.moderators, bm.tauMethod, bm.ciMethod, { alpha: 0.05, interactions: bm.interactions ?? [] });
 
     console.log(`--- ${bm.name} ---`);
 
@@ -5995,9 +5995,9 @@ export function runTests() {
   // ---- c. metaRegression CI width scales with alpha ----
   const ciw_reg_studies = ciw_studies.map((d, i) => ({ ...d, x: i + 1 }));
   const ciw_mods = [{ key: "x", type: "continuous" }];
-  const reg90 = metaRegression(ciw_reg_studies, ciw_mods, "DL", "normal", 0.10);
-  const reg95 = metaRegression(ciw_reg_studies, ciw_mods, "DL", "normal", 0.05);
-  const reg99 = metaRegression(ciw_reg_studies, ciw_mods, "DL", "normal", 0.01);
+  const reg90 = metaRegression(ciw_reg_studies, ciw_mods, "DL", "normal", { alpha: 0.10 });
+  const reg95 = metaRegression(ciw_reg_studies, ciw_mods, "DL", "normal", { alpha: 0.05 });
+  const reg99 = metaRegression(ciw_reg_studies, ciw_mods, "DL", "normal", { alpha: 0.01 });
   // Intercept CI (index 0): 90% narrower than 95%, 95% narrower than 99%
   // reg.ci is Array<[lo, hi]> per coefficient
   const rw = r => r.ci[0][1] - r.ci[0][0];

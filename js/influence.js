@@ -433,7 +433,8 @@ export function cumulativeMeta(studies, method = "DL", ciMethod = "normal", alph
 //   where `significant` reflects whether the leave-one-out result is
 //   statistically significant at p < 0.05.  The rendering layer can compare
 //   this against `full.pval < 0.05` to flag significance changes.
-export function leaveOneOut(studies, method = "DL", ciMethod = "normal", precomputedFull = null, alpha = 0.05) {
+export function leaveOneOut(studies, method = "DL", ciMethod = "normal", precomputedFull = null, opts = {}) {
+  const alpha = opts.alpha ?? 0.05;
   const full = precomputedFull ?? meta(studies, method, ciMethod, alpha);
   if (studies.length < 3) return { full, rows: [] };
   const n = studies.length;

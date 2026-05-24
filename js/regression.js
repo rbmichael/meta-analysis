@@ -466,7 +466,8 @@ export function tau2_metaReg(yi, vi, X, method = "REML", tol = REML_TOL, maxIter
  *             I2: number, R2: number|null, vif: number[], maxVIF: number,
  *             colNames: string[], k: number, p: number, rankDeficient: boolean }}
  */
-export function metaRegression(studies, moderators = [], method = "REML", ciMethod = "normal", alpha = 0.05, interactions = []) {
+export function metaRegression(studies, moderators = [], method = "REML", ciMethod = "normal", opts = {}) {
+  const { alpha = 0.05, interactions = [] } = opts;
   // Filter to studies with finite yi and vi
   const valid = validStudies(studies);
   const k = valid.length;

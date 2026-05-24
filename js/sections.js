@@ -693,7 +693,7 @@ export function sensitivityData(args) {
   const realStudies = studies.filter(d => !d.filled);
 
   // ── Leave-one-out ──────────────────────────────────────────────────────────
-  const loo     = leaveOneOut(realStudies, method, ciMethod, m, alpha);
+  const loo     = leaveOneOut(realStudies, method, ciMethod, m, { alpha });
   const fullSig = loo.full.pval < 0.05;
   const fullEst = profile.transform(loo.full.RE);
 
