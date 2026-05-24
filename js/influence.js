@@ -456,14 +456,20 @@ export function leaveOneOut(studies, method = "DL", ciMethod = "normal", precomp
   const engineRows = ciMethod !== "PL" ? looEngine(studies, full, method, ciMethod, alpha) : null;
 
   const rows = studies.map((omitted, omitIdx) => {
-    // FE LOO sufficient stats — used for i2_loo regardless of τ² method.
     const wi_fe    = 1 / omitted.vi;
     const W_fe_l   = dlSS.W_fe - wi_fe;
     const WY_fe_l  = dlSS.WY   - wi_fe * omitted.yi;
     const WY2_fe_l = dlSS.WY2  - wi_fe * omitted.yi * omitted.yi;
     const Q_fe_l   = W_fe_l > 0 ? WY2_fe_l - WY_fe_l * WY_fe_l / W_fe_l : 0;
-    const i2_loo   = (Q_fe_l > df_loo && Q_fe_l > 0)
-      ? Math.min(100, ((Q_fe_l - df_loo) / Q_fe_l) * 100) : 0;
+
+    // σ²_typical for the LOO subset — needed for τ²-based I²
+    const W2_fe_l  = dlSS.W2 - wi_fe * wi_fe;
+    const c_loo    = W_fe_l - W2_fe_l / W_fe_l;
+    const sigma2_loo = c_loo > 0 ? df_loo / c_loo : (W_fe_l > 0 ? df_loo / W_fe_l : 0);
+
+    const i2FromTau2 = tau2 => sigma2_loo > 0
+      ? Math.max(0, Math.min(100, 100 * tau2 / (tau2 + sigma2_loo)))
+      : (tau2 > 0 ? 100 : 0);
 
     if (ciMethod === "PL") {
       // Profile-likelihood CIs are asymmetric; take bounds directly from meta().
@@ -475,7 +481,7 @@ export function leaveOneOut(studies, method = "DL", ciMethod = "normal", precomp
         lb:          m.ciLow,
         ub:          m.ciHigh,
         tau2:        m.tau2,
-        i2:          i2_loo,
+        i2:          i2FromTau2(m.tau2),
         pval:        m.pval,
         significant: m.pval < 0.05,
       };
@@ -495,7 +501,7 @@ export function leaveOneOut(studies, method = "DL", ciMethod = "normal", precomp
       lb:          ciLow_loo,
       ub:          ciHigh_loo,
       tau2:        tau2_loo,
-      i2:          i2_loo,
+      i2:          i2FromTau2(tau2_loo),
       pval:        pval_loo,
       significant: pval_loo < 0.05,
     };

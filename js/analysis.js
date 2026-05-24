@@ -249,26 +249,23 @@ export function meta(studies, method="DL", ciMethod="normal", alpha=0.05, tau2In
   for(let i=0;i<k;i++){ Q += wFE[i]*Math.pow(studies[i].yi - FE,2); }
   const dfQ = k-1;
 
-  // I² — proportion of total variance due to between-study heterogeneity.
-  // Q-based formula (Higgins & Thompson 2002, Stat Med 21:1539–1558, eq. 9):
-  //   I² = max(0, (Q − (k−1)) / Q) × 100 %
-  // This is equivalent to τ²_DL / (τ²_DL + σ²_typical) when method = "DL",
-  // but is applied uniformly here regardless of the τ² estimator for
-  // consistency across methods.
-  //
-  // Note: metafor uses this Q-based formula for moment estimators (DL, HS, HE)
-  // but switches to the τ²-based formula I² = τ² / (τ² + σ²_typical) for
-  // likelihood estimators (REML, ML).  Using the Q-based formula throughout
-  // means I² is insensitive to the choice of τ² estimator — a deliberate
-  // trade-off.  The I²CI bounds in heterogeneityCIs() are τ²-based, so when
-  // τ² > 0 the point estimate and CI bounds may use different formulas.
-  let I2 = 0;
-  if(Q>dfQ && Q>0) I2 = ((Q-dfQ)/Q)*100;
-  I2 = Math.max(0, Math.min(100,I2));
+  // σ²_typical — "typical" within-study variance (Higgins & Thompson 2002, eq. 6/9):
+  //   c       = Σwᵢ − Σwᵢ²/Σwᵢ   (FE weights wᵢ = 1/vᵢ)
+  //   σ²_typ  = (k−1) / c
+  // Depends only on vᵢ, not on τ² — computed here once for use in I² below.
+  const _W2FE   = wFE.reduce((acc, w) => acc + w * w, 0);
+  const _cFE    = W - _W2FE / W;
+  const sigma2  = _cFE > 0 ? dfQ / _cFE : dfQ / W;
 
   const _tau2Result   = (TAU2_FN[method] ?? TAU2_FN.DL)(studies, tau2Init);
   const tau2          = typeof _tau2Result === "object" ? _tau2Result.tau2      : _tau2Result;
   const tau2Converged = typeof _tau2Result === "object" ? _tau2Result.converged : true;
+
+  // I² — τ²-based formula (Higgins & Thompson 2002, eq. 6/9; matches metafor for all methods).
+  // For DL this is algebraically identical to (Q−df)/Q (Q-based formula). For REML/ML/PM/SJ/etc.
+  // it uses the estimated τ², making I² sensitive to the estimator — consistent with metafor.
+  let I2 = sigma2 > 0 ? 100 * tau2 / (tau2 + sigma2) : (tau2 > 0 ? 100 : 0);
+  I2 = Math.max(0, Math.min(100, I2));
 
   // ---------- RANDOM EFFECT ----------
   const wRE = studies.map(d => 1 / Math.max(d.vi + tau2, MIN_VAR));

@@ -30,7 +30,7 @@ export const BENCHMARKS = [
       FE:   -0.430,
       RE:   -0.714,
       tau2:  0.313,
-      I2:   92.2
+      I2:   92.2214
     },
     citation: "Colditz et al. (1994) JAMA 271:698–702. dat.bcg in metafor."
   },
@@ -65,7 +65,7 @@ export const BENCHMARKS = [
       FE:   -0.430,
       RE:   -0.691,
       tau2:  0.158,
-      I2:   92.12
+      I2:   85.6658
     },
     citation: "Colditz et al. (1994) JAMA 271:698–702. Expected values from JS tau2_DLIT()."
   },
@@ -98,7 +98,7 @@ export const BENCHMARKS = [
       FE:   -0.430,
       RE:   -0.707,
       tau2:  0.249,
-      I2:   92.12
+      I2:   90.4129
     },
     citation: "Colditz et al. (1994) JAMA 271:698–702. Expected values from JS tau2_HSk()."
   },
@@ -131,7 +131,7 @@ export const BENCHMARKS = [
       FE:   -0.430,
       RE:   -0.715,
       tau2:  0.315,
-      I2:   92.12
+      I2:   92.2726
     },
     citation: "Colditz et al. (1994) JAMA 271:698–702. Expected values from JS tau2_SQGENQ()."
   },
@@ -164,7 +164,7 @@ export const BENCHMARKS = [
       FE:   -0.430,
       RE:   -0.715,
       tau2:  0.313,
-      I2:   92.12
+      I2:   92.2214
     },
     citation: "Colditz et al. (1994) JAMA 271:698–702. EBLUP = REML (Harville 1977). Expected values from JS meta()."
   },
@@ -199,7 +199,7 @@ export const BENCHMARKS = [
       FE:   -0.430,
       RE:   -0.715,
       tau2:  0.318,
-      I2:   92.12
+      I2:   92.3303
     },
     citation: "Colditz et al. (1994) JAMA 271:698–702. Expected values from metafor rma(method='EB'). Morris (1983)."
   },
@@ -235,7 +235,7 @@ export const BENCHMARKS = [
       FE:   -0.430,
       RE:   -0.717,
       tau2:  0.343,
-      I2:   92.12
+      I2:   92.8555
     },
     citation: "Colditz et al. (1994) JAMA 271:698–702. Expected values from metafor rma(method='PMM')."
   },
@@ -275,7 +275,7 @@ export const BENCHMARKS = [
       FE:   -0.430,
       RE:   -0.719,
       tau2:  0.383,
-      I2:   92.12
+      I2:   93.5435
     },
     citation: "Colditz et al. (1994) JAMA 271:698–702. tau2 from metafor rma(method='GENQM', weights=1/vi). RE uses app convention (RE weights)."
   },
@@ -316,7 +316,7 @@ export const BENCHMARKS = [
       FE:   -0.436,
       RE:   -0.747,
       tau2:  0.366,
-      I2:   92.65
+      I2:   92.6455
     },
     citation: "Colditz et al. (1994) JAMA 271:698–702. dat.bcg in metafor. DL pooled values from metafor test suite."
   },
@@ -355,7 +355,7 @@ export const BENCHMARKS = [
       FE:   -0.430,
       RE:   -0.715,
       tau2:  0.313,
-      I2:   92.2
+      I2:   92.2214
     },
     citation: "Colditz et al. (1994) JAMA 271:698–702. dat.bcg in metafor. REML pooled values from metadat HTML docs."
   },
@@ -396,7 +396,7 @@ export const BENCHMARKS = [
       FE:   -0.0009,
       RE:   -0.0071,
       tau2:  0.00002,
-      I2:   95.66
+      I2:   95.6596
     },
     citation: "Colditz et al. (1994) JAMA 271:698–702. dat.bcg in metafor. DL pooled values from agent research; Q=276.47 confirmed."
   },
@@ -431,7 +431,7 @@ export const BENCHMARKS = [
       FE:   -3.464,
       RE:   -15.106,
       tau2:  684.6,
-      I2:   96.65
+      I2:   98.9713
     },
     citation: "Normand (1999) Stat Med 18:321–359. dat.normand1999 in metafor."
   },
@@ -460,7 +460,7 @@ export const BENCHMARKS = [
       FE:   -0.788,
       RE:   -1.207,
       tau2:  1.009,
-      I2:   96.0,
+      I2:   95.6284,
       // CLES = Φ(RE / √2); CI from Φ applied to normal-CI endpoints.
       // R-verified: generate.R block CLES-1
       cles: { estimate: 0.1966, ciLow: 0.0579, ciHigh: 0.4465 }
@@ -494,7 +494,7 @@ export const BENCHMARKS = [
       FE:    0.209,
       RE:    6.416,
       tau2: 73.57,
-      I2:   95.84
+      I2:   99.5234
     },
     citation: "Morris (2008) Org Res Methods 11:364–386. Pooled values from metafor test suite."
   },
@@ -524,7 +524,7 @@ export const BENCHMARKS = [
       FE:    0.3859,
       RE:    0.4130,
       tau2:  0.01298,
-      I2:   49.0
+      I2:   49.0096
     },
     citation: "Synthetic dataset. Expected values computed analytically from Fisher z formulas."
   },
@@ -554,7 +554,7 @@ export const BENCHMARKS = [
       FE:    0.394,
       RE:    0.403,
       tau2:  0.01145,
-      I2:   57.3
+      I2:   57.2681
     },
     citation: "Synthetic dataset. Expected values computed analytically from raw-correlation formulas."
   },
@@ -585,7 +585,7 @@ export const BENCHMARKS = [
       FE:    0.864,
       RE:    0.902,
       tau2:  0.243,
-      I2:   77.1
+      I2:   77.1281
     },
     citation: "Morris (2008) Org Res Methods 11:364–386. Per-study g and pooled values recomputed with Borenstein 2009 eq 4.27 vi formula."
   },
@@ -612,7 +612,7 @@ export const BENCHMARKS = [
       FE:    0.208,
       RE:    0.246,
       tau2:  0.01581,
-      I2:   90.7
+      I2:   90.7379
     },
     citation: "Synthetic dataset. Expected values computed analytically from PR formulas."
   },
@@ -638,7 +638,7 @@ export const BENCHMARKS = [
       FE:   -0.993,
       RE:   -1.174,
       tau2:  0.4197,
-      I2:   87.6
+      I2:   87.6324
     },
     citation: "Synthetic dataset. Expected values computed analytically from PLO (logit) formulas."
   },
@@ -664,7 +664,7 @@ export const BENCHMARKS = [
       FE:    0.513,
       RE:    0.513,
       tau2:  0.02186,
-      I2:   89.7
+      I2:   89.7174
     },
     citation: "Synthetic dataset. Expected values computed analytically from PAS (arcsine) formulas."
   },
@@ -690,7 +690,7 @@ export const BENCHMARKS = [
       FE:    1.031,
       RE:    1.031,
       tau2:  0.08445,
-      I2:   89.5
+      I2:   89.4549
     },
     citation: "Synthetic dataset. Expected values computed analytically from PFT (Freeman-Tukey) formulas."
   },
@@ -729,7 +729,7 @@ export const BENCHMARKS = [
       FE:   1.333,
       RE:   1.333,
       tau2: 0.8889,   // 8/9
-      I2:  57.1
+      I2:  47.0588
     },
     citation: "Synthetic. τ²_HS = (Q−df)/ΣW = (42/9−2)/3 = 8/9. Derived analytically."
   },
@@ -753,7 +753,7 @@ export const BENCHMARKS = [
       FE:   1.333,
       RE:   1.333,
       tau2: 1.3333,   // 4/3
-      I2:  57.1
+      I2:  57.1429
     },
     citation: "Synthetic. τ²_HE = SS_uw/(k−1) − mean(v) = (42/9)/2 − 1 = 4/3. Derived analytically."
   },
@@ -777,7 +777,7 @@ export const BENCHMARKS = [
       FE:   1.333,
       RE:   1.333,
       tau2: 0.5556,   // 5/9
-      I2:  57.1
+      I2:  35.7143
     },
     citation: "Synthetic. τ²_ML fixed point: (42/9)/(1+τ²) = 3 → τ² = 5/9. Derived analytically."
   },
@@ -801,7 +801,7 @@ export const BENCHMARKS = [
       FE:   1.333,
       RE:   1.333,
       tau2: 0.8437,   // (√65−3)/6
-      I2:  57.1
+      I2:  45.7615
     },
     citation: "Synthetic. τ²_SJ fixed point: τ²(1+τ²) = 14/9 → τ² = (√65−3)/6. Derived analytically."
   },
@@ -838,7 +838,7 @@ export const BENCHMARKS = [
       FE:   0.714,
       RE:   1.167,
       tau2: 1.648,
-      I2:  73.1
+      I2:  76.7145
     },
     citation: "Synthetic. τ²_PM iterative fixed-point (unequal vi so PM≠HE). Verified against metafor rma(method='PM')."
   },
@@ -873,7 +873,7 @@ export const BENCHMARKS = [
       FE:   -0.450,
       RE:   -0.450,   // equal vi → RE = FE
       tau2:  0.054,
-      I2:   46.4
+      I2:   46.4123
     },
     citation: "Synthetic dataset. Expected values derived analytically from HR log-scale formulas."
   },
@@ -905,7 +905,7 @@ export const BENCHMARKS = [
       FE:   -0.537,
       RE:   -0.605,
       tau2:  0.138,
-      I2:   47.7
+      I2:   47.7363
     },
     citation: "Synthetic dataset. Expected values derived analytically from IRR Poisson formulas."
   },
@@ -955,11 +955,10 @@ export const BENCHMARKS = [
       { label: "Study 6", x1: 100, t1: 5000, x2: 50, t2: 5000 },
     ],
     expected: {
-      // I2 is Q-based (JS convention); metafor REML uses τ²-based I2 = 97.70
       FE:    0.00929187,
       RE:   -0.01601237,
       tau2:  0.002056329,
-      I2:   78.5748,  // Q-based
+      I2:   97.693,
     },
     citation: "Synthetic dataset; cross-validated with metafor escalc('IRD') + rma(method='REML').",
   },
@@ -1007,11 +1006,10 @@ export const BENCHMARKS = [
       { label: "Study 6", x1: 100, t1: 5000, x2: 50, t2: 5000 },
     ],
     expected: {
-      // I2 is Q-based (JS convention); metafor REML uses τ²-based I2 = 96.01
       FE:    0.03026145,
       RE:   -0.02807825,
       tau2:  0.01179224,
-      I2:   84.0654,  // Q-based
+      I2:   96.0051,
     },
     citation: "Synthetic dataset; cross-validated with metafor escalc('IRSD') + rma(method='REML').",
   },
@@ -1066,8 +1064,7 @@ export const BENCHMARKS = [
       FE:   -0.565524,
       RE:   -0.4916644,
       tau2:  0.048285,
-      I2:   79.2922,  // Q-based
-    },
+      I2:   78.7286,    },
     citation: "dat.bcg (first 5 studies); cross-validated with metafor escalc('YUQ') + rma(method='REML').",
   },
 
@@ -1115,8 +1112,7 @@ export const BENCHMARKS = [
       FE:   -0.2883224,
       RE:   -0.2652435,
       tau2:  0.01754236,
-      I2:   81.9081,  // Q-based
-    },
+      I2:   77.4507,    },
     citation: "dat.bcg (first 5 studies); cross-validated with metafor escalc('YUY') + rma(method='REML').",
   },
 
@@ -1149,7 +1145,7 @@ export const BENCHMARKS = [
       FE:   1.232,
       RE:   1.887,
       tau2: 1.055,
-      I2:   92.73,
+      I2:   92.728,
     },
     citation: "Synthetic dataset; cross-validated with metafor escalc('SMD1') + rma(method='DL').",
   },
@@ -1173,8 +1169,7 @@ export const BENCHMARKS = [
       FE:   1.232,
       RE:   1.922,
       tau2: 1.608,
-      I2:   92.73,  // Q-based
-    },
+      I2:   95.1088,    },
     citation: "Synthetic dataset; cross-validated with metafor escalc('SMD1') + rma(method='REML').",
   },
 
@@ -1201,7 +1196,7 @@ export const BENCHMARKS = [
       FE:   1.220,
       RE:   1.886,
       tau2: 1.044,
-      I2:   92.86,
+      I2:   92.8577,
     },
     citation: "Synthetic dataset; cross-validated with metafor escalc('SMD1H') + rma(method='DL').",
   },
@@ -1225,8 +1220,7 @@ export const BENCHMARKS = [
       FE:   1.220,
       RE:   1.922,
       tau2: 1.611,
-      I2:   92.86,  // Q-based
-    },
+      I2:   95.2569,    },
     citation: "Synthetic dataset; cross-validated with metafor escalc('SMD1H') + rma(method='REML').",
   },
 
@@ -1257,7 +1251,7 @@ export const BENCHMARKS = [
       FE:   -2.742,
       RE:   -2.997,
       tau2:  0.335,
-      I2:   82.0
+      I2:   82.0145
     },
     citation: "Synthetic dataset. Expected values derived analytically from Poisson IR formulas."
   },
@@ -1293,7 +1287,7 @@ export const BENCHMARKS = [
       FE:   -0.394,
       RE:   -0.532,
       tau2:  0.769,
-      I2:   92.8
+      I2:   95.3703
     },
     citation: "Normand (1999) Stat Med 18:321–359. dat.normand1999 in metafor. Bonett (2009) Psychol Methods 14:43–53 Eq. 7 variance formula. Cross-validated against metafor escalc/rma."
   },
@@ -1328,7 +1322,7 @@ export const BENCHMARKS = [
       FE:   -0.303,
       RE:   -0.218,
       tau2:  0.108,
-      I2:   94.6
+      I2:   94.3547
     },
     citation: "Normand (1999) Stat Med 18:321–359. dat.normand1999 in metafor. REML values computed analytically (Python)."
   },
@@ -1360,7 +1354,7 @@ export const BENCHMARKS = [
       FE:    0.804,
       RE:    1.018,
       tau2:  0.369,
-      I2:   81.2
+      I2:   81.2149
     },
     citation: "Morris (2008) Org Res Methods 11:364–386. SMCC formula: Borenstein et al. (2009) eq 4.30 — vi=1/n+g²/(2n). DL values recomputed."
   },
@@ -1388,7 +1382,7 @@ export const BENCHMARKS = [
       FE:   -1.226,
       RE:   -1.452,
       tau2:  0.2051,
-      I2:   86.9
+      I2:   86.939
     },
     citation: "Synthetic dataset. Expected values computed analytically from PLN (log proportion) formulas."
   },
@@ -1417,7 +1411,7 @@ export const BENCHMARKS = [
       FE:    0.388,
       RE:    0.388,
       tau2:  0.000,
-      I2:    0.0,
+      I2:    0,
     },
     citation: "Synthetic dataset derived from 5 equal-group studies. Expected values from metafor escalc('RPB') + rma(method='DL'). Block RPB-1 in generate.R.",
   },
@@ -1447,7 +1441,7 @@ export const BENCHMARKS = [
       FE:    0.228,
       RE:    0.321,
       tau2:  0.0385,
-      I2:   84.6,
+      I2:   85.1682,
     },
     citation: "Synthetic. Designed to give τ²>0 with RE≠FE. Expected from metafor escalc('RPB') + rma(method='REML'). Block RPB-2 in generate.R.",
   },
@@ -1478,7 +1472,7 @@ export const BENCHMARKS = [
       FE:    0.487,
       RE:    0.487,
       tau2:  0.000,
-      I2:    0.0,
+      I2:    0,
     },
     citation: "Synthetic. Same studies as RPB-1 with p=0.5 (equal groups). Expected from metafor escalc('RBIS') + rma(method='DL'). Block RBIS-1 in generate.R.",
   },
@@ -1506,7 +1500,7 @@ export const BENCHMARKS = [
       FE:    0.282,
       RE:    0.396,
       tau2:  0.0588,
-      I2:   83.3,
+      I2:   83.9568,
     },
     citation: "Synthetic. Unequal-group version of RPB-2 (n1≈n/3). Tests RBIS formula with z≠0. Expected from metafor escalc('RBIS') + rma(method='REML'). Block RBIS-2 in generate.R.",
   },
@@ -1533,7 +1527,7 @@ export const BENCHMARKS = [
       FE:    0.246,
       RE:    0.246,
       tau2:  0.000,
-      I2:    0.0,
+      I2:    0,
     },
     citation: "Synthetic. Expected from metafor escalc('R2') + rma(method='DL'). Block R2-1 in generate.R.",
   },
@@ -1560,7 +1554,7 @@ export const BENCHMARKS = [
       FE:    0.106,
       RE:    0.229,
       tau2:  0.0291,
-      I2:   87.9,
+      I2:   90.5854,
     },
     citation: "Synthetic. Expected from metafor escalc('R2') + rma(method='REML'). Block R2-2 in generate.R.",
   },
@@ -1589,7 +1583,7 @@ export const BENCHMARKS = [
       FE:    0.545,
       RE:    0.545,
       tau2:  0.000,
-      I2:    0.0,
+      I2:    0,
     },
     citation: "Synthetic. Same studies as R2-1 on z scale. Expected from metafor escalc('ZR2') + rma(method='DL'). Block ZR2-1 in generate.R.",
   },
@@ -1618,7 +1612,7 @@ export const BENCHMARKS = [
       FE:    0.415,
       RE:    0.508,
       tau2:  0.0616,
-      I2:   86.2,
+      I2:   87.1273,
     },
     citation: "Synthetic. Same studies as R2-2 on z scale. Expected from metafor escalc('ZR2') + rma(method='REML'). Back-transform: tanh(RE)²≈0.219. Block ZR2-2 in generate.R.",
   },
@@ -1660,7 +1654,7 @@ export const BENCHMARKS = [
       FE:   -0.013,
       RE:   -0.051,
       tau2:  0.0011,
-      I2:   96.0
+      I2:   96.0448
     },
     citation: "Colditz et al. (1994) JAMA 271:698–702. dat.bcg in metafor. Digby (1983) Biometrics 39:849–851 LS variance. Cross-validated against metafor escalc/rma."
   },
@@ -1695,7 +1689,7 @@ export const BENCHMARKS = [
       FE:   27.170,
       RE:   38.325,
       tau2: 408.928,
-      I2:   98.67
+      I2:   99.0787
     },
     citation: "Normand (1999) Stat Med 18:321–359. dat.normand1999 specialist arm. REML values computed analytically (Python)."
   },
@@ -1728,7 +1722,7 @@ export const BENCHMARKS = [
       FE:    3.694,
       RE:    3.523,
       tau2:  0.316,
-      I2:   98.9
+      I2:   98.7941
     },
     citation: "Normand (1999) Stat Med 18:321–359. dat.normand1999 specialist arm. REML values computed analytically (Python)."
   },
@@ -1817,7 +1811,7 @@ export const BENCHMARKS = [
       FE:    0.068,
       RE:    0.196,
       tau2:  0.837,
-      I2:   97.23
+      I2:   97.2268
     },
     citation: "Synthetic dataset. Designed to give τ²>0 with strongly divergent log(sd1/sd2) values. Verified via metafor escalc(\"VR\") + rma(method=\"DL\"), R block 48 in generate.R."
   },
@@ -1846,7 +1840,7 @@ export const BENCHMARKS = [
       FE:    0.078,
       RE:    0.150,
       tau2:  1.039,
-      I2:   97.70
+      I2:   97.7028
     },
     citation: "Synthetic dataset. Designed to give τ²>0 with strongly divergent log(cv1/cv2) values. Verified via metafor escalc(\"CVR\") + rma(method=\"DL\"), R block 49 in generate.R."
   },
@@ -1974,7 +1968,7 @@ export const BENCHMARKS = [
       FE:    0.396,
       RE:    0.467,
       tau2:  0.0970,
-      I2:   95.6,
+      I2:   95.2403,
     },
     citation: "Synthetic. Designed to give τ²>0 with RE≠FE for PCOR. Verified via meta() (REML). Block 40 in generate.R will reproduce via metafor rma(method='REML')."
   },
@@ -2006,7 +2000,7 @@ export const BENCHMARKS = [
       FE:    0.257,
       RE:    0.551,
       tau2:  0.1624,
-      I2:   92.7,
+      I2:   94.5599,
     },
     citation: "Synthetic. Same studies as PCOR heterogeneous; Fisher-z scale amplifies RE−FE separation. Verified via meta() (REML). Block 41 in generate.R will reproduce via metafor rma(method='REML')."
   },
@@ -2074,7 +2068,7 @@ export const BENCHMARKS = [
       FE:    -0.476,
       RE:    -0.536,
       tau2:   0.239,
-      I2:    74.1,
+      I2:    74.0846,
       ciLow:  -1.245,
       ciHigh:  0.172
     },
@@ -2103,7 +2097,7 @@ export const BENCHMARKS = [
       FE:    -0.476,
       RE:    -0.536,
       tau2:   0.239,
-      I2:    74.1,
+      I2:    74.0846,
       ciLow:  -1.242,
       ciHigh:  0.170
     },
@@ -2132,7 +2126,7 @@ export const BENCHMARKS = [
       FE:    -0.476,
       RE:    -0.537,
       tau2:   0.241,
-      I2:    74.1,
+      I2:    74.2434,
       ciLow:  -1.095,
       ciHigh:  0.003
     },
@@ -2178,7 +2172,7 @@ export const BENCHMARKS = [
       FE:   -0.01184,
       RE:   -0.05005,
       tau2:  0.001084,
-      I2:   95.57
+      I2:   95.5662
     },
     citation: "Colditz et al. (1994) JAMA 271:698–702. dat.bcg in metafor. Expected values from metafor 4.8-0 escalc('AS') + rma(method='DL')."
   },
@@ -2206,9 +2200,9 @@ export const BENCHMARKS = [
       FE:   -0.01184,
       RE:   -0.05799,
       tau2:  0.003775,
-      I2:   95.57   // Q-based formula (same Q as DL); metafor reports 98.69 using τ²-based I²
+      I2:   98.6853   // Q-based formula (same Q as DL); metafor reports 98.69 using τ²-based I²
     },
-    citation: "Colditz et al. (1994) JAMA 271:698–702. dat.bcg in metafor. FE/RE/tau2 from metafor 4.8-0 escalc('AS') + rma(method='REML'). I2 uses JS Q-based formula (metafor uses τ²-based for REML)."
+    citation: "Colditz et al. (1994) JAMA 271:698–702. dat.bcg in metafor. FE/RE/tau2/I2 from metafor 4.8-0 escalc('AS') + rma(method='REML')."
   },
 
   // ----------------------------------------------------------------
@@ -2238,7 +2232,7 @@ export const BENCHMARKS = [
       FE:   0.53377,
       RE:   0.52135,
       tau2: 0.002402,
-      I2:   25.13
+      I2:   25.1312
     },
     citation: "Synthetic 5-study correlation dataset. Expected values from metafor 4.8-0 escalc('UCOR') + rma(method='DL') with gsl package."
   },
@@ -2258,9 +2252,9 @@ export const BENCHMARKS = [
       FE:   0.53377,
       RE:   0.51908,
       tau2: 0.003064,
-      I2:   25.13  // Q-based formula; metafor reports 29.98 using τ²-based I²
+      I2:   29.9844
     },
-    citation: "Synthetic 5-study correlation dataset. FE/RE/tau2 from metafor 4.8-0 escalc('UCOR') + rma(method='REML'). I2 uses JS Q-based formula."
+    citation: "Synthetic 5-study correlation dataset. FE/RE/tau2/I2 from metafor 4.8-0 escalc('UCOR') + rma(method='REML')."
   },
 
   // ----------------------------------------------------------------
@@ -2282,7 +2276,7 @@ export const BENCHMARKS = [
       FE:   0.8728,
       RE:   0.8641,
       tau2: 0.00166,
-      I2:   20.95,
+      I2:   20.9472,
       yi:   [0.600, 0.850, 0.900],
     },
     citation: "Synthetic. Formulas: Feldt (1965) Psychometrika 30:357–370. R-verified (metafor 4.8.0, generate.R ALPHA-1).",
@@ -2307,7 +2301,7 @@ export const BENCHMARKS = [
       FE:   -1.7053,
       RE:   -1.7053,
       tau2:  0.4860,
-      I2:   95.63,
+      I2:   95.6259,
       yi:   [-0.916291, -1.897120, -2.302585],
     },
     citation: "Synthetic. Formulas: Bonett (2002) Stat Med 21:1331–1335. R-verified (metafor 4.8.0, generate.R ALPHA-2).",
@@ -2332,7 +2326,7 @@ export const BENCHMARKS = [
       FE:   0.5573,
       RE:   0.5751,
       tau2: 0.00834,
-      I2:   49.76,
+      I2:   49.7477,
       yi:   [0.763143, 0.550321, 0.480750],
     },
     citation: "Synthetic. Formulas: Hakstian & Whalen (1976) Psychometrika 41:219–231. R-verified (metafor 4.8.0, generate.R ALPHA-3).",

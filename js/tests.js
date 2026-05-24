@@ -2324,16 +2324,18 @@ export function runTests() {
   // Φ₂(0,0;ρ) = 0.25 + arcsin(ρ)/(2π)  [known closed form at origin]
   // p11 = 0.4  →  arcsin(ρ) = 0.3π  →  ρ = sin(0.3π)
   // bvd(0,0;ρ) = 1/(2π·√(1−ρ²)) = 1/(2π·cos(0.3π))
-  // vi = 0.0625·(2π·cos(0.3π))² / 100
+  // vi = √(p₁₁·p₁₂·p₂₁·p₂₂) · (2π·cos(0.3π))² / N
+  //    = √(0.4·0.1·0.1·0.4) · (2π·cos(0.3π))² / 100
+  //    = 0.04 · (2π·cos(0.3π))² / 100  [cell-product formula, matches metafor]
   console.log("--- RTET 1. Analytical spot-check ---");
   {
     const s        = compute({ a: 40, b: 10, c: 10, d: 40 }, "RTET");
     const rho_exp  = Math.sin(0.3 * Math.PI);
-    const vi_exp   = 0.0625 * (2 * Math.PI * Math.cos(0.3 * Math.PI)) ** 2 / 100;
-    rtetChk("ρ_tet = sin(0.3π)",        s.yi, rho_exp);
-    rtetChk("vi = 0.0625·(2π·cos)²/100", s.vi, vi_exp);
-    rtetChk("se = √vi",                 s.se, Math.sqrt(vi_exp));
-    rtetChk("w  = 1/vi",                s.w,  1 / vi_exp, 1e-3);
+    const vi_exp   = 0.04 * (2 * Math.PI * Math.cos(0.3 * Math.PI)) ** 2 / 100;
+    rtetChk("ρ_tet = sin(0.3π)",           s.yi, rho_exp);
+    rtetChk("vi = 0.04·(2π·cos)²/100",     s.vi, vi_exp);
+    rtetChk("se = √vi",                    s.se, Math.sqrt(vi_exp));
+    rtetChk("w  = 1/vi",                   s.w,  1 / vi_exp, 1e-3);
   }
 
   // --- RTET 2: |ρ_tet| ≥ |φ| (Pearson inequality) ---
