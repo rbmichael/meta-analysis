@@ -1288,6 +1288,40 @@ function _rveHIERMoM(clusterMap, m, k, p, moderators, xVec, alpha) {
 // Model-based correction for dependent effect sizes.
 // Hedges, Tipton & Johnson (2010, Res Synth Methods 1(1):39–65).
 //
+// ── Landscape of RVE approaches ──────────────────────────────────────
+//
+// Four approaches exist; none is identical to any other.
+//
+//   Approach               WLS weights          ρ in WLS?  Var components   SE scale
+//   ─────────────────────  ───────────────────  ─────────  ───────────────  ────────
+//   App default (HTJ CR1)  Σᵢ⁻¹ (ρ-structured) yes        none (ω²=0)      m/(m−1)
+//   App MoM (omega2:"MoM") 1/(vᵢⱼ+τ²+ω²)       no         ω²+τ² via MoM   m/(m−p)
+//   robumeta CORR (default) 1/(kᵢ·avg_v+τ²)    no         τ² only          m/(m−p)
+//   metafor robust()        1/(vᵢⱼ+τ²_rma)     no         τ² from rma()    m/(m−1)
+//
+// App default is most faithful to HTJ 2010; it is the only approach that
+// uses ρ in the GLS weights (Sherman-Morrison inverse of the block-diagonal
+// covariance).  All others use diagonal working weights and ignore ρ in WLS.
+//
+// robumeta CORR (its package default) uses cluster-average initial weights
+// 1/(kᵢ·avg_v) and a single-component MoM τ².  robumeta HIER (our MoM mode)
+// uses per-study 1/vᵢⱼ initial weights and a two-component MoM (ω² between-
+// cluster + τ² within-cluster).  The two robumeta models differ materially
+// when cluster sizes are heterogeneous.
+//
+// metafor robust() applies sandwich SE to an existing rma() fit, inflating
+// working weights by the model's τ².  It does not re-estimate τ² from cluster
+// structure and does not use ρ.
+//
+// Divergence is material only when ω²>0 (real between-cluster heterogeneity
+// beyond sampling error).  When ω²≈0 all approaches converge.
+//
+// See benchmark-data.md §RVE for full formula derivations and cross-validation
+// details.  Future UI options: MoM checkbox, robumeta CORR mode, metafor-style
+// τ²-inflation mode.
+//
+// ── Default mode (ω²=0, HTJ CR1) ─────────────────────────────────────
+//
 // Working covariance model (block-diagonal across clusters):
 //   Vᵢ[j,j]  = vⱼ          (within-study variance — on diagonal)
 //   Vᵢ[j,k]  = ρ√(vⱼ·vₖ)  (off-diagonal, j≠k, same cluster)
