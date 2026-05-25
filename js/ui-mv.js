@@ -26,6 +26,7 @@ import { vcalc, mvMeta } from "./multivariate.js";
 import { normalQuantile, tCritical } from "./utils.js";
 import { fmt } from "./format.js";
 import { escapeHTML } from "./utils-html.js";
+import { cellRich, mvPooledData, mvHeterogeneityData, mvTestsData, mvModeratorData, mvFitLine, mvStudyData } from "./sections.js";
 import { PLOT_THEMES } from "./plotThemes.js";
 import { resolveThemeVars, hasEmbeddedBackground, currentBgColour } from "./export.js";
 import { downloadBlob } from "./io.js";
@@ -1142,68 +1143,36 @@ function _mvSerializeSVG(svgEl) {
   return new XMLSerializer().serializeToString(clone);
 }
 
+function _renderRich(s) {
+  return cellRich(s).map(r => r.italic ? `<em>${escapeHTML(r.text)}</em>` : escapeHTML(r.text)).join("");
+}
+
 export function buildMVReportHTML(res, rows = [], alpha = 0.05, { reportCSS, buildTableAPA, buildFigureAPA } = {}) {
-  const { beta, se, ci, z, pval, betaNames = [], tau2, rho_between,
-          outcomeIds, n, k, P, QM, df_QM, pQM, QE, df_QE, pQE,
-          logLik, AIC, BIC, AICc, struct, method, slopes = "separate", I2, convergence,
-          warnings: engineWarnings = [] } = res;
-  const hasMods = beta.length > P;
-  const ciPct = Math.round((1 - alpha) * 100);
-  const date  = new Date().toLocaleDateString(undefined, { year:"numeric", month:"long", day:"numeric" });
-  const esc   = s => String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-  const fmtN  = (v, d = 3) => isFinite(v) ? (+v).toFixed(d) : "—";
-  const fmtP  = p => !isFinite(p) ? "—" : p < 0.001 ? "< .001" : (+p).toFixed(3).replace(/^0\./, ".");
+  const { outcomeIds, k, P, method, struct, convergence, warnings: engineWarnings = [] } = res;
+  const date = new Date().toLocaleDateString(undefined, { year:"numeric", month:"long", day:"numeric" });
 
   let _tblN = 0, _figN = 0;
   const nextTable  = () => ++_tblN;
   const nextFigure = () => ++_figN;
 
-  const pooledTblRows = outcomeIds.map((id, o) => {
-    const [lo, hi] = ci[o];
-    return `<tr><td><strong>${esc(String(id))}</strong></td><td>${fmtN(beta[o],4)}</td><td>${fmtN(se[o],4)}</td>
-      <td>[${fmtN(lo,4)}, ${fmtN(hi,4)}]</td><td>${fmtN(z[o],3)}</td><td>${fmtP(pval[o])}</td></tr>`;
-  });
-  const pooledSection = buildTableAPA(nextTable(),
-    `Pooled effect estimates per outcome (${method}, Ψ = ${struct})`,
-    ["Outcome","Estimate","SE",`${ciPct}% CI`,"<em>z</em>","<em>p</em>"],
-    pooledTblRows);
+  const toHtmlRows = dataRows => dataRows.map(r =>
+    `<tr>${r.map(c => `<td>${_renderRich(c)}</td>`).join("")}</tr>`);
 
-  let modSection = "";
-  if (hasMods) {
-    const modRows = beta.slice(P).map((b, i) => {
-      const j = P + i;
-      const [lo, hi] = ci[j];
-      return `<tr><td>${esc(betaNames[j] ?? `β${j}`)}</td><td>${fmtN(b,4)}</td><td>${fmtN(se[j],4)}</td>
-        <td>[${fmtN(lo,4)}, ${fmtN(hi,4)}]</td><td>${fmtN(z[j],3)}</td><td>${fmtP(pval[j])}</td></tr>`;
-    });
-    modSection = buildTableAPA(nextTable(), "Meta-regression coefficients",
-      ["Coefficient","Estimate","SE",`${ciPct}% CI`,"<em>z</em>","<em>p</em>"], modRows);
-  }
+  const pooledD = mvPooledData(res, alpha);
+  const pooledSection = buildTableAPA(nextTable(), pooledD.title, pooledD.headers, toHtmlRows(pooledD.rows));
 
-  const hetCols = struct === "CS"
-    ? ["Outcome","τ²","<em>I</em>²","ρ (between)"]
-    : ["Outcome","τ²","<em>I</em>²"];
-  const hetTblRows = outcomeIds.map((id, o) => {
-    const rho = struct === "CS" ? `<td>${fmtN(rho_between ?? 0, 4)}</td>` : "";
-    return `<tr><td>${esc(String(id))}</td><td>${fmtN(tau2[o],5)}</td>
-      <td>${isFinite(I2[o]) ? (+I2[o]).toFixed(1)+"%" : "—"}</td>${rho}</tr>`;
-  });
-  const hetSection = buildTableAPA(nextTable(), "Between-study heterogeneity", hetCols, hetTblRows);
+  const modD = mvModeratorData(res, alpha);
+  const modSection = modD
+    ? buildTableAPA(nextTable(), modD.title, modD.headers, toHtmlRows(modD.rows))
+    : "";
 
-  const testTblRows = [
-    ...(hasMods && isFinite(QM)
-      ? [`<tr><td>Omnibus test of moderators (Q<sub>M</sub>)</td><td>${fmtN(QM,3)}</td><td>${df_QM}</td><td>${fmtP(pQM)}</td></tr>`]
-      : []),
-    `<tr><td>Residual heterogeneity (Q<sub>E</sub>)</td><td>${fmtN(QE,3)}</td><td>${df_QE}</td><td>${fmtP(pQE)}</td></tr>`,
-  ];
-  const testSection = buildTableAPA(nextTable(), "Hypothesis tests",
-    ["Test","χ²","df","<em>p</em>"], testTblRows);
+  const hetD = mvHeterogeneityData(res);
+  const hetSection = buildTableAPA(nextTable(), hetD.title, hetD.headers, toHtmlRows(hetD.rows));
 
-  const fitLine = `k = ${k} · n = ${n} obs · P = ${P} outcomes`
-    + ` │ log-lik = ${fmtN(logLik,4)} · AIC = ${fmtN(AIC,2)} · BIC = ${fmtN(BIC,2)}`
-    + (isFinite(AICc) ? ` · AICc = ${fmtN(AICc,2)}` : "")
-    + ` │ ${esc(method)}, Ψ = ${esc(struct)}`
-    + (hasMods ? ` · slopes = ${esc(slopes)}` : "");
+  const testD = mvTestsData(res);
+  const testSection = buildTableAPA(nextTable(), testD.title, testD.headers, toHtmlRows(testD.rows));
+
+  const fitLine = escapeHTML(mvFitLine(res));
 
   const forestSVGs = (() => {
     const combined    = document.getElementById("mvForestPlotCombined");
@@ -1221,23 +1190,16 @@ export function buildMVReportHTML(res, rows = [], alpha = 0.05, { reportCSS, bui
 
   const warnHTML = [
     convergence === false ? `<p style="color:#c0392b"><strong>Warning:</strong> Optimizer did not fully converge — interpret results with caution.</p>` : "",
-    ...engineWarnings.map(w => `<p style="color:#c0392b">${esc(w)}</p>`),
+    ...engineWarnings.map(w => `<p style="color:#c0392b">${escapeHTML(w)}</p>`),
   ].filter(Boolean).join("");
 
   const forestSection = forestSVGs.length
     ? buildFigureAPA(nextFigure(), "Forest plot of multivariate meta-analysis results", forestSVGs)
     : "";
 
-  const zVal = normalQuantile(1 - alpha / 2);
-  const studyBodyRows = rows.map(r => {
-    const se_r = Math.sqrt(r.vi);
-    return `<tr><td>${esc(String(r.study_id))}</td><td>${esc(String(r.outcome_id))}</td>
-      <td>${fmtN(r.yi,4)}</td><td>${fmtN(r.vi,4)}</td><td>${fmtN(se_r,4)}</td>
-      <td>[${fmtN(r.yi - zVal*se_r,4)},&nbsp;${fmtN(r.yi + zVal*se_r,4)}]</td></tr>`;
-  });
-  const studySection = rows.length
-    ? buildTableAPA(nextTable(), "Individual study data",
-        ["Study","Outcome","y<sub>i</sub>","v<sub>i</sub>","SE",`${ciPct}% CI`], studyBodyRows)
+  const studyD = mvStudyData(rows, alpha);
+  const studySection = studyD
+    ? buildTableAPA(nextTable(), studyD.title, studyD.headers, toHtmlRows(studyD.rows))
     : "";
 
   let robSection = "";
@@ -1286,9 +1248,9 @@ export function buildMVReportHTML(res, rows = [], alpha = 0.05, { reportCSS, bui
 </head>
 <body>
   <h1>Multivariate Meta-Analysis Report</h1>
-  <p class="report-meta">Generated ${esc(date)}
+  <p class="report-meta">Generated ${escapeHTML(date)}
     &nbsp;·&nbsp; k = ${k} studies, P = ${P} outcomes
-    &nbsp;·&nbsp; ${esc(method)}, Ψ = ${esc(struct)}</p>
+    &nbsp;·&nbsp; ${escapeHTML(method)}, Ψ = ${escapeHTML(struct)}</p>
   ${body}
 </body>
 </html>`;

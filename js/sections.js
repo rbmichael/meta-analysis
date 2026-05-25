@@ -810,3 +810,84 @@ export function bayesSensitivityData(sensitivityRows, profile, ciLevel = "95") {
     note: "Grid: σ_μ ∈ {0.5, 1, 2}, σ_τ ∈ {0.25, 0.5, 1}. Diffuse priors approach the frequentist RE estimate.",
   };
 }
+
+// ---------------------------------------------------------------------------
+// Multivariate meta-analysis
+// ---------------------------------------------------------------------------
+
+export function mvPooledData(res, alpha = 0.05) {
+  const { beta, se, ci, z, pval, outcomeIds, method, struct } = res;
+  const ciPct = Math.round((1 - alpha) * 100);
+  const headers = ["Outcome", "Estimate", "SE", `${ciPct}% CI`, "<em>z</em>", "<em>p</em>"];
+  const rows = outcomeIds.map((id, o) => {
+    const [lo, hi] = ci[o];
+    return [String(id), fmt(beta[o], 4), fmt(se[o], 4),
+            `[${fmt(lo, 4)}, ${fmt(hi, 4)}]`, fmt(z[o], 3), fmtP_APA(pval[o])];
+  });
+  return { title: `Pooled effect estimates per outcome (${method}, Ψ = ${struct})`, headers, rows };
+}
+
+export function mvHeterogeneityData(res) {
+  const { tau2, I2, rho_between, outcomeIds, struct } = res;
+  const headers = struct === "CS"
+    ? ["Outcome", "τ²", "<em>I</em>²", "ρ (between)"]
+    : ["Outcome", "τ²", "<em>I</em>²"];
+  const rows = outcomeIds.map((id, o) => {
+    const cells = [String(id), fmt(tau2[o], 5),
+                   isFinite(I2[o]) ? (+I2[o]).toFixed(1) + "%" : "—"];
+    if (struct === "CS") cells.push(fmt(rho_between ?? 0, 4));
+    return cells;
+  });
+  return { title: "Between-study heterogeneity", headers, rows };
+}
+
+export function mvTestsData(res) {
+  const { QM, df_QM, pQM, QE, df_QE, pQE, beta, P } = res;
+  const hasMods = beta.length > P;
+  const headers = ["Test", "χ²", "<em>df</em>", "<em>p</em>"];
+  const rows = [
+    ...(hasMods && isFinite(QM)
+      ? [["Omnibus test of moderators (QM)", fmt(QM, 3), String(df_QM), fmtP_APA(pQM)]]
+      : []),
+    ["Residual heterogeneity (QE)", fmt(QE, 3), String(df_QE), fmtP_APA(pQE)],
+  ];
+  return { title: "Hypothesis tests", headers, rows };
+}
+
+export function mvModeratorData(res, alpha = 0.05) {
+  const { beta, se, ci, z, pval, betaNames = [], P } = res;
+  if (beta.length <= P) return null;
+  const ciPct = Math.round((1 - alpha) * 100);
+  const headers = ["Coefficient", "Estimate", "SE", `${ciPct}% CI`, "<em>z</em>", "<em>p</em>"];
+  const rows = beta.slice(P).map((b, i) => {
+    const j = P + i;
+    const [lo, hi] = ci[j];
+    return [betaNames[j] ?? `β${j}`, fmt(b, 4), fmt(se[j], 4),
+            `[${fmt(lo, 4)}, ${fmt(hi, 4)}]`, fmt(z[j], 3), fmtP_APA(pval[j])];
+  });
+  return { title: "Meta-regression coefficients", headers, rows };
+}
+
+export function mvFitLine(res) {
+  const { k, n, P, logLik, AIC, BIC, AICc, method, struct, slopes = "separate", beta } = res;
+  const hasMods = beta.length > P;
+  return `k = ${k} · n = ${n} obs · P = ${P} outcomes`
+    + ` | log-lik = ${fmt(logLik, 4)} · AIC = ${fmt(AIC, 2)} · BIC = ${fmt(BIC, 2)}`
+    + (isFinite(AICc) ? ` · AICc = ${fmt(AICc, 2)}` : "")
+    + ` | ${method}, Ψ = ${struct}`
+    + (hasMods ? ` · slopes = ${slopes}` : "");
+}
+
+export function mvStudyData(rows, alpha = 0.05) {
+  if (!rows || !rows.length) return null;
+  const ciPct = Math.round((1 - alpha) * 100);
+  const zVal = normalQuantile(1 - alpha / 2);
+  const headers = ["Study", "Outcome", "<em>y</em>ᵢ", "<em>v</em>ᵢ", "SE", `${ciPct}% CI`];
+  const dataRows = rows.map(r => {
+    const se_r = Math.sqrt(r.vi);
+    return [String(r.study_id), String(r.outcome_id),
+            fmt(r.yi, 4), fmt(r.vi, 4), fmt(se_r, 4),
+            `[${fmt(r.yi - zVal * se_r, 4)}, ${fmt(r.yi + zVal * se_r, 4)}]`];
+  });
+  return { title: "Individual study effect sizes", headers, rows: dataRows };
+}

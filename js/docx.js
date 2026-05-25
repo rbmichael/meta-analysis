@@ -26,7 +26,8 @@ import { summaryData, pubBiasData, pCurveData, puniformData, selModelData,
          influenceData, subgroupData, studyTableData, regressionData,
          regressionFittedData, locationScaleData, permutationData,
          rveData, threeLevelData, sensitivityData,
-         bayesData, bayesSensitivityData, cellRich } from "./sections.js";
+         bayesData, bayesSensitivityData, cellRich,
+         mvPooledData, mvHeterogeneityData, mvTestsData, mvModeratorData, mvFitLine, mvStudyData } from "./sections.js";
 
 // serializeSVG and collectPagedSVGs are imported from export.js.
 
@@ -1002,12 +1003,8 @@ export async function buildDocx(args) {
 // ---------------------------------------------------------------------------
 
 export async function buildMVDocx({ res, rows = [], alpha = 0.05, exportScale = 3 }) {
-  const { beta, se, ci, z, pval, betaNames = [], tau2, rho_between,
-          outcomeIds, n, k, P, QM, df_QM, pQM, QE, df_QE, pQE,
-          logLik, AIC, BIC, AICc, struct, method, slopes = "separate", I2, convergence,
-          warnings: engineWarnings = [] } = res;
-  const hasMods = beta.length > P;
-  const ciPct   = Math.round((1 - alpha) * 100);
+  const { outcomeIds, k, P, method, struct, convergence } = res;
+  const toDocxRows = dataRows => dataRows.map(r => r.map(c => richRuns(c)));
 
   // Collect MV forest SVG strings from DOM
   const forestSVGStrings = (() => {
@@ -1038,64 +1035,18 @@ export async function buildMVDocx({ res, rows = [], alpha = 0.05, exportScale = 
   const nextTable  = () => ++_tblN;
   const nextFigure = () => ++_figN;
 
-  // Pooled estimates table
-  const pooledHeaders = ["Outcome", "Estimate", "SE", `${ciPct}% CI`, "z", "p"];
-  const pooledRows = outcomeIds.map((id, o) => {
-    const [lo, hi] = ci[o];
-    return [run(String(id)), run(fmt(beta[o], 4)), run(fmt(se[o], 4)),
-            run(`[${fmt(lo, 4)}, ${fmt(hi, 4)}]`), run(fmt(z[o], 3)), run(fmtP_APA(pval[o]))];
-  });
+  const pooledD = mvPooledData(res, alpha);
+  const hetD    = mvHeterogeneityData(res);
+  const testD   = mvTestsData(res);
+  const modD    = mvModeratorData(res, alpha);
+  const studyD  = mvStudyData(rows, alpha);
+  const fitText = mvFitLine(res);
 
-  // Heterogeneity table
-  const hetHeaders = struct === "CS"
-    ? ["Outcome", "τ²", "I²", "ρ (between)"]
-    : ["Outcome", "τ²", "I²"];
-  const hetRows = outcomeIds.map((id, o) => {
-    const cells = [run(String(id)), run(fmt(tau2[o], 5)),
-                   run(isFinite(I2[o]) ? (+I2[o]).toFixed(1) + "%" : "—")];
-    if (struct === "CS") cells.push(run(fmt(rho_between ?? 0, 4)));
-    return cells;
-  });
-
-  // Tests table
-  const testHeaders = ["Test", "χ²", "df", "p"];
-  const testRows = [
-    ...(hasMods && isFinite(QM)
-      ? [[run("Omnibus test of moderators (QM)"), run(fmt(QM, 3)), run(String(df_QM)), run(fmtP_APA(pQM))]]
-      : []),
-    [run("Residual heterogeneity (QE)"), run(fmt(QE, 3)), run(String(df_QE)), run(fmtP_APA(pQE))],
-  ];
-
-  // Moderator table
-  let modChunks = [];
-  if (hasMods) {
-    const modHeaders = ["Coefficient", "Estimate", "SE", `${ciPct}% CI`, "z", "p"];
-    const modRows = beta.slice(P).map((b, i) => {
-      const j = P + i;
-      const [lo, hi] = ci[j];
-      return [run(betaNames[j] ?? `β${j}`), run(fmt(b, 4)), run(fmt(se[j], 4)),
-              run(`[${fmt(lo, 4)}, ${fmt(hi, 4)}]`), run(fmt(z[j], 3)), run(fmtP_APA(pval[j]))];
-    });
-    modChunks = [...apaTableDocx(nextTable(), "Meta-regression coefficients", modHeaders, modRows), para("")];
-  }
-
-  const fitText = `k = ${k} · n = ${n} obs · P = ${P} outcomes`
-    + ` | log-lik = ${fmt(logLik, 4)} · AIC = ${fmt(AIC, 2)} · BIC = ${fmt(BIC, 2)}`
-    + (isFinite(AICc) ? ` · AICc = ${fmt(AICc, 2)}` : "")
-    + ` | ${method}, Ψ = ${struct}`
-    + (hasMods ? ` · slopes = ${slopes}` : "");
-
-  // Individual Studies table
-  const zVal = normalQuantile(1 - alpha / 2);
-  const studyHeaders = ["Study", "Outcome", "yi", "vi", "SE", `${ciPct}% CI`];
-  const studyDocxRows = rows.map(r => {
-    const se_r = Math.sqrt(r.vi);
-    return [run(String(r.study_id)), run(String(r.outcome_id)),
-            run(fmt(r.yi, 4)), run(fmt(r.vi, 4)), run(fmt(se_r, 4)),
-            run(`[${fmt(r.yi - zVal * se_r, 4)}, ${fmt(r.yi + zVal * se_r, 4)}]`)];
-  });
-  const studyChunks = rows.length
-    ? [...apaTableDocx(nextTable(), "Individual study effect sizes", studyHeaders, studyDocxRows), para("")]
+  const modChunks = modD
+    ? [...apaTableDocx(nextTable(), modD.title, modD.headers, toDocxRows(modD.rows)), para("")]
+    : [];
+  const studyChunks = studyD
+    ? [...apaTableDocx(nextTable(), studyD.title, studyD.headers, toDocxRows(studyD.rows)), para("")]
     : [];
 
   // RoB images
@@ -1142,11 +1093,11 @@ export async function buildMVDocx({ res, rows = [], alpha = 0.05, exportScale = 
     paraText(`Generated ${new Date().toLocaleDateString()} · k = ${k} studies, P = ${P} outcomes · ${method}, Ψ = ${struct}`, "APANote"),
     ...(convergence === false ? [paraText("Warning: Optimizer did not fully converge — interpret results with caution.")] : []),
     para(""),
-    ...apaTableDocx(nextTable(), `Pooled effect estimates per outcome (${method}, Ψ = ${struct})`, pooledHeaders, pooledRows),
+    ...apaTableDocx(nextTable(), pooledD.title, pooledD.headers, toDocxRows(pooledD.rows)),
     para(""),
-    ...apaTableDocx(nextTable(), "Between-study heterogeneity", hetHeaders, hetRows),
+    ...apaTableDocx(nextTable(), hetD.title, hetD.headers, toDocxRows(hetD.rows)),
     para(""),
-    ...apaTableDocx(nextTable(), "Hypothesis tests", testHeaders, testRows),
+    ...apaTableDocx(nextTable(), testD.title, testD.headers, toDocxRows(testD.rows)),
     para(""),
     ...modChunks,
     paraText(fitText, "APANote"),
