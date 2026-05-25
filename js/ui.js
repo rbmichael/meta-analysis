@@ -1557,16 +1557,31 @@ function _checkMvBadge() {
   };
   const valDiffers = id => { const el = document.getElementById(id); return el && el.value !== el.defaultValue; };
 
-  const custom = selDiffers("mvStruct") || selDiffers("mvMethod") || selDiffers("mvSlopes") || valDiffers("mvRho");
+  const custom = selDiffers("mvSlopes") || valDiffers("mvRho") || selDiffers("mvCiLevel");
 
   const badge = document.getElementById("mvBadge");
   if (badge) badge.style.display = custom ? "" : "none";
   document.getElementById("mvSettings")?.classList.toggle("settings-modified", custom);
 }
 
-document.getElementById("mvSettings").addEventListener("change", _checkMvBadge);
-document.getElementById("mvSettings").addEventListener("input",  _checkMvBadge);
+document.getElementById("mvSettings").addEventListener("change", () => { _checkMvBadge(); scheduleSave(); markStale(); });
+document.getElementById("mvSettings").addEventListener("input",  () => { _checkMvBadge(); scheduleSave(); markStale(); });
 _checkMvBadge();
+
+// Strip selects: mark stale + save on change (mirrors Standard effectType/tauMethod behavior)
+document.getElementById("mvStruct").addEventListener("change", () => { scheduleSave(); markStale(); });
+document.getElementById("mvMethod").addEventListener("change", () => { scheduleSave(); markStale(); });
+
+// CI width two-way sync: mvCiLevel ↔ ciLevel
+document.getElementById("mvCiLevel").addEventListener("change", e => {
+  document.getElementById("ciLevel").value = e.target.value;
+  _checkAdvancedBadge();
+  scheduleSave(); markStale();
+});
+document.getElementById("ciLevel").addEventListener("change", () => {
+  const mvEl = document.getElementById("mvCiLevel");
+  if (mvEl) { mvEl.value = document.getElementById("ciLevel").value; _checkMvBadge(); }
+});
 
 function resetMvSettings() {
   const resetSel = id => {
@@ -1577,10 +1592,13 @@ function resetMvSettings() {
   resetSel("mvStruct");
   resetSel("mvMethod");
   resetSel("mvSlopes");
+  resetSel("mvCiLevel");
+  document.getElementById("ciLevel").value = "95";
   const rho = document.getElementById("mvRho");
   if (rho) rho.value = rho.defaultValue;
   markStale();
   _checkMvBadge();
+  _checkAdvancedBadge();
 }
 
 document.getElementById("resetMv").addEventListener("click", resetMvSettings);
@@ -1694,8 +1712,11 @@ function applySession(session) {
     document.getElementById("tauMethod").value       = s.tauMethod;
   if (s.ciMethod        && document.getElementById("ciMethod").querySelector(`option[value="${s.ciMethod}"]`))
     document.getElementById("ciMethod").value        = s.ciMethod;
-  if (s.ciLevel         && document.getElementById("ciLevel").querySelector(`option[value="${s.ciLevel}"]`))
+  if (s.ciLevel         && document.getElementById("ciLevel").querySelector(`option[value="${s.ciLevel}"]`)) {
     document.getElementById("ciLevel").value         = s.ciLevel;
+    const mvCiEl = document.getElementById("mvCiLevel");
+    if (mvCiEl) mvCiEl.value = s.ciLevel;
+  }
   if (s.cumulativeOrder && document.getElementById("cumulativeOrder").querySelector(`option[value="${s.cumulativeOrder}"]`))
     document.getElementById("cumulativeOrder").value = s.cumulativeOrder;
   if (typeof s.useTrimFill   === "boolean") document.getElementById("useTrimFill").checked   = s.useTrimFill;

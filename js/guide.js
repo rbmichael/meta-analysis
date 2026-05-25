@@ -3256,6 +3256,16 @@ covariance. Treating correlated outcomes as independent (three-level or RVE) ign
 the sign and magnitude of those correlations; the multivariate model estimates them
 from the data and produces correctly calibrated standard errors.</p>
 
+<p><strong>Input layout:</strong> Switch to <em>Multivariate</em> mode using the tabs at the
+top-left of the input panel. The settings strip then shows:</p>
+<ul>
+  <li><strong>Ψ</strong> — between-study covariance structure (CS / Diag / UN)</li>
+  <li><strong>τ²</strong> — estimation method (REML / ML)</li>
+  <li><strong>Variables ▾</strong> — add moderator columns to the data table</li>
+  <li><strong>Settings ▾</strong> — slope specification, assumed within-study ρ, and CI width</li>
+</ul>
+<p>CI width is shared with Standard mode; changing it in either mode updates both.</p>
+
 <p><strong>When to use:</strong> A study contributes two or more outcome types
 (e.g. pain and function, anxiety and depression, two laboratory endpoints) and the
 within-study covariance between those outcomes can be estimated from the reported
