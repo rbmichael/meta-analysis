@@ -411,14 +411,17 @@ export function runMVAnalysis() {
 
   const msgs = [];
 
-  if (mvModerators.length) {
+  let activeModerators = [...mvModerators];
+  if (activeModerators.length) {
     const before = rows.length;
-    rows = rows.filter(r => mvModerators.every(name => isFinite(r[name])));
-    const dropped = before - rows.length;
-    if (dropped) msgs.push(`⚠️ ${dropped} row${dropped > 1 ? "s" : ""} excluded: missing or non-numeric moderator value${dropped > 1 ? "s" : ""}.`);
-    if (!rows.length) {
-      warningsEl.innerHTML = msgs.map(m => `• ${m}`).join("<br>");
-      return false;
+    const filtered = rows.filter(r => activeModerators.every(name => isFinite(r[name])));
+    const dropped = before - filtered.length;
+    if (dropped === before) {
+      msgs.push(`⚠️ No rows have complete moderator values — running without moderators.`);
+      activeModerators = [];
+    } else {
+      rows = filtered;
+      if (dropped) msgs.push(`⚠️ ${dropped} row${dropped > 1 ? "s" : ""} excluded: missing or non-numeric moderator value${dropped > 1 ? "s" : ""}.`);
     }
   }
   const outcomeIds = [...new Set(rows.map(r => r.outcome_id))];
@@ -452,7 +455,7 @@ export function runMVAnalysis() {
   const slopes  = document.getElementById("mvSlopes").value;
   const rho     = parseFloat(document.getElementById("mvRho").value);
   const alpha   = _getCiAlpha();
-  const mods    = mvModerators.map(key => ({ key, type: "continuous" }));
+  const mods    = activeModerators.map(key => ({ key, type: "continuous" }));
 
   const nPsiPar = struct === "CS" ? 2 : struct === "Diag" ? outcomeIds.length : outcomeIds.length * (outcomeIds.length + 1) / 2;
   if (struct === "UN" && outcomeIds.length > 5)
