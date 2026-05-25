@@ -475,9 +475,8 @@ export function tau2_SQGENQ(studies) {
 // aliases "EBLUP" → tau2_REML. Included in estimatorComparison() alongside
 // the other methods.
 
-export function tau2_GENQ(studies, weights) {
-  const w = weights ?? studies.map(d => 1 / d.vi);
-  return genqCore(studies, w);
+export function tau2_GENQ(studies) {
+  return genqCore(studies, studies.map(d => 1 / d.vi));
 }
 
 // ================= REGRESSION TAU² CORES =================

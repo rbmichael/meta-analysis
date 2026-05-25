@@ -459,7 +459,7 @@ export function tau2_metaReg(yi, vi, X, method = "REML", tol = REML_TOL, maxIter
  * @param {{ yi: number, vi: number, [key: string]: * }[]} studies
  * @param {{ key: string, type: "continuous"|"categorical" }[]} [moderators=[]]
  * @param {string} [method="REML"]     - τ² estimator: "REML","DL","PM","ML".
- * @param {string} [ciMethod="normal"] - CI method: "normal","t","kr","hksj".
+ * @param {string} [ciMethod="normal"] - CI method: "normal" | "KH" (Knapp-Hartung).
  * @returns {{ beta: number[], se: number[], zval: number[], pval: number[],
  *             ci: {lb: number, ub: number}[], tau2: number,
  *             QE: number, QEp: number, QM: number, QMp: number,

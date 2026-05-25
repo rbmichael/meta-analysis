@@ -125,11 +125,10 @@ export function groupByCluster(studies) {
  * @param {Object} s       - Raw study object; required fields vary by `type`.
  * @param {string} [type]  - Effect-type key (e.g. "SMD", "OR"); falsy = auto-detect
  *                           from field names (MD for continuous, OR for 2×2 counts).
- * @param {Object} [options={}] - Reserved for future use; currently unused.
  * @returns {{ yi: number, vi: number, se: number, w: number } & Object}
  *   Returns NaN yi/vi/se with w=0 on validation failure so meta() skips the study.
  */
-export function compute(s, type, options = {}) {
+export function compute(s, type) {
   const resolvedType = type || autoDetectType(s);
   if (!resolvedType) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
   const profile = getProfile(resolvedType);
