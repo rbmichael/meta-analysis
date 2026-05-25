@@ -821,11 +821,13 @@ function _fitContinuousSelModel({ studies, sides, weightFn, makeWFn, initGrid, l
   const lrt_stat = 2 * (logLikSel - logLikUnsel);
   const lrt_p    = lrt_stat > 0 ? 1 - chiSquareCDF(lrt_stat, lrtDf) : 1;
 
+  const _log2pi = Math.log(2 * Math.PI);
   return {
     mu, se_mu, zval_mu, pval_mu, ci_mu,
     tau2, se_tau2,
     ...extractShapeParams(logShapeFits, getSE),
-    logLikSel, logLikUnsel,
+    logLikSel:   logLikSel   - k * 0.5 * _log2pi,
+    logLikUnsel: logLikUnsel - k * 0.5 * _log2pi,
     LRT: lrt_stat, LRTdf: lrtDf, LRTp: lrt_p,
     RE_unsel:     mUnsel.RE,
     tau2_unsel:   mUnsel.tau2,
@@ -1203,12 +1205,14 @@ export function veveaHedges(studies, cuts = SEL_CUTS_ONE_SIDED, sides = 1, fixed
     const pval_mu = 2 * (1 - normalCDF(Math.abs(zval_mu)));
     const ci_mu   = [mu - Z_95 * se_mu, mu + Z_95 * se_mu];
 
+    const _log2pi_f = Math.log(2 * Math.PI);
     return {
       mu, se_mu, zval_mu, pval_mu, ci_mu,
       tau2, se_tau2,
       omega, se_omega,
       alpha, se_alpha,
-      logLikSel, logLikUnsel,
+      logLikSel:   logLikSel   - k * 0.5 * _log2pi_f,
+      logLikUnsel: logLikUnsel - k * 0.5 * _log2pi_f,
       LRT: NaN, LRTdf: K - 1, LRTp: NaN,
       RE_unsel: mUnsel.RE, tau2_unsel: mUnsel.tau2,
       ciLow_unsel: mUnsel.ciLow, ciHigh_unsel: mUnsel.ciHigh,
@@ -1246,7 +1250,8 @@ export function veveaHedges(studies, cuts = SEL_CUTS_ONE_SIDED, sides = 1, fixed
       tau2: mUnsel.tau2, se_tau2: NaN,
       omega: omega0, se_omega: new Array(K).fill(NaN),
       alpha: alpha0, se_alpha: new Array(K).fill(NaN),
-      logLikSel: logLikUnsel, logLikUnsel,
+      logLikSel: logLikUnsel - k * 0.5 * Math.log(2 * Math.PI),
+      logLikUnsel: logLikUnsel - k * 0.5 * Math.log(2 * Math.PI),
       LRT: 0, LRTdf: 0, LRTp: 1,
       RE_unsel: mUnsel.RE, tau2_unsel: mUnsel.tau2,
       ciLow_unsel: mUnsel.ciLow, ciHigh_unsel: mUnsel.ciHigh,
@@ -1324,6 +1329,7 @@ export function veveaHedges(studies, cuts = SEL_CUTS_ONE_SIDED, sides = 1, fixed
     ? 1 - chiSquareCDF(lrt_stat, lrt_df)
     : (lrt_stat <= 0 ? 1 : NaN);
 
+  const _log2pi_v = Math.log(2 * Math.PI);
   return {
     // Corrected pooled estimate
     mu, se_mu, zval_mu, pval_mu, ci_mu,
@@ -1335,9 +1341,9 @@ export function veveaHedges(studies, cuts = SEL_CUTS_ONE_SIDED, sides = 1, fixed
     omega, se_omega,
     alpha, se_alpha,
 
-    // Log-likelihoods
-    logLikSel,
-    logLikUnsel,
+    // Log-likelihoods (include −k/2·log(2π) to match R's logLik())
+    logLikSel:   logLikSel   - k * 0.5 * _log2pi_v,
+    logLikUnsel: logLikUnsel - k * 0.5 * _log2pi_v,
 
     // Likelihood ratio test
     LRT: lrt_stat, LRTdf: lrt_df, LRTp: lrt_p,

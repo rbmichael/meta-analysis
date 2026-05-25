@@ -3045,12 +3045,12 @@ export const VH_BENCHMARKS = [
       LRT:        1.8074,
       LRTdf:      4,
       LRTp:       0.7711282,
-      ll_sel:    0.18482,
-      ll_unsel: -0.71888,
+      ll_sel:   -11.76138,
+      ll_unsel: -12.66508,
       RE_unsel:  -0.7111991,
       tau2_unsel: 0.2800282
     },
-    citation: "Colditz et al. (1994) dat.bcg. R-verified (metafor 4.8.0, generate.R block 45) for mu/se/zval/pval/tau2/delta/LRT/LRTdf/LRTp. ll_sel/ll_unsel use JS reduced log-likelihood (differ from R by normalization constant ~11.95); LRT identical — see benchmark-data.md 'R-verification status'."
+    citation: "Colditz et al. (1994) dat.bcg. R-verified (metafor 4.8.0, generate.R block 45) for mu/se/zval/pval/tau2/delta/LRT/LRTdf/LRTp. ll_sel/ll_unsel include −k/2·log(2π) normalising constant to match R's logLik(); LRT identical."
   },
 
   // ----------------------------------------------------------------
@@ -3089,12 +3089,12 @@ export const VH_BENCHMARKS = [
       LRT:        1.192686,
       LRTdf:      2,
       LRTp:       0.5508223,
-      ll_sel:   -0.12253,
-      ll_unsel: -0.71888,
+      ll_sel:   -12.06873,
+      ll_unsel: -12.66508,
       RE_unsel:  -0.7111991,
       tau2_unsel: 0.2800282
     },
-    citation: "Colditz et al. (1994) dat.bcg. R-verified (metafor 4.8.0, generate.R block 46) for mu/se/zval/pval/tau2/delta/LRT/LRTdf/LRTp. ll_sel/ll_unsel use JS reduced log-likelihood; LRT identical — see benchmark-data.md 'R-verification status'."
+    citation: "Colditz et al. (1994) dat.bcg. R-verified (metafor 4.8.0, generate.R block 46) for mu/se/zval/pval/tau2/delta/LRT/LRTdf/LRTp. ll_sel/ll_unsel include −k/2·log(2π) normalising constant to match R's logLik(); LRT identical."
   },
 
   // ----------------------------------------------------------------
@@ -3133,12 +3133,12 @@ export const VH_BENCHMARKS = [
       LRT:      16.96038,
       LRTdf:     3,
       LRTp:      0.00072,
-      ll_sel:   15.25465,
-      ll_unsel:  6.77446,
+      ll_sel:   -3.12412,
+      ll_unsel: -11.60431,
       RE_unsel:  0.5953773,
       tau2_unsel: 0.06011935
     },
-    citation: "Synthetic dataset (20 studies, positive effects). Self-verified via JS BFGS (unconstrained optimum); differs from metafor R block 47 which constrains delta ≤ 100."
+    citation: "Synthetic dataset (20 studies, positive effects). JS-verified (unconstrained optimum); differs from metafor R block 47. ll_sel/ll_unsel include −k/2·log(2π) normalising constant."
   }
 
 ];
