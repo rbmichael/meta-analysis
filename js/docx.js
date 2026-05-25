@@ -1004,7 +1004,7 @@ export async function buildDocx(args) {
 export async function buildMVDocx({ res, rows = [], alpha = 0.05, exportScale = 3 }) {
   const { beta, se, ci, z, pval, betaNames = [], tau2, rho_between,
           outcomeIds, n, k, P, QM, df_QM, pQM, QE, df_QE, pQE,
-          logLik, AIC, BIC, AICc, struct, method, I2, convergence,
+          logLik, AIC, BIC, AICc, struct, method, slopes = "separate", I2, convergence,
           warnings: engineWarnings = [] } = res;
   const hasMods = beta.length > P;
   const ciPct   = Math.round((1 - alpha) * 100);
@@ -1082,7 +1082,8 @@ export async function buildMVDocx({ res, rows = [], alpha = 0.05, exportScale = 
   const fitText = `k = ${k} · n = ${n} obs · P = ${P} outcomes`
     + ` | log-lik = ${fmt(logLik, 4)} · AIC = ${fmt(AIC, 2)} · BIC = ${fmt(BIC, 2)}`
     + (isFinite(AICc) ? ` · AICc = ${fmt(AICc, 2)}` : "")
-    + ` | ${method}, Ψ = ${struct}`;
+    + ` | ${method}, Ψ = ${struct}`
+    + (hasMods ? ` · slopes = ${slopes}` : "");
 
   // Individual Studies table
   const zVal = normalQuantile(1 - alpha / 2);

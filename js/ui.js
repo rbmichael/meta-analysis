@@ -1554,7 +1554,7 @@ function _checkMvBadge() {
   };
   const valDiffers = id => { const el = document.getElementById(id); return el && el.value !== el.defaultValue; };
 
-  const custom = selDiffers("mvStruct") || selDiffers("mvMethod") || valDiffers("mvRho");
+  const custom = selDiffers("mvStruct") || selDiffers("mvMethod") || selDiffers("mvSlopes") || valDiffers("mvRho");
 
   const badge = document.getElementById("mvBadge");
   if (badge) badge.style.display = custom ? "" : "none";
@@ -1573,6 +1573,7 @@ function resetMvSettings() {
   };
   resetSel("mvStruct");
   resetSel("mvMethod");
+  resetSel("mvSlopes");
   const rho = document.getElementById("mvRho");
   if (rho) rho.value = rho.defaultValue;
   markStale();
@@ -1797,6 +1798,8 @@ function applySession(session) {
       document.getElementById("mvStruct").value = mv.struct;
     if (mv.method && document.getElementById("mvMethod").querySelector(`option[value="${mv.method}"]`))
       document.getElementById("mvMethod").value = mv.method;
+    if (mv.slopes && document.getElementById("mvSlopes").querySelector(`option[value="${mv.slopes}"]`))
+      document.getElementById("mvSlopes").value = mv.slopes;
     if (isFinite(mv.rho)) document.getElementById("mvRho").value = mv.rho;
     mvModerators.length = 0;
     if (Array.isArray(mv.moderators)) mv.moderators.forEach(n => { if (n) mvModerators.push(n); });

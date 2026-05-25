@@ -290,6 +290,7 @@ export function gatherMVState() {
   return {
     struct:     document.getElementById("mvStruct").value,
     method:     document.getElementById("mvMethod").value,
+    slopes:     document.getElementById("mvSlopes").value,
     rho:        parseFloat(document.getElementById("mvRho").value),
     moderators: [...mvModerators],
     rows,
@@ -421,11 +422,12 @@ export function runMVAnalysis() {
   else if (singleOutcomeStudies.length > 0)
     msgs.push(`⚠️ Studies with only one outcome (contribute no covariance): ${singleOutcomeStudies.map(escapeHTML).join(", ")}.`);
 
-  const struct = document.getElementById("mvStruct").value;
-  const method = document.getElementById("mvMethod").value;
-  const rho    = parseFloat(document.getElementById("mvRho").value);
-  const alpha  = _getCiAlpha();
-  const mods   = mvModerators.map(key => ({ key, type: "continuous" }));
+  const struct  = document.getElementById("mvStruct").value;
+  const method  = document.getElementById("mvMethod").value;
+  const slopes  = document.getElementById("mvSlopes").value;
+  const rho     = parseFloat(document.getElementById("mvRho").value);
+  const alpha   = _getCiAlpha();
+  const mods    = mvModerators.map(key => ({ key, type: "continuous" }));
 
   const nPsiPar = struct === "CS" ? 2 : struct === "Diag" ? outcomeIds.length : outcomeIds.length * (outcomeIds.length + 1) / 2;
   if (struct === "UN" && outcomeIds.length > 5)
@@ -441,7 +443,7 @@ export function runMVAnalysis() {
   let V, res;
   try {
     V   = vcalc(rows, { rho });
-    res = mvMeta(rows, V, { struct, method, alpha, moderators: mods });
+    res = mvMeta(rows, V, { struct, method, slopes, alpha, moderators: mods });
   } catch (e) {
     errorLines.push(`• ❌ Error: ${escapeHTML(String(e))}`);
     flushWarnings();
@@ -1143,7 +1145,7 @@ function _mvSerializeSVG(svgEl) {
 export function buildMVReportHTML(res, rows = [], alpha = 0.05, { reportCSS, buildTableAPA, buildFigureAPA } = {}) {
   const { beta, se, ci, z, pval, betaNames = [], tau2, rho_between,
           outcomeIds, n, k, P, QM, df_QM, pQM, QE, df_QE, pQE,
-          logLik, AIC, BIC, AICc, struct, method, I2, convergence,
+          logLik, AIC, BIC, AICc, struct, method, slopes = "separate", I2, convergence,
           warnings: engineWarnings = [] } = res;
   const hasMods = beta.length > P;
   const ciPct = Math.round((1 - alpha) * 100);
@@ -1200,7 +1202,8 @@ export function buildMVReportHTML(res, rows = [], alpha = 0.05, { reportCSS, bui
   const fitLine = `k = ${k} · n = ${n} obs · P = ${P} outcomes`
     + ` │ log-lik = ${fmtN(logLik,4)} · AIC = ${fmtN(AIC,2)} · BIC = ${fmtN(BIC,2)}`
     + (isFinite(AICc) ? ` · AICc = ${fmtN(AICc,2)}` : "")
-    + ` │ ${esc(method)}, Ψ = ${esc(struct)}`;
+    + ` │ ${esc(method)}, Ψ = ${esc(struct)}`
+    + (hasMods ? ` · slopes = ${esc(slopes)}` : "");
 
   const forestSVGs = (() => {
     const combined    = document.getElementById("mvForestPlotCombined");

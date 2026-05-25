@@ -590,7 +590,7 @@ export function mvMeta(rows, V, opts = {}) {
 
     // Model metadata
     k, n, P,
-    struct, method,
+    struct, method, slopes,
     convergence: res.converged,
     optimizer: { iters: res.iters, gnorm: res.gnorm },
     warnings,

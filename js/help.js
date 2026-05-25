@@ -1557,6 +1557,22 @@ export const HELP = {
            "comparing models with different fixed-effect structures via likelihood-ratio tests.",
   },
 
+  "mv.slopes": {
+    title: "Moderator slopes",
+    body:  "Controls how moderator effects are parameterised when at least one moderator is present.\n\n" +
+           "Separate (default): each outcome gets its own slope per moderator. " +
+           "With P outcomes and q moderators, the design matrix has P + P·q columns " +
+           "and β contains P intercepts followed by P·q slopes (one per outcome–moderator pair). " +
+           "Coefficient names take the form 'outcome:moderator'. " +
+           "Equivalent to mods = ~outcome*moderator - 1 in metafor.\n\n" +
+           "Common: all outcomes share a single slope per moderator. " +
+           "The design matrix has P + q columns; β contains P intercepts then q shared slopes. " +
+           "Coefficient names are the plain moderator names. " +
+           "Equivalent to mods = ~outcome + moderator - 1 in metafor. " +
+           "Use when theory predicts the same moderator relationship across outcomes and " +
+           "sample size is too small to support outcome-specific estimates.",
+  },
+
   "mv.forest": {
     title: "MV forest plot",
     body:  "One forest plot per outcome. Each study's effect estimate (square, sized by inverse-variance weight) " +
