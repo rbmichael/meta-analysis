@@ -245,10 +245,10 @@ export const BENCHMARKS = [
   // Generalised-Q Median: finds τ² such that the observed FE Q-statistic
   // equals the median of its distribution under the RE model.
   // The distribution Σλᵢ χ²(1) uses eigenvalues from the secular equation
-  // (rank-1 perturbed diagonal); the median is approximated via a 2-moment
-  // scaled chi-square (Patnaik/Satterthwaite), giving ~3–4% error vs the
-  // exact Farebrother CDF used by metafor. Expected tau2 is the exact metafor
-  // value; the JS approximation passes the 5% relative tau2 tolerance.
+  // (rank-1 perturbed diagonal); the median is found via the exact Imhof (1961)
+  // numerical integral (composite GL20, 16 subintervals) — equivalent to the
+  // Farebrother/Davies algorithm used by metafor's CompQuadForm. Residual error
+  // vs metafor: ~0.05%, well within the 5% relative tau2 tolerance.
   // RE estimate uses RE weights 1/(vᵢ+τ²) as in all other app estimators
   // (metafor GENQM uses FE weights for the pooled estimate — different convention).
   // ----------------------------------------------------------------
