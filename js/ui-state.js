@@ -84,6 +84,8 @@ export function gatherSessionState(mods, scaleMods, ixs, robState) {
     rveRho:           parseFloat(document.getElementById("rveRho")?.value) || 0.8,
     rveMode:          document.getElementById("rveWeighting")?.value ?? "corr",
     threeLevelMethod: document.getElementById("threeLevelMethod")?.value ?? "REML",
+    fsnTrivial:       parseFloat(document.getElementById("fsnTrivial")?.value) || 0.1,
+    fsnDirection:     document.getElementById("fsnDirection")?.value ?? "auto",
   };
 
   const savedModerators = mods.map(m => ({ name: m.name, type: m.type, transform: m.transform || "linear" }));

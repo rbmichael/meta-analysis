@@ -455,9 +455,10 @@ export function failSafeN(studies, alpha = 0.05, trivial = 0.1, direction = "pos
   const z_crit = bisect(mid => (1 - alpha) - normalCDF(mid), 0, 10);
 
   // Squaring means sign of sumZ does not affect rosenthal — both directions give same N
-  const rosenthal = Math.max(0, (sumZ / z_crit) ** 2 - k);
+  // Math.ceil matches metafor::fsn() rounding convention (need whole studies).
+  const rosenthal = Math.max(0, Math.ceil((sumZ / z_crit) ** 2 - k));
 
-  const orwin = Math.max(0, k * (Math.abs(FE) - Math.abs(trivial)) / Math.abs(trivial));
+  const orwin = Math.max(0, Math.ceil(k * (Math.abs(FE) - Math.abs(trivial)) / Math.abs(trivial)));
 
   return { rosenthal, orwin, sumZ, z_crit, k };
 }

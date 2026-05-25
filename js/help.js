@@ -871,12 +871,16 @@ export const HELP = {
   },
 
   "bias.fsn": {
-    title: "Fail-Safe N (Rosenthal)",
-    body:  "The number of unpublished null-result studies that would be needed to " +
-           "reduce the pooled p-value to non-significance (p > .05). " +
-           "Rosenthal's rule of thumb: FSN > 5k + 10 suggests robustness. " +
-           "Widely criticised for being too lenient; trim-and-fill and selection " +
-           "models are generally preferred.",
+    title: "Fail-Safe N",
+    body:  "Two fail-safe N statistics are reported. " +
+           "Rosenthal's FSN: number of unpublished null-result studies needed to reduce the pooled " +
+           "p-value below significance (Rosenthal, 1979). Rule of thumb: FSN > 5k + 10 suggests robustness. " +
+           "Orwin's FSN: number of studies needed to bring the pooled effect below a trivial threshold " +
+           "(Orwin, 1983). Set 'Orwin trivial threshold' to the smallest effect considered meaningful " +
+           "(default 0.1 on the analysis scale). " +
+           "'Direction' controls the sign convention for Rosenthal's z sum: 'auto' aligns with the " +
+           "fixed-effects estimate (recommended); 'positive' or 'negative' fix the sign regardless of data. " +
+           "Both statistics are widely criticised as too lenient; selection models and trim-and-fill are preferred.",
   },
 
   "bias.fatpet": {

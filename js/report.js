@@ -363,13 +363,14 @@ function sectionSummary(args) {
 // status. PET estimate is back-transformed through profile.transform().
 // "NA (k < 3)" is shown for any test that requires at least 3 studies.
 function sectionPubBias(args) {
-  const { useTF, tf, nextTable, nextFigure, profile } = args;
+  const { useTF, tf, nextTable, nextFigure, profile,
+          fsnTrivial = 0.1, fsnDirection = "auto" } = args;
 
   const fsnProse = `
   <p style="margin-top:10px">
     Fail-safe N (Rosenthal): <strong>${isFinite(args.fsn.rosenthal) ? Math.round(args.fsn.rosenthal) : "—"}</strong>
     &nbsp;·&nbsp;
-    Fail-safe N (Orwin, trivial = 0.1): <strong>${isFinite(args.fsn.orwin) ? Math.round(args.fsn.orwin) : "—"}</strong>
+    Fail-safe N (Orwin, trivial = ${fsnTrivial}, dir = ${fsnDirection}): <strong>${isFinite(args.fsn.orwin) ? Math.round(args.fsn.orwin) : "—"}</strong>
   </p>
   <p>Trim &amp; Fill: <strong>${useTF ? "ON" : "OFF"}</strong>${tf.length > 0 ? ` (${tf.length} filled)` : ""}</p>`;
 

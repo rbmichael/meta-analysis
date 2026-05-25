@@ -434,7 +434,8 @@ function _checkAdvancedBadge() {
     selDiffers("tfEstimator") || chkDiffers("useTrimFill") || chkDiffers("useTFAdjusted") ||
     selDiffers("selMode") || selDiffers("selPreset") || selDiffers("selSides") || selDiffers("selWeightFn") ||
     valDiffers("bayesMu0") || valDiffers("bayesSigmaMu") || valDiffers("bayesSigmaTau") ||
-    valDiffers("selCuts") || valDiffers("rveRho") || selDiffers("rveWeighting") || selDiffers("threeLevelMethod");
+    valDiffers("selCuts") || valDiffers("rveRho") || selDiffers("rveWeighting") || selDiffers("threeLevelMethod") ||
+    valDiffers("fsnTrivial") || selDiffers("fsnDirection");
 
   const badge = document.getElementById("advancedBadge");
   if (badge) badge.style.display = custom ? "" : "none";
@@ -1160,6 +1161,7 @@ document.getElementById("draftStartFresh").addEventListener("click", () => {
   resetNum("bayesMu0"); resetNum("bayesSigmaMu"); resetNum("bayesSigmaTau");
   resetSel("bayesPreset");
   resetNum("selCuts");
+  resetNum("fsnTrivial"); resetSel("fsnDirection");
   // RVE: reset weighting select (fires change to show/hide ρ row), then reset ρ slider.
   const rveWeightingReset = document.getElementById("rveWeighting");
   if (rveWeightingReset) { rveWeightingReset.selectedIndex = 0; rveWeightingReset.dispatchEvent(new Event("change")); }
@@ -1532,6 +1534,7 @@ function resetAdvancedSettings() {
   resetNum("bayesMu0"); resetNum("bayesSigmaMu"); resetNum("bayesSigmaTau");
   resetSel("bayesPreset");
   resetNum("selCuts");
+  resetNum("fsnTrivial"); resetSel("fsnDirection");
   const rveWeightingReset2 = document.getElementById("rveWeighting");
   if (rveWeightingReset2) { rveWeightingReset2.selectedIndex = 0; rveWeightingReset2.dispatchEvent(new Event("change")); }
   const rveRhoEl = document.getElementById("rveRho");
@@ -1741,6 +1744,14 @@ function applySession(session) {
   if (isFinite(s.rveRho) && s.rveRho >= 0 && s.rveRho < 1) {
     const el = document.getElementById("rveRho");
     if (el) { el.value = s.rveRho; el.dispatchEvent(new Event("input")); }
+  }
+  if (isFinite(s.fsnTrivial) && s.fsnTrivial > 0) {
+    const el = document.getElementById("fsnTrivial");
+    if (el) el.value = s.fsnTrivial;
+  }
+  if (s.fsnDirection) {
+    const el = document.getElementById("fsnDirection");
+    if (el && el.querySelector(`option[value="${s.fsnDirection}"]`)) el.value = s.fsnDirection;
   }
 
   // Rebuild moderators
@@ -2906,13 +2917,14 @@ function _runBayesBatch(studies, m, opts) {
 
 // ── Helper: publication bias batch ───────────────────────────────────────────
 function _runPubBiasBatch(studies, m, opts) {
-  const { alpha, selModeVal, selPreset, selWeightFn, selSides, selCuts } = opts;
+  const { alpha, selModeVal, selPreset, selWeightFn, selSides, selCuts,
+          fsnTrivial = 0.1, fsnDirection = "auto" } = opts;
 
   const egger    = eggerTest(studies);
   const begg     = beggTest(studies);
   const petpeese = petPeeseTest(studies);
   const fatpet   = petpeese.fat;
-  const fsn      = failSafeN(studies);
+  const fsn      = failSafeN(studies, alpha, fsnTrivial, fsnDirection);
   const tes      = tesTest(studies, m);
   const waap     = waapWls(studies);
   const pcurve   = pCurve(studies);
@@ -3238,7 +3250,7 @@ function _renderPooledPanel(ctx) {
 function _renderPubBiasPanel(ctx) {
   const { profile, m, egger, begg, fatpet, petpeese, fsn, tes, waap, hc,
           harbord, peters, deeks, ruecker, mAdjusted, tf } = ctx;
-  const { alpha, tfEstimator, useTF } = ctx.opts;
+  const { alpha, tfEstimator, useTF, fsnTrivial = 0.1, fsnDirection = "auto" } = ctx.opts;
 
   const eggerRobustNote  = egger.clustersUsed  ? ` | <em>p</em><sub>robust</sub> ${isFinite(egger.robustInterceptP)  ? fmtPval(egger.robustInterceptP)  : "= —"}` : "";
   const fatpetRobustNote = fatpet.clustersUsed ? ` | <em>p</em><sub>FAT,rob</sub> ${isFinite(fatpet.robustSlopeP) ? fmtPval(fatpet.robustSlopeP) : "= —"} · <em>p</em><sub>PET,rob</sub> ${isFinite(fatpet.robustInterceptP) ? fmtPval(fatpet.robustInterceptP) : "= —"}` : "";
@@ -3296,7 +3308,7 @@ function _renderPubBiasPanel(ctx) {
     &nbsp;&nbsp;${hBtn("bias.begg")}Begg: ${beggStats}<br>
     &nbsp;&nbsp;${hBtn("bias.fatpet")}FAT (bias): ${fatStats} &nbsp;·&nbsp; PET (effect at SE→0): ${petStats}${fatpetRobustNote}<br>
     &nbsp;&nbsp;${hBtn("bias.petpeese")}${petpeese.usePeese?"<b>":""}PET-PEESE (corrected): ${ppStats}${petpeese.usePeese?"</b>":""}<br>
-    &nbsp;&nbsp;${hBtn("bias.fsn")}Fail-safe N (Rosenthal): ${isFinite(fsn.rosenthal)?Math.round(fsn.rosenthal):"NA"} &nbsp;·&nbsp; Orwin (trivial=0.1): ${isFinite(fsn.orwin)?Math.round(fsn.orwin):"NA"}<br>
+    &nbsp;&nbsp;${hBtn("bias.fsn")}Fail-safe N (Rosenthal): ${isFinite(fsn.rosenthal)?Math.round(fsn.rosenthal):"NA"} &nbsp;·&nbsp; Orwin (trivial=${fsnTrivial}, dir=${fsnDirection}): ${isFinite(fsn.orwin)?Math.round(fsn.orwin):"NA"}<br>
     &nbsp;&nbsp;${hBtn("bias.tes")}TES: O = ${isFinite(tes.O)?tes.O:"NA"} | E = ${isFinite(tes.E)?fmt(tes.E):"NA"} | χ²(k−1) = ${isFinite(tes.chi2)?fmt(tes.chi2):"NA (k<2)"} | ${isFinite(tes.p)?`<em>p</em> ${fmtPval(tes.p)}`:"<em>p</em> (k<2)"}${isFinite(tes.p)&&tes.p<0.1?" <span style='color:var(--color-warning)'>⚠ excess</span>":""}<br>
     &nbsp;&nbsp;${hBtn("bias.waap")}WAAP-WLS: ${waapStats}<br>
     &nbsp;&nbsp;${hBtn("bias.hc")}Henmi-Copas: ${hcStats}<br>
@@ -3428,6 +3440,7 @@ function _renderForestAndBubbles(ctx) {
     rveRho:           parseFloat(document.getElementById("rveRho")?.value ?? 0.8),
     rveMode:          document.getElementById("rveWeighting")?.value ?? "corr",
     threeLevelMethod: document.getElementById("threeLevelMethod")?.value ?? "REML",
+    fsnTrivial, fsnDirection,
     permResult: permState.lastResult ?? null,
     ciLevel:   document.getElementById("ciLevel")?.value   ?? "95",
     mccMethod: document.getElementById("mccMethod")?.value ?? "none",
@@ -3736,11 +3749,16 @@ async function runAnalysis() {
     const bayesSigmaMu  = Math.max(0.01, parseFloat(document.getElementById("bayesSigmaMu")?.value)  || 1);
     const bayesSigmaTau = Math.max(0.01, parseFloat(document.getElementById("bayesSigmaTau")?.value) || 0.5);
 
+    // Fail-safe N settings
+    const fsnTrivial   = Math.max(0.001, parseFloat(document.getElementById("fsnTrivial")?.value) || 0.1);
+    const fsnDirection = document.getElementById("fsnDirection")?.value ?? "auto";
+
     const opts = {
       method, ciMethod, alpha, type, useTF, tfEstimator, useTFAdjusted,
       isMHorPeto, hasClusters, rveRho, rveMode, threeLevelMethod, modSpec, scaleModSpec, interactionSpec, cumulativeOrder,
       selModeVal, selPreset, selWeightFn, selSides, selCuts,
       bayesMu0, bayesSigmaMu, bayesSigmaTau,
+      fsnTrivial, fsnDirection,
     };
 
     // ── Phase 2: Core meta-analysis ───────────────────────────────────────

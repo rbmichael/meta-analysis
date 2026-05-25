@@ -2354,7 +2354,7 @@ export const PUB_BIAS_BENCHMARKS = [
   //   Begg:     τ_b = −0.128, S = −10, z = −0.549, p = 0.583
   //   Egger:    intercept = −2.345 (bias), slope = −0.157, p = 0.160
   //   FAT-PET:  intercept = −0.157 (PET), slope = −2.345 (FAT), interceptP = 0.521, slopeP = 0.160
-  //   Rosenthal fail-safe N ≈ 656, Orwin ≈ 44
+  //   Rosenthal fail-safe N = 607, Orwin (trivial=0.1) = 44
   //   Harbord:  intercept = −2.093, interceptP = 0.235
   //   Peters:   intercept = −0.357, interceptP = 0.045
   //   TrimFill (L₀/R₀/Q₀, DL): k0 = 0, adjustedRE = −0.747
@@ -2501,7 +2501,43 @@ export const PUB_BIAS_BENCHMARKS = [
       ruecker: { intercept: -2.7853, interceptP: 0.1156, slope: 0.6562, slopeP: 0.0203, df: 2 },
     },
     citation: "Synthetic 2×2 tables, R-verified (base R lm(), generate.R block RUECKER-1). Rücker: OLS of arcsine z on 1/se (uniform weights)."
-  }
+  },
+
+  // ----------------------------------------------------------------
+  // BCG Vaccine — Orwin fail-safe N with non-default trivial threshold
+  // Same 13-study dataset as PUB_BIAS_BENCHMARKS[0].
+  // trivial=0.2, direction="auto" (FE<0 → signMul=-1, same Rosenthal N due to squaring)
+  // Orwin = max(0, k * (|FE| − |trivial|) / |trivial|)
+  //       = max(0, 13 * (0.4361 − 0.2) / 0.2) ≈ 15.35 → 15
+  // R: fsn(yi, vi, data=bcg_esc, type="Orwin", target=0.2)
+  // ----------------------------------------------------------------
+  {
+    name: "BCG Vaccine – Orwin FSN, trivial=0.2 (log OR, DL, 13 studies)",
+    rBlock: "FSN-2",
+    type: "OR",
+    tauMethod: "DL",
+    data: [
+      { label: "Aronson 1948",            a:   4, b:   119, c:  11, d:   128 },
+      { label: "Ferguson & Simes 1949",   a:   6, b:   300, c:  29, d:   274 },
+      { label: "Rosenthal 1960",          a:   3, b:   228, c:  11, d:   209 },
+      { label: "Hart & Sutherland 1977",  a:  62, b: 13536, c: 248, d: 12619 },
+      { label: "Frimodt-Moller 1973",     a:  33, b:  5036, c:  47, d:  5761 },
+      { label: "Stein & Aronson 1953",    a: 180, b:  1361, c: 372, d:  1079 },
+      { label: "Vandiviere 1973",         a:   8, b:  2537, c:  10, d:   619 },
+      { label: "TPT Madras 1980",         a: 505, b: 87886, c: 499, d: 87892 },
+      { label: "Coetzee & Berjak 1968",   a:  29, b:  7470, c:  45, d:  7232 },
+      { label: "Rosenthal 1961",          a:  17, b:  1699, c:  65, d:  1600 },
+      { label: "Comstock 1974",           a: 186, b: 50448, c: 141, d: 27197 },
+      { label: "Comstock & Webster 1969", a:   5, b:  2493, c:   3, d:  2338 },
+      { label: "Comstock 1976",           a:  27, b: 16886, c:  29, d: 17825 },
+    ],
+    tests: {
+      failSafe: { rosenthal: 607, orwin: 16 },
+    },
+    fsnTrivial: 0.2,
+    fsnDirection: "auto",
+    citation: "Colditz et al. (1994) JAMA 271:698–702. dat.bcg in metafor. Orwin FSN with trivial=0.2, R-verified (generate.R FSN-2).",
+  },
 
 ];
 

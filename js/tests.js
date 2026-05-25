@@ -601,14 +601,14 @@ export function runTests() {
   }
 
   // One study at yi = 3, vi = 1: z = 3, z_crit ≈ 1.6449
-  // Nfs = (3 / 1.6449)² − 1 ≈ 2.327
+  // raw = (3 / 1.6449)² − 1 ≈ 2.327 → ceil → 3
   console.log("--- Fail-safe N: one study z=3 ---");
   {
     const s = [{ yi: 3, vi: 1 }];
     const f = failSafeN(s);
-    bchk("sumZ = 3",           f.sumZ,       3,     1e-9);
-    bchk("z_crit ≈ 1.6449",   f.z_crit,     1.6449, 0.001);
-    bchk("Rosenthal ≈ 2.327", f.rosenthal,  (3 / f.z_crit) ** 2 - 1, 0.001);
+    bchk("sumZ = 3",          f.sumZ,       3,     1e-9);
+    bchk("z_crit ≈ 1.6449",  f.z_crit,     1.6449, 0.001);
+    bchk("Rosenthal = 3",     f.rosenthal,  3,      0);
   }
 
   // Orwin: k * (|RE| − trivial) / trivial
@@ -3217,7 +3217,7 @@ export function runTests() {
     }
 
     if (exp.failSafe) {
-      const f = failSafeN(studies);
+      const f = failSafeN(studies, 0.05, bm.fsnTrivial ?? 0.1, bm.fsnDirection ?? "positive");
       if (exp.failSafe.rosenthal !== undefined) pbchk("failSafe.rosenthal", f.rosenthal, exp.failSafe.rosenthal, 1);
       if (exp.failSafe.orwin    !== undefined) pbchk("failSafe.orwin",    f.orwin,    exp.failSafe.orwin,    1);
     }

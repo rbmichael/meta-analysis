@@ -94,7 +94,7 @@ export function summaryData(args) {
 
 export function pubBiasData(args) {
   const { egger, begg, fatpet, petpeese, fsn, tes, waap, harbord, peters, deeks, ruecker, hc,
-          useTF, tf, profile } = args;
+          useTF, tf, profile, fsnTrivial = 0.1, fsnDirection = "auto" } = args;
 
   const na  = v => isFinite(v) ? fmt(v) : "—";
   const naP = v => isFinite(v) ? fmtP_APA(v) : "NA";
@@ -137,7 +137,7 @@ export function pubBiasData(args) {
 
   const fsnLine = [
     `Fail-safe N (Rosenthal): ${isFinite(fsn?.rosenthal) ? Math.round(fsn.rosenthal) : "—"}`,
-    `Fail-safe N (Orwin): ${isFinite(fsn?.orwin) ? Math.round(fsn.orwin) : "—"}`,
+    `Fail-safe N (Orwin, trivial=${fsnTrivial}, dir=${fsnDirection}): ${isFinite(fsn?.orwin) ? Math.round(fsn.orwin) : "—"}`,
     `Trim & Fill: ${useTF ? "ON" : "OFF"}${tf?.length > 0 ? ` (${tf.length} filled)` : ""}`,
   ].join("  ·  ");
 
