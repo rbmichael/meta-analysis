@@ -658,9 +658,10 @@ export function rveData(args) {
 // ---------------------------------------------------------------------------
 
 export function threeLevelData(args) {
-  const { threeLevelResult, profile, ciLevel = "95" } = args;
+  const { threeLevelResult, threeLevelMethod = "REML", profile, ciLevel = "95" } = args;
   if (!threeLevelResult || threeLevelResult.error) return null;
   const tl = threeLevelResult;
+  const method = threeLevelMethod ?? "REML";
   const widthCiLabel = ciLevel + "% CI";
   const mu = profile.transform(tl.mu);
   const lo = profile.transform(tl.ci[0]);
@@ -675,11 +676,12 @@ export function threeLevelData(args) {
     ["<em>I</em>²_within", `${fmt(tl.I2_within)}%`],
     ["<em>I</em>²_between", `${fmt(tl.I2_between)}%`],
     [`<em>Q</em>(${tl.df})`, fmt(tl.Q)],
+    ["Estimation", method],
     ["m (clusters)", String(tl.kCluster)],
     ["<em>k</em> (studies)", String(tl.k)],
     ["Log-likelihood", fmt(tl.logLikFull ?? tl.logLik)],
   ];
-  const note = "Three-level model: studies nested within clusters. σ²_within = within-cluster, σ²_between = between-cluster between-study heterogeneity. REML estimation.";
+  const note = `Three-level model: studies nested within clusters. σ²_within = within-cluster, σ²_between = between-cluster between-study heterogeneity. ${method} estimation.`;
   return { headers: ["Parameter", "Value"], rows, note };
 }
 

@@ -355,6 +355,15 @@
             </datalist>
             <p class="settings-hint" id="rveRhoHint">0.4 = mild &nbsp;·&nbsp; 0.8 = moderate (default) &nbsp;·&nbsp; 0.95 = strong</p>
             <p class="settings-hint" id="rveHierHint" style="display:none">HIER MoM estimates ω² (between-cluster) and τ² (within-cluster) via method-of-moments; ρ is not used.</p>
+            <span class="settings-group-label" style="margin-top:8px">Three-level model</span>
+            <div class="settings-section-controls">
+              <label class="inline">Estimation:
+                <select id="threeLevelMethod">
+                  <option value="REML" selected>REML</option>
+                  <option value="ML">ML</option>
+                </select>
+              </label>
+            </div>
           </div>
 
           <!-- Reset button -->

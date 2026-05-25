@@ -434,7 +434,7 @@ function _checkAdvancedBadge() {
     selDiffers("tfEstimator") || chkDiffers("useTrimFill") || chkDiffers("useTFAdjusted") ||
     selDiffers("selMode") || selDiffers("selPreset") || selDiffers("selSides") || selDiffers("selWeightFn") ||
     valDiffers("bayesMu0") || valDiffers("bayesSigmaMu") || valDiffers("bayesSigmaTau") ||
-    valDiffers("selCuts") || valDiffers("rveRho") || selDiffers("rveWeighting");
+    valDiffers("selCuts") || valDiffers("rveRho") || selDiffers("rveWeighting") || selDiffers("threeLevelMethod");
 
   const badge = document.getElementById("advancedBadge");
   if (badge) badge.style.display = custom ? "" : "none";
@@ -1165,6 +1165,7 @@ document.getElementById("draftStartFresh").addEventListener("click", () => {
   if (rveWeightingReset) { rveWeightingReset.selectedIndex = 0; rveWeightingReset.dispatchEvent(new Event("change")); }
   const rveRhoEl = document.getElementById("rveRho");
   if (rveRhoEl) { rveRhoEl.value = rveRhoEl.defaultValue; rveRhoEl.dispatchEvent(new Event("input")); }
+  resetSel("threeLevelMethod");
 
   // Sync dependent UI state.
   syncTrimFillState();
@@ -1535,6 +1536,7 @@ function resetAdvancedSettings() {
   if (rveWeightingReset2) { rveWeightingReset2.selectedIndex = 0; rveWeightingReset2.dispatchEvent(new Event("change")); }
   const rveRhoEl = document.getElementById("rveRho");
   if (rveRhoEl) { rveRhoEl.value = rveRhoEl.defaultValue; rveRhoEl.dispatchEvent(new Event("input")); }
+  resetSel("threeLevelMethod");
 
   syncTrimFillState();
   syncSelControls();
@@ -1628,6 +1630,7 @@ document.getElementById("resetMv").addEventListener("click", resetMvSettings);
   rveRhoSlider.addEventListener("input",  syncRhoDisplay);
   rveRhoSlider.addEventListener("change", markStale);
   rveWeightingEl?.addEventListener("change", () => { syncWeighting(); markStale(); });
+  document.getElementById("threeLevelMethod")?.addEventListener("change", markStale);
 }
 
 // ---------------- GOSH ----------------
@@ -1729,6 +1732,10 @@ function applySession(session) {
   if (s.rveMode === "hier") {
     const el = document.getElementById("rveWeighting");
     if (el) { el.value = "hier"; el.dispatchEvent(new Event("change")); }
+  }
+  if (s.threeLevelMethod === "ML") {
+    const el = document.getElementById("threeLevelMethod");
+    if (el) el.value = "ML";
   }
   if (isFinite(s.rveRho) && s.rveRho >= 0 && s.rveRho < 1) {
     const el = document.getElementById("rveRho");
@@ -2849,7 +2856,7 @@ function renderSensitivity(mu0, sigmaMu, sigmaTau, ciLevel) {
 // ── Helper: core meta-analysis ────────────────────────────────────────────────
 function _runCoreMeta(studies, opts) {
   const { method, ciMethod, alpha, type, useTF, tfEstimator, useTFAdjusted,
-          isMHorPeto, hasClusters, rveRho, rveMode } = opts;
+          isMHorPeto, hasClusters, rveRho, rveMode, threeLevelMethod } = opts;
 
   let tf = [], all = studies;
   if (useTF && !isMHorPeto) {
@@ -2879,7 +2886,7 @@ function _runCoreMeta(studies, opts) {
     : null;
 
   const threeLevelResult = (hasClusters && !isMHorPeto)
-    ? meta3level(studies, { method: "REML", alpha })
+    ? meta3level(studies, { method: threeLevelMethod ?? "REML", alpha })
     : null;
 
   return { m, tf, all, profileLikResult, mAdjusted, rveResult, threeLevelResult };
@@ -3060,8 +3067,8 @@ function _renderRveThreeLevel(ctx) {
               m=${tl.kCluster} cluster${tl.kCluster === 1 ? "" : "s"} &nbsp;·&nbsp; k=${tl.k} studies &nbsp;·&nbsp; df=${tl.df}<br>
               ${hBtn("threelevel.tau2")}σ²<sub>within</sub>=${fmt(tl.tau2_within)} &nbsp;·&nbsp; σ²<sub>between</sub>=${fmt(tl.tau2_between)}<br>
               ${hBtn("threelevel.I2")}<em>I</em>²<sub>within</sub>=${fmt(tl.I2_within)}% &nbsp;·&nbsp; <em>I</em>²<sub>between</sub>=${fmt(tl.I2_between)}%<br>
-              ${hBtn("het.Q")}<em>Q</em>(${tl.df}) = ${fmt(tl.Q)} | method=REML<br>
-              LL = ${fmt(tl.logLikFull ?? tl.logLik)} (REML)
+              ${hBtn("het.Q")}<em>Q</em>(${tl.df}) = ${fmt(tl.Q)} | method=${ctx.opts.threeLevelMethod ?? "REML"}<br>
+              LL = ${fmt(tl.logLikFull ?? tl.logLik)} (${ctx.opts.threeLevelMethod ?? "REML"})
             </div>
           `;
         }
@@ -3415,8 +3422,9 @@ function _renderForestAndBubbles(ctx) {
     harbord, peters, deeks, ruecker, hc, baujatResult,
     influence, subgroup, method, ciMethod,
     rveResult, threeLevelResult,
-    rveRho:  parseFloat(document.getElementById("rveRho")?.value ?? 0.8),
-    rveMode: document.getElementById("rveWeighting")?.value ?? "corr",
+    rveRho:           parseFloat(document.getElementById("rveRho")?.value ?? 0.8),
+    rveMode:          document.getElementById("rveWeighting")?.value ?? "corr",
+    threeLevelMethod: document.getElementById("threeLevelMethod")?.value ?? "REML",
     permResult: permState.lastResult ?? null,
     ciLevel:   document.getElementById("ciLevel")?.value   ?? "95",
     mccMethod: document.getElementById("mccMethod")?.value ?? "none",
@@ -3701,8 +3709,9 @@ async function runAnalysis() {
     const useTFAdjusted = document.getElementById("useTFAdjusted")?.checked;
     const isMHorPeto    = method === "MH" || method === "Peto";
     const hasClusters   = studies.some(s => s.cluster);
-    const rveRho        = parseFloat(document.getElementById("rveRho")?.value) || 0.8;
-    const rveMode       = document.getElementById("rveWeighting")?.value ?? "corr";
+    const rveRho             = parseFloat(document.getElementById("rveRho")?.value) || 0.8;
+    const rveMode            = document.getElementById("rveWeighting")?.value ?? "corr";
+    const threeLevelMethod   = document.getElementById("threeLevelMethod")?.value ?? "REML";
     const modSpec       = moderators.map(mod => ({ key: mod.name, type: mod.type, transform: mod.transform || "linear" }));
     const scaleModSpec  = scaleModerators.map(mod => ({ key: mod.name, type: mod.type, transform: mod.transform || "linear" }));
     const interactionSpec = interactions.map(ix => ({ name: ix.name, termA: ix.termA, termB: ix.termB }));
@@ -3726,7 +3735,7 @@ async function runAnalysis() {
 
     const opts = {
       method, ciMethod, alpha, type, useTF, tfEstimator, useTFAdjusted,
-      isMHorPeto, hasClusters, rveRho, rveMode, modSpec, scaleModSpec, interactionSpec, cumulativeOrder,
+      isMHorPeto, hasClusters, rveRho, rveMode, threeLevelMethod, modSpec, scaleModSpec, interactionSpec, cumulativeOrder,
       selModeVal, selPreset, selWeightFn, selSides, selCuts,
       bayesMu0, bayesSigmaMu, bayesSigmaTau,
     };

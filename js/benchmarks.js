@@ -3778,7 +3778,7 @@ export const RVE_MOM_BENCHMARKS = [
 // Each entry drives one meta3level() call (method: "REML" unless noted).
 // Expected values are computed from the JS implementation and will be
 // cross-validated against metafor rma.mv(yi, vi, random=~1|cluster/study)
-// in generate.R blocks THREE-1 and THREE-2.
+// in generate.R blocks THREE-1 through THREE-4.
 //
 // Model: Σᵢ = diag(vᵢⱼ + σ²ᵤ) + σ²ₜ·1·1'
 // BFGS optimisation in log-τ² space; I² uses vi_typical = 1/Σ(1/vᵢ).
@@ -3865,6 +3865,85 @@ export const THREE_LEVEL_BENCHMARKS = [
       k:            14,
       kCluster:     5,
       logLik:       6.4180830762,
+    },
+  },
+  {
+    // THREE-3. Same data as THREE-1; method="ML".
+    // ML shrinks τ² estimates relative to REML (tau2_between: 0.110 → 0.0792).
+    // R: rma.mv(yi, vi, random=~1|cluster/study, method="ML")
+    name:   "Synthetic 4-cluster × 3-study (ML)",
+    rBlock: "THREE-3",
+    method: "ML",
+    data: [
+      { yi:  0.00, vi: 0.005, cluster: "C1" },
+      { yi:  0.40, vi: 0.005, cluster: "C1" },
+      { yi:  0.20, vi: 0.005, cluster: "C1" },
+      { yi:  0.60, vi: 0.005, cluster: "C2" },
+      { yi:  1.00, vi: 0.005, cluster: "C2" },
+      { yi:  0.80, vi: 0.005, cluster: "C2" },
+      { yi:  0.10, vi: 0.005, cluster: "C3" },
+      { yi:  0.50, vi: 0.005, cluster: "C3" },
+      { yi:  0.30, vi: 0.005, cluster: "C3" },
+      { yi:  0.70, vi: 0.005, cluster: "C4" },
+      { yi:  1.10, vi: 0.005, cluster: "C4" },
+      { yi:  0.90, vi: 0.005, cluster: "C4" },
+    ],
+    expected: {
+      mu:           0.5500000000,
+      se:           0.1520690636,
+      ciLow:        0.2519501118,
+      ciHigh:       0.8480498882,
+      z:            3.6167777114,
+      p:            0.0002983651,
+      tau2_within:  0.0349999997,
+      tau2_between: 0.0791666672,
+      I2_within:    30.54545424,
+      I2_between:   69.09090939,
+      Q:            286.0000000000,
+      df:           11,
+      k:            12,
+      kCluster:     4,
+      logLik:       9.4393719911,
+    },
+  },
+  {
+    // THREE-4. Same data as THREE-2; method="ML".
+    // R: rma.mv(yi, vi, random=~1|cluster/study, method="ML")
+    name:   "Synthetic 5-cluster unequal sizes (ML)",
+    rBlock: "THREE-4",
+    method: "ML",
+    data: [
+      { yi:  0.10, vi: 0.015, cluster: "A" },
+      { yi:  0.70, vi: 0.020, cluster: "A" },
+      { yi:  0.40, vi: 0.018, cluster: "A" },
+      { yi:  0.80, vi: 0.012, cluster: "B" },
+      { yi:  1.20, vi: 0.015, cluster: "B" },
+      { yi:  0.05, vi: 0.010, cluster: "C" },
+      { yi:  0.45, vi: 0.012, cluster: "C" },
+      { yi:  0.25, vi: 0.014, cluster: "C" },
+      { yi:  0.90, vi: 0.016, cluster: "C" },
+      { yi:  0.60, vi: 0.020, cluster: "D" },
+      { yi:  1.00, vi: 0.025, cluster: "D" },
+      { yi:  0.35, vi: 0.018, cluster: "E" },
+      { yi:  0.75, vi: 0.022, cluster: "E" },
+      { yi:  0.55, vi: 0.019, cluster: "E" },
+    ],
+    expected: {
+      mu:           0.5858189805,
+      se:           0.0967270121,
+      ciLow:        0.3962375204,
+      ciHigh:       0.7754004406,
+      z:            6.0564155552,
+      p:            0.0000000014,
+      tau2_within:  0.0808165605,
+      tau2_between: 0.0112586806,
+      I2_within:    86.70599350,
+      I2_between:   12.07914665,
+      Q:            101.3917859047,
+      df:           13,
+      k:            14,
+      kCluster:     5,
+      logLik:       8.6849558354,
     },
   },
 ];

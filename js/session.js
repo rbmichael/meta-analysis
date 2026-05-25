@@ -11,7 +11,8 @@
 //                     selSides, selCuts                         (selection model),
 //                     mccMethod                                 (multiple-comparison correction),
 //                     rveRho                                    (RVE within-cluster correlation),
-//                     rveMode                                   ("corr" | "hier" — RVE weighting mode)
+//                     rveMode                                   ("corr" | "hier" — RVE weighting mode),
+//                     threeLevelMethod                          ("REML" | "ML" — three-level estimation)
 //   moderators    — array of { name, type } objects
 //   interactions  — array of { name, termA, termB } interaction term specs
 //   studies       — array of { study, inputs: {col: value}, group, cluster, moderators: {name: value} }
@@ -21,7 +22,8 @@ export const SESSION_VERSION = 1;
 // Build a versioned session object from explicit plain-JS arguments.
 // settings        — { effectType, tauMethod, ciMethod, ciLevel, cumulativeOrder, useTrimFill,
 //                     tfEstimator, useTFAdjusted, bayesMu0, bayesSigmaMu, bayesSigmaTau,
-//                     selMode, selPreset, selWeightFn, selSides, selCuts, mccMethod, rveRho, rveMode }
+//                     selMode, selPreset, selWeightFn, selSides, selCuts, mccMethod, rveRho, rveMode,
+//                     threeLevelMethod }
 // savedModerators — array of { name, type }
 // studies         — array of { study, inputs, group, moderators }
 // rob             — { domains: string[], data: { [label]: { [domain]: string } } }
