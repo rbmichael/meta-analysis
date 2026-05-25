@@ -335,6 +335,14 @@
           <div class="settings-section" id="rveSettings" style="display:none">
             <span class="settings-group-label">RVE (robust variance estimation)</span>
             <div class="settings-section-controls">
+              <label class="inline">Weighting:
+                <select id="rveWeighting">
+                  <option value="corr" selected>CORR — user-specified ρ</option>
+                  <option value="hier">HIER MoM — estimate ω² + τ²</option>
+                </select>
+              </label>
+            </div>
+            <div id="rveRhoRow" class="settings-section-controls">
               <label class="inline">Assumed within-cluster correlation ρ:
                 <input type="range" id="rveRho" min="0" max="0.999" step="0.01" value="0.8" list="rveRhoTicks">
                 <span id="rveRhoDisplay" class="rve-rho-display" aria-live="polite">0.80</span>
@@ -345,7 +353,8 @@
               <option value="0.8"></option>
               <option value="0.95"></option>
             </datalist>
-            <p class="settings-hint">0.4 = mild &nbsp;·&nbsp; 0.8 = moderate (default) &nbsp;·&nbsp; 0.95 = strong</p>
+            <p class="settings-hint" id="rveRhoHint">0.4 = mild &nbsp;·&nbsp; 0.8 = moderate (default) &nbsp;·&nbsp; 0.95 = strong</p>
+            <p class="settings-hint" id="rveHierHint" style="display:none">HIER MoM estimates ω² (between-cluster) and τ² (within-cluster) via method-of-moments; ρ is not used.</p>
           </div>
 
           <!-- Reset button -->

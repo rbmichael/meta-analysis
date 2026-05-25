@@ -621,22 +621,35 @@ export function permutationData(permResult, reg) {
 // ---------------------------------------------------------------------------
 
 export function rveData(args) {
-  const { rveResult, rveRho = 0.8, profile, ciLevel = "95" } = args;
+  const { rveResult, rveRho = 0.8, rveMode = "corr", profile, ciLevel = "95" } = args;
   if (!rveResult || rveResult.error) return null;
   const widthCiLabel = ciLevel + "% CI";
   const est = profile.transform(rveResult.est);
   const lo  = profile.transform(rveResult.ci[0]);
   const hi  = profile.transform(rveResult.ci[1]);
+  const isHier = rveMode === "hier";
+  const weightRows = isHier
+    ? [
+        ["Weighting", "HIER MoM (Hedges, Tipton & Johnson, 2010)"],
+        ["ω² (between-cluster)", fmt(rveResult.omega2)],
+        ["τ² (within-cluster)", fmt(rveResult.tau2)],
+      ]
+    : [
+        ["Weighting", "CORR (user-specified ρ)"],
+        ["ρ (assumed within-cluster correlation)", fmt(rveRho)],
+      ];
   const rows = [
     ["Pooled estimate", `${fmt(est)}, ${widthCiLabel} [${fmt(lo)}, ${fmt(hi)}]`],
     ["SE", fmt(rveResult.se)],
     [`<em>t</em>(${rveResult.df})`, fmt(rveResult.t)],
     ["<em>p</em>", fmtP_APA(rveResult.p)],
-    ["ρ (assumed within-cluster correlation)", fmt(rveRho)],
+    ...weightRows,
     ["m (clusters)", String(rveResult.kCluster)],
     ["<em>k</em> (studies)", String(rveResult.k)],
   ];
-  const note = "RVE = robust variance estimation (Hedges, Tipton & Johnson, 2010). Working correlation model: ρ assumed constant within cluster.";
+  const note = isHier
+    ? "RVE = robust variance estimation (Hedges, Tipton & Johnson, 2010). HIER MoM: ω² (between-cluster) and τ² (within-cluster) estimated via method-of-moments; weights = 1/(vⱼ + τ² + ω²); sandwich SE scale m/(m−p)."
+    : "RVE = robust variance estimation (Hedges, Tipton & Johnson, 2010). Working correlation model: ρ assumed constant within cluster.";
   return { headers: ["Parameter", "Value"], rows, note };
 }
 

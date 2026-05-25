@@ -434,7 +434,7 @@ function _checkAdvancedBadge() {
     selDiffers("tfEstimator") || chkDiffers("useTrimFill") || chkDiffers("useTFAdjusted") ||
     selDiffers("selMode") || selDiffers("selPreset") || selDiffers("selSides") || selDiffers("selWeightFn") ||
     valDiffers("bayesMu0") || valDiffers("bayesSigmaMu") || valDiffers("bayesSigmaTau") ||
-    valDiffers("selCuts") || valDiffers("rveRho");
+    valDiffers("selCuts") || valDiffers("rveRho") || selDiffers("rveWeighting");
 
   const badge = document.getElementById("advancedBadge");
   if (badge) badge.style.display = custom ? "" : "none";
@@ -1160,7 +1160,9 @@ document.getElementById("draftStartFresh").addEventListener("click", () => {
   resetNum("bayesMu0"); resetNum("bayesSigmaMu"); resetNum("bayesSigmaTau");
   resetSel("bayesPreset");
   resetNum("selCuts");
-  // RVE rho: reset value then fire input event so the block-scoped display updater runs.
+  // RVE: reset weighting select (fires change to show/hide ρ row), then reset ρ slider.
+  const rveWeightingReset = document.getElementById("rveWeighting");
+  if (rveWeightingReset) { rveWeightingReset.selectedIndex = 0; rveWeightingReset.dispatchEvent(new Event("change")); }
   const rveRhoEl = document.getElementById("rveRho");
   if (rveRhoEl) { rveRhoEl.value = rveRhoEl.defaultValue; rveRhoEl.dispatchEvent(new Event("input")); }
 
@@ -1529,6 +1531,8 @@ function resetAdvancedSettings() {
   resetNum("bayesMu0"); resetNum("bayesSigmaMu"); resetNum("bayesSigmaTau");
   resetSel("bayesPreset");
   resetNum("selCuts");
+  const rveWeightingReset2 = document.getElementById("rveWeighting");
+  if (rveWeightingReset2) { rveWeightingReset2.selectedIndex = 0; rveWeightingReset2.dispatchEvent(new Event("change")); }
   const rveRhoEl = document.getElementById("rveRho");
   if (rveRhoEl) { rveRhoEl.value = rveRhoEl.defaultValue; rveRhoEl.dispatchEvent(new Event("input")); }
 
@@ -1600,16 +1604,30 @@ document.getElementById("resetMv").addEventListener("click", resetMvSettings);
   clampPos("bayesSigmaTau", "bayesSigmaTauWarn");
 }
 
-// ---------------- RVE ρ SLIDER ----------------
+// ---------------- RVE ρ SLIDER + WEIGHTING SELECT ----------------
 {
-  const rveRhoSlider  = document.getElementById("rveRho");
-  const rveRhoDisplay = document.getElementById("rveRhoDisplay");
+  const rveRhoSlider    = document.getElementById("rveRho");
+  const rveRhoDisplay   = document.getElementById("rveRhoDisplay");
+  const rveWeightingEl  = document.getElementById("rveWeighting");
+  const rveRhoRow       = document.getElementById("rveRhoRow");
+  const rveRhoHint      = document.getElementById("rveRhoHint");
+  const rveHierHint     = document.getElementById("rveHierHint");
+
   const syncRhoDisplay = () => {
     rveRhoDisplay.textContent = parseFloat(rveRhoSlider.value).toFixed(2);
   };
+  const syncWeighting = () => {
+    const isHier = rveWeightingEl?.value === "hier";
+    if (rveRhoRow)   rveRhoRow.style.display   = isHier ? "none" : "";
+    if (rveRhoHint)  rveRhoHint.style.display  = isHier ? "none" : "";
+    if (rveHierHint) rveHierHint.style.display = isHier ? ""     : "none";
+  };
+
   syncRhoDisplay();
+  syncWeighting();
   rveRhoSlider.addEventListener("input",  syncRhoDisplay);
   rveRhoSlider.addEventListener("change", markStale);
+  rveWeightingEl?.addEventListener("change", () => { syncWeighting(); markStale(); });
 }
 
 // ---------------- GOSH ----------------
@@ -1707,6 +1725,10 @@ function applySession(session) {
   if (s.mccMethod) {
     const el = document.getElementById("mccMethod");
     if (el && el.querySelector(`option[value="${s.mccMethod}"]`)) el.value = s.mccMethod;
+  }
+  if (s.rveMode === "hier") {
+    const el = document.getElementById("rveWeighting");
+    if (el) { el.value = "hier"; el.dispatchEvent(new Event("change")); }
   }
   if (isFinite(s.rveRho) && s.rveRho >= 0 && s.rveRho < 1) {
     const el = document.getElementById("rveRho");
@@ -2827,7 +2849,7 @@ function renderSensitivity(mu0, sigmaMu, sigmaTau, ciLevel) {
 // ── Helper: core meta-analysis ────────────────────────────────────────────────
 function _runCoreMeta(studies, opts) {
   const { method, ciMethod, alpha, type, useTF, tfEstimator, useTFAdjusted,
-          isMHorPeto, hasClusters, rveRho } = opts;
+          isMHorPeto, hasClusters, rveRho, rveMode } = opts;
 
   let tf = [], all = studies;
   if (useTF && !isMHorPeto) {
@@ -2853,7 +2875,7 @@ function _runCoreMeta(studies, opts) {
     : null;
 
   const rveResult = (hasClusters && !isMHorPeto)
-    ? rvePooled(studies, { rho: rveRho, alpha })
+    ? rvePooled(studies, { rho: rveRho, alpha, omega2: rveMode === "hier" ? "MoM" : 0 })
     : null;
 
   const threeLevelResult = (hasClusters && !isMHorPeto)
@@ -2994,12 +3016,16 @@ function _renderRveThreeLevel(ctx) {
           const rveHi   = profile.transform(rveResult.ci[1]);
           const reDisp  = profile.transform(m.RE);
           const diffDir = rveResult.est > m.RE ? "higher" : rveResult.est < m.RE ? "lower" : "equal";
+          const rveMode = ctx.opts.rveMode;
           const rveRho  = ctx.opts.rveRho;
+          const rveLine3 = rveMode === "hier"
+            ? `HIER MoM &nbsp;·&nbsp; ω²=${fmt(rveResult.omega2)} &nbsp;·&nbsp; τ²=${fmt(rveResult.tau2)} &nbsp;·&nbsp; m=${rveResult.kCluster} cluster${rveResult.kCluster === 1 ? "" : "s"} &nbsp;·&nbsp; k=${rveResult.k} studies`
+            : `ρ=${rveRho.toFixed(2)} &nbsp;·&nbsp; m=${rveResult.kCluster} cluster${rveResult.kCluster === 1 ? "" : "s"} &nbsp;·&nbsp; k=${rveResult.k} studies`;
           elRveSummary.innerHTML = `
             <div style="font-size:0.8125rem;line-height:1.9;margin-bottom:8px">
               ${hBtn("rve.model")}<b>RVE pooled estimate:</b> ${fmt(rveEst)}<br>
               CI [${fmt(rveLo)}, ${fmt(rveHi)}] | SE = ${fmt(rveResult.se)} | <em>t</em>(${rveResult.df}) = ${fmt(rveResult.t)} | <em>p</em> ${fmtPval(rveResult.p)}<br>
-              ρ=${rveRho.toFixed(2)} &nbsp;·&nbsp; m=${rveResult.kCluster} cluster${rveResult.kCluster === 1 ? "" : "s"} &nbsp;·&nbsp; k=${rveResult.k} studies<br>
+              ${rveLine3}<br>
               <span style="color:var(--fg-muted);font-size:0.93em">RE (cluster-robust): ${fmt(reDisp)} &nbsp;·&nbsp; RVE estimate is ${diffDir}.</span>
             </div>
           `;
@@ -3389,7 +3415,8 @@ function _renderForestAndBubbles(ctx) {
     harbord, peters, deeks, ruecker, hc, baujatResult,
     influence, subgroup, method, ciMethod,
     rveResult, threeLevelResult,
-    rveRho: parseFloat(document.getElementById("rveRho")?.value ?? 0.8),
+    rveRho:  parseFloat(document.getElementById("rveRho")?.value ?? 0.8),
+    rveMode: document.getElementById("rveWeighting")?.value ?? "corr",
     permResult: permState.lastResult ?? null,
     ciLevel:   document.getElementById("ciLevel")?.value   ?? "95",
     mccMethod: document.getElementById("mccMethod")?.value ?? "none",
@@ -3675,6 +3702,7 @@ async function runAnalysis() {
     const isMHorPeto    = method === "MH" || method === "Peto";
     const hasClusters   = studies.some(s => s.cluster);
     const rveRho        = parseFloat(document.getElementById("rveRho")?.value) || 0.8;
+    const rveMode       = document.getElementById("rveWeighting")?.value ?? "corr";
     const modSpec       = moderators.map(mod => ({ key: mod.name, type: mod.type, transform: mod.transform || "linear" }));
     const scaleModSpec  = scaleModerators.map(mod => ({ key: mod.name, type: mod.type, transform: mod.transform || "linear" }));
     const interactionSpec = interactions.map(ix => ({ name: ix.name, termA: ix.termA, termB: ix.termB }));
@@ -3698,7 +3726,7 @@ async function runAnalysis() {
 
     const opts = {
       method, ciMethod, alpha, type, useTF, tfEstimator, useTFAdjusted,
-      isMHorPeto, hasClusters, rveRho, modSpec, scaleModSpec, interactionSpec, cumulativeOrder,
+      isMHorPeto, hasClusters, rveRho, rveMode, modSpec, scaleModSpec, interactionSpec, cumulativeOrder,
       selModeVal, selPreset, selWeightFn, selSides, selCuts,
       bayesMu0, bayesSigmaMu, bayesSigmaTau,
     };

@@ -1347,20 +1347,22 @@ export const HELP = {
   "rve.model": {
     title: "RVE (Robust Variance Estimation)",
     body:  "The RVE pooled estimator (Hedges, Tipton & Johnson 2010) accounts for " +
-           "dependent effect sizes by constructing a working covariance matrix for " +
-           "each cluster: diagonal entries equal the sampling variance vⱼ; " +
-           "off-diagonal entries equal ρ·√(vⱼ·vₖ), where ρ is the assumed " +
-           "within-cluster correlation (default 0.80). " +
-           "Sherman-Morrison inversion gives the WLS point estimate β̂ without " +
-           "explicit matrix ops. " +
-           "The standard error is a sandwich (CR1) estimate that is valid regardless " +
-           "of whether the working covariance is correct: " +
-           "SE² = m/(m−1) · Σg²ᵢ / (ΣAᵢ)², where gᵢ are per-cluster score contributions. " +
-           "Degrees of freedom: df = m − p (m = clusters, p = predictors). " +
-           "Unlike the cluster-robust SE in the summary line above (which post-hoc " +
-           "adjusts a RE estimate), RVE uses a separate WLS estimator whose weights " +
-           "depend on ρ. " +
-           "Adjust ρ in the RVE settings row; re-run fires automatically.",
+           "dependent effect sizes. Two weighting modes are available:\n\n" +
+           "CORR (default): constructs a working covariance matrix for each cluster — " +
+           "diagonal entries equal the sampling variance vⱼ; off-diagonal entries equal " +
+           "ρ·√(vⱼ·vₖ), where ρ is the assumed within-cluster correlation (default 0.80). " +
+           "Sherman-Morrison inversion gives the WLS estimate without explicit matrix ops. " +
+           "The sandwich (CR1) SE is valid regardless of whether ρ is correct: " +
+           "SE² = m/(m−1) · Σg²ᵢ / (ΣAᵢ)².\n\n" +
+           "HIER MoM (robumeta model): estimates ω² (between-cluster) and τ² (within-cluster) " +
+           "via method-of-moments in two steps — (1) initial 1/vⱼ WLS gives residuals used to " +
+           "compute ω² and τ²; (2) updated weights 1/(vⱼ + τ² + ω²) give the final estimate. " +
+           "ρ is not used. Sandwich SE scale: m/(m−p). " +
+           "Equivalent to robu(..., modelweights='HIER', small=FALSE) in R.\n\n" +
+           "Both modes: df = m − p (m = clusters, p = predictors). " +
+           "Unlike the cluster-robust SE in the summary line above (which post-hoc adjusts a RE " +
+           "estimate), RVE uses a separate WLS estimator. " +
+           "Choose mode in the RVE settings row; re-run fires automatically.",
   },
 
   // Three-level meta-analysis                                           //

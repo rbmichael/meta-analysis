@@ -82,6 +82,7 @@ export function gatherSessionState(mods, scaleMods, ixs, robState) {
     // Display / reporting settings
     mccMethod:       document.getElementById("mccMethod")?.value    ?? "none",
     rveRho:          parseFloat(document.getElementById("rveRho")?.value) || 0.8,
+    rveMode:         document.getElementById("rveWeighting")?.value ?? "corr",
   };
 
   const savedModerators = mods.map(m => ({ name: m.name, type: m.type, transform: m.transform || "linear" }));
