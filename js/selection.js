@@ -730,6 +730,14 @@ function betaNormConst(mu, tau2, vi, a, b, sides, pval_min = 1e-5) {
   return analytical + numerical;
 }
 
+// Upper bound on log-scale shape parameters for continuous selection models.
+// Matches metafor selmodel() which constrains δ ≤ exp(100) ≈ 2.7×10^43.
+// Beyond this the weight function collapses to a step function, the Hessian
+// becomes ill-conditioned, and the asymptotic theory for the LRT breaks down.
+// The soft-wall is applied inside makeWFn and extractShapeParams: any logδ > 100
+// evaluates identically to logδ = 100, so BFGS sees zero gradient there and stops.
+const SEL_MAX_LOG_SHAPE = 100;
+
 // =============================================================================
 // _fitContinuousSelModel — shared BFGS/Hessian/LRT engine for all four
 // continuous selection models (halfnorm, power, negexp, beta).
@@ -885,7 +893,7 @@ export function halfNormalSelModel(studies, opts = {}) {
     weightFn: "halfnorm",
     pvalMin,
     makeWFn: ([logDelta]) => {
-      const delta = Math.exp(logDelta);
+      const delta = Math.exp(Math.min(logDelta, SEL_MAX_LOG_SHAPE));
       const w = p => {
         const pc = Math.max(pvalMin, Math.min(1 - pvalMin, p));
         return normalCDF(normalQuantile(1 - pc) * delta);
@@ -895,7 +903,7 @@ export function halfNormalSelModel(studies, opts = {}) {
     initGrid:           [[Math.log(1e-3)], [Math.log(0.5)], [Math.log(1.0)], [Math.log(2.0)]],
     lrtDf:              1,
     extractShapeParams: ([logDelta], getSE) => {
-      const delta = Math.exp(logDelta);
+      const delta = Math.exp(Math.min(logDelta, SEL_MAX_LOG_SHAPE));
       const se_logDelta = getSE(2);
       return { delta, se_delta: isFinite(se_logDelta) ? delta * se_logDelta : NaN };
     },
@@ -938,7 +946,7 @@ export function powerSelModel(studies, opts = {}) {
     weightFn: "power",
     pvalMin,
     makeWFn: ([logDelta]) => {
-      const delta = Math.exp(logDelta);
+      const delta = Math.exp(Math.min(logDelta, SEL_MAX_LOG_SHAPE));
       const w = p => {
         const pc = Math.max(pvalMin, Math.min(1 - pvalMin, p));
         return Math.pow(1 - pc, delta);
@@ -948,7 +956,7 @@ export function powerSelModel(studies, opts = {}) {
     initGrid:           [[Math.log(1e-3)], [Math.log(0.5)], [Math.log(1.0)], [Math.log(2.0)]],
     lrtDf:              1,
     extractShapeParams: ([logDelta], getSE) => {
-      const delta = Math.exp(logDelta);
+      const delta = Math.exp(Math.min(logDelta, SEL_MAX_LOG_SHAPE));
       const se_logDelta = getSE(2);
       return { delta, se_delta: isFinite(se_logDelta) ? delta * se_logDelta : NaN };
     },
@@ -991,7 +999,7 @@ export function negexpSelModel(studies, opts = {}) {
     weightFn: "negexp",
     pvalMin,
     makeWFn: ([logDelta]) => {
-      const delta = Math.exp(logDelta);
+      const delta = Math.exp(Math.min(logDelta, SEL_MAX_LOG_SHAPE));
       const w = p => {
         const pc = Math.max(pvalMin, Math.min(1 - pvalMin, p));
         return Math.exp(-delta * pc);
@@ -1001,7 +1009,7 @@ export function negexpSelModel(studies, opts = {}) {
     initGrid:           [[Math.log(1e-3)], [Math.log(0.5)], [Math.log(1.0)], [Math.log(2.0)]],
     lrtDf:              1,
     extractShapeParams: ([logDelta], getSE) => {
-      const delta = Math.exp(logDelta);
+      const delta = Math.exp(Math.min(logDelta, SEL_MAX_LOG_SHAPE));
       const se_logDelta = getSE(2);
       return { delta, se_delta: isFinite(se_logDelta) ? delta * se_logDelta : NaN };
     },
@@ -1049,8 +1057,8 @@ export function betaSelModel(studies, opts = {}) {
     weightFn: "beta",
     pvalMin,
     makeWFn: ([logA, logB]) => {
-      const a = Math.exp(logA);
-      const b = Math.exp(logB);
+      const a = Math.exp(Math.min(logA, SEL_MAX_LOG_SHAPE));
+      const b = Math.exp(Math.min(logB, SEL_MAX_LOG_SHAPE));
       const w = p => {
         const pc = Math.max(pvalMin, Math.min(1 - pvalMin, p));
         return Math.pow(pc, a - 1) * Math.pow(1 - pc, b - 1);
@@ -1070,8 +1078,8 @@ export function betaSelModel(studies, opts = {}) {
     ],
     lrtDf: 2,
     extractShapeParams: ([logA, logB], getSE) => {
-      const a = Math.exp(logA);
-      const b = Math.exp(logB);
+      const a = Math.exp(Math.min(logA, SEL_MAX_LOG_SHAPE));
+      const b = Math.exp(Math.min(logB, SEL_MAX_LOG_SHAPE));
       const se_logA = getSE(2);
       const se_logB = getSE(3);
       return {
