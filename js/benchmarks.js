@@ -3696,6 +3696,80 @@ export const RVE_BENCHMARKS = [
 ];
 
 // =============================================================================
+// RVE_MOM_BENCHMARKS — rvePooled() with omega2:"MoM" (robumeta HIER two-step)
+//
+// These entries test the omega2:"MoM" branch of rvePooled(), which implements
+// the robumeta HIER model (Hedges, Tipton & Johnson 2010).  The algorithm:
+//   1. Initial 1/vi WLS → β₀, residuals
+//   2. Method-of-moments → ω² (between-cluster) + τ² (within-cluster)
+//   3. Updated weights 1/(vi+τ²+ω²) → second WLS → β̂ᵣ
+//   4. Sandwich SE with scale m/(m-p); df = m-p
+// Cross-validated against robu(..., modelweights="HIER", small=FALSE) in
+// generate.R blocks RVE-MoM-1 and RVE-MoM-2.
+// rho is not used in the MoM algorithm; the field is kept for API compatibility.
+// =============================================================================
+export const RVE_MOM_BENCHMARKS = [
+  {
+    // RVE-MoM-1. Same data as RVE-1; omega2>0 so MoM materially changes result.
+    // robu HIER small=FALSE: est=0.4200251, se=0.1159402, t=3.6227723, df=2
+    // omega2=0.0223540, tau2=0.0094283
+    name: "3-cluster 6-study intercept-only MoM (rho=0.80)",
+    rBlock: "RVE-MoM-1",
+    rho: 0.80,
+    moderators: [],
+    data: [
+      { yi:  0.10, vi: 0.04, cluster: "1" },
+      { yi:  0.30, vi: 0.05, cluster: "1" },
+      { yi:  0.50, vi: 0.03, cluster: "2" },
+      { yi:  0.70, vi: 0.06, cluster: "2" },
+      { yi:  0.20, vi: 0.04, cluster: "3" },
+      { yi:  0.80, vi: 0.05, cluster: "3" }
+    ],
+    expected: {
+      est:      0.4200251,
+      se:       0.1159402,
+      t:        3.6227723,
+      p:        0.0684615,
+      df:       2,
+      kCluster: 3,
+      k:        6,
+      omega2:   0.0223540,
+      tau2:     0.0094283
+    }
+  },
+  {
+    // RVE-MoM-2. Same data as RVE-2; omega2>0.
+    // robu HIER small=FALSE: est=0.3736972, se=0.1169068, t=3.1965403, df=3
+    // omega2=0.0323341, tau2=0.0257758
+    name: "4-cluster 8-study heterogeneous sizes MoM (rho=0.80)",
+    rBlock: "RVE-MoM-2",
+    rho: 0.80,
+    moderators: [],
+    data: [
+      { yi:  0.20, vi: 0.020, cluster: "1" },
+      { yi:  0.40, vi: 0.030, cluster: "1" },
+      { yi:  0.60, vi: 0.025, cluster: "1" },
+      { yi: -0.10, vi: 0.040, cluster: "2" },
+      { yi:  0.30, vi: 0.035, cluster: "2" },
+      { yi:  0.80, vi: 0.020, cluster: "3" },
+      { yi:  0.50, vi: 0.030, cluster: "3" },
+      { yi:  0.15, vi: 0.050, cluster: "4" }
+    ],
+    expected: {
+      est:      0.3736972,
+      se:       0.1169068,
+      t:        3.1965403,
+      p:        0.0494626,
+      df:       3,
+      kCluster: 4,
+      k:        8,
+      omega2:   0.0323341,
+      tau2:     0.0257758
+    }
+  }
+];
+
+// =============================================================================
 // THREE_LEVEL_BENCHMARKS — meta3level() benchmarks
 //
 // Each entry drives one meta3level() call (method: "REML" unless noted).

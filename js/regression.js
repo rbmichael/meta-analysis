@@ -1107,6 +1107,182 @@ export function lsModel(studies, locMods = [], scaleMods = [], opts = {}) {
   };
 }
 
+// ---- Internal: robumeta HIER two-step MoM estimator ----
+//
+// Implements robu(..., modelweights="HIER", small=FALSE) from the robumeta R
+// package (Hedges, Tipton & Johnson 2010, §5).  Called by rvePooled() when
+// opts.omega2 === "MoM".  Does NOT use ρ in the WLS step.
+//
+// Step 1: initial 1/vᵢⱼ WLS → β₀, residuals
+// Step 2: MoM via robu HIER formula → ω² (between-cluster), τ² (within-cluster)
+// Step 3: updated weights 1/(vᵢⱼ+τ²+ω²) → second WLS → β̂ᵣ
+// Step 4: sandwich SE  V̂ = m/(m−p) · Qᵣ · Meat · Qᵣ, df = m−p
+//
+// Returns same shape as rvePooled() plus { omega2, tau2 }.
+function _rveHIERMoM(clusterMap, m, k, p, moderators, xVec, alpha) {
+  // ── Step 1: initial WLS with Wᵢ = diag(1/vᵢⱼ) ──
+  const B0    = Array.from({ length: p }, () => new Array(p).fill(0));
+  const bVec0 = new Array(p).fill(0);
+  const clData = [];
+
+  for (const clStudies of clusterMap.values()) {
+    const ki = clStudies.length;
+    const SX = new Array(p).fill(0);    // Σⱼ (1/vⱼ) xⱼ  (weighted)
+    const sumX = new Array(p).fill(0);  // Σⱼ xⱼ          (unweighted)
+    let SWi = 0, SWWi = 0, SVi = 0;
+
+    for (const s of clStudies) {
+      const wj = 1 / s.vi;
+      const xj = xVec(s);
+      SWi += wj; SWWi += wj * wj; SVi += s.vi;
+      for (let r = 0; r < p; r++) {
+        SX[r]    += wj * xj[r];
+        sumX[r]  += xj[r];
+        bVec0[r] += wj * xj[r] * s.yi;
+        for (let c = 0; c < p; c++) B0[r][c] += wj * xj[r] * xj[c];
+      }
+    }
+    clData.push({ ki, SX, sumX, SWi, SWWi, SVi, clStudies });
+  }
+
+  const Q0 = matInverse(B0);
+  if (Q0 === null) return { error: "Design matrix is singular (collinear moderators?)." };
+  const beta0 = Q0.map(row => row.reduce((acc, v, j) => acc + v * bVec0[j], 0));
+
+  // ── Precompute Q0·SXᵢ and Q0·sumXᵢ per cluster ──
+  const dot = (a, b) => a.reduce((s, v, i) => s + v * b[i], 0);
+  const mvMul = (M, v) => M.map(row => dot(row, v));
+
+  for (const ci of clData) {
+    ci.qSX   = mvMul(Q0, ci.SX);
+    ci.qsumX = mvMul(Q0, ci.sumX);
+  }
+
+  // G = Q0 · (Σᵢ sumXᵢ·sumXᵢ') · Q0 = Σᵢ qsumXᵢ·qsumXᵢ'  (p×p)
+  const G = Array.from({ length: p }, (_, r) =>
+    new Array(p).fill(0).map((_, c) =>
+      clData.reduce((acc, ci) => acc + ci.qsumX[r] * ci.qsumX[c], 0)
+    )
+  );
+
+  // ── Step 2: residuals, Qe, Qa ──
+  let Qe = 0, Qa = 0;
+  for (const ci of clData) {
+    let sumE = 0;
+    for (const s of ci.clStudies) {
+      const xj = xVec(s);
+      const ej = s.yi - dot(xj, beta0);
+      Qe += ej * ej / s.vi;
+      sumE += ej;
+    }
+    Qa += sumE * sumE;
+  }
+
+  // ── Step 3: trace terms for MoM formula (robu HIER, eq. A1–B2) ──
+  let sumKsq = 0, sumV = 0, sumW = 0;
+  let trQJX = 0, trQWJWX = 0, trQWJX = 0, trQWJJX = 0;
+  let trQJX_QWJWX = 0, trQWWX = 0, trQJX_QWWX = 0;
+
+  for (const ci of clData) {
+    sumKsq += ci.ki * ci.ki;
+    sumV   += ci.SVi;
+    sumW   += ci.SWi;
+    trQJX    += dot(ci.sumX, ci.qsumX);          // sumXᵢ'Q₀sumXᵢ
+    trQWJWX  += dot(ci.SX,   ci.qSX);            // SXᵢ'Q₀SXᵢ
+    trQWJX   += dot(ci.sumX, ci.qSX);            // sumXᵢ'Q₀SXᵢ
+    trQWJJX  += ci.ki * dot(ci.sumX, ci.qSX);    // kᵢ·sumXᵢ'Q₀SXᵢ
+    // SXᵢ'·G·SXᵢ
+    let sxGsx = 0;
+    for (let r = 0; r < p; r++) for (let c = 0; c < p; c++) sxGsx += ci.SX[r] * G[r][c] * ci.SX[c];
+    trQJX_QWJWX += sxGsx;
+  }
+
+  // Per-study terms for trQWWX and trQJX_QWWX
+  for (const ci of clData) {
+    for (const s of ci.clStudies) {
+      const wj2 = 1 / (s.vi * s.vi);
+      const xj  = xVec(s);
+      const qxj = mvMul(Q0, xj);
+      const xqx = dot(xj, qxj);
+      let xGx = 0;
+      for (let r = 0; r < p; r++) for (let c = 0; c < p; c++) xGx += xj[r] * G[r][c] * xj[c];
+      trQWWX    += wj2 * xqx;
+      trQJX_QWWX += wj2 * xGx;
+    }
+  }
+
+  // ── MoM estimates ──
+  const C2 = k - p;
+  const A1 = sumKsq - 2 * trQWJJX + trQJX_QWJWX;
+  const B1 = k      - 2 * trQWJX  + trQJX_QWWX;
+  const C1 = sumV   - trQJX;
+  const A2 = sumW   - trQWJWX;
+  const B2 = sumW   - trQWWX;
+
+  const momDen = B1 * A2 - B2 * A1;
+  let omega2 = 0, tau2 = 0;
+  if (Math.abs(momDen) > 1e-10) {
+    omega2 = Math.max(0, ((Qa - C1) * A2 - (Qe - C2) * A1) / momDen);
+    tau2   = Math.max(0, (Qe - C2) / A2 - omega2 * (B2 / A2));
+  }
+
+  const theta = omega2 + tau2;
+
+  // ── Step 4: second WLS with weights 1/(vᵢⱼ + θ) ──
+  const Br    = Array.from({ length: p }, () => new Array(p).fill(0));
+  const bVecr = new Array(p).fill(0);
+
+  for (const ci of clData) {
+    for (const s of ci.clStudies) {
+      const wr = 1 / (s.vi + theta);
+      const xj = xVec(s);
+      for (let r = 0; r < p; r++) {
+        bVecr[r] += wr * xj[r] * s.yi;
+        for (let c = 0; c < p; c++) Br[r][c] += wr * xj[r] * xj[c];
+      }
+    }
+  }
+
+  const Qr = matInverse(Br);
+  if (Qr === null) return { error: "Singular matrix in second WLS pass." };
+  const betaR = Qr.map(row => row.reduce((acc, v, j) => acc + v * bVecr[j], 0));
+
+  // ── Step 5: sandwich SE with scale m/(m−p) [matches robu small=FALSE] ──
+  const Meat = Array.from({ length: p }, () => new Array(p).fill(0));
+  for (const ci of clData) {
+    const gi = new Array(p).fill(0);
+    for (const s of ci.clStudies) {
+      const wr  = 1 / (s.vi + theta);
+      const xj  = xVec(s);
+      const erj = s.yi - dot(xj, betaR);
+      for (let r = 0; r < p; r++) gi[r] += wr * xj[r] * erj;
+    }
+    for (let r = 0; r < p; r++) for (let c = 0; c < p; c++) Meat[r][c] += gi[r] * gi[c];
+  }
+
+  const scale = m / (m - p);
+  const QrMeat = Qr.map(row =>
+    new Array(p).fill(0).map((_, c) => row.reduce((acc, v, j) => acc + v * Meat[j][c], 0))
+  );
+  const Vhat = QrMeat.map(row =>
+    new Array(p).fill(0).map((_, c) => row.reduce((acc, v, j) => acc + v * Qr[j][c], 0))
+  );
+
+  const df   = m - p;
+  const crit = tCritical(df, alpha);
+  const coefNames = ["intercept", ...moderators];
+  const coefs = coefNames.map((name, i) => {
+    const est_i = betaR[i];
+    const se_i  = Math.sqrt(Math.max(0, scale * Vhat[i][i]));
+    const t_i   = se_i > 0 ? est_i / se_i : NaN;
+    const p_i   = isFinite(t_i) ? 2 * (1 - tCDF(Math.abs(t_i), df)) : NaN;
+    return { name, est: est_i, se: se_i, ci: [est_i - crit * se_i, est_i + crit * se_i], t: t_i, p: p_i };
+  });
+
+  const { est, se, ci, t, p: pval } = coefs[0];
+  return { est, se, ci, t, p: pval, df, coefs, kCluster: m, k, omega2, tau2 };
+}
+
 // ================= ROBUST VARIANCE ESTIMATION (RVE) =================
 //
 // Model-based correction for dependent effect sizes.
@@ -1133,14 +1309,19 @@ export function lsModel(studies, locMods = [], scaleMods = [], opts = {}) {
 // Parameters
 // ----------
 //   studies     — [{yi, vi, cluster?, <mod>?}] — cluster absent/blank → singleton
-//   opts        — { rho: 0.80, alpha: 0.05, moderators: [] }
+//   opts        — { rho: 0.80, alpha: 0.05, moderators: [], omega2: 0 }
 //     moderators — array of study property names to use as covariates
 //                  (intercept is always included; studies missing a moderator
 //                   value are silently excluded)
+//     omega2     — 0 (default, ρ-weighted Sherman-Morrison CR1) or "MoM"
+//                  (robumeta HIER two-step: estimates between-cluster ω² and
+//                   within-cluster τ² via method-of-moments, then re-weights
+//                   to 1/(vⱼ+τ²+ω²); ρ is not used; sandwich scale m/(m−p)).
 //
 // Returns
 // -------
 //   { est, se, ci: [lo, hi], df, t, p, coefs, rho, kCluster, k }
+//   omega2:"MoM" also adds { omega2, tau2 } to the result.
 //   coefs: [{ name, est, se, ci, t, p }] — one entry per coefficient
 //          (coefs[0] is always the intercept / pooled effect)
 //   or { error: string } on failure
@@ -1148,6 +1329,7 @@ export function lsModel(studies, locMods = [], scaleMods = [], opts = {}) {
 export function rvePooled(studies, opts = {}) {
   const rho        = opts.rho        ?? 0.80;
   const alpha      = opts.alpha      ?? 0.05;
+  const omega2opt  = opts.omega2     ?? 0;    // 0 | "MoM"
   const moderators = opts.moderators ?? [];   // array of covariate names
 
   if (rho <= -1 || rho >= 1) return { error: "ρ must be in (−1, 1)." };
@@ -1174,6 +1356,8 @@ export function rvePooled(studies, opts = {}) {
 
   // Design vector for a study: [1, mod1, mod2, ...]
   const xVec = s => [1, ...moderators.map(mod => s[mod])];
+
+  if (omega2opt === "MoM") return _rveHIERMoM(clusterMap, m, k, p, moderators, xVec, alpha);
 
   // --- First pass: accumulate B = ΣAᵢ (p×p) and b = Σbᵢ (p) ---
   const B = Array.from({ length: p }, () => new Array(p).fill(0));

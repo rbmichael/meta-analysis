@@ -1,6 +1,6 @@
 import { round, transformEffect, chiSquareCDF, chiSquareQuantile, parseCounts, bivariateNormalCDF, normalQuantile, tCritical, fCDF, normalCDF, tCDF } from "./utils.js";
 import { validateStudy } from "./profiles.js";
-import { BENCHMARKS, PUB_BIAS_BENCHMARKS, INFLUENCE_BENCHMARKS, META_REGRESSION_BENCHMARKS, VH_BENCHMARKS, MH_BENCHMARKS, CLUSTER_BENCHMARKS, RVE_BENCHMARKS, THREE_LEVEL_BENCHMARKS, LS_BENCHMARKS, CONTRAST_BENCHMARKS, INTERACTION_BENCHMARKS, HALFNORM_BENCHMARKS, POWER_BENCHMARKS, NEGEXP_BENCHMARKS, BETA_BENCHMARKS, PERM_BENCHMARKS } from "./benchmarks.js";
+import { BENCHMARKS, PUB_BIAS_BENCHMARKS, INFLUENCE_BENCHMARKS, META_REGRESSION_BENCHMARKS, VH_BENCHMARKS, MH_BENCHMARKS, CLUSTER_BENCHMARKS, RVE_BENCHMARKS, RVE_MOM_BENCHMARKS, THREE_LEVEL_BENCHMARKS, LS_BENCHMARKS, CONTRAST_BENCHMARKS, INTERACTION_BENCHMARKS, HALFNORM_BENCHMARKS, POWER_BENCHMARKS, NEGEXP_BENCHMARKS, BETA_BENCHMARKS, PERM_BENCHMARKS } from "./benchmarks.js";
 import { permTestSync, permPval } from "./perm.js";
 import { compute, meta, metaMH, metaPeto, robustMeta, sandwichVar, robustWlsResult, metaRegression, testContrast, tau2_HS, tau2_HE, tau2_ML, tau2_SJ, beggTest, eggerTest, fatPetTest, petPeeseTest, failSafeN, tesTest, heterogeneityCIs, cumulativeMeta, influenceDiagnostics, harbordTest, petersTest, deeksTest, rueckerTest, leaveOneOut, baujat, blupMeta, pCurve, pUniform, estimatorComparison, subgroupAnalysis, logLik, bfgs, selIntervalProbs, selIntervalIdx, selectionLogLik, SEL_CUTS_ONE_SIDED, SEL_CUTS_TWO_SIDED, veveaHedges, SELECTION_PRESETS, halfNormalSelModel, powerSelModel, negexpSelModel, betaSelModel, profileLikTau2, profileLikCI, bayesMeta, priorSensitivity, rvePooled, meta3level, lsModel, adjustPvals, henmiCopas, waapWls, clES, vcalc, mvMeta, validStudies } from "./analysis.js";
 import { trimFill } from "./trimfill.js";
@@ -6074,6 +6074,40 @@ export function runTests() {
     });
 
     console.log(rveBmPass ? "\n✅ ALL RVE BENCHMARK TESTS PASSED" : "\n❌ SOME RVE BENCHMARK TESTS FAILED");
+  }
+
+  // ===== RVE MoM (omega2:"MoM") BENCHMARK TESTS =====
+  // Cross-validated against robu(..., modelweights="HIER", small=FALSE) in generate.R
+  {
+    console.log("\n===== RVE MoM BENCHMARK TESTS =====\n");
+    let rveMomPass = true;
+    const bchk = (label, got, exp, tol = 1e-5) => {
+      const ok = Math.abs(got - exp) <= tol;
+      if (!ok) { console.error(`  FAIL ${label}: got ${got}, expected ${exp} (tol ${tol})`); rveMomPass = false; }
+      else console.log(`  ok  ${label}`);
+    };
+
+    RVE_MOM_BENCHMARKS.forEach(bm => {
+      console.log(`--- Benchmark: ${bm.name} ---`);
+      const r = rvePooled(bm.data, { rho: bm.rho, moderators: bm.moderators, omega2: "MoM" });
+
+      if (r.error) {
+        console.error(`  FAIL: unexpected error — ${r.error}`);
+        rveMomPass = false;
+        return;
+      }
+
+      bchk("est",    r.est,    bm.expected.est,    1e-5);
+      bchk("se",     r.se,     bm.expected.se,     1e-5);
+      bchk("t",      r.t,      bm.expected.t,      1e-5);
+      bchk("p",      r.p,      bm.expected.p,      1e-5);
+      bchk("omega2", r.omega2, bm.expected.omega2, 1e-5);
+      bchk("tau2",   r.tau2,   bm.expected.tau2,   1e-5);
+      if (r.df !== bm.expected.df) { console.error(`  FAIL df: got ${r.df}, expected ${bm.expected.df}`); rveMomPass = false; }
+      else console.log(`  ok  df`);
+    });
+
+    console.log(rveMomPass ? "\n✅ ALL RVE MoM BENCHMARK TESTS PASSED" : "\n❌ SOME RVE MoM BENCHMARK TESTS FAILED");
   }
 
   // ===== RVE (rvePooled) UNIT TESTS =====
