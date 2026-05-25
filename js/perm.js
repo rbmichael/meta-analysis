@@ -141,7 +141,7 @@ export function permTestSync(params) {
     yi, vi, Xf: X,
     QM_obs,
     nPerm  = 999,
-    seed   = 12345,
+    seed   = 12345, // fixed seed — reproducible results; not exposed in UI
     method = 'REML',
     modTests = [],
   } = params;

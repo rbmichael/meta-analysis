@@ -1231,7 +1231,9 @@ export const HELP = {
            "(1 + #{QM_perm ≥ QM_obs}) / (nPerm + 1). " +
            "τ² is fixed at the observed value (no re-estimation per permutation), " +
            "matching metafor's permutest() default. " +
-           "Useful when k is small (< 20) and parametric χ² or F approximations are unreliable.",
+           "Useful when k is small (< 20) and parametric χ² or F approximations are unreliable. " +
+           "A fixed random seed (12345) is used so results are fully reproducible across runs " +
+           "for the same data and nPerm setting.",
   },
 
   "perm.iter": {
@@ -1508,7 +1510,9 @@ export const HELP = {
            "Robust conclusions are stable across the grid. " +
            "With diffuse priors (σ_μ = 2, σ_τ = 1) the posterior mean should approach the frequentist RE estimate. " +
            "The current prior setting (from the Bayesian priors inputs above) is highlighted in bold. " +
-           "Runs automatically alongside the main Bayesian analysis.",
+           "Runs automatically alongside the main Bayesian analysis. " +
+           "The grid values {0.5, 1, 2} × {0.25, 0.5, 1} are deliberately fixed to span a wide range " +
+           "of prior informativeness; they cannot be changed in the UI.",
   },
 
   "bayes.model": {

@@ -435,8 +435,8 @@ export function bayesMeta(studies, opts = {}) {
 export function priorSensitivity(studies, opts = {}) {
   const {
     mu0          = 0,
-    sigmaMuGrid  = [0.5, 1, 2],
-    sigmaTauGrid = [0.25, 0.5, 1],
+    sigmaMuGrid  = [0.5, 1, 2],    // deliberate fixed grid — not exposed in UI
+    sigmaTauGrid = [0.25, 0.5, 1], // deliberate fixed grid — not exposed in UI
     alpha        = 0.05,
   } = opts;
   const rows = [];
