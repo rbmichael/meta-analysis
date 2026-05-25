@@ -2399,7 +2399,7 @@ export const PUB_BIAS_BENCHMARKS = [
       hc:       { beta: -0.4361, tau2: 0.3663, t0: 0.3252, ciLb: -1.1910, ciUb: 0.3187 },
       // waapWls(): verified via generate.R block WAAP-1
       // kAdequate=4 (Hart, Stein, TPT Madras, Comstock 1974); power≥80% vs wlsEst=−0.4361
-      waap:     { wlsEstimate: -0.4361, kAdequate: 4, estimate: -0.4015, se: 0.0457, z: -8.79, p: 0, ci: [-0.4910, -0.3119], fallback: false }
+      waap:     { wlsEstimate: -0.4361, kAdequate: 4, estimate: -0.4015, se: 0.0457, z: -8.7964, p: 0, ci: [-0.4910, -0.3119], fallback: false }
     },
     citation: "Colditz et al. (1994) JAMA 271:698–702. dat.bcg in metafor. Expected values derived analytically (_derive_pubias.py)."
   },
@@ -3101,14 +3101,17 @@ export const VH_BENCHMARKS = [
   // VH-C: Synthetic (positive effects), one-sided, 4 steps
   // 20 synthetic studies designed so all 4 one-sided intervals are
   // populated: [7,2,7,4] studies per interval.
-  // Verified against our JS implementation (unconstrained BFGS).
-  // Note: metafor selmodel() constrains delta ≤ 100, capping omega[3]
-  // at exp(100) ≈ 2.7e43; our BFGS is unconstrained and finds the true
-  // optimum at omega[3] ≈ 149.8, yielding a higher log-likelihood.
+  // jsOnly: true — expected values are JS-verified, not R-verified.
+  // R block "47" exists but gives a different solution (mu=0.9194) because
+  // metafor parameterises VH omega weights in log-space and constrains each
+  // log-omega ≤ 100. JS BFGS is unconstrained and reaches the true optimum
+  // at omega[3] ≈ 149.8 (mu=0.9366), yielding a higher log-likelihood.
+  // Excluded from diff_benchmarks.mjs R cross-check; rBlock kept for traceability.
   // ----------------------------------------------------------------
   {
     name: "Synthetic (positive effects) – one-sided, 4 steps [0.025,0.10,0.50,1.0]",
     rBlock: "47",
+    jsOnly: true,
     cuts: [0.025, 0.10, 0.50, 1.0],
     sides: 1,
     data: [
