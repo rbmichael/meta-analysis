@@ -159,10 +159,34 @@ function _mvCancelPendingDelete() {
 
 export function rebuildMVTableHeaders() {
   const tr = document.getElementById("mvTableHead");
-  tr.innerHTML =
-    "<th>Study ID</th><th>Outcome ID</th><th>Effect (y<sub>i</sub>)</th><th>Variance (v<sub>i</sub>)</th>" +
-    mvModerators.map((m, i) => `<th>${escapeHTML(m)} <button class="remove-mod-btn" data-mod-idx="${i}" title="Remove moderator">×</button></th>`).join("") +
-    '<th class="col-actions">Actions</th>';
+  tr.innerHTML = "";
+
+  const fixedCols = [
+    ["Study ID",                    "Study label or identifier"],
+    ["Outcome ID",                  "Outcome label — groups rows within a study"],
+    ["Effect (y<sub>i</sub>)",      "Observed effect size for this study–outcome"],
+    ["Variance (v<sub>i</sub>)",    "Variance of the effect size estimate"],
+  ];
+  fixedCols.forEach(([label, tip]) => {
+    const th = document.createElement("th");
+    th.innerHTML = label;
+    th.title = tip;
+    tr.appendChild(th);
+  });
+
+  mvModerators.forEach((m, i) => {
+    const th = document.createElement("th");
+    th.title = `Moderator — ${m}`;
+    th.innerHTML = `${escapeHTML(m)} <button class="remove-mod-btn" data-mod-idx="${i}" title="Remove moderator">×</button>`;
+    tr.appendChild(th);
+  });
+
+  const thActions = document.createElement("th");
+  thActions.className = "col-actions";
+  thActions.textContent = "Actions";
+  thActions.title = "Row controls: clear or delete the study";
+  tr.appendChild(thActions);
+
   tr.querySelectorAll("button[data-mod-idx]").forEach(btn => {
     btn.addEventListener("click", () => _mvRemoveMod(Number(btn.dataset.modIdx)));
   });

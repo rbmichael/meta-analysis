@@ -88,6 +88,7 @@ export const moderators = [];
 export function makeModTh(name) {
   const th = document.createElement("th");
   th.dataset.mod = name;
+  th.title = `Moderator — ${name}`;
   th.innerHTML = `${escapeHTML(name)} <button class="remove-mod-btn" data-mod="${escapeHTML(name)}" title="Remove moderator">×</button>`;
   th.querySelector(".remove-mod-btn").addEventListener("click", () => removeModerator(name));
   return th;
@@ -219,6 +220,7 @@ export function updateTableHeaders() {
   // Study column
   const thStudy = document.createElement("th");
   thStudy.textContent = "Study";
+  thStudy.title = "Study label or identifier";
   headerRow.appendChild(thStudy);
 
   // Effect columns
@@ -231,11 +233,13 @@ export function updateTableHeaders() {
 
   // Group column
   const thGroup = document.createElement("th");
+  thGroup.title = "Optional subgroup label — used for subgroup analysis";
   thGroup.innerHTML = 'Group <button class="help-btn" data-help="input.group" aria-label="Help: Group" title="Help">?</button>';
   headerRow.appendChild(thGroup);
 
   // Cluster column — inline help button (avoids importing hBtn from ui.js)
   const thCluster = document.createElement("th");
+  thCluster.title = "Optional cluster ID — used for cluster-robust or three-level analysis";
   thCluster.innerHTML = 'Cluster <button class="help-btn" data-help="cluster.id" aria-label="Help: Cluster ID" title="Help">?</button>';
   headerRow.appendChild(thCluster);
 
@@ -245,6 +249,7 @@ export function updateTableHeaders() {
   // Actions column
   const thActions = document.createElement("th");
   thActions.textContent = "Actions";
+  thActions.title = "Row controls: clear or delete the study";
   headerRow.appendChild(thActions);
 }
 

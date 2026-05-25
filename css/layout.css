@@ -567,8 +567,27 @@
   text-overflow: ellipsis;
 }
 
-#appHeader > .theme-toggle-btn {
-  justify-self: end;
+#appHeaderActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.header-kbd-btn {
+  font-size: 1.1rem;
+  width: 2rem;
+  height: 2rem;
+  margin: 0;
+  background: transparent;
+  color: var(--fg-muted);
+  border-color: var(--border);
+}
+
+.header-kbd-btn:hover {
+  background: var(--bg-surface);
+  color: var(--fg);
+  border-color: var(--border-hover);
 }
 
 /* Tabs centred in the middle column */
@@ -617,8 +636,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
+  width: 2rem;
+  height: 2rem;
   padding: 0;
   margin: 0;
   font-size: var(--font-size-lg);

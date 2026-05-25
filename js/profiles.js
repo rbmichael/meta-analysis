@@ -185,7 +185,7 @@ const _profileSpecs = {
 
   // ------------------------------------------------------------------ //
   "MD": {
-    label:  "Mean Difference",
+    label:  "Mean Difference (MD)",
     group:  "Continuous (two groups)",
     inputs: ["m1", "sd1", "n1", "m2", "sd2", "n2"],
     compute(s) {
@@ -207,7 +207,7 @@ const _profileSpecs = {
 
   // ------------------------------------------------------------------ //
   "SMD": {
-    label:  "Standardized Mean Difference (Hedges g)",
+    label:  "Standardized Mean Difference (Hedges' g; SMD)",
     group:  "Continuous (two groups)",
     inputs: ["m1", "sd1", "n1", "m2", "sd2", "n2"],
     compute(s) {
@@ -232,7 +232,7 @@ const _profileSpecs = {
   // one extra warning beyond softWarnTwoGroup: when SD ratio < 1.1 the equal-
   // variance assumption holds and standard SMD is preferable.
   "SMDH": {
-    label:  "Standardized Mean Difference (heteroscedastic)",
+    label:  "Standardized Mean Difference (heteroscedastic; SMDH)",
     group:  "Continuous (two groups)",
     inputs: ["m1", "sd1", "n1", "m2", "sd2", "n2"],
     compute(s) {
@@ -274,7 +274,7 @@ const _profileSpecs = {
 
   // ------------------------------------------------------------------ //
   "MD_paired": {
-    label:  "Mean Difference (Paired)",
+    label:  "Mean Difference (paired; MD_paired)",
     group:  "Continuous (paired)",
     inputs: ["m_pre", "sd_pre", "m_post", "sd_post", "n", "r"],
     compute(s) {
@@ -300,7 +300,7 @@ const _profileSpecs = {
 
   // ------------------------------------------------------------------ //
   "SMD_paired": {
-    label:  "Standardized Mean Change",
+    label:  "Standardized Mean Change (SMD_paired)",
     group:  "Continuous (paired)",
     inputs: ["m_pre", "sd_pre", "m_post", "sd_post", "n", "r"],
     compute(s) {
@@ -335,7 +335,7 @@ const _profileSpecs = {
   //               pre-post correlation; the default r = 0.5 can over- or under-
   //               estimate variance by ≥ 50% when the true r is near 0 or 1.
   "SMCC": {
-    label:  "Standardized Mean Change (change-score SD)",
+    label:  "Standardized Mean Change (change-score SD; SMCC)",
     group:  "Continuous (paired)",
     inputs: ["m_pre", "sd_pre", "m_post", "sd_post", "n", "r"],
     compute(s) {
@@ -570,7 +570,7 @@ const _profileSpecs = {
   //                       cells make the log-OR/RR asymptotically unstable;
   //                       exact methods or Peto OR may be preferable.
   "OR": {
-    label:  "Odds Ratio",
+    label:  "Odds Ratio (OR)",
     group:  "Binary outcomes",
     isTransformedScale: true,
     isLog: true,
@@ -603,7 +603,7 @@ const _profileSpecs = {
 
   // ------------------------------------------------------------------ //
   "RR": {
-    label:  "Risk Ratio",
+    label:  "Risk Ratio (RR)",
     group:  "Binary outcomes",
     isTransformedScale: true,
     isLog: true,
@@ -637,7 +637,7 @@ const _profileSpecs = {
 
   // ------------------------------------------------------------------ //
   "RD": {
-    label:  "Risk Difference",
+    label:  "Risk Difference (RD)",
     group:  "Binary outcomes",
     inputs: ["a", "b", "c", "d"],
     compute(s) {
@@ -683,7 +683,7 @@ const _profileSpecs = {
   // difference of two arcsine-transformed values; results are reported on
   // the arcsine scale directly. Reference: metafor escalc("AS").
   "AS": {
-    label:  "Arcsine-transformed Risk Difference",
+    label:  "Arcsine-transformed Risk Difference (AS)",
     group:  "Binary outcomes",
     inputs: ["a", "b", "c", "d"],
     compute(s) {
@@ -726,7 +726,7 @@ const _profileSpecs = {
   // are still estimable provided the denominator a·d+b·c > 0.
   // Reference: metafor escalc("YUQ").
   "YUQ": {
-    label:  "Yule's Q",
+    label:  "Yule's Q (YUQ)",
     group:  "Binary outcomes",
     inputs: ["a", "b", "c", "d"],
     compute(s) {
@@ -782,7 +782,7 @@ const _profileSpecs = {
   // variation near ±1. Undefined when √(a·d)+√(b·c) = 0.
   // Reference: metafor escalc("YUY").
   "YUY": {
-    label:  "Yule's Y",
+    label:  "Yule's Y (YUY)",
     group:  "Binary outcomes",
     inputs: ["a", "b", "c", "d"],
     compute(s) {
@@ -835,7 +835,7 @@ const _profileSpecs = {
   //   |r| > 0.9 — vi = (1−r²)²/(n−1) approaches 0 as r → ±1; the
   //               estimate becomes increasingly unstable near the boundary.
   "COR": {
-    label:  "Correlation (raw r)",
+    label:  "Correlation (raw r; COR)",
     group:  "Correlations",
     inputs: ["r", "n"],
     compute(s) {
@@ -881,7 +881,7 @@ const _profileSpecs = {
   // The variance uses the bias-corrected r (yi), not the raw r.
   // Requires n ≥ 4 so that (n−2)/2 ≥ 1 (avoids c = 0 in ₂F₁).
   "UCOR": {
-    label:  "Bias-corrected correlation",
+    label:  "Bias-corrected Correlation (UCOR)",
     group:  "Correlations",
     inputs: ["r", "n"],
     compute(s) {
@@ -919,7 +919,7 @@ const _profileSpecs = {
 
   // ------------------------------------------------------------------ //
   "ZCOR": {
-    label:  "Correlation (Fisher's z)",
+    label:  "Correlation (Fisher's z; ZCOR)",
     group:  "Correlations",
     isTransformedScale: true,
     analysisScaleLabel: "Fisher z scale",
@@ -965,7 +965,7 @@ const _profileSpecs = {
   //                  for zero-order correlations, adjusted for p covariates.
   //   |r| > 0.9    — Same boundary-instability issue as COR/ZCOR.
   "PCOR": {
-    label:  "Partial Correlation (raw r)",
+    label:  "Partial Correlation (raw r; PCOR)",
     group:  "Correlations",
     inputs: ["r", "n", "p"],
     compute(s) {
@@ -1007,7 +1007,7 @@ const _profileSpecs = {
 
   // ------------------------------------------------------------------ //
   "ZPCOR": {
-    label:  "Partial Correlation (Fisher's z)",
+    label:  "Partial Correlation (Fisher's z; ZPCOR)",
     group:  "Correlations",
     isTransformedScale: true,
     analysisScaleLabel: "Fisher z scale",
@@ -1065,7 +1065,7 @@ const _profileSpecs = {
   //   |r| > 0.9 — variance near boundary; estimate increasingly unstable.
   // ------------------------------------------------------------------ //
   "RPB": {
-    label:  "Point-Biserial Correlation (r_pb)",
+    label:  "Point-Biserial Correlation (r_pb; RPB)",
     group:  "Correlations",
     inputs: ["r", "n"],
     compute(s) {
@@ -1120,7 +1120,7 @@ const _profileSpecs = {
   //         For p = 0.5 (equal groups): z = 0, φ_z = φ(0) ≈ 0.3989.
   // ------------------------------------------------------------------ //
   "RBIS": {
-    label:  "Biserial Correlation (r_bis)",
+    label:  "Biserial Correlation (r_bis; RBIS)",
     group:  "Correlations",
     inputs: ["r", "n", "p"],
     compute(s) {
@@ -1188,7 +1188,7 @@ const _profileSpecs = {
   //   R² does not convey sign (always ≥ 0). For bivariate case: r² = R².
   // ------------------------------------------------------------------ //
   "R2": {
-    label:  "R-squared (raw R²)",
+    label:  "R-squared (raw R²; R2)",
     group:  "Correlations",
     inputs: ["r2", "n"],
     compute(s) {
@@ -1236,7 +1236,7 @@ const _profileSpecs = {
   //   squares the pooled z estimate to return to the R² scale.
   // ------------------------------------------------------------------ //
   "ZR2": {
-    label:  "R-squared (Fisher's z of √R²)",
+    label:  "R-squared (Fisher's z of √R²; ZR2)",
     group:  "Correlations",
     isTransformedScale: true,
     analysisScaleLabel: "Fisher z scale",
@@ -1283,7 +1283,7 @@ const _profileSpecs = {
   //                expected-cell-count assumption (E ≥ 5) is often violated.
   //   |r| > 0.9  — Same boundary-instability issue as COR/ZCOR.
   "PHI": {
-    label:  "Phi Coefficient",
+    label:  "Phi Coefficient (PHI)",
     group:  "Correlations",
     inputs: ["a", "b", "c", "d"],
     compute(s) {
@@ -1333,7 +1333,7 @@ const _profileSpecs = {
 
   // ------------------------------------------------------------------ //
   "RTET": {
-    label:  "Tetrachoric Correlation",
+    label:  "Tetrachoric Correlation (RTET)",
     group:  "Correlations",
     inputs: ["a", "b", "c", "d"],
     compute(s) {
@@ -1388,7 +1388,7 @@ const _profileSpecs = {
   // PR additionally flags p = 0 or p = 1 exactly: the binomial variance p(1−p)/n
   // equals zero, giving the study infinite weight — a structural problem.
   "PR": {
-    label:  "Proportion (raw)",
+    label:  "Proportion (raw; PR)",
     group:  "Proportions",
     inputs: ["x", "n"],
     compute(s) {
@@ -1414,7 +1414,7 @@ const _profileSpecs = {
 
   // ------------------------------------------------------------------ //
   "PLN": {
-    label:  "Proportion (log)",
+    label:  "Proportion (log; PLN)",
     group:  "Proportions",
     isTransformedScale: true,
     isLog: true,
@@ -1443,7 +1443,7 @@ const _profileSpecs = {
 
   // ------------------------------------------------------------------ //
   "PLO": {
-    label:  "Proportion (logit)",
+    label:  "Proportion (logit; PLO)",
     group:  "Proportions",
     isTransformedScale: true,
     analysisScaleLabel: "logit scale",
@@ -1472,7 +1472,7 @@ const _profileSpecs = {
 
   // ------------------------------------------------------------------ //
   "PAS": {
-    label:  "Proportion (arcsine)",
+    label:  "Proportion (arcsine; PAS)",
     group:  "Proportions",
     isTransformedScale: true,
     analysisScaleLabel: "arcsine scale",
@@ -1500,7 +1500,7 @@ const _profileSpecs = {
 
   // ------------------------------------------------------------------ //
   "PFT": {
-    label:  "Proportion (Freeman-Tukey)",
+    label:  "Proportion (Freeman-Tukey; PFT)",
     group:  "Proportions",
     isTransformedScale: true,
     analysisScaleLabel: "double-arcsine scale",
@@ -1534,7 +1534,7 @@ const _profileSpecs = {
   //            the study's 95% CI spans roughly ±2 units, contributing very
   //            little weight. The user may want to double-check the input.
   "GENERIC": {
-    label:  "Generic (yi / vi)",
+    label:  "Generic (yi / vi; GENERIC)",
     group:  "Generic",
     inputs: ["yi", "vi"],
     compute(s) {
@@ -1568,7 +1568,7 @@ const _profileSpecs = {
 
   // ------------------------------------------------------------------ //
   "HR": {
-    label:  "Hazard Ratio",
+    label:  "Hazard Ratio (HR)",
     group:  "Time-to-event / Rates",
     isTransformedScale: true,
     isLog: true,
@@ -1609,7 +1609,7 @@ const _profileSpecs = {
   //                 event counts (analogous to the OR/RR zero-cell correction).
   //                 Warning is informational so the user knows the correction fired.
   "IRR": {
-    label:  "Incidence Rate Ratio",
+    label:  "Incidence Rate Ratio (IRR)",
     group:  "Time-to-event / Rates",
     isTransformedScale: true,
     isLog: true,
@@ -1654,7 +1654,7 @@ const _profileSpecs = {
   //   When both counts are 0, vi = 0 → excluded via MIN_VAR floor.
   //   No ratio is taken, so no log-continuity correction is applied.
   "IRD": {
-    label:  "Incidence Rate Difference",
+    label:  "Incidence Rate Difference (IRD)",
     group:  "Time-to-event / Rates",
     inputs: ["x1", "t1", "x2", "t2"],
     compute(s) {
@@ -1697,7 +1697,7 @@ const _profileSpecs = {
   //   vi = 1/(4*t1) + 1/(4*t2) — independent of event counts (no zero
   //   issue); studies with zero events remain informative.
   "IRSD": {
-    label:  "Incidence Rate Difference (sqrt)",
+    label:  "Incidence Rate Difference (sqrt; IRSD)",
     group:  "Time-to-event / Rates",
     inputs: ["x1", "t1", "x2", "t2"],
     compute(s) {
@@ -1734,7 +1734,7 @@ const _profileSpecs = {
   //   zero events — vi = 1/x; at x = 0 this is infinite. x is replaced by 0.5
   //                 (consistent with Poisson continuity correction convention).
   "IR": {
-    label:  "Incidence Rate (log)",
+    label:  "Incidence Rate (log; IR)",
     group:  "Time-to-event / Rates",
     isTransformedScale: true,
     isLog: true,
@@ -1884,7 +1884,7 @@ const _profileSpecs = {
   //   n < 10    — vi = sd²/n; with very small n the sampling distribution of
   //               the mean departs noticeably from normality.
   "MN": {
-    label:  "Mean (raw)",
+    label:  "Mean (raw; MN)",
     group:  "Continuous (single group)",
     inputs: ["m", "sd", "n"],
     compute(s) {
@@ -1926,7 +1926,7 @@ const _profileSpecs = {
   //              method systematically underestimates the true variance.
   //   n < 10   — Same as MN: small-n normality concern.
   "MNLN": {
-    label:  "Mean (log)",
+    label:  "Mean (log; MNLN)",
     group:  "Continuous (single group)",
     isTransformedScale: true,
     isLog: true,
@@ -1972,7 +1972,7 @@ const _profileSpecs = {
   //                    apparent number of categories without adding information
   //                    and may indicate a data-coding error.
   "GOR": {
-    label:  "Generalised Odds Ratio (ordinal)",
+    label:  "Generalised Odds Ratio (ordinal; GOR)",
     group:  "Binary outcomes",
     isTransformedScale: true,
     isLog: true,
@@ -2040,7 +2040,7 @@ const _profileSpecs = {
   //   Psychometrika, 30(3), 357–370.
   // ------------------------------------------------------------------ //
   "ARAW": {
-    label: "Cronbach's α (raw, ARAW)",
+    label: "Cronbach's α (raw; ARAW)",
     group: "Reliability",
     inputs: ["alpha", "k", "n"],
     compute(s) {
@@ -2087,7 +2087,7 @@ const _profileSpecs = {
   //   Statistics in Medicine, 21(9), 1331–1335.
   // ------------------------------------------------------------------ //
   "ABT": {
-    label: "Cronbach's α (log transform, ABT)",
+    label: "Cronbach's α (log transform; ABT)",
     group: "Reliability",
     isTransformedScale: true,
     analysisScaleLabel: "log(1−α) scale",
@@ -2138,7 +2138,7 @@ const _profileSpecs = {
   //   Psychometrika, 41(2), 219–231.
   // ------------------------------------------------------------------ //
   "AHW": {
-    label: "Cronbach's α (cube-root transform, AHW)",
+    label: "Cronbach's α (cube-root transform; AHW)",
     group: "Reliability",
     isTransformedScale: true,
     inputs: ["alpha", "k", "n"],

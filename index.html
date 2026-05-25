@@ -45,7 +45,10 @@
       <button class="toggle-btn"        id="toggleAbout"   data-view="about">About</button>
     </div>
   </div>
-  <button id="themeToggle" class="theme-toggle-btn" title="Switch to light mode" aria-label="Toggle colour theme"></button>
+  <div id="appHeaderActions">
+    <button class="help-btn header-kbd-btn" data-help="keyboard.shortcuts" title="Keyboard shortcuts" aria-label="Keyboard shortcuts">⌨</button>
+    <button id="themeToggle" class="theme-toggle-btn" title="Switch to light mode" aria-label="Toggle colour theme"></button>
+  </div>
 </header>
 
 <!-- ===================== APP LAYOUT ===================== -->
@@ -101,7 +104,7 @@
           <label class="strip-label">Effect<button class="help-btn" data-help-select="effectType" data-help-prefix="effect." title="Help">?</button><select id="effectType"></select></label>
           <label class="strip-label">τ²<button class="help-btn" data-help-select="tauMethod" data-help-prefix="tau." title="Help">?</button><select id="tauMethod">
             <optgroup label="Recommended">
-              <option value="REML" selected>REML</option>
+              <option value="REML" selected>Restricted Maximum Likelihood (REML)</option>
               <option value="DL">DerSimonian-Laird (DL)</option>
               <option value="PM">Paule-Mandel (PM)</option>
             </optgroup>
@@ -123,11 +126,11 @@
               <option value="HSk">Hunter-Schmidt corrected (HSk)</option>
             </optgroup>
             <optgroup label="Alias">
-              <option value="EBLUP">EBLUP (= REML)</option>
+              <option value="EBLUP">Empirical Best Linear Unbiased Predictor (EBLUP)</option>
             </optgroup>
             <optgroup label="Fixed effects">
               <option value="MH">Mantel-Haenszel (MH)</option>
-              <option value="Peto">Peto OR</option>
+              <option value="Peto">Peto one-step (Peto)</option>
             </optgroup>
           </select></label>
           <label class="strip-label">CI<button class="help-btn" data-help-select="ciMethod" data-help-prefix="ci." title="Help">?</button><select id="ciMethod">
@@ -376,8 +379,8 @@
             <div class="settings-section-controls">
               <label class="inline">Estimation:
                 <select id="threeLevelMethod">
-                  <option value="REML" selected>REML</option>
-                  <option value="ML">ML</option>
+                  <option value="REML" selected>Restricted Maximum Likelihood (REML)</option>
+                  <option value="ML">Maximum Likelihood (ML)</option>
                 </select>
               </label>
             </div>
@@ -405,8 +408,8 @@
           <label>
             <span>Estimation<button class="help-btn" data-help="mv.method" title="Help">?</button></span>
             <select id="mvMethod">
-              <option value="REML" selected>REML</option>
-              <option value="ML">ML</option>
+              <option value="REML" selected>Restricted Maximum Likelihood (REML)</option>
+              <option value="ML">Maximum Likelihood (ML)</option>
             </select>
           </label>
           <label>
@@ -444,8 +447,8 @@
         <button id="addStudy">Add Study</button>
         <button id="mvAddRow" style="display:none">Add Row</button>
         <span class="io-sep" role="separator" aria-hidden="true"></span>
-        <button id="run" class="btn--primary" title="Run analysis (Ctrl+Enter)">Run <kbd class="run-kbd">(Ctrl+Enter)</kbd></button>
-        <button class="help-btn" data-help="keyboard.shortcuts" title="Keyboard shortcuts">⌨</button>
+        <button id="run" class="btn--primary" title="Run analysis (Ctrl+Enter)">Run</button>
+
         <span id="inputStaleBadge" hidden>Results out of date — click Run</span>
         <div id="inputFileControls">
           <input type="file" id="csvFile" accept=".csv" style="display:none">

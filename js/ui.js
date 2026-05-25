@@ -3814,7 +3814,7 @@ async function runAnalysis() {
     return true;
   } finally {
     _analysisRunning = false;
-    if (_runBtn)     { _runBtn.disabled = false; _runBtn.innerHTML = 'Run <kbd class="run-kbd">(Ctrl+Enter)</kbd>'; }
+    if (_runBtn)     { _runBtn.disabled = false; _runBtn.textContent = 'Run'; }
     if (_runProgress) _runProgress.hidden = true;
   }
 }
