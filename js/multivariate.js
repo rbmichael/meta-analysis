@@ -7,7 +7,7 @@
 // =============================================================================
 
 import { MIN_VAR } from "./constants.js";
-import { normalCDF, normalQuantile, chiSquareCDF } from "./utils.js";
+import { normalCDF, normalQuantile, chiSquareCDF, tCDF, tCritical, fCDF } from "./utils.js";
 import { cholFactor, cholLogDet, cholSolveVec, cholInverse, matInverse, logDet, diagSE } from "./linalg.js";
 // bfgs is imported from selection.js to avoid a circular dep through analysis.js.
 // Safe: bfgs is only called inside mvMeta (a function body), never at module init.
@@ -229,6 +229,7 @@ export function mvMeta(rows, V, opts = {}) {
   const {
     struct    = "CS",
     method    = "REML",
+    ciMethod  = "normal",  // "normal" (z/Wald) | "t" (t-distribution, df = n − q_total)
     alpha     = 0.05,
     moderators = [],   // [{key, type}] — continuous moderators only for now
     slopes    = "separate",  // "separate" (one slope per outcome) | "common" (shared slope)
@@ -449,10 +450,23 @@ export function mvMeta(rows, V, opts = {}) {
   const beta = XOXinv.map(row => row.reduce((s, v, j) => s + v * XOy[j], 0));
   const se   = diagSE(XOXinv);
 
-  const zcrit = normalQuantile(1 - alpha / 2);
-  const ci   = beta.map((b, j) => [b - zcrit * se[j], b + zcrit * se[j]]);
+  // Residual df: total observations minus fixed-effect parameters.
+  // Matches metafor rma.mv(test="t") default df.
+  const df_residual = n - q_total;
+
   const z    = beta.map((b, j) => se[j] > 0 ? b / se[j] : NaN);
-  const pval = z.map(zi => isFinite(zi) ? 2 * (1 - normalCDF(Math.abs(zi))) : NaN);
+  let crit, ci, pval, dist;
+  if (ciMethod === "t" && df_residual > 0) {
+    crit  = tCritical(df_residual, alpha);
+    ci    = beta.map((b, j) => [b - crit * se[j], b + crit * se[j]]);
+    pval  = z.map(zi => isFinite(zi) ? 2 * (1 - tCDF(Math.abs(zi), df_residual)) : NaN);
+    dist  = "t";
+  } else {
+    crit  = normalQuantile(1 - alpha / 2);
+    ci    = beta.map((b, j) => [b - crit * se[j], b + crit * se[j]]);
+    pval  = z.map(zi => isFinite(zi) ? 2 * (1 - normalCDF(Math.abs(zi))) : NaN);
+    dist  = "z";
+  }
 
   // QM — omnibus Wald test for β = 0, evaluated at Ω = V + ZΨ*Z'
   //   QM  = β̂'(X'Ω⁻¹X)β̂ = XOy'·XOXinv·XOy
@@ -463,9 +477,13 @@ export function mvMeta(rows, V, opts = {}) {
     for (let kk = 0; kk < q_total; kk++) s += XOXinv[j][kk] * XOy[kk];
     crossTerm += XOy[j] * s;
   }
-  const QM          = Math.max(0, crossTerm);
-  const df_QM       = q_total;
-  const pQM         = 1 - chiSquareCDF(QM, q_total);
+  const QM    = Math.max(0, crossTerm);
+  const df_QM = q_total;
+  const pQM   = 1 - chiSquareCDF(QM, q_total);
+  // F-test equivalent (used when ciMethod === "t"): F = QM/df_QM ~ F(df_QM, df_residual)
+  const Fstat = df_QM > 0 ? QM / df_QM : NaN;
+  const pF    = (ciMethod === "t" && df_residual > 0 && isFinite(Fstat))
+                ? 1 - fCDF(Fstat, df_QM, df_residual) : NaN;
   const residOmega  = Math.max(0, yOy - QM);   // used only for logLik below
 
   // QE — Cochran residual heterogeneity test, evaluated at Ψ = 0 (V only).
@@ -508,7 +526,7 @@ export function mvMeta(rows, V, opts = {}) {
     }
   }
   const QE    = Math.max(0, yVy - crossTermV);
-  const df_QE = n - q_total;
+  const df_QE = df_residual;  // n − q_total
   const pQE   = df_QE > 0 ? 1 - chiSquareCDF(QE, df_QE) : NaN;
 
   // Between-study correlation matrix: corPsi[i][j] = Psi[i][j] / sqrt(Psi[i][i] * Psi[j][j])
@@ -575,8 +593,9 @@ export function mvMeta(rows, V, opts = {}) {
     tau2,
     rho_between,
 
-    // Omnibus Wald test (β = 0)
-    QM, df_QM, pQM,
+    // Omnibus Wald/F test (β = 0)
+    QM, df_QM, pQM,   // χ²-based (always available)
+    Fstat, pF,        // F-based (defined when ciMethod === "t")
 
     // Residual heterogeneity
     QE, df_QE, pQE,
@@ -590,7 +609,8 @@ export function mvMeta(rows, V, opts = {}) {
 
     // Model metadata
     k, n, P,
-    struct, method, slopes,
+    struct, method, ciMethod, slopes,
+    dist, df: df_residual,
     convergence: res.converged,
     optimizer: { iters: res.iters, gnorm: res.gnorm },
     warnings,

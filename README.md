@@ -92,7 +92,9 @@ A dedicated **Multivariate** mode jointly synthesises P ≥ 2 correlated outcome
 | **Diag** (diagonal) | P | Independent τ²_p per outcome; zero between-study correlation |
 | **UN** (unstructured) | P(P+1)/2 | Full Cholesky-parameterised Ψ |
 
-Estimation by REML or ML via BFGS. Optional meta-regression adds common moderator slopes. Reports per-outcome pooled estimates, Ψ̂, per-outcome I², Q_E (residual heterogeneity), Q_M (omnibus moderator test), AIC/BIC, and per-outcome forest plots. Based on Berkey et al. (1998) and Jackson, Riley & White (2011).
+Estimation by REML or ML via BFGS. Optional meta-regression adds common moderator slopes. Reports per-outcome pooled estimates, Ψ̂, per-outcome I², Q_E (residual heterogeneity), Q_M (omnibus moderator test), AIC/BIC, and per-outcome forest plots.
+
+**CI method:** Normal (z) or t-distribution (df = n − q, where n = observations and q = fixed-effect parameters). The t-method widens CIs and converts Q_M to an F(q, df) test; recommended when the number of studies is small. Equivalent to `rma.mv(test = "t")` in metafor. Based on Berkey et al. (1998) and Jackson, Riley & White (2011).
 
 ### Meta-regression
 

@@ -156,6 +156,10 @@
             <option value="REML" selected>Restricted Maximum Likelihood (REML)</option>
             <option value="ML">Maximum Likelihood (ML)</option>
           </select></label>
+          <label class="strip-label">CI<button class="help-btn" data-help="mv.ci" title="Help">?</button><select id="mvCiMethod">
+            <option value="normal" selected>Normal CI</option>
+            <option value="t">t-distribution</option>
+          </select></label>
           <button id="mvVariablesPanelBtn" class="strip-popover-btn" aria-expanded="false" data-popover="mvVariablesPanel">Variables ▾</button>
           <button id="mvSettingsBtn" class="strip-popover-btn" aria-expanded="false" data-popover="mvSettings">Settings<span id="mvBadge" class="advanced-badge" style="display:none" title="Some MV settings differ from defaults" aria-label="MV settings customized">●</span> ▾</button>
         </div>
@@ -1267,7 +1271,11 @@
       <p>Estimation by REML or ML via BFGS. Optional meta-regression adds common moderator slopes.
       Reports per-outcome pooled estimates, the Ψ̂ matrix, per-outcome I², residual heterogeneity
       Q<sub>E</sub>, omnibus moderator test Q<sub>M</sub>, AIC / BIC / log-likelihood, and per-outcome
-      forest plots. Based on Berkey et al. (1998) and Jackson, Riley &amp; White (2011).</p>
+      forest plots.</p>
+      <p><strong>CI method:</strong> Normal (z) or t-distribution (df = n − q). The t-method widens
+      CIs and converts Q<sub>M</sub> to an F-test; recommended for small k. Equivalent to
+      <code>rma.mv(test = "t")</code> in metafor. Based on Berkey et al. (1998) and Jackson,
+      Riley &amp; White (2011).</p>
 
       <!-- ---- Plots ---- -->
       <h2>Plots</h2>

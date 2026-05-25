@@ -1569,8 +1569,9 @@ document.getElementById("mvSettings").addEventListener("input",  () => { _checkM
 _checkMvBadge();
 
 // Strip selects: mark stale + save on change (mirrors Standard effectType/tauMethod behavior)
-document.getElementById("mvStruct").addEventListener("change", () => { scheduleSave(); markStale(); });
-document.getElementById("mvMethod").addEventListener("change", () => { scheduleSave(); markStale(); });
+document.getElementById("mvStruct").addEventListener("change",    () => { scheduleSave(); markStale(); });
+document.getElementById("mvMethod").addEventListener("change",    () => { scheduleSave(); markStale(); });
+document.getElementById("mvCiMethod").addEventListener("change",  () => { scheduleSave(); markStale(); });
 
 // CI width two-way sync: mvCiLevel ↔ ciLevel
 document.getElementById("mvCiLevel").addEventListener("change", e => {
@@ -1591,6 +1592,7 @@ function resetMvSettings() {
   };
   resetSel("mvStruct");
   resetSel("mvMethod");
+  resetSel("mvCiMethod");
   resetSel("mvSlopes");
   resetSel("mvCiLevel");
   document.getElementById("ciLevel").value = "95";
@@ -1830,6 +1832,8 @@ function applySession(session) {
       document.getElementById("mvStruct").value = mv.struct;
     if (mv.method && document.getElementById("mvMethod").querySelector(`option[value="${mv.method}"]`))
       document.getElementById("mvMethod").value = mv.method;
+    if (mv.ciMethod && document.getElementById("mvCiMethod").querySelector(`option[value="${mv.ciMethod}"]`))
+      document.getElementById("mvCiMethod").value = mv.ciMethod;
     if (mv.slopes && document.getElementById("mvSlopes").querySelector(`option[value="${mv.slopes}"]`))
       document.getElementById("mvSlopes").value = mv.slopes;
     if (isFinite(mv.rho)) document.getElementById("mvRho").value = mv.rho;

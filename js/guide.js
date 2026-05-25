@@ -3326,6 +3326,22 @@ common slopes (one β per moderator, shared across all outcomes) or separate slo
     number of fixed-effect parameters. Shown only when moderators are present.</li>
 </ul>
 
+<p><strong>CI method:</strong> The CI dropdown in the settings strip controls how
+confidence intervals and p-values are computed for the pooled effects.</p>
+<ul>
+  <li><strong>Normal (z):</strong> Wald CIs using the standard normal quantile (z = 1.96 for
+    95%). Fast and invariant to sample size; appropriate when k is large. Matches
+    <code>rma.mv(test = "z")</code> in metafor.</li>
+  <li><strong>t-distribution:</strong> Uses a t-critical value with df = n − q (n = total
+    observations, q = number of fixed-effect parameters) for both CIs and individual
+    coefficient p-values. The omnibus Q<sub>M</sub> Wald statistic is divided by its
+    degrees of freedom and referred to an F(q, df) distribution. More conservative
+    than the z-test; recommended when the number of studies is small. Matches
+    <code>rma.mv(test = "t")</code> in metafor.</li>
+</ul>
+<p>CI width (the nominal coverage level, e.g. 95%) is shared between Standard and
+Multivariate modes; changing it in one mode updates the other automatically.</p>
+
 <p><strong>Caution on over-parameterisation:</strong> The UN structure requires
 P(P+1)/2 parameters to estimate Ψ. As a rough guideline, each variance parameter
 needs at least 3–5 studies to estimate reliably; the app will warn when the ratio
@@ -3349,6 +3365,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
 // ------------------------------------------------------------------ //
 export const HELP_TO_GUIDE = {
   "mv.model":         "guide-multivariate",
+  "mv.ci":            "guide-multivariate",
   "mv.struct":        "guide-multivariate",
   "mv.forest":        "guide-multivariate",
   "mv.method":        "guide-multivariate",

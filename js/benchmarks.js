@@ -4425,4 +4425,22 @@ export const MULTIVARIATE_BENCHMARKS = [
     },
     citation: 'Berkey98 + centred study-index moderator, common slopes. Verified against metafor rma.mv(mods=~outcome+x-1) (generate.R block MV-4).',
   },
+  {
+    rBlock: 'MV-1-t',
+    name: 'Berkey98: CS struct, REML, t-distribution CIs',
+    struct: 'CS', method: 'REML', rho: 0.5,
+    ciMethod: 't',
+    data: _BERKEY98,
+    expected: {
+      // Same model as MV-1; test="t" widens CIs via t-critical (df=8) instead of z=1.96.
+      // Omnibus test becomes F(2,8) instead of chi2(2).
+      beta:   [0.30051151,  -0.08373912],  // outcomePD, outcomeAL
+      se:     [0.07470856,   0.07152062],
+      ci_lb:  [0.12823325,  -0.24866595],
+      ci_ub:  [0.47278977,   0.08118772],
+      Fstat:  9.75331509, df_QM1: 2, df_QM2: 8, pF: 0.00715501,
+      QE:     45.42745765, df_QE: 8, pQE: 3.1e-7,
+    },
+    citation: 'Berkey98, t-distribution CIs (metafor test="t"). Verified against rma.mv(test="t") (generate.R block MV-1-t).',
+  },
 ];

@@ -1546,6 +1546,18 @@ export const HELP = {
            "Switch to this mode using the Standard / Multivariate toggle above the data table.",
   },
 
+  "mv.ci": {
+    title: "CI method (multivariate)",
+    body:  "Controls how confidence intervals and p-values are computed for the pooled effects β.\n\n" +
+           "Normal CI (default): Wald z-based intervals — β̂ ± z_{α/2} · SE. " +
+           "Appropriate when the number of study-outcome observations is large relative to the number of parameters.\n\n" +
+           "t-distribution: uses a t critical value with df = n − q residual degrees of freedom, " +
+           "where n is the total number of effect-size observations and q is the number of fixed-effect parameters. " +
+           "Matches metafor rma.mv(test=\"t\"). " +
+           "Recommended when k is small or when moderators are included, as z-based CIs are then anticonservative. " +
+           "The omnibus test switches from χ²(q) to F(q, df) under this option.",
+  },
+
   "mv.struct": {
     title: "Ψ structure",
     body:  "Determines how many parameters describe the between-study covariance matrix Ψ. " +

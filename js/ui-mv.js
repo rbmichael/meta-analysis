@@ -49,6 +49,7 @@ export const mvForestState = {
   lastRes:      null,
   lastRows:     [],
   alpha:        0.05,
+  ciMethod:     "normal",
   viewMode:     "separate",  // "separate" | "combined"
 };
 
@@ -315,6 +316,7 @@ export function gatherMVState() {
   return {
     struct:     document.getElementById("mvStruct").value,
     method:     document.getElementById("mvMethod").value,
+    ciMethod:   document.getElementById("mvCiMethod").value,
     slopes:     document.getElementById("mvSlopes").value,
     rho:        parseFloat(document.getElementById("mvRho").value),
     moderators: [...mvModerators],
@@ -450,12 +452,13 @@ export function runMVAnalysis() {
   else if (singleOutcomeStudies.length > 0)
     msgs.push(`⚠️ Studies with only one outcome (contribute no covariance): ${singleOutcomeStudies.map(escapeHTML).join(", ")}.`);
 
-  const struct  = document.getElementById("mvStruct").value;
-  const method  = document.getElementById("mvMethod").value;
-  const slopes  = document.getElementById("mvSlopes").value;
-  const rho     = parseFloat(document.getElementById("mvRho").value);
-  const alpha   = _getCiAlpha();
-  const mods    = activeModerators.map(key => ({ key, type: "continuous" }));
+  const struct    = document.getElementById("mvStruct").value;
+  const method    = document.getElementById("mvMethod").value;
+  const ciMethod  = document.getElementById("mvCiMethod").value;
+  const slopes    = document.getElementById("mvSlopes").value;
+  const rho       = parseFloat(document.getElementById("mvRho").value);
+  const alpha     = _getCiAlpha();
+  const mods      = activeModerators.map(key => ({ key, type: "continuous" }));
 
   const nPsiPar = struct === "CS" ? 2 : struct === "Diag" ? outcomeIds.length : outcomeIds.length * (outcomeIds.length + 1) / 2;
   if (struct === "UN" && outcomeIds.length > 5)
@@ -471,7 +474,7 @@ export function runMVAnalysis() {
   let V, res;
   try {
     V   = vcalc(rows, { rho });
-    res = mvMeta(rows, V, { struct, method, slopes, alpha, moderators: mods });
+    res = mvMeta(rows, V, { struct, method, ciMethod, slopes, alpha, moderators: mods });
   } catch (e) {
     errorLines.push(`• ❌ Error: ${escapeHTML(String(e))}`);
     flushWarnings();
@@ -493,7 +496,7 @@ export function runMVAnalysis() {
 
   _renderMVResults(res, { alpha, rows });
 
-  _appState.reportArgs = { mv: true, mvRes: res, mvRows: rows, mvAlpha: alpha };
+  _appState.reportArgs = { mv: true, mvRes: res, mvRows: rows, mvAlpha: alpha, mvCiMethod: ciMethod };
 
   const _studyTableSection = document.getElementById("studyTableSection");
   const _studyTableEl      = document.getElementById("studyTable");
@@ -537,8 +540,9 @@ function _buildMVStudyTable(rows, alpha = 0.05) {
 
 function _renderMVResults(res, { alpha, rows = [] } = {}) {
   const { beta, se, ci, z, pval, betaNames, tau2, rho_between, Psi, corPsi, outcomeIds,
-          n, k, P, QM, df_QM, pQM, QE, df_QE, pQE, logLik, AIC, BIC, AICc,
-          struct, method, I2, convergence, warnings: engineWarnings = [] } = res;
+          n, k, P, QM, df_QM, pQM, QE, df_QE, pQE, Fstat, pF, logLik, AIC, BIC, AICc,
+          struct, method, ciMethod = "normal", dist = "z", df, I2,
+          convergence, warnings: engineWarnings = [] } = res;
 
   alpha ??= 0.05;
   const ciPct  = Math.round((1 - alpha) * 100);
@@ -570,7 +574,7 @@ function _renderMVResults(res, { alpha, rows = [] } = {}) {
     </h4>
     <table class="reg-table" style="margin-bottom:12px">
       <thead><tr><th>Outcome</th><th>Estimate</th><th>SE</th>
-        <th>${ciPct}% CI</th><th><em>z</em></th><th><em>p</em></th></tr></thead>
+        <th>${ciPct}% CI</th><th><em>${dist}</em></th><th><em>p</em></th></tr></thead>
       <tbody>${interceptRows}</tbody>
     </table>`;
 
@@ -591,7 +595,7 @@ function _renderMVResults(res, { alpha, rows = [] } = {}) {
       <h4 style="font-size:0.9em;margin:8px 0 4px">Moderator effects</h4>
       <table class="reg-table" style="margin-bottom:12px">
         <thead><tr><th>Coefficient</th><th>Estimate</th><th>SE</th>
-          <th>${ciPct}% CI</th><th><em>z</em></th><th><em>p</em></th></tr></thead>
+          <th>${ciPct}% CI</th><th><em>${dist}</em></th><th><em>p</em></th></tr></thead>
         <tbody>${modRows}</tbody>
       </table>`;
   }
@@ -646,15 +650,20 @@ function _renderMVResults(res, { alpha, rows = [] } = {}) {
       </table>`;
   }
 
+  const useFtest = dist === "t" && hasMods && isFinite(Fstat);
   const testsBlock = `
     <h4 style="font-size:0.9em;margin:8px 0 4px">Hypothesis tests</h4>
     <table class="reg-table" style="margin-bottom:12px">
-      <thead><tr><th>Test</th><th>χ²</th><th>df</th><th><em>p</em></th></tr></thead>
+      <thead><tr><th>Test</th><th>${useFtest ? "Statistic" : "χ²"}</th><th>df</th><th><em>p</em></th></tr></thead>
       <tbody>
-        ${hasMods && isFinite(QM)
-          ? `<tr><td>Omnibus test of moderators (Q<sub>M</sub>)</td><td>${fmt(QM, 3)}</td><td>${df_QM}</td><td>${fmtP(pQM)}</td></tr>`
-          : ""}
-        <tr><td>Residual heterogeneity (Q<sub>E</sub>)</td><td>${fmt(QE, 3)}</td><td>${df_QE}</td><td>${fmtP(pQE)}</td></tr>
+        ${hasMods && isFinite(QM) ? `<tr><td>Omnibus test of moderators (Q<sub>M</sub>)</td>${
+          useFtest
+            ? `<td>F = ${fmt(Fstat, 3)}</td><td>${df_QM}, ${df}</td><td>${fmtP(pF)}</td>`
+            : `<td>${fmt(QM, 3)}</td><td>${df_QM}</td><td>${fmtP(pQM)}</td>`
+        }</tr>` : ""}
+        <tr><td>Residual heterogeneity (Q<sub>E</sub>)</td>
+          <td>${useFtest ? `χ² = ${fmt(QE, 3)}` : fmt(QE, 3)}</td>
+          <td>${df_QE}</td><td>${fmtP(pQE)}</td></tr>
       </tbody>
     </table>`;
 
@@ -663,7 +672,7 @@ function _renderMVResults(res, { alpha, rows = [] } = {}) {
     &nbsp;|&nbsp; log-lik = ${fmt(logLik, 4)}
     &nbsp;·&nbsp; AIC = ${fmt(AIC, 2)} &nbsp;·&nbsp; BIC = ${fmt(BIC, 2)}
     ${isFinite(AICc) ? `&nbsp;·&nbsp; AICc = ${fmt(AICc, 2)}` : ""}
-    &nbsp;|&nbsp; ${method}, Ψ = ${struct}
+    &nbsp;|&nbsp; ${method}, Ψ = ${struct}, CI = ${ciMethod === "t" ? "t-dist" : "normal"}
     ${convergence === false ? `&nbsp;·&nbsp; <span style="color:var(--color-warning)">convergence uncertain</span>` : ""}
   </div>`;
 
@@ -678,6 +687,7 @@ function _renderMVResults(res, { alpha, rows = [] } = {}) {
   mvForestState.lastRes      = res;
   mvForestState.lastRows     = rows;
   mvForestState.alpha        = alpha;
+  mvForestState.ciMethod     = ciMethod;
   mvForestState.pages        = outcomeIds.map(() => 0);
   mvForestState.combinedPage = 0;
 

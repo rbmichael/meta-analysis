@@ -6939,6 +6939,30 @@ export function runTests() {
     mvchkTrue("sep: logLik finite",     isFinite(r.logLik));
   }
 
+  // 14. t-distribution CI method
+  console.log("--- ciMethod='t': t-distribution CIs ---");
+  {
+    const rZ = mvMeta(mvRows, mvV, { struct: "CS", method: "REML", ciMethod: "normal" });
+    const rT = mvMeta(mvRows, mvV, { struct: "CS", method: "REML", ciMethod: "t" });
+    mvchkTrue("t: no error",          !rT.error);
+    mvchkTrue("t: dist === 't'",      rT.dist === "t");
+    mvchkTrue("z: dist === 'z'",      rZ.dist === "z");
+    // df_residual = n - q_total = 12 - 2 = 10
+    mvchkExact("t: df = 10",          rT.df, 10);
+    // t-CIs must be wider than z-CIs (t_crit(0.025,10) > z_crit(0.025))
+    mvchkTrue("t: CI[0] wider lb",   rT.ci[0][0] < rZ.ci[0][0]);
+    mvchkTrue("t: CI[0] wider ub",   rT.ci[0][1] > rZ.ci[0][1]);
+    // beta and se unchanged by ciMethod
+    mvchkTrue("t: beta[0] same",     Math.abs(rT.beta[0] - rZ.beta[0]) < 1e-10);
+    mvchkTrue("t: se[0] same",       Math.abs(rT.se[0] - rZ.se[0]) < 1e-10);
+    // Fstat = QM / df_QM
+    mvchkTrue("t: Fstat finite",     isFinite(rT.Fstat));
+    mvchkTrue("t: Fstat ≈ QM/df_QM", Math.abs(rT.Fstat - rT.QM / rT.df_QM) < 1e-8);
+    mvchkTrue("t: pF in (0,1)",      isFinite(rT.pF) && rT.pF >= 0 && rT.pF <= 1);
+    // ciMethod="normal": pF is NaN (F-test not applicable)
+    mvchkTrue("z: pF is NaN",        !isFinite(rZ.pF));
+  }
+
   console.log(mvPass ? "\n✅ ALL mvMeta TESTS PASSED" : "\n❌ SOME mvMeta TESTS FAILED");
 }
 

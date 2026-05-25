@@ -816,15 +816,17 @@ export function bayesSensitivityData(sensitivityRows, profile, ciLevel = "95") {
 // ---------------------------------------------------------------------------
 
 export function mvPooledData(res, alpha = 0.05) {
-  const { beta, se, ci, z, pval, outcomeIds, method, struct } = res;
+  const { beta, se, ci, z, pval, outcomeIds, method, struct, dist = "z", df } = res;
   const ciPct = Math.round((1 - alpha) * 100);
-  const headers = ["Outcome", "Estimate", "SE", `${ciPct}% CI`, "<em>z</em>", "<em>p</em>"];
+  const statHdr = dist === "t" ? `<em>t</em>` : `<em>z</em>`;
+  const headers = ["Outcome", "Estimate", "SE", `${ciPct}% CI`, statHdr, "<em>p</em>"];
   const rows = outcomeIds.map((id, o) => {
     const [lo, hi] = ci[o];
     return [String(id), fmt(beta[o], 4), fmt(se[o], 4),
             `[${fmt(lo, 4)}, ${fmt(hi, 4)}]`, fmt(z[o], 3), fmtP_APA(pval[o])];
   });
-  return { title: `Pooled effect estimates per outcome (${method}, Ψ = ${struct})`, headers, rows };
+  const ciNote = dist === "t" ? `, t-dist (df = ${df})` : "";
+  return { title: `Pooled effect estimates per outcome (${method}, Ψ = ${struct}${ciNote})`, headers, rows };
 }
 
 export function mvHeterogeneityData(res) {
@@ -842,23 +844,31 @@ export function mvHeterogeneityData(res) {
 }
 
 export function mvTestsData(res) {
-  const { QM, df_QM, pQM, QE, df_QE, pQE, beta, P } = res;
+  const { QM, df_QM, pQM, QE, df_QE, pQE, Fstat, pF, beta, P, dist = "z", df } = res;
   const hasMods = beta.length > P;
-  const headers = ["Test", "χ²", "<em>df</em>", "<em>p</em>"];
+  const useFtest = dist === "t" && hasMods && isFinite(Fstat);
+  const headers = useFtest
+    ? ["Test", "Statistic", "<em>df</em>", "<em>p</em>"]
+    : ["Test", "χ²", "<em>df</em>", "<em>p</em>"];
   const rows = [
-    ...(hasMods && isFinite(QM)
-      ? [["Omnibus test of moderators (QM)", fmt(QM, 3), String(df_QM), fmtP_APA(pQM)]]
-      : []),
-    ["Residual heterogeneity (QE)", fmt(QE, 3), String(df_QE), fmtP_APA(pQE)],
+    ...(hasMods && isFinite(QM) ? [
+      useFtest
+        ? [`Omnibus test of moderators (Q<sub>M</sub>)`, `F = ${fmt(Fstat, 3)}`, `${df_QM}, ${df}`, fmtP_APA(pF)]
+        : [`Omnibus test of moderators (Q<sub>M</sub>)`, fmt(QM, 3), String(df_QM), fmtP_APA(pQM)],
+    ] : []),
+    useFtest
+      ? [`Residual heterogeneity (Q<sub>E</sub>)`, `χ² = ${fmt(QE, 3)}`, String(df_QE), fmtP_APA(pQE)]
+      : [`Residual heterogeneity (Q<sub>E</sub>)`, fmt(QE, 3), String(df_QE), fmtP_APA(pQE)],
   ];
   return { title: "Hypothesis tests", headers, rows };
 }
 
 export function mvModeratorData(res, alpha = 0.05) {
-  const { beta, se, ci, z, pval, betaNames = [], P } = res;
+  const { beta, se, ci, z, pval, betaNames = [], P, dist = "z" } = res;
   if (beta.length <= P) return null;
   const ciPct = Math.round((1 - alpha) * 100);
-  const headers = ["Coefficient", "Estimate", "SE", `${ciPct}% CI`, "<em>z</em>", "<em>p</em>"];
+  const statHdr = dist === "t" ? `<em>t</em>` : `<em>z</em>`;
+  const headers = ["Coefficient", "Estimate", "SE", `${ciPct}% CI`, statHdr, "<em>p</em>"];
   const rows = beta.slice(P).map((b, i) => {
     const j = P + i;
     const [lo, hi] = ci[j];
@@ -869,12 +879,12 @@ export function mvModeratorData(res, alpha = 0.05) {
 }
 
 export function mvFitLine(res) {
-  const { k, n, P, logLik, AIC, BIC, AICc, method, struct, slopes = "separate", beta } = res;
+  const { k, n, P, logLik, AIC, BIC, AICc, method, struct, ciMethod = "normal", slopes = "separate", beta } = res;
   const hasMods = beta.length > P;
   return `k = ${k} · n = ${n} obs · P = ${P} outcomes`
     + ` | log-lik = ${fmt(logLik, 4)} · AIC = ${fmt(AIC, 2)} · BIC = ${fmt(BIC, 2)}`
     + (isFinite(AICc) ? ` · AICc = ${fmt(AICc, 2)}` : "")
-    + ` | ${method}, Ψ = ${struct}`
+    + ` | ${method}, Ψ = ${struct}, CI = ${ciMethod === "t" ? "t-dist" : "normal"}`
     + (hasMods ? ` · slopes = ${slopes}` : "");
 }
 

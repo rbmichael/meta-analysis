@@ -18,6 +18,9 @@
 //   moderators    — array of { name, type } objects
 //   interactions  — array of { name, termA, termB } interaction term specs
 //   studies       — array of { study, inputs: {col: value}, group, cluster, moderators: {name: value} }
+//   mv            — multivariate mode state (present when MV data exists):
+//                     struct, method, ciMethod ("normal"|"t"), slopes, rho,
+//                     moderators: string[], rows: [...], active: boolean
 
 export const SESSION_VERSION = 1;
 
