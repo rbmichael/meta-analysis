@@ -910,12 +910,6 @@
   margin-top: 0;
 }
 
-#variablesPanel #moderatorManager {
-  border-top: none;
-  padding-top: 0;
-  margin-top: 0;
-}
-
 /* ---- MV-hint banner (item 20: promote from inline style) ---- */
 #previewMvHint {
   font-size: var(--font-size-base);
@@ -928,11 +922,6 @@
 }
 
 /* ---- MV settings ρ label alignment (item 20: promote from inline style) ---- */
-.mv-rho-label {
-  align-self: flex-end;
-  margin-bottom: 6px;
-}
-
 /* ---- MV forest plot toolbar (item 20: promote from inline style) ---- */
 .mv-forest-toolbar {
   display: flex;

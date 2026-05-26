@@ -170,62 +170,70 @@
         <div class="advanced-settings-body">
 
           <!-- Moderator manager -->
-          <div id="moderatorManager">
-            <strong>Moderators:</strong>
-            <input type="text" id="modName" placeholder="Column name">
-            <select id="modType" title="Moderator type and transform">
-              <optgroup label="Continuous">
-                <option value="linear">Linear</option>
-                <option value="poly2">Quadratic (x²)</option>
-                <option value="poly3">Cubic (x², x³)</option>
-                <option value="rcs3">RCS (3 knots)</option>
-                <option value="rcs4">RCS (4 knots)</option>
-                <option value="rcs5">RCS (5 knots)</option>
-              </optgroup>
-              <optgroup label="Categorical">
-                <option value="categorical">Categorical</option>
-              </optgroup>
-            </select>
-            <button id="addMod">+ Add</button><button class="help-btn" data-help="input.moderators" title="Help">?</button>
+          <div class="settings-section" id="moderatorManager">
+            <span class="settings-group-label">Moderators<button class="help-btn" data-help="input.moderators" title="Help">?</button></span>
+            <div class="settings-section-controls">
+              <input type="text" id="modName" placeholder="Column name">
+              <select id="modType" title="Moderator type and transform">
+                <optgroup label="Continuous">
+                  <option value="linear">Linear</option>
+                  <option value="poly2">Quadratic (x²)</option>
+                  <option value="poly3">Cubic (x², x³)</option>
+                  <option value="rcs3">RCS (3 knots)</option>
+                  <option value="rcs4">RCS (4 knots)</option>
+                  <option value="rcs5">RCS (5 knots)</option>
+                </optgroup>
+                <optgroup label="Categorical">
+                  <option value="categorical">Categorical</option>
+                </optgroup>
+              </select>
+              <button id="addMod">+ Add</button>
+            </div>
             <div id="modTags"></div>
           </div>
 
           <!-- Interaction term manager (shown when ≥2 moderators exist) -->
-          <div id="interactionManager" style="display:none">
-            <strong>Interaction terms:</strong>
-            <select id="interactTermA"></select>
-            <span style="margin:0 2px">×</span>
-            <select id="interactTermB"></select>
-            <button id="addInteraction">+ Add</button><button class="help-btn" data-help="input.interactions" title="Help">?</button>
+          <div class="settings-section" id="interactionManager" style="display:none">
+            <span class="settings-group-label">Interaction terms<button class="help-btn" data-help="input.interactions" title="Help">?</button></span>
+            <div class="settings-section-controls">
+              <select id="interactTermA"></select>
+              <span>×</span>
+              <select id="interactTermB"></select>
+              <button id="addInteraction">+ Add</button>
+            </div>
             <div id="interactionTags"></div>
           </div>
 
           <!-- Scale moderator manager (location-scale model) -->
-          <div id="scaleModManager">
-            <strong>Location-scale model moderators:</strong>
-            <input type="text" id="scaleModName" placeholder="Column name">
-            <select id="scaleModType" title="Moderator type and transform">
-              <optgroup label="Continuous">
-                <option value="linear">Linear</option>
-                <option value="poly2">Quadratic (x²)</option>
-                <option value="poly3">Cubic (x², x³)</option>
-                <option value="rcs3">RCS (3 knots)</option>
-                <option value="rcs4">RCS (4 knots)</option>
-                <option value="rcs5">RCS (5 knots)</option>
-              </optgroup>
-              <optgroup label="Categorical">
-                <option value="categorical">Categorical</option>
-              </optgroup>
-            </select>
-            <button id="addScaleMod">+ Add</button><button class="help-btn" data-help="input.scaleModerators" title="Help">?</button>
+          <div class="settings-section" id="scaleModManager">
+            <span class="settings-group-label">Location-scale model moderators<button class="help-btn" data-help="input.scaleModerators" title="Help">?</button></span>
+            <div class="settings-section-controls">
+              <input type="text" id="scaleModName" placeholder="Column name">
+              <select id="scaleModType" title="Moderator type and transform">
+                <optgroup label="Continuous">
+                  <option value="linear">Linear</option>
+                  <option value="poly2">Quadratic (x²)</option>
+                  <option value="poly3">Cubic (x², x³)</option>
+                  <option value="rcs3">RCS (3 knots)</option>
+                  <option value="rcs4">RCS (4 knots)</option>
+                  <option value="rcs5">RCS (5 knots)</option>
+                </optgroup>
+                <optgroup label="Categorical">
+                  <option value="categorical">Categorical</option>
+                </optgroup>
+              </select>
+              <button id="addScaleMod">+ Add</button>
+            </div>
             <div id="scaleModTags"></div>
           </div>
 
           <!-- Risk-of-bias domain manager -->
-          <div id="robManager">
-            <strong>Risk-of-bias domains:</strong>
-            <input type="text" id="robDomainInput" placeholder="Domain name">
-            <button id="addRobDomain">+ Add</button><button class="help-btn" data-help="input.rob" title="Help">?</button>
+          <div class="settings-section" id="robManager">
+            <span class="settings-group-label">Risk-of-bias domains<button class="help-btn" data-help="input.rob" title="Help">?</button></span>
+            <div class="settings-section-controls">
+              <input type="text" id="robDomainInput" placeholder="Domain name">
+              <button id="addRobDomain">+ Add</button>
+            </div>
             <div id="robDomainTags"></div>
           </div>
 
@@ -238,7 +246,7 @@
 
           <!-- Analysis & display: CI width, MCC -->
           <div class="settings-section">
-            <span class="settings-group-label">Analysis &amp; display</span>
+            <span class="settings-group-label">Analysis</span>
             <div class="settings-section-controls">
               <label class="inline">CI width:
                 <select id="ciLevel" title="Confidence interval width">
@@ -247,7 +255,7 @@
                   <option value="99">99%</option>
                 </select>
               </label>
-              <label class="inline">Multiple-test correction:
+              <label class="inline">Multiple-test correction<button class="help-btn" data-help="reg.mcc" title="Help">?</button>:
                 <select id="mccMethod" title="Multiple-test correction for meta-regression coefficients">
                   <option value="none" selected>None</option>
                   <option value="bonferroni">Bonferroni</option>
@@ -367,7 +375,7 @@
 
           <!-- RVE (shown when clusters present) -->
           <div class="settings-section" id="rveSettings" style="display:none">
-            <span class="settings-group-label">RVE (robust variance estimation)</span>
+            <span class="settings-group-label">RVE (robust variance estimation)<button class="help-btn" data-help="rve.model" title="Help">?</button></span>
             <div class="settings-section-controls">
               <label class="inline">Weighting:
                 <select id="rveWeighting">
@@ -389,7 +397,7 @@
             </datalist>
             <p class="settings-hint" id="rveRhoHint">0.4 = mild &nbsp;·&nbsp; 0.8 = moderate (default) &nbsp;·&nbsp; 0.95 = strong</p>
             <p class="settings-hint" id="rveHierHint" style="display:none">HIER MoM estimates ω² (between-cluster) and τ² (within-cluster) via method-of-moments; ρ is not used.</p>
-            <span class="settings-group-label" style="margin-top:8px">Three-level model</span>
+            <span class="settings-group-label" style="margin-top:8px">Three-level model<button class="help-btn" data-help="threelevel.model" title="Help">?</button></span>
             <div class="settings-section-controls">
               <label class="inline">Estimation:
                 <select id="threeLevelMethod">
@@ -410,20 +418,7 @@
 
       <!-- MV settings popover -->
       <div id="mvSettings" class="settings-popover" hidden>
-        <div class="settings-row">
-          <label>
-            <span>Slopes<button class="help-btn" data-help="mv.slopes" title="Help">?</button></span>
-            <select id="mvSlopes">
-              <option value="separate" selected>Separate</option>
-              <option value="common">Common</option>
-            </select>
-          </label>
-          <label class="inline mv-rho-label">
-            Within-study correlation ρ<button class="help-btn" data-help="mv.rho" title="Help">?</button>:
-            <input type="number" id="mvRho" value="0.5" min="-0.999" max="0.999" step="0.05" style="width:70px">
-          </label>
-        </div>
-        <div class="settings-section">
+        <div class="settings-section settings-section--no-top">
           <span class="settings-group-label">Analysis</span>
           <div class="settings-section-controls">
             <label class="inline">CI width<button class="help-btn" data-help="ci.width" title="Help">?</button>:
@@ -433,8 +428,22 @@
                 <option value="99">99%</option>
               </select>
             </label>
-            <p class="settings-hint">Shared with Standard mode — changing here updates both.</p>
           </div>
+        </div>
+        <div class="settings-row" style="border-top:1px solid var(--border);padding-top:12px;margin-top:2px">
+          <label>
+            <span>Slopes<button class="help-btn" data-help="mv.slopes" title="Help">?</button></span>
+            <select id="mvSlopes">
+              <option value="separate" selected>Separate</option>
+              <option value="common">Common</option>
+            </select>
+          </label>
+        </div>
+        <div class="settings-row">
+          <label>
+            <span>Within-study correlation ρ<button class="help-btn" data-help="mv.rho" title="Help">?</button></span>
+            <input type="number" id="mvRho" value="0.5" min="-0.999" max="0.999" step="0.05" style="width:70px">
+          </label>
         </div>
         <div class="settings-footer">
           <button id="resetMv" class="settings-reset-btn">Reset to defaults</button>
@@ -447,7 +456,7 @@
           <div id="mvModeratorManager">
             <strong>Moderators:</strong>
             <input type="text" id="mvModName" placeholder="Column name">
-            <button id="mvAddMod">+ Add</button>
+            <button id="mvAddMod">+ Add</button><button class="help-btn" data-help="input.moderators" title="Help">?</button>
             <p class="settings-hint settings-hint--flush">Moderators are added as columns to the table.</p>
             <div id="mvModTags"></div>
           </div>
