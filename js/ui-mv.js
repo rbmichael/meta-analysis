@@ -26,6 +26,7 @@ import { vcalc, mvMeta } from "./multivariate.js";
 import { normalQuantile, tCritical } from "./utils.js";
 import { fmt } from "./format.js";
 import { escapeHTML } from "./utils-html.js";
+import { renderWarningBlocks, msgExcluded, msgNonNumericMod, analysisChecks } from "./ui-warnings.js";
 import { cellRich, mvPooledData, mvHeterogeneityData, mvTestsData, mvModeratorData, mvFitLine, mvStudyData } from "./sections.js";
 import { PLOT_THEMES } from "./plotThemes.js";
 import { resolveThemeVars, hasEmbeddedBackground, currentBgColour } from "./export.js";
@@ -81,6 +82,7 @@ export function initMV(deps) {
     }
     _markStale();
   });
+  document.getElementById("mvStruct").addEventListener("change", _updateMVValidationWarnings);
   document.getElementById("mvAddMod").addEventListener("click", _mvAddMod);
   document.getElementById("mvModName").addEventListener("keydown", e => { if (e.key === "Enter") _mvAddMod(); });
   document.getElementById("mvForestPageSize").addEventListener("change", e => {
@@ -394,9 +396,44 @@ export function commitImportMV(parsed, mvHeaders) {
 
 // ── MV analysis & rendering ───────────────────────────────────────────────────
 
+// Shared analysis-level checks for MV rows (outcome count, study count,
+// single-outcome studies, struct overparameterization). Called by both the
+// live validation panel and runMVAnalysis so messages stay in sync.
+function _mvAnalysisChecks(rows) {
+  const errors = [], warnings = [];
+  const outcomeIds = [...new Set(rows.map(r => r.outcome_id))];
+  const studyIds   = [...new Set(rows.map(r => r.study_id))];
+
+  if (outcomeIds.length < 2)
+    errors.push("Requires ≥ 2 distinct outcome IDs. For a single outcome, use Standard mode.");
+  if (studyIds.length < 3)
+    errors.push("Requires ≥ 3 studies.");
+
+  const studyOutcomeCounts = {};
+  rows.forEach(r => {
+    studyOutcomeCounts[r.study_id] = (studyOutcomeCounts[r.study_id] || new Set());
+    studyOutcomeCounts[r.study_id].add(r.outcome_id);
+  });
+  const singleOutcomeStudies = Object.entries(studyOutcomeCounts)
+    .filter(([, s]) => s.size === 1).map(([id]) => id);
+  if (singleOutcomeStudies.length === studyIds.length)
+    warnings.push("All studies contribute only one outcome — within-study correlations cannot be estimated. Consider using Standard mode or checking that Study IDs correctly group multiple outcomes per study.");
+  else if (singleOutcomeStudies.length > 0)
+    warnings.push(`Studies with only one outcome (contribute no covariance): ${singleOutcomeStudies.map(escapeHTML).join(", ")}.`);
+
+  const struct  = document.getElementById("mvStruct").value;
+  const nPsiPar = struct === "CS" ? 2 : struct === "Diag" ? outcomeIds.length : outcomeIds.length * (outcomeIds.length + 1) / 2;
+  if (struct === "UN" && outcomeIds.length > 5)
+    warnings.push(`UN structure with P = ${outcomeIds.length} outcomes requires ${nPsiPar} Ψ parameters — optimizer instability likely. Consider CS or Diag.`);
+  if (nPsiPar > studyIds.length / 3)
+    warnings.push(`Between-study covariance has ${nPsiPar} parameters but only ${studyIds.length} studies — model may be overparameterized.`);
+
+  return { errors, warnings };
+}
+
 function _updateMVValidationWarnings() {
   const warningsEl = document.getElementById("mvValidationWarnings");
-  const msgs = [];
+  const errors = [], warnings = [];
   document.querySelectorAll("#mvTableBody tr").forEach((tr, i) => {
     if (tr.classList.contains("row-pending-delete")) return;
     const allInputs = [...tr.querySelectorAll("input")];
@@ -411,18 +448,25 @@ function _updateMVValidationWarnings() {
     if (!tr.querySelector(".mv-study-id")?.value.trim() ||
         !tr.querySelector(".mv-outcome-id")?.value.trim() ||
         !isFinite(yi) || !isFinite(vi) || vi <= 0)
-      msgs.push(`⚠️ Excluded: ${escapeHTML(label)} (Invalid input)`);
+      warnings.push(msgExcluded(label, "Invalid input"));
 
     tr.querySelectorAll(".mv-mod-cell").forEach((inp, modIdx) => {
       if (inp.classList.contains("input-error")) {
         const modName = mvModerators[modIdx] || `moderator ${modIdx + 1}`;
-        msgs.push(`⚠️ ${escapeHTML(label)}: "${escapeHTML(inp.value.trim())}" is not a valid number for ${escapeHTML(modName)}`);
+        warnings.push(msgNonNumericMod(label, inp.value.trim(), modName));
       }
     });
   });
   const rows = _collectMVRows();
-  if (!rows.length) msgs.push("❌ No valid rows — fill in Study ID, Outcome ID, y<sub>i</sub>, and v<sub>i</sub>.");
-  warningsEl.innerHTML = msgs.length > 0 ? msgs.map(m => `• ${m}`).join("<br>") : "";
+  if (!rows.length) {
+    errors.push("No valid rows — fill in Study ID, Outcome ID, y<sub>i</sub>, and v<sub>i</sub>.");
+  } else {
+    const checks   = analysisChecks({ studies: rows, biasTests: false });
+    const mvChecks = _mvAnalysisChecks(rows);
+    errors.push(...checks.errors,   ...mvChecks.errors);
+    warnings.push(...checks.warnings, ...mvChecks.warnings);
+  }
+  renderWarningBlocks(warningsEl, { errors, warnings });
 }
 
 export function runMVAnalysis() {
@@ -436,7 +480,8 @@ export function runMVAnalysis() {
 
   if (!rows.length) return false;
 
-  const msgs = [];
+  const runErrors = [], runWarnings = [];
+  const flush = () => renderWarningBlocks(warningsEl, { errors: runErrors, warnings: runWarnings });
 
   let activeModerators = [...mvModerators];
   if (activeModerators.length) {
@@ -444,71 +489,45 @@ export function runMVAnalysis() {
     const filtered = rows.filter(r => activeModerators.every(name => isFinite(r[name])));
     const dropped = before - filtered.length;
     if (dropped === before) {
-      msgs.push(`⚠️ No rows have complete moderator values — running without moderators.`);
+      runWarnings.push(`No rows have complete moderator values — running without moderators.`);
       activeModerators = [];
     } else {
       rows = filtered;
-      if (dropped) msgs.push(`⚠️ ${dropped} row${dropped > 1 ? "s" : ""} excluded: missing or non-numeric moderator value${dropped > 1 ? "s" : ""}.`);
+      if (dropped) runWarnings.push(`${dropped} row${dropped > 1 ? "s" : ""} excluded: missing or non-numeric moderator value${dropped > 1 ? "s" : ""}.`);
     }
   }
-  const outcomeIds = [...new Set(rows.map(r => r.outcome_id))];
-  const studyIds   = [...new Set(rows.map(r => r.study_id))];
+  const mvChecks = _mvAnalysisChecks(rows);
+  runErrors.push(...mvChecks.errors);
+  runWarnings.push(...mvChecks.warnings);
 
-  if (outcomeIds.length < 2) {
-    msgs.push("❌ Requires ≥ 2 distinct outcome IDs. For a single outcome, use Standard mode.");
-    warningsEl.innerHTML = msgs.map(m => `• ${m}`).join("<br>");
-    return false;
-  }
-  if (studyIds.length < 3) {
-    msgs.push("❌ Requires ≥ 3 studies.");
-    warningsEl.innerHTML = msgs.map(m => `• ${m}`).join("<br>");
+  if (runErrors.length) {
+    flush();
     return false;
   }
 
-  const studyOutcomeCounts = {};
-  rows.forEach(r => {
-    studyOutcomeCounts[r.study_id] = (studyOutcomeCounts[r.study_id] || new Set());
-    studyOutcomeCounts[r.study_id].add(r.outcome_id);
-  });
-  const singleOutcomeStudies = Object.entries(studyOutcomeCounts)
-    .filter(([,s]) => s.size === 1).map(([id]) => id);
-  if (singleOutcomeStudies.length === studyIds.length)
-    msgs.push("⚠️ All studies contribute only one outcome — within-study correlations cannot be estimated. Consider using Standard mode or checking that Study IDs correctly group multiple outcomes per study.");
-  else if (singleOutcomeStudies.length > 0)
-    msgs.push(`⚠️ Studies with only one outcome (contribute no covariance): ${singleOutcomeStudies.map(escapeHTML).join(", ")}.`);
+  const struct   = document.getElementById("mvStruct").value;
+  const method   = document.getElementById("mvMethod").value;
+  const ciMethod = document.getElementById("mvCiMethod").value;
+  const slopes   = document.getElementById("mvSlopes").value;
+  const rho      = parseFloat(document.getElementById("mvRho").value);
+  const alpha    = _getCiAlpha();
+  const mods     = activeModerators.map(key => ({ key, type: "continuous" }));
 
-  const struct    = document.getElementById("mvStruct").value;
-  const method    = document.getElementById("mvMethod").value;
-  const ciMethod  = document.getElementById("mvCiMethod").value;
-  const slopes    = document.getElementById("mvSlopes").value;
-  const rho       = parseFloat(document.getElementById("mvRho").value);
-  const alpha     = _getCiAlpha();
-  const mods      = activeModerators.map(key => ({ key, type: "continuous" }));
-
-  const nPsiPar = struct === "CS" ? 2 : struct === "Diag" ? outcomeIds.length : outcomeIds.length * (outcomeIds.length + 1) / 2;
-  if (struct === "UN" && outcomeIds.length > 5)
-    msgs.push(`⚠️ UN structure with P = ${outcomeIds.length} outcomes requires ${nPsiPar} Ψ parameters — optimizer instability likely. Consider CS or Diag.`);
-
-  if (nPsiPar > studyIds.length / 3)
-    msgs.push(`⚠️ Between-study covariance has ${nPsiPar} parameters but only ${studyIds.length} studies — model may be overparameterized.`);
-
-  const errorLines = [...msgs.map(m => `• ${m}`)];
-  const flushWarnings = () => { warningsEl.innerHTML = errorLines.join("<br>"); };
-  flushWarnings();
+  flush();
 
   let V, res;
   try {
     V   = vcalc(rows, { rho });
     res = mvMeta(rows, V, { struct, method, ciMethod, slopes, alpha, moderators: mods });
   } catch (e) {
-    errorLines.push(`• ❌ Error: ${escapeHTML(String(e))}`);
-    flushWarnings();
+    runErrors.push(`Error: ${escapeHTML(String(e))}`);
+    flush();
     return false;
   }
 
   if (res.error) {
-    errorLines.push(`• ❌ Error: ${escapeHTML(res.error)}`);
-    flushWarnings();
+    runErrors.push(`Error: ${escapeHTML(res.error)}`);
+    flush();
     return false;
   }
 

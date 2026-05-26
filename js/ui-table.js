@@ -13,6 +13,7 @@
 import { effectProfiles } from "./profiles.js";
 import { validateRow, getSoftWarnings } from "./ui-state.js";
 import { escapeHTML } from "./utils-html.js";
+import { renderWarningBlocks, msgExcluded, msgNonNumericMod, analysisChecks } from "./ui-warnings.js";
 import { buildTag } from "./ui-render.js";
 import { parseCSV, detectEffectType } from "./csv.js";
 import { readTextFile } from "./io.js";
@@ -508,14 +509,15 @@ export function updateValidationWarnings(studies, excluded, softWarnings) {
   // Input errors
   rows.forEach((row, idx) => {
     if (row.classList.contains("row-pending-delete")) return;
-    const label  = escapeHTML(row.querySelector("input")?.value || `Row ${idx + 1}`);
+    const labelRaw = row.querySelector("input")?.value || `Row ${idx + 1}`;
+    const label    = escapeHTML(labelRaw);
     const errors = JSON.parse(row.dataset.validationErrors || "{}");
     Object.entries(errors).forEach(([, msg]) => errLines.push(`${label}: ${escapeHTML(msg)}`));
 
     // Continuous moderator inputs with non-numeric values — surface as warnings
     row.querySelectorAll("input[data-mod]").forEach(inp => {
       if (inp.dataset.modType === "continuous" && inp.classList.contains("input-error"))
-        warnLines.push(`${label}: "${escapeHTML(inp.value.trim())}" is not a valid number for moderator ${escapeHTML(inp.dataset.mod)}`);
+        warnLines.push(msgNonNumericMod(labelRaw, inp.value.trim(), inp.dataset.mod));
     });
 
     const groupName = row.querySelector(".group")?.value.trim();
@@ -532,28 +534,17 @@ export function updateValidationWarnings(studies, excluded, softWarnings) {
   });
 
   // Excluded studies
-  excluded.forEach(e => warnLines.push(`Excluded: ${escapeHTML(e.label)} (${escapeHTML(e.reason)})`));
+  excluded.forEach(e => warnLines.push(msgExcluded(e.label, e.reason)));
 
   // Soft warnings (already carry descriptive text from profiles.js)
   softWarnings.forEach(w => warnLines.push(escapeHTML(w)));
 
   // Analysis-level
-  const k = studies.length;
-  if (k === 0) {
-    errLines.push("No valid studies available for analysis");
-  } else {
-    if (k < 2) warnLines.push("Fewer than 2 studies — meta-analysis not meaningful");
-    if (k < 3) warnLines.push("Egger / Begg / FAT-PET tests require ≥ 3 studies");
-    if (studies.some(s => s.vi < 1e-8))
-      warnLines.push("One or more studies have extremely small variance (may inflate weights)");
-  }
+  const checks = analysisChecks({ studies, excluded });
+  errLines.push(...checks.errors);
+  warnLines.push(...checks.warnings);
 
-  let html = "";
-  if (errLines.length)
-    html += `<div class="validation-block validation-block--error">${errLines.map(m => `<div>❌ ${m}</div>`).join("")}</div>`;
-  if (warnLines.length)
-    html += `<div class="validation-block validation-block--warning">${warnLines.map(m => `<div>⚠ ${m}</div>`).join("")}</div>`;
-  warningDiv.innerHTML = html;
+  renderWarningBlocks(warningDiv, { errors: errLines, warnings: warnLines });
 }
 
 // =============================================================================
