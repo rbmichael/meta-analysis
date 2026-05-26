@@ -44,6 +44,15 @@ export function validateRow(row) {
 
   row.dataset.validationErrors = JSON.stringify(errors);
   row.classList.toggle("row-error", !valid);
+
+  // Continuous moderator inputs: highlight non-numeric values visually.
+  // Does not affect study inclusion — NaN mods are handled downstream by regression.
+  inputs.forEach(input => {
+    if (!("mod" in input.dataset) || input.dataset.modType !== "continuous") return;
+    const val = input.value.trim();
+    if (val !== "" && isNaN(+val)) input.classList.add("input-error");
+  });
+
   return valid;
 }
 

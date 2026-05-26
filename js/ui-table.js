@@ -99,9 +99,14 @@ export function makeModTd(name, type) {
   td.dataset.mod = name;
   const input = document.createElement("input");
   input.dataset.mod = name;
+  input.dataset.modType = type;
   input.style.width = "70px";
   input.placeholder = type === "categorical" ? "A/B/…" : "0";
-  input.addEventListener("input", () => { _cb.markStale(); _cb.scheduleSave(); });
+  let _t;
+  input.addEventListener("input", () => {
+    clearTimeout(_t);
+    _t = setTimeout(() => { _revalidate(); _cb.markStale(); _cb.scheduleSave(); }, 150);
+  });
   td.appendChild(input);
   return td;
 }
@@ -377,9 +382,9 @@ export function addRow(values) {
   const actionCell = row.insertCell();
   actionCell.innerHTML = `<button class="remove-btn" aria-label="Remove study">✖</button> <button class="clear-btn" aria-label="Clear row">🧹</button>`;
 
-  // Input listeners
+  // Input listeners — mod inputs are wired by makeModTd; skip them here to avoid double-firing.
   let _valTimer;
-  row.querySelectorAll("input").forEach(input => {
+  row.querySelectorAll("input:not([data-mod])").forEach(input => {
     input.addEventListener("input", () => {
       clearTimeout(_valTimer);
       _valTimer = setTimeout(() => {
@@ -506,6 +511,12 @@ export function updateValidationWarnings(studies, excluded, softWarnings) {
     const label  = escapeHTML(row.querySelector("input")?.value || `Row ${idx + 1}`);
     const errors = JSON.parse(row.dataset.validationErrors || "{}");
     Object.entries(errors).forEach(([, msg]) => errLines.push(`${label}: ${escapeHTML(msg)}`));
+
+    // Continuous moderator inputs with non-numeric values — surface as warnings
+    row.querySelectorAll("input[data-mod]").forEach(inp => {
+      if (inp.dataset.modType === "continuous" && inp.classList.contains("input-error"))
+        warnLines.push(`${label}: "${escapeHTML(inp.value.trim())}" is not a valid number for moderator ${escapeHTML(inp.dataset.mod)}`);
+    });
 
     const groupName = row.querySelector(".group")?.value.trim();
     if (groupName) {

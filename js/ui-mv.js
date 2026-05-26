@@ -196,6 +196,13 @@ export function rebuildMVTableHeaders() {
   });
 }
 
+function _wireMVInput(tr, inp) {
+  inp.addEventListener("input", () => {
+    clearTimeout(tr._valTimer);
+    tr._valTimer = setTimeout(() => { _validateMVRow(tr); _updateMVValidationWarnings(); _markStale(); }, 150);
+  });
+}
+
 function _syncMVRowMods(tr) {
   const cells = tr.querySelectorAll("td");
   const fixedCount = 4;
@@ -211,6 +218,7 @@ function _syncMVRowMods(tr) {
     const td = document.createElement("td");
     td.innerHTML = `<input type="text" class="mv-mod-cell" placeholder="0" style="width:90px">`;
     tr.insertBefore(td, actionsTd);
+    _wireMVInput(tr, td.querySelector("input"));
   }
 }
 
@@ -218,6 +226,7 @@ function _validateMVRow(tr) {
   const yiInput = tr.querySelector(".mv-yi");
   const viInput = tr.querySelector(".mv-vi");
   [yiInput, viInput].forEach(inp => inp?.classList.remove("input-error"));
+  tr.querySelectorAll(".mv-mod-cell").forEach(inp => inp.classList.remove("input-error"));
   tr.classList.remove("row-error");
 
   const allInputs = [...tr.querySelectorAll("input")];
@@ -227,16 +236,24 @@ function _validateMVRow(tr) {
   const yiVal = yiInput?.value.trim() ?? "";
   const viVal = viInput?.value.trim() ?? "";
 
-  if (yiVal === "" || !isFinite(parseFloat(yiVal))) {
+  if (yiVal === "" || !isFinite(+yiVal)) {
     yiInput?.classList.add("input-error");
     valid = false;
   }
-  const viNum = parseFloat(viVal);
+  const viNum = +viVal;
   if (viVal === "" || !isFinite(viNum) || viNum <= 0) {
     viInput?.classList.add("input-error");
     valid = false;
   }
   tr.classList.toggle("row-error", !valid);
+
+  // MV moderator cells are always numeric — highlight non-numeric values visually.
+  // Does not affect row inclusion; invalid mods are excluded from regression only.
+  tr.querySelectorAll(".mv-mod-cell").forEach(inp => {
+    const val = inp.value.trim();
+    if (val !== "" && isNaN(+val)) inp.classList.add("input-error");
+  });
+
   return valid;
 }
 
@@ -269,11 +286,7 @@ export function addMVRow() {
     _validateMVRow(tr);
     _markStale();
   });
-  let _valTimer;
-  tr.querySelectorAll("input").forEach(inp => inp.addEventListener("input", () => {
-    clearTimeout(_valTimer);
-    _valTimer = setTimeout(() => { _validateMVRow(tr); _updateMVValidationWarnings(); _markStale(); }, 150);
-  }));
+  tr.querySelectorAll("input").forEach(inp => _wireMVInput(tr, inp));
   tbody.appendChild(tr);
   return tr;
 }
@@ -284,13 +297,16 @@ function _collectMVRows() {
     if (tr.classList.contains("row-pending-delete")) return;
     const study_id   = tr.querySelector(".mv-study-id")?.value.trim();
     const outcome_id = tr.querySelector(".mv-outcome-id")?.value.trim();
-    const yi = parseFloat(tr.querySelector(".mv-yi")?.value);
-    const vi = parseFloat(tr.querySelector(".mv-vi")?.value);
+    const yiRaw = tr.querySelector(".mv-yi")?.value.trim() ?? "";
+    const viRaw = tr.querySelector(".mv-vi")?.value.trim() ?? "";
+    const yi = yiRaw === "" ? NaN : +yiRaw;
+    const vi = viRaw === "" ? NaN : +viRaw;
     if (!study_id || !outcome_id || !isFinite(yi) || !isFinite(vi) || vi <= 0) return;
     const row = { study_id, outcome_id, yi, vi };
     const modInputs = tr.querySelectorAll(".mv-mod-cell");
     mvModerators.forEach((name, i) => {
-      row[name] = parseFloat(modInputs[i]?.value);
+      const raw = modInputs[i]?.value.trim() ?? "";
+      row[name] = raw === "" ? NaN : +raw;
     });
     rows.push(row);
   });
@@ -388,12 +404,21 @@ function _updateMVValidationWarnings() {
     const studyId   = tr.querySelector(".mv-study-id")?.value.trim()  || `Row ${i + 1}`;
     const outcomeId = tr.querySelector(".mv-outcome-id")?.value.trim() || "";
     const label     = outcomeId ? `${studyId} / ${outcomeId}` : studyId;
-    const yi = parseFloat(tr.querySelector(".mv-yi")?.value);
-    const vi = parseFloat(tr.querySelector(".mv-vi")?.value);
+    const yiRaw = tr.querySelector(".mv-yi")?.value.trim() ?? "";
+    const viRaw = tr.querySelector(".mv-vi")?.value.trim() ?? "";
+    const yi = yiRaw === "" ? NaN : +yiRaw;
+    const vi = viRaw === "" ? NaN : +viRaw;
     if (!tr.querySelector(".mv-study-id")?.value.trim() ||
         !tr.querySelector(".mv-outcome-id")?.value.trim() ||
         !isFinite(yi) || !isFinite(vi) || vi <= 0)
       msgs.push(`⚠️ Excluded: ${escapeHTML(label)} (Invalid input)`);
+
+    tr.querySelectorAll(".mv-mod-cell").forEach((inp, modIdx) => {
+      if (inp.classList.contains("input-error")) {
+        const modName = mvModerators[modIdx] || `moderator ${modIdx + 1}`;
+        msgs.push(`⚠️ ${escapeHTML(label)}: "${escapeHTML(inp.value.trim())}" is not a valid number for ${escapeHTML(modName)}`);
+      }
+    });
   });
   const rows = _collectMVRows();
   if (!rows.length) msgs.push("❌ No valid rows — fill in Study ID, Outcome ID, y<sub>i</sub>, and v<sub>i</sub>.");
