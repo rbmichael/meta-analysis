@@ -365,6 +365,25 @@ export function populateMVExample() {
   });
 }
 
+export function clearMV() {
+  mvModerators.length = 0;
+  renderMVModTags();
+  rebuildMVTableHeaders();
+  document.getElementById("mvTableBody").innerHTML = "";
+  addMVRow();
+  mvForestState.pages        = [];
+  mvForestState.combinedPage = 0;
+  mvForestState.showPI       = false;
+  mvForestState.lastRes      = null;
+  mvForestState.lastRows     = [];
+  mvForestState.pageSize     = 20;
+  mvForestState.alpha        = 0.05;
+  mvForestState.ciMethod     = "normal";
+  mvForestState.viewMode     = "separate";
+  _updateMVValidationWarnings();
+  _markStale();
+}
+
 export function commitImportMV(parsed, mvHeaders) {
   const { headers, rows } = parsed;
   const headerMap = {};

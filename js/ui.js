@@ -126,7 +126,7 @@ import {
   initMV, gatherMVState, runMVAnalysis,
   populateMVExample, commitImportMV, redrawAllMVForestPlots,
   renderMVModTags, rebuildMVTableHeaders, addMVRow,
-  buildMVReportHTML, mvDownloadHTML, mvOpenPrintPreview,
+  buildMVReportHTML, mvDownloadHTML, mvOpenPrintPreview, clearMV,
 } from "./ui-mv.js";
 import { exportSVG, exportPNG, exportTIFF } from "./export.js";
 import { PLOT_THEMES } from "./plotThemes.js";
@@ -1187,6 +1187,10 @@ document.getElementById("draftStartFresh").addEventListener("click", () => {
   while (table.rows.length > 1) table.deleteRow(1);
   addRow();
   hideDraftBanner();
+
+  // Reset Multivariate mode.
+  resetMvSettings();
+  clearMV();
 });
 
 // Draft restore is handled inside init() — see below.
