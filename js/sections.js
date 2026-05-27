@@ -28,6 +28,20 @@ export function cellRich(s) {
 }
 
 // ---------------------------------------------------------------------------
+// Convergence badge helper
+// ---------------------------------------------------------------------------
+// Returns null when converged (or no convergence info), otherwise a
+// structured warning object consumed by ui-render.js, report.js, docx.js.
+export function convergenceBadge(convergence) {
+  if (!convergence || convergence.converged !== false) return null;
+  const src  = convergence.source ?? 'optimizer';
+  const itersNote = (isFinite(convergence.iters) && isFinite(convergence.maxIters))
+    ? ` (${convergence.iters}/${convergence.maxIters} iters)`
+    : '';
+  return { severity: 'warn', text: `Optimizer did not converge${itersNote} [${src}]` };
+}
+
+// ---------------------------------------------------------------------------
 // Summary
 // ---------------------------------------------------------------------------
 
@@ -63,7 +77,7 @@ export function summaryData(args) {
     ...(cles        ? [["CLES (RE)", `${fmt(cles.estimate)} [${fmt(cles.ci[0])}, ${fmt(cles.ci[1])}]`]] : []),
     ...(RE_adj !== null ? [["RE (trim-and-fill adjusted)", fmt(RE_adj)]] : []),
     ...(!isMHorPeto ? [["95% Prediction interval (PI)", fmtCI_APA(pred.lb, pred.ub)]] : []),
-    ...(!isMHorPeto ? [["τ²", `${fmt(m.tau2)}, ${widthCiLabel} [${tauCI1}, ${tauCI2}]`]] : []),
+    ...(!isMHorPeto ? [["τ²", `${m.tau2Boundary ? "0 (boundary)" : fmt(m.tau2)}, ${widthCiLabel} [${tauCI1}, ${tauCI2}]`]] : []),
     ["<em>I</em>²", `${fmt(m.I2)}%, ${widthCiLabel} [${fmt(m.I2CI?.[0])}%, ${fmt(m.I2CI?.[1])}%]`],
     ...(!isMHorPeto ? [["H²-CI", `[${fmt(m.H2CI?.[0])}, ${H2hi}]`]] : []),
     [`<em>Q</em> (<em>df</em> = ${m.df})`, fmt(m.Q)],
@@ -84,7 +98,8 @@ export function summaryData(args) {
     headers:  ["Statistic", "Value"],
     rows,
     note,
-    reRowIdx: !isMHorPeto ? 1 : -1,
+    reRowIdx:    !isMHorPeto ? 1 : -1,
+    convergence: convergenceBadge(m.convergence),
   };
 }
 
@@ -277,6 +292,7 @@ export function selModelData(args) {
     nPerInterval: sel.nPerInterval,
     isMLE,
     converged:    sel.converged,
+    convergence:  convergenceBadge(sel.convergence),
     LRTp:         sel.LRTp,
     muAdj, ciLo, ciHi,
     muUnadj:      fmtDisp(sel.RE_unsel),
@@ -500,6 +516,7 @@ export function regressionData(args) {
     metaExtra,
     coef: { headers: coefHeaders, rows: coefRows, note: coefNote },
     modTests,
+    convergence: convergenceBadge(reg.convergence),
   };
 }
 
@@ -556,7 +573,7 @@ export function locationScaleData(ls, ciLevel = "95") {
     };
   }
 
-  return { metaLine, locCoef: { headers: locHeaders, rows: locRows, note: locNote }, scaleCoef: { headers: scaleHeaders, rows: scaleRows, note: scaleNote }, fitted };
+  return { metaLine, locCoef: { headers: locHeaders, rows: locRows, note: locNote }, scaleCoef: { headers: scaleHeaders, rows: scaleRows, note: scaleNote }, fitted, convergence: convergenceBadge(ls.convergence) };
 }
 
 // ---------------------------------------------------------------------------
@@ -682,7 +699,7 @@ export function threeLevelData(args) {
     ["Log-likelihood", fmt(tl.logLikFull ?? tl.logLik)],
   ];
   const note = `Three-level model: studies nested within clusters. σ²_within = within-cluster, σ²_between = between-cluster between-study heterogeneity. ${method} estimation.`;
-  return { headers: ["Parameter", "Value"], rows, note };
+  return { headers: ["Parameter", "Value"], rows, note, convergence: convergenceBadge(tl.convergence) };
 }
 
 // ---------------------------------------------------------------------------
@@ -826,7 +843,7 @@ export function mvPooledData(res, alpha = 0.05) {
             `[${fmt(lo, 4)}, ${fmt(hi, 4)}]`, fmt(z[o], 3), fmtP_APA(pval[o])];
   });
   const ciNote = dist === "t" ? `, t-dist (df = ${df})` : "";
-  return { title: `Pooled effect estimates per outcome (${method}, Ψ = ${struct}${ciNote})`, headers, rows };
+  return { title: `Pooled effect estimates per outcome (${method}, Ψ = ${struct}${ciNote})`, headers, rows, convergence: convergenceBadge(res.convergence) };
 }
 
 export function mvHeterogeneityData(res) {

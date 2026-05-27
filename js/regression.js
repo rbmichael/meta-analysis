@@ -369,7 +369,7 @@ function quadForm(A, x) {
 
 export function tau2_metaReg(yi, vi, X, method = "REML", tol = REML_TOL, maxIter = 100) {
   const k = vi.length, p = X[0].length, df = k - p;
-  if (df <= 0) return 0;
+  if (df <= 0) return { tau2: 0, converged: true, iters: 0, maxIters: maxIter };
 
   const reFitFn = (tau2) => {
     const w = vi.map(v => 1 / (v + tau2));
@@ -404,15 +404,15 @@ export function tau2_metaReg(yi, vi, X, method = "REML", tol = REML_TOL, maxIter
   if (method === "REML") return tau2Core_REML(vi, reFitFn, tau2Core_DL(vi, feFitFn, df), tol, maxIter);
   if (method === "ML")   return tau2Core_ML  (vi, reFitFn, tau2Core_DL(vi, feFitFn, df), tol, maxIter);
   if (method === "PM")   return tau2Core_PM  (vi, reFitFn, df, 0, tol, maxIter);
-  if (method === "HS")   return tau2Core_HS  (vi, feFitFn, df);
-  if (method === "HE")   return tau2Core_HE  (vi, uwFitFn, df);
+  if (method === "HS")   return { tau2: tau2Core_HS(vi, feFitFn, df), converged: true, iters: 0, maxIters: 0 };
+  if (method === "HE")   return { tau2: tau2Core_HE(vi, uwFitFn, df), converged: true, iters: 0, maxIters: 0 };
   if (method === "SJ") {
     const fit0 = uwFitFn();
-    if (!fit0) return 0;
+    if (!fit0) return { tau2: 0, converged: true, iters: 0, maxIters: maxIter };
     const seed = fit0.e.reduce((s, ei) => s + ei * ei, 0) / k;
     return tau2Core_SJ(vi, reFitFn, seed, tol, maxIter);
   }
-  return tau2Core_DL(vi, feFitFn, df);
+  return { tau2: tau2Core_DL(vi, feFitFn, df), converged: true, iters: 0, maxIters: 0 };
 }
 
 // ================= META-REGRESSION =================
@@ -495,12 +495,13 @@ export function metaRegression(studies, moderators = [], method = "REML", ciMeth
   if (kf < p + 1) return { ...empty, rankDeficientCause: "insufficient_k", error: "Insufficient studies for regression" };
 
   // ---- τ² ----
-  const tau2 = tau2_metaReg(yi, vi, Xf, method);
+  const tau2Res = tau2_metaReg(yi, vi, Xf, method);
+  const tau2 = tau2Res.tau2;
 
   // ---- pseudo-R² (proportion of heterogeneity explained by moderators) ----
   // Only meaningful when there are actual moderators (p > 1).
   const X0   = Xf.map(() => [1]);  // intercept-only design matrix
-  const tau2_0 = p > 1 ? tau2_metaReg(yi, vi, X0, method) : tau2;
+  const tau2_0 = p > 1 ? tau2_metaReg(yi, vi, X0, method).tau2 : tau2;
   const R2 = p > 1 && tau2_0 > 0 ? Math.max(0, (tau2_0 - tau2) / tau2_0) : NaN;
 
   // ---- WLS with RE weights ----
@@ -735,7 +736,7 @@ export function metaRegression(studies, moderators = [], method = "REML", ciMeth
       return ll;
     };
     const _mlFit = (X_) => {
-      const t2_opt = Math.max(0, tau2_metaReg(yi, vi, X_, "ML"));
+      const t2_opt = Math.max(0, tau2_metaReg(yi, vi, X_, "ML").tau2);
       const ll_opt = _llAt(X_, t2_opt);
       if (t2_opt === 0) return ll_opt;
       const ll_bnd = _llAt(X_, 0);
@@ -795,6 +796,8 @@ export function metaRegression(studies, moderators = [], method = "REML", ciMeth
     clustersUsed: robustC, allSingletons,
     robustError,
     isClustered: robustSE !== undefined,
+    convergence: { converged: tau2Res.converged, iters: tau2Res.iters, maxIters: tau2Res.maxIters,
+                   reason: tau2Res.converged ? null : 'max_iters', source: 'tau2_' + method },
   };
 }
 
@@ -1098,7 +1101,9 @@ export function lsModel(studies, locMods = [], scaleMods = [], opts = {}) {
     scaleKnots: scaleDM.modKnots,
     locModTests, scaleModTests,
     k: kf, p, q,
-    rankDeficient: false, converged: opt.converged,
+    rankDeficient: false,
+    convergence: { converged: opt.converged, iters: opt.iters, maxIters: 600,
+                   reason: opt.converged ? null : 'max_iters', source: 'bfgs_locScale' },
     studiesUsed: rows,
     fitted, residuals,
     yi, vi,
@@ -1523,7 +1528,8 @@ export function meta3level(studies, opts = {}) {
     error: msg, mu: NaN, se: NaN, ci: [NaN, NaN], z: NaN, p: NaN,
     tau2_within: NaN, tau2_between: NaN, I2_within: NaN, I2_between: NaN,
     Q: NaN, df: NaN, k: Array.isArray(studies) ? studies.length : NaN,
-    kCluster: NaN, logLik: NaN, logLikFull: NaN, convergence: false,
+    kCluster: NaN, logLik: NaN, logLikFull: NaN,
+    convergence: { converged: false, iters: 0, maxIters: 400, reason: 'max_iters', source: 'bfgs_meta3level' },
   });
 
   if (method !== "REML" && method !== "ML")
@@ -1658,6 +1664,7 @@ export function meta3level(studies, opts = {}) {
     Q, df: k - 1,
     k, kCluster: m,
     logLik, logLikFull,
-    convergence: res.converged,
+    convergence: { converged: res.converged, iters: res.iters, maxIters: 400,
+                   reason: res.converged ? null : 'max_iters', source: 'bfgs_meta3level' },
   };
 }

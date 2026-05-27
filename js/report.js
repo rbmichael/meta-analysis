@@ -42,7 +42,7 @@ import { summaryData, pubBiasData, pCurveData, puniformData, selModelData,
          influenceData, subgroupData, studyTableData, regressionData,
          regressionFittedData, locationScaleData, permutationData,
          rveData, threeLevelData, sensitivityData,
-         bayesData, bayesSensitivityData, cellRich } from "./sections.js";
+         bayesData, bayesSensitivityData, cellRich, convergenceBadge } from "./sections.js";
 
 // serializeSVG and collectPagedSVGs are imported from export.js.
 
@@ -314,6 +314,12 @@ export function collectCitations(args) {
 // Section builders
 // ---------------------------------------------------------------------------
 
+// Returns an HTML convergence-warning chip, or "" when converged.
+function convWarn(badge) {
+  if (!badge) return "";
+  return `<p class="convergence-warning">⚠ ${esc(badge.text)}</p>`;
+}
+
 // sectionSummary(args) → HTML string
 // Builds the "Summary" <section> of the exported report.
 // Renders two tables: (1) analysis settings (effect type, τ² estimator,
@@ -350,7 +356,7 @@ function sectionSummary(args) {
 <section>
   <h2>Summary</h2>
   ${settingsProse}
-  ${statsTable}
+  ${convWarn(d.convergence)}${statsTable}
 </section>`;
 }
 
@@ -441,7 +447,6 @@ function sectionSelectionModel(sel, profile, selMode, selLabel, nextTable, width
       ? ` Warning: interval${empty.length > 1 ? "s" : ""} ${empty.join(", ")} ha${empty.length > 1 ? "ve" : "s"} 0 studies.`
       : "";
   })();
-  const convWarning = d.isMLE && !d.converged ? " Optimizer did not fully converge; results may be approximate." : "";
   const direction = sel.mu > sel.RE_unsel ? "higher" : "lower";
   const schemeText = d.isMLE ? "the estimated selection pattern" : `<em>${esc(selLabel)}</em> selection`;
   const interpNote = `Under ${schemeText} the bias-corrected estimate is ${d.muAdj} [${d.ciLo}, ${d.ciHi}]`
@@ -449,12 +454,12 @@ function sectionSelectionModel(sel, profile, selMode, selLabel, nextTable, width
     + (d.isMLE && isFinite(d.LRTp) && d.LRTp < 0.05
         ? ` The LRT rejects the null of no selection (<em>p</em> ${fmtP_APA(d.LRTp)}).`
         : "");
-  const note = renderRich(d.note) + " " + interpNote + emptyWarning + convWarning;
+  const note = renderRich(d.note) + " " + interpNote + emptyWarning;
   return `
 <section>
   <h2>Selection Model (Vevea-Hedges, 1995)</h2>
   <p class="meta-line">${renderRich(d.metaLine)}</p>
-  ${buildTableAPA(nextTable(), "Vevea-Hedges Selection Model Results", d.headers, htmlRows, note)}
+  ${convWarn(d.convergence)}${buildTableAPA(nextTable(), "Vevea-Hedges Selection Model Results", d.headers, htmlRows, note)}
 </section>`;
 }
 
@@ -575,7 +580,7 @@ function sectionRegression(reg, method, ciMethod, nextTable, widthCiLabel = "95%
 <section>
   <h2>Meta-Regression</h2>
   <p class="meta-line">${renderRich(d.metaLine)}${R2row}${aicRow}</p>
-  ${coefTable}
+  ${convWarn(d.convergence)}${coefTable}
   ${modTestsTable}
   ${fittedTable}
 </section>`;
@@ -628,7 +633,7 @@ function sectionThreeLevel(args, nextTable) {
   return `
 <section>
   <h2>Three-Level Meta-Analysis</h2>
-  ${buildTableAPA(nextTable(), "Three-Level Model Estimates", d.headers, bodyRows, esc(d.note))}
+  ${convWarn(d.convergence)}${buildTableAPA(nextTable(), "Three-Level Model Estimates", d.headers, bodyRows, esc(d.note))}
 </section>`;
 }
 
@@ -658,7 +663,7 @@ function sectionLocationScale(ls, nextTable, widthCiLabel = "95% CI") {
 <section>
   <h2>Location-Scale Model</h2>
   <p class="meta-line">${renderRich(d.metaLine)}</p>
-  ${locTable}
+  ${convWarn(d.convergence)}${locTable}
   ${scaleTable}
   ${fittedTable}
 </section>`;
@@ -885,6 +890,13 @@ const _REPORT_STATIC_CSS = `
     .apa-references li  { font-size: 0.85em; color: var(--report-td-color); margin-bottom: 6px;
                           padding-left: 2em; text-indent: -2em; }
     .apa-references a   { color: inherit; }
+    .convergence-warning {
+      display: flex; align-items: center; gap: 6px;
+      padding: 5px 10px; margin: 0 0 8px;
+      background: #fff8e1; border: 1px solid #f9a825;
+      border-radius: 4px; color: #8a6000;
+      font-size: 0.875em; font-weight: 500;
+    }
     @media print {
       body { background: #fff; color: #000; padding: 12px 16px; }
       section { background: #fff; border-color: #ccc; page-break-inside: avoid; }

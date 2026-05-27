@@ -119,9 +119,9 @@ function estimateTau2(X, yi, vi, method) {
   if (df <= 0) return 0;
   const feFit0  = buildFeFit0(X, yi, vi);
   const reFitFn = buildReFitFn(X, yi, vi);
-  if (method === 'REML') return tau2Core_REML(vi, reFitFn, tau2Core_DL(vi, feFit0, df));
-  if (method === 'ML')   return tau2Core_ML  (vi, reFitFn, tau2Core_DL(vi, feFit0, df));
-  if (method === 'PM')   return tau2Core_PM  (vi, reFitFn, df, 0);
+  if (method === 'REML') return tau2Core_REML(vi, reFitFn, tau2Core_DL(vi, feFit0, df)).tau2;
+  if (method === 'ML')   return tau2Core_ML  (vi, reFitFn, tau2Core_DL(vi, feFit0, df)).tau2;
+  if (method === 'PM')   return tau2Core_PM  (vi, reFitFn, df, 0).tau2;
   if (method === 'HS')   return tau2Core_HS  (vi, feFit0, df);
   if (method === 'HE') {
     const w1 = vi.map(() => 1);

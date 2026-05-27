@@ -26,7 +26,7 @@ import { summaryData, pubBiasData, pCurveData, puniformData, selModelData,
          influenceData, subgroupData, studyTableData, regressionData,
          regressionFittedData, locationScaleData, permutationData,
          rveData, threeLevelData, sensitivityData,
-         bayesData, bayesSensitivityData, cellRich,
+         bayesData, bayesSensitivityData, cellRich, convergenceBadge,
          mvPooledData, mvHeterogeneityData, mvTestsData, mvModeratorData, mvFitLine, mvStudyData } from "./sections.js";
 
 // serializeSVG and collectPagedSVGs are imported from export.js.
@@ -311,11 +311,18 @@ function apaFigureDocx(figNum, title, imgs, note) {
 // Each returns an array of OOXML XML string chunks.
 // ---------------------------------------------------------------------------
 
+// Returns a one-element array with a warning paragraph, or [] when converged.
+function convWarnPara(badge) {
+  if (!badge) return [];
+  return [paraText(`⚠ ${badge.text}`)];
+}
+
 function docSummary(args, ctx) {
   const d = summaryData(args);
   return [
     paraText("Summary", "Heading1"),
     paraText(d.settings),
+    ...convWarnPara(d.convergence),
     ...apaTableDocx(ctx.nextTable(), d.subtitle, d.headers,
       d.rows.map(r => r.map(richRuns)), d.note),
   ];
@@ -365,6 +372,7 @@ function docSelectionModel(args, ctx) {
   return [
     paraText("Selection Model (Vevea-Hedges, 1995)", "Heading1"),
     paraText(d.metaLine),
+    ...convWarnPara(d.convergence),
     ...apaTableDocx(ctx.nextTable(), d.subtitle, d.headers, normalizedRows, d.note),
   ];
 }
@@ -427,6 +435,7 @@ function docRegression(args, ctx) {
   const chunks = [
     paraText("Meta-Regression", "Heading1"),
     paraText(d.metaLine + (d.metaExtra || "")),
+    ...convWarnPara(d.convergence),
     ...apaTableDocx(ctx.nextTable(), "Meta-Regression Coefficients",
       d.coef.headers, d.coef.rows.map(r => r.map(richRuns)), d.coef.note),
   ];
@@ -486,6 +495,7 @@ function docThreeLevel(args, ctx) {
   if (!d) return [];
   return [
     paraText("Three-Level Meta-Analysis", "Heading1"),
+    ...convWarnPara(d.convergence),
     ...apaTableDocx(ctx.nextTable(), "Three-Level Model Estimates",
       d.headers, d.rows.map(r => r.map(richRuns)), d.note),
   ];
@@ -497,6 +507,7 @@ function docLocationScale(args, ctx) {
   const chunks = [
     paraText("Location-Scale Model", "Heading1"),
     paraText(d.metaLine),
+    ...convWarnPara(d.convergence),
     ...apaTableDocx(ctx.nextTable(), "Location Model Coefficients",
       d.locCoef.headers, d.locCoef.rows.map(r => r.map(richRuns)), d.locCoef.note),
     ...apaTableDocx(ctx.nextTable(), "Scale Model Coefficients",
@@ -1091,7 +1102,7 @@ export async function buildMVDocx({ res, rows = [], alpha = 0.05, exportScale = 
   const bodyChunks = [
     para(bold("Multivariate Meta-Analysis Report"), "Heading1"),
     paraText(`Generated ${new Date().toLocaleDateString()} · k = ${k} studies, P = ${P} outcomes · ${method}, Ψ = ${struct}`, "APANote"),
-    ...(convergence === false ? [paraText("Warning: Optimizer did not fully converge — interpret results with caution.")] : []),
+    ...convWarnPara(pooledD.convergence),
     para(""),
     ...apaTableDocx(nextTable(), pooledD.title, pooledD.headers, toDocxRows(pooledD.rows)),
     para(""),

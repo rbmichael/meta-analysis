@@ -256,9 +256,13 @@ export function meta(studies, method="DL", ciMethod="normal", alpha=0.05, tau2In
   const _cFE    = W - _W2FE / W;
   const sigma2  = _cFE > 0 ? dfQ / _cFE : dfQ / W;
 
-  const _tau2Result   = (TAU2_FN[method] ?? TAU2_FN.DL)(studies, tau2Init);
-  const tau2          = typeof _tau2Result === "object" ? _tau2Result.tau2      : _tau2Result;
-  const tau2Converged = typeof _tau2Result === "object" ? _tau2Result.converged : true;
+  const _tau2Result = (TAU2_FN[method] ?? TAU2_FN.DL)(studies, tau2Init);
+  const tau2 = typeof _tau2Result === "object" ? _tau2Result.tau2 : _tau2Result;
+  const convergence = typeof _tau2Result === "object"
+    ? { converged: _tau2Result.converged, iters: _tau2Result.iters, maxIters: _tau2Result.maxIters,
+        reason: _tau2Result.converged ? null : 'max_iters', source: 'tau2_' + method }
+    : { converged: true, iters: 0, maxIters: 0, reason: null, source: 'tau2_' + method };
+  const tau2Boundary = typeof _tau2Result === "object" ? (_tau2Result.tau2Boundary ?? false) : false;
 
   // I² — τ²-based formula (Higgins & Thompson 2002, eq. 6/9; matches metafor for all methods).
   // For DL this is algebraically identical to (Q−df)/Q (Q-based formula). For REML/ML/PM/SJ/etc.
@@ -342,7 +346,8 @@ export function meta(studies, method="DL", ciMethod="normal", alpha=0.05, tau2In
     RE,
     seRE,
     tau2,
-    tau2Converged,
+    tau2Boundary,
+    convergence,
     Q,
     df: dfQ,
     I2,

@@ -18,6 +18,15 @@ import { drawPCurve, drawPUniform } from "./plots.js";
 import { escapeHTML } from "./utils-html.js";
 import { HELP_LABELS } from "./help-labels.js";
 
+// Returns an HTML string for a yellow convergence-warning chip, or "" if converged.
+export function renderConvergenceBadge(convergence) {
+  if (!convergence || convergence.converged !== false) return "";
+  const src  = convergence.source ?? "optimizer";
+  const note = (isFinite(convergence.iters) && isFinite(convergence.maxIters))
+    ? ` (${convergence.iters}/${convergence.maxIters} iters)` : "";
+  return `<div class="convergence-warning">⚠ Optimizer did not converge${note} [${src}]</div>`;
+}
+
 // Build a <span class="mod-tag"> with label text and a remove button.
 // onRemove: function called when the button is clicked.
 export function buildTag(label, onRemove, title = "Remove") {
@@ -313,7 +322,7 @@ export function renderLocationScalePanel(ls, ciMethod, kExcluded = 0, alpha = 0.
       <br><span style="color:var(--fg-muted);font-size:0.93em">LL = ${fmt(ls.LL)} (ML; log τ²ᵢ = Zᵢγ)</span>
     </div>
     <div class="reg-body">
-      ${excWarn}
+      ${renderConvergenceBadge(ls.convergence)}${excWarn}
       <p style="margin:4px 0 2px;font-weight:600;font-size:0.95em">Location model — E[yᵢ] = Xᵢβ</p>
       <table class="reg-table">
         <thead><tr>
@@ -517,7 +526,7 @@ export function renderRegressionPanel(reg, method, ciMethod, kExcluded = 0, mods
       <br><span style="color:var(--fg-muted);font-size:0.93em">${hBtn("reg.aic")}AIC&nbsp;=&nbsp;${fmt(reg.AIC)} &nbsp;·&nbsp; BIC&nbsp;=&nbsp;${fmt(reg.BIC)} &nbsp;·&nbsp; LL&nbsp;=&nbsp;${fmt(reg.LL)}${ciMethod === "KH" && isFinite(reg.s2) ? ` &nbsp;·&nbsp; KH&nbsp;<em>s</em>²&nbsp;=&nbsp;${fmt(reg.s2)}` : ""}&nbsp;&nbsp;<span style="font-size:0.9em;opacity:0.75">(${method}; compare ${method === "REML" ? "models with same predictors only" : "any nested models"})</span></span>
     </div>
     <div class="reg-body">
-      ${clusterRegNote}${excludedWarning}${lowDfWarning}${vifWarning}
+      ${renderConvergenceBadge(reg.convergence)}${clusterRegNote}${excludedWarning}${lowDfWarning}${vifWarning}
       <table class="reg-table">
         <thead><tr>
           <th>Term</th><th>β</th><th>SE</th><th>${statLabel}</th>
@@ -907,9 +916,7 @@ export function renderSelectionModelPanel(r, mode, weightFn, profile) {
     const ciLo   = fmtDisp(r.ci_mu[0]);
     const ciHi   = fmtDisp(r.ci_mu[1]);
     const muUnadj = fmtDisp(r.RE_unsel);
-    const convNote = !r.converged
-      ? `<p class="sel-warn">⚠ Optimizer did not fully converge. Results may be unreliable.</p>`
-      : "";
+    const convNote = renderConvergenceBadge(r.convergence);
     const tau2Warn = (r.tau2_unsel !== undefined && r.tau2_unsel < 0.01)
       ? `<p class="sel-note">Note: Heterogeneity near zero (τ² ≈ 0). Selection model may be underidentified.</p>`
       : "";
@@ -942,9 +949,7 @@ export function renderSelectionModelPanel(r, mode, weightFn, profile) {
     const ciLo   = fmtDisp(r.ci_mu[0]);
     const ciHi   = fmtDisp(r.ci_mu[1]);
     const muUnadj = fmtDisp(r.RE_unsel);
-    const convNote = !r.converged
-      ? `<p class="sel-warn">⚠ Optimizer did not fully converge. Results may be unreliable.</p>`
-      : "";
+    const convNote = renderConvergenceBadge(r.convergence);
     const tau2Warn = (r.tau2_unsel !== undefined && r.tau2_unsel < 0.01)
       ? `<p class="sel-note">Note: Heterogeneity near zero (τ² ≈ 0). Selection model may be underidentified.</p>`
       : "";
@@ -977,9 +982,7 @@ export function renderSelectionModelPanel(r, mode, weightFn, profile) {
     const ciLo   = fmtDisp(r.ci_mu[0]);
     const ciHi   = fmtDisp(r.ci_mu[1]);
     const muUnadj = fmtDisp(r.RE_unsel);
-    const convNote = !r.converged
-      ? `<p class="sel-warn">⚠ Optimizer did not fully converge. Results may be unreliable.</p>`
-      : "";
+    const convNote = renderConvergenceBadge(r.convergence);
     const tau2Warn = (r.tau2_unsel !== undefined && r.tau2_unsel < 0.01)
       ? `<p class="sel-note">Note: Heterogeneity near zero (τ² ≈ 0). Selection model may be underidentified.</p>`
       : "";
@@ -1012,9 +1015,7 @@ export function renderSelectionModelPanel(r, mode, weightFn, profile) {
     const ciLo    = fmtDisp(r.ci_mu[0]);
     const ciHi    = fmtDisp(r.ci_mu[1]);
     const muUnadj = fmtDisp(r.RE_unsel);
-    const convNote = !r.converged
-      ? `<p class="sel-warn">⚠ Optimizer did not fully converge. Results may be unreliable.</p>`
-      : "";
+    const convNote = renderConvergenceBadge(r.convergence);
     const tau2Warn = (r.tau2_unsel !== undefined && r.tau2_unsel < 0.01)
       ? `<p class="sel-note">Note: Heterogeneity near zero (τ² ≈ 0). Selection model may be underidentified.</p>`
       : "";
@@ -1087,9 +1088,7 @@ export function renderSelectionModelPanel(r, mode, weightFn, profile) {
     : "";
 
   // ---- Convergence note (MLE only) ----
-  const convNote = isMLE && !r.converged
-    ? `<p class="sel-warn">⚠ Optimizer did not fully converge (gradient norm may be elevated). Results may be unreliable.</p>`
-    : "";
+  const convNote = isMLE ? renderConvergenceBadge(r.convergence) : "";
 
   // ---- τ² ≈ 0 warning: selection model underidentified when heterogeneity is near zero ----
   const tau2Warn = (r.tau2_unsel !== undefined && r.tau2_unsel < 0.01)

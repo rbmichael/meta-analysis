@@ -64,7 +64,7 @@ export function profileLikCI(studies, alpha = 0.05) {
   const k = studies.length;
   if (k <= 1) return [NaN, NaN];
 
-  const tau2ml = tau2_ML(studies);
+  const tau2ml = tau2_ML(studies).tau2;
   const w      = studies.map(d => 1 / (d.vi + tau2ml));
   const W      = sum(w);
   const muHat  = studies.reduce((acc, d, i) => acc + w[i] * d.yi, 0) / W;
@@ -125,7 +125,7 @@ export function profileLikTau2(studies, opts = {}) {
     return ll;
   }
 
-  const tau2hat = method === "REML" ? tau2_REML(studies) : tau2_ML(studies);
+  const tau2hat = (method === "REML" ? tau2_REML(studies) : tau2_ML(studies)).tau2;
   const lMax    = evalProfile(tau2hat);
   const chi2thresh = chiSquareQuantile(1 - alpha, 1);
   const lCrit   = lMax - chi2thresh / 2;
@@ -414,6 +414,7 @@ export function bayesMeta(studies, opts = {}) {
     grid_truncated,
     k,
     BF10, BF01, logBF10,
+    convergence: { converged: true, iters: 0, maxIters: 0, reason: null, source: 'bayesMeta_grid' },
   };
 }
 

@@ -157,7 +157,7 @@ import { regStars, regFmtP, buildRegCoeffRows, buildRegFittedRows,
          renderPCurvePanel, renderPUniformPanel, renderSelectionModelPanel,
          buildInfluenceHTML, bayesInterpretation, buildBayesSummaryHTML,
          buildSensitivityHTML, buildSubgroupHTML, renderGoshInfo,
-         formatContrastResult, renderPermResults, buildTag }
+         formatContrastResult, renderPermResults, buildTag, renderConvergenceBadge }
   from "./ui-render.js";
 import { validateRow, gatherSessionState } from "./ui-state.js";
 import { initTable, moderators, doAddModerator, removeModerator, clearModerators,
@@ -1200,6 +1200,18 @@ document.getElementById("draftStartFresh").addEventListener("click", () => {
 // workingLabel: shown immediately + button disabled (pass null to skip)
 // doneLabel:    shown after the async work completes for durationMs
 // Returns a resolve function the caller invokes when the work is done.
+// Flash the convergence-failure toast for durationMs, then hide it.
+// sources is an array of convergence.source strings (one per failed optimizer).
+function showConvergenceToast(sources) {
+  const el = document.getElementById("convergenceToast");
+  if (!el || !sources.length) return;
+  const list = sources.join(", ");
+  el.textContent = `⚠ Optimizer did not converge: ${list}`;
+  el.hidden = false;
+  clearTimeout(el._hideTimer);
+  el._hideTimer = setTimeout(() => { el.hidden = true; }, 5000);
+}
+
 function flashBtn(btn, workingLabel, doneLabel, durationMs = 1500) {
   const original = btn.textContent;
   let resolve;
@@ -2058,6 +2070,7 @@ function init() {
     robPlotState,
     markStale,
     getCiAlpha,
+    showConvergenceToast,
     onRunSuccess: () => {
       if (outputPlaceholder) outputPlaceholder.style.display = "none";
       staleBanner.style.display = "none";
@@ -2903,7 +2916,7 @@ function _runCoreMeta(studies, opts) {
 
   let tf = [], all = studies;
   if (useTF && !isMHorPeto) {
-    tf  = trimFill(studies, method, tfEstimator);
+    tf  = trimFill(studies, method, tfEstimator).filled;
     all = [...studies, ...tf];
   }
 
@@ -3105,6 +3118,7 @@ function _renderRveThreeLevel(ctx) {
           const ciLoDisp = profile.transform(tl.ci[0]);
           const ciHiDisp = profile.transform(tl.ci[1]);
           elThreeSummary.innerHTML = `
+            ${renderConvergenceBadge(tl.convergence)}
             <div style="font-size:0.8125rem;line-height:1.9;margin-bottom:8px">
               ${hBtn("threelevel.model")}<b>Three-level pooled estimate:</b> ${fmt(muDisp)}<br>
               ${Math.round((1 - alpha) * 100)}% CI [${fmt(ciLoDisp)}, ${fmt(ciHiDisp)}] | SE = ${fmt(tl.se)} | <em>z</em> = ${fmt(tl.z)} | <em>p</em> ${fmtPval(tl.p)}<br>
@@ -3270,7 +3284,7 @@ function _renderPooledPanel(ctx) {
     ${logScaleFELine}${analysisScaleFELine}
     ${robustCILine}${clesLine}<div class="result-het-group">
       <div class="result-section-label">Heterogeneity</div>
-      <div class="result-het-stats">τ²=${fmt(m.tau2)} [${fmt(m.tauCI[0])}, ${isFinite(m.tauCI[1])?fmt(m.tauCI[1]):"∞"}]${hBtn("het.tau2")}${m.tau2Converged === false ? ' <span class="badge-warn" title="τ² estimator did not converge within the iteration limit">(did not converge)</span>' : ""} &nbsp;·&nbsp; <em>I</em>²=${fmt(m.I2)}% [${fmt(m.I2CI[0])}%, ${fmt(m.I2CI[1])}%]${hBtn("het.I2")} &nbsp;·&nbsp; <em>H</em>²-CI=[${fmt(m.H2CI[0])}, ${isFinite(m.H2CI[1])?fmt(m.H2CI[1]):"∞"}]${hBtn("het.H2")}</div>
+      <div class="result-het-stats">τ²=${m.tau2Boundary ? '0 <span class="badge-warn" title="τ² optimizer converged at the boundary (constrained to 0)">(boundary)</span>' : fmt(m.tau2)} [${fmt(m.tauCI[0])}, ${isFinite(m.tauCI[1])?fmt(m.tauCI[1]):"∞"}]${hBtn("het.tau2")}${(m.convergence && m.convergence.converged === false) ? ' <span class="badge-warn" title="τ² estimator did not converge within the iteration limit">(did not converge)</span>' : ""} &nbsp;·&nbsp; <em>I</em>²=${fmt(m.I2)}% [${fmt(m.I2CI[0])}%, ${fmt(m.I2CI[1])}%]${hBtn("het.I2")} &nbsp;·&nbsp; <em>H</em>²-CI=[${fmt(m.H2CI[0])}, ${isFinite(m.H2CI[1])?fmt(m.H2CI[1]):"∞"}]${hBtn("het.H2")}</div>
       <div class="result-het-stats result-het-test"><em>Q</em>(${m.df}) = ${fmt(m.Q)}, <em>p</em> ${fmtPval(m.df > 0 ? 1 - chiSquareCDF(m.Q, m.df) : NaN)}${hBtn("het.Q")}</div>
     </div>
   `);
@@ -3822,6 +3836,23 @@ async function runAnalysis() {
     performance.mark("phase:regression:start");
     const regression = _runRegressionBatch(studies, m, opts);
     performance.measure("phase:regression", "phase:regression:start");
+
+    // ── Convergence diagnostics ───────────────────────────────────────────
+    {
+      const nonConverged = [
+        m.convergence,
+        threeLevelResult?.convergence,
+        regression.reg?.convergence,
+        regression.ls?.convergence,
+        pubBias.selResult?.convergence,
+      ].filter(c => c && c.converged === false);
+      if (nonConverged.length) {
+        const sources = nonConverged.map(c => c.source);
+        console.warn("[FOSMA] Optimizer did not converge:",
+          nonConverged.map(c => `${c.source} (${c.iters}/${c.maxIters} iters)`).join("; "));
+        showConvergenceToast(sources);
+      }
+    }
 
     // ── Phase 7: Render all output panels ─────────────────────────────────
     _renderAllResults({

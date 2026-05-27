@@ -237,7 +237,8 @@ export function mvMeta(rows, V, opts = {}) {
 
   const mvErr = msg => ({
     error: msg, beta: [], se: [], ci: [], z: [], pval: [], tau2: [],
-    Psi: null, QM: NaN, QE: NaN, k: NaN, convergence: false,
+    Psi: null, QM: NaN, QE: NaN, k: NaN,
+    convergence: { converged: false, iters: 0, maxIters: 500, reason: 'max_iters', source: 'bfgs_mvMeta' },
   });
 
   // ---- Validate inputs ----
@@ -611,7 +612,8 @@ export function mvMeta(rows, V, opts = {}) {
     k, n, P,
     struct, method, ciMethod, slopes,
     dist, df: df_residual,
-    convergence: res.converged,
+    convergence: { converged: res.converged, iters: res.iters, maxIters: 500,
+                   reason: res.converged ? null : 'max_iters', source: 'bfgs_mvMeta_' + method },
     optimizer: { iters: res.iters, gnorm: res.gnorm },
     warnings,
   };

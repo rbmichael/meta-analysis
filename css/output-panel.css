@@ -344,6 +344,41 @@
   opacity: 1;
 }
 
+/* Optimizer convergence failure chip — rendered above the affected result table */
+.convergence-warning {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  margin: 0 0 8px;
+  background: var(--badge-warning-bg);
+  border: 1px solid var(--badge-warning-border);
+  border-radius: 4px;
+  color: var(--color-warning);
+  font-size: 0.875em;
+  font-weight: 500;
+}
+
+/* Convergence-failure toast — fixed bottom-centre, auto-dismissed by JS */
+#convergenceToast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9600;
+  max-width: min(480px, calc(100vw - 40px));
+  padding: 8px 16px;
+  background: var(--badge-warning-bg);
+  border: 1px solid var(--badge-warning-border);
+  border-radius: var(--radius-md);
+  color: var(--color-warning);
+  font-size: var(--font-size-base);
+  font-weight: 500;
+  pointer-events: none;
+  transition: opacity 0.4s ease;
+}
+#convergenceToast[hidden] { display: none; }
+
 /* Fitted values accordion */
 #regressionPanel details {
   margin-top: 12px;

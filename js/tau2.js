@@ -107,7 +107,7 @@ export function tau2_HE(studies) {
 // poorly estimated.
 export function tau2_SJ(studies, tol = REML_TOL, maxIter = 200, tau2Init = null) {
   const k = studies.length;
-  if (k <= 1) return 0;
+  if (k <= 1) return { tau2: 0, converged: true, iters: 0, maxIters: maxIter };
   let tau2;
   if (tau2Init !== null) {
     tau2 = Math.max(0, tau2Init);
@@ -115,9 +115,11 @@ export function tau2_SJ(studies, tol = REML_TOL, maxIter = 200, tau2Init = null)
     const ybar0 = studies.reduce((acc, d) => acc + d.yi, 0) / k;
     // Seed: raw between-study variance (always > 0 unless all yi identical)
     tau2 = studies.reduce((acc, d) => acc + (d.yi - ybar0) ** 2, 0) / k;
-    if (tau2 === 0) return 0;
+    if (tau2 === 0) return { tau2: 0, converged: true, iters: 0, maxIters: maxIter };
   }
-  for (let iter = 0; iter < maxIter; iter++) {
+  let iters = 0;
+  let converged = false;
+  for (; iters < maxIter; iters++) {
     let W = 0, Wmu = 0;
     for (const d of studies) {
       const wi = 1 / (d.vi + tau2);
@@ -130,10 +132,10 @@ export function tau2_SJ(studies, tol = REML_TOL, maxIter = 200, tau2Init = null)
       s += d.vi * r * r / (d.vi + tau2);
     }
     const newTau2 = s / k;
-    if (Math.abs(newTau2 - tau2) < tol) return Math.max(0, newTau2);
+    if (Math.abs(newTau2 - tau2) < tol) { tau2 = Math.max(0, newTau2); converged = true; iters++; break; }
     tau2 = Math.max(0, newTau2);
   }
-  return tau2;
+  return { tau2, converged, iters, maxIters: maxIter };
 }
 
 // ================= FISHER SCORING CORE =================
@@ -142,7 +144,9 @@ export function tau2_SJ(studies, tol = REML_TOL, maxIter = 200, tau2Init = null)
 function fisherScoringCore(vi, fitFn, seed, tol, maxIter, useHat) {
   const k = vi.length;
   let tau2 = seed;
-  for (let iter = 0; iter < maxIter; iter++) {
+  let iters = 0;
+  let converged = false;
+  for (; iters < maxIter; iters++) {
     const fit = fitFn(tau2);
     if (!fit) break;
     const { e, h } = fit;
@@ -159,10 +163,10 @@ function fisherScoringCore(vi, fitFn, seed, tol, maxIter, useHat) {
     let sh = 0;
     while (newTau2 < 0 && sh++ < 20) { step /= 2; newTau2 = tau2 + step; }
     newTau2 = Math.max(0, newTau2);
-    if (Math.abs(newTau2 - tau2) < tol) { tau2 = newTau2; break; }
+    if (Math.abs(newTau2 - tau2) < tol) { tau2 = newTau2; converged = true; iters++; break; }
     tau2 = newTau2;
   }
-  return tau2;
+  return { tau2, converged, iters, maxIters: maxIter, tau2Boundary: converged && tau2 === 0 };
 }
 
 // ================= ML TAU² =================
@@ -174,7 +178,7 @@ function fisherScoringCore(vi, fitFn, seed, tol, maxIter, useHat) {
 // in small samples. Useful when comparing nested models via LRT.
 export function tau2_ML(studies, tol = REML_TOL, maxIter = 100, tau2Init = null) {
   const k = studies.length;
-  if (k <= 1) return 0;
+  if (k <= 1) return { tau2: 0, converged: true, iters: 0, maxIters: maxIter };
   const vi = studies.map(d => d.vi);
   const yi = studies.map(d => d.yi);
   const seed = tau2Init !== null ? Math.max(0, tau2Init) : tau2_DL(studies);
@@ -206,7 +210,7 @@ export function logLik(studies, mu, tau2) {
 // estimator as the starting value and refines via Fisher scoring.
 export function tau2_REML(studies, tol = REML_TOL, maxIter = 100, tau2Init = null) {
   const k = studies.length;
-  if (k <= 1) return 0;
+  if (k <= 1) return { tau2: 0, converged: true, iters: 0, maxIters: maxIter };
   const vi = studies.map(d => d.vi);
   const yi = studies.map(d => d.yi);
   const seed = tau2Init !== null ? Math.max(0, tau2Init) : tau2_DL(studies);
@@ -319,7 +323,7 @@ export function tau2_PMM(studies, tol = REML_TOL, maxIter = 200, tau2Init = null
 // Replaces the previous Patnaik/Satterthwaite 2-moment approximation (3–4 % error).
 export function tau2_GENQM(studies, tol = REML_TOL, maxIter = 200) {
   const k = studies.length;
-  if (k <= 1) return 0;
+  if (k <= 1) return { tau2: 0, converged: true, iters: 0, maxIters: maxIter };
 
   const vi = studies.map(d => d.vi);
   const yi = studies.map(d => d.yi);
@@ -329,7 +333,7 @@ export function tau2_GENQM(studies, tol = REML_TOL, maxIter = 200) {
   // Observed FE Q-statistic (constant — does not depend on τ²)
   const ybarFE = yi.reduce((s, y, i) => s + wi[i] * y, 0) / W;
   const Q_obs  = yi.reduce((s, y, i) => s + wi[i] * (y - ybarFE) ** 2, 0);
-  if (Q_obs <= 0) return 0;
+  if (Q_obs <= 0) return { tau2: 0, converged: true, iters: 0, maxIters: maxIter };
 
   // k−1 positive eigenvalues of S·P·S via secular equation (rank-1 case)
   function eigenvalues(tau2) {
@@ -403,21 +407,23 @@ export function tau2_GENQM(studies, tol = REML_TOL, maxIter = 200) {
   }
 
   // Return 0 if Q_obs is at or below the median of Q_FE at τ²=0
-  if (imhofCDF(eigenvalues(0), Q_obs) <= 0.5) return 0;
+  if (imhofCDF(eigenvalues(0), Q_obs) <= 0.5) return { tau2: 0, converged: true, iters: 0, maxIters: maxIter };
 
   // Bisect on τ²: find where P(Q_FE(τ²) ≤ Q_obs) crosses 0.5 from above.
   // imhofCDF is decreasing in τ² (larger τ² → heavier distribution → lower CDF at fixed Q_obs).
   let lo = 0, hi = 1;
   while (imhofCDF(eigenvalues(hi), Q_obs) > 0.5 && hi < 1e6) hi *= 2;
-  if (hi >= 1e6) return hi / 2; // fallback
+  if (hi >= 1e6) return { tau2: hi / 2, converged: false, iters: 0, maxIters: maxIter }; // bracket failed to close
 
-  for (let i = 0; i < maxIter; i++) {
+  let bisIters = 0;
+  let bisConverged = false;
+  for (; bisIters < maxIter; bisIters++) {
     const mid = (lo + hi) / 2;
     if (imhofCDF(eigenvalues(mid), Q_obs) > 0.5) lo = mid; else hi = mid;
-    if (hi - lo < tol) break;
+    if (hi - lo < tol) { bisConverged = true; bisIters++; break; }
   }
 
-  return Math.max(0, (lo + hi) / 2);
+  return { tau2: Math.max(0, (lo + hi) / 2), converged: bisConverged, iters: bisIters, maxIters: maxIter };
 }
 
 // genqCore(studies, weights) → τ² estimate (≥ 0)
@@ -500,16 +506,18 @@ export function tau2Core_ML(vi, fitFn, seed = 0, tol = REML_TOL, maxIter = 100) 
 // fitFn(tau2) → { e: residual[], W: sumW } | null
 export function tau2Core_PM(vi, fitFn, df, seed = 0, tol = REML_TOL, maxIter = 100) {
   let tau2 = seed;
-  for (let iter = 0; iter < maxIter; iter++) {
+  let iters = 0;
+  let converged = false;
+  for (; iters < maxIter; iters++) {
     const fit = fitFn(tau2);
     if (!fit) break;
     const { e, W } = fit;
     const QE = vi.reduce((s, v, i) => s + e[i] * e[i] / (v + tau2), 0);
     const newTau2 = Math.max(0, tau2 + (QE - df) / W);
-    if (Math.abs(newTau2 - tau2) < tol) return newTau2;
+    if (Math.abs(newTau2 - tau2) < tol) { tau2 = newTau2; converged = true; iters++; break; }
     tau2 = newTau2;
   }
-  return tau2;
+  return { tau2, converged, iters, maxIters: maxIter };
 }
 
 // DL core: one-shot with leverage correction. fitFn0 uses FE weights. df = k − p.
@@ -551,16 +559,18 @@ export function tau2Core_HE(vi, fitFn0, df) {
 export function tau2Core_SJ(vi, fitFn, seed, tol = REML_TOL, maxIter = 200) {
   const k = vi.length;
   let tau2 = seed;
-  if (tau2 === 0) return 0;
-  for (let iter = 0; iter < maxIter; iter++) {
+  if (tau2 === 0) return { tau2: 0, converged: true, iters: 0, maxIters: maxIter };
+  let iters = 0;
+  let converged = false;
+  for (; iters < maxIter; iters++) {
     const fit = fitFn(tau2);
     if (!fit) break;
     const { e } = fit;
     const newTau2 = vi.reduce((s, v, i) => s + v * e[i] * e[i] / (v + tau2), 0) / k;
-    if (Math.abs(newTau2 - tau2) < tol) return Math.max(0, newTau2);
+    if (Math.abs(newTau2 - tau2) < tol) { tau2 = Math.max(0, newTau2); converged = true; iters++; break; }
     tau2 = Math.max(0, newTau2);
   }
-  return tau2;
+  return { tau2, converged, iters, maxIters: maxIter };
 }
 
 

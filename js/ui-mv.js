@@ -27,7 +27,7 @@ import { normalQuantile, tCritical } from "./utils.js";
 import { fmt } from "./format.js";
 import { escapeHTML } from "./utils-html.js";
 import { renderWarningBlocks, msgExcluded, msgNonNumericMod, analysisChecks } from "./ui-warnings.js";
-import { cellRich, mvPooledData, mvHeterogeneityData, mvTestsData, mvModeratorData, mvFitLine, mvStudyData } from "./sections.js";
+import { cellRich, mvPooledData, mvHeterogeneityData, mvTestsData, mvModeratorData, mvFitLine, mvStudyData, convergenceBadge } from "./sections.js";
 import { PLOT_THEMES } from "./plotThemes.js";
 import { resolveThemeVars, hasEmbeddedBackground, currentBgColour } from "./export.js";
 import { downloadBlob } from "./io.js";
@@ -37,7 +37,7 @@ import {
 } from "./ui-table.js";
 
 // ── Injected deps (set by initMV) ─────────────────────────────────────────────
-let _appState, _robPlotState, _markStale, _getCiAlpha, _onRunSuccess;
+let _appState, _robPlotState, _markStale, _getCiAlpha, _onRunSuccess, _showConvergenceToast;
 
 // ── Shared state (exported — mutated in place by ui.js / applySession) ────────
 export const mvState = { active: false };
@@ -58,11 +58,12 @@ export const mvForestState = {
 // Must be called once from init() before any table or session operations.
 // deps: { appState, robPlotState, markStale, getCiAlpha, onRunSuccess }
 export function initMV(deps) {
-  _appState     = deps.appState;
-  _robPlotState = deps.robPlotState;
-  _markStale    = deps.markStale;
-  _getCiAlpha   = deps.getCiAlpha;
-  _onRunSuccess = deps.onRunSuccess;
+  _appState              = deps.appState;
+  _robPlotState          = deps.robPlotState;
+  _markStale             = deps.markStale;
+  _getCiAlpha            = deps.getCiAlpha;
+  _onRunSuccess          = deps.onRunSuccess;
+  _showConvergenceToast  = deps.showConvergenceToast ?? (() => {});
 
   registerDeleteCompanion(_mvCommitPendingDelete);
 
@@ -550,6 +551,14 @@ export function runMVAnalysis() {
     return false;
   }
 
+  // Convergence diagnostics
+  if (res.convergence && res.convergence.converged === false) {
+    const c = res.convergence;
+    console.warn("[FOSMA] MV optimizer did not converge:",
+      `${c.source} (${c.iters}/${c.maxIters} iters)`);
+    _showConvergenceToast([c.source]);
+  }
+
   document.querySelectorAll(".results-section").forEach(d => { d.removeAttribute("open"); d.style.display = "none"; });
 
   const _stdForestSection = document.getElementById("forestSection");
@@ -613,12 +622,11 @@ function _renderMVResults(res, { alpha, rows = [] } = {}) {
   const stars  = p => p < 0.001 ? "***" : p < 0.01 ? "**" : p < 0.05 ? "*" : "";
   const hasMods = beta.length > P;
 
-  const warnHTML = (engineWarnings.length || convergence === false)
-    ? (convergence === false
-        ? `<p style="color:var(--color-warning);margin:2px 0">⚠ Optimizer did not fully converge — interpret results with caution.</p>`
-        : "") +
-      engineWarnings.map(w => `<p style="color:var(--color-warning);margin:2px 0">⚠ ${escapeHTML(w)}</p>`).join("")
+  const _convBadgeInline = convergence && convergence.converged === false
+    ? `<p style="color:var(--color-warning);margin:2px 0">⚠ Optimizer did not fully converge [${convergence.source}] — interpret results with caution.</p>`
     : "";
+  const warnHTML = (_convBadgeInline + engineWarnings.map(w =>
+    `<p style="color:var(--color-warning);margin:2px 0">⚠ ${escapeHTML(w)}</p>`).join("")) || "";
 
   const interceptRows = beta.slice(0, P).map((b, o) => {
     const [lo, hi] = ci[o];
@@ -736,7 +744,7 @@ function _renderMVResults(res, { alpha, rows = [] } = {}) {
     &nbsp;·&nbsp; AIC = ${fmt(AIC, 2)} &nbsp;·&nbsp; BIC = ${fmt(BIC, 2)}
     ${isFinite(AICc) ? `&nbsp;·&nbsp; AICc = ${fmt(AICc, 2)}` : ""}
     &nbsp;|&nbsp; ${method}, Ψ = ${struct}, CI = ${ciMethod === "t" ? "t-dist" : "normal"}
-    ${convergence === false ? `&nbsp;·&nbsp; <span style="color:var(--color-warning)">convergence uncertain</span>` : ""}
+    ${convergence && convergence.converged === false ? `&nbsp;·&nbsp; <span style="color:var(--color-warning)">convergence uncertain</span>` : ""}
   </div>`;
 
   const boundaryOutcomes = outcomeIds.filter((_, o) => tau2[o] < 1e-6).map(id => escapeHTML(String(id)));
@@ -1288,8 +1296,9 @@ export function buildMVReportHTML(res, rows = [], alpha = 0.05, { reportCSS, bui
     return out;
   })();
 
+  const _convBadge = convergenceBadge(pooledD.convergence);
   const warnHTML = [
-    convergence === false ? `<p style="color:#c0392b"><strong>Warning:</strong> Optimizer did not fully converge — interpret results with caution.</p>` : "",
+    _convBadge ? `<p class="convergence-warning">⚠ ${escapeHTML(_convBadge.text)}</p>` : "",
     ...engineWarnings.map(w => `<p style="color:#c0392b">${escapeHTML(w)}</p>`),
   ].filter(Boolean).join("");
 

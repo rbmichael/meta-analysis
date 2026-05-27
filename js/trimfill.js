@@ -77,13 +77,14 @@ function detectSide(studies, center) {
 // Algorithm matches metafor 4.8-0 trimfill.rma.uni().
 // ---------------------------------------------------------------------------
 export function trimFill(studies, method = "DL", estimator = "L0", maxIter = 100) {
-  if (studies.length < 3) return [];
+  const noFill = { filled: [], convergence: { converged: true, iters: 0, maxIters: maxIter, reason: null, source: 'trimFill_' + estimator } };
+  if (studies.length < 3) return noFill;
 
   const k = studies.length;
 
   // ---- Initial center for side detection ----
   const initCenter = meta(studies, method).RE;
-  if (!isFinite(initCenter)) return [];
+  if (!isFinite(initCenter)) return noFill;
 
   // ---- Side detection ----
   const side = detectSide(studies, initCenter);
@@ -100,8 +101,10 @@ export function trimFill(studies, method = "DL", estimator = "L0", maxIter = 100
   let k0       = 0;
   let center   = 0;   // center in the flipped scale
   let tau2Warm = null; // warm-start seed: previous iteration's converged τ²
+  let tfIters  = 0;
+  let tfConverged = false;
 
-  for (let iter = 0; iter < maxIter; iter++) {
+  for (; tfIters < maxIter; tfIters++) {
     const k0Prev = k0;
 
     // Trim k0 from the right end (largest values in flipped scale).
@@ -145,20 +148,26 @@ export function trimFill(studies, method = "DL", estimator = "L0", maxIter = 100
     }
 
     k0 = Math.max(0, Math.round(k0Raw));
-    if (k0 === k0Prev) break;
+    if (k0 === k0Prev) { tfConverged = true; tfIters++; break; }
   }
 
-  if (k0 === 0) return [];
+  const convergence = { converged: tfConverged, iters: tfIters, maxIters: maxIter,
+                        reason: tfConverged ? null : 'max_iters', source: 'trimFill_' + estimator };
+
+  if (k0 === 0) return { filled: [], convergence };
 
   // ---- Build filled (mirror-image) studies ----
   // The k0 rightmost in the sorted-flipped scale are the trimmed excess.
   // Their mirrors are: filled_yi_flipped = 2·center − orig_yi_flipped.
   // Un-flip: filled_yi = flip * filled_yi_flipped.
   const toFill = stSorted.slice(k - k0);
-  return toFill.map(orig => {
-    const origFlipped   = flip * orig.yi;
-    const filledFlipped = 2 * center - origFlipped;
-    const yi = flip * filledFlipped;
-    return { ...orig, yi, md: yi, label: orig.label + " (filled)", filled: true };
-  });
+  return {
+    filled: toFill.map(orig => {
+      const origFlipped   = flip * orig.yi;
+      const filledFlipped = 2 * center - origFlipped;
+      const yi = flip * filledFlipped;
+      return { ...orig, yi, md: yi, label: orig.label + " (filled)", filled: true };
+    }),
+    convergence,
+  };
 }

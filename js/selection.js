@@ -835,6 +835,8 @@ function _fitContinuousSelModel({ studies, sides, weightFn, makeWFn, initGrid, l
     ciHigh_unsel: mUnsel.ciHigh,
     converged: result.converged,
     iters:     result.iters,
+    convergence: { converged: result.converged, iters: result.iters, maxIters: 500,
+                   reason: result.converged ? null : 'max_iters', source: 'bfgs_' + weightFn },
     k, sides,
     weightFn,
   };
@@ -1217,6 +1219,8 @@ export function veveaHedges(studies, cuts = SEL_CUTS_ONE_SIDED, sides = 1, fixed
       RE_unsel: mUnsel.RE, tau2_unsel: mUnsel.tau2,
       ciLow_unsel: mUnsel.ciLow, ciHigh_unsel: mUnsel.ciHigh,
       converged: result.converged, iters: result.iters,
+      convergence: { converged: result.converged, iters: result.iters, maxIters: 400,
+                     reason: result.converged ? null : 'max_iters', source: 'bfgs_vh' },
       cuts, sides, k, K, nPerInterval,
       fixed: true,
     };
@@ -1256,6 +1260,7 @@ export function veveaHedges(studies, cuts = SEL_CUTS_ONE_SIDED, sides = 1, fixed
       RE_unsel: mUnsel.RE, tau2_unsel: mUnsel.tau2,
       ciLow_unsel: mUnsel.ciLow, ciHigh_unsel: mUnsel.ciHigh,
       converged: true, iters: 0,
+      convergence: { converged: true, iters: 0, maxIters: 400, reason: null, source: 'bfgs_vh' },
       cuts, sides, k, K, nFree: 0,
       nPerInterval, freeIdx: [],
       fixed: false,
@@ -1357,6 +1362,8 @@ export function veveaHedges(studies, cuts = SEL_CUTS_ONE_SIDED, sides = 1, fixed
     // Optimiser diagnostics
     converged: result.converged,
     iters:     result.iters,
+    convergence: { converged: result.converged, iters: result.iters, maxIters: 400,
+                   reason: result.converged ? null : 'max_iters', source: 'bfgs_vh' },
 
     // Configuration and counts
     cuts, sides, k, K, nFree,

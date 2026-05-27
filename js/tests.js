@@ -2,7 +2,7 @@ import { round, transformEffect, chiSquareCDF, chiSquareQuantile, parseCounts, b
 import { validateStudy } from "./profiles.js";
 import { BENCHMARKS, PUB_BIAS_BENCHMARKS, INFLUENCE_BENCHMARKS, META_REGRESSION_BENCHMARKS, VH_BENCHMARKS, MH_BENCHMARKS, CLUSTER_BENCHMARKS, RVE_BENCHMARKS, RVE_MOM_BENCHMARKS, THREE_LEVEL_BENCHMARKS, LS_BENCHMARKS, CONTRAST_BENCHMARKS, INTERACTION_BENCHMARKS, HALFNORM_BENCHMARKS, POWER_BENCHMARKS, NEGEXP_BENCHMARKS, BETA_BENCHMARKS, PERM_BENCHMARKS } from "./benchmarks.js";
 import { permTestSync, permPval } from "./perm.js";
-import { compute, meta, metaMH, metaPeto, robustMeta, sandwichVar, robustWlsResult, metaRegression, testContrast, tau2_HS, tau2_HE, tau2_ML, tau2_SJ, beggTest, eggerTest, fatPetTest, petPeeseTest, failSafeN, tesTest, heterogeneityCIs, cumulativeMeta, influenceDiagnostics, harbordTest, petersTest, deeksTest, rueckerTest, leaveOneOut, baujat, blupMeta, pCurve, pUniform, estimatorComparison, subgroupAnalysis, logLik, bfgs, selIntervalProbs, selIntervalIdx, selectionLogLik, SEL_CUTS_ONE_SIDED, SEL_CUTS_TWO_SIDED, veveaHedges, SELECTION_PRESETS, halfNormalSelModel, powerSelModel, negexpSelModel, betaSelModel, profileLikTau2, profileLikCI, bayesMeta, priorSensitivity, rvePooled, meta3level, lsModel, adjustPvals, henmiCopas, waapWls, clES, vcalc, mvMeta, validStudies } from "./analysis.js";
+import { compute, meta, metaMH, metaPeto, robustMeta, sandwichVar, robustWlsResult, metaRegression, testContrast, tau2_HS, tau2_HE, tau2_ML, tau2_REML, tau2_SJ, beggTest, eggerTest, fatPetTest, petPeeseTest, failSafeN, tesTest, heterogeneityCIs, cumulativeMeta, influenceDiagnostics, harbordTest, petersTest, deeksTest, rueckerTest, leaveOneOut, baujat, blupMeta, pCurve, pUniform, estimatorComparison, subgroupAnalysis, logLik, bfgs, selIntervalProbs, selIntervalIdx, selectionLogLik, SEL_CUTS_ONE_SIDED, SEL_CUTS_TWO_SIDED, veveaHedges, SELECTION_PRESETS, halfNormalSelModel, powerSelModel, negexpSelModel, betaSelModel, profileLikTau2, profileLikCI, bayesMeta, priorSensitivity, rvePooled, meta3level, lsModel, adjustPvals, henmiCopas, waapWls, clES, vcalc, mvMeta, validStudies } from "./analysis.js";
 import { trimFill } from "./trimfill.js";
 import { parseCSV } from "./csv.js";
 import { goshCompute, GOSH_MAX_ENUM_K, GOSH_MAX_K, GOSH_DEFAULT_MAX_SUBSETS } from "./gosh.js";
@@ -400,12 +400,12 @@ export function runTests() {
   console.log("--- Analytical values (yi=[0,1,3], vi=[1,1,1]) ---");
   tchk("HS  τ² = 8/9",        tau2_HS(s3),  8 / 9,  0.05);
   tchk("HE  τ² = 4/3",        tau2_HE(s3),  4 / 3,  0.05);
-  tchk("ML  τ² = 5/9",        tau2_ML(s3),  5 / 9,  0.05);
-  tchk("SJ  τ² = (√65−3)/6",  tau2_SJ(s3),  (Math.sqrt(65) - 3) / 6, 0.05);
+  tchk("ML  τ² = 5/9",        tau2_ML(s3).tau2,  5 / 9,  0.05);
+  tchk("SJ  τ² = (√65−3)/6",  tau2_SJ(s3).tau2,  (Math.sqrt(65) - 3) / 6, 0.05);
 
   // 2. Ordering relationships for this dataset (all inequalities are exact)
   console.log("--- Ordering: ML ≤ HS ≤ DL = HE = REML ---");
-  const hs = tau2_HS(s3), he = tau2_HE(s3), ml = tau2_ML(s3), sj = tau2_SJ(s3);
+  const hs = tau2_HS(s3), he = tau2_HE(s3), ml = tau2_ML(s3).tau2, sj = tau2_SJ(s3).tau2;
   tchkTrue("ML ≤ HS",  ml <= hs + 1e-9);
   tchkTrue("HS ≤ HE",  hs <= he + 1e-9);
   tchkTrue("SJ > 0",   sj > 0);
@@ -414,16 +414,16 @@ export function runTests() {
   console.log("--- Edge cases ---");
   tchk("HS  k=1 → 0", tau2_HS([{ yi: 1, vi: 1 }]), 0, 0.001);
   tchk("HE  k=1 → 0", tau2_HE([{ yi: 1, vi: 1 }]), 0, 0.001);
-  tchk("ML  k=1 → 0", tau2_ML([{ yi: 1, vi: 1 }]), 0, 0.001);
-  tchk("SJ  k=1 → 0", tau2_SJ([{ yi: 1, vi: 1 }]), 0, 0.001);
+  tchk("ML  k=1 → 0", tau2_ML([{ yi: 1, vi: 1 }]).tau2, 0, 0.001);
+  tchk("SJ  k=1 → 0", tau2_SJ([{ yi: 1, vi: 1 }]).tau2, 0, 0.001);
 
   // 4. Homogeneous studies: all yi identical → τ² = 0 for all methods
   console.log("--- Homogeneous yi → τ² = 0 ---");
   const sHom = [{ yi: 1, vi: 0.5 }, { yi: 1, vi: 1 }, { yi: 1, vi: 2 }];
   tchk("HS  homogeneous → 0", tau2_HS(sHom), 0, 0.001);
   tchk("HE  homogeneous → 0", tau2_HE(sHom), 0, 0.001);
-  tchk("ML  homogeneous → 0", tau2_ML(sHom), 0, 0.001);
-  tchk("SJ  homogeneous → 0", tau2_SJ(sHom), 0, 0.001);
+  tchk("ML  homogeneous → 0", tau2_ML(sHom).tau2, 0, 0.001);
+  tchk("SJ  homogeneous → 0", tau2_SJ(sHom).tau2, 0, 0.001);
 
   // 5. meta() dispatch: method strings route to the right estimator
   console.log("--- meta() dispatch ---");
@@ -3243,7 +3243,7 @@ export function runTests() {
         : [["L0", exp.trimFill]];
       for (const [est, tf] of entries) {
         if (!tf) continue;
-        const filled = trimFill(studies, tauM, est);
+        const { filled } = trimFill(studies, tauM, est);
         const k0 = filled.length;
         const adjustedRE = meta([...studies, ...filled], tauM).RE;
         if (tf.k0         !== undefined) pbchkTrue(`trimFill.${est}.k0 = ${tf.k0}`, k0 === tf.k0);
@@ -3654,9 +3654,9 @@ export function runTests() {
   // Code returns [] before any iteration when studies.length < 3.
   console.log("--- k < 3 edge cases ---");
   {
-    tfchk("k=0 → []", trimFill([]).length, 0);
-    tfchk("k=1 → []", trimFill([{ yi: 1, vi: 1 }]).length, 0);
-    tfchk("k=2 → []", trimFill([{ yi: 1, vi: 1 }, { yi: 2, vi: 1 }]).length, 0);
+    tfchk("k=0 → []", trimFill([]).filled.length, 0);
+    tfchk("k=1 → []", trimFill([{ yi: 1, vi: 1 }]).filled.length, 0);
+    tfchk("k=2 → []", trimFill([{ yi: 1, vi: 1 }, { yi: 2, vi: 1 }]).filled.length, 0);
   }
 
   // ---- k0=0: no asymmetry ----
@@ -3664,10 +3664,10 @@ export function runTests() {
   console.log("--- k0=0: all equal yi ---");
   {
     const flat3 = [{ yi: 1, vi: 0.1 }, { yi: 1, vi: 0.1 }, { yi: 1, vi: 0.1 }];
-    tfchk("k=3, all yi=1 → k0=0, []", trimFill(flat3).length, 0);
+    tfchk("k=3, all yi=1 → k0=0, []", trimFill(flat3).filled.length, 0);
 
     const flat5 = Array.from({ length: 5 }, () => ({ yi: 0, vi: 1, label: "s" }));
-    tfchk("k=5, all yi=0 → k0=0, []", trimFill(flat5).length, 0);
+    tfchk("k=5, all yi=0 → k0=0, []", trimFill(flat5).filled.length, 0);
   }
 
   // ---- maxIter=0: loop never runs, k0 stays 0 ----
@@ -3679,7 +3679,7 @@ export function runTests() {
       { label: "S3", yi: 1.5, vi: 0.04 }, { label: "S4", yi: 2.0, vi: 0.04 },
       { label: "S5", yi: 2.5, vi: 0.04 },
     ];
-    tfchk("maxIter=0 → k0=0 regardless of data", trimFill(asym, "DL", 0).length, 0);
+    tfchk("maxIter=0 → k0=0 regardless of data", trimFill(asym, "DL", 0).filled.length, 0);
   }
 
   // ---- BCG log-OR DL: k0=0 (cross-validated against metafor 4.8-0) ----
@@ -3692,9 +3692,9 @@ export function runTests() {
       const s = compute(d, bm.type);
       return { ...d, yi: s.yi, vi: s.vi, se: s.se };
     });
-    tfchk("BCG OR DL L0: k0=0", trimFill(studies, bm.tauMethod, "L0").length, 0);
-    tfchk("BCG OR DL R0: k0=0", trimFill(studies, bm.tauMethod, "R0").length, 0);
-    tfchk("BCG OR DL Q0: k0=0", trimFill(studies, bm.tauMethod, "Q0").length, 0);
+    tfchk("BCG OR DL L0: k0=0", trimFill(studies, bm.tauMethod, "L0").filled.length, 0);
+    tfchk("BCG OR DL R0: k0=0", trimFill(studies, bm.tauMethod, "R0").filled.length, 0);
+    tfchk("BCG OR DL Q0: k0=0", trimFill(studies, bm.tauMethod, "Q0").filled.length, 0);
   }
 
   // ---- BCG log-RR DL: L0=1, R0=0, Q0=1 (cross-validated against metafor 4.8-0) ----
@@ -3716,9 +3716,9 @@ export function runTests() {
       {label:"Comstock & Webster 1969",yi: 0.4459134005713787, vi:0.5325058452001528},
       {label:"Comstock et al 1976",    yi:-0.0173139482168798, vi:0.0714046596839863},
     ];
-    const filledL0 = trimFill(bcgRR, "DL", "L0");
-    const filledR0 = trimFill(bcgRR, "DL", "R0");
-    const filledQ0 = trimFill(bcgRR, "DL", "Q0");
+    const { filled: filledL0 } = trimFill(bcgRR, "DL", "L0");
+    const { filled: filledR0 } = trimFill(bcgRR, "DL", "R0");
+    const { filled: filledQ0 } = trimFill(bcgRR, "DL", "Q0");
     tfchk("BCG RR DL L0 k0=1", filledL0.length, 1);
     tfchk("BCG RR DL R0 k0=0", filledR0.length, 0);
     tfchk("BCG RR DL Q0 k0=1", filledQ0.length, 1);
@@ -3744,9 +3744,9 @@ export function runTests() {
       {label:"S9",  yi: 0.5, vi:0.80}, {label:"S10", yi: 0.8, vi:1.00},
       {label:"S11", yi: 1.2, vi:1.20}, {label:"S12", yi: 1.8, vi:1.50},
     ];
-    const fL0 = trimFill(mixed, "DL", "L0");
-    const fR0 = trimFill(mixed, "DL", "R0");
-    const fQ0 = trimFill(mixed, "DL", "Q0");
+    const { filled: fL0 } = trimFill(mixed, "DL", "L0");
+    const { filled: fR0 } = trimFill(mixed, "DL", "R0");
+    const { filled: fQ0 } = trimFill(mixed, "DL", "Q0");
     tfchk("mixed DL L0 k0=4", fL0.length, 4);
     tfchk("mixed DL R0 k0=3", fR0.length, 3);
     tfchk("mixed DL Q0 k0=6", fQ0.length, 6);
@@ -5104,7 +5104,7 @@ export function runTests() {
     console.log("--- 10. cross-check vs tau2_ML / profileLikCI ---");
     const rML = profileLikTau2(studiesPL, { method: "ML" });
     // tau2hat from profileLikTau2 should equal tau2_ML(studies) within float noise
-    plChk("tau2hat = tau2_ML", rML.tau2hat, tau2_ML(studiesPL), 1e-10);
+    plChk("tau2hat = tau2_ML", rML.tau2hat, tau2_ML(studiesPL).tau2, 1e-10);
     // profileLikCI gives the mu CI; both functions use the same likelihood so
     // the mu CI should be finite for this dataset
     const muCI = profileLikCI(studiesPL);
@@ -6253,7 +6253,7 @@ export function runTests() {
         return;
       }
 
-      bchkExact3("convergence",  r.convergence,    true);
+      bchkExact3("convergence",  r.convergence?.converged ?? r.convergence, true);
       bchkExact3("k",            r.k,              bm.expected.k);
       bchkExact3("kCluster",     r.kCluster,       bm.expected.kCluster);
       bchkExact3("df",           r.df,             bm.expected.df);
@@ -7289,3 +7289,131 @@ export function runTests() {
   ecInvalid("GENERIC: yi NaN","GENERIC", { yi:NaN, vi:1   });
 
   console.log(ecPass ? "\n✅ ALL EFFECT TYPE EDGE CASE TESTS PASSED" : "\n❌ SOME EFFECT TYPE EDGE CASE TESTS FAILED");
+
+// ===== CONVERGENCE-PLUMBING TESTS =====
+// Verify the convergence contract { converged, iters, maxIters, reason, source } is wired
+// end-to-end for every iterative analysis path.
+//
+// Two strategies:
+//   Force-fail  — functions that accept maxIter directly: call with seed=0 and maxIter=1 so
+//                 one Fisher-scoring step can't converge from a cold start; assert converged===false.
+//   Shape-check — functions with hardcoded maxIter (bfgs-based): run on well-conditioned data
+//                 and confirm the contract fields are present with correct types.
+{
+  console.log("\n===== CONVERGENCE-PLUMBING TESTS =====\n");
+  let cpPass = true;
+  const cpTrue = (label, cond) => {
+    console.log(`  ${label}: ${cond ? "PASS" : "FAIL"}`);
+    if (!cond) cpPass = false;
+  };
+
+  // Validates the full convergence-contract shape returned by higher-level wrappers.
+  const convShape = c =>
+    c != null && typeof c === "object" &&
+    typeof c.converged === "boolean" &&
+    typeof c.source    === "string"  &&
+    typeof c.iters     === "number"  &&
+    typeof c.maxIters  === "number";
+
+  // k=8 heterogeneous dataset. Seed=0 is far from the REML/ML optimum (~2.72),
+  // so maxIter=1 guarantees the optimizer cannot converge from a cold start.
+  const cpHet = [
+    { yi: -1.5, vi: 0.1 }, { yi: -0.5, vi: 0.1 }, { yi: 0.2, vi: 0.1 },
+    { yi:  0.8, vi: 0.1 }, { yi:  1.4, vi: 0.1 }, { yi: 2.0, vi: 0.1 },
+    { yi:  2.8, vi: 0.1 }, { yi:  3.5, vi: 0.1 },
+  ];
+
+  // --- Force-fail: functions that accept maxIter directly ---
+
+  console.log("--- tau2_REML (seed=0, maxIter=1) ---");
+  {
+    const r = tau2_REML(cpHet, 1e-10, 1, 0);
+    cpTrue("converged === false", r.converged === false);
+    cpTrue("iters = 1",          r.iters === 1);
+    cpTrue("tau2 ≥ 0",           r.tau2 >= 0);
+  }
+
+  console.log("--- tau2_ML (seed=0, maxIter=1) ---");
+  {
+    const r = tau2_ML(cpHet, 1e-10, 1, 0);
+    cpTrue("converged === false", r.converged === false);
+    cpTrue("iters = 1",          r.iters === 1);
+  }
+
+  console.log("--- bfgs (maxIter=1) ---");
+  {
+    // f(x) = (x−10)², minimum at x=10; starting at 0 — one step never suffices.
+    const r = bfgs(([x]) => ({ f: (x - 10) ** 2, g: [2 * (x - 10)] }), [0], { maxIter: 1 });
+    cpTrue("converged === false", r.converged === false);
+    cpTrue("iters = 1",          r.iters === 1);
+  }
+
+  console.log("--- trimFill (maxIter=1) ---");
+  {
+    // BCG data is funnel-asymmetric: L0 gives k0>0 on the first outer iteration,
+    // so the loop cannot stabilise before maxIter is exhausted.
+    const { convergence: c } = trimFill(BENCHMARKS[0].data, "DL", "L0", 1);
+    cpTrue("converged === false", c.converged === false);
+    cpTrue("shape ok",           convShape(c));
+  }
+
+  // --- Shape-checks: functions with hardcoded maxIter ---
+  // Run on well-conditioned data; confirm contract fields are present and correctly typed.
+
+  console.log("--- shape checks (hardcoded-maxIter paths) ---");
+
+  // mvMeta (CS REML, 3 studies × 2 outcomes)
+  {
+    const rows = [
+      { yi: 0.4, vi: 0.04, study_id: "S1", outcome_id: "A" },
+      { yi: 0.2, vi: 0.09, study_id: "S1", outcome_id: "B" },
+      { yi: 0.5, vi: 0.05, study_id: "S2", outcome_id: "A" },
+      { yi: 0.3, vi: 0.06, study_id: "S2", outcome_id: "B" },
+      { yi: 0.6, vi: 0.03, study_id: "S3", outcome_id: "A" },
+      { yi: 0.1, vi: 0.07, study_id: "S3", outcome_id: "B" },
+    ];
+    const r = mvMeta(rows, vcalc(rows, { rho: 0.5 }), { struct: "CS", method: "REML" });
+    cpTrue("mvMeta: no error",        !r.error);
+    cpTrue("mvMeta: shape ok",        convShape(r.convergence));
+    cpTrue("mvMeta: converged true",  r.convergence?.converged === true);
+  }
+
+  // veveaHedges (BCG, k=13)
+  {
+    const r = veveaHedges(BENCHMARKS[0].data);
+    cpTrue("veveaHedges: no error",   !r.error);
+    cpTrue("veveaHedges: shape ok",   convShape(r.convergence));
+  }
+
+  // meta3level (REML)
+  {
+    const r = meta3level(THREE_LEVEL_BENCHMARKS[0].data, { method: "REML" });
+    cpTrue("meta3level: no error",        !r.error);
+    cpTrue("meta3level: shape ok",        convShape(r.convergence));
+    cpTrue("meta3level: converged true",  r.convergence?.converged === true);
+  }
+
+  // lsModel (BCG + ablat scale moderator)
+  {
+    const bm = LS_BENCHMARKS[1];
+    const r = lsModel(bm.data, bm.locMods, bm.scaleMods);
+    cpTrue("lsModel: no error",   !r.error && !r.rankDeficient);
+    cpTrue("lsModel: shape ok",   convShape(r.convergence));
+  }
+
+  // continuous selection models (BCG data, all four weight functions)
+  for (const [label, fn] of [
+    ["halfNormalSelModel", halfNormalSelModel],
+    ["powerSelModel",      powerSelModel     ],
+    ["negexpSelModel",     negexpSelModel    ],
+    ["betaSelModel",       betaSelModel      ],
+  ]) {
+    const r = fn(BENCHMARKS[0].data);
+    cpTrue(`${label}: no error`, !r.error);
+    cpTrue(`${label}: shape ok`, convShape(r.convergence));
+  }
+
+  console.log(cpPass
+    ? "\n✅ ALL CONVERGENCE-PLUMBING TESTS PASSED"
+    : "\n❌ SOME CONVERGENCE-PLUMBING TESTS FAILED");
+}
