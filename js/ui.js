@@ -164,7 +164,8 @@ import { initTable, moderators, doAddModerator, removeModerator, clearModerators
          interactions, doAddInteraction, removeInteraction, clearInteractions,
          updateTableHeaders, addRow, commitPendingDelete, removeRow, clearRow,
          updateValidationWarnings, collectStudies, ensureModColumn,
-         refreshPreviewUI, previewCSV, commitImport, cancelImport, getPendingImport }
+         refreshPreviewUI, previewCSV, commitImport, cancelImport, getPendingImport,
+         reparseWithDelimiter, updatePendingDecimal }
   from "./ui-table.js";
 
 const USE_EXAMPLES = new URLSearchParams(window.location.search).has("tests");
@@ -865,6 +866,8 @@ document.addEventListener("keydown", e => {
   }
 });
 document.getElementById("previewEffectType").addEventListener("change", e => refreshPreviewUI(e.target.value));
+document.getElementById("previewDelimSep").addEventListener("change", e => reparseWithDelimiter(e.target.value));
+document.getElementById("previewDecimalSep").addEventListener("change", e => updatePendingDecimal(e.target.value));
 document.getElementById("export").addEventListener("click", e => {
   const done = flashBtn(e.currentTarget, null, "Saved \u2713");
   exportCSV();

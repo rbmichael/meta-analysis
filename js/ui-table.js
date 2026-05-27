@@ -15,7 +15,7 @@ import { validateRow, getSoftWarnings } from "./ui-state.js";
 import { escapeHTML } from "./utils-html.js";
 import { renderWarningBlocks, msgExcluded, msgNonNumericMod, analysisChecks } from "./ui-warnings.js";
 import { buildTag } from "./ui-render.js";
-import { parseCSV, detectEffectType } from "./csv.js";
+import { parseCSV, detectCsvFormat, detectEffectType } from "./csv.js";
 import { readTextFile } from "./io.js";
 
 // Descriptive titles for each input column name, used as <th title="..."> tooltips.
@@ -733,7 +733,8 @@ export async function previewCSV(file) {
     return;
   }
 
-  const parsed = parseCSV(text);
+  const fmt    = detectCsvFormat(text);
+  const parsed = parseCSV(text, { delimiter: fmt.delimiter, decimal: fmt.decimal });
 
   if (!parsed.headers.length) {
     warningDiv.textContent = "The selected file appears to be empty.";
@@ -745,11 +746,11 @@ export async function previewCSV(file) {
   const detection   = detectEffectType(parsed.headers, currentType, effectProfiles);
 
   // Detect multivariate data: study_id/study + outcome_id/outcome + yi + vi
-  const lowerHdrs   = new Set(parsed.headers.map(h => h.toLowerCase()));
-  const hasStudyCol  = lowerHdrs.has("study_id") || lowerHdrs.has("study");
+  const lowerHdrs     = new Set(parsed.headers.map(h => h.toLowerCase()));
+  const hasStudyCol   = lowerHdrs.has("study_id") || lowerHdrs.has("study");
   const hasOutcomeCol = lowerHdrs.has("outcome_id") || lowerHdrs.has("outcome");
-  const mvCandidate  = hasStudyCol && hasOutcomeCol && lowerHdrs.has("yi") && lowerHdrs.has("vi");
-  const mvHeaders    = mvCandidate ? {
+  const mvCandidate   = hasStudyCol && hasOutcomeCol && lowerHdrs.has("yi") && lowerHdrs.has("vi");
+  const mvHeaders     = mvCandidate ? {
     studyCol:   parsed.headers.find(h => h.toLowerCase() === "study_id") ??
                 parsed.headers.find(h => h.toLowerCase() === "study"),
     outcomeCol: parsed.headers.find(h => h.toLowerCase() === "outcome_id") ??
@@ -759,7 +760,9 @@ export async function previewCSV(file) {
   } : null;
 
   _pendingImport = {
+    rawText:      text,
     parsed,
+    format:       { delimiter: fmt.delimiter, decimal: fmt.decimal },
     detectedType: detection.type,
     tied:         detection.tied,
     tiedTypes:    detection.tiedTypes ?? [],
@@ -767,15 +770,66 @@ export async function previewCSV(file) {
     mvHeaders,
   };
 
-  const delimNames = { ",": "comma", ";": "semicolon", "\t": "tab" };
-  document.getElementById("previewDelimiter").textContent =
-    `delimiter: ${delimNames[parsed.delimiter] ?? parsed.delimiter}`;
+  // Populate format dropdowns with detected values.
+  document.getElementById("previewDelimSep").value   = fmt.delimiter;
+  document.getElementById("previewDecimalSep").value = fmt.decimal;
+
+  // Warn user when locale detection is uncertain.
+  const localeWarn = document.getElementById("previewLocaleWarn");
+  if (fmt.confidence !== "high") {
+    const sepNames = { ",": "comma", ";": "semicolon", "\t": "tab", "|": "pipe" };
+    const sepName  = sepNames[fmt.delimiter] ?? fmt.delimiter;
+    const decName  = fmt.decimal === "," ? "comma" : "period";
+    localeWarn.textContent =
+      `⚠ Locale detection is uncertain — guessing ${sepName} field separator and ${decName} decimal. ` +
+      `Please verify the dropdowns above before importing.`;
+    localeWarn.style.display = "block";
+  } else {
+    localeWarn.style.display = "none";
+  }
 
   document.getElementById("previewEffectType").value = detection.type;
 
   refreshPreviewUI(detection.type);
   document.getElementById("importPreview").style.display = "block";
   document.getElementById("previewImport").focus();
+}
+
+/**
+ * Re-parse the pending file with a different delimiter (triggered by the field-separator dropdown).
+ * Updates _pendingImport.parsed and refreshes the preview table.
+ */
+export function reparseWithDelimiter(delimiter) {
+  if (!_pendingImport) return;
+  const { decimal } = _pendingImport.format;
+  const parsed = parseCSV(_pendingImport.rawText, { delimiter, decimal });
+  if (!parsed.headers.length) return;
+
+  _pendingImport.parsed = parsed;
+  _pendingImport.format = { ..._pendingImport.format, delimiter };
+
+  // Re-detect effect type since headers may have changed with the new delimiter.
+  const currentType = document.getElementById("previewEffectType").value;
+  const detection   = detectEffectType(parsed.headers, currentType, effectProfiles);
+  _pendingImport.detectedType = detection.type;
+  _pendingImport.tied         = detection.tied;
+  _pendingImport.tiedTypes    = detection.tiedTypes ?? [];
+
+  document.getElementById("previewEffectType").value = detection.type;
+  refreshPreviewUI(detection.type);
+}
+
+/** Re-parse with a new decimal separator and refresh the preview table. */
+export function updatePendingDecimal(decimal) {
+  if (!_pendingImport) return;
+  const { delimiter } = _pendingImport.format;
+  const parsed = parseCSV(_pendingImport.rawText, { delimiter, decimal });
+  if (!parsed.headers.length) return;
+
+  _pendingImport.parsed = parsed;
+  _pendingImport.format = { ..._pendingImport.format, decimal };
+
+  refreshPreviewUI(document.getElementById("previewEffectType").value);
 }
 
 /**

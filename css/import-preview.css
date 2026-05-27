@@ -33,6 +33,21 @@
   letter-spacing: 0.02em;
 }
 
+/* Inline label + select for the overrideable format dropdowns */
+.preview-fmt-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--fg-muted);
+}
+
+.preview-fmt-label select {
+  width: auto;
+  min-width: 110px;
+}
+
 /* Inline label + select for the overrideable effect type */
 .preview-type-label {
   display: flex;
@@ -46,6 +61,17 @@
 .preview-type-label select {
   width: auto;
   min-width: 220px;
+}
+
+/* Locale-detection uncertainty warning */
+.preview-locale-warn {
+  font-size: var(--font-size-sm);
+  color: var(--color-warning);
+  background: var(--badge-warning-bg);
+  border: 1px solid var(--badge-warning-border);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  margin-bottom: 10px;
 }
 
 /* Base pill — shared by confidence indicator and column mapping chips */

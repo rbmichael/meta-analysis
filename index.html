@@ -63,7 +63,23 @@
 
         <!-- Detected settings row -->
         <div class="preview-meta">
-          <span class="preview-badge" id="previewDelimiter"></span>
+          <label class="preview-fmt-label">
+            Field separator
+            <select id="previewDelimSep">
+              <option value=",">, comma</option>
+              <option value=";">; semicolon</option>
+              <option value="&#9;">&#8677; tab</option>
+              <option value="|">| pipe</option>
+            </select>
+          </label>
+
+          <label class="preview-fmt-label">
+            Decimal separator
+            <select id="previewDecimalSep">
+              <option value=".">. period</option>
+              <option value=",">, comma</option>
+            </select>
+          </label>
 
           <label class="preview-type-label">
             Effect type
@@ -72,6 +88,9 @@
 
           <span id="previewConfidence" class="badge-pill"></span>
         </div>
+
+        <!-- Locale-detection warning (shown when confidence < high) -->
+        <div id="previewLocaleWarn" class="preview-locale-warn" style="display:none"></div>
 
         <!-- Column mapping summary -->
         <div id="previewMapping" class="preview-mapping"></div>

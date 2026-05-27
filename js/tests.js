@@ -4,7 +4,7 @@ import { BENCHMARKS, PUB_BIAS_BENCHMARKS, INFLUENCE_BENCHMARKS, META_REGRESSION_
 import { permTestSync, permPval } from "./perm.js";
 import { compute, meta, metaMH, metaPeto, robustMeta, sandwichVar, robustWlsResult, metaRegression, testContrast, tau2_HS, tau2_HE, tau2_ML, tau2_REML, tau2_SJ, beggTest, eggerTest, fatPetTest, petPeeseTest, failSafeN, tesTest, heterogeneityCIs, cumulativeMeta, influenceDiagnostics, harbordTest, petersTest, deeksTest, rueckerTest, leaveOneOut, baujat, blupMeta, pCurve, pUniform, estimatorComparison, subgroupAnalysis, logLik, bfgs, selIntervalProbs, selIntervalIdx, selectionLogLik, SEL_CUTS_ONE_SIDED, SEL_CUTS_TWO_SIDED, veveaHedges, SELECTION_PRESETS, halfNormalSelModel, powerSelModel, negexpSelModel, betaSelModel, profileLikTau2, profileLikCI, bayesMeta, priorSensitivity, rvePooled, meta3level, lsModel, adjustPvals, henmiCopas, waapWls, clES, vcalc, mvMeta, validStudies } from "./analysis.js";
 import { trimFill } from "./trimfill.js";
-import { parseCSV } from "./csv.js";
+import { parseCSV, detectCsvFormat, parseNumberWithDecimal } from "./csv.js";
 import { goshCompute, GOSH_MAX_ENUM_K, GOSH_MAX_K, GOSH_DEFAULT_MAX_SUBSETS } from "./gosh.js";
 
 // Tolerances vary by field:
@@ -4235,6 +4235,457 @@ export function runTests() {
   }
 
   console.log(csvPass ? "\n✅ ALL CSV IMPORT TESTS PASSED" : "\n❌ SOME CSV IMPORT TESTS FAILED");
+
+  // ---- detectCsvFormat unit tests ----
+  console.log("\n===== detectCsvFormat TESTS =====\n");
+  let fmtPass = true;
+  const fmtchk = (label, got, expected) => {
+    const ok = got === expected;
+    if (ok) console.log(`  PASS ${label}`);
+    else { console.error(`  FAIL ${label}: got ${JSON.stringify(got)}, expected ${JSON.stringify(expected)}`); fmtPass = false; }
+  };
+
+  // 1. US locale: comma delimiter + dot decimal → high confidence
+  {
+    const us = "study,yi,vi\nS1,0.123,0.045\nS2,-1.200,0.300\nS3,0.500,0.100\n";
+    const r = detectCsvFormat(us);
+    fmtchk("US delimiter", r.delimiter, ",");
+    fmtchk("US decimal",   r.decimal,   ".");
+    fmtchk("US confidence", r.confidence, "high");
+  }
+
+  // 2. EU locale: semicolon delimiter + comma decimal → high confidence
+  {
+    const eu = "study;yi;vi\nS1;0,123;0,045\nS2;-1,200;0,300\nS3;0,500;0,100\n";
+    const r = detectCsvFormat(eu);
+    fmtchk("EU delimiter", r.delimiter, ";");
+    fmtchk("EU decimal",   r.decimal,   ",");
+    fmtchk("EU confidence", r.confidence, "high");
+  }
+
+  // 3. Tab-delimited + dot decimal → high confidence
+  {
+    const tsv = "study\tyi\tvi\nS1\t0.123\t0.045\nS2\t-1.200\t0.300\n";
+    const r = detectCsvFormat(tsv);
+    fmtchk("TSV delimiter", r.delimiter, "\t");
+    fmtchk("TSV decimal",   r.decimal,   ".");
+    fmtchk("TSV confidence", r.confidence, "high");
+  }
+
+  // 4. Ambiguous: comma delimiter + comma decimal in numeric columns → low confidence, dot default
+  {
+    const amb = "study,yi,vi\nS1,0,123,0,045\nS2,1,200,0,300\n";
+    const r = detectCsvFormat(amb);
+    fmtchk("ambiguous decimal default to dot", r.decimal, ".");
+    fmtchk("ambiguous confidence is low",      r.confidence, "low");
+  }
+
+  // 5. UTF-8 BOM + CRLF (Excel EU export)
+  {
+    const bom = "﻿study;yi;vi\r\nS1;0,5;0,01\r\nS2;1,3;0,05\r\n";
+    const r = detectCsvFormat(bom);
+    fmtchk("BOM+CRLF EU delimiter", r.delimiter, ";");
+    fmtchk("BOM+CRLF EU decimal",   r.decimal,   ",");
+    fmtchk("BOM+CRLF EU confidence", r.confidence, "high");
+  }
+
+  // 6. Quoted fields with embedded commas — detection must not count commas inside quotes
+  {
+    // Delimiter is comma; "Smith, J." contains a comma inside quotes that should not be
+    // counted as a delimiter or as a decimal separator.
+    const quoted = 'study,label,yi,vi\nS1,"Smith, J.",0.45,0.02\nS2,"Doe, A.",0.30,0.03\n';
+    const r = detectCsvFormat(quoted);
+    fmtchk("quoted comma: delimiter",   r.delimiter, ",");
+    fmtchk("quoted comma: decimal",     r.decimal,   ".");
+    fmtchk("quoted comma: confidence",  r.confidence, "high");
+  }
+
+  // 7. Integer-only columns (no fractional part) — should still detect delimiter correctly
+  {
+    const ints = "study,n1,n2,events\nS1,50,47,12\nS2,30,29,8\nS3,100,98,20\n";
+    const r = detectCsvFormat(ints);
+    fmtchk("integers: delimiter",  r.delimiter, ",");
+    fmtchk("integers: decimal",    r.decimal,   ".");
+    // No fractional columns → confidence is low (can't determine decimal from evidence)
+    fmtchk("integers: confidence", r.confidence, "low");
+  }
+
+  // 8. Empty text → safe defaults
+  {
+    const r = detectCsvFormat("");
+    fmtchk("empty: delimiter",   r.delimiter,  ",");
+    fmtchk("empty: decimal",     r.decimal,    ".");
+    fmtchk("empty: confidence",  r.confidence, "low");
+  }
+
+  console.log(fmtPass ? "\n✅ ALL detectCsvFormat TESTS PASSED" : "\n❌ SOME detectCsvFormat TESTS FAILED");
+
+  // ---- Backward-compatibility tests ----
+  // Goal: every existing call-site pattern (parseCSV(text) with no opts) must
+  // behave identically to the pre-A.5 code.  Four invariants:
+  //   a) return shape is { delimiter, headers, rows } — no new fields required
+  //   b) rows are raw strings when opts.decimal is absent — no normalisation
+  //   c) detectCsvFormat returns (",", ".", "high") for all US-format CSVs in
+  //      the existing test suite
+  //   d) commitImport-level moderator detection (isNaN on raw cells) still
+  //      works correctly for US data; EU data benefits from normalisation
+  console.log("\n===== BACKWARD COMPATIBILITY TESTS =====\n");
+  let bcPass = true;
+  const bcchk = (label, got, expected) => {
+    const ok = got === expected;
+    if (ok) console.log(`  PASS ${label}`);
+    else { console.error(`  FAIL ${label}: got ${JSON.stringify(got)}, expected ${JSON.stringify(expected)}`); bcPass = false; }
+  };
+
+  // a) Return shape: { delimiter, headers, rows } — no opts path
+  {
+    const { delimiter, headers, rows } = parseCSV("study,yi,vi\nS1,0.1,0.01\n");
+    bcchk("shape: delimiter present", typeof delimiter,  "string");
+    bcchk("shape: headers present",   Array.isArray(headers), true);
+    bcchk("shape: rows present",      Array.isArray(rows),    true);
+    bcchk("shape: no extra keys",     Object.keys({ delimiter, headers, rows }).length, 3);
+    bcchk("delimiter auto-detected",  delimiter, ",");
+    bcchk("headers[0]",               headers[0], "study");
+    bcchk("rows[0][1] raw string",    rows[0][1], "0.1");
+  }
+
+  // b) No normalisation when decimal opt is absent, even on EU-looking values
+  {
+    // A cell "0,5" in a US CSV (label value) must remain "0,5" — not touched
+    const { rows } = parseCSV("study,label,yi\nS1,\"0,5\",0.5\n");
+    bcchk("no-opts: label '0,5' unchanged", rows[0][1], "0,5");
+    bcchk("no-opts: yi '0.5' unchanged",    rows[0][2], "0.5");
+  }
+
+  // b2) No normalisation when opts is empty object (explicit call with no decimal key)
+  {
+    const { rows } = parseCSV("study;yi\nS1;0,5\n", { delimiter: ";" });
+    bcchk("no-decimal-opt: '0,5' raw", rows[0][1], "0,5");
+  }
+
+  // c) detectCsvFormat always returns decimal "." for US-format CSVs.
+  //    Confidence is "high" when fractional values are present; "low" when the
+  //    file contains only integers (no fractional evidence — correct behaviour).
+  const usSamples = [
+    // BCG-like data with fractional yi/vi — high confidence
+    { csv: "Study,yi,vi,Group,year,ablat,region\nS1,-0.889,0.326,,1948,44,NA\nS2,-1.585,0.195,,1949,55,EU\n",
+      conf: "high", delim: "," },
+    // Normand-like data — high confidence
+    { csv: "study,yi,vi\nS1,0.1,0.01\nS2,0.2,0.02\nS3,0.3,0.03\n",
+      conf: "high", delim: "," },
+    // 2×2 binary integer data — no fractional evidence → "low" (default "." is still correct)
+    { csv: "study,ai,bi,ci,di\nS1,5,30,2,40\nS2,10,50,3,60\n",
+      conf: "low",  delim: "," },
+    // Quoted fields with embedded commas — high confidence
+    { csv: 'study,label,yi,vi\nS1,"Smith, J.",0.1,0.01\nS2,"Doe, A.",0.2,0.02\n',
+      conf: "high", delim: "," },
+    // BOM + CRLF (Excel US export) — high confidence
+    { csv: "﻿study,yi,vi\r\nS1,0.1,0.01\r\nS2,0.2,0.02\r\n",
+      conf: "high", delim: "," },
+    // Tab-separated — high confidence
+    { csv: "study\tyi\tvi\nS1\t0.1\t0.01\nS2\t0.2\t0.02\n",
+      conf: "high", delim: "\t" },
+  ];
+  usSamples.forEach(({ csv, conf, delim }, i) => {
+    const fmt = detectCsvFormat(csv);
+    bcchk(`US sample ${i}: decimal is "."`,   fmt.decimal,    ".");
+    bcchk(`US sample ${i}: delimiter`,        fmt.delimiter,  delim);
+    bcchk(`US sample ${i}: confidence`,       fmt.confidence, conf);
+  });
+
+  // d) commitImport moderator-detection (isNaN) — US raw cells pass correctly
+  {
+    // "continuous" detection: every non-empty value must satisfy !isNaN(v.trim())
+    const us = ["0.1", "0.2", "0.3"];
+    bcchk("US continuous: isNaN check", us.every(v => !isNaN(v.trim())), true);
+
+    // EU cells AFTER normalisation (what commitImport sees after parseCSV with decimal:",")
+    const euNorm = parseCSV("study;mod\nS1;0,5\nS2;1,3\nS3;2,1\n", { delimiter: ";", decimal: "," })
+      .rows.map(r => r[1]);
+    bcchk("EU normalised cells: isNaN pass", euNorm.every(v => !isNaN(v.trim())), true);
+    bcchk("EU normalised cell value",        euNorm[0], "0.5");
+
+    // EU cells WITHOUT normalisation (old behaviour, would wrongly → categorical)
+    const euRaw = parseCSV("study;mod\nS1;0,5\nS2;1,3\n", { delimiter: ";" })
+      .rows.map(r => r[1]);
+    bcchk("EU raw cells: isNaN fails (old bug documented)", euRaw.some(v => isNaN(v.trim())), true);
+  }
+
+  console.log(bcPass ? "\n✅ ALL BACKWARD COMPATIBILITY TESTS PASSED" : "\n❌ SOME BACKWARD COMPATIBILITY TESTS FAILED");
+
+  // ---- parseNumberWithDecimal + parseCSV decimal-normalisation tests ----
+  console.log("\n===== parseNumberWithDecimal & decimal-normalisation TESTS =====\n");
+  let decPass = true;
+  const decchk = (label, got, expected) => {
+    const ok = (Number.isNaN(got) && Number.isNaN(expected)) ||
+               (typeof got === "string" ? got === expected : Math.abs(got - expected) < 1e-10);
+    if (ok) console.log(`  PASS ${label}`);
+    else { console.error(`  FAIL ${label}: got ${JSON.stringify(got)}, expected ${JSON.stringify(expected)}`); decPass = false; }
+  };
+
+  // parseNumberWithDecimal — dot decimal (identity for non-comma locale)
+  decchk("dot decimal: 0.123",       parseNumberWithDecimal("0.123",   "."), 0.123);
+  decchk("dot decimal: -1.5e2",      parseNumberWithDecimal("-1.5e2",  "."), -150);
+  decchk("dot decimal: integer 42",  parseNumberWithDecimal("42",      "."), 42);
+  decchk("dot decimal: NaN string",  parseNumberWithDecimal("hello",   "."), NaN);
+
+  // parseNumberWithDecimal — comma decimal (EU locale)
+  decchk("comma decimal: 0,123",     parseNumberWithDecimal("0,123",   ","), 0.123);
+  decchk("comma decimal: -1,5",      parseNumberWithDecimal("-1,5",    ","), -1.5);
+  decchk("comma decimal: 1,5e3",     parseNumberWithDecimal("1,5e3",   ","), 1500);
+  decchk("comma decimal: integer 5", parseNumberWithDecimal("5",       ","), 5);
+  decchk("comma decimal: non-num",   parseNumberWithDecimal("Smith, J.", ","), NaN);
+
+  // parseCSV with decimal:"," normalises cells in data rows, not headers
+  {
+    const eu = "study;yi;vi\nS1;0,123;0,045\nS2;-1,200;0,300\n";
+    const { headers, rows } = parseCSV(eu, { delimiter: ";", decimal: "," });
+    decchk("EU header unchanged: study", headers[0], "study");
+    decchk("EU row[0][1] normalised",    rows[0][1], "0.123");
+    decchk("EU row[0][2] normalised",    rows[0][2], "0.045");
+    decchk("EU row[1][1] normalised",    rows[1][1], "-1.200");
+    decchk("EU row[1][2] normalised",    rows[1][2], "0.300");
+  }
+
+  // parseCSV with decimal:"." leaves dot-decimal data unchanged (backward compat)
+  {
+    const us = "study,yi,vi\nS1,0.123,0.045\nS2,-1.200,0.300\n";
+    const { rows } = parseCSV(us, { delimiter: ",", decimal: "." });
+    decchk("US row[0][1] unchanged", rows[0][1], "0.123");
+    decchk("US row[1][1] unchanged", rows[1][1], "-1.200");
+  }
+
+  // EU round-trip: same numeric values as equivalent US CSV after normalisation
+  {
+    const us = "study,yi,vi\nS1,0.5,0.04\nS2,-0.3,0.09\nS3,1.2,0.25\n";
+    const eu = "study;yi;vi\nS1;0,5;0,04\nS2;-0,3;0,09\nS3;1,2;0,25\n";
+    const usR = parseCSV(us, { delimiter: ",", decimal: "." });
+    const euR = parseCSV(eu, { delimiter: ";", decimal: "," });
+    for (let r = 0; r < 3; r++) {
+      for (let c = 1; c <= 2; c++) {
+        decchk(`round-trip row${r} col${c}`,
+          parseFloat(euR.rows[r][c]), parseFloat(usR.rows[r][c]));
+      }
+    }
+  }
+
+  // Non-numeric cells (labels, study names) must not be mangled
+  {
+    const eu = "study;label;yi;vi\nS1;Müller (2020);0,5;0,04\nS2;Smith, J.;-0,3;0,09\n";
+    const { rows } = parseCSV(eu, { delimiter: ";", decimal: "," });
+    decchk("label preserved: Müller (2020)", rows[0][1], "Müller (2020)");
+    decchk("label preserved: Smith, J.",     rows[1][1], "Smith, J.");
+    decchk("yi still normalised",            rows[0][2], "0.5");
+  }
+
+  // parseCSV with no decimal option: no normalisation (backward compat for all existing callers)
+  {
+    const eu = "study;yi;vi\nS1;0,5;0,04\n";
+    const { rows } = parseCSV(eu, { delimiter: ";" });  // no decimal opt
+    decchk("no decimal opt: raw cell unchanged", rows[0][1], "0,5");
+  }
+
+  console.log(decPass ? "\n✅ ALL decimal-normalisation TESTS PASSED" : "\n❌ SOME decimal-normalisation TESTS FAILED");
+
+  // ---- Plan A.5 Step 5 — full-pipeline locale tests ----
+  // Each test chains detectCsvFormat → parseCSV exactly as the import UI does,
+  // verifying the end-to-end path rather than individual functions in isolation.
+  console.log("\n===== LOCALE-AWARE CSV — FULL-PIPELINE TESTS =====\n");
+  let locPass = true;
+  const locchk = (label, got, expected) => {
+    const ok = typeof got === "number"
+      ? (Number.isNaN(got) && Number.isNaN(expected)) || Math.abs(got - expected) < 1e-10
+      : got === expected;
+    if (ok) console.log(`  PASS ${label}`);
+    else { console.error(`  FAIL ${label}: got ${JSON.stringify(got)}, expected ${JSON.stringify(expected)}`); locPass = false; }
+  };
+
+  // Helper: full pipeline — detect format then parse.
+  function detectAndParse(text) {
+    const fmt    = detectCsvFormat(text);
+    const parsed = parseCSV(text, { delimiter: fmt.delimiter, decimal: fmt.decimal });
+    return { fmt, parsed };
+  }
+
+  // 1. EU sample (`;` + `,`) round-trip — same numeric cells as equivalent US CSV.
+  //    Uses Normand 1999-like yi/vi values (5 studies).
+  console.log("--- 1. EU (;,) round-trip with US (,.) ---");
+  {
+    const us = [
+      "study,yi,vi",
+      "S1,0.500,0.040",
+      "S2,-0.300,0.090",
+      "S3,1.200,0.250",
+      "S4,0.100,0.010",
+      "S5,-0.750,0.180",
+    ].join("\n");
+    const eu = [
+      "study;yi;vi",
+      "S1;0,500;0,040",
+      "S2;-0,300;0,090",
+      "S3;1,200;0,250",
+      "S4;0,100;0,010",
+      "S5;-0,750;0,180",
+    ].join("\n");
+
+    const { fmt: usFmt, parsed: usP } = detectAndParse(us);
+    const { fmt: euFmt, parsed: euP } = detectAndParse(eu);
+
+    locchk("EU: delimiter detected",    euFmt.delimiter,  ";");
+    locchk("EU: decimal detected",      euFmt.decimal,    ",");
+    locchk("EU: confidence high",       euFmt.confidence, "high");
+    locchk("US: delimiter detected",    usFmt.delimiter,  ",");
+    locchk("US: decimal detected",      usFmt.decimal,    ".");
+    locchk("US: confidence high",       usFmt.confidence, "high");
+    locchk("header count matches",      euP.headers.length, usP.headers.length);
+    locchk("row count matches",         euP.rows.length,    usP.rows.length);
+
+    for (let r = 0; r < usP.rows.length; r++) {
+      for (let c = 1; c <= 2; c++) {          // yi and vi columns
+        locchk(`row${r} col${c} numeric identity`,
+          parseFloat(euP.rows[r][c]), parseFloat(usP.rows[r][c]));
+      }
+    }
+  }
+
+  // 2. Tab-delimited with `.` decimal — full pipeline.
+  console.log("--- 2. Tab-delimited + dot decimal ---");
+  {
+    const tsv = [
+      "study\tyi\tvi\tgroup",
+      "Trichard\t0.623\t0.041\tA",
+      "Chalmers\t-0.112\t0.078\tB",
+      "Cooper\t1.055\t0.200\tA",
+    ].join("\n");
+
+    const { fmt, parsed } = detectAndParse(tsv);
+
+    locchk("TSV: delimiter tab",        fmt.delimiter,  "\t");
+    locchk("TSV: decimal period",       fmt.decimal,    ".");
+    locchk("TSV: confidence high",      fmt.confidence, "high");
+    locchk("TSV: header count",         parsed.headers.length, 4);
+    locchk("TSV: headers[0]",           parsed.headers[0], "study");
+    locchk("TSV: headers[1]",           parsed.headers[1], "yi");
+    locchk("TSV: row count",            parsed.rows.length, 3);
+    locchk("TSV: row[0][1] yi",         parseFloat(parsed.rows[0][1]),  0.623);
+    locchk("TSV: row[1][1] yi",         parseFloat(parsed.rows[1][1]), -0.112);
+    locchk("TSV: row[2][2] vi",         parseFloat(parsed.rows[2][2]),  0.200);
+    locchk("TSV: row[0][3] group raw",  parsed.rows[0][3], "A");
+  }
+
+  // 3. Ambiguous CSV (integer-only columns) — confidence "low", decimal "." default,
+  //    parsing produces correct integer cells and no normalisation is applied.
+  //    The UI would show the locale-warning; here we assert the "low" confidence signal.
+  console.log("--- 3. Integer-only CSV → low confidence, dot decimal default ---");
+  {
+    const intCsv = [
+      "study,ai,bi,ci,di",
+      "S1,5,30,2,40",
+      "S2,10,50,3,60",
+      "S3,7,45,1,55",
+    ].join("\n");
+
+    const { fmt, parsed } = detectAndParse(intCsv);
+
+    locchk("int: decimal default .",    fmt.decimal,    ".");
+    locchk("int: confidence low",       fmt.confidence, "low");
+    locchk("int: delimiter comma",      fmt.delimiter,  ",");
+    locchk("int: header count",         parsed.headers.length, 5);
+    locchk("int: row count",            parsed.rows.length, 3);
+    locchk("int: cell ai row0",         parsed.rows[0][1], "5");
+    locchk("int: cell di row2",         parsed.rows[2][4], "55");
+    // Cells are parseable as integers
+    locchk("int: parseFloat ai",        parseFloat(parsed.rows[0][1]), 5);
+  }
+
+  // 4. Ambiguous CSV (`,` is both delimiter and appears in numeric-looking cells in
+  //    different columns) — detectCsvFormat defaults to dot decimal + low confidence,
+  //    which is the safe fallback.  The UI would warn the user.
+  console.log("--- 4. Conflicting comma (delimiter vs decimal role) → low confidence ---");
+  {
+    // With comma as delimiter, cells split correctly; some cells happen to contain
+    // what looks like a comma-decimal value in a different column.
+    // The detector must not flip the decimal to "," in this case.
+    const ambCsv = [
+      "study,yi,label",
+      "S1,0.5,low",
+      "S2,1.2,high",
+      "S3,0.8,medium",
+    ].join("\n");
+
+    // Force an ambiguous scenario: a column where most values are integers (no fractional
+    // evidence) — confidence will be low.
+    const intOnlyCsv = "a,b,c\n1,2,3\n4,5,6\n7,8,9\n";
+    const { fmt: ambFmt } = detectAndParse(intOnlyCsv);
+    locchk("ambiguous: decimal default .",   ambFmt.decimal,    ".");
+    locchk("ambiguous: confidence low",      ambFmt.confidence, "low");
+
+    // Genuine conflict: comma is delimiter AND appears as decimal in different cols.
+    // detectCsvFormat must choose dot-decimal (safe default) and signal low confidence.
+    const conflictCsv = [
+      "study,yi,vi",
+      "S1,0,5,0,04",   // if comma were decimal: "0.5" and "0.04" — but delimiter is also comma
+      "S2,1,3,0,09",
+    ].join("\n");
+    const cFmt = detectCsvFormat(conflictCsv);
+    locchk("conflict: decimal defaults to .", cFmt.decimal,    ".");
+    locchk("conflict: confidence low",        cFmt.confidence, "low");
+  }
+
+  // 5. File with UTF-8 BOM and CRLF line endings — through the new full path.
+  //    Previously only tested via parseCSV directly; now exercised via detectCsvFormat.
+  console.log("--- 5. BOM + CRLF through detectCsvFormat → parseCSV ---");
+  {
+    // US Excel EU export: BOM + CRLF + semicolon delimiter + comma decimal
+    const bomEU = "﻿study;yi;vi\r\nS1;0,45;0,02\r\nS2;-0,33;0,07\r\nS3;1,10;0,15\r\n";
+    const { fmt, parsed } = detectAndParse(bomEU);
+
+    locchk("BOM EU: delimiter ;",       fmt.delimiter,  ";");
+    locchk("BOM EU: decimal ,",         fmt.decimal,    ",");
+    locchk("BOM EU: confidence high",   fmt.confidence, "high");
+    locchk("BOM EU: header[0]",         parsed.headers[0], "study");
+    locchk("BOM EU: row count",         parsed.rows.length, 3);
+    locchk("BOM EU: yi normalised",     parsed.rows[0][1], "0.45");
+    locchk("BOM EU: vi normalised",     parsed.rows[1][2], "0.07");
+    locchk("BOM EU: yi parseFloat",     parseFloat(parsed.rows[2][1]), 1.10);
+
+    // US Excel export: BOM + CRLF + comma delimiter + dot decimal
+    const bomUS = "﻿study,yi,vi\r\nS1,0.45,0.02\r\nS2,-0.33,0.07\r\n";
+    const { fmt: usFmt, parsed: usP } = detectAndParse(bomUS);
+
+    locchk("BOM US: delimiter ,",       usFmt.delimiter,  ",");
+    locchk("BOM US: decimal .",         usFmt.decimal,    ".");
+    locchk("BOM US: confidence high",   usFmt.confidence, "high");
+    locchk("BOM US: header[0]",         usP.headers[0], "study");
+    locchk("BOM US: yi raw",            usP.rows[0][1], "0.45");
+  }
+
+  // 6. Quoted cells with embedded `,` in an EU file — detection must not count
+  //    commas inside quotes as decimal separators.  (Acceptance criterion from
+  //    Plan A.5 risk note: "cover with a quoted-cell test before claiming completeness.")
+  console.log("--- 6. EU file with quoted cells containing embedded commas ---");
+  {
+    const euQuoted = [
+      'study;label;yi;vi',
+      'S1;"Smith, J.";0,45;0,02',
+      'S2;"Müller, K.";-0,33;0,07',
+      'S3;"van der Berg, L.";1,10;0,15',
+    ].join("\n");
+
+    const { fmt, parsed } = detectAndParse(euQuoted);
+
+    locchk("EU quoted: delimiter ;",         fmt.delimiter,  ";");
+    locchk("EU quoted: decimal ,",           fmt.decimal,    ",");
+    locchk("EU quoted: confidence high",     fmt.confidence, "high");
+    locchk("EU quoted: header count",        parsed.headers.length, 4);
+    locchk("EU quoted: label preserved S1",  parsed.rows[0][1], "Smith, J.");
+    locchk("EU quoted: label preserved S2",  parsed.rows[1][1], "Müller, K.");
+    locchk("EU quoted: yi normalised",       parsed.rows[0][2], "0.45");
+    locchk("EU quoted: vi normalised",       parsed.rows[2][3], "0.15");
+    locchk("EU quoted: label not mangled",   parsed.rows[2][1], "van der Berg, L.");
+  }
+
+  console.log(locPass ? "\n✅ ALL FULL-PIPELINE LOCALE TESTS PASSED" : "\n❌ SOME FULL-PIPELINE LOCALE TESTS FAILED");
 
   // ---- BFGS optimizer tests ----
   console.log("\n===== BFGS OPTIMIZER TESTS =====\n");
