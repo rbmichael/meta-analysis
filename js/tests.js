@@ -1,6 +1,6 @@
 import { round, transformEffect, chiSquareCDF, chiSquareQuantile, parseCounts, bivariateNormalCDF, normalQuantile, tCritical, fCDF, normalCDF, tCDF } from "./utils.js";
 import { validateStudy } from "./profiles.js";
-import { BENCHMARKS, PUB_BIAS_BENCHMARKS, INFLUENCE_BENCHMARKS, META_REGRESSION_BENCHMARKS, VH_BENCHMARKS, MH_BENCHMARKS, CLUSTER_BENCHMARKS, RVE_BENCHMARKS, RVE_MOM_BENCHMARKS, THREE_LEVEL_BENCHMARKS, LS_BENCHMARKS, CONTRAST_BENCHMARKS, INTERACTION_BENCHMARKS, HALFNORM_BENCHMARKS, POWER_BENCHMARKS, NEGEXP_BENCHMARKS, BETA_BENCHMARKS, PERM_BENCHMARKS } from "./benchmarks.js";
+import { BENCHMARKS, PUB_BIAS_BENCHMARKS, INFLUENCE_BENCHMARKS, META_REGRESSION_BENCHMARKS, VH_BENCHMARKS, MH_BENCHMARKS, CLUSTER_BENCHMARKS, RVE_BENCHMARKS, RVE_MOM_BENCHMARKS, THREE_LEVEL_BENCHMARKS, LS_BENCHMARKS, CONTRAST_BENCHMARKS, INTERACTION_BENCHMARKS, HALFNORM_BENCHMARKS, POWER_BENCHMARKS, NEGEXP_BENCHMARKS, BETA_BENCHMARKS, PERM_BENCHMARKS, TRIMFILL_BENCHMARKS, CUMULATIVE_BENCHMARKS, HC_BENCHMARKS, WAAP_BENCHMARKS } from "./benchmarks.js";
 import { permTestSync, permPval } from "./perm.js";
 import { compute, meta, metaMH, metaPeto, robustMeta, sandwichVar, robustWlsResult, metaRegression, testContrast, tau2_HS, tau2_HE, tau2_ML, tau2_REML, tau2_SJ, beggTest, eggerTest, fatPetTest, petPeeseTest, failSafeN, tesTest, heterogeneityCIs, cumulativeMeta, influenceDiagnostics, harbordTest, petersTest, deeksTest, rueckerTest, leaveOneOut, baujat, blupMeta, pCurve, pUniform, estimatorComparison, subgroupAnalysis, logLik, bfgs, selIntervalProbs, selIntervalIdx, selectionLogLik, SEL_CUTS_ONE_SIDED, SEL_CUTS_TWO_SIDED, veveaHedges, SELECTION_PRESETS, halfNormalSelModel, powerSelModel, negexpSelModel, betaSelModel, profileLikTau2, profileLikCI, bayesMeta, priorSensitivity, rvePooled, meta3level, lsModel, adjustPvals, henmiCopas, waapWls, clES, vcalc, mvMeta, validStudies } from "./analysis.js";
 import { trimFill } from "./trimfill.js";
@@ -7740,6 +7740,161 @@ export function runTests() {
   ecInvalid("GENERIC: yi NaN","GENERIC", { yi:NaN, vi:1   });
 
   console.log(ecPass ? "\n✅ ALL EFFECT TYPE EDGE CASE TESTS PASSED" : "\n❌ SOME EFFECT TYPE EDGE CASE TESTS FAILED");
+
+// ===== TRIMFILL BENCHMARK TESTS =====
+// Cross-validates trimFill() + meta() pooled estimate against metafor trimfill().
+// Fields: k0 (exact), b_tf (±0.005), se_tf (±0.005), tau2_tf (5% rel), ci bounds (±0.005).
+{
+  console.log("\n===== TRIMFILL BENCHMARK TESTS =====\n");
+  let tfBmPass = true;
+  const tfBmChk = (label, got, exp, tol = 0.005) => {
+    const ok = Math.abs(got - exp) <= tol;
+    if (!ok) { console.error(`  FAIL ${label}: got ${got}, exp ${exp}`); tfBmPass = false; }
+    else console.log(`  ok  ${label}`);
+  };
+  const tfBmChkRel = (label, got, exp) => {
+    const ok = Math.abs(got - exp) / Math.max(Math.abs(exp), 0.001) < 0.05;
+    if (!ok) { console.error(`  FAIL ${label}: got ${got}, exp ${exp}`); tfBmPass = false; }
+    else console.log(`  ok  ${label}`);
+  };
+
+  TRIMFILL_BENCHMARKS.forEach(bm => {
+    console.log(`--- ${bm.name} ---`);
+    const studies = bm.data.map(d => {
+      if (d.yi !== undefined && d.vi !== undefined) return { ...d };
+      const s = compute(d, bm.type);
+      return { ...d, yi: s.yi, vi: s.vi };
+    });
+    const { filled } = trimFill(studies, bm.tauMethod, bm.estimator);
+    const pooled = meta([...studies, ...filled], bm.tauMethod);
+    const ex = bm.expected;
+    if (filled.length !== ex.k0) {
+      console.error(`  FAIL k0: got ${filled.length}, exp ${ex.k0}`);
+      tfBmPass = false;
+    } else console.log(`  ok  k0 = ${ex.k0}`);
+    tfBmChk   (`b_tf`,     pooled.RE,    ex.b_tf);
+    tfBmChk   (`se_tf`,    pooled.seRE,  ex.se_tf);
+    tfBmChkRel(`tau2_tf`,  pooled.tau2,  ex.tau2_tf);
+    tfBmChk   (`ci_lb_tf`, pooled.ciLow, ex.ci_lb_tf);
+    tfBmChk   (`ci_ub_tf`, pooled.ciHigh,ex.ci_ub_tf);
+  });
+
+  console.log(tfBmPass ? "\n✅ ALL TRIMFILL BENCHMARK TESTS PASSED" : "\n❌ SOME TRIMFILL BENCHMARK TESTS FAILED");
+}
+
+// ===== CUMULATIVE BENCHMARK TESTS =====
+// Cross-validates cumulativeMeta() step-by-step against metafor cumul().
+// Fields: RE (estimate), seRE (se), ciLow/ciHigh, tau2 — all ±0.005 / 5% rel for tau2.
+{
+  console.log("\n===== CUMULATIVE BENCHMARK TESTS =====\n");
+  let cumBmPass = true;
+  const cumBmChk = (label, got, exp, tol = 0.005) => {
+    const ok = Math.abs(got - exp) <= tol;
+    if (!ok) { console.error(`  FAIL ${label}: got ${got}, exp ${exp}`); cumBmPass = false; }
+    else console.log(`  ok  ${label}`);
+  };
+
+  CUMULATIVE_BENCHMARKS.forEach(bm => {
+    console.log(`--- ${bm.name} ---`);
+    const studies = bm.data.map(d => {
+      if (d.yi !== undefined && d.vi !== undefined) return { ...d };
+      const s = compute(d, bm.type);
+      return { ...d, yi: s.yi, vi: s.vi };
+    });
+    const steps = cumulativeMeta(studies, bm.tauMethod);
+    const ex = bm.expected;
+    if (steps.length !== ex.length) {
+      console.error(`  FAIL step count: got ${steps.length}, exp ${ex.length}`);
+      cumBmPass = false;
+      return;
+    }
+    ex.forEach((ev, i) => {
+      const sv = steps[i];
+      const sfx = `step${i + 1}`;
+      cumBmChk(`${sfx}.estimate`, sv.RE,     ev.estimate);
+      cumBmChk(`${sfx}.se`,       sv.seRE,   ev.se);
+      cumBmChk(`${sfx}.ci_lb`,    sv.ciLow,  ev.ci_lb);
+      cumBmChk(`${sfx}.ci_ub`,    sv.ciHigh, ev.ci_ub);
+      const tau2Ok = Math.abs(sv.tau2 - ev.tau2) / Math.max(Math.abs(ev.tau2), 0.001) < 0.05;
+      if (!tau2Ok) { console.error(`  FAIL ${sfx}.tau2: got ${sv.tau2}, exp ${ev.tau2}`); cumBmPass = false; }
+      else console.log(`  ok  ${sfx}.tau2`);
+    });
+  });
+
+  console.log(cumBmPass ? "\n✅ ALL CUMULATIVE BENCHMARK TESTS PASSED" : "\n❌ SOME CUMULATIVE BENCHMARK TESTS FAILED");
+}
+
+// ===== HC BENCHMARK TESTS =====
+// Cross-validates henmiCopas() against metafor hc().
+// Fields: beta, se (±0.005), tau2 (5% rel), ci_lb, ci_ub (±0.005).
+{
+  console.log("\n===== HC BENCHMARK TESTS =====\n");
+  let hcBmPass = true;
+  const hcBmChk = (label, got, exp, tol = 0.005) => {
+    const ok = Math.abs(got - exp) <= tol;
+    if (!ok) { console.error(`  FAIL ${label}: got ${got}, exp ${exp}`); hcBmPass = false; }
+    else console.log(`  ok  ${label}`);
+  };
+
+  HC_BENCHMARKS.forEach(bm => {
+    console.log(`--- ${bm.name} ---`);
+    const studies = bm.data.map(d => {
+      if (d.yi !== undefined && d.vi !== undefined) return { ...d };
+      const s = compute(d, bm.type);
+      return { ...d, yi: s.yi, vi: s.vi };
+    });
+    const h = henmiCopas(studies, 0.05);
+    const ex = bm.expected;
+    if (h.error) { console.error(`  FAIL henmiCopas error: ${h.error}`); hcBmPass = false; return; }
+    hcBmChk(`beta`,   h.beta,    ex.beta);
+    hcBmChk(`se`,     h.se,      ex.se);
+    const tau2Ok = Math.abs(h.tau2 - ex.tau2) / Math.max(Math.abs(ex.tau2), 0.001) < 0.05;
+    if (!tau2Ok) { console.error(`  FAIL tau2: got ${h.tau2}, exp ${ex.tau2}`); hcBmPass = false; }
+    else console.log(`  ok  tau2`);
+    hcBmChk(`ci_lb`,  h.ci[0],   ex.ci_lb);
+    hcBmChk(`ci_ub`,  h.ci[1],   ex.ci_ub);
+  });
+
+  console.log(hcBmPass ? "\n✅ ALL HC BENCHMARK TESTS PASSED" : "\n❌ SOME HC BENCHMARK TESTS FAILED");
+}
+
+// ===== WAAP BENCHMARK TESTS =====
+// Cross-validates waapWls() against manual R computation.
+// Fields: wlsEstimate, kAdequate (exact), estimate, se, z — ±0.005 / exact for counts.
+{
+  console.log("\n===== WAAP BENCHMARK TESTS =====\n");
+  let waapBmPass = true;
+  const waapBmChk = (label, got, exp, tol = 0.005) => {
+    const ok = Math.abs(got - exp) <= tol;
+    if (!ok) { console.error(`  FAIL ${label}: got ${got}, exp ${exp}`); waapBmPass = false; }
+    else console.log(`  ok  ${label}`);
+  };
+
+  WAAP_BENCHMARKS.forEach(bm => {
+    console.log(`--- ${bm.name} ---`);
+    const studies = bm.data.map(d => {
+      if (d.yi !== undefined && d.vi !== undefined) return { ...d };
+      const s = compute(d, bm.type);
+      return { ...d, yi: s.yi, vi: s.vi };
+    });
+    const w = waapWls(studies);
+    const ex = bm.expected;
+    waapBmChk(`wlsEstimate`, w.wlsEstimate, ex.wlsEstimate);
+    if (w.kAdequate !== ex.kAdequate) {
+      console.error(`  FAIL kAdequate: got ${w.kAdequate}, exp ${ex.kAdequate}`);
+      waapBmPass = false;
+    } else console.log(`  ok  kAdequate = ${ex.kAdequate}`);
+    if (w.fallback !== ex.fallback) {
+      console.error(`  FAIL fallback: got ${w.fallback}, exp ${ex.fallback}`);
+      waapBmPass = false;
+    } else console.log(`  ok  fallback = ${ex.fallback}`);
+    waapBmChk(`estimate`, w.estimate, ex.estimate);
+    waapBmChk(`se`,       w.se,      ex.se);
+    waapBmChk(`z`,        w.z,       ex.z, 0.01);
+  });
+
+  console.log(waapBmPass ? "\n✅ ALL WAAP BENCHMARK TESTS PASSED" : "\n❌ SOME WAAP BENCHMARK TESTS FAILED");
+}
 
 // ===== CONVERGENCE-PLUMBING TESTS =====
 // Verify the convergence contract { converged, iters, maxIters, reason, source } is wired

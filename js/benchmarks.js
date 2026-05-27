@@ -3224,7 +3224,63 @@ export const HALFNORM_BENCHMARKS = [
       tau2_unsel: 0.2800282
     },
     citation: "Colditz et al. (1994) dat.bcg. Verified against metafor selmodel(type='halfnorm', alternative='two.sided')."
-  }
+  },
+
+  // ----------------------------------------------------------------
+  // HN-EDGE-LOW: near-null k=10 dataset — delta → 0 (no selection signal)
+  // All effects ≈ 0; all p-values non-significant. Expected: delta≈0, LRT≈0.
+  // Verified against: metafor selmodel(type="halfnorm", alternative="two.sided")
+  //   (generate.R block HN-EDGE-LOW).
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic near-null – half-normal edge (δ → 0)",
+    rBlock: "HN-EDGE-LOW",
+    sides: 2,
+    data: [
+      { yi:  0.05, vi: 0.16 }, { yi: -0.03, vi: 0.25 }, { yi:  0.08, vi: 0.09 },
+      { yi: -0.02, vi: 0.36 }, { yi:  0.06, vi: 0.16 }, { yi:  0.01, vi: 0.25 },
+      { yi: -0.04, vi: 0.09 }, { yi:  0.03, vi: 0.36 }, { yi:  0.07, vi: 0.16 },
+      { yi: -0.01, vi: 0.25 }
+    ],
+    expected: {
+      mu:    0.02523967,
+      se_mu: 0.13091192,
+      tau2:  0.00000168,
+      delta: 0.00000931,
+      LRT:   0,
+      LRTdf: 1,
+      LRTp:  1,
+    },
+    citation: "Synthetic near-null (k=10, all p>0.05). Verified against metafor selmodel(type='halfnorm') (generate.R block HN-EDGE-LOW)."
+  },
+
+  // ----------------------------------------------------------------
+  // HN-EDGE-HIGH: strong-selection k=10 dataset — delta → 1 (upper bound)
+  // All effects large; all p < 0.001. Expected: delta≈1, LRT≈0 (flat weight fn).
+  // Verified against: metafor selmodel(type="halfnorm", alternative="two.sided")
+  //   (generate.R block HN-EDGE-HIGH).
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic strong-selection – half-normal edge (δ → 1)",
+    rBlock: "HN-EDGE-HIGH",
+    sides: 2,
+    data: [
+      { yi: 1.50, vi: 0.01 }, { yi: 1.80, vi: 0.02 }, { yi: 1.30, vi: 0.01 },
+      { yi: 2.00, vi: 0.03 }, { yi: 1.60, vi: 0.02 }, { yi: 1.40, vi: 0.01 },
+      { yi: 1.90, vi: 0.02 }, { yi: 1.70, vi: 0.01 }, { yi: 1.20, vi: 0.03 },
+      { yi: 2.10, vi: 0.02 }
+    ],
+    expected: {
+      mu:    1.64129658,
+      se_mu: 0.08749567,
+      tau2:  0.0590699,
+      delta: 1.00000104,
+      LRT:   0.000001,
+      LRTdf: 1,
+      LRTp:  0.99921203,
+    },
+    citation: "Synthetic strong-selection (k=10, all p<0.001). Verified against metafor selmodel(type='halfnorm') (generate.R block HN-EDGE-HIGH)."
+  },
 
 ];
 
@@ -4442,5 +4498,252 @@ export const MULTIVARIATE_BENCHMARKS = [
       QE:     45.42745765, df_QE: 8, pQE: 3.1e-7,
     },
     citation: 'Berkey98, t-distribution CIs (metafor test="t"). Verified against rma.mv(test="t") (generate.R block MV-1-t).',
+  },
+  {
+    rBlock: 'MV-UN-2',
+    name: 'Synthetic 3-outcome UN, 15 studies, REML',
+    struct: 'UN', method: 'REML', rho: 0.5,
+    data: (() => {
+      // 15 studies × 3 outcomes (A, B, C) in long format; hand-crafted yi/vi
+      const yi = [
+        0.28,0.51,0.22, 0.15,0.62,0.18, 0.40,0.44,0.27,
+        0.32,0.71,0.15, 0.25,0.38,0.24, 0.35,0.55,0.21,
+        0.20,0.48,0.19, 0.42,0.66,0.25, 0.18,0.42,0.23,
+        0.38,0.59,0.17, 0.29,0.53,0.20, 0.33,0.47,0.26,
+        0.21,0.68,0.16, 0.44,0.41,0.28, 0.31,0.57,0.22,
+      ];
+      const vi = [
+        0.020,0.015,0.025, 0.018,0.012,0.022, 0.025,0.020,0.030,
+        0.012,0.008,0.015, 0.020,0.015,0.025, 0.015,0.012,0.018,
+        0.022,0.018,0.028, 0.010,0.008,0.012, 0.024,0.020,0.030,
+        0.018,0.014,0.022, 0.020,0.016,0.024, 0.019,0.015,0.023,
+        0.021,0.017,0.027, 0.011,0.009,0.013, 0.017,0.013,0.020,
+      ];
+      const outcomes = ['A','B','C'];
+      return Array.from({ length: 45 }, (_, i) => ({
+        yi: yi[i], vi: vi[i],
+        study_id: Math.floor(i / 3) + 1,
+        outcome_id: outcomes[i % 3],
+      }));
+    })(),
+    expected: {
+      beta:    [0.31738275, 0.5468984, 0.21868336],
+      se:      [0.03401466, 0.03460077, 0.03754424],
+      tau2:    [0.00045276, 0.00470429, 0.00051889],
+      rho:     [-1, 1, -1],  // boundary values — not compared in diff
+      QM:      270.85726908, QE: 32.420444,
+      logLik:  37.17639714,
+    },
+    citation: 'Synthetic 45-row (15 studies × 3 outcomes) dataset. UN Ψ structure. Verified against metafor rma.mv() (generate.R block MV-UN-2).',
+  },
+];
+
+// =============================================================================
+// Shared datasets for trim-fill / cumulative / HC / WAAP benchmarks
+// =============================================================================
+
+const _BCG_2x2 = [
+  { label: "Aronson 1948",            a:   4, b:   119, c:  11, d:   128 },
+  { label: "Ferguson & Simes 1949",   a:   6, b:   300, c:  29, d:   274 },
+  { label: "Rosenthal 1960",          a:   3, b:   228, c:  11, d:   209 },
+  { label: "Hart & Sutherland 1977",  a:  62, b: 13536, c: 248, d: 12619 },
+  { label: "Frimodt-Moller 1973",     a:  33, b:  5036, c:  47, d:  5761 },
+  { label: "Stein & Aronson 1953",    a: 180, b:  1361, c: 372, d:  1079 },
+  { label: "Vandiviere 1973",         a:   8, b:  2537, c:  10, d:   619 },
+  { label: "TPT Madras 1980",         a: 505, b: 87886, c: 499, d: 87892 },
+  { label: "Coetzee & Berjak 1968",   a:  29, b:  7470, c:  45, d:  7232 },
+  { label: "Rosenthal 1961",          a:  17, b:  1699, c:  65, d:  1600 },
+  { label: "Comstock 1974",           a: 186, b: 50448, c: 141, d: 27197 },
+  { label: "Comstock & Webster 1969", a:   5, b:  2493, c:   3, d:  2338 },
+  { label: "Comstock 1976",           a:  27, b: 16886, c:  29, d: 17825 },
+];
+
+const _NORMAND_MD = [
+  { label: "Edinburgh",          n1: 155, m1:  55, sd1: 47, n2: 156, m2:  75, sd2: 64 },
+  { label: "Orpington-Mild",     n1:  31, m1:  27, sd1:  7, n2:  32, m2:  29, sd2:  4 },
+  { label: "Orpington-Moderate", n1:  75, m1:  64, sd1: 17, n2:  71, m2: 119, sd2: 29 },
+  { label: "Orpington-Severe",   n1:  18, m1:  66, sd1: 20, n2:  18, m2: 137, sd2: 48 },
+  { label: "Montreal-Home",      n1:   8, m1:  14, sd1:  8, n2:  13, m2:  18, sd2: 11 },
+  { label: "Montreal-Transfer",  n1:  57, m1:  19, sd1:  7, n2:  52, m2:  18, sd2:  4 },
+  { label: "Newcastle",          n1:  34, m1:  52, sd1: 45, n2:  33, m2:  41, sd2: 34 },
+  { label: "Umea",               n1: 110, m1:  21, sd1: 16, n2: 183, m2:  31, sd2: 27 },
+  { label: "Uppsala",            n1:  60, m1:  30, sd1: 27, n2:  52, m2:  23, sd2: 20 },
+];
+
+const _SYNTH_FUNNEL = [
+  { label: "S1", yi: -0.1, vi: 0.0400 },
+  { label: "S2", yi:  0.3, vi: 0.0900 },
+  { label: "S3", yi:  0.1, vi: 0.0225 },
+  { label: "S4", yi:  0.9, vi: 0.3600 },
+  { label: "S5", yi:  1.4, vi: 0.6400 },
+  { label: "S6", yi:  0.5, vi: 0.1600 },
+];
+
+// =============================================================================
+// TRIMFILL_BENCHMARKS — Duval-Tweedie L₀/R₀/Q₀ across three datasets.
+// Fields: k0 (exact), b_tf, se_tf, tau2_tf, ci_lb_tf, ci_ub_tf.
+// Verified against metafor trimfill() (generate.R blocks TF-*).
+// Note: TF-Q0-SYNTH skipped — metafor Q₀ fails on k=6 with NaN in sqrt.
+// =============================================================================
+export const TRIMFILL_BENCHMARKS = [
+  {
+    rBlock: "TF-L0-BCG",
+    name: "BCG OR trim-fill L0 (DL, k=13)",
+    type: "OR", tauMethod: "DL", estimator: "L0",
+    data: _BCG_2x2,
+    expected: { k0: 0, b_tf: -0.74739235, se_tf: 0.19226285, tau2_tf: 0.36634341, ci_lb_tf: -1.12422061, ci_ub_tf: -0.37056409 },
+    citation: "Colditz et al. (1994). dat.bcg in metafor. Verified via generate.R block TF-L0-BCG.",
+  },
+  {
+    rBlock: "TF-R0-BCG",
+    name: "BCG OR trim-fill R0 (DL, k=13)",
+    type: "OR", tauMethod: "DL", estimator: "R0",
+    data: _BCG_2x2,
+    expected: { k0: 0, b_tf: -0.74739235, se_tf: 0.19226285, tau2_tf: 0.36634341, ci_lb_tf: -1.12422061, ci_ub_tf: -0.37056409 },
+    citation: "Colditz et al. (1994). dat.bcg in metafor. Verified via generate.R block TF-R0-BCG.",
+  },
+  {
+    rBlock: "TF-Q0-BCG",
+    name: "BCG OR trim-fill Q0 (DL, k=13)",
+    type: "OR", tauMethod: "DL", estimator: "Q0",
+    data: _BCG_2x2,
+    expected: { k0: 0, b_tf: -0.74739235, se_tf: 0.19226285, tau2_tf: 0.36634341, ci_lb_tf: -1.12422061, ci_ub_tf: -0.37056409 },
+    citation: "Colditz et al. (1994). dat.bcg in metafor. Verified via generate.R block TF-Q0-BCG.",
+  },
+  {
+    rBlock: "TF-L0-SYNTH",
+    name: "Synthetic funnel trim-fill L0 (DL, k=6)",
+    type: "GENERIC", tauMethod: "DL", estimator: "L0",
+    data: _SYNTH_FUNNEL,
+    expected: { k0: 3, b_tf: 0.0733674, se_tf: 0.15345843, tau2_tf: 0.06949276, ci_lb_tf: -0.2274056, ci_ub_tf: 0.3741404 },
+    citation: "Synthetic asymmetric funnel (k=6). Verified via generate.R block TF-L0-SYNTH.",
+  },
+  {
+    rBlock: "TF-R0-SYNTH",
+    name: "Synthetic funnel trim-fill R0 (DL, k=6)",
+    type: "GENERIC", tauMethod: "DL", estimator: "R0",
+    data: _SYNTH_FUNNEL,
+    expected: { k0: 3, b_tf: 0.0733674, se_tf: 0.15345843, tau2_tf: 0.06949276, ci_lb_tf: -0.2274056, ci_ub_tf: 0.3741404 },
+    citation: "Synthetic asymmetric funnel (k=6). Verified via generate.R block TF-R0-SYNTH.",
+  },
+  {
+    rBlock: "TF-L0-NORMAND",
+    name: "Normand 1999 MD trim-fill L0 (DL, k=9)",
+    type: "MD", tauMethod: "DL", estimator: "L0",
+    data: _NORMAND_MD,
+    expected: { k0: 0, b_tf: -13.98172182, se_tf: 5.12669834, tau2_tf: 205.40937547, ci_lb_tf: -24.02986592, ci_ub_tf: -3.93357771 },
+    citation: "Normand (1999) Stat Med 18:321. dat.normand1999 in metafor. Verified via generate.R block TF-L0-NORMAND.",
+  },
+  {
+    rBlock: "TF-R0-NORMAND",
+    name: "Normand 1999 MD trim-fill R0 (DL, k=9)",
+    type: "MD", tauMethod: "DL", estimator: "R0",
+    data: _NORMAND_MD,
+    expected: { k0: 1, b_tf: -9.42048254, se_tf: 5.10696801, tau2_tf: 220.96401263, ci_lb_tf: -19.42995591, ci_ub_tf: 0.58899084 },
+    citation: "Normand (1999) Stat Med 18:321. dat.normand1999 in metafor. Verified via generate.R block TF-R0-NORMAND.",
+  },
+  {
+    rBlock: "TF-Q0-NORMAND",
+    name: "Normand 1999 MD trim-fill Q0 (DL, k=9)",
+    type: "MD", tauMethod: "DL", estimator: "Q0",
+    data: _NORMAND_MD,
+    expected: { k0: 0, b_tf: -13.98172182, se_tf: 5.12669834, tau2_tf: 205.40937547, ci_lb_tf: -24.02986592, ci_ub_tf: -3.93357771 },
+    citation: "Normand (1999) Stat Med 18:321. dat.normand1999 in metafor. Verified via generate.R block TF-Q0-NORMAND.",
+  },
+];
+
+// =============================================================================
+// CUMULATIVE_BENCHMARKS — cumulative meta-analysis (ordered entry, REML or DL).
+// expected: array of { estimate, se, ci_lb, ci_ub, tau2 } per step (k=1..K).
+// Verified against metafor cumul() (generate.R blocks CUM-*).
+// =============================================================================
+export const CUMULATIVE_BENCHMARKS = [
+  {
+    rBlock: "CUM-BCG",
+    name: "BCG OR cumulative meta (DL, k=13)",
+    type: "OR", tauMethod: "DL",
+    data: _BCG_2x2,
+    expected: [
+      { estimate: -0.93869414, se: 0.59759932, ci_lb: -2.10996729, ci_ub:  0.23257901, tau2: 0 },
+      { estimate: -1.39832051, se: 0.36262424, ci_lb: -2.10905096, ci_ub: -0.68759007, tau2: 0 },
+      { estimate: -1.39552114, se: 0.31762774, ci_lb: -2.01806007, ci_ub: -0.77298220, tau2: 0 },
+      { estimate: -1.44623245, se: 0.13003673, ci_lb: -1.70109976, ci_ub: -1.19136515, tau2: 0 },
+      { estimate: -1.09819182, se: 0.35197503, ci_lb: -1.78805020, ci_ub: -0.40833344, tau2: 0.44540649 },
+      { estimate: -1.04496196, se: 0.22080073, ci_lb: -1.47772344, ci_ub: -0.61220049, tau2: 0.18151058 },
+      { estimate: -1.10664136, se: 0.20660855, ci_lb: -1.51158669, ci_ub: -0.70169604, tau2: 0.17637391 },
+      { estimate: -0.96643431, se: 0.28888769, ci_lb: -1.53264377, ci_ub: -0.40022484, tau2: 0.53628420 },
+      { estimate: -0.90077482, se: 0.25995783, ci_lb: -1.41028280, ci_ub: -0.39126685, tau2: 0.48804273 },
+      { estimate: -0.95502828, se: 0.24721871, ci_lb: -1.43956804, ci_ub: -0.47048851, tau2: 0.49550343 },
+      { estimate: -0.87579783, se: 0.20867051, ci_lb: -1.28478452, ci_ub: -0.46681114, tau2: 0.37964171 },
+      { estimate: -0.81557729, se: 0.20364480, ci_lb: -1.21471377, ci_ub: -0.41644082, tau2: 0.37861620 },
+      { estimate: -0.74739235, se: 0.19226285, ci_lb: -1.12422061, ci_ub: -0.37056409, tau2: 0.36634341 },
+    ],
+    citation: "Colditz et al. (1994). dat.bcg in metafor. Verified via generate.R block CUM-BCG.",
+  },
+  {
+    rBlock: "CUM-NORMAND",
+    name: "Normand 1999 MD cumulative meta (REML, k=9)",
+    type: "MD", tauMethod: "REML",
+    data: _NORMAND_MD,
+    expected: [
+      { estimate: -20.00000000, se:  6.36459136, ci_lb: -32.47436984, ci_ub:  -7.52563016, tau2:   0 },
+      { estimate:  -9.93257283, se:  8.93647577, ci_lb: -27.44774350, ci_ub:   7.58259783, tau2: 140.70566584 },
+      { estimate: -25.57957528, se: 15.73547859, ci_lb: -56.42054660, ci_ub:   5.26139604, tau2: 723.72497709 },
+      { estimate: -35.88210854, se: 15.62563231, ci_lb: -66.50778509, ci_ub:  -5.25643198, tau2: 927.79463349 },
+      { estimate: -29.28105467, se: 13.55207556, ci_lb: -55.84263469, ci_ub:  -2.71947466, tau2: 876.06777622 },
+      { estimate: -23.99318729, se: 12.05947077, ci_lb: -47.62931567, ci_ub:  -0.35705891, tau2: 837.57642483 },
+      { estimate: -19.27759979, se: 11.27617044, ci_lb: -41.37848775, ci_ub:   2.82328816, tau2: 846.98584503 },
+      { estimate: -17.96900670, se:  9.70299836, ci_lb: -36.98653403, ci_ub:   1.04852062, tau2: 715.30749709 },
+      { estimate: -15.10602747, se:  8.94655285, ci_lb: -32.64094884, ci_ub:   2.42889389, tau2: 684.64615288 },
+    ],
+    citation: "Normand (1999) Stat Med 18:321. dat.normand1999 in metafor. Verified via generate.R block CUM-NORMAND.",
+  },
+];
+
+// =============================================================================
+// HC_BENCHMARKS — Henmi-Copas confidence intervals.
+// expected: { beta, se, tau2, ci_lb, ci_ub }.
+// Verified against metafor hc() (generate.R blocks HC-BCG-RR, HC-BCG-RD, HC-NORMAND-MD).
+// =============================================================================
+export const HC_BENCHMARKS = [
+  {
+    rBlock: "HC-BCG-RR",
+    name: "BCG log-RR Henmi-Copas (DL, k=13)",
+    type: "RR",
+    data: _BCG_2x2,
+    expected: { beta: -0.43028516, se: 0.28354435, tau2: 0.30876026, ci_lb: -1.15551187, ci_ub: 0.29494154 },
+    citation: "Colditz et al. (1994). dat.bcg log-RR. Verified via generate.R block HC-BCG-RR.",
+  },
+  {
+    rBlock: "HC-BCG-RD",
+    name: "BCG RD Henmi-Copas (DL, k=13)",
+    type: "RD",
+    data: _BCG_2x2,
+    expected: { beta: -0.00091426, se: 0.00229642, tau2: 0.00001873, ci_lb: -0.00778351, ci_ub: 0.00595498 },
+    citation: "Colditz et al. (1994). dat.bcg risk difference. Verified via generate.R block HC-BCG-RD.",
+  },
+  {
+    rBlock: "HC-NORMAND-MD",
+    name: "Normand 1999 MD Henmi-Copas (DL, k=9)",
+    type: "MD",
+    data: _NORMAND_MD,
+    expected: { beta: -3.46361263, se: 8.42125652, tau2: 205.40937547, ci_lb: -28.60190092, ci_ub: 21.67467566 },
+    citation: "Normand (1999) Stat Med 18:321. dat.normand1999. Verified via generate.R block HC-NORMAND-MD.",
+  },
+];
+
+// =============================================================================
+// WAAP_BENCHMARKS — Weighted Average of Adequately Powered studies (Stanley & Doucouliagos 2015).
+// expected: { wlsEstimate, kAdequate, estimate, se, z, fallback }.
+// Verified against manual WLS computation in generate.R (block WAAP-NORMAND).
+// =============================================================================
+export const WAAP_BENCHMARKS = [
+  {
+    rBlock: "WAAP-NORMAND",
+    name: "Normand 1999 MD WAAP-WLS (k=9, kAdequate=1)",
+    type: "MD",
+    data: _NORMAND_MD,
+    expected: { wlsEstimate: -3.46361263, kAdequate: 1, estimate: 1, se: 1.08043576, z: 0.92555248, fallback: false },
+    citation: "Normand (1999) Stat Med 18:321. One study (Montreal-Transfer) has adequate power vs |wlsEst|. Verified via generate.R block WAAP-NORMAND.",
   },
 ];
