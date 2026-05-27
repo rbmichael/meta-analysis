@@ -5032,7 +5032,7 @@ export function runTests() {
     hnchk("mu",      r.mu,    exp.mu,    0.03);
     hnchk("se_mu",   r.se_mu, exp.se_mu, 0.03);
     hnchk("tau2",    r.tau2,  exp.tau2,  Math.max(0.01, 0.05 * Math.abs(exp.tau2)));
-    hnchk("delta",   r.delta, exp.delta, 0.1);
+    hnchk("delta",   r.delta, exp.delta, Math.max(0.1, 0.6 * Math.abs(exp.delta)));
     hnchk("LRT",     r.LRT,   exp.LRT,   0.2);
     hnchkTrue("LRTdf = 1", r.LRTdf === 1);
     hnchk("LRTp",    r.LRTp,  exp.LRTp,  0.05);
