@@ -6,6 +6,19 @@ import { compute, meta, metaMH, metaPeto, robustMeta, sandwichVar, robustWlsResu
 import { trimFill } from "./trimfill.js";
 import { parseCSV, detectCsvFormat, parseNumberWithDecimal } from "./csv.js";
 import { goshCompute, GOSH_MAX_ENUM_K, GOSH_MAX_K, GOSH_DEFAULT_MAX_SUBSETS } from "./gosh.js";
+// ── Export-parity harness imports ────────────────────────────────────────────
+import { fmt } from "./format.js";
+import { runAnalysisHeadless, computeStudies, buildReportArgs } from "./analysis-headless.js";
+import { summaryData, pubBiasData, regressionData, influenceData,
+         selModelData, rveData, threeLevelData, bayesData } from "./sections.js";
+import { buildTableAPA } from "./report.js";
+import fixtureSmReml     from "./fixtures/fixture_smd_reml_normal.mjs";
+import fixtureSmKh       from "./fixtures/fixture_smd_reml_kh.mjs";
+import fixtureBcgReg     from "./fixtures/fixture_bcg_regression.mjs";
+import fixtureClusterRve from "./fixtures/fixture_cluster_rve.mjs";
+import fixtureVhSel      from "./fixtures/fixture_vh_selection.mjs";
+import fixtureBayes      from "./fixtures/fixture_bayes.mjs";
+import fixtureInfluence  from "./fixtures/fixture_normand_influence.mjs";
 
 // Tolerances vary by field:
 //   FE, RE  — absolute 0.01   (pooled estimates are on a stable scale)
@@ -8022,4 +8035,130 @@ export function runTests() {
   console.log(cpPass
     ? "\n✅ ALL CONVERGENCE-PLUMBING TESTS PASSED"
     : "\n❌ SOME CONVERGENCE-PLUMBING TESTS FAILED");
+}
+
+// =============================================================================
+// EXPORT PARITY TESTS
+// =============================================================================
+// Verify that every field in the headless result that appears in reportArgs
+// also appears (formatted with fmt()) in the HTML table produced by the
+// corresponding sections.js data function + buildTableAPA().
+//
+// Architecture (Plan B.3 Step 2):
+//   fixture → computeStudies → runAnalysisHeadless → buildReportArgs
+//   → sections.summaryData / sections.pubBiasData → buildTableAPA → HTML
+//   → assert formatted value present in HTML
+//
+// Catches: field removed from sections.js rows → formatted value absent.
+// Future: full buildReport / buildDocx checks once jsdom is available.
+// =============================================================================
+{
+  console.log("\n===== EXPORT PARITY TESTS =====\n");
+
+  let parityPass = true;
+  const onParityFail = () => { parityPass = false; };
+
+  // Navigate a dotted-key path (e.g. "m.RE") into an object.
+  function getNestedValue(obj, path) {
+    return path.split(".").reduce((o, k) => o?.[k], obj);
+  }
+
+  // Build the sections-level HTML table for a given section name.
+  function sectionHtml(name, reportArgs) {
+    if (name === "summary") {
+      const d = summaryData(reportArgs);
+      return buildTableAPA(1, d.subtitle, d.headers, d.rows, d.note ?? "");
+    }
+    if (name === "pubBias") {
+      const d = pubBiasData(reportArgs);
+      return buildTableAPA(1, "Publication Bias", d.headers, d.rows, d.note ?? "");
+    }
+    if (name === "regression") {
+      const d = regressionData(reportArgs);
+      if (!d) return "";
+      return buildTableAPA(1, "Meta-Regression", d.coef.headers, d.coef.rows, d.coef.note ?? "");
+    }
+    if (name === "influence") {
+      const d = influenceData(reportArgs);
+      if (!d) return "";
+      return buildTableAPA(1, "Influence Diagnostics", d.headers, d.rows, d.note ?? "");
+    }
+    if (name === "selModel") {
+      const d = selModelData(reportArgs);
+      if (!d) return "";
+      return buildTableAPA(1, "Selection Model", d.headers, d.rows, d.note ?? "");
+    }
+    if (name === "rve") {
+      const d = rveData(reportArgs);
+      if (!d) return "";
+      return buildTableAPA(1, "RVE", d.headers, d.rows, d.note ?? "");
+    }
+    if (name === "threeLevel") {
+      const d = threeLevelData(reportArgs);
+      if (!d) return "";
+      return buildTableAPA(1, "Three-Level", d.headers, d.rows, d.note ?? "");
+    }
+    if (name === "bayes") {
+      const d = bayesData(reportArgs);
+      if (!d) return "";
+      return buildTableAPA(1, "Bayesian", d.headers, d.rows, d.note ?? "");
+    }
+    return "";
+  }
+
+  // Run one fixture: compute → build reportArgs → check each expected field.
+  function runParityFixture(fixture) {
+    const { name, rawData, type, opts, reportSettings = {}, expected } = fixture;
+    console.log(`--- ${name} ---`);
+
+    const studies = computeStudies(rawData, type);
+    if (!studies.length) {
+      console.log("  FAIL: no valid studies after compute");
+      onParityFail();
+      return;
+    }
+
+    const r = runAnalysisHeadless(studies, type, opts);
+    if (r.m.error) {
+      console.log(`  FAIL: analysis error: ${r.m.error}`);
+      onParityFail();
+      return;
+    }
+
+    const reportArgs = buildReportArgs(r, reportSettings);
+
+    const htmlCache = {};
+    let fixtureOk = true;
+
+    for (const { section, path, label = path } of expected) {
+      const value = getNestedValue(r, path);
+      if (value === undefined || !isFinite(value)) {
+        console.log(`  FAIL [${label}]: path '${path}' → ${value}`);
+        fixtureOk = false;
+        continue;
+      }
+      const formatted = fmt(value);
+      if (!htmlCache[section]) htmlCache[section] = sectionHtml(section, reportArgs);
+      if (!htmlCache[section].includes(formatted)) {
+        console.log(`  FAIL [${label}]: '${formatted}' not in ${section} HTML`);
+        fixtureOk = false;
+      } else {
+        console.log(`  ok  ${label}`);
+      }
+    }
+
+    if (!fixtureOk) onParityFail();
+  }
+
+  runParityFixture(fixtureSmReml);
+  runParityFixture(fixtureSmKh);
+  runParityFixture(fixtureBcgReg);
+  runParityFixture(fixtureClusterRve);
+  runParityFixture(fixtureVhSel);
+  runParityFixture(fixtureBayes);
+  runParityFixture(fixtureInfluence);
+
+  console.log(parityPass
+    ? "\n✅ ALL EXPORT PARITY TESTS PASSED"
+    : "\n❌ SOME EXPORT PARITY TESTS FAILED");
 }

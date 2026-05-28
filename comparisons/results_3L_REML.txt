@@ -1,0 +1,67 @@
+=== CLUSTER-ROBUST / THREE-LEVEL CROSS-VALIDATION RESULTS ===
+Script:        compare_robust.R
+Input:         cluster_data.csv
+Mode:          3l (Three-level rma.mv)
+Method:        REML
+Studies (k):   8
+Clusters (C):  4
+Generated:     2026-05-17
+
+Dataset: Synthetic 4-cluster dataset (cluster_data.csv).
+yi = effect size; vi = sampling variance; cluster = cluster ID; mod = continuous moderator.
+
+=== SECTION 1: THREE-LEVEL META-ANALYSIS ===
+(Cross-validates js/regression.js meta3level — THREE_LEVEL_BENCHMARKS style)
+rma.mv(yi, vi, random = ~ 1 | cluster/study_id, method = "REML", data = dat)
+
+Note: metafor sigma2[1] = between-cluster (tau2_between in app);
+      metafor sigma2[2] = within-cluster  (tau2_within  in app).
+
+--- POOLED ESTIMATE ---
+mu:           0.4368
+SE:           0.0798
+CI:           [0.2803, 0.5932]
+z:            5.4708
+p:            < 0.0001
+
+--- VARIANCE COMPONENTS ---
+tau2_between (sigma2[1]):  0.0000000  (between-cluster)
+tau2_within  (sigma2[2]):  0.0102245  (within-cluster)
+I2_between:               0.0000
+I2_within:                66.9734
+
+--- HETEROGENEITY ---
+Q (FE):  9.2479  df = 7  p = 0.2353
+
+--- LOG-LIKELIHOOD ---
+LL (R convention):   0.1542686
+  JS LL = R_LL + (k-1)/2*log(2*pi) - (1/2)*log(k)
+       = R_LL + 5.3930
+  JS LL ≈ 5.5473
+
+=== KNOWN DIVERGENCES ===
+All differences below are expected. None indicate computation errors.
+
+1. SIGMA2 ORDERING (metafor vs app)
+   metafor: sigma2[1] = between-cluster, sigma2[2] = within-cluster.
+   App (meta3level): tau2_between = sigma2[1], tau2_within = sigma2[2].
+
+2. LOG-LIKELIHOOD CONSTANT
+   JS meta3level evalLL omits normalising constants (valid for optimisation).
+   R logLik() uses full REML: -(k-p)/2*log(2π) - ½*log|Σ| - ½*QF - ½*log(X'Σ⁻¹X) + ½*log|X'X|
+   JS evalLL omits -(k-p)/2*log(2π) and +½*log|X'X| (both constant in θ).
+   For intercept-only (p=1, X'X=k):
+     JS_LL = R_LL + (k-1)/2*log(2π) - ½*log(k) = R_LL + 5.3930
+   Use 'JS LL' line above to compare against app display.
+
+3. I² FORMULA
+   Uses vi_typical = 1/sum(1/vi) (harmonic mean of sampling variances).
+   I2_between = tau2_between / (tau2_between + tau2_within + vi_typical).
+   I2_within  = tau2_within  / (tau2_between + tau2_within + vi_typical).
+   Matches generate.R THREE-1/THREE-2 formula exactly.
+
+4. DISPLAY PRECISION
+   This script prints 4 decimal places; app displays 3.
+   Differences of 0.001 may be rounding only.
+
+=== END OF RESULTS ===

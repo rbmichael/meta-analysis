@@ -1,0 +1,104 @@
+=== CLUSTER-ROBUST / THREE-LEVEL CROSS-VALIDATION RESULTS ===
+Script:        compare_robust.R
+Input:         cluster_data.csv
+Mode:          rve (Cluster-robust SE (CR1) + RVE)
+Method:        REML
+RVE rho:       0.8
+Studies (k):   8
+Clusters (C):  4
+Generated:     2026-05-16 21:22:38
+
+Dataset: Synthetic 4-cluster dataset (cluster_data.csv).
+yi = effect size; vi = sampling variance; cluster = cluster ID; mod = continuous moderator.
+
+=== SECTION 1: INTERCEPT-ONLY POOLED ESTIMATE + CLUSTER-ROBUST SE ===
+(Cross-validates js/robust.js robustMeta — CLUSTER_BENCHMARKS CL-style)
+rma(yi, vi, method = "REML", data = dat)
+coef_test(res, vcov = "CR1", cluster = dat$cluster)
+
+--- POOLED ESTIMATE ---
+RE (mu):        0.4368
+Model SE:       0.0798
+tau2:           0.0102
+I2 (Q-based):   24.3071%  [matches app formula (Q-df)/Q]
+I2 (tau2-based):20.1024%  [metafor res$I2; diverges from app]
+Q:              9.2479  df = 7  p = 0.2353
+
+--- CLUSTER-ROBUST INFERENCE ---
+Robust SE:      0.0793
+Robust CI:      [0.1844, 0.6891]
+df:             3  (C - p = 4 - 1)
+Clusters (C):   4
+
+=== SECTION 2: META-REGRESSION + CLUSTER-ROBUST SE ===
+(Cross-validates js/regression.js metaRegression with cluster IDs)
+rma(yi, vi, mods = ~ mod, method = "REML", data = dat)
+coef_test(res, vcov = "CR1", cluster = dat$cluster)
+
+--- COEFFICIENTS (model-based SE) ---
+term                beta  model SE
+------------------------------------
+intrcpt           0.0415    0.1646
+mod               0.1234    0.0466
+
+--- COEFFICIENTS (cluster-robust SE, df = 2) ---
+term                beta    rob SE  rob CI low   rob CI hi        t        p
+--------------------------------------------------------------------------
+intrcpt           0.0415    0.1014     -0.3950      0.4780   0.4094   0.7219
+mod               0.1234    0.0385     -0.0424      0.2892   3.2018   0.0853
+
+--- MODEL TESTS ---
+QM (omnibus, model-based):  6.9996  df = 1  p = 0.0082
+QE (residual):              2.2483  df = 6  p = 0.8955
+tau2:                       0.0000
+R2:                         100.0000%
+
+=== SECTION 3: RVE POOLED ESTIMATE (Hedges-Tipton-Johnson 2010) ===
+(Cross-validates js/regression.js rvePooled — RVE_BENCHMARKS style)
+Working model: V_i[j,j]=vi_j, V_i[j,k]=rho*sqrt(vi_j*vi_k), rho=0.8
+Manual implementation matching app rvePooled (omega^2=0, uses vi directly).
+Reference: Hedges, Tipton & Johnson (2010, Res Synth Methods 1:39-65).
+
+--- RVE ESTIMATE ---
+RVE est:      0.3592
+SE:           0.0679
+CI:           [0.1432, 0.5752]
+t:            5.2916
+df:           3  (m - 1 = 4 - 1)
+p:            0.0132
+Clusters (m): 4
+
+=== KNOWN DIVERGENCES ===
+All differences below are expected. None indicate computation errors.
+
+1. I² FORMULA (Section 1)
+   App uses Q-based I²: (Q - df) / Q * 100.  R res$I2 uses tau2/(tau2+v_typ).
+   Compare 'I2 (Q-based)' line in Section 1 against app; ignore 'I2 (tau2-based)'.
+   Divergence is largest for ML estimator and near-zero tau2.
+
+2. TWO SEPARATE ROBUST METHODS (Sections 1/2 vs Section 3)
+   Sections 1-2: CR1 sandwich (clubSandwich) applied AFTER rma().
+     App: robustMeta / metaRegression with cluster IDs.
+     Working model: uses RE weights w_i = 1/(vi + tau2).
+   Section 3: HTJ RVE applied to a compound-symmetry working model.
+     App: rvePooled with rho=0.8.
+     Working model: V_i[j,k] = rho*sqrt(vi_j*vi_k), no tau2 estimated.
+   These are INDEPENDENT estimates. App displays both; they need not agree.
+
+3. CLUBSANDWICH CR1 MATCHES APP sandwichVar EXACTLY
+   V_rob = (C/(C-p)) * A * B * A  (A=(X'WX)^-1, B=meat).
+   Verified in generate.R blocks CL-1 through CL-3.
+
+4. HTJ RVE FORMULA MATCHES APP rvePooled EXACTLY
+   rve_pooled() above replicates generate.R rve_manual() which is verified
+   against js/regression.js rvePooled in generate.R blocks RVE-1 through RVE-3.
+
+5. DF FORMULAS
+   CR1 sections: df = C - p  (C=clusters, p=params; p=1 S1, p=2 S2).
+   RVE section:  df = m - 1  (m=clusters, intercept-only).
+   t-distribution used when df < 30; normal otherwise.
+
+6. DISPLAY PRECISION
+   This script prints 4 decimal places; app displays 3.
+
+=== END OF RESULTS ===

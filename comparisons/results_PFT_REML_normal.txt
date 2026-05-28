@@ -1,0 +1,94 @@
+=== META-ANALYSIS RESULTS ===
+Script:        compare.R
+Input:         proportion_data.csv
+Effect Type:   PFT (Proportion (Freeman-Tukey double-arcsine))
+Estimator:     REML (Restricted Maximum Likelihood)
+CI Method:     normal (Normal (z-distribution))
+Studies (k):   12
+Generated:     2026-05-14 20:50:45
+
+  Scale note: yi is on the DOUBLE-ARCSINE (full-sum) scale.
+  Approximate back-transform: sin(yi/2)^2 = proportion (exact as n -> Inf).
+
+--- RANDOM-EFFECTS MODEL ---
+Estimate:      0.9635
+SE:            0.0578
+95% CI:        [0.8502, 1.0769]
+z-value:       16.6612
+p-value:       < 0.0001
+
+--- FIXED-EFFECTS MODEL ---
+Estimate:      0.9962
+SE:            0.0279
+95% CI:        [0.9416, 1.0509]
+
+--- HETEROGENEITY ---
+Q:             42.4462  (df = 11, p = < 0.0001)
+tau2:          0.030009  95% CI: [0.010088, 0.1112]
+tau:           0.173231
+I2 (Q-based):  74.1%  95% CI: [51.7%, 92.2%]
+H2 (clamped):  3.8587  95% CI: [2.0690, 12.7786]
+
+  Notes on heterogeneity:
+  - I2 point estimate uses Q-based formula (Q-df)/Q, matching the app.
+    metafor prints tau2/(tau2+v_typical) instead; they may diverge slightly.
+  - H2 clamped to >= 1. Raw Q/df = 3.8587.
+  - I2/H2 CI bounds use Q-profile inversion (same method as the app).
+
+--- PREDICTION INTERVAL (95%) ---
+[0.6056, 1.3215]
+  Formula: RE +/- z(0.975) = 1.96 * sqrt(tau2 + seRE^2)
+  tau2 = 0.030009,  seRE = 0.057832
+  sqrt(tau2 + seRE^2) = 0.182629
+
+--- PER-STUDY ESTIMATES ---
+Label            yi        SE   CI Lower   CI Upper     RE Wt %     FE Wt %
+---------------------------------------------------------------------------
+Study 01     0.9054    0.1115     0.6870     1.1239       7.88%       6.26%
+Study 02     1.2339    0.0911     1.0553     1.4124       8.73%       9.37%
+Study 03     0.6094    0.1286     0.3574     0.8614       7.19%       4.70%
+Study 04     1.0501    0.0706     0.9116     1.1885       9.56%      15.59%
+Study 05     1.1636    0.0998     0.9681     1.3591       8.37%       7.81%
+Study 06     0.6930    0.1051     0.4870     0.8990       8.15%       7.04%
+Study 07     0.9997    0.0951     0.8132     1.1861       8.56%       8.59%
+Study 08     0.6817    0.1151     0.4562     0.9073       7.73%       5.87%
+Study 09     1.1622    0.0815     1.0024     1.3219       9.12%      11.70%
+Study 10     0.9607    0.1023     0.7601     1.1612       8.26%       7.43%
+Study 11     1.0950    0.0875     0.9234     1.2666       8.88%      10.15%
+Study 12     0.8658    0.1191     0.6324     1.0993       7.57%       5.48%
+
+--- KNOWN DIVERGENCES ---
+All differences below are expected. None indicate computation errors.
+
+1. FORMULA CONVENTION (yi/vi computed directly, NOT via metafor escalc)
+   metafor's escalc('PFT') uses the half-sum convention:
+     yi = 0.5 * (arcsin(sqrt(x/(n+1))) + arcsin(sqrt((x+1)/(n+1)))),  vi = 1/(4n+2)
+   The app (and this script) use the original Freeman-Tukey full-sum:
+     yi = arcsin(sqrt(x/(n+1))) + arcsin(sqrt((x+1)/(n+1))),           vi = 1/(n+0.5)
+   Both conventions yield the same back-transformed proportion and identical
+   statistical inferences (RE, FE, Q, I², tau²) because yi and vi scale by the
+   same factor of 2. This script bypasses escalc and computes yi/vi directly
+   so that analysis-scale values match the app for easy side-by-side comparison.
+   The back-transform sin(yi/2)^2 is an approximation that improves with n.
+
+2. ZERO/ONE PROPORTION HANDLING
+   When x = 0 or x = n, the app applies a +0.5 continuity correction
+   (adding 0.5 to x and 1 to n) before computing yi for PLN and PLO.
+   metafor's escalc() does NOT apply this correction by default (add=0).
+   For PR, vi = p*(1-p)/n; at p=0 or p=1 this is 0 and the study gets
+   no weight in the app. The current dataset has no extreme proportions,
+   so no correction was applied and yi/vi should match to rounding precision.
+
+3. PREDICTION INTERVAL (residual < 0.01 per bound)
+   Both use: RE +/- crit * sqrt(tau2 + seRE^2).
+   For CI method = normal, crit = z(0.975) = 1.96 in both.
+   For CI method = t or KH, crit = t(k-1, 0.975) in both.
+   Any residual difference reflects independent REML tau2 estimates
+   converging to slightly different values; this is negligible when tau2 > 0.
+   metafor tau2 = 0.030009
+
+4. DISPLAY PRECISION
+   The app displays 3 decimal places; this script prints 4.
+   Differences of 0.001 in displayed values may be rounding only.
+
+--- END OF RESULTS ---

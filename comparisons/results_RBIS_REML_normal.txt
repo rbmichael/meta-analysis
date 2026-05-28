@@ -1,0 +1,136 @@
+=== META-ANALYSIS RESULTS ===
+Script:        compare.R
+Input:         biserial_data.csv
+Effect Type:   RBIS (Biserial Correlation (r_bis; converted from point-biserial r_pb))
+Estimator:     REML (Restricted Maximum Likelihood)
+CI Method:     normal (Normal (z-distribution))
+Studies (k):   12
+Generated:     2026-05-16 16:27:25
+
+  Scale note: yi = r_bis (biserial correlation, may exceed ±1 for extreme splits).
+  App displays r_bis directly. RE pooled estimate is on the r_bis scale.
+
+--- RANDOM-EFFECTS MODEL ---
+Estimate:      0.3916
+SE:            0.0403
+95% CI:        [0.3126, 0.4706]
+z-value:       9.7160
+p-value:       < 0.0001
+
+--- FIXED-EFFECTS MODEL ---
+Estimate:      0.3916
+SE:            0.0403
+95% CI:        [0.3127, 0.4706]
+
+--- HETEROGENEITY ---
+Q:             10.7048  (df = 11, p = 0.4683)
+tau2:          0.000031  95% CI: [0.000000, 0.0346]
+tau:           0.005542
+I2 (Q-based):  0.0%  95% CI: [0.0%, 63.9%]
+H2 (clamped):  1.0000  95% CI: [1.0000, 2.7734]
+
+  Notes on heterogeneity:
+  - I2 point estimate uses Q-based formula (Q-df)/Q, matching the app.
+    metafor prints tau2/(tau2+v_typical) instead; they may diverge slightly.
+  - H2 clamped to >= 1. Raw Q/df = 0.9732.
+  - I2/H2 CI bounds use Q-profile inversion (same method as the app).
+
+--- PREDICTION INTERVAL (95%) ---
+[0.3119, 0.4714]
+  Formula: RE +/- z(0.975) = 1.96 * sqrt(tau2 + seRE^2)
+  tau2 = 0.000031,  seRE = 0.040307
+  sqrt(tau2 + seRE^2) = 0.040687
+
+--- PUBLICATION BIAS ---
+  Tests use yi/vi on the analysis scale (same scale as the RE model).
+
+Egger (1997):
+  intercept = 2.4519  SE = 3.1406  t = 0.7807  p = 0.4531  [df = 10]
+  OLS of yi/sei on 1/sei; H0: intercept = 0 (asymmetry indicator)
+
+Begg (1994):
+  tau = 0.2121  z = 0.8914  p = 0.3727
+  Kendall rank correlation (continuity-corrected z)
+
+FAT bias test (Stanley-Doucouliagos 2008):
+  slope_sei = 2.4519  SE = 3.1406  t = 0.7807  p = 0.4531  [df = 10]
+  WLS of yi ~ sei, weights=1/vi; H0: slope_sei = 0
+
+PET-PEESE:
+  [FAT intercept p = 0.9096 >= 0.10  =>  using PET]
+  PET estimate = 0.0510  SE = 0.4382  t = 0.1164  p = 0.9096  [df = 10]
+  95% CI: [-0.9253, 1.0273]
+
+Fail-safe N (Rosenthal 1979):
+  N = 410
+  (sum_z = 33.7908  z_crit = 1.6449  [one-tailed, alpha=0.05])
+
+TES (Ioannidis-Trikalinos 2007):
+  O = 10  E = 9.4878  chi2 = 0.1321  p = 0.3581  [one-sided: excess significance]
+  theta = RE estimate = 0.3916
+
+WAAP-WLS (Stanley-Doucouliagos 2015):
+  estimate = 0.3780  SE = 0.0496  z = 7.6204  p = < 0.0001
+  95% CI: [0.2807, 0.4752]
+  WLS est (all studies) = 0.3916  k adequate (power >= 0.80) = 7 / 12
+
+Henmi-Copas (2010):
+  FE estimate = 0.3916  95% CI: [0.3167, 0.4665]
+  (DL tau2 = 0.000000)
+
+--- PER-STUDY ESTIMATES ---
+Label            yi        SE   CI Lower   CI Upper     RE Wt %     FE Wt %
+---------------------------------------------------------------------------
+Study 01     0.3771    0.1593     0.0648     0.6893       6.39%       6.39%
+Study 02     0.3133    0.1300     0.0585     0.5681       9.60%       9.60%
+Study 03     0.5072    0.1735     0.1671     0.8473       5.39%       5.39%
+Study 04     0.2262    0.1507    -0.0692     0.5217       7.14%       7.14%
+Study 05     0.5795    0.1438     0.2977     0.8612       7.85%       7.85%
+Study 06     0.1880    0.1291    -0.0651     0.4411       9.73%       9.73%
+Study 07     0.4022    0.1491     0.1100     0.6944       7.30%       7.30%
+Study 08     0.3509    0.1361     0.0842     0.6177       8.76%       8.76%
+Study 09     0.6340    0.1390     0.3616     0.9064       8.40%       8.40%
+Study 10     0.2765    0.1288     0.0240     0.5290       9.77%       9.77%
+Study 11     0.4776    0.1340     0.2149     0.7403       9.03%       9.03%
+Study 12     0.4387    0.1234     0.1968     0.6805      10.65%      10.65%
+
+--- KNOWN DIVERGENCES ---
+All differences below are expected. None indicate computation errors.
+
+1. MANUAL ESCALC (formula-level cross-validation, not escalc-level)
+   metafor escalc('RBIS') and escalc('RPB') require raw group means/SDs;
+   they do not accept a pre-computed r_pb. The app takes r_pb (+ p for RBIS)
+   and applies the same closed-form formula metafor uses internally.
+   This script implements that formula directly (bypassing escalc) so the
+   pooled RE/FE, Q, tau2, and weights can be compared. The yi/vi values
+   should match the app exactly since both use the same formula.
+
+2. PREDICTION INTERVAL (residual < 0.01 per bound)
+   Both use: RE +/- crit * sqrt(tau2 + seRE^2).
+   For CI method = normal, crit = z(0.975) = 1.96 in both.
+   For CI method = t or KH, crit = t(k-1, 0.975) in both.
+   For CI method = PL, crit = t(k-1, 0.975) in both (app convention).
+   Any residual difference reflects independent REML tau2 estimates
+   converging to slightly different values; this is negligible when tau2 > 0.
+   metafor tau2 = 0.000031
+
+3. PUBLICATION BIAS METHODS
+   Egger: R uses OLS (lm without weights), matching js/pubbias.js. Both use
+   df = k-2 t-test on the intercept of yi/sei ~ 1/sei. Should match exactly.
+   Begg: R uses a manual implementation matching js/pubbias.js exactly.
+   Both correlate raw yi vs vi with continuity-corrected normal z and tau_b.
+   metafor::ranktest() diverges because it adjusts yi by y*_j = y_j - v_j*FE
+   (a study-specific offset that changes the ranking) — do not use ranktest().
+   FAT-PET/PEESE: R uses lm() with weights=1/vi, same as JS. Should match.
+   Fail-safe N (Rosenthal): manual calculation in both; should match exactly.
+   TES: manual calculation in both using identical formulas; should match.
+   WAAP-WLS: manual calculation in both; should match exactly.
+   Henmi-Copas: R uses metafor::hc(), JS uses an independent port of Henmi &
+   Copas (2010). Both use DL tau2 and FE weights. CI bounds may differ by
+   ~0.001 due to numerical integration (JS: Simpson N=400; R: adaptive quadrature).
+
+4. DISPLAY PRECISION
+   The app displays 3 decimal places; this script prints 4.
+   Differences of 0.001 in displayed values may be rounding only.
+
+--- END OF RESULTS ---

@@ -167,6 +167,7 @@ import { initTable, moderators, doAddModerator, removeModerator, clearModerators
          refreshPreviewUI, previewCSV, commitImport, cancelImport, getPendingImport,
          reparseWithDelimiter, updatePendingDecimal }
   from "./ui-table.js";
+import { runAnalysisHeadless } from "./analysis-headless.js";
 
 const USE_EXAMPLES = new URLSearchParams(window.location.search).has("tests");
 
@@ -2893,163 +2894,12 @@ function renderSensitivity(mu0, sigmaMu, sigmaTau, ciLevel) {
 }
 
 // =============================================================================
-// R-1 REFACTOR: runAnalysis() decomposed into focused named helpers
+// runAnalysis() decomposed into focused named helpers
 // =============================================================================
-// Each helper is a pure computation function (no DOM writes) that receives an
-// `opts` bag and returns a results object.  runAnalysis() calls them in
-// sequence, collects results, then delegates all DOM writes to _renderAllResults().
-//
-// _runCoreMeta(studies, opts)        → { m, tf, all, profileLikResult, mAdjusted,
-//                                         rveResult, threeLevelResult }
-// _runBayesBatch(studies, m, opts)   → { bayesResult, reMeanRef }
-// _runPubBiasBatch(studies, m, opts) → { egger, begg, petpeese, fatpet, fsn, tes,
-//                                         waap, pcurve, puniform, harbord, peters,
-//                                         deeks, ruecker, hc, selResult }
-// _runSensitivityBatch(studies, m, opts) → { influence, baujatResult, blupResult,
-//                                             qqResiduals, qqLabels,
-//                                             cumResults, cumulativeStudies }
-// _runRegressionBatch(studies, m, opts)  → { subgroup, reg, ls }
-// _renderAllResults(ctx)             — writes all DOM / draws all plots
+// Pure computation helpers live in analysis-headless.js (no DOM deps, callable
+// from Node test harnesses).  runAnalysis() builds opts from the DOM, calls
+// runAnalysisHeadless(), then delegates all DOM writes to _renderAllResults().
 // =============================================================================
-
-// ── Helper: core meta-analysis ────────────────────────────────────────────────
-function _runCoreMeta(studies, opts) {
-  const { method, ciMethod, alpha, type, useTF, tfEstimator, useTFAdjusted,
-          isMHorPeto, hasClusters, rveRho, rveMode, threeLevelMethod } = opts;
-
-  let tf = [], all = studies;
-  if (useTF && !isMHorPeto) {
-    tf  = trimFill(studies, method, tfEstimator).filled;
-    all = [...studies, ...tf];
-  }
-
-  let m;
-  if      (method === "MH"  ) m = metaMH(studies, type, alpha);
-  else if (method === "Peto") m = metaPeto(studies, alpha);
-  else if (hasClusters)       m = robustMeta(studies, method, ciMethod, alpha);
-  else                        m = meta(studies, method, ciMethod, alpha);
-
-  if (m.error) return { m, tf, all, profileLikResult: null, mAdjusted: null, rveResult: null, threeLevelResult: null };
-
-  const profileLikResult =
-    (method === "ML" || method === "REML") && studies.length >= 2
-      ? profileLikTau2(studies, { method })
-      : null;
-
-  const mAdjusted = (useTF && useTFAdjusted)
-    ? (tf.length > 0 ? meta([...studies, ...tf], method, ciMethod, alpha) : m)
-    : null;
-
-  const rveResult = (hasClusters && !isMHorPeto)
-    ? rvePooled(studies, { rho: rveRho, alpha, omega2: rveMode === "hier" ? "MoM" : 0 })
-    : null;
-
-  const threeLevelResult = (hasClusters && !isMHorPeto)
-    ? meta3level(studies, { method: threeLevelMethod ?? "REML", alpha })
-    : null;
-
-  return { m, tf, all, profileLikResult, mAdjusted, rveResult, threeLevelResult };
-}
-
-// ── Helper: Bayesian batch ────────────────────────────────────────────────────
-function _runBayesBatch(studies, m, opts) {
-  const { bayesMu0, bayesSigmaMu, bayesSigmaTau, alpha, isMHorPeto } = opts;
-  if (studies.length < 2 || isMHorPeto) return { bayesResult: null, reMeanRef: NaN };
-  const reMeanRef  = isFinite(m.RE) ? m.RE : m.FE;
-  const bayesResult = bayesMeta(studies, { mu0: bayesMu0, sigma_mu: bayesSigmaMu, sigma_tau: bayesSigmaTau, alpha });
-  return { bayesResult, reMeanRef };
-}
-
-// ── Helper: publication bias batch ───────────────────────────────────────────
-function _runPubBiasBatch(studies, m, opts) {
-  const { alpha, selModeVal, selPreset, selWeightFn, selSides, selCuts,
-          fsnTrivial = 0.1, fsnDirection = "auto" } = opts;
-
-  const egger    = eggerTest(studies);
-  const begg     = beggTest(studies);
-  const petpeese = petPeeseTest(studies);
-  const fatpet   = petpeese.fat;
-  const fsn      = failSafeN(studies, alpha, fsnTrivial, fsnDirection);
-  const tes      = tesTest(studies, m);
-  const waap     = waapWls(studies);
-  const pcurve   = pCurve(studies);
-  const puniform = pUniform(studies, m);
-  const harbord  = harbordTest(studies);
-  const peters   = petersTest(studies);
-  const deeks    = deeksTest(studies);
-  const ruecker  = rueckerTest(studies);
-  const hc       = henmiCopas(studies, alpha);
-
-  // Selection model — skip when meta-regression moderators are active
-  let selResult = null;
-  if (moderators.length === 0) {
-    if (selModeVal === "sensitivity") {
-      let selCutsEff, selSidesEff, selOmegaFixed;
-      if (selPreset !== "custom") {
-        const p    = SELECTION_PRESETS[selPreset];
-        selCutsEff    = p.cuts;
-        selSidesEff   = p.sides;
-        selOmegaFixed = p.omega;
-      } else {
-        selCutsEff    = selCuts;
-        selSidesEff   = selSides;
-        selOmegaFixed = null;
-      }
-      selResult = veveaHedges(studies, selCutsEff, selSidesEff, selOmegaFixed);
-    } else if (selWeightFn === "halfnorm") {
-      selResult = halfNormalSelModel(studies, { sides: selSides });
-    } else if (selWeightFn === "power") {
-      selResult = powerSelModel(studies, { sides: selSides });
-    } else if (selWeightFn === "negexp") {
-      selResult = negexpSelModel(studies, { sides: selSides });
-    } else if (selWeightFn === "beta") {
-      selResult = betaSelModel(studies, { sides: selSides });
-    } else {
-      // Default MLE: Vevea-Hedges step function
-      selResult = veveaHedges(studies, selCuts, selSides, null);
-    }
-  }
-
-  return { egger, begg, petpeese, fatpet, fsn, tes, waap, pcurve, puniform,
-           harbord, peters, deeks, ruecker, hc, selResult };
-}
-
-// ── Helper: sensitivity / influence / cumulative batch ───────────────────────
-function _runSensitivityBatch(studies, m, opts) {
-  const { method, ciMethod, alpha, cumulativeOrder } = opts;
-
-  const influence    = influenceDiagnostics(studies, method, ciMethod, alpha);
-  const baujatResult = baujat(studies);
-  const blupResult   = (m && isFinite(m.tau2) && m.tau2 > 0 && studies.length >= 2)
-    ? blupMeta(studies, m) : null;
-  const qqResiduals  = influence.map(d => d.stdResidual).filter(isFinite);
-  const qqLabels     = influence.filter(d => isFinite(d.stdResidual)).map(d => d.label);
-
-  const cumulativeStudies = studies.slice();
-  if      (cumulativeOrder === "precision_desc") cumulativeStudies.sort((a, b) => a.vi - b.vi);
-  else if (cumulativeOrder === "precision_asc")  cumulativeStudies.sort((a, b) => b.vi - a.vi);
-  else if (cumulativeOrder === "effect_asc")     cumulativeStudies.sort((a, b) => a.yi - b.yi);
-  else if (cumulativeOrder === "effect_desc")    cumulativeStudies.sort((a, b) => b.yi - a.yi);
-  // "input" order: no sort
-
-  const cumResults = cumulativeMeta(cumulativeStudies, method, ciMethod, alpha);
-
-  return { influence, baujatResult, blupResult, qqResiduals, qqLabels, cumResults, cumulativeStudies };
-}
-
-// ── Helper: meta-regression / subgroup batch ─────────────────────────────────
-function _runRegressionBatch(studies, m, opts) {
-  const { method, ciMethod, alpha, modSpec, scaleModSpec, interactionSpec } = opts;
-
-  const subgroup = subgroupAnalysis(studies, method, ciMethod, alpha);
-  let reg = null, ls = null;
-  if (scaleModSpec.length > 0) {
-    ls = lsModel(studies, modSpec, scaleModSpec, { ciMethod, alpha, locInteractions: interactionSpec });
-  } else if (modSpec.length > 0 || interactionSpec.length > 0) {
-    reg = metaRegression(studies, modSpec, method, ciMethod, { alpha, interactions: interactionSpec });
-  }
-  return { subgroup, reg, ls };
-}
 
 function _animateFresh(el) {
   if (!el) return;
@@ -3779,7 +3629,7 @@ async function runAnalysis() {
     const interactionSpec = interactions.map(ix => ({ name: ix.name, termA: ix.termA, termB: ix.termB }));
     const cumulativeOrder = document.getElementById("cumulativeOrder")?.value || "input";
 
-    // Selection model settings (read up front so _runPubBiasBatch is pure)
+    // Selection model settings (part of opts passed to runAnalysisHeadless)
     const selModeVal  = document.getElementById("selMode").value;
     const selPreset   = document.getElementById("selPreset").value;
     const selWeightFn = document.getElementById("selWeightFn").value;
@@ -3807,11 +3657,11 @@ async function runAnalysis() {
       fsnTrivial, fsnDirection,
     };
 
-    // ── Phase 2: Core meta-analysis ───────────────────────────────────────
+    // ── Phases 2–6: Pure computation (no DOM) ────────────────────────────
     performance.mark("phase:meta:start");
-    const coreMeta = _runCoreMeta(studies, opts);
+    const r = runAnalysisHeadless(studies, type, opts);
     performance.measure("phase:meta", "phase:meta:start");
-    const { m, tf, all, profileLikResult, mAdjusted, rveResult, threeLevelResult } = coreMeta;
+    const { m, threeLevelResult } = r;
 
     if (m.error) {
       document.getElementById("results").innerHTML =
@@ -3820,34 +3670,14 @@ async function runAnalysis() {
       return false;
     }
 
-    // ── Phase 3: Bayesian ─────────────────────────────────────────────────
-    performance.mark("phase:bayes:start");
-    const { bayesResult, reMeanRef } = _runBayesBatch(studies, m, opts);
-    performance.measure("phase:bayes", "phase:bayes:start");
-
-    // ── Phase 4: Publication bias ─────────────────────────────────────────
-    performance.mark("phase:pubbias:start");
-    const pubBias = _runPubBiasBatch(studies, m, opts);
-    performance.measure("phase:pubbias", "phase:pubbias:start");
-
-    // ── Phase 5: Sensitivity / influence / cumulative ─────────────────────
-    performance.mark("phase:loo:start");
-    const sensitivity = _runSensitivityBatch(studies, m, opts);
-    performance.measure("phase:loo", "phase:loo:start");
-
-    // ── Phase 6: Meta-regression / subgroup ───────────────────────────────
-    performance.mark("phase:regression:start");
-    const regression = _runRegressionBatch(studies, m, opts);
-    performance.measure("phase:regression", "phase:regression:start");
-
     // ── Convergence diagnostics ───────────────────────────────────────────
     {
       const nonConverged = [
         m.convergence,
         threeLevelResult?.convergence,
-        regression.reg?.convergence,
-        regression.ls?.convergence,
-        pubBias.selResult?.convergence,
+        r.reg?.convergence,
+        r.ls?.convergence,
+        r.selResult?.convergence,
       ].filter(c => c && c.converged === false);
       if (nonConverged.length) {
         const sources = nonConverged.map(c => c.source);
@@ -3859,13 +3689,8 @@ async function runAnalysis() {
 
     // ── Phase 7: Render all output panels ─────────────────────────────────
     _renderAllResults({
-      type, profile, studies, excluded, softWarnings, missingCorrelation,
-      m, tf, all, profileLikResult, mAdjusted, rveResult, threeLevelResult,
-      bayesResult, reMeanRef,
-      ...pubBias,
-      ...sensitivity,
-      ...regression,
-      opts,
+      ...r,
+      excluded, softWarnings, missingCorrelation,
     });
 
     performance.measure("runAnalysis", "runAnalysis:start");

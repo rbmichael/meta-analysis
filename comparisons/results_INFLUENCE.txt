@@ -1,0 +1,263 @@
+=== INFLUENCE DIAGNOSTICS CROSS-VALIDATION RESULTS ===
+Script:        compare_influence.R
+Input:         smd_data.csv
+Effect Type:   SMD (Hedges' g via metafor escalc)
+Estimator:     REML
+CI Method:     normal (Normal (z-distribution))
+Studies (k):   12
+Generated:     2026-05-17 10:28:21
+
+Dataset: smd_data.csv — 12 two-group SMD studies (m1,sd1,n1,m2,sd2,n2).
+yi/vi computed via escalc('SMD', ...) — Hedges' g with small-sample correction.
+
+=== SECTION 0: FULL RE MODEL (BASELINE) ===
+res <- rma(yi, vi, data=dat_esc, method="REML", test="z")
+
+--- POOLED ESTIMATE ---
+mu:            0.6173
+SE:            0.1051
+95% CI:        [0.4113, 0.8234]
+z-value:       5.8717
+p-value:       < 0.0001
+
+--- HETEROGENEITY ---
+tau2:          0.088503
+tau:           0.297494
+I2 (Q-based):  67.9764%  [(Q-df)/Q*100]
+Q:             34.3496  (df = 11, p = 0.0003)
+
+=== SECTION 1: LEAVE-ONE-OUT ===
+loo_res <- leave1out(res)
+Cross-validates js/influence.js leaveOneOut()
+
+Per-study leave-one-out results:
+Study         estimate        se        tau2      ci.lb      ci.ub      pval
+----------------------------------------------------------------------------
+Study 01        0.6645    0.1045    0.074141     0.4596     0.8693  < 0.0001
+Study 02        0.6583    0.1079    0.082648     0.4469     0.8697  < 0.0001
+Study 03        0.6564    0.1092    0.085532     0.4422     0.8705  < 0.0001
+Study 04        0.6473    0.1114    0.092415     0.4290     0.8655  < 0.0001
+Study 05        0.6233    0.1159    0.102490     0.3962     0.8504  < 0.0001
+Study 06        0.6178    0.1152    0.101490     0.3921     0.8435  < 0.0001
+Study 07        0.6155    0.1141    0.100010     0.3919     0.8392  < 0.0001
+Study 08        0.6097    0.1147    0.100057     0.3848     0.8345  < 0.0001
+Study 09        0.5842    0.1079    0.084790     0.3727     0.7956  < 0.0001
+Study 10        0.5774    0.1059    0.079792     0.3698     0.7850  < 0.0001
+Study 11        0.5838    0.1065    0.083209     0.3750     0.7926  < 0.0001
+Study 12        0.5729    0.1036    0.075213     0.3699     0.7758  < 0.0001
+
+Note: leave1out() uses same test= argument as the full model.
+      LOO I2 uses FE Q on the k-1 set: (Q_loo - (k-2)) / Q_loo * 100, clamped [0,100].
+
+=== SECTION 2: INFLUENCE DIAGNOSTICS (JS-EQUIVALENT FORMULAS) ===
+Cross-validates js/influence.js influenceDiagnostics()
+
+NOTE: These formulas are computed to match the JS app, NOT metafor influence().
+See Section 6 (known divergences) for the metafor vs JS differences.
+
+Thresholds:
+  outlier:      |stdResid| > 2
+  influential:  |DFBETA| > 1
+  highLeverage: hat > 2/k = 0.1667
+  highCookD:    cookD > 4/k = 0.3333
+  highDffits:   |DFFITS| > 3*sqrt(1/(k-1)) = 0.9045
+  highCovRatio: covRatio > 1+1/k = 1.0833
+
+--- CONTINUOUS DIAGNOSTICS ---
+Study              hat  stdResid     cookD    DFBETA    DFFITS  covRatio     dTau2  tau2_loo
+--------------------------------------------------------------------------------------------
+Study 01        0.0970   -1.3814    0.2010   -0.4510   -0.4796    0.9881  0.014362  0.074141
+Study 02        0.0922   -1.2034    0.1521   -0.3801   -0.3998    1.0528  0.005855  0.082648
+Study 03        0.0946   -1.1112    0.1379   -0.3574   -0.3762    1.0798  0.002971  0.085532
+Study 04        0.0822   -0.8828    0.0811   -0.2689   -0.2808    1.1221  -0.003912  0.092415
+Study 05        0.0892   -0.0834    0.0032   -0.0516   -0.0539    1.2142  -0.013987  0.102490
+Study 06        0.0841    0.0728    0.0000   -0.0042   -0.0044    1.1998  -0.012987  0.101490
+Study 07        0.0759    0.1375    0.0003    0.0155    0.0162    1.1777  -0.011507  0.100010
+Study 08        0.0864    0.3037    0.0053    0.0665    0.0695    1.1906  -0.011554  0.100057
+Study 09        0.0770    1.0222    0.0995    0.3074    0.3196    1.0526  0.003712  0.084790
+Study 10        0.0807    1.1624    0.1442    0.3769    0.3925    1.0153  0.008711  0.079792
+Study 11        0.0660    1.1233    0.1015    0.3143    0.3237    1.0267  0.005294  0.083209
+Study 12        0.0747    1.3344    0.1787    0.4292    0.4431    0.9701  0.013290  0.075213
+
+--- FLAGS ---
+Study           outlier  influential  highLeverage  highCookD  highDffits  highCovRatio
+---------------------------------------------------------------------------------------
+Study 01          FALSE        FALSE         FALSE      FALSE       FALSE         FALSE
+Study 02          FALSE        FALSE         FALSE      FALSE       FALSE         FALSE
+Study 03          FALSE        FALSE         FALSE      FALSE       FALSE         FALSE
+Study 04          FALSE        FALSE         FALSE      FALSE       FALSE          TRUE
+Study 05          FALSE        FALSE         FALSE      FALSE       FALSE          TRUE
+Study 06          FALSE        FALSE         FALSE      FALSE       FALSE          TRUE
+Study 07          FALSE        FALSE         FALSE      FALSE       FALSE          TRUE
+Study 08          FALSE        FALSE         FALSE      FALSE       FALSE          TRUE
+Study 09          FALSE        FALSE         FALSE      FALSE       FALSE         FALSE
+Study 10          FALSE        FALSE         FALSE      FALSE       FALSE         FALSE
+Study 11          FALSE        FALSE         FALSE      FALSE       FALSE         FALSE
+Study 12          FALSE        FALSE         FALSE      FALSE       FALSE         FALSE
+
+Scalar parameters used:
+  RE_full (mu):  0.6173
+  tau2_f:        0.088503
+  W_re:          90.4703
+  k:             12
+
+=== SECTION 3: BAUJAT COORDINATES ===
+Cross-validates js/influence.js baujat()
+
+Computed from FE quantities — exactly matching JS baujat() formulas:
+  res_fe  <- rma(yi, vi, data=dat_esc, method='FE')
+  w_fe    <- 1 / dat_esc$vi
+  W_fe    <- sum(w_fe)
+  FE_mu   <- sum(w_fe * yi) / W_fe
+  bj_x    <- w_fe * (yi - FE_mu)^2     # Q contribution
+  bj_infl <- w_fe * bj_x / (W_fe - w_fe)  # influence on FE
+
+FE_mu (pooled FE estimate):  0.5547
+Q_total (sum of bj_x):       34.3496
+
+Study         x (Q contrib)     influence        yi        vi
+-------------------------------------------------------------
+Study 01          6.4126        1.0040    0.1511    0.0254
+Study 02          3.9905        0.4903    0.2006    0.0314
+Study 03          3.5464        0.4889    0.2374    0.0284
+Study 04          1.4826        0.1198    0.2936    0.0460
+Study 05          0.0314        0.0034    0.5880    0.0354
+Study 06          0.1846        0.0161    0.6437    0.0429
+Study 07          0.2320        0.0149    0.6698    0.0571
+Study 08          0.7432        0.0709    0.7260    0.0395
+Study 09          3.6814        0.2456    1.0045    0.0550
+Study 10          5.0160        0.3834    1.0474    0.0484
+Study 11          3.4532        0.1570    1.0771    0.0790
+Study 12          5.5757        0.3418    1.1307    0.0595
+
+=== SECTION 4: CUMULATIVE META-ANALYSIS ===
+Cross-validates js/influence.js cumulativeMeta()
+
+--- Ordering: effect ascending (order(yi)) ---
+cum_res <- cumul(res, order = 1:12)
+
+k     added         estimate        se      ci.lb      ci.ub        tau2        I2
+----------------------------------------------------------------------------------
+1     Study 01        0.1511    0.1594    -0.1612     0.4635    0.000000      0.00
+2     Study 02        0.1732    0.1185    -0.0590     0.4055    0.000000      0.00
+3     Study 03        0.1945    0.0969     0.0045     0.3845    0.000000      0.00
+4     Study 04        0.2113    0.0883     0.0382     0.3844    0.000000      0.00
+5     Study 05        0.2794    0.0799     0.1227     0.4360    0.000000      0.00
+6     Study 06        0.3318    0.0836     0.1681     0.4956    0.008219     19.62
+7     Study 07        0.3675    0.0837     0.2036     0.5315    0.012873     26.40
+8     Study 08        0.4147    0.0862     0.2457     0.5836    0.022656     38.46
+9     Study 09        0.4756    0.0962     0.2869     0.6642    0.044548     54.16
+10    Study 10        0.5333    0.1029     0.3316     0.7350    0.065941     63.10
+11    Study 11        0.5729    0.1036     0.3699     0.7758    0.075213     64.99
+12    Study 12        0.6173    0.1051     0.4113     0.8234    0.088503     68.01
+
+--- Ordering: precision descending (order(vi), smallest vi first) ---
+cum_res <- cumul(res, order = c(1L, 3L, 2L, 5L, 8L, 6L, 4L, 10L, 9L, 7L, 12L, 11L))
+
+k     added         estimate        se      ci.lb      ci.ub        tau2        I2
+----------------------------------------------------------------------------------
+1     Study 01        0.1511    0.1594    -0.1612     0.4635    0.000000      0.00
+2     Study 03        0.1919    0.1158    -0.0350     0.4188    0.000000      0.00
+3     Study 02        0.1945    0.0969     0.0045     0.3845    0.000000      0.00
+4     Study 05        0.2616    0.0898     0.0856     0.4377    0.000001      0.00
+5     Study 08        0.2664    0.0828     0.1040     0.4288    0.000002      0.00
+6     Study 06        0.3258    0.0848     0.1595     0.4920    0.007197     16.64
+7     Study 04        0.4398    0.1228     0.1991     0.6804    0.066702     64.07
+8     Study 10        0.4562    0.1078     0.2449     0.6676    0.054758     59.62
+9     Study 09        0.5134    0.1120     0.2938     0.7330    0.072900     65.44
+10    Study 07        0.5333    0.1029     0.3316     0.7350    0.065941     63.10
+11    Study 12        0.5838    0.1065     0.3750     0.7926    0.083209     67.61
+12    Study 11        0.6173    0.1051     0.4113     0.8234    0.088503     68.01
+
+Note: cumul() I2 uses metafor's tau2/(tau2+v_typical) formula.
+      JS cumulativeMeta() uses Q-based I2: (Q-df)/Q*100.
+      These diverge when tau2 is small or zero; see known divergences.
+
+=== SECTION 5: BLUP ===
+Cross-validates js/influence.js blupMeta()
+
+metafor blup(res) AND JS-equivalent manual calculation.
+JS blupMeta() returns null when tau2=0; only called when tau2>0.
+
+Scalar parameters:
+  mu (RE_full):  0.6173
+  tau2:          0.088503
+  WRE:           90.4703
+  z(0.975):      1.9600  [JS uses normalQuantile(0.975)]
+
+Note: metafor blup() returns pred, se, pi.lb, pi.ub (prediction interval),
+      but NOT ci.lb/ci.ub. CI bounds are computed here as pred ± z*se,
+      matching JS blupMeta() which uses normalQuantile(0.975) for BLUP CIs.
+
+--- METAFOR blup() vs JS-EQUIVALENT ---
+Study          blup_mf     se_mf     lb_mf     ub_mf   blup_JS     se_JS     lb_JS     ub_JS     ranef  se_ranef
+----------------------------------------------------------------------------------------------------------------
+Study 01        0.2551    0.1424   -0.0241    0.5342    0.2551    0.1424   -0.0241    0.5342   -0.3623    0.1405
+Study 02        0.3098    0.1547    0.0065    0.6130    0.3098    0.1547    0.0065    0.6130   -0.3076    0.1523
+Study 03        0.3297    0.1488    0.0381    0.6213    0.3297    0.1488    0.0381    0.6213   -0.2877    0.1466
+Study 04        0.4043    0.1776    0.0561    0.7524    0.4043    0.1776    0.0561    0.7524   -0.2131    0.1739
+Study 05        0.5964    0.1618    0.2793    0.9134    0.5964    0.1618    0.2793    0.9134   -0.0210    0.1590
+Study 06        0.6351    0.1735    0.2951    0.9751    0.6351    0.1735    0.2951    0.9751    0.0178    0.1700
+Study 07        0.6492    0.1908    0.2752    1.0232    0.6492    0.1908    0.2752    1.0232    0.0319    0.1863
+Study 08        0.6924    0.1684    0.3624    1.0225    0.6924    0.1684    0.3624    1.0225    0.0751    0.1652
+Study 09        0.8562    0.1885    0.4867    1.2256    0.8562    0.1885    0.4867    1.2256    0.2388    0.1841
+Study 10        0.8953    0.1808    0.5411    1.2496    0.8953    0.1808    0.5411    1.2496    0.2780    0.1769
+Study 11        0.8602    0.2103    0.4481    1.2723    0.8602    0.2103    0.4481    1.2723    0.2429    0.2043
+Study 12        0.9243    0.1933    0.5454    1.3032    0.9243    0.1933    0.5454    1.3032    0.3070    0.1886
+
+--- LAMBDA (shrinkage weights) ---
+Study           lambda        vi
+--------------------------------
+Study 01        0.7771    0.0254
+Study 02        0.7380    0.0314
+Study 03        0.7572    0.0284
+Study 04        0.6582    0.0460
+Study 05        0.7144    0.0354
+Study 06        0.6733    0.0429
+Study 07        0.6077    0.0571
+Study 08        0.6915    0.0395
+Study 09        0.6169    0.0550
+Study 10        0.6464    0.0484
+Study 11        0.5282    0.0790
+Study 12        0.5979    0.0595
+
+=== SECTION 6: KNOWN DIVERGENCES ===
+All differences below are expected. None indicate computation errors.
+
+1. METAFOR influence() cook.d vs JS cookD
+   metafor influence.rma.uni() normalises Cook's distance by (p+1)=2:
+     cook.d_metafor = (RE_full - RE_loo)^2 / ((p+1) * seRE^2)
+                    = (RE_full - RE_loo)^2 * W / ((p+1))
+   JS cookD = (RE_full - RE_loo)^2 * W  (no normalisation by p+1).
+   The two formulas differ by a factor of 2 (for p=1, intercept-only).
+   Section 2 uses the JS formula for direct comparison with the app.
+
+2. METAFOR influence() rstudent vs JS stdResidual
+   metafor externally studentizes using the LOO residual variance:
+     rstudent_i = (yi - RE_loo_i) / sqrt(vi + tau2_loo_i)
+   JS stdResidual (Section 2): (yi - RE_full) / sqrt(vi + tau2_full).
+   These are different quantities; both are useful but not directly comparable.
+   Section 2 uses the JS formula.
+
+3. CUMULATIVE I2: METAFOR vs APP
+   metafor cumul() I2 uses tau2/(tau2+v_typical) (tau2-based formula).
+   JS cumulativeMeta() uses Q-based I2: (Q-df)/Q*100 (same as full model).
+   For k=1: tau2 is forced to 0 (degenerate single-study case).
+   App and metafor both produce tau2=0 for k=1; I2=0 in both.
+   For k>1 near zero tau2, the I2 formulas can diverge substantially.
+
+4. BLUP CI USES z=1.96 REGARDLESS OF CI METHOD
+   JS blupMeta() always uses normalQuantile(0.975) = 1.959964 for BLUP CIs.
+   This matches the metafor blup() convention (always uses normal quantile).
+   The CI method (normal/KH/t) only affects the pooled estimate CI, not BLUPs.
+
+5. SMD J CORRECTION (yi/vi residual ~3-4e-5, sub-display-precision)
+   The app uses the approximate J correction: J = 1 - 3/(4*df-1).
+   metafor uses the exact J via gamma functions.
+   For typical df the two agree to ~5 decimal places; difference in Q ~0.001.
+
+6. DISPLAY PRECISION
+   This script prints 4 decimal places; the app displays 3.
+   Differences of 0.001 in displayed values may be rounding only.
+
+=== END OF RESULTS ===

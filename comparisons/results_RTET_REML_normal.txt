@@ -1,0 +1,79 @@
+=== META-ANALYSIS RESULTS ===
+Script:        compare.R
+Input:         binary_data.csv
+Effect Type:   RTET (Tetrachoric Correlation)
+Estimator:     REML (Restricted Maximum Likelihood)
+CI Method:     normal (Normal (z-distribution))
+Studies (k):   12
+Generated:     2026-05-14 20:01:10
+
+--- RANDOM-EFFECTS MODEL ---
+Estimate:      0.1475
+SE:            0.0422
+95% CI:        [0.0649, 0.2301]
+z-value:       3.4992
+p-value:       0.0005
+
+--- FIXED-EFFECTS MODEL ---
+Estimate:      0.1446
+SE:            0.0364
+95% CI:        [0.0733, 0.2159]
+
+--- HETEROGENEITY ---
+Q:             12.8364  (df = 11, p = 0.3042)
+tau2:          0.004468  95% CI: [0.000000, 0.0356]
+tau:           0.066845
+I2 (Q-based):  14.3%  95% CI: [0.0%, 68.6%]
+H2 (clamped):  1.1669  95% CI: [1.0000, 3.1849]
+
+  Notes on heterogeneity:
+  - I2 point estimate uses Q-based formula (Q-df)/Q, matching the app.
+    metafor prints tau2/(tau2+v_typical) instead; they may diverge slightly.
+  - H2 clamped to >= 1. Raw Q/df = 1.1669.
+  - I2/H2 CI bounds use Q-profile inversion (same method as the app).
+
+--- PREDICTION INTERVAL (95%) ---
+[-0.0074, 0.3024]
+  Formula: RE +/- z(0.975) = 1.96 * sqrt(tau2 + seRE^2)
+  tau2 = 0.004468,  seRE = 0.042151
+  sqrt(tau2 + seRE^2) = 0.079025
+
+--- PER-STUDY ESTIMATES ---
+Label            yi        SE   CI Lower   CI Upper     RE Wt %     FE Wt %
+---------------------------------------------------------------------------
+Study 01     0.3639    0.1197     0.1293     0.5985       9.45%       9.24%
+Study 02     0.2529    0.1680    -0.0764     0.5822       5.44%       4.69%
+Study 03    -0.0895    0.1260    -0.3364     0.1574       8.74%       8.34%
+Study 04     0.2060    0.1839    -0.1544     0.5665       4.64%       3.91%
+Study 05     0.2053    0.1228    -0.0354     0.4459       9.09%       8.78%
+Study 06     0.1569    0.1778    -0.1915     0.5053       4.93%       4.19%
+Study 07     0.2775    0.1548    -0.0258     0.5808       6.25%       5.53%
+Study 08     0.1744    0.0891    -0.0003     0.3491      14.32%      16.66%
+Study 09     0.1842    0.1911    -0.1903     0.5587       4.34%       3.62%
+Study 10     0.1796    0.1343    -0.0836     0.4427       7.90%       7.34%
+Study 11    -0.0870    0.1147    -0.3118     0.1379      10.08%      10.05%
+Study 12     0.1044    0.0866    -0.0654     0.2742      14.84%      17.64%
+
+--- KNOWN DIVERGENCES ---
+All differences below are expected. None indicate computation errors.
+
+1. NUMERICAL INTEGRATION (residual typically < 0.005 in yi)
+   Tetrachoric correlation is computed via numerical bivariate-normal CDF.
+   The app and metafor use independent implementations; small differences
+   (~0.001-0.005) in individual yi are possible, especially for extreme
+   proportions (< 0.10 or > 0.90). The pooled RE estimate typically agrees
+   to 2 decimal places.
+
+2. PREDICTION INTERVAL (residual < 0.01 per bound)
+   Both use: RE +/- crit * sqrt(tau2 + seRE^2).
+   For CI method = normal, crit = z(0.975) = 1.96 in both.
+   For CI method = t or KH, crit = t(k-1, 0.975) in both.
+   Any residual difference reflects independent REML tau2 estimates
+   converging to slightly different values; this is negligible when tau2 > 0.
+   metafor tau2 = 0.004468
+
+3. DISPLAY PRECISION
+   The app displays 3 decimal places; this script prints 4.
+   Differences of 0.001 in displayed values may be rounding only.
+
+--- END OF RESULTS ---

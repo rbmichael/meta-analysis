@@ -1,0 +1,80 @@
+=== META-ANALYSIS RESULTS ===
+Script:        compare.R
+Input:         singlegroup_data.csv
+Effect Type:   SMD1H (Standardized Mean Difference — one sample, heteroscedastic (SMD1H))
+Estimator:     REML (Restricted Maximum Likelihood)
+CI Method:     normal (Normal (z-distribution))
+Studies (k):   12
+Generated:     2026-05-14 19:09:56
+
+--- RANDOM-EFFECTS MODEL ---
+Estimate:      0.7660
+SE:            0.1473
+95% CI:        [0.4773, 1.0547]
+z-value:       5.2011
+p-value:       < 0.0001
+
+--- FIXED-EFFECTS MODEL ---
+Estimate:      0.7012
+SE:            0.0703
+95% CI:        [0.5634, 0.8391]
+
+--- HETEROGENEITY ---
+Q:             43.9903  (df = 11, p = < 0.0001)
+tau2:          0.197714  95% CI: [0.068580, 0.7321]
+tau:           0.444650
+I2 (Q-based):  75.0%  95% CI: [53.5%, 92.5%]
+H2 (clamped):  3.9991  95% CI: [2.1489, 13.2650]
+
+  Notes on heterogeneity:
+  - I2 point estimate uses Q-based formula (Q-df)/Q, matching the app.
+    metafor prints tau2/(tau2+v_typical) instead; they may diverge slightly.
+  - H2 clamped to >= 1. Raw Q/df = 3.9991.
+  - I2/H2 CI bounds use Q-profile inversion (same method as the app).
+
+--- PREDICTION INTERVAL (95%) ---
+[-0.1521, 1.6841]
+  Formula: RE +/- z(0.975) = 1.96 * sqrt(tau2 + seRE^2)
+  tau2 = 0.197714,  seRE = 0.147276
+  sqrt(tau2 + seRE^2) = 0.468406
+
+--- PER-STUDY ESTIMATES ---
+Label            yi        SE   CI Lower   CI Upper     RE Wt %     FE Wt %
+---------------------------------------------------------------------------
+Study 01     1.4709    0.2811     0.9200     2.0219       7.84%       6.26%
+Study 02     1.4666    0.3008     0.8771     2.0561       7.53%       5.47%
+Study 03     1.4066    0.2470     0.9225     1.8907       8.38%       8.11%
+Study 04     1.5149    0.3294     0.8692     2.1606       7.08%       4.56%
+Study 05     0.7371    0.2272     0.2918     1.1825       8.70%       9.58%
+Study 06     0.6530    0.2446     0.1737     1.1324       8.42%       8.27%
+Study 07     0.6135    0.2310     0.1607     1.0663       8.64%       9.27%
+Study 08     0.6333    0.2077     0.2262     1.0405       9.01%      11.46%
+Study 09     0.2452    0.2282    -0.2020     0.6923       8.68%       9.50%
+Study 10     0.2935    0.2416    -0.1800     0.7671       8.47%       8.47%
+Study 11     0.2187    0.2075    -0.1881     0.6254       9.01%      11.49%
+Study 12     0.2439    0.2559    -0.2576     0.7454       8.24%       7.56%
+
+--- KNOWN DIVERGENCES ---
+All differences below are expected. None indicate computation errors.
+
+1. vi FORMULA DIFFERENCE (conceptual: two-sample mapping vs one-sample)
+   metafor SMD1H vi = (sd1²/sd2²)/(n1-1) + 1/(n2-1) + g²/(2*(n2-1))
+   With sd1=sd2=sd, n1=n2=n this gives: vi = 2/(n-1) + g²/(2*(n-1))
+   App SMD1H vi = J²·(1/n + d²/(2*(n-1)))  =  J²/n + g²/(2*(n-1))
+   The g² second term matches; the first term differs: 2/(n-1) vs J²/n.
+   For n=30: 2/29 ≈ 0.069 (metafor) vs J²/30 ≈ 0.032 (app).
+   Same conceptual distinction as SMD1: metafor treats reference as a sample.
+
+2. PREDICTION INTERVAL (residual < 0.01 per bound)
+   Both use: RE +/- crit * sqrt(tau2 + seRE^2).
+   For CI method = normal, crit = z(0.975) = 1.96 in both.
+   For CI method = t or KH, crit = t(k-1, 0.975) in both.
+   Any residual difference reflects independent REML tau2 estimates
+   converging to slightly different values; this is negligible when tau2 > 0.
+   metafor tau2 = 0.197714
+
+3. DISPLAY PRECISION
+   The app displays 3 decimal places; this script prints 4.
+   Differences of 0.001 in displayed values may be rounding only.
+
+--- END OF RESULTS ---
