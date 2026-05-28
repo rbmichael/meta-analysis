@@ -1,5 +1,7 @@
 # Meta-Analysis
 
+[![Tests](https://github.com/rbmichael/meta-analysis/actions/workflows/test.yml/badge.svg)](https://github.com/rbmichael/meta-analysis/actions/workflows/test.yml)
+
 A browser-based meta-analysis tool. No installation, no server, no dependencies beyond a modern browser. All computation runs locally in JavaScript.
 
 ---

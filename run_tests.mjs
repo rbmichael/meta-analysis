@@ -1,6 +1,7 @@
 // run_tests.mjs — Node.js entry point for js/tests.js
 // Usage:  node run_tests.mjs
 import { runTests } from "./js/tests.js";
+import { runPlotTests } from "./js/test-harness/run-plot-tests.mjs";
 import { readFileSync } from "node:fs";
 
 let failed = false;
@@ -76,6 +77,13 @@ runTests();
   );
 
   origLog(syncPass ? "\n✅ ALL WORKER SYNC CHECKS PASSED" : "\n❌ SOME WORKER SYNC CHECKS FAILED");
+}
+
+// ===== PLOT SMOKE TESTS =====
+{
+  origLog("\n===== PLOT SMOKE TESTS =====\n");
+  const { fail: plotFail } = runPlotTests();
+  if (plotFail > 0) failed = true;
 }
 
 process.exit(failed ? 1 : 0);

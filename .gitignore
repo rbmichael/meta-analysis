@@ -1,3 +1,4 @@
+node_modules/
 .claude/
 CLAUDE.md
 CLAUDE.original.md
@@ -8,7 +9,4 @@ perf_k050.csv
 perf_k200.csv
 perf_k400.csv
 ROADMAP.md
-node_modules/
 OFFLINE.md
-package-lock.json
-package.json
