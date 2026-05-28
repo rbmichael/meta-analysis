@@ -1131,3 +1131,41 @@ export async function buildMVDocx({ res, rows = [], alpha = 0.05, exportScale = 
 
   return zip.generateAsync({ type: "blob" });
 }
+
+// ---------------------------------------------------------------------------
+// docSectionXML — headless OOXML generator for export-parity tests
+// ---------------------------------------------------------------------------
+// Returns the raw concatenated OOXML XML produced by the named doc* section
+// function, calling the same sections.js data functions that buildDocx() uses.
+// No JSZip, no DOM, no PNG conversion — safe to call from Node.js tests.
+//
+// Sections supported: summary | pubBias | regression | influence |
+//                     selModel | rve | threeLevel
+// (Bayes is image-gated inside docBayes and returns "" without SVG figures.)
+//
+// @param {string} sectionName
+// @param {object} reportArgs  Same shape as buildReportArgs() output.
+// @returns {string}  Raw OOXML XML string (not a complete document).
+
+export function docSectionXML(sectionName, reportArgs) {
+  let _n = 0;
+  const ctx = {
+    nextTable:  () => ++_n,
+    nextFigure: () => ++_n,
+    imgReg:     new Map(),
+    linkMgr:    { getId: () => "rId0" },
+  };
+  const args = { ...reportArgs, getImgs: () => [] };
+  let chunks;
+  switch (sectionName) {
+    case "summary":    chunks = docSummary(args, ctx);         break;
+    case "pubBias":    chunks = docPubBias(args, ctx);         break;
+    case "regression": chunks = docRegression(args, ctx);      break;
+    case "influence":  chunks = docInfluence(args, ctx);       break;
+    case "selModel":   chunks = docSelectionModel(args, ctx);  break;
+    case "rve":        chunks = docRve(args, ctx);             break;
+    case "threeLevel": chunks = docThreeLevel(args, ctx);      break;
+    default: return "";
+  }
+  return chunks.join("");
+}

@@ -12,6 +12,7 @@ import { runAnalysisHeadless, computeStudies, buildReportArgs } from "./analysis
 import { summaryData, pubBiasData, regressionData, influenceData,
          selModelData, rveData, threeLevelData, bayesData } from "./sections.js";
 import { buildTableAPA } from "./report.js";
+import { docSectionXML } from "./docx.js";
 import fixtureSmReml     from "./fixtures/fixture_smd_reml_normal.mjs";
 import fixtureSmKh       from "./fixtures/fixture_smd_reml_kh.mjs";
 import fixtureBcgReg     from "./fixtures/fixture_bcg_regression.mjs";
@@ -8058,10 +8059,21 @@ export function runTests() {
   let parityPass = true;
   const onParityFail = () => { parityPass = false; };
 
-  // Navigate a dotted-key path (e.g. "m.RE") into an object.
+  // Navigate a dotted-key path (e.g. "m.RE", "influence.0.RE_loo") into an object.
   function getNestedValue(obj, path) {
     return path.split(".").reduce((o, k) => o?.[k], obj);
   }
+
+  // Extract all <w:t> text segments from OOXML and concatenate them.
+  // Handles numbers split across runs (the ROADMAP OOXML whitespace risk).
+  function extractWt(xml) {
+    return [...xml.matchAll(/<w:t[^>]*>([^<]*)<\/w:t>/g)]
+      .map(m => m[1])
+      .join("");
+  }
+
+  // Sections whose DOCX output is image-gated (docBayes returns [] without SVG).
+  const DOCX_IMAGE_GATED = new Set(["bayes"]);
 
   // Build the sections-level HTML table for a given section name.
   function sectionHtml(name, reportArgs) {
@@ -8127,7 +8139,8 @@ export function runTests() {
 
     const reportArgs = buildReportArgs(r, reportSettings);
 
-    const htmlCache = {};
+    const htmlCache  = {};
+    const docxCache  = {};
     let fixtureOk = true;
 
     for (const { section, path, label = path } of expected) {
@@ -8138,12 +8151,25 @@ export function runTests() {
         continue;
       }
       const formatted = fmt(value);
+
+      // HTML check
       if (!htmlCache[section]) htmlCache[section] = sectionHtml(section, reportArgs);
-      if (!htmlCache[section].includes(formatted)) {
-        console.log(`  FAIL [${label}]: '${formatted}' not in ${section} HTML`);
+      const inHtml = htmlCache[section].includes(formatted);
+
+      // DOCX check — skip sections whose doc* function is image-gated
+      const skipDocx = DOCX_IMAGE_GATED.has(section);
+      let inDocx = true;
+      if (!skipDocx) {
+        if (!docxCache[section]) docxCache[section] = extractWt(docSectionXML(section, reportArgs));
+        inDocx = docxCache[section].includes(formatted);
+      }
+
+      if (!inHtml || !inDocx) {
+        const where = [!inHtml && "HTML", !inDocx && "DOCX"].filter(Boolean).join(" + ");
+        console.log(`  FAIL [${label}]: '${formatted}' absent from ${section} ${where}`);
         fixtureOk = false;
       } else {
-        console.log(`  ok  ${label}`);
+        console.log(`  ok  ${label}${skipDocx ? " (HTML; DOCX image-gated)" : ""}`);
       }
     }
 
