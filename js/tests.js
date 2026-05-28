@@ -10,9 +10,10 @@ import { goshCompute, GOSH_MAX_ENUM_K, GOSH_MAX_K, GOSH_DEFAULT_MAX_SUBSETS } fr
 import { fmt } from "./format.js";
 import { runAnalysisHeadless, computeStudies, buildReportArgs } from "./analysis-headless.js";
 import { summaryData, pubBiasData, regressionData, influenceData,
-         selModelData, rveData, threeLevelData, bayesData } from "./sections.js";
+         selModelData, rveData, threeLevelData, bayesData,
+         mvPooledData, mvHeterogeneityData, mvTestsData } from "./sections.js";
 import { buildTableAPA } from "./report.js";
-import { docSectionXML } from "./docx.js";
+import { docSectionXML, docMVSectionXML } from "./docx.js";
 import fixtureSmReml     from "./fixtures/fixture_smd_reml_normal.mjs";
 import fixtureSmKh       from "./fixtures/fixture_smd_reml_kh.mjs";
 import fixtureBcgReg     from "./fixtures/fixture_bcg_regression.mjs";
@@ -20,6 +21,7 @@ import fixtureClusterRve from "./fixtures/fixture_cluster_rve.mjs";
 import fixtureVhSel      from "./fixtures/fixture_vh_selection.mjs";
 import fixtureBayes      from "./fixtures/fixture_bayes.mjs";
 import fixtureInfluence  from "./fixtures/fixture_normand_influence.mjs";
+import fixtureMvBerkey   from "./fixtures/fixture_mv_berkey.mjs";
 
 // Tolerances vary by field:
 //   FE, RE  — absolute 0.01   (pooled estimates are on a stable scale)
@@ -8118,10 +8120,74 @@ export function runTests() {
     return "";
   }
 
+  // Build the sections-level HTML table for an MV section (rows from sections.js).
+  function mvSectionHtml(name, mvRes) {
+    if (name === "mvPooled") {
+      const d = mvPooledData(mvRes, 0.05);
+      return buildTableAPA(1, d.title, d.headers, d.rows, "");
+    }
+    if (name === "mvHeterogeneity") {
+      const d = mvHeterogeneityData(mvRes);
+      return buildTableAPA(1, d.title, d.headers, d.rows, "");
+    }
+    if (name === "mvTests") {
+      const d = mvTestsData(mvRes);
+      return buildTableAPA(1, d.title, d.headers, d.rows, "");
+    }
+    return "";
+  }
+
   // Run one fixture: compute → build reportArgs → check each expected field.
+  // Supports fixture.mode === 'mv' for the multivariate pipeline.
+  // Expected entries may include an optional 'd' field (decimal places for fmt).
   function runParityFixture(fixture) {
+    console.log(`--- ${fixture.name} ---`);
+
+    // ── Multivariate path ────────────────────────────────────────────────────
+    if (fixture.mode === "mv") {
+      const { rawData, mvOpts, expected } = fixture;
+      const V = vcalc(rawData, { rho: mvOpts.rho });
+      const r = mvMeta(rawData, V, mvOpts);
+      if (r.error) {
+        console.log(`  FAIL: mvMeta error: ${r.error}`);
+        onParityFail();
+        return;
+      }
+
+      const htmlCache = {};
+      const docxCache = {};
+      let fixtureOk = true;
+
+      for (const { section, path, label = path, d = 3 } of expected) {
+        const value = getNestedValue(r, path);
+        if (value === undefined || !isFinite(value)) {
+          console.log(`  FAIL [${label}]: path '${path}' → ${value}`);
+          fixtureOk = false;
+          continue;
+        }
+        const formatted = fmt(value, d);
+
+        if (!htmlCache[section]) htmlCache[section] = mvSectionHtml(section, r);
+        const inHtml = htmlCache[section].includes(formatted);
+
+        if (!docxCache[section]) docxCache[section] = extractWt(docMVSectionXML(section, r));
+        const inDocx = docxCache[section].includes(formatted);
+
+        if (!inHtml || !inDocx) {
+          const where = [!inHtml && "HTML", !inDocx && "DOCX"].filter(Boolean).join(" + ");
+          console.log(`  FAIL [${label}]: '${formatted}' absent from ${section} ${where}`);
+          fixtureOk = false;
+        } else {
+          console.log(`  ok  ${label}`);
+        }
+      }
+
+      if (!fixtureOk) onParityFail();
+      return;
+    }
+
+    // ── Standard (single-outcome) path ──────────────────────────────────────
     const { name, rawData, type, opts, reportSettings = {}, expected } = fixture;
-    console.log(`--- ${name} ---`);
 
     const studies = computeStudies(rawData, type);
     if (!studies.length) {
@@ -8143,14 +8209,14 @@ export function runTests() {
     const docxCache  = {};
     let fixtureOk = true;
 
-    for (const { section, path, label = path } of expected) {
+    for (const { section, path, label = path, d = 3 } of expected) {
       const value = getNestedValue(r, path);
       if (value === undefined || !isFinite(value)) {
         console.log(`  FAIL [${label}]: path '${path}' → ${value}`);
         fixtureOk = false;
         continue;
       }
-      const formatted = fmt(value);
+      const formatted = fmt(value, d);
 
       // HTML check
       if (!htmlCache[section]) htmlCache[section] = sectionHtml(section, reportArgs);
@@ -8183,6 +8249,7 @@ export function runTests() {
   runParityFixture(fixtureVhSel);
   runParityFixture(fixtureBayes);
   runParityFixture(fixtureInfluence);
+  runParityFixture(fixtureMvBerkey);
 
   console.log(parityPass
     ? "\n✅ ALL EXPORT PARITY TESTS PASSED"

@@ -1169,3 +1169,26 @@ export function docSectionXML(sectionName, reportArgs) {
   }
   return chunks.join("");
 }
+
+// docMVSectionXML — headless OOXML generator for MV export-parity tests
+// Supports: mvPooled | mvHeterogeneity | mvTests
+// No JSZip, no DOM, no async — safe to call from Node.js tests.
+export function docMVSectionXML(sectionName, mvRes, alpha = 0.05) {
+  let _n = 0;
+  const toDocxRows = rows => rows.map(r => r.map(c => richRuns(c)));
+  switch (sectionName) {
+    case "mvPooled": {
+      const d = mvPooledData(mvRes, alpha);
+      return apaTableDocx(++_n, d.title, d.headers, toDocxRows(d.rows)).join("");
+    }
+    case "mvHeterogeneity": {
+      const d = mvHeterogeneityData(mvRes);
+      return apaTableDocx(++_n, d.title, d.headers, toDocxRows(d.rows)).join("");
+    }
+    case "mvTests": {
+      const d = mvTestsData(mvRes);
+      return apaTableDocx(++_n, d.title, d.headers, toDocxRows(d.rows)).join("");
+    }
+    default: return "";
+  }
+}
