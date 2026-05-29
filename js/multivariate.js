@@ -336,6 +336,7 @@ export function mvMeta(rows, V, opts = {}) {
   // ---- Concentrated (RE)ML log-likelihood ----
   // Returns negative log-likelihood (positive) for minimisation by BFGS.
   // Fixed effects β are concentrated out analytically at each θ.
+  let singularEncountered = false;
   function negLogLik(theta) {
     const Psi = _psiFromTheta(theta, struct, P);
 
@@ -351,7 +352,7 @@ export function mvMeta(rows, V, opts = {}) {
       );
 
       const L = cholFactor(Sigma);
-      if (L === null) return 1e10;   // Σᵢ not PD — penalise
+      if (L === null) { singularEncountered = true; return 1e10; }
 
       logDetSum += cholLogDet(L);
 
@@ -381,7 +382,7 @@ export function mvMeta(rows, V, opts = {}) {
     }
 
     const XOXinv = matInverse(XOX);
-    if (XOXinv === null) return 1e10;
+    if (XOXinv === null) { singularEncountered = true; return 1e10; }
 
     // Q = y'Ω⁻¹y − (X'Ω⁻¹y)'β̂  =  yOy − XOy'·XOXinv·XOy
     let crossTerm = 0;
@@ -612,8 +613,9 @@ export function mvMeta(rows, V, opts = {}) {
     k, n, P,
     struct, method, ciMethod, slopes,
     dist, df: df_residual,
-    convergence: { converged: res.converged, iters: res.iters, maxIters: 500,
-                   reason: res.converged ? null : 'max_iters', source: 'bfgs_mvMeta_' + method },
+    convergence: { converged: res.converged && !singularEncountered, iters: res.iters, maxIters: 500,
+                   reason: !res.converged ? 'max_iters' : singularEncountered ? 'singular_matrix' : null,
+                   source: 'bfgs_mvMeta_' + method },
     optimizer: { iters: res.iters, gnorm: res.gnorm },
     warnings,
   };

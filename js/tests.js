@@ -8492,6 +8492,23 @@ export function runTests() {
     singChkTrue("fatPetTest k<3 → NaN slope",             !isFinite(r.slope));
   }
 
+  // 7. lsModel: zero-valued scale moderator → all-zero Hessian column →
+  //    matInverse returns null (rdGamma=true) → convergence.converged:false
+  //    + reason:'singular_hessian' instead of silent NaN SEs
+  {
+    const rows = [
+      { label: "S1", yi: -0.889, vi: 0.326, zero: 0 },
+      { label: "S2", yi: -1.585, vi: 0.195, zero: 0 },
+      { label: "S3", yi: -1.348, vi: 0.415, zero: 0 },
+      { label: "S4", yi: -1.442, vi: 0.020, zero: 0 },
+      { label: "S5", yi: -0.218, vi: 0.051, zero: 0 },
+      { label: "S6", yi: -0.786, vi: 0.007, zero: 0 },
+    ];
+    const r = lsModel(rows, [], [{ key: "zero", type: "continuous" }], { alpha: 0.05 });
+    singChkTrue("lsModel zero scale mod → converged:false",          r.convergence?.converged === false);
+    singChkTrue("lsModel zero scale mod → reason:'singular_hessian'", r.convergence?.reason === 'singular_hessian');
+  }
+
   console.log(singPass
     ? "\n✅ ALL SINGULAR-MATRIX GUARDING TESTS PASSED"
     : "\n❌ SOME SINGULAR-MATRIX GUARDING TESTS FAILED");
