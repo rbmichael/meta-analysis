@@ -13,10 +13,10 @@ function iterate(seed, updateFn, maxIter = 200, tol = REML_TOL) {
   let tau2 = seed;
   for (let iter = 0; iter < maxIter; iter++) {
     const newTau2 = updateFn(tau2);
-    if (Math.abs(newTau2 - tau2) < tol) return { tau2: newTau2, converged: true, iters: iter + 1 };
+    if (Math.abs(newTau2 - tau2) < tol) return { tau2: newTau2, converged: true, iters: iter + 1, tau2Boundary: newTau2 === 0 };
     tau2 = newTau2;
   }
-  return { tau2, converged: false, iters: maxIter };
+  return { tau2, converged: false, iters: maxIter, tau2Boundary: false };
 }
 
 // ================= DERSIMONIAN-LAIRD (DL) TAU² =================
@@ -107,7 +107,7 @@ export function tau2_HE(studies) {
 // poorly estimated.
 export function tau2_SJ(studies, tol = REML_TOL, maxIter = 200, tau2Init = null) {
   const k = studies.length;
-  if (k <= 1) return { tau2: 0, converged: true, iters: 0, maxIters: maxIter };
+  if (k <= 1) return { tau2: 0, converged: true, iters: 0, maxIters: maxIter, tau2Boundary: false };
   let tau2;
   if (tau2Init !== null) {
     tau2 = Math.max(0, tau2Init);
@@ -115,7 +115,7 @@ export function tau2_SJ(studies, tol = REML_TOL, maxIter = 200, tau2Init = null)
     const ybar0 = studies.reduce((acc, d) => acc + d.yi, 0) / k;
     // Seed: raw between-study variance (always > 0 unless all yi identical)
     tau2 = studies.reduce((acc, d) => acc + (d.yi - ybar0) ** 2, 0) / k;
-    if (tau2 === 0) return { tau2: 0, converged: true, iters: 0, maxIters: maxIter };
+    if (tau2 === 0) return { tau2: 0, converged: true, iters: 0, maxIters: maxIter, tau2Boundary: false };
   }
   let iters = 0;
   let converged = false;
@@ -135,7 +135,7 @@ export function tau2_SJ(studies, tol = REML_TOL, maxIter = 200, tau2Init = null)
     if (Math.abs(newTau2 - tau2) < tol) { tau2 = Math.max(0, newTau2); converged = true; iters++; break; }
     tau2 = Math.max(0, newTau2);
   }
-  return { tau2, converged, iters, maxIters: maxIter };
+  return { tau2, converged, iters, maxIters: maxIter, tau2Boundary: converged && tau2 === 0 };
 }
 
 // ================= FISHER SCORING CORE =================
@@ -333,7 +333,7 @@ export function tau2_GENQM(studies, tol = REML_TOL, maxIter = 200) {
   // Observed FE Q-statistic (constant — does not depend on τ²)
   const ybarFE = yi.reduce((s, y, i) => s + wi[i] * y, 0) / W;
   const Q_obs  = yi.reduce((s, y, i) => s + wi[i] * (y - ybarFE) ** 2, 0);
-  if (Q_obs <= 0) return { tau2: 0, converged: true, iters: 0, maxIters: maxIter };
+  if (Q_obs <= 0) return { tau2: 0, converged: true, iters: 0, maxIters: maxIter, tau2Boundary: true };
 
   // k−1 positive eigenvalues of S·P·S via secular equation (rank-1 case)
   function eigenvalues(tau2) {
@@ -407,13 +407,13 @@ export function tau2_GENQM(studies, tol = REML_TOL, maxIter = 200) {
   }
 
   // Return 0 if Q_obs is at or below the median of Q_FE at τ²=0
-  if (imhofCDF(eigenvalues(0), Q_obs) <= 0.5) return { tau2: 0, converged: true, iters: 0, maxIters: maxIter };
+  if (imhofCDF(eigenvalues(0), Q_obs) <= 0.5) return { tau2: 0, converged: true, iters: 0, maxIters: maxIter, tau2Boundary: true };
 
   // Bisect on τ²: find where P(Q_FE(τ²) ≤ Q_obs) crosses 0.5 from above.
   // imhofCDF is decreasing in τ² (larger τ² → heavier distribution → lower CDF at fixed Q_obs).
   let lo = 0, hi = 1;
   while (imhofCDF(eigenvalues(hi), Q_obs) > 0.5 && hi < 1e6) hi *= 2;
-  if (hi >= 1e6) return { tau2: hi / 2, converged: false, iters: 0, maxIters: maxIter }; // bracket failed to close
+  if (hi >= 1e6) return { tau2: hi / 2, converged: false, iters: 0, maxIters: maxIter, tau2Boundary: false }; // bracket failed to close
 
   let bisIters = 0;
   let bisConverged = false;
@@ -423,7 +423,8 @@ export function tau2_GENQM(studies, tol = REML_TOL, maxIter = 200) {
     if (hi - lo < tol) { bisConverged = true; bisIters++; break; }
   }
 
-  return { tau2: Math.max(0, (lo + hi) / 2), converged: bisConverged, iters: bisIters, maxIters: maxIter };
+  const bisResult = Math.max(0, (lo + hi) / 2);
+  return { tau2: bisResult, converged: bisConverged, iters: bisIters, maxIters: maxIter, tau2Boundary: bisResult === 0 };
 }
 
 // genqCore(studies, weights) → τ² estimate (≥ 0)
@@ -559,7 +560,7 @@ export function tau2Core_HE(vi, fitFn0, df) {
 export function tau2Core_SJ(vi, fitFn, seed, tol = REML_TOL, maxIter = 200) {
   const k = vi.length;
   let tau2 = seed;
-  if (tau2 === 0) return { tau2: 0, converged: true, iters: 0, maxIters: maxIter };
+  if (tau2 === 0) return { tau2: 0, converged: true, iters: 0, maxIters: maxIter, tau2Boundary: false };
   let iters = 0;
   let converged = false;
   for (; iters < maxIter; iters++) {
@@ -570,7 +571,7 @@ export function tau2Core_SJ(vi, fitFn, seed, tol = REML_TOL, maxIter = 200) {
     if (Math.abs(newTau2 - tau2) < tol) { tau2 = Math.max(0, newTau2); converged = true; iters++; break; }
     tau2 = Math.max(0, newTau2);
   }
-  return { tau2, converged, iters, maxIters: maxIter };
+  return { tau2, converged, iters, maxIters: maxIter, tau2Boundary: converged && tau2 === 0 };
 }
 
 

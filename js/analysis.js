@@ -262,7 +262,9 @@ export function meta(studies, method="DL", ciMethod="normal", alpha=0.05, tau2In
     ? { converged: _tau2Result.converged, iters: _tau2Result.iters, maxIters: _tau2Result.maxIters,
         reason: _tau2Result.converged ? null : 'max_iters', source: 'tau2_' + method }
     : { converged: true, iters: 0, maxIters: 0, reason: null, source: 'tau2_' + method };
-  const tau2Boundary = typeof _tau2Result === "object" ? (_tau2Result.tau2Boundary ?? false) : false;
+  const tau2Boundary = typeof _tau2Result === "object"
+    ? (_tau2Result.tau2Boundary ?? false)
+    : (tau2 === 0 && k >= 2);
 
   // I² — τ²-based formula (Higgins & Thompson 2002, eq. 6/9; matches metafor for all methods).
   // For DL this is algebraically identical to (Q−df)/Q (Q-based formula). For REML/ML/PM/SJ/etc.
