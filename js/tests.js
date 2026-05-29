@@ -1,5 +1,7 @@
 import { round, transformEffect, chiSquareCDF, chiSquareQuantile, parseCounts, bivariateNormalCDF, normalQuantile, tCritical, fCDF, normalCDF, tCDF } from "./utils.js";
-import { validateStudy } from "./profiles.js";
+import { validateStudy, effectProfiles } from "./profiles.js";
+import { MIN_VAR } from "./constants.js";
+import { msgMinVarClamp } from "./ui-warnings.js";
 import { BENCHMARKS, PUB_BIAS_BENCHMARKS, INFLUENCE_BENCHMARKS, META_REGRESSION_BENCHMARKS, VH_BENCHMARKS, MH_BENCHMARKS, CLUSTER_BENCHMARKS, RVE_BENCHMARKS, RVE_MOM_BENCHMARKS, THREE_LEVEL_BENCHMARKS, LS_BENCHMARKS, CONTRAST_BENCHMARKS, INTERACTION_BENCHMARKS, HALFNORM_BENCHMARKS, POWER_BENCHMARKS, NEGEXP_BENCHMARKS, BETA_BENCHMARKS, PERM_BENCHMARKS, TRIMFILL_BENCHMARKS, CUMULATIVE_BENCHMARKS, HC_BENCHMARKS, WAAP_BENCHMARKS } from "./benchmarks.js";
 import { permTestSync, permPval } from "./perm.js";
 import { compute, meta, metaMH, metaPeto, robustMeta, sandwichVar, robustWlsResult, metaRegression, testContrast, tau2_HS, tau2_HE, tau2_ML, tau2_REML, tau2_SJ, beggTest, eggerTest, fatPetTest, petPeeseTest, failSafeN, tesTest, heterogeneityCIs, cumulativeMeta, influenceDiagnostics, harbordTest, petersTest, deeksTest, rueckerTest, leaveOneOut, baujat, blupMeta, pCurve, pUniform, estimatorComparison, subgroupAnalysis, logLik, bfgs, selIntervalProbs, selIntervalIdx, selectionLogLik, SEL_CUTS_ONE_SIDED, SEL_CUTS_TWO_SIDED, veveaHedges, SELECTION_PRESETS, halfNormalSelModel, powerSelModel, negexpSelModel, betaSelModel, profileLikTau2, profileLikCI, bayesMeta, priorSensitivity, rvePooled, meta3level, lsModel, adjustPvals, henmiCopas, waapWls, clES, vcalc, mvMeta, validStudies } from "./analysis.js";
@@ -8413,4 +8415,66 @@ export function runTests() {
   console.log(singPass
     ? "\n✅ ALL SINGULAR-MATRIX GUARDING TESTS PASSED"
     : "\n❌ SOME SINGULAR-MATRIX GUARDING TESTS FAILED");
+}
+
+// =============================================================================
+// MIN_VAR AUDIT TRAIL TESTS (A.4)
+// =============================================================================
+// Verify that profile.compute() returns vi === MIN_VAR when the variance floor
+// is applied, and that msgMinVarClamp() produces a named warning string.
+//
+// Test strategy:
+//   PR type with x=0, n=100: p*(1-p)/n = 0 → clampVi(0) = MIN_VAR
+//   GENERIC type with vi=1e-20: direct tiny positive vi → clampVi(1e-20) = MIN_VAR
+//   PR type with x=10, n=100: p=0.1, vi = 0.0009 > MIN_VAR → no clamp
+//   msgMinVarClamp: output contains the study label and escapes HTML characters
+{
+  console.log("\n===== MIN_VAR AUDIT TRAIL TESTS (A.4) =====\n");
+  let mvPass = true;
+  const { chkTrue: mvChkTrue } = makeChk(() => { mvPass = false; });
+
+  // --- PR: extreme proportion (p=0) → vi=0 → clamped to MIN_VAR ---
+  {
+    const pr = effectProfiles["PR"];
+    const r  = pr.compute({ x: 0, n: 100 });
+    mvChkTrue("PR x=0 n=100: vi === MIN_VAR",   r.vi === MIN_VAR);
+    mvChkTrue("PR x=0 n=100: yi === 0",          r.yi === 0);
+    mvChkTrue("PR x=0 n=100: w = 1/MIN_VAR",    r.w === 1 / MIN_VAR);
+  }
+
+  // --- PR: opposite extreme (p=1) → vi=0 → clamped to MIN_VAR ---
+  {
+    const pr = effectProfiles["PR"];
+    const r  = pr.compute({ x: 100, n: 100 });
+    mvChkTrue("PR x=n: vi === MIN_VAR",          r.vi === MIN_VAR);
+  }
+
+  // --- GENERIC: tiny positive vi → clamped to MIN_VAR ---
+  {
+    const gen = effectProfiles["GENERIC"];
+    const r   = gen.compute({ yi: 0.5, vi: 1e-20 });
+    mvChkTrue("GENERIC vi=1e-20: vi === MIN_VAR", r.vi === MIN_VAR);
+    mvChkTrue("GENERIC vi=1e-20: yi preserved",   r.yi === 0.5);
+  }
+
+  // --- PR: normal proportion → vi > MIN_VAR (no clamp) ---
+  {
+    const pr = effectProfiles["PR"];
+    const r  = pr.compute({ x: 10, n: 100 });
+    mvChkTrue("PR x=10 n=100: vi > MIN_VAR",     r.vi > MIN_VAR);
+    mvChkTrue("PR x=10 n=100: vi approx 0.0009", Math.abs(r.vi - 0.0009) < 1e-12);
+  }
+
+  // --- msgMinVarClamp: named warning string ---
+  {
+    const msg = msgMinVarClamp("Smith 2023");
+    mvChkTrue("msgMinVarClamp contains label",    msg.includes("Smith 2023"));
+    mvChkTrue("msgMinVarClamp contains 1e-8",     msg.includes("1e-8"));
+    const escaped = msgMinVarClamp("<script>");
+    mvChkTrue("msgMinVarClamp escapes HTML",      !escaped.includes("<script>") && escaped.includes("&lt;script&gt;"));
+  }
+
+  console.log(mvPass
+    ? "\n✅ ALL MIN_VAR AUDIT TRAIL TESTS PASSED"
+    : "\n❌ SOME MIN_VAR AUDIT TRAIL TESTS FAILED");
 }

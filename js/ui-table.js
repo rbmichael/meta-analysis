@@ -13,7 +13,8 @@
 import { effectProfiles } from "./profiles.js";
 import { validateRow, getSoftWarnings } from "./ui-state.js";
 import { escapeHTML } from "./utils-html.js";
-import { renderWarningBlocks, msgExcluded, msgNonNumericMod, analysisChecks } from "./ui-warnings.js";
+import { renderWarningBlocks, msgExcluded, msgNonNumericMod, msgMinVarClamp, analysisChecks } from "./ui-warnings.js";
+import { MIN_VAR } from "./constants.js";
 import { buildTag } from "./ui-render.js";
 import { parseCSV, detectCsvFormat, detectEffectType } from "./csv.js";
 import { readTextFile } from "./io.js";
@@ -540,7 +541,7 @@ export function updateValidationWarnings(studies, excluded, softWarnings) {
   softWarnings.forEach(w => warnLines.push(escapeHTML(w)));
 
   // Analysis-level
-  const checks = analysisChecks({ studies, excluded });
+  const checks = analysisChecks({ studies, excluded, skipTinyVi: true });
   errLines.push(...checks.errors);
   warnLines.push(...checks.warnings);
 
@@ -607,6 +608,8 @@ export function collectStudies(type, extraMods = []) {
       excluded.push({ label, reason: "Computation failed (invalid effect size or variance)" });
       continue;
     }
+
+    if (study.vi === MIN_VAR) softWarnings.push(msgMinVarClamp(label));
 
     study.group   = group;
     study.cluster = cluster;

@@ -36,6 +36,9 @@ export const msgFewStudies = (k, minK, context) =>
 export const msgTinyVariance = () =>
   "One or more studies have extremely small variance (may inflate weights)";
 
+export const msgMinVarClamp = (label) =>
+  `${escapeHTML(label)}: variance clamped to minimum floor (1e-8) — study assigned minimum weight`;
+
 /**
  * Shared analysis-level pre-checks: no-studies, k<minK, k<3 bias-test, tiny vi.
  *
@@ -46,7 +49,7 @@ export const msgTinyVariance = () =>
  *   biasTests — when false, skips the Egger/Begg/FAT-PET k<3 warning (use for MV)
  * @returns {{ errors: string[], warnings: string[] }} pre-escaped HTML strings
  */
-export function analysisChecks({ studies, excluded, minK = 2, biasTests = true }) {
+export function analysisChecks({ studies, excluded, minK = 2, biasTests = true, skipTinyVi = false }) {
   const errors = [], warnings = [];
   const k = studies.length;
   if (k === 0) {
@@ -54,7 +57,7 @@ export function analysisChecks({ studies, excluded, minK = 2, biasTests = true }
   } else {
     if (k < minK) warnings.push(msgFewStudies(k, minK, "meta-analysis not meaningful"));
     if (biasTests && k < 3) warnings.push(msgFewStudies(k, 3, "Egger / Begg / FAT-PET tests require ≥ 3 studies"));
-    if (studies.some(s => s.vi <= 1e-8)) warnings.push(msgTinyVariance());
+    if (!skipTinyVi && studies.some(s => s.vi <= 1e-8)) warnings.push(msgTinyVariance());
   }
   return { errors, warnings };
 }
