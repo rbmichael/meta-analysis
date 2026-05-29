@@ -132,12 +132,15 @@ export function beggTest(studies) {
 // Used by fatPetTest, harbordTest, petersTest, deeksTest, rueckerTest.
 
 // NaN result object for when a pub-bias regression cannot be computed.
-function _pubBiasNaN(df) {
-  return {
+// singularMatrix=true when caused by a rank-deficient design matrix (not just k<3).
+function _pubBiasNaN(df, singularMatrix = false) {
+  const r = {
     intercept: NaN, interceptSE: NaN, interceptT: NaN, interceptP: NaN,
     slope:     NaN, slopeSE:     NaN, slopeT:     NaN, slopeP:     NaN,
     df
   };
+  if (singularMatrix) r.singularMatrix = true;
+  return r;
 }
 
 // Compute RSS, s², SE/t/p for intercept and slope from WLS output.
@@ -182,7 +185,7 @@ export function fatPetTest(studies) {
 
   const X = xs.map(x => [1, x]);
   const { beta, vcov, rankDeficient } = wls(X, ys, ws);
-  if (rankDeficient) return _pubBiasNaN(k - 2);
+  if (rankDeficient) return _pubBiasNaN(k - 2, true);
 
   const result = _wlsFinish(beta, vcov, ys, xs, ws, k - 2);
 
@@ -279,7 +282,7 @@ export function harbordTest(studies) {
   const X  = xs.map(x => [1, x]);
   const ws = xs.map(() => 1);   // OLS — uniform weights
   const { beta, vcov, rankDeficient } = wls(X, ys, ws);
-  if (rankDeficient) return _pubBiasNaN(k - 2);
+  if (rankDeficient) return _pubBiasNaN(k - 2, true);
 
   return _wlsFinish(beta, vcov, ys, xs, ws, k - 2);
 }
@@ -318,7 +321,7 @@ export function petersTest(studies) {
 
   const X = xs.map(x => [1, x]);
   const { beta, vcov, rankDeficient } = wls(X, ys, ws);
-  if (rankDeficient) return _pubBiasNaN(k - 2);
+  if (rankDeficient) return _pubBiasNaN(k - 2, true);
 
   return _wlsFinish(beta, vcov, ys, xs, ws, k - 2);
 }
@@ -359,7 +362,7 @@ export function deeksTest(studies) {
 
   const X = xs.map(x => [1, x]);
   const { beta, vcov, rankDeficient } = wls(X, ys, ws);
-  if (rankDeficient) return _pubBiasNaN(k - 2);
+  if (rankDeficient) return _pubBiasNaN(k - 2, true);
 
   return _wlsFinish(beta, vcov, ys, xs, ws, k - 2);
 }
@@ -407,7 +410,7 @@ export function rueckerTest(studies) {
   const X  = xs.map(x => [1, x]);
   const ws = xs.map(() => 1);   // OLS — uniform weights
   const { beta, vcov, rankDeficient } = wls(X, ys, ws);
-  if (rankDeficient) return _pubBiasNaN(k - 2);
+  if (rankDeficient) return _pubBiasNaN(k - 2, true);
 
   return _wlsFinish(beta, vcov, ys, xs, ws, k - 2);
 }

@@ -3165,10 +3165,12 @@ function _renderPubBiasPanel(ctx) {
 
   const fatStats = isFinite(fatpet.slope)
     ? `β₁ = ${fmt(fatpet.slope)}, SE = ${fmt(fatpet.slopeSE)}, <em>t</em>(${fatpet.df}) = ${fmt(fatpet.slopeT)}, <em>p</em> ${fmtPval(fatpet.slopeP)}`
+    : fatpet.singularMatrix ? `β₁ (singular design matrix — identical predictor values?)`
     : `β₁ (k&lt;3)`;
 
   const petStats = (() => {
-    if (!isFinite(fatpet.intercept)) return `(k&lt;3)`;
+    if (!isFinite(fatpet.intercept))
+      return fatpet.singularMatrix ? `(singular design matrix)` : `(k&lt;3)`;
     if (!isFinite(fatpetTC)) return `${fmt(profile.transform(fatpet.intercept))}, <em>p</em> ${fmtPval(fatpet.interceptP)}`;
     const lo = fmt(profile.transform(fatpet.intercept - fatpetTC * fatpet.interceptSE));
     const hi = fmt(profile.transform(fatpet.intercept + fatpetTC * fatpet.interceptSE));
@@ -3179,7 +3181,8 @@ function _renderPubBiasPanel(ctx) {
   const ppTC    = isFinite(ppSrc.df) ? tCritical(ppSrc.df, alpha) : NaN;
   const ppLabel = petpeese.usePeese ? "PEESE" : "PET";
   const ppStats = (() => {
-    if (!isFinite(ppSrc.intercept)) return `NA (k&lt;3)`;
+    if (!isFinite(ppSrc.intercept))
+      return ppSrc.singularMatrix ? `NA (singular design matrix)` : `NA (k&lt;3)`;
     if (!isFinite(ppTC)) return `${fmt(profile.transform(ppSrc.intercept))}, <em>p</em> ${fmtPval(ppSrc.interceptP)} [${ppLabel}]`;
     const lo = fmt(profile.transform(ppSrc.intercept - ppTC * ppSrc.interceptSE));
     const hi = fmt(profile.transform(ppSrc.intercept + ppTC * ppSrc.interceptSE));
@@ -3224,7 +3227,7 @@ function _renderPubBiasPanel(ctx) {
           ["bias.deeks",   "Deeks",    deeks,    "k&lt;3 or no 2×2 counts"],
           ["bias.ruecker", "Rücker", ruecker,  "k&lt;3 or no 2×2 counts"],
         ].map(([key, name, r, naMsg]) =>
-          `&nbsp;&nbsp;${hBtn(key)}${name}: intercept = ${isFinite(r.intercept)?fmt(r.intercept):"NA"} | <em>p</em> ${isFinite(r.interceptP)?fmtPval(r.interceptP):`NA (${naMsg})`}`
+          `&nbsp;&nbsp;${hBtn(key)}${name}: intercept = ${isFinite(r.intercept)?fmt(r.intercept):"NA"} | <em>p</em> ${isFinite(r.interceptP)?fmtPval(r.interceptP):`NA (${r.singularMatrix ? "singular design matrix" : naMsg})`}`
         ).join("<br>\n        ")}
       </div>
     </details>

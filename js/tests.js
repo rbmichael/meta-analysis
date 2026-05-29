@@ -8254,4 +8254,75 @@ export function runTests() {
   console.log(parityPass
     ? "\n✅ ALL EXPORT PARITY TESTS PASSED"
     : "\n❌ SOME EXPORT PARITY TESTS FAILED");
+
+  // ===== SINGULAR-MATRIX GUARDING UNIT TESTS =====
+  // Pathological datasets that trigger matrix singularity in pub-bias and
+  // regression callers.  Each test verifies that the failure is explicitly
+  // flagged rather than silently producing NaN with a misleading "k<3" label.
+  console.log("\n===== SINGULAR-MATRIX GUARDING UNIT TESTS =====\n");
+  let singPass = true;
+  const { chkTrue: singChkTrue } = makeChk(() => { singPass = false; });
+
+  // 1. fatPetTest: all studies have identical vi → identical se → singular [1, se] X
+  {
+    // vi = 0.04 for all → se = 0.2 for all → X'WX determinant = 0
+    const studies = [0.10, 0.25, 0.40, 0.15].map(yi => ({ yi, vi: 0.04 }));
+    const r = fatPetTest(studies);
+    singChkTrue("fatPetTest identical SE → singularMatrix:true", r.singularMatrix === true);
+    singChkTrue("fatPetTest identical SE → NaN slope",           !isFinite(r.slope));
+    singChkTrue("fatPetTest identical SE → NaN intercept",       !isFinite(r.intercept));
+  }
+
+  // 2. harbordTest: identical 2×2 tables → identical √V → singular [1, √V] X
+  {
+    const s = { a: 5, b: 5, c: 5, d: 5 };
+    const r = harbordTest([s, s, s, s]);
+    singChkTrue("harbordTest identical cells → singularMatrix:true", r.singularMatrix === true);
+    singChkTrue("harbordTest identical cells → NaN intercept",       !isFinite(r.intercept));
+  }
+
+  // 3. petersTest: identical N values → singular [1, 1/N] X
+  {
+    const studies = [0.10, 0.25, 0.40, 0.15].map(yi => ({ yi, vi: 0.04, n: 100 }));
+    const r = petersTest(studies);
+    singChkTrue("petersTest identical N → singularMatrix:true", r.singularMatrix === true);
+    singChkTrue("petersTest identical N → NaN intercept",       !isFinite(r.intercept));
+  }
+
+  // 4. metaRegression: m2 = m1 (perfect collinearity) → rankDeficient with error string
+  {
+    const studies = [0.1, 0.2, 0.3, 0.4, 0.5].map((yi, i) => ({
+      yi, vi: 0.01, m1: i + 1, m2: i + 1,
+    }));
+    const r = metaRegression(studies, [
+      { name: "m1", type: "continuous" },
+      { name: "m2", type: "continuous" },
+    ]);
+    singChkTrue("metaRegression collinear → rankDeficient:true", r.rankDeficient === true);
+    singChkTrue("metaRegression collinear → error string",       typeof r.error === "string" && r.error.length > 0);
+  }
+
+  // 5. sandwichVar: all studies in a single cluster → explicit error (C < 2)
+  {
+    const X     = [[1], [1], [1], [1]];
+    const w     = [25, 25, 25, 25];
+    const resid = [0.05, -0.05, 0.10, -0.10];
+    const ids   = ["A", "A", "A", "A"];
+    const r = sandwichVar(X, w, resid, ids);
+    singChkTrue("sandwichVar 1 cluster → error string", typeof r.error === "string" && r.error.length > 0);
+    singChkTrue("sandwichVar 1 cluster → no V_rob",     r.V_rob === undefined);
+  }
+
+  // 6. pub-bias k-too-small path is NOT confused with singular:
+  //    With only 2 valid studies, singularMatrix must be absent / false.
+  {
+    const studies = [{ yi: 0.1, vi: 0.04 }, { yi: 0.3, vi: 0.09 }];
+    const r = fatPetTest(studies);
+    singChkTrue("fatPetTest k<3 → singularMatrix absent", !r.singularMatrix);
+    singChkTrue("fatPetTest k<3 → NaN slope",             !isFinite(r.slope));
+  }
+
+  console.log(singPass
+    ? "\n✅ ALL SINGULAR-MATRIX GUARDING TESTS PASSED"
+    : "\n❌ SOME SINGULAR-MATRIX GUARDING TESTS FAILED");
 }
