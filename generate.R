@@ -3520,6 +3520,140 @@ BENCH[["LS-C"]] <- list(beta=round(as.vector(res2$b),7), gamma=round(as.vector(r
 }
 
 # =================================================================
+# P-CURVE and P-UNIFORM benchmarks (JS formula round-trip)
+# Implements Simonsohn, Nelson & Simmons (2014) p-curve and
+# van Assen, van Aert & Wicherts (2015) p-uniform using the
+# exact same algorithms as pCurve() / pUniform() in js/selection.js.
+#
+# Note: metafor::selmodel(type="pcurve") and selmodel(type="puni")
+# use different model formulations (Kim & Viechtbauer 2022;
+# van Aert & van Assen 2023) and are NOT equivalent to the
+# distributional / conditional-uniformity tests here.
+# -----------------------------------------------------------------
+{
+  .z95 <- qnorm(0.975)
+
+  # JS-equivalent p-curve (Simonsohn et al. 2014, JPSP)
+  .js_pcurve <- function(yi, vi) {
+    se  <- sqrt(as.numeric(vi))
+    z   <- abs(as.numeric(yi) / se)
+    p   <- 2 * (1 - pnorm(z))
+    sig <- p < 0.05
+    z_s <- z[sig]; p_s <- p[sig]
+    k <- sum(sig)
+    if (k == 0) return(list(k=0L, rightSkewZ=NA_real_, rightSkewP=NA_real_,
+                             flatnessZ=NA_real_, flatnessP=NA_real_))
+    # lambda33: noncentrality for 33% power at two-tailed z-test (bisection on [0,10])
+    pow33 <- function(lam) (1 - pnorm(.z95 - lam)) + pnorm(-.z95 - lam)
+    lo33 <- 0; hi33 <- 10
+    for (.i in seq_len(100)) {
+      mid33 <- (lo33 + hi33) / 2
+      if (pow33(mid33) < 0.33) lo33 <- mid33 else hi33 <- mid33
+    }
+    lam33 <- (lo33 + hi33) / 2
+    pp33CDF <- function(p) {
+      if (p <= 0) return(0)
+      if (p >= 0.05) return(1)
+      zp <- qnorm(1 - p / 2)
+      ((1 - pnorm(zp - lam33)) + pnorm(-zp - lam33)) / 0.33
+    }
+    pp0       <- p_s / 0.05
+    rightSkewZ <- (mean(pp0) - 0.5) * sqrt(12 * k)
+    rightSkewP <- pnorm(rightSkewZ)
+    pp33       <- sapply(p_s, pp33CDF)
+    flatnessZ  <- (mean(pp33) - 0.5) * sqrt(12 * k)
+    flatnessP  <- 1 - pnorm(flatnessZ)
+    list(k=as.integer(k),
+         rightSkewZ=round(rightSkewZ, 8), rightSkewP=round(rightSkewP, 8),
+         flatnessZ =round(flatnessZ,  8), flatnessP =round(flatnessP,  8))
+  }
+
+  # JS-equivalent p-uniform (van Assen et al. 2015)
+  .js_puniform <- function(yi, vi, RE) {
+    se  <- sqrt(as.numeric(vi))
+    z   <- abs(as.numeric(yi) / se)
+    p   <- 2 * (1 - pnorm(z))
+    sig <- p < 0.05
+    z_s  <- z[sig]; se_s <- se[sig]
+    k <- sum(sig)
+    if (k == 0) return(list(k=0L, estimate=NA_real_, ciLow=NA_real_, ciHigh=NA_real_,
+                             Z_sig=NA_real_, p_sig=NA_real_, Z_bias=NA_real_, p_bias=NA_real_))
+    MIN_DENOM <- 1e-10
+    qi_fn <- function(z_i, se_i, delta) {
+      lambda <- delta / se_i
+      numer  <- 1 - pnorm(z_i - lambda)
+      denom  <- max(1 - pnorm(.z95 - lambda), MIN_DENOM)
+      numer / denom
+    }
+    sumQ <- function(delta) sum(mapply(qi_fn, z_s, se_s, MoreArgs=list(delta=delta)))
+    maxAbsYi  <- max(z_s * se_s)
+    SEARCH_HI <- max(10, maxAbsYi * 2)
+    SEARCH_LO <- -SEARCH_HI
+    sdUnif <- sqrt(k / 12)
+    Z_sig  <- (sumQ(0)  - k / 2) / sdUnif
+    Z_bias <- (sumQ(RE) - k / 2) / sdUnif
+    p_sig_v  <- pnorm(Z_sig)
+    p_bias_v <- 1 - pnorm(Z_bias)
+    bisect_d <- function(target) {
+      lo0 <- sumQ(SEARCH_LO); hi0 <- sumQ(SEARCH_HI)
+      if (target < lo0 || target > hi0) return(NA_real_)
+      lo <- SEARCH_LO; hi <- SEARCH_HI
+      for (.i in seq_len(100)) {
+        mid <- (lo + hi) / 2
+        if (sumQ(mid) < target) lo <- mid else hi <- mid
+      }
+      (lo + hi) / 2
+    }
+    half   <- k / 2
+    margin <- .z95 * sdUnif
+    estimate <- bisect_d(half)
+    ciLow    <- bisect_d(half - margin)
+    ciHigh   <- bisect_d(half + margin)
+    list(k=as.integer(k),
+         estimate=round(estimate, 8), ciLow=round(ciLow, 8), ciHigh=round(ciHigh, 8),
+         Z_sig =round(Z_sig,     8), p_sig =round(p_sig_v,  8),
+         Z_bias=round(Z_bias,    8), p_bias=round(p_bias_v, 8))
+  }
+
+  # --- PCURVE-BCG-OR: BCG log-OR (dat.bcg, DL, k=13) ---
+  cat("\n## PCURVE-BCG-OR: p-curve (BCG log-OR, DL)\n")
+  .pc_bcg <- .js_pcurve(bcg_esc$yi, bcg_esc$vi)
+  cat(sprintf("   k_sig=%d  rightSkewZ=%.8f  rightSkewP=%.8f  flatnessZ=%.8f  flatnessP=%.8f\n",
+              .pc_bcg$k, .pc_bcg$rightSkewZ, .pc_bcg$rightSkewP,
+              .pc_bcg$flatnessZ, .pc_bcg$flatnessP))
+  BENCH[["PCURVE-BCG-OR"]] <- .pc_bcg
+
+  # --- PUNIFORM-BCG-OR: BCG log-OR (dat.bcg, DL, k=13) ---
+  cat("\n## PUNIFORM-BCG-OR: p-uniform (BCG log-OR, DL)\n")
+  .pu_bcg <- .js_puniform(bcg_esc$yi, bcg_esc$vi, as.numeric(coef(res_bcg)))
+  cat(sprintf("   k_sig=%d  estimate=%.8f  ciLow=%.8f  ciHigh=%.8f  Z_sig=%.8f  Z_bias=%.8f\n",
+              .pu_bcg$k, .pu_bcg$estimate, .pu_bcg$ciLow, .pu_bcg$ciHigh,
+              .pu_bcg$Z_sig, .pu_bcg$Z_bias))
+  BENCH[["PUNIFORM-BCG-OR"]] <- .pu_bcg
+
+  # --- Normand 1999 MD (DL) ---
+  .norm_md_pu <- escalc("MD", m1i=m1i, sd1i=sd1i, n1i=n1i,
+                         m2i=m2i, sd2i=sd2i, n2i=n2i, data=dat.normand1999)
+  .res_norm_pu <- rma(yi, vi, data=.norm_md_pu, method="DL")
+
+  # --- PCURVE-NORMAND-MD: Normand 1999 MD (DL, k=9) ---
+  cat("\n## PCURVE-NORMAND-MD: p-curve (Normand 1999 MD, DL)\n")
+  .pc_norm <- .js_pcurve(.norm_md_pu$yi, .norm_md_pu$vi)
+  cat(sprintf("   k_sig=%d  rightSkewZ=%.8f  rightSkewP=%.8f  flatnessZ=%.8f  flatnessP=%.8f\n",
+              .pc_norm$k, .pc_norm$rightSkewZ, .pc_norm$rightSkewP,
+              .pc_norm$flatnessZ, .pc_norm$flatnessP))
+  BENCH[["PCURVE-NORMAND-MD"]] <- .pc_norm
+
+  # --- PUNIFORM-NORMAND-MD: Normand 1999 MD (DL, k=9) ---
+  cat("\n## PUNIFORM-NORMAND-MD: p-uniform (Normand 1999 MD, DL)\n")
+  .pu_norm <- .js_puniform(.norm_md_pu$yi, .norm_md_pu$vi, as.numeric(coef(.res_norm_pu)))
+  cat(sprintf("   k_sig=%d  estimate=%.8f  ciLow=%.8f  ciHigh=%.8f  Z_sig=%.8f  Z_bias=%.8f\n",
+              .pu_norm$k, .pu_norm$estimate, .pu_norm$ciLow, .pu_norm$ciHigh,
+              .pu_norm$Z_sig, .pu_norm$Z_bias))
+  BENCH[["PUNIFORM-NORMAND-MD"]] <- .pu_norm
+}
+
+# =================================================================
 # Write structured JSON reference for diff_benchmarks.mjs
 # Run: Rscript generate.R   then commit benchmark_reference.json
 # =================================================================

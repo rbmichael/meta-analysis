@@ -26,6 +26,8 @@ import {
   CUMULATIVE_BENCHMARKS,
   HC_BENCHMARKS,
   WAAP_BENCHMARKS,
+  PCURVE_BENCHMARKS,
+  PUNIFORM_BENCHMARKS,
 } from './js/benchmarks.js';
 
 const ref = JSON.parse(readFileSync('./benchmark_reference.json', 'utf8'));
@@ -605,6 +607,86 @@ for (const bm of PERM_BENCHMARKS) {
     chk(label, w.wlsEstimate, ex.wlsEstimate, 'default');
     chk(label, w.estimate,    ex.estimate,    'default');
     chk(label, w.se,          ex.se,          'default');
+  }
+}
+
+// ---- PCURVE_BENCHMARKS ----
+// Runs pCurve() on each dataset and compares against R formula cross-check.
+// Tolerance: ±0.005 for all fields (Z and p values are deterministic).
+{
+  const { compute: _computePC, meta: _metaPC, pCurve: _pCurve } = await import('./js/analysis.js');
+
+  for (const bm of PCURVE_BENCHMARKS) {
+    if (!bm.rBlock) continue;
+    const r = chkBlock(bm.rBlock);
+    if (!r) continue;
+    const label = `[${bm.rBlock}] ${bm.name}`;
+    const ex = bm.expected;
+
+    const studies = bm.data.map(d => {
+      if (d.yi !== undefined && d.vi !== undefined) return { ...d };
+      const s = _computePC(d, bm.type);
+      return { ...d, yi: s.yi, vi: s.vi, se: s.se };
+    });
+
+    const pc = _pCurve(studies);
+
+    if (r.k !== undefined && pc.k !== ex.k) {
+      console.log(`MISMATCH  ${label}  k: R=${r.k}  js=${pc.k}`);
+      failures++;
+    }
+    chk(label, r.rightSkewZ, ex.rightSkewZ, 'default');
+    chk(label, r.rightSkewP, ex.rightSkewP, 'default');
+    chk(label, r.flatnessZ,  ex.flatnessZ,  'default');
+    chk(label, r.flatnessP,  ex.flatnessP,  'default');
+    // Cross-check JS result vs expected
+    chk(label, pc.rightSkewZ, ex.rightSkewZ, 'default');
+    chk(label, pc.rightSkewP, ex.rightSkewP, 'default');
+    chk(label, pc.flatnessZ,  ex.flatnessZ,  'default');
+    chk(label, pc.flatnessP,  ex.flatnessP,  'default');
+  }
+}
+
+// ---- PUNIFORM_BENCHMARKS ----
+// Runs pUniform() on each dataset and compares against R formula cross-check.
+{
+  const { compute: _computePU, meta: _metaPU, pUniform: _pUniform } = await import('./js/analysis.js');
+
+  for (const bm of PUNIFORM_BENCHMARKS) {
+    if (!bm.rBlock) continue;
+    const r = chkBlock(bm.rBlock);
+    if (!r) continue;
+    const label = `[${bm.rBlock}] ${bm.name}`;
+    const ex = bm.expected;
+
+    const studies = bm.data.map(d => {
+      if (d.yi !== undefined && d.vi !== undefined) return { ...d };
+      const s = _computePU(d, bm.type);
+      return { ...d, yi: s.yi, vi: s.vi, se: s.se };
+    });
+
+    const m = _metaPU(studies, bm.tauMethod);
+    const pu = _pUniform(studies, m);
+
+    if (r.k !== undefined && pu.k !== ex.k) {
+      console.log(`MISMATCH  ${label}  k: R=${r.k}  js=${pu.k}`);
+      failures++;
+    }
+    chk(label, r.estimate, ex.estimate, 'default');
+    chk(label, r.ciLow,    ex.ciLow,    'default');
+    chk(label, r.ciHigh,   ex.ciHigh,   'default');
+    chk(label, r.Z_sig,    ex.Z_sig,    'default');
+    chk(label, r.p_sig,    ex.p_sig,    'default');
+    chk(label, r.Z_bias,   ex.Z_bias,   'default');
+    chk(label, r.p_bias,   ex.p_bias,   'default');
+    // Cross-check JS result vs expected
+    chk(label, pu.estimate, ex.estimate, 'default');
+    chk(label, pu.ciLow,    ex.ciLow,    'default');
+    chk(label, pu.ciHigh,   ex.ciHigh,   'default');
+    chk(label, pu.Z_sig,    ex.Z_sig,    'default');
+    chk(label, pu.p_sig,    ex.p_sig,    'default');
+    chk(label, pu.Z_bias,   ex.Z_bias,   'default');
+    chk(label, pu.p_bias,   ex.p_bias,   'default');
   }
 }
 

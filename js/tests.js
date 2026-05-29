@@ -2,7 +2,7 @@ import { round, transformEffect, chiSquareCDF, chiSquareQuantile, parseCounts, b
 import { validateStudy, effectProfiles } from "./profiles.js";
 import { MIN_VAR } from "./constants.js";
 import { msgMinVarClamp } from "./ui-warnings.js";
-import { BENCHMARKS, PUB_BIAS_BENCHMARKS, INFLUENCE_BENCHMARKS, META_REGRESSION_BENCHMARKS, VH_BENCHMARKS, MH_BENCHMARKS, CLUSTER_BENCHMARKS, RVE_BENCHMARKS, RVE_MOM_BENCHMARKS, THREE_LEVEL_BENCHMARKS, LS_BENCHMARKS, CONTRAST_BENCHMARKS, INTERACTION_BENCHMARKS, HALFNORM_BENCHMARKS, POWER_BENCHMARKS, NEGEXP_BENCHMARKS, BETA_BENCHMARKS, PERM_BENCHMARKS, TRIMFILL_BENCHMARKS, CUMULATIVE_BENCHMARKS, HC_BENCHMARKS, WAAP_BENCHMARKS } from "./benchmarks.js";
+import { BENCHMARKS, PUB_BIAS_BENCHMARKS, INFLUENCE_BENCHMARKS, META_REGRESSION_BENCHMARKS, VH_BENCHMARKS, MH_BENCHMARKS, CLUSTER_BENCHMARKS, RVE_BENCHMARKS, RVE_MOM_BENCHMARKS, THREE_LEVEL_BENCHMARKS, LS_BENCHMARKS, CONTRAST_BENCHMARKS, INTERACTION_BENCHMARKS, HALFNORM_BENCHMARKS, POWER_BENCHMARKS, NEGEXP_BENCHMARKS, BETA_BENCHMARKS, PERM_BENCHMARKS, TRIMFILL_BENCHMARKS, CUMULATIVE_BENCHMARKS, HC_BENCHMARKS, WAAP_BENCHMARKS, PCURVE_BENCHMARKS, PUNIFORM_BENCHMARKS } from "./benchmarks.js";
 import { permTestSync, permPval } from "./perm.js";
 import { compute, meta, metaMH, metaPeto, robustMeta, sandwichVar, robustWlsResult, metaRegression, testContrast, tau2_HS, tau2_HE, tau2_ML, tau2_REML, tau2_SJ, beggTest, eggerTest, fatPetTest, petPeeseTest, failSafeN, tesTest, heterogeneityCIs, cumulativeMeta, influenceDiagnostics, harbordTest, petersTest, deeksTest, rueckerTest, leaveOneOut, baujat, blupMeta, pCurve, pUniform, estimatorComparison, subgroupAnalysis, logLik, bfgs, selIntervalProbs, selIntervalIdx, selectionLogLik, SEL_CUTS_ONE_SIDED, SEL_CUTS_TWO_SIDED, veveaHedges, SELECTION_PRESETS, halfNormalSelModel, powerSelModel, negexpSelModel, betaSelModel, profileLikTau2, profileLikCI, bayesMeta, priorSensitivity, rvePooled, meta3level, lsModel, adjustPvals, henmiCopas, waapWls, clES, vcalc, mvMeta, validStudies } from "./analysis.js";
 import { trimFill } from "./trimfill.js";
@@ -7992,6 +7992,80 @@ export function runTests() {
   });
 
   console.log(waapBmPass ? "\n✅ ALL WAAP BENCHMARK TESTS PASSED" : "\n❌ SOME WAAP BENCHMARK TESTS FAILED");
+}
+
+// ===== P-CURVE BENCHMARK TESTS =====
+// Verifies pCurve() right-skew and flatness statistics against R formula
+// cross-checks (generate.R blocks PCURVE-*). Tolerance: 0.001 (deterministic).
+{
+  console.log("\n===== P-CURVE BENCHMARK TESTS =====\n");
+  let pcBmPass = true;
+  const pcBmChk = (label, got, exp, tol = 0.001) => {
+    if (!isFinite(got) || !isFinite(exp) || Math.abs(got - exp) > tol) {
+      console.error(`  FAIL ${label}: got ${got}, exp ${exp}`);
+      pcBmPass = false;
+    } else console.log(`  ok  ${label}`);
+  };
+
+  PCURVE_BENCHMARKS.forEach(bm => {
+    console.log(`--- ${bm.name} ---`);
+    const studies = bm.data.map(d => {
+      if (d.yi !== undefined && d.vi !== undefined) return { ...d };
+      const s = compute(d, bm.type);
+      return { ...d, yi: s.yi, vi: s.vi, se: s.se };
+    });
+    const pc = pCurve(studies);
+    const ex = bm.expected;
+    if (pc.k !== ex.k) {
+      console.error(`  FAIL k: got ${pc.k}, exp ${ex.k}`);
+      pcBmPass = false;
+    } else console.log(`  ok  k = ${ex.k}`);
+    pcBmChk("rightSkewZ", pc.rightSkewZ, ex.rightSkewZ);
+    pcBmChk("rightSkewP", pc.rightSkewP, ex.rightSkewP);
+    pcBmChk("flatnessZ",  pc.flatnessZ,  ex.flatnessZ);
+    pcBmChk("flatnessP",  pc.flatnessP,  ex.flatnessP);
+  });
+
+  console.log(pcBmPass ? "\n✅ ALL P-CURVE BENCHMARK TESTS PASSED" : "\n❌ SOME P-CURVE BENCHMARK TESTS FAILED");
+}
+
+// ===== P-UNIFORM BENCHMARK TESTS =====
+// Verifies pUniform() estimate, CI, and test statistics against R formula
+// cross-checks (generate.R blocks PUNIFORM-*). Tolerance: 0.001.
+{
+  console.log("\n===== P-UNIFORM BENCHMARK TESTS =====\n");
+  let puBmPass = true;
+  const puBmChk = (label, got, exp, tol = 0.001) => {
+    if (!isFinite(got) || !isFinite(exp) || Math.abs(got - exp) > tol) {
+      console.error(`  FAIL ${label}: got ${got}, exp ${exp}`);
+      puBmPass = false;
+    } else console.log(`  ok  ${label}`);
+  };
+
+  PUNIFORM_BENCHMARKS.forEach(bm => {
+    console.log(`--- ${bm.name} ---`);
+    const studies = bm.data.map(d => {
+      if (d.yi !== undefined && d.vi !== undefined) return { ...d };
+      const s = compute(d, bm.type);
+      return { ...d, yi: s.yi, vi: s.vi, se: s.se };
+    });
+    const m = meta(studies, bm.tauMethod);
+    const pu = pUniform(studies, m);
+    const ex = bm.expected;
+    if (pu.k !== ex.k) {
+      console.error(`  FAIL k: got ${pu.k}, exp ${ex.k}`);
+      puBmPass = false;
+    } else console.log(`  ok  k = ${ex.k}`);
+    puBmChk("estimate", pu.estimate, ex.estimate, 0.005);
+    puBmChk("ciLow",    pu.ciLow,    ex.ciLow,    0.005);
+    puBmChk("ciHigh",   pu.ciHigh,   ex.ciHigh,   0.005);
+    puBmChk("Z_sig",    pu.Z_sig,    ex.Z_sig,    0.001);
+    puBmChk("p_sig",    pu.p_sig,    ex.p_sig,    0.001);
+    puBmChk("Z_bias",   pu.Z_bias,   ex.Z_bias,   0.001);
+    puBmChk("p_bias",   pu.p_bias,   ex.p_bias,   0.001);
+  });
+
+  console.log(puBmPass ? "\n✅ ALL P-UNIFORM BENCHMARK TESTS PASSED" : "\n❌ SOME P-UNIFORM BENCHMARK TESTS FAILED");
 }
 
 // ===== CONVERGENCE-PLUMBING TESTS =====

@@ -2536,6 +2536,54 @@ WAAP = WLS on all studies = **0.1436**, se = **0.1047**, z = 1.371, p = 0.170, C
 
 ---
 
+## P-curve and p-uniform benchmarks
+
+### PCURVE-BCG-OR — BCG log-OR (dat.bcg, DL, k=13, k_sig=8)
+
+**Method:** Simonsohn, Nelson & Simmons (2014) continuous p-curve test. Significant studies (two-tailed p < .05) have their p-values transformed to pp0ᵢ = pᵢ/0.05 (uniform under H₀: no effect) and pp33ᵢ (uniform under H₃₃: 33% power, using noncentrality λ₃₃ ≈ 0.8406 found by bisection). Right-skew Z = (mean(pp0) − 0.5)√(12k), flatness Z = (mean(pp33) − 0.5)√(12k).
+
+**R verification note:** `metafor::selmodel(type="pcurve")` implements Kim & Viechtbauer (2022), a parametric selection model — not equivalent to this distributional test. The generate.R block `PCURVE-BCG-OR` implements the JS formula directly in R for a clean round-trip.
+
+**R (generate.R block PCURVE-BCG-OR):**
+- k_sig = 8, rightSkewZ = −2.77934871, rightSkewP = 0.00272340
+- flatnessZ = −2.25930807, flatnessP = 0.98806789
+
+**Stored in `benchmarks.js`:** `PCURVE_BENCHMARKS[0]`
+
+### PCURVE-NORMAND-MD — Normand 1999 MD (dat.normand1999, DL, k=9, k_sig=4)
+
+**R (generate.R block PCURVE-NORMAND-MD):**
+- k_sig = 4, rightSkewZ = −3.40367025, rightSkewP = 0.00033243
+- flatnessZ = −3.15325365, flatnessP = 0.99919269
+
+**Stored in `benchmarks.js`:** `PCURVE_BENCHMARKS[1]`
+
+### PUNIFORM-BCG-OR — BCG log-OR (dat.bcg, DL, k=13, k_sig=8)
+
+**Method:** van Assen, van Aert & Wicherts (2015) p-uniform conditional-uniformity estimator. Significant studies have folded z-statistics zᵢ = |yᵢ/SEᵢ|. The conditional quantile qᵢ(δ) = (1 − Φ(zᵢ − δ/SEᵢ)) / max(1 − Φ(1.96 − δ/SEᵢ), 1e-10). The estimate δ* satisfies Σqᵢ(δ*) = k/2 (bisection on [−SEARCH_HI, +SEARCH_HI] where SEARCH_HI = max(10, 2·max|yᵢ|)). Returns |δ| (folded absolute-value scale).
+
+Note: Z_sig = (Σqᵢ(0) − k/2) / √(k/12) is mathematically identical to the p-curve right-skew Z (since qᵢ(0) = pp0ᵢ).
+
+**R verification note:** `metafor::selmodel(type="puni")` implements van Aert & van Assen (2023), a different model. The generate.R block `PUNIFORM-BCG-OR` implements the JS formula directly in R.
+
+**R (generate.R block PUNIFORM-BCG-OR):**
+- k_sig = 8, estimate = 1.02651826, CI = [0.35293979, 1.42891878]
+- Z_sig = −2.77934871, p_sig = 0.00272340
+- Z_bias = −3.03168535, p_bias = 0.99878638
+
+**Stored in `benchmarks.js`:** `PUNIFORM_BENCHMARKS[0]`
+
+### PUNIFORM-NORMAND-MD — Normand 1999 MD (dat.normand1999, DL, k=9, k_sig=4)
+
+**R (generate.R block PUNIFORM-NORMAND-MD):**
+- k_sig = 4, estimate = 37.19929330, CI = [11.09426612, 60.80492792]
+- Z_sig = −3.40367025, p_sig = 0.00033243
+- Z_bias = −3.45909170, p_bias = 0.99972966
+
+**Stored in `benchmarks.js`:** `PUNIFORM_BENCHMARKS[1]`
+
+---
+
 ## EB benchmark
 
 ### EB-1 — BCG Vaccine log-RR (GENERIC, k=13)

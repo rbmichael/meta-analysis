@@ -4747,3 +4747,78 @@ export const WAAP_BENCHMARKS = [
     citation: "Normand (1999) Stat Med 18:321. One study (Montreal-Transfer) has adequate power vs |wlsEst|. Verified via generate.R block WAAP-NORMAND.",
   },
 ];
+
+// =============================================================================
+// PCURVE_BENCHMARKS — p-curve distributional test (Simonsohn, Nelson & Simmons
+// 2014, JPSP). Tests right-skew and flatness statistics against the JS formula
+// implemented directly in R (generate.R blocks PCURVE-*).
+//
+// Note: metafor::selmodel(type="pcurve") is a different model (Kim &
+// Viechtbauer 2022) — NOT equivalent to this distributional test.
+// =============================================================================
+export const PCURVE_BENCHMARKS = [
+  {
+    rBlock: "PCURVE-BCG-OR",
+    name: "BCG log-OR p-curve (DL, k=13, k_sig=8)",
+    type: "OR", tauMethod: "DL",
+    data: _BCG_2x2,
+    expected: {
+      k: 8,
+      rightSkewZ: -2.77934871, rightSkewP: 0.00272340,
+      flatnessZ:  -2.25930807, flatnessP:  0.98806789,
+    },
+    citation: "Colditz et al. (1994) dat.bcg log-OR. JS formula verified via generate.R block PCURVE-BCG-OR.",
+  },
+  {
+    rBlock: "PCURVE-NORMAND-MD",
+    name: "Normand 1999 MD p-curve (DL, k=9, k_sig=4)",
+    type: "MD", tauMethod: "DL",
+    data: _NORMAND_MD,
+    expected: {
+      k: 4,
+      rightSkewZ: -3.40367025, rightSkewP: 0.00033243,
+      flatnessZ:  -3.15325365, flatnessP:  0.99919269,
+    },
+    citation: "Normand (1999) Stat Med 18:321 dat.normand1999. JS formula verified via generate.R block PCURVE-NORMAND-MD.",
+  },
+];
+
+// =============================================================================
+// PUNIFORM_BENCHMARKS — p-uniform bias-corrected effect estimator (van Assen,
+// van Aert & Wicherts 2015). Tests estimate, CI, and significance / bias-test
+// statistics against the JS formula implemented directly in R (generate.R
+// blocks PUNIFORM-*).
+//
+// Note: estimate = |delta| (uses folded |z| = |yi/se|); Z_sig coincides with
+// rightSkewZ from p-curve (both equal (sumQ(0) − k/2) / sqrt(k/12)).
+// Note: metafor::selmodel(type="puni") is a different model (van Aert &
+// van Assen 2023) — NOT equivalent to this conditional-uniformity estimator.
+// =============================================================================
+export const PUNIFORM_BENCHMARKS = [
+  {
+    rBlock: "PUNIFORM-BCG-OR",
+    name: "BCG log-OR p-uniform (DL, k=13, k_sig=8)",
+    type: "OR", tauMethod: "DL",
+    data: _BCG_2x2,
+    expected: {
+      k: 8,
+      estimate:  1.02651826, ciLow: 0.35293979, ciHigh: 1.42891878,
+      Z_sig:    -2.77934871, p_sig: 0.00272340,
+      Z_bias:   -3.03168535, p_bias: 0.99878638,
+    },
+    citation: "Colditz et al. (1994) dat.bcg log-OR. JS formula verified via generate.R block PUNIFORM-BCG-OR.",
+  },
+  {
+    rBlock: "PUNIFORM-NORMAND-MD",
+    name: "Normand 1999 MD p-uniform (DL, k=9, k_sig=4)",
+    type: "MD", tauMethod: "DL",
+    data: _NORMAND_MD,
+    expected: {
+      k: 4,
+      estimate:  37.19929330, ciLow: 11.09426612, ciHigh: 60.80492792,
+      Z_sig:    -3.40367025,  p_sig:  0.00033243,
+      Z_bias:   -3.45909170,  p_bias: 0.99972966,
+    },
+    citation: "Normand (1999) Stat Med 18:321 dat.normand1999. JS formula verified via generate.R block PUNIFORM-NORMAND-MD.",
+  },
+];
