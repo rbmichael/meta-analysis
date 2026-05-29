@@ -124,6 +124,7 @@ function regularizedBeta(x, a, b) {
   if (x < 0 || x > 1) return NaN;
   if (x === 0) return 0;
   if (x === 1) return 1;
+  if (a <= 0 || b <= 0) return NaN;
 
   // Use symmetry to keep x in the range that converges faster
   if (x > (a + 1) / (a + b + 2)) return 1 - regularizedBeta(1 - x, b, a);
@@ -174,11 +175,17 @@ function regularizedBeta(x, a, b) {
 // Accuracy: ~14 significant digits (limited by regularizedBeta, EPS = 1e-14).
 //   As df → ∞ the result converges to normalCDF(x).
 // Non-finite x or df, or df ≤ 0: returns NaN.
+// Overflow guard: |x| > ~1e154 makes x² = Infinity; beta_x clamps to 0, giving
+//   p_upper → 0, which would make the two-tailed p = 0 exactly. Floor at 1e-300
+//   so p-values never underflow to exact zero (prevents log(0) in p-curve/p-uniform).
 export function tCDF(x, df) {
   if (!isFinite(x) || !isFinite(df) || df <= 0) return NaN;
 
-  const t2  = x * x;
-  const p_upper = regularizedBeta(df / (df + t2), df / 2, 0.5) / 2;
+  const t2 = x * x;  // may overflow to Infinity when |x| is large but finite
+  // Clamp beta argument: df/(df+t2) → 0 when t2=Infinity; clamp avoids Inf/Inf = NaN
+  const beta_x = Math.min(Math.max(df / (df + t2), 0), 1);
+  // Floor at 1e-300 so the tail never underflows to exact 0
+  const p_upper = Math.max(regularizedBeta(beta_x, df / 2, 0.5) / 2, 1e-300);
 
   return x >= 0 ? 1 - p_upper : p_upper;
 }
@@ -209,11 +216,29 @@ export function chiSquareQuantile(p, df) {
 // CDF of the F distribution with d1 and d2 degrees of freedom.
 // Uses the regularised incomplete beta: P(F_{d1,d2} ≤ f) = I_{x}(d1/2, d2/2)
 // where x = d1·f / (d1·f + d2).
+// Overflow guard: d1·f can exceed MAX_VALUE (e.g. d1=1e200, f=1e200 → Infinity),
+//   making x = Inf/(Inf+d2) = NaN. Detect early and return 1.
 export function fCDF(f, d1, d2) {
   if (!isFinite(f) || f <= 0) return 0;
   if (!isFinite(d1) || d1 <= 0 || !isFinite(d2) || d2 <= 0) return NaN;
-  const x = (d1 * f) / (d1 * f + d2);
+  const num = d1 * f;
+  if (!isFinite(num)) return 1;  // d1·f overflow → F→∞ → CDF→1
+  const x = Math.min(Math.max(num / (num + d2), 0), 1);  // clamp for floating-point safety
   return regularizedBeta(x, d1 / 2, d2 / 2);
+}
+
+// Upper-tail probability P(F_{d1,d2} > f) computed via the complementary form
+// of the regularised incomplete beta — avoids catastrophic cancellation in
+// 1 − fCDF when f is large (1−fCDF rounds to 0 above ~1/Number.EPSILON).
+// Floored at 1e-300 so downstream log(p) calls never receive −Infinity.
+export function fTailP(f, d1, d2) {
+  if (!isFinite(f) || f <= 0) return 1;
+  if (!isFinite(d1) || d1 <= 0 || !isFinite(d2) || d2 <= 0) return NaN;
+  const num = d1 * f;
+  if (!isFinite(num)) return 1e-300;  // d1·f overflow → enormous F → floor
+  // x = d2/(d1·f + d2) = 1 − x_cdf; no cancellation even when num >> d2
+  const x = Math.max(d2 / (num + d2), 0);
+  return Math.max(regularizedBeta(x, d2 / 2, d1 / 2), 1e-300);
 }
 
 // Regularized lower incomplete gamma function P(a, x)

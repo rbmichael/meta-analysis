@@ -163,7 +163,7 @@ export function robustWlsResult(X, w, y, beta, clusterIds) {
   const robustZ  = beta.map((b, j) => b / robustSE[j]);
   const robustP  = robustZ.map(z =>
     useT
-      ? 2 * (1 - tCDF(Math.abs(z), rob.df))
+      ? 2 * tCDF(-Math.abs(z), rob.df)
       : 2 * (1 - normalCDF(Math.abs(z)))
   );
   const robustCi = beta.map((b, j) => [b - crit * robustSE[j], b + crit * robustSE[j]]);
@@ -210,7 +210,7 @@ export function robustMeta(studies, method, ciMethod, alpha = 0.05) {
   const crit  = useT ? tCritical(rob.df, alpha) : normalQuantile(1 - alpha / 2);
   const robStat = m.RE / robSE;
   const robPval = useT
-    ? 2 * (1 - tCDF(Math.abs(robStat), rob.df))
+    ? 2 * tCDF(-Math.abs(robStat), rob.df)
     : 2 * (1 - normalCDF(Math.abs(robStat)));
 
   return {

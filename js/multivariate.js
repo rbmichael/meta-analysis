@@ -7,7 +7,7 @@
 // =============================================================================
 
 import { MIN_VAR } from "./constants.js";
-import { normalCDF, normalQuantile, chiSquareCDF, tCDF, tCritical, fCDF } from "./utils.js";
+import { normalCDF, normalQuantile, chiSquareCDF, tCDF, tCritical, fCDF, fTailP } from "./utils.js";
 import { cholFactor, cholLogDet, cholSolveVec, cholInverse, matInverse, logDet, diagSE } from "./linalg.js";
 // bfgs is imported from selection.js to avoid a circular dep through analysis.js.
 // Safe: bfgs is only called inside mvMeta (a function body), never at module init.
@@ -460,7 +460,7 @@ export function mvMeta(rows, V, opts = {}) {
   if (ciMethod === "t" && df_residual > 0) {
     crit  = tCritical(df_residual, alpha);
     ci    = beta.map((b, j) => [b - crit * se[j], b + crit * se[j]]);
-    pval  = z.map(zi => isFinite(zi) ? 2 * (1 - tCDF(Math.abs(zi), df_residual)) : NaN);
+    pval  = z.map(zi => isFinite(zi) ? 2 * tCDF(-Math.abs(zi), df_residual) : NaN);
     dist  = "t";
   } else {
     crit  = normalQuantile(1 - alpha / 2);
@@ -484,7 +484,7 @@ export function mvMeta(rows, V, opts = {}) {
   // F-test equivalent (used when ciMethod === "t"): F = QM/df_QM ~ F(df_QM, df_residual)
   const Fstat = df_QM > 0 ? QM / df_QM : NaN;
   const pF    = (ciMethod === "t" && df_residual > 0 && isFinite(Fstat))
-                ? 1 - fCDF(Fstat, df_QM, df_residual) : NaN;
+                ? fTailP(Fstat, df_QM, df_residual) : NaN;
   const residOmega  = Math.max(0, yOy - QM);   // used only for logLik below
 
   // QE — Cochran residual heterogeneity test, evaluated at Ψ = 0 (V only).

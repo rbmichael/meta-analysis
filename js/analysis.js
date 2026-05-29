@@ -296,7 +296,7 @@ export function meta(studies, method="DL", ciMethod="normal", alpha=0.05, tau2In
 	  crit = tCritical(df, alpha);
 	  stat = RE / seRE;
 	  dist = "t";
-	  pval = 2 * (1 - tCDF(Math.abs(stat), df));
+	  pval = 2 * tCDF(-Math.abs(stat), df);
 
 	} else if (ciMethod === "t" && k > 1) {
 	  // --- t-distribution (no variance adjustment) ---
@@ -305,7 +305,7 @@ export function meta(studies, method="DL", ciMethod="normal", alpha=0.05, tau2In
 	  crit = tCritical(df, alpha);
 	  stat = RE / seRE;
 	  dist = "t";
-	  pval = 2 * (1 - tCDF(Math.abs(stat), df));
+	  pval = 2 * tCDF(-Math.abs(stat), df);
 
 	} else {
 	  // --- Normal (Wald) ---

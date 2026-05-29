@@ -9,7 +9,7 @@
 import { meta, robustWlsResult, logLik, validStudies, resolveClusterIds, groupByCluster } from "./analysis.js";
 import { tau2Core_REML, tau2Core_ML, tau2Core_PM, tau2Core_DL, tau2Core_HS, tau2Core_HE, tau2Core_SJ } from "./tau2.js";
 import { wls, wlsCholesky, matInverse, logDet, numericalHessian, diagSE } from "./linalg.js";
-import { normalCDF, normalQuantile, tCDF, tCritical, fCDF, chiSquareCDF, chiSquareQuantile, median, sum, bisect } from "./utils.js";
+import { normalCDF, normalQuantile, tCDF, tCritical, fCDF, fTailP, chiSquareCDF, chiSquareQuantile, median, sum, bisect } from "./utils.js";
 import { MIN_VAR, REML_TOL, BISECTION_ITERS } from "./constants.js";
 import { bfgs } from "./selection.js";
 
@@ -562,7 +562,7 @@ export function metaRegression(studies, moderators = [], method = "REML", ciMeth
     crit  = tCritical(QEdf, alpha);
     dist  = "t";
     zval  = beta.map((b, j) => b / se[j]);
-    pval  = zval.map(t => 2 * (1 - tCDF(Math.abs(t), QEdf)));
+    pval  = zval.map(t => 2 * tCDF(-Math.abs(t), QEdf));
     ci    = beta.map((b, j) => [b - crit * se[j], b + crit * se[j]]);
   } else {
     se    = diagSE(vcov);
@@ -587,7 +587,7 @@ export function metaRegression(studies, moderators = [], method = "REML", ciMeth
         acc + bi * invMod[r].reduce((iacc, v, c) => iacc + v * betaMod[c], 0), 0);
       if (useKH) {
         QM  = QMchi / (s2 * QMdf);   // F-statistic
-        QMp = 1 - fCDF(QM, QMdf, QEdf);
+        QMp = fTailP(QM, QMdf, QEdf);
       } else {
         QM  = QMchi;                   // chi-sq statistic
         QMp = 1 - chiSquareCDF(QM, QMdf);
@@ -620,7 +620,7 @@ export function metaRegression(studies, moderators = [], method = "REML", ciMeth
     let modQM, modQMp;
     if (useKH) {
       modQM  = QMchi / (s2 * df);
-      modQMp = 1 - fCDF(modQM, df, QEdf);
+      modQMp = fTailP(modQM, df, QEdf);
     } else {
       modQM  = QMchi;
       modQMp = 1 - chiSquareCDF(modQM, df);
@@ -818,7 +818,7 @@ export function testContrast(reg, L) {
   const stat   = se > 0 ? est / se : NaN;
   const p      = !isFinite(stat) ? NaN
     : dist === "t"
-    ? 2 * (1 - tCDF(Math.abs(stat), QEdf))
+    ? 2 * tCDF(-Math.abs(stat), QEdf)
     : 2 * (1 - normalCDF(Math.abs(stat)));
   const ci = [est - crit * se, est + crit * se];
   return { est, se, stat, p, ci };
@@ -1280,7 +1280,7 @@ function _rveHIERMoM(clusterMap, m, k, p, moderators, xVec, alpha) {
     const est_i = betaR[i];
     const se_i  = Math.sqrt(Math.max(0, scale * Vhat[i][i]));
     const t_i   = se_i > 0 ? est_i / se_i : NaN;
-    const p_i   = isFinite(t_i) ? 2 * (1 - tCDF(Math.abs(t_i), df)) : NaN;
+    const p_i   = isFinite(t_i) ? 2 * tCDF(-Math.abs(t_i), df) : NaN;
     return { name, est: est_i, se: se_i, ci: [est_i - crit * se_i, est_i + crit * se_i], t: t_i, p: p_i };
   });
 
@@ -1480,7 +1480,7 @@ export function rvePooled(studies, opts = {}) {
     const est_i = beta[i];
     const se_i  = Math.sqrt(Math.max(0, scale * Vhat[i][i]));
     const t_i   = se_i > 0 ? est_i / se_i : NaN;
-    const p_i   = isFinite(t_i) ? 2 * (1 - tCDF(Math.abs(t_i), df)) : NaN;
+    const p_i   = isFinite(t_i) ? 2 * tCDF(-Math.abs(t_i), df) : NaN;
     return { name, est: est_i, se: se_i, ci: [est_i - crit * se_i, est_i + crit * se_i], t: t_i, p: p_i };
   });
 

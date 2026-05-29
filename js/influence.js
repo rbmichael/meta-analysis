@@ -492,7 +492,7 @@ export function leaveOneOut(studies, method = "DL", ciMethod = "normal", precomp
     const ciHigh_loo = RE_loo + crit_loo * seRE_loo;
     const stat_loo   = RE_loo / seRE_loo;
     const pval_loo   = useT
-      ? 2 * (1 - tCDF(Math.abs(stat_loo), df_loo))
+      ? 2 * tCDF(-Math.abs(stat_loo), df_loo)
       : 2 * (1 - normalCDF(Math.abs(stat_loo)));
 
     return {

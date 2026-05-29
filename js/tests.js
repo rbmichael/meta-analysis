@@ -1,4 +1,4 @@
-import { round, transformEffect, chiSquareCDF, chiSquareQuantile, parseCounts, bivariateNormalCDF, normalQuantile, tCritical, fCDF, normalCDF, tCDF } from "./utils.js";
+import { round, transformEffect, chiSquareCDF, chiSquareQuantile, parseCounts, bivariateNormalCDF, normalQuantile, tCritical, fCDF, fTailP, normalCDF, tCDF } from "./utils.js";
 import { validateStudy, effectProfiles } from "./profiles.js";
 import { MIN_VAR } from "./constants.js";
 import { msgMinVarClamp } from "./ui-warnings.js";
@@ -3830,6 +3830,35 @@ export function runTests() {
   nanCheck("fCDF(1,1,0) = NaN (d2=0)",         fCDF(1, 1, 0));
   nanCheck("fCDF(1,Inf,1) = NaN (d1=Infinity)", fCDF(1, Infinity, 1));
 
+  // A.7 overflow guard: d1·f exceeding MAX_VALUE must not produce NaN (was NaN before fix)
+  {
+    const big = fCDF(1e200, 1e200, 5);
+    const ok = isFinite(big) && big >= 1 - 1e-5;
+    if (!ok) { console.error(`  FAIL fCDF(1e200,1e200,5) overflow guard: got ${big}`); fcdfPass = false; }
+    else console.log("  ok  fCDF(1e200,1e200,5) ≈ 1 (overflow guard, not NaN)");
+  }
+  // A.7 fTailP: cancellation-free upper tail — must be ≥ 1e-300 for extreme F
+  {
+    const tailP = fTailP(1e200, 5, 5);
+    const ok = isFinite(tailP) && tailP >= 1e-300;
+    if (!ok) { console.error(`  FAIL fTailP(1e200,5,5) floor: got ${tailP}`); fcdfPass = false; }
+    else console.log("  ok  fTailP(1e200,5,5) ≥ 1e-300 (p-value floor)");
+  }
+  // fTailP overflow guard: d1·f = Infinity must return floor, not NaN
+  {
+    const tailP = fTailP(1e200, 1e200, 5);
+    const ok = isFinite(tailP) && tailP >= 1e-300;
+    if (!ok) { console.error(`  FAIL fTailP(1e200,1e200,5) overflow: got ${tailP}`); fcdfPass = false; }
+    else console.log("  ok  fTailP(1e200,1e200,5) ≥ 1e-300 (overflow guard)");
+  }
+  // fTailP agrees with 1−fCDF for moderate values
+  {
+    const diff = Math.abs(fTailP(3, 2, 2) - (1 - fCDF(3, 2, 2)));
+    const ok = diff < 1e-12;
+    if (!ok) { console.error(`  FAIL fTailP(3,2,2) ≠ 1-fCDF(3,2,2): diff=${diff}`); fcdfPass = false; }
+    else console.log("  ok  fTailP(3,2,2) = 1−fCDF(3,2,2) (correctness)");
+  }
+
   console.log(fcdfPass ? "\n✅ ALL fCDF TESTS PASSED" : "\n❌ SOME fCDF TESTS FAILED");
 
   // ===== EGGER TEST UNIT TESTS =====
@@ -7646,6 +7675,30 @@ export function runTests() {
   cdfNaN("tCDF(1, −1) = NaN (df<0)", tCDF(1, -1));
   cdfNaN("tCDF(Inf, 5) = NaN",       tCDF(Infinity, 5));
   cdfNaN("tCDF(−Inf, 5) = NaN",      tCDF(-Infinity, 5));
+
+  // A.7 overflow/floor guards: very large finite |t| (t^2->Infinity) must not return NaN.
+  // tCDF(-|t|, df) returns the lower tail directly (no subtraction from 1), so the
+  // floor at 1e-300 on p_upper is accessible without catastrophic cancellation.
+  {
+    const tailP = tCDF(-1e200, 5);
+    const ok = isFinite(tailP) && tailP >= 1e-300;
+    if (!ok) { console.error(`  FAIL tCDF neg tail: tCDF(-1e200,5)=${tailP}`); cdfPass = false; }
+    else console.log("  ok  tCDF(-1e200, df=5) >= 1e-300 (p-value floor)");
+  }
+  // Two-tailed p via cancellation-free formula: 2*tCDF(-|t|, df) >= 1e-300
+  {
+    const p2tail = 2 * tCDF(-1e155, 30);
+    const ok = isFinite(p2tail) && p2tail >= 1e-300;
+    if (!ok) { console.error(`  FAIL two-tailed p floor: 2*tCDF(-1e155,30)=${p2tail}`); cdfPass = false; }
+    else console.log("  ok  2*tCDF(-1e155, df=30) >= 1e-300 (p-value floor)");
+  }
+  // tCDF with overflow t^2 still returns a valid CDF value (not NaN)
+  {
+    const cdfVal = tCDF(1e200, 5);
+    const ok = isFinite(cdfVal) && cdfVal >= 0 && cdfVal <= 1;
+    if (!ok) { console.error(`  FAIL tCDF(1e200,5) out-of-range or NaN: ${cdfVal}`); cdfPass = false; }
+    else console.log("  ok  tCDF(1e200, df=5) is a finite CDF value (overflow guard)");
+  }
 
   console.log(cdfPass ? "\n✅ ALL normalCDF & tCDF TESTS PASSED" : "\n❌ SOME normalCDF & tCDF TESTS FAILED");
 

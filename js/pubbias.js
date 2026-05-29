@@ -46,7 +46,7 @@ export function eggerTest(studies){
   const df = k-2;
   const se = Math.sqrt(rss/df) * Math.sqrt(1/k + (meanX*meanX)/den);
   const t = intercept/se;
-  const p = 2 * (1 - tCDF(Math.abs(t), df));
+  const p = 2 * tCDF(-Math.abs(t), df);
   const result = { intercept, slope, se, t, df, p, interceptSE: se, interceptT: t, interceptP: p };
 
   // Cluster-robust extension: reads study.cluster (set by ui.js)
@@ -155,8 +155,8 @@ function _wlsFinish(beta, vcov, ys, xs, ws, df) {
   const [interceptSE, slopeSE] = diagSE(vcov, s2);
   const interceptT  = beta[0] / interceptSE;
   const slopeT      = beta[1] / slopeSE;
-  const interceptP  = 2 * (1 - tCDF(Math.abs(interceptT), df));
-  const slopeP      = 2 * (1 - tCDF(Math.abs(slopeT),     df));
+  const interceptP  = 2 * tCDF(-Math.abs(interceptT), df);
+  const slopeP      = 2 * tCDF(-Math.abs(slopeT),     df);
   return {
     intercept: beta[0], interceptSE, interceptT, interceptP,
     slope:     beta[1], slopeSE,     slopeT,     slopeP,
