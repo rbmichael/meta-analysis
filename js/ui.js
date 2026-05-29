@@ -3024,6 +3024,9 @@ function _renderPooledPanel(ctx) {
     drawBayesTauPosterior(bayesResult, { theme: appState.plotTheme });
     document.getElementById("bayesGridWarning").style.display =
       bayesResult.grid_truncated ? "" : "none";
+    const elGridExt = document.getElementById("bayesGridExtendedWarning");
+    if (elGridExt)
+      elGridExt.style.display = bayesResult.gridExtended && !bayesResult.grid_truncated ? "" : "none";
     const ciLevel = document.getElementById("ciLevel")?.value ?? "95";
     renderSensitivity(bayesMu0, bayesSigmaMu, bayesSigmaTau, ciLevel);
   } else {

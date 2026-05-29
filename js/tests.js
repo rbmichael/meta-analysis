@@ -5846,6 +5846,33 @@ export function runTests() {
     bayChkTrue("wider prior → smaller BF10", rWide.BF10 < rNarrow.BF10);
   }
 
+  // ---- 22. gridExtended field: false for BCG default priors ----
+  {
+    console.log("--- 22. gridExtended false for BCG default priors ---");
+    const r = bayesMeta(studiesBCG);
+    bayChkTrue("gridExtended is boolean", typeof r.gridExtended === 'boolean');
+    bayChkTrue("tauREML is finite",       isFinite(r.tauREML));
+    bayChkTrue("tauREML >= 0",            r.tauREML >= 0);
+    bayChkTrue("gridExtended === false",  r.gridExtended === false);
+  }
+
+  // ---- 23. gridExtended === true for high-heterogeneity dataset ----
+  {
+    console.log("--- 23. gridExtended true: REML τ̂ > 1.5 ---");
+    // k=2, yi=[-2, 2], vi=[1, 1].
+    // DL: Q=8, k-1=1, C=1, τ²_DL=7, tauDL≈2.65 → tauMax_DL=21.2
+    // REML: seeds from DL≈2.65, score=0 at τ²=7 → tauREML≈2.65 > 1.5
+    // → proactive extension fires (tauREML > 0.5 * TAU_MAX_FLOOR=3)
+    const studiesHighTau = [
+      { yi: -2, vi: 1 },
+      { yi:  2, vi: 1 },
+    ];
+    const r = bayesMeta(studiesHighTau);
+    bayChkTrue("no error",             !r.error);
+    bayChkTrue("tauREML > 1.5",        r.tauREML > 1.5);
+    bayChkTrue("gridExtended === true", r.gridExtended === true);
+  }
+
   console.log(bayPass ? "\n✅ ALL BAYESIAN META-ANALYSIS TESTS PASSED" : "\n❌ SOME BAYESIAN META-ANALYSIS TESTS FAILED");
 
   // =========================================================================

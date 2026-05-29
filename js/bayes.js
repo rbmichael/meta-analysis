@@ -211,7 +211,7 @@ export function bayesMeta(studies, opts = {}) {
   if (sigma_mu  <= 0) return { error: "sigma_mu must be positive." };
   if (sigma_tau <= 0) return { error: "sigma_tau must be positive." };
 
-  // ---- Inline DL τ estimate for grid sizing ----
+  // ---- Inline DL τ estimate for initial grid sizing ----
   const wFE   = studies.map(d => 1 / Math.max(d.vi, MIN_VAR));
   const W     = wFE.reduce((s, w) => s + w, 0);
   const FE    = studies.reduce((s, d, i) => s + d.yi * wFE[i], 0) / W;
@@ -219,6 +219,11 @@ export function bayesMeta(studies, opts = {}) {
   const sumW2 = wFE.reduce((s, w) => s + w * w, 0);
   const C     = W - sumW2 / W;
   const tauDL = Math.sqrt(C > 0 ? Math.max(0, (Q - (k - 1)) / C) : 0);
+
+  // ---- REML τ̂ for pre-quadrature grid extension check (A.6) ----
+  // REML is less downward-biased than DL for small k; use it to detect when the
+  // DL-based initial tauMax undershoots the posterior support.
+  const tauREML = Math.sqrt(Math.max(0, tau2_REML(studies).tau2));
 
   // ---- Compute grid weights for a given tauMax ----
   const computeGrid = (tauMax) => {
@@ -268,7 +273,21 @@ export function bayesMeta(studies, opts = {}) {
   };
 
   // ---- Initial grid ----
-  let tauMax = Math.max(tauDL * 8, 3);
+  // Start with the hard-coded floor of 3 (the "grid_max" in A.6 parlance).
+  // REML τ̂ is then used as a proactive probe: if it exceeds half the initial
+  // range (> 1.5), the posterior likely has substantial mass beyond τ=3, so
+  // we extend before computing any grid weights.
+  // After the REML check, also apply the DL*8 heuristic as a safety floor.
+  const TAU_MAX_FLOOR = 3;
+  let tauMax = TAU_MAX_FLOOR;
+
+  let gridExtended = false;
+  if (tauREML > 0.5 * TAU_MAX_FLOOR) {        // tauREML > 1.5
+    tauMax = Math.max(tauREML * 8, TAU_MAX_FLOOR);
+    gridExtended = true;
+  }
+  tauMax = Math.max(tauMax, tauDL * 8);        // DL-based safety floor
+
   let { tauGrid, condMeans, condVars, logW, dtau } = computeGrid(tauMax);
 
   // ---- Normalise via log-sum-exp ----
@@ -412,6 +431,8 @@ export function bayesMeta(studies, opts = {}) {
     tauGrid, tauWeights,
     muGrid, muDensity,
     grid_truncated,
+    gridExtended,
+    tauREML,
     k,
     BF10, BF01, logBF10,
     convergence: { converged: true, iters: 0, maxIters: 0, reason: null, source: 'bayesMeta_grid' },
