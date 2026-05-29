@@ -2839,18 +2839,159 @@ If R equivalents are ever identified, add a `## DLIT-1`, `## HSk-1`, etc. block 
 
 The following complete analysis methods are implemented in JS but have **no `js/benchmarks.js` entries and no R cross-validation**. This is intentional and documented here so the gap is explicit rather than an oversight.
 
+---
+
 ### Bayesian Meta-Analysis (`bayesMeta` / `priorSensitivity`)
 
-`js/bayes.js` implements profile-likelihood + Bayesian MA (Higgins et al. 2009; Lambert et al. 2005). The output is a posterior distribution over τ² and a credible interval for μ.
+**Source file:** `js/bayes.js`
 
-**Why no R cross-validation:** metafor does not implement full Bayesian MA. The closest R equivalent is `metamisc::valmeta()` (Bayesian) or `brms` — neither is in the standard metafor ecosystem. The profile-likelihood component (PLci) *is* covered indirectly by the VH_BENCHMARKS entries which use `profileLikTau2` / `profileLikCI`; the Bayesian credible intervals are not separately verified but are derived from the same grid.
+**Method summary:** Conjugate normal-normal random-effects model approximated by 1-D grid
+quadrature over τ. At each grid point τ_g the conditional posterior of μ is analytically
+tractable (conjugate normal); the marginal posterior of μ is a Gaussian mixture:
 
-**How to add in future:** Add a `brms` or `RBesT` R block that outputs posterior mean, SD, and 95% CrI; add a `BAYES_BENCHMARKS` array in `js/benchmarks.js`; add a `BAYES-*` diff section in `diff_benchmarks.mjs`.
+```
+Prior:   μ | μ₀, σ_μ  ~ N(μ₀, σ_μ²)
+         τ             ~ HalfNormal(0, σ_τ)
+
+Posterior: p(μ|y) = Σ_g w_g · N(μ; m_g, V_g)
+  where  P_g = 1/σ_μ² + Σ 1/(vᵢ+τ_g²)
+         m_g = [μ₀/σ_μ² + Σ yᵢ/(vᵢ+τ_g²)] / P_g
+         V_g = 1 / P_g
+         w_g ∝ exp(logML_g − τ_g²/(2σ_τ²))
+```
+
+Posterior summaries (mean, SD, 95% CrI) are extracted from this mixture by trapezoidal
+quadrature. The Savage-Dickey Bayes factor BF₁₀ is the ratio of prior to posterior density
+at μ=0. `priorSensitivity()` wraps `bayesMeta()` over a 3×3 grid of (σ_μ, σ_τ) pairs.
+
+**Why no R cross-validation (prior-dependent output):** metafor does not implement full
+Bayesian MA. Any R comparison requires specifying the same prior and numerical grid, and
+results are necessarily prior-dependent — different prior parameterisations produce different
+posteriors by design. The closest R equivalents (`brms`, `RBesT`, `bayesmeta`) each use
+different sampling or quadrature backends, making exact numeric agreement unrealistic without
+fixing the PRNG seed and grid resolution at both ends. The profile-likelihood component
+(`profileLikCI`, `profileLikTau2`) *is* R-verified indirectly: the VH_BENCHMARKS entries use
+those same functions and are benchmarked against metafor's profile-likelihood CI. The Bayesian
+credible intervals derive from the same τ grid; the numerical difference from R comes entirely
+from prior specification, not from the grid arithmetic.
+
+**Self-tests in `js/tests.js` (Bayesian section, 23 tests):**
+
+The self-test suite validates internal consistency and known mathematical properties in place
+of a metafor round-trip. Together they constitute a correctness argument that does not depend
+on any R comparison.
+
+| Test | Description | Tolerance |
+|------|-------------|-----------|
+| 1–3 | Input guards: k<2, σ_μ≤0, σ_τ≤0 → error object | exact |
+| 4 | All return fields present and finite (BCG k=13) | exact |
+| 5 | μ CI ordering: muCI[0] < muMean < muCI[1] | exact |
+| 6 | τ CI non-negativity and ordering | exact |
+| 7 | **Diffuse prior → muMean ≈ REML RE estimate** (σ_μ=100, σ_τ=100 on BCG; tolerance 0.05) | ±0.05 |
+| 8 | **Tight prior shrinks toward μ₀:** |muMean_tight| < |muMean_default| | exact |
+| 9 | **Homogeneous data → tauMean < 0.3, tauCI[0] < 0.1** (all-equal yi) | exact |
+| 10 | **muDensity integrates to ≈ 1** (trapezoidal rule over muGrid) | ±0.01 |
+| 11 | **tauWeights sum to 1** | ±1e-10 |
+| 12 | grid_truncated = false for BCG with default priors | exact |
+| 13 | k=2 edge case: finite outputs, CI ordering preserved | exact |
+| 14 | **Coarse vs fine grid agreement on BCG** (nGrid 100 vs 300, nMu 200 vs 500): muCI ±0.005, tauCI ±0.02 | ±0.005/0.02 |
+| 15 | Adaptive grid sizing by k: k=13 → nGrid=300, nMu=500; k=50 → nGrid=100, nMu=500 | exact |
+| 16 | BF10, BF01, logBF10 all finite and positive | exact |
+| 17 | **BF10 × BF01 ≈ 1** (reciprocal identity) | ±1e-10 |
+| 18 | **logBF10 = log(BF10)** | ±1e-10 |
+| 19 | **BCG data (strong negative effect) → BF10 > 3** (moderate evidence for H₁) | exact |
+| 20 | **Null data (yi ≈ 0) → BF10 < 1** (evidence for H₀) | exact |
+| 21 | **Wider σ_μ → smaller BF10** (prior density at 0 ∝ 1/σ_μ; data dominates postAt0) | exact |
+| 22 | gridExtended = false for BCG default priors; tauREML finite and ≥ 0 | exact |
+| 23 | **gridExtended = true when REML τ̂ > 1.5** (high-heterogeneity k=2 dataset) | exact |
+
+Tests 7–9 together constitute the key behavioural validation: Bayesian inference converges to
+frequentist RE under diffuse priors, regularises toward the prior under tight priors, and
+correctly identifies near-zero heterogeneity in homogeneous data. Tests 10–11 verify that the
+quadrature grid is properly normalised. Tests 17–21 verify the Savage-Dickey BF implementation
+against known-direction predictions. Tests 22–23 verify the REML-based grid-extension logic
+(Milestone A.6).
+
+**`priorSensitivity` tests (separate suite):** Runs a 3×3 prior grid on a 5-study BCG subset
+and checks: correct number of output rows (9), all fields present and finite, monotone
+shrinkage of muMean toward μ₀ as σ_μ decreases, custom grid respects user-supplied arrays.
+
+**How to add R cross-validation in future:** Pin to the `bayesmeta` R package
+(Röver 2020, *J Stat Softw* 93(6)). For the BCG dataset with priors μ₀=0, σ_μ=1, σ_τ=0.5,
+`bayesmeta(yi, sigma=sqrt(vi), mu.prior.mean=0, mu.prior.sd=1, tau.prior=function(t) dhalfnormal(t, scale=0.5))`
+returns posterior mean and 95% CrI for μ and τ. Add a `BAYES_BENCHMARKS` array in
+`js/benchmarks.js` and a `BAYES-*` diff section in `diff_benchmarks.mjs`. Expected tolerance:
+±0.01 for means, ±0.02 for CI bounds (grid vs. MCMC discretisation).
+
+---
 
 ### GOSH Plot (`goshCompute`)
 
-`js/gosh.js` / `gosh.worker.js` implements the Galbraith-Olkin-Schein-Hedges (GOSH) plot by exhaustive or sampled enumeration of all subset meta-analyses.
+**Source files:** `js/gosh.js`, `js/gosh.worker.js`
 
-**Why no R cross-validation:** metafor's `gosh.rma()` produces the same plot, but the output is a matrix of (subset_RE, subset_I2) pairs — one per subset — not a summarized scalar. Automating a numeric comparison against all ~2^k subsets for a range of k is feasible but not yet wired into the pipeline. The JS implementation is tested functionally (correct subset counts, finite outputs, worker thresholds) in `run_tests.mjs` convergence-plumbing and unit sections.
+**Method summary:** Graphical Display of Study Heterogeneity (Harbord & Higgins 2008). For
+every non-empty subset of the k studies, compute the fixed-effects pooled estimate and I²;
+scatter-plotting these reveals influential studies and heterogeneity patterns invisible in
+leave-one-out.
 
-**How to add in future:** For a fixed dataset (e.g. BCG k=13) at a fixed seed / full enumeration, export the sorted (RE, I2) pair array from R and compare the JS output sorted the same way. Add a `GOSH_BENCHMARKS` array and a `GOSH-*` diff section.
+Enumeration strategy:
+
+| k | Strategy | Max subsets |
+|---|----------|-------------|
+| ≤ 15 (`GOSH_MAX_ENUM_K`) | Full enumeration (all 2^k−1 subsets) | 32 767 |
+| 16–30 (`GOSH_MAX_K`) | Random sample without replacement (Mulberry32 PRNG, seedable) | `maxSubsets` (default 50 000) |
+| > 30 | Error | — |
+
+For enumeration the index mapping is deterministic: subset with bitmask `m` is stored at
+`m−1`, so the full-dataset entry (mask = 2^k−1) is always last.
+
+Per-subset Q uses a single-pass formula: `Q = Σ(wᵢyᵢ²) − (Σwᵢyᵢ)²/Σwᵢ`, equivalent to
+the standard `Σwᵢ(yᵢ−μ̂)²` but avoids a second loop. I² = max(0, (Q−(n−1))/Q)·100 for n>1,
+0 otherwise.
+
+**Why no R cross-validation (exhaustive enumeration output):** metafor's `gosh.rma()` produces
+an identical plot, but its output is a matrix of (pooled estimate, I²) pairs — one row per
+subset — not a summarised scalar. Comparing all 2^k−1 subset rows programmatically is
+feasible for small k but requires exporting the full matrix from R and sorting both outputs
+identically (since enumeration order differs between implementations). This per-subset
+comparison has not been wired into the automated pipeline. The JS Q and I² formulas are
+identical to the standard FE formulas benchmarked elsewhere (BENCHMARKS suite), so the
+per-subset arithmetic is indirectly validated by the main benchmark suite.
+
+**Self-tests in `js/tests.js` (GOSH section, 9 test groups):**
+
+| Test | Description | Tolerance |
+|------|-------------|-----------|
+| 1 | Input guards: k=1, k=31, mismatched lengths → error object | exact |
+| 2 | **k=3 hand-verified exact values for all 7 subsets:** mu, I², Q, n for every bitmask | ±1e-10 |
+| 3 | **n[mask−1] = popcount(mask)** for all 15 subsets of k=4 | exact |
+| 4 | **Full-dataset entry matches `meta("FE")`:** mu ±1e-5 (Float32 precision), Q ±1e-10 | ±1e-5 |
+| 5 | I² ∈ [0, 100] and mu finite for all 63 subsets of k=6; n=1 subsets have I²=0, Q=0 | exact |
+| 6 | **I² formula on known pair:** yi=[0,2], vi=[1,1] → Q=2, I²=50% | ±1e-10 |
+| 7a | Enumeration path ignores `maxSubsets`: k=3, maxSubsets=1000 → count=7 | exact |
+| 7 | **Sampling boundary:** k=15 enumerates (count=32 767, sampled=false); k=16 samples (count=200, sampled=true) | exact |
+| 8 | **Reproducibility:** same seed → identical mu[0] and mu[99]; different seed → different mu[0] | exact |
+| 9 | Exported constants: GOSH_MAX_ENUM_K=15, GOSH_MAX_K=30, GOSH_DEFAULT_MAX_SUBSETS=50 000 | exact |
+
+Test 2 is the most critical: all 7 subsets of a k=3 dataset are computed by hand using the
+single-pass Q formula and compared at floating-point precision, providing an independent
+derivation check on the core loop. Test 4 ties the GOSH full-dataset entry to the
+`meta("FE")` result already benchmarked against metafor, giving an indirect R connection
+without requiring per-subset enumeration from R.
+
+**How to add R cross-validation in future:** For the BCG dataset (k=13) with full enumeration,
+run in R:
+
+```r
+library(metafor)
+res <- rma(yi, vi, data=dat.bcg, measure="OR", method="FE")
+g   <- gosh(res, progbar=FALSE)
+out <- data.frame(mu=g$b, I2=g$I2)
+out_sorted <- out[order(out$mu, out$I2), ]
+write.csv(out_sorted, "gosh_bcg_fe.csv", row.names=FALSE)
+```
+
+Compare against the JS output sorted the same way (all 32 767 rows, Float64 mu). Add a
+`GOSH_BENCHMARKS` array in `js/benchmarks.js` keyed by `rBlock: "GOSH-BCG-1"` and a
+`GOSH-*` diff section in `diff_benchmarks.mjs`. Tolerance: ±1e-6 on mu (same FE formula),
+±0.01 on I² (possible formula variant in metafor for very small Q).
