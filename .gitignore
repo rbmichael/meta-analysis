@@ -1,7 +1,5 @@
 node_modules/
 .claude/
 CLAUDE.md
-CLAUDE.original.md
-verify_benchmarks.py
 ROADMAP.md
 OFFLINE.md
