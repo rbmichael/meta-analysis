@@ -727,8 +727,6 @@ const _toggleResults = document.getElementById("toggleResults");
 const _toggleGuide   = document.getElementById("toggleGuide");
 const _toggleAbout   = document.getElementById("toggleAbout");
 
-const PERF_LOG = new URLSearchParams(location.search).has("perf");
-
 function getCiAlpha() {
   const v = document.getElementById("ciLevel")?.value ?? "95";
   return { "90": 0.10, "95": 0.05, "99": 0.01 }[v] ?? 0.05;
@@ -3316,9 +3314,7 @@ function _renderForestAndBubbles(ctx) {
     ? { ...m, RE: m.FE, seRE: m.seFE, tau2: 0, predLow: NaN, predHigh: NaN }
     : m;
   forestPlot.args = { studies: all, m: mForest, options: forestOpts };
-  performance.mark("phase:plot:forest:start");
   const { totalPages } = drawForest(all, mForest, { ...forestOpts, page: forestPlot.page });
-  performance.measure("phase:plot:forest", "phase:plot:forest:start");
   renderForestNav(totalPages);
 
   // ── Report args cache ─────────────────────────────────────────────────────────
@@ -3363,9 +3359,7 @@ function _renderForestAndBubbles(ctx) {
   funnelPlot.egger = egger;
   funnelPlot.petpeese = petpeese;
   drawIfVisible("pubBiasSection", () => {
-    performance.mark("phase:plot:funnel:start");
     drawFunnel(...funnelPlot.args, { egger: funnelPlot.egger, contours: funnelPlot.contours, petpeese: funnelPlot.petpeese, theme: appState.plotTheme });
-    performance.measure("phase:plot:funnel", "phase:plot:funnel:start");
   });
 
   // ── BLUPs, Baujat, QQ, Radial, L'Abbé ────────────────────────────────────────
@@ -3393,7 +3387,6 @@ function _renderForestAndBubbles(ctx) {
   });
 
   drawIfVisible("diagnosticSection", () => {
-    performance.mark("phase:plot:influence:start");
     drawInfluencePlot(influence, { theme: appState.plotTheme });
     if (blupResult) {
       const { totalPages: blupPages } = drawBlupPlot(blupResult, profile, { pageSize: blupPlot.pageSize, page: 0, theme: appState.plotTheme });
@@ -3403,7 +3396,6 @@ function _renderForestAndBubbles(ctx) {
     if (showQQ)  drawQQPlot(qqResiduals, qqLabels, { theme: appState.plotTheme });
     if (studies.length >= 2 && !isMHorPeto) drawRadialPlot(studies, m, profile, { theme: appState.plotTheme });
     if (showLabbe) drawLabbe(studies, m, profile, { type, theme: appState.plotTheme });
-    performance.measure("phase:plot:influence", "phase:plot:influence:start");
   });
 
   // ── Cumulative meta-analysis ──────────────────────────────────────────────────
@@ -3429,11 +3421,9 @@ function _renderForestAndBubbles(ctx) {
   elCumFunnelBlock.style.display = "";
 
   drawIfVisible("cumulativeSection", () => {
-    performance.mark("phase:plot:cumulative:start");
     const { totalPages: cumForestPages } = drawCumulativeForest(cumResults, profile, { pageSize: cumForestPageSize, page: 0, theme: appState.plotTheme });
     renderCumulativeForestNav(cumForestPages);
     drawCumulativeFunnel(cumulativeStudies, cumResults, profile, cumResults.length - 1, { theme: appState.plotTheme });
-    performance.measure("phase:plot:cumulative", "phase:plot:cumulative:start");
   });
 
   // ── Orchard + caterpillar plots ───────────────────────────────────────────────
@@ -3448,11 +3438,9 @@ function _renderForestAndBubbles(ctx) {
   appState.reportArgs.caterpillarOptions = { studies: all, m, profile, pageSize: catPageSize, currentPage: 0 };
 
   drawIfVisible("altVizSection", () => {
-    performance.mark("phase:plot:orchard:start");
     drawOrchardPlot(all, m, profile, { theme: appState.plotTheme });
     const { totalPages: catPages } = drawCaterpillarPlot(all, m, profile, { pageSize: catPageSize, page: 0, theme: appState.plotTheme });
     renderCaterpillarNav(catPages);
-    performance.measure("phase:plot:orchard", "phase:plot:orchard:start");
   });
 
   // ── Risk-of-bias plots ────────────────────────────────────────────────────────
@@ -3515,9 +3503,7 @@ function _renderAllResults(ctx) {
   _animateFresh(document.getElementById("studyTable"));
 
   // ── Sensitivity panel (LOO) + p-curve + selection model ─────────────────────
-  performance.mark("phase:loo:render:start");
   renderSensitivityPanel(studies, isMHorPeto ? null : m, isMHorPeto ? "DL" : method, ciMethod, profile, alpha, { isMHFallback: isMHorPeto });
-  performance.measure("phase:loo:render", "phase:loo:render:start");
   pCurvePlot.result = pcurve;
   pUniformPlot.result = puniform; pUniformPlot.m = m; pUniformPlot.profile = profile;
   renderPCurvePanel(pcurve, { theme: appState.plotTheme });
@@ -3557,14 +3543,11 @@ async function runAnalysis() {
   // progress bar has been painted before the synchronous computation blocks.
   await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
   try {
-    performance.mark("runAnalysis:start");
     scheduleSave();
 
     // Multivariate mode — separate pipeline
     if (mvState.active) {
-      const ok = runMVAnalysis();
-      performance.measure("runAnalysis", "runAnalysis:start");
-      return ok;
+      return runMVAnalysis();
     }
 
     // Cancel any in-progress GOSH computation.
@@ -3593,16 +3576,13 @@ async function runAnalysis() {
     if (!profile) return;
 
     // ── Phase 1: Parse input table ────────────────────────────────────────
-    performance.mark("phase:parse:start");
     const { studies, excluded, softWarnings, missingCorrelation } = collectStudies(type, scaleModerators);
-    performance.measure("phase:parse", "phase:parse:start");
 
     if (!studies.length) {
       if (outputPlaceholder) {
         outputPlaceholder.style.display = "";
         outputPlaceholder.textContent = "No valid studies to analyse. Check the input table for errors.";
       }
-      performance.measure("runAnalysis", "runAnalysis:start");
       return false;
     }
 
@@ -3664,15 +3644,12 @@ async function runAnalysis() {
     };
 
     // ── Phases 2–6: Pure computation (no DOM) ────────────────────────────
-    performance.mark("phase:meta:start");
     const r = runAnalysisHeadless(studies, type, opts);
-    performance.measure("phase:meta", "phase:meta:start");
     const { m, threeLevelResult } = r;
 
     if (m.error) {
       document.getElementById("results").innerHTML =
         `<b style="color:var(--color-warning)">Error: ${escapeHTML(m.error)}</b>`;
-      performance.measure("runAnalysis", "runAnalysis:start");
       return false;
     }
 
@@ -3699,12 +3676,6 @@ async function runAnalysis() {
       excluded, softWarnings, missingCorrelation,
     });
 
-    performance.measure("runAnalysis", "runAnalysis:start");
-    if (PERF_LOG) {
-      const entries = performance.getEntriesByType("measure")
-        .filter(e => e.name.startsWith("phase:") || e.name === "runAnalysis");
-      console.table(entries.map(e => ({ name: e.name, ms: +e.duration.toFixed(2) })));
-    }
     return true;
   } finally {
     _analysisRunning = false;

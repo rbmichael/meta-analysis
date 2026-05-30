@@ -407,7 +407,7 @@ export function maybeStartTour() {
   if (localStorage.getItem(DRAFT_KEY)) return;
 
   const params = new URLSearchParams(location.search);
-  if (params.has("perf") || params.has("tests")) return;
+  if (params.has("tests")) return;
 
   const importPreview = document.getElementById("importPreview");
   if (importPreview && importPreview.style.display !== "none") return;
