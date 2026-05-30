@@ -2045,7 +2045,8 @@ BENCH[["PB"]]$tes <- tes_a
 cat("\n## TES-B. Synthetic asymmetric funnel – tes() verification (DL)\n")
 yi_tes_b <- c(-0.1,  0.3,  0.1,  0.9,  1.4,  0.5)
 vi_tes_b <- c(0.04, 0.09, 0.0225, 0.36, 0.64, 0.16)
-js_tes(yi_tes_b, vi_tes_b)
+tes_b <- js_tes(yi_tes_b, vi_tes_b)
+BENCH[["PB-synth"]]$tes <- tes_b
 # Expected (JS implementation): O=0, E≈0.707, chi2≈0.802, p≈0.815
 
 # ----------------------------------------------------------------
