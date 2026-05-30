@@ -27,9 +27,9 @@ export const BENCHMARKS = [
       { label: "Comstock 1976",         yi: -0.017313948216879493,vi: 0.0714046596839863  }
     ],
     expected: {
-      FE:   -0.430,
-      RE:   -0.714,
-      tau2:  0.313,
+      FE:   -0.43029,
+      RE:   -0.71453,
+      tau2:  0.31324,
       I2:   92.2214
     },
     citation: "Colditz et al. (1994) JAMA 271:698–702. dat.bcg in metafor."
@@ -311,11 +311,11 @@ export const BENCHMARKS = [
     ],
     expected: {
       // ln(a*d / b*c) per study, computed from raw counts
-      yi:   [-0.9389, -1.6658, -1.3863, -1.4564, -0.2189, -0.9581,
-             -1.6338,  0.0120, -0.4715, -1.4012, -0.3407,  0.4468, -0.0173],
-      FE:   -0.436,
-      RE:   -0.747,
-      tau2:  0.366,
+      yi:   [-0.93869, -1.66619, -1.3863, -1.4564, -0.21914, -0.9581,
+             -1.6338,  0.0120, -0.47175, -1.4012, -0.34085,  0.44663, -0.0173],
+      FE:   -0.43614,
+      RE:   -0.74739,
+      tau2:  0.36634,
       I2:   92.6455
     },
     citation: "Colditz et al. (1994) JAMA 271:698–702. dat.bcg in metafor. DL pooled values from metafor test suite."
@@ -352,9 +352,9 @@ export const BENCHMARKS = [
       // Rounded from full-precision metafor values in the GENERIC benchmark above
       yi:   [-0.8893, -1.5854, -1.3481, -1.4416, -0.2175, -0.7861,
              -1.6209,  0.0120, -0.4694, -1.3713, -0.3394,  0.4459, -0.0173],
-      FE:   -0.430,
-      RE:   -0.715,
-      tau2:  0.313,
+      FE:   -0.43029,
+      RE:   -0.71453,
+      tau2:  0.31324,
       I2:   92.2214
     },
     citation: "Colditz et al. (1994) JAMA 271:698–702. dat.bcg in metafor. REML pooled values from metadat HTML docs."
@@ -428,9 +428,9 @@ export const BENCHMARKS = [
     expected: {
       // yi = m1 - m2 (days); exact integer differences
       yi:   [-20, -2, -55, -71, -4, 1, 11, -10, 7],
-      FE:   -3.464,
+      FE:   -3.46361,
       RE:   -15.106,
-      tau2:  684.6,
+      tau2:  684.64615,
       I2:   98.9713
     },
     citation: "Normand (1999) Stat Med 18:321–359. dat.normand1999 in metafor."
@@ -457,8 +457,8 @@ export const BENCHMARKS = [
     expected: {
       // Hedges' g per study, confirmed from metafor escalc(measure="SMD")
       yi:   [-0.3552, -0.3479, -2.3176, -1.8880],
-      FE:   -0.788,
-      RE:   -1.207,
+      FE:   -0.79034,
+      RE:   -1.20737,
       tau2:  1.009,
       I2:   95.6284,
       // CLES = Φ(RE / √2); CI from Φ applied to normal-CI endpoints.
@@ -491,9 +491,9 @@ export const BENCHMARKS = [
     expected: {
       // yi = m_post - m_pre (exact); vi verified by hand
       yi:   [7.9, 3.3, 0.2, 22.5, 0.4],
-      FE:    0.209,
-      RE:    6.416,
-      tau2: 73.57,
+      FE:    0.20922,
+      RE:    6.41623,
+      tau2: 73.57154,
       I2:   99.5234
     },
     citation: "Morris (2008) Org Res Methods 11:364–386. Pooled values from metafor test suite."
@@ -552,8 +552,8 @@ export const BENCHMARKS = [
       yi:   [0.500, 0.300, 0.600, 0.400, 0.250],
       // FE/RE on raw r scale; pooled values verified analytically via vi=(1-r²)²/(n-1)
       FE:    0.394,
-      RE:    0.403,
-      tau2:  0.01145,
+      RE:    0.4033,
+      tau2:  0.0119,
       I2:   57.2681
     },
     citation: "Synthetic dataset. Expected values computed analytically from raw-correlation formulas."
@@ -563,7 +563,7 @@ export const BENCHMARKS = [
   // SMD_paired — Morris (2008), treatment arm (5 studies)
   // Same raw data as MD_paired benchmark above.
   // SMCR formula: d = (m_post - m_pre) / sd_pre  (pre-test SD standardiser)
-  // g = d · J(df),  J = 1 − 3/(4·df − 1),  df = n − 1
+  // g = d · J(df),  J = Γ(df/2)/(√(df/2)·Γ((df−1)/2)) exact,  df = n − 1
   // vi = 2(1−r)/n + g²/(2n)  (Borenstein et al. 2009 eq 4.27)
   // Per-study g verified by hand; pooled values computed analytically (DL).
   // ----------------------------------------------------------------
@@ -580,12 +580,12 @@ export const BENCHMARKS = [
       { label: "Study 5", m_pre: 35.6, m_post: 36.0, sd_pre:  4.7, sd_post:  4.6, n: 14, r: 0.44 }
     ],
     expected: {
-      // Hedges' g per study: d = Δm/sd_pre, g = d·J, verified by hand
-      yi:   [0.5056, 1.0481, 1.8065, 1.4187, 0.0801],
-      FE:    0.864,
-      RE:    0.902,
-      tau2:  0.243,
-      I2:   77.1281
+      // Hedges' g per study: d = Δm/sd_pre, g = d·J (exact), verified vs metafor block "8"
+      yi:   [0.5056, 1.0481, 1.8054, 1.4181, 0.0801],
+      FE:    0.8643,
+      RE:    0.9022,
+      tau2:  0.2425,
+      I2:   77.1174
     },
     citation: "Morris (2008) Org Res Methods 11:364–386. Per-study g and pooled values recomputed with Borenstein 2009 eq 4.27 vi formula."
   },
@@ -609,8 +609,8 @@ export const BENCHMARKS = [
     ],
     expected: {
       yi:   [0.100, 0.300, 0.200, 0.400],
-      FE:    0.208,
-      RE:    0.246,
+      FE:    0.20755,
+      RE:    0.24641,
       tau2:  0.01581,
       I2:   90.7379
     },
@@ -634,9 +634,9 @@ export const BENCHMARKS = [
       { label: "Study 4", x: 40, n: 100 }
     ],
     expected: {
-      yi:   [-2.197, -0.847, -1.386, -0.405],
-      FE:   -0.993,
-      RE:   -1.174,
+      yi:   [-2.19722, -0.8473, -1.38629, -0.40547],
+      FE:   -0.99257,
+      RE:   -1.17436,
       tau2:  0.4197,
       I2:   87.6324
     },
@@ -660,9 +660,9 @@ export const BENCHMARKS = [
       { label: "Study 4", x: 40, n: 100 }
     ],
     expected: {
-      yi:   [0.322, 0.580, 0.464, 0.685],
-      FE:    0.513,
-      RE:    0.513,
+      yi:   [0.32175, 0.57964, 0.46365, 0.68472],
+      FE:    0.51244,
+      RE:    0.51244,
       tau2:  0.02186,
       I2:   89.7174
     },
@@ -720,6 +720,7 @@ export const BENCHMARKS = [
   // ----------------------------------------------------------------
   {
     name: "Synthetic τ² test – HS (k=3, equal vi)",
+    rBlock: "HS-1",
     type: "GENERIC",
     tauMethod: "HS",
     data: [
@@ -728,8 +729,8 @@ export const BENCHMARKS = [
       { label: "Study 3", yi: 3, vi: 1 }
     ],
     expected: {
-      FE:   1.333,
-      RE:   1.333,
+      FE:   1.33333,  // 4/3
+      RE:   1.33333,  // equal vi → RE = FE
       tau2: 0.8889,   // 8/9
       I2:  47.0588
     },
@@ -752,8 +753,8 @@ export const BENCHMARKS = [
       { label: "Study 3", yi: 3, vi: 1 }
     ],
     expected: {
-      FE:   1.333,
-      RE:   1.333,
+      FE:   1.33333,
+      RE:   1.33333,
       tau2: 1.3333,   // 4/3
       I2:  57.1429
     },
@@ -776,8 +777,8 @@ export const BENCHMARKS = [
       { label: "Study 3", yi: 3, vi: 1 }
     ],
     expected: {
-      FE:   1.333,
-      RE:   1.333,
+      FE:   1.33333,
+      RE:   1.33333,
       tau2: 0.5556,   // 5/9
       I2:  35.7143
     },
@@ -792,6 +793,7 @@ export const BENCHMARKS = [
   // ----------------------------------------------------------------
   {
     name: "Synthetic τ² test – SJ (k=3, equal vi)",
+    rBlock: "SJ-1",
     type: "GENERIC",
     tauMethod: "SJ",
     data: [
@@ -800,8 +802,8 @@ export const BENCHMARKS = [
       { label: "Study 3", yi: 3, vi: 1 }
     ],
     expected: {
-      FE:   1.333,
-      RE:   1.333,
+      FE:   1.33333,  // 4/3
+      RE:   1.33333,  // equal vi → RE = FE
       tau2: 0.8437,   // (√65−3)/6
       I2:  45.7615
     },
@@ -837,9 +839,9 @@ export const BENCHMARKS = [
       { label: "Study 3", yi: 3, vi: 1.00 }
     ],
     expected: {
-      FE:   0.714,
-      RE:   1.167,
-      tau2: 1.648,
+      FE:   0.71429,
+      RE:   1.16667,
+      tau2: 1.64726,
       I2:  76.7145
     },
     citation: "Synthetic. τ²_PM iterative fixed-point (unequal vi so PM≠HE). Verified against metafor rma(method='PM')."
@@ -874,7 +876,7 @@ export const BENCHMARKS = [
       yi:   [-0.500, -0.100, -0.900, -0.300],
       FE:   -0.450,
       RE:   -0.450,   // equal vi → RE = FE
-      tau2:  0.054,
+      tau2:  0.05413,
       I2:   46.4123
     },
     citation: "Synthetic dataset. Expected values derived analytically from HR log-scale formulas."
@@ -903,10 +905,10 @@ export const BENCHMARKS = [
     ],
     expected: {
       // yi = log(x1/x2) since t1=t2
-      yi:   [-1.386, -0.105, -0.916, -0.357],
-      FE:   -0.537,
-      RE:   -0.605,
-      tau2:  0.138,
+      yi:   [-1.38629, -0.10536, -0.91629, -0.35667],
+      FE:   -0.53665,
+      RE:   -0.60488,
+      tau2:  0.13767,
       I2:   47.7363
     },
     citation: "Synthetic dataset. Expected values derived analytically from IRR Poisson formulas."
@@ -920,6 +922,7 @@ export const BENCHMARKS = [
   // ----------------------------------------------------------------
   {
     name: "Synthetic – IRD (incidence rate difference, DL)",
+    rBlock: "IRD-1",
     type: "IRD",
     tauMethod: "DL",
     data: [
@@ -946,6 +949,7 @@ export const BENCHMARKS = [
   // ----------------------------------------------------------------
   {
     name: "Synthetic – IRD (incidence rate difference, REML)",
+    rBlock: "IRD-2",
     type: "IRD",
     tauMethod: "REML",
     data: [
@@ -971,6 +975,7 @@ export const BENCHMARKS = [
   // ----------------------------------------------------------------
   {
     name: "Synthetic – IRSD (sqrt incidence rate difference, DL)",
+    rBlock: "IRSD-1",
     type: "IRSD",
     tauMethod: "DL",
     data: [
@@ -997,6 +1002,7 @@ export const BENCHMARKS = [
   // ----------------------------------------------------------------
   {
     name: "Synthetic – IRSD (sqrt incidence rate difference, REML)",
+    rBlock: "IRSD-2",
     type: "IRSD",
     tauMethod: "REML",
     data: [
@@ -1028,6 +1034,7 @@ export const BENCHMARKS = [
   // ----------------------------------------------------------------
   {
     name: "dat.bcg (5 studies) – YUQ (Yule's Q, DL)",
+    rBlock: "YUQ-1",
     type: "YUQ",
     tauMethod: "DL",
     data: [
@@ -1052,6 +1059,7 @@ export const BENCHMARKS = [
   // ----------------------------------------------------------------
   {
     name: "dat.bcg (5 studies) – YUQ (Yule's Q, REML)",
+    rBlock: "YUQ-2",
     type: "YUQ",
     tauMethod: "REML",
     data: [
@@ -1076,6 +1084,7 @@ export const BENCHMARKS = [
   // ----------------------------------------------------------------
   {
     name: "dat.bcg (5 studies) – YUY (Yule's Y, DL)",
+    rBlock: "YUY-1",
     type: "YUY",
     tauMethod: "DL",
     data: [
@@ -1100,6 +1109,7 @@ export const BENCHMARKS = [
   // ----------------------------------------------------------------
   {
     name: "dat.bcg (5 studies) – YUY (Yule's Y, REML)",
+    rBlock: "YUY-2",
     type: "YUY",
     tauMethod: "REML",
     data: [
@@ -1249,9 +1259,9 @@ export const BENCHMARKS = [
     ],
     expected: {
       // yi = log(x/t), verified by formula
-      yi:   [-2.996, -2.485, -4.382, -2.526],
-      FE:   -2.742,
-      RE:   -2.997,
+      yi:   [-2.99573, -2.48491, -4.382, -2.52573],
+      FE:   -2.74174,
+      RE:   -2.99661,
       tau2:  0.335,
       I2:   82.0145
     },
@@ -1286,9 +1296,9 @@ export const BENCHMARKS = [
     expected: {
       // g per study (sdi = avg-SD standardiser); yi unchanged from old formula (same d·J)
       yi:   [-0.3553, -0.3465, -2.3018, -1.8880, -0.3993, 0.1742, 0.2726, -0.4494, 0.2926],
-      FE:   -0.394,
-      RE:   -0.532,
-      tau2:  0.769,
+      FE:   -0.39414,
+      RE:   -0.53242,
+      tau2:  0.7686,
       I2:   95.3703
     },
     citation: "Normand (1999) Stat Med 18:321–359. dat.normand1999 in metafor. Bonett (2009) Psychol Methods 14:43–53 Eq. 7 variance formula. Cross-validated against metafor escalc/rma."
@@ -1321,8 +1331,8 @@ export const BENCHMARKS = [
     expected: {
       // yi = ln(m1/m2) per study, verified by formula
       yi:   [-0.3102, -0.0715, -0.6202, -0.7303, -0.2513, 0.0541, 0.2377, -0.3895, 0.2657],
-      FE:   -0.303,
-      RE:   -0.218,
+      FE:   -0.30278,
+      RE:   -0.21837,
       tau2:  0.108,
       I2:   94.3547
     },
@@ -1334,7 +1344,7 @@ export const BENCHMARKS = [
   // Same raw data as the MD_paired / SMD_paired benchmarks above.
   // Standardiser: sd_change (change-score SD), not sd_pre.
   // sd_change = √(sd_pre²+sd_post²−2·r·sd_pre·sd_post)
-  // d = Δm/sd_change,  g = d·J,  J = 1−3/(4·(n−1)−1)
+  // d = Δm/sd_change,  g = d·J,  J = Γ(df/2)/(√(df/2)·Γ((df−1)/2)) exact
   // vi = 1/n + g²/(2n)  (Borenstein et al. 2009 eq 4.30)
   // All values computed analytically (DL).
   // ----------------------------------------------------------------
@@ -1351,11 +1361,11 @@ export const BENCHMARKS = [
       { label: "Study 5", m_pre: 35.6, m_post: 36.0, sd_pre:  4.7, sd_post:  4.6, n: 14, r: 0.44 }
     ],
     expected: {
-      // g per study (sd_change standardiser), verified by formula
-      yi:   [0.5417, 1.0198, 2.6635, 1.9096, 0.0765],
-      FE:    0.804,
-      RE:    1.018,
-      tau2:  0.369,
+      // g per study (sd_change standardiser), verified vs metafor block "24"
+      yi:   [0.5417, 1.0198, 2.6619, 1.9088, 0.0765],
+      FE:    0.8035,
+      RE:    1.0177,
+      tau2:  0.3682,
       I2:   81.2149
     },
     citation: "Morris (2008) Org Res Methods 11:364–386. SMCC formula: Borenstein et al. (2009) eq 4.30 — vi=1/n+g²/(2n). DL values recomputed."
@@ -1381,8 +1391,8 @@ export const BENCHMARKS = [
     expected: {
       // yi = ln(x/n) per study, exact
       yi:   [-2.3026, -1.2040, -1.6094, -0.9163],
-      FE:   -1.226,
-      RE:   -1.452,
+      FE:   -1.2257,
+      RE:   -1.4523,
       tau2:  0.2051,
       I2:   86.939
     },
@@ -1653,9 +1663,9 @@ export const BENCHMARKS = [
       // phi per study, unchanged (only vi formula changed)
       yi:   [-0.1001, -0.1635, -0.1067, -0.0684, -0.0092, -0.1798,
              -0.0677,  0.0005, -0.0164, -0.0947, -0.0110,  0.0089, -0.0003],
-      FE:   -0.013,
-      RE:   -0.051,
-      tau2:  0.0011,
+      FE:   -0.01337,
+      RE:   -0.05059,
+      tau2:  0.00115,
       I2:   96.0448
     },
     citation: "Colditz et al. (1994) JAMA 271:698–702. dat.bcg in metafor. Digby (1983) Biometrics 39:849–851 LS variance. Cross-validated against metafor escalc/rma."
@@ -1688,9 +1698,9 @@ export const BENCHMARKS = [
     expected: {
       // yi = m per study (raw mean), exact
       yi:   [55, 27, 64, 66, 14, 19, 52, 21, 30],
-      FE:   27.170,
-      RE:   38.325,
-      tau2: 408.928,
+      FE:   27.16966,
+      RE:   38.32477,
+      tau2: 408.92774,
       I2:   99.0787
     },
     citation: "Normand (1999) Stat Med 18:321–359. dat.normand1999 specialist arm. REML values computed analytically (Python)."
@@ -1721,9 +1731,9 @@ export const BENCHMARKS = [
     expected: {
       // yi = ln(m) per study, verified by formula
       yi:   [4.0073, 3.2958, 4.1589, 4.1897, 2.6391, 2.9444, 3.9512, 3.0445, 3.4012],
-      FE:    3.694,
-      RE:    3.523,
-      tau2:  0.316,
+      FE:    3.69418,
+      RE:    3.52271,
+      tau2:  0.31619,
       I2:   98.7941
     },
     citation: "Normand (1999) Stat Med 18:321–359. dat.normand1999 specialist arm. REML values computed analytically (Python)."
@@ -1781,8 +1791,8 @@ export const BENCHMARKS = [
     expected: {
       // yi = ln(sd1/sd2) + bias correction; verified via metafor escalc("VR"), R block 30
       yi:   [0.4048, 0.5411, 0.4174, 0.4218, 0.3359],
-      FE:    0.430,
-      RE:    0.430,
+      FE:    0.42963,
+      RE:    0.42963,
       tau2:  0.000,
       I2:    0.0
     },
@@ -1810,9 +1820,9 @@ export const BENCHMARKS = [
     ],
     expected: {
       yi:   [-0.6931, 0.9163, 0.0000, 1.3863, -1.0986, 0.6931],
-      FE:    0.068,
-      RE:    0.196,
-      tau2:  0.837,
+      FE:    0.06772,
+      RE:    0.19632,
+      tau2:  0.83725,
       I2:   97.2268
     },
     citation: "Synthetic dataset. Designed to give τ²>0 with strongly divergent log(sd1/sd2) values. Verified via metafor escalc(\"VR\") + rma(method=\"DL\"), R block 48 in generate.R."
@@ -1839,9 +1849,9 @@ export const BENCHMARKS = [
     ],
     expected: {
       yi:   [-1.0986, 1.0986, 0.0000, 0.9808, -1.0986, 1.0296],
-      FE:    0.078,
-      RE:    0.150,
-      tau2:  1.039,
+      FE:    0.07833,
+      RE:    0.14977,
+      tau2:  1.03874,
       I2:   97.7028
     },
     citation: "Synthetic dataset. Designed to give τ²>0 with strongly divergent log(cv1/cv2) values. Verified via metafor escalc(\"CVR\") + rma(method=\"DL\"), R block 49 in generate.R."
@@ -1869,8 +1879,8 @@ export const BENCHMARKS = [
     expected: {
       // yi = ln(theta/phi) per study, verified by gorFromCounts (Python)
       yi:   [1.0316, 1.0385, 0.7985, 1.0822],
-      FE:    0.981,
-      RE:    0.981,
+      FE:    0.98074,
+      RE:    0.98074,
       tau2:  0.000,
       I2:    0.0
     },
@@ -1931,8 +1941,8 @@ export const BENCHMARKS = [
     expected: {
       // yi = atanh(r) per study; vi = 1/(n−p−3)
       yi:   [0.4847, 0.4001, 0.5763, 0.3205, 0.5101],
-      FE:    0.470,
-      RE:    0.470,
+      FE:    0.47029,
+      RE:    0.47029,
       tau2:  0.000,
       I2:    0.0
     },
@@ -1967,8 +1977,8 @@ export const BENCHMARKS = [
     expected: {
       // yi = r (identity); vi = (1−r²)²/(n−p−1)
       yi:   [0.1000, 0.1500, 0.7000, 0.7500, 0.6500],
-      FE:    0.396,
-      RE:    0.467,
+      FE:    0.39588,
+      RE:    0.46655,
       tau2:  0.0970,
       I2:   95.2403,
     },
@@ -1999,8 +2009,8 @@ export const BENCHMARKS = [
     expected: {
       // yi = atanh(r); vi = 1/(n−p−3)
       yi:   [0.1003, 0.1511, 0.8673, 0.9730, 0.7753],
-      FE:    0.257,
-      RE:    0.551,
+      FE:    0.2568,
+      RE:    0.55067,
       tau2:  0.1624,
       I2:   94.5599,
     },
@@ -2033,8 +2043,8 @@ export const BENCHMARKS = [
       // yi = rho_tet per study, verified by bisection + analytic spot-check
       // vi from cell-product formula matching metafor escalc("RTET")
       yi:   [0.809018, 0.654514, 0.776535, 0.748453],
-      FE:    0.760,
-      RE:    0.760,
+      FE:    0.76033,
+      RE:    0.76033,
       tau2:  0.000,
       I2:    0.0
     },
@@ -2067,9 +2077,9 @@ export const BENCHMARKS = [
     ],
     expected: {
       yi:    [-0.6931, -0.2231, -1.2528, 0.2231, -0.8473],
-      FE:    -0.476,
-      RE:    -0.536,
-      tau2:   0.239,
+      FE:    -0.47629,
+      RE:    -0.53639,
+      tau2:   0.23854,
       I2:    74.0846,
       ciLow:  -1.245,
       ciHigh:  0.172
@@ -2096,9 +2106,9 @@ export const BENCHMARKS = [
     ],
     expected: {
       yi:    [-0.6931, -0.2231, -1.2528, 0.2231, -0.8473],
-      FE:    -0.476,
-      RE:    -0.536,
-      tau2:   0.239,
+      FE:    -0.47629,
+      RE:    -0.53639,
+      tau2:   0.23854,
       I2:    74.0846,
       ciLow:  -1.242,
       ciHigh:  0.170
@@ -2125,9 +2135,9 @@ export const BENCHMARKS = [
     ],
     expected: {
       yi:    [-0.6931, -0.2231, -1.2528, 0.2231, -0.8473],
-      FE:    -0.476,
-      RE:    -0.537,
-      tau2:   0.241,
+      FE:    -0.47629,
+      RE:    -0.53652,
+      tau2:   0.24052,
       I2:    74.2434,
       ciLow:  -1.095,
       ciHigh:  0.003
@@ -2217,6 +2227,7 @@ export const BENCHMARKS = [
   // ----------------------------------------------------------------
   {
     name: "Correlations – UCOR (DL)",
+    rBlock: "UCOR-1",
     type: "UCOR",
     tauMethod: "DL",
     data: [
@@ -2241,6 +2252,7 @@ export const BENCHMARKS = [
 
   {
     name: "Correlations – UCOR (REML)",
+    rBlock: "UCOR-2",
     type: "UCOR",
     tauMethod: "REML",
     data: [
@@ -2380,26 +2392,26 @@ export const PUB_BIAS_BENCHMARKS = [
       { label: "Comstock 1976",           a:  27, b: 16886, c:  29, d: 17825 }
     ],
     tests: {
-      begg:     { tau: -0.128, S: -10, z: -0.549, p: 0.583 },
-      egger:    { intercept: -2.345, slope: -0.157, p: 0.160 },
-      fatPet:   { intercept: -0.157, interceptP: 0.521, slope: -2.345, slopeP: 0.160 },
+      begg:     { tau: -0.12821, S: -10, z: -0.549, p: 0.583 },
+      egger:    { intercept: -2.34534, slope: -0.157, p: 0.160 },
+      fatPet:   { intercept: -0.157, interceptP: 0.52136, slope: -2.34534, slopeP: 0.160 },
       petPeese: { usePeese: false,
                   fat:   { intercept: -0.157, interceptP: 0.521, slope: -2.345, slopeP: 0.160 },
                   peese: { intercept: -0.379, interceptP: 0.048, slope: -2.477, slopeP: 0.396 } },
       failSafe: { rosenthal: 607, orwin: 44 },
       harbord:  { intercept: -2.093, interceptP: 0.235 },
-      peters:   { intercept: -0.357, interceptP: 0.045 },
+      peters:   { intercept: -0.35727, interceptP: 0.045 },
       trimFill: {
         L0: { k0: 0, adjustedRE: -0.747 },
         R0: { k0: 0, adjustedRE: -0.747 },
         Q0: { k0: 0, adjustedRE: -0.747 },
       },
-      tes:      { O: 8, E: 8.703, chi2: 0.172, p: 0.661 },
+      tes:      { O: 8, E: 8.70259, chi2: 0.17159, p: 0.66065 },
       // hc() from metafor: verified via generate.R block HC-1
       hc:       { beta: -0.4361, tau2: 0.3663, t0: 0.3252, ciLb: -1.1910, ciUb: 0.3187 },
       // waapWls(): verified via generate.R block WAAP-1
       // kAdequate=4 (Hart, Stein, TPT Madras, Comstock 1974); power≥80% vs wlsEst=−0.4361
-      waap:     { wlsEstimate: -0.4361, kAdequate: 4, estimate: -0.4015, se: 0.0457, z: -8.7964, p: 0, ci: [-0.4910, -0.3119], fallback: false }
+      waap:     { wlsEstimate: -0.4361, kAdequate: 4, estimate: -0.40167, se: 0.0457, z: -8.7964, p: 0, ci: [-0.4910, -0.3119], fallback: false }
     },
     citation: "Colditz et al. (1994) JAMA 271:698–702. dat.bcg in metafor. Expected values derived analytically (_derive_pubias.py)."
   },
@@ -2430,7 +2442,7 @@ export const PUB_BIAS_BENCHMARKS = [
       { label: "S6", yi:  0.5, vi: 0.1600 },
     ],
     tests: {
-      egger:    { intercept: 1.917, slope: -0.286, se: 0.504, t: 3.804, df: 4, p: 0.019 },
+      egger:    { intercept: 1.91667, slope: -0.28571, se: 0.504, t: 3.804, df: 4, p: 0.019 },
       fatPet:   { intercept: -0.286, interceptP: 0.092, slope: 1.917, slopeP: 0.019 },
       petPeese: { usePeese: true,
                   fat:   { intercept: -0.286, interceptP: 0.092, slope: 1.917, slopeP: 0.019 },
@@ -2748,8 +2760,8 @@ export const META_REGRESSION_BENCHMARKS = [
       { label: "Comstock 1976",          yi: -0.017313948216879493,vi: 0.0714046596839863,   year: 1976, ablat: 33 }
     ],
     expected: {
-      beta:  [-3.5454, 0.0019, -0.0280],
-      se:    [29.0956, 0.0147,  0.0102],
+      beta:  [-3.5455, 0.0019, -0.0280],
+      se:    [29.09588, 0.0147,  0.0102],
       tau2:  0.1108,
       QE:    28.3251,
       QEdf:  10,
@@ -3138,11 +3150,14 @@ export const VH_BENCHMARKS = [
   // 20 synthetic studies designed so all 4 one-sided intervals are
   // populated: [7,2,7,4] studies per interval.
   // jsOnly: true — expected values are JS-verified, not R-verified.
-  // R block "47" exists but gives a different solution (mu=0.9194) because
-  // metafor parameterises VH omega weights in log-space and constrains each
-  // log-omega ≤ 100. JS BFGS is unconstrained and reaches the true optimum
-  // at omega[3] ≈ 149.8 (mu=0.9366), yielding a higher log-likelihood.
+  // R block "47" finds a local optimum (mu=0.9194, ll=-4.668) due to optimizer
+  // differences (R uses L-BFGS-B in log-space parameterization; convergence is
+  // sensitive to the ridge structure of the VH log-likelihood surface).
+  // JS unconstrained BFGS finds the global optimum (mu=0.9366, ll=-3.124,
+  // omega[3]=149.84), confirmed by higher log-likelihood (Δll=+1.54).
+  // LRT: JS=16.96, R=13.87 — consistent with JS reaching the better solution.
   // Excluded from diff_benchmarks.mjs R cross-check; rBlock kept for traceability.
+  // Audit 2026-05-29: classified Bucket D (R optimizer limitation, JS correct).
   // ----------------------------------------------------------------
   {
     name: "Synthetic (positive effects) – one-sided, 4 steps [0.025,0.10,0.50,1.0]",

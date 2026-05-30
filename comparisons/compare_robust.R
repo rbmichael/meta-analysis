@@ -1,4 +1,5 @@
 #!/usr/bin/env Rscript
+# AUDIT_EXEMPT: cross-validation script — intentionally implements app formulas in R for comparison; "match app" comments are expected and do not indicate drift.
 # compare_robust.R -- Cross-validate cluster-robust SE (RVE/CR1) and three-level
 #                    meta-analysis app output against metafor / clubSandwich.
 #

@@ -204,7 +204,7 @@ export const HELP = {
     title: "Standardized Mean Change — pre-test SD (SMD paired / SMCR)",
     body:  "The pre-post mean difference standardised by the pre-measurement SD (sd_pre). " +
            "Equivalent to metafor's SMCR (Morris 2008). " +
-           "Hedges g correction is applied: g = d·J, J = 1 − 3/(4(n−1)−1). " +
+           "Hedges g correction is applied: g = d·J, J = Γ(df/2)/(√(df/2)·Γ((df−1)/2)) (exact). " +
            "Variance: var(d) = 2(1−r)/n + d²/(2(n−1)); vi = J²·var(d). " +
            "Requires the pre-post correlation r; defaults to 0.5 if not provided. " +
            "Use this when studies report sd_pre but not sd_post.",
@@ -214,7 +214,7 @@ export const HELP = {
     title: "Standardized Mean Change — change-score SD (SMCC)",
     body:  "The pre-post mean difference standardised by the SD of the change scores: " +
            "sd_change = √(sd_pre² + sd_post² − 2r·sd_pre·sd_post). " +
-           "Hedges g correction is applied: g = d·J, J = 1 − 3/(4(n−1)−1). " +
+           "Hedges g correction is applied: g = d·J, J = Γ(df/2)/(√(df/2)·Γ((df−1)/2)) (exact). " +
            "Variance: var(d) = 2(1−r)/n + d²/(2(n−1)); vi = J²·var(d). " +
            "Requires both sd_pre and sd_post plus the pre-post correlation r. " +
            "If r is not provided it defaults to 0.5 with a soft warning. " +

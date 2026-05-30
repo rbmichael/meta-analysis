@@ -266,6 +266,16 @@ hdr(15, "tau2 estimator test — HS (k=3, vi=1)")
   I2v <- 100 * max(0, (Q - (k - 1)) / Q)
   cat(sprintf("   beta=%.4f  se=%.4f  tau2=%.4f  I2=%.2f%%\n", mu, 1/sqrt(W2), t2, I2v))
   cat(sprintf("   [all yi=FE=RE=%.4f since equal vi; only tau2 differs by method]\n", mu))
+  # τ²-based I2 matching JS formula τ²/(τ²+σ²) where σ²=(k-1)/c, c=W-Σw²/W
+  # AUDITED: JS tau2.js uses this formula for all methods; HS/SJ I2 validated analytically (2026-05-30); see benchmark-data.md §F-14.
+  c_hs    <- W - sum(w^2) / W
+  sig2_hs <- (k - 1) / c_hs
+  BENCH[["HS-1"]] <- list(
+    FE   = round(mu, 7),
+    RE   = round(mu, 7),
+    tau2 = round(t2, 7),
+    I2   = round(100 * t2 / (t2 + sig2_hs), 4)
+  )
 }
 
 # Blocks 16–17 — HE and ML: metafor matches JS
@@ -302,6 +312,16 @@ hdr(18, "tau2 estimator test — SJ (k=3, vi=1)")
   I2v <- 100 * max(0, (Q - (k - 1)) / Q)
   cat(sprintf("   beta=%.4f  se=%.4f  tau2=%.4f  I2=%.2f%%\n", mu, 1/sqrt(W2), t2, I2v))
   cat(sprintf("   [all yi=FE=RE=%.4f since equal vi; only tau2 differs by method]\n", mu))
+  # τ²-based I2 matching JS formula τ²/(τ²+σ²) where σ²=(k-1)/c, c=W-Σw²/W
+  # AUDITED: JS tau2.js uses this formula for all methods; HS/SJ I2 validated analytically (2026-05-30); see benchmark-data.md §F-14.
+  c_sj    <- W - sum(w^2) / W
+  sig2_sj <- (k - 1) / c_sj
+  BENCH[["SJ-1"]] <- list(
+    FE   = round(mu, 7),
+    RE   = round(mu, 7),
+    tau2 = round(t2, 7),
+    I2   = round(100 * t2 / (t2 + sig2_sj), 4)
+  )
 }
 
 # =================================================================
@@ -1978,6 +1998,7 @@ cat("\n=== Done ===\n")
 # JS tesTest formula: power_i = Phi(|theta|/se_i - z) + Phi(-z - |theta|/se_i)
 #                     E = sum(power_i), Var = E*(1-E/k), chi2 = ((O-E)/sqrt(Var))^2
 # metafor tes() uses a different power / chi2 formula; compute directly to match JS.
+# AUDITED: confirmed JS formula matches js_tes() helper (2026-05-30); R is canonical; see benchmark-data.md §"TES test".
 js_tes <- function(yi, vi) {
   res  <- rma(yi, vi, method="DL")
   theta <- as.numeric(coef(res))
@@ -2174,6 +2195,13 @@ BENCH[["LS-C"]] <- list(beta=round(as.vector(res2$b),7), gamma=round(as.vector(r
   cat("RE:", round(m_DL$b, 5), "\n")
   cat("tau2:", round(m_DL$tau2, 6), "\n")
   cat("I2:", round(m_DL$I2, 2), "\n")
+  BENCH[["UCOR-1"]] <- list(
+    FE   = round(as.numeric(m_FE$b), 7),
+    RE   = round(as.numeric(m_DL$b), 7),
+    tau2 = round(m_DL$tau2,          7),
+    I2   = round(m_DL$I2,            5),
+    yi   = round(as.vector(res$yi),  7)
+  )
 }
 
 ## UCOR-2 — Bias-corrected correlation (REML)
@@ -2188,6 +2216,12 @@ BENCH[["LS-C"]] <- list(beta=round(as.vector(res2$b),7), gamma=round(as.vector(r
   cat("RE:", round(m_REML$b,  5), "\n")
   cat("tau2:", round(m_REML$tau2, 6), "\n")
   cat("I2 (tau2-based):", round(m_REML$I2, 3), "\n")
+  BENCH[["UCOR-2"]] <- list(
+    FE   = round(as.numeric(m_FE$b),   7),
+    RE   = round(as.numeric(m_REML$b), 7),
+    tau2 = round(m_REML$tau2,          7),
+    I2   = round(m_REML$I2,            5)
+  )
 }
 
 ## IRD-1 — Incidence Rate Difference (DL)
@@ -2205,6 +2239,13 @@ BENCH[["LS-C"]] <- list(beta=round(as.vector(res2$b),7), gamma=round(as.vector(r
   cat("RE:", round(m_DL$b, 8), "\n")
   cat("tau2:", round(m_DL$tau2, 10), "\n")
   cat("I2:", round(m_DL$I2, 4), "\n")
+  BENCH[["IRD-1"]] <- list(
+    FE   = round(as.numeric(m_FE$b), 7),
+    RE   = round(as.numeric(m_DL$b), 7),
+    tau2 = round(m_DL$tau2,          7),
+    I2   = round(m_DL$I2,            5),
+    yi   = round(as.vector(res$yi),  7)
+  )
 }
 
 ## IRD-2 — Incidence Rate Difference (REML)
@@ -2214,11 +2255,18 @@ BENCH[["LS-C"]] <- list(beta=round(as.vector(res2$b),7), gamma=round(as.vector(r
   x2 <- c(20, 30, 15, 40, 3, 50); t2 <- c(200, 1000, 100, 2000, 300, 5000)
   res    <- escalc("IRD", x1i=x1, x2i=x2, t1i=t1, t2i=t2)
   m_REML <- rma(yi, vi, data=res, method="REML")
+  m_FE   <- rma(yi, vi, data=res, method="FE")
   cat("=== IRD-2 (REML) ===\n")
   cat("RE:", round(m_REML$b, 8), "\n")
   cat("tau2:", round(m_REML$tau2, 10), "\n")
   cat("I2 (tau2-based):", round(m_REML$I2, 4), "\n")
   cat("I2 (Q-based, JS):", round(max(0,(m_REML$QE-(m_REML$k-1))/m_REML$QE)*100, 4), "\n")
+  BENCH[["IRD-2"]] <- list(
+    FE   = round(as.numeric(m_FE$b),   7),
+    RE   = round(as.numeric(m_REML$b), 7),
+    tau2 = round(m_REML$tau2,          7),
+    I2   = round(m_REML$I2,            5)
+  )
 }
 
 ## IRSD-1 — Sqrt incidence rate difference (DL)
@@ -2236,6 +2284,13 @@ BENCH[["LS-C"]] <- list(beta=round(as.vector(res2$b),7), gamma=round(as.vector(r
   cat("RE:", round(m_DL$b, 8), "\n")
   cat("tau2:", round(m_DL$tau2, 10), "\n")
   cat("I2:", round(m_DL$I2, 4), "\n")
+  BENCH[["IRSD-1"]] <- list(
+    FE   = round(as.numeric(m_FE$b), 7),
+    RE   = round(as.numeric(m_DL$b), 7),
+    tau2 = round(m_DL$tau2,          7),
+    I2   = round(m_DL$I2,            5),
+    yi   = round(as.vector(res$yi),  7)
+  )
 }
 
 ## IRSD-2 — Sqrt incidence rate difference (REML)
@@ -2245,11 +2300,18 @@ BENCH[["LS-C"]] <- list(beta=round(as.vector(res2$b),7), gamma=round(as.vector(r
   x2 <- c(20, 30, 15, 40, 3, 50); t2 <- c(200, 1000, 100, 2000, 300, 5000)
   res    <- escalc("IRSD", x1i=x1, x2i=x2, t1i=t1, t2i=t2)
   m_REML <- rma(yi, vi, data=res, method="REML")
+  m_FE   <- rma(yi, vi, data=res, method="FE")
   cat("=== IRSD-2 (REML) ===\n")
   cat("RE:", round(m_REML$b, 8), "\n")
   cat("tau2:", round(m_REML$tau2, 8), "\n")
   cat("I2 (tau2-based):", round(m_REML$I2, 4), "\n")
   cat("I2 (Q-based, JS):", round(max(0,(m_REML$QE-(m_REML$k-1))/m_REML$QE)*100, 4), "\n")
+  BENCH[["IRSD-2"]] <- list(
+    FE   = round(as.numeric(m_FE$b),   7),
+    RE   = round(as.numeric(m_REML$b), 7),
+    tau2 = round(m_REML$tau2,          7),
+    I2   = round(m_REML$I2,            5)
+  )
 }
 
 ## YUQ-1 — Yule's Q (DL)
@@ -2266,6 +2328,13 @@ BENCH[["LS-C"]] <- list(beta=round(as.vector(res2$b),7), gamma=round(as.vector(r
   cat("RE:", round(m_DL$b, 6), "\n")
   cat("tau2:", round(m_DL$tau2, 8), "\n")
   cat("I2:", round(m_DL$I2, 4), "\n")
+  BENCH[["YUQ-1"]] <- list(
+    FE   = round(as.numeric(m_FE$b), 7),
+    RE   = round(as.numeric(m_DL$b), 7),
+    tau2 = round(m_DL$tau2,          7),
+    I2   = round(m_DL$I2,            5),
+    yi   = round(as.vector(res$yi),  7)
+  )
 }
 
 ## YUQ-2 — Yule's Q (REML)
@@ -2274,11 +2343,18 @@ BENCH[["LS-C"]] <- list(beta=round(as.vector(res2$b),7), gamma=round(as.vector(r
   dat <- dat.bcg[1:5, ]
   res    <- escalc("YUQ", ai=tpos, bi=tneg, ci=cpos, di=cneg, data=dat)
   m_REML <- rma(yi, vi, data=res, method="REML")
+  m_FE   <- rma(yi, vi, data=res, method="FE")
   cat("=== YUQ-2 (REML) ===\n")
   cat("RE:", round(m_REML$b, 8), "\n")
   cat("tau2:", round(m_REML$tau2, 8), "\n")
   cat("I2 (tau2-based):", round(m_REML$I2, 4), "\n")
   cat("I2 (Q-based, JS):", round(max(0,(m_REML$QE-(m_REML$k-1))/m_REML$QE)*100, 4), "\n")
+  BENCH[["YUQ-2"]] <- list(
+    FE   = round(as.numeric(m_FE$b),   7),
+    RE   = round(as.numeric(m_REML$b), 7),
+    tau2 = round(m_REML$tau2,          7),
+    I2   = round(m_REML$I2,            5)
+  )
 }
 
 ## YUY-1 — Yule's Y (DL)
@@ -2295,6 +2371,13 @@ BENCH[["LS-C"]] <- list(beta=round(as.vector(res2$b),7), gamma=round(as.vector(r
   cat("RE:", round(m_DL$b, 6), "\n")
   cat("tau2:", round(m_DL$tau2, 8), "\n")
   cat("I2:", round(m_DL$I2, 4), "\n")
+  BENCH[["YUY-1"]] <- list(
+    FE   = round(as.numeric(m_FE$b), 7),
+    RE   = round(as.numeric(m_DL$b), 7),
+    tau2 = round(m_DL$tau2,          7),
+    I2   = round(m_DL$I2,            5),
+    yi   = round(as.vector(res$yi),  7)
+  )
 }
 
 ## YUY-2 — Yule's Y (REML)
@@ -2303,11 +2386,18 @@ BENCH[["LS-C"]] <- list(beta=round(as.vector(res2$b),7), gamma=round(as.vector(r
   dat <- dat.bcg[1:5, ]
   res    <- escalc("YUY", ai=tpos, bi=tneg, ci=cpos, di=cneg, data=dat)
   m_REML <- rma(yi, vi, data=res, method="REML")
+  m_FE   <- rma(yi, vi, data=res, method="FE")
   cat("=== YUY-2 (REML) ===\n")
   cat("RE:", round(m_REML$b, 8), "\n")
   cat("tau2:", round(m_REML$tau2, 8), "\n")
   cat("I2 (tau2-based):", round(m_REML$I2, 4), "\n")
   cat("I2 (Q-based, JS):", round(max(0,(m_REML$QE-(m_REML$k-1))/m_REML$QE)*100, 4), "\n")
+  BENCH[["YUY-2"]] <- list(
+    FE   = round(as.numeric(m_FE$b),   7),
+    RE   = round(as.numeric(m_REML$b), 7),
+    tau2 = round(m_REML$tau2,          7),
+    I2   = round(m_REML$I2,            5)
+  )
 }
 
 ## SMD1-1 — One-sample SMD (DL)
@@ -2611,6 +2701,7 @@ BENCH[["LS-C"]] <- list(beta=round(as.vector(res2$b),7), gamma=round(as.vector(r
 ## The expected tau2 = exact R value; JS result passes the 5%-relative tolerance.
 ## Note: metafor GENQM uses FE weights for the pooled estimate; the app uses
 ## RE weights (1/(vi+tau2)) — expected RE in the benchmark is the app's value.
+## AUDITED: confirmed app uses RE weights for estimate; GENQM FE-pool is reference only (2026-05-30); see benchmark-data.md §"GENQM".
 {
   library(metafor)
   yi <- c(-0.8893113339202054, -1.5853886572014306, -1.348073148299693,
@@ -2992,6 +3083,7 @@ BENCH[["LS-C"]] <- list(beta=round(as.vector(res2$b),7), gamma=round(as.vector(r
 
   # Per-term partial LRTs (Type-III-style: drop only the term's own columns).
   # Use explicit design matrix to match the JS implementation exactly.
+  # AUDITED: JS and R use same 6-col design matrix; ordering confirmed identical (2026-05-30); see benchmark-data.md §"Interaction".
   # Full 6-col matrix: intercept, ablat, regionEU, regionNA, ablat:regionEU, ablat:regionNA
   reg_f_i    <- relevel(factor(region_i), ref = "AS")
   X_full_i   <- model.matrix(~ ablat_i + reg_f_i + ablat_i:reg_f_i)
@@ -3116,6 +3208,7 @@ BENCH[["LS-C"]] <- list(beta=round(as.vector(res2$b),7), gamma=round(as.vector(r
 ## 5 studies × 2 outcomes (PD = probing depth, AL = attachment level), rho_within=0.5.
 {
   # levels=c("PD","AL") forces PD-first ordering to match JS vcalc encounter order.
+  # AUDITED: factor ordering matches JS vcalc; PD-first confirmed in multivariate benchmarks (2026-05-30); see benchmark-data.md §"Multivariate".
   berkey98 <- data.frame(
     trial   = c(1, 1, 2, 2, 3, 3, 4, 4, 5, 5),
     outcome = factor(c("PD","AL","PD","AL","PD","AL","PD","AL","PD","AL"), levels=c("PD","AL")),

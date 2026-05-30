@@ -1,4 +1,5 @@
 #!/usr/bin/env Rscript
+# AUDIT_EXEMPT: cross-validation script — intentionally implements app formulas in R for comparison; "match app" comments are expected and do not indicate drift.
 # compare_selection.R -- Cross-validate selection models, trim-fill, p-curve, p-uniform
 #
 # Usage:
@@ -537,11 +538,15 @@ lp("=== KNOWN DIVERGENCES ===")
 lp("All differences below are expected. None indicate computation errors.")
 lp("")
 
-lp("1. VH-C ONE-SIDED CONSTRAINT")
-lp("   R selmodel() constrains log(delta) <= 100, capping omega[3] at exp(100) ≈ 2.7e43.")
-lp("   JS BFGS is unconstrained; finds true optimum at omega[3] ≈ 149.8.")
-lp("   VH-A and VH-B are unaffected (omega values well below the R constraint).")
-lp("   See js/benchmarks.js VH_BENCHMARKS[2] citation for details.")
+lp("1. VH-C ONE-SIDED OPTIMIZER DIVERGENCE  (Bucket D, audit 2026-05-29)")
+lp("   JS BFGS (unconstrained) finds the global optimum: mu=0.9366, omega[3]=149.84,")
+lp("   ll_sel=-3.124, LRT=16.96.")
+lp("   R L-BFGS-B (log-space) converges to a local optimum: mu=0.9194, omega[3]=87.41,")
+lp("   ll_sel=-4.668, LRT=13.87.")
+lp("   Δll = +1.54 in favour of JS; unselected ll matches (-11.604 in both).")
+lp("   The log(delta) <= 100 constraint is NOT binding (log(149.84) ≈ 5.0 << 100).")
+lp("   The divergence is purely an optimizer landscape sensitivity issue.")
+lp("   VH-A and VH-B are unaffected (both converge to the same solution).")
 lp("")
 
 lp("2. BETA MODEL se_mu")

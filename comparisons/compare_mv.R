@@ -1,4 +1,5 @@
 #!/usr/bin/env Rscript
+# AUDIT_EXEMPT: cross-validation script — intentionally implements app formulas in R for comparison; "match app" comments are expected and do not indicate drift.
 # compare_mv.R -- Cross-validate multivariate meta-analysis app output against metafor
 #
 # Usage:

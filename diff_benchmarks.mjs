@@ -9,10 +9,12 @@ import {
   PUB_BIAS_BENCHMARKS,
   INFLUENCE_BENCHMARKS,
   META_REGRESSION_BENCHMARKS,
+  INTERACTION_BENCHMARKS,
   VH_BENCHMARKS,
   MH_BENCHMARKS,
   CLUSTER_BENCHMARKS,
   RVE_BENCHMARKS,
+  RVE_MOM_BENCHMARKS,
   THREE_LEVEL_BENCHMARKS,
   LS_BENCHMARKS,
   CONTRAST_BENCHMARKS,
@@ -53,14 +55,27 @@ const ref = JSON.parse(readFileSync('./benchmark_reference.json', 'utf8'));
 }
 
 // ---- tolerances ----
+// Phase 5 (audit 2026-05-29):
+//   default   ±0.0001  — R reports 6–8 dp; after updating benchmarks.js to 5dp this is achievable
+//   tau2      1% rel   — COR/PHI/all others match R at < 0.01% once expected values are at 5dp
+//   I2        ±0.1     — Q-based vs τ²-based formula divergence; see F-06/F-29
+//   vhDelta   5% rel   — VH-A/B/D converge cleanly; VH-C excluded (jsOnly)
+//   vhLRT     5% rel   — all VH LRT values match R within 5%
+//   betaDelta 20% rel  — BETA model se_mu: Hessian curvature differs between JS and R at same MLE (F-10/F-33)
+//   hcCI      ±0.0015  — Henmi-Copas CI bounds: JS/R numerical integration differ by ~0.001065
+//   tesField  ±0.001   — TES E/chi2: generate.R uses hand-rolled js_tes() that drifted ~0.0005 from JS (F-01)
+//   puField   ±0.001   — p-curve/p-uniform: JS/R integration differ by ≤0.0004; use ±0.001 for margin
 function approxEqual(a, b, field) {
   if (!isFinite(a) || !isFinite(b)) return false;
-  if (field === 'tau2')    return Math.abs(a - b) / Math.max(Math.abs(b), 0.001) < 0.05;
-  if (field === 'yi')      return Math.abs(a - b) <= 0.002;  // 8dp R rounding
-  if (field === 'I2')      return Math.abs(a - b) < 0.1;     // τ²-based formula; R rounds at 4dp
-  if (field === 'vhDelta') return Math.abs(a - b) / Math.max(Math.abs(b), 1) < 0.6; // selection model delta sensitive to optimization
-  if (field === 'vhLRT')   return Math.abs(a - b) / Math.max(Math.abs(b), 1) < 0.3; // LRT varies with optimizer
-  return Math.abs(a - b) < 0.005; // per-field overrides above cover larger known divergences
+  if (field === 'tau2')      return Math.abs(a - b) / Math.max(Math.abs(b), 0.001) < 0.01;
+  if (field === 'I2')        return Math.abs(a - b) < 0.1;
+  if (field === 'vhDelta')   return Math.abs(a - b) / Math.max(Math.abs(b), 1) < 0.05;
+  if (field === 'vhLRT')     return Math.abs(a - b) / Math.max(Math.abs(b), 1) < 0.05;
+  if (field === 'betaDelta') return Math.abs(a - b) / Math.max(Math.abs(b), 1) < 0.20;
+  if (field === 'hcCI')      return Math.abs(a - b) < 0.0015;
+  if (field === 'tesField')  return Math.abs(a - b) < 0.001;
+  if (field === 'puField')   return Math.abs(a - b) < 0.001;
+  return Math.abs(a - b) < 0.0001;
 }
 
 let failures = 0;
@@ -143,9 +158,9 @@ for (const bm of PUB_BIAS_BENCHMARKS) {
   }
   if (T.tes && r.tes) {
     chk(`${label} tes.O`,    r.tes.O,    T.tes.O,    'default');
-    chk(`${label} tes.E`,    r.tes.E,    T.tes.E,    'default');
-    chk(`${label} tes.chi2`, r.tes.chi2, T.tes.chi2, 'default');
-    chk(`${label} tes.p`,    r.tes.p,    T.tes.p,    'default');
+    chk(`${label} tes.E`,    r.tes.E,    T.tes.E,    'tesField'); // generate.R uses hand-rolled js_tes(); ~0.0005 drift (F-01)
+    chk(`${label} tes.chi2`, r.tes.chi2, T.tes.chi2, 'tesField');
+    chk(`${label} tes.p`,    r.tes.p,    T.tes.p,    'tesField');
   }
   if (T.hc && r.hc) {
     chk(`${label} hc.beta`, r.hc.beta, T.hc.beta, 'default');
@@ -198,6 +213,24 @@ for (const bm of META_REGRESSION_BENCHMARKS) {
   chk(label, r.tau2, ex.tau2, 'tau2');
   chk(label, r.QE,   ex.QE,   'default');
   chk(label, r.QEp,  ex.QEp,  'default');
+  if (r.beta && ex.beta)
+    r.beta.forEach((v, i) => chk(`${label} beta[${i}]`, v, ex.beta[i], 'default'));
+  if (r.se && ex.se)
+    r.se.forEach((v, i) => chk(`${label} se[${i}]`, v, ex.se[i], 'default'));
+}
+
+// ---- INTERACTION_BENCHMARKS ----
+for (const bm of INTERACTION_BENCHMARKS) {
+  if (!bm.rBlock) continue;
+  const r = chkBlock(bm.rBlock);
+  if (!r) continue;
+  const label = `[${bm.rBlock}] ${bm.name}`;
+  const ex = bm.expected;
+  chk(label, r.tau2, ex.tau2, 'tau2');
+  chk(label, r.QE,   ex.QE,   'default');
+  chk(label, r.QEp,  ex.QEp,  'default');
+  chk(label, r.QM,   ex.QM,   'default');
+  chk(label, r.QMp,  ex.QMp,  'default');
   if (r.beta && ex.beta)
     r.beta.forEach((v, i) => chk(`${label} beta[${i}]`, v, ex.beta[i], 'default'));
   if (r.se && ex.se)
@@ -262,6 +295,25 @@ for (const bm of RVE_BENCHMARKS) {
   chk(label, r.ciHigh, ex.ciHigh, 'default');
   chk(label, r.t,      ex.t,      'default');
   chk(label, r.p,      ex.p,      'default');
+}
+
+// ---- RVE_MOM_BENCHMARKS ----
+// omega2 and tau2 from R arrive as nested matrices [[value]] due to jsonlite;
+// flatten before comparison.
+for (const bm of RVE_MOM_BENCHMARKS) {
+  if (!bm.rBlock) continue;
+  const r = chkBlock(bm.rBlock);
+  if (!r) continue;
+  const label = `[${bm.rBlock}] ${bm.name}`;
+  const ex = bm.expected;
+  chk(label, r.est, ex.est, 'default');
+  chk(label, r.se,  ex.se,  'default');
+  chk(label, r.t,   ex.t,   'default');
+  chk(label, r.p,   ex.p,   'default');
+  const rOmega2 = Array.isArray(r.omega2?.[0]) ? r.omega2[0][0] : r.omega2;
+  const rTau2   = Array.isArray(r.tau2?.[0])   ? r.tau2[0][0]   : r.tau2;
+  chk(label, rOmega2, ex.omega2, 'tau2');
+  chk(label, rTau2,   ex.tau2,   'tau2');
 }
 
 // ---- THREE_LEVEL_BENCHMARKS ----
@@ -370,7 +422,7 @@ for (const bm of BETA_BENCHMARKS) {
   if (!r) continue;
   const label = `[${bm.rBlock}] ${bm.name}`;
   chk(label, r.mu,    ex.mu,    'default');
-  chk(label, r.se_mu, ex.se_mu, 'vhDelta'); // Hessian curvature varies by parametrization; both valid
+  chk(label, r.se_mu, ex.se_mu, 'betaDelta'); // Hessian curvature varies by parametrization; both valid
   chk(label, r.tau2,  ex.tau2,  'tau2');
   chk(label, r.a,     ex.a,     'vhDelta');
   chk(label, r.b,     ex.b,     'vhDelta');
@@ -450,8 +502,9 @@ for (const bm of PERM_BENCHMARKS) {
       chk(`${label} tau2`, r.tau2, res.tau2[0], 'tau2');
     }
     // QM / QE (QM skipped for ciMethod="t" since R reports F, not chi2; QE always chi2)
+    // QM uses puField: ±0.001 (Cholesky vs R internal divergence; observed max diff=0.000292)
     if (bm.ciMethod !== 't') {
-      chk(`${label} QM`, r.QM, res.QM, 'default');
+      chk(`${label} QM`, r.QM, res.QM, 'puField');
     }
     chk(`${label} QE`,  r.QE,  res.QE,  'default');
     // logLik: slightly looser tolerance (±0.1) due to Cholesky vs R numerical differences
@@ -566,13 +619,13 @@ for (const bm of PERM_BENCHMARKS) {
     chk(label, r.beta,   ex.beta,   'default');
     chk(label, r.se,     ex.se,     'default');
     chk(label, r.tau2,   ex.tau2,   'tau2');
-    chk(label, r.ci_lb,  ex.ci_lb,  'default');
-    chk(label, r.ci_ub,  ex.ci_ub,  'default');
+    chk(label, r.ci_lb,  ex.ci_lb,  'hcCI');   // HC CI: JS/R numerical integration differ ~0.001065
+    chk(label, r.ci_ub,  ex.ci_ub,  'hcCI');
     // Also cross-check R vs JS expected (catch stale expected values)
     chk(label, h.beta,   ex.beta,   'default');
     chk(label, h.tau2,   ex.tau2,   'tau2');
-    chk(label, h.ci[0],  ex.ci_lb,  'default');
-    chk(label, h.ci[1],  ex.ci_ub,  'default');
+    chk(label, h.ci[0],  ex.ci_lb,  'hcCI');
+    chk(label, h.ci[1],  ex.ci_ub,  'hcCI');
   }
 }
 
@@ -635,15 +688,15 @@ for (const bm of PERM_BENCHMARKS) {
       console.log(`MISMATCH  ${label}  k: R=${r.k}  js=${pc.k}`);
       failures++;
     }
-    chk(label, r.rightSkewZ, ex.rightSkewZ, 'default');
-    chk(label, r.rightSkewP, ex.rightSkewP, 'default');
-    chk(label, r.flatnessZ,  ex.flatnessZ,  'default');
-    chk(label, r.flatnessP,  ex.flatnessP,  'default');
-    // Cross-check JS result vs expected
-    chk(label, pc.rightSkewZ, ex.rightSkewZ, 'default');
-    chk(label, pc.rightSkewP, ex.rightSkewP, 'default');
-    chk(label, pc.flatnessZ,  ex.flatnessZ,  'default');
-    chk(label, pc.flatnessP,  ex.flatnessP,  'default');
+    chk(label, r.rightSkewZ, ex.rightSkewZ, 'puField'); // p-curve: JS/R integration differ ≤0.0002
+    chk(label, r.rightSkewP, ex.rightSkewP, 'puField');
+    chk(label, r.flatnessZ,  ex.flatnessZ,  'puField');
+    chk(label, r.flatnessP,  ex.flatnessP,  'puField');
+    // Cross-check JS result vs expected (puField: ≤0.0002 integration difference)
+    chk(label, pc.rightSkewZ, ex.rightSkewZ, 'puField');
+    chk(label, pc.rightSkewP, ex.rightSkewP, 'puField');
+    chk(label, pc.flatnessZ,  ex.flatnessZ,  'puField');
+    chk(label, pc.flatnessP,  ex.flatnessP,  'puField');
   }
 }
 
@@ -672,21 +725,21 @@ for (const bm of PERM_BENCHMARKS) {
       console.log(`MISMATCH  ${label}  k: R=${r.k}  js=${pu.k}`);
       failures++;
     }
-    chk(label, r.estimate, ex.estimate, 'default');
-    chk(label, r.ciLow,    ex.ciLow,    'default');
-    chk(label, r.ciHigh,   ex.ciHigh,   'default');
-    chk(label, r.Z_sig,    ex.Z_sig,    'default');
-    chk(label, r.p_sig,    ex.p_sig,    'default');
-    chk(label, r.Z_bias,   ex.Z_bias,   'default');
-    chk(label, r.p_bias,   ex.p_bias,   'default');
-    // Cross-check JS result vs expected
-    chk(label, pu.estimate, ex.estimate, 'default');
-    chk(label, pu.ciLow,    ex.ciLow,    'default');
-    chk(label, pu.ciHigh,   ex.ciHigh,   'default');
-    chk(label, pu.Z_sig,    ex.Z_sig,    'default');
-    chk(label, pu.p_sig,    ex.p_sig,    'default');
-    chk(label, pu.Z_bias,   ex.Z_bias,   'default');
-    chk(label, pu.p_bias,   ex.p_bias,   'default');
+    chk(label, r.estimate, ex.estimate, 'puField'); // p-uniform: JS/R integration differ ≤0.0004
+    chk(label, r.ciLow,    ex.ciLow,    'puField');
+    chk(label, r.ciHigh,   ex.ciHigh,   'puField');
+    chk(label, r.Z_sig,    ex.Z_sig,    'puField');
+    chk(label, r.p_sig,    ex.p_sig,    'puField');
+    chk(label, r.Z_bias,   ex.Z_bias,   'puField');
+    chk(label, r.p_bias,   ex.p_bias,   'puField');
+    // Cross-check JS result vs expected (puField: ≤0.0004 integration difference)
+    chk(label, pu.estimate, ex.estimate, 'puField');
+    chk(label, pu.ciLow,    ex.ciLow,    'puField');
+    chk(label, pu.ciHigh,   ex.ciHigh,   'puField');
+    chk(label, pu.Z_sig,    ex.Z_sig,    'puField');
+    chk(label, pu.p_sig,    ex.p_sig,    'puField');
+    chk(label, pu.Z_bias,   ex.Z_bias,   'puField');
+    chk(label, pu.p_bias,   ex.p_bias,   'puField');
   }
 }
 

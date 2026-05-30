@@ -255,20 +255,19 @@ Pooled (FE):   beta=0.2092  (SE=0.0226, CI=[0.1650, 0.2535], Q=96.09)
 
 ### Morris (2008) as SMD_paired
 
-Per-study values (SMCR — pre-test SD standardisation; verified against metafor `escalc("SMCR")`):
+Per-study values (SMCR — pre-test SD standardisation; matched to metafor block "8", exact J):
 
 | Label   |      d  |       g |      vi |
 |---------|--------:|--------:|--------:|
 | Study 1 |  0.5267 |  0.5056 | 0.05557 |
 | Study 2 |  1.0645 |  1.0481 | 0.02518 |
-| Study 3 |  2.0000 |  1.8065 | 0.24566 |
-| Study 4 |  1.5517 |  1.4187 | 0.13022 |
+| Study 3 |  2.0000 |  1.8054 | 0.24527 |
+| Study 4 |  1.5517 |  1.4181 | 0.13009 |
 | Study 5 |  0.0851 |  0.0801 | 0.07112 |
 
-Pooled (DL):
-- FE:  0.839
-- RE:  0.892,  τ² = 0.2474,  I² = 78.1%
-- Q(df=4) = 18.22
+Pooled (DL, from metafor block "8"):
+- FE:  0.8643
+- RE:  0.9022,  τ² = 0.2425,  I² = 77.1%
 
 metafor verification:
 ```r
@@ -284,21 +283,21 @@ and uses a different formula — see generate.R block 24.
 ### Morris (2008) as SMD_paired (SMCC)
 
 App formula: sd_change = √(sd_pre²+sd_post²−2·r·sd_pre·sd_post),  d = (m_post−m_pre)/sd_change
-  g = d·J,  df = n−1,  J = 1−3/(4·df−1),  vi = J²·[2(1−r)/n + d²/(2·df)]
+  g = d·J,  df = n−1,  J = Γ(df/2)/(√(df/2)·Γ((df−1)/2)) (exact),  vi = 1/n + g²/(2n)
 
-Per-study values:
+Per-study values (matched to metafor block "24"):
 
 | Label   | sd_change |       d |       g |
 |---------|----------:|--------:|--------:|
 | Study 1 |  14.0000  |  0.5643 |  0.5417 |
 | Study 2 |   3.1860  |  1.0358 |  1.0198 |
-| Study 3 |   0.0678  |  2.9488 |  2.6635 |
-| Study 4 |  10.7736  |  2.0884 |  1.9096 |
+| Study 3 |   0.0678  |  2.9488 |  2.6619 |
+| Study 4 |  10.7736  |  2.0884 |  1.9088 |
 | Study 5 |   4.9182  |  0.0813 |  0.0765 |
 
-Pooled (DL):
-- FE:  0.839
-- RE:  1.038, τ²=0.373, I²=82.7%
+Pooled (DL, from metafor block "24"):
+- FE:  0.8035
+- RE:  1.0177, τ²=0.3682, I²=81.2%
 
 Note: SMCC yi values differ from SMD_paired (SMCR) because the standardiser is
 sd_change rather than sd_pre. For Study 3 especially, sd_pre=sd_post=0.1 and
@@ -1713,6 +1712,47 @@ and third quartile of both the theoretical and sample distributions.
 
 ---
 
+### Metafor `influence()` convention comparison (audit 2026-05-29)
+
+`compare_influence.R` Section 7 calls `influence.rma.uni()` directly and compares
+each diagnostic field against the JS app formulas. Results on the SMD dataset (k=12,
+REML method):
+
+| Field | JS app | metafor `influence()` | Match? |
+|-------|--------|----------------------|--------|
+| `hat` | `wᵢ/W` (RE weights) | same | **exact** |
+| `DFFITS` | `(RE−RE_loo)/√(hᵢ·(τ²_loo+vᵢ))` | same | **exact** |
+| `covRatio` | `W_full/W_loo` (LOO τ²) | same | **exact** |
+| `cookD` | `(RE−RE_loo)²·W` | same | **exact** |
+| `DFBETA` | `(RE−RE_loo)/seRE_loo` | `(RE−RE_loo)/seRE_full` | **B — SE denominator** |
+| `stdResidual` | `(yᵢ−RE_full)/√(vᵢ+τ²_full)` (internal) | `rstudent=(yᵢ−RE_loo)/√(vᵢ+τ²_loo)` (external) | **B — different quantity** |
+
+**Convention notes:**
+
+- **DFBETA SE denominator**: the JS app divides by `seRE_loo` (the LOO-model SE).
+  metafor's `dfbs` divides by `seRE_full` (full-model SE, Cook & Weisberg 1982).
+  On the k=12 SMD dataset, these differ by ~1–5% per study. Both are valid
+  standardizations; `seRE_loo` measures the shift in units of the precision under
+  the reduced model, while `seRE_full` uses a fixed reference.
+  The `|DFBETA|>1` influential threshold is convention-dependent.
+
+- **stdResidual vs rstudent**: internally standardized residuals `(yᵢ−RE_full)/√(vᵢ+τ²_full)`
+  are used by the app and by Borenstein et al. (2009). metafor returns externally
+  studentized residuals (`rstudent`) using the leave-one-out variance. External
+  studentization is more sensitive to outliers but requires LOO refits.
+
+- **cookD**: an earlier draft of compare_influence.R incorrectly claimed cookD
+  differed from metafor by a factor of (p+1)=2. Section 7 verification shows
+  the formulas are identical — the claim was wrong.
+
+**References:**
+- Cook, R.D. & Weisberg, S. (1982). *Residuals and Influence in Regression.* Chapman & Hall.
+- Borenstein, M. et al. (2009). *Introduction to Meta-Analysis.* Wiley.
+- Viechtbauer, W. & Cheung, M.W. (2010). Outlier and influence diagnostics for meta-analysis.
+  *Research Synthesis Methods*, 1(2), 112–125.
+
+---
+
 ## Multi-Moderator Meta-Regression Benchmarks (Phase 8)
 
 Three benchmark entries (MR-A, MR-B, MR-C) use the BCG vaccine dataset
@@ -1909,6 +1949,35 @@ bcg_region <- c("AS","BS","EU","NA","AS","EU","AS","AS","AS","EU","NA","EU","NA"
 this gives LL ≈ −19 instead of −8, producing wrong AIC/BIC. The `logDet()`
 helper uses partial-pivoting Gaussian elimination to compute log|det| stably.
 
+### INTERACTION_BENCHMARKS — INT-1 and INT-2
+
+#### Reference-level convention (categorical × continuous interaction)
+
+The app's `buildDesignMatrix` collects unique values for a categorical moderator,
+sorts them alphabetically, and uses the first as the reference level (dropped dummy).
+For region ∈ {AS, EU, NA} the reference is "AS" (alphabetically first). R's
+`factor(region)` default also alphabetically orders levels, giving the same
+reference. generate.R uses `relevel(factor(region), ref="AS")` which is
+redundant but explicit documentation of the same choice. Both JS and metafor
+produce identical beta[], se[], tau2, QE, QEp, QM, QMp — confirmed by
+diff_benchmarks.mjs (no mismatches).
+
+#### Per-term LRT convention (Type-III vs sequential)
+
+The app computes per-term partial likelihood-ratio tests using a **Type-III**
+approach: for each term, fit a reduced ML model that drops only that term's own
+columns from the design matrix (regardless of interaction hierarchy). This differs
+from metafor's `anova.rma()` default which uses sequential (Type-I) testing.
+
+generate.R block INT-1 (lines 2993–3015) uses the same Type-III manual
+column-dropping approach for the LRT prints, to match JS output for
+verification. Those values are NOT stored in `BENCH[["INT-1"]]` and are
+therefore not in `benchmark_reference.json`.
+
+**Citation**: Type-III ("partial") LRTs are the standard for interpretation
+of interaction models; see Fox (2016) *Applied Regression Analysis and
+Generalized Linear Models*, §8.2.
+
 ## R-verification status (audit April 2026)
 
 Run against R metafor 4.8.0 + clubSandwich. All generate.R blocks were executed
@@ -1936,9 +2005,89 @@ log-likelihood (includes `−½ log(2π vᵢ)` terms). JS uses the reduced form
 dataset. LRT = 2(ll_sel − ll_unsel) is identical under both normalizations and
 matches R exactly (VH-A: 1.8074, VH-B: 1.1927).
 
-VH-C (synthetic, one-sided) is intentionally JS-only: metafor's `selmodel()`
-constrains selection weights δ ≤ exp(100); the JS BFGS is unconstrained and
-reaches the true optimum (ω₃ ≈ 149.8 > exp(100) boundary). See VH-C citation.
+**VH-C (synthetic, one-sided) — Bucket D: R optimizer finds local minimum.**
+
+| Solution | mu | omega[3] | ll_sel | LRT |
+|---|---|---|---|---|
+| JS (unconstrained BFGS) | 0.9366 | 149.84 | −3.124 | 16.96 |
+| R (L-BFGS-B log-space)  | 0.9194 | 87.41  | −4.668 | 13.87 |
+
+JS log-likelihood is higher by Δll = +1.54 log units (unselected ll matches:
+both give −11.604). JS reaches the true global optimum; R's L-BFGS-B optimizer
+converges to a local optimum due to the ridge structure of the VH log-likelihood
+surface when weights are large. The constraint `log-omega ≤ 100` (i.e. omega ≤
+exp(100) ≈ 2.7e43) is not binding for either solution — the divergence is
+purely an optimizer sensitivity issue, not a constraint boundary artefact.
+
+`jsOnly: true` flag in `js/benchmarks.js` correctly excludes this entry from
+`diff_benchmarks.mjs` R cross-check. Audit 2026-05-29: classified Bucket D.
+
+### I² formula convention (F-29)
+
+The app and metafor use **different I² formulas** throughout all analysis types.
+This is a deliberate convention difference, not a bug.
+
+**App formula (Q-based, Higgins & Thompson 2002):**
+
+    I² = max(0, (Q − (k−1)) / Q) × 100
+
+- Q is Cochran's heterogeneity statistic, df = k−1.
+- This formula is used consistently for all τ² estimators (REML, DL, ML, HS, …).
+- Recommended in the Cochrane Handbook for Systematic Reviews; widely used in
+  clinical meta-analysis.
+
+**metafor formula (τ²-based, Nakagawa & Santos 2012 / Higgins et al. 2019):**
+
+    I² = τ² / (τ² + ṽ) × 100
+
+- ṽ = typical within-study variance = (k−1) / (Σwᵢ − Σwᵢ²/Σwᵢ).
+- This formula is the default in metafor (`res$I2`).
+
+**Divergence magnitude:**
+
+| Estimator | Max observed Δ(I²) |
+|-----------|--------------------|
+| DL        | < 1 pp             |
+| REML      | < 3 pp             |
+| ML        | up to ~21 pp       |
+
+The ML divergence is large because ML systematically underestimates τ²,
+producing a lower τ²-based I² while the Q-statistic (which is not directly
+affected by the estimator) yields a higher value.
+
+**diff_benchmarks.mjs tolerance:** `I2` uses `approxEqual(..., 'I2')` with an
+absolute tolerance of ±0.1 (pp). This covers the DL and REML cases. ML is not
+cross-validated for I² because the divergence is structural (different formulas),
+not a numerical approximation error.
+
+**Citation:** Higgins & Thompson (2002) *Statistics in Medicine* 21:1539–1558,
+eq. (9). For the τ²-based alternative: Nakagawa & Santos (2012) *Methods in
+Ecology and Evolution* 3:133–142.
+
+### BETA selection model se_mu Hessian divergence (F-33)
+
+The BETA selection model (`veveaHedges` with `modelType="beta"`) estimates a
+location parameter μ. The standard error of μ is derived from the observed
+information matrix (negative Hessian of the log-likelihood at the MLE).
+
+**Source of divergence:** JS uses a numerical Hessian (finite-differences with
+step `h = 1e-5 × max(|θ|, 1)`). metafor uses its own numerical Hessian with
+different step size and parametrization. For the BETA model the log-likelihood
+surface near the MLE is sharply curved with respect to μ, so small differences
+in step size produce noticeable differences in the observed information.
+
+**Observed magnitude:** Δ(se_mu) / se_mu up to ~15% across test datasets.
+The point estimate μ itself matches to < 0.01%.
+
+**diff_benchmarks.mjs tolerance:** `se_mu` for the BETA model uses
+`approxEqual(..., 'betaDelta')` with 20% relative tolerance. This covers the
+observed range while still catching regressions that move se_mu by more than 20%.
+
+**Impact on inference:** se_mu feeds the confidence interval for μ. A 15%
+difference in se_mu shifts the CI boundary by ~0.15 × z_α × se_mu. For typical
+values this is < 0.02 on the log-odds scale — unlikely to affect qualitative
+conclusions. The divergence is accepted pending a shared closed-form Hessian
+implementation.
 
 ### META_REGRESSION_BENCHMARKS — R-verified with one documented QE difference
 
@@ -2074,6 +2223,27 @@ Blocks RVE-MoM-1 and RVE-MoM-2 use `robu(..., modelweights="HIER", small=FALSE)`
 | RVE-MoM-1 | same as RVE-1 | none | n/a | 3 | 6 | 2 | MoM: ω²=0.0224, τ²=0.0094 |
 | RVE-MoM-2 | same as RVE-2 | none | n/a | 4 | 8 | 3 | MoM: ω²=0.0323, τ²=0.0258 |
 
+### I² in RVE output (F-06)
+
+The app reports I² alongside RVE results. The value is computed using the same
+Q-based formula as the underlying `meta()` call:
+
+    I² = max(0, (Q − (k−1)) / Q) × 100
+
+where Q is from the RE fit with the composite within-cluster variance.
+
+metafor's `robust()` function does not report I² directly in the robustified
+output. When comparing via `res$I2` after a `rma()` + `robust()` call, metafor
+uses the τ²-based formula `τ²/(τ²+ṽ)` (same convention as for standard RE).
+
+Because the Q-based and τ²-based formulas diverge (see I² formula convention
+section below), the I² value shown alongside RVE results is not directly
+comparable to any single metafor field. The `generate.R` RVE blocks do not
+store `I2` in `BENCH`, so `diff_benchmarks.mjs` does not compare it.
+
+This is the same convention difference documented in the I² section below;
+it applies equally to the RVE code path.
+
 ---
 
 ## THREE_LEVEL_BENCHMARKS (meta3level) — derivation notes
@@ -2130,6 +2300,40 @@ Agreement with R (metafor 4.8.0):
 
 ---
 
+## Multivariate AIC convention difference (F-09)
+
+The app displays AIC and BIC for multivariate MA results (`mvMeta()` in
+`js/multivariate.js`). These values differ from `AIC(rma.mv_object)` in metafor
+because the two implementations use different log-likelihood normalizations for
+REML.
+
+**JS convention (this app):** The REML log-likelihood omits constants that are
+fixed with respect to σ²_g (the variance components being optimized). Specifically,
+the log-determinant of the marginal covariance `Σ_i` is retained but the
+`−k/2·log(2π)` term is omitted. AIC and BIC are then computed as:
+
+    AIC = −2 · ll_REML_JS + 2 · p
+    BIC = −2 · ll_REML_JS + p · log(k)
+
+where p = number of variance components.
+
+**metafor convention:** `logLik.rma.mv()` returns the full REML log-likelihood
+including `−k/2·log(2π)`. Its `AIC()` and `BIC()` calls use this full value,
+producing numbers that are offset from the JS values by a constant
+`k · log(2π) ≈ k · 1.8379`.
+
+**Impact:** The REML log-likelihoods and derived AIC/BIC are not directly
+comparable to metafor output for the same dataset. The LRT between nested models
+is unaffected because the constant cancels. The `generate.R` MV blocks do not
+store `ll`, `AIC`, or `BIC` in `BENCH` for this reason; only `mu`, `se`, `tau2`,
+and `QM` are cross-validated.
+
+**Resolution:** This is a display convention difference, not a correctness issue.
+Future work could align with metafor by adding `−k/2·log(2π)` to `ll_REML_JS`
+before computing AIC/BIC, or could add an explicit footnote in the UI.
+
+---
+
 ## Less common τ² estimators
 
 Four τ² estimators are available in the UI dropdown alongside the main estimators.
@@ -2146,6 +2350,33 @@ of older software output.
 No formula changes are needed — the implementations are complete and tested via
 `estimatorComparison()` smoke tests in `js/tests.js`.
 
+### HS and SJ estimators — formula-verified with automated BENCH coverage (F-14, F-15)
+
+**Resolved 2026-05-30.** Two τ² estimators implemented in `tau2.js` now have automated
+round-trip cross-validation via `generate.R` blocks HS-1 and SJ-1.
+
+**Key discovery (2026-05-30):** metafor 4.8.0 `rma(method="HS")` gives τ² = 5/9 ≈ 0.5556
+(identical to ML), **not** 8/9 ≈ 0.8889 (the JS HS formula). This confirms the existing
+generate.R note (block 15): "metafor 4.x 'HS' and 'SJ' use different algorithms than the JS app."
+Therefore the HS-1 and SJ-1 generate.R blocks use **manual computation** (not `rma(method=)`)
+that replicates the JS formula exactly. The BENCH values validate the JS algorithm against
+its own published formulas — not against metafor's differing implementation.
+
+| Method | `tau2.js` function | generate.R block | Verification status |
+|--------|--------------------|-----------------|---------------------|
+| HS (Hunter-Schmidt) | `tau2_HS()` | HS-1 (block 15 with BENCH) | BENCH added 2026-05-30; rBlock in benchmarks.js; diff passes |
+| SJ (Sidik-Jonkman) | `tau2_SJ()` | SJ-1 (block 18 with BENCH) | BENCH added 2026-05-30; rBlock in benchmarks.js; diff passes |
+
+**HS formula (implemented):** τ²_HS = max(0, (Q − (k−1)) / Σwᵢ), where wᵢ = 1/vᵢ.
+Distinct from DL which uses `c = Σwᵢ − Σwᵢ²/Σwᵢ` as denominator.
+
+**SJ formula (implemented):** Fixed-point iteration starting from τ²⁽⁰⁾ = τ²_DL, then
+τ²⁽ᵗ⁺¹⁾ = [(k−1)·Σwᵢ*(yᵢ−ȳ*)² / (Σwᵢ*)²] + 1/k·Σ(1/wᵢ*²) − 1/(Σwᵢ*²)
+where wᵢ* = 1/(vᵢ + τ²⁽ᵗ⁾). Matches Sidik & Jonkman (2005) equation (6).
+
+**I² note:** BENCH stores τ²-based I² (formula: τ²/(τ²+σ²) where σ²=(k−1)/c) to match
+the JS `computeI2()` function. metafor computes Q-based I² for HS/SJ; these diverge by
+~10 pp for the k=3 test dataset.
 
 ---
 
@@ -2861,6 +3092,26 @@ CI = [Φ(−2.2245 / √2), Φ(−0.1902 / √2)] = [Φ(−1.5727), Φ(−0.1345
 **R verification (generate.R blocks ALPHA-1, ALPHA-2, ALPHA-3):** all values verified against direct formula computation; no metafor escalc call needed (formulas are exact).
 
 **Stored in `benchmarks.js`:** "Cronbach's α (AHW, DL, k_studies=3)".
+
+---
+
+## Effect types promoted from cat()-only to automated BENCH coverage (F-18, F-19, F-24)
+
+**Resolved 2026-05-30.** These effect types originally had generate.R blocks that produced
+human-readable output via `cat()` but did not store results in the `BENCH` list. They are
+now fully promoted: each block writes to `BENCH[["<ID>"]]`, `benchmark_reference.json`
+contains the R ground truth, and `diff_benchmarks.mjs` compares JS against R automatically.
+
+### Promoted blocks
+
+| Audit finding | Effect type(s) | generate.R block IDs | Verification status |
+|---------------|---------------|----------------------|---------------------|
+| F-24 | UCOR (uncorrected correlation) | UCOR-1, UCOR-2 | BENCH added 2026-05-30; rBlock in benchmarks.js; diff passes |
+| F-18 | IRD (incidence rate difference), IRSD (incidence rate SD) | IRD-1, IRD-2, IRSD-1, IRSD-2 | BENCH added 2026-05-30; rBlock in benchmarks.js; diff passes |
+| F-19 | YUQ (Yule's Q), YUY (Yule's Y) | YUQ-1, YUQ-2, YUY-1, YUY-2 | BENCH added 2026-05-30; rBlock in benchmarks.js; diff passes |
+
+All 10 blocks now use `BENCH[["ID"]] <- list(...)` (top-level `<-`, not `<<-` which fails outside a function),
+pass `node diff_benchmarks.mjs`, and are included in the 120-block `benchmark_reference.json`.
 
 ---
 

@@ -2,7 +2,9 @@
 // Usage:  node run_tests.mjs
 import { runTests } from "./js/tests.js";
 import { runPlotTests } from "./js/test-harness/run-plot-tests.mjs";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
+import { join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
 
 let failed = false;
 const origLog = console.log.bind(console);
@@ -77,6 +79,49 @@ runTests();
   );
 
   origLog(syncPass ? "\n✅ ALL WORKER SYNC CHECKS PASSED" : "\n❌ SOME WORKER SYNC CHECKS FAILED");
+}
+
+// ===== AUDIT: MATCH-APP COMMENTS =====
+// Phase 6 guard: every "match app/JS" comment in generate.R must have an AUDITED: tag.
+// comparisons/*.R are exempt (they are cross-validation scripts by design).
+{
+  origLog("\n===== AUDIT: MATCH-APP COMMENTS =====\n");
+
+  const ROOT       = fileURLToPath(new URL(".", import.meta.url));
+  const WINDOW     = 4;
+  const HEADER     = 15;
+  const MATCH_PAT  = /match(?:ing)?\s+(?:the\s+)?(?:app|JS)\b|app'?s\s+(?:value|formula|convention|output)/i;
+  const AUDITED_P  = /AUDITED:/i;
+  const EXEMPT_P   = /AUDIT_EXEMPT:/i;
+
+  function auditFile(filepath) {
+    let src;
+    try { src = readFileSync(filepath, "utf8"); } catch { return []; }
+    const lines  = src.split("\n");
+    if (lines.slice(0, Math.min(HEADER, lines.length)).some(l => EXEMPT_P.test(l))) return [];
+    const viols = [];
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      if (!MATCH_PAT.test(line) || !/^\s*#/.test(line)) continue;
+      const win = lines.slice(i, Math.min(i + WINDOW + 1, lines.length));
+      if (!win.some(l => AUDITED_P.test(l)))
+        viols.push({ file: relative(ROOT, filepath).replace(/\\/g, "/"), line: i + 1, text: line.trim().slice(0, 100) });
+    }
+    return viols;
+  }
+
+  const targets = [ join(ROOT, "generate.R") ];
+  try { for (const f of readdirSync(join(ROOT, "comparisons")))
+    if (f.endsWith(".R")) targets.push(join(ROOT, "comparisons", f)); } catch {}
+
+  const viols = targets.flatMap(auditFile);
+  if (viols.length === 0) {
+    origLog("  ✅ All match-app comments have AUDITED: tags");
+  } else {
+    origLog(`  ❌ ${viols.length} unaudited match-app comment(s):`);
+    for (const v of viols) origLog(`    ${v.file}:${v.line}  ${v.text}`);
+    failed = true;
+  }
 }
 
 // ===== PLOT SMOKE TESTS =====

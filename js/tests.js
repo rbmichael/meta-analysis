@@ -1,4 +1,4 @@
-import { round, transformEffect, chiSquareCDF, chiSquareQuantile, parseCounts, bivariateNormalCDF, normalQuantile, tCritical, fCDF, fTailP, normalCDF, tCDF } from "./utils.js";
+import { round, transformEffect, chiSquareCDF, chiSquareQuantile, parseCounts, bivariateNormalCDF, normalQuantile, tCritical, fCDF, fTailP, normalCDF, tCDF, logGamma } from "./utils.js";
 import { validateStudy, effectProfiles } from "./profiles.js";
 import { MIN_VAR } from "./constants.js";
 import { msgMinVarClamp } from "./ui-warnings.js";
@@ -2123,13 +2123,13 @@ export function runTests() {
   // m_pre=10, m_post=8, sd_pre=2, sd_post=2, n=30, r=0.5
   // sd_change = sqrt(4+4-2*0.5*4) = sqrt(4) = 2
   // d = (8-10)/2 = -1
-  // df=29, J = 1-3/(4*29-1) = 1-3/115
+  // df=29, J = exp(lgamma(14.5) - 0.5*log(14.5) - lgamma(14))  (exact Hedges)
   // g = d*J
   // vi = 1/n + g²/(2n) = 1/30 + (J²)/60  (Borenstein 2009 eq 4.30)
   console.log("--- SMCC 1. Formula spot-check ---");
   {
     const s = compute({ m_pre: 10, m_post: 8, sd_pre: 2, sd_post: 2, n: 30, r: 0.5 }, "SMCC");
-    const J      = 1 - 3 / 115;
+    const J      = Math.exp(logGamma(14.5) - 0.5 * Math.log(14.5) - logGamma(14));
     const g_exp  = -1 * J;
     const vi_exp = 1/30 + (g_exp * g_exp) / 60;
     smccChk("g  = d·J",          s.yi, g_exp,         1e-9);

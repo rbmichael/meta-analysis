@@ -308,7 +308,7 @@ const _profileSpecs = {
       const corr = isFinite(r) ? r : 0.5;
       const d    = (m_post - m_pre) / sd_pre;   // SMCR: pre-test SD standardiser
       const df   = n - 1;
-      const J    = 1 - (3 / (4*df - 1));
+      const J    = hedgesJ(df);
       const g    = d * J;
       // Variance: Borenstein et al. 2009 eq 4.27 (large-sample).
       // J applies only to g in the d² term; the 2(1-r)/n term is not scaled by J².
@@ -344,7 +344,7 @@ const _profileSpecs = {
       const sd_change = Math.sqrt(sd_pre**2 + sd_post**2 - 2*corr*sd_pre*sd_post);
       const d    = (m_post - m_pre) / sd_change;
       const df   = n - 1;
-      const J    = 1 - (3 / (4*df - 1));
+      const J    = hedgesJ(df);
       const g    = d * J;
       // Variance: Borenstein et al. 2009 eq 4.30 (large-sample).
       // J applies only to g in the d² term; the 1/n term is not scaled by J².
@@ -1780,7 +1780,7 @@ const _profileSpecs = {
   // Both types share the same point estimate:
   //   d  = (m − ref) / sd          (raw Cohen's d, one-sample)
   //   df = n − 1
-  //   J  = 1 − 3/(4·df − 1)        (Hedges' small-sample bias correction)
+  //   J  = Γ(df/2) / (√(df/2)·Γ((df−1)/2))  exact Hedges' bias correction (hedgesJ)
   //   yi = d · J                   (bias-corrected one-sample SMD)
   //
   // Variance differs:

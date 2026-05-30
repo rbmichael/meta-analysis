@@ -5,7 +5,7 @@ Effect Type:   SMD (Hedges' g via metafor escalc)
 Estimator:     REML
 CI Method:     normal (Normal (z-distribution))
 Studies (k):   12
-Generated:     2026-05-17 10:28:21
+Generated:     2026-05-29 18:39:45
 
 Dataset: smd_data.csv — 12 two-group SMD studies (m1,sd1,n1,m2,sd2,n2).
 yi/vi computed via escalc('SMD', ...) — Hedges' g with small-sample correction.
@@ -224,40 +224,154 @@ Study 12        0.5979    0.0595
 === SECTION 6: KNOWN DIVERGENCES ===
 All differences below are expected. None indicate computation errors.
 
-1. METAFOR influence() cook.d vs JS cookD
-   metafor influence.rma.uni() normalises Cook's distance by (p+1)=2:
-     cook.d_metafor = (RE_full - RE_loo)^2 / ((p+1) * seRE^2)
-                    = (RE_full - RE_loo)^2 * W / ((p+1))
-   JS cookD = (RE_full - RE_loo)^2 * W  (no normalisation by p+1).
-   The two formulas differ by a factor of 2 (for p=1, intercept-only).
-   Section 2 uses the JS formula for direct comparison with the app.
+1. METAFOR influence() cook.d vs JS cookD — MATCH
+   JS cookD = (RE_full - RE_loo)^2 * W_re  (Cook 1977 / Viechtbauer 2010 formula).
+   metafor influence.rma.uni() cook.d uses the same formula for intercept-only RE models.
+   Section 7 confirms ratio = 1.000 for all studies (diff = 0 to 4 d.p.).
+   No divergence; Section 2 JS-equivalent formula matches metafor exactly.
 
-2. METAFOR influence() rstudent vs JS stdResidual
+2. METAFOR influence() rstudent vs JS stdResidual — CONVENTION DIFFERENCE
    metafor externally studentizes using the LOO residual variance:
      rstudent_i = (yi - RE_loo_i) / sqrt(vi + tau2_loo_i)
-   JS stdResidual (Section 2): (yi - RE_full) / sqrt(vi + tau2_full).
+   JS stdResidual: (yi - RE_full) / sqrt(vi + tau2_full)  (internally studentized).
    These are different quantities; both are useful but not directly comparable.
+   JS convention matches Borenstein et al. (2009) textbook formula.
    Section 2 uses the JS formula.
 
-3. CUMULATIVE I2: METAFOR vs APP
+3b. METAFOR dfbs vs JS DFBETA — CONVENTION DIFFERENCE (SE denominator)
+   metafor dfbs$intrcpt = (mu_full - mu_{-i}) / seRE_full  (Cook & Weisberg 1982).
+   JS DFBETA           = (mu_full - mu_{-i}) / seRE_loo   (LOO SE denominator).
+   Section 7 shows differences of ~1-5% across studies on this dataset.
+   Both are valid standardizations; metafor uses full-model SE, JS uses LOO SE.
+   The original 'influential' threshold |DFBETA| > 1 is convention-dependent.
+
+4. CUMULATIVE I2: METAFOR vs APP
    metafor cumul() I2 uses tau2/(tau2+v_typical) (tau2-based formula).
    JS cumulativeMeta() uses Q-based I2: (Q-df)/Q*100 (same as full model).
    For k=1: tau2 is forced to 0 (degenerate single-study case).
    App and metafor both produce tau2=0 for k=1; I2=0 in both.
    For k>1 near zero tau2, the I2 formulas can diverge substantially.
 
-4. BLUP CI USES z=1.96 REGARDLESS OF CI METHOD
+5. BLUP CI USES z=1.96 REGARDLESS OF CI METHOD
    JS blupMeta() always uses normalQuantile(0.975) = 1.959964 for BLUP CIs.
    This matches the metafor blup() convention (always uses normal quantile).
    The CI method (normal/KH/t) only affects the pooled estimate CI, not BLUPs.
 
-5. SMD J CORRECTION (yi/vi residual ~3-4e-5, sub-display-precision)
-   The app uses the approximate J correction: J = 1 - 3/(4*df-1).
-   metafor uses the exact J via gamma functions.
-   For typical df the two agree to ~5 decimal places; difference in Q ~0.001.
+6. SMD J CORRECTION
+   App uses hedgesJ(df) = exp(lgamma(df/2) - 0.5*log(df/2) - lgamma((df-1)/2)),
+   matching metafor's exact Gamma formula. No residual from J.
 
-6. DISPLAY PRECISION
+7. DISPLAY PRECISION
    This script prints 4 decimal places; the app displays 3.
    Differences of 0.001 in displayed values may be rounding only.
 
 === END OF RESULTS ===
+=== SECTION 7: METAFOR influence() SIDE-BY-SIDE ===
+Calls influence.rma.uni() directly to confirm the convention differences
+documented in Section 6 hold numerically, and that hat/DFFITS/covRatio/DFBETA
+match the JS app to floating-point precision.
+
+--- HAT: metafor vs JS (should match) ---
+Study             hat_mf      hat_JS     diff(abs)
+--------------------------------------------------
+Study 01          0.0970      0.0970      0.000000
+Study 02          0.0922      0.0922      0.000000
+Study 03          0.0946      0.0946      0.000000
+Study 04          0.0822      0.0822      0.000000
+Study 05          0.0892      0.0892      0.000000
+Study 06          0.0841      0.0841      0.000000
+Study 07          0.0759      0.0759      0.000000
+Study 08          0.0864      0.0864      0.000000
+Study 09          0.0770      0.0770      0.000000
+Study 10          0.0807      0.0807      0.000000
+Study 11          0.0660      0.0660      0.000000
+Study 12          0.0747      0.0747      0.000000
+
+--- DFFITS: metafor vs JS (should match) ---
+Study          dffits_mf   DFFITS_JS     diff(abs)
+--------------------------------------------------
+Study 01         -0.4796     -0.4796      0.000000
+Study 02         -0.3998     -0.3998      0.000000
+Study 03         -0.3762     -0.3762      0.000000
+Study 04         -0.2808     -0.2808      0.000000
+Study 05         -0.0539     -0.0539      0.000000
+Study 06         -0.0044     -0.0044      0.000000
+Study 07          0.0162      0.0162      0.000000
+Study 08          0.0695      0.0695      0.000000
+Study 09          0.3196      0.3196      0.000000
+Study 10          0.3925      0.3925      0.000000
+Study 11          0.3237      0.3237      0.000000
+Study 12          0.4431      0.4431      0.000000
+
+--- covRatio: metafor vs JS (should match) ---
+Study           cov.r_mf  covRatio_JS     diff(abs)
+---------------------------------------------------
+Study 01          0.9881      0.9881      0.000000
+Study 02          1.0528      1.0528      0.000000
+Study 03          1.0798      1.0798      0.000000
+Study 04          1.1221      1.1221      0.000000
+Study 05          1.2142      1.2142      0.000000
+Study 06          1.1998      1.1998      0.000000
+Study 07          1.1777      1.1777      0.000000
+Study 08          1.1906      1.1906      0.000000
+Study 09          1.0526      1.0526      0.000000
+Study 10          1.0153      1.0153      0.000000
+Study 11          1.0267      1.0267      0.000000
+Study 12          0.9701      0.9701      0.000000
+
+--- DFBETA: metafor dfbs$intrcpt vs JS DFBETA (should match) ---
+Study            dfbs_mf   DFBETA_JS     diff(abs)
+--------------------------------------------------
+Study 01         -0.4751     -0.4510      0.024101
+Study 02         -0.3990     -0.3801      0.018917
+Study 03         -0.3757     -0.3574      0.018259
+Study 04         -0.2807     -0.2689      0.011791
+Study 05         -0.0541     -0.0516      0.002454
+Study 06         -0.0044     -0.0042      0.000188
+Study 07          0.0161      0.0155      0.000629
+Study 08          0.0696      0.0665      0.003066
+Study 09          0.3200      0.3074      0.012542
+Study 10          0.3931      0.3769      0.016151
+Study 11          0.3251      0.3143      0.010807
+Study 12          0.4460      0.4292      0.016754
+
+--- cookD: metafor cook.d vs JS cookD (should differ by factor p+1=2) ---
+Study          cook.d_mf    cookD_JS  ratio JS/mf
+-------------------------------------------------
+Study 01          0.2010      0.2010      1.0000
+Study 02          0.1521      0.1521      1.0000
+Study 03          0.1379      0.1379      1.0000
+Study 04          0.0811      0.0811      1.0000
+Study 05          0.0032      0.0032      1.0000
+Study 06          0.0000      0.0000      1.0000
+Study 07          0.0003      0.0003      1.0000
+Study 08          0.0053      0.0053      1.0000
+Study 09          0.0995      0.0995      1.0000
+Study 10          0.1442      0.1442      1.0000
+Study 11          0.1015      0.1015      1.0000
+Study 12          0.1787      0.1787      1.0000
+Expected ratio ≈ 2.0000 (p+1=2 for intercept-only model).
+
+--- rstudent: metafor vs JS stdResidual (DIFFERENT QUANTITIES) ---
+  metafor: external  rstudent_i = (yi - RE_loo_i) / sqrt(vi + tau2_loo_i)
+  JS:      internal stdResid_i  = (yi - RE_full)  / sqrt(vi + tau2_full)
+
+Study         rstudent_mf  stdResid_JS
+--------------------------------------
+Study 01         -1.5445     -1.3814
+Study 02         -1.2910     -1.2034
+Study 03         -1.1809     -1.1112
+Study 04         -0.9108     -0.8828
+Study 05         -0.0908     -0.0834
+Study 06          0.0652      0.0728
+Study 07          0.1315      0.1375
+Study 08          0.2976      0.3037
+Study 09          1.0803      1.0222
+Study 10          1.2588      1.1624
+Study 11          1.1839      1.1233
+Study 12          1.4627      1.3344
+Note: These are different quantities. External rstudent is more sensitive
+to outliers. Internal stdResidual matches the convention used by many
+meta-analysis textbooks (e.g. Borenstein et al. 2009).
+
+=== END SECTION 7 ===

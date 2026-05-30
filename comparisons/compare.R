@@ -1,4 +1,5 @@
 #!/usr/bin/env Rscript
+# AUDIT_EXEMPT: cross-validation script — intentionally implements app formulas in R for comparison; "match app" comments are expected and do not indicate drift.
 # compare.R -- Cross-validate meta-analysis app output against metafor
 #
 # Usage:
@@ -329,17 +330,12 @@ effect_configs <- list(
     measure     = "PFT",
     label       = "Proportion (Freeman-Tukey double-arcsine)",
     cols        = c("x", "n"),
-    trans_note  = "yi is on the DOUBLE-ARCSINE (full-sum) scale.",
-    trans_cmp   = "Approximate back-transform: sin(yi/2)^2 = proportion (exact as n -> Inf).",
-    # metafor escalc('PFT') uses yi/2 and vi/4; bypass it to match the app's
-    # full-sum formula: yi = arcsin(sqrt(x/(n+1))) + arcsin(sqrt((x+1)/(n+1)))
-    manual_esc  = function(d) {
-      data.frame(
-        yi = asin(sqrt(d$x / (d$n + 1))) + asin(sqrt((d$x + 1) / (d$n + 1))),
-        vi = 1 / (d$n + 0.5)
-      )
-    },
-    esc_args    = NULL
+    trans_note  = "yi is on the DOUBLE-ARCSINE (half-sum) scale. Back-transform: sin(yi)^2 = proportion.",
+    trans_cmp   = "Back-transform: sin(yi)^2 = proportion (exact as n -> Inf).",
+    # App (js/profiles.js) uses the half-sum convention matching metafor escalc('PFT'):
+    #   yi = 0.5*(arcsin(sqrt(x/(n+1))) + arcsin(sqrt((x+1)/(n+1)))),  vi = 1/(4(n+0.5))
+    # escalc("PFT") used directly — no bypass needed.
+    esc_args    = function(d) list(xi = d$x, ni = d$n)
   ),
   GENERIC = list(
     label      = "Generic (yi / vi)",
@@ -590,7 +586,7 @@ if (is_fe_only) {
 } else {
   # Standard RE path.
   # cfg$manual_esc overrides escalc() for types where metafor's escalc uses a
-  # different formula than the app (e.g. PFT: metafor uses half-sum).
+  # different formula or convention than the app (ARAW, ABT, AHW, GENERIC, etc.).
   if (!is.null(cfg$manual_esc)) {
     esc <- cfg$manual_esc(dat)
   } else {
@@ -1161,21 +1157,10 @@ lp("")
 
 div_n <- 1L
 
-if (effect_arg %in% c("SMD", "SMDH")) {
-  lp(div_n, ". J CORRECTION (yi/vi residual ~3-4e-5, sub-display-precision)")
-  lp("   The app uses the approximate J correction: J = 1 - 3/(4*df-1).")
-  lp("   metafor uses the exact J via gamma functions: Gamma(df/2)/(sqrt(df/2)*Gamma((df-1)/2)).")
-  lp("   For typical df the two agree to ~5 decimal places, causing a difference")
-  lp("   of ~0.001 in Q and ~0.001 in the z-statistic. Both round to the same")
-  lp("   value at 2-3 decimal places. Not scientifically meaningful.")
-  lp("")
-  div_n <- div_n + 1L
-}
 if (effect_arg %in% c("SMD_paired", "SMCC")) {
-  lp(div_n, ". J APPROXIMATION IN vi (residual < 2e-4, sub-display-precision)")
-  lp("   Both app and metafor use vi = first_term + g²/(2n) (Borenstein 2009).")
-  lp("   The app uses J_approx = 1 - 3/(4*df-1) for g; metafor uses J_exact.")
-  lp("   This causes a vi residual of < 2e-4 for n ≥ 9. Sub-display-precision.")
+  lp(div_n, ". J FORMULA NOTE (app now uses exact J)")
+  lp("   App uses hedgesJ(df) = exp(lgamma(df/2) - 0.5*log(df/2) - lgamma((df-1)/2)),")
+  lp("   matching metafor exactly. No residual from J.")
   lp("")
   div_n <- div_n + 1L
 }
@@ -1243,16 +1228,12 @@ if (effect_arg == "RTET") {
 }
 
 if (effect_arg == "PFT") {
-  lp(div_n, ". FORMULA CONVENTION (yi/vi computed directly, NOT via metafor escalc)")
-  lp("   metafor's escalc('PFT') uses the half-sum convention:")
-  lp("     yi = 0.5 * (arcsin(sqrt(x/(n+1))) + arcsin(sqrt((x+1)/(n+1)))),  vi = 1/(4n+2)")
-  lp("   The app (and this script) use the original Freeman-Tukey full-sum:")
-  lp("     yi = arcsin(sqrt(x/(n+1))) + arcsin(sqrt((x+1)/(n+1))),           vi = 1/(n+0.5)")
-  lp("   Both conventions yield the same back-transformed proportion and identical")
-  lp("   statistical inferences (RE, FE, Q, I², tau²) because yi and vi scale by the")
-  lp("   same factor of 2. This script bypasses escalc and computes yi/vi directly")
-  lp("   so that analysis-scale values match the app for easy side-by-side comparison.")
-  lp("   The back-transform sin(yi/2)^2 is an approximation that improves with n.")
+  lp(div_n, ". PFT FORMULA CONVENTION — MATCH (audit 2026-05-29)")
+  lp("   Both app (js/profiles.js) and metafor escalc('PFT') use the half-sum:")
+  lp("     yi = 0.5*(arcsin(sqrt(x/(n+1))) + arcsin(sqrt((x+1)/(n+1)))),  vi = 1/(4(n+0.5))")
+  lp("   Back-transform: sin(yi)^2 = proportion.")
+  lp("   This script now uses escalc('PFT') directly — no bypass.")
+  lp("   (Earlier versions of this script used the full-sum formula, now corrected.)")
   lp("")
   div_n <- div_n + 1L
 }

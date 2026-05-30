@@ -3,6 +3,8 @@
   "scripts": {
     "test": "node run_tests.mjs",
     "diff": "node diff_benchmarks.mjs",
+    "canonical-diff": "node canonical_diff.mjs",
+    "audit-comments": "node audit_match_comments.mjs",
     "test:plots": "node js/test-harness/run-plot-tests.mjs"
   },
   "devDependencies": {
