@@ -95,10 +95,10 @@ All Phase 4 items closed except item 4 (I² documentation):
 
 All nine documentation gaps (F-06, F-09, F-14, F-15, F-18, F-19, F-24, F-29, F-33) **closed 2026-05-29** by adding benchmark-data.md sections.
 
-**Phase 6 — Prevent recurrence — NOT STARTED:**
-- `audit_match_comments.mjs`: grep guard for future "match app" comments in R sources
-- Convention documentation process for "match app" comments
-- `canonical_diff.mjs`: informational canonical-metafor drift reporter
+**Phase 6 — Prevent recurrence — DONE 2026-05-30:**
+- `audit_match_comments.mjs` wired into `run_tests.mjs`; all 6 match-app comments in `generate.R` have `# AUDITED:` tags.
+- `CLAUDE.md` §"Convention: # AUDITED: tag in generate.R" documents required format and enforcement.
+- `canonical_diff.mjs` created for informational drift reporting.
 
 ---
 
