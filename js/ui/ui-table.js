@@ -10,14 +10,14 @@
 // before any table operations are performed.
 // =============================================================================
 
-import { effectProfiles } from "./profiles.js";
+import { effectProfiles } from "../core/profiles.js";
 import { validateRow, getSoftWarnings } from "./ui-state.js";
-import { escapeHTML } from "./utils-html.js";
+import { escapeHTML } from "../core/utils-html.js";
 import { renderWarningBlocks, msgExcluded, msgNonNumericMod, msgMinVarClamp, analysisChecks } from "./ui-warnings.js";
-import { MIN_VAR } from "./constants.js";
+import { MIN_VAR } from "../core/constants.js";
 import { buildTag } from "./ui-render.js";
-import { parseCSV, detectCsvFormat, detectEffectType } from "./csv.js";
-import { readTextFile } from "./io.js";
+import { parseCSV, detectCsvFormat, detectEffectType } from "../io/csv.js";
+import { readTextFile } from "../io/io.js";
 
 // Descriptive titles for each input column name, used as <th title="..."> tooltips.
 const INPUT_TITLES = {

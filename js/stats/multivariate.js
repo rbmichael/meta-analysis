@@ -6,9 +6,9 @@
 //   mvMeta(rows, V, opts)     — Step 2: REML/ML estimation of the multivariate model
 // =============================================================================
 
-import { MIN_VAR } from "./constants.js";
-import { normalCDF, normalQuantile, chiSquareCDF, tCDF, tCritical, fCDF, fTailP } from "./utils.js";
-import { cholFactor, cholLogDet, cholSolveVec, cholInverse, matInverse, logDet, diagSE } from "./linalg.js";
+import { MIN_VAR } from "../core/constants.js";
+import { normalCDF, normalQuantile, chiSquareCDF, tCDF, tCritical, fCDF, fTailP } from "../core/utils.js";
+import { cholFactor, cholLogDet, cholSolveVec, cholInverse, matInverse, logDet, diagSE } from "../core/linalg.js";
 // bfgs is imported from selection.js to avoid a circular dep through analysis.js.
 // Safe: bfgs is only called inside mvMeta (a function body), never at module init.
 import { bfgs } from "./selection.js";

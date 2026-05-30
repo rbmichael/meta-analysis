@@ -30,7 +30,7 @@ import {
   WAAP_BENCHMARKS,
   PCURVE_BENCHMARKS,
   PUNIFORM_BENCHMARKS,
-} from './js/benchmarks.js';
+} from './js/tests/benchmarks.js';
 
 const ref = JSON.parse(readFileSync('./benchmark_reference.json', 'utf8'));
 

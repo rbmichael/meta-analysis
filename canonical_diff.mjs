@@ -38,7 +38,7 @@ import {
   WAAP_BENCHMARKS,
   PCURVE_BENCHMARKS,
   PUNIFORM_BENCHMARKS,
-} from './js/benchmarks.js';
+} from './js/tests/benchmarks.js';
 
 // ---- CLI args ----
 const argv       = process.argv.slice(2);

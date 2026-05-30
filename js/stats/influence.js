@@ -7,8 +7,8 @@
 
 // Circular imports — safe: these are only called inside function bodies.
 import { meta, tau2_REML, validStudies } from "./analysis.js";
-import { normalCDF, normalQuantile, tCDF, tCritical } from "./utils.js";
-import { MIN_VAR, REML_TOL } from "./constants.js";
+import { normalCDF, normalQuantile, tCDF, tCritical } from "../core/utils.js";
+import { MIN_VAR, REML_TOL } from "../core/constants.js";
 
 // ================= LOO ENGINE =================
 // looEngine(studies, full, method, ciMethod, alpha)

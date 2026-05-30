@@ -111,15 +111,15 @@
 //   ui.js calls init() on DOMContentLoaded, which populates dropdowns,
 //   restores any autosave draft, and attaches all event listeners.
 // =============================================================================
-import { eggerTest, beggTest, fatPetTest, petPeeseTest, failSafeN, tesTest, waapWls, clES, pCurve, pUniform, baujat, blupMeta, meta, metaMH, metaPeto, robustMeta, influenceDiagnostics, subgroupAnalysis, metaRegression, testContrast, cumulativeMeta, veveaHedges, SELECTION_PRESETS, halfNormalSelModel, powerSelModel, negexpSelModel, betaSelModel, profileLikTau2, bayesMeta, priorSensitivity, rvePooled, meta3level, harbordTest, petersTest, deeksTest, rueckerTest, lsModel, henmiCopas, isValidStudy } from "./analysis.js";
-import { normalQuantile, normalCDF, chiSquareCDF, tCritical } from "./utils.js";
-import { fmt, fmtP_APA as fmtPval } from "./format.js";
-import { escapeHTML } from "./utils-html.js";
-import { effectProfiles, getProfile } from "./profiles.js";
-import { trimFill } from "./trimfill.js";
-import { drawForest, drawFunnel, drawBubble, drawPartialResidualBubble, drawInfluencePlot, drawCumulativeForest, drawCumulativeFunnel, drawOrchardPlot, drawCaterpillarPlot, drawBlupPlot, drawBaujatPlot, drawLabbe, drawRoBTrafficLight, drawRoBSummary, drawGoshPlot, drawProfileLikTau2, drawBayesTauPosterior, drawBayesMuPosterior, drawQQPlot, drawRadialPlot, drawPCurve, drawPUniform, setTooltipElement } from "./plots.js";
-import { goshCompute, GOSH_MAX_K } from "./gosh.js";
-import { permTestSync, permPval } from "./perm.js";
+import { eggerTest, beggTest, fatPetTest, petPeeseTest, failSafeN, tesTest, waapWls, clES, pCurve, pUniform, baujat, blupMeta, meta, metaMH, metaPeto, robustMeta, influenceDiagnostics, subgroupAnalysis, metaRegression, testContrast, cumulativeMeta, veveaHedges, SELECTION_PRESETS, halfNormalSelModel, powerSelModel, negexpSelModel, betaSelModel, profileLikTau2, bayesMeta, priorSensitivity, rvePooled, meta3level, harbordTest, petersTest, deeksTest, rueckerTest, lsModel, henmiCopas, isValidStudy } from "../stats/analysis.js";
+import { normalQuantile, normalCDF, chiSquareCDF, tCritical } from "../core/utils.js";
+import { fmt, fmtP_APA as fmtPval } from "../core/format.js";
+import { escapeHTML } from "../core/utils-html.js";
+import { effectProfiles, getProfile } from "../core/profiles.js";
+import { trimFill } from "../stats/trimfill.js";
+import { drawForest, drawFunnel, drawBubble, drawPartialResidualBubble, drawInfluencePlot, drawCumulativeForest, drawCumulativeFunnel, drawOrchardPlot, drawCaterpillarPlot, drawBlupPlot, drawBaujatPlot, drawLabbe, drawRoBTrafficLight, drawRoBSummary, drawGoshPlot, drawProfileLikTau2, drawBayesTauPosterior, drawBayesMuPosterior, drawQQPlot, drawRadialPlot, drawPCurve, drawPUniform, setTooltipElement } from "../plots/plots.js";
+import { goshCompute, GOSH_MAX_K } from "../stats/gosh.js";
+import { permTestSync, permPval } from "../stats/perm.js";
 import { makeNavRenderer } from "./ui-nav.js";
 import {
   mvState, mvModerators, mvForestState,
@@ -128,8 +128,8 @@ import {
   renderMVModTags, rebuildMVTableHeaders, addMVRow,
   buildMVReportHTML, mvDownloadHTML, mvOpenPrintPreview, clearMV,
 } from "./ui-mv.js";
-import { exportSVG, exportPNG, exportTIFF } from "./export.js";
-import { PLOT_THEMES } from "./plotThemes.js";
+import { exportSVG, exportPNG, exportTIFF } from "../io/export.js";
+import { PLOT_THEMES } from "../plots/plotThemes.js";
 import { HELP_LABELS } from "./help-labels.js";
 // report.js (81 KB) and docx.js (51 KB) are loaded on first export click.
 // guide.js (166 KB) and help.js (76 KB) are loaded on first use so they don't
@@ -142,15 +142,15 @@ import { HELP_LABELS } from "./help-labels.js";
 // query strings before translating paths, so static serving is unaffected.
 const _cb = `?cb=${Date.now()}`;
 let _reportMod, _docxMod, _helpMod, _guideMod, _onboardingMod;
-function getReport()     { return (_reportMod     ??= import(`./report.js${_cb}`    ).catch(e => { _reportMod     = null; throw e; })); }
-function getDocx()       { return (_docxMod       ??= import(`./docx.js${_cb}`      ).catch(e => { _docxMod       = null; throw e; })); }
+function getReport()     { return (_reportMod     ??= import(`../io/report.js${_cb}`    ).catch(e => { _reportMod     = null; throw e; })); }
+function getDocx()       { return (_docxMod       ??= import(`../io/docx.js${_cb}`      ).catch(e => { _docxMod       = null; throw e; })); }
 function getHelp()       { return (_helpMod       ??= import(`./help.js${_cb}`      ).catch(e => { _helpMod       = null; throw e; })); }
 function getGuide()      { return (_guideMod      ??= import(`./guide.js${_cb}`     ).catch(e => { _guideMod      = null; throw e; })); }
 function getOnboarding() { return (_onboardingMod ??= import(`./onboarding.js${_cb}`).catch(e => { _onboardingMod = null; throw e; })); }
-import { serializeSession, parseSession, missingInputCols } from "./session.js";
-import { saveDraft, loadDraft, clearDraft } from "./autosave.js";
-import { downloadBlob, readTextFile, serializeCSV } from "./io.js";
-import { Z_95 } from "./constants.js";
+import { serializeSession, parseSession, missingInputCols } from "../io/session.js";
+import { saveDraft, loadDraft, clearDraft } from "../io/autosave.js";
+import { downloadBlob, readTextFile, serializeCSV } from "../io/io.js";
+import { Z_95 } from "../core/constants.js";
 import { regStars, regFmtP, buildRegCoeffRows, buildRegFittedRows,
          renderLocationScalePanel, renderRegressionPanel,
          TAU_METHOD_LABELS, renderSensitivityPanel, renderStudyTable,
@@ -167,7 +167,7 @@ import { initTable, moderators, doAddModerator, removeModerator, clearModerators
          refreshPreviewUI, previewCSV, commitImport, cancelImport, getPendingImport,
          reparseWithDelimiter, updatePendingDecimal }
   from "./ui-table.js";
-import { runAnalysisHeadless } from "./analysis-headless.js";
+import { runAnalysisHeadless } from "../tests/analysis-headless.js";
 
 const USE_EXAMPLES = new URLSearchParams(window.location.search).has("tests");
 
@@ -2153,7 +2153,7 @@ function init() {
   });
 
   if (new URLSearchParams(window.location.search).has("tests")) {
-    import("./tests.js").then(({ runTests }) => runTests());
+    import("../tests/tests.js").then(({ runTests }) => runTests());
   }
 
   // Fire the onboarding tour after idle — never blocks initial render.
@@ -2670,7 +2670,7 @@ function runGosh() {
   // ---- Try Worker first ----
   let workerOk = false;
   try {
-    const workerUrl = new URL("./gosh.worker.js", import.meta.url).href;
+    const workerUrl = new URL("../workers/gosh.worker.js", import.meta.url).href;
     const w = new Worker(workerUrl);
     goshState.worker = w;
     workerOk = true;
@@ -2824,7 +2824,7 @@ function _startPermTest() {
 
   let workerOk = false;
   try {
-    const workerUrl = new URL("./perm.worker.js", import.meta.url).href;
+    const workerUrl = new URL("../workers/perm.worker.js", import.meta.url).href;
     const w = new Worker(workerUrl);
     permState.worker = w;
     workerOk = true;

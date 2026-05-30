@@ -15,12 +15,12 @@
 //   constants.js Z_95
 //   report.js    CITATIONS, collectCitations
 
-import { fmt, fmtP_APA, fmtCI_APA } from "./format.js";
-import { drawForest, drawCumulativeForest, drawCaterpillarPlot } from "./plots.js";
+import { fmt, fmtP_APA, fmtCI_APA } from "../core/format.js";
+import { drawForest, drawCumulativeForest, drawCaterpillarPlot } from "../plots/plots.js";
 import { serializeSVG, collectPagedSVGs } from "./export.js";
-import { Z_95 } from "./constants.js";
-import { normalQuantile } from "./utils.js";
-import { adjustPvals } from "./regression.js";
+import { Z_95 } from "../core/constants.js";
+import { normalQuantile } from "../core/utils.js";
+import { adjustPvals } from "../stats/regression.js";
 import { CITATIONS, collectCitations } from "./report.js";
 import { summaryData, pubBiasData, pCurveData, puniformData, selModelData,
          influenceData, subgroupData, studyTableData, regressionData,

@@ -123,12 +123,12 @@
 // Dependencies: utils.js (chiSquareCDF), constants.js (Z_95), D3 (global)
 // =============================================================================
 
-import { chiSquareCDF, normalQuantile } from "./utils.js";
-import { Z_95 } from "./constants.js";
+import { chiSquareCDF, normalQuantile } from "../core/utils.js";
+import { Z_95 } from "../core/constants.js";
 import { PLOT_THEMES, ROB_COLORS, BW_DASHES, hashGroupLabel } from "./plotThemes.js";
-import { rcsBasis, validStudies } from "./analysis.js";
-import { fmt, fmtP_APA } from "./format.js";
-import { escapeHTML } from "./utils-html.js";
+import { rcsBasis, validStudies } from "../stats/analysis.js";
+import { fmt, fmtP_APA } from "../core/format.js";
+import { escapeHTML } from "../core/utils-html.js";
 
 // ── Plot style constants ──────────────────────────────────────────────────────
 // Centralised defaults for font sizes, margins, tooltip offsets, and label

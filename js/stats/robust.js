@@ -27,9 +27,9 @@
 //                  never at module initialisation time)
 // =============================================================================
 
-import { matInverse } from "./linalg.js";
-import { tCritical, tCDF, normalCDF, normalQuantile } from "./utils.js";
-import { MIN_VAR, Z_95 } from "./constants.js";
+import { matInverse } from "../core/linalg.js";
+import { tCritical, tCDF, normalCDF, normalQuantile } from "../core/utils.js";
+import { MIN_VAR, Z_95 } from "../core/constants.js";
 // Circular import — safe: meta() only called inside robustMeta function body.
 import { meta, resolveClusterIds } from "./analysis.js";
 

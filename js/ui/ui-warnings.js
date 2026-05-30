@@ -6,7 +6,7 @@
 // and glyph conventions stay identical across modes.
 // =============================================================================
 
-import { escapeHTML } from "./utils-html.js";
+import { escapeHTML } from "../core/utils-html.js";
 
 /**
  * Render error + warning blocks into a DOM element.

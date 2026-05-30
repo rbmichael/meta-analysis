@@ -5,8 +5,8 @@
 // No imports from ui.js — avoids circular dependency.
 // =============================================================================
 
-import { buildSession } from "./session.js";
-import { effectProfiles, getProfile } from "./profiles.js";
+import { buildSession } from "../io/session.js";
+import { effectProfiles, getProfile } from "../core/profiles.js";
 
 // ---------------- VALIDATE ROW ----------------
 export function validateRow(row) {

@@ -38,10 +38,10 @@
 // sections.js, and report.js in the same commit.
 
 import { meta, logLik, validStudies } from "./analysis.js";
-import { inverseWithRidge, numericalHessian } from "./linalg.js";
-import { normalCDF, normalQuantile, chiSquareCDF, bisect } from "./utils.js";
-import { Z_95, BISECTION_ITERS } from "./constants.js";
-import { GL20_X, GL20_W, GH20_X, GH20_W } from "./quadrature.js";
+import { inverseWithRidge, numericalHessian } from "../core/linalg.js";
+import { normalCDF, normalQuantile, chiSquareCDF, bisect } from "../core/utils.js";
+import { Z_95, BISECTION_ITERS } from "../core/constants.js";
+import { GL20_X, GL20_W, GH20_X, GH20_W } from "../core/quadrature.js";
 
 // ================ P-CURVE ANALYSIS ================
 // pCurve(studies)

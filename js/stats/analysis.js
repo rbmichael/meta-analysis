@@ -54,12 +54,12 @@
 // calls only happen inside function bodies, never at module initialisation time.
 // =============================================================================
 
-import { tCritical, normalCDF, normalQuantile, tCDF, sum } from "./utils.js";
-import { MIN_VAR, REML_TOL } from "./constants.js";
+import { tCritical, normalCDF, normalQuantile, tCDF, sum } from "../core/utils.js";
+import { MIN_VAR, REML_TOL } from "../core/constants.js";
 import { tau2_DL, tau2_HS, tau2_DLIT, tau2_HSk, tau2_HE, tau2_SJ, tau2_ML,
          logLik, tau2_REML, tau2_PM, tau2_EB, tau2_PMM, tau2_GENQM,
          tau2_SQGENQ, tau2_GENQ } from "./tau2.js";
-import { getProfile, autoDetectType } from "./profiles.js";
+import { getProfile, autoDetectType } from "../core/profiles.js";
 // Circular imports — safe: these are only called inside function bodies, never at
 // module initialisation time.
 import { profileLikCI } from "./bayes.js";       // bayes no longer imports back

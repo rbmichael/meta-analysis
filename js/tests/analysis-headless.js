@@ -33,9 +33,9 @@ import {
   negexpSelModel, betaSelModel, profileLikTau2, bayesMeta, rvePooled,
   meta3level, harbordTest, petersTest, deeksTest, rueckerTest, lsModel,
   henmiCopas, isValidStudy, compute, clES,
-} from "./analysis.js";
-import { effectProfiles } from "./profiles.js";
-import { trimFill } from "./trimfill.js";
+} from "../stats/analysis.js";
+import { effectProfiles } from "../core/profiles.js";
+import { trimFill } from "../stats/trimfill.js";
 
 // ── Batch helpers ─────────────────────────────────────────────────────────────
 

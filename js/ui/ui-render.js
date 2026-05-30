@@ -8,14 +8,14 @@
 // Extracted from ui.js (item 4.2.1 of TECHNICAL IMPROVEMENT ROADMAP).
 // =============================================================================
 
-import { fmt, fmtP_APA as fmtPval } from "./format.js";
-import { effectProfiles } from "./profiles.js";
-import { Z_95 } from "./constants.js";
-import { leaveOneOut, estimatorComparison } from "./influence.js";
-import { adjustPvals } from "./regression.js";
-import { permPval } from "./sections.js";
-import { drawPCurve, drawPUniform } from "./plots.js";
-import { escapeHTML } from "./utils-html.js";
+import { fmt, fmtP_APA as fmtPval } from "../core/format.js";
+import { effectProfiles } from "../core/profiles.js";
+import { Z_95 } from "../core/constants.js";
+import { leaveOneOut, estimatorComparison } from "../stats/influence.js";
+import { adjustPvals } from "../stats/regression.js";
+import { permPval } from "../io/sections.js";
+import { drawPCurve, drawPUniform } from "../plots/plots.js";
+import { escapeHTML } from "../core/utils-html.js";
 import { HELP_LABELS } from "./help-labels.js";
 
 // Returns an HTML string for a yellow convergence-warning chip, or "" if converged.

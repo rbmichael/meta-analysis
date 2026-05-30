@@ -15,8 +15,8 @@
 // module initialisation time.
 // =============================================================================
 
-import { normalCDF, normalQuantile } from "./utils.js";
-import { MIN_VAR } from "./constants.js";
+import { normalCDF, normalQuantile } from "../core/utils.js";
+import { MIN_VAR } from "../core/constants.js";
 // Circular import — safe: called inside function bodies only.
 import { heterogeneityCIs } from "./regression.js";
 

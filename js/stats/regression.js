@@ -8,9 +8,9 @@
 // Circular imports — safe: these are only called inside function bodies.
 import { meta, robustWlsResult, logLik, validStudies, resolveClusterIds, groupByCluster } from "./analysis.js";
 import { tau2Core_REML, tau2Core_ML, tau2Core_PM, tau2Core_DL, tau2Core_HS, tau2Core_HE, tau2Core_SJ } from "./tau2.js";
-import { wls, wlsCholesky, matInverse, logDet, numericalHessian, diagSE } from "./linalg.js";
-import { normalCDF, normalQuantile, tCDF, tCritical, fCDF, fTailP, chiSquareCDF, chiSquareQuantile, median, sum, bisect } from "./utils.js";
-import { MIN_VAR, REML_TOL, BISECTION_ITERS } from "./constants.js";
+import { wls, wlsCholesky, matInverse, logDet, numericalHessian, diagSE } from "../core/linalg.js";
+import { normalCDF, normalQuantile, tCDF, tCritical, fCDF, fTailP, chiSquareCDF, chiSquareQuantile, median, sum, bisect } from "../core/utils.js";
+import { MIN_VAR, REML_TOL, BISECTION_ITERS } from "../core/constants.js";
 import { bfgs } from "./selection.js";
 
 // ================= SUBGROUP =================

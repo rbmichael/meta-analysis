@@ -26,9 +26,9 @@
 //   constants.js BISECTION_ITERS
 
 import { robustWlsResult, validStudies, resolveClusterIds } from "./analysis.js";
-import { wls, diagSE } from "./linalg.js";
-import { normalCDF, normalQuantile, tCDF, regularizedGammaP, sum, mean, bisect } from "./utils.js";
-import { BISECTION_ITERS } from "./constants.js";
+import { wls, diagSE } from "../core/linalg.js";
+import { normalCDF, normalQuantile, tCDF, regularizedGammaP, sum, mean, bisect } from "../core/utils.js";
+import { BISECTION_ITERS } from "../core/constants.js";
 
 // ================= EGGER TEST =================
 export function eggerTest(studies){

@@ -5,9 +5,9 @@
 // Extracted from analysis.js (item 4.1.6 of TECHNICAL IMPROVEMENT ROADMAP).
 // =============================================================================
 
-import { chiSquareQuantile, chiSquareCDF, clamp01 } from "./utils.js";
-import { REML_TOL } from "./constants.js";
-import { GL20_X, GL20_W } from "./quadrature.js";
+import { chiSquareQuantile, chiSquareCDF, clamp01 } from "../core/utils.js";
+import { REML_TOL } from "../core/constants.js";
+import { GL20_X, GL20_W } from "../core/quadrature.js";
 
 function iterate(seed, updateFn, maxIter = 200, tol = REML_TOL) {
   let tau2 = seed;

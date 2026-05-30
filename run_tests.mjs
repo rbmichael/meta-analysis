@@ -1,7 +1,7 @@
 // run_tests.mjs — Node.js entry point for js/tests.js
 // Usage:  node run_tests.mjs
-import { runTests } from "./js/tests.js";
-import { runPlotTests } from "./js/test-harness/run-plot-tests.mjs";
+import { runTests } from "./js/tests/tests.js";
+import { runPlotTests } from "./js/tests/harness/run-plot-tests.mjs";
 import { readFileSync, readdirSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";

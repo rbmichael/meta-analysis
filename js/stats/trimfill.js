@@ -27,7 +27,7 @@
 //   linalg.js    wls()
 
 import { meta } from "./analysis.js";
-import { wls } from "./linalg.js";
+import { wls } from "../core/linalg.js";
 
 // ---------------------------------------------------------------------------
 // Internal helper: stable argsort (ascending yi)

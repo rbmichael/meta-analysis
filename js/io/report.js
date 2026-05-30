@@ -31,12 +31,12 @@
 //   constants.js Z_95
 //   export.js    serializeSVG(), collectPagedSVGs()
 
-import { fmt, fmtCI_APA, escHTML, fmtP as _fmtP, fmtP_APA as _fmtP_APA } from "./format.js";
-import { drawForest, drawCumulativeForest, drawCaterpillarPlot } from "./plots.js";
+import { fmt, fmtCI_APA, escHTML, fmtP as _fmtP, fmtP_APA as _fmtP_APA } from "../core/format.js";
+import { drawForest, drawCumulativeForest, drawCaterpillarPlot } from "../plots/plots.js";
 import { downloadBlob } from "./io.js";
-import { Z_95 } from "./constants.js";
-import { normalQuantile } from "./utils.js";
-import { adjustPvals } from "./regression.js";
+import { Z_95 } from "../core/constants.js";
+import { normalQuantile } from "../core/utils.js";
+import { adjustPvals } from "../stats/regression.js";
 import { serializeSVG, collectPagedSVGs } from "./export.js";
 import { summaryData, pubBiasData, pCurveData, puniformData, selModelData,
          influenceData, subgroupData, studyTableData, regressionData,

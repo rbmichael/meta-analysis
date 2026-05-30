@@ -22,15 +22,15 @@
 //   mvOpenPrintPreview(html)
 // =============================================================================
 
-import { vcalc, mvMeta } from "./multivariate.js";
-import { normalQuantile, tCritical } from "./utils.js";
-import { fmt } from "./format.js";
-import { escapeHTML } from "./utils-html.js";
+import { vcalc, mvMeta } from "../stats/multivariate.js";
+import { normalQuantile, tCritical } from "../core/utils.js";
+import { fmt } from "../core/format.js";
+import { escapeHTML } from "../core/utils-html.js";
 import { renderWarningBlocks, msgExcluded, msgNonNumericMod, analysisChecks } from "./ui-warnings.js";
-import { cellRich, mvPooledData, mvHeterogeneityData, mvTestsData, mvModeratorData, mvFitLine, mvStudyData, convergenceBadge } from "./sections.js";
-import { PLOT_THEMES } from "./plotThemes.js";
-import { resolveThemeVars, hasEmbeddedBackground, currentBgColour } from "./export.js";
-import { downloadBlob } from "./io.js";
+import { cellRich, mvPooledData, mvHeterogeneityData, mvTestsData, mvModeratorData, mvFitLine, mvStudyData, convergenceBadge } from "../io/sections.js";
+import { PLOT_THEMES } from "../plots/plotThemes.js";
+import { resolveThemeVars, hasEmbeddedBackground, currentBgColour } from "../io/export.js";
+import { downloadBlob } from "../io/io.js";
 import {
   commitPendingDelete, registerDeleteCompanion,
   showUndoToast, hideUndoToast,

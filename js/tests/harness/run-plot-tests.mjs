@@ -14,8 +14,8 @@
 import { setup, makeSvg, makeContainer } from "./plot-test-env.mjs";
 import { computeStudies, runAnalysisHeadless } from "../analysis-headless.js";
 import { meta, influenceDiagnostics, baujat, blupMeta, pCurve, pUniform,
-         metaRegression, profileLikTau2, bayesMeta, cumulativeMeta } from "../analysis.js";
-import { goshCompute } from "../gosh.js";
+         metaRegression, profileLikTau2, bayesMeta, cumulativeMeta } from "../../stats/analysis.js";
+import { goshCompute } from "../../stats/gosh.js";
 import {
   drawForest, drawFunnel,
   drawBubble, drawPartialResidualBubble,
@@ -27,7 +27,7 @@ import {
   drawBayesTauPosterior, drawBayesMuPosterior,
   drawQQPlot, drawRadialPlot,
   drawPCurve, drawPUniform,
-} from "../plots.js";
+} from "../../plots/plots.js";
 
 // ── Fixture data (module-level constants, no DOM needed) ──────────────────────
 

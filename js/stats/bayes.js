@@ -18,8 +18,8 @@
 //   constants.js REML_TOL, BISECTION_ITERS, MIN_VAR
 
 import { logLik, tau2_REML, tau2_ML } from "./tau2.js";
-import { chiSquareQuantile, sum, bisect } from "./utils.js";
-import { REML_TOL, BISECTION_ITERS, MIN_VAR } from "./constants.js";
+import { chiSquareQuantile, sum, bisect } from "../core/utils.js";
+import { REML_TOL, BISECTION_ITERS, MIN_VAR } from "../core/constants.js";
 
 // ================= PROFILE TAU² =================
 // For a fixed pooled mean μ, find τ² ≥ 0 that maximises L(μ, τ²).

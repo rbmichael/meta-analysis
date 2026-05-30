@@ -33,7 +33,7 @@
 // Dependencies: matInverse, wls from analysis.js
 // =============================================================================
 
-import { matInverse, wls, wlsCholesky } from "./linalg.js";
+import { matInverse, wls, wlsCholesky } from "../core/linalg.js";
 import { tau2Core_DL, tau2Core_HS, tau2Core_HE, tau2Core_REML, tau2Core_ML, tau2Core_PM } from "./tau2.js";
 
 // ---------------------------------------------------------------------------

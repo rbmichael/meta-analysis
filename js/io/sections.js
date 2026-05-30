@@ -6,10 +6,10 @@
 // Notes use plain text or <em>…</em> only (no <sub>, no HTML entities).
 // Rows are string[][] — renderers wrap cells in <td> or OOXML <w:r>.
 
-import { fmt, fmtCI_APA, fmtP_APA } from "./format.js";
-import { normalQuantile } from "./utils.js";
-import { Z_95 } from "./constants.js";
-import { leaveOneOut, estimatorComparison } from "./influence.js";
+import { fmt, fmtCI_APA, fmtP_APA } from "../core/format.js";
+import { normalQuantile } from "../core/utils.js";
+import { Z_95 } from "../core/constants.js";
+import { leaveOneOut, estimatorComparison } from "../stats/influence.js";
 
 // ---------------------------------------------------------------------------
 // cellRich — renderer-agnostic run parser

@@ -1,21 +1,21 @@
-import { round, transformEffect, chiSquareCDF, chiSquareQuantile, parseCounts, bivariateNormalCDF, normalQuantile, tCritical, fCDF, fTailP, normalCDF, tCDF, logGamma } from "./utils.js";
-import { validateStudy, effectProfiles } from "./profiles.js";
-import { MIN_VAR } from "./constants.js";
-import { msgMinVarClamp } from "./ui-warnings.js";
+import { round, transformEffect, chiSquareCDF, chiSquareQuantile, parseCounts, bivariateNormalCDF, normalQuantile, tCritical, fCDF, fTailP, normalCDF, tCDF, logGamma } from "../core/utils.js";
+import { validateStudy, effectProfiles } from "../core/profiles.js";
+import { MIN_VAR } from "../core/constants.js";
+import { msgMinVarClamp } from "../ui/ui-warnings.js";
 import { BENCHMARKS, PUB_BIAS_BENCHMARKS, INFLUENCE_BENCHMARKS, META_REGRESSION_BENCHMARKS, VH_BENCHMARKS, MH_BENCHMARKS, CLUSTER_BENCHMARKS, RVE_BENCHMARKS, RVE_MOM_BENCHMARKS, THREE_LEVEL_BENCHMARKS, LS_BENCHMARKS, CONTRAST_BENCHMARKS, INTERACTION_BENCHMARKS, HALFNORM_BENCHMARKS, POWER_BENCHMARKS, NEGEXP_BENCHMARKS, BETA_BENCHMARKS, PERM_BENCHMARKS, TRIMFILL_BENCHMARKS, CUMULATIVE_BENCHMARKS, HC_BENCHMARKS, WAAP_BENCHMARKS, PCURVE_BENCHMARKS, PUNIFORM_BENCHMARKS } from "./benchmarks.js";
-import { permTestSync, permPval } from "./perm.js";
-import { compute, meta, metaMH, metaPeto, robustMeta, sandwichVar, robustWlsResult, metaRegression, testContrast, tau2_HS, tau2_HE, tau2_ML, tau2_REML, tau2_SJ, beggTest, eggerTest, fatPetTest, petPeeseTest, failSafeN, tesTest, heterogeneityCIs, cumulativeMeta, influenceDiagnostics, harbordTest, petersTest, deeksTest, rueckerTest, leaveOneOut, baujat, blupMeta, pCurve, pUniform, estimatorComparison, subgroupAnalysis, logLik, bfgs, selIntervalProbs, selIntervalIdx, selectionLogLik, SEL_CUTS_ONE_SIDED, SEL_CUTS_TWO_SIDED, veveaHedges, SELECTION_PRESETS, halfNormalSelModel, powerSelModel, negexpSelModel, betaSelModel, profileLikTau2, profileLikCI, bayesMeta, priorSensitivity, rvePooled, meta3level, lsModel, adjustPvals, henmiCopas, waapWls, clES, vcalc, mvMeta, validStudies } from "./analysis.js";
-import { trimFill } from "./trimfill.js";
-import { parseCSV, detectCsvFormat, parseNumberWithDecimal } from "./csv.js";
-import { goshCompute, GOSH_MAX_ENUM_K, GOSH_MAX_K, GOSH_DEFAULT_MAX_SUBSETS } from "./gosh.js";
+import { permTestSync, permPval } from "../stats/perm.js";
+import { compute, meta, metaMH, metaPeto, robustMeta, sandwichVar, robustWlsResult, metaRegression, testContrast, tau2_HS, tau2_HE, tau2_ML, tau2_REML, tau2_SJ, beggTest, eggerTest, fatPetTest, petPeeseTest, failSafeN, tesTest, heterogeneityCIs, cumulativeMeta, influenceDiagnostics, harbordTest, petersTest, deeksTest, rueckerTest, leaveOneOut, baujat, blupMeta, pCurve, pUniform, estimatorComparison, subgroupAnalysis, logLik, bfgs, selIntervalProbs, selIntervalIdx, selectionLogLik, SEL_CUTS_ONE_SIDED, SEL_CUTS_TWO_SIDED, veveaHedges, SELECTION_PRESETS, halfNormalSelModel, powerSelModel, negexpSelModel, betaSelModel, profileLikTau2, profileLikCI, bayesMeta, priorSensitivity, rvePooled, meta3level, lsModel, adjustPvals, henmiCopas, waapWls, clES, vcalc, mvMeta, validStudies } from "../stats/analysis.js";
+import { trimFill } from "../stats/trimfill.js";
+import { parseCSV, detectCsvFormat, parseNumberWithDecimal } from "../io/csv.js";
+import { goshCompute, GOSH_MAX_ENUM_K, GOSH_MAX_K, GOSH_DEFAULT_MAX_SUBSETS } from "../stats/gosh.js";
 // ── Export-parity harness imports ────────────────────────────────────────────
-import { fmt } from "./format.js";
+import { fmt } from "../core/format.js";
 import { runAnalysisHeadless, computeStudies, buildReportArgs } from "./analysis-headless.js";
 import { summaryData, pubBiasData, regressionData, influenceData,
          selModelData, rveData, threeLevelData, bayesData,
-         mvPooledData, mvHeterogeneityData, mvTestsData } from "./sections.js";
-import { buildTableAPA } from "./report.js";
-import { docSectionXML, docMVSectionXML } from "./docx.js";
+         mvPooledData, mvHeterogeneityData, mvTestsData } from "../io/sections.js";
+import { buildTableAPA } from "../io/report.js";
+import { docSectionXML, docMVSectionXML } from "../io/docx.js";
 import fixtureSmReml     from "./fixtures/fixture_smd_reml_normal.mjs";
 import fixtureSmKh       from "./fixtures/fixture_smd_reml_kh.mjs";
 import fixtureBcgReg     from "./fixtures/fixture_bcg_regression.mjs";
