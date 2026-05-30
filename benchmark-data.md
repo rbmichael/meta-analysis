@@ -1577,6 +1577,46 @@ All values verified against metafor 4.8-0 (tolerance 0.001).
 
 ---
 
+**TF-Q0-SYNTH: Synthetic asymmetric funnel (k=6, DL) — Q0 discriminant failure**
+
+Dataset (same as PB-synth / HC-2 / WAAP-2):
+```
+yi:  −0.1   0.3   0.1   0.9   1.4   0.5
+vi:   0.04  0.09  0.0225 0.36  0.64  0.16
+```
+
+R: `trimfill(rma(yi, vi, method="DL"), estimator="Q0")` throws:
+```
+Warning: NaNs produced
+Error in if (k0.new < 0) ... : missing value where TRUE/FALSE needed
+```
+
+The discriminant `2k² − 4·Sr + ¼` goes negative on the trimmed dataset, making
+the Q0 formula undefined. R cannot recover from this.
+
+JS behaviour (trimfill.js): the iterative algorithm tries k0=3 on the first pass
+(full-k discriminant is positive: disc=4.25), then re-runs with 3 studies trimmed.
+On the trimmed set of 3 studies the discriminant becomes −3.75 < 0. JS detects
+`disc < 0` and breaks immediately with `k0=0`, `converged=false`,
+`reason='q0_disc_negative'` — no fill is applied. This is a graceful degradation
+where R errors fatally.
+
+**Expected JS output (no fill; pooled = original 6 studies, DL):**
+
+| Field   | Value       |
+|---------|-------------|
+| k0      | 0           |
+| b_tf    | 0.19309212  |
+| se_tf   | 0.13800816  |
+| tau2_tf | 0.02782229  |
+| ci_lb   | −0.07739889 |
+| ci_ub   | 0.46358314  |
+
+No `rBlock` in `js/benchmarks.js` — R cannot produce a reference value.
+Entry serves as a regression-guard for the JS `disc<0` code path (2026-05-30).
+
+---
+
 ---
 
 ## Influence / LOO Benchmarks (Phase 7)

@@ -103,6 +103,7 @@ export function trimFill(studies, method = "DL", estimator = "L0", maxIter = 100
   let tau2Warm = null; // warm-start seed: previous iteration's converged τ²
   let tfIters  = 0;
   let tfConverged = false;
+  let tfReason    = 'max_iters';
 
   for (; tfIters < maxIter; tfIters++) {
     const k0Prev = k0;
@@ -144,15 +145,18 @@ export function trimFill(studies, method = "DL", estimator = "L0", maxIter = 100
     } else {  // Q0
       const Sr = signedRanks.reduce((acc, r) => r > 0 ? acc + r : acc, 0);
       const disc = 2 * k * k - 4 * Sr + 0.25;
-      k0Raw = disc >= 0 ? k - 0.5 - Math.sqrt(disc) : 0;
+      // disc<0: Q0 undefined for this trimmed data (mirrors R's NaN/error).
+      // Break immediately rather than oscillating; k0=0, no fill.
+      if (disc < 0) { k0 = 0; tfReason = 'q0_disc_negative'; break; }
+      k0Raw = k - 0.5 - Math.sqrt(disc);
     }
 
     k0 = Math.max(0, Math.round(k0Raw));
-    if (k0 === k0Prev) { tfConverged = true; tfIters++; break; }
+    if (k0 === k0Prev) { tfConverged = true; tfReason = null; tfIters++; break; }
   }
 
   const convergence = { converged: tfConverged, iters: tfIters, maxIters: maxIter,
-                        reason: tfConverged ? null : 'max_iters', source: 'trimFill_' + estimator };
+                        reason: tfReason, source: 'trimFill_' + estimator };
 
   if (k0 === 0) return { filled: [], convergence };
 

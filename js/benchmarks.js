@@ -4598,7 +4598,9 @@ const _SYNTH_FUNNEL = [
 // TRIMFILL_BENCHMARKS — Duval-Tweedie L₀/R₀/Q₀ across three datasets.
 // Fields: k0 (exact), b_tf, se_tf, tau2_tf, ci_lb_tf, ci_ub_tf.
 // Verified against metafor trimfill() (generate.R blocks TF-*).
-// Note: TF-Q0-SYNTH skipped — metafor Q₀ fails on k=6 with NaN in sqrt.
+// Note: TF-Q0-SYNTH — metafor Q₀ errors on k=6 with NaN in sqrt (disc<0 on trimmed data).
+// JS trims once (k0=3), then disc<0 on trimmed set → break with k0=0, converged=false.
+// Expected: no fill; pooled result = original 6 studies. Verified 2026-05-30.
 // =============================================================================
 export const TRIMFILL_BENCHMARKS = [
   {
@@ -4640,6 +4642,16 @@ export const TRIMFILL_BENCHMARKS = [
     data: _SYNTH_FUNNEL,
     expected: { k0: 3, b_tf: 0.0733674, se_tf: 0.15345843, tau2_tf: 0.06949276, ci_lb_tf: -0.2274056, ci_ub_tf: 0.3741404 },
     citation: "Synthetic asymmetric funnel (k=6). Verified via generate.R block TF-R0-SYNTH.",
+  },
+  {
+    // No rBlock — metafor Q0 errors (NaN in sqrt) on k=6 asymmetric data.
+    // JS: k0=3 on first iter, disc<0 on trimmed set → break, k0=0, converged=false.
+    // Expected: no fill; pooled = original 6 studies. JS-only benchmark; see benchmark-data.md §TF-Q0-SYNTH.
+    name: "Synthetic funnel trim-fill Q0 (DL, k=6) — R fails, JS no-fill",
+    type: "GENERIC", tauMethod: "DL", estimator: "Q0",
+    data: _SYNTH_FUNNEL,
+    expected: { k0: 0, b_tf: 0.19309212, se_tf: 0.13800816, tau2_tf: 0.02782229, ci_lb_tf: -0.07739889, ci_ub_tf: 0.46358314 },
+    citation: "Synthetic asymmetric funnel (k=6). R's trimfill(estimator='Q0') errors with NaN. JS breaks on disc<0 → k0=0. JS-only; verified 2026-05-30.",
   },
   {
     rBlock: "TF-L0-NORMAND",
