@@ -17,7 +17,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const ROOT   = fileURLToPath(new URL(".", import.meta.url));
+const ROOT   = fileURLToPath(new URL("..", import.meta.url));
 const WINDOW = 4;          // lines after the match line to look for AUDITED:
 const HEADER = 15;         // lines at the top of file to check for AUDIT_EXEMPT:
 
@@ -33,7 +33,7 @@ const EXEMPT_PAT = /AUDIT_EXEMPT:/i;
 
 // Collect target files: generate.R + comparisons/*.R
 function collectFiles() {
-  const files = [ join(ROOT, "generate.R") ];
+  const files = [ join(ROOT, "scripts", "generate.R") ];
   const cmpDir = join(ROOT, "comparisons");
   try {
     for (const f of readdirSync(cmpDir)) {

@@ -1,11 +1,11 @@
 {
   "type": "module",
   "scripts": {
-    "test": "node run_tests.mjs",
-    "diff": "node diff_benchmarks.mjs",
-    "canonical-diff": "node canonical_diff.mjs",
-    "audit-comments": "node audit_match_comments.mjs",
-    "test:plots": "node js/test-harness/run-plot-tests.mjs"
+    "test": "node scripts/run_tests.mjs",
+    "diff": "node scripts/diff_benchmarks.mjs",
+    "canonical-diff": "node scripts/canonical_diff.mjs",
+    "audit-comments": "node scripts/audit_match_comments.mjs",
+    "test:plots": "node js/tests/harness/run-plot-tests.mjs"
   },
   "devDependencies": {
     "d3": "^7.9.0",

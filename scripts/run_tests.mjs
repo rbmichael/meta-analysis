@@ -1,7 +1,7 @@
 // run_tests.mjs — Node.js entry point for js/tests.js
 // Usage:  node run_tests.mjs
-import { runTests } from "./js/tests/tests.js";
-import { runPlotTests } from "./js/tests/harness/run-plot-tests.mjs";
+import { runTests } from "../js/tests/tests.js";
+import { runPlotTests } from "../js/tests/harness/run-plot-tests.mjs";
 import { readFileSync, readdirSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -33,10 +33,10 @@ runTests();
   };
 
   const read = (rel) => readFileSync(new URL(rel, import.meta.url), "utf8");
-  const goshJs     = read("./js/gosh.js");
-  const goshWorker = read("./js/gosh.worker.js");
-  const permJs     = read("./js/perm.js");
-  const permWorker = read("./js/perm.worker.js");
+  const goshJs     = read("../js/stats/gosh.js");
+  const goshWorker = read("../js/workers/gosh.worker.js");
+  const permJs     = read("../js/stats/perm.js");
+  const permWorker = read("../js/workers/perm.worker.js");
 
   // Extract the numeric value of a named constant from source text.
   // Handles both `50_000` and `50000` forms.
@@ -87,7 +87,7 @@ runTests();
 {
   origLog("\n===== AUDIT: MATCH-APP COMMENTS =====\n");
 
-  const ROOT       = fileURLToPath(new URL(".", import.meta.url));
+  const ROOT       = fileURLToPath(new URL("..", import.meta.url));
   const WINDOW     = 4;
   const HEADER     = 15;
   const MATCH_PAT  = /match(?:ing)?\s+(?:the\s+)?(?:app|JS)\b|app'?s\s+(?:value|formula|convention|output)/i;
@@ -110,7 +110,7 @@ runTests();
     return viols;
   }
 
-  const targets = [ join(ROOT, "generate.R") ];
+  const targets = [ join(ROOT, "scripts", "generate.R") ];
   try { for (const f of readdirSync(join(ROOT, "comparisons")))
     if (f.endsWith(".R")) targets.push(join(ROOT, "comparisons", f)); } catch {}
 

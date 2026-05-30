@@ -28,7 +28,7 @@ jobs:
         run: npm ci
 
       - name: Run test suite (benchmarks + export-parity + plot smoke tests)
-        run: node run_tests.mjs
+        run: node scripts/run_tests.mjs
 
       - name: Diff benchmarks against R ground truth
-        run: node diff_benchmarks.mjs
+        run: node scripts/diff_benchmarks.mjs

@@ -3757,6 +3757,6 @@ BENCH[["__meta"]] <- list(
   generated       = format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC"),
   blocks          = length(BENCH)
 )
-jsonlite::write_json(BENCH, "benchmark_reference.json",
+jsonlite::write_json(BENCH, "../benchmark_reference.json",
                      auto_unbox = TRUE, digits = 8, pretty = FALSE)
 cat("\nWrote benchmark_reference.json  (", length(BENCH), "blocks)\n")

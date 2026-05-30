@@ -38,7 +38,7 @@ import {
   WAAP_BENCHMARKS,
   PCURVE_BENCHMARKS,
   PUNIFORM_BENCHMARKS,
-} from './js/tests/benchmarks.js';
+} from '../js/tests/benchmarks.js';
 
 // ---- CLI args ----
 const argv       = process.argv.slice(2);
@@ -47,7 +47,7 @@ const fieldFilter = fieldIdx >= 0 ? new Set(argv[fieldIdx + 1].split(',')) : nul
 const thrIdx     = argv.indexOf('--threshold');
 const threshold  = thrIdx >= 0 ? parseFloat(argv[thrIdx + 1]) : 0;
 
-const ref = JSON.parse(readFileSync('./benchmark_reference.json', 'utf8'));
+const ref = JSON.parse(readFileSync('../benchmark_reference.json', 'utf8'));
 
 const meta = ref['__meta'];
 console.log('canonical_diff.mjs — informational only; always exits 0');

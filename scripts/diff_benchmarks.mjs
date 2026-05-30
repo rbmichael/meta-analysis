@@ -30,9 +30,9 @@ import {
   WAAP_BENCHMARKS,
   PCURVE_BENCHMARKS,
   PUNIFORM_BENCHMARKS,
-} from './js/tests/benchmarks.js';
+} from '../js/tests/benchmarks.js';
 
-const ref = JSON.parse(readFileSync('./benchmark_reference.json', 'utf8'));
+const ref = JSON.parse(readFileSync('../benchmark_reference.json', 'utf8'));
 
 // ---- version header ----
 {
@@ -463,7 +463,7 @@ for (const bm of PERM_BENCHMARKS) {
 {
   // Import compute functions — must be done dynamically since diff_benchmarks.mjs
   // uses static imports for benchmarks.js, but analysis.js has side-effect imports.
-  const { vcalc, mvMeta } = await import('./js/analysis.js');
+  const { vcalc, mvMeta } = await import('../js/stats/analysis.js');
 
   for (const bm of MULTIVARIATE_BENCHMARKS) {
     if (!bm.rBlock) continue;
@@ -533,8 +533,8 @@ for (const bm of PERM_BENCHMARKS) {
 // Compares trimfill() pooled-estimate fields (b_tf, se_tf, tau2_tf, ci endpoints).
 // k0 is integer-exact; numeric fields use default tolerance (±0.005).
 {
-  const { compute: _compute, meta: _meta } = await import('./js/analysis.js');
-  const { trimFill: _trimFill } = await import('./js/trimfill.js');
+  const { compute: _compute, meta: _meta } = await import('../js/stats/analysis.js');
+  const { trimFill: _trimFill } = await import('../js/stats/trimfill.js');
 
   for (const bm of TRIMFILL_BENCHMARKS) {
     if (!bm.rBlock) continue;
@@ -568,8 +568,8 @@ for (const bm of PERM_BENCHMARKS) {
 // ---- CUMULATIVE_BENCHMARKS ----
 // Compares each cumulative step's estimate, se, ci_lb, ci_ub, tau2.
 {
-  const { compute: _compute2, meta: _meta2 } = await import('./js/analysis.js');
-  const { cumulativeMeta: _cumMeta } = await import('./js/influence.js');
+  const { compute: _compute2, meta: _meta2 } = await import('../js/stats/analysis.js');
+  const { cumulativeMeta: _cumMeta } = await import('../js/stats/influence.js');
 
   for (const bm of CUMULATIVE_BENCHMARKS) {
     if (!bm.rBlock) continue;
@@ -600,7 +600,7 @@ for (const bm of PERM_BENCHMARKS) {
 // ---- HC_BENCHMARKS ----
 // Compares Henmi-Copas beta, se, tau2, ci_lb, ci_ub.
 {
-  const { compute: _compute3, henmiCopas: _hc } = await import('./js/analysis.js');
+  const { compute: _compute3, henmiCopas: _hc } = await import('../js/stats/analysis.js');
 
   for (const bm of HC_BENCHMARKS) {
     if (!bm.rBlock) continue;
@@ -632,7 +632,7 @@ for (const bm of PERM_BENCHMARKS) {
 // ---- WAAP_BENCHMARKS ----
 // Compares WAAP-WLS wlsEstimate, kAdequate (exact), estimate, se, z.
 {
-  const { compute: _compute4, waapWls: _waap } = await import('./js/analysis.js');
+  const { compute: _compute4, waapWls: _waap } = await import('../js/stats/analysis.js');
 
   for (const bm of WAAP_BENCHMARKS) {
     if (!bm.rBlock) continue;
@@ -667,7 +667,7 @@ for (const bm of PERM_BENCHMARKS) {
 // Runs pCurve() on each dataset and compares against R formula cross-check.
 // Tolerance: ±0.005 for all fields (Z and p values are deterministic).
 {
-  const { compute: _computePC, meta: _metaPC, pCurve: _pCurve } = await import('./js/analysis.js');
+  const { compute: _computePC, meta: _metaPC, pCurve: _pCurve } = await import('../js/stats/analysis.js');
 
   for (const bm of PCURVE_BENCHMARKS) {
     if (!bm.rBlock) continue;
@@ -703,7 +703,7 @@ for (const bm of PERM_BENCHMARKS) {
 // ---- PUNIFORM_BENCHMARKS ----
 // Runs pUniform() on each dataset and compares against R formula cross-check.
 {
-  const { compute: _computePU, meta: _metaPU, pUniform: _pUniform } = await import('./js/analysis.js');
+  const { compute: _computePU, meta: _metaPU, pUniform: _pUniform } = await import('../js/stats/analysis.js');
 
   for (const bm of PUNIFORM_BENCHMARKS) {
     if (!bm.rBlock) continue;
