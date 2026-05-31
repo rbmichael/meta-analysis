@@ -1199,6 +1199,14 @@
         and passing it via <code>mods</code> (Harrell, 2015).</li>
       </ul>
 
+      <p><strong>Interaction terms</strong> — once two or more moderators exist, an
+      <em>Interaction terms</em> row lets you add an A×B term from two existing moderators;
+      the product columns are computed automatically (no extra data column needed). A
+      continuous×continuous interaction adds one column (x₁·x₂); continuous×categorical adds
+      k−1 columns; categorical×categorical adds (j−1)×(k−1) columns. Main effects are kept
+      automatically, and each interaction receives its own Wald QM and LRT in the per-term
+      table.</p>
+
       <p><strong>Multiple comparison correction</strong> — when m moderators are tested
       simultaneously, Bonferroni (p<sub>adj</sub> = min(1, m·p)) or Holm (step-down, uniformly
       more powerful than Bonferroni) correction is applied to the per-moderator omnibus QM
@@ -1322,6 +1330,7 @@
             <tr><td>Baujat plot</td><td>Heterogeneity contribution vs. overall influence; quadrant guides at the mean.</td></tr>
             <tr><td>Normal Q-Q plot</td><td>Normal probability plot of standardised residuals <em>z</em><sub>i</sub> = (<em>y</em><sub>i</sub> − μ̂) / √(<em>v</em><sub>i</sub> + τ²). Reference line through Q1/Q3. Orange points: |<em>z</em>| > 2.</td></tr>
             <tr><td>Radial (Galbraith) plot</td><td>Precision (1/seᵢ) vs. standardised effect (yᵢ/seᵢ). Solid line through origin with slope = FE pooled estimate; dashed ±2 band. Orange points: outliers (|yᵢ/seᵢ − θ·xᵢ| > 2). Right axis shows effect-size scale.</td></tr>
+            <tr><td>L'Abbé plot</td><td>Treatment vs. control event rate per study (binary outcomes: OR, RR, RD). Reference diagonal = no effect; dashed curve = pooled RE estimate.</td></tr>
             <tr><td>Cumulative forest plot</td><td>Cumulative pooled estimate as studies are added in sequence. Paginated.</td></tr>
             <tr><td>Cumulative funnel plot</td><td>Funnel at each cumulative step; slider-controlled.</td></tr>
             <tr><td>Orchard plot</td><td>Effect estimates as precision-sized dots with RE diamond and prediction interval.</td></tr>
