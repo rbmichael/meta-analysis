@@ -1,0 +1,21 @@
+cff-version: 1.2.0
+message: "If you use this software in published work, please cite it as below."
+title: "Free and Open-Source Meta-Analysis (FOSMA): a browser-based meta-analysis tool"
+version: 1.0.0
+date-released: 2026-05-31
+license: MIT
+doi: 10.5281/zenodo.20470390
+url: "https://github.com/rbmichael/meta-analysis"
+repository-code: "https://github.com/rbmichael/meta-analysis"
+authors:
+  - family-names: Michael
+    given-names: R. B.
+    orcid: "https://orcid.org/0000-0001-5275-7636"
+keywords:
+  - meta-analysis
+  - statistics
+  - browser-based
+  - JavaScript
+  - effect sizes
+  - heterogeneity
+  - publication bias
