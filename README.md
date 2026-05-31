@@ -8,6 +8,20 @@ A browser-based meta-analysis tool. No installation, no server, no dependencies 
 
 ---
 
+## Reproducibility
+
+All numerical results are cross-validated against [metafor](https://github.com/wviechtb/metafor) (R). The pipeline:
+
+1. `Rscript scripts/generate.R` — runs 107 named R/metafor blocks and writes `benchmark_reference.json`.
+2. `node scripts/diff_benchmarks.mjs` — compares every block against `js/tests/benchmarks.js` within documented tolerances. Exit 0 = all match.
+3. `node scripts/run_tests.mjs` — full test suite (benchmarks, unit tests, export-parity, plot smoke tests). Exit 0 required before every release.
+
+`comparisons/` contains six R scripts (`compare.R`, `compare_mv.R`, `compare_regression.R`, `compare_robust.R`, `compare_selection.R`, `compare_influence.R`) and 89 annotated result snapshots covering all major analysis paths. Any reviewer with R + metafor can re-run them independently. See [`comparisons/scripts/README.md`](comparisons/scripts/README.md) for the coverage table and invocation reference.
+
+Known formula divergences from metafor are listed with bounded tolerances in [`docs/benchmark-data.md`](docs/benchmark-data.md). There are no silent disagreements.
+
+---
+
 ## Features
 
 ### Effect types
@@ -200,6 +214,8 @@ CSV column names match the input fields for each effect type (e.g. `m1,sd1,n1,m2
 
 ## Usage
 
+**Tested browsers:** Chrome ≥ 90, Firefox ≥ 90, Safari ≥ 15, Edge ≥ 90. The app uses ES modules and Web Workers; older browsers are not supported.
+
 **Option 1 — Hosted (no setup):**
 Visit **https://rbmichael.github.io/meta-analysis/** in any modern browser. Nothing to install or configure.
 
@@ -305,6 +321,28 @@ git checkout offline
 - Wagenmakers EJ, Lodewyckx T, Kuriyal H, Grasman R (2010). Bayesian hypothesis testing for psychologists: A tutorial on the Savage-Dickey method. *Cogn Psychol*, 60(3), 158–189.
 - Yule GU (1900). On the association of attributes in statistics. *Phil Trans R Soc Lond A*, 194, 257–319.
 - Yule GU (1912). On the methods of measuring association between two attributes. *J R Stat Soc*, 75(6), 579–642.
+
+---
+
+## Citation
+
+If you use FOSMA in published work, please cite:
+
+> Michael, R. B. (2026). *Free and Open-Source Meta-Analysis (FOSMA): a browser-based meta-analysis tool* (Version 1.0.0). Zenodo. https://doi.org/10.5281/zenodo.20470390
+
+BibTeX:
+
+```bibtex
+@software{michael2026fosma,
+  author    = {Michael, R. B.},
+  title     = {Free and Open-Source Meta-Analysis ({FOSMA}): a browser-based meta-analysis tool},
+  year      = {2026},
+  version   = {1.0.0},
+  publisher = {Zenodo},
+  doi       = {10.5281/zenodo.20470390},
+  url       = {https://doi.org/10.5281/zenodo.20470390}
+}
+```
 
 ---
 
