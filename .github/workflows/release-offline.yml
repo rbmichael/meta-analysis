@@ -1,0 +1,45 @@
+name: Release offline bundle
+
+on:
+  push:
+    branches: [offline]
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build bundle
+        run: node build-offline.mjs
+
+      - name: Download JS dependencies
+        run: |
+          mkdir -p lib
+          curl -o lib/jszip.min.js https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js
+          curl -o lib/d3.min.js    https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js
+
+      - name: Package zip
+        run: |
+          mkdir dist
+          cp index.html bundle.js dist/
+          cp -r css lib dist/
+          cd dist && zip -r ../fosma-offline.zip .
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: offline-latest
+          name: Offline bundle (latest)
+          body: Pre-built offline version. Download and open index.html — no server or internet required.
+          files: fosma-offline.zip
+          make_latest: true
