@@ -36,6 +36,9 @@ script_dir   <- if (length(file_flag) > 0) {
 } else {
   "."
 }
+data_dir    <- file.path(script_dir, "..", "data")
+results_dir <- file.path(script_dir, "..", "results")
+
 
 # ── Argument parsing ──────────────────────────────────────────────────────────
 args    <- commandArgs(trailingOnly = TRUE)
@@ -48,9 +51,9 @@ struct_arg    <- get_arg("--struct", "CS")
 method_arg    <- get_arg("--method", "REML")
 rho_arg       <- as.numeric(get_arg("--rho", "0.5"))
 ciMethod_arg  <- get_arg("--ciMethod", "normal")
-input_file    <- get_arg("--input", file.path(script_dir, "mv_berkey98.csv"))
+input_file    <- get_arg("--input", file.path(data_dir, "mv_berkey98.csv"))
 rho_str    <- sub("\\.", "", sprintf("%.1f", rho_arg))   # "05" for 0.5, "0" for 0
-default_out <- file.path(script_dir,
+default_out <- file.path(results_dir,
   paste0("results_MV_", struct_arg, "_", method_arg, "_rho", rho_str, ".txt"))
 output_file <- get_arg("--output", default_out)
 

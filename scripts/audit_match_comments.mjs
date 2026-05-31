@@ -34,12 +34,12 @@ const EXEMPT_PAT = /AUDIT_EXEMPT:/i;
 // Collect target files: generate.R + comparisons/*.R
 function collectFiles() {
   const files = [ join(ROOT, "scripts", "generate.R") ];
-  const cmpDir = join(ROOT, "comparisons");
+  const cmpDir = join(ROOT, "comparisons", "scripts");
   try {
     for (const f of readdirSync(cmpDir)) {
       if (f.endsWith(".R")) files.push(join(cmpDir, f));
     }
-  } catch { /* comparisons/ absent — skip */ }
+  } catch { /* comparisons/scripts/ absent — skip */ }
   return files;
 }
 

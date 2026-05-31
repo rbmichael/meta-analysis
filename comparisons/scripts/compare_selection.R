@@ -65,8 +65,8 @@ type_label <- switch(type_arg,
   puniform = "PUNIFORM",
   all      = "SELECTION"
 )
-default_input  <- file.path(script_dir, "selection_data.csv")
-default_output <- file.path(script_dir, paste0("results_", type_label, ".txt"))
+default_input  <- file.path(data_dir, "selection_data.csv")
+default_output <- file.path(results_dir, paste0("results_", type_label, ".txt"))
 input_file     <- get_arg("--input",  default_input)
 output_file    <- get_arg("--output", default_output)
 

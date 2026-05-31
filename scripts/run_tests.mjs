@@ -111,8 +111,8 @@ runTests();
   }
 
   const targets = [ join(ROOT, "scripts", "generate.R") ];
-  try { for (const f of readdirSync(join(ROOT, "comparisons")))
-    if (f.endsWith(".R")) targets.push(join(ROOT, "comparisons", f)); } catch {}
+  try { for (const f of readdirSync(join(ROOT, "comparisons", "scripts")))
+    if (f.endsWith(".R")) targets.push(join(ROOT, "comparisons", "scripts", f)); } catch {}
 
   const viols = targets.flatMap(auditFile);
   if (viols.length === 0) {

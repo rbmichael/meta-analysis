@@ -37,6 +37,9 @@ script_dir   <- if (length(file_flag) > 0) {
 } else {
   "."
 }
+data_dir    <- file.path(script_dir, "..", "data")
+results_dir <- file.path(script_dir, "..", "results")
+
 
 # ---------------------------------------------------------------------------
 # Argument parsing
@@ -50,8 +53,8 @@ get_arg <- function(key, default) {
 
 method_arg  <- get_arg("--method", "REML")
 ci_arg      <- get_arg("--ci",     "normal")
-input_file  <- get_arg("--input",  file.path(script_dir, "smd_data.csv"))
-output_file <- get_arg("--output", file.path(script_dir, "results_INFLUENCE.txt"))
+input_file  <- get_arg("--input",  file.path(data_dir, "smd_data.csv"))
+output_file <- get_arg("--output", file.path(results_dir, "results_INFLUENCE.txt"))
 
 # ---------------------------------------------------------------------------
 # CI method -> test argument for rma()

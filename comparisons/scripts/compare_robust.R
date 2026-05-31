@@ -45,6 +45,9 @@ script_dir   <- if (length(file_flag) > 0) {
 } else {
   "."
 }
+data_dir    <- file.path(script_dir, "..", "data")
+results_dir <- file.path(script_dir, "..", "results")
+
 
 # ---------------------------------------------------------------------------
 # Argument parsing
@@ -58,10 +61,10 @@ get_arg <- function(key, default) {
 mode_arg   <- get_arg("--mode",   "rve")
 method_arg <- get_arg("--method", "REML")
 rho_arg    <- as.numeric(get_arg("--rho", "0.80"))
-input_file <- get_arg("--input",  file.path(script_dir, "cluster_data.csv"))
+input_file <- get_arg("--input",  file.path(data_dir, "cluster_data.csv"))
 
 mode_tag    <- toupper(mode_arg)
-default_out <- file.path(script_dir,
+default_out <- file.path(results_dir,
   paste0("results_", mode_tag, "_", method_arg, ".txt"))
 output_file <- get_arg("--output", default_out)
 

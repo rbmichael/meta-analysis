@@ -39,6 +39,9 @@ script_dir   <- if (length(file_flag) > 0) {
 } else {
   "."
 }
+data_dir    <- file.path(script_dir, "..", "data")
+results_dir <- file.path(script_dir, "..", "results")
+
 
 # ---------------------------------------------------------------------------
 # Argument parsing
@@ -100,9 +103,9 @@ effect_default_inputs <- c(
 )
 default_input_name <- effect_default_inputs[effect_arg]
 if (is.na(default_input_name)) default_input_name <- "smd_data.csv"
-input_file <- get_arg("--input",  file.path(script_dir, default_input_name))
+input_file <- get_arg("--input",  file.path(data_dir, default_input_name))
 
-default_out <- file.path(script_dir,
+default_out <- file.path(results_dir,
   paste0("results_", effect_arg, "_", method_arg, "_", ci_arg, ".txt"))
 output_file <- get_arg("--output", default_out)
 

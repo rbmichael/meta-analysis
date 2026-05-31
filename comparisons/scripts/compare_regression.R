@@ -37,6 +37,9 @@ script_dir   <- if (length(file_flag) > 0) {
 } else {
   "."
 }
+data_dir    <- file.path(script_dir, "..", "data")
+results_dir <- file.path(script_dir, "..", "results")
+
 
 # ---------------------------------------------------------------------------
 # Argument parsing
@@ -51,9 +54,9 @@ method_arg <- get_arg("--method", "REML")
 ci_arg     <- get_arg("--ci",     "normal")
 perm_arg   <- as.integer(get_arg("--perm", "1000"))
 seed_arg   <- as.integer(get_arg("--seed", "42"))
-input_file <- get_arg("--input",  file.path(script_dir, "regression_data.csv"))
+input_file <- get_arg("--input",  file.path(data_dir, "regression_data.csv"))
 
-default_out <- file.path(script_dir,
+default_out <- file.path(results_dir,
   paste0("results_REG_", method_arg, "_", ci_arg, ".txt"))
 output_file <- get_arg("--output", default_out)
 
