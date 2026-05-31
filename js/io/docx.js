@@ -1170,6 +1170,53 @@ export function docSectionXML(sectionName, reportArgs) {
   return chunks.join("");
 }
 
+// ---------------------------------------------------------------------------
+// buildDocxBodyXML — headless full-body OOXML assembly for integration tests
+// ---------------------------------------------------------------------------
+// Identical wiring to buildDocx's body-chunk array but with no JSZip, no DOM,
+// and no canvas/PNG conversion.  getImgs always returns [] so figure sections
+// and docBayes return [] (image-gated).  Text sections produce their full OOXML.
+//
+// Returns raw concatenated OOXML suitable for string-contains assertions via
+// the extractWt() helper (<w:t> run concatenation) in test harnesses.
+//
+// Add as a named export only — never call from buildDocx to avoid side effects.
+
+export function buildDocxBodyXML(args) {
+  const { reg, ciLevel, mccMethod = "none" } = args;
+
+  const widthCiLabel = (ciLevel ?? "95") + "% CI";
+  const widthCrLabel = (ciLevel ?? "95") + "% CrI";
+  const mccLabel  = mccMethod === "bonferroni" ? "Bonferroni" : mccMethod === "holm" ? "Holm" : "";
+  const rawModPs  = Array.isArray(reg?.modTests) ? reg.modTests.map(mt => mt.QMp) : [];
+  const adjPs     = mccMethod !== "none" && rawModPs.length > 1 ? adjustPvals(rawModPs, mccMethod) : null;
+
+  const getImgs  = () => [];
+  const docArgs  = { ...args, widthCiLabel, widthCrLabel, adjPs, mccLabel, getImgs };
+  const linkMgr  = new HyperlinkManager();
+  let _n = 0;
+  const ctx = { nextTable: () => ++_n, nextFigure: () => ++_n, imgReg: new Map(), linkMgr };
+
+  return [
+    ...docSummary(docArgs, ctx),
+    ...docStudyTable(docArgs, ctx),
+    ...docBayes(docArgs, ctx),          // returns [] — image-gated (no getImgs)
+    ...docRve(docArgs, ctx),
+    ...docThreeLevel(docArgs, ctx),
+    ...docPubBias(docArgs, ctx),
+    ...docSensitivity(docArgs, ctx),
+    ...docSubgroup(docArgs, ctx),
+    ...docInfluence(docArgs, ctx),
+    ...docPCurve(docArgs, ctx),
+    ...docPUniform(docArgs, ctx),
+    ...docSelectionModel(docArgs, ctx),
+    ...docLocationScale(docArgs, ctx),
+    ...docRegression(docArgs, ctx),
+    ...docPermutation(docArgs, ctx),
+    ...docReferences(docArgs, linkMgr),
+  ].filter(chunk => chunk != null && chunk !== "").join("");
+}
+
 // docMVSectionXML — headless OOXML generator for MV export-parity tests
 // Supports: mvPooled | mvHeterogeneity | mvTests
 // No JSZip, no DOM, no async — safe to call from Node.js tests.

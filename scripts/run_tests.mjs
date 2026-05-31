@@ -2,6 +2,7 @@
 // Usage:  node run_tests.mjs
 import { runTests } from "../js/tests/tests.js";
 import { runPlotTests } from "../js/tests/harness/run-plot-tests.mjs";
+import { runExportTests } from "../js/tests/harness/run-export-tests.mjs";
 import { readFileSync, readdirSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -122,6 +123,69 @@ runTests();
     for (const v of viols) origLog(`    ${v.file}:${v.line}  ${v.text}`);
     failed = true;
   }
+}
+
+// ===== EXPORT WIRING CHECKS =====
+// Verify that every section*/doc* function is called within the body array of
+// buildReport (report.js) and buildDocx (docx.js).
+// Catches: a section call silently removed from either body array.
+{
+  origLog("\n===== EXPORT WIRING CHECKS =====\n");
+
+  const ROOT = fileURLToPath(new URL("..", import.meta.url));
+  let wiringPass = true;
+  const onFail = (msg) => { origLog(`  ❌ ${msg}`); wiringPass = false; failed = true; };
+
+  const reportSrc = readFileSync(join(ROOT, "js", "io", "report.js"), "utf8");
+  const docxSrc   = readFileSync(join(ROOT, "js", "io", "docx.js"),   "utf8");
+
+  // Slice: report.js  — "const body = [" … "].join"
+  const rStart = reportSrc.indexOf("const body = [");
+  const rEnd   = reportSrc.indexOf("].join", rStart);
+  const reportBody = rStart >= 0 && rEnd >= 0 ? reportSrc.slice(rStart, rEnd) : "";
+
+  // Slice: docx.js (buildDocx, not buildMVDocx) — first "const bodyChunks = [" … "zip.file"
+  const dStart = docxSrc.indexOf("const bodyChunks = [");
+  const dEnd   = docxSrc.indexOf("zip.file", dStart);
+  const docxBody = dStart >= 0 && dEnd >= 0 ? docxSrc.slice(dStart, dEnd) : "";
+
+  if (!reportBody) onFail("Could not locate 'const body = [' slice in report.js");
+  if (!docxBody)   onFail("Could not locate 'const bodyChunks = [' slice in docx.js");
+
+  const REPORT_SECTIONS = [
+    "sectionSummary", "sectionStudyTable", "sectionBayes",
+    "sectionRve", "sectionThreeLevel", "sectionPubBias", "sectionSensitivity",
+    "sectionSubgroup", "sectionInfluence", "sectionPCurve", "sectionPUniform",
+    "sectionSelectionModel", "sectionGosh", "sectionLocationScale",
+    "sectionRegression", "sectionPermutation", "sectionReferences",
+  ];
+  const DOCX_SECTIONS = [
+    "docSummary", "docStudyTable", "docBayes",
+    "docRve", "docThreeLevel", "docPubBias", "docSensitivity",
+    "docSubgroup", "docInfluence", "docPCurve", "docPUniform",
+    "docSelectionModel", "docLocationScale", "docRegression",
+    "docPermutation", "docReferences",
+  ];
+
+  for (const name of REPORT_SECTIONS) {
+    if (!reportBody.includes(name + "("))
+      onFail(`report.js body array missing call: ${name}()`);
+  }
+  for (const name of DOCX_SECTIONS) {
+    if (!docxBody.includes(name + "("))
+      onFail(`docx.js bodyChunks array missing call: ${name}()`);
+  }
+
+  if (wiringPass) origLog("  ✅ All section*/doc* functions wired in body arrays");
+}
+
+// ===== EXPORT INTEGRATION TESTS =====
+// Calls buildReport() in jsdom and asserts every text-section heading appears.
+// Catches: section dropped/renamed in the body array; buildReport() throwing.
+{
+  origLog("\n===== EXPORT INTEGRATION TESTS =====\n");
+  const { fail: exportFail } = runExportTests();
+  if (exportFail > 0) failed = true;
 }
 
 // ===== PLOT SMOKE TESTS =====
