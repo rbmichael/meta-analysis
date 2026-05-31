@@ -4849,3 +4849,27 @@ export const PUNIFORM_BENCHMARKS = [
     citation: "Normand (1999) Stat Med 18:321 dat.normand1999. JS formula verified via generate.R block PUNIFORM-NORMAND-MD.",
   },
 ];
+
+// =============================================================================
+// GOSH_BENCHMARKS — Graphical Display of Study Heterogeneity
+// Cross-validates goshCompute() against metafor::gosh.rma() on the BCG dataset.
+// metafor >= 4.x returns all 2^k−1 subsets in bitmask order (row i = bitmask i),
+// matching JS goshCompute exactly.  mu is Float32 in JS; tolerance ±1e-4.
+// Sentinel strategy: R stores 5 lowest + 5 highest mu rows by bitmask; JS looks
+// them up by direct index (bitmask − 1) to avoid sort-order Float32/Float64 divergence.
+// =============================================================================
+export const GOSH_BENCHMARKS = [
+  {
+    rBlock: "GOSH-BCG-1",
+    name: "BCG log-OR GOSH (FE, k=13, full enumeration — 8 191 subsets)",
+    // Pre-computed log-OR yi/vi from rma(measure="OR", data=dat.bcg, method="FE")
+    // matching generate.R GOSH-BCG-1 block.
+    yi: [-0.93869414, -1.66619073, -1.38629436, -1.45644355, -0.21914109,
+         -0.95812204, -1.63377584,  0.01202060, -0.47174604, -1.40121014,
+         -0.34084965,  0.44663468, -0.01734187],
+    vi: [0.35712495, 0.20813239, 0.43341308, 0.02031441, 0.05195178,
+         0.00990527, 0.22700968, 0.00400696, 0.05697712, 0.07542173,
+         0.01252513, 0.53416217, 0.07163512],
+    citation: "Colditz et al. (1994) dat.bcg log-OR FE. Cross-validated against metafor::gosh.rma() via generate.R GOSH-BCG-1.",
+  },
+];

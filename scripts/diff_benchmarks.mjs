@@ -31,6 +31,7 @@ import {
   WAAP_BENCHMARKS,
   PCURVE_BENCHMARKS,
   PUNIFORM_BENCHMARKS,
+  GOSH_BENCHMARKS,
 } from '../js/tests/benchmarks.js';
 
 const ref = JSON.parse(readFileSync(fileURLToPath(new URL('../benchmark_reference.json', import.meta.url)), 'utf8'));
@@ -76,6 +77,7 @@ function approxEqual(a, b, field) {
   if (field === 'hcCI')      return Math.abs(a - b) < 0.0015;
   if (field === 'tesField')  return Math.abs(a - b) < 0.001;
   if (field === 'puField')   return Math.abs(a - b) < 0.001;
+  if (field === 'goshMu')   return Math.abs(a - b) < 1e-4;   // JS Float32Array; ~6e-8 × value ULP
   return Math.abs(a - b) < 0.0001;
 }
 
@@ -741,6 +743,53 @@ for (const bm of PERM_BENCHMARKS) {
     chk(label, pu.p_sig,    ex.p_sig,    'puField');
     chk(label, pu.Z_bias,   ex.Z_bias,   'puField');
     chk(label, pu.p_bias,   ex.p_bias,   'puField');
+  }
+}
+
+// ---- GOSH_BENCHMARKS ----
+// Runs goshCompute() and compares against metafor::gosh.rma() on the BCG dataset.
+// R uses combination ordering; JS uses bitmask ordering — they differ, so no row-index
+// correspondence is possible.  Comparison strategy: sort JS Float32 mu array and compare
+// the 10 lowest + 10 highest values against R's pre-sorted sentMu array.
+// Float32 precision does not change the ranking of extreme values vs Float64.
+// Tolerances: ±1e-4 on mu (JS Float32Array).
+{
+  const { goshCompute } = await import('../js/stats/gosh.js');
+
+  for (const bm of GOSH_BENCHMARKS) {
+    if (!bm.rBlock) continue;
+    const r = chkBlock(bm.rBlock);
+    if (!r) continue;
+    const label = `[${bm.rBlock}] ${bm.name}`;
+
+    const g = goshCompute(bm.yi, bm.vi);
+    if (g.error) {
+      console.log(`ERROR  ${label}: ${g.error}`);
+      failures++;
+      continue;
+    }
+
+    // Count: both R and JS (metafor >= 4.x) return all 2^k−1 subsets.
+    if (r.count !== undefined && g.count !== r.count) {
+      console.log(`MISMATCH  ${label}  count: R=${r.count}  js=${g.count}`);
+      failures++;
+    }
+
+    // Sort JS mu array (Float32) and compare 10 lowest + 10 highest against R sentMu.
+    if (r.sentMu && r.sentMu.length > 0) {
+      const n = r.sentMu.length;          // 20 (10 low + 10 high)
+      const half = n / 2;
+      const sorted = Array.from(g.mu).sort((a, b) => a - b);
+      // First half of sentMu = 10 lowest; second half = 10 highest
+      r.sentMu.forEach((rv, i) => {
+        const jsVal = i < half ? sorted[i] : sorted[sorted.length - (n - i)];
+        chk(`${label} sentMu[${i}]`, rv, jsVal, 'goshMu');
+      });
+    }
+
+    // muMin / muMax as a quick sanity check.
+    if (r.muMin !== undefined) chk(`${label} muMin`, r.muMin, Math.min(...Array.from(g.mu)), 'goshMu');
+    if (r.muMax !== undefined) chk(`${label} muMax`, r.muMax, Math.max(...Array.from(g.mu)), 'goshMu');
   }
 }
 

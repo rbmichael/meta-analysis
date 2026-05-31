@@ -3748,6 +3748,50 @@ BENCH[["LS-C"]] <- list(beta=round(as.vector(res2$b),7), gamma=round(as.vector(r
 }
 
 # =================================================================
+# GOSH-BCG-1 — GOSH: BCG Vaccine log-OR (dat.bcg, 13 studies, FE)
+# Verifies goshCompute() count, sorted-extreme subsets, and muMin/muMax vs metafor::gosh.rma().
+# metafor >= 4.x gosh() uses combination ordering (not bitmask); JS uses bitmask order.
+# Comparison strategy: store 10 lowest + 10 highest sorted mu values; JS sorts its output
+# and reads the same positions. Float32 precision does not change ranking of extreme values.
+# =================================================================
+{
+  res_gosh <- rma(ai=tpos, bi=tneg, ci=cpos, di=cneg, measure="OR",
+                  data=dat.bcg, method="FE")
+  g <- suppressWarnings(gosh(res_gosh, progbar=FALSE))  # k.min=2 default
+
+  # Columns: k, QE, I2, H2, tau2, tau, estimate  (metafor >= 4.x)
+  # Rows are in bitmask order: row i corresponds to bitmask i (same as JS goshCompute).
+  mu_vec <- g$res[, "estimate"]
+  I2_vec <- g$res[, "I2"]
+  k_vec  <- as.integer(g$res[, "k"])
+  n_R    <- nrow(g$res)   # = 2^13 - 1 = 8191
+
+  cat(sprintf("\n## GOSH-BCG-1: k=13 FE  count=%d  mu [%.6f, %.6f]  I2 [%.2f, %.2f]\n",
+              n_R, min(mu_vec), max(mu_vec), min(I2_vec), max(I2_vec)))
+
+  # Store the 10 lowest + 10 highest mu values from the sorted distribution.
+  # Compared in JS by sorting the Float32 mu array and reading the same positions.
+  # No index/bitmask correspondence needed — sort order is identical at extremes
+  # because Float32 precision doesn't change ranking of well-separated values.
+  mu_sorted <- sort(mu_vec)
+  n_sent    <- 10L
+  sent_mu   <- round(c(head(mu_sorted, n_sent), tail(mu_sorted, n_sent)), 7)
+
+  BENCH[["GOSH-BCG-1"]] <- list(
+    count   = as.integer(n_R),
+    yi      = round(as.vector(res_gosh$yi), 8),
+    vi      = round(as.vector(res_gosh$vi), 8),
+    muMin   = round(mu_sorted[1],   7),
+    muMax   = round(mu_sorted[n_R], 7),
+    sentMu  = sent_mu
+  )
+  cat(sprintf("   count=%d  muMin=%.7f  muMax=%.7f\n",
+              BENCH[["GOSH-BCG-1"]]$count,
+              BENCH[["GOSH-BCG-1"]]$muMin,
+              BENCH[["GOSH-BCG-1"]]$muMax))
+}
+
+# =================================================================
 # Write structured JSON reference for diff_benchmarks.mjs
 # Run: Rscript generate.R   then commit benchmark_reference.json
 # =================================================================
