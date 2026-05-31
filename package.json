@@ -1,5 +1,6 @@
 {
   "type": "module",
+  "version": "1.0.0",
   "scripts": {
     "test": "node scripts/run_tests.mjs",
     "diff": "node scripts/diff_benchmarks.mjs",
