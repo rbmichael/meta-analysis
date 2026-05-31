@@ -81,7 +81,7 @@
 
 .onb-body {
   margin: 0 0 16px;
-  font-size: 0.8125rem;
+  font-size: var(--font-size-base);
   color: var(--fg-subtle);
   line-height: 1.6;
 }
@@ -94,7 +94,7 @@
 }
 
 .onb-counter {
-  font-size: 0.75rem;
+  font-size: var(--font-size-sm);
   color: var(--fg-muted);
   flex-shrink: 0;
 }
@@ -109,7 +109,7 @@
 .onb-btn {
   padding: 5px 12px;
   border-radius: var(--radius-sm);
-  font-size: 0.8125rem;
+  font-size: var(--font-size-base);
   font-weight: 500;
   cursor: pointer;
   border: 1px solid var(--border);

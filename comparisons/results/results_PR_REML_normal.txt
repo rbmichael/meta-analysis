@@ -1,0 +1,80 @@
+=== META-ANALYSIS RESULTS ===
+Script:        compare.R
+Input:         proportion_data.csv
+Effect Type:   PR (Proportion (raw))
+Estimator:     REML (Restricted Maximum Likelihood)
+CI Method:     normal (Normal (z-distribution))
+Studies (k):   12
+Generated:     2026-05-14 20:35:34
+
+--- RANDOM-EFFECTS MODEL ---
+Estimate:      0.2110
+SE:            0.0241
+95% CI:        [0.1637, 0.2583]
+z-value:       8.7395
+p-value:       < 0.0001
+
+--- FIXED-EFFECTS MODEL ---
+Estimate:      0.2057
+SE:            0.0111
+95% CI:        [0.1840, 0.2274]
+
+--- HETEROGENEITY ---
+Q:             52.8343  (df = 11, p = < 0.0001)
+tau2:          0.005453  95% CI: [0.001979, 0.0182]
+tau:           0.073843
+I2 (Q-based):  79.2%  95% CI: [57.2%, 92.5%]
+H2 (clamped):  4.8031  95% CI: [2.3374, 13.3274]
+
+  Notes on heterogeneity:
+  - I2 point estimate uses Q-based formula (Q-df)/Q, matching the app.
+    metafor prints tau2/(tau2+v_typical) instead; they may diverge slightly.
+  - H2 clamped to >= 1. Raw Q/df = 4.8031.
+  - I2/H2 CI bounds use Q-profile inversion (same method as the app).
+
+--- PREDICTION INTERVAL (95%) ---
+[0.0587, 0.3633]
+  Formula: RE +/- z(0.975) = 1.96 * sqrt(tau2 + seRE^2)
+  tau2 = 0.005453,  seRE = 0.024143
+  sqrt(tau2 + seRE^2) = 0.077689
+
+--- PER-STUDY ESTIMATES ---
+Label            yi        SE   CI Lower   CI Upper     RE Wt %     FE Wt %
+---------------------------------------------------------------------------
+Study 01     0.1875    0.0436     0.1020     0.2730       7.92%       6.44%
+Study 02     0.3333    0.0430     0.2490     0.4177       7.98%       6.62%
+Study 03     0.0833    0.0357     0.0134     0.1533       8.67%       9.63%
+Study 04     0.2500    0.0306     0.1900     0.3100       9.12%      13.08%
+Study 05     0.3000    0.0458     0.2102     0.3898       7.72%       5.84%
+Study 06     0.1111    0.0331     0.0462     0.1760       8.90%      11.17%
+Study 07     0.2273    0.0400     0.1490     0.3056       8.27%       7.68%
+Study 08     0.1067    0.0356     0.0368     0.1765       8.67%       9.65%
+Study 09     0.3000    0.0374     0.2267     0.3733       8.51%       8.76%
+Study 10     0.2105    0.0418     0.1285     0.2925       8.09%       7.01%
+Study 11     0.2692    0.0389     0.1930     0.3455       8.37%       8.10%
+Study 12     0.1714    0.0450     0.0831     0.2597       7.79%       6.04%
+
+--- KNOWN DIVERGENCES ---
+All differences below are expected. None indicate computation errors.
+
+1. ZERO/ONE PROPORTION HANDLING
+   When x = 0 or x = n, the app applies a +0.5 continuity correction
+   (adding 0.5 to x and 1 to n) before computing yi for PLN and PLO.
+   metafor's escalc() does NOT apply this correction by default (add=0).
+   For PR, vi = p*(1-p)/n; at p=0 or p=1 this is 0 and the study gets
+   no weight in the app. The current dataset has no extreme proportions,
+   so no correction was applied and yi/vi should match to rounding precision.
+
+2. PREDICTION INTERVAL (residual < 0.01 per bound)
+   Both use: RE +/- crit * sqrt(tau2 + seRE^2).
+   For CI method = normal, crit = z(0.975) = 1.96 in both.
+   For CI method = t or KH, crit = t(k-1, 0.975) in both.
+   Any residual difference reflects independent REML tau2 estimates
+   converging to slightly different values; this is negligible when tau2 > 0.
+   metafor tau2 = 0.005453
+
+3. DISPLAY PRECISION
+   The app displays 3 decimal places; this script prints 4.
+   Differences of 0.001 in displayed values may be rounding only.
+
+--- END OF RESULTS ---

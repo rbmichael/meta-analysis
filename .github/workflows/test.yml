@@ -1,0 +1,34 @@
+name: Tests
+
+on:
+  push:
+    branches: [main, audit]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Node ${{ matrix.node-version }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [20.x, 22.x]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      - name: Install dev dependencies (jsdom, d3, esbuild)
+        run: npm ci
+
+      - name: Run test suite (benchmarks + export-parity + plot smoke tests)
+        run: node scripts/run_tests.mjs
+
+      - name: Diff benchmarks against R ground truth
+        run: node scripts/diff_benchmarks.mjs

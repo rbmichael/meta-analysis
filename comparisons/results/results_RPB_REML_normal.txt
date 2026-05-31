@@ -1,0 +1,133 @@
+=== META-ANALYSIS RESULTS ===
+Script:        compare.R
+Input:         biserial_data.csv
+Effect Type:   RPB (Point-Biserial Correlation (r_pb; Kraemer 1975 ST formula))
+Estimator:     REML (Restricted Maximum Likelihood)
+CI Method:     normal (Normal (z-distribution))
+Studies (k):   12
+Generated:     2026-05-16 16:27:26
+
+--- RANDOM-EFFECTS MODEL ---
+Estimate:      0.3098
+SE:            0.0324
+95% CI:        [0.2463, 0.3733]
+z-value:       9.5601
+p-value:       < 0.0001
+
+--- FIXED-EFFECTS MODEL ---
+Estimate:      0.3098
+SE:            0.0324
+95% CI:        [0.2463, 0.3733]
+
+--- HETEROGENEITY ---
+Q:             10.0053  (df = 11, p = 0.5299)
+tau2:          0.000000  95% CI: [0.000000, 0.0202]
+tau:           0.000000
+I2 (Q-based):  0.0%  95% CI: [0.0%, 61.5%]
+H2 (clamped):  1.0000  95% CI: [1.0000, 2.5946]
+
+  Notes on heterogeneity:
+  - I2 point estimate uses Q-based formula (Q-df)/Q, matching the app.
+    metafor prints tau2/(tau2+v_typical) instead; they may diverge slightly.
+  - H2 clamped to >= 1. Raw Q/df = 0.9096.
+  - I2/H2 CI bounds use Q-profile inversion (same method as the app).
+
+--- PREDICTION INTERVAL (95%) ---
+[0.2463, 0.3733]
+  Formula: RE +/- z(0.975) = 1.96 * sqrt(tau2 + seRE^2)
+  tau2 = 0.000000,  seRE = 0.032407
+  sqrt(tau2 + seRE^2) = 0.032407
+
+--- PUBLICATION BIAS ---
+  Tests use yi/vi on the analysis scale (same scale as the RE model).
+
+Egger (1997):
+  intercept = 2.6191  SE = 2.9975  t = 0.8738  p = 0.4027  [df = 10]
+  OLS of yi/sei on 1/sei; H0: intercept = 0 (asymmetry indicator)
+
+Begg (1994):
+  tau = 0.2121  z = 0.8914  p = 0.3727
+  Kendall rank correlation (continuity-corrected z)
+
+FAT bias test (Stanley-Doucouliagos 2008):
+  slope_sei = 2.6191  SE = 2.9975  t = 0.8738  p = 0.4027  [df = 10]
+  WLS of yi ~ sei, weights=1/vi; H0: slope_sei = 0
+
+PET-PEESE:
+  [FAT intercept p = 0.9606 >= 0.10  =>  using PET]
+  PET estimate = 0.0171  SE = 0.3365  t = 0.0507  p = 0.9606  [df = 10]
+  95% CI: [-0.7327, 0.7668]
+
+Fail-safe N (Rosenthal 1979):
+  N = 396
+  (sum_z = 33.2450  z_crit = 1.6449  [one-tailed, alpha=0.05])
+
+TES (Ioannidis-Trikalinos 2007):
+  O = 10  E = 9.3293  chi2 = 0.2166  p = 0.3208  [one-sided: excess significance]
+  theta = RE estimate = 0.3098
+
+WAAP-WLS (Stanley-Doucouliagos 2015):
+  estimate = 0.2712  SE = 0.0427  z = 6.3535  p = < 0.0001
+  95% CI: [0.1875, 0.3548]
+  WLS est (all studies) = 0.3098  k adequate (power >= 0.80) = 6 / 12
+
+Henmi-Copas (2010):
+  FE estimate = 0.3098  95% CI: [0.2495, 0.3701]
+  (DL tau2 = 0.000000)
+
+--- PER-STUDY ESTIMATES ---
+Label            yi        SE   CI Lower   CI Upper     RE Wt %     FE Wt %
+---------------------------------------------------------------------------
+Study 01     0.3000    0.1282     0.0487     0.5513       6.39%       6.39%
+Study 02     0.2500    0.1044     0.0453     0.4547       9.63%       9.63%
+Study 03     0.4000    0.1399     0.1258     0.6742       5.37%       5.37%
+Study 04     0.1800    0.1209    -0.0569     0.4169       7.19%       7.19%
+Study 05     0.4500    0.1150     0.2246     0.6754       7.94%       7.94%
+Study 06     0.1500    0.1036    -0.0531     0.3531       9.78%       9.78%
+Study 07     0.3200    0.1200     0.0848     0.5552       7.30%       7.30%
+Study 08     0.2800    0.1095     0.0654     0.4946       8.76%       8.76%
+Study 09     0.5000    0.1134     0.2777     0.7223       8.17%       8.17%
+Study 10     0.2200    0.1031     0.0178     0.4222       9.87%       9.87%
+Study 11     0.3800    0.1081     0.1682     0.5918       8.99%       8.99%
+Study 12     0.3500    0.0994     0.1551     0.5449      10.62%      10.62%
+
+--- KNOWN DIVERGENCES ---
+All differences below are expected. None indicate computation errors.
+
+1. MANUAL ESCALC (formula-level cross-validation, not escalc-level)
+   metafor escalc('RBIS') and escalc('RPB') require raw group means/SDs;
+   they do not accept a pre-computed r_pb. The app takes r_pb (+ p for RBIS)
+   and applies the same closed-form formula metafor uses internally.
+   This script implements that formula directly (bypassing escalc) so the
+   pooled RE/FE, Q, tau2, and weights can be compared. The yi/vi values
+   should match the app exactly since both use the same formula.
+
+2. PREDICTION INTERVAL (residual < 0.01 per bound)
+   Both use: RE +/- crit * sqrt(tau2 + seRE^2).
+   For CI method = normal, crit = z(0.975) = 1.96 in both.
+   For CI method = t or KH, crit = t(k-1, 0.975) in both.
+   For CI method = PL, crit = t(k-1, 0.975) in both (app convention).
+   Any residual difference reflects independent REML tau2 estimates
+   converging to slightly different values; this is negligible when tau2 > 0.
+   metafor tau2 = 0.000000
+
+3. PUBLICATION BIAS METHODS
+   Egger: R uses OLS (lm without weights), matching js/pubbias.js. Both use
+   df = k-2 t-test on the intercept of yi/sei ~ 1/sei. Should match exactly.
+   Begg: R uses a manual implementation matching js/pubbias.js exactly.
+   Both correlate raw yi vs vi with continuity-corrected normal z and tau_b.
+   metafor::ranktest() diverges because it adjusts yi by y*_j = y_j - v_j*FE
+   (a study-specific offset that changes the ranking) — do not use ranktest().
+   FAT-PET/PEESE: R uses lm() with weights=1/vi, same as JS. Should match.
+   Fail-safe N (Rosenthal): manual calculation in both; should match exactly.
+   TES: manual calculation in both using identical formulas; should match.
+   WAAP-WLS: manual calculation in both; should match exactly.
+   Henmi-Copas: R uses metafor::hc(), JS uses an independent port of Henmi &
+   Copas (2010). Both use DL tau2 and FE weights. CI bounds may differ by
+   ~0.001 due to numerical integration (JS: Simpson N=400; R: adaptive quadrature).
+
+4. DISPLAY PRECISION
+   The app displays 3 decimal places; this script prints 4.
+   Differences of 0.001 in displayed values may be rounding only.
+
+--- END OF RESULTS ---

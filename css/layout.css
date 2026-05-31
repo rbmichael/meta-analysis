@@ -9,7 +9,7 @@
   color: var(--accent);
   border: 2px solid var(--accent);
   border-radius: var(--radius-sm);
-  font-size: 0.875rem;
+  font-size: var(--font-size-lg);
   font-weight: 600;
   text-decoration: none;
   transition: none;
@@ -128,7 +128,7 @@
   display: flex;
   align-items: center;
   gap: 5px;
-  font-size: 0.75rem;
+  font-size: var(--font-size-sm);
   font-weight: 500;
   color: var(--fg-muted);
   margin-right: 6px;
@@ -140,9 +140,55 @@
   font-size: 1em;
 }
 
+/* ---- Modifier classes (composable with specific button classes) ---- */
+
+/* Primary accent action — composable onto any <button> */
+.btn--primary {
+  background: var(--accent);
+  color: var(--fg-on-accent);
+  border-color: var(--border-accent-strong);
+  box-shadow: var(--shadow-btn-accent);
+  font-weight: 600;
+}
+.btn--primary:hover {
+  background: var(--accent-bright);
+  border-color: var(--border-accent-strong);
+  box-shadow: var(--shadow-btn-accent-hover);
+  color: var(--fg-on-accent);
+}
+
+/* Ghost — transparent background, border visible on hover only */
+.btn--ghost {
+  background: transparent;
+  margin: 0;
+}
+.btn--ghost:hover {
+  background: var(--bg-surface);
+  color: var(--fg);
+  border-color: var(--border-hover);
+}
+
+/* Danger — base styling unchanged; destructive hover state */
+.btn--danger:hover {
+  background: var(--badge-error-bg-hover);
+  color: var(--color-error);
+  border-color: var(--badge-error-border-hover);
+}
+
+/* Icon — fixed square, no text padding */
+.btn--icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: var(--radius-full);
+}
+
+/* ---- Named button classes ---- */
+
 .report-btn {
   padding: 3px 10px;
-  font-size: 0.75rem;
+  font-size: var(--font-size-sm);
   background: var(--bg-surface);
   border-radius: var(--radius-sm);
   margin: 0;
@@ -223,7 +269,7 @@
   display: flex;
   flex-direction: column;
   gap: 5px;
-  font-size: 0.75rem;
+  font-size: var(--font-size-sm);
   font-weight: 500;
   color: var(--fg-muted);
 }
@@ -234,7 +280,7 @@
   align-items: center;
   gap: 7px;
   color: var(--fg);
-  font-size: 0.875rem;
+  font-size: var(--font-size-lg);
   font-weight: 400;
   cursor: pointer;
 }
@@ -278,7 +324,7 @@
   align-items: center;
   gap: 7px;
   color: var(--fg);
-  font-size: 0.875rem;
+  font-size: var(--font-size-lg);
   font-weight: 400;
   cursor: pointer;
 }
@@ -318,7 +364,7 @@
 /* Inline hint beneath a settings section */
 .settings-hint {
   margin: 4px 0 0;
-  font-size: 0.75rem;
+  font-size: var(--font-size-sm);
   color: var(--fg-muted);
   font-style: italic;
 }
@@ -331,7 +377,7 @@
 
 .prior-warn {
   margin-left: 4px;
-  font-size: 0.75rem;
+  font-size: var(--font-size-sm);
   color: var(--color-error, #c0392b);
 }
 
@@ -521,8 +567,27 @@
   text-overflow: ellipsis;
 }
 
-#appHeader > .theme-toggle-btn {
-  justify-self: end;
+#appHeaderActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.header-kbd-btn {
+  font-size: 1.1rem;
+  width: 2rem;
+  height: 2rem;
+  margin: 0;
+  background: transparent;
+  color: var(--fg-muted);
+  border-color: var(--border);
+}
+
+.header-kbd-btn:hover {
+  background: var(--bg-surface);
+  color: var(--fg);
+  border-color: var(--border-hover);
 }
 
 /* Tabs centred in the middle column */
@@ -571,11 +636,11 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
+  width: 2rem;
+  height: 2rem;
   padding: 0;
   margin: 0;
-  font-size: 0.875rem;
+  font-size: var(--font-size-lg);
   line-height: 1;
   background: transparent;
   border-radius: var(--radius-full);
@@ -617,7 +682,7 @@
 /* ---- Output placeholder (shown before first run) ---- */
 #outputPlaceholder {
   color: var(--fg-muted);
-  font-size: 0.875rem;
+  font-size: var(--font-size-lg);
   padding: 48px 0 24px;
   text-align: center;
   opacity: 0.5;
@@ -640,7 +705,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  font-size: 0.875rem;
+  font-size: var(--font-size-lg);
   color: var(--fg);
 }
 
@@ -657,7 +722,7 @@
   border: none;
   border-radius: var(--radius-sm);
   padding: 3px 10px;
-  font-size: 0.8125rem;
+  font-size: var(--font-size-base);
   font-weight: 600;
   cursor: pointer;
 }
@@ -788,13 +853,13 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 0.75rem;
+  font-size: var(--font-size-sm);
   color: var(--fg-muted);
   white-space: nowrap;
 }
 
 .strip-label select {
-  font-size: 0.8125rem;
+  font-size: var(--font-size-base);
   max-width: 180px;
 }
 
@@ -845,15 +910,9 @@
   margin-top: 0;
 }
 
-#variablesPanel #moderatorManager {
-  border-top: none;
-  padding-top: 0;
-  margin-top: 0;
-}
-
 /* ---- MV-hint banner (item 20: promote from inline style) ---- */
 #previewMvHint {
-  font-size: 0.8125rem;
+  font-size: var(--font-size-base);
   color: var(--color-info);
   background: var(--accent-subtle);
   border: 1px solid var(--border-accent);
@@ -863,11 +922,6 @@
 }
 
 /* ---- MV settings ρ label alignment (item 20: promote from inline style) ---- */
-.mv-rho-label {
-  align-self: flex-end;
-  margin-bottom: 6px;
-}
-
 /* ---- MV forest plot toolbar (item 20: promote from inline style) ---- */
 .mv-forest-toolbar {
   display: flex;
@@ -879,7 +933,7 @@
 
 /* ---- MV forest toolbar labels (item 20: promote from inline style) ---- */
 .mv-forest-label {
-  font-size: 0.8125rem;
+  font-size: var(--font-size-base);
   font-weight: normal;
   gap: 4px;
 }
@@ -901,7 +955,8 @@
 }
 
 /* ---- Settings reset button: promote when custom settings are active (item 23) ---- */
-.advanced-settings.settings-modified .settings-reset-btn {
+.advanced-settings.settings-modified .settings-reset-btn,
+#mvSettings.settings-modified .settings-reset-btn {
   color: var(--accent);
   border-color: var(--border-accent);
   background: var(--accent-subtle);

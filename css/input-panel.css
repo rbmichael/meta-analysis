@@ -6,7 +6,7 @@
   width: 100%;
   border-collapse: collapse;
   margin-bottom: 12px;
-  font-size: 0.8125rem;
+  font-size: var(--font-size-base);
 }
 
 /* Header row */
@@ -14,7 +14,7 @@
   background: var(--bg-th);
   color: var(--fg-muted);
   font-weight: 500;
-  font-size: 0.75rem;
+  font-size: var(--font-size-sm);
   letter-spacing: 0.03em;
   padding: 7px 8px;
   border: 1px solid var(--border);
@@ -43,7 +43,7 @@
   border: none;
   border-radius: 0;
   color: var(--fg);
-  font-size: 0.8125rem;
+  font-size: var(--font-size-base);
   padding: 5px 6px;
   text-align: center;
   transition: background var(--t-fast);
@@ -141,7 +141,7 @@
   right: 20px;
   z-index: 9500;
   max-width: min(400px, calc(100vw - 40px));
-  font-size: 0.8125rem;
+  font-size: var(--font-size-base);
   color: var(--color-error);
   background: var(--badge-error-bg-faint);
   border: 1px solid var(--badge-error-border);
@@ -165,7 +165,7 @@
   border: 1px solid var(--border-accent);
   border-radius: var(--radius-md);
   padding: 8px 10px 8px 14px;
-  font-size: 0.8125rem;
+  font-size: var(--font-size-base);
   color: var(--color-info);
   box-shadow: var(--shadow-md);
 }
@@ -184,7 +184,7 @@
 
 #draftStartFresh {
   padding: 3px 10px;
-  font-size: 0.75rem;
+  font-size: var(--font-size-sm);
   background: transparent;
   color: var(--color-info);
   border: 1px solid var(--badge-info-border);
@@ -227,7 +227,7 @@
   border-radius: var(--radius-md);
   padding: 8px 14px;
   margin-bottom: 14px;
-  font-size: 0.8125rem;
+  font-size: var(--font-size-base);
   color: var(--color-warning);
 }
 
@@ -245,7 +245,7 @@ input[type="file"] {
   border: none;
   padding: 0;
   color: var(--fg-muted);
-  font-size: 0.8125rem;
+  font-size: var(--font-size-base);
 }
 
 input[type="file"]::file-selector-button {
@@ -256,7 +256,7 @@ input[type="file"]::file-selector-button {
   padding: 4px 10px;
   cursor: pointer;
   font-family: var(--font-sans);
-  font-size: 0.8125rem;
+  font-size: var(--font-size-base);
   font-weight: 500;
   margin-right: 8px;
   transition: background var(--t-fast), color var(--t-fast), border-color var(--t-fast);
@@ -269,80 +269,6 @@ input[type="file"]::file-selector-button:hover {
 }
 
 /* ---- Moderator manager ---- */
-#moderatorManager {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 0 14px;
-  border-top: 1px solid var(--border);
-  margin-top: 2px;
-}
-
-#moderatorManager strong {
-  font-size: 0.75rem;
-  font-weight: 500;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--fg-muted);
-}
-
-/* ---- Interaction term manager (shown when ≥2 moderators exist) ---- */
-#interactionManager {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 0 14px;
-  border-top: 1px solid var(--border);
-  margin-top: 2px;
-}
-
-#interactionManager strong {
-  font-size: 0.75rem;
-  font-weight: 500;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--fg-muted);
-}
-
-/* ---- Scale moderator manager (location-scale model) ---- */
-#scaleModManager {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 0 14px;
-  border-top: 1px solid var(--border);
-  margin-top: 2px;
-}
-
-#scaleModManager strong {
-  font-size: 0.75rem;
-  font-weight: 500;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--fg-muted);
-}
-
-/* ---- Risk-of-bias domain manager ---- */
-#robManager {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 0 14px;
-  border-top: 1px solid var(--border);
-  margin-top: 2px;
-}
-
-#robManager strong {
-  font-size: 0.75rem;
-  font-weight: 500;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--fg-muted);
-}
 
 /* Replace fixed pixel widths in manager inputs with responsive min/max pairs */
 #modName,
@@ -365,7 +291,7 @@ input[type="file"]::file-selector-button:hover {
   background: var(--bg-th);
   border: 1px solid var(--border);
   border-radius: var(--radius-full);
-  font-size: 0.8125rem;
+  font-size: var(--font-size-base);
   color: var(--fg);
 }
 
@@ -408,7 +334,7 @@ input[type="file"]::file-selector-button:hover {
   font-weight: 500;
   text-align: center;
   color: var(--fg-muted);
-  font-size: 0.75rem;
+  font-size: var(--font-size-sm);
 }
 
 .rob-study-label {
@@ -420,7 +346,7 @@ input[type="file"]::file-selector-button:hover {
 }
 
 #robDataGrid select {
-  font-size: 0.75rem;
+  font-size: var(--font-size-sm);
   padding: 1px 2px;
   min-width: 110px;
   border: none;
@@ -436,7 +362,7 @@ input[type="file"]::file-selector-button:hover {
 
 /* ---- Stale badge in toolbar (shown after first run when data changes) ---- */
 #inputStaleBadge {
-  font-size: 0.75rem;
+  font-size: var(--font-size-sm);
   font-weight: 500;
   color: var(--color-warning);
   background: var(--badge-warning-bg-faint);
@@ -447,21 +373,7 @@ input[type="file"]::file-selector-button:hover {
 }
 
 /* ---- Primary action: Run ---- */
-#run {
-  background: var(--accent);
-  color: var(--fg-on-accent);
-  border-color: var(--border-accent-strong);
-  box-shadow: var(--shadow-btn-accent);
-  font-weight: 600;
-  padding: 6px 20px;
-}
-
-#run:hover {
-  background: var(--accent-bright);
-  border-color: var(--border-accent-strong);
-  box-shadow: var(--shadow-btn-accent-hover);
-  color: var(--fg-on-accent);
-}
+#run { padding: 6px 20px; }
 
 /* kbd shortcut badge inside Run button */
 .run-kbd {
@@ -556,14 +468,14 @@ tr.row-pending-delete input {
   width: 100%;
   border-collapse: collapse;
   margin-bottom: 12px;
-  font-size: 0.8125rem;
+  font-size: var(--font-size-base);
 }
 
 #mvTable th {
   background: var(--bg-elevated);
   color: var(--fg-muted);
   font-weight: 500;
-  font-size: 0.75rem;
+  font-size: var(--font-size-sm);
   letter-spacing: 0.03em;
   padding: 7px 8px;
   border: 1px solid var(--border);
@@ -586,7 +498,7 @@ tr.row-pending-delete input {
   border: none;
   border-radius: 0;
   color: var(--fg);
-  font-size: 0.8125rem;
+  font-size: var(--font-size-base);
   padding: 5px 6px;
   text-align: center;
   transition: background var(--t-fast);
@@ -601,20 +513,6 @@ tr.row-pending-delete input {
 #mvTable td:first-child input { text-align: left; }
 #mvTable td:nth-child(2) input { text-align: left; }
 
-.del-btn {
-  padding: 2px 6px;
-  font-size: 0.7rem;
-  margin: 0 1px;
-  border-radius: var(--radius-xs);
-  line-height: 1.4;
-  min-width: 0;
-}
-
-.del-btn:hover {
-  background: var(--badge-error-bg-hover);
-  color: var(--color-error);
-  border-color: var(--badge-error-border-hover);
-}
 
 #mvTableWrap {
   overflow-x: auto;

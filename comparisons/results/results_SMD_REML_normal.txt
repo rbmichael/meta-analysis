@@ -1,0 +1,135 @@
+=== META-ANALYSIS RESULTS ===
+Script:        compare.R
+Input:         smd_data.csv
+Effect Type:   SMD (Standardized Mean Difference (Hedges' g))
+Estimator:     REML (Restricted Maximum Likelihood)
+CI Method:     normal (Normal (z-distribution))
+Studies (k):   12
+Generated:     2026-05-15 16:51:27
+
+--- RANDOM-EFFECTS MODEL ---
+Estimate:      0.6173
+SE:            0.1051
+95% CI:        [0.4113, 0.8234]
+z-value:       5.8717
+p-value:       < 0.0001
+
+--- FIXED-EFFECTS MODEL ---
+Estimate:      0.5547
+SE:            0.0586
+95% CI:        [0.4397, 0.6696]
+
+--- HETEROGENEITY ---
+Q:             34.3496  (df = 11, p = 0.0003)
+tau2:          0.088503  95% CI: [0.022858, 0.3360]
+tau:           0.297494
+I2 (Q-based):  68.0%  95% CI: [35.4%, 89.0%]
+H2 (clamped):  3.1227  95% CI: [1.5490, 9.0693]
+
+  Notes on heterogeneity:
+  - I2 point estimate uses Q-based formula (Q-df)/Q, matching the app.
+    metafor prints tau2/(tau2+v_typical) instead; they may diverge slightly.
+  - H2 clamped to >= 1. Raw Q/df = 3.1227.
+  - I2/H2 CI bounds use Q-profile inversion (same method as the app).
+  - I2 CI upper / H2 CI upper may differ from the app by ~2 ppt / ~0.04.
+    Root cause: vi formula approximation -- see KNOWN DIVERGENCES below.
+
+--- PREDICTION INTERVAL (95%) ---
+[-0.0011, 1.2357]
+  Formula: RE +/- z(0.975) = 1.96 * sqrt(tau2 + seRE^2)
+  tau2 = 0.088503,  seRE = 0.105135
+  sqrt(tau2 + seRE^2) = 0.315525
+
+--- PUBLICATION BIAS ---
+  Tests use yi/vi on the analysis scale (same scale as the RE model).
+
+Egger (1997):
+  intercept = 9.0338  SE = 1.8280  t = 4.9420  p = 0.0006  [df = 10]
+  OLS of yi/sei on 1/sei; H0: intercept = 0 (asymmetry indicator)
+
+Begg (1994):
+  tau = 0.6970  z = 3.0858  p = 0.0020
+  Kendall rank correlation (continuity-corrected z)
+
+FAT bias test (Stanley-Doucouliagos 2008):
+  slope_sei = 9.0338  SE = 1.8280  t = 4.9420  p = 0.0006  [df = 10]
+  WLS of yi ~ sei, weights=1/vi; H0: slope_sei = 0
+
+PET-PEESE:
+  [FAT intercept p = 0.0069 < 0.10  =>  using PEESE]
+  PEESE estimate = -0.3124  SE = 0.1971  t = -1.5847  p = 0.1441  [df = 10]
+  95% CI: [-0.7517, 0.1269]
+  WLS of yi ~ vi (not sei), weights=1/vi
+
+Fail-safe N (Rosenthal 1979):
+  N = 442
+  (sum_z = 35.0583  z_crit = 1.6449  [one-tailed, alpha=0.05])
+
+TES (Ioannidis-Trikalinos 2007):
+  O = 8  E = 9.9054  chi2 = 2.0997  p = 0.9263  [one-sided: excess significance]
+  theta = RE estimate = 0.6173
+
+WAAP-WLS (Stanley-Doucouliagos 2015):
+  estimate = 0.2771  SE = 0.0862  z = 3.2159  p = 0.0013
+  95% CI: [0.1082, 0.4459]
+  WLS est (all studies) = 0.5547  k adequate (power >= 0.80) = 4 / 12
+
+Henmi-Copas (2010):
+  FE estimate = 0.5547  95% CI: [0.3174, 0.7919]
+  (DL tau2 = 0.088380)
+
+--- PER-STUDY ESTIMATES ---
+Label            yi        SE   CI Lower   CI Upper     RE Wt %     FE Wt %
+---------------------------------------------------------------------------
+Study 01     0.1511    0.1594    -0.1612     0.4635       9.70%      13.54%
+Study 02     0.2006    0.1772    -0.1468     0.5480       9.22%      10.94%
+Study 03     0.2374    0.1684    -0.0927     0.5676       9.46%      12.12%
+Study 04     0.2936    0.2144    -0.1266     0.7138       8.22%       7.48%
+Study 05     0.5880    0.1881     0.2193     0.9566       8.92%       9.72%
+Study 06     0.6437    0.2072     0.2375     1.0499       8.41%       8.00%
+Study 07     0.6698    0.2390     0.2013     1.1382       7.59%       6.02%
+Study 08     0.7260    0.1987     0.3365     1.1155       8.64%       8.71%
+Study 09     1.0045    0.2344     0.5450     1.4640       7.70%       6.25%
+Study 10     1.0474    0.2200     0.6162     1.4786       8.07%       7.10%
+Study 11     1.0771    0.2812     0.5261     1.6282       6.60%       4.35%
+Study 12     1.1307    0.2439     0.6526     1.6088       7.47%       5.78%
+
+--- KNOWN DIVERGENCES ---
+All differences below are expected. None indicate computation errors.
+
+1. J CORRECTION (yi/vi residual ~3-4e-5, sub-display-precision)
+   The app uses the approximate J correction: J = 1 - 3/(4*df-1).
+   metafor uses the exact J via gamma functions: Gamma(df/2)/(sqrt(df/2)*Gamma((df-1)/2)).
+   For typical df the two agree to ~5 decimal places, causing a difference
+   of ~0.001 in Q and ~0.001 in the z-statistic. Both round to the same
+   value at 2-3 decimal places. Not scientifically meaningful.
+
+2. PREDICTION INTERVAL (residual < 0.01 per bound)
+   Both use: RE +/- crit * sqrt(tau2 + seRE^2).
+   For CI method = normal, crit = z(0.975) = 1.96 in both.
+   For CI method = t or KH, crit = t(k-1, 0.975) in both.
+   For CI method = PL, crit = t(k-1, 0.975) in both (app convention).
+   Any residual difference reflects independent REML tau2 estimates
+   converging to slightly different values; this is negligible when tau2 > 0.
+   metafor tau2 = 0.088503
+
+3. PUBLICATION BIAS METHODS
+   Egger: R uses OLS (lm without weights), matching js/pubbias.js. Both use
+   df = k-2 t-test on the intercept of yi/sei ~ 1/sei. Should match exactly.
+   Begg: R uses a manual implementation matching js/pubbias.js exactly.
+   Both correlate raw yi vs vi with continuity-corrected normal z and tau_b.
+   metafor::ranktest() diverges because it adjusts yi by y*_j = y_j - v_j*FE
+   (a study-specific offset that changes the ranking) — do not use ranktest().
+   FAT-PET/PEESE: R uses lm() with weights=1/vi, same as JS. Should match.
+   Fail-safe N (Rosenthal): manual calculation in both; should match exactly.
+   TES: manual calculation in both using identical formulas; should match.
+   WAAP-WLS: manual calculation in both; should match exactly.
+   Henmi-Copas: R uses metafor::hc(), JS uses an independent port of Henmi &
+   Copas (2010). Both use DL tau2 and FE weights. CI bounds may differ by
+   ~0.001 due to numerical integration (JS: Simpson N=400; R: adaptive quadrature).
+
+4. DISPLAY PRECISION
+   The app displays 3 decimal places; this script prints 4.
+   Differences of 0.001 in displayed values may be rounding only.
+
+--- END OF RESULTS ---

@@ -1,0 +1,137 @@
+=== META-ANALYSIS RESULTS ===
+Script:        compare.R
+Input:         rate_data.csv
+Effect Type:   IRD (Incidence Rate Difference)
+Estimator:     REML (Restricted Maximum Likelihood)
+CI Method:     normal (Normal (z-distribution))
+Studies (k):   12
+Generated:     2026-05-16 16:27:49
+
+--- RANDOM-EFFECTS MODEL ---
+Estimate:      -0.0425
+SE:            0.0262
+95% CI:        [-0.0938, 0.0088]
+z-value:       -1.6245
+p-value:       0.1043
+
+--- FIXED-EFFECTS MODEL ---
+Estimate:      -0.0344
+SE:            0.0228
+95% CI:        [-0.0790, 0.0102]
+
+--- HETEROGENEITY ---
+Q:             13.3465  (df = 11, p = 0.2713)
+tau2:          0.001577  95% CI: [0.000000, 0.0172]
+tau:           0.039709
+I2 (Q-based):  17.6%  95% CI: [0.0%, 72.8%]
+H2 (clamped):  1.2133  95% CI: [1.0000, 3.6787]
+
+  Notes on heterogeneity:
+  - I2 point estimate uses Q-based formula (Q-df)/Q, matching the app.
+    metafor prints tau2/(tau2+v_typical) instead; they may diverge slightly.
+  - H2 clamped to >= 1. Raw Q/df = 1.2133.
+  - I2/H2 CI bounds use Q-profile inversion (same method as the app).
+
+--- PREDICTION INTERVAL (95%) ---
+[-0.1357, 0.0507]
+  Formula: RE +/- z(0.975) = 1.96 * sqrt(tau2 + seRE^2)
+  tau2 = 0.001577,  seRE = 0.026166
+  sqrt(tau2 + seRE^2) = 0.047555
+
+--- PUBLICATION BIAS ---
+  Tests use yi/vi on the analysis scale (same scale as the RE model).
+
+Egger (1997):
+  intercept = -2.9949  SE = 0.7169  t = -4.1777  p = 0.0019  [df = 10]
+  OLS of yi/sei on 1/sei; H0: intercept = 0 (asymmetry indicator)
+
+Begg (1994):
+  tau = -0.6667  z = -2.9486  p = 0.0032
+  Kendall rank correlation (continuity-corrected z)
+
+FAT bias test (Stanley-Doucouliagos 2008):
+  slope_sei = -2.9949  SE = 0.7169  t = -4.1777  p = 0.0019  [df = 10]
+  WLS of yi ~ sei, weights=1/vi; H0: slope_sei = 0
+
+PET-PEESE:
+  [FAT intercept p = 0.0068 < 0.10  =>  using PEESE]
+  PEESE estimate = 0.0679  SE = 0.0327  t = 2.0788  p = 0.0643  [df = 10]
+  95% CI: [-0.0049, 0.1407]
+  WLS of yi ~ vi (not sei), weights=1/vi
+
+Fail-safe N (Rosenthal 1979):
+  N = 32
+  (sum_z = 10.9867  z_crit = 1.6449  [one-tailed, alpha=0.05])
+
+TES (Ioannidis-Trikalinos 2007):
+  O = 1  E = 1.0087  chi2 = 0.0001  p = 0.5036  [one-sided: excess significance]
+  theta = RE estimate = -0.0425
+
+WAAP-WLS (Stanley-Doucouliagos 2015):
+  estimate = -0.0344  SE = 0.0228  z = -1.5107  p = 0.1309
+  95% CI: [-0.0790, 0.0102]
+  WLS est (all studies) = -0.0344  k adequate (power >= 0.80) = 0 / 12  [FALLBACK: no adequate studies]
+
+Henmi-Copas (2010):
+  FE estimate = -0.0344  95% CI: [-0.0861, 0.0173]
+  (DL tau2 = 0.001369)
+
+--- PER-STUDY ESTIMATES ---
+Label            yi        SE   CI Lower   CI Upper     RE Wt %     FE Wt %
+---------------------------------------------------------------------------
+Study 01    -0.2600    0.0959    -0.4480    -0.0720       6.35%       5.63%
+Study 02     0.0167    0.0640    -0.1088     0.1421      12.07%      12.65%
+Study 03    -0.1333    0.1027    -0.3347     0.0680       5.64%       4.91%
+Study 04     0.0125    0.0659    -0.1167     0.1417      11.56%      11.93%
+Study 05    -0.2000    0.1345    -0.4637     0.0637       3.48%       2.86%
+Study 06    -0.0635    0.0784    -0.2172     0.0902       8.86%       8.43%
+Study 07    -0.0500    0.1275    -0.2998     0.1998       3.84%       3.19%
+Study 08    -0.1091    0.0927    -0.2908     0.0726       6.73%       6.03%
+Study 09    -0.1143    0.1010    -0.3123     0.0837       5.81%       5.08%
+Study 10     0.0283    0.0595    -0.0882     0.1449      13.39%      14.65%
+Study 11    -0.0400    0.0961    -0.2284     0.1484       6.33%       5.61%
+Study 12     0.0333    0.0522    -0.0689     0.1356      15.93%      19.04%
+
+--- KNOWN DIVERGENCES ---
+All differences below are expected. None indicate computation errors.
+
+1. REML SCALE SENSITIVITY — DATASET TIME UNITS
+   IRD vi = x1/t1^2 + x2/t2^2 and IRSD vi = 1/(4*t1) + 1/(4*t2) both
+   shrink quadratically as person-time t grows. When t is in the thousands
+   (typical epidemiology) vi falls to ~1e-5 or smaller, causing both metafor's
+   Fisher-scoring REML and the app's Newton-Raphson to converge inconsistently
+   (metafor warns 'Fisher scoring may have gotten stuck'). The benchmark CSV
+   uses t in the range 20-150 so that vi ~ 0.003-0.02, well within the
+   numerically stable range for REML. For real data with large person-times,
+   rescale the time axis (e.g. per 100 person-years instead of per person-year)
+   before meta-analysis to avoid this instability.
+
+2. PREDICTION INTERVAL (residual < 0.01 per bound)
+   Both use: RE +/- crit * sqrt(tau2 + seRE^2).
+   For CI method = normal, crit = z(0.975) = 1.96 in both.
+   For CI method = t or KH, crit = t(k-1, 0.975) in both.
+   For CI method = PL, crit = t(k-1, 0.975) in both (app convention).
+   Any residual difference reflects independent REML tau2 estimates
+   converging to slightly different values; this is negligible when tau2 > 0.
+   metafor tau2 = 0.001577
+
+3. PUBLICATION BIAS METHODS
+   Egger: R uses OLS (lm without weights), matching js/pubbias.js. Both use
+   df = k-2 t-test on the intercept of yi/sei ~ 1/sei. Should match exactly.
+   Begg: R uses a manual implementation matching js/pubbias.js exactly.
+   Both correlate raw yi vs vi with continuity-corrected normal z and tau_b.
+   metafor::ranktest() diverges because it adjusts yi by y*_j = y_j - v_j*FE
+   (a study-specific offset that changes the ranking) — do not use ranktest().
+   FAT-PET/PEESE: R uses lm() with weights=1/vi, same as JS. Should match.
+   Fail-safe N (Rosenthal): manual calculation in both; should match exactly.
+   TES: manual calculation in both using identical formulas; should match.
+   WAAP-WLS: manual calculation in both; should match exactly.
+   Henmi-Copas: R uses metafor::hc(), JS uses an independent port of Henmi &
+   Copas (2010). Both use DL tau2 and FE weights. CI bounds may differ by
+   ~0.001 due to numerical integration (JS: Simpson N=400; R: adaptive quadrature).
+
+4. DISPLAY PRECISION
+   The app displays 3 decimal places; this script prints 4.
+   Differences of 0.001 in displayed values may be rounding only.
+
+--- END OF RESULTS ---

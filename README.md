@@ -1,6 +1,24 @@
 # Meta-Analysis
 
+[![Tests](https://github.com/rbmichael/meta-analysis/actions/workflows/test.yml/badge.svg)](https://github.com/rbmichael/meta-analysis/actions/workflows/test.yml)
+
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20470390.svg)](https://doi.org/10.5281/zenodo.20470390)
+
 A browser-based meta-analysis tool. No installation, no server, no dependencies beyond a modern browser. All computation runs locally in JavaScript.
+
+---
+
+## Reproducibility
+
+All numerical results are cross-validated against [metafor](https://github.com/wviechtb/metafor) (R). The pipeline:
+
+1. `Rscript scripts/generate.R` — runs 107 named R/metafor blocks and writes `benchmark_reference.json`.
+2. `node scripts/diff_benchmarks.mjs` — compares every block against `js/tests/benchmarks.js` within documented tolerances. Exit 0 = all match.
+3. `node scripts/run_tests.mjs` — full test suite (benchmarks, unit tests, export-parity, plot smoke tests). Exit 0 required before every release.
+
+`comparisons/` contains six R scripts (`compare.R`, `compare_mv.R`, `compare_regression.R`, `compare_robust.R`, `compare_selection.R`, `compare_influence.R`) and 89 annotated result snapshots covering all major analysis paths. Any reviewer with R + metafor can re-run them independently. See [`comparisons/scripts/README.md`](comparisons/scripts/README.md) for the coverage table and invocation reference.
+
+Known formula divergences from metafor are listed with bounded tolerances in [`docs/benchmark-data.md`](docs/benchmark-data.md). There are no silent disagreements.
 
 ---
 
@@ -92,13 +110,17 @@ A dedicated **Multivariate** mode jointly synthesises P ≥ 2 correlated outcome
 | **Diag** (diagonal) | P | Independent τ²_p per outcome; zero between-study correlation |
 | **UN** (unstructured) | P(P+1)/2 | Full Cholesky-parameterised Ψ |
 
-Estimation by REML or ML via BFGS. Optional meta-regression adds common moderator slopes. Reports per-outcome pooled estimates, Ψ̂, per-outcome I², Q_E (residual heterogeneity), Q_M (omnibus moderator test), AIC/BIC, and per-outcome forest plots. Based on Berkey et al. (1998) and Jackson, Riley & White (2011).
+Estimation by REML or ML via BFGS. Optional meta-regression adds common moderator slopes. Reports per-outcome pooled estimates, Ψ̂, per-outcome I², Q_E (residual heterogeneity), Q_M (omnibus moderator test), AIC/BIC, and per-outcome forest plots.
+
+**CI method:** Normal (z) or t-distribution (df = n − q, where n = observations and q = fixed-effect parameters). The t-method widens CIs and converts Q_M to an F(q, df) test; recommended when the number of studies is small. Equivalent to `rma.mv(test = "t")` in metafor. Based on Berkey et al. (1998) and Jackson, Riley & White (2011).
 
 ### Meta-regression
 
 Continuous and categorical moderators. Multiple moderators may be added simultaneously. Results include coefficients, standard errors, *z*/*t* statistics, *p*-values, *R*² (proportion of heterogeneity explained), and model-fit indices (AIC, BIC, log-likelihood) for comparing competing models. Bubble plots are generated per continuous moderator.
 
 **Non-linear transforms** (Poly², Poly³, RCS 3–5 knots) are available via the moderator transform dropdown.
+
+**Interaction terms** — when 2+ moderators are present, an *Interaction terms* row lets you add an A×B term from two existing moderators. Product columns are computed automatically (continuous×continuous → 1 column x₁·x₂; continuous×categorical → k−1 columns; categorical×categorical → (j−1)×(k−1) columns). Main effects are retained automatically, and each interaction gets its own Wald QM and LRT in the per-term table.
 
 **Per-moderator tests** — when 2+ moderators are present, each moderator is tested individually via both a **Wald QM** statistic and a **Likelihood Ratio Test (LRT)**. LRT = 2·(LL_ML,full − LL_ML,reduced) ~ χ²(df); always uses ML internally regardless of the selected τ² method, since REML log-likelihoods cannot be compared across different fixed-effect structures. LRT is generally preferred over Wald in small samples.
 
@@ -194,6 +216,8 @@ CSV column names match the input fields for each effect type (e.g. `m1,sd1,n1,m2
 
 ## Usage
 
+**Tested browsers:** Chrome ≥ 90, Firefox ≥ 90, Safari ≥ 15, Edge ≥ 90. The app uses ES modules and Web Workers; older browsers are not supported.
+
 **Option 1 — Hosted (no setup):**
 Visit **https://rbmichael.github.io/meta-analysis/** in any modern browser. Nothing to install or configure.
 
@@ -226,22 +250,15 @@ npx serve .
 
 **Option 3 — Fully offline (no server, no internet required):**
 
-The repository has an `offline` branch that contains a pre-built single-file bundle with all dependencies vendored locally. Once cloned, it works by opening `index.html` directly in a browser — no server or internet connection needed.
+The easiest path is to download the pre-built zip from the [latest release](https://github.com/rbmichael/meta-analysis/releases/latest), unzip it, and open `index.html` directly in a browser — no installation, server, or internet connection needed.
+
+Alternatively, clone the `offline` branch directly:
 
 ```bash
 git clone https://github.com/rbmichael/meta-analysis.git
 cd meta-analysis
 git checkout offline
 # open index.html directly in your browser
-```
-
-To keep the offline branch up to date as the main branch changes:
-```bash
-git checkout offline
-git merge main
-npx esbuild js/ui.js --bundle --outfile=bundle.js --format=iife --global-name=App
-git add bundle.js
-git commit -m "Rebuild bundle after sync with main"
 ```
 
 ---
@@ -306,6 +323,34 @@ git commit -m "Rebuild bundle after sync with main"
 - Wagenmakers EJ, Lodewyckx T, Kuriyal H, Grasman R (2010). Bayesian hypothesis testing for psychologists: A tutorial on the Savage-Dickey method. *Cogn Psychol*, 60(3), 158–189.
 - Yule GU (1900). On the association of attributes in statistics. *Phil Trans R Soc Lond A*, 194, 257–319.
 - Yule GU (1912). On the methods of measuring association between two attributes. *J R Stat Soc*, 75(6), 579–642.
+
+---
+
+## Citation
+
+If you use FOSMA in published work, please cite:
+
+> Michael, R. B. (2026). *Free and Open-Source Meta-Analysis (FOSMA): a browser-based meta-analysis tool* (Version 1.0.0). Zenodo. https://doi.org/10.5281/zenodo.20470390
+
+BibTeX:
+
+```bibtex
+@software{michael2026fosma,
+  author    = {Michael, R. B.},
+  title     = {Free and Open-Source Meta-Analysis ({FOSMA}): a browser-based meta-analysis tool},
+  year      = {2026},
+  version   = {1.0.0},
+  publisher = {Zenodo},
+  doi       = {10.5281/zenodo.20470390},
+  url       = {https://doi.org/10.5281/zenodo.20470390}
+}
+```
+
+---
+
+## Conflict of interest and funding
+
+The author declares no conflicts of interest. This work received no external funding.
 
 ---
 

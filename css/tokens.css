@@ -45,6 +45,11 @@
   --plot-border:           rgba(0,0,0,0.30);
   --plot-border-grid:      rgba(0,0,0,0.13);
 
+  /* ── Funnel significance-band fills (default/transparent theme) */
+  --funnel-contour-01:     #a0a0a0;
+  --funnel-contour-05:     #c4c4c4;
+  --funnel-contour-10:     #e4e4e4;
+
   /* ── Semantic colours ────────────────────────────────────── */
   --color-success:    #1a7a50;
   --color-warning:    #8a6000;
@@ -116,6 +121,24 @@
   --reg-sig-2-color: #ca8a04;
   --reg-sig-1-color: #16a34a;
 
+  /* ── Spacing scale ──────────────────────────────────────── */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+
+  /* ── Font sizes ──────────────────────────────────────────── */
+  --font-size-sm:   0.75rem;   /* ~12px — labels, captions, dense UI */
+  --font-size-base: 0.8125rem; /* ~13px — default body/input text */
+  --font-size-lg:   0.875rem;  /* ~14px — slightly larger body text */
+
+  /* ── Plot font sizes (SVG px — not subject to rem scaling) ── */
+  --plot-font-base: 11px;
+  --plot-font-sm:   10px;
+  --plot-font-xs:    9px;
+
   /* ── Radius ──────────────────────────────────────────────── */
   --radius-xs:   3px;
   --radius-sm:   4px;
@@ -164,6 +187,10 @@
 
   --plot-border:           rgba(255,255,255,0.10);
   --plot-border-grid:      rgba(255,255,255,0.06);
+
+  --funnel-contour-01:     #606060;
+  --funnel-contour-05:     #404040;
+  --funnel-contour-10:     #262626;
 
   --color-success:    #4caf82;
   --color-warning:    #f0c060;

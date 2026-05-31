@@ -1,0 +1,77 @@
+=== META-ANALYSIS RESULTS ===
+Script:        compare.R
+Input:         paired_data.csv
+Effect Type:   SMCC (Standardized Mean Change (change-score SD; Hedges' g))
+Estimator:     REML (Restricted Maximum Likelihood)
+CI Method:     normal (Normal (z-distribution))
+Studies (k):   12
+Generated:     2026-05-14 15:49:57
+
+--- RANDOM-EFFECTS MODEL ---
+Estimate:      -0.8663
+SE:            0.2108
+95% CI:        [-1.2795, -0.4530]
+z-value:       -4.1086
+p-value:       < 0.0001
+
+--- FIXED-EFFECTS MODEL ---
+Estimate:      -0.6315
+SE:            0.0529
+95% CI:        [-0.7352, -0.5279]
+
+--- HETEROGENEITY ---
+Q:             118.5438  (df = 11, p = < 0.0001)
+tau2:          0.492074  95% CI: [0.226738, 1.5689]
+tau:           0.701480
+I2 (Q-based):  90.7%  95% CI: [86.9%, 97.9%]
+H2 (clamped):  10.7767  95% CI: [7.6539, 47.0421]
+
+  Notes on heterogeneity:
+  - I2 point estimate uses Q-based formula (Q-df)/Q, matching the app.
+    metafor prints tau2/(tau2+v_typical) instead; they may diverge slightly.
+  - H2 clamped to >= 1. Raw Q/df = 10.7767.
+  - I2/H2 CI bounds use Q-profile inversion (same method as the app).
+
+--- PREDICTION INTERVAL (95%) ---
+[-2.3019, 0.5694]
+  Formula: RE +/- z(0.975) = 1.96 * sqrt(tau2 + seRE^2)
+  tau2 = 0.492074,  seRE = 0.210846
+  sqrt(tau2 + seRE^2) = 0.732482
+
+--- PER-STUDY ESTIMATES ---
+Label            yi        SE   CI Lower   CI Upper     RE Wt %     FE Wt %
+---------------------------------------------------------------------------
+Study 01    -1.8615    0.2614    -2.3738    -1.3492       7.93%       4.10%
+Study 02    -1.4536    0.2424    -1.9286    -0.9785       8.07%       4.76%
+Study 03    -2.1048    0.2536    -2.6017    -1.6078       7.99%       4.35%
+Study 04    -1.9849    0.3146    -2.6015    -1.3682       7.52%       2.83%
+Study 05    -0.6552    0.1643    -0.9772    -0.3332       8.56%      10.36%
+Study 06    -0.6590    0.1790    -1.0098    -0.3082       8.48%       8.73%
+Study 07    -0.7487    0.1746    -1.0909    -0.4065       8.51%       9.18%
+Study 08    -0.5305    0.1481    -0.8208    -0.2402       8.65%      12.75%
+Study 09    -0.1553    0.1591    -0.4671     0.1564       8.59%      11.06%
+Study 10    -0.2340    0.1689    -0.5651     0.0971       8.54%       9.80%
+Study 11    -0.1514    0.1452    -0.4359     0.1331       8.66%      13.28%
+Study 12    -0.1860    0.1783    -0.5355     0.1634       8.49%       8.80%
+
+--- KNOWN DIVERGENCES ---
+All differences below are expected. None indicate computation errors.
+
+1. J APPROXIMATION IN vi (residual < 2e-4, sub-display-precision)
+   Both app and metafor use vi = first_term + g²/(2n) (Borenstein 2009).
+   The app uses J_approx = 1 - 3/(4*df-1) for g; metafor uses J_exact.
+   This causes a vi residual of < 2e-4 for n ≥ 9. Sub-display-precision.
+
+2. PREDICTION INTERVAL (residual < 0.01 per bound)
+   Both use: RE +/- crit * sqrt(tau2 + seRE^2).
+   For CI method = normal, crit = z(0.975) = 1.96 in both.
+   For CI method = t or KH, crit = t(k-1, 0.975) in both.
+   Any residual difference reflects independent REML tau2 estimates
+   converging to slightly different values; this is negligible when tau2 > 0.
+   metafor tau2 = 0.492074
+
+3. DISPLAY PRECISION
+   The app displays 3 decimal places; this script prints 4.
+   Differences of 0.001 in displayed values may be rounding only.
+
+--- END OF RESULTS ---

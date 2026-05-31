@@ -1,0 +1,163 @@
+/*
+ * Standalone report styles — canonical source.
+ *
+ * These rules are consumed two ways:
+ *   1. Exported HTML report: reportCSS() in report.js inlines this content
+ *      after injecting a :root { } block that defines the CSS variables below.
+ *   2. (Optional) In-app link: any page that links this file and defines the
+ *      same --report-* custom properties will get the same visual treatment.
+ *
+ * If you edit rules here, update _REPORT_STATIC_CSS in report.js to match.
+ * If you add/remove CSS variables, update _reportCSSVars() in report.js too.
+ */
+
+/* ---- Reset ---- */
+*, *::before, *::after { box-sizing: border-box; }
+
+/* ---- Base ---- */
+body {
+  font-family: Arial, sans-serif;
+  background: var(--report-body-bg);
+  color: var(--report-body-color);
+  margin: 0;
+  padding: 24px 32px;
+  font-size: 14px;
+}
+h1 { font-size: 1.4em; margin: 0 0 4px 0; }
+h2 {
+  font-size: 0.78em;
+  font-weight: bold;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--report-h2-color);
+  margin: 0 0 12px 0;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--report-h2-border);
+}
+.report-meta { font-size: 0.82em; color: var(--report-meta-color); margin-bottom: 28px; }
+section {
+  background: var(--report-section-bg);
+  border: 1px solid var(--report-section-border);
+  border-radius: 8px;
+  padding: 16px 20px;
+  margin-bottom: 24px;
+}
+p { margin: 4px 0; }
+.meta-line { font-size: 0.84em; color: var(--report-meta-line); margin: 0 0 8px 0; }
+.note { font-size: 0.78em; color: var(--report-note-color); margin-top: 6px; }
+.svg-wrap { margin-bottom: 12px; overflow-x: auto; }
+.svg-wrap svg { display: block; }
+
+/* ---- Stat table (legacy, non-APA) ---- */
+.stat-table {
+  border-collapse: collapse;
+  font-size: 0.88em;
+  width: 100%;
+  max-width: 900px;
+}
+.stat-table th {
+  background: var(--report-th-bg);
+  color: var(--report-th-color);
+  font-weight: normal;
+  text-align: left;
+  padding: 5px 10px;
+  border: 1px solid var(--report-th-border);
+}
+.stat-table td {
+  padding: 5px 10px;
+  border: 1px solid var(--report-td-border);
+  color: var(--report-td-color);
+}
+.stat-table tbody tr:nth-child(even) td { background: var(--report-td-alt-bg); }
+.study-tbl td:first-child { font-family: monospace; }
+.imputed td   { color: var(--report-imputed-color); font-style: italic; }
+.pooled td    {
+  color: var(--report-pooled-color);
+  font-weight: bold;
+  background: var(--report-pooled-bg) !important;
+  border-top: 2px solid var(--report-pooled-border);
+}
+.intercept td { color: var(--report-intercept-color); font-style: italic; }
+.flagged td   { background: var(--report-flagged-bg) !important; }
+
+/* ---- APA table ---- */
+.apa-table {
+  border-collapse: collapse;
+  font-size: 0.88em;
+  width: 100%;
+  max-width: 900px;
+}
+.apa-table thead th {
+  border-top: 2px solid var(--report-body-color);
+  border-bottom: 1px solid var(--report-body-color);
+  background: none;
+  color: var(--report-td-color);
+  font-weight: bold;
+  text-align: left;
+  padding: 4px 8px;
+}
+.apa-table td {
+  padding: 3px 8px;
+  border: none;
+  color: var(--report-td-color);
+}
+.apa-table tfoot td {
+  border-top: 2px solid var(--report-body-color);
+  padding-top: 5px;
+}
+/* Rule 3 (closing rule) when no tfoot present */
+.apa-table:not(:has(tfoot)) > tbody > tr:last-child > td {
+  border-bottom: 2px solid var(--report-body-color);
+}
+.apa-table .imputed td  { color: var(--report-imputed-color); font-style: italic; }
+.apa-table .pooled td   { font-weight: bold; background: none !important; border-top: none; color: var(--report-td-color); }
+.apa-table .flagged td  { font-style: italic; }
+.apa-table .intercept td { color: var(--report-intercept-color); font-style: italic; }
+.apa-table-title    { font-weight: bold; margin: 16px 0 2px 0; font-size: 0.88em; }
+.apa-table-subtitle { font-style: italic; margin: 0 0 4px 0; font-size: 0.88em; }
+.apa-note           { font-size: 0.82em; color: var(--report-note-color); }
+.apa-note em        { font-style: italic; }
+.apa-figure-num     { font-weight: bold; font-size: 0.88em; margin: 16px 0 2px 0; }
+.apa-figure-title   { font-style: italic; font-size: 0.88em; margin: 0 0 4px 0; }
+.apa-figure-note    { font-size: 0.82em; color: var(--report-note-color); margin-top: 4px; }
+.apa-figure-note em { font-style: italic; }
+.apa-references     { padding-left: 0; list-style: none; }
+.apa-references li  {
+  font-size: 0.85em;
+  color: var(--report-td-color);
+  margin-bottom: 6px;
+  padding-left: 2em;
+  text-indent: -2em;
+}
+.apa-references a   { color: inherit; }
+
+/* ---- Print ---- */
+@media print {
+  body { background: #fff; color: #000; padding: 12px 16px; }
+  section { background: #fff; border-color: #ccc; page-break-inside: avoid; }
+  h2 { color: #444; border-color: #ccc; }
+  .stat-table th { background: #e8e8f0; color: #333; }
+  .stat-table td { color: #222; }
+  .stat-table tbody tr:nth-child(even) td { background: #f5f5f5; }
+  .imputed td { color: #999; }
+  .pooled td { color: #6a5000; background: #fffff0 !important; }
+  .flagged td { background: #fff5f5 !important; }
+  .meta-line { color: #555; }
+  .note { color: #888; }
+  .plot-section { page-break-before: always; }
+  .svg-wrap svg { max-width: 100%; height: auto; }
+  .apa-table thead th         { border-top-color: #000; border-bottom-color: #000; color: #000; }
+  .apa-table tfoot td         { border-top-color: #000; color: #444; }
+  .apa-table:not(:has(tfoot)) > tbody > tr:last-child > td { border-bottom-color: #000; }
+  .apa-table td               { color: #000; }
+  .apa-table .pooled td       { color: #000; font-weight: bold; background: none !important; border-top: none; }
+  .apa-table .imputed td      { color: #666; }
+  .apa-table-title            { font-weight: bold; color: #000; }
+  .apa-table-subtitle         { font-style: italic; color: #000; }
+  .apa-note                   { color: #444; }
+  .apa-figure-num             { font-weight: bold; color: #000; }
+  .apa-figure-title           { font-style: italic; color: #000; }
+  .apa-figure-note            { color: #444; }
+  .apa-references li          { color: #000; }
+  .apa-references a           { color: #000; }
+}

@@ -1,0 +1,68 @@
+=== META-ANALYSIS RESULTS ===
+Script:        compare.R
+Input:         binary_data.csv
+Effect Type:   OR (Odds Ratio)
+Estimator:     MH (Mantel-Haenszel)
+CI Method:     normal (Normal (z-distribution))
+Studies (k):   12
+Generated:     2026-05-14 21:23:16
+
+  Scale note: all statistics below are on the LOG scale (analysis scale).
+  exp(yi) = odds ratio (OR); app displays back-transformed values
+  To compare with the app: exp(Estimate), exp(CI lower), exp(CI upper).
+
+--- POOLED ESTIMATE (MH) ---
+Estimate:      0.3834
+SE:            0.1039
+95% CI:        [0.1798, 0.5870]
+z-value:       3.6916
+p-value:       0.0002
+
+  Fixed-effect only — no τ², RE estimate, or prediction interval.
+
+--- HETEROGENEITY ---
+Q:             12.4903  (df = 11, p = 0.3279)
+I2 (Q-based):  11.9%
+H2 (clamped):  1.1355
+
+  Notes on heterogeneity:
+  - I2 point estimate uses Q-based formula (Q-df)/Q, matching the app.
+  - No tau2/CI: MH and Peto are fixed-effect methods.
+  - H2 clamped to >= 1. Raw Q/df = 1.1355.
+
+--- PER-STUDY ESTIMATES ---
+Label            yi        SE   CI Lower   CI Upper      MH Wt %
+----------------------------------------------------------------
+Study 01     1.0986    0.4055     0.3038     1.8934        4.87%
+Study 02     0.7138    0.4980    -0.2623     1.6899        3.74%
+Study 03    -0.2507    0.3550    -0.9465     0.4451       11.71%
+Study 04     0.6061    0.5607    -0.4928     1.7051        3.12%
+Study 05     0.5371    0.3301    -0.1099     1.1842        9.13%
+Study 06     0.5108    0.5935    -0.6524     1.6740        2.92%
+Study 07     0.7472    0.4393    -0.1138     1.6082        4.67%
+Study 08     0.4978    0.2606    -0.0128     1.0085       15.09%
+Study 09     0.6061    0.6511    -0.6699     1.8822        2.34%
+Study 10     0.4969    0.3805    -0.2487     1.2426        7.06%
+Study 11    -0.2283    0.3026    -0.8214     0.3649       15.90%
+Study 12     0.2877    0.2407    -0.1840     0.7594       19.47%
+
+--- KNOWN DIVERGENCES ---
+All differences below are expected. None indicate computation errors.
+
+1. ZERO-CELL HANDLING
+   Both app and metafor add 0.5 to all four cells in a study when any cell
+   equals 0 (Haldane-Anscombe continuity correction). The current dataset
+   has no zero cells, so no correction was applied and yi/vi match metafor
+   to rounding precision.
+
+2. MANTEL-HAENSZEL POOLING
+   rma.mh() uses the Mantel-Haenszel method, which weights studies by cell
+   counts directly rather than by 1/vi. The pooled estimate is identical to
+   the app's MH estimate. Zero-cell studies receive a 0.5 continuity correction
+   by default in both metafor and the app.
+
+3. DISPLAY PRECISION
+   The app displays 3 decimal places; this script prints 4.
+   Differences of 0.001 in displayed values may be rounding only.
+
+--- END OF RESULTS ---

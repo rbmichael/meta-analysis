@@ -36,7 +36,7 @@
 
 /* ---- Section headings ---- */
 #aboutContent h2 {
-  font-size: 0.875rem;
+  font-size: var(--font-size-lg);
   font-weight: 600;
   color: var(--fg-muted);
   text-transform: uppercase;
@@ -92,11 +92,16 @@
 .about-table-wrap::-webkit-scrollbar-track { background: transparent; }
 .about-table-wrap::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 9999px; }
 
+/* Stat tables used inline in prose (outside .about-table-wrap scrollers) */
+.stat-table {
+  margin: 8px 0 12px;
+}
+
 /* Tables — override the global table/th/td reset (center alignment, 20px margin) */
 #aboutContent table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.8125rem;
+  font-size: var(--font-size-base);
   margin-bottom: 0;
 }
 
@@ -104,7 +109,7 @@
   background: var(--bg-th);
   color: var(--fg-muted);
   font-weight: 500;
-  font-size: 0.75rem;
+  font-size: var(--font-size-sm);
   text-align: left;
   padding: 7px 12px;
   border: 1px solid var(--border);
@@ -130,9 +135,20 @@
   background: var(--bg-row-alt);
 }
 
+/* ---- Author / citation block ---- */
+.about-citation {
+  margin: 8px 0 0 0;
+  padding: 10px 14px;
+  border-left: 3px solid var(--border-hover);
+  background: var(--bg-row-alt);
+  border-radius: 0 var(--radius-xs) var(--radius-xs) 0;
+  color: var(--fg-subtle);
+  font-size: var(--font-size-base);
+}
+
 /* ---- Quickstart bar (shortcuts + replay link) ---- */
 .about-quickstart {
-  font-size: 0.8125rem;
+  font-size: var(--font-size-base);
   color: var(--fg-muted);
   margin: -20px 0 28px;   /* pull up under the about-intro border-bottom */
 }
@@ -162,7 +178,7 @@
 .about-refs {
   margin: 0 0 12px;
   padding-left: 1.8em;
-  font-size: 0.8125rem;
+  font-size: var(--font-size-base);
   color: var(--fg-muted);
   line-height: 1.75;
 }

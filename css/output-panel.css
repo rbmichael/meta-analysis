@@ -20,7 +20,7 @@
 
 /* ---- Main results summary block ---- */
 #results {
-  font-size: 0.875rem;
+  font-size: var(--font-size-lg);
   line-height: 1.6;
   color: var(--fg);
   margin-bottom: 16px;
@@ -69,20 +69,20 @@
 .result-label {
   color: var(--fg-muted);
   font-weight: 500;
-  font-size: 0.8125rem;
+  font-size: var(--font-size-base);
   white-space: nowrap;
 }
 
 .result-row-label {
   color: var(--fg-muted);
   font-weight: 400;
-  font-size: 0.8125rem;
+  font-size: var(--font-size-base);
   font-style: italic;
   white-space: nowrap;
 }
 
 .result-ci {
-  font-size: 0.8125rem;
+  font-size: var(--font-size-base);
   font-weight: 400;
   color: var(--fg-muted);
   font-variant-numeric: tabular-nums;
@@ -92,11 +92,11 @@
 .result-se {
   font-weight: 400;
   color: var(--fg-muted);
-  font-size: 0.8125rem;
+  font-size: var(--font-size-base);
 }
 
 .result-re-adjusted {
-  font-size: 0.8125rem;
+  font-size: var(--font-size-base);
   color: var(--fg-muted);
   margin-bottom: 1px;
   padding-left: 0.5em;
@@ -108,7 +108,7 @@
 }
 
 .result-method-note {
-  font-size: 0.8125rem;
+  font-size: var(--font-size-base);
   color: var(--fg-muted);
   margin-bottom: 2px;
 }
@@ -120,7 +120,7 @@
 }
 
 .result-stat-value {
-  font-size: 0.875rem;
+  font-size: var(--font-size-lg);
   color: var(--fg);
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum" 1;
@@ -142,17 +142,28 @@
 }
 
 .result-het-stats {
-  font-size: 0.875rem;
+  font-size: var(--font-size-lg);
   color: var(--fg);
 }
 
 .result-het-test {
-  font-size: 0.8125rem;
+  font-size: var(--font-size-base);
   color: var(--fg-muted);
 }
 
+.badge-warn {
+  font-size: 0.78em;
+  font-weight: 600;
+  color: var(--color-warning, #8a6000);
+  background: var(--badge-warning-bg);
+  border: 1px solid var(--badge-warning-border);
+  border-radius: 3px;
+  padding: 1px 5px;
+  vertical-align: middle;
+}
+
 .result-fe-secondary {
-  font-size: 0.8125rem;
+  font-size: var(--font-size-base);
   color: var(--fg-muted);
   margin-bottom: 6px;
   display: flex;
@@ -162,7 +173,7 @@
 }
 
 .result-log-note {
-  font-size: 0.8125rem;
+  font-size: var(--font-size-base);
   color: var(--fg-muted);
   font-style: italic;
   margin-top: -2px;
@@ -177,7 +188,7 @@
   border-collapse: collapse;
   border: none;
   margin: 8px 0 12px;
-  font-size: 0.8125rem;
+  font-size: var(--font-size-base);
   max-width: 100%;
 }
 
@@ -215,7 +226,7 @@
 #results td:first-child {
   text-align: left;
   font-family: var(--font-mono);
-  font-size: 0.75rem;
+  font-size: var(--font-size-sm);
 }
 
 #results tr:nth-child(even) td { background: var(--bg-row-alt); }
@@ -251,12 +262,12 @@
 
 .reg-title {
   font-weight: 600;
-  font-size: 0.875rem;
+  font-size: var(--font-size-lg);
   color: var(--fg);
 }
 
 .reg-meta {
-  font-size: 0.75rem;
+  font-size: var(--font-size-sm);
   color: var(--fg-muted);
   font-family: var(--font-mono);
 }
@@ -279,7 +290,7 @@
   width: 100%;
   border-collapse: collapse;
   margin-top: 8px;
-  font-size: 0.8125rem;
+  font-size: var(--font-size-base);
 }
 
 .reg-table th {
@@ -304,7 +315,7 @@
 .reg-table td:first-child {
   text-align: left;
   font-family: var(--font-mono);
-  font-size: 0.75rem;
+  font-size: var(--font-size-sm);
 }
 
 .reg-table tr:nth-child(even) td { background: var(--bg-row-alt); }
@@ -320,7 +331,7 @@
 .reg-sig-1 { color: var(--reg-sig-1-color); }
 
 .reg-note {
-  font-size: 0.75rem;
+  font-size: var(--font-size-sm);
   color: var(--fg-muted);
   opacity: 0.7;
   margin-top: 8px;
@@ -333,6 +344,41 @@
   opacity: 1;
 }
 
+/* Optimizer convergence failure chip — rendered above the affected result table */
+.convergence-warning {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  margin: 0 0 8px;
+  background: var(--badge-warning-bg);
+  border: 1px solid var(--badge-warning-border);
+  border-radius: 4px;
+  color: var(--color-warning);
+  font-size: 0.875em;
+  font-weight: 500;
+}
+
+/* Convergence-failure toast — fixed bottom-centre, auto-dismissed by JS */
+#convergenceToast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9600;
+  max-width: min(480px, calc(100vw - 40px));
+  padding: 8px 16px;
+  background: var(--badge-warning-bg);
+  border: 1px solid var(--badge-warning-border);
+  border-radius: var(--radius-md);
+  color: var(--color-warning);
+  font-size: var(--font-size-base);
+  font-weight: 500;
+  pointer-events: none;
+  transition: opacity 0.4s ease;
+}
+#convergenceToast[hidden] { display: none; }
+
 /* Fitted values accordion */
 #regressionPanel details {
   margin-top: 12px;
@@ -340,7 +386,7 @@
 
 #regressionPanel details > summary {
   cursor: pointer;
-  font-size: 0.8125rem;
+  font-size: var(--font-size-base);
   color: var(--fg-muted);
   user-select: none;
   list-style: none;
@@ -362,7 +408,7 @@
 .reg-mod-group td {
   background: var(--bg-th);
   color: var(--fg-muted);
-  font-size: 0.75rem;
+  font-size: var(--font-size-sm);
   padding: 4px 10px;
   border: 1px solid var(--border);
 }
@@ -396,7 +442,7 @@
 .study-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.8125rem;
+  font-size: var(--font-size-base);
 }
 
 .study-table th {
@@ -422,7 +468,7 @@
 .study-table td:first-child {
   text-align: left;
   font-family: var(--font-mono);
-  font-size: 0.75rem;
+  font-size: var(--font-size-sm);
 }
 
 .study-table tr:nth-child(even) td { background: var(--bg-row-alt); }
@@ -540,7 +586,7 @@
 /* ---- Section empty-state message ---- */
 .section-empty-state {
   margin: 6px 0 10px;
-  font-size: 0.8125rem;
+  font-size: var(--font-size-base);
   color: var(--fg-muted);
   line-height: 1.5;
 }
@@ -550,7 +596,7 @@
 /* ---- GOSH info line (error / cancelled / status messages) ---- */
 .gosh-info {
   margin: 6px 0;
-  font-size: 0.8125rem;
+  font-size: var(--font-size-base);
   color: var(--fg-muted);
 }
 
@@ -565,9 +611,9 @@
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
-  font-size: 0.875rem;
+  font-size: var(--font-size-lg);
 }
 .perm-results-block {
   margin: 8px 0 2px;
-  font-size: 0.875rem;
+  font-size: var(--font-size-lg);
 }

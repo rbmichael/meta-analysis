@@ -1,0 +1,76 @@
+=== META-ANALYSIS RESULTS ===
+Script:        compare.R
+Input:         smdh_data.csv
+Effect Type:   SMDH (Standardized Mean Difference (heteroscedastic, Bonett g))
+Estimator:     ML (Maximum Likelihood)
+CI Method:     normal (Normal (z-distribution))
+Studies (k):   9
+Generated:     2026-05-14 21:23:10
+
+--- RANDOM-EFFECTS MODEL ---
+Estimate:      -0.5297
+SE:            0.2874
+95% CI:        [-1.0930, 0.0336]
+z-value:       -1.8429
+p-value:       0.0653
+
+--- FIXED-EFFECTS MODEL ---
+Estimate:      -0.3941
+SE:            0.0613
+95% CI:        [-0.5142, -0.2741]
+
+--- HETEROGENEITY ---
+Q:             111.4535  (df = 8, p = < 0.0001)
+tau2:          0.673069  95% CI: [0.313000, 3.0709]
+tau:           0.820408
+I2 (Q-based):  92.8%  95% CI: [89.3%, 98.8%]
+H2 (clamped):  13.9317  95% CI: [9.3889, 83.3060]
+
+  Notes on heterogeneity:
+  - I2 point estimate uses Q-based formula (Q-df)/Q, matching the app.
+    metafor prints tau2/(tau2+v_typical) instead; they may diverge slightly.
+  - H2 clamped to >= 1. Raw Q/df = 13.9317.
+  - I2/H2 CI bounds use Q-profile inversion (same method as the app).
+
+--- PREDICTION INTERVAL (95%) ---
+[-2.2335, 1.1741]
+  Formula: RE +/- z(0.975) = 1.96 * sqrt(tau2 + seRE^2)
+  tau2 = 0.673069,  seRE = 0.287425
+  sqrt(tau2 + seRE^2) = 0.869300
+
+--- PER-STUDY ESTIMATES ---
+Label                      yi        SE   CI Lower   CI Upper     RE Wt %     FE Wt %
+-------------------------------------------------------------------------------------
+Edinburgh             -0.3553    0.1147    -0.5801    -0.1305      12.04%      28.53%
+Orpington-Mild        -0.3465    0.2596    -0.8553     0.1623      11.16%       5.57%
+Orpington-Moderate    -2.3018    0.2269    -2.7465    -1.8571      11.40%       7.29%
+Orpington-Severe      -1.8880    0.4428    -2.7558    -1.0201       9.51%       1.91%
+Montreal-Home         -0.3992    0.4605    -1.3018     0.5033       9.33%       1.77%
+Montreal-Transfer      0.1742    0.1917    -0.2015     0.5499      11.64%      10.21%
+Newcastle              0.2726    0.2488    -0.2150     0.7603      11.24%       6.06%
+Umea                  -0.4494    0.1152    -0.6752    -0.2237      12.04%      28.28%
+Uppsala                0.2926    0.1902    -0.0802     0.6655      11.65%      10.37%
+
+--- KNOWN DIVERGENCES ---
+All differences below are expected. None indicate computation errors.
+
+1. J CORRECTION (yi/vi residual ~3-4e-5, sub-display-precision)
+   The app uses the approximate J correction: J = 1 - 3/(4*df-1).
+   metafor uses the exact J via gamma functions: Gamma(df/2)/(sqrt(df/2)*Gamma((df-1)/2)).
+   For typical df the two agree to ~5 decimal places, causing a difference
+   of ~0.001 in Q and ~0.001 in the z-statistic. Both round to the same
+   value at 2-3 decimal places. Not scientifically meaningful.
+
+2. PREDICTION INTERVAL (residual < 0.01 per bound)
+   Both use: RE +/- crit * sqrt(tau2 + seRE^2).
+   For CI method = normal, crit = z(0.975) = 1.96 in both.
+   For CI method = t or KH, crit = t(k-1, 0.975) in both.
+   Any residual difference reflects independent REML tau2 estimates
+   converging to slightly different values; this is negligible when tau2 > 0.
+   metafor tau2 = 0.673069
+
+3. DISPLAY PRECISION
+   The app displays 3 decimal places; this script prints 4.
+   Differences of 0.001 in displayed values may be rounding only.
+
+--- END OF RESULTS ---

@@ -1,0 +1,272 @@
+=== SELECTION MODEL CROSS-VALIDATION RESULTS ===
+Script:    compare_selection.R
+Input:     selection_data.csv
+Type:      all
+Generated: 2026-05-17 09:27:26
+
+Dataset: BCG vaccine (Colditz et al. 1994), log risk ratio scale, k=13 studies.
+Cross-validates js/selection.js and js/trimfill.js.
+
+=== SECTION 1: VEVEA-HEDGES STEP FUNCTION SELECTION MODEL ===
+(Cross-validates js/selection.js veveaHedges — VH_BENCHMARKS)
+Base model: rma(yi, vi, method='ML', data=dat)
+selmodel(res_ml, type='stepfun', alternative=..., steps=...)
+
+--- UNSELECTED BASELINE (method=ML) ---
+RE (mu):   -0.7112
+SE:        0.1719
+tau2:      0.2800
+
+--- VH-A: two-sided, 5 steps [0.025, 0.10, 0.25, 0.50, 1.0] ---
+(Cross-validates VH_BENCHMARKS[0] / generate.R block 45)
+steps: [0.025, 0.1, 0.25, 0.5, 1]  alternative: two.sided
+mu:       -0.8891
+se:       0.2536
+tau2:     0.2818
+delta:    [1.0000, 2.7223, 1.6242, 1.7317, 3.8023]
+LRT:      1.8074
+LRTdf:    4
+LRTp:     0.7711
+LL_sel (R): -11.761376
+LL_unsel (R): -12.665076
+
+--- VH-B: two-sided, 3 steps [0.05, 0.50, 1.0] ---
+(Cross-validates VH_BENCHMARKS[1] / generate.R block 46)
+steps: [0.05, 0.5, 1]  alternative: two.sided
+mu:       -0.7226
+se:       0.2212
+tau2:     0.2732
+delta:    [1.0000, 0.5903, 1.5787]
+LRT:      1.1927
+LRTdf:    2
+LRTp:     0.5508
+LL_sel (R): -12.068733
+LL_unsel (R): -12.665076
+
+--- VH-C: Synthetic, one-sided, 4 steps [0.025, 0.10, 0.50, 1.0] ---
+(Cross-validates VH_BENCHMARKS[2] / generate.R block 47)
+NOTE: R's selmodel() constrains delta <= 100 (omega <= exp(100) ≈ 2.7e43).
+  JS BFGS is unconstrained; finds true optimum at omega[3] ≈ 149.8.
+  R output below is constrained and will differ from JS for this case.
+  VH-A and VH-B do not hit this constraint; VH-C is the only divergence.
+steps: [0.025, 0.1, 0.5, 1]  alternative: greater
+mu:       0.9194
+se:       0.0842
+tau2:     0.0000
+delta:    [1.0000, 3.8826, 24.0018, 87.4106]
+LRT:      13.8730
+LRTdf:    3
+LRTp:     0.0031
+LL_sel (R): -4.667805
+LL_unsel (R): -11.604311
+
+=== SECTION 2: HALF-NORMAL SELECTION MODEL ===
+(Cross-validates js/selection.js halfNormalSelModel — HALFNORM_BENCHMARKS)
+w(p; δ) = Φ(Φ⁻¹(1 − p) · δ),  δ ≥ 0
+selmodel(res_ml, type='halfnorm', alternative='two.sided')
+
+--- HN-1: BCG, two-sided ---
+(Cross-validates HALFNORM_BENCHMARKS[0] / generate.R block HN-1)
+mu:       -0.7112
+se:       0.1896
+tau2:     0.2800
+delta:    [0.0005]
+LRT:      0.0000
+LRTdf:    1
+LRTp:     1.0000
+LL_sel (R): -12.665424
+LL_unsel (R): -12.665076
+
+=== SECTION 3: POWER SELECTION MODEL ===
+(Cross-validates js/selection.js powerSelModel — POWER_BENCHMARKS)
+w(p; δ) = (1 − p)^δ,  δ ≥ 0
+selmodel(res_ml, type='power', alternative='two.sided')
+
+--- PWR-1: BCG, two-sided ---
+(Cross-validates POWER_BENCHMARKS[0] / generate.R block PWR-1)
+mu:       -0.7112
+se:       0.1879
+tau2:     0.2800
+delta:    [0.0001]
+LRT:      0.0000
+LRTdf:    1
+LRTp:     1.0000
+LL_sel (R): -12.665389
+LL_unsel (R): -12.665076
+
+=== SECTION 4: NEGATIVE EXPONENTIAL SELECTION MODEL ===
+(Cross-validates js/selection.js negexpSelModel — NEGEXP_BENCHMARKS)
+w(p; δ) = exp(−δ · p),  δ ≥ 0
+selmodel(res_ml, type='negexp', alternative='two.sided')
+
+--- NEG-1: BCG, two-sided ---
+(Cross-validates NEGEXP_BENCHMARKS[0] / generate.R block NEG-1)
+mu:       -0.7112
+se:       0.2034
+tau2:     0.2800
+delta:    [0.0006]
+LRT:      0.0000
+LRTdf:    1
+LRTp:     1.0000
+LL_sel (R): -12.665491
+LL_unsel (R): -12.665076
+
+=== SECTION 5: BETA SELECTION MODEL ===
+(Cross-validates js/selection.js betaSelModel — BETA_BENCHMARKS)
+w(p; a, b) = p^(a−1) · (1−p)^(b−1),  a > 0, b > 0
+selmodel(res_ml, type='beta', alternative='two.sided')
+
+--- BETA-1: BCG, two-sided ---
+(Cross-validates BETA_BENCHMARKS[0] / generate.R block BETA-1)
+NOTE: se_mu diverges — R and JS use different Hessian computations
+  at the same MLE. App se_mu ≈ 0.310 (JS Hessian); R se_mu ≈ 0.153.
+  mu, tau2, delta (a, b), LRT match; se_mu is a known divergence.
+
+mu:       -0.9856
+se:       0.1527
+tau2:     0.2825
+a:        1.1285
+b:        0.7698
+LRT:      1.6484
+LRTdf:    2
+LRTp:     0.4386
+LL_sel (R): -11.840873
+LL_unsel (R): -12.665076
+
+=== SECTION 6: TRIM-AND-FILL ===
+(Cross-validates js/trimfill.js trimFill)
+Duval & Tweedie (2000) iterative rank-based imputation.
+Base model: rma(yi, vi, method='DL', data=dat)
+
+Unadjusted RE (DL):
+  mu:   -0.7141
+  tau2: 0.3088
+
+--- Estimator: L0 ---
+k0 (imputed studies): 1
+Side:                 right
+Adjusted mu:          -0.6561
+Adjusted SE:          0.1735
+Adjusted CI:          [-0.9961, -0.3161]
+Adjusted tau2:        0.3081
+
+--- Imputed studies (filled) ---
+(App trimFill() returns these; caller combines with originals)
+  filled[1]  yi=0.3095  vi=0.2230
+
+--- Estimator: R0 ---
+k0 (imputed studies): 0
+Side:                 right
+Adjusted mu:          -0.7141
+Adjusted SE:          0.1787
+Adjusted CI:          [-1.0644, -0.3638]
+Adjusted tau2:        0.3088
+
+--- Estimator: Q0 ---
+k0 (imputed studies): 1
+Side:                 right
+Adjusted mu:          -0.6561
+Adjusted SE:          0.1735
+Adjusted CI:          [-0.9961, -0.3161]
+Adjusted tau2:        0.3081
+
+--- Imputed studies (filled) ---
+(App trimFill() returns these; caller combines with originals)
+  filled[1]  yi=0.3095  vi=0.2230
+
+=== SECTION 7: P-CURVE ===
+(Cross-validates js/selection.js pCurve)
+Simonsohn, Nelson & Simmons (2014, JPSP). Manual R implementation.
+Selects studies with two-tailed p < 0.05; z = |yi / sqrt(vi)|.
+
+Studies with two-tailed p < 0.05: k_sig = 8
+Significant study p-values:
+  Study 2 (Ferguson & Simes 1949): z=3.594  p=0.0003
+  Study 3 (Rosenthal 1960): z=2.092  p=0.0365
+  Study 4 (Hart & Sutherland 1977): z=10.191  p=0.0000
+  Study 6 (Stein & Aronson 1953): z=9.460  p=0.0000
+  Study 7 (Vandiviere 1973): z=3.432  p=0.0006
+  Study 9 (Coetzee & Berjak 1968): z=1.976  p=0.0482
+  Study 10 (Rosenthal 1961): z=5.075  p=0.0000
+  Study 11 (Comstock 1974): z=3.046  p=0.0023
+
+--- Five-bin histogram ---
+Bin           Count  Prop   Expected (H0)   Expected (33%)
+  [0.00, 0.01)       6  0.750          0.200           0.441
+  [0.01, 0.02)       0  0.000          0.200           0.195
+  [0.02, 0.03)       0  0.000          0.200           0.145
+  [0.03, 0.04)       1  0.125          0.200           0.118
+  [0.04, 0.05)       1  0.125          0.200           0.101
+
+--- Test statistics ---
+Right-skew (H0: no effect):
+  pp0 mean: 0.2197
+  Z:        -2.7468
+  p (one-tailed left): 0.0030
+Flatness test (H33: 33% power):
+  pp33 mean: 0.2721
+  Z:         -2.2325
+  p (one-tailed right): 0.9872
+
+Verdict: evidential (right-skew p < .05)
+
+=== SECTION 8: P-UNIFORM ===
+(Cross-validates js/selection.js pUniform)
+van Assen, van Aert & Wicherts (2015). Manual R implementation.
+Conditional quantile q_i(δ) = [1 − Φ(z_i − λ_i)] / [1 − Φ(1.96 − λ_i)]
+where λ_i = δ / se_i, z_i = |yi / se_i|.
+
+Studies with two-tailed p < 0.05: k_sig = 8
+RE estimate used for bias test (DL): -0.7141
+
+--- Test statistics ---
+Significance test (H0: δ = 0):
+  sum_q(0): 1.7574
+  Z_sig:    -2.7466
+  p (one-tailed left): 0.0030
+Publication-bias test (H0: no bias, δ = RE_DL):
+  sum_q(RE_DL): 1.5611
+  Z_bias:       -2.9870
+  p (one-tailed right): 0.9986
+
+--- Bias-corrected estimate ---
+Estimate: 0.8835
+95% CI:   [0.3430, 1.4004]
+
+=== KNOWN DIVERGENCES ===
+All differences below are expected. None indicate computation errors.
+
+1. VH-C ONE-SIDED CONSTRAINT
+   R selmodel() constrains log(delta) <= 100, capping omega[3] at exp(100) ≈ 2.7e43.
+   JS BFGS is unconstrained; finds true optimum at omega[3] ≈ 149.8.
+   VH-A and VH-B are unaffected (omega values well below the R constraint).
+   See js/benchmarks.js VH_BENCHMARKS[2] citation for details.
+
+2. BETA MODEL se_mu
+   JS uses numerical Hessian of the negative log-likelihood at the MLE.
+   R metafor uses a different curvature approximation.
+   Both find the same MLE (mu, tau2, a, b); se_mu differs:
+     JS: ~0.310   R: ~0.153
+   This is a known Hessian-sensitivity issue — see memory/feedback_beta_selmodel.md.
+
+3. LOG-LIKELIHOOD CONSTANT (all selection models)
+   R logLik() includes the -k/2*log(2π) and +½*log|X'X| normalising constants.
+   JS reduced log-likelihood omits these. LRT = 2*(LL_sel - LL_unsel) is
+   identical because the constant cancels. For BCG (k=13, p=1):
+   offset = (k-1)/2*log(2π) - ½*log(k) ≈ 9.7448
+
+4. DISPLAY PRECISION
+   This script prints 4 decimal places; app displays 3.
+
+5. P-CURVE AND P-UNIFORM: NO METAFOR EQUIVALENT
+   Sections 7–8 implement the formulas manually in R (no metafor selmodel type).
+   The puniform R package provides an independent implementation but is not required.
+   Results should match the app exactly (same formulas, same rounding).
+
+6. TRIMFILL SIDE DETECTION
+   App uses WLS regression yi ~ [1, sqrt(vi)] with w=1/vi to detect side.
+   metafor uses a similar approach (regtest-based). Should agree for most datasets.
+   If R and app show different 'side', check sign convention — the adjusted
+   estimate and k0 are the primary quantities of interest.
+
+=== END OF RESULTS ===

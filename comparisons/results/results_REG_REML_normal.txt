@@ -1,0 +1,248 @@
+=== META-REGRESSION CROSS-VALIDATION RESULTS ===
+Script:        compare_regression.R
+Input:         regression_data.csv
+Method:        REML
+CI Method:     normal (Normal (z-distribution))
+Studies (k):   13
+Generated:     2026-05-16 20:46:29
+
+Dataset: BCG vaccine data (Colditz et al. 1994).
+yi = log risk ratio; vi = sampling variance.
+Moderators: ablat (absolute latitude), year, region (AS/EU/NA).
+
+=== SECTION 1: META-REGRESSION — year + ablat ===
+(Cross-validates MR-A benchmark in js/benchmarks.js)
+rma(yi, vi, mods = ~ year + ablat, method = "REML", test = "z", data = dat)
+
+--- COEFFICIENTS ---
+  term               beta         SE   CI Lower   CI Upper        z/t          p
+  ------------  ---------  ---------  ---------  ---------  ---------  ---------
+  intercept       -3.5455    29.0959   -60.5724    53.4814    -0.1219     0.9030
+  year             0.0019     0.0147    -0.0269     0.0307     0.1299     0.8966
+  ablat           -0.0280     0.0102    -0.0481    -0.0080    -2.7371     0.0062
+
+--- MODEL TESTS ---
+QM (omnibus):  12.2043  df = 2  p = 0.0022
+  Wald per term:
+  year:   QM = 0.0169  df = 1  p = 0.8966
+  ablat:  QM = 7.4915  df = 1  p = 0.0062
+
+--- LRT PER TERM (always ML, independent of --method) ---
+  year:   LRT = 0.0791  df = 1  p = 0.7785
+  ablat:  LRT = 7.1799  df = 1  p = 0.0074
+
+--- RESIDUAL HETEROGENEITY ---
+QE:  28.3251  df = 10  p = 0.0016
+
+--- VARIANCE COMPONENTS ---
+tau2:  0.110787
+I2:    71.98%  (tau2/(tau2+v_typical), metafor convention)
+R2:    64.63%
+
+--- AIC / BIC (REML unless --method ML) ---
+LL:   -8.106874
+AIC:  24.213748
+BIC:  25.424088
+
+=== SECTION 2: META-REGRESSION — ablat + region ===
+(Cross-validates MR-B [normal CI] and MR-C [KH CI] in js/benchmarks.js)
+Reference level for region: "AS" (alphabetically first, matching app buildDesignMatrix).
+rma(yi, vi, mods = ~ ablat + region_f, method = "REML", test = "z", data = dat)
+
+--- COEFFICIENTS ---
+  term               beta         SE   CI Lower   CI Upper        z/t          p
+  ------------  ---------  ---------  ---------  ---------  ---------  ---------
+  intercept        0.1024     0.3369    -0.5579     0.7627     0.3040     0.7611
+  ablat           -0.0330     0.0143    -0.0612    -0.0049    -2.3022     0.0213
+  region:EU        0.1598     0.6491    -1.1124     1.4321     0.2462     0.8055
+  region:NA        0.4339     0.3733    -0.2977     1.1654     1.1623     0.2451
+
+--- MODEL TESTS ---
+QM (omnibus):  13.2388  df = 3  p = 0.0041
+  Wald per term:
+  ablat:   QM = 5.3003  df = 1  p = 0.0213
+  region:  QM = 2.1225  df = 2  p = 0.3460  (joint test: EU + NA vs. AS)
+
+--- LRT PER TERM (always ML) ---
+  ablat:   LRT = 7.9061  df = 1  p = 0.0049
+  region:  LRT = 3.2660  df = 2  p = 0.1953
+
+--- RESIDUAL HETEROGENEITY ---
+QE:  23.8904  df = 9  p = 0.0045
+
+--- VARIANCE COMPONENTS ---
+tau2:  0.123949
+I2:    65.50%  (tau2/(tau2+v_typical))
+R2:    60.43%
+
+--- AIC / BIC ---
+LL:   -6.767674
+AIC:  23.535348
+BIC:  24.521471
+
+=== SECTION 3: SUBGROUP ANALYSIS — region ===
+Q_between = Q_total(FE full) - sum(Q_within per group FE).
+Per-group estimates use method = "REML", test = "z".
+
+--- Q DECOMPOSITION ---
+Q_total (FE, k = 13):  152.2330  df = 12
+Q_within (sum per group):   42.6337
+Q_between:                  109.5993  df = 2  p = < 0.0001
+
+--- PER-GROUP ESTIMATES ---
+  Grp     k   Estimate         SE   CI Lower   CI Upper       tau2         I2
+  ----  ---  ---------  ---------  ---------  ---------  ---------  ---------
+  AS      4    -0.6542     0.4040    -1.4460     0.1375   0.514443      82.0%
+  EU      2    -1.4550     0.1347    -1.7190    -1.1910   0.000000       0.0%
+  NA      7    -0.5606     0.1873    -0.9278    -0.1935   0.160182      76.8%
+
+=== SECTION 4: LOCATION-SCALE — intercept location + ablat scale ===
+(Cross-validates LS-B benchmark in js/benchmarks.js)
+Always uses method = "ML" — same as app's lsModel.
+rma(yi, vi, scale = ~ ablat, method = "ML", data = dat)
+
+--- LOCATION COEFFICIENTS (beta) ---
+  term               beta         SE   CI Lower   CI Upper          z          p
+  intercept       -0.6876     0.1712    -1.0232    -0.3519    -4.0152   < 0.0001
+
+--- SCALE COEFFICIENTS (gamma) ---
+  term              gamma         SE   CI Lower   CI Upper          z          p
+  ------------  ---------  ---------  ---------  ---------  ---------  ---------
+  intercept       -1.4269     3.1500    -7.6008     4.7471    -0.4530     0.6506
+  ablat            0.0047     0.0935    -0.1786     0.1879     0.0498     0.9603
+
+--- PER-STUDY tau2_i = exp(gamma0 + gamma1*ablat) ---
+  Study                            ablat     tau2_i
+  ------------------------------  ------  ---------
+  Aronson 1948                        44  0.2945970
+  Ferguson & Simes 1949               55  0.3100670
+  Rosenthal 1960                      42  0.2918683
+  Hart & Sutherland 1977              52  0.3057691
+  Frimodt-Moller 1973                 13  0.2550278
+  Stein & Aronson 1953                44  0.2945970
+  Vandiviere 1973                     19  0.2622476
+  TPT Madras 1980                     13  0.2550278
+  Coetzee & Berjak 1968               27  0.2721930
+  Rosenthal 1961                      42  0.2918683
+  Comstock 1974                       18  0.2610303
+  Comstock & Webster 1969             33  0.2798987
+  Comstock 1976                       33  0.2798987
+
+--- SCALE WALD TEST (QM_scale / QS) ---
+QM_scale:  0.0025  df = 1  p = 0.9603
+
+--- LR TEST: ablat scale vs. intercept-only scale ---
+(rma(scale=~ablat) vs. rma(scale=~1), both ML)
+LRT:  0.0025  df = 1  p = 0.9602
+
+--- LOG-LIKELIHOOD ---
+LL (R convention):   -12.6638290
+  JS LL = R_LL + k/2*log(2*pi) = R_LL + 11.9462
+  JS LL ≈ -0.7176281
+
+=== SECTION 5: LOCATION-SCALE — ablat location + ablat scale ===
+(Cross-validates LS-C benchmark in js/benchmarks.js)
+rma(yi, vi, mods = ~ ablat, scale = ~ ablat, method = "ML", data = dat)
+
+--- LOCATION COEFFICIENTS (beta) ---
+  term               beta         SE   CI Lower   CI Upper          z          p
+  ------------  ---------  ---------  ---------  ---------  ---------  ---------
+  intercept        0.3045     0.1438     0.0226     0.5863     2.1174     0.0342
+  ablat           -0.0298     0.0050    -0.0395    -0.0200    -5.9738   < 0.0001
+
+--- SCALE COEFFICIENTS (gamma) ---
+  term              gamma         SE   CI Lower   CI Upper          z          p
+  ------------  ---------  ---------  ---------  ---------  ---------  ---------
+  intercept       -4.9575     3.2676   -11.3618     1.4469    -1.5172     0.1292
+  ablat            0.0386     0.0730    -0.1046     0.1818     0.5284     0.5972
+
+--- PER-STUDY tau2_i = exp(gamma0 + gamma1*ablat) ---
+  Study                            ablat     tau2_i
+  ------------------------------  ------  ---------
+  Aronson 1948                        44  0.0384119
+  Ferguson & Simes 1949               55  0.0587267
+  Rosenthal 1960                      42  0.0355586
+  Hart & Sutherland 1977              52  0.0523062
+  Frimodt-Moller 1973                 13  0.0116113
+  Stein & Aronson 1953                44  0.0384119
+  Vandiviere 1973                     19  0.0146368
+  TPT Madras 1980                     13  0.0116113
+  Coetzee & Berjak 1968               27  0.0199311
+  Rosenthal 1961                      42  0.0355586
+  Comstock 1974                       18  0.0140826
+  Comstock & Webster 1969             33  0.0251245
+  Comstock 1976                       33  0.0251245
+
+--- QM_loc (Wald test for location moderators) ---
+QM_loc:    35.6867  df = 1  p = < 0.0001
+
+--- QE (residual heterogeneity) ---
+QE:        30.7331  df = 11  p = 0.0012
+
+--- SCALE WALD TEST (QM_scale / QS) ---
+QM_scale:  0.2792  df = 1  p = 0.5972
+
+--- LR TEST (scale mods): LS-C vs. ablat location + intercept-only scale ---
+(rma(mods=~ablat, scale=~ablat) vs. rma(mods=~ablat, scale=~1), both ML)
+(Cross-validates app 'LR test (scale mods)' for LS-C)
+LRT:  0.2928  df = 1  p = 0.5885
+
+--- LR TEST: LS-C vs. LS-B (add ablat to location) ---
+(rma(mods=~ablat, scale=~ablat) vs. rma(scale=~ablat), both ML)
+LRT:  10.2491  df = 1  p = 0.0014
+
+--- LOG-LIKELIHOOD ---
+LL (R convention):   -7.5392903
+  JS LL = R_LL + k/2*log(2*pi) ≈ 4.4069107
+
+=== SECTION 6: PERMUTATION TEST — ablat moderator ===
+(--perm iter = 1000, --seed = 42)
+rma(yi, vi, mods = ~ ablat, method = "REML", data = dat)
+
+--- OBSERVED ---
+QM (observed):  16.3571  df = 1
+Wald p (ablat): < 0.0001
+
+--- PERMUTED (R Mersenne-Twister, seed = 42) ---
+QM permuted p:  0.0040  (from 1000 iterations)
+
+  Note: JS uses mulberry32 PRNG seeded with --seed; permuted p-values will
+  differ numerically but should be directionally consistent for iter >= 1000.
+  Compare observed QM for exact validation; permuted p is PRNG-dependent.
+
+=== KNOWN DIVERGENCES ===
+All differences below are expected. None indicate computation errors.
+
+1. QE FORMULA (Sections 1-2)
+   QE uses FE weights (1/vi) with FE-fitted beta for residual Q.
+   Matches metafor convention (Thompson & Sharp 1999, Viechtbauer 2010).
+   App and this script both use this formula — should match exactly.
+
+2. CATEGORICAL REFERENCE LEVEL (Section 2)
+   App buildDesignMatrix drops the alphabetically-first level.
+   For region {AS, EU, NA}: reference = AS => dummies are region:EU and region:NA.
+   R uses relevel(factor(region), ref='AS') to match.
+
+3. KH s² DENOMINATOR (when --ci KH)
+   With test='knha', QM becomes F(p-1, k-p) and SE/CI use t(k-p).
+   R rma(test='knha') matches app exactly for both omnibus and per-term tests.
+
+4. LRT ALWAYS ML (Sections 1-2)
+   app modTests[*].lrt always refits with ML even if model method = REML.
+   This script does the same: computes 2*(ll_full - ll_reduced) with ML models.
+
+5. LOCATION-SCALE LOG-LIKELIHOOD CONSTANT (Sections 4-5)
+   JS lsModel omits the -k/2*log(2*pi) normalisation constant from LL.
+   JS_LL = R_logLik + k/2*log(2*pi) = R_logLik + 11.9462
+   R logLik() includes the constant. To compare with app: subtract 11.9462
+
+6. PERMUTATION PRNG DIVERGENCE (Section 6)
+   JS perm.js uses mulberry32 seeded with --seed; R uses Mersenne-Twister via set.seed().
+   Permuted p-values will differ numerically but be directionally consistent for iter >= 1000.
+   Observed QM must match exactly (Wald-based, not random).
+
+7. DISPLAY PRECISION
+   This script prints 4 decimal places; app displays 3.
+   Differences of 0.001 may be rounding only.
+
+=== END OF RESULTS ===

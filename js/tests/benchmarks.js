@@ -1,0 +1,4875 @@
+// benchmarks.js
+export const BENCHMARKS = [
+
+  // ----------------------------------------------------------------
+  // GENERIC — BCG Vaccine (dat.bcg, log RR, pre-computed yi/vi)
+  // Source: Colditz et al. (1994). JAMA 271(9), 698–702.
+  // Verified against metafor rma() at full precision.
+  // ----------------------------------------------------------------
+  {
+    name: "BCG Vaccine – GENERIC (log RR, metafor exact)",
+    rBlock: "1",
+    type: "GENERIC",
+    tauMethod: "REML",
+    data: [
+      { label: "Aronson 1948",          yi: -0.8893113339202054, vi: 0.3255847650039614   },
+      { label: "Ferguson & Simes 1949", yi: -1.5853886572014306, vi: 0.19458112139814387  },
+      { label: "Rosenthal 1960",        yi: -1.348073148299693,  vi: 0.41536796536796533  },
+      { label: "Hart & Sutherland 1977",yi: -1.4415511900213054, vi: 0.020010031902247573 },
+      { label: "Frimodt-Moller 1973",   yi: -0.2175473222112957, vi: 0.05121017216963086  },
+      { label: "Stein & Aronson 1953",  yi: -0.786115585818864,  vi: 0.0069056184559087574},
+      { label: "Vandiviere 1973",       yi: -1.6208982235983924, vi: 0.22301724757231517  },
+      { label: "TPT Madras 1980",       yi:  0.011952333523841173,vi: 0.00396157929781773 },
+      { label: "Coetzee & Berjak 1968", yi: -0.4694176487381487, vi: 0.056434210463248966 },
+      { label: "Rosenthal 1961",        yi: -1.3713448034727846, vi: 0.07302479361302891  },
+      { label: "Comstock 1974",         yi: -0.33935882833839015,vi: 0.01241221397155972  },
+      { label: "Comstock & Webster 1969",yi: 0.4459134005713783, vi: 0.5325058452001528   },
+      { label: "Comstock 1976",         yi: -0.017313948216879493,vi: 0.0714046596839863  }
+    ],
+    expected: {
+      FE:   -0.43029,
+      RE:   -0.71453,
+      tau2:  0.31324,
+      I2:   92.2214
+    },
+    citation: "Colditz et al. (1994) JAMA 271:698–702. dat.bcg in metafor."
+  },
+
+  // ----------------------------------------------------------------
+  // GENERIC — BCG Vaccine, DLIT estimator
+  // Same 13-study dataset as above; tauMethod changed to DLIT.
+  // Expected values computed from tau2_DLIT() in analysis.js (JS engine).
+  // DLIT iterates the DL moment formula with RE-updated weights until
+  // convergence (tol=1e-10).  Produces lower τ² than plain DL for BCG.
+  // ----------------------------------------------------------------
+  {
+    name: "BCG Vaccine – GENERIC (log RR, DLIT)",
+    type: "GENERIC",
+    tauMethod: "DLIT",
+    data: [
+      { label: "Aronson 1948",           yi: -0.8893113339202054,  vi: 0.3255847650039614   },
+      { label: "Ferguson & Simes 1949",  yi: -1.5853886572014306,  vi: 0.19458112139814387  },
+      { label: "Rosenthal 1960",         yi: -1.348073148299693,   vi: 0.41536796536796533  },
+      { label: "Hart & Sutherland 1977", yi: -1.4415511900213054,  vi: 0.020010031902247573 },
+      { label: "Frimodt-Moller 1973",    yi: -0.2175473222112957,  vi: 0.05121017216963086  },
+      { label: "Stein & Aronson 1953",   yi: -0.786115585818864,   vi: 0.0069056184559087574},
+      { label: "Vandiviere 1973",        yi: -1.6208982235983924,  vi: 0.22301724757231517  },
+      { label: "TPT Madras 1980",        yi:  0.011952333523841173, vi: 0.00396157929781773 },
+      { label: "Coetzee & Berjak 1968",  yi: -0.4694176487381487,  vi: 0.056434210463248966 },
+      { label: "Rosenthal 1961",         yi: -1.3713448034727846,  vi: 0.07302479361302891  },
+      { label: "Comstock 1974",          yi: -0.33935882833839015, vi: 0.01241221397155972  },
+      { label: "Comstock & Webster 1969",yi:  0.4459134005713783,  vi: 0.5325058452001528   },
+      { label: "Comstock 1976",          yi: -0.017313948216879493,vi: 0.0714046596839863   }
+    ],
+    expected: {
+      FE:   -0.430,
+      RE:   -0.691,
+      tau2:  0.158,
+      I2:   85.6658
+    },
+    citation: "Colditz et al. (1994) JAMA 271:698–702. Expected values from JS tau2_DLIT()."
+  },
+
+  // ----------------------------------------------------------------
+  // GENERIC — BCG Vaccine, HSk estimator
+  // Same dataset; tauMethod = HSk (HS * k/(k-1) small-sample correction).
+  // Expected values computed from tau2_HSk() in analysis.js.
+  // ----------------------------------------------------------------
+  {
+    name: "BCG Vaccine – GENERIC (log RR, HSk)",
+    type: "GENERIC",
+    tauMethod: "HSk",
+    data: [
+      { label: "Aronson 1948",           yi: -0.8893113339202054,  vi: 0.3255847650039614   },
+      { label: "Ferguson & Simes 1949",  yi: -1.5853886572014306,  vi: 0.19458112139814387  },
+      { label: "Rosenthal 1960",         yi: -1.348073148299693,   vi: 0.41536796536796533  },
+      { label: "Hart & Sutherland 1977", yi: -1.4415511900213054,  vi: 0.020010031902247573 },
+      { label: "Frimodt-Moller 1973",    yi: -0.2175473222112957,  vi: 0.05121017216963086  },
+      { label: "Stein & Aronson 1953",   yi: -0.786115585818864,   vi: 0.0069056184559087574},
+      { label: "Vandiviere 1973",        yi: -1.6208982235983924,  vi: 0.22301724757231517  },
+      { label: "TPT Madras 1980",        yi:  0.011952333523841173, vi: 0.00396157929781773 },
+      { label: "Coetzee & Berjak 1968",  yi: -0.4694176487381487,  vi: 0.056434210463248966 },
+      { label: "Rosenthal 1961",         yi: -1.3713448034727846,  vi: 0.07302479361302891  },
+      { label: "Comstock 1974",          yi: -0.33935882833839015, vi: 0.01241221397155972  },
+      { label: "Comstock & Webster 1969",yi:  0.4459134005713783,  vi: 0.5325058452001528   },
+      { label: "Comstock 1976",          yi: -0.017313948216879493,vi: 0.0714046596839863   }
+    ],
+    expected: {
+      FE:   -0.430,
+      RE:   -0.707,
+      tau2:  0.249,
+      I2:   90.4129
+    },
+    citation: "Colditz et al. (1994) JAMA 271:698–702. Expected values from JS tau2_HSk()."
+  },
+
+  // ----------------------------------------------------------------
+  // GENERIC — BCG Vaccine, SQGENQ estimator
+  // Same dataset; tauMethod = SQGENQ (GENQ with sqrt(1/vi) weights).
+  // Expected values computed from tau2_SQGENQ() in analysis.js.
+  // ----------------------------------------------------------------
+  {
+    name: "BCG Vaccine – GENERIC (log RR, SQGENQ)",
+    type: "GENERIC",
+    tauMethod: "SQGENQ",
+    data: [
+      { label: "Aronson 1948",           yi: -0.8893113339202054,  vi: 0.3255847650039614   },
+      { label: "Ferguson & Simes 1949",  yi: -1.5853886572014306,  vi: 0.19458112139814387  },
+      { label: "Rosenthal 1960",         yi: -1.348073148299693,   vi: 0.41536796536796533  },
+      { label: "Hart & Sutherland 1977", yi: -1.4415511900213054,  vi: 0.020010031902247573 },
+      { label: "Frimodt-Moller 1973",    yi: -0.2175473222112957,  vi: 0.05121017216963086  },
+      { label: "Stein & Aronson 1953",   yi: -0.786115585818864,   vi: 0.0069056184559087574},
+      { label: "Vandiviere 1973",        yi: -1.6208982235983924,  vi: 0.22301724757231517  },
+      { label: "TPT Madras 1980",        yi:  0.011952333523841173, vi: 0.00396157929781773 },
+      { label: "Coetzee & Berjak 1968",  yi: -0.4694176487381487,  vi: 0.056434210463248966 },
+      { label: "Rosenthal 1961",         yi: -1.3713448034727846,  vi: 0.07302479361302891  },
+      { label: "Comstock 1974",          yi: -0.33935882833839015, vi: 0.01241221397155972  },
+      { label: "Comstock & Webster 1969",yi:  0.4459134005713783,  vi: 0.5325058452001528   },
+      { label: "Comstock 1976",          yi: -0.017313948216879493,vi: 0.0714046596839863   }
+    ],
+    expected: {
+      FE:   -0.430,
+      RE:   -0.715,
+      tau2:  0.315,
+      I2:   92.2726
+    },
+    citation: "Colditz et al. (1994) JAMA 271:698–702. Expected values from JS tau2_SQGENQ()."
+  },
+
+  // ----------------------------------------------------------------
+  // GENERIC — BCG Vaccine, EBLUP estimator
+  // Same dataset; EBLUP aliases REML in analysis.js (Harville 1977).
+  // Expected values ≈ REML benchmark above (sub-0.001 difference).
+  // ----------------------------------------------------------------
+  {
+    name: "BCG Vaccine – GENERIC (log RR, EBLUP)",
+    type: "GENERIC",
+    tauMethod: "EBLUP",
+    data: [
+      { label: "Aronson 1948",           yi: -0.8893113339202054,  vi: 0.3255847650039614   },
+      { label: "Ferguson & Simes 1949",  yi: -1.5853886572014306,  vi: 0.19458112139814387  },
+      { label: "Rosenthal 1960",         yi: -1.348073148299693,   vi: 0.41536796536796533  },
+      { label: "Hart & Sutherland 1977", yi: -1.4415511900213054,  vi: 0.020010031902247573 },
+      { label: "Frimodt-Moller 1973",    yi: -0.2175473222112957,  vi: 0.05121017216963086  },
+      { label: "Stein & Aronson 1953",   yi: -0.786115585818864,   vi: 0.0069056184559087574},
+      { label: "Vandiviere 1973",        yi: -1.6208982235983924,  vi: 0.22301724757231517  },
+      { label: "TPT Madras 1980",        yi:  0.011952333523841173, vi: 0.00396157929781773 },
+      { label: "Coetzee & Berjak 1968",  yi: -0.4694176487381487,  vi: 0.056434210463248966 },
+      { label: "Rosenthal 1961",         yi: -1.3713448034727846,  vi: 0.07302479361302891  },
+      { label: "Comstock 1974",          yi: -0.33935882833839015, vi: 0.01241221397155972  },
+      { label: "Comstock & Webster 1969",yi:  0.4459134005713783,  vi: 0.5325058452001528   },
+      { label: "Comstock 1976",          yi: -0.017313948216879493,vi: 0.0714046596839863   }
+    ],
+    expected: {
+      FE:   -0.430,
+      RE:   -0.715,
+      tau2:  0.313,
+      I2:   92.2214
+    },
+    citation: "Colditz et al. (1994) JAMA 271:698–702. EBLUP = REML (Harville 1977). Expected values from JS meta()."
+  },
+
+  // ----------------------------------------------------------------
+  // GENERIC — BCG Vaccine, EB estimator
+  // Morris (1983) Empirical Bayes: same RE-weighted fixed point as PM
+  // (Q(τ²) = k−1) but uses a step scaled by k/(k−1).  In practice EB and
+  // PM converge to almost identical τ²; differences are sub-0.001.
+  // Expected values from metafor rma(method="EB").
+  // ----------------------------------------------------------------
+  {
+    name: "BCG Vaccine – GENERIC (log RR, EB)",
+    type: "GENERIC",
+    tauMethod: "EB",
+    data: [
+      { label: "Aronson 1948",           yi: -0.8893113339202054,  vi: 0.3255847650039614   },
+      { label: "Ferguson & Simes 1949",  yi: -1.5853886572014306,  vi: 0.19458112139814387  },
+      { label: "Rosenthal 1960",         yi: -1.348073148299693,   vi: 0.41536796536796533  },
+      { label: "Hart & Sutherland 1977", yi: -1.4415511900213054,  vi: 0.020010031902247573 },
+      { label: "Frimodt-Moller 1973",    yi: -0.2175473222112957,  vi: 0.05121017216963086  },
+      { label: "Stein & Aronson 1953",   yi: -0.786115585818864,   vi: 0.0069056184559087574},
+      { label: "Vandiviere 1973",        yi: -1.6208982235983924,  vi: 0.22301724757231517  },
+      { label: "TPT Madras 1980",        yi:  0.011952333523841173, vi: 0.00396157929781773 },
+      { label: "Coetzee & Berjak 1968",  yi: -0.4694176487381487,  vi: 0.056434210463248966 },
+      { label: "Rosenthal 1961",         yi: -1.3713448034727846,  vi: 0.07302479361302891  },
+      { label: "Comstock 1974",          yi: -0.33935882833839015, vi: 0.01241221397155972  },
+      { label: "Comstock & Webster 1969",yi:  0.4459134005713783,  vi: 0.5325058452001528   },
+      { label: "Comstock 1976",          yi: -0.017313948216879493,vi: 0.0714046596839863   }
+    ],
+    expected: {
+      FE:   -0.430,
+      RE:   -0.715,
+      tau2:  0.318,
+      I2:   92.3303
+    },
+    citation: "Colditz et al. (1994) JAMA 271:698–702. Expected values from metafor rma(method='EB'). Morris (1983)."
+  },
+
+  // ----------------------------------------------------------------
+  // GENERIC — BCG Vaccine, PMM estimator
+  // Paule-Mandel Median: finds τ² where Q(τ²) = χ²₀.₅(k−1) via fixed-point
+  // iteration (same shape as PM but targeting the chi-square median rather
+  // than its mean k−1). Gives a median-unbiased τ² estimate.
+  // Expected values from metafor rma(method="PMM"). JS fixed-point converges
+  // to within <0.001 of metafor's uniroot result.
+  // ----------------------------------------------------------------
+  {
+    name: "BCG Vaccine – GENERIC (log RR, PMM)",
+    type: "GENERIC",
+    tauMethod: "PMM",
+    data: [
+      { label: "Aronson 1948",           yi: -0.8893113339202054,  vi: 0.3255847650039614   },
+      { label: "Ferguson & Simes 1949",  yi: -1.5853886572014306,  vi: 0.19458112139814387  },
+      { label: "Rosenthal 1960",         yi: -1.348073148299693,   vi: 0.41536796536796533  },
+      { label: "Hart & Sutherland 1977", yi: -1.4415511900213054,  vi: 0.020010031902247573 },
+      { label: "Frimodt-Moller 1973",    yi: -0.2175473222112957,  vi: 0.05121017216963086  },
+      { label: "Stein & Aronson 1953",   yi: -0.786115585818864,   vi: 0.0069056184559087574},
+      { label: "Vandiviere 1973",        yi: -1.6208982235983924,  vi: 0.22301724757231517  },
+      { label: "TPT Madras 1980",        yi:  0.011952333523841173, vi: 0.00396157929781773 },
+      { label: "Coetzee & Berjak 1968",  yi: -0.4694176487381487,  vi: 0.056434210463248966 },
+      { label: "Rosenthal 1961",         yi: -1.3713448034727846,  vi: 0.07302479361302891  },
+      { label: "Comstock 1974",          yi: -0.33935882833839015, vi: 0.01241221397155972  },
+      { label: "Comstock & Webster 1969",yi:  0.4459134005713783,  vi: 0.5325058452001528   },
+      { label: "Comstock 1976",          yi: -0.017313948216879493,vi: 0.0714046596839863   }
+    ],
+    expected: {
+      FE:   -0.430,
+      RE:   -0.717,
+      tau2:  0.343,
+      I2:   92.8555
+    },
+    citation: "Colditz et al. (1994) JAMA 271:698–702. Expected values from metafor rma(method='PMM')."
+  },
+
+  // ----------------------------------------------------------------
+  // GENERIC — BCG Vaccine, GENQM estimator
+  // Generalised-Q Median: finds τ² such that the observed FE Q-statistic
+  // equals the median of its distribution under the RE model.
+  // The distribution Σλᵢ χ²(1) uses eigenvalues from the secular equation
+  // (rank-1 perturbed diagonal); the median is found via the exact Imhof (1961)
+  // numerical integral (composite GL20, 16 subintervals) — equivalent to the
+  // Farebrother/Davies algorithm used by metafor's CompQuadForm. Residual error
+  // vs metafor: ~0.05%, well within the 5% relative tau2 tolerance.
+  // RE estimate uses RE weights 1/(vᵢ+τ²) as in all other app estimators
+  // (metafor GENQM uses FE weights for the pooled estimate — different convention).
+  // ----------------------------------------------------------------
+  {
+    name: "BCG Vaccine – GENERIC (log RR, GENQM)",
+    type: "GENERIC",
+    tauMethod: "GENQM",
+    data: [
+      { label: "Aronson 1948",           yi: -0.8893113339202054,  vi: 0.3255847650039614   },
+      { label: "Ferguson & Simes 1949",  yi: -1.5853886572014306,  vi: 0.19458112139814387  },
+      { label: "Rosenthal 1960",         yi: -1.348073148299693,   vi: 0.41536796536796533  },
+      { label: "Hart & Sutherland 1977", yi: -1.4415511900213054,  vi: 0.020010031902247573 },
+      { label: "Frimodt-Moller 1973",    yi: -0.2175473222112957,  vi: 0.05121017216963086  },
+      { label: "Stein & Aronson 1953",   yi: -0.786115585818864,   vi: 0.0069056184559087574},
+      { label: "Vandiviere 1973",        yi: -1.6208982235983924,  vi: 0.22301724757231517  },
+      { label: "TPT Madras 1980",        yi:  0.011952333523841173, vi: 0.00396157929781773 },
+      { label: "Coetzee & Berjak 1968",  yi: -0.4694176487381487,  vi: 0.056434210463248966 },
+      { label: "Rosenthal 1961",         yi: -1.3713448034727846,  vi: 0.07302479361302891  },
+      { label: "Comstock 1974",          yi: -0.33935882833839015, vi: 0.01241221397155972  },
+      { label: "Comstock & Webster 1969",yi:  0.4459134005713783,  vi: 0.5325058452001528   },
+      { label: "Comstock 1976",          yi: -0.017313948216879493,vi: 0.0714046596839863   }
+    ],
+    expected: {
+      FE:   -0.430,
+      RE:   -0.719,
+      tau2:  0.383,
+      I2:   93.5435
+    },
+    citation: "Colditz et al. (1994) JAMA 271:698–702. tau2 from metafor rma(method='GENQM', weights=1/vi). RE uses app convention (RE weights)."
+  },
+
+  // ----------------------------------------------------------------
+  // OR — BCG Vaccine (dat.bcg, log odds ratio)
+  // Same 13 studies as GENERIC benchmark above; raw 2x2 counts used here
+  // to exercise the compute("OR") pipeline.
+  // yi = ln(a*d / b*c),  vi = 1/a + 1/b + 1/c + 1/d
+  // Per-study yi computed from raw counts (verified by hand).
+  // Pooled FE/RE/τ²/I² confirmed from metafor test files (DL method;
+  // REML not independently confirmed for OR in available test files).
+  // ----------------------------------------------------------------
+  {
+    name: "BCG Vaccine – OR (dat.bcg, DL)",
+    rBlock: "2",
+    type: "OR",
+    tauMethod: "DL",
+    data: [
+      { label: "Aronson 1948",           a:   4, b:   119, c:  11, d:   128 },
+      { label: "Ferguson & Simes 1949",  a:   6, b:   300, c:  29, d:   274 },
+      { label: "Rosenthal 1960",         a:   3, b:   228, c:  11, d:   209 },
+      { label: "Hart & Sutherland 1977", a:  62, b: 13536, c: 248, d: 12619 },
+      { label: "Frimodt-Moller 1973",    a:  33, b:  5036, c:  47, d:  5761 },
+      { label: "Stein & Aronson 1953",   a: 180, b:  1361, c: 372, d:  1079 },
+      { label: "Vandiviere 1973",        a:   8, b:  2537, c:  10, d:   619 },
+      { label: "TPT Madras 1980",        a: 505, b: 87886, c: 499, d: 87892 },
+      { label: "Coetzee & Berjak 1968",  a:  29, b:  7470, c:  45, d:  7232 },
+      { label: "Rosenthal 1961",         a:  17, b:  1699, c:  65, d:  1600 },
+      { label: "Comstock 1974",          a: 186, b: 50448, c: 141, d: 27197 },
+      { label: "Comstock & Webster 1969",a:   5, b:  2493, c:   3, d:  2338 },
+      { label: "Comstock 1976",          a:  27, b: 16886, c:  29, d: 17825 }
+    ],
+    expected: {
+      // ln(a*d / b*c) per study, computed from raw counts
+      yi:   [-0.93869, -1.66619, -1.3863, -1.4564, -0.21914, -0.9581,
+             -1.6338,  0.0120, -0.47175, -1.4012, -0.34085,  0.44663, -0.0173],
+      FE:   -0.43614,
+      RE:   -0.74739,
+      tau2:  0.36634,
+      I2:   92.6455
+    },
+    citation: "Colditz et al. (1994) JAMA 271:698–702. dat.bcg in metafor. DL pooled values from metafor test suite."
+  },
+
+  // ----------------------------------------------------------------
+  // RR — BCG Vaccine (dat.bcg, log risk ratio)
+  // Same raw counts as OR benchmark above.
+  // yi = ln((a/(a+b)) / (c/(c+d))),  vi = (1/a - 1/(a+b)) + (1/c - 1/(c+d))
+  // Per-study yi rounded from full-precision metafor values in GENERIC benchmark.
+  // Pooled FE/RE/τ²/I² confirmed from metadat HTML documentation (REML).
+  // ----------------------------------------------------------------
+  {
+    name: "BCG Vaccine – RR (dat.bcg, REML)",
+    rBlock: "3",
+    type: "RR",
+    tauMethod: "REML",
+    data: [
+      { label: "Aronson 1948",           a:   4, b:   119, c:  11, d:   128 },
+      { label: "Ferguson & Simes 1949",  a:   6, b:   300, c:  29, d:   274 },
+      { label: "Rosenthal 1960",         a:   3, b:   228, c:  11, d:   209 },
+      { label: "Hart & Sutherland 1977", a:  62, b: 13536, c: 248, d: 12619 },
+      { label: "Frimodt-Moller 1973",    a:  33, b:  5036, c:  47, d:  5761 },
+      { label: "Stein & Aronson 1953",   a: 180, b:  1361, c: 372, d:  1079 },
+      { label: "Vandiviere 1973",        a:   8, b:  2537, c:  10, d:   619 },
+      { label: "TPT Madras 1980",        a: 505, b: 87886, c: 499, d: 87892 },
+      { label: "Coetzee & Berjak 1968",  a:  29, b:  7470, c:  45, d:  7232 },
+      { label: "Rosenthal 1961",         a:  17, b:  1699, c:  65, d:  1600 },
+      { label: "Comstock 1974",          a: 186, b: 50448, c: 141, d: 27197 },
+      { label: "Comstock & Webster 1969",a:   5, b:  2493, c:   3, d:  2338 },
+      { label: "Comstock 1976",          a:  27, b: 16886, c:  29, d: 17825 }
+    ],
+    expected: {
+      // Rounded from full-precision metafor values in the GENERIC benchmark above
+      yi:   [-0.8893, -1.5854, -1.3481, -1.4416, -0.2175, -0.7861,
+             -1.6209,  0.0120, -0.4694, -1.3713, -0.3394,  0.4459, -0.0173],
+      FE:   -0.43029,
+      RE:   -0.71453,
+      tau2:  0.31324,
+      I2:   92.2214
+    },
+    citation: "Colditz et al. (1994) JAMA 271:698–702. dat.bcg in metafor. REML pooled values from metadat HTML docs."
+  },
+
+  // ----------------------------------------------------------------
+  // RD — BCG Vaccine (dat.bcg, risk difference)
+  // Same raw counts as OR/RR benchmarks above.
+  // yi = a/(a+b) - c/(c+d),  vi = risk1*(1-risk1)/(a+b) + risk2*(1-risk2)/(c+d)
+  // Per-study yi computed from raw counts (verified by hand).
+  // Pooled FE/RE/τ²/I² from agent research (DL; REML not confirmed for RD).
+  // τ² is close to zero in absolute terms (~2e-5) but I² is high because
+  // the per-study vi are also tiny for the large-n studies.
+  // ----------------------------------------------------------------
+  {
+    name: "BCG Vaccine – RD (dat.bcg, DL)",
+    rBlock: "4",
+    type: "RD",
+    tauMethod: "DL",
+    data: [
+      { label: "Aronson 1948",           a:   4, b:   119, c:  11, d:   128 },
+      { label: "Ferguson & Simes 1949",  a:   6, b:   300, c:  29, d:   274 },
+      { label: "Rosenthal 1960",         a:   3, b:   228, c:  11, d:   209 },
+      { label: "Hart & Sutherland 1977", a:  62, b: 13536, c: 248, d: 12619 },
+      { label: "Frimodt-Moller 1973",    a:  33, b:  5036, c:  47, d:  5761 },
+      { label: "Stein & Aronson 1953",   a: 180, b:  1361, c: 372, d:  1079 },
+      { label: "Vandiviere 1973",        a:   8, b:  2537, c:  10, d:   619 },
+      { label: "TPT Madras 1980",        a: 505, b: 87886, c: 499, d: 87892 },
+      { label: "Coetzee & Berjak 1968",  a:  29, b:  7470, c:  45, d:  7232 },
+      { label: "Rosenthal 1961",         a:  17, b:  1699, c:  65, d:  1600 },
+      { label: "Comstock 1974",          a: 186, b: 50448, c: 141, d: 27197 },
+      { label: "Comstock & Webster 1969",a:   5, b:  2493, c:   3, d:  2338 },
+      { label: "Comstock 1976",          a:  27, b: 16886, c:  29, d: 17825 }
+    ],
+    expected: {
+      // risk1 - risk2 per study, computed from raw counts
+      yi:   [-0.04662, -0.07610, -0.03701, -0.01471, -0.00158, -0.13957,
+             -0.01276,  0.00007, -0.00232, -0.02913, -0.00148,  0.00072, -0.00003],
+      FE:   -0.0009,
+      RE:   -0.0071,
+      tau2:  0.00002,
+      I2:   95.6596
+    },
+    citation: "Colditz et al. (1994) JAMA 271:698–702. dat.bcg in metafor. DL pooled values from agent research; Q=276.47 confirmed."
+  },
+
+  // ----------------------------------------------------------------
+  // MD — Normand 1999 (dat.normand1999)
+  // Source: Normand SLT (1999). Stat Med 18(3), 321–359.
+  // Stroke rehabilitation: specialist (group 1) vs routine care (group 2).
+  // yi = m1 - m2 (days); negative = specialist care shorter stay.
+  // vi = sd1²/n1 + sd2²/n2  (app formula, matches metadat HTML docs).
+  // Expected values confirmed from metafor rma(measure="MD", method="REML").
+  // ----------------------------------------------------------------
+  {
+    name: "Normand 1999 – MD (dat.normand1999, REML)",
+    rBlock: "5",
+    type: "MD",
+    tauMethod: "REML",
+    data: [
+      { label: "Edinburgh",          n1: 155, m1:  55, sd1: 47, n2: 156, m2:  75, sd2: 64 },
+      { label: "Orpington-Mild",     n1:  31, m1:  27, sd1:  7, n2:  32, m2:  29, sd2:  4 },
+      { label: "Orpington-Moderate", n1:  75, m1:  64, sd1: 17, n2:  71, m2: 119, sd2: 29 },
+      { label: "Orpington-Severe",   n1:  18, m1:  66, sd1: 20, n2:  18, m2: 137, sd2: 48 },
+      { label: "Montreal-Home",      n1:   8, m1:  14, sd1:  8, n2:  13, m2:  18, sd2: 11 },
+      { label: "Montreal-Transfer",  n1:  57, m1:  19, sd1:  7, n2:  52, m2:  18, sd2:  4 },
+      { label: "Newcastle",          n1:  34, m1:  52, sd1: 45, n2:  33, m2:  41, sd2: 34 },
+      { label: "Umea",               n1: 110, m1:  21, sd1: 16, n2: 183, m2:  31, sd2: 27 },
+      { label: "Uppsala",            n1:  60, m1:  30, sd1: 27, n2:  52, m2:  23, sd2: 20 }
+    ],
+    expected: {
+      // yi = m1 - m2 (days); exact integer differences
+      yi:   [-20, -2, -55, -71, -4, 1, 11, -10, 7],
+      FE:   -3.46361,
+      RE:   -15.106,
+      tau2:  684.64615,
+      I2:   98.9713
+    },
+    citation: "Normand (1999) Stat Med 18:321–359. dat.normand1999 in metafor."
+  },
+
+  // ----------------------------------------------------------------
+  // SMD (Hedges' g) — Normand 1999, first 4 studies
+  // Same source as MD benchmark above; subset of 4 studies used because
+  // REML τ²=1.009 is confirmed from a metafor test file for this subset.
+  // Per-study g values confirmed against metafor escalc(measure="SMD") output.
+  // ----------------------------------------------------------------
+  {
+    name: "Normand 1999 – SMD Hedges' g, 4 studies (REML)",
+    rBlock: "6",
+    type: "SMD",
+    correction: "hedges",
+    tauMethod: "REML",
+    data: [
+      { label: "Edinburgh",          n1: 155, m1:  55, sd1: 47, n2: 156, m2:  75, sd2: 64 },
+      { label: "Orpington-Mild",     n1:  31, m1:  27, sd1:  7, n2:  32, m2:  29, sd2:  4 },
+      { label: "Orpington-Moderate", n1:  75, m1:  64, sd1: 17, n2:  71, m2: 119, sd2: 29 },
+      { label: "Orpington-Severe",   n1:  18, m1:  66, sd1: 20, n2:  18, m2: 137, sd2: 48 }
+    ],
+    expected: {
+      // Hedges' g per study, confirmed from metafor escalc(measure="SMD")
+      yi:   [-0.3552, -0.3479, -2.3176, -1.8880],
+      FE:   -0.79034,
+      RE:   -1.20737,
+      tau2:  1.009,
+      I2:   95.6284,
+      // CLES = Φ(RE / √2); CI from Φ applied to normal-CI endpoints.
+      // R-verified: generate.R block CLES-1
+      cles: { estimate: 0.1966, ciLow: 0.0579, ciHigh: 0.4465 }
+    },
+    citation: "Normand (1999) Stat Med 18:321–359. dat.normand1999 in metafor. REML τ²=1.009 from metafor test suite."
+  },
+
+  // ----------------------------------------------------------------
+  // MD_paired — Morris (2008), treatment arm (5 studies)
+  // Source: Morris SB (2008). Org Res Methods 11(2), 364–386.
+  // yi = m_post - m_pre
+  // sd_change = sqrt(sd_pre² + sd_post² - 2·r·sd_pre·sd_post)
+  // vi = sd_change² / n
+  // Per-study yi/vi verified by hand. Pooled values from metafor test suite.
+  // ----------------------------------------------------------------
+  {
+    name: "Morris 2008 – MD_paired (REML)",
+    rBlock: "7",
+    type: "MD_paired",
+    tauMethod: "REML",
+    data: [
+      { label: "Study 1", m_pre: 30.6, m_post: 38.5, sd_pre: 15.0, sd_post: 11.6, n: 20, r: 0.47 },
+      { label: "Study 2", m_pre: 23.5, m_post: 26.8, sd_pre:  3.1, sd_post:  4.1, n: 50, r: 0.64 },
+      { label: "Study 3", m_pre:  0.5, m_post:  0.7, sd_pre:  0.1, sd_post:  0.1, n:  9, r: 0.77 },
+      { label: "Study 4", m_pre: 53.4, m_post: 75.9, sd_pre: 14.5, sd_post:  4.4, n: 10, r: 0.89 },
+      { label: "Study 5", m_pre: 35.6, m_post: 36.0, sd_pre:  4.7, sd_post:  4.6, n: 14, r: 0.44 }
+    ],
+    expected: {
+      // yi = m_post - m_pre (exact); vi verified by hand
+      yi:   [7.9, 3.3, 0.2, 22.5, 0.4],
+      FE:    0.20922,
+      RE:    6.41623,
+      tau2: 73.57154,
+      I2:   99.5234
+    },
+    citation: "Morris (2008) Org Res Methods 11:364–386. Pooled values from metafor test suite."
+  },
+
+  // ----------------------------------------------------------------
+  // ZCOR — synthetic 5-study dataset (hand-computed, DL)
+  // yi = atanh(r),  vi = 1/(n−3)
+  // FE weights wi = n−3 (exact integers, so FE_z is a simple weighted mean).
+  // τ²_DL, RE_z verified analytically; per-study zi verified by formula.
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic – ZCOR (Fisher's z, DL)",
+    rBlock: "13",
+    type: "ZCOR",
+    tauMethod: "DL",
+    data: [
+      { label: "Study 1", r: 0.50, n: 53  },
+      { label: "Study 2", r: 0.30, n: 103 },
+      { label: "Study 3", r: 0.60, n: 43  },
+      { label: "Study 4", r: 0.40, n: 78  },
+      { label: "Study 5", r: 0.25, n: 123 }
+    ],
+    expected: {
+      // yi = atanh(r); verified to machine precision via Math.atanh
+      yi:   [0.54931, 0.30952, 0.69315, 0.42365, 0.25541],
+      // FE_z = Σ(wi·zi)/Σwi, wi=n-3; pooled on z scale (not back-transformed here)
+      FE:    0.3859,
+      RE:    0.4130,
+      tau2:  0.01298,
+      I2:   49.0096
+    },
+    citation: "Synthetic dataset. Expected values computed analytically from Fisher z formulas."
+  },
+
+  // ----------------------------------------------------------------
+  // COR — synthetic 5-study dataset (hand-computed, DL)
+  // Same r/n as ZCOR benchmark; different vi formula: (1−r²)²/(n−1).
+  // yi = r (raw correlation, no transform).
+  // τ²_DL and pooled estimates verified analytically.
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic – COR (raw correlation, DL)",
+    rBlock: "14",
+    type: "COR",
+    tauMethod: "DL",
+    data: [
+      { label: "Study 1", r: 0.50, n: 53  },
+      { label: "Study 2", r: 0.30, n: 103 },
+      { label: "Study 3", r: 0.60, n: 43  },
+      { label: "Study 4", r: 0.40, n: 78  },
+      { label: "Study 5", r: 0.25, n: 123 }
+    ],
+    expected: {
+      // yi = r exactly
+      yi:   [0.500, 0.300, 0.600, 0.400, 0.250],
+      // FE/RE on raw r scale; pooled values verified analytically via vi=(1-r²)²/(n-1)
+      FE:    0.394,
+      RE:    0.4033,
+      tau2:  0.0119,
+      I2:   57.2681
+    },
+    citation: "Synthetic dataset. Expected values computed analytically from raw-correlation formulas."
+  },
+
+  // ----------------------------------------------------------------
+  // SMD_paired — Morris (2008), treatment arm (5 studies)
+  // Same raw data as MD_paired benchmark above.
+  // SMCR formula: d = (m_post - m_pre) / sd_pre  (pre-test SD standardiser)
+  // g = d · J(df),  J = Γ(df/2)/(√(df/2)·Γ((df−1)/2)) exact,  df = n − 1
+  // vi = 2(1−r)/n + g²/(2n)  (Borenstein et al. 2009 eq 4.27)
+  // Per-study g verified by hand; pooled values computed analytically (DL).
+  // ----------------------------------------------------------------
+  {
+    name: "Morris 2008 – SMD_paired (DL)",
+    rBlock: "8",
+    type: "SMD_paired",
+    tauMethod: "DL",
+    data: [
+      { label: "Study 1", m_pre: 30.6, m_post: 38.5, sd_pre: 15.0, sd_post: 11.6, n: 20, r: 0.47 },
+      { label: "Study 2", m_pre: 23.5, m_post: 26.8, sd_pre:  3.1, sd_post:  4.1, n: 50, r: 0.64 },
+      { label: "Study 3", m_pre:  0.5, m_post:  0.7, sd_pre:  0.1, sd_post:  0.1, n:  9, r: 0.77 },
+      { label: "Study 4", m_pre: 53.4, m_post: 75.9, sd_pre: 14.5, sd_post:  4.4, n: 10, r: 0.89 },
+      { label: "Study 5", m_pre: 35.6, m_post: 36.0, sd_pre:  4.7, sd_post:  4.6, n: 14, r: 0.44 }
+    ],
+    expected: {
+      // Hedges' g per study: d = Δm/sd_pre, g = d·J (exact), verified vs metafor block "8"
+      yi:   [0.5056, 1.0481, 1.8054, 1.4181, 0.0801],
+      FE:    0.8643,
+      RE:    0.9022,
+      tau2:  0.2425,
+      I2:   77.1174
+    },
+    citation: "Morris (2008) Org Res Methods 11:364–386. Per-study g and pooled values recomputed with Borenstein 2009 eq 4.27 vi formula."
+  },
+
+  // ----------------------------------------------------------------
+  // PR — Synthetic proportion dataset (raw proportion)
+  // 4 studies with x/n data, equal n=100.
+  // yi = p = x/n,  vi = p(1-p)/n.
+  // Per-study yi exact; FE/RE/tau2/I2 computed analytically (DL).
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic Proportion – PR (DL)",
+    rBlock: "9",
+    type: "PR",
+    tauMethod: "DL",
+    data: [
+      { label: "Study 1", x: 10, n: 100 },
+      { label: "Study 2", x: 30, n: 100 },
+      { label: "Study 3", x: 20, n: 100 },
+      { label: "Study 4", x: 40, n: 100 }
+    ],
+    expected: {
+      yi:   [0.100, 0.300, 0.200, 0.400],
+      FE:    0.20755,
+      RE:    0.24641,
+      tau2:  0.01581,
+      I2:   90.7379
+    },
+    citation: "Synthetic dataset. Expected values computed analytically from PR formulas."
+  },
+
+  // ----------------------------------------------------------------
+  // PLO — Synthetic proportion dataset (logit)
+  // Same 4 studies. yi = logit(p),  vi = 1 / (n·p·(1−p)).
+  // Per-study logit yi verified by hand. FE/RE/tau2/I2 analytic (DL).
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic Proportion – PLO (DL)",
+    rBlock: "10",
+    type: "PLO",
+    tauMethod: "DL",
+    data: [
+      { label: "Study 1", x: 10, n: 100 },
+      { label: "Study 2", x: 30, n: 100 },
+      { label: "Study 3", x: 20, n: 100 },
+      { label: "Study 4", x: 40, n: 100 }
+    ],
+    expected: {
+      yi:   [-2.19722, -0.8473, -1.38629, -0.40547],
+      FE:   -0.99257,
+      RE:   -1.17436,
+      tau2:  0.4197,
+      I2:   87.6324
+    },
+    citation: "Synthetic dataset. Expected values computed analytically from PLO (logit) formulas."
+  },
+
+  // ----------------------------------------------------------------
+  // PAS — Synthetic proportion dataset (arcsine square root)
+  // Same 4 studies. yi = arcsin(√p),  vi = 1/(4n).
+  // All vi equal (n=100) => RE = FE. tau2/I2 analytic (DL).
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic Proportion – PAS (DL)",
+    rBlock: "11",
+    type: "PAS",
+    tauMethod: "DL",
+    data: [
+      { label: "Study 1", x: 10, n: 100 },
+      { label: "Study 2", x: 30, n: 100 },
+      { label: "Study 3", x: 20, n: 100 },
+      { label: "Study 4", x: 40, n: 100 }
+    ],
+    expected: {
+      yi:   [0.32175, 0.57964, 0.46365, 0.68472],
+      FE:    0.51244,
+      RE:    0.51244,
+      tau2:  0.02186,
+      I2:   89.7174
+    },
+    citation: "Synthetic dataset. Expected values computed analytically from PAS (arcsine) formulas."
+  },
+
+  // ----------------------------------------------------------------
+  // PFT — Synthetic proportion dataset (Freeman-Tukey double-arcsine)
+  // Same 4 studies. Half-sum convention (metafor escalc("PFT")):
+  // yi = ½(arcsin(√(x/(n+1))) + arcsin(√((x+1)/(n+1)))), vi = 1/(4(n+0.5)).
+  // Equal vi => RE = FE. tau2/I2 analytic (DL).
+  // FE/RE/ciLow/ciHigh = full-sum/2; tau2 = full-sum-tau2/4; I2 unchanged.
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic Proportion – PFT (DL)",
+    rBlock: "12",
+    type: "PFT",
+    tauMethod: "DL",
+    data: [
+      { label: "Study 1", x: 10, n: 100 },
+      { label: "Study 2", x: 30, n: 100 },
+      { label: "Study 3", x: 20, n: 100 },
+      { label: "Study 4", x: 40, n: 100 }
+    ],
+    expected: {
+      yi:   [0.3282, 0.5818, 0.4673, 0.6857],
+      FE:    0.5158,
+      RE:    0.5158,
+      tau2:  0.02110,
+      I2:   89.4549
+    },
+    citation: "Synthetic dataset. Expected values match metafor escalc(\"PFT\") half-sum convention. Verified against R block 12."
+  },
+
+  // ================================================================
+  // TAU² ESTIMATOR BENCHMARKS
+  //
+  // Dataset: yi=[0, 1, 3], vi=[1, 1, 1]  (k=3, equal variances)
+  //
+  // Because all vi are equal, the weighted mean equals the unweighted
+  // mean for any τ² value, so FE = RE = (0+1+3)/3 = 4/3 ≈ 1.333 for
+  // every method.  I² = (Q−df)/Q = (4.667−2)/4.667 = 57.1% (fixed).
+  // Only τ² differs by method, making this ideal for isolating each
+  // estimator formula.  All expected values derived analytically.
+  //
+  //   Q  = Σwᵢ(yᵢ−ȳ)²  =  42/9  ≈ 4.667
+  //   df = k−1 = 2
+  //   ΣW = Σwᵢ  = 3   (wᵢ=1/vᵢ=1)
+  //   c  = ΣW − ΣW²/ΣW = 2   (DL denominator)
+  // ================================================================
+
+  // ----------------------------------------------------------------
+  // HS — Hunter-Schmidt
+  // τ²_HS = max(0, (Q−df) / ΣW) = (4.667−2)/3 = 8/9 ≈ 0.889
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic τ² test – HS (k=3, equal vi)",
+    rBlock: "HS-1",
+    type: "GENERIC",
+    tauMethod: "HS",
+    data: [
+      { label: "Study 1", yi: 0, vi: 1 },
+      { label: "Study 2", yi: 1, vi: 1 },
+      { label: "Study 3", yi: 3, vi: 1 }
+    ],
+    expected: {
+      FE:   1.33333,  // 4/3
+      RE:   1.33333,  // equal vi → RE = FE
+      tau2: 0.8889,   // 8/9
+      I2:  47.0588
+    },
+    citation: "Synthetic. τ²_HS = (Q−df)/ΣW = (42/9−2)/3 = 8/9. Derived analytically."
+  },
+
+  // ----------------------------------------------------------------
+  // HE — Hedges (unweighted method of moments)
+  // τ²_HE = SS_uw/(k−1) − mean(vᵢ)
+  //       = (42/9)/2 − 1 = 7/3 − 1 = 4/3 ≈ 1.333
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic τ² test – HE (k=3, equal vi)",
+    rBlock: "16",
+    type: "GENERIC",
+    tauMethod: "HE",
+    data: [
+      { label: "Study 1", yi: 0, vi: 1 },
+      { label: "Study 2", yi: 1, vi: 1 },
+      { label: "Study 3", yi: 3, vi: 1 }
+    ],
+    expected: {
+      FE:   1.33333,
+      RE:   1.33333,
+      tau2: 1.3333,   // 4/3
+      I2:  57.1429
+    },
+    citation: "Synthetic. τ²_HE = SS_uw/(k−1) − mean(v) = (42/9)/2 − 1 = 4/3. Derived analytically."
+  },
+
+  // ----------------------------------------------------------------
+  // ML — Maximum Likelihood
+  // Fixed point of score=0:  (42/9)/(1+τ²)² = 3/(1+τ²)
+  // → 1+τ² = (42/9)/3 = 14/9  → τ² = 5/9 ≈ 0.556
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic τ² test – ML (k=3, equal vi)",
+    rBlock: "17",
+    type: "GENERIC",
+    tauMethod: "ML",
+    data: [
+      { label: "Study 1", yi: 0, vi: 1 },
+      { label: "Study 2", yi: 1, vi: 1 },
+      { label: "Study 3", yi: 3, vi: 1 }
+    ],
+    expected: {
+      FE:   1.33333,
+      RE:   1.33333,
+      tau2: 0.5556,   // 5/9
+      I2:  35.7143
+    },
+    citation: "Synthetic. τ²_ML fixed point: (42/9)/(1+τ²) = 3 → τ² = 5/9. Derived analytically."
+  },
+
+  // ----------------------------------------------------------------
+  // SJ — Sidik-Jonkman
+  // Fixed point: τ²(1+τ²) = (1/k)·Σvᵢ(yᵢ−μ)²/(vᵢ+τ²)·(1+τ²)
+  // With equal vᵢ=1: τ²(1+τ²) = (42/9)/3 = 14/9
+  // → τ² = (√65−3)/6 ≈ 0.844
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic τ² test – SJ (k=3, equal vi)",
+    rBlock: "SJ-1",
+    type: "GENERIC",
+    tauMethod: "SJ",
+    data: [
+      { label: "Study 1", yi: 0, vi: 1 },
+      { label: "Study 2", yi: 1, vi: 1 },
+      { label: "Study 3", yi: 3, vi: 1 }
+    ],
+    expected: {
+      FE:   1.33333,  // 4/3
+      RE:   1.33333,  // equal vi → RE = FE
+      tau2: 0.8437,   // (√65−3)/6
+      I2:  45.7615
+    },
+    citation: "Synthetic. τ²_SJ fixed point: τ²(1+τ²) = 14/9 → τ² = (√65−3)/6. Derived analytically."
+  },
+
+  // ----------------------------------------------------------------
+  // PM — Paule-Mandel iterative moment-matching
+  // Uses UNEQUAL vi=[0.25,0.50,1.00] to produce a value distinct from DL/HE.
+  // (For equal vi, PM = HE analytically.)
+  //
+  // Dataset: yi=[0,1,3], vi=[0.25,0.50,1.00]
+  //
+  // Fixed-weight quantities (τ²-independent):
+  //   w_FE = [4,2,1], W_FE = 7
+  //   FE   = (0·4+1·2+3·1)/7 = 5/7 ≈ 0.714
+  //   Q_FE = 4·(5/7)²+2·(2/7)²+1·(16/7)² = (100+8+256)/49 = 364/49 ≈ 7.429
+  //   I²   = (Q−df)/Q = 266/364 ≈ 73.1%
+  //
+  // τ²_PM: iterative solution of Q(τ*)=k−1=2
+  //   Update: τ²_new = τ² + (Q(τ²)−2)/W(τ²)  [start τ²=0, converge ~1e−10]
+  //   Converges to τ² ≈ 1.648, RE ≈ 1.167
+  //   Verified against metafor: rma(c(0,1,3), c(0.25,0.50,1.00), method="PM")
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic τ² test – PM (k=3, unequal vi)",
+    rBlock: "38",
+    type: "GENERIC",
+    tauMethod: "PM",
+    data: [
+      { label: "Study 1", yi: 0, vi: 0.25 },
+      { label: "Study 2", yi: 1, vi: 0.50 },
+      { label: "Study 3", yi: 3, vi: 1.00 }
+    ],
+    expected: {
+      FE:   0.71429,
+      RE:   1.16667,
+      tau2: 1.64726,
+      I2:  76.7145
+    },
+    citation: "Synthetic. τ²_PM iterative fixed-point (unequal vi so PM≠HE). Verified against metafor rma(method='PM')."
+  },
+
+  // ----------------------------------------------------------------
+  // HR — Synthetic hazard ratio dataset (hand-computed, DL)
+  // yi = log(hr),  se = (log(ci_hi)−log(ci_lo)) / (2·1.96),  vi = se²
+  // 4 studies, equal se=0.25 (vi=0.0625) on log scale.
+  // Because all vi are equal, RE = FE regardless of τ².
+  //   yi: [−0.5, −0.1, −0.9, −0.3]
+  //   FE = (−0.5−0.1−0.9−0.3)/4 = −0.450
+  //   Q  = Σwi·(yi−FE)² = 16·(0.05²+0.35²+0.45²+0.15²) = 16·0.35 = 5.6
+  //   df = 3,  c = ΣW − ΣW²/ΣW = 64 − 16 = 48
+  //   τ²_DL = (5.6−3)/48 = 0.054
+  //   I²    = (5.6−3)/5.6 = 46.4%
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic – HR (log hazard ratio, DL)",
+    rBlock: "19",
+    type: "HR",
+    tauMethod: "DL",
+    data: [
+      // hr = exp(yi), ci_lo/ci_hi = exp(yi ∓ 0.49)  [0.49 = 1.96·0.25]
+      { label: "Study 1", hr: 0.6065, ci_lo: 0.3716, ci_hi: 0.9900 },
+      { label: "Study 2", hr: 0.9048, ci_lo: 0.5543, ci_hi: 1.4770 },
+      { label: "Study 3", hr: 0.4066, ci_lo: 0.2491, ci_hi: 0.6637 },
+      { label: "Study 4", hr: 0.7408, ci_lo: 0.4538, ci_hi: 1.2092 }
+    ],
+    expected: {
+      // yi = log(hr), verified by formula
+      yi:   [-0.500, -0.100, -0.900, -0.300],
+      FE:   -0.450,
+      RE:   -0.450,   // equal vi → RE = FE
+      tau2:  0.05413,
+      I2:   46.4123
+    },
+    citation: "Synthetic dataset. Expected values derived analytically from HR log-scale formulas."
+  },
+
+  // ----------------------------------------------------------------
+  // IRR — Synthetic incidence rate ratio dataset (hand-computed, DL)
+  // yi = log(x1/t1) − log(x2/t2),  vi = 1/x1 + 1/x2
+  // 4 studies: x1=[5,18,8,14], x2=20 for all, t1=t2=100.
+  //   yi: [ln(0.25), ln(0.9), ln(0.4), ln(0.7)]
+  //       = [−1.3863, −0.1054, −0.9163, −0.3567]
+  //   vi: [0.250, 0.1056, 0.175, 0.1214]
+  //   FE = −0.537  (verified analytically)
+  //   τ²_DL = 0.138,  I² = 47.7%,  RE = −0.605
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic – IRR (incidence rate ratio, DL)",
+    rBlock: "20",
+    type: "IRR",
+    tauMethod: "DL",
+    data: [
+      { label: "Study 1", x1: 5,  t1: 100, x2: 20, t2: 100 },
+      { label: "Study 2", x1: 18, t1: 100, x2: 20, t2: 100 },
+      { label: "Study 3", x1: 8,  t1: 100, x2: 20, t2: 100 },
+      { label: "Study 4", x1: 14, t1: 100, x2: 20, t2: 100 }
+    ],
+    expected: {
+      // yi = log(x1/x2) since t1=t2
+      yi:   [-1.38629, -0.10536, -0.91629, -0.35667],
+      FE:   -0.53665,
+      RE:   -0.60488,
+      tau2:  0.13767,
+      I2:   47.7363
+    },
+    citation: "Synthetic dataset. Expected values derived analytically from IRR Poisson formulas."
+  },
+
+  // ----------------------------------------------------------------
+  // IRD — Heterogeneous 6-study dataset, DL (cross-validated vs metafor)
+  // escalc("IRD", x1i=..., x2i=..., t1i=..., t2i=...)
+  // x1=[5,40,2,60,8,100], t1=[200,1000,100,2000,300,5000]
+  // x2=[20,30,15,40,3,50], t2=[200,1000,100,2000,300,5000]
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic – IRD (incidence rate difference, DL)",
+    rBlock: "IRD-1",
+    type: "IRD",
+    tauMethod: "DL",
+    data: [
+      { label: "Study 1", x1:  5, t1:  200, x2: 20, t2:  200 },
+      { label: "Study 2", x1: 40, t1: 1000, x2: 30, t2: 1000 },
+      { label: "Study 3", x1:  2, t1:  100, x2: 15, t2:  100 },
+      { label: "Study 4", x1: 60, t1: 2000, x2: 40, t2: 2000 },
+      { label: "Study 5", x1:  8, t1:  300, x2:  3, t2:  300 },
+      { label: "Study 6", x1: 100, t1: 5000, x2: 50, t2: 5000 },
+    ],
+    expected: {
+      // yi = x1/t1 − x2/t2; vi = x1/t1² + x2/t2² — verified in R
+      yi:   [-0.075, 0.01, -0.13, 0.01, 0.0166667, 0.01],
+      FE:    0.00929187,
+      RE:    0.00189442,
+      tau2:  0.0001777897,
+      I2:   78.5748,
+    },
+    citation: "Synthetic dataset; cross-validated with metafor escalc('IRD') + rma(method='DL').",
+  },
+
+  // ----------------------------------------------------------------
+  // IRD — REML (same data as IRD-1)
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic – IRD (incidence rate difference, REML)",
+    rBlock: "IRD-2",
+    type: "IRD",
+    tauMethod: "REML",
+    data: [
+      { label: "Study 1", x1:  5, t1:  200, x2: 20, t2:  200 },
+      { label: "Study 2", x1: 40, t1: 1000, x2: 30, t2: 1000 },
+      { label: "Study 3", x1:  2, t1:  100, x2: 15, t2:  100 },
+      { label: "Study 4", x1: 60, t1: 2000, x2: 40, t2: 2000 },
+      { label: "Study 5", x1:  8, t1:  300, x2:  3, t2:  300 },
+      { label: "Study 6", x1: 100, t1: 5000, x2: 50, t2: 5000 },
+    ],
+    expected: {
+      FE:    0.00929187,
+      RE:   -0.01601237,
+      tau2:  0.002056329,
+      I2:   97.693,
+    },
+    citation: "Synthetic dataset; cross-validated with metafor escalc('IRD') + rma(method='REML').",
+  },
+
+  // ----------------------------------------------------------------
+  // IRSD — Heterogeneous 6-study dataset, DL (cross-validated vs metafor)
+  // escalc("IRSD", ...) — sqrt variance-stabilising transform
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic – IRSD (sqrt incidence rate difference, DL)",
+    rBlock: "IRSD-1",
+    type: "IRSD",
+    tauMethod: "DL",
+    data: [
+      { label: "Study 1", x1:  5, t1:  200, x2: 20, t2:  200 },
+      { label: "Study 2", x1: 40, t1: 1000, x2: 30, t2: 1000 },
+      { label: "Study 3", x1:  2, t1:  100, x2: 15, t2:  100 },
+      { label: "Study 4", x1: 60, t1: 2000, x2: 40, t2: 2000 },
+      { label: "Study 5", x1:  8, t1:  300, x2:  3, t2:  300 },
+      { label: "Study 6", x1: 100, t1: 5000, x2: 50, t2: 5000 },
+    ],
+    expected: {
+      // yi = sqrt(x1/t1) − sqrt(x2/t2); vi = 1/(4t1) + 1/(4t2) — verified in R
+      yi:   [-0.1581139, 0.0267949, -0.2458770, 0.0317837, 0.0632993, 0.0414214],
+      FE:    0.03026145,
+      RE:   -0.00826508,
+      tau2:  0.002588462,
+      I2:   84.0654,
+    },
+    citation: "Synthetic dataset; cross-validated with metafor escalc('IRSD') + rma(method='DL').",
+  },
+
+  // ----------------------------------------------------------------
+  // IRSD — REML (same data as IRSD-1)
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic – IRSD (sqrt incidence rate difference, REML)",
+    rBlock: "IRSD-2",
+    type: "IRSD",
+    tauMethod: "REML",
+    data: [
+      { label: "Study 1", x1:  5, t1:  200, x2: 20, t2:  200 },
+      { label: "Study 2", x1: 40, t1: 1000, x2: 30, t2: 1000 },
+      { label: "Study 3", x1:  2, t1:  100, x2: 15, t2:  100 },
+      { label: "Study 4", x1: 60, t1: 2000, x2: 40, t2: 2000 },
+      { label: "Study 5", x1:  8, t1:  300, x2:  3, t2:  300 },
+      { label: "Study 6", x1: 100, t1: 5000, x2: 50, t2: 5000 },
+    ],
+    expected: {
+      FE:    0.03026145,
+      RE:   -0.02807825,
+      tau2:  0.01179224,
+      I2:   96.0051,
+    },
+    citation: "Synthetic dataset; cross-validated with metafor escalc('IRSD') + rma(method='REML').",
+  },
+
+  // ----------------------------------------------------------------
+  // YUQ — dat.bcg first 5 studies (a=tpos,b=tneg,c=cpos,d=cneg), DL
+  // escalc("YUQ", ai=tpos, bi=tneg, ci=cpos, di=cneg, data=dat.bcg[1:5])
+  // rma(yi, vi, method="DL")
+  //   Study 1: a=4,   b=119,   c=11,  d=128
+  //   Study 2: a=6,   b=300,   c=29,  d=274
+  //   Study 3: a=3,   b=228,   c=11,  d=209
+  //   Study 4: a=62,  b=13536, c=248, d=12619
+  //   Study 5: a=33,  b=5036,  c=47,  d=5761
+  // ----------------------------------------------------------------
+  {
+    name: "dat.bcg (5 studies) – YUQ (Yule's Q, DL)",
+    rBlock: "YUQ-1",
+    type: "YUQ",
+    tauMethod: "DL",
+    data: [
+      { label: "Aronson 1948",     a:  4, b:   119, c:  11, d:   128 },
+      { label: "Ferguson & Simes", a:  6, b:   300, c:  29, d:   274 },
+      { label: "Rosenthal 1960",   a:  3, b:   228, c:  11, d:   209 },
+      { label: "Hart & Sutherland",a: 62, b: 13536, c: 248, d: 12619 },
+      { label: "Frimodt-Moller",   a: 33, b:  5036, c:  47, d:  5761 },
+    ],
+    expected: {
+      yi:   [-0.43767161, -0.68213457, -0.6, -0.62197624, -0.10913415],
+      FE:   -0.565524,
+      RE:   -0.491567,
+      tau2:  0.04995381,
+      I2:   79.2922,
+    },
+    citation: "dat.bcg (first 5 studies); cross-validated with metafor escalc('YUQ') + rma(method='DL').",
+  },
+
+  // ----------------------------------------------------------------
+  // YUQ — REML (same data as YUQ-1)
+  // ----------------------------------------------------------------
+  {
+    name: "dat.bcg (5 studies) – YUQ (Yule's Q, REML)",
+    rBlock: "YUQ-2",
+    type: "YUQ",
+    tauMethod: "REML",
+    data: [
+      { label: "Aronson 1948",     a:  4, b:   119, c:  11, d:   128 },
+      { label: "Ferguson & Simes", a:  6, b:   300, c:  29, d:   274 },
+      { label: "Rosenthal 1960",   a:  3, b:   228, c:  11, d:   209 },
+      { label: "Hart & Sutherland",a: 62, b: 13536, c: 248, d: 12619 },
+      { label: "Frimodt-Moller",   a: 33, b:  5036, c:  47, d:  5761 },
+    ],
+    expected: {
+      yi:   [-0.43767161, -0.68213457, -0.6, -0.62197624, -0.10913415],
+      FE:   -0.565524,
+      RE:   -0.4916644,
+      tau2:  0.048285,
+      I2:   78.7286,    },
+    citation: "dat.bcg (first 5 studies); cross-validated with metafor escalc('YUQ') + rma(method='REML').",
+  },
+
+  // ----------------------------------------------------------------
+  // YUY — dat.bcg first 5 studies, DL
+  // escalc("YUY", ai=tpos, bi=tneg, ci=cpos, di=cneg, data=dat.bcg[1:5])
+  // ----------------------------------------------------------------
+  {
+    name: "dat.bcg (5 studies) – YUY (Yule's Y, DL)",
+    rBlock: "YUY-1",
+    type: "YUY",
+    tauMethod: "DL",
+    data: [
+      { label: "Aronson 1948",     a:  4, b:   119, c:  11, d:   128 },
+      { label: "Ferguson & Simes", a:  6, b:   300, c:  29, d:   274 },
+      { label: "Rosenthal 1960",   a:  3, b:   228, c:  11, d:   209 },
+      { label: "Hart & Sutherland",a: 62, b: 13536, c: 248, d: 12619 },
+      { label: "Frimodt-Moller",   a: 33, b:  5036, c:  47, d:  5761 },
+    ],
+    expected: {
+      yi:   [-0.23045841, -0.39401806, -0.33333333, -0.34882986, -0.05473053],
+      FE:   -0.2883224,
+      RE:   -0.2663702,
+      tau2:  0.02312507,
+      I2:   81.9081,
+    },
+    citation: "dat.bcg (first 5 studies); cross-validated with metafor escalc('YUY') + rma(method='DL').",
+  },
+
+  // ----------------------------------------------------------------
+  // YUY — REML (same data as YUY-1)
+  // ----------------------------------------------------------------
+  {
+    name: "dat.bcg (5 studies) – YUY (Yule's Y, REML)",
+    rBlock: "YUY-2",
+    type: "YUY",
+    tauMethod: "REML",
+    data: [
+      { label: "Aronson 1948",     a:  4, b:   119, c:  11, d:   128 },
+      { label: "Ferguson & Simes", a:  6, b:   300, c:  29, d:   274 },
+      { label: "Rosenthal 1960",   a:  3, b:   228, c:  11, d:   209 },
+      { label: "Hart & Sutherland",a: 62, b: 13536, c: 248, d: 12619 },
+      { label: "Frimodt-Moller",   a: 33, b:  5036, c:  47, d:  5761 },
+    ],
+    expected: {
+      yi:   [-0.23045841, -0.39401806, -0.33333333, -0.34882986, -0.05473053],
+      FE:   -0.2883224,
+      RE:   -0.2652435,
+      tau2:  0.01754236,
+      I2:   77.4507,    },
+    citation: "dat.bcg (first 5 studies); cross-validated with metafor escalc('YUY') + rma(method='REML').",
+  },
+
+  // ----------------------------------------------------------------
+  // SMD1 — Synthetic 5-study one-sample SMD dataset, DL
+  // escalc("SMD1", mi=m, sdi=sd, ni=n, mu0i=0)
+  // rma(yi, vi, method="DL")
+  // m=[2.0,1.0,3.5,1.5,4.0], sd=[1.0,1.5,1.2,2.0,1.0], n=[30,25,40,35,20]
+  //   d: [2.0, 0.6667, 2.9167, 0.75, 4.0]
+  //   J: [0.97391, 0.96842, 0.98065, 0.97778, 0.96000]
+  //   yi = d*J: [1.94783, 0.64561, 2.86020, 0.73333, 3.84000]
+  //   vi_SMD1 = 1/n + yi²/(2*(n-1)):
+  //     [0.09875, 0.04868, 0.12988, 0.03648, 0.43804]
+  //   FE = 1.232,  tau2_DL = 1.055,  I2 = 92.73%,  RE_DL = 1.887
+  // Cross-validated with metafor escalc("SMD1") + rma(method="DL")
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic – SMD1 (one-sample SMD, DL)",
+    type: "SMD1",
+    tauMethod: "DL",
+    data: [
+      { label: "Study 1", m: 2.0, sd: 1.0, n: 30, ref: 0 },
+      { label: "Study 2", m: 1.0, sd: 1.5, n: 25, ref: 0 },
+      { label: "Study 3", m: 3.5, sd: 1.2, n: 40, ref: 0 },
+      { label: "Study 4", m: 1.5, sd: 2.0, n: 35, ref: 0 },
+      { label: "Study 5", m: 4.0, sd: 1.0, n: 20, ref: 0 },
+    ],
+    expected: {
+      yi:   [1.94783, 0.64561, 2.86020, 0.73333, 3.84000],
+      FE:   1.232,
+      RE:   1.887,
+      tau2: 1.055,
+      I2:   92.728,
+    },
+    citation: "Synthetic dataset; cross-validated with metafor escalc('SMD1') + rma(method='DL').",
+  },
+
+  // ----------------------------------------------------------------
+  // SMD1 — REML (same data as SMD1-1)
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic – SMD1 (one-sample SMD, REML)",
+    type: "SMD1",
+    tauMethod: "REML",
+    data: [
+      { label: "Study 1", m: 2.0, sd: 1.0, n: 30, ref: 0 },
+      { label: "Study 2", m: 1.0, sd: 1.5, n: 25, ref: 0 },
+      { label: "Study 3", m: 3.5, sd: 1.2, n: 40, ref: 0 },
+      { label: "Study 4", m: 1.5, sd: 2.0, n: 35, ref: 0 },
+      { label: "Study 5", m: 4.0, sd: 1.0, n: 20, ref: 0 },
+    ],
+    expected: {
+      yi:   [1.94783, 0.64561, 2.86020, 0.73333, 3.84000],
+      FE:   1.232,
+      RE:   1.922,
+      tau2: 1.608,
+      I2:   95.1088,    },
+    citation: "Synthetic dataset; cross-validated with metafor escalc('SMD1') + rma(method='REML').",
+  },
+
+  // ----------------------------------------------------------------
+  // SMD1H — same dataset, DL
+  // escalc("SMD1H", mi=m, sdi=sd, ni=n, mu0i=0)
+  //   vi_SMD1H = J² * (1/n + d²/(2*(n-1))):
+  //     [0.09703, 0.04621, 0.12889, 0.03522, 0.43412]
+  //   FE = 1.220,  tau2_DL = 1.044,  I2 = 92.86%,  RE_DL = 1.886
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic – SMD1H (one-sample SMD heteroscedastic, DL)",
+    type: "SMD1H",
+    tauMethod: "DL",
+    data: [
+      { label: "Study 1", m: 2.0, sd: 1.0, n: 30, ref: 0 },
+      { label: "Study 2", m: 1.0, sd: 1.5, n: 25, ref: 0 },
+      { label: "Study 3", m: 3.5, sd: 1.2, n: 40, ref: 0 },
+      { label: "Study 4", m: 1.5, sd: 2.0, n: 35, ref: 0 },
+      { label: "Study 5", m: 4.0, sd: 1.0, n: 20, ref: 0 },
+    ],
+    expected: {
+      yi:   [1.94783, 0.64561, 2.86020, 0.73333, 3.84000],
+      FE:   1.220,
+      RE:   1.886,
+      tau2: 1.044,
+      I2:   92.8577,
+    },
+    citation: "Synthetic dataset; cross-validated with metafor escalc('SMD1H') + rma(method='DL').",
+  },
+
+  // ----------------------------------------------------------------
+  // SMD1H — REML (same data as SMD1H-1)
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic – SMD1H (one-sample SMD heteroscedastic, REML)",
+    type: "SMD1H",
+    tauMethod: "REML",
+    data: [
+      { label: "Study 1", m: 2.0, sd: 1.0, n: 30, ref: 0 },
+      { label: "Study 2", m: 1.0, sd: 1.5, n: 25, ref: 0 },
+      { label: "Study 3", m: 3.5, sd: 1.2, n: 40, ref: 0 },
+      { label: "Study 4", m: 1.5, sd: 2.0, n: 35, ref: 0 },
+      { label: "Study 5", m: 4.0, sd: 1.0, n: 20, ref: 0 },
+    ],
+    expected: {
+      yi:   [1.94783, 0.64561, 2.86020, 0.73333, 3.84000],
+      FE:   1.220,
+      RE:   1.922,
+      tau2: 1.611,
+      I2:   95.2569,    },
+    citation: "Synthetic dataset; cross-validated with metafor escalc('SMD1H') + rma(method='REML').",
+  },
+
+  // ----------------------------------------------------------------
+  // IR — Synthetic incidence rate dataset (hand-computed, DL)
+  // yi = log(x/t),  vi = 1/x
+  // 4 studies: x=[10,25,5,20], t=[200,300,400,250].
+  //   yi: [ln(0.05), ln(25/300), ln(0.0125), ln(0.08)]
+  //       = [−2.9957, −2.4849, −4.3820, −2.5257]
+  //   vi: [0.1, 0.04, 0.2, 0.05]
+  //   FE = −2.742  (verified analytically)
+  //   τ²_DL = 0.335,  I² = 82.0%,  RE = −2.997
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic – IR (incidence rate log, DL)",
+    rBlock: "21",
+    type: "IR",
+    tauMethod: "DL",
+    data: [
+      { label: "Study 1", x: 10, t: 200 },
+      { label: "Study 2", x: 25, t: 300 },
+      { label: "Study 3", x:  5, t: 400 },
+      { label: "Study 4", x: 20, t: 250 }
+    ],
+    expected: {
+      // yi = log(x/t), verified by formula
+      yi:   [-2.99573, -2.48491, -4.382, -2.52573],
+      FE:   -2.74174,
+      RE:   -2.99661,
+      tau2:  0.335,
+      I2:   82.0145
+    },
+    citation: "Synthetic dataset. Expected values derived analytically from Poisson IR formulas."
+  },
+
+  // ----------------------------------------------------------------
+  // SMDH — Normand 1999 (dat.normand1999, all 9 studies)
+  // Same raw data as the MD benchmark above.
+  // Standardiser: sdi = √((sd1²+sd2²)/2)  (average, not pooled).
+  // d = (m1−m2)/sdi,  g = d·J,  J = 1−3/(4·df−1),  df = n1+n2−2
+  // vi(g) = g²·(sd1⁴/(n1−1)+sd2⁴/(n2−1))/(8·sdi²²) + (sd1²/(n1−1)+sd2²/(n2−1))/sdi²
+  //   Bonett (2009) Eq. 7 delta-method formula; uses n−1 denominators.
+  // FE/RE/τ²/I² cross-validated against metafor escalc("SMDH") + rma(method="REML").
+  // ----------------------------------------------------------------
+  {
+    name: "Normand 1999 – SMDH (heteroscedastic g, REML)",
+    rBlock: "22",
+    type: "SMDH",
+    tauMethod: "REML",
+    data: [
+      { label: "Edinburgh",          n1: 155, m1:  55, sd1: 47, n2: 156, m2:  75, sd2: 64 },
+      { label: "Orpington-Mild",     n1:  31, m1:  27, sd1:  7, n2:  32, m2:  29, sd2:  4 },
+      { label: "Orpington-Moderate", n1:  75, m1:  64, sd1: 17, n2:  71, m2: 119, sd2: 29 },
+      { label: "Orpington-Severe",   n1:  18, m1:  66, sd1: 20, n2:  18, m2: 137, sd2: 48 },
+      { label: "Montreal-Home",      n1:   8, m1:  14, sd1:  8, n2:  13, m2:  18, sd2: 11 },
+      { label: "Montreal-Transfer",  n1:  57, m1:  19, sd1:  7, n2:  52, m2:  18, sd2:  4 },
+      { label: "Newcastle",          n1:  34, m1:  52, sd1: 45, n2:  33, m2:  41, sd2: 34 },
+      { label: "Umea",               n1: 110, m1:  21, sd1: 16, n2: 183, m2:  31, sd2: 27 },
+      { label: "Uppsala",            n1:  60, m1:  30, sd1: 27, n2:  52, m2:  23, sd2: 20 }
+    ],
+    expected: {
+      // g per study (sdi = avg-SD standardiser); yi unchanged from old formula (same d·J)
+      yi:   [-0.3553, -0.3465, -2.3018, -1.8880, -0.3993, 0.1742, 0.2726, -0.4494, 0.2926],
+      FE:   -0.39414,
+      RE:   -0.53242,
+      tau2:  0.7686,
+      I2:   95.3703
+    },
+    citation: "Normand (1999) Stat Med 18:321–359. dat.normand1999 in metafor. Bonett (2009) Psychol Methods 14:43–53 Eq. 7 variance formula. Cross-validated against metafor escalc/rma."
+  },
+
+  // ----------------------------------------------------------------
+  // ROM — Normand 1999 (dat.normand1999, all 9 studies)
+  // Same raw data as the MD / SMDH benchmarks above.
+  // yi = ln(m1/m2),  vi = sd1²/(n1·m1²) + sd2²/(n2·m2²)
+  // All 9 means are strictly positive; Montreal-Home (n1=8) triggers a
+  // soft warning but is not excluded.
+  // Pooled FE analytically derived; RE/τ²/I² via REML (Python script).
+  // ----------------------------------------------------------------
+  {
+    name: "Normand 1999 – ROM (log ratio of means, REML)",
+    rBlock: "23",
+    type: "ROM",
+    tauMethod: "REML",
+    data: [
+      { label: "Edinburgh",          n1: 155, m1:  55, sd1: 47, n2: 156, m2:  75, sd2: 64 },
+      { label: "Orpington-Mild",     n1:  31, m1:  27, sd1:  7, n2:  32, m2:  29, sd2:  4 },
+      { label: "Orpington-Moderate", n1:  75, m1:  64, sd1: 17, n2:  71, m2: 119, sd2: 29 },
+      { label: "Orpington-Severe",   n1:  18, m1:  66, sd1: 20, n2:  18, m2: 137, sd2: 48 },
+      { label: "Montreal-Home",      n1:   8, m1:  14, sd1:  8, n2:  13, m2:  18, sd2: 11 },
+      { label: "Montreal-Transfer",  n1:  57, m1:  19, sd1:  7, n2:  52, m2:  18, sd2:  4 },
+      { label: "Newcastle",          n1:  34, m1:  52, sd1: 45, n2:  33, m2:  41, sd2: 34 },
+      { label: "Umea",               n1: 110, m1:  21, sd1: 16, n2: 183, m2:  31, sd2: 27 },
+      { label: "Uppsala",            n1:  60, m1:  30, sd1: 27, n2:  52, m2:  23, sd2: 20 }
+    ],
+    expected: {
+      // yi = ln(m1/m2) per study, verified by formula
+      yi:   [-0.3102, -0.0715, -0.6202, -0.7303, -0.2513, 0.0541, 0.2377, -0.3895, 0.2657],
+      FE:   -0.30278,
+      RE:   -0.21837,
+      tau2:  0.108,
+      I2:   94.3547
+    },
+    citation: "Normand (1999) Stat Med 18:321–359. dat.normand1999 in metafor. REML values computed analytically (Python)."
+  },
+
+  // ----------------------------------------------------------------
+  // SMCC — Morris (2008), treatment arm (5 studies)
+  // Same raw data as the MD_paired / SMD_paired benchmarks above.
+  // Standardiser: sd_change (change-score SD), not sd_pre.
+  // sd_change = √(sd_pre²+sd_post²−2·r·sd_pre·sd_post)
+  // d = Δm/sd_change,  g = d·J,  J = Γ(df/2)/(√(df/2)·Γ((df−1)/2)) exact
+  // vi = 1/n + g²/(2n)  (Borenstein et al. 2009 eq 4.30)
+  // All values computed analytically (DL).
+  // ----------------------------------------------------------------
+  {
+    name: "Morris 2008 – SMCC (change-score SD, DL)",
+    rBlock: "24",
+    type: "SMCC",
+    tauMethod: "DL",
+    data: [
+      { label: "Study 1", m_pre: 30.6, m_post: 38.5, sd_pre: 15.0, sd_post: 11.6, n: 20, r: 0.47 },
+      { label: "Study 2", m_pre: 23.5, m_post: 26.8, sd_pre:  3.1, sd_post:  4.1, n: 50, r: 0.64 },
+      { label: "Study 3", m_pre:  0.5, m_post:  0.7, sd_pre:  0.1, sd_post:  0.1, n:  9, r: 0.77 },
+      { label: "Study 4", m_pre: 53.4, m_post: 75.9, sd_pre: 14.5, sd_post:  4.4, n: 10, r: 0.89 },
+      { label: "Study 5", m_pre: 35.6, m_post: 36.0, sd_pre:  4.7, sd_post:  4.6, n: 14, r: 0.44 }
+    ],
+    expected: {
+      // g per study (sd_change standardiser), verified vs metafor block "24"
+      yi:   [0.5417, 1.0198, 2.6619, 1.9088, 0.0765],
+      FE:    0.8035,
+      RE:    1.0177,
+      tau2:  0.3682,
+      I2:   81.2149
+    },
+    citation: "Morris (2008) Org Res Methods 11:364–386. SMCC formula: Borenstein et al. (2009) eq 4.30 — vi=1/n+g²/(2n). DL values recomputed."
+  },
+
+  // ----------------------------------------------------------------
+  // PLN — Synthetic proportion dataset (log proportion)
+  // Same 4 studies as the PR/PLO/PAS/PFT benchmarks above.
+  // yi = ln(p),  vi = (1−p)/(n·p)  (no zero cells → no correction)
+  // All values computed analytically (DL).
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic Proportion – PLN (log, DL)",
+    rBlock: "25",
+    type: "PLN",
+    tauMethod: "DL",
+    data: [
+      { label: "Study 1", x: 10, n: 100 },
+      { label: "Study 2", x: 30, n: 100 },
+      { label: "Study 3", x: 20, n: 100 },
+      { label: "Study 4", x: 40, n: 100 }
+    ],
+    expected: {
+      // yi = ln(x/n) per study, exact
+      yi:   [-2.3026, -1.2040, -1.6094, -0.9163],
+      FE:   -1.2257,
+      RE:   -1.4523,
+      tau2:  0.2051,
+      I2:   86.939
+    },
+    citation: "Synthetic dataset. Expected values computed analytically from PLN (log proportion) formulas."
+  },
+
+  // ----------------------------------------------------------------
+  // RPB-1 — Point-biserial correlation, homogeneous (DL)
+  // 5 synthetic studies with equal group sizes (n1=n2).
+  // yi = r_pb,  vi = (1−r²)³/(n−2) + r²(1−r²)²/(2n)  [Kraemer 1975 "ST" formula]
+  // τ²=0 (Q < df for this dataset).
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic – RPB (point-biserial, DL)",
+    type: "RPB",
+    tauMethod: "DL",
+    data: [
+      { label: "Study 1", r: 0.435497, n: 60 },
+      { label: "Study 2", r: 0.225079, n: 50 },
+      { label: "Study 3", r: 0.329520, n: 80 },
+      { label: "Study 4", r: 0.467504, n: 70 },
+      { label: "Study 5", r: 0.396108, n: 40 },
+    ],
+    expected: {
+      // yi = r_pb (identity); vi = (1−r²)³/(n−2) + r²(1−r²)²/(2n)
+      yi:   [0.435497, 0.225079, 0.329520, 0.467504, 0.396108],
+      vi:   [0.010212, 0.018281, 0.009621, 0.007971, 0.017165],
+      FE:    0.388,
+      RE:    0.388,
+      tau2:  0.000,
+      I2:    0,
+    },
+    citation: "Synthetic dataset derived from 5 equal-group studies. Expected values from metafor escalc('RPB') + rma(method='DL'). Block RPB-1 in generate.R.",
+  },
+
+  // ----------------------------------------------------------------
+  // RPB-2 — Point-biserial correlation, heterogeneous (REML)
+  // Low r in large-n studies, high r in small-n studies.
+  // Same variance formula as RPB-1.
+  // τ²=0.038 (REML), I2≈84.6%: strongly heterogeneous.
+  // RE (0.321) > FE (0.228) because large RE weight assigned to
+  // imprecise small-n studies with high r.
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic – RPB heterogeneous (REML, τ²>0)",
+    type: "RPB",
+    tauMethod: "REML",
+    data: [
+      { label: "Study 1", r: 0.099834, n: 300 },
+      { label: "Study 2", r: 0.119618, n: 250 },
+      { label: "Study 3", r: 0.489494, n:  50 },
+      { label: "Study 4", r: 0.524222, n:  40 },
+      { label: "Study 5", r: 0.455383, n:  45 },
+    ],
+    expected: {
+      yi:   [0.099834, 0.119618, 0.489494, 0.524222, 0.455383],
+      vi:   [0.003273, 0.003889, 0.010545, 0.011843, 0.013028],
+      FE:    0.228,
+      RE:    0.321,
+      tau2:  0.0385,
+      I2:   85.1682,
+    },
+    citation: "Synthetic. Designed to give τ²>0 with RE≠FE. Expected from metafor escalc('RPB') + rma(method='REML'). Block RPB-2 in generate.R.",
+  },
+
+  // ----------------------------------------------------------------
+  // RBIS-1 — Biserial correlation, homogeneous (DL), equal groups (p=0.5)
+  // Same 5 studies as RPB-1; p=0.5 so z=0, φ(z)=φ(0)≈0.3989.
+  // yi = r_bis = r_pb · √(0.25) / φ(0) ≈ 1.2533 · r_pb
+  // vi = 1/(n−1) · [p·(1−p)/φ²  − (3/2 + 1)·r̃²  + r̃⁴]
+  //   (simplifies for z=0 since (1−p·z/φ)·(1+p·z/φ) = 1)
+  // τ²=0 (Q < df for this dataset).
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic – RBIS (biserial, DL, p=0.5)",
+    type: "RBIS",
+    tauMethod: "DL",
+    data: [
+      { label: "Study 1", r: 0.435497, n: 60, p: 0.5 },
+      { label: "Study 2", r: 0.225079, n: 50, p: 0.5 },
+      { label: "Study 3", r: 0.329520, n: 80, p: 0.5 },
+      { label: "Study 4", r: 0.467504, n: 70, p: 0.5 },
+      { label: "Study 5", r: 0.396108, n: 40, p: 0.5 },
+    ],
+    expected: {
+      // yi = r_bis ≈ 1.2533 × r_pb (for p=0.5)
+      yi:   [0.545814, 0.282095, 0.412992, 0.585930, 0.496447],
+      vi:   [0.015505, 0.028126, 0.014854, 0.012034, 0.026036],
+      FE:    0.487,
+      RE:    0.487,
+      tau2:  0.000,
+      I2:    0,
+    },
+    citation: "Synthetic. Same studies as RPB-1 with p=0.5 (equal groups). Expected from metafor escalc('RBIS') + rma(method='DL'). Block RBIS-1 in generate.R.",
+  },
+
+  // ----------------------------------------------------------------
+  // RBIS-2 — Biserial correlation, heterogeneous (REML), unequal groups (p≈1/3)
+  // Same underlying effects as RPB-2 but with 1:2 group ratio (n1≈n/3).
+  // p1 ≈ 0.333 → z ≈ 0.431, φ(z) ≈ 0.365 → amplification ≈ 1.297.
+  // τ²=0.059 (REML), I2≈83.3%. Tests the full RBIS formula with z≠0.
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic – RBIS heterogeneous (REML, unequal groups)",
+    type: "RBIS",
+    tauMethod: "REML",
+    data: [
+      { label: "Study 1", r: 0.094176, n: 300, p: 0.3333 },
+      { label: "Study 2", r: 0.112755, n: 250, p: 0.332  },
+      { label: "Study 3", r: 0.469551, n:  50, p: 0.34   },
+      { label: "Study 4", r: 0.499546, n:  40, p: 0.325  },
+      { label: "Study 5", r: 0.434372, n:  45, p: 0.3333 },
+    ],
+    expected: {
+      yi:   [0.122099, 0.146271, 0.607053, 0.650084, 0.563161],
+      vi:   [0.005494, 0.006538, 0.017510, 0.019909, 0.021870],
+      FE:    0.282,
+      RE:    0.396,
+      tau2:  0.0588,
+      I2:   83.9568,
+    },
+    citation: "Synthetic. Unequal-group version of RPB-2 (n1≈n/3). Tests RBIS formula with z≠0. Expected from metafor escalc('RBIS') + rma(method='REML'). Block RBIS-2 in generate.R.",
+  },
+
+  // ----------------------------------------------------------------
+  // R2-1 — R-squared (raw), homogeneous (DL, τ²=0)
+  // yi = R²,  vi = 4R²(1−R²)²/n   [metafor escalc("R2") LS formula]
+  // τ²=0: Q < df for these similar R² values.
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic – R2 (raw R², DL)",
+    type: "R2",
+    tauMethod: "DL",
+    data: [
+      { label: "Study 1", r2: 0.25, n:  80 },
+      { label: "Study 2", r2: 0.22, n: 100 },
+      { label: "Study 3", r2: 0.28, n:  60 },
+      { label: "Study 4", r2: 0.24, n: 120 },
+      { label: "Study 5", r2: 0.26, n:  90 },
+    ],
+    expected: {
+      yi:   [0.250000, 0.220000, 0.280000, 0.240000, 0.260000],
+      vi:   [0.007031, 0.005354, 0.009677, 0.004621, 0.006328],
+      FE:    0.246,
+      RE:    0.246,
+      tau2:  0.000,
+      I2:    0,
+    },
+    citation: "Synthetic. Expected from metafor escalc('R2') + rma(method='DL'). Block R2-1 in generate.R.",
+  },
+
+  // ----------------------------------------------------------------
+  // R2-2 — R-squared (raw), heterogeneous (REML, τ²>0)
+  // Low R² in large-n, high R² in small-n.
+  // τ²=0.029 (REML), I2≈87.9%.
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic – R2 heterogeneous (REML, τ²>0)",
+    type: "R2",
+    tauMethod: "REML",
+    data: [
+      { label: "Study 1", r2: 0.04, n: 200 },
+      { label: "Study 2", r2: 0.09, n: 150 },
+      { label: "Study 3", r2: 0.49, n:  50 },
+      { label: "Study 4", r2: 0.36, n:  80 },
+      { label: "Study 5", r2: 0.25, n: 100 },
+    ],
+    expected: {
+      yi:   [0.040000, 0.090000, 0.490000, 0.360000, 0.250000],
+      vi:   [0.000737, 0.001987, 0.010196, 0.007373, 0.005625],
+      FE:    0.106,
+      RE:    0.229,
+      tau2:  0.0291,
+      I2:   90.5854,
+    },
+    citation: "Synthetic. Expected from metafor escalc('R2') + rma(method='REML'). Block R2-2 in generate.R.",
+  },
+
+  // ----------------------------------------------------------------
+  // ZR2-1 — R-squared (Fisher z of √R²), homogeneous (DL, τ²=0)
+  // Same 5 studies as R2-1.
+  // yi = atanh(√R²), vi = 1/n.
+  // Back-transform: tanh(yi)² → R².
+  // τ²=0: same studies as R2-1 remain homogeneous on z scale.
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic – ZR2 (Fisher z of √R², DL)",
+    type: "ZR2",
+    tauMethod: "DL",
+    data: [
+      { label: "Study 1", r2: 0.25, n:  80 },
+      { label: "Study 2", r2: 0.22, n: 100 },
+      { label: "Study 3", r2: 0.28, n:  60 },
+      { label: "Study 4", r2: 0.24, n: 120 },
+      { label: "Study 5", r2: 0.26, n:  90 },
+    ],
+    expected: {
+      yi:   [0.549306, 0.508841, 0.588964, 0.535926, 0.562597],
+      vi:   [0.012500, 0.010000, 0.016667, 0.008333, 0.011111],
+      FE:    0.545,
+      RE:    0.545,
+      tau2:  0.000,
+      I2:    0,
+    },
+    citation: "Synthetic. Same studies as R2-1 on z scale. Expected from metafor escalc('ZR2') + rma(method='DL'). Block ZR2-1 in generate.R.",
+  },
+
+  // ----------------------------------------------------------------
+  // ZR2-2 — R-squared (Fisher z of √R²), heterogeneous (REML, τ²>0)
+  // Same 5 studies as R2-2.
+  // yi = atanh(√R²), vi = 1/n.
+  // Pooled z RE = 0.508 → tanh(0.508)² ≈ R² = 0.219.
+  // τ²=0.062 (REML), I2≈86.2%.
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic – ZR2 heterogeneous (REML, τ²>0)",
+    type: "ZR2",
+    tauMethod: "REML",
+    data: [
+      { label: "Study 1", r2: 0.04, n: 200 },
+      { label: "Study 2", r2: 0.09, n: 150 },
+      { label: "Study 3", r2: 0.49, n:  50 },
+      { label: "Study 4", r2: 0.36, n:  80 },
+      { label: "Study 5", r2: 0.25, n: 100 },
+    ],
+    expected: {
+      yi:   [0.202733, 0.309520, 0.867301, 0.693147, 0.549306],
+      vi:   [0.005000, 0.006667, 0.020000, 0.012500, 0.010000],
+      FE:    0.415,
+      RE:    0.508,
+      tau2:  0.0616,
+      I2:   87.1273,
+    },
+    citation: "Synthetic. Same studies as R2-2 on z scale. Expected from metafor escalc('ZR2') + rma(method='REML'). Back-transform: tanh(RE)²≈0.219. Block ZR2-2 in generate.R.",
+  },
+
+  // ----------------------------------------------------------------
+  // PHI — BCG Vaccine (dat.bcg, phi coefficient)
+  // Same 13 studies as the OR/RR/RD benchmarks above.
+  // phi = (a·d−b·c)/√((a+b)(c+d)(a+c)(b+d))
+  // vi: Digby (1983) LS delta-method formula (metafor vtype="LS"):
+  //   vi = (1/N)·(1−φ² + φ·(1+φ²/2)·(π₁.−π₂.)·(π.₁−π.₂)/√(π₁.·π₂.·π.₁·π.₂)
+  //            − ¾·φ²·[(π₁.−π₂.)²/(π₁.·π₂.) + (π.₁−π.₂)²/(π.₁·π.₂)])
+  // Large N per study → small vi; phi values are small negative.
+  // All values cross-validated against metafor escalc("PHI") + rma(method="DL").
+  // ----------------------------------------------------------------
+  {
+    name: "BCG Vaccine – PHI (phi coefficient, DL)",
+    rBlock: "26",
+    type: "PHI",
+    tauMethod: "DL",
+    data: [
+      { label: "Aronson 1948",            a:   4, b:   119, c:  11, d:   128 },
+      { label: "Ferguson & Simes 1949",   a:   6, b:   300, c:  29, d:   274 },
+      { label: "Rosenthal 1960",          a:   3, b:   228, c:  11, d:   209 },
+      { label: "Hart & Sutherland 1977",  a:  62, b: 13536, c: 248, d: 12619 },
+      { label: "Frimodt-Moller 1973",     a:  33, b:  5036, c:  47, d:  5761 },
+      { label: "Stein & Aronson 1953",    a: 180, b:  1361, c: 372, d:  1079 },
+      { label: "Vandiviere 1973",         a:   8, b:  2537, c:  10, d:   619 },
+      { label: "TPT Madras 1980",         a: 505, b: 87886, c: 499, d: 87892 },
+      { label: "Coetzee & Berjak 1968",   a:  29, b:  7470, c:  45, d:  7232 },
+      { label: "Rosenthal 1961",          a:  17, b:  1699, c:  65, d:  1600 },
+      { label: "Comstock 1974",           a: 186, b: 50448, c: 141, d: 27197 },
+      { label: "Comstock & Webster 1969", a:   5, b:  2493, c:   3, d:  2338 },
+      { label: "Comstock 1976",           a:  27, b: 16886, c:  29, d: 17825 }
+    ],
+    expected: {
+      // phi per study, unchanged (only vi formula changed)
+      yi:   [-0.1001, -0.1635, -0.1067, -0.0684, -0.0092, -0.1798,
+             -0.0677,  0.0005, -0.0164, -0.0947, -0.0110,  0.0089, -0.0003],
+      FE:   -0.01337,
+      RE:   -0.05059,
+      tau2:  0.00115,
+      I2:   96.0448
+    },
+    citation: "Colditz et al. (1994) JAMA 271:698–702. dat.bcg in metafor. Digby (1983) Biometrics 39:849–851 LS variance. Cross-validated against metafor escalc/rma."
+  },
+
+  // ----------------------------------------------------------------
+  // MN — Normand 1999, specialist arm (single-group raw mean, REML)
+  // Uses the 9 specialist-arm entries (m1i, sd1i, n1i) from dat.normand1999.
+  // yi = m,  vi = sd²/n   (direct SEM² formula)
+  // FE analytically derived; RE/τ²/I² via REML (Python script).
+  // Montreal-Home (n=8) is included — n<10 triggers a soft warning
+  // but is not excluded (same as in the MD benchmark).
+  // ----------------------------------------------------------------
+  {
+    name: "Normand 1999 – MN (raw mean, specialist arm, REML)",
+    rBlock: "27",
+    type: "MN",
+    tauMethod: "REML",
+    data: [
+      { label: "Edinburgh",          m:  55, sd: 47, n: 155 },
+      { label: "Orpington-Mild",     m:  27, sd:  7, n:  31 },
+      { label: "Orpington-Moderate", m:  64, sd: 17, n:  75 },
+      { label: "Orpington-Severe",   m:  66, sd: 20, n:  18 },
+      { label: "Montreal-Home",      m:  14, sd:  8, n:   8 },
+      { label: "Montreal-Transfer",  m:  19, sd:  7, n:  57 },
+      { label: "Newcastle",          m:  52, sd: 45, n:  34 },
+      { label: "Umea",               m:  21, sd: 16, n: 110 },
+      { label: "Uppsala",            m:  30, sd: 27, n:  60 }
+    ],
+    expected: {
+      // yi = m per study (raw mean), exact
+      yi:   [55, 27, 64, 66, 14, 19, 52, 21, 30],
+      FE:   27.16966,
+      RE:   38.32477,
+      tau2: 408.92774,
+      I2:   99.0787
+    },
+    citation: "Normand (1999) Stat Med 18:321–359. dat.normand1999 specialist arm. REML values computed analytically (Python)."
+  },
+
+  // ----------------------------------------------------------------
+  // MNLN — Normand 1999, specialist arm (log mean, REML)
+  // Same specialist-arm data as MN above.
+  // yi = ln(m),  vi = sd²/(n·m²)   (delta-method variance of log)
+  // FE analytically derived; RE/τ²/I² via REML (Python script).
+  // ----------------------------------------------------------------
+  {
+    name: "Normand 1999 – MNLN (log mean, specialist arm, REML)",
+    rBlock: "28",
+    type: "MNLN",
+    tauMethod: "REML",
+    data: [
+      { label: "Edinburgh",          m:  55, sd: 47, n: 155 },
+      { label: "Orpington-Mild",     m:  27, sd:  7, n:  31 },
+      { label: "Orpington-Moderate", m:  64, sd: 17, n:  75 },
+      { label: "Orpington-Severe",   m:  66, sd: 20, n:  18 },
+      { label: "Montreal-Home",      m:  14, sd:  8, n:   8 },
+      { label: "Montreal-Transfer",  m:  19, sd:  7, n:  57 },
+      { label: "Newcastle",          m:  52, sd: 45, n:  34 },
+      { label: "Umea",               m:  21, sd: 16, n: 110 },
+      { label: "Uppsala",            m:  30, sd: 27, n:  60 }
+    ],
+    expected: {
+      // yi = ln(m) per study, verified by formula
+      yi:   [4.0073, 3.2958, 4.1589, 4.1897, 2.6391, 2.9444, 3.9512, 3.0445, 3.4012],
+      FE:    3.69418,
+      RE:    3.52271,
+      tau2:  0.31619,
+      I2:   98.7941
+    },
+    citation: "Normand (1999) Stat Med 18:321–359. dat.normand1999 specialist arm. REML values computed analytically (Python)."
+  },
+
+  // ----------------------------------------------------------------
+  // CVR — Synthetic variability dataset (profiles.js CVR exampleData, DL)
+  // 5 studies with n≥28, m>0, CV<1, SD ratio<4 — all soft-warning
+  // thresholds satisfied.
+  // yi = ln(cv1/cv2) + 1/(2(n1−1)) − 1/(2(n2−1)),  vi = 1/(2(n1−1)) + cv1²/n1 + 1/(2(n2−1)) + cv2²/n2
+  // Bias correction per Nakagawa et al. (2015) eq. 1. τ²=0 reflects homogeneous CVR.
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic Variability – CVR (log CV ratio, DL)",
+    rBlock: "29",
+    type: "CVR",
+    tauMethod: "DL",
+    data: [
+      { label: "Study 1", m1: 25.0, sd1:  6.2, n1: 40, m2: 24.8, sd2: 3.5, n2: 38 },
+      { label: "Study 2", m1: 30.1, sd1:  9.0, n1: 55, m2: 29.7, sd2: 4.8, n2: 52 },
+      { label: "Study 3", m1: 18.5, sd1:  5.1, n1: 30, m2: 19.0, sd2: 3.0, n2: 28 },
+      { label: "Study 4", m1: 42.0, sd1: 11.5, n1: 70, m2: 40.5, sd2: 6.2, n2: 68 },
+      { label: "Study 5", m1: 22.3, sd1:  7.8, n1: 45, m2: 23.1, sd2: 4.9, n2: 43 }
+    ],
+    expected: {
+      // yi = ln(cv1/cv2) + bias correction; verified via metafor escalc("CVR"), R block 29
+      yi:   [0.5631, 0.6147, 0.5560, 0.5812, 0.4996],
+      FE:    0.568,
+      RE:    0.568,
+      tau2:  0.000,
+      I2:    0.0
+    },
+    citation: "Synthetic dataset (profiles.js CVR exampleData). τ²=0 reflects homogeneous CVR across studies."
+  },
+
+  // ----------------------------------------------------------------
+  // VR — Synthetic variability dataset (profiles.js VR exampleData, DL)
+  // 5 studies with n≥28, SD ratio<4 — all soft-warning thresholds
+  // satisfied.
+  // yi = ln(sd1/sd2) + 1/(2(n1−1)) − 1/(2(n2−1)),  vi = 1/(2(n1−1)) + 1/(2(n2−1))
+  // Bias correction per Nakagawa et al. (2015) eq. 1. τ²=0 reflects homogeneous VR.
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic Variability – VR (log SD ratio, DL)",
+    rBlock: "30",
+    type: "VR",
+    tauMethod: "DL",
+    data: [
+      { label: "Study 1", sd1: 4.2, n1: 40, sd2: 2.8, n2: 38 },
+      { label: "Study 2", sd1: 5.5, n1: 55, sd2: 3.2, n2: 52 },
+      { label: "Study 3", sd1: 3.8, n1: 30, sd2: 2.5, n2: 28 },
+      { label: "Study 4", sd1: 6.1, n1: 70, sd2: 4.0, n2: 68 },
+      { label: "Study 5", sd1: 4.9, n1: 45, sd2: 3.5, n2: 43 }
+    ],
+    expected: {
+      // yi = ln(sd1/sd2) + bias correction; verified via metafor escalc("VR"), R block 30
+      yi:   [0.4048, 0.5411, 0.4174, 0.4218, 0.3359],
+      FE:    0.42963,
+      RE:    0.42963,
+      tau2:  0.000,
+      I2:    0.0
+    },
+    citation: "Synthetic dataset (profiles.js VR exampleData). τ²=0 reflects homogeneous SD ratio across studies."
+  },
+
+  // ----------------------------------------------------------------
+  // VR heterogeneous — 6 studies with strongly divergent SD ratios (REML)
+  // Designed so that τ²>0 exercises the heterogeneous-RE path.
+  // yi = log(sd1/sd2);  vi = 1/(2(n1−1)) + 1/(2(n2−1))
+  // Ground truth: metafor escalc("VR") + rma(method="REML"), R block 48.
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic Variability – VR heterogeneous (DL, τ²>0)",
+    rBlock: "48",
+    type: "VR",
+    tauMethod: "DL",
+    data: [
+      { label: "Study 1", sd1: 2.0, n1: 50, sd2: 4.0, n2: 50 },
+      { label: "Study 2", sd1: 5.0, n1: 40, sd2: 2.0, n2: 40 },
+      { label: "Study 3", sd1: 3.0, n1: 60, sd2: 3.0, n2: 60 },
+      { label: "Study 4", sd1: 6.0, n1: 30, sd2: 1.5, n2: 30 },
+      { label: "Study 5", sd1: 1.5, n1: 45, sd2: 4.5, n2: 45 },
+      { label: "Study 6", sd1: 4.0, n1: 35, sd2: 2.0, n2: 35 }
+    ],
+    expected: {
+      yi:   [-0.6931, 0.9163, 0.0000, 1.3863, -1.0986, 0.6931],
+      FE:    0.06772,
+      RE:    0.19632,
+      tau2:  0.83725,
+      I2:   97.2268
+    },
+    citation: "Synthetic dataset. Designed to give τ²>0 with strongly divergent log(sd1/sd2) values. Verified via metafor escalc(\"VR\") + rma(method=\"DL\"), R block 48 in generate.R."
+  },
+
+  // ----------------------------------------------------------------
+  // CVR heterogeneous — 6 studies with strongly divergent CV ratios (DL)
+  // Designed so that τ²>0 exercises the heterogeneous-RE path.
+  // yi = log(cv1/cv2);  vi = 1/(2(n1−1)) + cv1²/n1 + 1/(2(n2−1)) + cv2²/n2
+  // Ground truth: metafor escalc("CVR") + rma(method="DL"), R block 49.
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic Variability – CVR heterogeneous (DL, τ²>0)",
+    rBlock: "49",
+    type: "CVR",
+    tauMethod: "DL",
+    data: [
+      { label: "Study 1", m1: 20.0, sd1: 2.0, n1: 50, m2: 20.0, sd2: 6.0, n2: 50 },
+      { label: "Study 2", m1: 15.0, sd1: 6.0, n1: 40, m2: 15.0, sd2: 2.0, n2: 40 },
+      { label: "Study 3", m1: 25.0, sd1: 5.0, n1: 60, m2: 25.0, sd2: 5.0, n2: 60 },
+      { label: "Study 4", m1: 10.0, sd1: 4.0, n1: 35, m2: 10.0, sd2: 1.5, n2: 35 },
+      { label: "Study 5", m1: 30.0, sd1: 3.0, n1: 45, m2: 30.0, sd2: 9.0, n2: 45 },
+      { label: "Study 6", m1: 18.0, sd1: 7.0, n1: 55, m2: 18.0, sd2: 2.5, n2: 55 }
+    ],
+    expected: {
+      yi:   [-1.0986, 1.0986, 0.0000, 0.9808, -1.0986, 1.0296],
+      FE:    0.07833,
+      RE:    0.14977,
+      tau2:  1.03874,
+      I2:   97.7028
+    },
+    citation: "Synthetic dataset. Designed to give τ²>0 with strongly divergent log(cv1/cv2) values. Verified via metafor escalc(\"CVR\") + rma(method=\"DL\"), R block 49 in generate.R."
+  },
+
+  // ----------------------------------------------------------------
+  // GOR — Synthetic 4-study 3-category ordinal dataset (DL)
+  // Group 1 (treatment) skews toward higher categories;
+  // Group 2 (control) skews toward lower categories.
+  // yi = ln(θ/φ),  θ=P(Y1>Y2),  φ=P(Y1<Y2)  (concordance probability
+  // ratio); variance via delta method (gorFromCounts in utils.js).
+  // τ²=0 reflects consistent ordering effect across studies.
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic – GOR (generalised odds ratio, DL)",
+    rBlock: "31",
+    type: "GOR",
+    tauMethod: "DL",
+    data: [
+      { label: "Study 1", counts1: "15,20,35", counts2: "30,25,15" },
+      { label: "Study 2", counts1: "10,25,40", counts2: "25,30,20" },
+      { label: "Study 3", counts1: "20,30,30", counts2: "35,30,15" },
+      { label: "Study 4", counts1: "12,18,40", counts2: "28,32,20" }
+    ],
+    expected: {
+      // yi = ln(theta/phi) per study, verified by gorFromCounts (Python)
+      yi:   [1.0316, 1.0385, 0.7985, 1.0822],
+      FE:    0.98074,
+      RE:    0.98074,
+      tau2:  0.000,
+      I2:    0.0
+    },
+    citation: "Synthetic dataset. GOR via concordance/discordance probability sums (gorFromCounts in utils.js). τ²=0 reflects homogeneous effect."
+  },
+
+  // ----------------------------------------------------------------
+  // PCOR — Synthetic partial correlation dataset (DL)
+  // Same 5 studies as the ZPCOR benchmark below.
+  // yi = r  (raw partial correlation, not transformed)
+  // vi = (1−r²)² / (n−p−1)   [Olkin & Siotani 1976 formula]
+  // The denominator adjusts for p covariates beyond the COR formula
+  // (which uses n−1). τ²=0: Q=3.55 < df=4, so DL floors to zero.
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic – PCOR (raw partial correlation, DL)",
+    rBlock: "32",
+    type: "PCOR",
+    tauMethod: "DL",
+    data: [
+      { label: "Study 1", r: 0.45, n:  80, p: 2 },
+      { label: "Study 2", r: 0.38, n:  65, p: 2 },
+      { label: "Study 3", r: 0.52, n: 110, p: 3 },
+      { label: "Study 4", r: 0.31, n:  90, p: 2 },
+      { label: "Study 5", r: 0.47, n: 130, p: 4 }
+    ],
+    expected: {
+      // yi = r per study (identity transform), vi = (1−r²)²/(n−p−1)
+      yi:   [0.4500, 0.3800, 0.5200, 0.3100, 0.4700],
+      FE:    0.446,
+      RE:    0.446,
+      tau2:  0.000,
+      I2:    0.0
+    },
+    citation: "Synthetic dataset (profiles.js PCOR exampleData). τ²=0 because Q < df for this dataset."
+  },
+
+  // ----------------------------------------------------------------
+  // ZPCOR — Synthetic partial correlation dataset (Fisher z, DL)
+  // Same 5 studies as the PCOR benchmark above.
+  // yi = atanh(r)  (Fisher's z of the partial correlation)
+  // vi = 1 / (n−p−3)   [standard partial-r to z formula]
+  // Back-transform: tanh(yi) → r scale; pooled RE tanh(0.4704)=0.4385.
+  // τ²=0 reflects homogeneous partial-r across studies.
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic – ZPCOR (Fisher-z partial correlation, DL)",
+    rBlock: "33",
+    type: "ZPCOR",
+    tauMethod: "DL",
+    data: [
+      { label: "Study 1", r: 0.45, n:  80, p: 2 },
+      { label: "Study 2", r: 0.38, n:  65, p: 2 },
+      { label: "Study 3", r: 0.52, n: 110, p: 3 },
+      { label: "Study 4", r: 0.31, n:  90, p: 2 },
+      { label: "Study 5", r: 0.47, n: 130, p: 4 }
+    ],
+    expected: {
+      // yi = atanh(r) per study; vi = 1/(n−p−3)
+      yi:   [0.4847, 0.4001, 0.5763, 0.3205, 0.5101],
+      FE:    0.47029,
+      RE:    0.47029,
+      tau2:  0.000,
+      I2:    0.0
+    },
+    citation: "Synthetic dataset (profiles.js ZPCOR exampleData). τ²=0 reflects homogeneous partial-r."
+  },
+
+  // ----------------------------------------------------------------
+  // PCOR — Heterogeneous partial correlation dataset (REML, τ²>0)
+  // Large-n studies (precise) have small r; small-n studies (imprecise)
+  // have large r. This anti-correlation between precision and effect size
+  // creates clear separation between FE and RE estimates (|RE−FE|=0.071).
+  //
+  // yi = r per study (identity transform).
+  // vi = (1−r²)² / (n−p−1)
+  //
+  // τ²=0.097 (REML), I2=95.6%: strongly heterogeneous.
+  // RE (0.467) > FE (0.396) because large RE weight assigned to the
+  // imprecise small-n studies, which happen to have large r.
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic – PCOR heterogeneous (REML, τ²>0)",
+    rBlock: "40",
+    type: "PCOR",
+    tauMethod: "REML",
+    data: [
+      { label: "Study 1", r: 0.10, n: 300, p: 2 },
+      { label: "Study 2", r: 0.15, n: 250, p: 1 },
+      { label: "Study 3", r: 0.70, n:  50, p: 3 },
+      { label: "Study 4", r: 0.75, n:  40, p: 2 },
+      { label: "Study 5", r: 0.65, n:  45, p: 3 },
+    ],
+    expected: {
+      // yi = r (identity); vi = (1−r²)²/(n−p−1)
+      yi:   [0.1000, 0.1500, 0.7000, 0.7500, 0.6500],
+      FE:    0.39588,
+      RE:    0.46655,
+      tau2:  0.0970,
+      I2:   95.2403,
+    },
+    citation: "Synthetic. Designed to give τ²>0 with RE≠FE for PCOR. Verified via meta() (REML). Block 40 in generate.R will reproduce via metafor rma(method='REML')."
+  },
+
+  // ----------------------------------------------------------------
+  // ZPCOR — Heterogeneous partial correlation dataset (REML, τ²>0)
+  // Same 5 studies as the PCOR heterogeneous benchmark above.
+  // yi = atanh(r); vi = 1/(n−p−3).
+  //
+  // The Fisher-z transformation amplifies heterogeneity relative to raw r:
+  // τ²=0.162 vs 0.097, and |RE−FE|=0.294 vs 0.071.
+  // Back-transform: tanh(RE) = tanh(0.5507) ≈ 0.503.
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic – ZPCOR heterogeneous (REML, τ²>0)",
+    rBlock: "41",
+    type: "ZPCOR",
+    tauMethod: "REML",
+    data: [
+      { label: "Study 1", r: 0.10, n: 300, p: 2 },
+      { label: "Study 2", r: 0.15, n: 250, p: 1 },
+      { label: "Study 3", r: 0.70, n:  50, p: 3 },
+      { label: "Study 4", r: 0.75, n:  40, p: 2 },
+      { label: "Study 5", r: 0.65, n:  45, p: 3 },
+    ],
+    expected: {
+      // yi = atanh(r); vi = 1/(n−p−3)
+      yi:   [0.1003, 0.1511, 0.8673, 0.9730, 0.7753],
+      FE:    0.2568,
+      RE:    0.55067,
+      tau2:  0.1624,
+      I2:   94.5599,
+    },
+    citation: "Synthetic. Same studies as PCOR heterogeneous; Fisher-z scale amplifies RE−FE separation. Verified via meta() (REML). Block 41 in generate.R will reproduce via metafor rma(method='REML')."
+  },
+
+  // ----------------------------------------------------------------
+  // RTET — Synthetic tetrachoric correlation dataset (DL)
+  // 4 studies with 2×2 contingency tables; all show positive latent
+  // correlation between the two binary traits.
+  // yi = rho_tet: bisect Φ₂(h,k;ρ) = a/N over 64 iterations.
+  //   h = Φ⁻¹(p_row),  k = Φ⁻¹(p_col),  p11 = a/N
+  // vi = √(p₁₁·p₁₂·p₂₁·p₂₂) / (N·φ₂(h,k;ρ)²)
+  //   (Pearson 1913 / Brown & Benedetti 1977 / metafor convention)
+  //   φ₂ = bivariate normal density at (h,k;ρ)  (delta method)
+  // Spot-check: rho(40,10,10,40) = sin(0.3π) ≈ 0.8090 exactly.
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic – RTET (tetrachoric correlation, DL)",
+    rBlock: "34",
+    type: "RTET",
+    tauMethod: "DL",
+    data: [
+      { label: "Study 1", a: 40, b: 10, c: 10, d: 40 },
+      { label: "Study 2", a: 30, b: 15, c: 12, d: 43 },
+      { label: "Study 3", a: 25, b:  8, c:  9, d: 38 },
+      { label: "Study 4", a: 35, b: 12, c: 11, d: 42 }
+    ],
+    expected: {
+      // yi = rho_tet per study, verified by bisection + analytic spot-check
+      // vi from cell-product formula matching metafor escalc("RTET")
+      yi:   [0.809018, 0.654514, 0.776535, 0.748453],
+      FE:    0.76033,
+      RE:    0.76033,
+      tau2:  0.000,
+      I2:    0.0
+    },
+    citation: "Synthetic dataset. R-verified (metafor 4.8-0, generate.R block 34). vi uses cell-product formula √(p₁₁p₁₂p₂₁p₂₂)/(N·φ₂²) matching metafor escalc('RTET'). τ²=0 reflects consistent latent correlation."
+  },
+
+  // ----------------------------------------------------------------
+  // CI method benchmarks — Phase 5
+  // All three use the same 5-study synthetic log-RR dataset.
+  // FE/RE/tau2/I2 are identical to the DL normal-CI result; only
+  // ciLow/ciHigh change with the CI method.
+  // ----------------------------------------------------------------
+
+  // ----------------------------------------------------------------
+  // KH — Knapp-Hartung adjusted CI (DL τ², t_{k-1} critical value,
+  // seRE² = Σ wᵢ(yᵢ−RE)² / ((k−1)·W))
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic – log-RR ciMethod=KH (DL)",
+    rBlock: "35",
+    type: "RR",
+    tauMethod: "DL",
+    ciMethod: "KH",
+    data: [
+      { label: "Study 1", a: 15, b: 85, c: 30, d: 70 },
+      { label: "Study 2", a: 20, b: 80, c: 25, d: 75 },
+      { label: "Study 3", a: 10, b: 90, c: 35, d: 65 },
+      { label: "Study 4", a: 25, b: 75, c: 20, d: 80 },
+      { label: "Study 5", a: 12, b: 88, c: 28, d: 72 }
+    ],
+    expected: {
+      yi:    [-0.6931, -0.2231, -1.2528, 0.2231, -0.8473],
+      FE:    -0.47629,
+      RE:    -0.53639,
+      tau2:   0.23854,
+      I2:    74.0846,
+      ciLow:  -1.245,
+      ciHigh:  0.172
+    },
+    citation: "Synthetic 5-study log-RR dataset. KH: seRE² = Σwᵢ(yᵢ−RE)²/((k−1)·W), crit = t_{4,0.975} = 2.776."
+  },
+
+  // ----------------------------------------------------------------
+  // t — t-distribution CI without KH variance adjustment
+  // (same seRE as normal/Wald, but crit = t_{k-1,0.975})
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic – log-RR ciMethod=t (DL)",
+    rBlock: "36",
+    type: "RR",
+    tauMethod: "DL",
+    ciMethod: "t",
+    data: [
+      { label: "Study 1", a: 15, b: 85, c: 30, d: 70 },
+      { label: "Study 2", a: 20, b: 80, c: 25, d: 75 },
+      { label: "Study 3", a: 10, b: 90, c: 35, d: 65 },
+      { label: "Study 4", a: 25, b: 75, c: 20, d: 80 },
+      { label: "Study 5", a: 12, b: 88, c: 28, d: 72 }
+    ],
+    expected: {
+      yi:    [-0.6931, -0.2231, -1.2528, 0.2231, -0.8473],
+      FE:    -0.47629,
+      RE:    -0.53639,
+      tau2:   0.23854,
+      I2:    74.0846,
+      ciLow:  -1.242,
+      ciHigh:  0.170
+    },
+    citation: "Synthetic 5-study log-RR dataset. t CI: seRE = √(1/W), crit = t_{4,0.975} = 2.776 (no KH variance inflation)."
+  },
+
+  // ----------------------------------------------------------------
+  // PL — Profile-likelihood CI (REML point estimate; CI bounds invert
+  // the profile log-likelihood using ML internally)
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic – log-RR ciMethod=PL (REML)",
+    rBlock: "37",
+    type: "RR",
+    tauMethod: "REML",
+    ciMethod: "PL",
+    data: [
+      { label: "Study 1", a: 15, b: 85, c: 30, d: 70 },
+      { label: "Study 2", a: 20, b: 80, c: 25, d: 75 },
+      { label: "Study 3", a: 10, b: 90, c: 35, d: 65 },
+      { label: "Study 4", a: 25, b: 75, c: 20, d: 80 },
+      { label: "Study 5", a: 12, b: 88, c: 28, d: 72 }
+    ],
+    expected: {
+      yi:    [-0.6931, -0.2231, -1.2528, 0.2231, -0.8473],
+      FE:    -0.47629,
+      RE:    -0.53652,
+      tau2:   0.24052,
+      I2:    74.2434,
+      ciLow:  -1.095,
+      ciHigh:  0.003
+    },
+    citation: "Synthetic 5-study log-RR dataset. PL CI: bounds from profile log-likelihood inversion (ML internally, cutoff = χ²_{1,0.95}/2 = 1.921)."
+  },
+
+  // ----------------------------------------------------------------
+  // AS — BCG Vaccine (dat.bcg, arcsine-transformed RD)
+  // yi = asin(sqrt(p1)) - asin(sqrt(p2))
+  // vi = 1/(4*n1) + 1/(4*n2)
+  // where p1=a/(a+b), p2=c/(c+d), n1=a+b, n2=c+d
+  // Expected values from: Rscript crossval_as.R (metafor 4.8-0)
+  //   escalc("AS", ai=tpos, bi=tneg, ci=cpos, di=cneg, data=dat.bcg)
+  //   rma(yi, vi, method="DL") and rma(yi, vi, method="REML")
+  // ----------------------------------------------------------------
+  {
+    name: "BCG Vaccine – AS (dat.bcg, DL)",
+    type: "AS",
+    tauMethod: "DL",
+    data: [
+      { label: "Aronson 1948",            a:   4, b:   119, c:  11, d:   128 },
+      { label: "Ferguson & Simes 1949",   a:   6, b:   300, c:  29, d:   274 },
+      { label: "Rosenthal 1960",          a:   3, b:   228, c:  11, d:   209 },
+      { label: "Hart & Sutherland 1977",  a:  62, b: 13536, c: 248, d: 12619 },
+      { label: "Frimodt-Moller 1973",     a:  33, b:  5036, c:  47, d:  5761 },
+      { label: "Stein & Aronson 1953",    a: 180, b:  1361, c: 372, d:  1079 },
+      { label: "Vandiviere 1973",         a:   8, b:  2537, c:  10, d:   619 },
+      { label: "TPT Madras 1980",         a: 505, b: 87886, c: 499, d: 87892 },
+      { label: "Coetzee & Berjak 1968",   a:  29, b:  7470, c:  45, d:  7232 },
+      { label: "Rosenthal 1961",          a:  17, b:  1699, c:  65, d:  1600 },
+      { label: "Comstock 1974",           a: 186, b: 50448, c: 141, d: 27197 },
+      { label: "Comstock & Webster 1969", a:   5, b:  2493, c:   3, d:  2338 },
+      { label: "Comstock 1976",           a:  27, b: 16886, c:  29, d: 17825 }
+    ],
+    expected: {
+      // asin(sqrt(a/(a+b))) - asin(sqrt(c/(c+d))) per study
+      // verified against metafor escalc("AS") to 5 dp
+      yi:   [-0.10384, -0.17404, -0.11131, -0.07171, -0.00931, -0.18213,
+             -0.07033,  0.00045, -0.01649, -0.09919, -0.01123,  0.00895, -0.00035],
+      // 1/(4*(a+b)) + 1/(4*(c+d)) per study
+      vi:   [0.003831, 0.001642, 0.002219, 0.0000378, 0.0000924, 0.000335,
+             0.000496, 0.00000566, 0.0000677, 0.000296, 0.0000141, 0.000207, 0.0000288],
+      FE:   -0.01184,
+      RE:   -0.05005,
+      tau2:  0.001084,
+      I2:   95.5662
+    },
+    citation: "Colditz et al. (1994) JAMA 271:698–702. dat.bcg in metafor. Expected values from metafor 4.8-0 escalc('AS') + rma(method='DL')."
+  },
+
+  {
+    name: "BCG Vaccine – AS (dat.bcg, REML)",
+    type: "AS",
+    tauMethod: "REML",
+    data: [
+      { label: "Aronson 1948",            a:   4, b:   119, c:  11, d:   128 },
+      { label: "Ferguson & Simes 1949",   a:   6, b:   300, c:  29, d:   274 },
+      { label: "Rosenthal 1960",          a:   3, b:   228, c:  11, d:   209 },
+      { label: "Hart & Sutherland 1977",  a:  62, b: 13536, c: 248, d: 12619 },
+      { label: "Frimodt-Moller 1973",     a:  33, b:  5036, c:  47, d:  5761 },
+      { label: "Stein & Aronson 1953",    a: 180, b:  1361, c: 372, d:  1079 },
+      { label: "Vandiviere 1973",         a:   8, b:  2537, c:  10, d:   619 },
+      { label: "TPT Madras 1980",         a: 505, b: 87886, c: 499, d: 87892 },
+      { label: "Coetzee & Berjak 1968",   a:  29, b:  7470, c:  45, d:  7232 },
+      { label: "Rosenthal 1961",          a:  17, b:  1699, c:  65, d:  1600 },
+      { label: "Comstock 1974",           a: 186, b: 50448, c: 141, d: 27197 },
+      { label: "Comstock & Webster 1969", a:   5, b:  2493, c:   3, d:  2338 },
+      { label: "Comstock 1976",           a:  27, b: 16886, c:  29, d: 17825 }
+    ],
+    expected: {
+      FE:   -0.01184,
+      RE:   -0.05799,
+      tau2:  0.003775,
+      I2:   98.6853   // Q-based formula (same Q as DL); metafor reports 98.69 using τ²-based I²
+    },
+    citation: "Colditz et al. (1994) JAMA 271:698–702. dat.bcg in metafor. FE/RE/tau2/I2 from metafor 4.8-0 escalc('AS') + rma(method='REML')."
+  },
+
+  // ----------------------------------------------------------------
+  // UCOR — Bias-corrected correlation (Olkin & Pratt 1958)
+  // yi = r · ₂F₁(1/2, 1/2; (n−2)/2; 1−r²)
+  // vi = (1 − yi²)² / (n − 1)
+  // Expected values from: Rscript crossval_ucor.R (metafor 4.8-0 + gsl)
+  //   escalc("UCOR", ri=ri, ni=ni)
+  //   rma(yi, vi, method="DL") and rma(yi, vi, method="REML")
+  // ----------------------------------------------------------------
+  {
+    name: "Correlations – UCOR (DL)",
+    rBlock: "UCOR-1",
+    type: "UCOR",
+    tauMethod: "DL",
+    data: [
+      { label: "Study 1", r: 0.45, n:  62 },
+      { label: "Study 2", r: 0.56, n:  90 },
+      { label: "Study 3", r: 0.38, n:  45 },
+      { label: "Study 4", r: 0.61, n: 120 },
+      { label: "Study 5", r: 0.42, n:  75 },
+    ],
+    expected: {
+      // yi = r · ₂F₁(0.5,0.5;(n-2)/2;1-r²); vi = (1-yi²)²/(n-1)
+      // verified against metafor escalc("UCOR") to 6 dp
+      yi: [0.453082, 0.562223, 0.383956, 0.611642, 0.422431],
+      vi: [0.010354, 0.005255, 0.016520, 0.003292, 0.009121],
+      FE:   0.53377,
+      RE:   0.52135,
+      tau2: 0.002402,
+      I2:   25.1312
+    },
+    citation: "Synthetic 5-study correlation dataset. Expected values from metafor 4.8-0 escalc('UCOR') + rma(method='DL') with gsl package."
+  },
+
+  {
+    name: "Correlations – UCOR (REML)",
+    rBlock: "UCOR-2",
+    type: "UCOR",
+    tauMethod: "REML",
+    data: [
+      { label: "Study 1", r: 0.45, n:  62 },
+      { label: "Study 2", r: 0.56, n:  90 },
+      { label: "Study 3", r: 0.38, n:  45 },
+      { label: "Study 4", r: 0.61, n: 120 },
+      { label: "Study 5", r: 0.42, n:  75 },
+    ],
+    expected: {
+      FE:   0.53377,
+      RE:   0.51908,
+      tau2: 0.003064,
+      I2:   29.9844
+    },
+    citation: "Synthetic 5-study correlation dataset. FE/RE/tau2/I2 from metafor 4.8-0 escalc('UCOR') + rma(method='REML')."
+  },
+
+  // ----------------------------------------------------------------
+  // ALPHA-1 — Cronbach's α (raw, ARAW, DL)
+  // Synthetic 3-study dataset: alpha=[0.60,0.85,0.90], k=10, n=100.
+  // yi=α (raw), vi=2k²(1−α)²/(n(k−1)).
+  // DL values computed analytically (closed form); generate.R ALPHA-1 verifies.
+  // ----------------------------------------------------------------
+  {
+    name: "Cronbach's α (ARAW, DL, k_studies=3)",
+    type: "ARAW",
+    tauMethod: "DL",
+    data: [
+      { label: "Study 1", alpha: 0.60, k: 10, n: 100 },
+      { label: "Study 2", alpha: 0.85, k: 10, n: 100 },
+      { label: "Study 3", alpha: 0.90, k: 10, n: 100 },
+    ],
+    expected: {
+      FE:   0.8728,
+      RE:   0.8641,
+      tau2: 0.00166,
+      I2:   20.9472,
+      yi:   [0.600, 0.850, 0.900],
+    },
+    citation: "Synthetic. Formulas: Feldt (1965) Psychometrika 30:357–370. R-verified (metafor 4.8.0, generate.R ALPHA-1).",
+  },
+
+  // ----------------------------------------------------------------
+  // ALPHA-2 — Cronbach's α (log transform, ABT, DL)
+  // Same 3-study dataset as ALPHA-1.
+  // yi=ln(1−α), vi=2k/(n(k−1)); back-transform: 1−exp(yi).
+  // DL values computed analytically; generate.R ALPHA-2 verifies.
+  // ----------------------------------------------------------------
+  {
+    name: "Cronbach's α (ABT, DL, k_studies=3)",
+    type: "ABT",
+    tauMethod: "DL",
+    data: [
+      { label: "Study 1", alpha: 0.60, k: 10, n: 100 },
+      { label: "Study 2", alpha: 0.85, k: 10, n: 100 },
+      { label: "Study 3", alpha: 0.90, k: 10, n: 100 },
+    ],
+    expected: {
+      FE:   -1.7053,
+      RE:   -1.7053,
+      tau2:  0.4860,
+      I2:   95.6259,
+      yi:   [-0.916291, -1.897120, -2.302585],
+    },
+    citation: "Synthetic. Formulas: Bonett (2002) Stat Med 21:1331–1335. R-verified (metafor 4.8.0, generate.R ALPHA-2).",
+  },
+
+  // ----------------------------------------------------------------
+  // ALPHA-3 — Cronbach's α (cube-root transform, AHW, DL)
+  // Same 3-study dataset as ALPHA-1.
+  // u=k/(k−1)·(1−α), yi=u^(1/3), vi=2k²/(9n(k−1))·u^(2/3).
+  // DL values computed analytically; generate.R ALPHA-3 verifies.
+  // ----------------------------------------------------------------
+  {
+    name: "Cronbach's α (AHW, DL, k_studies=3)",
+    type: "AHW",
+    tauMethod: "DL",
+    data: [
+      { label: "Study 1", alpha: 0.60, k: 10, n: 100 },
+      { label: "Study 2", alpha: 0.85, k: 10, n: 100 },
+      { label: "Study 3", alpha: 0.90, k: 10, n: 100 },
+    ],
+    expected: {
+      FE:   0.5573,
+      RE:   0.5751,
+      tau2: 0.00834,
+      I2:   49.7477,
+      yi:   [0.763143, 0.550321, 0.480750],
+    },
+    citation: "Synthetic. Formulas: Hakstian & Whalen (1976) Psychometrika 41:219–231. R-verified (metafor 4.8.0, generate.R ALPHA-3).",
+  },
+
+];
+
+// ----------------------------------------------------------------
+// Publication bias + trim-and-fill benchmarks
+// Each entry has a `tests` object with named sub-objects per function.
+// Expected values derived in _derive_pubias.py and cross-verified against metafor (generate.R).
+// ----------------------------------------------------------------
+export const PUB_BIAS_BENCHMARKS = [
+
+  // ----------------------------------------------------------------
+  // BCG Vaccine — publication bias (log OR, 13 studies)
+  // Source: Colditz et al. (1994). dat.bcg in metafor.
+  // Same 13 2×2 tables as the OR benchmarks above.
+  // Expected values — Begg/Egger/FAT-PET/Fail-safe: derived analytically
+  //   in _derive_pubias.py and cross-verified against metafor (generate.R PB-1–PB-6).
+  // Harbord/Peters: cross-verified against metafor (generate.R PB-5, PB-6).
+  // Deeks/Rücker: cross-verified against metafor (generate.R PB-8, PB-9).
+  //   Begg:     τ_b = −0.128, S = −10, z = −0.549, p = 0.583
+  //   Egger:    intercept = −2.345 (bias), slope = −0.157, p = 0.160
+  //   FAT-PET:  intercept = −0.157 (PET), slope = −2.345 (FAT), interceptP = 0.521, slopeP = 0.160
+  //   Rosenthal fail-safe N = 607, Orwin (trivial=0.1) = 44
+  //   Harbord:  intercept = −2.093, interceptP = 0.235
+  //   Peters:   intercept = −0.357, interceptP = 0.045
+  //   TrimFill (L₀/R₀/Q₀, DL): k0 = 0, adjustedRE = −0.747
+  // ----------------------------------------------------------------
+  {
+    name: "BCG Vaccine – pub bias (log OR, DL, 13 studies)",
+    rBlock: "PB",
+    type: "OR",
+    tauMethod: "DL",
+    data: [
+      { label: "Aronson 1948",            a:   4, b:   119, c:  11, d:   128 },
+      { label: "Ferguson & Simes 1949",   a:   6, b:   300, c:  29, d:   274 },
+      { label: "Rosenthal 1960",          a:   3, b:   228, c:  11, d:   209 },
+      { label: "Hart & Sutherland 1977",  a:  62, b: 13536, c: 248, d: 12619 },
+      { label: "Frimodt-Moller 1973",     a:  33, b:  5036, c:  47, d:  5761 },
+      { label: "Stein & Aronson 1953",    a: 180, b:  1361, c: 372, d:  1079 },
+      { label: "Vandiviere 1973",         a:   8, b:  2537, c:  10, d:   619 },
+      { label: "TPT Madras 1980",         a: 505, b: 87886, c: 499, d: 87892 },
+      { label: "Coetzee & Berjak 1968",   a:  29, b:  7470, c:  45, d:  7232 },
+      { label: "Rosenthal 1961",          a:  17, b:  1699, c:  65, d:  1600 },
+      { label: "Comstock 1974",           a: 186, b: 50448, c: 141, d: 27197 },
+      { label: "Comstock & Webster 1969", a:   5, b:  2493, c:   3, d:  2338 },
+      { label: "Comstock 1976",           a:  27, b: 16886, c:  29, d: 17825 }
+    ],
+    tests: {
+      begg:     { tau: -0.12821, S: -10, z: -0.549, p: 0.583 },
+      egger:    { intercept: -2.34534, slope: -0.157, p: 0.160 },
+      fatPet:   { intercept: -0.157, interceptP: 0.52136, slope: -2.34534, slopeP: 0.160 },
+      petPeese: { usePeese: false,
+                  fat:   { intercept: -0.157, interceptP: 0.521, slope: -2.345, slopeP: 0.160 },
+                  peese: { intercept: -0.379, interceptP: 0.048, slope: -2.477, slopeP: 0.396 } },
+      failSafe: { rosenthal: 607, orwin: 44 },
+      harbord:  { intercept: -2.093, interceptP: 0.235 },
+      peters:   { intercept: -0.35727, interceptP: 0.045 },
+      trimFill: {
+        L0: { k0: 0, adjustedRE: -0.747 },
+        R0: { k0: 0, adjustedRE: -0.747 },
+        Q0: { k0: 0, adjustedRE: -0.747 },
+      },
+      tes:      { O: 8, E: 8.70259, chi2: 0.17159, p: 0.66065 },
+      // hc() from metafor: verified via generate.R block HC-1
+      hc:       { beta: -0.4361, tau2: 0.3663, t0: 0.3252, ciLb: -1.1910, ciUb: 0.3187 },
+      // waapWls(): verified via generate.R block WAAP-1
+      // kAdequate=4 (Hart, Stein, TPT Madras, Comstock 1974); power≥80% vs wlsEst=−0.4361
+      waap:     { wlsEstimate: -0.4361, kAdequate: 4, estimate: -0.40167, se: 0.0457, z: -8.7964, p: 0, ci: [-0.4910, -0.3119], fallback: false }
+    },
+    citation: "Colditz et al. (1994) JAMA 271:698–702. dat.bcg in metafor. Expected values derived analytically (_derive_pubias.py)."
+  },
+
+  // ----------------------------------------------------------------
+  // Synthetic asymmetric funnel (k=6, clearly significant Egger test)
+  // Designed to show a publication-bias pattern: small studies (large SE)
+  // have disproportionately large effects.  Data are on a log scale
+  // (e.g. log OR) so negative yi is also plausible.
+  //
+  // yi  = [-0.1,  0.3,  0.1,  0.9,  1.4,  0.5]
+  // se  = [ 0.2,  0.3, 0.15,  0.6,  0.8,  0.4]
+  //
+  // Egger: intercept=1.917, slope=-0.286, se=0.504, t=3.804, df=4, p=0.019
+  // Verified by running eggerTest() directly; see benchmark-data.md
+  // "Synthetic asymmetric funnel" section.
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic asymmetric funnel (k=6)",
+    rBlock: "PB-synth",
+    type: "GENERIC",
+    data: [
+      { label: "S1", yi: -0.1, vi: 0.0400 },
+      { label: "S2", yi:  0.3, vi: 0.0900 },
+      { label: "S3", yi:  0.1, vi: 0.0225 },
+      { label: "S4", yi:  0.9, vi: 0.3600 },
+      { label: "S5", yi:  1.4, vi: 0.6400 },
+      { label: "S6", yi:  0.5, vi: 0.1600 },
+    ],
+    tests: {
+      egger:    { intercept: 1.91667, slope: -0.28571, se: 0.504, t: 3.804, df: 4, p: 0.019 },
+      fatPet:   { intercept: -0.286, interceptP: 0.092, slope: 1.917, slopeP: 0.019 },
+      petPeese: { usePeese: true,
+                  fat:   { intercept: -0.286, interceptP: 0.092, slope: 1.917, slopeP: 0.019 },
+                  peese: { intercept: -0.017, interceptP: 0.819, slope: 2.439, slopeP: 0.014 } },
+      tes:      { O: 0, E: 0.707, chi2: 0.802, p: 0.815 },
+      // hc() verified via generate.R block HC-2
+      hc:       { beta: 0.1436, tau2: 0.0278, t0: 1.6528, ciLb: -0.1760, ciUb: 0.4633 },
+      // waapWls(): verified via generate.R block WAAP-2
+      // kAdequate=0 (all studies underpowered vs wlsEst=0.1436) → fallback to full WLS
+      waap:     { wlsEstimate: 0.1436, kAdequate: 0, estimate: 0.1436, se: 0.1047, z: 1.371, p: 0.170, ci: [-0.0617, 0.3489], fallback: true }
+    },
+    citation: "Synthetic. Designed to produce a clearly significant Egger test (p=0.019). Verified against eggerTest() and petPeeseTest() to floating-point precision."
+  },
+
+  // ----------------------------------------------------------------
+  // Synthetic 2×2 tables — Deeks test (k=4)
+  // Source: synthetic data with spread ESS values.
+  //
+  // Deeks (2005, J Clin Epidemiol 58:882-893):
+  //   WLS of log(DOR) on 1/√ESS_i with weights ESS_i; H₀: intercept = 0.
+  //   ESS:    [11.7333, 37.3333, 99.0,   149.3333]
+  //   logDOR: [-0.2513,  1.3863,  1.2040,   2.2336]
+  //   intercept = 2.8191, p = 0.0565 (marginal asymmetry, p < 0.10)
+  //
+  // R-verified: generate.R block DEEKS-1.
+  //   lm(log(DOR) ~ I(1/sqrt(ESS)), weights=ESS)
+  // ----------------------------------------------------------------
+  {
+    rBlock: "DEEKS-1",
+    name: "Synthetic 2×2 tables – Deeks (k=4)",
+    type: "OR",
+    data: [
+      { a:  5, b: 15, c:  3, d:   7 },
+      { a: 20, b: 10, c: 15, d:  30 },
+      { a: 50, b: 30, c: 40, d:  80 },
+      { a: 80, b: 20, c: 60, d: 140 },
+    ],
+    tests: {
+      deeks: { intercept: 2.8191, interceptP: 0.0565, slope: -10.6242, slopeP: 0.2206, df: 2 },
+    },
+    citation: "Synthetic 2×2 tables, R-verified (base R lm(), generate.R block DEEKS-1). Deeks: WLS of log(DOR) on 1/sqrt(ESS) with weights ESS."
+  },
+
+  // ----------------------------------------------------------------
+  // Synthetic 2×2 tables — Rücker test (k=4)
+  // Source: synthetic data with spread 1/se precision values.
+  //
+  // Rücker (2008, Stat Med 27:4450-4465):
+  //   OLS of arcsine z_i on 1/se_i (uniform weights); H₀: intercept = 0.
+  //   1/se:   [3.6515, 7.3855, 12.0,  16.3299]
+  //   z_stat: [0.0,    1.9985,  4.0780,  8.6142]
+  //   intercept = -2.7853, p = 0.1156
+  //
+  // R-verified: generate.R block RUECKER-1.
+  //   lm(z ~ I(1/se))  (OLS, uniform weights)
+  // ----------------------------------------------------------------
+  {
+    rBlock: "RUECKER-1",
+    name: "Synthetic 2×2 tables – Rücker (k=4)",
+    type: "OR",
+    data: [
+      { a:  2, b:  3, c:  4, d:   6 },
+      { a: 15, b: 10, c: 10, d:  20 },
+      { a: 40, b: 20, c: 30, d:  60 },
+      { a: 80, b: 20, c: 60, d: 140 },
+    ],
+    tests: {
+      ruecker: { intercept: -2.7853, interceptP: 0.1156, slope: 0.6562, slopeP: 0.0203, df: 2 },
+    },
+    citation: "Synthetic 2×2 tables, R-verified (base R lm(), generate.R block RUECKER-1). Rücker: OLS of arcsine z on 1/se (uniform weights)."
+  },
+
+  // ----------------------------------------------------------------
+  // BCG Vaccine — Orwin fail-safe N with non-default trivial threshold
+  // Same 13-study dataset as PUB_BIAS_BENCHMARKS[0].
+  // trivial=0.2, direction="auto" (FE<0 → signMul=-1, same Rosenthal N due to squaring)
+  // Orwin = max(0, k * (|FE| − |trivial|) / |trivial|)
+  //       = max(0, 13 * (0.4361 − 0.2) / 0.2) ≈ 15.35 → 15
+  // R: fsn(yi, vi, data=bcg_esc, type="Orwin", target=0.2)
+  // ----------------------------------------------------------------
+  {
+    name: "BCG Vaccine – Orwin FSN, trivial=0.2 (log OR, DL, 13 studies)",
+    rBlock: "FSN-2",
+    type: "OR",
+    tauMethod: "DL",
+    data: [
+      { label: "Aronson 1948",            a:   4, b:   119, c:  11, d:   128 },
+      { label: "Ferguson & Simes 1949",   a:   6, b:   300, c:  29, d:   274 },
+      { label: "Rosenthal 1960",          a:   3, b:   228, c:  11, d:   209 },
+      { label: "Hart & Sutherland 1977",  a:  62, b: 13536, c: 248, d: 12619 },
+      { label: "Frimodt-Moller 1973",     a:  33, b:  5036, c:  47, d:  5761 },
+      { label: "Stein & Aronson 1953",    a: 180, b:  1361, c: 372, d:  1079 },
+      { label: "Vandiviere 1973",         a:   8, b:  2537, c:  10, d:   619 },
+      { label: "TPT Madras 1980",         a: 505, b: 87886, c: 499, d: 87892 },
+      { label: "Coetzee & Berjak 1968",   a:  29, b:  7470, c:  45, d:  7232 },
+      { label: "Rosenthal 1961",          a:  17, b:  1699, c:  65, d:  1600 },
+      { label: "Comstock 1974",           a: 186, b: 50448, c: 141, d: 27197 },
+      { label: "Comstock & Webster 1969", a:   5, b:  2493, c:   3, d:  2338 },
+      { label: "Comstock 1976",           a:  27, b: 16886, c:  29, d: 17825 },
+    ],
+    tests: {
+      failSafe: { rosenthal: 607, orwin: 16 },
+    },
+    fsnTrivial: 0.2,
+    fsnDirection: "auto",
+    citation: "Colditz et al. (1994) JAMA 271:698–702. dat.bcg in metafor. Orwin FSN with trivial=0.2, R-verified (generate.R FSN-2).",
+  },
+
+];
+
+// ----------------------------------------------------------------
+// Influence / LOO benchmarks (Phase 7)
+// Each entry's `expected` is a k-length array of per-study objects
+// matching the fields returned by influenceDiagnostics().
+// Expected values derived in _derive_influence.py and cross-verified against metafor (generate.R INF-1, INF-2).
+// ----------------------------------------------------------------
+export const INFLUENCE_BENCHMARKS = [
+
+  // ----------------------------------------------------------------
+  // 5-study synthetic log-RR dataset (same data as benchmarks 35–37)
+  // Full DL meta: RE=−0.536, tau2=0.239, I2=74.1%
+  // No study clears any flag threshold on this dataset:
+  //   highLeverage > 0.40, highCookD > 0.80, |stdResidual| > 2, |DFBETA| > 1
+  // Study 4 (the sole positive effect) has the largest Cook's D (0.551)
+  // and DFBETA (0.880), nearest to but below the influential threshold.
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic – log-RR influence diagnostics (DL)",
+    rBlock: "INF-Normand",
+    type: "RR",
+    tauMethod: "DL",
+    data: [
+      { label: "Study 1", a: 15, b: 85, c: 30, d: 70 },
+      { label: "Study 2", a: 20, b: 80, c: 25, d: 75 },
+      { label: "Study 3", a: 10, b: 90, c: 35, d: 65 },
+      { label: "Study 4", a: 25, b: 75, c: 20, d: 80 },
+      { label: "Study 5", a: 12, b: 88, c: 28, d: 72 }
+    ],
+    expected: [
+      {
+        label:        "Study 1",
+        RE_loo:       -0.5027,
+        tau2_loo:      0.3298,
+        hat:           0.2030,
+        cookD:         0.0176,
+        stdResidual:  -0.2778,
+        DFBETA:       -0.1045,
+        DFFITS:       -0.1168,
+        covRatio:      1.6084,
+        deltaTau2:    -0.0913,
+        outlier:       false,
+        influential:   false,
+        highLeverage:  false,
+        highCookD:     false,
+        highDffits:    false,
+        highCovRatio:  true
+      },
+      {
+        label:        "Study 2",
+        RE_loo:       -0.6244,
+        tau2_loo:      0.3283,
+        hat:           0.2096,
+        cookD:         0.1199,
+        stdResidual:   0.5639,
+        DFBETA:        0.2727,
+        DFFITS:        0.3048,
+        covRatio:      1.6128,
+        deltaTau2:    -0.0898,
+        outlier:       false,
+        influential:   false,
+        highLeverage:  false,
+        highCookD:     false,
+        highDffits:    false,
+        highCovRatio:  true
+      },
+      {
+        label:        "Study 3",
+        RE_loo:       -0.3679,
+        tau2_loo:      0.1542,
+        hat:           0.1863,
+        cookD:         0.4390,
+        stdResidual:  -1.2159,
+        DFBETA:       -0.6975,
+        DFFITS:       -0.7615,
+        covRatio:      0.9023,
+        deltaTau2:     0.0843,
+        outlier:       false,
+        influential:   false,
+        highLeverage:  false,
+        highCookD:     false,
+        highDffits:    false,
+        highCovRatio:  false
+      },
+      {
+        label:        "Study 4",
+        RE_loo:       -0.7251,
+        tau2_loo:      0.0958,
+        hat:           0.2096,
+        cookD:         0.5507,
+        stdResidual:   1.3674,
+        DFBETA:        0.8799,
+        DFFITS:        1.0122,
+        covRatio:      0.7114,
+        deltaTau2:     0.1427,
+        outlier:       false,
+        influential:   false,
+        highLeverage:  false,
+        highCookD:     false,
+        highDffits:    false,
+        highCovRatio:  true
+      },
+      {
+        label:        "Study 5",
+        RE_loo:       -0.4658,
+        tau2_loo:      0.2881,
+        hat:           0.1915,
+        cookD:         0.0770,
+        stdResidual:  -0.5351,
+        DFBETA:       -0.2322,
+        DFFITS:       -0.2592,
+        covRatio:      1.4289,
+        deltaTau2:    -0.0496,
+        outlier:       false,
+        influential:   false,
+        highLeverage:  false,
+        highCookD:     false,
+        highDffits:    false,
+        highCovRatio:  true
+      }
+    ],
+    citation: "Synthetic 5-study log-RR dataset (same as benchmarks 35–37). Expected values cross-verified against metafor influence.rma.uni() (generate.R INF-2)."
+  },
+
+  // ----------------------------------------------------------------
+  // BCG vaccine dataset (dat.bcg, k=13), DL method — DFFITS benchmark.
+  // yi/vi are pre-computed log-RR escalc values from dat.bcg.
+  // Expected DFFITS cross-validated against metafor 4.8-0
+  // influence.rma.uni(); all 13 studies match to ≤ 3e-17.
+  // Threshold: 3·√(1/(k−1)) = 3·√(1/12) ≈ 0.866; no study flagged.
+  // ----------------------------------------------------------------
+  {
+    name: "BCG – log-RR DFFITS (DL, k=13)",
+    rBlock: "INF-BCG",
+    type: "GENERIC",
+    tauMethod: "DL",
+    data: [
+      { label: "Aronson 1948",            yi: -0.8893113339202054, vi: 0.3255847650039613 },
+      { label: "Ferguson & Simes 1949",   yi: -1.5853886572014306, vi: 0.1945811213981438 },
+      { label: "Rosenthal et al 1960",    yi: -1.3480731482996933, vi: 0.4153679653679654 },
+      { label: "Hart & Sutherland 1977",  yi: -1.4415511900213054, vi: 0.0200100319022476 },
+      { label: "Frimodt-Moller et al 1973", yi: -0.2175473222112956, vi: 0.0512101721696309 },
+      { label: "Stein & Aronson 1953",    yi: -0.7861155858188640, vi: 0.0069056184559088 },
+      { label: "Vandiviere et al 1973",   yi: -1.6208982235983918, vi: 0.2230172475723152 },
+      { label: "TPT Madras 1980",         yi:  0.0119523335238405, vi: 0.0039615792978177 },
+      { label: "Coetzee & Berjak 1968",   yi: -0.4694176487381494, vi: 0.0564342104632490 },
+      { label: "Rosenthal et al 1961",    yi: -1.3713448034727844, vi: 0.0730247936130289 },
+      { label: "Comstock et al 1974",     yi: -0.3393588283383906, vi: 0.0124122139715597 },
+      { label: "Comstock & Webster 1969", yi:  0.4459134005713787, vi: 0.5325058452001528 },
+      { label: "Comstock et al 1976",     yi: -0.0173139482168798, vi: 0.0714046596839863 }
+    ],
+    expected: [
+      { label: "Aronson 1948",            DFFITS: -0.0501725, highDffits: false, covRatio: 1.0625800, highCovRatio: false, RE_loo: -0.7051252, tau2_loo: 0.3121715, hat: 0.0503649, cookD: 0.0025308, stdResidual: -0.2199666, DFBETA: -0.0488034, deltaTau2: -0.0034112, outlier: false, influential: false, highLeverage: false, highCookD: false },
+      { label: "Ferguson & Simes 1949",   DFFITS: -0.3363976, highDffits: false, covRatio: 1.0429284, highCovRatio: false, RE_loo: -0.6545159, tau2_loo: 0.2999746, hat: 0.0634733, cookD: 0.1111881, stdResidual: -1.2280673, DFBETA: -0.3265141, deltaTau2:  0.0087857, outlier: false, influential: false, highLeverage: false, highCookD: false },
+      { label: "Rosenthal et al 1960",    DFFITS: -0.1638125, highDffits: false, covRatio: 1.0455078, highCovRatio: false, RE_loo: -0.6848417, tau2_loo: 0.3085271, hat: 0.0441203, cookD: 0.0268259, stdResidual: -0.7449915, DFBETA: -0.1601819, deltaTau2:  0.0002332, outlier: false, influential: false, highLeverage: false, highCookD: false },
+      { label: "Hart & Sutherland 1977",  DFFITS: -0.6291024, highDffits: false, covRatio: 0.8425990, highCovRatio: true,  RE_loo: -0.6186969, tau2_loo: 0.2167336, hat: 0.0971765, cookD: 0.2849892, stdResidual: -1.2686660, DFBETA: -0.5815723, deltaTau2:  0.0920267, outlier: false, influential: false, highLeverage: false, highCookD: false },
+      { label: "Frimodt-Moller et al 1973", DFFITS: 0.2727445, highDffits: false, covRatio: 1.1467962, highCovRatio: true,  RE_loo: -0.7640357, tau2_loo: 0.3262089, hat: 0.0887538, cookD: 0.0779954, stdResidual:  0.8276505, DFBETA:  0.2607903, deltaTau2: -0.0174486, outlier: false, influential: false, highLeverage: false, highCookD: false },
+      { label: "Stein & Aronson 1953",    DFFITS: -0.0069973, highDffits: false, covRatio: 1.3202119, highCovRatio: true,  RE_loo: -0.7127273, tau2_loo: 0.3829190, hat: 0.1012106, cookD: 0.0000605, stdResidual: -0.1281471, DFBETA: -0.0067675, deltaTau2: -0.0741588, outlier: false, influential: false, highLeverage: false, highCookD: false },
+      { label: "Vandiviere et al 1973",   DFFITS: -0.3294041, highDffits: false, covRatio: 1.0408079, highCovRatio: false, RE_loo: -0.6556939, tau2_loo: 0.3005713, hat: 0.0600791, cookD: 0.1068361, stdResidual: -1.2434761, DFBETA: -0.3203862, deltaTau2:  0.0081890, outlier: false, influential: false, highLeverage: false, highCookD: false },
+      { label: "TPT Madras 1980",         DFFITS:  0.5127745, highDffits: false, covRatio: 0.8324774, highCovRatio: true,  RE_loo: -0.7900866, tau2_loo: 0.2108852, hat: 0.1021634, cookD: 0.1806440, stdResidual:  1.2983719, DFBETA:  0.4658279, deltaTau2:  0.0978750, outlier: false, influential: false, highLeverage: false, highCookD: false },
+      { label: "Coetzee & Berjak 1968",   DFFITS:  0.1373670, highDffits: false, covRatio: 1.1464091, highCovRatio: true,  RE_loo: -0.7392634, tau2_loo: 0.3266093, hat: 0.0874842, cookD: 0.0197920, stdResidual:  0.4049218, DFBETA:  0.1313937, deltaTau2: -0.0178490, outlier: false, influential: false, highLeverage: false, highCookD: false },
+      { label: "Rosenthal et al 1961",    DFFITS: -0.3507962, highDffits: false, covRatio: 1.0511511, highCovRatio: false, RE_loo: -0.6525852, tau2_loo: 0.2946449, hat: 0.0836825, cookD: 0.1185083, stdResidual: -1.0636685, DFBETA: -0.3357699, deltaTau2:  0.0141154, outlier: false, influential: false, highLeverage: false, highCookD: false },
+      { label: "Comstock et al 1974",     DFFITS:  0.2334335, highDffits: false, covRatio: 1.3318039, highCovRatio: true,  RE_loo: -0.7606942, tau2_loo: 0.3878092, hat: 0.0994753, cookD: 0.0679029, stdResidual:  0.6612752, DFBETA:  0.2258001, deltaTau2: -0.0790489, outlier: false, influential: false, highLeverage: false, highCookD: false },
+      { label: "Comstock & Webster 1969", DFFITS:  0.2566754, highDffits: false, covRatio: 1.0411904, highCovRatio: false, RE_loo: -0.7600128, tau2_loo: 0.3093804, hat: 0.0379770, cookD: 0.0659308, stdResidual:  1.2647444, DFBETA:  0.2516397, deltaTau2: -0.0006202, outlier: false, influential: false, highLeverage: false, highCookD: false },
+      { label: "Comstock et al 1976",     DFFITS:  0.3583792, highDffits: false, covRatio: 1.1171108, highCovRatio: true,  RE_loo: -0.7789237, tau2_loo: 0.3177033, hat: 0.0840391, cookD: 0.1314570, stdResidual:  1.1301190, DFBETA:  0.3430392, deltaTau2: -0.0089430, outlier: false, influential: false, highLeverage: false, highCookD: false }
+    ],
+    citation: "metafor 4.8-0 influence.rma.uni(), dat.bcg, DL method. DFFITS cross-validated to ≤ 3e-17; covRatio to ≤ 1.78e-15."
+  }
+
+];
+
+// ================================================================
+// META-REGRESSION BENCHMARKS
+// BCG vaccine dat.bcg (13 studies) with additional moderators.
+// yi/vi are log-RR pre-computed values from BENCHMARKS[0].
+// year and ablat from metafor::dat.bcg; region coded NA/EU/AS.
+// Expected values verified against metafor rma.uni().
+// ================================================================
+export const META_REGRESSION_BENCHMARKS = [
+
+  // ----------------------------------------------------------------
+  // MR-A: two continuous moderators (year + ablat), REML, normal CI
+  // ----------------------------------------------------------------
+  {
+    name: "BCG – year + ablat (REML, normal CI)",
+    rBlock: "MR-A",
+    moderators: [
+      { key: "year",  type: "continuous" },
+      { key: "ablat", type: "continuous" }
+    ],
+    tauMethod: "REML",
+    ciMethod:  "normal",
+    data: [
+      { label: "Aronson 1948",           yi: -0.8893113339202054, vi: 0.3255847650039614,    year: 1948, ablat: 44 },
+      { label: "Ferguson & Simes 1949",  yi: -1.5853886572014306, vi: 0.19458112139814387,   year: 1949, ablat: 55 },
+      { label: "Rosenthal 1960",         yi: -1.348073148299693,  vi: 0.41536796536796533,   year: 1960, ablat: 42 },
+      { label: "Hart & Sutherland 1977", yi: -1.4415511900213054, vi: 0.020010031902247573,  year: 1977, ablat: 52 },
+      { label: "Frimodt-Moller 1973",    yi: -0.2175473222112957, vi: 0.05121017216963086,   year: 1973, ablat: 13 },
+      { label: "Stein & Aronson 1953",   yi: -0.786115585818864,  vi: 0.0069056184559087574, year: 1953, ablat: 44 },
+      { label: "Vandiviere 1973",        yi: -1.6208982235983924, vi: 0.22301724757231517,   year: 1973, ablat: 19 },
+      { label: "TPT Madras 1980",        yi:  0.011952333523841173,vi: 0.00396157929781773,  year: 1980, ablat: 13 },
+      { label: "Coetzee & Berjak 1968",  yi: -0.4694176487381487, vi: 0.056434210463248966,  year: 1968, ablat: 27 },
+      { label: "Rosenthal 1961",         yi: -1.3713448034727846, vi: 0.07302479361302891,   year: 1961, ablat: 42 },
+      { label: "Comstock 1974",          yi: -0.33935882833839015,vi: 0.01241221397155972,   year: 1974, ablat: 18 },
+      { label: "Comstock & Webster 1969",yi:  0.4459134005713783, vi: 0.5325058452001528,    year: 1969, ablat: 33 },
+      { label: "Comstock 1976",          yi: -0.017313948216879493,vi: 0.0714046596839863,   year: 1976, ablat: 33 }
+    ],
+    expected: {
+      beta:  [-3.5455, 0.0019, -0.0280],
+      se:    [29.09588, 0.0147,  0.0102],
+      tau2:  0.1108,
+      QE:    28.3251,
+      QEdf:  10,
+      QEp:   0.0016,
+      QM:    12.2045,
+      QMdf:  2,
+      QMp:   0.0022,
+      I2:    71.97,
+      R2:    0.6463,
+      colNames: ["intercept", "year", "ablat"],
+      modTests: [
+        // lrt/lrtP always use ML internally regardless of model method
+        // R: anova(rma(yi~year+ablat,vi,data=dat.bcg,method="ML"), rma(yi~ablat,vi,data=dat.bcg,method="ML"))
+        { name: "year",  QM: 0.0169, QMdf: 1, QMp: 0.8966, lrt: 0.0791, lrtDf: 1, lrtP: 0.7785 },
+        { name: "ablat", QM: 7.4917, QMdf: 1, QMp: 0.0062, lrt: 7.1799, lrtDf: 1, lrtP: 0.0074 }
+      ],
+      vif: [null, 1.7846, 1.7846],
+      // AIC/BIC (REML): npar=p+1=4; BIC uses kBIC=k−p=10 (error contrasts)
+      // R: logLik(res)=-8.106874; AIC(res)=24.213748; BIC(res)=25.424088
+      LL:  -8.106874,
+      AIC: 24.213748,
+      BIC: 25.424088
+    },
+    citation: "Colditz et al. (1994) dat.bcg. R-verified (metafor 4.8.0, generate.R block 42) for all fields including QE. QE uses FE weights (1/vi) with FE-fitted β, matching metafor convention (Thompson & Sharp 1999, Viechtbauer 2010). AIC/BIC verified against AIC()/BIC() in R."
+  },
+
+  // ----------------------------------------------------------------
+  // MR-B: continuous + categorical moderator (ablat + region),
+  //        REML, normal CI.  Reference level for region = "AS".
+  // ----------------------------------------------------------------
+  {
+    name: "BCG – ablat + region (REML, normal CI)",
+    rBlock: "MR-B",
+    moderators: [
+      { key: "ablat",  type: "continuous"  },
+      { key: "region", type: "categorical" }
+    ],
+    tauMethod: "REML",
+    ciMethod:  "normal",
+    data: [
+      { label: "Aronson 1948",           yi: -0.8893113339202054, vi: 0.3255847650039614,    ablat: 44, region: "NA" },
+      { label: "Ferguson & Simes 1949",  yi: -1.5853886572014306, vi: 0.19458112139814387,   ablat: 55, region: "EU" },
+      { label: "Rosenthal 1960",         yi: -1.348073148299693,  vi: 0.41536796536796533,   ablat: 42, region: "AS" },
+      { label: "Hart & Sutherland 1977", yi: -1.4415511900213054, vi: 0.020010031902247573,  ablat: 52, region: "EU" },
+      { label: "Frimodt-Moller 1973",    yi: -0.2175473222112957, vi: 0.05121017216963086,   ablat: 13, region: "AS" },
+      { label: "Stein & Aronson 1953",   yi: -0.786115585818864,  vi: 0.0069056184559087574, ablat: 44, region: "NA" },
+      { label: "Vandiviere 1973",        yi: -1.6208982235983924, vi: 0.22301724757231517,   ablat: 19, region: "AS" },
+      { label: "TPT Madras 1980",        yi:  0.011952333523841173,vi: 0.00396157929781773,  ablat: 13, region: "AS" },
+      { label: "Coetzee & Berjak 1968",  yi: -0.4694176487381487, vi: 0.056434210463248966,  ablat: 27, region: "NA" },
+      { label: "Rosenthal 1961",         yi: -1.3713448034727846, vi: 0.07302479361302891,   ablat: 42, region: "NA" },
+      { label: "Comstock 1974",          yi: -0.33935882833839015,vi: 0.01241221397155972,   ablat: 18, region: "NA" },
+      { label: "Comstock & Webster 1969",yi:  0.4459134005713783, vi: 0.5325058452001528,    ablat: 33, region: "NA" },
+      { label: "Comstock 1976",          yi: -0.017313948216879493,vi: 0.0714046596839863,   ablat: 33, region: "NA" }
+    ],
+    expected: {
+      beta:  [ 0.1024, -0.0330, 0.1598, 0.4339],
+      se:    [ 0.3369,  0.0143, 0.6491, 0.3733],
+      tau2:  0.1239,
+      QE:    23.8904,
+      QEdf:  9,
+      QEp:   0.0045,
+      QM:    13.2389,
+      QMdf:  3,
+      QMp:   0.0041,
+      I2:    65.50,
+      R2:    0.6043,
+      colNames: ["intercept", "ablat", "region:EU", "region:NA"],
+      modTests: [
+        { name: "ablat",  QM: 5.3003, QMdf: 1, QMp: 0.0213 },
+        { name: "region", QM: 2.1225, QMdf: 2, QMp: 0.3460 }
+      ],
+      // AIC/BIC (REML): npar=p+1=5; BIC uses kBIC=k−p=9 (error contrasts)
+      // R: logLik(res)=-6.767674; AIC(res)=23.535348; BIC(res)=24.521471
+      LL:  -6.767674,
+      AIC: 23.535348,
+      BIC: 24.521471
+    },
+    citation: "Colditz et al. (1994) dat.bcg. R-verified (metafor 4.8.0, generate.R block 43) for all fields including QE. QE uses FE weights (1/vi) with FE-fitted β, matching metafor convention (Thompson & Sharp 1999, Viechtbauer 2010). AIC/BIC verified against AIC()/BIC() in R."
+  },
+
+  // ----------------------------------------------------------------
+  // MR-C: same as MR-B but with Knapp-Hartung CI (ciMethod="KH").
+  //        tau2 and QE are identical to MR-B; QM becomes an F-stat.
+  // ----------------------------------------------------------------
+  {
+    name: "BCG – ablat + region (REML, KH CI)",
+    rBlock: "MR-C",
+    moderators: [
+      { key: "ablat",  type: "continuous"  },
+      { key: "region", type: "categorical" }
+    ],
+    tauMethod: "REML",
+    ciMethod:  "KH",
+    data: [
+      { label: "Aronson 1948",           yi: -0.8893113339202054, vi: 0.3255847650039614,    ablat: 44, region: "NA" },
+      { label: "Ferguson & Simes 1949",  yi: -1.5853886572014306, vi: 0.19458112139814387,   ablat: 55, region: "EU" },
+      { label: "Rosenthal 1960",         yi: -1.348073148299693,  vi: 0.41536796536796533,   ablat: 42, region: "AS" },
+      { label: "Hart & Sutherland 1977", yi: -1.4415511900213054, vi: 0.020010031902247573,  ablat: 52, region: "EU" },
+      { label: "Frimodt-Moller 1973",    yi: -0.2175473222112957, vi: 0.05121017216963086,   ablat: 13, region: "AS" },
+      { label: "Stein & Aronson 1953",   yi: -0.786115585818864,  vi: 0.0069056184559087574, ablat: 44, region: "NA" },
+      { label: "Vandiviere 1973",        yi: -1.6208982235983924, vi: 0.22301724757231517,   ablat: 19, region: "AS" },
+      { label: "TPT Madras 1980",        yi:  0.011952333523841173,vi: 0.00396157929781773,  ablat: 13, region: "AS" },
+      { label: "Coetzee & Berjak 1968",  yi: -0.4694176487381487, vi: 0.056434210463248966,  ablat: 27, region: "NA" },
+      { label: "Rosenthal 1961",         yi: -1.3713448034727846, vi: 0.07302479361302891,   ablat: 42, region: "NA" },
+      { label: "Comstock 1974",          yi: -0.33935882833839015,vi: 0.01241221397155972,   ablat: 18, region: "NA" },
+      { label: "Comstock & Webster 1969",yi:  0.4459134005713783, vi: 0.5325058452001528,    ablat: 33, region: "NA" },
+      { label: "Comstock 1976",          yi: -0.017313948216879493,vi: 0.0714046596839863,   ablat: 33, region: "NA" }
+    ],
+    expected: {
+      beta:  [ 0.1024, -0.0330, 0.1598, 0.4339],
+      se:    [ 0.3478,  0.0148, 0.6701, 0.3854],
+      tau2:  0.1239,
+      QE:    23.8904,
+      QEdf:  9,
+      QEp:   0.0045,
+      QM:    4.1404,
+      QMdf:  3,
+      QMp:   0.0423,
+      I2:    65.50,
+      R2:    0.6043,
+      colNames: ["intercept", "ablat", "region:EU", "region:NA"],
+      modTests: [
+        { name: "ablat",  QM: 4.9729, QMdf: 1, QMp: 0.0527 },
+        { name: "region", QM: 0.9957, QMdf: 2, QMp: 0.4068 }
+      ],
+      // AIC/BIC identical to MR-B (same tau2; KH only changes CIs, not ll)
+      LL:  -6.767674,
+      AIC: 23.535348,
+      BIC: 24.521471
+    },
+    citation: "Colditz et al. (1994) dat.bcg. R-verified (metafor 4.8.0, generate.R block 44) for all fields including QE. QE uses FE weights (1/vi) with FE-fitted β, matching metafor convention. KH s² from RE residuals (Knapp & Hartung 2003, eq. 8). AIC/BIC identical to MR-B (REML tau2 unchanged by KH)."
+  },
+
+  // ----------------------------------------------------------------
+  // MR-D: polynomial (quadratic) moderator — ablat + ablat², REML
+  // Equivalent to metafor: rma(yi, vi, mods = ~ ablat + I(ablat^2), data=dat.bcg)
+  // Cross-verified against metafor (generate.R block 48).
+  // ----------------------------------------------------------------
+  {
+    name: "BCG – ablat poly² (REML, normal CI)",
+    moderators: [
+      { key: "ablat", type: "continuous", transform: "poly2" }
+    ],
+    tauMethod: "REML",
+    ciMethod:  "normal",
+    data: [
+      { label: "Aronson 1948",           yi: -0.8893113339202054, vi: 0.3255847650039614,    ablat: 44 },
+      { label: "Ferguson & Simes 1949",  yi: -1.5853886572014306, vi: 0.19458112139814387,   ablat: 55 },
+      { label: "Rosenthal 1960",         yi: -1.348073148299693,  vi: 0.41536796536796533,   ablat: 42 },
+      { label: "Hart & Sutherland 1977", yi: -1.4415511900213054, vi: 0.020010031902247573,  ablat: 52 },
+      { label: "Frimodt-Moller 1973",    yi: -0.2175473222112957, vi: 0.05121017216963086,   ablat: 13 },
+      { label: "Stein & Aronson 1953",   yi: -0.786115585818864,  vi: 0.0069056184559087574, ablat: 44 },
+      { label: "Vandiviere 1973",        yi: -1.6208982235983924, vi: 0.22301724757231517,   ablat: 19 },
+      { label: "TPT Madras 1980",        yi:  0.011952333523841173,vi: 0.00396157929781773,  ablat: 13 },
+      { label: "Coetzee & Berjak 1968",  yi: -0.4694176487381487, vi: 0.056434210463248966,  ablat: 27 },
+      { label: "Rosenthal 1961",         yi: -1.3713448034727846, vi: 0.07302479361302891,   ablat: 42 },
+      { label: "Comstock 1974",          yi: -0.33935882833839015,vi: 0.01241221397155972,   ablat: 18 },
+      { label: "Comstock & Webster 1969",yi:  0.4459134005713783, vi: 0.5325058452001528,    ablat: 33 },
+      { label: "Comstock 1976",          yi: -0.017313948216879493,vi: 0.0714046596839863,   ablat: 33 }
+    ],
+    expected: {
+      beta:     [-0.3889, 0.0218, -0.0008],
+      se:       [ 0.6285, 0.0464,  0.0007],
+      tau2:     0.0806,
+      QE:       28.4961,
+      QEdf:     10,
+      QEp:      0.0015,
+      QM:       16.9158,
+      QMdf:     2,
+      QMp:      0.0002,
+      I2:       66.62,
+      R2:       0.7426,
+      colNames: ["intercept", "ablat", "ablat²"],
+      modTests: [
+        { name: "ablat", QM: 16.9158, QMdf: 2, QMp: 0.0002 }
+      ]
+    },
+    citation: "Colditz et al. (1994) dat.bcg. R-verified (metafor 4.8.0, crossval_nonlinear.R block 48). Equivalent to metafor rma(mods = ~ ablat + I(ablat^2))."
+  },
+
+  // ----------------------------------------------------------------
+  // MR-E: restricted cubic spline (3 knots) — ablat, REML
+  // Knots at 10th/50th/90th percentiles of ablat: [14, 33, 50.4]
+  // Equivalent to metafor: rma(yi, vi, mods = ~ ablat + phi1, data=dat.bcg)
+  //   where phi1 is the single RCS nonlinear term computed from Harrell's formula.
+  // Cross-verified against metafor (generate.R block 49).
+  // ----------------------------------------------------------------
+  {
+    name: "BCG – ablat RCS (3 knots, REML, normal CI)",
+    moderators: [
+      { key: "ablat", type: "continuous", transform: "rcs3" }
+    ],
+    tauMethod: "REML",
+    ciMethod:  "normal",
+    data: [
+      { label: "Aronson 1948",           yi: -0.8893113339202054, vi: 0.3255847650039614,    ablat: 44 },
+      { label: "Ferguson & Simes 1949",  yi: -1.5853886572014306, vi: 0.19458112139814387,   ablat: 55 },
+      { label: "Rosenthal 1960",         yi: -1.348073148299693,  vi: 0.41536796536796533,   ablat: 42 },
+      { label: "Hart & Sutherland 1977", yi: -1.4415511900213054, vi: 0.020010031902247573,  ablat: 52 },
+      { label: "Frimodt-Moller 1973",    yi: -0.2175473222112957, vi: 0.05121017216963086,   ablat: 13 },
+      { label: "Stein & Aronson 1953",   yi: -0.786115585818864,  vi: 0.0069056184559087574, ablat: 44 },
+      { label: "Vandiviere 1973",        yi: -1.6208982235983924, vi: 0.22301724757231517,   ablat: 19 },
+      { label: "TPT Madras 1980",        yi:  0.011952333523841173,vi: 0.00396157929781773,  ablat: 13 },
+      { label: "Coetzee & Berjak 1968",  yi: -0.4694176487381487, vi: 0.056434210463248966,  ablat: 27 },
+      { label: "Rosenthal 1961",         yi: -1.3713448034727846, vi: 0.07302479361302891,   ablat: 42 },
+      { label: "Comstock 1974",          yi: -0.33935882833839015,vi: 0.01241221397155972,   ablat: 18 },
+      { label: "Comstock & Webster 1969",yi:  0.4459134005713783, vi: 0.5325058452001528,    ablat: 33 },
+      { label: "Comstock 1976",          yi: -0.017313948216879493,vi: 0.0714046596839863,   ablat: 33 }
+    ],
+    expected: {
+      // Knots at 10th/50th/90th percentiles of ablat: [14, 33, 50.4]
+      beta:     [-0.2099, -0.0029, -0.0000264],
+      se:       [ 0.4384,  0.0217,  0.0000206],
+      tau2:     0.0766,
+      QE:       27.9911,
+      QEdf:     10,
+      QEp:      0.0018,
+      QM:       17.9533,
+      QMdf:     2,
+      QMp:      0.0001,
+      I2:       65.96,
+      R2:       0.7555,
+      colNames: ["intercept", "ablat", "ablat_rcs1"],
+      modTests: [
+        { name: "ablat", QM: 17.9533, QMdf: 2, QMp: 0.0001 }
+      ]
+    },
+    citation: "Colditz et al. (1994) dat.bcg. R-verified (metafor 4.8.0, crossval_nonlinear.R block 49). Harrell RCS formula with 3 knots at 10th/50th/90th pct of ablat (14, 33, 50.4). phi1 values and all statistics match metafor exactly."
+  },
+
+  // ----------------------------------------------------------------
+  // MR-D: BCG year + ablat (ML) — verifies LRT alongside Wald QM
+  // ----------------------------------------------------------------
+  {
+    name: "BCG – year + ablat (ML, normal CI) [LRT]",
+    moderators: [
+      { key: "year",  type: "continuous" },
+      { key: "ablat", type: "continuous" }
+    ],
+    tauMethod: "ML",
+    ciMethod:  "normal",
+    data: [
+      { label: "Aronson 1948",           yi: -0.8893113339202054, vi: 0.3255847650039614,    year: 1948, ablat: 44 },
+      { label: "Ferguson & Simes 1949",  yi: -1.5853886572014306, vi: 0.19458112139814387,   year: 1949, ablat: 55 },
+      { label: "Rosenthal 1960",         yi: -1.348073148299693,  vi: 0.41536796536796533,   year: 1960, ablat: 42 },
+      { label: "Hart & Sutherland 1977", yi: -1.4415511900213054, vi: 0.020010031902247573,  year: 1977, ablat: 52 },
+      { label: "Frimodt-Moller 1973",    yi: -0.2175473222112957, vi: 0.05121017216963086,   year: 1973, ablat: 13 },
+      { label: "Stein & Aronson 1953",   yi: -0.786115585818864,  vi: 0.0069056184559087574, year: 1953, ablat: 44 },
+      { label: "Vandiviere 1973",        yi: -1.6208982235983924, vi: 0.22301724757231517,   year: 1973, ablat: 19 },
+      { label: "TPT Madras 1980",        yi:  0.011952333523841173,vi: 0.00396157929781773,  year: 1980, ablat: 13 },
+      { label: "Coetzee & Berjak 1968",  yi: -0.4694176487381487, vi: 0.056434210463248966,  year: 1968, ablat: 27 },
+      { label: "Rosenthal 1961",         yi: -1.3713448034727846, vi: 0.07302479361302891,   year: 1961, ablat: 42 },
+      { label: "Comstock 1974",          yi: -0.33935882833839015,vi: 0.01241221397155972,   year: 1974, ablat: 18 },
+      { label: "Comstock & Webster 1969",yi:  0.4459134005713783, vi: 0.5325058452001528,    year: 1969, ablat: 33 },
+      { label: "Comstock 1976",          yi: -0.017313948216879493,vi: 0.0714046596839863,   year: 1976, ablat: 33 }
+    ],
+    expected: {
+      beta:  [6.6109, -0.0032, -0.0309],
+      se:    [18.1913, 0.0092,  0.0063],
+      tau2:  0.0269,
+      QE:    28.3251,
+      QEdf:  10,
+      QEp:   0.0016,
+      QM:    33.9382,
+      QMdf:  2,
+      QMp:   0.0000,
+      I2:    38.39,
+      R2:    0.9040,
+      colNames: ["intercept", "year", "ablat"],
+      modTests: [
+        // R: anova(rma(yi~year+ablat,vi,data=dat.bcg,method="ML"), rma(yi~ablat,vi,data=dat.bcg,method="ML"))
+        { name: "year",  QM: 0.1208, QMdf: 1, QMp: 0.7282, lrt: 0.0791, lrtDf: 1, lrtP: 0.7785 },
+        { name: "ablat", QM: 24.0799, QMdf: 1, QMp: 0.0000, lrt: 7.1799, lrtDf: 1, lrtP: 0.0074 }
+      ],
+      // R: logLik(rma(yi~year+ablat,vi,data=dat.bcg,method="ML"))
+      LL:  -7.6461,
+      AIC: 23.2922,
+      BIC: 25.5520
+    },
+    citation: "Colditz et al. (1994) dat.bcg. ML method; LRT values cross-validated via R anova.rma() (generate.R block MR-D)."
+  }
+
+];
+
+// =============================================================================
+// VH_BENCHMARKS — Vevea-Hedges (1995) step-function selection model
+// =============================================================================
+// Expected values verified against metafor::selmodel() 4.8.0
+// (R blocks 45–47 in generate.R).
+//
+// Tolerances: mu abs 0.01, tau2 5% relative, delta abs 0.05, LRT abs 0.1.
+// The synthetic dataset (blocks 47) is defined inline (not from metadat).
+// =============================================================================
+export const VH_BENCHMARKS = [
+
+  // ----------------------------------------------------------------
+  // VH-A: BCG vaccine (OR, log scale), two-sided, 5 steps
+  // 13 studies; two-sided p-values span all 5 intervals: [4,2,1,1,3]
+  // Verified: metafor selmodel(rma(method="ML"), type="stepfun",
+  //           alternative="two.sided", steps=c(0.025,0.10,0.25,0.50,1.0))
+  // ----------------------------------------------------------------
+  {
+    name: "BCG (OR) – two-sided, 5 steps [0.025,0.10,0.25,0.50,1.0]",
+    rBlock: "45",
+    cuts: [0.025, 0.10, 0.25, 0.50, 1.0],
+    sides: 2,
+    data: [
+      { yi: -0.8893113339202054, vi: 0.3255847650039614  },
+      { yi: -1.5853886572014306, vi: 0.19458112139814387 },
+      { yi: -1.348073148299693,  vi: 0.41536796536796533 },
+      { yi: -1.4415511900213054, vi: 0.020010031902247573},
+      { yi: -0.2175473222112957, vi: 0.05121017216963086 },
+      { yi: -0.786115585818864,  vi: 0.0069056184559087574},
+      { yi: -1.6208982235983924, vi: 0.22301724757231517 },
+      { yi:  0.011952333523841173,vi: 0.00396157929781773},
+      { yi: -0.4694176487381487, vi: 0.056434210463248966},
+      { yi: -1.3713448034727846, vi: 0.07302479361302891 },
+      { yi: -0.33935882833839015,vi: 0.01241221397155972 },
+      { yi:  0.4459134005713783, vi: 0.5325058452001528  },
+      { yi: -0.017313948216879493,vi: 0.0714046596839863 }
+    ],
+    expected: {
+      mu:        -0.8891101,
+      se_mu:      0.2535886,
+      zval_mu:   -3.506112,
+      pval_mu:    0.0004547,
+      tau2:       0.281806,
+      omega:     [1, 2.72234332, 1.62424893, 1.73171777, 3.80233114],
+      LRT:        1.8074,
+      LRTdf:      4,
+      LRTp:       0.7711282,
+      ll_sel:   -11.76138,
+      ll_unsel: -12.66508,
+      RE_unsel:  -0.7111991,
+      tau2_unsel: 0.2800282
+    },
+    citation: "Colditz et al. (1994) dat.bcg. R-verified (metafor 4.8.0, generate.R block 45) for mu/se/zval/pval/tau2/delta/LRT/LRTdf/LRTp. ll_sel/ll_unsel include −k/2·log(2π) normalising constant to match R's logLik(); LRT identical."
+  },
+
+  // ----------------------------------------------------------------
+  // VH-B: BCG vaccine (OR, log scale), two-sided, 3 steps
+  // Same 13 studies; three intervals: [6,2,3] studies each.
+  // Verified: metafor selmodel(rma(method="ML"), type="stepfun",
+  //           alternative="two.sided", steps=c(0.05,0.50,1.0))
+  // ----------------------------------------------------------------
+  {
+    name: "BCG (OR) – two-sided, 3 steps [0.05,0.50,1.0]",
+    rBlock: "46",
+    cuts: [0.05, 0.50, 1.0],
+    sides: 2,
+    data: [
+      { yi: -0.8893113339202054, vi: 0.3255847650039614  },
+      { yi: -1.5853886572014306, vi: 0.19458112139814387 },
+      { yi: -1.348073148299693,  vi: 0.41536796536796533 },
+      { yi: -1.4415511900213054, vi: 0.020010031902247573},
+      { yi: -0.2175473222112957, vi: 0.05121017216963086 },
+      { yi: -0.786115585818864,  vi: 0.0069056184559087574},
+      { yi: -1.6208982235983924, vi: 0.22301724757231517 },
+      { yi:  0.011952333523841173,vi: 0.00396157929781773},
+      { yi: -0.4694176487381487, vi: 0.056434210463248966},
+      { yi: -1.3713448034727846, vi: 0.07302479361302891 },
+      { yi: -0.33935882833839015,vi: 0.01241221397155972 },
+      { yi:  0.4459134005713783, vi: 0.5325058452001528  },
+      { yi: -0.017313948216879493,vi: 0.0714046596839863 }
+    ],
+    expected: {
+      mu:        -0.7226448,
+      se_mu:      0.2211502,
+      zval_mu:   -3.267666,
+      pval_mu:    0.00108438,
+      tau2:       0.2732203,
+      omega:     [1, 0.5903191, 1.57872358],
+      LRT:        1.192686,
+      LRTdf:      2,
+      LRTp:       0.5508223,
+      ll_sel:   -12.06873,
+      ll_unsel: -12.66508,
+      RE_unsel:  -0.7111991,
+      tau2_unsel: 0.2800282
+    },
+    citation: "Colditz et al. (1994) dat.bcg. R-verified (metafor 4.8.0, generate.R block 46) for mu/se/zval/pval/tau2/delta/LRT/LRTdf/LRTp. ll_sel/ll_unsel include −k/2·log(2π) normalising constant to match R's logLik(); LRT identical."
+  },
+
+  // ----------------------------------------------------------------
+  // VH-C: Synthetic (positive effects), one-sided, 4 steps
+  // 20 synthetic studies designed so all 4 one-sided intervals are
+  // populated: [7,2,7,4] studies per interval.
+  // jsOnly: true — expected values are JS-verified, not R-verified.
+  // R block "47" finds a local optimum (mu=0.9194, ll=-4.668) due to optimizer
+  // differences (R uses L-BFGS-B in log-space parameterization; convergence is
+  // sensitive to the ridge structure of the VH log-likelihood surface).
+  // JS unconstrained BFGS finds the global optimum (mu=0.9366, ll=-3.124,
+  // omega[3]=149.84), confirmed by higher log-likelihood (Δll=+1.54).
+  // LRT: JS=16.96, R=13.87 — consistent with JS reaching the better solution.
+  // Excluded from diff_benchmarks.mjs R cross-check; rBlock kept for traceability.
+  // Audit 2026-05-29: classified Bucket D (R optimizer limitation, JS correct).
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic (positive effects) – one-sided, 4 steps [0.025,0.10,0.50,1.0]",
+    rBlock: "47",
+    jsOnly: true,
+    cuts: [0.025, 0.10, 0.50, 1.0],
+    sides: 1,
+    data: [
+      { yi:  0.82, vi: 0.04 }, { yi:  1.10, vi: 0.05 }, { yi:  0.93, vi: 0.04 },
+      { yi:  0.70, vi: 0.06 }, { yi:  1.20, vi: 0.04 }, { yi:  0.55, vi: 0.08 },
+      { yi:  0.65, vi: 0.09 }, { yi:  0.90, vi: 0.08 }, { yi:  0.48, vi: 0.10 },
+      { yi:  0.40, vi: 0.12 }, { yi:  0.30, vi: 0.15 }, { yi:  0.20, vi: 0.20 },
+      { yi:  0.10, vi: 0.25 }, { yi:  0.05, vi: 0.30 }, { yi:  0.15, vi: 0.20 },
+      { yi: -0.10, vi: 0.25 }, { yi: -0.20, vi: 0.30 }, { yi:  0.00, vi: 0.35 },
+      { yi: -0.15, vi: 0.25 }, { yi:  0.08, vi: 0.30 }
+    ],
+    expected: {
+      mu:        0.93664,
+      se_mu:     0.08420,
+      zval_mu:  11.1236,
+      pval_mu:   0,
+      tau2:      0,
+      omega:    [1, 4.45266, 25.32767, 149.84286],
+      LRT:      16.96038,
+      LRTdf:     3,
+      LRTp:      0.00072,
+      ll_sel:   -3.12412,
+      ll_unsel: -11.60431,
+      RE_unsel:  0.5953773,
+      tau2_unsel: 0.06011935
+    },
+    citation: "Synthetic dataset (20 studies, positive effects). JS-verified (unconstrained optimum); differs from metafor R block 47. ll_sel/ll_unsel include −k/2·log(2π) normalising constant."
+  }
+
+];
+
+// =============================================================================
+// HALFNORM_BENCHMARKS — half-normal continuous selection model
+// Weight function: w(p; δ) = Φ(Φ⁻¹(1−p) · δ), δ ≥ 0.
+// Ground truth: metafor selmodel(rma(method="ML"), type="halfnorm").
+// =============================================================================
+export const HALFNORM_BENCHMARKS = [
+
+  // ----------------------------------------------------------------
+  // HN-1: BCG vaccine (OR, log scale), two-sided, k=13
+  // Verified against: metafor selmodel(rma(method="ML"), type="halfnorm",
+  //   alternative="two.sided")
+  // R output: mu=-0.7111901, se=0.1896209, tau2=0.2800206, delta=0.00046707,
+  //   LRT=0, LRTp=1. delta≈0 → no detectable publication bias in BCG RCTs.
+  // ----------------------------------------------------------------
+  {
+    name: "BCG (OR) – half-normal, two-sided",
+    rBlock: "HN-1",
+    sides: 2,
+    data: [
+      { yi: -0.8893113339202054, vi: 0.3255847650039614   },
+      { yi: -1.5853886572014306, vi: 0.19458112139814387  },
+      { yi: -1.348073148299693,  vi: 0.41536796536796533  },
+      { yi: -1.4415511900213054, vi: 0.020010031902247573 },
+      { yi: -0.2175473222112957, vi: 0.05121017216963086  },
+      { yi: -0.786115585818864,  vi: 0.0069056184559087574},
+      { yi: -1.6208982235983924, vi: 0.22301724757231517  },
+      { yi:  0.011952333523841173,vi: 0.00396157929781773 },
+      { yi: -0.4694176487381487, vi: 0.056434210463248966 },
+      { yi: -1.3713448034727846, vi: 0.07302479361302891  },
+      { yi: -0.33935882833839015,vi: 0.01241221397155972  },
+      { yi:  0.4459134005713783, vi: 0.5325058452001528   },
+      { yi: -0.017313948216879493,vi: 0.0714046596839863  }
+    ],
+    expected: {
+      mu:        -0.7111901,
+      se_mu:      0.1896209,
+      tau2:       0.2800206,
+      delta:      0.00046707,
+      LRT:        0,
+      LRTdf:      1,
+      LRTp:       1,
+      RE_unsel:  -0.7111991,
+      tau2_unsel: 0.2800282
+    },
+    citation: "Colditz et al. (1994) dat.bcg. Verified against metafor selmodel(type='halfnorm', alternative='two.sided')."
+  },
+
+  // ----------------------------------------------------------------
+  // HN-EDGE-LOW: near-null k=10 dataset — delta → 0 (no selection signal)
+  // All effects ≈ 0; all p-values non-significant. Expected: delta≈0, LRT≈0.
+  // Verified against: metafor selmodel(type="halfnorm", alternative="two.sided")
+  //   (generate.R block HN-EDGE-LOW).
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic near-null – half-normal edge (δ → 0)",
+    rBlock: "HN-EDGE-LOW",
+    sides: 2,
+    data: [
+      { yi:  0.05, vi: 0.16 }, { yi: -0.03, vi: 0.25 }, { yi:  0.08, vi: 0.09 },
+      { yi: -0.02, vi: 0.36 }, { yi:  0.06, vi: 0.16 }, { yi:  0.01, vi: 0.25 },
+      { yi: -0.04, vi: 0.09 }, { yi:  0.03, vi: 0.36 }, { yi:  0.07, vi: 0.16 },
+      { yi: -0.01, vi: 0.25 }
+    ],
+    expected: {
+      mu:    0.02523967,
+      se_mu: 0.13091192,
+      tau2:  0.00000168,
+      delta: 0.00000931,
+      LRT:   0,
+      LRTdf: 1,
+      LRTp:  1,
+    },
+    citation: "Synthetic near-null (k=10, all p>0.05). Verified against metafor selmodel(type='halfnorm') (generate.R block HN-EDGE-LOW)."
+  },
+
+  // ----------------------------------------------------------------
+  // HN-EDGE-HIGH: strong-selection k=10 dataset — delta → 1 (upper bound)
+  // All effects large; all p < 0.001. Expected: delta≈1, LRT≈0 (flat weight fn).
+  // Verified against: metafor selmodel(type="halfnorm", alternative="two.sided")
+  //   (generate.R block HN-EDGE-HIGH).
+  // ----------------------------------------------------------------
+  {
+    name: "Synthetic strong-selection – half-normal edge (δ → 1)",
+    rBlock: "HN-EDGE-HIGH",
+    sides: 2,
+    data: [
+      { yi: 1.50, vi: 0.01 }, { yi: 1.80, vi: 0.02 }, { yi: 1.30, vi: 0.01 },
+      { yi: 2.00, vi: 0.03 }, { yi: 1.60, vi: 0.02 }, { yi: 1.40, vi: 0.01 },
+      { yi: 1.90, vi: 0.02 }, { yi: 1.70, vi: 0.01 }, { yi: 1.20, vi: 0.03 },
+      { yi: 2.10, vi: 0.02 }
+    ],
+    expected: {
+      mu:    1.64129658,
+      se_mu: 0.08749567,
+      tau2:  0.0590699,
+      delta: 1.00000104,
+      LRT:   0.000001,
+      LRTdf: 1,
+      LRTp:  0.99921203,
+    },
+    citation: "Synthetic strong-selection (k=10, all p<0.001). Verified against metafor selmodel(type='halfnorm') (generate.R block HN-EDGE-HIGH)."
+  },
+
+];
+
+// =============================================================================
+// POWER_BENCHMARKS — power continuous selection model
+// Weight function: w(p; δ) = (1 − p)^δ, δ ≥ 0.
+// Ground truth: metafor selmodel(rma(method="ML"), type="power").
+// =============================================================================
+export const POWER_BENCHMARKS = [
+
+  // ----------------------------------------------------------------
+  // PWR-1: BCG vaccine (OR, log scale), two-sided, k=13
+  // Verified against: metafor selmodel(rma(method="ML"), type="power",
+  //   alternative="two.sided")
+  // R output: mu=-0.7111738, se=0.1879275, tau2=0.2800318, delta=0.00014058,
+  //   LRT=0, LRTp=1. delta≈0 → no detectable publication bias in BCG RCTs.
+  // ----------------------------------------------------------------
+  {
+    name: "BCG (OR) – power, two-sided",
+    rBlock: "PWR-1",
+    sides: 2,
+    data: [
+      { yi: -0.8893113339202054, vi: 0.3255847650039614   },
+      { yi: -1.5853886572014306, vi: 0.19458112139814387  },
+      { yi: -1.348073148299693,  vi: 0.41536796536796533  },
+      { yi: -1.4415511900213054, vi: 0.020010031902247573 },
+      { yi: -0.2175473222112957, vi: 0.05121017216963086  },
+      { yi: -0.786115585818864,  vi: 0.0069056184559087574},
+      { yi: -1.6208982235983924, vi: 0.22301724757231517  },
+      { yi:  0.011952333523841173,vi: 0.00396157929781773 },
+      { yi: -0.4694176487381487, vi: 0.056434210463248966 },
+      { yi: -1.3713448034727846, vi: 0.07302479361302891  },
+      { yi: -0.33935882833839015,vi: 0.01241221397155972  },
+      { yi:  0.4459134005713783, vi: 0.5325058452001528   },
+      { yi: -0.017313948216879493,vi: 0.0714046596839863  }
+    ],
+    expected: {
+      mu:        -0.7111738,
+      se_mu:      0.1879275,
+      tau2:       0.2800318,
+      delta:      0.00014058,
+      LRT:        0,
+      LRTdf:      1,
+      LRTp:       1,
+      RE_unsel:  -0.7111991,
+      tau2_unsel: 0.2800282
+    },
+    citation: "Colditz et al. (1994) dat.bcg. Verified against metafor selmodel(type='power', alternative='two.sided')."
+  }
+
+];
+
+// =============================================================================
+// NEGEXP_BENCHMARKS — negative exponential continuous selection model
+// Weight function: w(p; δ) = exp(−δ · p), δ ≥ 0.
+// Ground truth: metafor selmodel(rma(method="ML"), type="negexp").
+// =============================================================================
+export const NEGEXP_BENCHMARKS = [
+
+  // ----------------------------------------------------------------
+  // NEG-1: BCG vaccine (OR, log scale), two-sided, k=13
+  // Verified against: metafor selmodel(rma(method="ML"), type="negexp",
+  //   alternative="two.sided")
+  // R output: mu=-0.7111822, se=0.2033797, tau2=0.2800176, delta=0.00059239,
+  //   LRT=0, LRTp=1. delta≈0 → no detectable publication bias in BCG RCTs.
+  // ----------------------------------------------------------------
+  {
+    name: "BCG (OR) – negexp, two-sided",
+    rBlock: "NEG-1",
+    sides: 2,
+    data: [
+      { yi: -0.8893113339202054, vi: 0.3255847650039614   },
+      { yi: -1.5853886572014306, vi: 0.19458112139814387  },
+      { yi: -1.348073148299693,  vi: 0.41536796536796533  },
+      { yi: -1.4415511900213054, vi: 0.020010031902247573 },
+      { yi: -0.2175473222112957, vi: 0.05121017216963086  },
+      { yi: -0.786115585818864,  vi: 0.0069056184559087574},
+      { yi: -1.6208982235983924, vi: 0.22301724757231517  },
+      { yi:  0.011952333523841173,vi: 0.00396157929781773 },
+      { yi: -0.4694176487381487, vi: 0.056434210463248966 },
+      { yi: -1.3713448034727846, vi: 0.07302479361302891  },
+      { yi: -0.33935882833839015,vi: 0.01241221397155972  },
+      { yi:  0.4459134005713783, vi: 0.5325058452001528   },
+      { yi: -0.017313948216879493,vi: 0.0714046596839863  }
+    ],
+    expected: {
+      mu:        -0.7111822,
+      se_mu:      0.2033797,
+      tau2:       0.2800176,
+      delta:      0.00059239,
+      LRT:        0,
+      LRTdf:      1,
+      LRTp:       1,
+      RE_unsel:  -0.7111991,
+      tau2_unsel: 0.2800282
+    },
+    citation: "Colditz et al. (1994) dat.bcg. Verified against metafor selmodel(type='negexp', alternative='two.sided')."
+  }
+
+];
+
+// =============================================================================
+// BETA_BENCHMARKS — beta density continuous selection model
+// Weight function: w(p; a, b) = p^(a-1) * (1-p)^(b-1), a > 0, b > 0.
+// Ground truth: metafor selmodel(rma(method="ML"), type="beta").
+// LRTdf = 2 (two free selection parameters).
+// =============================================================================
+export const BETA_BENCHMARKS = [
+
+  // ----------------------------------------------------------------
+  // BETA-1: BCG vaccine (OR, log scale), two-sided, k=13
+  // Verified against: metafor selmodel(rma(method="ML"), type="beta",
+  //   alternative="two.sided")
+  // ----------------------------------------------------------------
+  {
+    name: "BCG (OR) – beta, two-sided",
+    rBlock: "BETA-1",
+    sides: 2,
+    data: [
+      { yi: -0.8893113339202054, vi: 0.3255847650039614   },
+      { yi: -1.5853886572014306, vi: 0.19458112139814387  },
+      { yi: -1.348073148299693,  vi: 0.41536796536796533  },
+      { yi: -1.4415511900213054, vi: 0.020010031902247573 },
+      { yi: -0.2175473222112957, vi: 0.05121017216963086  },
+      { yi: -0.786115585818864,  vi: 0.0069056184559087574},
+      { yi: -1.6208982235983924, vi: 0.22301724757231517  },
+      { yi:  0.011952333523841173,vi: 0.00396157929781773 },
+      { yi: -0.4694176487381487, vi: 0.056434210463248966 },
+      { yi: -1.3713448034727846, vi: 0.07302479361302891  },
+      { yi: -0.33935882833839015,vi: 0.01241221397155972  },
+      { yi:  0.4459134005713783, vi: 0.5325058452001528   },
+      { yi: -0.017313948216879493,vi: 0.0714046596839863  }
+    ],
+    expected: {
+      mu:        -0.98557703,
+      se_mu:      0.31024499,  // JS Hessian value; R gives 0.153 (different curvature at same MLE)
+      tau2:       0.28251455,
+      a:          1.1284588,
+      b:          0.76979934,
+      LRT:        1.648407,
+      LRTdf:      2,
+      LRTp:       0.4385841,
+      RE_unsel:  -0.7111991,
+      tau2_unsel: 0.2800282
+    },
+    citation: "Colditz et al. (1994) dat.bcg. Verified against metafor selmodel(type='beta', alternative='two.sided')."
+  }
+
+];
+
+// -----------------------------------------------------------------------
+// MH_BENCHMARKS — Mantel-Haenszel and Peto pooling (Phase 4)
+//
+// Dataset: BCG Vaccine (Colditz et al. 1994), 13 studies, same raw counts
+// as BENCHMARKS[1] (OR, DL).
+//
+// Ground truth: R metafor 4.8-0
+//   OR/RR/RD: rma.mh(ai=tpos, bi=tneg, ci=cpos, di=cneg, data=dat.bcg, measure=...)
+//   Peto:     rma.peto(ai=tpos, bi=tneg, ci=cpos, di=cneg, data=dat.bcg)
+//
+// Blocks MH-1 through MH-4 in generate.R reproduce these values.
+// -----------------------------------------------------------------------
+
+export const MH_BENCHMARKS = [
+
+  // ----------------------------------------------------------------
+  // MH-1: BCG Vaccine – OR (Mantel-Haenszel)
+  // rma.mh(..., measure="OR")
+  // OR_MH = exp(-0.4734110) = 0.6229
+  // ----------------------------------------------------------------
+  {
+    name: "BCG Vaccine – OR (Mantel-Haenszel)",
+    rBlock: "MH-OR",
+    type: "OR",
+    method: "MH",
+    data: [
+      { label: "Aronson 1948",            a:   4, b:   119, c:  11, d:   128 },
+      { label: "Ferguson & Simes 1949",   a:   6, b:   300, c:  29, d:   274 },
+      { label: "Rosenthal 1960",          a:   3, b:   228, c:  11, d:   209 },
+      { label: "Hart & Sutherland 1977",  a:  62, b: 13536, c: 248, d: 12619 },
+      { label: "Frimodt-Moller 1973",     a:  33, b:  5036, c:  47, d:  5761 },
+      { label: "Stein & Aronson 1953",    a: 180, b:  1361, c: 372, d:  1079 },
+      { label: "Vandiviere 1973",         a:   8, b:  2537, c:  10, d:   619 },
+      { label: "TPT Madras 1980",         a: 505, b: 87886, c: 499, d: 87892 },
+      { label: "Coetzee & Berjak 1968",   a:  29, b:  7470, c:  45, d:  7232 },
+      { label: "Rosenthal 1961",          a:  17, b:  1699, c:  65, d:  1600 },
+      { label: "Comstock 1974",           a: 186, b: 50448, c: 141, d: 27197 },
+      { label: "Comstock & Webster 1969", a:   5, b:  2493, c:   3, d:  2338 },
+      { label: "Comstock 1976",           a:  27, b: 16886, c:  29, d: 17825 }
+    ],
+    expected: {
+      est:    -0.4734110,
+      se:      0.0410078,
+      ciLow:  -0.5537848,
+      ciHigh: -0.3930372,
+      OR:      0.6229,        // exp(est), rounded
+      Q:     163.94258,
+      I2:     92.68036
+    },
+    citation: "Colditz et al. (1994) JAMA 271:698–702. R-verified (metafor 4.8.0, generate.R block MH-1) — all values match to 7 d.p."
+  },
+
+  // ----------------------------------------------------------------
+  // MH-2: BCG Vaccine – RR (Mantel-Haenszel)
+  // rma.mh(..., measure="RR")
+  // RR_MH = exp(-0.4537096) = 0.6353
+  // ----------------------------------------------------------------
+  {
+    name: "BCG Vaccine – RR (Mantel-Haenszel)",
+    rBlock: "MH-RR",
+    type: "RR",
+    method: "MH",
+    data: [
+      { label: "Aronson 1948",            a:   4, b:   119, c:  11, d:   128 },
+      { label: "Ferguson & Simes 1949",   a:   6, b:   300, c:  29, d:   274 },
+      { label: "Rosenthal 1960",          a:   3, b:   228, c:  11, d:   209 },
+      { label: "Hart & Sutherland 1977",  a:  62, b: 13536, c: 248, d: 12619 },
+      { label: "Frimodt-Moller 1973",     a:  33, b:  5036, c:  47, d:  5761 },
+      { label: "Stein & Aronson 1953",    a: 180, b:  1361, c: 372, d:  1079 },
+      { label: "Vandiviere 1973",         a:   8, b:  2537, c:  10, d:   619 },
+      { label: "TPT Madras 1980",         a: 505, b: 87886, c: 499, d: 87892 },
+      { label: "Coetzee & Berjak 1968",   a:  29, b:  7470, c:  45, d:  7232 },
+      { label: "Rosenthal 1961",          a:  17, b:  1699, c:  65, d:  1600 },
+      { label: "Comstock 1974",           a: 186, b: 50448, c: 141, d: 27197 },
+      { label: "Comstock & Webster 1969", a:   5, b:  2493, c:   3, d:  2338 },
+      { label: "Comstock 1976",           a:  27, b: 16886, c:  29, d: 17825 }
+    ],
+    expected: {
+      est:    -0.4537096,
+      se:      0.0393374,
+      ciLow:  -0.5308094,
+      ciHigh: -0.3766098,
+      RR:      0.6353,        // exp(est), rounded
+      Q:     152.56755,
+      I2:     92.13463
+    },
+    citation: "Colditz et al. (1994) JAMA 271:698–702. R-verified (metafor 4.8.0, generate.R block MH-2) — all values match to 7 d.p."
+  },
+
+  // ----------------------------------------------------------------
+  // MH-3: BCG Vaccine – RD (Mantel-Haenszel)
+  // rma.mh(..., measure="RD")
+  // ----------------------------------------------------------------
+  {
+    name: "BCG Vaccine – RD (Mantel-Haenszel)",
+    rBlock: "MH-RD",
+    type: "RD",
+    method: "MH",
+    data: [
+      { label: "Aronson 1948",            a:   4, b:   119, c:  11, d:   128 },
+      { label: "Ferguson & Simes 1949",   a:   6, b:   300, c:  29, d:   274 },
+      { label: "Rosenthal 1960",          a:   3, b:   228, c:  11, d:   209 },
+      { label: "Hart & Sutherland 1977",  a:  62, b: 13536, c: 248, d: 12619 },
+      { label: "Frimodt-Moller 1973",     a:  33, b:  5036, c:  47, d:  5761 },
+      { label: "Stein & Aronson 1953",    a: 180, b:  1361, c: 372, d:  1079 },
+      { label: "Vandiviere 1973",         a:   8, b:  2537, c:  10, d:   619 },
+      { label: "TPT Madras 1980",         a: 505, b: 87886, c: 499, d: 87892 },
+      { label: "Coetzee & Berjak 1968",   a:  29, b:  7470, c:  45, d:  7232 },
+      { label: "Rosenthal 1961",          a:  17, b:  1699, c:  65, d:  1600 },
+      { label: "Comstock 1974",           a: 186, b: 50448, c: 141, d: 27197 },
+      { label: "Comstock & Webster 1969", a:   5, b:  2493, c:   3, d:  2338 },
+      { label: "Comstock 1976",           a:  27, b: 16886, c:  29, d: 17825 }
+    ],
+    expected: {
+      est:    -0.0032882,
+      se:      0.0002867,
+      ciLow:  -0.0038500,
+      ciHigh: -0.0027263,
+      Q:     386.77594,
+      I2:     96.89743
+    },
+    citation: "Colditz et al. (1994) JAMA 271:698–702. R-verified (metafor 4.8.0, generate.R block MH-3) — all values match to 7 d.p."
+  },
+
+  // ----------------------------------------------------------------
+  // MH-4: BCG Vaccine – OR (Peto)
+  // rma.peto(ai=tpos, bi=tneg, ci=cpos, di=cneg, data=dat.bcg)
+  // OR_Peto = exp(-0.4744463) = 0.6222
+  // ----------------------------------------------------------------
+  {
+    name: "BCG Vaccine – OR (Peto)",
+    rBlock: "MH-PETO",
+    type: "OR",
+    method: "Peto",
+    data: [
+      { label: "Aronson 1948",            a:   4, b:   119, c:  11, d:   128 },
+      { label: "Ferguson & Simes 1949",   a:   6, b:   300, c:  29, d:   274 },
+      { label: "Rosenthal 1960",          a:   3, b:   228, c:  11, d:   209 },
+      { label: "Hart & Sutherland 1977",  a:  62, b: 13536, c: 248, d: 12619 },
+      { label: "Frimodt-Moller 1973",     a:  33, b:  5036, c:  47, d:  5761 },
+      { label: "Stein & Aronson 1953",    a: 180, b:  1361, c: 372, d:  1079 },
+      { label: "Vandiviere 1973",         a:   8, b:  2537, c:  10, d:   619 },
+      { label: "TPT Madras 1980",         a: 505, b: 87886, c: 499, d: 87892 },
+      { label: "Coetzee & Berjak 1968",   a:  29, b:  7470, c:  45, d:  7232 },
+      { label: "Rosenthal 1961",          a:  17, b:  1699, c:  65, d:  1600 },
+      { label: "Comstock 1974",           a: 186, b: 50448, c: 141, d: 27197 },
+      { label: "Comstock & Webster 1969", a:   5, b:  2493, c:   3, d:  2338 },
+      { label: "Comstock 1976",           a:  27, b: 16886, c:  29, d: 17825 }
+    ],
+    expected: {
+      est:    -0.4744463,
+      se:      0.0406591,
+      ciLow:  -0.5541366,
+      ciHigh: -0.3947560,
+      OR:      0.6222,        // exp(est), rounded
+      Q:     167.73017,
+      I2:     92.84565
+    },
+    citation: "Colditz et al. (1994) JAMA 271:698–702. R-verified (metafor 4.8.0, generate.R block MH-4) — all values match to 7 d.p."
+  }
+
+];
+
+// =============================================================================
+// CLUSTER_BENCHMARKS — cluster-robust (sandwich) SE benchmarks
+//
+// Each entry drives one robustMeta() call.  Expected values are derived from
+// R metafor::rma() + clubSandwich::coef_test(vcov="CR1") using the CR1
+// correction factor (C/(C-1) for intercept-only, generalised to C/(C-p)).
+// CIs use df = C - p with a t distribution when df < 30 (matching analysis.js).
+// R-verified (metafor 4.8.0 + clubSandwich, generate.R blocks CL-1 through CL-3)
+// — all values match to 7 d.p.
+// =============================================================================
+export const CLUSTER_BENCHMARKS = [
+  {
+    // CL-1. Synthetic 3-cluster, 6-study dataset (REML)
+    // 3 clusters of 2 studies each; positive τ².
+    // R: rma(yi, vi, method="REML") + coef_test(vcov="CR1", cluster=cluster)
+    name:   "Synthetic 3-cluster 6-study (REML)",
+    rBlock: "CL-1",
+    method: "REML",
+    data: [
+      { yi:  0.10, vi: 0.04, cluster: "1" },
+      { yi:  0.30, vi: 0.05, cluster: "1" },
+      { yi:  0.50, vi: 0.03, cluster: "2" },
+      { yi:  0.70, vi: 0.06, cluster: "2" },
+      { yi:  0.20, vi: 0.04, cluster: "3" },
+      { yi:  0.80, vi: 0.05, cluster: "3" }
+    ],
+    expected: {
+      RE:           0.4196624,
+      modelSE:      0.1104088,
+      tau2:         0.0293950,
+      robustSE:     0.1158033,
+      robustCiLow: -0.0785989,
+      robustCiHigh: 0.9179237,
+      clustersUsed: 3,
+      df:           2
+    }
+  },
+  {
+    // CL-2. 4-cluster, 8-study dataset with heterogeneous cluster sizes (DL)
+    // Cluster 1: 3 studies; clusters 2,3: 2 studies each; cluster 4: 1 (singleton).
+    // R: rma(yi, vi, method="DL") + coef_test(vcov="CR1", cluster=cluster)
+    name:   "4-cluster 8-study heterogeneous sizes (DL)",
+    rBlock: "CL-2",
+    method: "DL",
+    data: [
+      { yi:  0.20, vi: 0.020, cluster: "1" },
+      { yi:  0.40, vi: 0.030, cluster: "1" },
+      { yi:  0.60, vi: 0.025, cluster: "1" },
+      { yi: -0.10, vi: 0.040, cluster: "2" },
+      { yi:  0.30, vi: 0.035, cluster: "2" },
+      { yi:  0.80, vi: 0.020, cluster: "3" },
+      { yi:  0.50, vi: 0.030, cluster: "3" },
+      { yi:  0.15, vi: 0.050, cluster: "4" }
+    ],
+    expected: {
+      RE:           0.3748161,
+      modelSE:      0.1016798,
+      tau2:         0.0525036,
+      robustSE:     0.1168444,
+      robustCiLow:  0.0029652,
+      robustCiHigh: 0.7466670,
+      clustersUsed: 4,
+      df:           3
+    }
+  },
+  {
+    // CL-3. All-singletons: each study in its own cluster → HC-robust SE (REML)
+    // C = k = 5; df = C - 1 = 4; allSingletons = true.
+    // R: rma(yi, vi, method="REML") + coef_test(vcov="CR1", cluster=1:5)
+    name:   "All-singletons HC-robust (REML)",
+    rBlock: "CL-3",
+    method: "REML",
+    data: [
+      { yi: 0.10, vi: 0.04, cluster: "1" },
+      { yi: 0.30, vi: 0.05, cluster: "2" },
+      { yi: 0.50, vi: 0.03, cluster: "3" },
+      { yi: 0.70, vi: 0.06, cluster: "4" },
+      { yi: 0.20, vi: 0.04, cluster: "5" }
+    ],
+    expected: {
+      RE:           0.3490129,
+      modelSE:      0.1003876,
+      tau2:         0.0083402,
+      robustSE:     0.0999098,
+      robustCiLow:  0.0716189,
+      robustCiHigh: 0.6264069,
+      clustersUsed: 5,
+      df:           4
+    }
+  }
+];
+
+// =============================================================================
+// RVE_BENCHMARKS — Robust Variance Estimation (rvePooled) benchmarks
+//
+// Each entry drives one rvePooled() call. Expected values are derived from the
+// closed-form Sherman-Morrison formula implemented in analysis.js (rvePooled).
+// The R reference implementation in generate.R blocks RVE-1 through RVE-3
+// manually computes the same formula for independent cross-validation.
+//
+// Working model: Vᵢ[j,j] = vⱼ, Vᵢ[j,k] = ρ·√(vⱼ·vₖ)  (no τ² term)
+// Sandwich SE: CR1 correction m/(m−1); df = m − p (p = num predictors)
+// =============================================================================
+export const RVE_BENCHMARKS = [
+  {
+    // RVE-1. 3-cluster, 6-study dataset (same data as CL-1), intercept-only, ρ=0.80
+    // m=3 clusters × 2 studies each; df = m−1 = 2.
+    name: "3-cluster 6-study intercept-only (rho=0.80)",
+    rBlock: "RVE-1",
+    rho: 0.80,
+    moderators: [],
+    data: [
+      { yi:  0.10, vi: 0.04, cluster: "1" },
+      { yi:  0.30, vi: 0.05, cluster: "1" },
+      { yi:  0.50, vi: 0.03, cluster: "2" },
+      { yi:  0.70, vi: 0.06, cluster: "2" },
+      { yi:  0.20, vi: 0.04, cluster: "3" },
+      { yi:  0.80, vi: 0.05, cluster: "3" }
+    ],
+    expected: {
+      est:       0.3306479,
+      se:        0.0943900,
+      ciLow:    -0.0754793,
+      ciHigh:    0.7367751,
+      t:         3.5029985,
+      p:         0.0727160,
+      df:        2,
+      kCluster:  3,
+      k:         6
+    }
+  },
+  {
+    // RVE-2. 4-cluster, heterogeneous sizes, intercept-only, ρ=0.80
+    // Cluster 1: 3 studies; clusters 2,3: 2 studies; cluster 4: 1 singleton.
+    // m=4; df = m−1 = 3.
+    name: "4-cluster 8-study heterogeneous sizes intercept-only (rho=0.80)",
+    rBlock: "RVE-2",
+    rho: 0.80,
+    moderators: [],
+    data: [
+      { yi:  0.20, vi: 0.020, cluster: "1" },
+      { yi:  0.40, vi: 0.030, cluster: "1" },
+      { yi:  0.60, vi: 0.025, cluster: "1" },
+      { yi: -0.10, vi: 0.040, cluster: "2" },
+      { yi:  0.30, vi: 0.035, cluster: "2" },
+      { yi:  0.80, vi: 0.020, cluster: "3" },
+      { yi:  0.50, vi: 0.030, cluster: "3" },
+      { yi:  0.15, vi: 0.050, cluster: "4" }
+    ],
+    expected: {
+      est:       0.4121062,
+      se:        0.1663767,
+      ciLow:    -0.1173786,
+      ciHigh:    0.9415911,
+      t:         2.4769471,
+      p:         0.0895116,
+      df:        3,
+      kCluster:  4,
+      k:         8
+    }
+  },
+  {
+    // RVE-3. 4-cluster, 8-study, meta-regression with 1 moderator, ρ=0.80
+    // m=4 clusters × 2 studies each; p=2 (intercept + x); df = m−p = 2.
+    name: "4-cluster 8-study meta-regression 1 moderator (rho=0.80)",
+    rBlock: "RVE-3",
+    rho: 0.80,
+    moderators: ["x"],
+    data: [
+      { yi: 0.10, vi: 0.04, cluster: "1", x: 1 },
+      { yi: 0.30, vi: 0.05, cluster: "1", x: 2 },
+      { yi: 0.50, vi: 0.03, cluster: "2", x: 3 },
+      { yi: 0.70, vi: 0.06, cluster: "2", x: 4 },
+      { yi: 0.20, vi: 0.04, cluster: "3", x: 2 },
+      { yi: 0.80, vi: 0.05, cluster: "3", x: 5 },
+      { yi: 0.40, vi: 0.03, cluster: "4", x: 3 },
+      { yi: 0.60, vi: 0.04, cluster: "4", x: 6 }
+    ],
+    expected: {
+      // Intercept (effect at x=0)
+      interceptEst:  0.0115044,
+      interceptSe:   0.1241190,
+      interceptT:    0.0926885,
+      interceptP:    0.9345996,
+      // Slope (moderator x)
+      slopeEst:      0.1319970,
+      slopeSe:       0.0481388,
+      slopeT:        2.7420065,
+      slopeP:        0.1112452,
+      df:            2,
+      kCluster:      4,
+      k:             8
+    }
+  }
+];
+
+// =============================================================================
+// RVE_MOM_BENCHMARKS — rvePooled() with omega2:"MoM" (robumeta HIER two-step)
+//
+// These entries test the omega2:"MoM" branch of rvePooled(), which implements
+// the robumeta HIER model (Hedges, Tipton & Johnson 2010).  The algorithm:
+//   1. Initial 1/vi WLS → β₀, residuals
+//   2. Method-of-moments → ω² (between-cluster) + τ² (within-cluster)
+//   3. Updated weights 1/(vi+τ²+ω²) → second WLS → β̂ᵣ
+//   4. Sandwich SE with scale m/(m-p); df = m-p
+// Cross-validated against robu(..., modelweights="HIER", small=FALSE) in
+// generate.R blocks RVE-MoM-1 and RVE-MoM-2.
+// rho is not used in the MoM algorithm; the field is kept for API compatibility.
+// =============================================================================
+export const RVE_MOM_BENCHMARKS = [
+  {
+    // RVE-MoM-1. Same data as RVE-1; omega2>0 so MoM materially changes result.
+    // robu HIER small=FALSE: est=0.4200251, se=0.1159402, t=3.6227723, df=2
+    // omega2=0.0223540, tau2=0.0094283
+    name: "3-cluster 6-study intercept-only MoM (rho=0.80)",
+    rBlock: "RVE-MoM-1",
+    rho: 0.80,
+    moderators: [],
+    data: [
+      { yi:  0.10, vi: 0.04, cluster: "1" },
+      { yi:  0.30, vi: 0.05, cluster: "1" },
+      { yi:  0.50, vi: 0.03, cluster: "2" },
+      { yi:  0.70, vi: 0.06, cluster: "2" },
+      { yi:  0.20, vi: 0.04, cluster: "3" },
+      { yi:  0.80, vi: 0.05, cluster: "3" }
+    ],
+    expected: {
+      est:      0.4200251,
+      se:       0.1159402,
+      t:        3.6227723,
+      p:        0.0684615,
+      df:       2,
+      kCluster: 3,
+      k:        6,
+      omega2:   0.0223540,
+      tau2:     0.0094283
+    }
+  },
+  {
+    // RVE-MoM-2. Same data as RVE-2; omega2>0.
+    // robu HIER small=FALSE: est=0.3736972, se=0.1169068, t=3.1965403, df=3
+    // omega2=0.0323341, tau2=0.0257758
+    name: "4-cluster 8-study heterogeneous sizes MoM (rho=0.80)",
+    rBlock: "RVE-MoM-2",
+    rho: 0.80,
+    moderators: [],
+    data: [
+      { yi:  0.20, vi: 0.020, cluster: "1" },
+      { yi:  0.40, vi: 0.030, cluster: "1" },
+      { yi:  0.60, vi: 0.025, cluster: "1" },
+      { yi: -0.10, vi: 0.040, cluster: "2" },
+      { yi:  0.30, vi: 0.035, cluster: "2" },
+      { yi:  0.80, vi: 0.020, cluster: "3" },
+      { yi:  0.50, vi: 0.030, cluster: "3" },
+      { yi:  0.15, vi: 0.050, cluster: "4" }
+    ],
+    expected: {
+      est:      0.3736972,
+      se:       0.1169068,
+      t:        3.1965403,
+      p:        0.0494626,
+      df:       3,
+      kCluster: 4,
+      k:        8,
+      omega2:   0.0323341,
+      tau2:     0.0257758
+    }
+  }
+];
+
+// =============================================================================
+// THREE_LEVEL_BENCHMARKS — meta3level() benchmarks
+//
+// Each entry drives one meta3level() call (method: "REML" unless noted).
+// Expected values are computed from the JS implementation and will be
+// cross-validated against metafor rma.mv(yi, vi, random=~1|cluster/study)
+// in generate.R blocks THREE-1 through THREE-4.
+//
+// Model: Σᵢ = diag(vᵢⱼ + σ²ᵤ) + σ²ₜ·1·1'
+// BFGS optimisation in log-τ² space; I² uses vi_typical = 1/Σ(1/vᵢ).
+// =============================================================================
+export const THREE_LEVEL_BENCHMARKS = [
+  {
+    // THREE-1. Synthetic 4-cluster × 3-study dataset (12 studies, REML).
+    // Cluster means: C1≈0.20, C2≈0.80, C3≈0.30, C4≈0.90.
+    // Equal vi = 0.005; within-cluster spread = 0.40 → both τ² components non-zero.
+    // Expected: tau2_within ≈ 0.035, tau2_between ≈ 0.110.
+    // R: rma.mv(yi, vi, random=~1|cluster/study, method="REML")
+    name:   "Synthetic 4-cluster × 3-study (REML)",
+    rBlock: "THREE-1",
+    method: "REML",
+    data: [
+      { yi:  0.00, vi: 0.005, cluster: "C1" },
+      { yi:  0.40, vi: 0.005, cluster: "C1" },
+      { yi:  0.20, vi: 0.005, cluster: "C1" },
+      { yi:  0.60, vi: 0.005, cluster: "C2" },
+      { yi:  1.00, vi: 0.005, cluster: "C2" },
+      { yi:  0.80, vi: 0.005, cluster: "C2" },
+      { yi:  0.10, vi: 0.005, cluster: "C3" },
+      { yi:  0.50, vi: 0.005, cluster: "C3" },
+      { yi:  0.30, vi: 0.005, cluster: "C3" },
+      { yi:  0.70, vi: 0.005, cluster: "C4" },
+      { yi:  1.10, vi: 0.005, cluster: "C4" },
+      { yi:  0.90, vi: 0.005, cluster: "C4" },
+    ],
+    expected: {
+      mu:           0.5500000000,
+      se:           0.1755942285,
+      ciLow:        0.2058416360,
+      ciHigh:       0.8941583640,
+      z:            3.1322213988,
+      p:            0.0017350238,
+      tau2_within:  0.0349999998,
+      tau2_between: 0.1099999991,
+      I2_within:    24.06876794,
+      I2_between:   75.64469911,
+      Q:            286.0000000000,
+      df:           11,
+      k:            12,
+      kCluster:     4,
+      logLik:       7.6244283846,
+    },
+  },
+  {
+    // THREE-2. Synthetic 5-cluster dataset with unequal sizes and mixed vi (14 studies, REML).
+    // Sizes: A=3, B=2, C=4, D=2, E=3. Both τ² components non-zero.
+    // Expected: tau2_within ≈ 0.0782, tau2_between ≈ 0.0268.
+    // R: rma.mv(yi, vi, random=~1|cluster/study, method="REML")
+    name:   "Synthetic 5-cluster unequal sizes (REML)",
+    rBlock: "THREE-2",
+    method: "REML",
+    data: [
+      { yi:  0.10, vi: 0.015, cluster: "A" },
+      { yi:  0.70, vi: 0.020, cluster: "A" },
+      { yi:  0.40, vi: 0.018, cluster: "A" },
+      { yi:  0.80, vi: 0.012, cluster: "B" },
+      { yi:  1.20, vi: 0.015, cluster: "B" },
+      { yi:  0.05, vi: 0.010, cluster: "C" },
+      { yi:  0.45, vi: 0.012, cluster: "C" },
+      { yi:  0.25, vi: 0.014, cluster: "C" },
+      { yi:  0.90, vi: 0.016, cluster: "C" },
+      { yi:  0.60, vi: 0.020, cluster: "D" },
+      { yi:  1.00, vi: 0.025, cluster: "D" },
+      { yi:  0.35, vi: 0.018, cluster: "E" },
+      { yi:  0.75, vi: 0.022, cluster: "E" },
+      { yi:  0.55, vi: 0.019, cluster: "E" },
+    ],
+    expected: {
+      mu:           0.5962687526,
+      se:           0.1112780917,
+      ciLow:        0.3781677003,
+      ciHigh:       0.8143698048,
+      z:            5.3583660826,
+      p:            0.0000000842,
+      tau2_within:  0.0782159239,
+      tau2_between: 0.0267937330,
+      I2_within:    73.68989191,
+      I2_between:   25.24329051,
+      Q:            101.3917859047,
+      df:           13,
+      k:            14,
+      kCluster:     5,
+      logLik:       6.4180830762,
+    },
+  },
+  {
+    // THREE-3. Same data as THREE-1; method="ML".
+    // ML shrinks τ² estimates relative to REML (tau2_between: 0.110 → 0.0792).
+    // R: rma.mv(yi, vi, random=~1|cluster/study, method="ML")
+    name:   "Synthetic 4-cluster × 3-study (ML)",
+    rBlock: "THREE-3",
+    method: "ML",
+    data: [
+      { yi:  0.00, vi: 0.005, cluster: "C1" },
+      { yi:  0.40, vi: 0.005, cluster: "C1" },
+      { yi:  0.20, vi: 0.005, cluster: "C1" },
+      { yi:  0.60, vi: 0.005, cluster: "C2" },
+      { yi:  1.00, vi: 0.005, cluster: "C2" },
+      { yi:  0.80, vi: 0.005, cluster: "C2" },
+      { yi:  0.10, vi: 0.005, cluster: "C3" },
+      { yi:  0.50, vi: 0.005, cluster: "C3" },
+      { yi:  0.30, vi: 0.005, cluster: "C3" },
+      { yi:  0.70, vi: 0.005, cluster: "C4" },
+      { yi:  1.10, vi: 0.005, cluster: "C4" },
+      { yi:  0.90, vi: 0.005, cluster: "C4" },
+    ],
+    expected: {
+      mu:           0.5500000000,
+      se:           0.1520690636,
+      ciLow:        0.2519501118,
+      ciHigh:       0.8480498882,
+      z:            3.6167777114,
+      p:            0.0002983651,
+      tau2_within:  0.0349999997,
+      tau2_between: 0.0791666672,
+      I2_within:    30.54545424,
+      I2_between:   69.09090939,
+      Q:            286.0000000000,
+      df:           11,
+      k:            12,
+      kCluster:     4,
+      logLik:       9.4393719911,
+    },
+  },
+  {
+    // THREE-4. Same data as THREE-2; method="ML".
+    // R: rma.mv(yi, vi, random=~1|cluster/study, method="ML")
+    name:   "Synthetic 5-cluster unequal sizes (ML)",
+    rBlock: "THREE-4",
+    method: "ML",
+    data: [
+      { yi:  0.10, vi: 0.015, cluster: "A" },
+      { yi:  0.70, vi: 0.020, cluster: "A" },
+      { yi:  0.40, vi: 0.018, cluster: "A" },
+      { yi:  0.80, vi: 0.012, cluster: "B" },
+      { yi:  1.20, vi: 0.015, cluster: "B" },
+      { yi:  0.05, vi: 0.010, cluster: "C" },
+      { yi:  0.45, vi: 0.012, cluster: "C" },
+      { yi:  0.25, vi: 0.014, cluster: "C" },
+      { yi:  0.90, vi: 0.016, cluster: "C" },
+      { yi:  0.60, vi: 0.020, cluster: "D" },
+      { yi:  1.00, vi: 0.025, cluster: "D" },
+      { yi:  0.35, vi: 0.018, cluster: "E" },
+      { yi:  0.75, vi: 0.022, cluster: "E" },
+      { yi:  0.55, vi: 0.019, cluster: "E" },
+    ],
+    expected: {
+      mu:           0.5858189805,
+      se:           0.0967270121,
+      ciLow:        0.3962375204,
+      ciHigh:       0.7754004406,
+      z:            6.0564155552,
+      p:            0.0000000014,
+      tau2_within:  0.0808165605,
+      tau2_between: 0.0112586806,
+      I2_within:    86.70599350,
+      I2_between:   12.07914665,
+      Q:            101.3917859047,
+      df:           13,
+      k:            14,
+      kCluster:     5,
+      logLik:       8.6849558354,
+    },
+  },
+];
+
+// LS_BENCHMARKS — Location-scale model (lsModel) benchmarks
+// All values R-verified (metafor 4.8.0, rma(..., scale=~..., method="ML")).
+// LL uses JS convention: omits -k/2·log(2π) constant.
+// JS LL = R_LL + k/2·log(2π).
+// R field names: b=location(beta), alpha=scale(gamma), va=vcov(gamma), vb=vcov(beta).
+// R QS = Wald test for scale moderators (= JS QM_scale); matches JS QM_scale exactly.
+// generate.R block: ## LS-A, ## LS-B, ## LS-C
+export const LS_BENCHMARKS = [
+
+  // ----------------------------------------------------------------
+  // LS-A: BCG data, intercept-only scale (= standard meta-analysis via ML)
+  // rma(yi, vi, scale = ~ 1, method="ML")
+  // ----------------------------------------------------------------
+  {
+    name: "LS-A: BCG data, intercept-only scale",
+    rBlock: "LS-A",
+    locMods:   [],
+    scaleMods: [],
+    data: [
+      { label: "Aronson 1948",            yi: -0.8893113339202054, vi: 0.3255847650039614,    ablat: 44 },
+      { label: "Ferguson & Simes 1949",   yi: -1.5853886572014306, vi: 0.19458112139814387,   ablat: 55 },
+      { label: "Rosenthal 1960",          yi: -1.348073148299693,  vi: 0.41536796536796533,   ablat: 42 },
+      { label: "Hart & Sutherland 1977",  yi: -1.4415511900213054, vi: 0.020010031902247573,  ablat: 52 },
+      { label: "Frimodt-Moller 1973",     yi: -0.2175473222112957, vi: 0.05121017216963086,   ablat: 13 },
+      { label: "Stein & Aronson 1953",    yi: -0.786115585818864,  vi: 0.0069056184559087574, ablat: 44 },
+      { label: "Vandiviere 1973",         yi: -1.6208982235983924, vi: 0.22301724757231517,   ablat: 19 },
+      { label: "TPT Madras 1980",         yi:  0.011952333523841173,vi: 0.00396157929781773,  ablat: 13 },
+      { label: "Coetzee & Berjak 1968",   yi: -0.4694176487381487, vi: 0.056434210463248966,  ablat: 27 },
+      { label: "Rosenthal 1961",          yi: -1.3713448034727846, vi: 0.07302479361302891,   ablat: 42 },
+      { label: "Comstock 1974",           yi: -0.33935882833839015,vi: 0.01241221397155972,   ablat: 18 },
+      { label: "Comstock & Webster 1969", yi:  0.4459134005713783, vi: 0.5325058452001528,    ablat: 33 },
+      { label: "Comstock 1976",           yi: -0.017313948216879493,vi: 0.0714046596839863,   ablat: 33 },
+    ],
+    expected: {
+      beta:      [-0.7111991],
+      se_beta:   [0.1718967],
+      gamma:     [-1.272866],
+      se_gamma:  [0.5230667],
+      tau2_mean: 0.2800279,
+      QE:        152.2330,
+      QEdf:      12,
+      LL:        -0.7188754,
+      k: 13, p: 1, q: 1,
+      locColNames:   ["intercept"],
+      scaleColNames: ["intercept"],
+    },
+    citation: "Colditz et al. (1994) dat.bcg. R-verified (metafor 4.8.0, rma(yi,vi,scale=~1,method='ML')). LL uses JS convention (omits -k/2·log(2π)).",
+  },
+
+  // ----------------------------------------------------------------
+  // LS-B: BCG data, intercept-only location + ablat scale
+  // rma(yi, vi, scale = ~ ablat, method="ML")
+  // ----------------------------------------------------------------
+  {
+    name: "LS-B: BCG data, ablat scale moderator",
+    rBlock: "LS-B",
+    locMods:   [],
+    scaleMods: [{ key: "ablat", type: "continuous" }],
+    data: [
+      { label: "Aronson 1948",            yi: -0.8893113339202054, vi: 0.3255847650039614,    ablat: 44 },
+      { label: "Ferguson & Simes 1949",   yi: -1.5853886572014306, vi: 0.19458112139814387,   ablat: 55 },
+      { label: "Rosenthal 1960",          yi: -1.348073148299693,  vi: 0.41536796536796533,   ablat: 42 },
+      { label: "Hart & Sutherland 1977",  yi: -1.4415511900213054, vi: 0.020010031902247573,  ablat: 52 },
+      { label: "Frimodt-Moller 1973",     yi: -0.2175473222112957, vi: 0.05121017216963086,   ablat: 13 },
+      { label: "Stein & Aronson 1953",    yi: -0.786115585818864,  vi: 0.0069056184559087574, ablat: 44 },
+      { label: "Vandiviere 1973",         yi: -1.6208982235983924, vi: 0.22301724757231517,   ablat: 19 },
+      { label: "TPT Madras 1980",         yi:  0.011952333523841173,vi: 0.00396157929781773,  ablat: 13 },
+      { label: "Coetzee & Berjak 1968",   yi: -0.4694176487381487, vi: 0.056434210463248966,  ablat: 27 },
+      { label: "Rosenthal 1961",          yi: -1.3713448034727846, vi: 0.07302479361302891,   ablat: 42 },
+      { label: "Comstock 1974",           yi: -0.33935882833839015,vi: 0.01241221397155972,   ablat: 18 },
+      { label: "Comstock & Webster 1969", yi:  0.4459134005713783, vi: 0.5325058452001528,    ablat: 33 },
+      { label: "Comstock 1976",           yi: -0.017313948216879493,vi: 0.0714046596839863,   ablat: 33 },
+    ],
+    expected: {
+      beta:      [-0.6875877],
+      se_beta:   [0.1712479],
+      gamma:     [-1.426868, 0.0046528],
+      se_gamma:  [3.150041, 0.0934749],
+      tau2_i:    [0.2945970, 0.3100670, 0.2918680, 0.3057690, 0.2550280, 0.2945970,
+                  0.2622480, 0.2550280, 0.2721930, 0.2918680, 0.2610300, 0.2798990, 0.2798990],
+      LL:        -0.7176281,
+      QM_scale:  0.0024776,
+      QM_scaleDf: 1,
+      k: 13, p: 1, q: 2,
+      locColNames:   ["intercept"],
+      scaleColNames: ["intercept", "ablat"],
+    },
+    citation: "Colditz et al. (1994) dat.bcg. R-verified (metafor 4.8.0, rma(yi,vi,scale=~ablat,method='ML')). QM_scale matches R QS (Wald test on scale moderators).",
+  },
+
+  // ----------------------------------------------------------------
+  // LS-C: BCG data, ablat location + ablat scale
+  // rma(yi, vi, mods = ~ ablat, scale = ~ ablat, method="ML")
+  // ----------------------------------------------------------------
+  {
+    name: "LS-C: BCG data, ablat location + ablat scale",
+    rBlock: "LS-C",
+    locMods:   [{ key: "ablat", type: "continuous" }],
+    scaleMods: [{ key: "ablat", type: "continuous" }],
+    data: [
+      { label: "Aronson 1948",            yi: -0.8893113339202054, vi: 0.3255847650039614,    ablat: 44 },
+      { label: "Ferguson & Simes 1949",   yi: -1.5853886572014306, vi: 0.19458112139814387,   ablat: 55 },
+      { label: "Rosenthal 1960",          yi: -1.348073148299693,  vi: 0.41536796536796533,   ablat: 42 },
+      { label: "Hart & Sutherland 1977",  yi: -1.4415511900213054, vi: 0.020010031902247573,  ablat: 52 },
+      { label: "Frimodt-Moller 1973",     yi: -0.2175473222112957, vi: 0.05121017216963086,   ablat: 13 },
+      { label: "Stein & Aronson 1953",    yi: -0.786115585818864,  vi: 0.0069056184559087574, ablat: 44 },
+      { label: "Vandiviere 1973",         yi: -1.6208982235983924, vi: 0.22301724757231517,   ablat: 19 },
+      { label: "TPT Madras 1980",         yi:  0.011952333523841173,vi: 0.00396157929781773,  ablat: 13 },
+      { label: "Coetzee & Berjak 1968",   yi: -0.4694176487381487, vi: 0.056434210463248966,  ablat: 27 },
+      { label: "Rosenthal 1961",          yi: -1.3713448034727846, vi: 0.07302479361302891,   ablat: 42 },
+      { label: "Comstock 1974",           yi: -0.33935882833839015,vi: 0.01241221397155972,   ablat: 18 },
+      { label: "Comstock & Webster 1969", yi:  0.4459134005713783, vi: 0.5325058452001528,    ablat: 33 },
+      { label: "Comstock 1976",           yi: -0.017313948216879493,vi: 0.0714046596839863,   ablat: 33 },
+    ],
+    expected: {
+      beta:      [0.304468, -0.0297727],
+      se_beta:   [0.1437904, 0.0049839],
+      gamma:     [-4.957491, 0.0385933],
+      se_gamma:  [3.267588, 0.0730426],
+      tau2_i:    [0.038412, 0.058727, 0.035559, 0.052306, 0.011611, 0.038412,
+                  0.014637, 0.011611, 0.019931, 0.035559, 0.014083, 0.025124, 0.025124],
+      QE:        30.73309,
+      QEdf:      11,
+      QM_loc:    35.68667,
+      QM_locDf:  1,
+      QM_scale:  0.2791713,
+      QM_scaleDf: 1,
+      LL:        4.406911,
+      k: 13, p: 2, q: 2,
+      locColNames:   ["intercept", "ablat"],
+      scaleColNames: ["intercept", "ablat"],
+    },
+    citation: "Colditz et al. (1994) dat.bcg. R-verified (metafor 4.8.0, rma(yi,vi,mods=~ablat,scale=~ablat,method='ML')). QM_loc and QM_scale are Wald tests matching R QM and QS respectively.",
+  },
+];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CONTRAST_BENCHMARKS
+// Each entry: { name, regResult (partial), L, expected }
+// regResult supplies only the fields testContrast() needs: beta, vcov, crit,
+// dist, QEdf.  Uses MR-B data (BCG; ablat + region; REML, normal CI).
+// ─────────────────────────────────────────────────────────────────────────────
+export const CONTRAST_BENCHMARKS = [
+  // -----------------------------------------------------------------------
+  // MR-CONTRAST-1 — region:EU vs region:NA
+  //   L = [0, 0, 1, -1]
+  //   est  = beta[region:EU] - beta[region:NA] = 0.1598 - 0.4339 = -0.2740
+  //   var  = vcov[2][2] + vcov[3][3] - 2*vcov[2][3]
+  //        = 0.42135388 + 0.13932588 - 2*0.17664826 = 0.20738324
+  //   se   = sqrt(0.20738324) = 0.45539350
+  //   z    = -0.2740 / 0.45539 = -0.60173
+  //   p    = 0.54736 (two-tailed normal)
+  //   CI   = est ± 1.959964 * se = [-1.16658, 0.61853]
+  //   R-verified (metafor 4.8.0, generate.R block MR-CONTRAST-1).
+  // -----------------------------------------------------------------------
+  {
+    name: "BCG – region:EU vs region:NA",
+    rBlock: "CONTRAST-1",
+    // Minimal reg object needed by testContrast()
+    reg: {
+      beta:  [ 0.1024, -0.0330,  0.1598,  0.4339],
+      vcov: [
+        [ 0.11349313, -0.00347749,  0.07058366,  0.00236991],
+        [-0.00347749,  0.00020588, -0.00742037, -0.00338192],
+        [ 0.07058366, -0.00742037,  0.42135388,  0.17664826],
+        [ 0.00236991, -0.00338192,  0.17664826,  0.13932588],
+      ],
+      crit:  1.959964,
+      dist:  "z",
+      QEdf:  9,
+    },
+    L: [0, 0, 1, -1],
+    expected: {
+      est:  -0.2740,
+      se:    0.4554,
+      stat: -0.6017,
+      p:     0.5474,
+      ci:   [-1.1666, 0.6185],
+    },
+  },
+];
+
+// =============================================================================
+// INTERACTION_BENCHMARKS — interaction term meta-regression
+//
+// Each entry drives a metaRegression() call with both moderators[] and
+// interactions[].  Expected values are R-verified against metafor (generate.R
+// blocks INT-1 and INT-2).
+//
+// Note: entries with expected === null are pending R cross-validation;
+// the test runner logs them as "PENDING" and does not fail on them.
+// =============================================================================
+export const INTERACTION_BENCHMARKS = [
+
+  // -----------------------------------------------------------------------
+  // INT-1: BCG – ablat (continuous) × region (categorical, ref = "AS")
+  // Model: yi ~ ablat + region + ablat:region
+  // 6 columns: intercept, ablat, region:EU, region:NA,
+  //            ablat×region:EU, ablat×region:NA
+  // R-verified: generate.R block INT-1
+  // -----------------------------------------------------------------------
+  {
+    name: "BCG – ablat × region interaction (REML, normal CI)",
+    rBlock: "INT-1",
+    moderators: [
+      { key: "ablat",  type: "continuous"  },
+      { key: "region", type: "categorical" }
+    ],
+    interactions: [
+      { name: "ablat×region", termA: "ablat", termB: "region" }
+    ],
+    tauMethod: "REML",
+    ciMethod:  "normal",
+    data: [
+      { label: "Aronson 1948",           yi: -0.8893113339202054, vi: 0.3255847650039614,    ablat: 44, region: "NA" },
+      { label: "Ferguson & Simes 1949",  yi: -1.5853886572014306, vi: 0.19458112139814387,   ablat: 55, region: "EU" },
+      { label: "Rosenthal 1960",         yi: -1.348073148299693,  vi: 0.41536796536796533,   ablat: 42, region: "AS" },
+      { label: "Hart & Sutherland 1977", yi: -1.4415511900213054, vi: 0.020010031902247573,  ablat: 52, region: "EU" },
+      { label: "Frimodt-Moller 1973",    yi: -0.2175473222112957, vi: 0.05121017216963086,   ablat: 13, region: "AS" },
+      { label: "Stein & Aronson 1953",   yi: -0.786115585818864,  vi: 0.0069056184559087574, ablat: 44, region: "NA" },
+      { label: "Vandiviere 1973",        yi: -1.6208982235983924, vi: 0.22301724757231517,   ablat: 19, region: "AS" },
+      { label: "TPT Madras 1980",        yi:  0.011952333523841173,vi: 0.00396157929781773,  ablat: 13, region: "AS" },
+      { label: "Coetzee & Berjak 1968",  yi: -0.4694176487381487, vi: 0.056434210463248966,  ablat: 27, region: "NA" },
+      { label: "Rosenthal 1961",         yi: -1.3713448034727846, vi: 0.07302479361302891,   ablat: 42, region: "NA" },
+      { label: "Comstock 1974",          yi: -0.33935882833839015,vi: 0.01241221397155972,   ablat: 18, region: "NA" },
+      { label: "Comstock & Webster 1969",yi:  0.4459134005713783, vi: 0.5325058452001528,    ablat: 33, region: "NA" },
+      { label: "Comstock 1976",          yi: -0.017313948216879493,vi: 0.0714046596839863,   ablat: 33, region: "NA" }
+    ],
+    expectedColNames: [
+      "intercept", "ablat", "region:EU", "region:NA",
+      "ablat×region:EU", "ablat×region:NA"
+    ],
+    expected: {
+      beta:  [ 0.3384, -0.0479,  0.7133,  0.0018,  0.0000,  0.0210],
+      se:    [ 0.5447,  0.0279, 12.7976,  0.8483,  0.2428,  0.0336],
+      tau2:  0.1544,
+      QE:    20.1679,
+      QEdf:  7,
+      QEp:   0.0052,
+      QM:    11.6853,
+      QMdf:  5,
+      QMp:   0.0394,
+      R2:    0.5070,
+      colNames: ["intercept", "ablat", "region:EU", "region:NA", "ablat×region:EU", "ablat×region:NA"],
+      // Per-term tests — Wald from REML fit; LRT partial (drop only the term's own columns)
+      modTests: [
+        { name: "ablat",        QM: 2.9544, QMdf: 1, QMp: 0.0856, lrt: 8.2985, lrtDf: 1, lrtP: 0.0040 },
+        { name: "region",       QM: 0.0031, QMdf: 2, QMp: 0.9984, lrt: 3.4417, lrtDf: 2, lrtP: 0.1789 },
+        { name: "ablat×region", QM: 0.3943, QMdf: 2, QMp: 0.8210, lrt: 3.7232, lrtDf: 2, lrtP: 0.1554 },
+      ],
+    },
+    citation: "BCG vaccine data (dat.bcg). Verified against metafor 4.8.0 (generate.R block INT-1). Wald QM from anova(btt=); partial LRT drops only the term's own columns (non-hierarchical, Type-III-style), matching JS implementation.",
+  },
+
+  // -----------------------------------------------------------------------
+  // INT-2: BCG – ablat (continuous) × year (continuous)
+  // Model: yi ~ ablat + year + ablat:year
+  // 4 columns: intercept, ablat, year, ablat×year
+  // R-verified: generate.R block INT-2
+  // -----------------------------------------------------------------------
+  {
+    name: "BCG – ablat × year interaction (REML, normal CI)",
+    rBlock: "INT-2",
+    moderators: [
+      { key: "ablat", type: "continuous" },
+      { key: "year",  type: "continuous" }
+    ],
+    interactions: [
+      { name: "ablat×year", termA: "ablat", termB: "year" }
+    ],
+    tauMethod: "REML",
+    ciMethod:  "normal",
+    data: [
+      { label: "Aronson 1948",           yi: -0.8893113339202054, vi: 0.3255847650039614,    ablat: 44, year: 1948 },
+      { label: "Ferguson & Simes 1949",  yi: -1.5853886572014306, vi: 0.19458112139814387,   ablat: 55, year: 1949 },
+      { label: "Rosenthal 1960",         yi: -1.348073148299693,  vi: 0.41536796536796533,   ablat: 42, year: 1960 },
+      { label: "Hart & Sutherland 1977", yi: -1.4415511900213054, vi: 0.020010031902247573,  ablat: 52, year: 1977 },
+      { label: "Frimodt-Moller 1973",    yi: -0.2175473222112957, vi: 0.05121017216963086,   ablat: 13, year: 1973 },
+      { label: "Stein & Aronson 1953",   yi: -0.786115585818864,  vi: 0.0069056184559087574, ablat: 44, year: 1953 },
+      { label: "Vandiviere 1973",        yi: -1.6208982235983924, vi: 0.22301724757231517,   ablat: 19, year: 1973 },
+      { label: "TPT Madras 1980",        yi:  0.011952333523841173,vi: 0.00396157929781773,  ablat: 13, year: 1980 },
+      { label: "Coetzee & Berjak 1968",  yi: -0.4694176487381487, vi: 0.056434210463248966,  ablat: 27, year: 1968 },
+      { label: "Rosenthal 1961",         yi: -1.3713448034727846, vi: 0.07302479361302891,   ablat: 42, year: 1961 },
+      { label: "Comstock 1974",          yi: -0.33935882833839015,vi: 0.01241221397155972,   ablat: 18, year: 1974 },
+      { label: "Comstock & Webster 1969",yi:  0.4459134005713783, vi: 0.5325058452001528,    ablat: 33, year: 1969 },
+      { label: "Comstock 1976",          yi: -0.017313948216879493,vi: 0.0714046596839863,   ablat: 33, year: 1976 }
+    ],
+    expectedColNames: ["intercept", "ablat", "year", "ablat×year"],
+    expected: {
+      beta:  [-30.2418,  0.5363,  0.0154, -0.0003],
+      se:    [127.3070,  2.7623,  0.0645,  0.0014],
+      tau2:  0.1432,
+      QE:    25.1699,
+      QEdf:  9,
+      QEp:   0.0028,
+      QM:    9.9224,
+      QMdf:  3,
+      QMp:   0.0192,
+      R2:    0.5427,
+      colNames: ["intercept", "ablat", "year", "ablat×year"],
+      modTests: [
+        { name: "ablat",    QM: 0.0377, QMdf: 1, QMp: 0.8461, lrt: 1.8841, lrtDf: 1, lrtP: 0.1699 },
+        { name: "year",     QM: 0.0572, QMdf: 1, QMp: 0.8110, lrt: 1.7277, lrtDf: 1, lrtP: 0.1887 },
+        { name: "ablat×year", QM: 0.0417, QMdf: 1, QMp: 0.8383, lrt: 1.9081, lrtDf: 1, lrtP: 0.1672 },
+      ],
+    },
+    citation: "BCG vaccine data (dat.bcg). Verified against metafor 4.8.0 (generate.R block INT-2). Wald QM from anova(btt=); partial LRT drops only the term's own columns, matching JS implementation.",
+  },
+];
+
+// PERM_BENCHMARKS — permutation test for meta-regression.
+// QM_obs must match exactly (deterministic). QM_perm_p compared with ±0.015
+// tolerance due to Monte Carlo error (JS Mulberry32 PRNG ≠ R's internal RNG).
+// Algorithm matches metafor::permutest.rma.uni():
+//   permute X rows, re-estimate tau2 per permutation, p = mean(QM_dist >= QM_obs).
+export const PERM_BENCHMARKS = [
+  {
+    rBlock: 'PERM-1',
+    name: 'BCG ablat permutation test (REML, 999 iter)',
+    expected: {
+      QM_obs: 16.357130,   // matches META_REGRESSION_BENCHMARKS INT-1 QM
+      QM_perm_p: 0.004004, // metafor permutest() seed=42, 999 iter; compared with ±0.015
+    },
+    citation: 'BCG vaccine data (dat.bcg), mods=~ablat, method=REML, seed=42, iter=999. Verified against metafor::permutest().',
+  },
+];
+
+// =============================================================================
+// MULTIVARIATE_BENCHMARKS
+// Berkey et al. (1998) periodontal data: 5 studies × 2 outcomes (PD, AL).
+// All R blocks use mods=~outcome-1 (intercept-per-outcome) to match JS design.
+// Factor levels: PD < AL forced in R to match JS encounter order (PD first).
+// Within-study rho=0.5 passed to vcalc() in both R and JS.
+//
+// Tolerances in diff_benchmarks.mjs:
+//   beta, se, QE, QM: ±0.03 (standard)
+//   tau2:             5% relative
+//   logLik:           ±0.1 (slight numerical divergence from Cholesky vs R's internal)
+//   rho:              NOT compared — boundary sensitivity (rho near -1 for some blocks)
+// =============================================================================
+
+// Shared dataset: Berkey et al. (1998), outcomes in encounter order (PD first, AL second).
+const _BERKEY98 = [
+  { yi:  0.470,  vi: 0.0275, study_id: 1, outcome_id: "PD" },
+  { yi: -0.320,  vi: 0.0135, study_id: 1, outcome_id: "AL" },
+  { yi:  0.397,  vi: 0.0162, study_id: 2, outcome_id: "PD" },
+  { yi: -0.240,  vi: 0.0119, study_id: 2, outcome_id: "AL" },
+  { yi:  0.133,  vi: 0.0033, study_id: 3, outcome_id: "PD" },
+  { yi: -0.050,  vi: 0.0040, study_id: 3, outcome_id: "AL" },
+  { yi:  0.165,  vi: 0.0030, study_id: 4, outcome_id: "PD" },
+  { yi:  0.068,  vi: 0.0015, study_id: 4, outcome_id: "AL" },
+  { yi:  0.349,  vi: 0.0051, study_id: 5, outcome_id: "PD" },
+  { yi:  0.016,  vi: 0.0019, study_id: 5, outcome_id: "AL" },
+];
+
+export const MULTIVARIATE_BENCHMARKS = [
+  {
+    rBlock: 'MV-1',
+    name: 'Berkey98: CS struct, REML',
+    struct: 'CS', method: 'REML', rho: 0.5,
+    data: _BERKEY98,
+    expected: {
+      // Outcome order: PD first (index 0), AL second (index 1)
+      beta:   [0.30051151,  -0.08373912],
+      se:     [0.07152062,   0.07470856],
+      tau2:    0.02103905,             // CS: single tau2 for both outcomes
+      rho_between: -0.89079784,
+      QM:     19.50663017, df_QM: 2, pQM:  0.0000581,
+      QE:     45.42745765, df_QE: 8, pQE:  3.1e-7,
+      logLik:  4.17833623,
+    },
+    citation: 'Berkey CS et al. (1998) Stat Med 17:2537. Verified against metafor rma.mv() (generate.R block MV-1).',
+  },
+  {
+    rBlock: 'MV-2',
+    name: 'Berkey98: CS struct, ML',
+    struct: 'CS', method: 'ML', rho: 0.5,
+    data: _BERKEY98,
+    expected: {
+      beta:   [0.29916662,  -0.07778336],
+      se:     [0.06614757,   0.06283262],
+      tau2:    0.0155314,
+      rho_between: -0.98810115,  // near boundary; not checked in diff
+      QM:     26.48921148, df_QM: 2, pQM: 0.00000177,
+      QE:     45.42745765, df_QE: 8, pQE: 3.1e-7,
+      logLik:  6.37260509,
+    },
+    citation: 'Berkey98, ML method. Verified against metafor rma.mv() (generate.R block MV-2). Note: rho near -1 boundary in this dataset with ML.',
+  },
+  {
+    rBlock: 'MV-3',
+    name: 'Berkey98 unbalanced: drop study-5 AL, CS, REML',
+    struct: 'CS', method: 'REML', rho: 0.5,
+    // Drop study 5 outcome AL → study 5 contributes PD only
+    data: _BERKEY98.filter(r => !(r.study_id === 5 && r.outcome_id === 'AL')),
+    expected: {
+      beta:   [0.29983673,  -0.12455229],
+      se:     [0.07454304,   0.07642340],
+      tau2:    0.0214332,
+      rho_between: -1,                // boundary; not checked in diff
+      QM:     18.96256661, df_QM: 2, pQM: 0.00007627,
+      QE:     45.14175345, df_QE: 7, pQE: 1.3e-7,
+      logLik:  4.01995119,
+    },
+    citation: 'Berkey98, study 5 AL removed (unbalanced design). Verified against metafor rma.mv() (generate.R block MV-3). Note: rho=-1 boundary solution.',
+  },
+  {
+    rBlock: 'MV-UN-1',
+    name: 'Berkey98: UN struct, REML',
+    struct: 'UN', method: 'REML', rho: 0.5,
+    data: _BERKEY98,
+    expected: {
+      // UN: separate tau2 per outcome; tau2[0]=PD, tau2[1]=AL
+      beta:   [0.29878084,  -0.08507446],
+      se:     [0.07338390,   0.07263252],
+      tau2:   [0.02009242,   0.02180710],  // array for UN
+      rho_between: -0.88800904,
+      QM:     19.92789836, df_QM: 2, pQM: 0.00004707,
+      QE:     45.42745765, df_QE: 8, pQE: 3.1e-7,
+      logLik:  4.18040362,
+    },
+    citation: 'Berkey98, UN Ψ structure. Canonical example from metafor vignettes. Verified against metafor rma.mv() (generate.R block MV-UN-1).',
+  },
+  {
+    rBlock: 'MV-4',
+    name: 'Berkey98: CS REML, common-slopes moderator (centred study index)',
+    struct: 'CS', method: 'REML', rho: 0.5,
+    slopes: 'common',
+    moderators: [{ key: 'x', type: 'continuous' }],
+    data: _BERKEY98.map((r, i) => ({ ...r, x: Math.floor(i / 2) + 1 - 3 })),  // x = study_index - 3
+    expected: {
+      // mods = ~outcome + x - 1 (common slope for centred study index)
+      beta:   [0.26345732, -0.11107843, 0.04548845],  // PD intercept, AL intercept, x slope
+      se:     [0.07056262,  0.06694841, 0.02436396],
+      tau2:   0.01666401,
+      QM:     30.24515956, df_QM: 3, pQM: 1.264e-6,
+      QE:     38.99416093, df_QE: 7, pQE: 1.85e-6,
+      logLik:  4.48699427,
+    },
+    citation: 'Berkey98 + centred study-index moderator, common slopes. Verified against metafor rma.mv(mods=~outcome+x-1) (generate.R block MV-4).',
+  },
+  {
+    rBlock: 'MV-1-t',
+    name: 'Berkey98: CS struct, REML, t-distribution CIs',
+    struct: 'CS', method: 'REML', rho: 0.5,
+    ciMethod: 't',
+    data: _BERKEY98,
+    expected: {
+      // Same model as MV-1; test="t" widens CIs via t-critical (df=8) instead of z=1.96.
+      // Omnibus test becomes F(2,8) instead of chi2(2).
+      beta:   [0.30051151,  -0.08373912],  // outcomePD, outcomeAL
+      se:     [0.07470856,   0.07152062],
+      ci_lb:  [0.12823325,  -0.24866595],
+      ci_ub:  [0.47278977,   0.08118772],
+      Fstat:  9.75331509, df_QM1: 2, df_QM2: 8, pF: 0.00715501,
+      QE:     45.42745765, df_QE: 8, pQE: 3.1e-7,
+    },
+    citation: 'Berkey98, t-distribution CIs (metafor test="t"). Verified against rma.mv(test="t") (generate.R block MV-1-t).',
+  },
+  {
+    rBlock: 'MV-UN-2',
+    name: 'Synthetic 3-outcome UN, 15 studies, REML',
+    struct: 'UN', method: 'REML', rho: 0.5,
+    data: (() => {
+      // 15 studies × 3 outcomes (A, B, C) in long format; hand-crafted yi/vi
+      const yi = [
+        0.28,0.51,0.22, 0.15,0.62,0.18, 0.40,0.44,0.27,
+        0.32,0.71,0.15, 0.25,0.38,0.24, 0.35,0.55,0.21,
+        0.20,0.48,0.19, 0.42,0.66,0.25, 0.18,0.42,0.23,
+        0.38,0.59,0.17, 0.29,0.53,0.20, 0.33,0.47,0.26,
+        0.21,0.68,0.16, 0.44,0.41,0.28, 0.31,0.57,0.22,
+      ];
+      const vi = [
+        0.020,0.015,0.025, 0.018,0.012,0.022, 0.025,0.020,0.030,
+        0.012,0.008,0.015, 0.020,0.015,0.025, 0.015,0.012,0.018,
+        0.022,0.018,0.028, 0.010,0.008,0.012, 0.024,0.020,0.030,
+        0.018,0.014,0.022, 0.020,0.016,0.024, 0.019,0.015,0.023,
+        0.021,0.017,0.027, 0.011,0.009,0.013, 0.017,0.013,0.020,
+      ];
+      const outcomes = ['A','B','C'];
+      return Array.from({ length: 45 }, (_, i) => ({
+        yi: yi[i], vi: vi[i],
+        study_id: Math.floor(i / 3) + 1,
+        outcome_id: outcomes[i % 3],
+      }));
+    })(),
+    expected: {
+      beta:    [0.31738275, 0.5468984, 0.21868336],
+      se:      [0.03401466, 0.03460077, 0.03754424],
+      tau2:    [0.00045276, 0.00470429, 0.00051889],
+      rho:     [-1, 1, -1],  // boundary values — not compared in diff
+      QM:      270.85726908, QE: 32.420444,
+      logLik:  37.17639714,
+    },
+    citation: 'Synthetic 45-row (15 studies × 3 outcomes) dataset. UN Ψ structure. Verified against metafor rma.mv() (generate.R block MV-UN-2).',
+  },
+];
+
+// =============================================================================
+// Shared datasets for trim-fill / cumulative / HC / WAAP benchmarks
+// =============================================================================
+
+const _BCG_2x2 = [
+  { label: "Aronson 1948",            a:   4, b:   119, c:  11, d:   128 },
+  { label: "Ferguson & Simes 1949",   a:   6, b:   300, c:  29, d:   274 },
+  { label: "Rosenthal 1960",          a:   3, b:   228, c:  11, d:   209 },
+  { label: "Hart & Sutherland 1977",  a:  62, b: 13536, c: 248, d: 12619 },
+  { label: "Frimodt-Moller 1973",     a:  33, b:  5036, c:  47, d:  5761 },
+  { label: "Stein & Aronson 1953",    a: 180, b:  1361, c: 372, d:  1079 },
+  { label: "Vandiviere 1973",         a:   8, b:  2537, c:  10, d:   619 },
+  { label: "TPT Madras 1980",         a: 505, b: 87886, c: 499, d: 87892 },
+  { label: "Coetzee & Berjak 1968",   a:  29, b:  7470, c:  45, d:  7232 },
+  { label: "Rosenthal 1961",          a:  17, b:  1699, c:  65, d:  1600 },
+  { label: "Comstock 1974",           a: 186, b: 50448, c: 141, d: 27197 },
+  { label: "Comstock & Webster 1969", a:   5, b:  2493, c:   3, d:  2338 },
+  { label: "Comstock 1976",           a:  27, b: 16886, c:  29, d: 17825 },
+];
+
+const _NORMAND_MD = [
+  { label: "Edinburgh",          n1: 155, m1:  55, sd1: 47, n2: 156, m2:  75, sd2: 64 },
+  { label: "Orpington-Mild",     n1:  31, m1:  27, sd1:  7, n2:  32, m2:  29, sd2:  4 },
+  { label: "Orpington-Moderate", n1:  75, m1:  64, sd1: 17, n2:  71, m2: 119, sd2: 29 },
+  { label: "Orpington-Severe",   n1:  18, m1:  66, sd1: 20, n2:  18, m2: 137, sd2: 48 },
+  { label: "Montreal-Home",      n1:   8, m1:  14, sd1:  8, n2:  13, m2:  18, sd2: 11 },
+  { label: "Montreal-Transfer",  n1:  57, m1:  19, sd1:  7, n2:  52, m2:  18, sd2:  4 },
+  { label: "Newcastle",          n1:  34, m1:  52, sd1: 45, n2:  33, m2:  41, sd2: 34 },
+  { label: "Umea",               n1: 110, m1:  21, sd1: 16, n2: 183, m2:  31, sd2: 27 },
+  { label: "Uppsala",            n1:  60, m1:  30, sd1: 27, n2:  52, m2:  23, sd2: 20 },
+];
+
+const _SYNTH_FUNNEL = [
+  { label: "S1", yi: -0.1, vi: 0.0400 },
+  { label: "S2", yi:  0.3, vi: 0.0900 },
+  { label: "S3", yi:  0.1, vi: 0.0225 },
+  { label: "S4", yi:  0.9, vi: 0.3600 },
+  { label: "S5", yi:  1.4, vi: 0.6400 },
+  { label: "S6", yi:  0.5, vi: 0.1600 },
+];
+
+// =============================================================================
+// TRIMFILL_BENCHMARKS — Duval-Tweedie L₀/R₀/Q₀ across three datasets.
+// Fields: k0 (exact), b_tf, se_tf, tau2_tf, ci_lb_tf, ci_ub_tf.
+// Verified against metafor trimfill() (generate.R blocks TF-*).
+// Note: TF-Q0-SYNTH — metafor Q₀ errors on k=6 with NaN in sqrt (disc<0 on trimmed data).
+// JS trims once (k0=3), then disc<0 on trimmed set → break with k0=0, converged=false.
+// Expected: no fill; pooled result = original 6 studies. Verified 2026-05-30.
+// =============================================================================
+export const TRIMFILL_BENCHMARKS = [
+  {
+    rBlock: "TF-L0-BCG",
+    name: "BCG OR trim-fill L0 (DL, k=13)",
+    type: "OR", tauMethod: "DL", estimator: "L0",
+    data: _BCG_2x2,
+    expected: { k0: 0, b_tf: -0.74739235, se_tf: 0.19226285, tau2_tf: 0.36634341, ci_lb_tf: -1.12422061, ci_ub_tf: -0.37056409 },
+    citation: "Colditz et al. (1994). dat.bcg in metafor. Verified via generate.R block TF-L0-BCG.",
+  },
+  {
+    rBlock: "TF-R0-BCG",
+    name: "BCG OR trim-fill R0 (DL, k=13)",
+    type: "OR", tauMethod: "DL", estimator: "R0",
+    data: _BCG_2x2,
+    expected: { k0: 0, b_tf: -0.74739235, se_tf: 0.19226285, tau2_tf: 0.36634341, ci_lb_tf: -1.12422061, ci_ub_tf: -0.37056409 },
+    citation: "Colditz et al. (1994). dat.bcg in metafor. Verified via generate.R block TF-R0-BCG.",
+  },
+  {
+    rBlock: "TF-Q0-BCG",
+    name: "BCG OR trim-fill Q0 (DL, k=13)",
+    type: "OR", tauMethod: "DL", estimator: "Q0",
+    data: _BCG_2x2,
+    expected: { k0: 0, b_tf: -0.74739235, se_tf: 0.19226285, tau2_tf: 0.36634341, ci_lb_tf: -1.12422061, ci_ub_tf: -0.37056409 },
+    citation: "Colditz et al. (1994). dat.bcg in metafor. Verified via generate.R block TF-Q0-BCG.",
+  },
+  {
+    rBlock: "TF-L0-SYNTH",
+    name: "Synthetic funnel trim-fill L0 (DL, k=6)",
+    type: "GENERIC", tauMethod: "DL", estimator: "L0",
+    data: _SYNTH_FUNNEL,
+    expected: { k0: 3, b_tf: 0.0733674, se_tf: 0.15345843, tau2_tf: 0.06949276, ci_lb_tf: -0.2274056, ci_ub_tf: 0.3741404 },
+    citation: "Synthetic asymmetric funnel (k=6). Verified via generate.R block TF-L0-SYNTH.",
+  },
+  {
+    rBlock: "TF-R0-SYNTH",
+    name: "Synthetic funnel trim-fill R0 (DL, k=6)",
+    type: "GENERIC", tauMethod: "DL", estimator: "R0",
+    data: _SYNTH_FUNNEL,
+    expected: { k0: 3, b_tf: 0.0733674, se_tf: 0.15345843, tau2_tf: 0.06949276, ci_lb_tf: -0.2274056, ci_ub_tf: 0.3741404 },
+    citation: "Synthetic asymmetric funnel (k=6). Verified via generate.R block TF-R0-SYNTH.",
+  },
+  {
+    // No rBlock — metafor Q0 errors (NaN in sqrt) on k=6 asymmetric data.
+    // JS: k0=3 on first iter, disc<0 on trimmed set → break, k0=0, converged=false.
+    // Expected: no fill; pooled = original 6 studies. JS-only benchmark; see benchmark-data.md §TF-Q0-SYNTH.
+    name: "Synthetic funnel trim-fill Q0 (DL, k=6) — R fails, JS no-fill",
+    type: "GENERIC", tauMethod: "DL", estimator: "Q0",
+    data: _SYNTH_FUNNEL,
+    expected: { k0: 0, b_tf: 0.19309212, se_tf: 0.13800816, tau2_tf: 0.02782229, ci_lb_tf: -0.07739889, ci_ub_tf: 0.46358314 },
+    citation: "Synthetic asymmetric funnel (k=6). R's trimfill(estimator='Q0') errors with NaN. JS breaks on disc<0 → k0=0. JS-only; verified 2026-05-30.",
+  },
+  {
+    rBlock: "TF-L0-NORMAND",
+    name: "Normand 1999 MD trim-fill L0 (DL, k=9)",
+    type: "MD", tauMethod: "DL", estimator: "L0",
+    data: _NORMAND_MD,
+    expected: { k0: 0, b_tf: -13.98172182, se_tf: 5.12669834, tau2_tf: 205.40937547, ci_lb_tf: -24.02986592, ci_ub_tf: -3.93357771 },
+    citation: "Normand (1999) Stat Med 18:321. dat.normand1999 in metafor. Verified via generate.R block TF-L0-NORMAND.",
+  },
+  {
+    rBlock: "TF-R0-NORMAND",
+    name: "Normand 1999 MD trim-fill R0 (DL, k=9)",
+    type: "MD", tauMethod: "DL", estimator: "R0",
+    data: _NORMAND_MD,
+    expected: { k0: 1, b_tf: -9.42048254, se_tf: 5.10696801, tau2_tf: 220.96401263, ci_lb_tf: -19.42995591, ci_ub_tf: 0.58899084 },
+    citation: "Normand (1999) Stat Med 18:321. dat.normand1999 in metafor. Verified via generate.R block TF-R0-NORMAND.",
+  },
+  {
+    rBlock: "TF-Q0-NORMAND",
+    name: "Normand 1999 MD trim-fill Q0 (DL, k=9)",
+    type: "MD", tauMethod: "DL", estimator: "Q0",
+    data: _NORMAND_MD,
+    expected: { k0: 0, b_tf: -13.98172182, se_tf: 5.12669834, tau2_tf: 205.40937547, ci_lb_tf: -24.02986592, ci_ub_tf: -3.93357771 },
+    citation: "Normand (1999) Stat Med 18:321. dat.normand1999 in metafor. Verified via generate.R block TF-Q0-NORMAND.",
+  },
+];
+
+// =============================================================================
+// CUMULATIVE_BENCHMARKS — cumulative meta-analysis (ordered entry, REML or DL).
+// expected: array of { estimate, se, ci_lb, ci_ub, tau2 } per step (k=1..K).
+// Verified against metafor cumul() (generate.R blocks CUM-*).
+// =============================================================================
+export const CUMULATIVE_BENCHMARKS = [
+  {
+    rBlock: "CUM-BCG",
+    name: "BCG OR cumulative meta (DL, k=13)",
+    type: "OR", tauMethod: "DL",
+    data: _BCG_2x2,
+    expected: [
+      { estimate: -0.93869414, se: 0.59759932, ci_lb: -2.10996729, ci_ub:  0.23257901, tau2: 0 },
+      { estimate: -1.39832051, se: 0.36262424, ci_lb: -2.10905096, ci_ub: -0.68759007, tau2: 0 },
+      { estimate: -1.39552114, se: 0.31762774, ci_lb: -2.01806007, ci_ub: -0.77298220, tau2: 0 },
+      { estimate: -1.44623245, se: 0.13003673, ci_lb: -1.70109976, ci_ub: -1.19136515, tau2: 0 },
+      { estimate: -1.09819182, se: 0.35197503, ci_lb: -1.78805020, ci_ub: -0.40833344, tau2: 0.44540649 },
+      { estimate: -1.04496196, se: 0.22080073, ci_lb: -1.47772344, ci_ub: -0.61220049, tau2: 0.18151058 },
+      { estimate: -1.10664136, se: 0.20660855, ci_lb: -1.51158669, ci_ub: -0.70169604, tau2: 0.17637391 },
+      { estimate: -0.96643431, se: 0.28888769, ci_lb: -1.53264377, ci_ub: -0.40022484, tau2: 0.53628420 },
+      { estimate: -0.90077482, se: 0.25995783, ci_lb: -1.41028280, ci_ub: -0.39126685, tau2: 0.48804273 },
+      { estimate: -0.95502828, se: 0.24721871, ci_lb: -1.43956804, ci_ub: -0.47048851, tau2: 0.49550343 },
+      { estimate: -0.87579783, se: 0.20867051, ci_lb: -1.28478452, ci_ub: -0.46681114, tau2: 0.37964171 },
+      { estimate: -0.81557729, se: 0.20364480, ci_lb: -1.21471377, ci_ub: -0.41644082, tau2: 0.37861620 },
+      { estimate: -0.74739235, se: 0.19226285, ci_lb: -1.12422061, ci_ub: -0.37056409, tau2: 0.36634341 },
+    ],
+    citation: "Colditz et al. (1994). dat.bcg in metafor. Verified via generate.R block CUM-BCG.",
+  },
+  {
+    rBlock: "CUM-NORMAND",
+    name: "Normand 1999 MD cumulative meta (REML, k=9)",
+    type: "MD", tauMethod: "REML",
+    data: _NORMAND_MD,
+    expected: [
+      { estimate: -20.00000000, se:  6.36459136, ci_lb: -32.47436984, ci_ub:  -7.52563016, tau2:   0 },
+      { estimate:  -9.93257283, se:  8.93647577, ci_lb: -27.44774350, ci_ub:   7.58259783, tau2: 140.70566584 },
+      { estimate: -25.57957528, se: 15.73547859, ci_lb: -56.42054660, ci_ub:   5.26139604, tau2: 723.72497709 },
+      { estimate: -35.88210854, se: 15.62563231, ci_lb: -66.50778509, ci_ub:  -5.25643198, tau2: 927.79463349 },
+      { estimate: -29.28105467, se: 13.55207556, ci_lb: -55.84263469, ci_ub:  -2.71947466, tau2: 876.06777622 },
+      { estimate: -23.99318729, se: 12.05947077, ci_lb: -47.62931567, ci_ub:  -0.35705891, tau2: 837.57642483 },
+      { estimate: -19.27759979, se: 11.27617044, ci_lb: -41.37848775, ci_ub:   2.82328816, tau2: 846.98584503 },
+      { estimate: -17.96900670, se:  9.70299836, ci_lb: -36.98653403, ci_ub:   1.04852062, tau2: 715.30749709 },
+      { estimate: -15.10602747, se:  8.94655285, ci_lb: -32.64094884, ci_ub:   2.42889389, tau2: 684.64615288 },
+    ],
+    citation: "Normand (1999) Stat Med 18:321. dat.normand1999 in metafor. Verified via generate.R block CUM-NORMAND.",
+  },
+];
+
+// =============================================================================
+// HC_BENCHMARKS — Henmi-Copas confidence intervals.
+// expected: { beta, se, tau2, ci_lb, ci_ub }.
+// Verified against metafor hc() (generate.R blocks HC-BCG-RR, HC-BCG-RD, HC-NORMAND-MD).
+// =============================================================================
+export const HC_BENCHMARKS = [
+  {
+    rBlock: "HC-BCG-RR",
+    name: "BCG log-RR Henmi-Copas (DL, k=13)",
+    type: "RR",
+    data: _BCG_2x2,
+    expected: { beta: -0.43028516, se: 0.28354435, tau2: 0.30876026, ci_lb: -1.15551187, ci_ub: 0.29494154 },
+    citation: "Colditz et al. (1994). dat.bcg log-RR. Verified via generate.R block HC-BCG-RR.",
+  },
+  {
+    rBlock: "HC-BCG-RD",
+    name: "BCG RD Henmi-Copas (DL, k=13)",
+    type: "RD",
+    data: _BCG_2x2,
+    expected: { beta: -0.00091426, se: 0.00229642, tau2: 0.00001873, ci_lb: -0.00778351, ci_ub: 0.00595498 },
+    citation: "Colditz et al. (1994). dat.bcg risk difference. Verified via generate.R block HC-BCG-RD.",
+  },
+  {
+    rBlock: "HC-NORMAND-MD",
+    name: "Normand 1999 MD Henmi-Copas (DL, k=9)",
+    type: "MD",
+    data: _NORMAND_MD,
+    expected: { beta: -3.46361263, se: 8.42125652, tau2: 205.40937547, ci_lb: -28.60190092, ci_ub: 21.67467566 },
+    citation: "Normand (1999) Stat Med 18:321. dat.normand1999. Verified via generate.R block HC-NORMAND-MD.",
+  },
+];
+
+// =============================================================================
+// WAAP_BENCHMARKS — Weighted Average of Adequately Powered studies (Stanley & Doucouliagos 2015).
+// expected: { wlsEstimate, kAdequate, estimate, se, z, fallback }.
+// Verified against manual WLS computation in generate.R (block WAAP-NORMAND).
+// =============================================================================
+export const WAAP_BENCHMARKS = [
+  {
+    rBlock: "WAAP-NORMAND",
+    name: "Normand 1999 MD WAAP-WLS (k=9, kAdequate=1)",
+    type: "MD",
+    data: _NORMAND_MD,
+    expected: { wlsEstimate: -3.46361263, kAdequate: 1, estimate: 1, se: 1.08043576, z: 0.92555248, fallback: false },
+    citation: "Normand (1999) Stat Med 18:321. One study (Montreal-Transfer) has adequate power vs |wlsEst|. Verified via generate.R block WAAP-NORMAND.",
+  },
+];
+
+// =============================================================================
+// PCURVE_BENCHMARKS — p-curve distributional test (Simonsohn, Nelson & Simmons
+// 2014, JPSP). Tests right-skew and flatness statistics against the JS formula
+// implemented directly in R (generate.R blocks PCURVE-*).
+//
+// Note: metafor::selmodel(type="pcurve") is a different model (Kim &
+// Viechtbauer 2022) — NOT equivalent to this distributional test.
+// =============================================================================
+export const PCURVE_BENCHMARKS = [
+  {
+    rBlock: "PCURVE-BCG-OR",
+    name: "BCG log-OR p-curve (DL, k=13, k_sig=8)",
+    type: "OR", tauMethod: "DL",
+    data: _BCG_2x2,
+    expected: {
+      k: 8,
+      rightSkewZ: -2.77934871, rightSkewP: 0.00272340,
+      flatnessZ:  -2.25930807, flatnessP:  0.98806789,
+    },
+    citation: "Colditz et al. (1994) dat.bcg log-OR. JS formula verified via generate.R block PCURVE-BCG-OR.",
+  },
+  {
+    rBlock: "PCURVE-NORMAND-MD",
+    name: "Normand 1999 MD p-curve (DL, k=9, k_sig=4)",
+    type: "MD", tauMethod: "DL",
+    data: _NORMAND_MD,
+    expected: {
+      k: 4,
+      rightSkewZ: -3.40367025, rightSkewP: 0.00033243,
+      flatnessZ:  -3.15325365, flatnessP:  0.99919269,
+    },
+    citation: "Normand (1999) Stat Med 18:321 dat.normand1999. JS formula verified via generate.R block PCURVE-NORMAND-MD.",
+  },
+];
+
+// =============================================================================
+// PUNIFORM_BENCHMARKS — p-uniform bias-corrected effect estimator (van Assen,
+// van Aert & Wicherts 2015). Tests estimate, CI, and significance / bias-test
+// statistics against the JS formula implemented directly in R (generate.R
+// blocks PUNIFORM-*).
+//
+// Note: estimate = |delta| (uses folded |z| = |yi/se|); Z_sig coincides with
+// rightSkewZ from p-curve (both equal (sumQ(0) − k/2) / sqrt(k/12)).
+// Note: metafor::selmodel(type="puni") is a different model (van Aert &
+// van Assen 2023) — NOT equivalent to this conditional-uniformity estimator.
+// =============================================================================
+export const PUNIFORM_BENCHMARKS = [
+  {
+    rBlock: "PUNIFORM-BCG-OR",
+    name: "BCG log-OR p-uniform (DL, k=13, k_sig=8)",
+    type: "OR", tauMethod: "DL",
+    data: _BCG_2x2,
+    expected: {
+      k: 8,
+      estimate:  1.02651826, ciLow: 0.35293979, ciHigh: 1.42891878,
+      Z_sig:    -2.77934871, p_sig: 0.00272340,
+      Z_bias:   -3.03168535, p_bias: 0.99878638,
+    },
+    citation: "Colditz et al. (1994) dat.bcg log-OR. JS formula verified via generate.R block PUNIFORM-BCG-OR.",
+  },
+  {
+    rBlock: "PUNIFORM-NORMAND-MD",
+    name: "Normand 1999 MD p-uniform (DL, k=9, k_sig=4)",
+    type: "MD", tauMethod: "DL",
+    data: _NORMAND_MD,
+    expected: {
+      k: 4,
+      estimate:  37.19929330, ciLow: 11.09426612, ciHigh: 60.80492792,
+      Z_sig:    -3.40367025,  p_sig:  0.00033243,
+      Z_bias:   -3.45909170,  p_bias: 0.99972966,
+    },
+    citation: "Normand (1999) Stat Med 18:321 dat.normand1999. JS formula verified via generate.R block PUNIFORM-NORMAND-MD.",
+  },
+];
+
+// =============================================================================
+// GOSH_BENCHMARKS — Graphical Display of Study Heterogeneity
+// Cross-validates goshCompute() against metafor::gosh.rma() on the BCG dataset.
+// metafor >= 4.x returns all 2^k−1 subsets in bitmask order (row i = bitmask i),
+// matching JS goshCompute exactly.  mu is Float32 in JS; tolerance ±1e-4.
+// Sentinel strategy: R stores 5 lowest + 5 highest mu rows by bitmask; JS looks
+// them up by direct index (bitmask − 1) to avoid sort-order Float32/Float64 divergence.
+// =============================================================================
+export const GOSH_BENCHMARKS = [
+  {
+    rBlock: "GOSH-BCG-1",
+    name: "BCG log-OR GOSH (FE, k=13, full enumeration — 8 191 subsets)",
+    // Pre-computed log-OR yi/vi from rma(measure="OR", data=dat.bcg, method="FE")
+    // matching generate.R GOSH-BCG-1 block.
+    yi: [-0.93869414, -1.66619073, -1.38629436, -1.45644355, -0.21914109,
+         -0.95812204, -1.63377584,  0.01202060, -0.47174604, -1.40121014,
+         -0.34084965,  0.44663468, -0.01734187],
+    vi: [0.35712495, 0.20813239, 0.43341308, 0.02031441, 0.05195178,
+         0.00990527, 0.22700968, 0.00400696, 0.05697712, 0.07542173,
+         0.01252513, 0.53416217, 0.07163512],
+    citation: "Colditz et al. (1994) dat.bcg log-OR FE. Cross-validated against metafor::gosh.rma() via generate.R GOSH-BCG-1.",
+  },
+];

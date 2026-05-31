@@ -1,0 +1,78 @@
+=== META-ANALYSIS RESULTS ===
+Script:        compare.R
+Input:         binary_data.csv
+Effect Type:   AS (Arcsine-transformed Risk Difference)
+Estimator:     REML (Restricted Maximum Likelihood)
+CI Method:     normal (Normal (z-distribution))
+Studies (k):   12
+Generated:     2026-05-14 19:39:03
+
+--- RANDOM-EFFECTS MODEL ---
+Estimate:      0.0803
+SE:            0.0223
+95% CI:        [0.0366, 0.1240]
+z-value:       3.6035
+p-value:       0.0003
+
+--- FIXED-EFFECTS MODEL ---
+Estimate:      0.0797
+SE:            0.0208
+95% CI:        [0.0390, 0.1204]
+
+--- HETEROGENEITY ---
+Q:             12.0733  (df = 11, p = 0.3582)
+tau2:          0.000647  95% CI: [0.000000, 0.0117]
+tau:           0.025428
+I2 (Q-based):  8.9%  95% CI: [0.0%, 68.8%]
+H2 (clamped):  1.0976  95% CI: [1.0000, 3.2060]
+
+  Notes on heterogeneity:
+  - I2 point estimate uses Q-based formula (Q-df)/Q, matching the app.
+    metafor prints tau2/(tau2+v_typical) instead; they may diverge slightly.
+  - H2 clamped to >= 1. Raw Q/df = 1.0976.
+  - I2/H2 CI bounds use Q-profile inversion (same method as the app).
+
+--- PREDICTION INTERVAL (95%) ---
+[0.0141, 0.1466]
+  Formula: RE +/- z(0.975) = 1.96 * sqrt(tau2 + seRE^2)
+  tau2 = 0.000647,  seRE = 0.022294
+  sqrt(tau2 + seRE^2) = 0.033817
+
+--- PER-STUDY ESTIMATES ---
+Label            yi        SE   CI Lower   CI Upper     RE Wt %     FE Wt %
+---------------------------------------------------------------------------
+Study 01     0.2018    0.0707     0.0633     0.3404       8.80%       8.62%
+Study 02     0.1461    0.1000    -0.0499     0.3421       4.67%       4.31%
+Study 03    -0.0501    0.0707    -0.1886     0.0885       8.80%       8.62%
+Study 04     0.1099    0.1000    -0.0861     0.3059       4.67%       4.31%
+Study 05     0.1295    0.0791    -0.0254     0.2845       7.21%       6.90%
+Study 06     0.0691    0.0791    -0.0859     0.2240       7.21%       6.90%
+Study 07     0.1727    0.1000    -0.0232     0.3687       4.67%       4.31%
+Study 08     0.0965    0.0500    -0.0015     0.1945      15.80%      17.24%
+Study 09     0.0804    0.0845    -0.0853     0.2460       6.38%       6.03%
+Study 10     0.1042    0.0791    -0.0508     0.2591       7.21%       6.90%
+Study 11    -0.0534    0.0707    -0.1920     0.0852       8.80%       8.62%
+Study 12     0.0600    0.0500    -0.0380     0.1579      15.80%      17.24%
+
+--- KNOWN DIVERGENCES ---
+All differences below are expected. None indicate computation errors.
+
+1. ZERO-CELL HANDLING
+   Both app and metafor add 0.5 to all four cells in a study when any cell
+   equals 0 (Haldane-Anscombe continuity correction). The current dataset
+   has no zero cells, so no correction was applied and yi/vi match metafor
+   to rounding precision.
+
+2. PREDICTION INTERVAL (residual < 0.01 per bound)
+   Both use: RE +/- crit * sqrt(tau2 + seRE^2).
+   For CI method = normal, crit = z(0.975) = 1.96 in both.
+   For CI method = t or KH, crit = t(k-1, 0.975) in both.
+   Any residual difference reflects independent REML tau2 estimates
+   converging to slightly different values; this is negligible when tau2 > 0.
+   metafor tau2 = 0.000647
+
+3. DISPLAY PRECISION
+   The app displays 3 decimal places; this script prints 4.
+   Differences of 0.001 in displayed values may be rounding only.
+
+--- END OF RESULTS ---

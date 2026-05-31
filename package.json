@@ -1,0 +1,16 @@
+{
+  "type": "module",
+  "version": "1.0.0",
+  "scripts": {
+    "test": "node scripts/run_tests.mjs",
+    "diff": "node scripts/diff_benchmarks.mjs",
+    "canonical-diff": "node scripts/canonical_diff.mjs",
+    "audit-comments": "node scripts/audit_match_comments.mjs",
+    "test:plots": "node js/tests/harness/run-plot-tests.mjs"
+  },
+  "devDependencies": {
+    "d3": "^7.9.0",
+    "esbuild": "^0.28.0",
+    "jsdom": "^26.1.0"
+  }
+}
