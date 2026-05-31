@@ -12,6 +12,7 @@
 //         node canonical_diff.mjs --threshold 0.01      (hide diffs smaller than this)
 
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import {
   BENCHMARKS,
   PUB_BIAS_BENCHMARKS,
@@ -47,7 +48,7 @@ const fieldFilter = fieldIdx >= 0 ? new Set(argv[fieldIdx + 1].split(',')) : nul
 const thrIdx     = argv.indexOf('--threshold');
 const threshold  = thrIdx >= 0 ? parseFloat(argv[thrIdx + 1]) : 0;
 
-const ref = JSON.parse(readFileSync('../benchmark_reference.json', 'utf8'));
+const ref = JSON.parse(readFileSync(fileURLToPath(new URL('../benchmark_reference.json', import.meta.url)), 'utf8'));
 
 const meta = ref['__meta'];
 console.log('canonical_diff.mjs — informational only; always exits 0');

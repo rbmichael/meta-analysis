@@ -4,6 +4,7 @@
 // Exit 1 if any mismatch exceeds tolerance; exit 0 if all pass.
 
 import { readFileSync } from 'fs';
+import { fileURLToPath } from 'node:url';
 import {
   BENCHMARKS,
   PUB_BIAS_BENCHMARKS,
@@ -32,7 +33,7 @@ import {
   PUNIFORM_BENCHMARKS,
 } from '../js/tests/benchmarks.js';
 
-const ref = JSON.parse(readFileSync('../benchmark_reference.json', 'utf8'));
+const ref = JSON.parse(readFileSync(fileURLToPath(new URL('../benchmark_reference.json', import.meta.url)), 'utf8'));
 
 // ---- version header ----
 {
