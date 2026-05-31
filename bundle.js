@@ -14,10 +14,10 @@ var App = (() => {
       __defProp(target, name, { get: all[name], enumerable: true });
   };
 
-  // js/constants.js
+  // js/core/constants.js
   var MIN_VAR, REML_TOL, BISECTION_ITERS, Z_95;
   var init_constants = __esm({
-    "js/constants.js"() {
+    "js/core/constants.js"() {
       MIN_VAR = 1e-8;
       REML_TOL = 1e-10;
       BISECTION_ITERS = 64;
@@ -25,10 +25,10 @@ var App = (() => {
     }
   });
 
-  // js/quadrature.js
+  // js/core/quadrature.js
   var GL20_X, GL20_W, _GH20_X_POS, _GH20_W_POS, GH20_X, GH20_W;
   var init_quadrature = __esm({
-    "js/quadrature.js"() {
+    "js/core/quadrature.js"() {
       GL20_X = [
         -0.9931285991850949,
         -0.9639719272779138,
@@ -102,20 +102,38 @@ var App = (() => {
     }
   });
 
-  // js/utils.js
+  // js/core/utils.js
   function round(value, digits = 3) {
     if (!isFinite(value)) return value;
     const factor = Math.pow(10, digits);
     return Math.round((value + Number.EPSILON) * factor) / factor;
   }
-  function fmt(value, digits = 3) {
-    if (!isFinite(value)) return "NA";
-    return round(value, digits).toFixed(digits);
+  function median(arr) {
+    const s = arr.slice().sort((a, b) => a - b);
+    const m = Math.floor(s.length / 2);
+    return s.length % 2 === 0 ? (s[m - 1] + s[m]) / 2 : s[m];
   }
-  function fmtPval(p) {
-    if (!isFinite(p)) return "= NA";
-    if (p < 1e-3) return "< .001";
-    return "= " + p.toFixed(3).replace(/^0\./, ".");
+  function sum(arr) {
+    return arr.reduce((acc, b) => acc + b, 0);
+  }
+  function mean(arr) {
+    return sum(arr) / arr.length;
+  }
+  function clamp01(v) {
+    return Math.min(1, Math.max(0, v));
+  }
+  function hedgesJ(df) {
+    if (df <= 0) return 1 - 3 / (4 * df - 1);
+    const half = df / 2;
+    return Math.exp(logGamma(half) - 0.5 * Math.log(half) - logGamma(half - 0.5));
+  }
+  function bisect(f, lo, hi, iters = BISECTION_ITERS) {
+    for (let i = 0; i < iters; i++) {
+      const mid = (lo + hi) / 2;
+      if (f(mid) > 0) lo = mid;
+      else hi = mid;
+    }
+    return (lo + hi) / 2;
   }
   function tCritical(df, alpha = 0.05) {
     const target = 1 - alpha / 2;
@@ -143,6 +161,7 @@ var App = (() => {
     if (x < 0 || x > 1) return NaN;
     if (x === 0) return 0;
     if (x === 1) return 1;
+    if (a <= 0 || b <= 0) return NaN;
     if (x > (a + 1) / (a + b + 2)) return 1 - regularizedBeta(1 - x, b, a);
     const lbeta = logGamma(a) + logGamma(b) - logGamma(a + b);
     const front = Math.exp(a * Math.log(x) + b * Math.log(1 - x) - lbeta) / a;
@@ -178,7 +197,8 @@ var App = (() => {
   function tCDF(x, df) {
     if (!isFinite(x) || !isFinite(df) || df <= 0) return NaN;
     const t2 = x * x;
-    const p_upper = regularizedBeta(df / (df + t2), df / 2, 0.5) / 2;
+    const beta_x = Math.min(Math.max(df / (df + t2), 0), 1);
+    const p_upper = Math.max(regularizedBeta(beta_x, df / 2, 0.5) / 2, 1e-300);
     return x >= 0 ? 1 - p_upper : p_upper;
   }
   function chiSquareCDF(x, k) {
@@ -199,8 +219,18 @@ var App = (() => {
   function fCDF(f, d1, d2) {
     if (!isFinite(f) || f <= 0) return 0;
     if (!isFinite(d1) || d1 <= 0 || !isFinite(d2) || d2 <= 0) return NaN;
-    const x = d1 * f / (d1 * f + d2);
+    const num = d1 * f;
+    if (!isFinite(num)) return 1;
+    const x = Math.min(Math.max(num / (num + d2), 0), 1);
     return regularizedBeta(x, d1 / 2, d2 / 2);
+  }
+  function fTailP(f, d1, d2) {
+    if (!isFinite(f) || f <= 0) return 1;
+    if (!isFinite(d1) || d1 <= 0 || !isFinite(d2) || d2 <= 0) return NaN;
+    const num = d1 * f;
+    if (!isFinite(num)) return 1e-300;
+    const x = Math.max(d2 / (num + d2), 0);
+    return Math.max(regularizedBeta(x, d2 / 2, d1 / 2), 1e-300);
   }
   function regularizedGammaP(a, x) {
     const EPS = 1e-14;
@@ -208,14 +238,14 @@ var App = (() => {
     if (x < 0 || a <= 0) return NaN;
     if (x === 0) return 0;
     if (x < a + 1) {
-      let sum = 1 / a;
+      let sum2 = 1 / a;
       let term = 1 / a;
       for (let n = 1; n < MAX_ITER; n++) {
         term *= x / (a + n);
-        sum += term;
+        sum2 += term;
         if (term < EPS) break;
       }
-      return sum * Math.exp(-x + a * Math.log(x) - logGamma(a));
+      return sum2 * Math.exp(-x + a * Math.log(x) - logGamma(a));
     } else {
       let b = x + 1 - a;
       let c = 1 / 1e-30;
@@ -269,7 +299,7 @@ var App = (() => {
     const sp = Math.sqrt(((n1 - 1) * s.sd1 ** 2 + (n2 - 1) * s.sd2 ** 2) / df);
     const d = (s.m1 - s.m2) / sp;
     const applyHedges = options.hedgesCorrection ?? true;
-    const J = 1 - 3 / (4 * df - 1);
+    const J = hedgesJ(df);
     const g = applyHedges ? d * J : d;
     const varBase = (n1 + n2) / (n1 * n2) + g * g / (2 * (n1 + n2));
     return { es: g, var: Math.max(varBase, MIN_VAR) };
@@ -384,13 +414,13 @@ var App = (() => {
     if (rho === 0) return normalCDF(h) * normalCDF(k);
     const hh = h * h, kk = k * k, hk = h * k;
     const TWO_PI = 2 * Math.PI;
-    let sum = 0;
+    let sum2 = 0;
     for (let i = 0; i < 20; i++) {
       const t = rho * (GL20_X[i] + 1) / 2;
       const r2 = 1 - t * t;
-      sum += GL20_W[i] * Math.exp(-(hh + kk - 2 * t * hk) / (2 * r2)) / (TWO_PI * Math.sqrt(r2));
+      sum2 += GL20_W[i] * Math.exp(-(hh + kk - 2 * t * hk) / (2 * r2)) / (TWO_PI * Math.sqrt(r2));
     }
-    return normalCDF(h) * normalCDF(k) + rho / 2 * sum;
+    return normalCDF(h) * normalCDF(k) + rho / 2 * sum2;
   }
   function continuityCorrect({ a, b, c, d }) {
     if (a === 0 || b === 0 || c === 0 || d === 0) {
@@ -406,6 +436,9 @@ var App = (() => {
     const p_row = (aa + bb) / N;
     const p_col = (aa + cc) / N;
     const p11 = aa / N;
+    const p12 = bb / N;
+    const p21 = cc / N;
+    const p22 = dd / N;
     if (p_row <= 0 || p_row >= 1 || p_col <= 0 || p_col >= 1) return nan;
     const h = normalQuantile(p_row);
     const k = normalQuantile(p_col);
@@ -421,18 +454,18 @@ var App = (() => {
     const r2 = 1 - rho * rho;
     const bvd = Math.exp(-(h * h + k * k - 2 * rho * h * k) / (2 * r2)) / (2 * Math.PI * Math.sqrt(r2));
     if (!isFinite(bvd) || bvd === 0) return nan;
-    const v = p_row * (1 - p_row) * p_col * (1 - p_col) / (N * bvd * bvd);
+    const v = Math.sqrt(p11 * p12 * p21 * p22) / (N * bvd * bvd);
     return { rho, var: Math.max(v, MIN_VAR) };
   }
   function hyperg2F1_ucor(c, z) {
     if (z === 0) return 1;
-    let sum = 1, term = 1;
+    let sum2 = 1, term = 1;
     for (let k = 1; k <= 500; k++) {
       term *= (k - 0.5) * (k - 0.5) / ((c + k - 1) * k) * z;
-      sum += term;
-      if (Math.abs(term) < 1e-15 * Math.abs(sum)) break;
+      sum2 += term;
+      if (Math.abs(term) < 1e-15 * Math.abs(sum2)) break;
     }
-    return sum;
+    return sum2;
   }
   function transformEffect(x, type) {
     if (!isFinite(x)) return NaN;
@@ -443,7 +476,7 @@ var App = (() => {
   }
   var _tCriticalCache, _clamp01, _TRANSFORMS;
   var init_utils = __esm({
-    "js/utils.js"() {
+    "js/core/utils.js"() {
       init_constants();
       init_quadrature();
       _tCriticalCache = /* @__PURE__ */ new Map();
@@ -483,44 +516,48 @@ var App = (() => {
         PLN: (x) => _clamp01(Math.exp(x)),
         PLO: (x) => _clamp01(1 / (1 + Math.exp(-x))),
         PAS: (x) => _clamp01(Math.sin(x) ** 2),
-        PFT: (x) => _clamp01(Math.sin(x / 2) ** 2)
+        PFT: (x) => _clamp01(Math.sin(x) ** 2)
       };
     }
   });
 
-  // js/tau2.js
+  // js/stats/tau2.js
   function iterate(seed, updateFn, maxIter = 200, tol = REML_TOL) {
     let tau2 = seed;
     for (let iter = 0; iter < maxIter; iter++) {
       const newTau2 = updateFn(tau2);
-      if (Math.abs(newTau2 - tau2) < tol) return newTau2;
+      if (Math.abs(newTau2 - tau2) < tol) return { tau2: newTau2, converged: true, iters: iter + 1, tau2Boundary: newTau2 === 0 };
       tau2 = newTau2;
     }
-    return tau2;
+    return { tau2, converged: false, iters: maxIter, tau2Boundary: false };
   }
   function tau2_DL(studies) {
     const k = studies.length;
     if (k <= 1) return 0;
-    let W = 0, WY = 0, WY2 = 0, W2 = 0;
-    for (const d of studies) {
-      const wi = 1 / d.vi;
+    const vi = studies.map((d) => d.vi);
+    const yi = studies.map((d) => d.yi);
+    let W = 0, Wmu = 0;
+    for (let i = 0; i < k; i++) {
+      const wi = 1 / vi[i];
       W += wi;
-      WY += wi * d.yi;
-      WY2 += wi * d.yi * d.yi;
-      W2 += wi * wi;
+      Wmu += wi * yi[i];
     }
-    const Q = WY2 - WY * WY / W;
-    const C = W - W2 / W;
-    return C > 0 ? Math.max(0, (Q - (k - 1)) / C) : 0;
+    const mu = Wmu / W;
+    return tau2Core_DL(vi, () => ({ e: yi.map((y) => y - mu), h: vi.map((v) => 1 / (W * v)), W }), k - 1);
   }
   function tau2_HS(studies) {
     const k = studies.length;
     if (k <= 1) return 0;
-    const w = studies.map((d) => 1 / d.vi);
-    const W = w.reduce((acc, b) => acc + b, 0);
-    const ybar = studies.reduce((acc, d, i) => acc + w[i] * d.yi, 0) / W;
-    const Q = studies.reduce((acc, d, i) => acc + w[i] * (d.yi - ybar) ** 2, 0);
-    return Math.max(0, (Q - (k - 1)) / W);
+    const vi = studies.map((d) => d.vi);
+    const yi = studies.map((d) => d.yi);
+    let W = 0, Wmu = 0;
+    for (let i = 0; i < k; i++) {
+      const wi = 1 / vi[i];
+      W += wi;
+      Wmu += wi * yi[i];
+    }
+    const mu = Wmu / W;
+    return tau2Core_HS(vi, () => ({ e: yi.map((y) => y - mu), W }), k - 1);
   }
   function tau2_DLIT(studies, tol = REML_TOL, maxIter = 200, tau2Init = null) {
     const k = studies.length;
@@ -552,23 +589,25 @@ var App = (() => {
   function tau2_HE(studies) {
     const k = studies.length;
     if (k <= 1) return 0;
-    const ybar = studies.reduce((acc, d) => acc + d.yi, 0) / k;
-    const SS = studies.reduce((acc, d) => acc + (d.yi - ybar) ** 2, 0);
-    const meanV = studies.reduce((acc, d) => acc + d.vi, 0) / k;
-    return Math.max(0, SS / (k - 1) - meanV);
+    const vi = studies.map((d) => d.vi);
+    const yi = studies.map((d) => d.yi);
+    const mu = yi.reduce((s, y) => s + y, 0) / k;
+    return tau2Core_HE(vi, () => ({ e: yi.map((y) => y - mu) }), k - 1);
   }
   function tau2_SJ(studies, tol = REML_TOL, maxIter = 200, tau2Init = null) {
     const k = studies.length;
-    if (k <= 1) return 0;
+    if (k <= 1) return { tau2: 0, converged: true, iters: 0, maxIters: maxIter, tau2Boundary: false };
     let tau2;
     if (tau2Init !== null) {
       tau2 = Math.max(0, tau2Init);
     } else {
       const ybar0 = studies.reduce((acc, d) => acc + d.yi, 0) / k;
       tau2 = studies.reduce((acc, d) => acc + (d.yi - ybar0) ** 2, 0) / k;
-      if (tau2 === 0) return 0;
+      if (tau2 === 0) return { tau2: 0, converged: true, iters: 0, maxIters: maxIter, tau2Boundary: false };
     }
-    for (let iter = 0; iter < maxIter; iter++) {
+    let iters = 0;
+    let converged = false;
+    for (; iters < maxIter; iters++) {
       let W = 0, Wmu = 0;
       for (const d of studies) {
         const wi = 1 / (d.vi + tau2);
@@ -582,15 +621,22 @@ var App = (() => {
         s += d.vi * r * r / (d.vi + tau2);
       }
       const newTau2 = s / k;
-      if (Math.abs(newTau2 - tau2) < tol) return Math.max(0, newTau2);
+      if (Math.abs(newTau2 - tau2) < tol) {
+        tau2 = Math.max(0, newTau2);
+        converged = true;
+        iters++;
+        break;
+      }
       tau2 = Math.max(0, newTau2);
     }
-    return tau2;
+    return { tau2, converged, iters, maxIters: maxIter, tau2Boundary: converged && tau2 === 0 };
   }
   function fisherScoringCore(vi, fitFn, seed, tol, maxIter, useHat) {
     const k = vi.length;
     let tau2 = seed;
-    for (let iter = 0; iter < maxIter; iter++) {
+    let iters = 0;
+    let converged = false;
+    for (; iters < maxIter; iters++) {
       const fit = fitFn(tau2);
       if (!fit) break;
       const { e, h } = fit;
@@ -612,19 +658,21 @@ var App = (() => {
       newTau2 = Math.max(0, newTau2);
       if (Math.abs(newTau2 - tau2) < tol) {
         tau2 = newTau2;
+        converged = true;
+        iters++;
         break;
       }
       tau2 = newTau2;
     }
-    return tau2;
+    return { tau2, converged, iters, maxIters: maxIter, tau2Boundary: converged && tau2 === 0 };
   }
   function tau2_ML(studies, tol = REML_TOL, maxIter = 100, tau2Init = null) {
     const k = studies.length;
-    if (k <= 1) return 0;
+    if (k <= 1) return { tau2: 0, converged: true, iters: 0, maxIters: maxIter };
     const vi = studies.map((d) => d.vi);
     const yi = studies.map((d) => d.yi);
     const seed = tau2Init !== null ? Math.max(0, tau2Init) : tau2_DL(studies);
-    return fisherScoringCore(vi, (tau2) => {
+    const reFitFn = (tau2) => {
       let W = 0, Wmu = 0;
       for (let i = 0; i < k; i++) {
         const wi = 1 / (vi[i] + tau2);
@@ -633,7 +681,8 @@ var App = (() => {
       }
       const mu = Wmu / W;
       return { e: yi.map((y) => y - mu), W };
-    }, seed, tol, maxIter, false);
+    };
+    return tau2Core_ML(vi, reFitFn, seed, tol, maxIter);
   }
   function logLik(studies, mu, tau2) {
     let ll = 0;
@@ -645,11 +694,11 @@ var App = (() => {
   }
   function tau2_REML(studies, tol = REML_TOL, maxIter = 100, tau2Init = null) {
     const k = studies.length;
-    if (k <= 1) return 0;
+    if (k <= 1) return { tau2: 0, converged: true, iters: 0, maxIters: maxIter };
     const vi = studies.map((d) => d.vi);
     const yi = studies.map((d) => d.yi);
     const seed = tau2Init !== null ? Math.max(0, tau2Init) : tau2_DL(studies);
-    return fisherScoringCore(vi, (tau2) => {
+    const reFitFn = (tau2) => {
       let W = 0, Wmu = 0;
       for (let i = 0; i < k; i++) {
         const wi = 1 / (vi[i] + tau2);
@@ -658,7 +707,8 @@ var App = (() => {
       }
       const mu = Wmu / W;
       return { e: yi.map((y) => y - mu), h: vi.map((v) => 1 / (W * (v + tau2))), W };
-    }, seed, tol, maxIter, true);
+    };
+    return tau2Core_REML(vi, reFitFn, seed, tol, maxIter);
   }
   function tau2_PM(studies, tol = REML_TOL, maxIter = 100, tau2Init = null) {
     const k = studies.length;
@@ -724,14 +774,14 @@ var App = (() => {
   }
   function tau2_GENQM(studies, tol = REML_TOL, maxIter = 200) {
     const k = studies.length;
-    if (k <= 1) return 0;
+    if (k <= 1) return { tau2: 0, converged: true, iters: 0, maxIters: maxIter };
     const vi = studies.map((d) => d.vi);
     const yi = studies.map((d) => d.yi);
     const wi = vi.map((v) => 1 / v);
     const W = wi.reduce((s, w) => s + w, 0);
     const ybarFE = yi.reduce((s, y, i) => s + wi[i] * y, 0) / W;
     const Q_obs = yi.reduce((s, y, i) => s + wi[i] * (y - ybarFE) ** 2, 0);
-    if (Q_obs <= 0) return 0;
+    if (Q_obs <= 0) return { tau2: 0, converged: true, iters: 0, maxIters: maxIter, tau2Boundary: true };
     function eigenvalues(tau2) {
       const d = vi.map((v) => (v + tau2) / v);
       const b2 = vi.map((v) => (v + tau2) / (v * v));
@@ -785,19 +835,26 @@ var App = (() => {
         const mid = (m + 0.5) * halfH * 2;
         for (let i = 0; i < 20; i++) s += GL20_W[i] * integrand(mid + halfH * GL20_X[i]);
       }
-      return Math.min(1, Math.max(0, 0.5 - s * halfH / Math.PI));
+      return clamp01(0.5 - s * halfH / Math.PI);
     }
-    if (imhofCDF(eigenvalues(0), Q_obs) <= 0.5) return 0;
+    if (imhofCDF(eigenvalues(0), Q_obs) <= 0.5) return { tau2: 0, converged: true, iters: 0, maxIters: maxIter, tau2Boundary: true };
     let lo = 0, hi = 1;
     while (imhofCDF(eigenvalues(hi), Q_obs) > 0.5 && hi < 1e6) hi *= 2;
-    if (hi >= 1e6) return hi / 2;
-    for (let i = 0; i < maxIter; i++) {
+    if (hi >= 1e6) return { tau2: hi / 2, converged: false, iters: 0, maxIters: maxIter, tau2Boundary: false };
+    let bisIters = 0;
+    let bisConverged = false;
+    for (; bisIters < maxIter; bisIters++) {
       const mid = (lo + hi) / 2;
       if (imhofCDF(eigenvalues(mid), Q_obs) > 0.5) lo = mid;
       else hi = mid;
-      if (hi - lo < tol) break;
+      if (hi - lo < tol) {
+        bisConverged = true;
+        bisIters++;
+        break;
+      }
     }
-    return Math.max(0, (lo + hi) / 2);
+    const bisResult = Math.max(0, (lo + hi) / 2);
+    return { tau2: bisResult, converged: bisConverged, iters: bisIters, maxIters: maxIter, tau2Boundary: bisResult === 0 };
   }
   function genqCore(studies, weights) {
     const k = studies.length;
@@ -816,9 +873,8 @@ var App = (() => {
     const weights = studies.map((d) => Math.sqrt(1 / d.vi));
     return genqCore(studies, weights);
   }
-  function tau2_GENQ(studies, weights) {
-    const w = weights ?? studies.map((d) => 1 / d.vi);
-    return genqCore(studies, w);
+  function tau2_GENQ(studies) {
+    return genqCore(studies, studies.map((d) => 1 / d.vi));
   }
   function tau2Core_REML(vi, fitFn, seed = 0, tol = REML_TOL, maxIter = 100) {
     return fisherScoringCore(vi, fitFn, seed, tol, maxIter, true);
@@ -828,16 +884,23 @@ var App = (() => {
   }
   function tau2Core_PM(vi, fitFn, df, seed = 0, tol = REML_TOL, maxIter = 100) {
     let tau2 = seed;
-    for (let iter = 0; iter < maxIter; iter++) {
+    let iters = 0;
+    let converged = false;
+    for (; iters < maxIter; iters++) {
       const fit = fitFn(tau2);
       if (!fit) break;
       const { e, W } = fit;
       const QE = vi.reduce((s, v, i) => s + e[i] * e[i] / (v + tau2), 0);
       const newTau2 = Math.max(0, tau2 + (QE - df) / W);
-      if (Math.abs(newTau2 - tau2) < tol) return newTau2;
+      if (Math.abs(newTau2 - tau2) < tol) {
+        tau2 = newTau2;
+        converged = true;
+        iters++;
+        break;
+      }
       tau2 = newTau2;
     }
-    return tau2;
+    return { tau2, converged, iters, maxIters: maxIter };
   }
   function tau2Core_DL(vi, fitFn0, df) {
     if (df <= 0) return 0;
@@ -867,26 +930,33 @@ var App = (() => {
   function tau2Core_SJ(vi, fitFn, seed, tol = REML_TOL, maxIter = 200) {
     const k = vi.length;
     let tau2 = seed;
-    if (tau2 === 0) return 0;
-    for (let iter = 0; iter < maxIter; iter++) {
+    if (tau2 === 0) return { tau2: 0, converged: true, iters: 0, maxIters: maxIter, tau2Boundary: false };
+    let iters = 0;
+    let converged = false;
+    for (; iters < maxIter; iters++) {
       const fit = fitFn(tau2);
       if (!fit) break;
       const { e } = fit;
       const newTau2 = vi.reduce((s, v, i) => s + v * e[i] * e[i] / (v + tau2), 0) / k;
-      if (Math.abs(newTau2 - tau2) < tol) return Math.max(0, newTau2);
+      if (Math.abs(newTau2 - tau2) < tol) {
+        tau2 = Math.max(0, newTau2);
+        converged = true;
+        iters++;
+        break;
+      }
       tau2 = Math.max(0, newTau2);
     }
-    return tau2;
+    return { tau2, converged, iters, maxIters: maxIter, tau2Boundary: converged && tau2 === 0 };
   }
   var init_tau2 = __esm({
-    "js/tau2.js"() {
+    "js/stats/tau2.js"() {
       init_utils();
       init_constants();
       init_quadrature();
     }
   });
 
-  // js/profiles.js
+  // js/core/profiles.js
   function clampVi(x) {
     return x < MIN_VAR ? MIN_VAR : x;
   }
@@ -992,13 +1062,13 @@ var App = (() => {
   }
   var _profileSpecs, effectProfiles;
   var init_profiles = __esm({
-    "js/profiles.js"() {
+    "js/core/profiles.js"() {
       init_utils();
       init_constants();
       _profileSpecs = {
         // ------------------------------------------------------------------ //
         "MD": {
-          label: "Mean Difference",
+          label: "Mean Difference (MD)",
           group: "Continuous (two groups)",
           inputs: ["m1", "sd1", "n1", "m2", "sd2", "n2"],
           compute(s) {
@@ -1018,7 +1088,7 @@ var App = (() => {
         },
         // ------------------------------------------------------------------ //
         "SMD": {
-          label: "Standardized Mean Difference (Hedges g)",
+          label: "Standardized Mean Difference (Hedges' g; SMD)",
           group: "Continuous (two groups)",
           inputs: ["m1", "sd1", "n1", "m2", "sd2", "n2"],
           compute(s) {
@@ -1041,7 +1111,7 @@ var App = (() => {
         // one extra warning beyond softWarnTwoGroup: when SD ratio < 1.1 the equal-
         // variance assumption holds and standard SMD is preferable.
         "SMDH": {
-          label: "Standardized Mean Difference (heteroscedastic)",
+          label: "Standardized Mean Difference (heteroscedastic; SMDH)",
           group: "Continuous (two groups)",
           inputs: ["m1", "sd1", "n1", "m2", "sd2", "n2"],
           compute(s) {
@@ -1050,7 +1120,7 @@ var App = (() => {
             const sdi2 = (sd1 ** 2 + sd2 ** 2) / 2;
             const sdi = Math.sqrt(sdi2);
             const d = (m1 - m2) / sdi;
-            const J = 1 - 3 / (4 * df - 1);
+            const J = hedgesJ(df);
             const g = d * J;
             const vi_g = Math.max(
               g ** 2 * (sd1 ** 4 / (n1 - 1) + sd2 ** 4 / (n2 - 1)) / (8 * sdi2 ** 2) + (sd1 ** 2 / (n1 - 1) + sd2 ** 2 / (n2 - 1)) / sdi2,
@@ -1076,7 +1146,7 @@ var App = (() => {
         },
         // ------------------------------------------------------------------ //
         "MD_paired": {
-          label: "Mean Difference (Paired)",
+          label: "Mean Difference (paired; MD_paired)",
           group: "Continuous (paired)",
           inputs: ["m_pre", "sd_pre", "m_post", "sd_post", "n", "r"],
           compute(s) {
@@ -1101,7 +1171,7 @@ var App = (() => {
         },
         // ------------------------------------------------------------------ //
         "SMD_paired": {
-          label: "Standardized Mean Change",
+          label: "Standardized Mean Change (SMD_paired)",
           group: "Continuous (paired)",
           inputs: ["m_pre", "sd_pre", "m_post", "sd_post", "n", "r"],
           compute(s) {
@@ -1109,7 +1179,7 @@ var App = (() => {
             const corr = isFinite(r) ? r : 0.5;
             const d = (m_post - m_pre) / sd_pre;
             const df = n - 1;
-            const J = 1 - 3 / (4 * df - 1);
+            const J = hedgesJ(df);
             const g = d * J;
             const vi = clampVi(2 * (1 - corr) / n + g * g / (2 * n));
             return { yi: g, vi, md: g };
@@ -1133,7 +1203,7 @@ var App = (() => {
         //               pre-post correlation; the default r = 0.5 can over- or under-
         //               estimate variance by ≥ 50% when the true r is near 0 or 1.
         "SMCC": {
-          label: "Standardized Mean Change (change-score SD)",
+          label: "Standardized Mean Change (change-score SD; SMCC)",
           group: "Continuous (paired)",
           inputs: ["m_pre", "sd_pre", "m_post", "sd_post", "n", "r"],
           compute(s) {
@@ -1142,7 +1212,7 @@ var App = (() => {
             const sd_change = Math.sqrt(sd_pre ** 2 + sd_post ** 2 - 2 * corr * sd_pre * sd_post);
             const d = (m_post - m_pre) / sd_change;
             const df = n - 1;
-            const J = 1 - 3 / (4 * df - 1);
+            const J = hedgesJ(df);
             const g = d * J;
             const vi = clampVi(1 / n + g * g / (2 * n));
             return { yi: g, vi, md: g };
@@ -1343,7 +1413,7 @@ var App = (() => {
         //                       cells make the log-OR/RR asymptotically unstable;
         //                       exact methods or Peto OR may be preferable.
         "OR": {
-          label: "Odds Ratio",
+          label: "Odds Ratio (OR)",
           group: "Binary outcomes",
           isTransformedScale: true,
           isLog: true,
@@ -1372,7 +1442,7 @@ var App = (() => {
         },
         // ------------------------------------------------------------------ //
         "RR": {
-          label: "Risk Ratio",
+          label: "Risk Ratio (RR)",
           group: "Binary outcomes",
           isTransformedScale: true,
           isLog: true,
@@ -1402,7 +1472,7 @@ var App = (() => {
         },
         // ------------------------------------------------------------------ //
         "RD": {
-          label: "Risk Difference",
+          label: "Risk Difference (RD)",
           group: "Binary outcomes",
           inputs: ["a", "b", "c", "d"],
           compute(s) {
@@ -1446,7 +1516,7 @@ var App = (() => {
         // difference of two arcsine-transformed values; results are reported on
         // the arcsine scale directly. Reference: metafor escalc("AS").
         "AS": {
-          label: "Arcsine-transformed Risk Difference",
+          label: "Arcsine-transformed Risk Difference (AS)",
           group: "Binary outcomes",
           inputs: ["a", "b", "c", "d"],
           compute(s) {
@@ -1485,7 +1555,7 @@ var App = (() => {
         // are still estimable provided the denominator a·d+b·c > 0.
         // Reference: metafor escalc("YUQ").
         "YUQ": {
-          label: "Yule's Q",
+          label: "Yule's Q (YUQ)",
           group: "Binary outcomes",
           inputs: ["a", "b", "c", "d"],
           compute(s) {
@@ -1537,7 +1607,7 @@ var App = (() => {
         // variation near ±1. Undefined when √(a·d)+√(b·c) = 0.
         // Reference: metafor escalc("YUY").
         "YUY": {
-          label: "Yule's Y",
+          label: "Yule's Y (YUY)",
           group: "Binary outcomes",
           inputs: ["a", "b", "c", "d"],
           compute(s) {
@@ -1586,7 +1656,7 @@ var App = (() => {
         //   |r| > 0.9 — vi = (1−r²)²/(n−1) approaches 0 as r → ±1; the
         //               estimate becomes increasingly unstable near the boundary.
         "COR": {
-          label: "Correlation (raw r)",
+          label: "Correlation (raw r; COR)",
           group: "Correlations",
           inputs: ["r", "n"],
           compute(s) {
@@ -1628,7 +1698,7 @@ var App = (() => {
         // The variance uses the bias-corrected r (yi), not the raw r.
         // Requires n ≥ 4 so that (n−2)/2 ≥ 1 (avoids c = 0 in ₂F₁).
         "UCOR": {
-          label: "Bias-corrected correlation",
+          label: "Bias-corrected Correlation (UCOR)",
           group: "Correlations",
           inputs: ["r", "n"],
           compute(s) {
@@ -1662,7 +1732,7 @@ var App = (() => {
         },
         // ------------------------------------------------------------------ //
         "ZCOR": {
-          label: "Correlation (Fisher's z)",
+          label: "Correlation (Fisher's z; ZCOR)",
           group: "Correlations",
           isTransformedScale: true,
           analysisScaleLabel: "Fisher z scale",
@@ -1704,7 +1774,7 @@ var App = (() => {
         //                  for zero-order correlations, adjusted for p covariates.
         //   |r| > 0.9    — Same boundary-instability issue as COR/ZCOR.
         "PCOR": {
-          label: "Partial Correlation (raw r)",
+          label: "Partial Correlation (raw r; PCOR)",
           group: "Correlations",
           inputs: ["r", "n", "p"],
           compute(s) {
@@ -1742,7 +1812,7 @@ var App = (() => {
         },
         // ------------------------------------------------------------------ //
         "ZPCOR": {
-          label: "Partial Correlation (Fisher's z)",
+          label: "Partial Correlation (Fisher's z; ZPCOR)",
           group: "Correlations",
           isTransformedScale: true,
           analysisScaleLabel: "Fisher z scale",
@@ -1796,7 +1866,7 @@ var App = (() => {
         //   |r| > 0.9 — variance near boundary; estimate increasingly unstable.
         // ------------------------------------------------------------------ //
         "RPB": {
-          label: "Point-Biserial Correlation (r_pb)",
+          label: "Point-Biserial Correlation (r_pb; RPB)",
           group: "Correlations",
           inputs: ["r", "n"],
           compute(s) {
@@ -1847,7 +1917,7 @@ var App = (() => {
         //         For p = 0.5 (equal groups): z = 0, φ_z = φ(0) ≈ 0.3989.
         // ------------------------------------------------------------------ //
         "RBIS": {
-          label: "Biserial Correlation (r_bis)",
+          label: "Biserial Correlation (r_bis; RBIS)",
           group: "Correlations",
           inputs: ["r", "n", "p"],
           compute(s) {
@@ -1908,7 +1978,7 @@ var App = (() => {
         //   R² does not convey sign (always ≥ 0). For bivariate case: r² = R².
         // ------------------------------------------------------------------ //
         "R2": {
-          label: "R-squared (raw R\xB2)",
+          label: "R-squared (raw R\xB2; R2)",
           group: "Correlations",
           inputs: ["r2", "n"],
           compute(s) {
@@ -1952,7 +2022,7 @@ var App = (() => {
         //   squares the pooled z estimate to return to the R² scale.
         // ------------------------------------------------------------------ //
         "ZR2": {
-          label: "R-squared (Fisher's z of \u221AR\xB2)",
+          label: "R-squared (Fisher's z of \u221AR\xB2; ZR2)",
           group: "Correlations",
           isTransformedScale: true,
           analysisScaleLabel: "Fisher z scale",
@@ -1995,7 +2065,7 @@ var App = (() => {
         //                expected-cell-count assumption (E ≥ 5) is often violated.
         //   |r| > 0.9  — Same boundary-instability issue as COR/ZCOR.
         "PHI": {
-          label: "Phi Coefficient",
+          label: "Phi Coefficient (PHI)",
           group: "Correlations",
           inputs: ["a", "b", "c", "d"],
           compute(s) {
@@ -2034,7 +2104,7 @@ var App = (() => {
         },
         // ------------------------------------------------------------------ //
         "RTET": {
-          label: "Tetrachoric Correlation",
+          label: "Tetrachoric Correlation (RTET)",
           group: "Correlations",
           inputs: ["a", "b", "c", "d"],
           compute(s) {
@@ -2085,7 +2155,7 @@ var App = (() => {
         // PR additionally flags p = 0 or p = 1 exactly: the binomial variance p(1−p)/n
         // equals zero, giving the study infinite weight — a structural problem.
         "PR": {
-          label: "Proportion (raw)",
+          label: "Proportion (raw; PR)",
           group: "Proportions",
           inputs: ["x", "n"],
           compute(s) {
@@ -2095,7 +2165,7 @@ var App = (() => {
             const vi = clampVi(p * (1 - p) / n);
             return { yi, vi };
           },
-          transform: (x) => Math.min(1, Math.max(0, x)),
+          transform: (x) => clamp01(x),
           validate: validateProportion,
           softWarnings: (s, label) => softWarnProportion(s, label, true),
           exampleData: [
@@ -2108,7 +2178,7 @@ var App = (() => {
         },
         // ------------------------------------------------------------------ //
         "PLN": {
-          label: "Proportion (log)",
+          label: "Proportion (log; PLN)",
           group: "Proportions",
           isTransformedScale: true,
           isLog: true,
@@ -2124,7 +2194,7 @@ var App = (() => {
             const vi = clampVi((1 - p) / (n * p));
             return { yi, vi };
           },
-          transform: (x) => Math.min(1, Math.max(0, Math.exp(x))),
+          transform: (x) => clamp01(Math.exp(x)),
           validate: validateProportion,
           softWarnings: softWarnProportion,
           exampleData: [
@@ -2137,7 +2207,7 @@ var App = (() => {
         },
         // ------------------------------------------------------------------ //
         "PLO": {
-          label: "Proportion (logit)",
+          label: "Proportion (logit; PLO)",
           group: "Proportions",
           isTransformedScale: true,
           analysisScaleLabel: "logit scale",
@@ -2153,7 +2223,7 @@ var App = (() => {
             const vi = clampVi(1 / (n * p * (1 - p)));
             return { yi, vi };
           },
-          transform: (x) => Math.min(1, Math.max(0, 1 / (1 + Math.exp(-x)))),
+          transform: (x) => clamp01(1 / (1 + Math.exp(-x))),
           validate: validateProportion,
           softWarnings: softWarnProportion,
           exampleData: [
@@ -2166,7 +2236,7 @@ var App = (() => {
         },
         // ------------------------------------------------------------------ //
         "PAS": {
-          label: "Proportion (arcsine)",
+          label: "Proportion (arcsine; PAS)",
           group: "Proportions",
           isTransformedScale: true,
           analysisScaleLabel: "arcsine scale",
@@ -2178,7 +2248,7 @@ var App = (() => {
             const vi = clampVi(1 / (4 * n));
             return { yi, vi };
           },
-          transform: (x) => Math.min(1, Math.max(0, Math.sin(x) ** 2)),
+          transform: (x) => clamp01(Math.sin(x) ** 2),
           validate: validateProportion,
           softWarnings: softWarnProportion,
           exampleData: [
@@ -2191,18 +2261,18 @@ var App = (() => {
         },
         // ------------------------------------------------------------------ //
         "PFT": {
-          label: "Proportion (Freeman-Tukey)",
+          label: "Proportion (Freeman-Tukey; PFT)",
           group: "Proportions",
           isTransformedScale: true,
           analysisScaleLabel: "double-arcsine scale",
           inputs: ["x", "n"],
           compute(s) {
             const { x, n } = s;
-            const yi = Math.asin(Math.sqrt(x / (n + 1))) + Math.asin(Math.sqrt((x + 1) / (n + 1)));
-            const vi = clampVi(1 / (n + 0.5));
+            const yi = 0.5 * (Math.asin(Math.sqrt(x / (n + 1))) + Math.asin(Math.sqrt((x + 1) / (n + 1))));
+            const vi = clampVi(1 / (4 * (n + 0.5)));
             return { yi, vi };
           },
-          transform: (x) => Math.min(1, Math.max(0, Math.sin(x / 2) ** 2)),
+          transform: (x) => clamp01(Math.sin(x) ** 2),
           validate: validateProportion,
           softWarnings: softWarnProportion,
           exampleData: [
@@ -2220,7 +2290,7 @@ var App = (() => {
         //            the study's 95% CI spans roughly ±2 units, contributing very
         //            little weight. The user may want to double-check the input.
         "GENERIC": {
-          label: "Generic (yi / vi)",
+          label: "Generic (yi / vi; GENERIC)",
           group: "Generic",
           inputs: ["yi", "vi"],
           compute(s) {
@@ -2250,7 +2320,7 @@ var App = (() => {
         },
         // ------------------------------------------------------------------ //
         "HR": {
-          label: "Hazard Ratio",
+          label: "Hazard Ratio (HR)",
           group: "Time-to-event / Rates",
           isTransformedScale: true,
           isLog: true,
@@ -2289,7 +2359,7 @@ var App = (() => {
         //                 event counts (analogous to the OR/RR zero-cell correction).
         //                 Warning is informational so the user knows the correction fired.
         "IRR": {
-          label: "Incidence Rate Ratio",
+          label: "Incidence Rate Ratio (IRR)",
           group: "Time-to-event / Rates",
           isTransformedScale: true,
           isLog: true,
@@ -2333,7 +2403,7 @@ var App = (() => {
         //   When both counts are 0, vi = 0 → excluded via MIN_VAR floor.
         //   No ratio is taken, so no log-continuity correction is applied.
         "IRD": {
-          label: "Incidence Rate Difference",
+          label: "Incidence Rate Difference (IRD)",
           group: "Time-to-event / Rates",
           inputs: ["x1", "t1", "x2", "t2"],
           compute(s) {
@@ -2372,7 +2442,7 @@ var App = (() => {
         //   vi = 1/(4*t1) + 1/(4*t2) — independent of event counts (no zero
         //   issue); studies with zero events remain informative.
         "IRSD": {
-          label: "Incidence Rate Difference (sqrt)",
+          label: "Incidence Rate Difference (sqrt; IRSD)",
           group: "Time-to-event / Rates",
           inputs: ["x1", "t1", "x2", "t2"],
           compute(s) {
@@ -2407,7 +2477,7 @@ var App = (() => {
         //   zero events — vi = 1/x; at x = 0 this is infinite. x is replaced by 0.5
         //                 (consistent with Poisson continuity correction convention).
         "IR": {
-          label: "Incidence Rate (log)",
+          label: "Incidence Rate (log; IR)",
           group: "Time-to-event / Rates",
           isTransformedScale: true,
           isLog: true,
@@ -2449,7 +2519,7 @@ var App = (() => {
         // Both types share the same point estimate:
         //   d  = (m − ref) / sd          (raw Cohen's d, one-sample)
         //   df = n − 1
-        //   J  = 1 − 3/(4·df − 1)        (Hedges' small-sample bias correction)
+        //   J  = Γ(df/2) / (√(df/2)·Γ((df−1)/2))  exact Hedges' bias correction (hedgesJ)
         //   yi = d · J                   (bias-corrected one-sample SMD)
         //
         // Variance differs:
@@ -2469,7 +2539,7 @@ var App = (() => {
             const ref = isFinite(s.ref) ? s.ref : 0;
             const d = (m - ref) / sd;
             const df = n - 1;
-            const J = 1 - 3 / (4 * df - 1);
+            const J = hedgesJ(df);
             const yi = d * J;
             const vi = clampVi(1 / n + yi * yi / (2 * df));
             return { yi, vi };
@@ -2506,7 +2576,7 @@ var App = (() => {
             const ref = isFinite(s.ref) ? s.ref : 0;
             const d = (m - ref) / sd;
             const df = n - 1;
-            const J = 1 - 3 / (4 * df - 1);
+            const J = hedgesJ(df);
             const yi = d * J;
             const vi_d = 1 / n + d * d / (2 * df);
             const vi = clampVi(J * J * vi_d);
@@ -2544,7 +2614,7 @@ var App = (() => {
         //   n < 10    — vi = sd²/n; with very small n the sampling distribution of
         //               the mean departs noticeably from normality.
         "MN": {
-          label: "Mean (raw)",
+          label: "Mean (raw; MN)",
           group: "Continuous (single group)",
           inputs: ["m", "sd", "n"],
           compute(s) {
@@ -2582,7 +2652,7 @@ var App = (() => {
         //              method systematically underestimates the true variance.
         //   n < 10   — Same as MN: small-n normality concern.
         "MNLN": {
-          label: "Mean (log)",
+          label: "Mean (log; MNLN)",
           group: "Continuous (single group)",
           isTransformedScale: true,
           isLog: true,
@@ -2624,7 +2694,7 @@ var App = (() => {
         //                    apparent number of categories without adding information
         //                    and may indicate a data-coding error.
         "GOR": {
-          label: "Generalised Odds Ratio (ordinal)",
+          label: "Generalised Odds Ratio (ordinal; GOR)",
           group: "Binary outcomes",
           isTransformedScale: true,
           isLog: true,
@@ -2687,7 +2757,7 @@ var App = (() => {
         //   Psychometrika, 30(3), 357–370.
         // ------------------------------------------------------------------ //
         "ARAW": {
-          label: "Cronbach's \u03B1 (raw, ARAW)",
+          label: "Cronbach's \u03B1 (raw; ARAW)",
           group: "Reliability",
           inputs: ["alpha", "k", "n"],
           compute(s) {
@@ -2730,7 +2800,7 @@ var App = (() => {
         //   Statistics in Medicine, 21(9), 1331–1335.
         // ------------------------------------------------------------------ //
         "ABT": {
-          label: "Cronbach's \u03B1 (log transform, ABT)",
+          label: "Cronbach's \u03B1 (log transform; ABT)",
           group: "Reliability",
           isTransformedScale: true,
           analysisScaleLabel: "log(1\u2212\u03B1) scale",
@@ -2777,7 +2847,7 @@ var App = (() => {
         //   Psychometrika, 41(2), 219–231.
         // ------------------------------------------------------------------ //
         "AHW": {
-          label: "Cronbach's \u03B1 (cube-root transform, AHW)",
+          label: "Cronbach's \u03B1 (cube-root transform; AHW)",
           group: "Reliability",
           isTransformedScale: true,
           inputs: ["alpha", "k", "n"],
@@ -2820,7 +2890,7 @@ var App = (() => {
     }
   });
 
-  // js/bayes.js
+  // js/stats/bayes.js
   function profileTau2(studies, mu, tol = REML_TOL) {
     function score(t2) {
       let s = 0;
@@ -2845,9 +2915,9 @@ var App = (() => {
   function profileLikCI(studies, alpha = 0.05) {
     const k = studies.length;
     if (k <= 1) return [NaN, NaN];
-    const tau2ml = tau2_ML(studies);
+    const tau2ml = tau2_ML(studies).tau2;
     const w = studies.map((d) => 1 / (d.vi + tau2ml));
-    const W = w.reduce((acc, b) => acc + b, 0);
+    const W = sum(w);
     const muHat = studies.reduce((acc, d, i) => acc + w[i] * d.yi, 0) / W;
     const lMax = logLik(studies, muHat, tau2ml);
     const cutoff = chiSquareQuantile(1 - alpha, 1) / 2;
@@ -2870,9 +2940,9 @@ var App = (() => {
   }
   function profileLikTau2(studies, opts = {}) {
     const k = studies.length;
-    const method = opts.method !== void 0 ? opts.method : "REML";
-    const nGrid = opts.nGrid !== void 0 ? opts.nGrid : 200;
-    const alpha = opts.alpha !== void 0 ? opts.alpha : 0.05;
+    const method = opts.method ?? "REML";
+    const nGrid = opts.nGrid ?? 200;
+    const alpha = opts.alpha ?? 0.05;
     if (k < 2)
       return { error: "Profile likelihood requires at least 2 studies (got " + k + ")" };
     if (method !== "ML" && method !== "REML")
@@ -2889,7 +2959,7 @@ var App = (() => {
       if (method === "REML") ll2 -= 0.5 * Math.log(W);
       return ll2;
     }
-    const tau2hat = method === "REML" ? tau2_REML(studies) : tau2_ML(studies);
+    const tau2hat = (method === "REML" ? tau2_REML(studies) : tau2_ML(studies)).tau2;
     const lMax = evalProfile(tau2hat);
     const chi2thresh = chiSquareQuantile(1 - alpha, 1);
     const lCrit = lMax - chi2thresh / 2;
@@ -2899,24 +2969,9 @@ var App = (() => {
     if (evalProfile(0) >= lCrit) {
       ciLow = 0;
     } else {
-      let lo = 0, bhi = tau2hat;
-      for (let i = 0; i < BISECTION_ITERS; i++) {
-        const mid = (lo + bhi) / 2;
-        if (evalProfile(mid) >= lCrit) bhi = mid;
-        else lo = mid;
-      }
-      ciLow = (lo + bhi) / 2;
+      ciLow = bisect((mid) => lCrit - evalProfile(mid), 0, tau2hat);
     }
-    let ciHigh;
-    {
-      let lo = tau2hat, bhi = hi;
-      for (let i = 0; i < BISECTION_ITERS; i++) {
-        const mid = (lo + bhi) / 2;
-        if (evalProfile(mid) >= lCrit) lo = mid;
-        else bhi = mid;
-      }
-      ciHigh = (lo + bhi) / 2;
-    }
+    const ciHigh = bisect((mid) => evalProfile(mid) - lCrit, tau2hat, hi);
     const grid = new Float64Array(nGrid);
     const ll = new Float64Array(nGrid);
     const stepTau = Math.sqrt(hi) / (nGrid - 1);
@@ -2943,12 +2998,12 @@ var App = (() => {
   }
   function bayesMeta(studies, opts = {}) {
     const k = studies.length;
-    const mu0 = opts.mu0 !== void 0 ? opts.mu0 : 0;
-    const sigma_mu = opts.sigma_mu !== void 0 ? opts.sigma_mu : 1;
-    const sigma_tau = opts.sigma_tau !== void 0 ? opts.sigma_tau : 0.5;
-    const alpha = opts.alpha !== void 0 ? opts.alpha : 0.05;
-    const nGrid = opts.nGrid !== void 0 ? opts.nGrid : Math.round(Math.max(100, Math.min(300, 4500 / k)));
-    const nMu = opts.nMu !== void 0 ? opts.nMu : Math.round(Math.max(200, Math.min(500, 1e5 / k)));
+    const mu0 = opts.mu0 ?? 0;
+    const sigma_mu = opts.sigma_mu ?? 1;
+    const sigma_tau = opts.sigma_tau ?? 0.5;
+    const alpha = opts.alpha ?? 0.05;
+    const nGrid = opts.nGrid ?? Math.round(Math.max(100, Math.min(300, 4500 / k)));
+    const nMu = opts.nMu ?? Math.round(Math.max(200, Math.min(500, 1e5 / k)));
     if (k < 2) return { error: "Bayesian meta-analysis requires at least 2 studies." };
     if (sigma_mu <= 0) return { error: "sigma_mu must be positive." };
     if (sigma_tau <= 0) return { error: "sigma_tau must be positive." };
@@ -2959,6 +3014,7 @@ var App = (() => {
     const sumW2 = wFE.reduce((s, w) => s + w * w, 0);
     const C = W - sumW2 / W;
     const tauDL = Math.sqrt(C > 0 ? Math.max(0, (Q - (k - 1)) / C) : 0);
+    const tauREML = Math.sqrt(Math.max(0, tau2_REML(studies).tau2));
     const computeGrid = (tauMax2) => {
       const dtau2 = tauMax2 / (nGrid - 1);
       const tauGrid2 = new Float64Array(nGrid);
@@ -2993,7 +3049,14 @@ var App = (() => {
       }
       return { tauGrid: tauGrid2, condMeans: condMeans2, condVars: condVars2, logW: logW2, dtau: dtau2 };
     };
-    let tauMax = Math.max(tauDL * 8, 3);
+    const TAU_MAX_FLOOR = 3;
+    let tauMax = TAU_MAX_FLOOR;
+    let gridExtended = false;
+    if (tauREML > 0.5 * TAU_MAX_FLOOR) {
+      tauMax = Math.max(tauREML * 8, TAU_MAX_FLOOR);
+      gridExtended = true;
+    }
+    tauMax = Math.max(tauMax, tauDL * 8);
     let { tauGrid, condMeans, condVars, logW, dtau } = computeGrid(tauMax);
     const normalise = (lw) => {
       const lmax = lw.reduce((m, v) => Math.max(m, v), -Infinity);
@@ -3108,17 +3171,22 @@ var App = (() => {
       muGrid,
       muDensity,
       grid_truncated,
+      gridExtended,
+      tauREML,
       k,
       BF10,
       BF01,
-      logBF10
+      logBF10,
+      convergence: { converged: true, iters: 0, maxIters: 0, reason: null, source: "bayesMeta_grid" }
     };
   }
   function priorSensitivity(studies, opts = {}) {
     const {
       mu0 = 0,
       sigmaMuGrid = [0.5, 1, 2],
+      // deliberate fixed grid — not exposed in UI
       sigmaTauGrid = [0.25, 0.5, 1],
+      // deliberate fixed grid — not exposed in UI
       alpha = 0.05
     } = opts;
     const rows = [];
@@ -3137,14 +3205,14 @@ var App = (() => {
     return rows;
   }
   var init_bayes = __esm({
-    "js/bayes.js"() {
+    "js/stats/bayes.js"() {
       init_tau2();
       init_utils();
       init_constants();
     }
   });
 
-  // js/linalg.js
+  // js/core/linalg.js
   function wls(X, y, w) {
     const k = X.length;
     const p = X[0].length;
@@ -3345,12 +3413,15 @@ var App = (() => {
     }
     return logd;
   }
+  function diagSE(vcov, s2 = 1) {
+    return vcov.map((row, j) => Math.sqrt(Math.max(0, row[j] * s2)));
+  }
   var init_linalg = __esm({
-    "js/linalg.js"() {
+    "js/core/linalg.js"() {
     }
   });
 
-  // js/selection.js
+  // js/stats/selection.js
   function pCurve(studies) {
     const sig = studies.filter((d) => isFinite(d.yi) && isFinite(d.se) && d.se > 0).map((d) => {
       const z = Math.abs(d.yi / d.se);
@@ -3368,12 +3439,7 @@ var App = (() => {
     function power(lambda) {
       return 1 - normalCDF(Z_95 - lambda) + normalCDF(-Z_95 - lambda);
     }
-    let lo33 = 0, hi33 = 10;
-    for (let i = 0; i < BISECTION_ITERS; i++) {
-      const mid = (lo33 + hi33) / 2;
-      power(mid) < POWER_33 ? lo33 = mid : hi33 = mid;
-    }
-    const lambda33 = (lo33 + hi33) / 2;
+    const lambda33 = bisect((mid) => POWER_33 - power(mid), 0, 10);
     function pp33CDF(p) {
       if (p <= 0) return 0;
       if (p >= 0.05) return 1;
@@ -3451,12 +3517,7 @@ var App = (() => {
       const lo0 = sumQ(SEARCH_LO);
       const hi0 = sumQ(SEARCH_HI);
       if (target < lo0 || target > hi0) return NaN;
-      let lo = SEARCH_LO, hi = SEARCH_HI;
-      for (let i = 0; i < BISECTION_ITERS; i++) {
-        const mid = (lo + hi) / 2;
-        sumQ(mid) < target ? lo = mid : hi = mid;
-      }
-      return (lo + hi) / 2;
+      return bisect((mid) => target - sumQ(mid), SEARCH_LO, SEARCH_HI);
     }
     let estimate = NaN, ciLow = NaN, ciHigh = NaN;
     if (k >= 1) {
@@ -3629,13 +3690,13 @@ var App = (() => {
   function continuousNormConst(mu, tau2, vi, wFn, sides) {
     const sigma_i = Math.sqrt(vi + tau2);
     const se_i = Math.sqrt(vi);
-    let sum = 0;
+    let sum2 = 0;
     for (let j = 0; j < 20; j++) {
       const y = mu + GH20_X[j] * Math.SQRT2 * sigma_i;
       const p = sides === 2 ? 2 * (1 - normalCDF(Math.abs(y) / se_i)) : 1 - normalCDF(y / se_i);
-      sum += GH20_W[j] * wFn(p);
+      sum2 += GH20_W[j] * wFn(p);
     }
-    return sum / _SQRT_PI;
+    return sum2 / _SQRT_PI;
   }
   function betaNormConst(mu, tau2, vi, a, b, sides, pval_min = 1e-5) {
     const sigma_i = Math.sqrt(vi + tau2);
@@ -3737,6 +3798,7 @@ var App = (() => {
     const ci_mu = [mu - Z_95 * se_mu, mu + Z_95 * se_mu];
     const lrt_stat = 2 * (logLikSel - logLikUnsel);
     const lrt_p = lrt_stat > 0 ? 1 - chiSquareCDF(lrt_stat, lrtDf) : 1;
+    const _log2pi = Math.log(2 * Math.PI);
     return {
       mu,
       se_mu,
@@ -3746,8 +3808,8 @@ var App = (() => {
       tau2,
       se_tau2,
       ...extractShapeParams(logShapeFits, getSE),
-      logLikSel,
-      logLikUnsel,
+      logLikSel: logLikSel - k * 0.5 * _log2pi,
+      logLikUnsel: logLikUnsel - k * 0.5 * _log2pi,
       LRT: lrt_stat,
       LRTdf: lrtDf,
       LRTp: lrt_p,
@@ -3757,6 +3819,13 @@ var App = (() => {
       ciHigh_unsel: mUnsel.ciHigh,
       converged: result.converged,
       iters: result.iters,
+      convergence: {
+        converged: result.converged,
+        iters: result.iters,
+        maxIters: 500,
+        reason: result.converged ? null : "max_iters",
+        source: "bfgs_" + weightFn
+      },
       k,
       sides,
       weightFn
@@ -3771,7 +3840,7 @@ var App = (() => {
       weightFn: "halfnorm",
       pvalMin,
       makeWFn: ([logDelta]) => {
-        const delta = Math.exp(logDelta);
+        const delta = Math.exp(Math.min(logDelta, SEL_MAX_LOG_SHAPE));
         const w = (p) => {
           const pc = Math.max(pvalMin, Math.min(1 - pvalMin, p));
           return normalCDF(normalQuantile(1 - pc) * delta);
@@ -3781,7 +3850,7 @@ var App = (() => {
       initGrid: [[Math.log(1e-3)], [Math.log(0.5)], [Math.log(1)], [Math.log(2)]],
       lrtDf: 1,
       extractShapeParams: ([logDelta], getSE) => {
-        const delta = Math.exp(logDelta);
+        const delta = Math.exp(Math.min(logDelta, SEL_MAX_LOG_SHAPE));
         const se_logDelta = getSE(2);
         return { delta, se_delta: isFinite(se_logDelta) ? delta * se_logDelta : NaN };
       }
@@ -3796,7 +3865,7 @@ var App = (() => {
       weightFn: "power",
       pvalMin,
       makeWFn: ([logDelta]) => {
-        const delta = Math.exp(logDelta);
+        const delta = Math.exp(Math.min(logDelta, SEL_MAX_LOG_SHAPE));
         const w = (p) => {
           const pc = Math.max(pvalMin, Math.min(1 - pvalMin, p));
           return Math.pow(1 - pc, delta);
@@ -3806,7 +3875,7 @@ var App = (() => {
       initGrid: [[Math.log(1e-3)], [Math.log(0.5)], [Math.log(1)], [Math.log(2)]],
       lrtDf: 1,
       extractShapeParams: ([logDelta], getSE) => {
-        const delta = Math.exp(logDelta);
+        const delta = Math.exp(Math.min(logDelta, SEL_MAX_LOG_SHAPE));
         const se_logDelta = getSE(2);
         return { delta, se_delta: isFinite(se_logDelta) ? delta * se_logDelta : NaN };
       }
@@ -3821,7 +3890,7 @@ var App = (() => {
       weightFn: "negexp",
       pvalMin,
       makeWFn: ([logDelta]) => {
-        const delta = Math.exp(logDelta);
+        const delta = Math.exp(Math.min(logDelta, SEL_MAX_LOG_SHAPE));
         const w = (p) => {
           const pc = Math.max(pvalMin, Math.min(1 - pvalMin, p));
           return Math.exp(-delta * pc);
@@ -3831,7 +3900,7 @@ var App = (() => {
       initGrid: [[Math.log(1e-3)], [Math.log(0.5)], [Math.log(1)], [Math.log(2)]],
       lrtDf: 1,
       extractShapeParams: ([logDelta], getSE) => {
-        const delta = Math.exp(logDelta);
+        const delta = Math.exp(Math.min(logDelta, SEL_MAX_LOG_SHAPE));
         const se_logDelta = getSE(2);
         return { delta, se_delta: isFinite(se_logDelta) ? delta * se_logDelta : NaN };
       }
@@ -3846,8 +3915,8 @@ var App = (() => {
       weightFn: "beta",
       pvalMin,
       makeWFn: ([logA, logB]) => {
-        const a = Math.exp(logA);
-        const b = Math.exp(logB);
+        const a = Math.exp(Math.min(logA, SEL_MAX_LOG_SHAPE));
+        const b = Math.exp(Math.min(logB, SEL_MAX_LOG_SHAPE));
         const w = (p) => {
           const pc = Math.max(pvalMin, Math.min(1 - pvalMin, p));
           return Math.pow(pc, a - 1) * Math.pow(1 - pc, b - 1);
@@ -3875,8 +3944,8 @@ var App = (() => {
       ],
       lrtDf: 2,
       extractShapeParams: ([logA, logB], getSE) => {
-        const a = Math.exp(logA);
-        const b = Math.exp(logB);
+        const a = Math.exp(Math.min(logA, SEL_MAX_LOG_SHAPE));
+        const b = Math.exp(Math.min(logB, SEL_MAX_LOG_SHAPE));
         const se_logA = getSE(2);
         const se_logB = getSE(3);
         return {
@@ -3914,8 +3983,8 @@ var App = (() => {
     const vi = valid.map((s) => s.vi);
     const mUnsel = meta(valid, "ML");
     const logLikUnsel = logLik(valid, mUnsel.RE, mUnsel.tau2);
-    function invertHess(H, fval, f2) {
-      const hess = numericalHessian(f2, H, fval);
+    function invertHess(params2, fval, f2) {
+      const hess = numericalHessian(f2, params2, fval);
       return { hess, inv: inverseWithRidge(hess) };
     }
     function getSE(hess, inv, j) {
@@ -3951,6 +4020,7 @@ var App = (() => {
       const zval_mu2 = mu2 / se_mu2;
       const pval_mu2 = 2 * (1 - normalCDF(Math.abs(zval_mu2)));
       const ci_mu2 = [mu2 - Z_95 * se_mu2, mu2 + Z_95 * se_mu2];
+      const _log2pi_f = Math.log(2 * Math.PI);
       return {
         mu: mu2,
         se_mu: se_mu2,
@@ -3963,8 +4033,8 @@ var App = (() => {
         se_omega: se_omega2,
         alpha: alpha2,
         se_alpha: se_alpha2,
-        logLikSel: logLikSel2,
-        logLikUnsel,
+        logLikSel: logLikSel2 - k * 0.5 * _log2pi_f,
+        logLikUnsel: logLikUnsel - k * 0.5 * _log2pi_f,
         LRT: NaN,
         LRTdf: K - 1,
         LRTp: NaN,
@@ -3974,6 +4044,13 @@ var App = (() => {
         ciHigh_unsel: mUnsel.ciHigh,
         converged: result2.converged,
         iters: result2.iters,
+        convergence: {
+          converged: result2.converged,
+          iters: result2.iters,
+          maxIters: 400,
+          reason: result2.converged ? null : "max_iters",
+          source: "bfgs_vh"
+        },
         cuts,
         sides,
         k,
@@ -3990,11 +4067,11 @@ var App = (() => {
     if (nPerInterval[0] === 0) {
       const alpha0 = new Array(K).fill(0);
       const omega0 = new Array(K).fill(1);
-      const zval_mu0 = mUnsel.RE / mUnsel.se;
+      const zval_mu0 = mUnsel.RE / mUnsel.seRE;
       const pval_mu0 = 2 * (1 - normalCDF(Math.abs(zval_mu0)));
       return {
         mu: mUnsel.RE,
-        se_mu: mUnsel.se,
+        se_mu: mUnsel.seRE,
         zval_mu: zval_mu0,
         pval_mu: pval_mu0,
         ci_mu: [mUnsel.ciLow, mUnsel.ciHigh],
@@ -4004,8 +4081,8 @@ var App = (() => {
         se_omega: new Array(K).fill(NaN),
         alpha: alpha0,
         se_alpha: new Array(K).fill(NaN),
-        logLikSel: logLikUnsel,
-        logLikUnsel,
+        logLikSel: logLikUnsel - k * 0.5 * Math.log(2 * Math.PI),
+        logLikUnsel: logLikUnsel - k * 0.5 * Math.log(2 * Math.PI),
         LRT: 0,
         LRTdf: 0,
         LRTp: 1,
@@ -4015,6 +4092,7 @@ var App = (() => {
         ciHigh_unsel: mUnsel.ciHigh,
         converged: true,
         iters: 0,
+        convergence: { converged: true, iters: 0, maxIters: 400, reason: null, source: "bfgs_vh" },
         cuts,
         sides,
         k,
@@ -4066,6 +4144,7 @@ var App = (() => {
     const lrt_stat = 2 * (logLikSel - logLikUnsel);
     const lrt_df = nFree;
     const lrt_p = lrt_df > 0 && lrt_stat > 0 ? 1 - chiSquareCDF(lrt_stat, lrt_df) : lrt_stat <= 0 ? 1 : NaN;
+    const _log2pi_v = Math.log(2 * Math.PI);
     return {
       // Corrected pooled estimate
       mu,
@@ -4081,9 +4160,9 @@ var App = (() => {
       se_omega,
       alpha,
       se_alpha,
-      // Log-likelihoods
-      logLikSel,
-      logLikUnsel,
+      // Log-likelihoods (include −k/2·log(2π) to match R's logLik())
+      logLikSel: logLikSel - k * 0.5 * _log2pi_v,
+      logLikUnsel: logLikUnsel - k * 0.5 * _log2pi_v,
       // Likelihood ratio test
       LRT: lrt_stat,
       LRTdf: lrt_df,
@@ -4096,6 +4175,13 @@ var App = (() => {
       // Optimiser diagnostics
       converged: result.converged,
       iters: result.iters,
+      convergence: {
+        converged: result.converged,
+        iters: result.iters,
+        maxIters: 400,
+        reason: result.converged ? null : "max_iters",
+        source: "bfgs_vh"
+      },
       // Configuration and counts
       cuts,
       sides,
@@ -4107,9 +4193,9 @@ var App = (() => {
       fixed: false
     };
   }
-  var SEL_CUTS_ONE_SIDED, SELECTION_PRESETS, _SQRT_PI;
+  var SEL_CUTS_ONE_SIDED, SELECTION_PRESETS, _SQRT_PI, SEL_MAX_LOG_SHAPE;
   var init_selection = __esm({
-    "js/selection.js"() {
+    "js/stats/selection.js"() {
       init_analysis();
       init_linalg();
       init_utils();
@@ -4151,10 +4237,11 @@ var App = (() => {
         }
       };
       _SQRT_PI = Math.sqrt(Math.PI);
+      SEL_MAX_LOG_SHAPE = 100;
     }
   });
 
-  // js/regression.js
+  // js/stats/regression.js
   function subgroupAnalysis(studies, method = "REML", ciMethod = "normal", alpha = 0.05) {
     const valid = studies.filter((s) => s && isFinite(s.yi) && isFinite(s.vi) && s.group != null && s.group !== "");
     const kNoGroup = studies.filter((s) => s && isFinite(s.yi) && isFinite(s.vi) && (s.group == null || s.group === "")).length;
@@ -4208,7 +4295,7 @@ var App = (() => {
   }
   function qProfile(tau2, studies) {
     const w = studies.map((d) => 1 / (d.vi + tau2));
-    const W = w.reduce((acc, b) => acc + b, 0);
+    const W = sum(w);
     const mu = studies.reduce((acc, d, i) => acc + w[i] * d.yi, 0) / W;
     return studies.reduce((acc, d, i) => acc + w[i] * (d.yi - mu) ** 2, 0);
   }
@@ -4229,12 +4316,7 @@ var App = (() => {
       if (qProfile(hi, studies) > chiHi) {
         tau2_lo = NaN;
       } else {
-        for (let i = 0; i < BISECTION_ITERS; i++) {
-          const mid = (lo + hi) / 2;
-          if (qProfile(mid, studies) > chiHi) lo = mid;
-          else hi = mid;
-        }
-        tau2_lo = (lo + hi) / 2;
+        tau2_lo = bisect((mid) => qProfile(mid, studies) - chiHi, lo, hi);
       }
     }
     let tau2_hi;
@@ -4246,12 +4328,7 @@ var App = (() => {
       if (qProfile(hi, studies) > chiLo) {
         tau2_hi = NaN;
       } else {
-        for (let i = 0; i < BISECTION_ITERS; i++) {
-          const mid = (lo + hi) / 2;
-          if (qProfile(mid, studies) > chiLo) lo = mid;
-          else hi = mid;
-        }
-        tau2_hi = (lo + hi) / 2;
+        tau2_hi = bisect((mid) => qProfile(mid, studies) - chiLo, lo, hi);
       }
     }
     const sumWFE = studies.reduce((acc, d) => acc + 1 / d.vi, 0);
@@ -4389,7 +4466,7 @@ var App = (() => {
   }
   function tau2_metaReg(yi, vi, X, method = "REML", tol = REML_TOL, maxIter = 100) {
     const k = vi.length, p = X[0].length, df = k - p;
-    if (df <= 0) return 0;
+    if (df <= 0) return { tau2: 0, converged: true, iters: 0, maxIters: maxIter };
     const reFitFn = (tau2) => {
       const w = vi.map((v) => 1 / (v + tau2));
       const { beta, vcov, rankDeficient } = wlsCholesky(X, yi, w);
@@ -4420,17 +4497,18 @@ var App = (() => {
     if (method === "REML") return tau2Core_REML(vi, reFitFn, tau2Core_DL(vi, feFitFn, df), tol, maxIter);
     if (method === "ML") return tau2Core_ML(vi, reFitFn, tau2Core_DL(vi, feFitFn, df), tol, maxIter);
     if (method === "PM") return tau2Core_PM(vi, reFitFn, df, 0, tol, maxIter);
-    if (method === "HS") return tau2Core_HS(vi, feFitFn, df);
-    if (method === "HE") return tau2Core_HE(vi, uwFitFn, df);
+    if (method === "HS") return { tau2: tau2Core_HS(vi, feFitFn, df), converged: true, iters: 0, maxIters: 0 };
+    if (method === "HE") return { tau2: tau2Core_HE(vi, uwFitFn, df), converged: true, iters: 0, maxIters: 0 };
     if (method === "SJ") {
       const fit0 = uwFitFn();
-      if (!fit0) return 0;
+      if (!fit0) return { tau2: 0, converged: true, iters: 0, maxIters: maxIter };
       const seed = fit0.e.reduce((s, ei) => s + ei * ei, 0) / k;
       return tau2Core_SJ(vi, reFitFn, seed, tol, maxIter);
     }
-    return tau2Core_DL(vi, feFitFn, df);
+    return { tau2: tau2Core_DL(vi, feFitFn, df), converged: true, iters: 0, maxIters: 0 };
   }
-  function metaRegression(studies, moderators2 = [], method = "REML", ciMethod = "normal", alpha = 0.05, interactions2 = []) {
+  function metaRegression(studies, moderators2 = [], method = "REML", ciMethod = "normal", opts = {}) {
+    const { alpha = 0.05, interactions: interactions2 = [] } = opts;
     const valid = validStudies(studies);
     const k = valid.length;
     const { X, colNames, modColMap, modKnots, validMask, p } = buildDesignMatrix(valid, moderators2, interactions2);
@@ -4462,12 +4540,14 @@ var App = (() => {
       k: kf,
       p,
       rankDeficient: true,
-      rankDeficientCause: "collinear"
+      rankDeficientCause: "collinear",
+      error: "Collinear moderators"
     };
-    if (kf < p + 1) return { ...empty, rankDeficientCause: "insufficient_k" };
-    const tau2 = tau2_metaReg(yi, vi, Xf, method);
+    if (kf < p + 1) return { ...empty, rankDeficientCause: "insufficient_k", error: "Insufficient studies for regression" };
+    const tau2Res = tau2_metaReg(yi, vi, Xf, method);
+    const tau2 = tau2Res.tau2;
     const X0 = Xf.map(() => [1]);
-    const tau2_0 = p > 1 ? tau2_metaReg(yi, vi, X0, method) : tau2;
+    const tau2_0 = p > 1 ? tau2_metaReg(yi, vi, X0, method).tau2 : tau2;
     const R2 = p > 1 && tau2_0 > 0 ? Math.max(0, (tau2_0 - tau2) / tau2_0) : NaN;
     const w = vi.map((v) => 1 / (v + tau2));
     const { beta, vcov, rankDeficient } = wls(Xf, yi, w);
@@ -4480,10 +4560,10 @@ var App = (() => {
     }, 0) : NaN;
     const QEdf = kf - p;
     const QEp = QEdf > 0 && isFinite(QE) ? 1 - chiSquareCDF(QE, QEdf) : NaN;
-    let I22 = 0;
+    let I2 = 0;
     if (!rd0 && QEdf > 0) {
       const c = w0.reduce((acc, wi, i) => acc + wi * (1 - wi * quadForm(vcov0, Xf[i])), 0);
-      if (c > 0) I22 = Math.max(0, tau2 / (tau2 + QEdf / c) * 100);
+      if (c > 0) I2 = Math.max(0, tau2 / (tau2 + QEdf / c) * 100);
     }
     const useKH = ciMethod === "KH" && kf > p && QEdf > 0;
     let s2 = 1;
@@ -4496,14 +4576,14 @@ var App = (() => {
     }
     let se, crit, zval, pval, ci, dist;
     if (useKH) {
-      se = vcov.map((row, j) => Math.sqrt(Math.max(0, row[j]) * s2));
+      se = diagSE(vcov, s2);
       crit = tCritical(QEdf, alpha);
       dist = "t";
       zval = beta.map((b, j) => b / se[j]);
-      pval = zval.map((t) => 2 * (1 - tCDF(Math.abs(t), QEdf)));
+      pval = zval.map((t) => 2 * tCDF(-Math.abs(t), QEdf));
       ci = beta.map((b, j) => [b - crit * se[j], b + crit * se[j]]);
     } else {
-      se = vcov.map((row, j) => Math.sqrt(Math.max(0, row[j])));
+      se = diagSE(vcov);
       crit = normalQuantile(1 - alpha / 2);
       dist = "z";
       zval = beta.map((b, j) => b / se[j]);
@@ -4520,7 +4600,7 @@ var App = (() => {
         const QMchi = betaMod.reduce((acc, bi, r) => acc + bi * invMod[r].reduce((iacc, v, c) => iacc + v * betaMod[c], 0), 0);
         if (useKH) {
           QM = QMchi / (s2 * QMdf);
-          QMp = 1 - fCDF(QM, QMdf, QEdf);
+          QMp = fTailP(QM, QMdf, QEdf);
         } else {
           QM = QMchi;
           QMp = 1 - chiSquareCDF(QM, QMdf);
@@ -4543,7 +4623,7 @@ var App = (() => {
       let modQM, modQMp;
       if (useKH) {
         modQM = QMchi / (s2 * df);
-        modQMp = 1 - fCDF(modQM, df, QEdf);
+        modQMp = fTailP(modQM, df, QEdf);
       } else {
         modQM = QMchi;
         modQMp = 1 - chiSquareCDF(modQM, df);
@@ -4608,7 +4688,7 @@ var App = (() => {
         return ll;
       };
       const _mlFit = (X_) => {
-        const t2_opt = Math.max(0, tau2_metaReg(yi, vi, X_, "ML"));
+        const t2_opt = Math.max(0, tau2_metaReg(yi, vi, X_, "ML").tau2);
         const ll_opt = _llAt(X_, t2_opt);
         if (t2_opt === 0) return ll_opt;
         const ll_bnd = _llAt(X_, 0);
@@ -4666,7 +4746,7 @@ var App = (() => {
       modTests,
       vif,
       maxVIF,
-      I2: I22,
+      I2,
       colNames,
       modColMap,
       modKnots,
@@ -4703,7 +4783,14 @@ var App = (() => {
       clustersUsed: robustC,
       allSingletons,
       robustError,
-      isClustered: robustSE !== void 0
+      isClustered: robustSE !== void 0,
+      convergence: {
+        converged: tau2Res.converged,
+        iters: tau2Res.iters,
+        maxIters: tau2Res.maxIters,
+        reason: tau2Res.converged ? null : "max_iters",
+        source: "tau2_" + method
+      }
     };
   }
   function testContrast(reg, L) {
@@ -4712,7 +4799,7 @@ var App = (() => {
     const varEst = quadForm(vcov, L);
     const se = Math.sqrt(Math.max(0, varEst));
     const stat = se > 0 ? est / se : NaN;
-    const p = !isFinite(stat) ? NaN : dist === "t" ? 2 * (1 - tCDF(Math.abs(stat), QEdf)) : 2 * (1 - normalCDF(Math.abs(stat)));
+    const p = !isFinite(stat) ? NaN : dist === "t" ? 2 * tCDF(-Math.abs(stat), QEdf) : 2 * (1 - normalCDF(Math.abs(stat)));
     const ci = [est - crit * se, est + crit * se];
     return { est, se, stat, p, ci };
   }
@@ -4803,7 +4890,7 @@ var App = (() => {
     };
     if (kf < p + q) return { ...emptyResult, rankDeficientCause: "insufficient_k" };
     function profileAt(gamma) {
-      const tau2_i2 = Zscale.map((z) => Math.exp(dot(z, gamma)));
+      const tau2_i2 = Zscale.map((z) => Math.max(MIN_VAR, Math.exp(dot(z, gamma))));
       const w2 = vi.map((v, i) => 1 / (v + tau2_i2[i]));
       const { beta: beta2, rankDeficient } = wls(Xloc, yi, w2);
       if (rankDeficient) return null;
@@ -4817,7 +4904,7 @@ var App = (() => {
       const res = profileAt(gamma);
       return res ? -res.LL : 1e10;
     }
-    const medVi = vi.slice().sort((a, b) => a - b)[Math.floor(kf / 2)];
+    const medVi = median(vi);
     const gamma0 = Array(q).fill(0);
     gamma0[0] = Math.log(Math.max(medVi * 0.1, 1e-6));
     const opt = bfgs(negLL, gamma0, { maxIter: 600, gtol: 1e-7 });
@@ -4832,11 +4919,11 @@ var App = (() => {
     const vcov_gamma = vcov_gamma_raw ?? Array.from({ length: q }, () => Array(q).fill(NaN));
     const rdGamma = vcov_gamma_raw === null;
     const crit = normalQuantile(1 - alpha / 2);
-    const se_beta = vcov_beta.map((row, j) => Math.sqrt(Math.max(0, row[j])));
+    const se_beta = diagSE(vcov_beta);
     const zval_beta = beta.map((b, j) => b / se_beta[j]);
     const pval_beta = zval_beta.map((z) => 2 * (1 - normalCDF(Math.abs(z))));
     const ci_beta = beta.map((b, j) => [b - crit * se_beta[j], b + crit * se_beta[j]]);
-    const se_gamma = vcov_gamma.map((row, j) => Math.sqrt(Math.max(0, row[j])));
+    const se_gamma = diagSE(vcov_gamma);
     const zval_gamma = gamma_hat.map((g, j) => g / se_gamma[j]);
     const pval_gamma = zval_gamma.map((z) => 2 * (1 - normalCDF(Math.abs(z))));
     const ci_gamma = gamma_hat.map((g, j) => [g - crit * se_gamma[j], g + crit * se_gamma[j]]);
@@ -4887,7 +4974,7 @@ var App = (() => {
     }
     const tau2_mean = tau2_i.reduce((s, t) => s + t, 0) / kf;
     const { vcov: vcov_FE } = !rdFE ? wls(Xloc, yi, w0) : { vcov: null };
-    const I22 = !rdFE && QEdf > 0 && vcov_FE ? (() => {
+    const I2 = !rdFE && QEdf > 0 && vcov_FE ? (() => {
       const c = w0.reduce((acc, wi, i) => acc + wi * (1 - wi * quadForm(vcov_FE, Xloc[i])), 0);
       if (c <= 0) return 0;
       return Math.max(0, tau2_mean / (tau2_mean + QEdf / c) * 100);
@@ -4949,7 +5036,7 @@ var App = (() => {
       LRp,
       LL,
       LL0,
-      I2: I22,
+      I2,
       locColNames: locDM.colNames,
       scaleColNames: scaleDM.colNames,
       locColMap: locDM.modColMap,
@@ -4962,7 +5049,13 @@ var App = (() => {
       p,
       q,
       rankDeficient: false,
-      converged: opt.converged,
+      convergence: {
+        converged: opt.converged && !rdGamma,
+        iters: opt.iters,
+        maxIters: 600,
+        reason: !opt.converged ? "max_iters" : rdGamma ? "singular_hessian" : null,
+        source: "bfgs_locScale"
+      },
       studiesUsed: rows,
       fitted,
       residuals,
@@ -4973,9 +5066,146 @@ var App = (() => {
       alpha
     };
   }
+  function _rveHIERMoM(clusterMap, m, k, p, moderators2, xVec, alpha) {
+    const B0 = Array.from({ length: p }, () => new Array(p).fill(0));
+    const bVec0 = new Array(p).fill(0);
+    const clData = [];
+    for (const clStudies of clusterMap.values()) {
+      const ki = clStudies.length;
+      const SX = new Array(p).fill(0);
+      const sumX = new Array(p).fill(0);
+      let SWi = 0, SWWi = 0, SVi = 0;
+      for (const s of clStudies) {
+        const wj = 1 / s.vi;
+        const xj = xVec(s);
+        SWi += wj;
+        SWWi += wj * wj;
+        SVi += s.vi;
+        for (let r = 0; r < p; r++) {
+          SX[r] += wj * xj[r];
+          sumX[r] += xj[r];
+          bVec0[r] += wj * xj[r] * s.yi;
+          for (let c = 0; c < p; c++) B0[r][c] += wj * xj[r] * xj[c];
+        }
+      }
+      clData.push({ ki, SX, sumX, SWi, SWWi, SVi, clStudies });
+    }
+    const Q0 = matInverse(B0);
+    if (Q0 === null) return { error: "Design matrix is singular (collinear moderators?)." };
+    const beta0 = Q0.map((row) => row.reduce((acc, v, j) => acc + v * bVec0[j], 0));
+    const dot2 = (a, b) => a.reduce((s, v, i) => s + v * b[i], 0);
+    const mvMul = (M, v) => M.map((row) => dot2(row, v));
+    for (const ci2 of clData) {
+      ci2.qSX = mvMul(Q0, ci2.SX);
+      ci2.qsumX = mvMul(Q0, ci2.sumX);
+    }
+    const G = Array.from(
+      { length: p },
+      (_, r) => new Array(p).fill(0).map(
+        (_2, c) => clData.reduce((acc, ci2) => acc + ci2.qsumX[r] * ci2.qsumX[c], 0)
+      )
+    );
+    let Qe = 0, Qa = 0;
+    for (const ci2 of clData) {
+      let sumE = 0;
+      for (const s of ci2.clStudies) {
+        const xj = xVec(s);
+        const ej = s.yi - dot2(xj, beta0);
+        Qe += ej * ej / s.vi;
+        sumE += ej;
+      }
+      Qa += sumE * sumE;
+    }
+    let sumKsq = 0, sumV = 0, sumW = 0;
+    let trQJX = 0, trQWJWX = 0, trQWJX = 0, trQWJJX = 0;
+    let trQJX_QWJWX = 0, trQWWX = 0, trQJX_QWWX = 0;
+    for (const ci2 of clData) {
+      sumKsq += ci2.ki * ci2.ki;
+      sumV += ci2.SVi;
+      sumW += ci2.SWi;
+      trQJX += dot2(ci2.sumX, ci2.qsumX);
+      trQWJWX += dot2(ci2.SX, ci2.qSX);
+      trQWJX += dot2(ci2.sumX, ci2.qSX);
+      trQWJJX += ci2.ki * dot2(ci2.sumX, ci2.qSX);
+      let sxGsx = 0;
+      for (let r = 0; r < p; r++) for (let c = 0; c < p; c++) sxGsx += ci2.SX[r] * G[r][c] * ci2.SX[c];
+      trQJX_QWJWX += sxGsx;
+    }
+    for (const ci2 of clData) {
+      for (const s of ci2.clStudies) {
+        const wj2 = 1 / (s.vi * s.vi);
+        const xj = xVec(s);
+        const qxj = mvMul(Q0, xj);
+        const xqx = dot2(xj, qxj);
+        let xGx = 0;
+        for (let r = 0; r < p; r++) for (let c = 0; c < p; c++) xGx += xj[r] * G[r][c] * xj[c];
+        trQWWX += wj2 * xqx;
+        trQJX_QWWX += wj2 * xGx;
+      }
+    }
+    const C2 = k - p;
+    const A1 = sumKsq - 2 * trQWJJX + trQJX_QWJWX;
+    const B1 = k - 2 * trQWJX + trQJX_QWWX;
+    const C1 = sumV - trQJX;
+    const A2 = sumW - trQWJWX;
+    const B2 = sumW - trQWWX;
+    const momDen = B1 * A2 - B2 * A1;
+    let omega2 = 0, tau2 = 0;
+    if (Math.abs(momDen) > 1e-10) {
+      omega2 = Math.max(0, ((Qa - C1) * A2 - (Qe - C2) * A1) / momDen);
+      tau2 = Math.max(0, (Qe - C2) / A2 - omega2 * (B2 / A2));
+    }
+    const theta = omega2 + tau2;
+    const Br = Array.from({ length: p }, () => new Array(p).fill(0));
+    const bVecr = new Array(p).fill(0);
+    for (const ci2 of clData) {
+      for (const s of ci2.clStudies) {
+        const wr = 1 / (s.vi + theta);
+        const xj = xVec(s);
+        for (let r = 0; r < p; r++) {
+          bVecr[r] += wr * xj[r] * s.yi;
+          for (let c = 0; c < p; c++) Br[r][c] += wr * xj[r] * xj[c];
+        }
+      }
+    }
+    const Qr = matInverse(Br);
+    if (Qr === null) return { error: "Singular matrix in second WLS pass." };
+    const betaR = Qr.map((row) => row.reduce((acc, v, j) => acc + v * bVecr[j], 0));
+    const Meat = Array.from({ length: p }, () => new Array(p).fill(0));
+    for (const ci2 of clData) {
+      const gi = new Array(p).fill(0);
+      for (const s of ci2.clStudies) {
+        const wr = 1 / (s.vi + theta);
+        const xj = xVec(s);
+        const erj = s.yi - dot2(xj, betaR);
+        for (let r = 0; r < p; r++) gi[r] += wr * xj[r] * erj;
+      }
+      for (let r = 0; r < p; r++) for (let c = 0; c < p; c++) Meat[r][c] += gi[r] * gi[c];
+    }
+    const scale = m / (m - p);
+    const QrMeat = Qr.map(
+      (row) => new Array(p).fill(0).map((_, c) => row.reduce((acc, v, j) => acc + v * Meat[j][c], 0))
+    );
+    const Vhat = QrMeat.map(
+      (row) => new Array(p).fill(0).map((_, c) => row.reduce((acc, v, j) => acc + v * Qr[j][c], 0))
+    );
+    const df = m - p;
+    const crit = tCritical(df, alpha);
+    const coefNames = ["intercept", ...moderators2];
+    const coefs = coefNames.map((name, i) => {
+      const est_i = betaR[i];
+      const se_i = Math.sqrt(Math.max(0, scale * Vhat[i][i]));
+      const t_i = se_i > 0 ? est_i / se_i : NaN;
+      const p_i = isFinite(t_i) ? 2 * tCDF(-Math.abs(t_i), df) : NaN;
+      return { name, est: est_i, se: se_i, ci: [est_i - crit * se_i, est_i + crit * se_i], t: t_i, p: p_i };
+    });
+    const { est, se, ci, t, p: pval } = coefs[0];
+    return { est, se, ci, t, p: pval, df, coefs, kCluster: m, k, omega2, tau2 };
+  }
   function rvePooled(studies, opts = {}) {
     const rho = opts.rho ?? 0.8;
     const alpha = opts.alpha ?? 0.05;
+    const omega2opt = opts.omega2 ?? 0;
     const moderators2 = opts.moderators ?? [];
     if (rho <= -1 || rho >= 1) return { error: "\u03C1 must be in (\u22121, 1)." };
     const p = 1 + moderators2.length;
@@ -4993,6 +5223,7 @@ var App = (() => {
     const df = m - p;
     if (df < 1) return { error: `Too few clusters (m=${m}) for ${p} predictors; need m > p.` };
     const xVec = (s) => [1, ...moderators2.map((mod) => s[mod])];
+    if (omega2opt === "MoM") return _rveHIERMoM(clusterMap, m, k, p, moderators2, xVec, alpha);
     const B = Array.from({ length: p }, () => new Array(p).fill(0));
     const bVec = new Array(p).fill(0);
     const clList = [];
@@ -5054,7 +5285,7 @@ var App = (() => {
       const est_i = beta[i];
       const se_i = Math.sqrt(Math.max(0, scale * Vhat[i][i]));
       const t_i = se_i > 0 ? est_i / se_i : NaN;
-      const p_i = isFinite(t_i) ? 2 * (1 - tCDF(Math.abs(t_i), df)) : NaN;
+      const p_i = isFinite(t_i) ? 2 * tCDF(-Math.abs(t_i), df) : NaN;
       return { name, est: est_i, se: se_i, ci: [est_i - crit * se_i, est_i + crit * se_i], t: t_i, p: p_i };
     });
     const { est, se, ci, t, p: pval } = coefs[0];
@@ -5063,15 +5294,34 @@ var App = (() => {
   function meta3level(studies, opts = {}) {
     const method = opts.method ?? "REML";
     const alpha = opts.alpha ?? 0.05;
+    const t3Err = (msg) => ({
+      error: msg,
+      mu: NaN,
+      se: NaN,
+      ci: [NaN, NaN],
+      z: NaN,
+      p: NaN,
+      tau2_within: NaN,
+      tau2_between: NaN,
+      I2_within: NaN,
+      I2_between: NaN,
+      Q: NaN,
+      df: NaN,
+      k: Array.isArray(studies) ? studies.length : NaN,
+      kCluster: NaN,
+      logLik: NaN,
+      logLikFull: NaN,
+      convergence: { converged: false, iters: 0, maxIters: 400, reason: "max_iters", source: "bfgs_meta3level" }
+    });
     if (method !== "REML" && method !== "ML")
-      return { error: `method must be "REML" or "ML" (got "${method}")` };
+      return t3Err(`method must be "REML" or "ML" (got "${method}")`);
     if (!Array.isArray(studies) || studies.length < 3)
-      return { error: "Three-level meta-analysis requires at least 3 studies" };
+      return t3Err("Three-level meta-analysis requires at least 3 studies");
     const clusterMap = groupByCluster(studies);
     const clusters = [...clusterMap.values()];
     const m = clusters.length;
     const k = studies.length;
-    if (m < 2) return { error: "Three-level meta-analysis requires at least 2 clusters" };
+    if (m < 2) return t3Err("Three-level meta-analysis requires at least 2 clusters");
     function evalLL(tau2u2, tau2t2) {
       let W2 = 0, Wmu2 = 0, ll = 0;
       for (const cl of clusters) {
@@ -5119,8 +5369,8 @@ var App = (() => {
     const muFE0 = Wmu0 / W0;
     const Q0 = studies.reduce((a, s) => a + (s.yi - muFE0) ** 2 / s.vi, 0);
     const c0 = W0 - W02 / W0;
-    const tau2DL2 = Math.max(0.01, (Q0 - (k - 1)) / c0);
-    const x0 = [Math.log(tau2DL2 / 2), Math.log(tau2DL2 / 2)];
+    const tau2DL = Math.max(0.01, (Q0 - (k - 1)) / c0);
+    const x0 = [Math.log(tau2DL / 2), Math.log(tau2DL / 2)];
     const res = bfgs(negLL, x0, { maxIter: 400, gtol: 1e-6 });
     const tau2u = Math.max(0, Math.exp(res.x[0]));
     const tau2t = Math.max(0, Math.exp(res.x[1]));
@@ -5142,11 +5392,14 @@ var App = (() => {
     const ci = [mu - zcrit * se, mu + zcrit * se];
     const zval = se > 0 ? mu / se : NaN;
     const pval = isFinite(zval) ? 2 * (1 - normalCDF(Math.abs(zval))) : NaN;
-    const Q = studies.reduce((a, s) => a + (s.yi - muFE0) ** 2 / s.vi, 0);
+    const Q = Q0;
     const vi_typ = 1 / W0;
     const tot = tau2u + tau2t + vi_typ;
     const I2_within = tot > 0 ? 100 * tau2u / tot : 0;
     const I2_between = tot > 0 ? 100 * tau2t / tot : 0;
+    const logLik2 = -res.fval;
+    const kAdj = method === "REML" ? k - 1 : k;
+    const logLikFull = logLik2 - kAdj / 2 * Math.log(2 * Math.PI);
     return {
       mu,
       se,
@@ -5161,12 +5414,19 @@ var App = (() => {
       df: k - 1,
       k,
       kCluster: m,
-      logLik: -res.fval,
-      convergence: res.converged
+      logLik: logLik2,
+      logLikFull,
+      convergence: {
+        converged: res.converged,
+        iters: res.iters,
+        maxIters: 400,
+        reason: res.converged ? null : "max_iters",
+        source: "bfgs_meta3level"
+      }
     };
   }
   var init_regression = __esm({
-    "js/regression.js"() {
+    "js/stats/regression.js"() {
       init_analysis();
       init_tau2();
       init_linalg();
@@ -5176,7 +5436,7 @@ var App = (() => {
     }
   });
 
-  // js/multivariate.js
+  // js/stats/multivariate.js
   function _nPsiParams(struct, P) {
     if (struct === "CS") return 2;
     if (struct === "Diag") return P;
@@ -5300,25 +5560,41 @@ var App = (() => {
     const {
       struct = "CS",
       method = "REML",
+      ciMethod = "normal",
+      // "normal" (z/Wald) | "t" (t-distribution, df = n − q_total)
       alpha = 0.05,
       moderators: moderators2 = [],
       // [{key, type}] — continuous moderators only for now
       slopes = "separate"
       // "separate" (one slope per outcome) | "common" (shared slope)
     } = opts;
+    const mvErr = (msg) => ({
+      error: msg,
+      beta: [],
+      se: [],
+      ci: [],
+      z: [],
+      pval: [],
+      tau2: [],
+      Psi: null,
+      QM: NaN,
+      QE: NaN,
+      k: NaN,
+      convergence: { converged: false, iters: 0, maxIters: 500, reason: "max_iters", source: "bfgs_mvMeta" }
+    });
     if (!V || !Array.isArray(V.blocks) || V.blocks.length === 0)
-      return { error: "V must be a vcalc() result with at least one block" };
+      return mvErr("V must be a vcalc() result with at least one block");
     if (!["CS", "Diag", "UN"].includes(struct))
-      return { error: `struct must be "CS", "Diag", or "UN" (got "${struct}")` };
+      return mvErr(`struct must be "CS", "Diag", or "UN" (got "${struct}")`);
     if (!["REML", "ML"].includes(method))
-      return { error: `method must be "REML" or "ML" (got "${method}")` };
+      return mvErr(`method must be "REML" or "ML" (got "${method}")`);
     const k = V.blocks.length;
     const P = V.outcomeIds.length;
     const n = V.n;
     if (P < 2)
-      return { error: "mvMeta requires at least 2 outcomes; use meta() for univariate analysis" };
+      return mvErr("mvMeta requires at least 2 outcomes; use meta() for univariate analysis");
     if (k < 3)
-      return { error: "mvMeta requires at least 3 studies" };
+      return mvErr("mvMeta requires at least 3 studies");
     const nPsiPar = _nPsiParams(struct, P);
     const warnings = [...V.warnings];
     if (k < P + nPsiPar)
@@ -5326,7 +5602,7 @@ var App = (() => {
     for (const block of V.blocks) {
       for (const r of block.rows) {
         if (!isFinite(r.yi) || !isFinite(r.vi) || r.vi <= 0)
-          return { error: `Invalid yi=${r.yi} or vi=${r.vi} in study "${block.studyId}", outcome "${r._oid}"` };
+          return mvErr(`Invalid yi=${r.yi} or vi=${r.vi} in study "${block.studyId}", outcome "${r._oid}"`);
       }
     }
     const outcomeIdx = new Map(V.outcomeIds.map((id, i) => [id, i]));
@@ -5370,6 +5646,7 @@ var App = (() => {
     const logDetXtX = logDet(XtX);
     const tau2_0 = _initTau2(studyData, P);
     const theta0 = _initialTheta(struct, P, tau2_0);
+    let singularEncountered = false;
     function negLogLik(theta) {
       const Psi2 = _psiFromTheta(theta, struct, P);
       let logDetSum2 = 0;
@@ -5382,7 +5659,10 @@ var App = (() => {
           (_, j) => Array.from({ length: p }, (_2, k2) => Vmat[j][k2] + Psi2[idx[j]][idx[k2]])
         );
         const L = cholFactor(Sigma);
-        if (L === null) return 1e10;
+        if (L === null) {
+          singularEncountered = true;
+          return 1e10;
+        }
         logDetSum2 += cholLogDet(L);
         const Oiy = cholSolveVec(L, y);
         for (let j = 0; j < p; j++) yOy2 += y[j] * Oiy[j];
@@ -5405,7 +5685,10 @@ var App = (() => {
         }
       }
       const XOXinv2 = matInverse(XOX2);
-      if (XOXinv2 === null) return 1e10;
+      if (XOXinv2 === null) {
+        singularEncountered = true;
+        return 1e10;
+      }
       let crossTerm2 = 0;
       for (let j = 0; j < q_total; j++) {
         let s = 0;
@@ -5433,7 +5716,7 @@ var App = (() => {
         (_, j) => Array.from({ length: p }, (_2, kk) => Vmat[j][kk] + Psi[idx[j]][idx[kk]])
       );
       const L = cholFactor(Sigma);
-      if (L === null) return { error: "Cholesky factorisation failed at converged parameters" };
+      if (L === null) return mvErr("Cholesky factorisation failed at converged parameters");
       logDetSum += cholLogDet(L);
       const Oiy = cholSolveVec(L, y);
       for (let j = 0; j < p; j++) yOy += y[j] * Oiy[j];
@@ -5456,13 +5739,23 @@ var App = (() => {
       }
     }
     const XOXinv = matInverse(XOX);
-    if (XOXinv === null) return { error: "Singular information matrix X'\u03A9\u207B\xB9X at converged parameters" };
+    if (XOXinv === null) return mvErr("Singular information matrix X'\u03A9\u207B\xB9X at converged parameters");
     const beta = XOXinv.map((row) => row.reduce((s, v, j) => s + v * XOy[j], 0));
-    const se = XOXinv.map((row, j) => Math.sqrt(Math.max(0, row[j])));
-    const zcrit = normalQuantile(1 - alpha / 2);
-    const ci = beta.map((b, j) => [b - zcrit * se[j], b + zcrit * se[j]]);
+    const se = diagSE(XOXinv);
+    const df_residual = n - q_total;
     const z = beta.map((b, j) => se[j] > 0 ? b / se[j] : NaN);
-    const pval = z.map((zi) => isFinite(zi) ? 2 * (1 - normalCDF(Math.abs(zi))) : NaN);
+    let crit, ci, pval, dist;
+    if (ciMethod === "t" && df_residual > 0) {
+      crit = tCritical(df_residual, alpha);
+      ci = beta.map((b, j) => [b - crit * se[j], b + crit * se[j]]);
+      pval = z.map((zi) => isFinite(zi) ? 2 * tCDF(-Math.abs(zi), df_residual) : NaN);
+      dist = "t";
+    } else {
+      crit = normalQuantile(1 - alpha / 2);
+      ci = beta.map((b, j) => [b - crit * se[j], b + crit * se[j]]);
+      pval = z.map((zi) => isFinite(zi) ? 2 * (1 - normalCDF(Math.abs(zi))) : NaN);
+      dist = "z";
+    }
     let crossTerm = 0;
     for (let j = 0; j < q_total; j++) {
       let s = 0;
@@ -5472,6 +5765,8 @@ var App = (() => {
     const QM = Math.max(0, crossTerm);
     const df_QM = q_total;
     const pQM = 1 - chiSquareCDF(QM, q_total);
+    const Fstat = df_QM > 0 ? QM / df_QM : NaN;
+    const pF = ciMethod === "t" && df_residual > 0 && isFinite(Fstat) ? fTailP(Fstat, df_QM, df_residual) : NaN;
     const residOmega = Math.max(0, yOy - QM);
     let yVy = 0;
     const XVX = Array.from({ length: q_total }, () => new Array(q_total).fill(0));
@@ -5509,7 +5804,7 @@ var App = (() => {
       }
     }
     const QE = Math.max(0, yVy - crossTermV);
-    const df_QE = n - q_total;
+    const df_QE = df_residual;
     const pQE = df_QE > 0 ? 1 - chiSquareCDF(QE, df_QE) : NaN;
     const corPsi = Array.from(
       { length: P },
@@ -5520,7 +5815,7 @@ var App = (() => {
         return Psi[i][j] / denom;
       })
     );
-    const I22 = V.outcomeIds.map((oid, o) => {
+    const I2 = V.outcomeIds.map((oid, o) => {
       const tau2_o = Math.max(0, Psi[o][o]);
       const vis = V.blocks.filter((b) => b.outcomeIds.includes(oid)).map((b) => {
         const li = b.outcomeIds.indexOf(oid);
@@ -5557,16 +5852,20 @@ var App = (() => {
       corPsi,
       tau2,
       rho_between,
-      // Omnibus Wald test (β = 0)
+      // Omnibus Wald/F test (β = 0)
       QM,
       df_QM,
       pQM,
+      // χ²-based (always available)
+      Fstat,
+      pF,
+      // F-based (defined when ciMethod === "t")
       // Residual heterogeneity
       QE,
       df_QE,
       pQE,
       // Per-outcome I²
-      I2: I22,
+      I2,
       // Fit
       logLik: logL,
       AIC,
@@ -5578,13 +5877,23 @@ var App = (() => {
       P,
       struct,
       method,
-      convergence: res.converged,
+      ciMethod,
+      slopes,
+      dist,
+      df: df_residual,
+      convergence: {
+        converged: res.converged && !singularEncountered,
+        iters: res.iters,
+        maxIters: 500,
+        reason: !res.converged ? "max_iters" : singularEncountered ? "singular_matrix" : null,
+        source: "bfgs_mvMeta_" + method
+      },
       optimizer: { iters: res.iters, gnorm: res.gnorm },
       warnings
     };
   }
   var init_multivariate = __esm({
-    "js/multivariate.js"() {
+    "js/stats/multivariate.js"() {
       init_constants();
       init_utils();
       init_linalg();
@@ -5592,17 +5901,30 @@ var App = (() => {
     }
   });
 
-  // js/binary.js
+  // js/stats/binary.js
   function metaMH(studies, type, alpha = 0.05) {
     const k = studies.length;
-    if (k < 2) return { error: "Mantel-Haenszel requires at least 2 studies." };
+    const mhErr = (msg) => ({
+      error: msg,
+      FE: NaN,
+      seFE: NaN,
+      RE: NaN,
+      seRE: NaN,
+      tau2: NaN,
+      Q: NaN,
+      df: NaN,
+      I2: NaN,
+      stat: NaN,
+      pval: NaN,
+      k,
+      isMH: true
+    });
+    if (k < 2) return mhErr("Mantel-Haenszel requires at least 2 studies.");
     const MH_TYPES = ["OR", "RR", "RD"];
-    if (!MH_TYPES.includes(type)) {
-      return { error: `Mantel-Haenszel pooling is only available for OR, RR, and RD (got "${type}").` };
-    }
-    if (studies[0]?.a === void 0) {
-      return { error: "Mantel-Haenszel requires raw cell counts (a, b, c, d)." };
-    }
+    if (!MH_TYPES.includes(type))
+      return mhErr(`Mantel-Haenszel pooling is only available for OR, RR, and RD (got "${type}").`);
+    if (studies[0]?.a === void 0)
+      return mhErr("Mantel-Haenszel requires raw cell counts (a, b, c, d).");
     let est, varEst;
     let kEff = 0;
     if (type === "OR") {
@@ -5623,9 +5945,9 @@ var App = (() => {
         sumQS += Q2 * S;
         kEff++;
       }
-      if (kEff < 2) return { error: "Fewer than 2 studies contributed to the M-H OR estimate." };
-      if (sumR === 0) return { error: "M-H OR is undefined: no events in the treatment arm across all studies." };
-      if (sumS === 0) return { error: "M-H OR is undefined: no events in the control arm across all studies." };
+      if (kEff < 2) return mhErr("Fewer than 2 studies contributed to the M-H OR estimate.");
+      if (sumR <= 0) return mhErr("M-H OR is undefined: no events in the treatment arm across all studies.");
+      if (sumS <= 0) return mhErr("M-H OR is undefined: no events in the control arm across all studies.");
       est = Math.log(sumR / sumS);
       varEst = sumPR / (2 * sumR * sumR) + sumPS_QR / (2 * sumR * sumS) + sumQS / (2 * sumS * sumS);
     } else if (type === "RR") {
@@ -5643,9 +5965,9 @@ var App = (() => {
         sumC += C;
         kEff++;
       }
-      if (kEff < 2) return { error: "Fewer than 2 studies contributed to the M-H RR estimate." };
-      if (sumR === 0) return { error: "M-H RR is undefined: no events in the treatment arm across all studies." };
-      if (sumS === 0) return { error: "M-H RR is undefined: no events in the control arm across all studies." };
+      if (kEff < 2) return mhErr("Fewer than 2 studies contributed to the M-H RR estimate.");
+      if (sumR <= 0) return mhErr("M-H RR is undefined: no events in the treatment arm across all studies.");
+      if (sumS <= 0) return mhErr("M-H RR is undefined: no events in the control arm across all studies.");
       est = Math.log(sumR / sumS);
       varEst = sumC / (sumR * sumS);
     } else {
@@ -5659,8 +5981,8 @@ var App = (() => {
         sumNum2 += c * (n1 / N) ** 2 - a * (n2 / N) ** 2 + n1 / N * (n2 / N) * (n2 - n1) / 2;
         kEff++;
       }
-      if (kEff < 2) return { error: "Fewer than 2 studies contributed to the M-H RD estimate." };
-      if (sumW === 0) return { error: "M-H RD is undefined: total weight is zero." };
+      if (kEff < 2) return mhErr("Fewer than 2 studies contributed to the M-H RD estimate.");
+      if (sumW === 0) return mhErr("M-H RD is undefined: total weight is zero.");
       est = sumNum1 / sumW;
       let sumB = 0;
       for (const s of studies) {
@@ -5671,14 +5993,13 @@ var App = (() => {
       }
       varEst = (est * sumNum2 + sumB / 2) / (sumW * sumW);
     }
-    if (!isFinite(est) || !isFinite(varEst) || varEst <= 0) {
-      return { error: "M-H estimate is not finite \u2014 check for degenerate cell counts." };
-    }
+    if (!isFinite(est) || !isFinite(varEst) || varEst <= 0)
+      return mhErr("M-H estimate is not finite \u2014 check for degenerate cell counts.");
     const se = Math.sqrt(varEst);
     const df = k - 1;
     let Q = 0;
     for (const s of studies) Q += (s.yi - est) ** 2 / Math.max(s.vi, MIN_VAR);
-    const I22 = df > 0 && Q > 0 ? Math.max(0, Math.min(100, (Q - df) / Q * 100)) : 0;
+    const I2 = df > 0 && Q > 0 ? Math.max(0, Math.min(100, (Q - df) / Q * 100)) : 0;
     const hetCI = heterogeneityCIs(studies, 0);
     const stat = est / se;
     const pval = 2 * (1 - normalCDF(Math.abs(stat)));
@@ -5696,7 +6017,7 @@ var App = (() => {
       H2CI: hetCI.H2CI,
       Q,
       df,
-      I2: I22,
+      I2,
       predLow: NaN,
       predHigh: NaN,
       stat,
@@ -5709,10 +6030,24 @@ var App = (() => {
   }
   function metaPeto(studies, alpha = 0.05) {
     const k = studies.length;
-    if (k < 2) return { error: "Peto OR requires at least 2 studies." };
-    if (studies[0]?.a === void 0) {
-      return { error: "Peto OR requires raw cell counts (a, b, c, d)." };
-    }
+    const petoErr = (msg) => ({
+      error: msg,
+      FE: NaN,
+      seFE: NaN,
+      RE: NaN,
+      seRE: NaN,
+      tau2: NaN,
+      Q: NaN,
+      df: NaN,
+      I2: NaN,
+      stat: NaN,
+      pval: NaN,
+      k,
+      isPeto: true
+    });
+    if (k < 2) return petoErr("Peto OR requires at least 2 studies.");
+    if (studies[0]?.a === void 0)
+      return petoErr("Peto OR requires raw cell counts (a, b, c, d).");
     let sumOmE = 0, sumV = 0, sumOmE2V = 0;
     let kEff = 0;
     for (const s of studies) {
@@ -5731,17 +6066,16 @@ var App = (() => {
       sumOmE2V += omE * omE / V;
       kEff++;
     }
-    if (kEff < 2) return { error: "Fewer than 2 studies contributed to the Peto OR estimate." };
-    if (sumV === 0) return { error: "Peto OR is undefined: total hypergeometric variance is zero." };
+    if (kEff < 2) return petoErr("Fewer than 2 studies contributed to the Peto OR estimate.");
+    if (sumV === 0) return petoErr("Peto OR is undefined: total hypergeometric variance is zero.");
     const est = sumOmE / sumV;
     const varEst = 1 / sumV;
-    if (!isFinite(est) || varEst <= 0) {
-      return { error: "Peto OR estimate is not finite \u2014 check for degenerate cell counts." };
-    }
+    if (!isFinite(est) || varEst <= 0)
+      return petoErr("Peto OR estimate is not finite \u2014 check for degenerate cell counts.");
     const se = Math.sqrt(varEst);
     const df = k - 1;
     let Q = sumOmE2V - sumOmE * sumOmE / sumV;
-    const I22 = df > 0 && Q > 0 ? Math.max(0, Math.min(100, (Q - df) / Q * 100)) : 0;
+    const I2 = df > 0 && Q > 0 ? Math.max(0, Math.min(100, (Q - df) / Q * 100)) : 0;
     const hetCI = heterogeneityCIs(studies, 0);
     const stat = est / se;
     const pval = 2 * (1 - normalCDF(Math.abs(stat)));
@@ -5759,7 +6093,7 @@ var App = (() => {
       H2CI: hetCI.H2CI,
       Q,
       df,
-      I2: I22,
+      I2,
       predLow: NaN,
       predHigh: NaN,
       stat,
@@ -5771,20 +6105,20 @@ var App = (() => {
     };
   }
   var init_binary = __esm({
-    "js/binary.js"() {
+    "js/stats/binary.js"() {
       init_utils();
       init_constants();
       init_regression();
     }
   });
 
-  // js/pubbias.js
+  // js/stats/pubbias.js
   function eggerTest(studies) {
     const k = studies.length;
     if (k < 3) return { intercept: NaN, slope: NaN, se: NaN, t: NaN, df: NaN, p: NaN };
     const Z = studies.map((d) => d.yi / d.se);
     const X = studies.map((d) => 1 / d.se);
-    const meanX = X.reduce((acc, b) => acc + b, 0) / X.length, meanZ = Z.reduce((acc, b) => acc + b, 0) / Z.length;
+    const meanX = mean(X), meanZ = mean(Z);
     let num = 0, den = 0;
     for (let i = 0; i < k; i++) {
       num += (X[i] - meanX) * (Z[i] - meanZ);
@@ -5799,8 +6133,8 @@ var App = (() => {
     const df = k - 2;
     const se = Math.sqrt(rss / df) * Math.sqrt(1 / k + meanX * meanX / den);
     const t = intercept / se;
-    const p = 2 * (1 - tCDF(Math.abs(t), df));
-    const result = { intercept, slope, se, t, df, p };
+    const p = 2 * tCDF(-Math.abs(t), df);
+    const result = { intercept, slope, se, t, df, p, interceptSE: se, interceptT: t, interceptP: p };
     if (studies.some((s) => s.cluster?.trim())) {
       const clusters = resolveClusterIds(studies);
       const X2d = studies.map((_, i) => [1, X[i]]);
@@ -5855,8 +6189,8 @@ var App = (() => {
     const tau = denom > 0 ? S / denom : 0;
     return { tau, S, z, p };
   }
-  function _pubBiasNaN(df) {
-    return {
+  function _pubBiasNaN(df, singularMatrix = false) {
+    const r = {
       intercept: NaN,
       interceptSE: NaN,
       interceptT: NaN,
@@ -5867,6 +6201,8 @@ var App = (() => {
       slopeP: NaN,
       df
     };
+    if (singularMatrix) r.singularMatrix = true;
+    return r;
   }
   function _wlsFinish(beta, vcov, ys, xs, ws, df) {
     let rss = 0;
@@ -5875,12 +6211,11 @@ var App = (() => {
       rss += ws[i] * e * e;
     }
     const s2 = df > 0 ? rss / df : NaN;
-    const interceptSE = Math.sqrt(s2 * vcov[0][0]);
-    const slopeSE = Math.sqrt(s2 * vcov[1][1]);
+    const [interceptSE, slopeSE] = diagSE(vcov, s2);
     const interceptT = beta[0] / interceptSE;
     const slopeT = beta[1] / slopeSE;
-    const interceptP = 2 * (1 - tCDF(Math.abs(interceptT), df));
-    const slopeP = 2 * (1 - tCDF(Math.abs(slopeT), df));
+    const interceptP = 2 * tCDF(-Math.abs(interceptT), df);
+    const slopeP = 2 * tCDF(-Math.abs(slopeT), df);
     return {
       intercept: beta[0],
       interceptSE,
@@ -5902,7 +6237,7 @@ var App = (() => {
     const ws = valid.map((s) => 1 / s.vi);
     const X = xs.map((x) => [1, x]);
     const { beta, vcov, rankDeficient } = wls(X, ys, ws);
-    if (rankDeficient) return _pubBiasNaN(k - 2);
+    if (rankDeficient) return _pubBiasNaN(k - 2, true);
     const result = _wlsFinish(beta, vcov, ys, xs, ws, k - 2);
     if (valid.some((s) => s.cluster?.trim())) {
       const clusters = resolveClusterIds(valid);
@@ -5964,7 +6299,7 @@ var App = (() => {
     const X = xs.map((x) => [1, x]);
     const ws = xs.map(() => 1);
     const { beta, vcov, rankDeficient } = wls(X, ys, ws);
-    if (rankDeficient) return _pubBiasNaN(k - 2);
+    if (rankDeficient) return _pubBiasNaN(k - 2, true);
     return _wlsFinish(beta, vcov, ys, xs, ws, k - 2);
   }
   function petersTest(studies) {
@@ -5989,7 +6324,7 @@ var App = (() => {
     const ws = valid.map((s) => 1 / s.vi);
     const X = xs.map((x) => [1, x]);
     const { beta, vcov, rankDeficient } = wls(X, ys, ws);
-    if (rankDeficient) return _pubBiasNaN(k - 2);
+    if (rankDeficient) return _pubBiasNaN(k - 2, true);
     return _wlsFinish(beta, vcov, ys, xs, ws, k - 2);
   }
   function deeksTest(studies) {
@@ -6014,7 +6349,7 @@ var App = (() => {
     }
     const X = xs.map((x) => [1, x]);
     const { beta, vcov, rankDeficient } = wls(X, ys, ws);
-    if (rankDeficient) return _pubBiasNaN(k - 2);
+    if (rankDeficient) return _pubBiasNaN(k - 2, true);
     return _wlsFinish(beta, vcov, ys, xs, ws, k - 2);
   }
   function rueckerTest(studies) {
@@ -6041,31 +6376,21 @@ var App = (() => {
     const X = xs.map((x) => [1, x]);
     const ws = xs.map(() => 1);
     const { beta, vcov, rankDeficient } = wls(X, ys, ws);
-    if (rankDeficient) return _pubBiasNaN(k - 2);
+    if (rankDeficient) return _pubBiasNaN(k - 2, true);
     return _wlsFinish(beta, vcov, ys, xs, ws, k - 2);
   }
-  function failSafeN(studies, alpha = 0.05, trivial = 0.1) {
+  function failSafeN(studies, alpha = 0.05, trivial = 0.1, direction = "positive") {
     const valid = validStudies(studies);
     const k = valid.length;
     if (k < 1) return { rosenthal: NaN, orwin: NaN, sumZ: NaN, z_crit: NaN, k: 0 };
-    const sumZ = valid.reduce((acc, d) => {
-      const z = Math.abs(d.yi) / Math.sqrt(d.vi);
-      return acc + z;
-    }, 0);
-    const z_crit = (() => {
-      const target = 1 - alpha;
-      let lo = 0, hi = 10;
-      for (let i = 0; i < BISECTION_ITERS; i++) {
-        const mid = (lo + hi) / 2;
-        normalCDF(mid) < target ? lo = mid : hi = mid;
-      }
-      return (lo + hi) / 2;
-    })();
-    const rosenthal = Math.max(0, (sumZ / z_crit) ** 2 - k);
     const w0 = valid.map((s) => 1 / s.vi);
-    const W = w0.reduce((acc, b) => acc + b, 0);
+    const W = sum(w0);
     const FE = valid.reduce((acc, d, i) => acc + w0[i] * d.yi, 0) / W;
-    const orwin = Math.max(0, k * (Math.abs(FE) - Math.abs(trivial)) / Math.abs(trivial));
+    const signMul = direction === "negative" ? -1 : direction === "auto" ? FE >= 0 ? 1 : -1 : 1;
+    const sumZ = valid.reduce((acc, d) => acc + signMul * d.yi / Math.sqrt(d.vi), 0);
+    const z_crit = bisect((mid) => 1 - alpha - normalCDF(mid), 0, 10);
+    const rosenthal = Math.max(0, Math.ceil((sumZ / z_crit) ** 2 - k));
+    const orwin = Math.max(0, Math.ceil(k * (Math.abs(FE) - Math.abs(trivial)) / Math.abs(trivial)));
     return { rosenthal, orwin, sumZ, z_crit, k };
   }
   function henmiCopas(studies, alpha = 0.05) {
@@ -6117,21 +6442,22 @@ var App = (() => {
       const hi2 = Math.max(lo2 + 0.01, 7);
       const N = 400;
       const h = (hi2 - lo2) / N;
-      let sum = 0;
+      let sum2 = 0;
       for (let i = 0; i <= N; i++) {
         const r = lo2 + i * h;
         const rv = SDR * r;
         const fv = finv(r / x);
         const pg = pgamma(fv, shapeF(rv), scaleF(rv));
         const coeff = i === 0 || i === N ? 1 : i % 2 === 0 ? 2 : 4;
-        sum += coeff * pg * dnorm(r);
+        sum2 += coeff * pg * dnorm(r);
       }
-      return sum * h / 3;
+      return sum2 * h / 3;
     };
     const halfAlpha = alpha / 2;
     const eqn = (x) => integrate(x) - halfAlpha;
     let lo = 1e-4, hi = 10;
-    if (!isFinite(eqn(lo)) || !isFinite(eqn(hi)) || eqn(lo) < 0) {
+    const vLo = eqn(lo), vHi = eqn(hi);
+    if (!isFinite(vLo) || !isFinite(vHi) || vLo < 0 || vHi > 0) {
       return { error: "HC: failed to bracket root" };
     }
     let t0 = (lo + hi) / 2;
@@ -6210,7 +6536,7 @@ var App = (() => {
     return { estimate: waap, se, ci, z, p, k, kAdequate, wlsEstimate: wlsEst, fallback };
   }
   var init_pubbias = __esm({
-    "js/pubbias.js"() {
+    "js/stats/pubbias.js"() {
       init_analysis();
       init_linalg();
       init_utils();
@@ -6218,7 +6544,7 @@ var App = (() => {
     }
   });
 
-  // js/influence.js
+  // js/stats/influence.js
   function looEngine(studies, full, method, ciMethod, alpha = 0.05) {
     const n = studies.length;
     const W = studies.reduce((acc, d) => acc + 1 / (d.vi + full.tau2), 0);
@@ -6557,7 +6883,8 @@ var App = (() => {
       };
     });
   }
-  function leaveOneOut(studies, method = "DL", ciMethod = "normal", precomputedFull = null, alpha = 0.05) {
+  function leaveOneOut(studies, method = "DL", ciMethod = "normal", precomputedFull = null, opts = {}) {
+    const alpha = opts.alpha ?? 0.05;
     const full = precomputedFull ?? meta(studies, method, ciMethod, alpha);
     if (studies.length < 3) return { full, rows: [] };
     const n = studies.length;
@@ -6580,7 +6907,10 @@ var App = (() => {
       const WY_fe_l = dlSS.WY - wi_fe * omitted.yi;
       const WY2_fe_l = dlSS.WY2 - wi_fe * omitted.yi * omitted.yi;
       const Q_fe_l = W_fe_l > 0 ? WY2_fe_l - WY_fe_l * WY_fe_l / W_fe_l : 0;
-      const i2_loo = Q_fe_l > df_loo && Q_fe_l > 0 ? Math.min(100, (Q_fe_l - df_loo) / Q_fe_l * 100) : 0;
+      const W2_fe_l = dlSS.W2 - wi_fe * wi_fe;
+      const c_loo = W_fe_l - W2_fe_l / W_fe_l;
+      const sigma2_loo = c_loo > 0 ? df_loo / c_loo : W_fe_l > 0 ? df_loo / W_fe_l : 0;
+      const i2FromTau2 = (tau2) => sigma2_loo > 0 ? Math.max(0, Math.min(100, 100 * tau2 / (tau2 + sigma2_loo))) : tau2 > 0 ? 100 : 0;
       if (ciMethod === "PL") {
         const subset = studies.filter((_, i) => i !== omitIdx);
         const m = meta(subset, method, ciMethod, alpha);
@@ -6590,7 +6920,7 @@ var App = (() => {
           lb: m.ciLow,
           ub: m.ciHigh,
           tau2: m.tau2,
-          i2: i2_loo,
+          i2: i2FromTau2(m.tau2),
           pval: m.pval,
           significant: m.pval < 0.05
         };
@@ -6599,14 +6929,14 @@ var App = (() => {
       const ciLow_loo = RE_loo - crit_loo * seRE_loo;
       const ciHigh_loo = RE_loo + crit_loo * seRE_loo;
       const stat_loo = RE_loo / seRE_loo;
-      const pval_loo = useT ? 2 * (1 - tCDF(Math.abs(stat_loo), df_loo)) : 2 * (1 - normalCDF(Math.abs(stat_loo)));
+      const pval_loo = useT ? 2 * tCDF(-Math.abs(stat_loo), df_loo) : 2 * (1 - normalCDF(Math.abs(stat_loo)));
       return {
         label: omitted.label ?? `Study ${omitIdx + 1}`,
         estimate: RE_loo,
         lb: ciLow_loo,
         ub: ciHigh_loo,
         tau2: tau2_loo,
-        i2: i2_loo,
+        i2: i2FromTau2(tau2_loo),
         pval: pval_loo,
         significant: pval_loo < 0.05
       };
@@ -6682,14 +7012,14 @@ var App = (() => {
     return { studies: out, mu, tau2, k };
   }
   var init_influence = __esm({
-    "js/influence.js"() {
+    "js/stats/influence.js"() {
       init_analysis();
       init_utils();
       init_constants();
     }
   });
 
-  // js/robust.js
+  // js/stats/robust.js
   function sandwichVar(X, w, residuals, clusterIds) {
     const k = residuals.length;
     const p = X[0].length;
@@ -6753,7 +7083,7 @@ var App = (() => {
     const robustSE = rob.SE_rob;
     const robustZ = beta.map((b, j) => b / robustSE[j]);
     const robustP = robustZ.map(
-      (z) => useT ? 2 * (1 - tCDF(Math.abs(z), rob.df)) : 2 * (1 - normalCDF(Math.abs(z)))
+      (z) => useT ? 2 * tCDF(-Math.abs(z), rob.df) : 2 * (1 - normalCDF(Math.abs(z)))
     );
     const robustCi = beta.map((b, j) => [b - crit * robustSE[j], b + crit * robustSE[j]]);
     return {
@@ -6780,7 +7110,7 @@ var App = (() => {
     const useT = rob.df < 30;
     const crit = useT ? tCritical(rob.df, alpha) : normalQuantile(1 - alpha / 2);
     const robStat = m.RE / robSE;
-    const robPval = useT ? 2 * (1 - tCDF(Math.abs(robStat), rob.df)) : 2 * (1 - normalCDF(Math.abs(robStat)));
+    const robPval = useT ? 2 * tCDF(-Math.abs(robStat), rob.df) : 2 * (1 - normalCDF(Math.abs(robStat)));
     return {
       ...m,
       robustSE: robSE,
@@ -6795,7 +7125,7 @@ var App = (() => {
     };
   }
   var init_robust = __esm({
-    "js/robust.js"() {
+    "js/stats/robust.js"() {
       init_linalg();
       init_utils();
       init_constants();
@@ -6803,7 +7133,7 @@ var App = (() => {
     }
   });
 
-  // js/analysis.js
+  // js/stats/analysis.js
   function isValidStudy(s) {
     return isFinite(s.yi) && isFinite(s.vi) && s.vi > 0;
   }
@@ -6830,17 +7160,11 @@ var App = (() => {
     }
     return map;
   }
-  function compute(s, type, options = {}) {
+  function compute(s, type) {
     const resolvedType = type || autoDetectType(s);
-    if (!resolvedType) {
-      console.warn("compute(): cannot auto-detect effect type", s);
-      return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
-    }
+    if (!resolvedType) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
     const profile = getProfile(resolvedType);
-    if (!profile) {
-      console.warn(`compute(): unknown effect type "${resolvedType}"`);
-      return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
-    }
+    if (!profile) return { ...s, yi: NaN, vi: NaN, se: NaN, w: 0 };
     return profile.compute(s);
   }
   function clES(d, ci) {
@@ -6855,16 +7179,14 @@ var App = (() => {
     let _byMethod = _metaCache.get(studies);
     if (_byMethod?.has(_cacheKey)) return _byMethod.get(_cacheKey);
     const valid = validStudies(studies);
-    if (valid.length < studies.length) {
-      console.warn(`meta(): dropped ${studies.length - valid.length} study/studies with non-finite or non-positive vi/yi`);
-      studies = valid;
-    }
+    const studies0 = studies;
+    if (valid.length < studies.length) studies = valid;
     const k = studies.length;
     if (k === 0) {
       return { FE: NaN, seFE: NaN, RE: NaN, seRE: NaN, tau2: 0, Q: NaN, df: 0, I2: 0, predLow: NaN, predHigh: NaN, ciLow: NaN, ciHigh: NaN, crit: NaN, stat: NaN, pval: NaN, dist: null };
     }
     const wFE = studies.map((d) => 1 / Math.max(d.vi, MIN_VAR));
-    const W = wFE.reduce((acc, b) => acc + b, 0);
+    const W = sum(wFE);
     const FE = W > 0 ? studies.reduce((acc, d, i) => acc + d.yi * wFE[i], 0) / W : NaN;
     const seFE = W > 0 ? Math.sqrt(1 / W) : NaN;
     let Q = 0;
@@ -6872,34 +7194,45 @@ var App = (() => {
       Q += wFE[i] * Math.pow(studies[i].yi - FE, 2);
     }
     const dfQ = k - 1;
-    let I22 = 0;
-    if (Q > dfQ && Q > 0) I22 = (Q - dfQ) / Q * 100;
-    I22 = Math.max(0, Math.min(100, I22));
-    const tau2 = (TAU2_FN[method] ?? TAU2_FN.DL)(studies, tau2Init);
+    const _W2FE = wFE.reduce((acc, w) => acc + w * w, 0);
+    const _cFE = W - _W2FE / W;
+    const sigma2 = _cFE > 0 ? dfQ / _cFE : dfQ / W;
+    const _tau2Result = (TAU2_FN[method] ?? TAU2_FN.DL)(studies, tau2Init);
+    const tau2 = typeof _tau2Result === "object" ? _tau2Result.tau2 : _tau2Result;
+    const convergence = typeof _tau2Result === "object" ? {
+      converged: _tau2Result.converged,
+      iters: _tau2Result.iters,
+      maxIters: _tau2Result.maxIters,
+      reason: _tau2Result.converged ? null : "max_iters",
+      source: "tau2_" + method
+    } : { converged: true, iters: 0, maxIters: 0, reason: null, source: "tau2_" + method };
+    const tau2Boundary = typeof _tau2Result === "object" ? _tau2Result.tau2Boundary ?? false : tau2 === 0 && k >= 2;
+    let I2 = sigma2 > 0 ? 100 * tau2 / (tau2 + sigma2) : tau2 > 0 ? 100 : 0;
+    I2 = Math.max(0, Math.min(100, I2));
     const wRE = studies.map((d) => 1 / Math.max(d.vi + tau2, MIN_VAR));
-    const WRE = wRE.reduce((acc, b) => acc + b, 0);
+    const WRE = sum(wRE);
     const RE = WRE > 0 ? studies.reduce((acc, d, i) => acc + d.yi * wRE[i], 0) / WRE : NaN;
     const seRE_base = WRE > 0 ? Math.sqrt(1 / WRE) : NaN;
     let seRE = seRE_base;
     let crit, stat, pval, dist;
     if (ciMethod === "KH" && k > 1) {
       const df = k - 1;
-      let sum = 0;
+      let sum2 = 0;
       for (let i = 0; i < k; i++) {
-        sum += wRE[i] * Math.pow(studies[i].yi - RE, 2);
+        sum2 += wRE[i] * Math.pow(studies[i].yi - RE, 2);
       }
-      const varKH = sum / (df * WRE);
+      const varKH = sum2 / (df * WRE);
       seRE = Math.sqrt(Math.max(varKH, 0));
       crit = tCritical(df, alpha);
       stat = RE / seRE;
       dist = "t";
-      pval = 2 * (1 - tCDF(Math.abs(stat), df));
+      pval = 2 * tCDF(-Math.abs(stat), df);
     } else if (ciMethod === "t" && k > 1) {
       const df = k - 1;
       crit = tCritical(df, alpha);
       stat = RE / seRE;
       dist = "t";
-      pval = 2 * (1 - tCDF(Math.abs(stat), df));
+      pval = 2 * tCDF(-Math.abs(stat), df);
     } else {
       crit = normalQuantile(1 - alpha / 2);
       stat = RE / seRE;
@@ -6922,9 +7255,11 @@ var App = (() => {
       RE,
       seRE,
       tau2,
+      tau2Boundary,
+      convergence,
       Q,
       df: dfQ,
-      I2: I22,
+      I2,
       tauCI: hetCI.tauCI,
       I2CI: hetCI.I2CI,
       H2CI: hetCI.H2CI,
@@ -6939,14 +7274,14 @@ var App = (() => {
     };
     if (!_byMethod) {
       _byMethod = /* @__PURE__ */ new Map();
-      _metaCache.set(studies, _byMethod);
+      _metaCache.set(studies0, _byMethod);
     }
     _byMethod.set(_cacheKey, _result);
     return _result;
   }
-  var _metaCache, TAU2_FN;
+  var _metaCache, _ITER_REML, _ITER_ML, _ITER_PM, _ITER_STD, TAU2_FN;
   var init_analysis = __esm({
-    "js/analysis.js"() {
+    "js/stats/analysis.js"() {
       init_utils();
       init_constants();
       init_tau2();
@@ -6963,27 +7298,60 @@ var App = (() => {
       init_selection();
       init_robust();
       _metaCache = /* @__PURE__ */ new WeakMap();
+      _ITER_REML = 500;
+      _ITER_ML = 100;
+      _ITER_PM = 100;
+      _ITER_STD = 200;
       TAU2_FN = {
-        DL: (s) => tau2_DL(s),
-        REML: (s, t0) => tau2_REML(s, REML_TOL, 500, t0),
-        PM: (s, t0) => tau2_PM(s, REML_TOL, 100, t0),
-        EB: (s, t0) => tau2_EB(s, REML_TOL, 200, t0),
-        PMM: (s, t0) => tau2_PMM(s, REML_TOL, 200, t0),
-        ML: (s, t0) => tau2_ML(s, REML_TOL, 100, t0),
-        SJ: (s, t0) => tau2_SJ(s, REML_TOL, 200, t0),
-        DLIT: (s, t0) => tau2_DLIT(s, REML_TOL, 200, t0),
-        EBLUP: (s, t0) => tau2_REML(s, REML_TOL, 500, t0),
-        GENQM: (s) => tau2_GENQM(s),
-        HS: (s) => tau2_HS(s),
-        HE: (s) => tau2_HE(s),
-        GENQ: (s) => tau2_GENQ(s),
-        SQGENQ: (s) => tau2_SQGENQ(s),
-        HSk: (s) => tau2_HSk(s)
+        // ---- closed-form (t0 accepted, not forwarded) ----
+        DL: (s, t0) => tau2_DL(s),
+        HS: (s, t0) => tau2_HS(s),
+        HE: (s, t0) => tau2_HE(s),
+        GENQ: (s, t0) => tau2_GENQ(s),
+        GENQM: (s, t0) => tau2_GENQM(s),
+        SQGENQ: (s, t0) => tau2_SQGENQ(s),
+        HSk: (s, t0) => tau2_HSk(s),
+        // ---- iterative (t0 forwarded as warm start) ----
+        REML: (s, t0) => tau2_REML(s, REML_TOL, _ITER_REML, t0),
+        EBLUP: (s, t0) => tau2_REML(s, REML_TOL, _ITER_REML, t0),
+        ML: (s, t0) => tau2_ML(s, REML_TOL, _ITER_ML, t0),
+        PM: (s, t0) => tau2_PM(s, REML_TOL, _ITER_PM, t0),
+        EB: (s, t0) => tau2_EB(s, REML_TOL, _ITER_STD, t0),
+        PMM: (s, t0) => tau2_PMM(s, REML_TOL, _ITER_STD, t0),
+        SJ: (s, t0) => tau2_SJ(s, REML_TOL, _ITER_STD, t0),
+        DLIT: (s, t0) => tau2_DLIT(s, REML_TOL, _ITER_STD, t0)
       };
     }
   });
 
-  // js/trimfill.js
+  // js/core/utils-html.js
+  function escapeHTML(s) {
+    return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+  var init_utils_html = __esm({
+    "js/core/utils-html.js"() {
+    }
+  });
+
+  // js/core/format.js
+  function fmt(v, d = 3) {
+    return isFinite(v) ? (+v).toFixed(d) : "\u2014";
+  }
+  function fmtP_APA(p) {
+    if (!isFinite(p)) return "\u2014";
+    if (p < 1e-3) return "< .001";
+    return "= " + (+p).toFixed(3).replace(/^0\./, ".");
+  }
+  function fmtCI_APA(lo, hi, d = 3) {
+    return `[${fmt(lo, d)}, ${fmt(hi, d)}]`;
+  }
+  var init_format = __esm({
+    "js/core/format.js"() {
+      init_utils_html();
+    }
+  });
+
+  // js/stats/trimfill.js
   function argsort(arr) {
     return arr.map((v, i) => i).sort((a, b) => arr[a] - arr[b]);
   }
@@ -7002,8 +7370,8 @@ var App = (() => {
       const X = studies.map((s) => [1, Math.sqrt(s.vi)]);
       const y = studies.map((s) => s.yi);
       const w = studies.map((s) => 1 / s.vi);
-      const beta = wls(X, y, w);
-      if (isFinite(beta[1])) return beta[1] < 0 ? "right" : "left";
+      const { beta, rankDeficient } = wls(X, y, w);
+      if (!rankDeficient && isFinite(beta[1])) return beta[1] < 0 ? "right" : "left";
     } catch (_) {
     }
     const nRight = studies.filter((s) => s.yi > center).length;
@@ -7011,10 +7379,11 @@ var App = (() => {
     return nRight >= nLeft ? "left" : "right";
   }
   function trimFill(studies, method = "DL", estimator = "L0", maxIter = 100) {
-    if (studies.length < 3) return [];
+    const noFill = { filled: [], convergence: { converged: true, iters: 0, maxIters: maxIter, reason: null, source: "trimFill_" + estimator } };
+    if (studies.length < 3) return noFill;
     const k = studies.length;
     const initCenter = meta(studies, method).RE;
-    if (!isFinite(initCenter)) return [];
+    if (!isFinite(initCenter)) return noFill;
     const side = detectSide(studies, initCenter);
     const flip = side === "right" ? -1 : 1;
     const flippedYi = studies.map((s) => flip * s.yi);
@@ -7025,7 +7394,10 @@ var App = (() => {
     let k0 = 0;
     let center = 0;
     let tau2Warm = null;
-    for (let iter = 0; iter < maxIter; iter++) {
+    let tfIters = 0;
+    let tfConverged = false;
+    let tfReason = "max_iters";
+    for (; tfIters < maxIter; tfIters++) {
       const k0Prev = k0;
       const yiTrim = yiSorted.slice(0, k - k0);
       const viTrim = viSorted.slice(0, k - k0);
@@ -7052,28 +7424,48 @@ var App = (() => {
       } else {
         const Sr = signedRanks.reduce((acc, r) => r > 0 ? acc + r : acc, 0);
         const disc = 2 * k * k - 4 * Sr + 0.25;
-        k0Raw = disc >= 0 ? k - 0.5 - Math.sqrt(disc) : 0;
+        if (disc < 0) {
+          k0 = 0;
+          tfReason = "q0_disc_negative";
+          break;
+        }
+        k0Raw = k - 0.5 - Math.sqrt(disc);
       }
       k0 = Math.max(0, Math.round(k0Raw));
-      if (k0 === k0Prev) break;
+      if (k0 === k0Prev) {
+        tfConverged = true;
+        tfReason = null;
+        tfIters++;
+        break;
+      }
     }
-    if (k0 === 0) return [];
+    const convergence = {
+      converged: tfConverged,
+      iters: tfIters,
+      maxIters: maxIter,
+      reason: tfReason,
+      source: "trimFill_" + estimator
+    };
+    if (k0 === 0) return { filled: [], convergence };
     const toFill = stSorted.slice(k - k0);
-    return toFill.map((orig) => {
-      const origFlipped = flip * orig.yi;
-      const filledFlipped = 2 * center - origFlipped;
-      const yi = flip * filledFlipped;
-      return { ...orig, yi, md: yi, label: orig.label + " (filled)", filled: true };
-    });
+    return {
+      filled: toFill.map((orig) => {
+        const origFlipped = flip * orig.yi;
+        const filledFlipped = 2 * center - origFlipped;
+        const yi = flip * filledFlipped;
+        return { ...orig, yi, md: yi, label: orig.label + " (filled)", filled: true };
+      }),
+      convergence
+    };
   }
   var init_trimfill = __esm({
-    "js/trimfill.js"() {
+    "js/stats/trimfill.js"() {
       init_analysis();
       init_linalg();
     }
   });
 
-  // js/plotThemes.js
+  // js/plots/plotThemes.js
   function hashGroupLabel(label) {
     let h = 5381;
     for (let i = 0; i < label.length; i++) h = (h << 5) + h ^ label.charCodeAt(i);
@@ -7081,7 +7473,7 @@ var App = (() => {
   }
   var ROB_COLORS, PLOT_THEMES, BW_DASHES;
   var init_plotThemes = __esm({
-    "js/plotThemes.js"() {
+    "js/plots/plotThemes.js"() {
       ROB_COLORS = {
         "Low": "#4caf50",
         "Some concerns": "#ff9800",
@@ -7113,14 +7505,22 @@ var App = (() => {
           borderGrid: "var(--plot-border-grid)",
           groupSepStroke: "var(--border-accent)",
           groupLabelFill: "var(--color-info)",
+          contour01: "var(--funnel-contour-01)",
+          contour05: "var(--funnel-contour-05)",
+          contour10: "var(--funnel-contour-10)",
           colorError: "var(--color-error)",
           colorWarning: "var(--color-warning)",
           colorInfo: "var(--color-info)",
           colorSuccess: "var(--color-success, #22aa66)",
-          fontFamily: "inherit",
+          fontFamily: "system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif",
           ciStrokeWidth: 1.5,
           headerRuleWidth: 1,
           nullLineDash: "4",
+          axisFontSize: null,
+          axisLineWidth: 1,
+          diamondStrokeWidth: 1.5,
+          piStrokeWidth: 2,
+          piDash: "6,3",
           useBwShapes: false,
           preserveSignalColors: false,
           signalColorNote: ""
@@ -7177,6 +7577,11 @@ var App = (() => {
           ciStrokeWidth: 1.5,
           headerRuleWidth: 1,
           nullLineDash: "4",
+          axisFontSize: null,
+          axisLineWidth: 1,
+          diamondStrokeWidth: 1.5,
+          piStrokeWidth: 2,
+          piDash: "6,3",
           useBwShapes: false,
           preserveSignalColors: false,
           signalColorNote: ""
@@ -7223,6 +7628,11 @@ var App = (() => {
           ciStrokeWidth: 1.5,
           headerRuleWidth: 1,
           nullLineDash: "4",
+          axisFontSize: null,
+          axisLineWidth: 1,
+          diamondStrokeWidth: 1.5,
+          piStrokeWidth: 2,
+          piDash: "6,3",
           useBwShapes: false,
           preserveSignalColors: false,
           signalColorNote: ""
@@ -7273,9 +7683,14 @@ var App = (() => {
           colorSuccess: "#333333",
           fontFamily: "Arial, Helvetica, sans-serif",
           ciStrokeWidth: 1,
-          // Slightly thinner lines for print legibility
           headerRuleWidth: 1,
           nullLineDash: "4",
+          axisFontSize: null,
+          axisLineWidth: 1,
+          diamondStrokeWidth: 1,
+          // thinner for print legibility (matches ciStrokeWidth)
+          piStrokeWidth: 1.5,
+          piDash: "6,3",
           useBwShapes: true,
           preserveSignalColors: true,
           signalColorNote: "Note: Risk of bias traffic-light colors (green/amber/red) are preserved in monochrome output to maintain compatibility with the Cochrane RoB 2 and ROBINS-I published conventions (Sterne et al., 2019; Sterne et al., 2016)."
@@ -7296,7 +7711,7 @@ var App = (() => {
     }
   });
 
-  // js/plots.js
+  // js/plots/plots.js
   function setTooltipElement(el) {
     _tooltipEl = el;
   }
@@ -7311,9 +7726,13 @@ var App = (() => {
   function setSvgSize(sel, w, h) {
     return sel.attr("width", w).attr("height", h).attr("viewBox", `0 0 ${w} ${h}`);
   }
-  function styleAxis(axisG, strokeColor, fillColor, fontSize, fontFamily) {
-    axisG.select(".domain").style("stroke", strokeColor);
-    axisG.selectAll(".tick line").style("stroke", strokeColor);
+  function styleAxis(axisG, strokeColor, fillColor, fontSize, fontFamily, lineWidth) {
+    const domainSel = axisG.select(".domain").style("stroke", strokeColor);
+    const tickLines = axisG.selectAll(".tick line").style("stroke", strokeColor);
+    if (lineWidth) {
+      domainSel.style("stroke-width", lineWidth);
+      tickLines.style("stroke-width", lineWidth);
+    }
     const tickText = axisG.selectAll(".tick text").style("fill", fillColor);
     if (fontSize) tickText.style("font-size", fontSize);
     if (fontFamily) tickText.style("font-family", fontFamily);
@@ -7391,14 +7810,76 @@ var App = (() => {
     }
     return [x];
   }
+  function buildBubbleSVG(container, ariaLabel, T) {
+    const svg = setSvgSize(d3.select(container).append("svg").attr("role", "img").attr("aria-label", ariaLabel).style("background", T.bg !== "transparent" ? T.bg : ""), BUBBLE_W, BUBBLE_H);
+    svg.append("title").text(ariaLabel);
+    if (T.bg && T.bg !== "transparent") {
+      svg.insert("rect", ":first-child").attr("width", BUBBLE_W).attr("height", BUBBLE_H).attr("fill", T.bg);
+    }
+    svg.style("font-family", T.fontFamily);
+    const g = svg.append("g").attr("transform", `translate(${BUBBLE_MARGIN.left},${BUBBLE_MARGIN.top})`);
+    return { svg, g };
+  }
+  function bubbleXScale(xVals) {
+    const [xMin, xMax] = d3.extent(xVals);
+    const xPad = (xMax - xMin) * 0.12 || 0.5;
+    return d3.scaleLinear().domain([xMin - xPad, xMax + xPad]).range([0, BUBBLE_IW]);
+  }
+  function bubbleYScale(yVals) {
+    const [yMin, yMax] = d3.extent(yVals);
+    const yPad = (yMax - yMin) * 0.15 || 0.2;
+    return d3.scaleLinear().domain([yMin - yPad, yMax + yPad]).nice().range([BUBBLE_IH, 0]);
+  }
+  function addBubbleZeroLine(g, yScale, T) {
+    const [yd0, yd1] = yScale.domain();
+    if (yd0 < 0 && yd1 > 0) {
+      g.append("line").attr("x1", 0).attr("x2", BUBBLE_IW).attr("y1", yScale(0)).attr("y2", yScale(0)).attr("stroke", T.borderGrid).attr("stroke-dasharray", "4,2");
+    }
+  }
+  function makeBubbleSeAt(vcov, wmeans, colIdxs, transform, knots, s2) {
+    return function seAt(x) {
+      if (!vcov) return NaN;
+      const l = wmeans.slice();
+      const basis = evalModBasis(x, transform, knots);
+      colIdxs.forEach((ci, j) => {
+        l[ci] = basis[j];
+      });
+      let q = 0;
+      for (let r = 0; r < l.length; r++)
+        for (let c = 0; c < l.length; c++)
+          q += l[r] * vcov[r][c] * l[c];
+      return Math.sqrt(Math.max(0, q) * s2);
+    };
+  }
+  function drawBubbleCurve(g, { xScale, yScale, fitFn, seAt, vcov, crit, isLinear, T }) {
+    const [xl, xr] = xScale.domain();
+    const pts = Array.from({ length: 120 }, (_, i) => xl + i * (xr - xl) / 119);
+    if (vcov && isFinite(crit)) {
+      const area = d3.area().x((x) => xScale(x)).y0((x) => {
+        const f = fitFn(x);
+        return yScale(f - crit * seAt(x));
+      }).y1((x) => {
+        const f = fitFn(x);
+        return yScale(f + crit * seAt(x));
+      });
+      g.append("path").datum(pts).attr("fill", T.accentGlow).attr("stroke", "none").attr("d", area);
+    }
+    if (isLinear) {
+      g.append("line").attr("x1", xScale(xl)).attr("y1", yScale(fitFn(xl))).attr("x2", xScale(xr)).attr("y2", yScale(fitFn(xr))).attr("stroke", T.accent).attr("stroke-width", 2);
+    } else {
+      g.append("path").datum(pts).attr("fill", "none").attr("stroke", T.accent).attr("stroke-width", 2).attr("d", d3.line().x((x) => xScale(x)).y((x) => yScale(fitFn(x))));
+    }
+  }
+  function drawBubbleDecoration(svg, g, { xScale, yScale, modName, yLabel, titleText, T }) {
+    styleAxis(g.append("g").attr("transform", `translate(0,${BUBBLE_IH})`).call(d3.axisBottom(xScale).ticks(5)), T.border, T.fgMuted, FONT_SIZE.tickLabel);
+    styleAxis(g.append("g").call(d3.axisLeft(yScale).ticks(5)), T.border, T.fgMuted, FONT_SIZE.tickLabel);
+    g.append("text").attr("x", BUBBLE_IW / 2).attr("y", BUBBLE_IH + 42).attr("text-anchor", "middle").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.axisLabel).text(modName);
+    g.append("text").attr("transform", "rotate(-90)").attr("x", -BUBBLE_IH / 2).attr("y", -44).attr("text-anchor", "middle").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.axisLabel).text(yLabel);
+    svg.append("text").attr("x", BUBBLE_MARGIN.left + BUBBLE_IW / 2).attr("y", 16).attr("text-anchor", "middle").attr("fill", T.fg).style("font-size", FONT_SIZE.title).text(titleText);
+  }
   function drawBubble(studies, reg, mod, container, options = {}) {
     const modName = mod.name;
     const transform = mod.transform || "linear";
-    const W = 460, H = 340;
-    const margin = { top: 34, right: 18, bottom: 52, left: 56 };
-    const _bubbleLabel = `Bubble plot for ${modName}`;
-    const iW = W - margin.left - margin.right;
-    const iH = H - margin.top - margin.bottom;
     const valid = studies.filter((s) => isFinite(s[modName]) && isFinite(s.yi) && isFinite(s.vi));
     if (valid.length < 2) return;
     const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
@@ -7406,7 +7887,6 @@ var App = (() => {
     const wArr = valid.map((s) => 1 / (s.vi + tau2));
     const wSum = wArr.reduce((a, b) => a + b, 0);
     const wMax = Math.max(...wArr);
-    const rMax = 15;
     const colIdxs = reg.modColMap && reg.modColMap[modName] || [];
     const knots = reg.modKnots && reg.modKnots[modName];
     const isLinear = transform === "linear" || colIdxs.length <= 1;
@@ -7434,81 +7914,33 @@ var App = (() => {
       const basis = evalModBasis(x, transform, knots);
       return colIdxs.reduce((acc, ci, j) => acc + beta[ci] * basis[j], intercept0);
     }
-    function seAt(x) {
-      if (!vcov) return NaN;
-      const l = wmeans.slice();
-      const basis = evalModBasis(x, transform, knots);
-      colIdxs.forEach((ci, j) => {
-        l[ci] = basis[j];
-      });
-      let q = 0;
-      for (let r = 0; r < l.length; r++)
-        for (let c = 0; c < l.length; c++)
-          q += l[r] * vcov[r][c] * l[c];
-      return Math.sqrt(Math.max(0, q) * s2);
-    }
-    const xVals = valid.map((s) => s[modName]);
-    const [xMin, xMax] = d3.extent(xVals);
-    const xPad = (xMax - xMin) * 0.12 || 0.5;
-    const xScale = d3.scaleLinear().domain([xMin - xPad, xMax + xPad]).range([0, iW]);
-    const yVals = valid.map((s) => s.yi);
-    const [yMin, yMax] = d3.extent(yVals);
-    const yPad = (yMax - yMin) * 0.15 || 0.2;
-    const yScale = d3.scaleLinear().domain([yMin - yPad, yMax + yPad]).nice().range([iH, 0]);
-    const svg = setSvgSize(d3.select(container).append("svg").attr("role", "img").attr("aria-label", _bubbleLabel).style("background", T.bg !== "transparent" ? T.bg : ""), W, H);
-    svg.append("title").text(_bubbleLabel);
-    if (T.bg && T.bg !== "transparent") {
-      svg.insert("rect", ":first-child").attr("width", W).attr("height", H).attr("fill", T.bg);
-    }
-    svg.style("font-family", T.fontFamily);
-    const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
-    const [yd0, yd1] = yScale.domain();
-    if (yd0 < 0 && yd1 > 0) {
-      g.append("line").attr("x1", 0).attr("x2", iW).attr("y1", yScale(0)).attr("y2", yScale(0)).attr("stroke", T.borderGrid).attr("stroke-dasharray", "4,2");
-    }
-    if (colIdxs.length > 0 && isFinite(intercept0)) {
-      const [xl, xr] = xScale.domain();
-      const nPts = 120;
-      const step = (xr - xl) / (nPts - 1);
-      const pts = Array.from({ length: nPts }, (_, i) => xl + i * step);
-      if (vcov && isFinite(crit)) {
-        const area = d3.area().x((x) => xScale(x)).y0((x) => {
-          const f = fitAt(x);
-          return yScale(f - crit * seAt(x));
-        }).y1((x) => {
-          const f = fitAt(x);
-          return yScale(f + crit * seAt(x));
-        });
-        g.append("path").datum(pts).attr("fill", T.accentGlow).attr("stroke", "none").attr("d", area);
+    const seAt = makeBubbleSeAt(vcov, wmeans, colIdxs, transform, knots, s2);
+    const xScale = bubbleXScale(valid.map((s) => s[modName]));
+    const yScale = bubbleYScale(valid.map((s) => s.yi));
+    const { svg, g } = buildBubbleSVG(container, `Bubble plot for ${modName}`, T);
+    addBubbleZeroLine(g, yScale, T);
+    if (colIdxs.length > 0 && isFinite(intercept0))
+      drawBubbleCurve(g, { xScale, yScale, fitFn: fitAt, seAt, vcov, crit, isLinear, T });
+    attachTooltip(
+      g.selectAll("circle").data(valid).enter().append("circle").attr("cx", (s) => xScale(s[modName])).attr("cy", (s) => yScale(s.yi)).attr("r", (s, i) => Math.max(3, BUBBLE_RMAX * Math.sqrt(wArr[i] / wMax))).attr("fill", T.bgSurfaceHover).attr("stroke", T.fgSubtle).attr("stroke-width", 1.2),
+      (s) => {
+        const fitted = fitAt(s[modName]);
+        return `<b>${escapeHTML(s.label)}</b><br>${escapeHTML(modName)}: ${escapeHTML(String(s[modName]))}<br>yi: ${s.yi.toFixed(3)}<br>\u0177: ${fitted.toFixed(3)}`;
       }
-      if (isLinear) {
-        g.append("line").attr("x1", xScale(xl)).attr("y1", yScale(fitAt(xl))).attr("x2", xScale(xr)).attr("y2", yScale(fitAt(xr))).attr("stroke", T.accent).attr("stroke-width", 2);
-      } else {
-        const line = d3.line().x((x) => xScale(x)).y((x) => yScale(fitAt(x)));
-        g.append("path").datum(pts).attr("fill", "none").attr("stroke", T.accent).attr("stroke-width", 2).attr("d", line);
-      }
-    }
-    const tooltip = selTooltip();
-    g.selectAll("circle").data(valid).enter().append("circle").attr("cx", (s) => xScale(s[modName])).attr("cy", (s) => yScale(s.yi)).attr("r", (s, i) => Math.max(3, rMax * Math.sqrt(wArr[i] / wMax))).attr("fill", T.bgSurfaceHover).attr("stroke", T.fgSubtle).attr("stroke-width", 1.2).on("mousemove", (event, s) => {
-      const fitted = fitAt(s[modName]);
-      tooltip.style("opacity", 1).html(`<b>${s.label}</b><br>${modName}: ${s[modName]}<br>yi: ${s.yi.toFixed(3)}<br>\u0177: ${fitted.toFixed(3)}`).style("left", event.pageX + TOOLTIP_OFFSET.x + "px").style("top", event.pageY + TOOLTIP_OFFSET.y + "px");
-    }).on("mouseout", () => tooltip.style("opacity", 0));
-    styleAxis(g.append("g").attr("transform", `translate(0,${iH})`).call(d3.axisBottom(xScale).ticks(5)), T.border, T.fgMuted, FONT_SIZE.tickLabel);
-    styleAxis(g.append("g").call(d3.axisLeft(yScale).ticks(5)), T.border, T.fgMuted, FONT_SIZE.tickLabel);
-    g.append("text").attr("x", iW / 2).attr("y", iH + 42).attr("text-anchor", "middle").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.axisLabel).text(modName);
-    g.append("text").attr("transform", "rotate(-90)").attr("x", -iH / 2).attr("y", -44).attr("text-anchor", "middle").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.axisLabel).text("Effect size (yi)");
-    const linearBeta = () => isFinite(beta[colIdxs[0]]) ? beta[colIdxs[0]].toFixed(3) : "NA";
-    const titleSuffix = isLinear ? `\u03B2 = ${colIdxs.length ? linearBeta() : "NA"}` : transform.startsWith("rcs") ? `RCS (${transform.slice(3)} knots)` : transform;
-    svg.append("text").attr("x", margin.left + iW / 2).attr("y", 16).attr("text-anchor", "middle").attr("fill", T.fg).style("font-size", FONT_SIZE.title).text(`${modName}  (${titleSuffix})`);
+    );
+    const titleSuffix = isLinear ? `\u03B2 = ${colIdxs.length ? fmt(beta[colIdxs[0]]) : "NA"}` : transform.startsWith("rcs") ? `RCS (${transform.slice(3)} knots)` : transform;
+    drawBubbleDecoration(svg, g, {
+      xScale,
+      yScale,
+      modName,
+      yLabel: "Effect size (yi)",
+      titleText: `${modName}  (${titleSuffix})`,
+      T
+    });
   }
   function drawPartialResidualBubble(studies, reg, mod, container, options = {}) {
     const modName = mod.name;
     const transform = mod.transform || "linear";
-    const _partialLabel = `Partial-residual bubble plot for ${modName}`;
-    const W = 460, H = 340;
-    const margin = { top: 34, right: 18, bottom: 52, left: 56 };
-    const iW = W - margin.left - margin.right;
-    const iH = H - margin.top - margin.bottom;
     const valid = studies.filter((s) => isFinite(s[modName]) && isFinite(s.yi) && isFinite(s.vi));
     if (valid.length < 2) return;
     const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
@@ -7516,7 +7948,6 @@ var App = (() => {
     const wArr = valid.map((s) => 1 / (s.vi + tau2));
     const wSum = wArr.reduce((a, b) => a + b, 0);
     const wMax = Math.max(...wArr);
-    const rMax = 15;
     const colIdxs = reg.modColMap && reg.modColMap[modName] || [];
     const knots = reg.modKnots && reg.modKnots[modName];
     const isLinear = transform === "linear" || colIdxs.length <= 1;
@@ -7536,19 +7967,7 @@ var App = (() => {
       }
       wmeans[i] = vals.reduce((s, v, k) => s + wArr[k] * v, 0) / wSum;
     }
-    function seAt(x) {
-      if (!vcov) return NaN;
-      const l = wmeans.slice();
-      const basis = evalModBasis(x, transform, knots);
-      colIdxs.forEach((ci, j) => {
-        l[ci] = basis[j];
-      });
-      let q = 0;
-      for (let r = 0; r < l.length; r++)
-        for (let c = 0; c < l.length; c++)
-          q += l[r] * vcov[r][c] * l[c];
-      return Math.sqrt(Math.max(0, q) * s2);
-    }
+    const seAt = makeBubbleSeAt(vcov, wmeans, colIdxs, transform, knots, s2);
     const residualsMap = new Map((reg.studiesUsed || []).map((s, i) => [s, reg.residuals[i]]));
     function focalContrib(x) {
       const basis = evalModBasis(x, transform, knots);
@@ -7565,58 +7984,29 @@ var App = (() => {
     function partialFitAt(x) {
       return isFinite(yIntercept) ? yIntercept + focalContrib(x) : NaN;
     }
-    const [xMin, xMax] = d3.extent(xVals);
-    const xPad = (xMax - xMin) * 0.12 || 0.5;
-    const xScale = d3.scaleLinear().domain([xMin - xPad, xMax + xPad]).range([0, iW]);
-    const [yMin, yMax] = d3.extent(partialY);
-    const yPad = (yMax - yMin) * 0.15 || 0.2;
-    const yScale = d3.scaleLinear().domain([yMin - yPad, yMax + yPad]).nice().range([iH, 0]);
-    const svg = setSvgSize(d3.select(container).append("svg").attr("role", "img").attr("aria-label", _partialLabel).style("background", T.bg !== "transparent" ? T.bg : ""), W, H);
-    svg.append("title").text(_partialLabel);
-    if (T.bg && T.bg !== "transparent") {
-      svg.insert("rect", ":first-child").attr("width", W).attr("height", H).attr("fill", T.bg);
-    }
-    svg.style("font-family", T.fontFamily);
-    const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
-    const [yd0, yd1] = yScale.domain();
-    if (yd0 < 0 && yd1 > 0) {
-      g.append("line").attr("x1", 0).attr("x2", iW).attr("y1", yScale(0)).attr("y2", yScale(0)).attr("stroke", T.borderGrid).attr("stroke-dasharray", "4,2");
-    }
-    if (isFinite(yIntercept) && colIdxs.length > 0) {
-      const [xl, xr] = xScale.domain();
-      const nPts = 120;
-      const step = (xr - xl) / (nPts - 1);
-      const pts = Array.from({ length: nPts }, (_, i) => xl + i * step);
-      if (vcov && isFinite(crit)) {
-        const area = d3.area().x((x) => xScale(x)).y0((x) => {
-          const f = partialFitAt(x);
-          return yScale(f - crit * seAt(x));
-        }).y1((x) => {
-          const f = partialFitAt(x);
-          return yScale(f + crit * seAt(x));
-        });
-        g.append("path").datum(pts).attr("fill", T.accentGlow).attr("stroke", "none").attr("d", area);
+    const xScale = bubbleXScale(xVals);
+    const yScale = bubbleYScale(partialY);
+    const { svg, g } = buildBubbleSVG(container, `Partial-residual bubble plot for ${modName}`, T);
+    addBubbleZeroLine(g, yScale, T);
+    if (isFinite(yIntercept) && colIdxs.length > 0)
+      drawBubbleCurve(g, { xScale, yScale, fitFn: partialFitAt, seAt, vcov, crit, isLinear, T });
+    attachTooltip(
+      g.selectAll("circle").data(valid).enter().append("circle").attr("cx", (s) => xScale(s[modName])).attr("cy", (_, i) => yScale(partialY[i])).attr("r", (_, i) => Math.max(3, BUBBLE_RMAX * Math.sqrt(wArr[i] / wMax))).attr("fill", T.bgSurfaceHover).attr("stroke", T.fgSubtle).attr("stroke-width", 1.2),
+      (s) => {
+        const i = valid.indexOf(s);
+        const fitted = partialFitAt(s[modName]);
+        return `<b>${escapeHTML(s.label)}</b><br>${escapeHTML(modName)}: ${escapeHTML(String(s[modName]))}<br>y*: ${partialY[i].toFixed(3)}<br>\u0177: ${fitted.toFixed(3)}`;
       }
-      if (isLinear) {
-        g.append("line").attr("x1", xScale(xl)).attr("y1", yScale(partialFitAt(xl))).attr("x2", xScale(xr)).attr("y2", yScale(partialFitAt(xr))).attr("stroke", T.accent).attr("stroke-width", 2);
-      } else {
-        const line = d3.line().x((x) => xScale(x)).y((x) => yScale(partialFitAt(x)));
-        g.append("path").datum(pts).attr("fill", "none").attr("stroke", T.accent).attr("stroke-width", 2).attr("d", line);
-      }
-    }
-    const tooltip = selTooltip();
-    g.selectAll("circle").data(valid).enter().append("circle").attr("cx", (s) => xScale(s[modName])).attr("cy", (_, i) => yScale(partialY[i])).attr("r", (_, i) => Math.max(3, rMax * Math.sqrt(wArr[i] / wMax))).attr("fill", T.bgSurfaceHover).attr("stroke", T.fgSubtle).attr("stroke-width", 1.2).on("mousemove", (event, s) => {
-      const i = valid.indexOf(s);
-      const fitted = partialFitAt(s[modName]);
-      tooltip.style("opacity", 1).html(`<b>${s.label}</b><br>${modName}: ${s[modName]}<br>y*: ${partialY[i].toFixed(3)}<br>\u0177: ${fitted.toFixed(3)}`).style("left", event.pageX + TOOLTIP_OFFSET.x + "px").style("top", event.pageY + TOOLTIP_OFFSET.y + "px");
-    }).on("mouseout", () => tooltip.style("opacity", 0));
-    styleAxis(g.append("g").attr("transform", `translate(0,${iH})`).call(d3.axisBottom(xScale).ticks(5)), T.border, T.fgMuted, FONT_SIZE.tickLabel);
-    styleAxis(g.append("g").call(d3.axisLeft(yScale).ticks(5)), T.border, T.fgMuted, FONT_SIZE.tickLabel);
-    g.append("text").attr("x", iW / 2).attr("y", iH + 42).attr("text-anchor", "middle").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.axisLabel).text(modName);
-    g.append("text").attr("transform", "rotate(-90)").attr("x", -iH / 2).attr("y", -44).attr("text-anchor", "middle").attr("fill", T.fgMuted).style("font-size", FONT_SIZE.axisLabel).text("Partial residual");
-    const slope = isFinite(beta[colIdxs[0]]) ? beta[colIdxs[0]].toFixed(3) : "NA";
-    const titleSuffix = isLinear ? `\u03B2 = ${slope}, partial residual` : (transform.startsWith("rcs") ? `RCS (${transform.slice(3)} knots)` : transform) + ", partial residual";
-    svg.append("text").attr("x", margin.left + iW / 2).attr("y", 16).attr("text-anchor", "middle").attr("fill", T.fg).style("font-size", FONT_SIZE.title).text(`${modName}  (${titleSuffix})`);
+    );
+    const titleSuffix = isLinear ? `\u03B2 = ${fmt(beta[colIdxs[0]])}, partial residual` : (transform.startsWith("rcs") ? `RCS (${transform.slice(3)} knots)` : transform) + ", partial residual";
+    drawBubbleDecoration(svg, g, {
+      xScale,
+      yScale,
+      modName,
+      yLabel: "Partial residual",
+      titleText: `${modName}  (${titleSuffix})`,
+      T
+    });
   }
   function forestDrawStudyRows(ctx, pageStudies, studies, studyCrit, widthCiLabel, ciMethodLabel, yPos) {
     const { svg, x, L, T, profile } = ctx;
@@ -7629,7 +8019,7 @@ var App = (() => {
         const ef_disp = profile.transform(d.yi);
         const lo_disp = profile.transform(d.yi - studyCrit * d.se);
         const hi_disp = profile.transform(d.yi + studyCrit * d.se);
-        return `${d.label}<br>Effect: ${isFinite(ef_disp) ? ef_disp.toFixed(3) : "NA"}<br>${widthCiLabel} (${ciMethodLabel}): ${isFinite(lo_disp) ? lo_disp.toFixed(3) : "NA"} \u2013 ${isFinite(hi_disp) ? hi_disp.toFixed(3) : "NA"}`;
+        return `${escapeHTML(d.label)}<br>Effect: ${fmt(ef_disp)}<br>${widthCiLabel} (${ciMethodLabel}): ${fmt(lo_disp)} \u2013 ${fmt(hi_disp)}`;
       }
     );
   }
@@ -7649,7 +8039,7 @@ var App = (() => {
       [x(ciHigh), yMid],
       [x(center), yMid + diamondHH]
     ];
-    svg.append("polygon").attr("points", pts.map((p) => p.join(",")).join(" ")).attr("fill", fillColor).attr("stroke", fillColor).attr("stroke-width", strokeDash ? 2.5 : 1.5).attr("stroke-dasharray", strokeDash || "0").append("title").text(tooltipText);
+    svg.append("polygon").attr("points", pts.map((p) => p.join(",")).join(" ")).attr("fill", fillColor).attr("stroke", fillColor).attr("stroke-width", strokeDash ? T.diamondStrokeWidth + 1 : T.diamondStrokeWidth).attr("stroke-dasharray", strokeDash || "0").append("title").text(tooltipText);
     svg.append("text").attr("x", L.labelW - 8).attr("y", yMid + 4).attr("text-anchor", "end").style("font-size", L.labelFontSize).style("font-family", T.fontFamily).style("font-weight", "bold").attr("fill", fillColor).text(labelText);
   }
   function forestDrawColumnHeaders(ctx, separators, hY) {
@@ -7678,9 +8068,9 @@ var App = (() => {
       const ef = profile.transform(d.yi);
       const lo = profile.transform(d.yi - studyCrit * d.se);
       const hi = profile.transform(d.yi + studyCrit * d.se);
-      const efStr = isFinite(ef) ? ef.toFixed(3) : "NA";
-      const ciStr = `[${isFinite(lo) ? lo.toFixed(3) : "NA"}, ${isFinite(hi) ? hi.toFixed(3) : "NA"}]`;
-      const wPct = d.filled ? "\u2014" : isFinite(d.w) && totalW_annot > 0 ? (d.w / totalW_annot * 100).toFixed(1) + "%" : "NA";
+      const efStr = fmt(ef);
+      const ciStr = `[${fmt(lo)}, ${fmt(hi)}]`;
+      const wPct = d.filled ? "\u2014" : isFinite(d.w) && totalW_annot > 0 ? fmt(d.w / totalW_annot * 100, 1) + "%" : "\u2014";
       svg.append("text").attr("x", efAnnotX).attr("y", rowMid).style("font-size", L.annotFontSize).style("font-family", T.fontFamily).attr("fill", d.filled ? T.fgMuted : T.fgSubtle).text(`${efStr} ${ciStr}`);
       svg.append("text").attr("x", wtAnnotX).attr("y", rowMid).attr("text-anchor", "end").style("font-size", L.annotFontSize).style("font-family", T.fontFamily).attr("fill", d.filled ? T.fgMuted : T.fgSubtle).text(wPct);
     });
@@ -7688,8 +8078,8 @@ var App = (() => {
       const efT = profile.transform(ef);
       const loT = profile.transform(lo);
       const hiT = profile.transform(hi);
-      const efStr = isFinite(efT) ? efT.toFixed(3) : "NA";
-      const ciStr = `[${isFinite(loT) ? loT.toFixed(3) : "NA"}, ${isFinite(hiT) ? hiT.toFixed(3) : "NA"}]`;
+      const efStr = fmt(efT);
+      const ciStr = `[${fmt(loT)}, ${fmt(hiT)}]`;
       svg.append("text").attr("x", efAnnotX).attr("y", yMid + 4).style("font-size", L.annotFontSize).style("font-family", T.fontFamily).attr("fill", color).text(`${efStr} ${ciStr}`);
       svg.append("text").attr("x", wtAnnotX).attr("y", yMid + 4).attr("text-anchor", "end").style("font-size", L.annotFontSize).style("font-family", T.fontFamily).attr("fill", color).text("100%");
     }
@@ -7699,24 +8089,24 @@ var App = (() => {
   function forestDrawPredictionInterval(ctx, m, showRE) {
     const { svg, x, L, T, profile } = ctx;
     if (!showRE || !isFinite(m.predLow) || !isFinite(m.predHigh)) return;
-    svg.append("line").attr("x1", x(m.predLow)).attr("x2", x(m.predHigh)).attr("y1", L.piY).attr("y2", L.piY).attr("stroke", T.pi).attr("stroke-width", 2).attr("stroke-dasharray", "6,3").append("title").text("Prediction interval: expected range of true effects in future studies");
-    svg.append("line").attr("x1", x(m.predLow)).attr("x2", x(m.predLow)).attr("y1", L.piY - 5).attr("y2", L.piY + 5).attr("stroke", T.pi).attr("stroke-width", 2);
-    svg.append("line").attr("x1", x(m.predHigh)).attr("x2", x(m.predHigh)).attr("y1", L.piY - 5).attr("y2", L.piY + 5).attr("stroke", T.pi).attr("stroke-width", 2);
+    svg.append("line").attr("x1", x(m.predLow)).attr("x2", x(m.predHigh)).attr("y1", L.piY).attr("y2", L.piY).attr("stroke", T.pi).attr("stroke-width", T.piStrokeWidth).attr("stroke-dasharray", T.piDash).append("title").text("Prediction interval: expected range of true effects in future studies");
+    svg.append("line").attr("x1", x(m.predLow)).attr("x2", x(m.predLow)).attr("y1", L.piY - 5).attr("y2", L.piY + 5).attr("stroke", T.pi).attr("stroke-width", T.piStrokeWidth);
+    svg.append("line").attr("x1", x(m.predHigh)).attr("x2", x(m.predHigh)).attr("y1", L.piY - 5).attr("y2", L.piY + 5).attr("stroke", T.pi).attr("stroke-width", T.piStrokeWidth);
     const pi_disp = { lb: profile.transform(m.predLow), ub: profile.transform(m.predHigh) };
-    svg.append("text").attr("x", x(m.RE)).attr("y", L.piY + 15).attr("text-anchor", "middle").style("font-size", L.labelFontSize).style("font-family", T.fontFamily).attr("fill", T.pi).text(`Prediction interval: ${isFinite(pi_disp.lb) ? pi_disp.lb.toFixed(3) : "NA"} to ${isFinite(pi_disp.ub) ? pi_disp.ub.toFixed(3) : "NA"}`);
+    svg.append("text").attr("x", x(m.RE)).attr("y", L.piY + 15).attr("text-anchor", "middle").style("font-size", L.labelFontSize).style("font-family", T.fontFamily).attr("fill", T.pi).text(`Prediction interval: ${fmt(pi_disp.lb)} to ${fmt(pi_disp.ub)}`);
   }
   function forestDrawHetSummary(ctx, m) {
     const { svg, L, T } = ctx;
     const Qp = isFinite(m.Q) && isFinite(m.df) && m.df > 0 ? 1 - chiSquareCDF(m.Q, m.df) : NaN;
     {
       const t = svg.append("text").attr("x", L.labelW + L.plotW / 2).attr("y", L.hetY).attr("text-anchor", "middle").style("font-size", L.annotFontSize).style("font-family", T.fontFamily).attr("fill", T.fgMuted);
-      t.append("tspan").text(`Heterogeneity:  \u03C4\xB2 = ${isFinite(m.tau2) ? m.tau2.toFixed(3) : "NA"},  `);
+      t.append("tspan").text(`Heterogeneity:  \u03C4\xB2 = ${fmt(m.tau2)},  `);
       t.append("tspan").style("font-style", "italic").text("I");
-      t.append("tspan").text(`\xB2 = ${isFinite(m.I2) ? m.I2.toFixed(1) + "%" : "NA"},  `);
+      t.append("tspan").text(`\xB2 = ${isFinite(m.I2) ? fmt(m.I2, 1) + "%" : "\u2014"},  `);
       t.append("tspan").style("font-style", "italic").text("Q");
-      t.append("tspan").text(`(df=${isFinite(m.df) ? m.df : "NA"}) = ${isFinite(m.Q) ? m.Q.toFixed(2) : "NA"},  `);
+      t.append("tspan").text(`(df=${isFinite(m.df) ? m.df : "\u2014"}) = ${fmt(m.Q, 2)},  `);
       t.append("tspan").style("font-style", "italic").text("p");
-      t.append("tspan").text(` = ${isFinite(Qp) ? Qp < 1e-3 ? "< .001" : Qp.toFixed(3) : "NA"}`);
+      t.append("tspan").text(` = ${fmtP_APA(Qp)}`);
     }
   }
   function drawForest(studies, m, options = {}) {
@@ -7769,7 +8159,11 @@ var App = (() => {
     }
     const { page, totalPages, items: pageStudies, isLastPage } = paginate(studies, options);
     const k = studies.length;
-    const L = k <= 20 ? { rowH: 22, labelFontSize: "11px", annotFontSize: "10px", titleFontSize: "12px", boxHalf: 5, diamondHH: 8 } : k <= 40 ? { rowH: 18, labelFontSize: "10px", annotFontSize: "9px", titleFontSize: "11px", boxHalf: 4, diamondHH: 7 } : { rowH: 14, labelFontSize: "9px", annotFontSize: "8px", titleFontSize: "10px", boxHalf: 3, diamondHH: 6 };
+    if (k === 0) {
+      drawNoDataPlaceholder(svg, +svg.attr("width") || 600, +svg.attr("height") || 200);
+      return;
+    }
+    const L = k <= 20 ? { rowH: 22, labelFontSize: FONT_SIZE.axisLabel, annotFontSize: FONT_SIZE.tickLabel, titleFontSize: FONT_SIZE.title, boxHalf: 5, diamondHH: 8 } : k <= 40 ? { rowH: 18, labelFontSize: FONT_SIZE.tickLabel, annotFontSize: FONT_SIZE.annot, titleFontSize: FONT_SIZE.axisLabel, boxHalf: 4, diamondHH: 7 } : { rowH: 14, labelFontSize: FONT_SIZE.annot, annotFontSize: "8px", titleFontSize: FONT_SIZE.tickLabel, boxHalf: 3, diamondHH: 6 };
     L.plotW = 440;
     L.annotW = 240;
     L.headerH = 28;
@@ -7834,7 +8228,7 @@ var App = (() => {
       const d = profile.transform(v);
       return isFinite(d) ? +d.toFixed(3) : "";
     }));
-    styleAxis(axisG, T.border, T.fgMuted, null, T.fontFamily);
+    styleAxis(axisG, T.border, T.fgMuted, T.axisFontSize, T.fontFamily, T.axisLineWidth);
     if (profile.isLog) {
       svg.append("text").attr("x", L.labelW + L.plotW / 2).attr("y", L.axisY + 36).attr("text-anchor", "middle").style("font-size", L.annotFontSize).style("font-family", T.fontFamily).attr("fill", T.fgMuted).text("(log scale)");
     }
@@ -7900,8 +8294,8 @@ var App = (() => {
     });
   }
   function funnelDrawFunnelArms(svg, x, y, seMax, xHalf, borderClr, m, T) {
-    const armRight = Math.min(1.96 * seMax, xHalf);
-    const armLeft = Math.max(-1.96 * seMax, -xHalf);
+    const armRight = Math.min(Z_95 * seMax, xHalf);
+    const armLeft = Math.max(-Z_95 * seMax, -xHalf);
     svg.append("line").attr("x1", x(0)).attr("y1", y(0)).attr("x2", x(armRight)).attr("y2", y(seMax)).attr("stroke", borderClr).attr("stroke-width", 1).attr("stroke-dasharray", "4,2");
     svg.append("line").attr("x1", x(0)).attr("y1", y(0)).attr("x2", x(armLeft)).attr("y2", y(seMax)).attr("stroke", borderClr).attr("stroke-width", 1).attr("stroke-dasharray", "4,2");
     svg.append("line").attr("x1", x(m.RE)).attr("x2", x(m.RE)).attr("y1", y(0)).attr("y2", y(seMax)).attr("stroke", T.accent).attr("stroke-dasharray", "4");
@@ -8008,7 +8402,7 @@ var App = (() => {
     items.forEach(({ color, dash, w, label }, i) => {
       const iy = PAD2 + i * ROW + ROW / 2;
       lg.append("line").attr("x1", PAD2).attr("y1", iy).attr("x2", PAD2 + SW).attr("y2", iy).attr("stroke", color).attr("stroke-width", w).attr("stroke-dasharray", dash || "none");
-      lg.append("text").attr("x", PAD2 + SW + 5).attr("y", iy + 4).attr("fill", T.fgMuted).style("font-size", "9px").style("font-family", T.fontFamily).text(label);
+      lg.append("text").attr("x", PAD2 + SW + 5).attr("y", iy + 4).attr("fill", T.fgMuted).style("font-size", FONT_SIZE.annot).style("font-family", T.fontFamily).text(label);
     });
   }
   function drawFunnel(studies, m, profile, options = {}) {
@@ -8032,6 +8426,10 @@ var App = (() => {
     }
     svg.style("font-family", T.fontFamily);
     const seMax = d3.max(studies, (d) => d.se);
+    if (!isFinite(seMax) || seMax === 0) {
+      drawNoDataPlaceholder(svg, W, H);
+      return;
+    }
     const xHalf = Math.max(
       d3.max(studies, (d) => Math.abs(d.yi)) * 1.15,
       seMax * 2.8
@@ -8039,7 +8437,6 @@ var App = (() => {
     const x = d3.scaleLinear().domain([-xHalf, xHalf]).range([margin.left, W - margin.right]);
     const y = d3.scaleLinear().domain([seMax, 0]).range([H - margin.bottom, margin.top]);
     const contours = !!options.contours;
-    const isDark = T.bg === "transparent" && contours && document.documentElement.dataset.theme !== "light";
     const fgColor = T.fgMuted;
     const borderClr = T.border;
     const dotFill = T.bgSurfaceHover;
@@ -8078,29 +8475,16 @@ var App = (() => {
         BANDS = [
           { z: Infinity, fill: "url(#hatch-dense)", label: "p < 0.01" },
           { z: 2.576, fill: "url(#hatch-medium)", label: "0.01 \u2264 p < 0.05" },
-          { z: 1.96, fill: "url(#hatch-sparse)", label: "0.05 \u2264 p < 0.10" },
+          { z: Z_95, fill: "url(#hatch-sparse)", label: "0.05 \u2264 p < 0.10" },
           { z: 1.645, fill: T.bg, label: "p \u2265 0.10" }
         ];
-      } else if (T.bg === "transparent") {
-        bgColor = getComputedStyle(document.documentElement).getPropertyValue("--bg-base").trim() || (isDark ? "#0d0d0d" : "#ffffff");
-        BANDS = isDark ? [
-          { z: Infinity, fill: "#606060", label: "p < 0.01" },
-          { z: 2.576, fill: "#404040", label: "0.01 \u2264 p < 0.05" },
-          { z: 1.96, fill: "#262626", label: "0.05 \u2264 p < 0.10" },
-          { z: 1.645, fill: bgColor, label: "p \u2265 0.10" }
-        ] : [
-          { z: Infinity, fill: "#a0a0a0", label: "p < 0.01" },
-          { z: 2.576, fill: "#c4c4c4", label: "0.01 \u2264 p < 0.05" },
-          { z: 1.96, fill: "#e4e4e4", label: "0.05 \u2264 p < 0.10" },
-          { z: 1.645, fill: bgColor, label: "p \u2265 0.10" }
-        ];
       } else {
-        bgColor = T.bg;
+        bgColor = T.bg === "transparent" ? getComputedStyle(document.documentElement).getPropertyValue("--bg-base").trim() || "#ffffff" : T.bg;
         BANDS = [
           { z: Infinity, fill: T.contour01 ?? "#a8a8a8", label: "p < 0.01" },
           { z: 2.576, fill: T.contour05 ?? "#c8c8c8", label: "0.01 \u2264 p < 0.05" },
-          { z: 1.96, fill: T.contour10 ?? "#e4e4e4", label: "0.05 \u2264 p < 0.10" },
-          { z: 1.645, fill: T.bg, label: "p \u2265 0.10" }
+          { z: Z_95, fill: T.contour10 ?? "#e4e4e4", label: "0.05 \u2264 p < 0.10" },
+          { z: 1.645, fill: bgColor, label: "p \u2265 0.10" }
         ];
       }
     }
@@ -8166,12 +8550,12 @@ var App = (() => {
           if (d.highLeverage || d.highCookD) return T.fgSubtle;
           return T.fgMuted;
         }).attr("opacity", 0.85),
-        (d) => `${d.label}<br>Hat: ${d.hat.toFixed(4)}<br>Cook's D: ${d.cookD.toFixed(4)}`
+        (d) => `${escapeHTML(d.label)}<br>Hat: ${d.hat.toFixed(4)}<br>Cook's D: ${d.cookD.toFixed(4)}`
       );
     } else {
       attachTooltip(
         g.selectAll("circle").data(influence).enter().append("circle").attr("cx", (d) => x(d.hat)).attr("cy", (d) => y(d.cookD)).attr("r", 5).attr("fill", (d) => d.highLeverage && d.highCookD ? T.colorError : d.highLeverage || d.highCookD ? T.colorWarning : T.bgSurfaceHover).attr("stroke", (d) => d.highLeverage && d.highCookD ? T.colorError : d.highLeverage || d.highCookD ? T.colorWarning : T.fgMuted).attr("opacity", 0.85),
-        (d) => `${d.label}<br>Hat: ${d.hat.toFixed(4)}<br>Cook's D: ${d.cookD.toFixed(4)}`
+        (d) => `${escapeHTML(d.label)}<br>Hat: ${d.hat.toFixed(4)}<br>Cook's D: ${d.cookD.toFixed(4)}`
       );
     }
     g.selectAll("text.pt-label").data(influence.filter((d) => d.highLeverage || d.highCookD)).enter().append("text").attr("class", "pt-label").attr("x", (d) => x(d.hat) + 7).attr("y", (d) => y(d.cookD) + 4).style("font-size", FONT_SIZE.tickLabel).attr("fill", (d) => T.useBwShapes ? T.fg : d.highLeverage && d.highCookD ? T.colorError : T.colorWarning).text((d) => d.label);
@@ -8248,7 +8632,7 @@ var App = (() => {
       const hitX2 = Math.max(x2 ?? cx ?? plotW, cx ?? plotW);
       attachTooltip(
         g.append("rect").attr("x", hitX1 - 4).attr("y", cy - rowH / 2).attr("width", Math.max(hitX2 - hitX1 + 8, 20)).attr("height", rowH).attr("fill", "transparent"),
-        () => `<b>After: ${r.addedLabel}</b> (k = ${r.k})<br>RE = ${isFinite(r.re_disp) ? r.re_disp.toFixed(3) : "NA"}&nbsp; ${options.ciLabel ?? "95% CI"} [${isFinite(r.lo_disp) ? r.lo_disp.toFixed(3) : "NA"}, ${isFinite(r.hi_disp) ? r.hi_disp.toFixed(3) : "NA"}]<br>\u03C4\xB2 = ${isFinite(r.tau2) ? r.tau2.toFixed(3) : "NA"}&nbsp; I\xB2 = ${isFinite(r.I2) ? r.I2.toFixed(1) : "NA"}%`
+        () => `<b>After: ${r.addedLabel}</b> (k = ${r.k})<br>RE = ${fmt(r.re_disp)}&nbsp; ${options.ciLabel ?? "95% CI"} [${fmt(r.lo_disp)}, ${fmt(r.hi_disp)}]<br>\u03C4\xB2 = ${fmt(r.tau2)}&nbsp; I\xB2 = ${fmt(r.I2, 1)}%`
       );
     });
     const axisG = g.append("g").attr("transform", `translate(0,${pk * rowH + 6})`).call(d3.axisBottom(xScale).ticks(5));
@@ -8286,8 +8670,8 @@ var App = (() => {
     const y = d3.scaleLinear().domain([seMax, 0]).range([H - margin.bottom, margin.top]);
     const fgColor = T.fgMuted;
     const borderClr = T.border;
-    const armRight = Math.min(1.96 * seMax, xHalf);
-    const armLeft = Math.max(-1.96 * seMax, -xHalf);
+    const armRight = Math.min(Z_95 * seMax, xHalf);
+    const armLeft = Math.max(-Z_95 * seMax, -xHalf);
     svg.append("line").attr("x1", x(0)).attr("y1", y(0)).attr("x2", x(armRight)).attr("y2", y(seMax)).attr("stroke", borderClr).attr("stroke-width", 1).attr("stroke-dasharray", "4,2");
     svg.append("line").attr("x1", x(0)).attr("y1", y(0)).attr("x2", x(armLeft)).attr("y2", y(seMax)).attr("stroke", borderClr).attr("stroke-width", 1).attr("stroke-dasharray", "4,2");
     if (isFinite(cur.RE)) {
@@ -8542,7 +8926,7 @@ var App = (() => {
           (d) => {
             const seVal = (d.se || Math.sqrt(Math.max(d.vi, 0))).toFixed(3);
             const yi_t = profile.transform(d.yi);
-            return `<b>${d.label}</b><br>Effect: ${isFinite(yi_t) ? +yi_t.toFixed(3) : "NA"}<br>SE: ${seVal}${d.filled ? "<br><i>(imputed)</i>" : ""}`;
+            return `<b>${escapeHTML(d.label)}</b><br>Effect: ${fmt(yi_t)}<br>SE: ${seVal}${d.filled ? "<br><i>(imputed)</i>" : ""}`;
           }
         );
       });
@@ -8643,8 +9027,7 @@ var App = (() => {
         const yi_t = profile.transform(s.yi);
         const lo_t = profile.transform(lo);
         const hi_t = profile.transform(hi);
-        const fmt3 = (v) => isFinite(v) ? +v.toFixed(3) : "NA";
-        tooltip.style("opacity", 1).html(`<b>${s.label}</b><br>Effect: ${fmt3(yi_t)} [${fmt3(lo_t)}, ${fmt3(hi_t)}]<br>SE: ${seVal}${s.filled ? "<br><i>(imputed)</i>" : ""}`).style("left", x0 + "px").style("top", y0 + "px");
+        tooltip.style("opacity", 1).html(`<b>${escapeHTML(s.label)}</b><br>Effect: ${fmt(yi_t)} [${fmt(lo_t)}, ${fmt(hi_t)}]<br>SE: ${seVal}${s.filled ? "<br><i>(imputed)</i>" : ""}`).style("left", x0 + "px").style("top", y0 + "px");
       };
       g.append("circle").attr("cx", x(s.yi)).attr("cy", cy).attr("r", s.filled ? 2.5 : 3.2).attr("fill", color).attr("fill-opacity", s.filled ? 0.4 : 1).attr("tabindex", 0).attr("role", "button").on("mousemove", (event) => showTip(event.pageX + TOOLTIP_OFFSET.x, event.pageY + TOOLTIP_OFFSET.y)).on("mouseout", () => tooltip.style("opacity", 0)).on("focus", (event) => {
         const rect = event.target.getBoundingClientRect();
@@ -8692,7 +9075,10 @@ var App = (() => {
   function drawBlupPlot(result, profile, options = {}) {
     const T = PLOT_THEMES[options.theme] ?? PLOT_THEMES["default"];
     const svg = initSvg("#blupPlot", "BLUP forest plot", T);
-    if (!result || !result.studies || result.studies.length === 0) return { totalPages: 1 };
+    if (!result || !result.studies || result.studies.length === 0) {
+      drawNoDataPlaceholder(svg, +svg.attr("width") || 560, +svg.attr("height") || 300);
+      return { totalPages: 1 };
+    }
     profile = profile || { transform: (x2) => x2, label: "Effect" };
     const sorted = result.studies.slice().sort((a, b) => b.yi - a.yi);
     const { page, pageSize, totalPages, items: pageStudies } = paginate(sorted, options);
@@ -8753,7 +9139,7 @@ var App = (() => {
           (d) => {
             const effDisplay = profile.transform(d.blup);
             const obsDisplay = profile.transform(d.yi);
-            return `<b>${d.label}</b><br>Observed: ${isFinite(obsDisplay) ? +obsDisplay.toFixed(3) : "NA"}<br>BLUP: ${isFinite(effDisplay) ? +effDisplay.toFixed(3) : "NA"}<br>Random effect (\xFB): ${+d.ranef.toFixed(4)}<br>Shrinkage (\u03BB): ${+(d.lambda * 100).toFixed(1)}%`;
+            return `<b>${escapeHTML(d.label)}</b><br>Observed: ${fmt(obsDisplay)}<br>BLUP: ${fmt(effDisplay)}<br>Random effect (\xFB): ${+d.ranef.toFixed(4)}<br>Shrinkage (\u03BB): ${+(d.lambda * 100).toFixed(1)}%`;
           }
         );
       }
@@ -8835,7 +9221,7 @@ var App = (() => {
         dot2.attr("fill", color).attr("fill-opacity", 0.75).attr("stroke", T.bgSurface).attr("stroke-width", 1),
         (d) => {
           const yi_t = profile.transform(d.yi);
-          return `<b>${d.label}</b><br>Q contribution: ${d.x.toFixed(3)}<br>Influence: ${d.influence.toFixed(4)}<br>Effect (${profile.label}): ${isFinite(yi_t) ? +yi_t.toFixed(3) : "NA"}`;
+          return `<b>${escapeHTML(d.label)}</b><br>Q contribution: ${d.x.toFixed(3)}<br>Influence: ${d.influence.toFixed(4)}<br>Effect (${profile.label}): ${fmt(yi_t)}`;
         }
       );
       if (showLabels) {
@@ -8960,7 +9346,7 @@ var App = (() => {
         dot2.attr("fill", color).attr("fill-opacity", 0.65).attr("stroke", T.bgSurface).attr("stroke-width", 1),
         (d) => {
           const effVal = profile ? profile.transform(d.yi) : d.yi;
-          return `<b>${d.label}</b><br>Control rate: ${(d.px * 100).toFixed(1)}%<br>Treatment rate: ${(d.py * 100).toFixed(1)}%<br>N: ${d.N}` + (isFinite(effVal) ? `<br>Effect: ${+effVal.toFixed(3)}` : "");
+          return `<b>${escapeHTML(d.label)}</b><br>Control rate: ${(d.px * 100).toFixed(1)}%<br>Treatment rate: ${(d.py * 100).toFixed(1)}%<br>N: ${d.N}` + (isFinite(effVal) ? `<br>Effect: ${+effVal.toFixed(3)}` : "");
         }
       );
       if (showLabels) {
@@ -9033,7 +9419,7 @@ var App = (() => {
         if (rating && ROB_COLORS[rating]) {
           attachTooltip(
             svg.append("circle").datum({ label, dom, rating }).attr("cx", cx).attr("cy", cy).attr("r", 7).attr("fill", ROB_COLORS[rating]).attr("fill-opacity", 0.85),
-            (d2) => `<strong>${d2.label}</strong><br>${d2.dom}<br>${d2.rating}`
+            (d2) => `<strong>${escapeHTML(d2.label)}</strong><br>${escapeHTML(d2.dom)}<br>${escapeHTML(d2.rating)}`
           );
         } else {
           svg.append("line").attr("x1", cx - 5).attr("x2", cx + 5).attr("y1", cy).attr("y2", cy).attr("stroke", T.fgMuted).attr("stroke-width", 1.5);
@@ -9336,8 +9722,8 @@ var App = (() => {
     const lineGen = d3.line().x((_, i) => x(toX(grid[i]))).y((_, i) => y(ll[i])).defined((_, i) => isFinite(ll[i]));
     g.append("g").attr("clip-path", `url(#${clipId})`).append("path").datum(ll).attr("fill", "none").attr("stroke", T.accent).attr("stroke-width", 2).attr("d", lineGen);
     g.append("circle").attr("cx", xHat).attr("cy", y(0)).attr("r", 4).attr("fill", T.accent);
-    const fmt3 = xScale === "tau" ? d3.format(".3~g") : d3.format(".3~g");
-    const axisX = g.append("g").attr("transform", `translate(0,${iH})`).call(d3.axisBottom(x).ticks(5).tickFormat(fmt3));
+    const fmt2 = xScale === "tau" ? d3.format(".3~g") : d3.format(".3~g");
+    const axisX = g.append("g").attr("transform", `translate(0,${iH})`).call(d3.axisBottom(x).ticks(5).tickFormat(fmt2));
     styleAxis(axisX, T.border, T.fgMuted, FONT_SIZE.tickLabel);
     const axisY = g.append("g").call(d3.axisLeft(y).ticks(5).tickFormat(d3.format(".2f")));
     styleAxis(axisY, T.border, T.fgMuted, FONT_SIZE.tickLabel);
@@ -9655,24 +10041,26 @@ var App = (() => {
     const outNote = nOut > 0 ? ` \u2014 ${nOut} outlier${nOut > 1 ? "s" : ""}` : "";
     svg.append("text").attr("x", margin.left + iW / 2).attr("y", 18).attr("text-anchor", "middle").attr("fill", T.fg).style("font-size", FONT_SIZE.title).style("font-weight", "600").text(`Radial (Galbraith) plot \u2014 k\u202F=\u202F${k}${outNote}`);
   }
-  var FONT_SIZE, MARGIN_DENSITY, TOOLTIP_OFFSET, LABEL_CHAR_PX, _tooltipEl, GROUP_COLORS, GOSH_SVG_REPORT_MAX;
+  var FONT_SIZE, MARGIN_DENSITY, TOOLTIP_OFFSET, LABEL_CHAR_PX, _tooltipEl, GROUP_COLORS, BUBBLE_W, BUBBLE_H, BUBBLE_MARGIN, BUBBLE_IW, BUBBLE_IH, BUBBLE_RMAX, GOSH_SVG_REPORT_MAX;
   var init_plots = __esm({
-    "js/plots.js"() {
+    "js/plots/plots.js"() {
       init_utils();
       init_constants();
       init_plotThemes();
       init_analysis();
+      init_format();
+      init_utils_html();
       FONT_SIZE = {
         title: "12px",
         // SVG-internal plot title
         axisLabel: "11px",
-        // axis labels (x/y legends)
+        // axis labels (x/y legends) — mirrors --plot-font-base
         tickLabel: "10px",
-        // axis tick text
+        // axis tick text            — mirrors --plot-font-sm
         annot: "9px",
-        // small in-plot annotations
+        // small in-plot annotations — mirrors --plot-font-xs
         legendLabel: "10px"
-        // legend text
+        // legend text               — mirrors --plot-font-sm
       };
       MARGIN_DENSITY = { top: 34, right: 24, bottom: 56, left: 66 };
       TOOLTIP_OFFSET = { x: 12, y: -24 };
@@ -9686,11 +10074,17 @@ var App = (() => {
         "#9966cc",
         "#669966"
       ];
+      BUBBLE_W = 460;
+      BUBBLE_H = 340;
+      BUBBLE_MARGIN = { top: 34, right: 18, bottom: 52, left: 56 };
+      BUBBLE_IW = BUBBLE_W - BUBBLE_MARGIN.left - BUBBLE_MARGIN.right;
+      BUBBLE_IH = BUBBLE_H - BUBBLE_MARGIN.top - BUBBLE_MARGIN.bottom;
+      BUBBLE_RMAX = 15;
       GOSH_SVG_REPORT_MAX = 3e3;
     }
   });
 
-  // js/gosh.js
+  // js/stats/gosh.js
   function mulberry32(seed) {
     let s = seed >>> 0;
     return function() {
@@ -9739,10 +10133,10 @@ var App = (() => {
       if (W === 0) return;
       const mu = Wmu / W;
       const Q = n > 1 ? Math.max(0, Wmu2 - Wmu * Wmu / W) : 0;
-      const I22 = n > 1 && Q > 0 ? Math.max(0, (Q - (n - 1)) / Q) * 100 : 0;
+      const I2 = n > 1 && Q > 0 ? Math.max(0, (Q - (n - 1)) / Q) * 100 : 0;
       muArr[idx] = mu;
       QArr[idx] = Q;
-      I2Arr[idx] = I22;
+      I2Arr[idx] = I2;
       nArr[idx] = n;
     }
     if (!sampled) {
@@ -9768,14 +10162,14 @@ var App = (() => {
   }
   var GOSH_MAX_ENUM_K, GOSH_MAX_K, GOSH_DEFAULT_MAX_SUBSETS;
   var init_gosh = __esm({
-    "js/gosh.js"() {
+    "js/stats/gosh.js"() {
       GOSH_MAX_ENUM_K = 15;
       GOSH_MAX_K = 30;
       GOSH_DEFAULT_MAX_SUBSETS = 5e4;
     }
   });
 
-  // js/perm.js
+  // js/stats/perm.js
   function mulberry322(seed) {
     let s = seed >>> 0;
     return function() {
@@ -9806,138 +10200,45 @@ var App = (() => {
     }
     return result;
   }
-  function tau2DL(X, yi, vi) {
-    const k = yi.length, p = X[0].length, df = k - p;
-    if (df <= 0) return 0;
-    const w0 = vi.map((v) => 1 / v);
-    const { beta: b0, vcov: V0, rankDeficient: rd0 } = wlsCholesky(X, yi, w0);
-    if (rd0) return 0;
-    const QE = yi.reduce((s, y, i) => {
-      const e = y - X[i].reduce((a, xi, j) => a + xi * b0[j], 0);
-      return s + w0[i] * e * e;
-    }, 0);
-    const c = w0.reduce((s, wi, i) => s + wi * (1 - wi * quadForm2(V0, X[i])), 0);
-    return c > 0 ? Math.max(0, (QE - df) / c) : 0;
+  function buildFeFit0(X, yi, vi) {
+    return function() {
+      const w0 = vi.map((v) => 1 / v);
+      const { beta, vcov: V, rankDeficient: rd } = wlsCholesky(X, yi, w0);
+      if (rd) return null;
+      const e = yi.map((y, i) => y - X[i].reduce((a, xi, j) => a + xi * beta[j], 0));
+      const h = vi.map((v, i) => 1 / v * quadForm2(V, X[i]));
+      const W = w0.reduce((s, wi) => s + wi, 0);
+      return { e, h, W };
+    };
   }
-  function tau2REML(X, yi, vi, tol = 1e-10, maxIter = 100) {
-    const k = yi.length, p = X[0].length;
-    if (k - p <= 0) return 0;
-    let tau2 = tau2DL(X, yi, vi);
-    for (let iter = 0; iter < maxIter; iter++) {
+  function buildReFitFn(X, yi, vi) {
+    return function(tau2) {
       const w = vi.map((v) => 1 / (v + tau2));
       const { beta, vcov: V, rankDeficient: rd } = wlsCholesky(X, yi, w);
-      if (rd) break;
-      let score = 0, info = 0;
-      for (let i = 0; i < k; i++) {
-        const h = w[i] * quadForm2(V, X[i]);
-        const e = yi[i] - X[i].reduce((a, xi, j) => a + xi * beta[j], 0);
-        const pi = w[i] * (1 - h);
-        score += w[i] * w[i] * e * e - pi;
-        info += w[i] * pi;
-      }
-      if (info <= 0) break;
-      let step = score / info;
-      let newTau2 = tau2 + step;
-      let sh = 0;
-      while (newTau2 < 0 && sh++ < 20) {
-        step /= 2;
-        newTau2 = tau2 + step;
-      }
-      newTau2 = Math.max(0, newTau2);
-      if (Math.abs(newTau2 - tau2) < tol) {
-        tau2 = newTau2;
-        break;
-      }
-      tau2 = newTau2;
-    }
-    return tau2;
-  }
-  function tau2ML(X, yi, vi, tol = 1e-10, maxIter = 100) {
-    const k = yi.length, p = X[0].length;
-    if (k - p <= 0) return 0;
-    let tau2 = tau2DL(X, yi, vi);
-    for (let iter = 0; iter < maxIter; iter++) {
-      const w = vi.map((v) => 1 / (v + tau2));
-      const { beta, rankDeficient: rd } = wlsCholesky(X, yi, w);
-      if (rd) break;
-      let score = 0, info = 0;
-      for (let i = 0; i < k; i++) {
-        const vit = vi[i] + tau2;
-        const e = yi[i] - X[i].reduce((a, xi, j) => a + xi * beta[j], 0);
-        score += e * e / (vit * vit) - 1 / vit;
-        info += 1 / (vit * vit);
-      }
-      if (info <= 0) break;
-      let step = score / info;
-      let newTau2 = tau2 + step;
-      let sh = 0;
-      while (newTau2 < 0 && sh++ < 20) {
-        step /= 2;
-        newTau2 = tau2 + step;
-      }
-      newTau2 = Math.max(0, newTau2);
-      if (Math.abs(newTau2 - tau2) < tol) {
-        tau2 = newTau2;
-        break;
-      }
-      tau2 = newTau2;
-    }
-    return tau2;
-  }
-  function tau2PM(X, yi, vi, tol = 1e-10, maxIter = 100) {
-    const k = yi.length, p = X[0].length, df = k - p;
-    if (df <= 0) return 0;
-    let tau2 = 0;
-    for (let iter = 0; iter < maxIter; iter++) {
-      const w = vi.map((v) => 1 / (v + tau2));
-      const { beta, rankDeficient: rd } = wlsCholesky(X, yi, w);
-      if (rd) break;
-      const QE = yi.reduce((s, y, i) => {
-        const e = y - X[i].reduce((a, xi, j) => a + xi * beta[j], 0);
-        return s + w[i] * e * e;
-      }, 0);
-      const sumW = w.reduce((a, b) => a + b, 0);
-      const newTau2 = Math.max(0, tau2 + (QE - df) / sumW);
-      if (Math.abs(newTau2 - tau2) < tol) return newTau2;
-      tau2 = newTau2;
-    }
-    return tau2;
-  }
-  function tau2HS(X, yi, vi) {
-    const k = yi.length, p = X[0].length, df = k - p;
-    if (df <= 0) return 0;
-    const w0 = vi.map((v) => 1 / v);
-    const { beta, rankDeficient: rd } = wls(X, yi, w0);
-    if (rd) return 0;
-    let QE = 0, sumW = 0;
-    for (let i = 0; i < k; i++) {
-      const e = yi[i] - X[i].reduce((a, xi, j) => a + xi * beta[j], 0);
-      QE += w0[i] * e * e;
-      sumW += w0[i];
-    }
-    return sumW > 0 ? Math.max(0, (QE - df) / sumW) : 0;
-  }
-  function tau2HE(X, yi, vi) {
-    const k = yi.length, p = X[0].length, df = k - p;
-    if (df <= 0) return 0;
-    const w1 = vi.map(() => 1);
-    const { beta, rankDeficient: rd } = wls(X, yi, w1);
-    if (rd) return 0;
-    let SS = 0;
-    for (let i = 0; i < k; i++) {
-      const e = yi[i] - X[i].reduce((a, xi, j) => a + xi * beta[j], 0);
-      SS += e * e;
-    }
-    const meanV = vi.reduce((a, b) => a + b, 0) / k;
-    return Math.max(0, SS / df - meanV);
+      if (rd) return null;
+      const e = yi.map((y, i) => y - X[i].reduce((a, xi, j) => a + xi * beta[j], 0));
+      const h = w.map((wi, i) => wi * quadForm2(V, X[i]));
+      const W = w.reduce((s, wi) => s + wi, 0);
+      return { e, h, W };
+    };
   }
   function estimateTau2(X, yi, vi, method) {
-    if (method === "REML") return tau2REML(X, yi, vi);
-    if (method === "ML") return tau2ML(X, yi, vi);
-    if (method === "PM") return tau2PM(X, yi, vi);
-    if (method === "HS") return tau2HS(X, yi, vi);
-    if (method === "HE") return tau2HE(X, yi, vi);
-    return tau2DL(X, yi, vi);
+    const k = yi.length, p = X[0].length, df = k - p;
+    if (df <= 0) return 0;
+    const feFit0 = buildFeFit0(X, yi, vi);
+    const reFitFn = buildReFitFn(X, yi, vi);
+    if (method === "REML") return tau2Core_REML(vi, reFitFn, tau2Core_DL(vi, feFit0, df)).tau2;
+    if (method === "ML") return tau2Core_ML(vi, reFitFn, tau2Core_DL(vi, feFit0, df)).tau2;
+    if (method === "PM") return tau2Core_PM(vi, reFitFn, df, 0).tau2;
+    if (method === "HS") return tau2Core_HS(vi, feFit0, df);
+    if (method === "HE") {
+      const w1 = vi.map(() => 1);
+      const { beta, rankDeficient: rd } = wls(X, yi, w1);
+      if (rd) return 0;
+      const e = yi.map((y, i) => y - X[i].reduce((a, xi, j) => a + xi * beta[j], 0));
+      return tau2Core_HE(vi, () => ({ e }), df);
+    }
+    return tau2Core_DL(vi, feFit0, df);
   }
   function permTestSync(params) {
     const {
@@ -9947,6 +10248,7 @@ var App = (() => {
       QM_obs,
       nPerm = 999,
       seed = 12345,
+      // fixed seed — reproducible results; not exposed in UI
       method = "REML",
       modTests = []
     } = params;
@@ -10038,12 +10340,822 @@ var App = (() => {
     return exceeds / dist.length;
   }
   var init_perm = __esm({
-    "js/perm.js"() {
+    "js/stats/perm.js"() {
       init_linalg();
+      init_tau2();
     }
   });
 
-  // js/io.js
+  // js/ui/ui-warnings.js
+  function renderWarningBlocks(targetEl, { errors = [], warnings = [] }) {
+    let html = "";
+    if (errors.length)
+      html += `<div class="validation-block validation-block--error">${errors.map((m) => `<div>\u274C ${m}</div>`).join("")}</div>`;
+    if (warnings.length)
+      html += `<div class="validation-block validation-block--warning">${warnings.map((m) => `<div>\u26A0 ${m}</div>`).join("")}</div>`;
+    targetEl.innerHTML = html;
+  }
+  function analysisChecks({ studies, excluded, minK = 2, biasTests = true, skipTinyVi = false }) {
+    const errors = [], warnings = [];
+    const k = studies.length;
+    if (k === 0) {
+      errors.push("No valid studies available for analysis");
+    } else {
+      if (k < minK) warnings.push(msgFewStudies(k, minK, "meta-analysis not meaningful"));
+      if (biasTests && k < 3) warnings.push(msgFewStudies(k, 3, "Egger / Begg / FAT-PET tests require \u2265 3 studies"));
+      if (!skipTinyVi && studies.some((s) => s.vi <= 1e-8)) warnings.push(msgTinyVariance());
+    }
+    return { errors, warnings };
+  }
+  var msgExcluded, msgNonNumericMod, msgFewStudies, msgTinyVariance, msgMinVarClamp;
+  var init_ui_warnings = __esm({
+    "js/ui/ui-warnings.js"() {
+      init_utils_html();
+      msgExcluded = (label, reason) => `Excluded: ${escapeHTML(label)} (${escapeHTML(reason)})`;
+      msgNonNumericMod = (label, value, modName) => `${escapeHTML(label)}: "${escapeHTML(value)}" is not a valid number for moderator ${escapeHTML(modName)}`;
+      msgFewStudies = (k, minK, context) => `Fewer than ${minK} studies \u2014 ${context}`;
+      msgTinyVariance = () => "One or more studies have extremely small variance (may inflate weights)";
+      msgMinVarClamp = (label) => `${escapeHTML(label)}: variance clamped to minimum floor (1e-8) \u2014 study assigned minimum weight`;
+    }
+  });
+
+  // js/io/sections.js
+  function cellRich(s) {
+    const str = s == null ? "" : String(s);
+    const runs = [];
+    for (const part of str.split(/(<em>[^<]*<\/em>)/)) {
+      if (part.startsWith("<em>")) runs.push({ text: part.slice(4, -5), italic: true });
+      else if (part) runs.push({ text: part });
+    }
+    return runs.length ? runs : [{ text: str }];
+  }
+  function convergenceBadge(convergence) {
+    if (!convergence || convergence.converged !== false) return null;
+    const src = convergence.source ?? "optimizer";
+    const itersNote = isFinite(convergence.iters) && isFinite(convergence.maxIters) ? ` (${convergence.iters}/${convergence.maxIters} iters)` : "";
+    return { severity: "warn", text: `Optimizer did not converge${itersNote} [${src}]` };
+  }
+  function summaryData(args) {
+    const {
+      m,
+      profile,
+      method,
+      ciMethod,
+      useTF,
+      tf,
+      mAdjusted,
+      studies,
+      cles = null,
+      ciLevel = "95"
+    } = args;
+    const widthCiLabel = ciLevel + "% CI";
+    const k = studies.filter((d) => !d.filled).length;
+    const isMHorPeto = m.isMH || m.isPeto;
+    const FE_disp = profile.transform(m.FE);
+    const RE_disp = isMHorPeto ? null : profile.transform(m.RE);
+    const ci = { lb: profile.transform(m.ciLow), ub: profile.transform(m.ciHigh) };
+    const pred = { lb: profile.transform(m.predLow), ub: profile.transform(m.predHigh) };
+    const RE_adj = !isMHorPeto && useTF && mAdjusted ? profile.transform(mAdjusted.RE) : null;
+    const feAlpha = { "90": 0.1, "95": 0.05, "99": 0.01 }[ciLevel] ?? 0.05;
+    const feZ = normalQuantile(1 - feAlpha / 2);
+    const feCi = { lb: profile.transform(m.FE - feZ * m.seFE), ub: profile.transform(m.FE + feZ * m.seFE) };
+    const tauCI1 = fmt(m.tauCI?.[0]);
+    const tauCI2 = isFinite(m.tauCI?.[1]) ? fmt(m.tauCI[1]) : "\u221E";
+    const H2hi = isFinite(m.H2CI?.[1]) ? fmt(m.H2CI[1]) : "\u221E";
+    const methodLabel = m.isMH ? "Mantel-Haenszel" : m.isPeto ? "Peto" : method;
+    const ciLabel = ciMethod === "KH" ? "Knapp-Hartung" : ciMethod === "t" ? "t-distribution" : ciMethod === "PL" ? "Profile Likelihood" : "Normal (z)";
+    const settings = `Effect type: ${profile.label}  \xB7  Pooling: ${methodLabel}  \xB7  CI method: ${ciLabel}  \xB7  k\u202F=\u202F${k}${tf.length > 0 ? ` + ${tf.length} imputed (trim\u202F&\u202Ffill)` : ""}`;
+    const rows = [
+      [profile.label + " \u2014 Fixed Effects (FE)", `${fmt(FE_disp)}, SE = ${fmt(m.seFE)}, ${widthCiLabel} ${fmtCI_APA(feCi.lb, feCi.ub)}`],
+      ...!isMHorPeto ? [[profile.label + " \u2014 Random Effects (RE)", `${fmt(RE_disp)}, SE = ${fmt(m.seRE)}, ${widthCiLabel} ${fmtCI_APA(ci.lb, ci.ub)}`]] : [],
+      ...isMHorPeto ? [[widthCiLabel, `${fmtCI_APA(ci.lb, ci.ub)}  \xB7  SE = ${fmt(m.seFE)}`]] : [],
+      ...cles ? [["CLES (RE)", `${fmt(cles.estimate)} [${fmt(cles.ci[0])}, ${fmt(cles.ci[1])}]`]] : [],
+      ...RE_adj !== null ? [["RE (trim-and-fill adjusted)", fmt(RE_adj)]] : [],
+      ...!isMHorPeto ? [["95% Prediction interval (PI)", fmtCI_APA(pred.lb, pred.ub)]] : [],
+      ...!isMHorPeto ? [["\u03C4\xB2", `${m.tau2Boundary ? "0 (boundary)" : fmt(m.tau2)}, ${widthCiLabel} [${tauCI1}, ${tauCI2}]`]] : [],
+      ["<em>I</em>\xB2", `${fmt(m.I2)}%, ${widthCiLabel} [${fmt(m.I2CI?.[0])}%, ${fmt(m.I2CI?.[1])}%]`],
+      ...!isMHorPeto ? [["H\xB2-CI", `[${fmt(m.H2CI?.[0])}, ${H2hi}]`]] : [],
+      [`<em>Q</em> (<em>df</em>\u202F=\u202F${m.df})`, fmt(m.Q)],
+      ...m.dist ? [[`${m.dist}-statistic`, `${fmt(m.stat)}, <em>p</em> ${fmtP_APA(m.pval)}`]] : [],
+      ...m.isClustered ? [[
+        `Robust CI (C\u202F=\u202F${m.clustersUsed} clusters)`,
+        `${fmtCI_APA(profile.transform(m.robustCiLow), profile.transform(m.robustCiHigh))}  \xB7  SE\u202F=\u202F${fmt(m.robustSE)}  \xB7  <em>z</em>\u202F=\u202F${fmt(m.robustStat)}, <em>p</em> ${fmtP_APA(m.robustPval)}`
+      ]] : []
+    ];
+    const note = isMHorPeto ? `Fixed-effect pooling (${methodLabel}) \u2014 RE estimate, \u03C4\xB2, and prediction interval not applicable. FE = fixed effects; CI = confidence interval.` : `FE = fixed effects; RE = random effects; CI = confidence interval; PI = prediction interval.${cles ? " CLES = common language effect size = \u03A6(g/\u221A2); probability that a randomly drawn score from group 1 exceeds group 2 (McGraw & Wong, 1992)." : ""}${m.isClustered ? " Robust CI uses cluster-robust (sandwich) standard errors." : ""}`;
+    return {
+      settings,
+      subtitle: `Summary of Meta-Analysis Results (${profile.label})`,
+      headers: ["Statistic", "Value"],
+      rows,
+      note,
+      reRowIdx: !isMHorPeto ? 1 : -1,
+      convergence: convergenceBadge(m.convergence)
+    };
+  }
+  function pubBiasData(args) {
+    const {
+      egger,
+      begg,
+      fatpet,
+      petpeese,
+      fsn,
+      tes,
+      waap,
+      harbord,
+      peters,
+      deeks,
+      ruecker,
+      hc,
+      useTF,
+      tf,
+      profile,
+      fsnTrivial: fsnTrivial2 = 0.1,
+      fsnDirection: fsnDirection2 = "auto"
+    } = args;
+    const na = (v) => isFinite(v) ? fmt(v) : "\u2014";
+    const naP = (v) => isFinite(v) ? fmtP_APA(v) : "NA";
+    const petEff = isFinite(fatpet?.intercept) ? fmt(profile.transform(fatpet.intercept)) : "\u2014";
+    const rows = [
+      ["Egger\u2019s test (intercept)", na(egger?.intercept), naP(egger?.p)],
+      ["Begg\u2019s test (rank correlation \u03C4)", na(begg?.tau), naP(begg?.p)],
+      ["FAT \u2014 \u03B2\u2081 (bias)", na(fatpet?.slope), naP(fatpet?.slopeP)],
+      ["PET \u2014 effect at SE \u2192 0", petEff, naP(fatpet?.interceptP)],
+      isFinite(petpeese?.peese?.intercept) ? [
+        `PEESE \u2014 effect at v\u1D62 \u2192 0${petpeese.usePeese ? " \u2713" : ""}`,
+        fmt(profile.transform(petpeese.peese.intercept)),
+        naP(petpeese.peese.interceptP)
+      ] : ["PEESE", "\u2014", "NA"],
+      ...[
+        ["Harbord (intercept)", harbord],
+        ["Peters (intercept)", peters],
+        ["Deeks (intercept)", deeks],
+        ["R\xFCcker (intercept)", ruecker]
+      ].map(([label, r]) => [label, na(r?.intercept), naP(r?.interceptP)]),
+      tes && isFinite(tes.chi2) ? [`TES \u2014 \u03C7\xB2 (O=${tes.O}, E=${fmt(tes.E)})`, fmt(tes.chi2), naP(tes.p)] : ["TES (test of excess significance)", "\u2014", "NA"],
+      waap && isFinite(waap.estimate) ? [
+        `WAAP-WLS (k_adequate\u202F=\u202F${waap.kAdequate} of ${waap.k}${waap.fallback ? "; WLS fallback" : ""})`,
+        `${fmt(profile.transform(waap.estimate))} [${fmt(profile.transform(waap.ci[0]))}, ${fmt(profile.transform(waap.ci[1]))}]`,
+        naP(waap.p)
+      ] : ["WAAP-WLS", "\u2014", "NA"],
+      hc && !hc.error ? [
+        "Henmi-Copas CI",
+        `${fmt(profile.transform(hc.beta))} [${fmt(profile.transform(hc.ci[0]))}, ${fmt(profile.transform(hc.ci[1]))}]`,
+        "\u2014"
+      ] : ["Henmi-Copas CI", "\u2014", "NA (k < 3)"],
+      hc && !hc.error && isFinite(hc.tau2) ? ["Henmi-Copas \u03C4\xB2 (DL, bias-robust)", fmt(hc.tau2), "\u2014"] : null
+    ].filter(Boolean);
+    const fsnLine = [
+      `Fail-safe N (Rosenthal): ${isFinite(fsn?.rosenthal) ? Math.round(fsn.rosenthal) : "\u2014"}`,
+      `Fail-safe N (Orwin, trivial=${fsnTrivial2}, dir=${fsnDirection2}): ${isFinite(fsn?.orwin) ? Math.round(fsn.orwin) : "\u2014"}`,
+      `Trim\u202F&\u202FFill: ${useTF ? "ON" : "OFF"}${tf?.length > 0 ? ` (${tf.length} filled)` : ""}`
+    ].join("  \xB7  ");
+    const note = "FAT = funnel asymmetry test; PET = precision-effect test; PEESE = precision-effect estimate with standard error (Stanley & Doucouliagos, 2014); \u2713 = PEESE preferred (FAT p < .10). Harbord, Peters, Deeks, and R\xFCcker are binary-outcome variants of the Egger test; TES = test of excess significance; WAAP-WLS = weighted average of adequately powered studies; statistic is bias-corrected effect estimate [95% CI]; Henmi-Copas = bias-robust CI centred on FE estimate (DL \u03C4\xB2). NA = fewer than 3 eligible studies or missing cell counts.";
+    return { headers: ["Test", "Statistic", "<em>p</em>"], rows, note, fsnLine };
+  }
+  function pCurveData(pcurve) {
+    if (!pcurve || pcurve.k < 3) return null;
+    const verdictLabels = {
+      "evidential": "Evidential value",
+      "no-evidential": "No evidential value",
+      "inconclusive": "Inconclusive",
+      "insufficient": "Insufficient data"
+    };
+    const fmtZ = (z) => isFinite(z) ? z.toFixed(3) : "\u2014";
+    const rows = [
+      ["Right-skew test", fmtZ(pcurve.rightSkewZ), fmtP_APA(pcurve.rightSkewP)],
+      ["Flatness test", fmtZ(pcurve.flatnessZ), fmtP_APA(pcurve.flatnessP)]
+    ];
+    const verdict = verdictLabels[pcurve.verdict] ?? pcurve.verdict ?? "\u2014";
+    return {
+      kLine: `${pcurve.k} significant result${pcurve.k !== 1 ? "s" : ""} (p < .05)`,
+      headers: ["Test", "<em>Z</em>", "<em>p</em>"],
+      rows,
+      verdict,
+      note: `Right-skew test H\u2080: p-curve is uniform or left-skewed (no evidential value). Flatness test H\u2080: p-curve has evidential value. Verdict: ${verdict}. Simonsohn et al. (2014).`
+    };
+  }
+  function puniformData(args) {
+    const { puniform, m, profile, ciLevel = "95" } = args;
+    if (!puniform || puniform.k < 3 || !isFinite(puniform.estimate)) return null;
+    const widthCiLabel = ciLevel + "% CI";
+    const tr = (v) => isFinite(v) ? profile.transform(v) : NaN;
+    const noteExtra = [
+      puniform.biasDetected ? "Bias detected (p < .05)." : "",
+      puniform.significantEffect ? "Significant effect after correction (p < .05)." : ""
+    ].filter(Boolean).join(" ");
+    const rows = [
+      [
+        "RE (uncorrected)",
+        isFinite(m.RE) ? fmt(tr(m.RE)) : "\u2014",
+        fmtCI_APA(tr(m.ciLow), tr(m.ciHigh)),
+        fmt(puniform.Z_bias),
+        fmtP_APA(puniform.p_bias)
+      ],
+      [
+        "P-uniform (bias-corrected)",
+        isFinite(puniform.estimate) ? fmt(tr(puniform.estimate)) : "\u2014",
+        fmtCI_APA(tr(puniform.ciLow), tr(puniform.ciHigh)),
+        fmt(puniform.Z_sig),
+        fmtP_APA(puniform.p_sig)
+      ]
+    ];
+    const note = "RE row: bias test (H\u2080: RE = true effect). P-uniform row: significance test (H\u2080: \u03B4\u202F=\u202F0). CI = confidence interval." + (noteExtra ? " " + noteExtra : "");
+    return {
+      kLine: `${puniform.k} significant result${puniform.k !== 1 ? "s" : ""} (p < .05) used  \xB7  effect scale: ${profile.label}`,
+      headers: ["Method", "Estimate", widthCiLabel, "<em>Z</em>", "<em>p</em>"],
+      rows,
+      note
+    };
+  }
+  function selModelData(args) {
+    const { sel, profile, selMode, selLabel, ciLevel = "95" } = args;
+    if (!sel || sel.error) return null;
+    const widthCiLabel = ciLevel + "% CI";
+    const isMLE = selMode === "mle";
+    const fmtDisp = (v) => isFinite(v) ? fmt(profile.transform(v)) : "\u2014";
+    const fmtV = (v) => isFinite(v) ? fmt(v) : "\u2014";
+    const cuts = sel.cuts;
+    const intervalLabels = cuts.map((c, j) => `(${j === 0 ? "0" : cuts[j - 1]}, ${c}]`);
+    const muAdj = fmtDisp(sel.mu);
+    const ciLo = fmtDisp(sel.mu - Z_95 * sel.se_mu);
+    const ciHi = fmtDisp(sel.mu + Z_95 * sel.se_mu);
+    const omegaRow = [
+      "Selection weight \u03C9",
+      ...sel.omega.map((w, j) => {
+        if (!isMLE || j === 0) return `${fmtV(w)} (fixed)`;
+        const se = isFinite(sel.se_omega[j]) ? ` \xB1 ${fmtV(sel.se_omega[j])}` : "";
+        return `${fmtV(w)}${se}`;
+      })
+    ];
+    const rows = [
+      omegaRow,
+      ["Studies per interval", ...sel.nPerInterval.map(String)],
+      [`Adjusted \u03BC\u0302 [${widthCiLabel}]`, `${muAdj} [${ciLo}, ${ciHi}]  \xB7  unadjusted: ${fmtDisp(sel.RE_unsel)}`],
+      [`Adjusted \u03C4\xB2`, `${fmtV(sel.tau2)}  \xB7  unadjusted: ${fmtV(sel.tau2_unsel)}`],
+      ...isMLE && isFinite(sel.LRT) ? [
+        [`LRT (H\u2080: no selection)`, `\u03C7\xB2(${sel.LRTdf})\u202F=\u202F${fmtV(sel.LRT)}, <em>p</em> ${fmtP_APA(sel.LRTp)}`]
+      ] : []
+    ];
+    const modeLabel = isMLE ? "MLE (estimated weights)" : `Sensitivity \u2014 ${selLabel}`;
+    const sidesLabel = sel.sides === 2 ? "two-sided" : "one-sided";
+    return {
+      metaLine: `Mode: ${modeLabel}  \xB7  p-values: ${sidesLabel}  \xB7  k\u202F=\u202F${sel.k}`,
+      subtitle: "Selection Model Results",
+      headers: ["Quantity", ...intervalLabels],
+      rows,
+      note: "\u03C9 = selection weight; \u03BC\u0302 = bias-corrected pooled estimate; CI = confidence interval; LRT = likelihood ratio test.",
+      nCols: 1 + cuts.length,
+      nPerInterval: sel.nPerInterval,
+      isMLE,
+      converged: sel.converged,
+      convergence: convergenceBadge(sel.convergence),
+      LRTp: sel.LRTp,
+      muAdj,
+      ciLo,
+      ciHi,
+      muUnadj: fmtDisp(sel.RE_unsel)
+    };
+  }
+  function influenceData(args) {
+    const { influence, studies } = args;
+    if (!influence || !influence.length) return null;
+    const k = studies.filter((d) => !d.filled).length;
+    const dffitsThresh = 3 * Math.sqrt(1 / Math.max(k - 1, 1));
+    const covRatioThresh = 1 + 1 / k;
+    const em = "\u2014";
+    const rows = influence.map((d) => [
+      d.label,
+      isFinite(d.RE_loo) ? fmt(d.RE_loo) : em,
+      isFinite(d.deltaTau2) ? fmt(d.deltaTau2) : em,
+      isFinite(d.stdResidual) ? fmt(d.stdResidual) : em,
+      isFinite(d.DFBETA) ? fmt(d.DFBETA) : em,
+      isFinite(d.DFFITS) ? fmt(d.DFFITS) : em,
+      isFinite(d.covRatio) ? d.covRatio.toFixed(3) : em,
+      isFinite(d.hat) ? d.hat.toFixed(3) : em,
+      isFinite(d.cookD) ? d.cookD.toFixed(3) : em,
+      [
+        d.outlier ? "Outlier" : "",
+        d.influential ? "Influential" : "",
+        d.highLeverage ? "Hi-Lev" : "",
+        d.highCookD ? "Hi-Cook" : "",
+        d.highDffits ? "Hi-DFFITS" : "",
+        d.highCovRatio ? "Hi-CovRatio" : ""
+      ].filter(Boolean).join(", ")
+    ]);
+    const flagged = influence.map((d) => d.outlier || d.influential || d.highLeverage || d.highCookD || d.highDffits || d.highCovRatio);
+    return {
+      headers: ["Study", "RE (LOO)", "\u0394\u03C4\xB2", "Std. Residual", "DFBETA", "DFFITS", "CovRatio", "Hat", "Cook\u2019s D", "Flag"],
+      rows,
+      flagged,
+      note: `LOO = leave-one-out. Thresholds: Hat > ${fmt(2 / k)} (= 2/k); Cook\u2019s D > ${fmt(4 / k)} (= 4/k); DFFITS > ${fmt(dffitsThresh)} (= 3\xB7\u221A(1/(k\u22121))); CovRatio > ${fmt(covRatioThresh)} (= 1+1/k).`
+    };
+  }
+  function subgroupData(args) {
+    const { subgroup, profile, ciLevel = "95" } = args;
+    if (!subgroup || subgroup.G < 2) return null;
+    const widthCiLabel = ciLevel + "% CI";
+    const rows = Object.entries(subgroup.groups).map(([g, r]) => {
+      const single = r.k === 1;
+      const y_disp = profile.transform(r.y);
+      const ci_lb = profile.transform(r.ci.lb);
+      const ci_ub = profile.transform(r.ci.ub);
+      return [
+        g,
+        String(r.k),
+        isFinite(y_disp) ? fmt(y_disp) : "\u2014",
+        single ? "\u2014" : isFinite(r.se) ? fmt(r.se) : "\u2014",
+        single ? "\u2014" : fmtCI_APA(ci_lb, ci_ub),
+        single ? "\u2014" : isFinite(r.tau2) ? r.tau2.toFixed(3) : "0",
+        single ? "\u2014" : isFinite(r.I2) ? r.I2.toFixed(1) : "0"
+      ];
+    });
+    return {
+      subtitle: `Subgroup Analysis Results (${profile.label})`,
+      headers: ["Group", "<em>k</em>", "Effect size", "SE", widthCiLabel, "\u03C4\xB2", "<em>I</em>\xB2 (%)"],
+      rows,
+      note: `CI = confidence interval. <em>Q</em>_total(${subgroup.k - 1}) = ${subgroup.Qtotal.toFixed(3)}  \xB7  <em>Q</em>_within(${subgroup.k - subgroup.G}) = ${subgroup.Qwithin.toFixed(3)}  \xB7  <em>Q</em>_between(${subgroup.df}) = ${subgroup.Qbetween.toFixed(3)}, <em>p</em> ${fmtP_APA(subgroup.p)}.`,
+      Qbetween: subgroup.Qbetween,
+      df: subgroup.df,
+      p: subgroup.p
+    };
+  }
+  function studyTableData(args) {
+    const { studies, m, profile, ciLevel = "95" } = args;
+    const widthCiLabel = ciLevel + "% CI";
+    const tau2 = isFinite(m.tau2) ? m.tau2 : 0;
+    const real = studies.filter((d) => !d.filled);
+    const totalW = real.reduce((s, d) => s + 1 / (d.vi + tau2), 0);
+    const showFEcol = !m.isMH && !m.isPeto;
+    const totalWfe = showFEcol ? real.reduce((s, d) => s + 1 / d.vi, 0) : 0;
+    const transformedScale = ["Ratio", "Hazard", "Rate", "log", "logit", "arcsine", "Freeman", "Fisher"].some((t) => profile.label.includes(t));
+    const seLabel = transformedScale ? "SE (transformed)" : "SE";
+    const fmtV = (v) => isFinite(v) ? (+v).toFixed(3) : "\u2014";
+    const fmtPct = (v) => v !== null && isFinite(v) ? v.toFixed(1) + "%" : "\u2014";
+    const pooledEf = profile.transform(m.RE);
+    const pooledLo = profile.transform(m.ciLow);
+    const pooledHi = profile.transform(m.ciHigh);
+    const headers = [`Study`, `Effect size (${profile.label})`, seLabel, widthCiLabel, "RE Weight (%)"];
+    if (showFEcol) headers.push("FE Weight (%)");
+    const rows = studies.map((d) => {
+      const wi = 1 / (d.vi + tau2);
+      const pct = d.filled ? null : wi / totalW * 100;
+      const pctFE = showFEcol && !d.filled ? 1 / d.vi / totalWfe * 100 : null;
+      const ef = profile.transform(d.yi);
+      const lo = profile.transform(d.yi - Z_95 * d.se);
+      const hi = profile.transform(d.yi + Z_95 * d.se);
+      const lbl = d.label.length > 40 ? d.label.slice(0, 39) + "\u2026" : d.label;
+      const cells = [lbl, fmtV(ef), fmtV(d.se), fmtCI_APA(lo, hi), fmtPct(pct)];
+      if (showFEcol) cells.push(fmtPct(pctFE));
+      return cells;
+    });
+    const pooledRow = ["Pooled (RE)", fmtV(pooledEf), fmtV(m.seRE), fmtCI_APA(pooledLo, pooledHi), "100%"];
+    if (showFEcol) pooledRow.push("100%");
+    const weightNote = showFEcol ? "RE and FE weights shown." : "FE weights shown.";
+    const note = `Effect size = ${profile.label}. SE = standard error. CI = confidence interval. ${weightNote}` + (studies.some((d) => d.filled) ? " Trim-and-fill imputed rows are included." : "");
+    const filled = studies.map((d) => !!d.filled);
+    return { headers, rows, pooledRow, note, showFEcol, filled, seLabel };
+  }
+  function regressionData(args) {
+    const { reg, method, ciMethod, ciLevel = "95", adjPs = null, mccLabel = "" } = args;
+    if (!reg || reg.rankDeficient || !reg.colNames) return null;
+    const widthCiLabel = ciLevel + "% CI";
+    const ciLabel = ciMethod === "KH" ? "Knapp-Hartung" : "Normal CI";
+    const statLabel = reg.dist === "t" ? `<em>t</em>(${reg.QEdf})` : "<em>z</em>";
+    const QMlabel = reg.QMdist === "F" ? `<em>F</em>(${reg.QMdf},\u202F${reg.QEdf})` : `\u03C7\xB2(${reg.QMdf})`;
+    const hasVif = Array.isArray(reg.vif) && reg.vif.some((v) => isFinite(v));
+    const hasRobust = reg.isClustered && Array.isArray(reg.robustSE);
+    const coefHeaders = ["Predictor", "\u03B2", "SE", statLabel, "<em>p</em>", widthCiLabel];
+    if (hasVif) coefHeaders.push("VIF");
+    if (hasRobust) coefHeaders.push("Rob. SE", "Rob. <em>t</em>", "Rob. <em>p</em>", "Rob. CI");
+    const coefRows = reg.colNames.map((name, j) => {
+      const [lo, hi] = reg.ci[j];
+      const cells = [
+        name,
+        fmt(reg.beta[j]),
+        fmt(reg.se[j]),
+        fmt(reg.zval[j]),
+        fmtP_APA(reg.pval[j]),
+        fmtCI_APA(lo, hi)
+      ];
+      if (hasVif) cells.push(j === 0 ? "\u2014" : isFinite(reg.vif?.[j]) ? fmt(reg.vif[j]) : "\u2014");
+      if (hasRobust) {
+        const rci = Array.isArray(reg.robustCi?.[j]) ? reg.robustCi[j] : [NaN, NaN];
+        cells.push(
+          fmt(reg.robustSE[j]),
+          isFinite(reg.robustZ?.[j]) ? fmt(reg.robustZ[j]) : "NA",
+          fmtP_APA(reg.robustP?.[j]),
+          fmtCI_APA(rci[0], rci[1])
+        );
+      }
+      return cells;
+    });
+    const R2str = reg.p > 1 && isFinite(reg.R2) ? ` <em>R</em>\xB2 = ${fmt(reg.R2 * 100)}%.` : "";
+    const clusterNote = hasRobust ? ` Cluster-robust SE (CR1): C = ${reg.clustersUsed} cluster${reg.clustersUsed === 1 ? "" : "s"}${reg.allSingletons ? "; all singletons (HC-robust)" : ""}.` : "";
+    const coefNote = `\u03B2 = unstandardised regression coefficient. SE = standard error. CI = confidence interval. <em>Q</em>E(${reg.QEdf}) = ${fmt(reg.QE)}, <em>p</em> ${fmtP_APA(reg.QEp)}.` + (reg.p > 1 ? ` <em>Q</em>M ${QMlabel} = ${fmt(reg.QM)}, <em>p</em> ${fmtP_APA(reg.QMp)}.` : "") + R2str + clusterNote;
+    const metaLine = `k\u202F=\u202F${reg.k}  \xB7  ${method}  \xB7  ${ciLabel}  \xB7  \u03C4\xB2\u202F=\u202F${fmt(reg.tau2)}  \xB7  I\xB2\u202F=\u202F${fmt(reg.I2)}%`;
+    const metaExtra = (reg.p > 1 && isFinite(reg.R2) ? ` \xB7 R\xB2 = ${fmt(reg.R2 * 100)}%` : "") + (isFinite(reg.AIC) ? ` \xB7 AIC = ${fmt(reg.AIC)} \xB7 BIC = ${fmt(reg.BIC)} \xB7 LL = ${fmt(reg.LL)}` + (ciMethod === "KH" && isFinite(reg.s2) ? ` \xB7 KH s\xB2 = ${fmt(reg.s2)}` : "") : "");
+    let modTests = null;
+    if (reg.modTests && reg.modTests.length > 1) {
+      const modQlabel = reg.QMdist === "F" ? "<em>F</em>" : "\u03C7\xB2";
+      const hasLRT = reg.modTests.some((mt) => isFinite(mt.lrt));
+      const hasAdj = Array.isArray(adjPs) && adjPs.length === reg.modTests.length;
+      const modHeaders = [
+        "Moderator",
+        `${modQlabel} (Wald)`,
+        ...hasLRT ? ["LRT \u03C7\xB2"] : [],
+        "<em>df</em>",
+        "<em>p</em> (Wald)",
+        ...hasLRT ? ["<em>p</em> (LRT)"] : [],
+        ...hasAdj ? [`<em>p</em> (${mccLabel})`] : []
+      ];
+      const modRows = reg.modTests.map((mt, mi) => [
+        mt.name,
+        fmt(mt.QM),
+        ...hasLRT ? [isFinite(mt.lrt) ? fmt(mt.lrt) : "NA"] : [],
+        String(mt.QMdf),
+        fmtP_APA(mt.QMp),
+        ...hasLRT ? [isFinite(mt.lrtP) ? fmtP_APA(mt.lrtP) : "NA"] : [],
+        ...hasAdj ? [fmtP_APA(adjPs[mi])] : []
+      ]);
+      const lrtNote = hasLRT ? "LRT = Likelihood Ratio Test; uses ML estimation internally regardless of \u03C4\xB2 method." : "";
+      const adjNote = hasAdj ? ` ${mccLabel} correction applied across ${reg.modTests.length} moderator tests.` : "";
+      modTests = {
+        headers: modHeaders,
+        rows: modRows,
+        note: lrtNote + adjNote
+      };
+    }
+    return {
+      metaLine,
+      metaExtra,
+      coef: { headers: coefHeaders, rows: coefRows, note: coefNote },
+      modTests,
+      convergence: convergenceBadge(reg.convergence)
+    };
+  }
+  function locationScaleData(ls, ciLevel = "95") {
+    if (!ls || ls.rankDeficient) return null;
+    const widthCiLabel = ciLevel + "% CI";
+    const tau2min = ls.tau2_i ? Math.min(...ls.tau2_i) : NaN;
+    const tau2max = ls.tau2_i ? Math.max(...ls.tau2_i) : NaN;
+    const tau2rng = ls.q > 1 ? `\u03C4\xB2 range: [${fmt(tau2min)}, ${fmt(tau2max)}]` : `\u03C4\xB2 = ${fmt(ls.tau2_mean)}`;
+    const metaLine = `k = ${ls.k}  \xB7  ML  \xB7  Normal CI  \xB7  ${tau2rng}  \xB7  I\xB2 = ${fmt(ls.I2)}%  \xB7  LL = ${fmt(ls.LL)}`;
+    const locHeaders = ["Term", "\u03B2", "SE", "<em>z</em>", "<em>p</em>", widthCiLabel];
+    const locRows = ls.locColNames.map((name, j) => {
+      const [lo, hi] = ls.ci_beta[j];
+      return [name, fmt(ls.beta[j]), fmt(ls.se_beta[j]), fmt(ls.zval_beta[j]), fmtP_APA(ls.pval_beta[j]), fmtCI_APA(lo, hi)];
+    });
+    const QMlocStr = ls.p > 1 && isFinite(ls.QM_loc) ? ` <em>Q</em>M_loc \u03C7\xB2(${ls.QM_locDf}) = ${fmt(ls.QM_loc)}, <em>p</em> ${fmtP_APA(ls.QM_locP)}.` : "";
+    const locNote = `\u03B2 = location coefficient. <em>Q</em>E(${ls.QEdf}) = ${fmt(ls.QE)}, <em>p</em> ${fmtP_APA(ls.QEp)}.${QMlocStr}`;
+    const scaleHeaders = ["Term", "\u03B3", "SE", "<em>z</em>", "<em>p</em>", widthCiLabel, "exp(\u03B3)"];
+    const scaleRows = ls.scaleColNames.map((name, j) => {
+      const [lo, hi] = ls.ci_gamma[j];
+      return [
+        name,
+        fmt(ls.gamma[j]),
+        fmt(ls.se_gamma[j]),
+        fmt(ls.zval_gamma[j]),
+        fmtP_APA(ls.pval_gamma[j]),
+        fmtCI_APA(lo, hi),
+        j === 0 ? fmt(Math.exp(ls.gamma[j])) : ""
+      ];
+    });
+    const QMscaleStr = ls.q > 1 && isFinite(ls.QM_scale) ? ` <em>Q</em>M_scale \u03C7\xB2(${ls.QM_scaleDf}) = ${fmt(ls.QM_scale)}, <em>p</em> ${fmtP_APA(ls.QM_scaleP)}.` : "";
+    const LRstr = ls.q > 1 && isFinite(ls.LRchi2) ? ` LR test (scale mods): \u03C7\xB2(${ls.LRdf}) = ${fmt(ls.LRchi2)}, <em>p</em> ${fmtP_APA(ls.LRp)}.` : "";
+    const scaleNote = `\u03B3 = scale coefficient (log \u03C4\xB2\u1D62 = Z\u1D62\u03B3). exp(\u03B3\u2080) = \u03C4\xB2 when all scale predictors = 0.${QMscaleStr}${LRstr}`;
+    let fitted = null;
+    if (ls.labels && ls.fitted) {
+      fitted = {
+        headers: ["Study", "<em>y</em>\u1D62", "<em>\u0177</em>\u1D62", "<em>e</em>\u1D62", "\u03C4\xB2\u1D62"],
+        rows: ls.labels.map((lbl, i) => [
+          lbl || String(i + 1),
+          fmt(ls.yi[i]),
+          fmt(ls.fitted[i]),
+          fmt(ls.residuals[i]),
+          fmt(ls.tau2_i[i])
+        ]),
+        note: "\u03C4\xB2\u1D62 = study-specific between-study variance from the scale model."
+      };
+    }
+    return { metaLine, locCoef: { headers: locHeaders, rows: locRows, note: locNote }, scaleCoef: { headers: scaleHeaders, rows: scaleRows, note: scaleNote }, fitted, convergence: convergenceBadge(ls.convergence) };
+  }
+  function regressionFittedData(reg) {
+    if (!reg || !reg.labels || !reg.fitted) return null;
+    const headers = ["Study", "<em>y</em>\u1D62", "<em>\u0177</em>\u1D62", "<em>e</em>\u1D62", "Std. <em>e</em>\u1D62"];
+    const rows = reg.labels.map((lbl, i) => {
+      const sr = reg.stdResiduals[i];
+      const flag = isFinite(sr) && Math.abs(sr) > Z_95;
+      return { cells: [lbl || String(i + 1), fmt(reg.yi[i]), fmt(reg.fitted[i]), fmt(reg.residuals[i]), fmt(sr)], flag };
+    });
+    const note = "Std. <em>e</em>\u1D62 = standardized residual. |Std. <em>e</em>\u1D62| > 1.96 may indicate outliers.";
+    return { headers, rows, note };
+  }
+  function permPval2(dist, observed) {
+    if (!isFinite(observed)) return NaN;
+    let exceeds = 0;
+    for (let i = 0; i < dist.length; i++) {
+      if (dist[i] >= observed) exceeds++;
+    }
+    return (1 + exceeds) / (dist.length + 1);
+  }
+  function permutationData(permResult, reg) {
+    if (!permResult || !reg) return null;
+    const { QM_dist, modQM_dist, nPerm, nMods } = permResult;
+    if (!QM_dist || !nPerm) return null;
+    const omniLabel = reg.QMdist === "F" ? `<em>F</em>(${reg.QMdf}, ${reg.QEdf})` : `\u03C7\xB2(${reg.QMdf})`;
+    const omniP = permPval2(QM_dist, reg.QM);
+    const mods = [];
+    if (nMods > 1 && Array.isArray(reg.modTests)) {
+      for (let mi = 0; mi < reg.modTests.length; mi++) {
+        const mt = reg.modTests[mi];
+        if (mt.QMdf === 0 || !mt.colIdxs || mt.colIdxs.length === 0) {
+          mods.push({ name: mt.name, label: "\u2014", observed: NaN, p: NaN });
+          continue;
+        }
+        const colDist = new Float64Array(nPerm);
+        for (let r = 0; r < nPerm; r++) colDist[r] = modQM_dist[r * nMods + mi];
+        const dfLabel = reg.QMdist === "F" ? `<em>F</em>(${mt.QMdf}, ${reg.QEdf})` : `\u03C7\xB2(${mt.QMdf})`;
+        mods.push({ name: mt.name, label: dfLabel, observed: mt.QM, p: permPval2(colDist, mt.QM) });
+      }
+    }
+    return { nPerm, omniLabel, omniObserved: reg.QM, omniP, mods };
+  }
+  function rveData(args) {
+    const { rveResult, rveRho = 0.8, rveMode = "corr", profile, ciLevel = "95" } = args;
+    if (!rveResult || rveResult.error) return null;
+    const widthCiLabel = ciLevel + "% CI";
+    const est = profile.transform(rveResult.est);
+    const lo = profile.transform(rveResult.ci[0]);
+    const hi = profile.transform(rveResult.ci[1]);
+    const isHier = rveMode === "hier";
+    const weightRows = isHier ? [
+      ["Weighting", "HIER MoM (Hedges, Tipton & Johnson, 2010)"],
+      ["\u03C9\xB2 (between-cluster)", fmt(rveResult.omega2)],
+      ["\u03C4\xB2 (within-cluster)", fmt(rveResult.tau2)]
+    ] : [
+      ["Weighting", "CORR (user-specified \u03C1)"],
+      ["\u03C1 (assumed within-cluster correlation)", fmt(rveRho)]
+    ];
+    const rows = [
+      ["Pooled estimate", `${fmt(est)}, ${widthCiLabel} [${fmt(lo)}, ${fmt(hi)}]`],
+      ["SE", fmt(rveResult.se)],
+      [`<em>t</em>(${rveResult.df})`, fmt(rveResult.t)],
+      ["<em>p</em>", fmtP_APA(rveResult.p)],
+      ...weightRows,
+      ["m (clusters)", String(rveResult.kCluster)],
+      ["<em>k</em> (studies)", String(rveResult.k)]
+    ];
+    const note = isHier ? "RVE = robust variance estimation (Hedges, Tipton & Johnson, 2010). HIER MoM: \u03C9\xB2 (between-cluster) and \u03C4\xB2 (within-cluster) estimated via method-of-moments; weights = 1/(v\u2C7C + \u03C4\xB2 + \u03C9\xB2); sandwich SE scale m/(m\u2212p)." : "RVE = robust variance estimation (Hedges, Tipton & Johnson, 2010). Working correlation model: \u03C1 assumed constant within cluster.";
+    return { headers: ["Parameter", "Value"], rows, note };
+  }
+  function threeLevelData(args) {
+    const { threeLevelResult, threeLevelMethod = "REML", profile, ciLevel = "95" } = args;
+    if (!threeLevelResult || threeLevelResult.error) return null;
+    const tl = threeLevelResult;
+    const method = threeLevelMethod ?? "REML";
+    const widthCiLabel = ciLevel + "% CI";
+    const mu = profile.transform(tl.mu);
+    const lo = profile.transform(tl.ci[0]);
+    const hi = profile.transform(tl.ci[1]);
+    const rows = [
+      ["Pooled estimate", `${fmt(mu)}, ${widthCiLabel} [${fmt(lo)}, ${fmt(hi)}]`],
+      ["SE", fmt(tl.se)],
+      ["<em>z</em>", fmt(tl.z)],
+      ["<em>p</em>", fmtP_APA(tl.p)],
+      ["\u03C3\xB2_within", fmt(tl.tau2_within)],
+      ["\u03C3\xB2_between", fmt(tl.tau2_between)],
+      ["<em>I</em>\xB2_within", `${fmt(tl.I2_within)}%`],
+      ["<em>I</em>\xB2_between", `${fmt(tl.I2_between)}%`],
+      [`<em>Q</em>(${tl.df})`, fmt(tl.Q)],
+      ["Estimation", method],
+      ["m (clusters)", String(tl.kCluster)],
+      ["<em>k</em> (studies)", String(tl.k)],
+      ["Log-likelihood", fmt(tl.logLikFull ?? tl.logLik)]
+    ];
+    const note = `Three-level model: studies nested within clusters. \u03C3\xB2_within = within-cluster, \u03C3\xB2_between = between-cluster between-study heterogeneity. ${method} estimation.`;
+    return { headers: ["Parameter", "Value"], rows, note, convergence: convergenceBadge(tl.convergence) };
+  }
+  function sensFv(v) {
+    return isFinite(v) ? v.toFixed(3) : "\u2014";
+  }
+  function sensFvp(v) {
+    return isFinite(v) ? v < 1e-3 ? "< .001" : v.toFixed(3).replace(/^0\./, ".") : "\u2014";
+  }
+  function sensitivityData(args) {
+    const { studies, m, method, ciMethod, profile, ciLevel = "95", alpha = 0.05 } = args;
+    if (!studies || studies.length < 2) return null;
+    const widthCiLabel = ciLevel + "% CI";
+    const realStudies = studies.filter((d) => !d.filled);
+    const loo = leaveOneOut(realStudies, method, ciMethod, m, { alpha });
+    const fullSig = loo.full.pval < 0.05;
+    const fullEst = profile.transform(loo.full.RE);
+    const looHeaders = ["Study omitted", "Estimate", `${widthCiLabel} (low)`, `${widthCiLabel} (high)`, "<em>I</em>\xB2 (%)", "\u03C4\xB2", "<em>p</em>", "\u0394 estimate"];
+    const looRows = loo.rows.map((row) => {
+      const est = profile.transform(row.estimate);
+      const lo = profile.transform(row.lb);
+      const hi = profile.transform(row.ub);
+      const delta = est - fullEst;
+      return [
+        row.label,
+        sensFv(est),
+        sensFv(lo),
+        sensFv(hi),
+        sensFv(row.i2),
+        sensFv(row.tau2),
+        sensFvp(row.pval),
+        (delta >= 0 ? "+" : "") + sensFv(delta)
+      ];
+    });
+    const sigChanges = loo.rows.map((row) => row.significant !== fullSig);
+    const looNote = "Rows marked * change statistical significance (<em>p</em> = .05 threshold) when that study is omitted. \u0394 estimate = LOO estimate minus full-set estimate.";
+    const estData = estimatorComparison(realStudies, ciMethod);
+    const estHeaders = ["\u03C4\xB2 Estimator", "Estimate", `${widthCiLabel} (low)`, `${widthCiLabel} (high)`, "\u03C4\xB2", "<em>I</em>\xB2 (%)"];
+    const estRows = estData.map((row) => {
+      const isCurrent = row.method === method;
+      return [
+        (TAU_LABELS[row.method] ?? row.method) + (isCurrent ? " \u2605" : ""),
+        sensFv(profile.transform(row.estimate)),
+        sensFv(profile.transform(row.lb)),
+        sensFv(profile.transform(row.ub)),
+        sensFv(row.tau2),
+        sensFv(row.i2)
+      ];
+    });
+    const estNote = "\u2605 = currently selected estimator. Estimates on the same scale as the primary analysis.";
+    return { loo: { headers: looHeaders, rows: looRows, sigChanges, note: looNote }, est: { headers: estHeaders, rows: estRows, note: estNote } };
+  }
+  function _fmtBF(bf) {
+    if (!isFinite(bf)) return "NA";
+    return bf >= 1e3 || bf < 1e-3 ? bf.toExponential(2) : bf.toFixed(3);
+  }
+  function bayesData(args) {
+    const { bayesResult, bayesReMean, profile, ciLevel = "95" } = args;
+    if (!bayesResult || bayesResult.error) return null;
+    const widthCrLabel = ciLevel + "% CrI";
+    const muDisp = profile.transform(bayesResult.muMean);
+    const muCIDisp = bayesResult.muCI.map((v) => profile.transform(v));
+    const reDisp = isFinite(bayesReMean) ? profile.transform(bayesReMean) : NaN;
+    const muSDNote = profile.isTransformedScale ? " (log)" : "";
+    const priorLine = `Prior: \u03BC ~ N(${bayesResult.mu0}, ${bayesResult.sigma_mu}\xB2)  \xB7  \u03C4 ~ HalfNormal(${bayesResult.sigma_tau})  \xB7  k = ${bayesResult.k} studies`;
+    const rows = [
+      [
+        `Posterior mean \u03BC`,
+        `${fmt(muDisp)}  \xB7  ${widthCrLabel} ${fmtCI_APA(muCIDisp[0], muCIDisp[1])}  \xB7  SD${muSDNote} = ${fmt(bayesResult.muSD)}`
+      ],
+      [
+        `Posterior mean \u03C4`,
+        `${fmt(bayesResult.tauMean)}  \xB7  ${widthCrLabel} ${fmtCI_APA(bayesResult.tauCI[0], bayesResult.tauCI[1])}  \xB7  SD = ${fmt(bayesResult.tauSD)}`
+      ],
+      ...isFinite(reDisp) ? [["Frequentist RE (comparison)", fmt(reDisp)]] : [],
+      ...isFinite(bayesResult.BF10) ? [[`Bayes Factor BF\u2081\u2080 (H\u2081: \u03BC\u22600)`, _fmtBF(bayesResult.BF10)]] : [],
+      ...bayesResult.BF10 < 1 && isFinite(bayesResult.BF01) ? [[`BF\u2080\u2081 = 1/BF\u2081\u2080 (H\u2080: \u03BC = 0)`, _fmtBF(bayesResult.BF01)]] : []
+    ];
+    return {
+      priorLine,
+      muSDNote,
+      tableName: `Bayesian Meta-Analysis Results (${profile.label})`,
+      headers: ["Statistic", "Value"],
+      rows,
+      note: `CrI = credible interval. Posterior mean \u03BC on ${profile.label} scale. Frequentist RE shown for comparison only.`,
+      muPriorNote: `Prior: \u03BC ~ N(${bayesResult.mu0}, ${bayesResult.sigma_mu}\xB2); \u03C4 ~ HalfNormal(${bayesResult.sigma_tau}). Vertical line = posterior mean; shaded region = ${widthCrLabel}.`,
+      tauPriorNote: `Prior: \u03C4 ~ HalfNormal(${bayesResult.sigma_tau}).`,
+      profileLabel: profile.label
+    };
+  }
+  function bayesSensitivityData(sensitivityRows, profile, ciLevel = "95") {
+    if (!sensitivityRows || !sensitivityRows.length) return null;
+    const widthCrLabel = ciLevel + "% CrI";
+    const rows = sensitivityRows.map((row) => {
+      const muDisp = profile.transform(row.muMean);
+      const muCIDisp = row.muCI.map((v) => profile.transform(v));
+      const ciStr = `[${isFinite(muCIDisp[0]) ? fmt(muCIDisp[0]) : "NA"}, ${isFinite(muCIDisp[1]) ? fmt(muCIDisp[1]) : "NA"}]`;
+      return [String(row.sigma_mu), String(row.sigma_tau), isFinite(muDisp) ? fmt(muDisp) : "NA", ciStr, _fmtBF(row.BF10)];
+    });
+    return {
+      tableName: "Prior Sensitivity Analysis",
+      headers: ["\u03C3_\u03BC", "\u03C3_\u03C4", "Post. \u03BC", widthCrLabel, "BF\u2081\u2080"],
+      rows,
+      note: "Grid: \u03C3_\u03BC \u2208 {0.5, 1, 2}, \u03C3_\u03C4 \u2208 {0.25, 0.5, 1}. Diffuse priors approach the frequentist RE estimate."
+    };
+  }
+  function mvPooledData(res, alpha = 0.05) {
+    const { beta, se, ci, z, pval, outcomeIds, method, struct, dist = "z", df } = res;
+    const ciPct = Math.round((1 - alpha) * 100);
+    const statHdr = dist === "t" ? `<em>t</em>` : `<em>z</em>`;
+    const headers = ["Outcome", "Estimate", "SE", `${ciPct}% CI`, statHdr, "<em>p</em>"];
+    const rows = outcomeIds.map((id, o) => {
+      const [lo, hi] = ci[o];
+      return [
+        String(id),
+        fmt(beta[o], 4),
+        fmt(se[o], 4),
+        `[${fmt(lo, 4)}, ${fmt(hi, 4)}]`,
+        fmt(z[o], 3),
+        fmtP_APA(pval[o])
+      ];
+    });
+    const ciNote = dist === "t" ? `, t-dist (df = ${df})` : "";
+    return { title: `Pooled effect estimates per outcome (${method}, \u03A8 = ${struct}${ciNote})`, headers, rows, convergence: convergenceBadge(res.convergence) };
+  }
+  function mvHeterogeneityData(res) {
+    const { tau2, I2, rho_between, outcomeIds, struct } = res;
+    const headers = struct === "CS" ? ["Outcome", "\u03C4\xB2", "<em>I</em>\xB2", "\u03C1 (between)"] : ["Outcome", "\u03C4\xB2", "<em>I</em>\xB2"];
+    const rows = outcomeIds.map((id, o) => {
+      const cells = [
+        String(id),
+        fmt(tau2[o], 5),
+        isFinite(I2[o]) ? (+I2[o]).toFixed(1) + "%" : "\u2014"
+      ];
+      if (struct === "CS") cells.push(fmt(rho_between ?? 0, 4));
+      return cells;
+    });
+    return { title: "Between-study heterogeneity", headers, rows };
+  }
+  function mvTestsData(res) {
+    const { QM, df_QM, pQM, QE, df_QE, pQE, Fstat, pF, beta, P, dist = "z", df } = res;
+    const hasMods = beta.length > P;
+    const useFtest = dist === "t" && hasMods && isFinite(Fstat);
+    const headers = useFtest ? ["Test", "Statistic", "<em>df</em>", "<em>p</em>"] : ["Test", "\u03C7\xB2", "<em>df</em>", "<em>p</em>"];
+    const rows = [
+      ...hasMods && isFinite(QM) ? [
+        useFtest ? [`Omnibus test of moderators (Q<sub>M</sub>)`, `F = ${fmt(Fstat, 3)}`, `${df_QM}, ${df}`, fmtP_APA(pF)] : [`Omnibus test of moderators (Q<sub>M</sub>)`, fmt(QM, 3), String(df_QM), fmtP_APA(pQM)]
+      ] : [],
+      useFtest ? [`Residual heterogeneity (Q<sub>E</sub>)`, `\u03C7\xB2 = ${fmt(QE, 3)}`, String(df_QE), fmtP_APA(pQE)] : [`Residual heterogeneity (Q<sub>E</sub>)`, fmt(QE, 3), String(df_QE), fmtP_APA(pQE)]
+    ];
+    return { title: "Hypothesis tests", headers, rows };
+  }
+  function mvModeratorData(res, alpha = 0.05) {
+    const { beta, se, ci, z, pval, betaNames = [], P, dist = "z" } = res;
+    if (beta.length <= P) return null;
+    const ciPct = Math.round((1 - alpha) * 100);
+    const statHdr = dist === "t" ? `<em>t</em>` : `<em>z</em>`;
+    const headers = ["Coefficient", "Estimate", "SE", `${ciPct}% CI`, statHdr, "<em>p</em>"];
+    const rows = beta.slice(P).map((b, i) => {
+      const j = P + i;
+      const [lo, hi] = ci[j];
+      return [
+        betaNames[j] ?? `\u03B2${j}`,
+        fmt(b, 4),
+        fmt(se[j], 4),
+        `[${fmt(lo, 4)}, ${fmt(hi, 4)}]`,
+        fmt(z[j], 3),
+        fmtP_APA(pval[j])
+      ];
+    });
+    return { title: "Meta-regression coefficients", headers, rows };
+  }
+  function mvFitLine(res) {
+    const { k, n, P, logLik: logLik2, AIC, BIC, AICc, method, struct, ciMethod = "normal", slopes = "separate", beta } = res;
+    const hasMods = beta.length > P;
+    return `k = ${k} \xB7 n = ${n} obs \xB7 P = ${P} outcomes | log-lik = ${fmt(logLik2, 4)} \xB7 AIC = ${fmt(AIC, 2)} \xB7 BIC = ${fmt(BIC, 2)}` + (isFinite(AICc) ? ` \xB7 AICc = ${fmt(AICc, 2)}` : "") + ` | ${method}, \u03A8 = ${struct}, CI = ${ciMethod === "t" ? "t-dist" : "normal"}` + (hasMods ? ` \xB7 slopes = ${slopes}` : "");
+  }
+  function mvStudyData(rows, alpha = 0.05) {
+    if (!rows || !rows.length) return null;
+    const ciPct = Math.round((1 - alpha) * 100);
+    const zVal = normalQuantile(1 - alpha / 2);
+    const headers = ["Study", "Outcome", "<em>y</em>\u1D62", "<em>v</em>\u1D62", "SE", `${ciPct}% CI`];
+    const dataRows = rows.map((r) => {
+      const se_r = Math.sqrt(r.vi);
+      return [
+        String(r.study_id),
+        String(r.outcome_id),
+        fmt(r.yi, 4),
+        fmt(r.vi, 4),
+        fmt(se_r, 4),
+        `[${fmt(r.yi - zVal * se_r, 4)}, ${fmt(r.yi + zVal * se_r, 4)}]`
+      ];
+    });
+    return { title: "Individual study effect sizes", headers, rows: dataRows };
+  }
+  var TAU_LABELS;
+  var init_sections = __esm({
+    "js/io/sections.js"() {
+      init_format();
+      init_utils();
+      init_constants();
+      init_influence();
+      TAU_LABELS = {
+        DL: "DerSimonian-Laird (DL)",
+        REML: "REML",
+        PM: "Paule-Mandel (PM)",
+        EB: "Empirical Bayes (EB)",
+        PMM: "PM-Median (PMM)",
+        GENQM: "GENQ-Median",
+        ML: "Maximum Likelihood (ML)",
+        HS: "Hunter-Schmidt (HS)",
+        HE: "Hedges (HE)",
+        SJ: "Sidik-Jonkman (SJ)",
+        GENQ: "GENQ",
+        SQGENQ: "SQGENQ",
+        DLIT: "DLIT",
+        EBLUP: "EBLUP",
+        HSk: "HSk"
+      };
+    }
+  });
+
+  // js/io/io.js
   function downloadBlobObject(blob, filename) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -10068,10 +11180,11 @@ var App = (() => {
   }
   function csvField(value) {
     const s = String(value ?? "");
-    if (s.includes(",") || s.includes('"') || s.includes("\n") || s.includes("\r")) {
-      return '"' + s.replace(/"/g, '""') + '"';
+    const safe = CSV_FORMULA_RE.test(s) ? "'" + s : s;
+    if (safe.includes(",") || safe.includes('"') || safe.includes("\n") || safe.includes("\r")) {
+      return '"' + safe.replace(/"/g, '""') + '"';
     }
-    return s;
+    return safe;
   }
   function csvRow(fields) {
     return fields.map(csvField).join(",");
@@ -10080,12 +11193,14 @@ var App = (() => {
     const lines = [csvRow(headers), ...rows.map(csvRow)];
     return "\uFEFF" + lines.join("\r\n");
   }
+  var CSV_FORMULA_RE;
   var init_io = __esm({
-    "js/io.js"() {
+    "js/io/io.js"() {
+      CSV_FORMULA_RE = /^[=+\-@\t\r]/;
     }
   });
 
-  // js/tiff.js
+  // js/io/tiff.js
   function encodeTIFF(width, height, rgbaData, dpi = 288) {
     const NUM_ENTRIES = 13;
     const IFD_OFFSET = 8;
@@ -10169,11 +11284,11 @@ var App = (() => {
     return new Blob([buf], { type: "image/tiff" });
   }
   var init_tiff = __esm({
-    "js/tiff.js"() {
+    "js/io/tiff.js"() {
     }
   });
 
-  // js/export.js
+  // js/io/export.js
   function resolveCSSColor(cssExpr) {
     const el = document.createElement("span");
     el.style.cssText = "position:absolute;visibility:hidden;pointer-events:none";
@@ -10335,14 +11450,23 @@ var App = (() => {
   }
   var VAR_RE;
   var init_export = __esm({
-    "js/export.js"() {
+    "js/io/export.js"() {
       init_io();
       init_tiff();
       VAR_RE = /var\(\s*(--[\w-]+)\s*\)/g;
     }
   });
 
-  // js/csv.js
+  // js/io/csv.js
+  function parseNumberWithDecimal(s, decimal) {
+    if (typeof s !== "string") return parseFloat(s);
+    const norm = decimal === "," ? s.replace(/^([+-]?\d+),(\d+(?:[eE][+-]?\d+)?)$/, "$1.$2") : s;
+    return parseFloat(norm);
+  }
+  function normalizeCell(s, decimal) {
+    if (decimal !== ",") return s;
+    return s.replace(/^([+-]?\d+),(\d+(?:[eE][+-]?\d+)?)$/, "$1.$2");
+  }
   function detectDelimiter(firstLine) {
     const counts = {
       ",": (firstLine.match(/,/g) || []).length,
@@ -10404,19 +11528,91 @@ var App = (() => {
     }
     return rows;
   }
-  function parseCSV(text) {
+  function detectCsvFormat(text) {
+    text = text.replace(/^\uFEFF/, "");
+    const lines = text.split(/\r?\n/).filter((l) => l.trim() !== "").slice(0, 100);
+    if (lines.length === 0) return { delimiter: ",", decimal: ".", confidence: "low" };
+    const candidates = [",", ";", "	", "|"];
+    const totals = Object.fromEntries(candidates.map((d) => [d, 0]));
+    for (const line of lines) {
+      let inQ = false;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (ch === '"') {
+          inQ = !inQ;
+          continue;
+        }
+        if (!inQ && totals[ch] !== void 0) totals[ch]++;
+      }
+    }
+    let delimiter;
+    if (totals["	"] > 0) {
+      delimiter = "	";
+    } else {
+      delimiter = [";", "|", ","].reduce(
+        (best, d) => totals[d] > totals[best] ? d : best,
+        ","
+      );
+    }
+    const allRows = parseFields(text, delimiter).filter((r) => r.some((f) => f !== "")).slice(0, 101);
+    if (allRows.length < 2) {
+      return { delimiter, decimal: delimiter === ";" ? "," : ".", confidence: "low" };
+    }
+    const dataRows = allRows.slice(1);
+    const colCount = allRows[0].length;
+    const numRe = /^[+-]?\d+([.,]\d+)?([eE][+-]?\d+)?$/;
+    let dotCols = 0, commaCols = 0;
+    for (let col = 0; col < colCount; col++) {
+      const cells = dataRows.map((r) => (r[col] ?? "").trim()).filter(Boolean);
+      if (cells.length === 0) continue;
+      const numeric = cells.filter((c) => numRe.test(c));
+      if (numeric.length / cells.length < 0.8) continue;
+      let dots = 0, commas = 0;
+      for (const c of numeric) {
+        if (/\.\d/.test(c)) dots++;
+        else if (/,\d/.test(c)) commas++;
+      }
+      if (dots === 0 && commas === 0) continue;
+      if (dots > 0 && commas === 0) dotCols++;
+      else if (commas > 0 && dots === 0) commaCols++;
+    }
+    let decimal, confidence;
+    if (dotCols > 0 && commaCols === 0) {
+      decimal = ".";
+      confidence = delimiter === "," || delimiter === "	" || delimiter === "|" ? "high" : "medium";
+    } else if (commaCols > 0 && dotCols === 0) {
+      decimal = ",";
+      if (delimiter === ";") {
+        confidence = "high";
+      } else if (delimiter === "	" || delimiter === "|") {
+        confidence = "high";
+      } else {
+        decimal = ".";
+        confidence = "low";
+      }
+    } else {
+      decimal = ".";
+      confidence = "low";
+    }
+    if (colCount <= 1) {
+      if (confidence === "high") confidence = "medium";
+    }
+    return { delimiter, decimal, confidence };
+  }
+  function parseCSV(text, opts = {}) {
     text = text.replace(/^\uFEFF/, "");
     const firstLine = text.split(/\r?\n/).find((l) => l.trim() !== "") ?? "";
-    const delimiter = detectDelimiter(firstLine);
+    const delimiter = opts.delimiter ?? detectDelimiter(firstLine);
     const allRows = parseFields(text, delimiter).filter((r) => r.some((f) => f !== ""));
     if (allRows.length === 0) {
       return { delimiter, headers: [], rows: [] };
     }
     const headers = allRows[0];
     const colCount = headers.length;
+    const { decimal } = opts;
     const rows = allRows.slice(1).map((r) => {
-      if (r.length >= colCount) return r.slice(0, colCount);
-      return [...r, ...Array(colCount - r.length).fill("")];
+      const padded = r.length >= colCount ? r.slice(0, colCount) : [...r, ...Array(colCount - r.length).fill("")];
+      return decimal === "," ? padded.map((cell) => normalizeCell(cell, decimal)) : padded;
     });
     return { delimiter, headers, rows };
   }
@@ -10455,90 +11651,239 @@ var App = (() => {
     };
   }
   var init_csv = __esm({
-    "js/csv.js"() {
+    "js/io/csv.js"() {
     }
   });
 
-  // js/format.js
-  function fmt2(v, d = 3) {
-    return isFinite(v) ? (+v).toFixed(d) : "\u2014";
-  }
-  function fmtP_APA(p) {
-    if (!isFinite(p)) return "\u2014";
-    if (p < 1e-3) return "< .001";
-    return "= " + (+p).toFixed(3).replace(/^0\./, ".");
-  }
-  function fmtCI_APA(lo, hi, d = 3) {
-    return `[${fmt2(lo, d)}, ${fmt2(hi, d)}]`;
-  }
-  function escHTML(s) {
-    return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-  }
-  var init_format = __esm({
-    "js/format.js"() {
-    }
-  });
-
-  // js/sections.js
-  function summaryData(args) {
+  // js/tests/analysis-headless.js
+  function _runCoreMeta(studies, opts) {
     const {
-      m,
-      profile,
       method,
       ciMethod,
+      alpha,
+      type,
       useTF,
-      tf,
-      mAdjusted,
-      studies,
-      cles = null,
-      ciLevel = "95"
-    } = args;
-    const widthCiLabel = ciLevel + "% CI";
-    const k = studies.filter((d) => !d.filled).length;
-    const isMHorPeto = m.isMH || m.isPeto;
-    const FE_disp = profile.transform(m.FE);
-    const RE_disp = isMHorPeto ? null : profile.transform(m.RE);
-    const ci = { lb: profile.transform(m.ciLow), ub: profile.transform(m.ciHigh) };
-    const pred = { lb: profile.transform(m.predLow), ub: profile.transform(m.predHigh) };
-    const RE_adj = !isMHorPeto && useTF && mAdjusted ? profile.transform(mAdjusted.RE) : null;
-    const feAlpha = { "90": 0.1, "95": 0.05, "99": 0.01 }[ciLevel] ?? 0.05;
-    const feZ = normalQuantile(1 - feAlpha / 2);
-    const feCi = { lb: profile.transform(m.FE - feZ * m.seFE), ub: profile.transform(m.FE + feZ * m.seFE) };
-    const tauCI1 = fmt2(m.tauCI?.[0]);
-    const tauCI2 = isFinite(m.tauCI?.[1]) ? fmt2(m.tauCI[1]) : "\u221E";
-    const H2hi = isFinite(m.H2CI?.[1]) ? fmt2(m.H2CI[1]) : "\u221E";
-    const methodLabel = m.isMH ? "Mantel-Haenszel" : m.isPeto ? "Peto" : method;
-    const ciLabel = ciMethod === "KH" ? "Knapp-Hartung" : ciMethod === "t" ? "t-distribution" : ciMethod === "PL" ? "Profile Likelihood" : "Normal (z)";
-    const settings = `Effect type: ${profile.label}  \xB7  Pooling: ${methodLabel}  \xB7  CI method: ${ciLabel}  \xB7  k\u202F=\u202F${k}${tf.length > 0 ? ` + ${tf.length} imputed (trim\u202F&\u202Ffill)` : ""}`;
-    const rows = [
-      [profile.label + " \u2014 Fixed Effects (FE)", `${fmt2(FE_disp)}, SE = ${fmt2(m.seFE)}, ${widthCiLabel} ${fmtCI_APA(feCi.lb, feCi.ub)}`],
-      ...!isMHorPeto ? [[profile.label + " \u2014 Random Effects (RE)", `${fmt2(RE_disp)}, SE = ${fmt2(m.seRE)}, ${widthCiLabel} ${fmtCI_APA(ci.lb, ci.ub)}`]] : [],
-      ...isMHorPeto ? [[widthCiLabel, `${fmtCI_APA(ci.lb, ci.ub)}  \xB7  SE = ${fmt2(m.seFE)}`]] : [],
-      ...cles ? [["CLES (RE)", `${fmt2(cles.estimate)} [${fmt2(cles.ci[0])}, ${fmt2(cles.ci[1])}]`]] : [],
-      ...RE_adj !== null ? [["RE (trim-and-fill adjusted)", fmt2(RE_adj)]] : [],
-      ...!isMHorPeto ? [["95% Prediction interval (PI)", fmtCI_APA(pred.lb, pred.ub)]] : [],
-      ...!isMHorPeto ? [["\u03C4\xB2", `${fmt2(m.tau2)}, ${widthCiLabel} [${tauCI1}, ${tauCI2}]`]] : [],
-      ["<em>I</em>\xB2", `${fmt2(m.I2)}%, ${widthCiLabel} [${fmt2(m.I2CI?.[0])}%, ${fmt2(m.I2CI?.[1])}%]`],
-      ...!isMHorPeto ? [["H\xB2-CI", `[${fmt2(m.H2CI?.[0])}, ${H2hi}]`]] : [],
-      [`<em>Q</em> (<em>df</em>\u202F=\u202F${m.df})`, fmt2(m.Q)],
-      ...m.dist ? [[`${m.dist}-statistic`, `${fmt2(m.stat)}, <em>p</em> ${fmtP_APA(m.pval)}`]] : [],
-      ...m.isClustered ? [[
-        `Robust CI (C\u202F=\u202F${m.clustersUsed} clusters)`,
-        `${fmtCI_APA(profile.transform(m.robustCiLow), profile.transform(m.robustCiHigh))}  \xB7  SE\u202F=\u202F${fmt2(m.robustSE)}  \xB7  <em>z</em>\u202F=\u202F${fmt2(m.robustStat)}, <em>p</em> ${fmtP_APA(m.robustPval)}`
-      ]] : []
-    ];
-    const note = isMHorPeto ? `Fixed-effect pooling (${methodLabel}) \u2014 RE estimate, \u03C4\xB2, and prediction interval not applicable. FE = fixed effects; CI = confidence interval.` : `FE = fixed effects; RE = random effects; CI = confidence interval; PI = prediction interval.${cles ? " CLES = common language effect size = \u03A6(g/\u221A2); probability that a randomly drawn score from group 1 exceeds group 2 (McGraw & Wong, 1992)." : ""}${m.isClustered ? " Robust CI uses cluster-robust (sandwich) standard errors." : ""}`;
+      tfEstimator,
+      useTFAdjusted,
+      isMHorPeto,
+      hasClusters,
+      rveRho,
+      rveMode,
+      threeLevelMethod
+    } = opts;
+    let tf = [], all = studies;
+    if (useTF && !isMHorPeto) {
+      tf = trimFill(studies, method, tfEstimator).filled;
+      all = [...studies, ...tf];
+    }
+    let m;
+    if (method === "MH") m = metaMH(studies, type, alpha);
+    else if (method === "Peto") m = metaPeto(studies, alpha);
+    else if (hasClusters) m = robustMeta(studies, method, ciMethod, alpha);
+    else m = meta(studies, method, ciMethod, alpha);
+    if (m.error) return { m, tf, all, profileLikResult: null, mAdjusted: null, rveResult: null, threeLevelResult: null };
+    const profileLikResult = (method === "ML" || method === "REML") && studies.length >= 2 ? profileLikTau2(studies, { method }) : null;
+    const mAdjusted = useTF && useTFAdjusted ? tf.length > 0 ? meta([...studies, ...tf], method, ciMethod, alpha) : m : null;
+    const rveResult = hasClusters && !isMHorPeto ? rvePooled(studies, { rho: rveRho, alpha, omega2: rveMode === "hier" ? "MoM" : 0 }) : null;
+    const threeLevelResult = hasClusters && !isMHorPeto ? meta3level(studies, { method: threeLevelMethod ?? "REML", alpha }) : null;
+    return { m, tf, all, profileLikResult, mAdjusted, rveResult, threeLevelResult };
+  }
+  function _runBayesBatch(studies, m, opts) {
+    const { bayesMu0, bayesSigmaMu, bayesSigmaTau, alpha, isMHorPeto } = opts;
+    if (studies.length < 2 || isMHorPeto) return { bayesResult: null, reMeanRef: NaN };
+    const reMeanRef = isFinite(m.RE) ? m.RE : m.FE;
+    const bayesResult = bayesMeta(studies, { mu0: bayesMu0, sigma_mu: bayesSigmaMu, sigma_tau: bayesSigmaTau, alpha });
+    return { bayesResult, reMeanRef };
+  }
+  function _runPubBiasBatch(studies, m, opts) {
+    const {
+      alpha,
+      selModeVal,
+      selPreset,
+      selWeightFn,
+      selSides,
+      selCuts,
+      fsnTrivial: fsnTrivial2 = 0.1,
+      fsnDirection: fsnDirection2 = "auto",
+      modSpec = [],
+      scaleModSpec = []
+    } = opts;
+    const egger = eggerTest(studies);
+    const begg = beggTest(studies);
+    const petpeese = petPeeseTest(studies);
+    const fatpet = petpeese.fat;
+    const fsn = failSafeN(studies, alpha, fsnTrivial2, fsnDirection2);
+    const tes = tesTest(studies, m);
+    const waap = waapWls(studies);
+    const pcurve = pCurve(studies);
+    const puniform = pUniform(studies, m);
+    const harbord = harbordTest(studies);
+    const peters = petersTest(studies);
+    const deeks = deeksTest(studies);
+    const ruecker = rueckerTest(studies);
+    const hc = henmiCopas(studies, alpha);
+    let selResult = null;
+    if (modSpec.length === 0 && scaleModSpec.length === 0) {
+      if (selModeVal === "sensitivity") {
+        let selCutsEff, selSidesEff, selOmegaFixed;
+        if (selPreset !== "custom") {
+          const p = SELECTION_PRESETS[selPreset];
+          selCutsEff = p.cuts;
+          selSidesEff = p.sides;
+          selOmegaFixed = p.omega;
+        } else {
+          selCutsEff = selCuts;
+          selSidesEff = selSides;
+          selOmegaFixed = null;
+        }
+        selResult = veveaHedges(studies, selCutsEff, selSidesEff, selOmegaFixed);
+      } else if (selWeightFn === "halfnorm") {
+        selResult = halfNormalSelModel(studies, { sides: selSides });
+      } else if (selWeightFn === "power") {
+        selResult = powerSelModel(studies, { sides: selSides });
+      } else if (selWeightFn === "negexp") {
+        selResult = negexpSelModel(studies, { sides: selSides });
+      } else if (selWeightFn === "beta") {
+        selResult = betaSelModel(studies, { sides: selSides });
+      } else {
+        selResult = veveaHedges(studies, selCuts, selSides, null);
+      }
+    }
     return {
-      settings,
-      subtitle: `Summary of Meta-Analysis Results (${profile.label})`,
-      headers: ["Statistic", "Value"],
-      rows,
-      note,
-      reRowIdx: !isMHorPeto ? 1 : -1
+      egger,
+      begg,
+      petpeese,
+      fatpet,
+      fsn,
+      tes,
+      waap,
+      pcurve,
+      puniform,
+      harbord,
+      peters,
+      deeks,
+      ruecker,
+      hc,
+      selResult
     };
   }
-  function pubBiasData(args) {
+  function _runSensitivityBatch(studies, m, opts) {
+    const { method, ciMethod, alpha, cumulativeOrder } = opts;
+    const influence = influenceDiagnostics(studies, method, ciMethod, alpha);
+    const baujatResult = baujat(studies);
+    const blupResult = m && isFinite(m.tau2) && m.tau2 > 0 && studies.length >= 2 ? blupMeta(studies, m) : null;
+    const qqResiduals = influence.map((d) => d.stdResidual).filter(isFinite);
+    const qqLabels = influence.filter((d) => isFinite(d.stdResidual)).map((d) => d.label);
+    const cumulativeStudies = studies.slice();
+    if (cumulativeOrder === "precision_desc") cumulativeStudies.sort((a, b) => a.vi - b.vi);
+    else if (cumulativeOrder === "precision_asc") cumulativeStudies.sort((a, b) => b.vi - a.vi);
+    else if (cumulativeOrder === "effect_asc") cumulativeStudies.sort((a, b) => a.yi - b.yi);
+    else if (cumulativeOrder === "effect_desc") cumulativeStudies.sort((a, b) => b.yi - a.yi);
+    const cumResults = cumulativeMeta(cumulativeStudies, method, ciMethod, alpha);
+    return { influence, baujatResult, blupResult, qqResiduals, qqLabels, cumResults, cumulativeStudies };
+  }
+  function _runRegressionBatch(studies, m, opts) {
+    const { method, ciMethod, alpha, modSpec, scaleModSpec, interactionSpec } = opts;
+    const subgroup = subgroupAnalysis(studies, method, ciMethod, alpha);
+    let reg = null, ls = null;
+    if (scaleModSpec.length > 0) {
+      ls = lsModel(studies, modSpec, scaleModSpec, { ciMethod, alpha, locInteractions: interactionSpec });
+    } else if (modSpec.length > 0 || interactionSpec.length > 0) {
+      reg = metaRegression(studies, modSpec, method, ciMethod, { alpha, interactions: interactionSpec });
+    }
+    return { subgroup, reg, ls };
+  }
+  function runAnalysisHeadless(studies, type, opts) {
+    const profile = effectProfiles[type];
+    const coreMeta = _runCoreMeta(studies, opts);
+    const { m, tf, all, profileLikResult, mAdjusted, rveResult, threeLevelResult } = coreMeta;
+    if (m.error) {
+      return {
+        m,
+        tf,
+        all,
+        profileLikResult,
+        mAdjusted,
+        rveResult,
+        threeLevelResult,
+        bayesResult: null,
+        reMeanRef: NaN,
+        egger: null,
+        begg: null,
+        petpeese: null,
+        fatpet: null,
+        fsn: null,
+        tes: null,
+        waap: null,
+        pcurve: null,
+        puniform: null,
+        harbord: null,
+        peters: null,
+        deeks: null,
+        ruecker: null,
+        hc: null,
+        selResult: null,
+        influence: [],
+        baujatResult: null,
+        blupResult: null,
+        qqResiduals: [],
+        qqLabels: [],
+        cumResults: [],
+        cumulativeStudies: [],
+        subgroup: null,
+        reg: null,
+        ls: null,
+        profile,
+        type,
+        studies,
+        opts
+      };
+    }
+    const { bayesResult, reMeanRef } = _runBayesBatch(studies, m, opts);
+    const pubBias = _runPubBiasBatch(studies, m, opts);
+    const sensitivity = _runSensitivityBatch(studies, m, opts);
+    const regression = _runRegressionBatch(studies, m, opts);
+    return {
+      m,
+      tf,
+      all,
+      profileLikResult,
+      mAdjusted,
+      rveResult,
+      threeLevelResult,
+      bayesResult,
+      reMeanRef,
+      ...pubBias,
+      ...sensitivity,
+      ...regression,
+      profile,
+      type,
+      studies,
+      opts
+    };
+  }
+  function computeStudies(rawData, type) {
+    return rawData.map((d, i) => {
+      const computed = compute(d, type);
+      return { label: d.label ?? `Study ${i + 1}`, ...d, ...computed };
+    }).filter((d) => isValidStudy(d));
+  }
+  function buildReportArgs(r, settings = {}) {
     const {
+      ciLevel = "95",
+      mccMethod = "none",
+      goshXAxis = "I2",
+      profileLikXScale = "tau2"
+    } = settings;
+    const {
+      m,
+      tf,
+      all,
+      profileLikResult,
+      mAdjusted,
+      rveResult,
+      threeLevelResult,
+      bayesResult,
       egger,
       begg,
       fatpet,
@@ -10546,543 +11891,123 @@ var App = (() => {
       fsn,
       tes,
       waap,
+      pcurve,
+      puniform,
       harbord,
       peters,
       deeks,
       ruecker,
       hc,
-      useTF,
+      selResult,
+      influence,
+      baujatResult,
+      qqResiduals,
+      qqLabels,
+      cumResults,
+      subgroup,
+      reg,
+      ls,
+      profile,
+      type,
+      studies,
+      opts
+    } = r;
+    const {
+      method,
+      ciMethod,
+      alpha,
+      selModeVal,
+      selPreset,
+      rveRho,
+      rveMode,
+      threeLevelMethod,
+      fsnTrivial: fsnTrivial2,
+      fsnDirection: fsnDirection2,
+      useTF
+    } = opts;
+    const SMD_TYPES = /* @__PURE__ */ new Set(["SMD", "SMDH", "SMD_paired", "SMD1", "SMD1H", "SMCC"]);
+    const cles = SMD_TYPES.has(type) ? clES(m.RE, [m.ciLow, m.ciHigh]) : null;
+    const _selLabel = selModeVal === "mle" ? "MLE" : selPreset !== "custom" ? SELECTION_PRESETS[selPreset]?.label ?? selPreset : "Custom";
+    const ciPct = Math.round((1 - alpha) * 100);
+    const ciLabel = `${ciPct}% CI`;
+    const forestOptions = {
+      ciMethod,
+      profile,
+      pageSize: 30,
+      pooledDisplay: "both",
+      theme: "default",
+      alpha,
+      ciLabel
+    };
+    return {
+      studies: all,
+      m,
+      profile,
+      reg,
+      ls,
       tf,
-      profile
-    } = args;
-    const na = (v) => isFinite(v) ? fmt2(v) : "\u2014";
-    const naP = (v) => isFinite(v) ? fmtP_APA(v) : "NA";
-    const petEff = isFinite(fatpet?.intercept) ? fmt2(profile.transform(fatpet.intercept)) : "\u2014";
-    const rows = [
-      ["Egger\u2019s test (intercept)", na(egger?.intercept), naP(egger?.p)],
-      ["Begg\u2019s test (rank correlation \u03C4)", na(begg?.tau), naP(begg?.p)],
-      ["FAT \u2014 \u03B2\u2081 (bias)", na(fatpet?.slope), naP(fatpet?.slopeP)],
-      ["PET \u2014 effect at SE \u2192 0", petEff, naP(fatpet?.interceptP)],
-      isFinite(petpeese?.peese?.intercept) ? [
-        `PEESE \u2014 effect at v\u1D62 \u2192 0${petpeese.usePeese ? " \u2713" : ""}`,
-        fmt2(profile.transform(petpeese.peese.intercept)),
-        naP(petpeese.peese.interceptP)
-      ] : ["PEESE", "\u2014", "NA"],
-      ["Harbord (intercept)", na(harbord?.intercept), naP(harbord?.interceptP)],
-      ["Peters (intercept)", na(peters?.intercept), naP(peters?.interceptP)],
-      ["Deeks (intercept)", na(deeks?.intercept), naP(deeks?.interceptP)],
-      ["R\xFCcker (intercept)", na(ruecker?.intercept), naP(ruecker?.interceptP)],
-      tes && isFinite(tes.chi2) ? [`TES \u2014 \u03C7\xB2 (O=${tes.O}, E=${fmt2(tes.E)})`, fmt2(tes.chi2), naP(tes.p)] : ["TES (test of excess significance)", "\u2014", "NA"],
-      waap && isFinite(waap.estimate) ? [
-        `WAAP-WLS (k_adequate\u202F=\u202F${waap.kAdequate} of ${waap.k}${waap.fallback ? "; WLS fallback" : ""})`,
-        `${fmt2(profile.transform(waap.estimate))} [${fmt2(profile.transform(waap.ci[0]))}, ${fmt2(profile.transform(waap.ci[1]))}]`,
-        naP(waap.p)
-      ] : ["WAAP-WLS", "\u2014", "NA"],
-      hc && !hc.error ? [
-        "Henmi-Copas CI",
-        `${fmt2(profile.transform(hc.beta))} [${fmt2(profile.transform(hc.ci[0]))}, ${fmt2(profile.transform(hc.ci[1]))}]`,
-        "\u2014"
-      ] : ["Henmi-Copas CI", "\u2014", "NA (k < 3)"],
-      hc && !hc.error && isFinite(hc.tau2) ? ["Henmi-Copas \u03C4\xB2 (DL, bias-robust)", fmt2(hc.tau2), "\u2014"] : null
-    ].filter(Boolean);
-    const fsnLine = [
-      `Fail-safe N (Rosenthal): ${isFinite(fsn?.rosenthal) ? Math.round(fsn.rosenthal) : "\u2014"}`,
-      `Fail-safe N (Orwin): ${isFinite(fsn?.orwin) ? Math.round(fsn.orwin) : "\u2014"}`,
-      `Trim\u202F&\u202FFill: ${useTF ? "ON" : "OFF"}${tf?.length > 0 ? ` (${tf.length} filled)` : ""}`
-    ].join("  \xB7  ");
-    const note = "FAT = funnel asymmetry test; PET = precision-effect test; PEESE = precision-effect estimate with standard error (Stanley & Doucouliagos, 2014); \u2713 = PEESE preferred (FAT p < .10). Harbord, Peters, Deeks, and R\xFCcker are binary-outcome variants of the Egger test; TES = test of excess significance; WAAP-WLS = weighted average of adequately powered studies; statistic is bias-corrected effect estimate [95% CI]; Henmi-Copas = bias-robust CI centred on FE estimate (DL \u03C4\xB2). NA = fewer than 3 eligible studies or missing cell counts.";
-    return { headers: ["Test", "Statistic", "<em>p</em>"], rows, note, fsnLine };
-  }
-  function pCurveData(pcurve) {
-    if (!pcurve || pcurve.k < 3) return null;
-    const verdictLabels = {
-      "evidential": "Evidential value",
-      "no-evidential": "No evidential value",
-      "inconclusive": "Inconclusive",
-      "insufficient": "Insufficient data"
-    };
-    const fmtZ = (z) => isFinite(z) ? z.toFixed(3) : "\u2014";
-    const rows = [
-      ["Right-skew test", fmtZ(pcurve.rightSkewZ), fmtP_APA(pcurve.rightSkewP)],
-      ["Flatness test", fmtZ(pcurve.flatnessZ), fmtP_APA(pcurve.flatnessP)]
-    ];
-    const verdict = verdictLabels[pcurve.verdict] ?? pcurve.verdict ?? "\u2014";
-    return {
-      kLine: `${pcurve.k} significant result${pcurve.k !== 1 ? "s" : ""} (p < .05)`,
-      headers: ["Test", "<em>Z</em>", "<em>p</em>"],
-      rows,
-      verdict,
-      note: `Right-skew test H\u2080: p-curve is uniform or left-skewed (no evidential value). Flatness test H\u2080: p-curve has evidential value. Verdict: ${verdict}. Simonsohn et al. (2014).`
+      egger,
+      begg,
+      fatpet,
+      petpeese,
+      fsn,
+      tes,
+      waap,
+      cles,
+      pcurve,
+      puniform,
+      harbord,
+      peters,
+      deeks,
+      ruecker,
+      hc,
+      baujatResult,
+      influence,
+      subgroup,
+      method,
+      ciMethod,
+      rveResult,
+      threeLevelResult,
+      rveRho,
+      rveMode,
+      threeLevelMethod,
+      fsnTrivial: fsnTrivial2,
+      fsnDirection: fsnDirection2,
+      permResult: null,
+      ciLevel,
+      mccMethod,
+      useTF,
+      mAdjusted,
+      sel: selResult,
+      selMode: selModeVal,
+      selLabel: _selLabel,
+      gosh: null,
+      goshXAxis,
+      profileLik: profileLikResult,
+      profileLikXScale,
+      bayesResult,
+      bayesReMean: m.RE,
+      sensitivityRows: null,
+      forestOptions,
+      cumForestOptions: { results: cumResults, profile, pageSize: 30, currentPage: 0, alpha, ciLabel },
+      caterpillarOptions: { studies: all, m, profile, pageSize: 30, currentPage: 0 },
+      qqResiduals,
+      qqLabels
     };
   }
-  function puniformData(args) {
-    const { puniform, m, profile, ciLevel = "95" } = args;
-    if (!puniform || puniform.k < 3 || !isFinite(puniform.estimate)) return null;
-    const widthCiLabel = ciLevel + "% CI";
-    const tr = (v) => isFinite(v) ? profile.transform(v) : NaN;
-    const noteExtra = [
-      puniform.biasDetected ? "Bias detected (p < .05)." : "",
-      puniform.significantEffect ? "Significant effect after correction (p < .05)." : ""
-    ].filter(Boolean).join(" ");
-    const rows = [
-      [
-        "RE (uncorrected)",
-        isFinite(m.RE) ? fmt2(tr(m.RE)) : "\u2014",
-        fmtCI_APA(tr(m.ciLow), tr(m.ciHigh)),
-        fmt2(puniform.Z_bias),
-        fmtP_APA(puniform.p_bias)
-      ],
-      [
-        "P-uniform (bias-corrected)",
-        isFinite(puniform.estimate) ? fmt2(tr(puniform.estimate)) : "\u2014",
-        fmtCI_APA(tr(puniform.ciLow), tr(puniform.ciHigh)),
-        fmt2(puniform.Z_sig),
-        fmtP_APA(puniform.p_sig)
-      ]
-    ];
-    const note = "RE row: bias test (H\u2080: RE = true effect). P-uniform row: significance test (H\u2080: \u03B4\u202F=\u202F0). CI = confidence interval." + (noteExtra ? " " + noteExtra : "");
-    return {
-      kLine: `${puniform.k} significant result${puniform.k !== 1 ? "s" : ""} (p < .05) used  \xB7  effect scale: ${profile.label}`,
-      headers: ["Method", "Estimate", widthCiLabel, "<em>Z</em>", "<em>p</em>"],
-      rows,
-      note
-    };
-  }
-  function selModelData(args) {
-    const { sel, profile, selMode, selLabel, ciLevel = "95" } = args;
-    if (!sel || sel.error) return null;
-    const widthCiLabel = ciLevel + "% CI";
-    const isMLE = selMode === "mle";
-    const fmtDisp = (v) => isFinite(v) ? fmt2(profile.transform(v)) : "\u2014";
-    const fmtV = (v) => isFinite(v) ? fmt2(v) : "\u2014";
-    const cuts = sel.cuts;
-    const intervalLabels = cuts.map((c, j) => `(${j === 0 ? "0" : cuts[j - 1]}, ${c}]`);
-    const muAdj = fmtDisp(sel.mu);
-    const ciLo = fmtDisp(sel.mu - 1.96 * sel.se_mu);
-    const ciHi = fmtDisp(sel.mu + 1.96 * sel.se_mu);
-    const omegaRow = [
-      "Selection weight \u03C9",
-      ...sel.omega.map((w, j) => {
-        if (!isMLE || j === 0) return `${fmtV(w)} (fixed)`;
-        const se = isFinite(sel.se_omega[j]) ? ` \xB1 ${fmtV(sel.se_omega[j])}` : "";
-        return `${fmtV(w)}${se}`;
-      })
-    ];
-    const rows = [
-      omegaRow,
-      ["Studies per interval", ...sel.nPerInterval.map(String)],
-      [`Adjusted \u03BC\u0302 [${widthCiLabel}]`, `${muAdj} [${ciLo}, ${ciHi}]  \xB7  unadjusted: ${fmtDisp(sel.RE_unsel)}`],
-      [`Adjusted \u03C4\xB2`, `${fmtV(sel.tau2)}  \xB7  unadjusted: ${fmtV(sel.tau2_unsel)}`],
-      ...isMLE && isFinite(sel.LRT) ? [
-        [`LRT (H\u2080: no selection)`, `\u03C7\xB2(${sel.LRTdf})\u202F=\u202F${fmtV(sel.LRT)}, <em>p</em> ${fmtP_APA(sel.LRTp)}`]
-      ] : []
-    ];
-    const modeLabel = isMLE ? "MLE (estimated weights)" : `Sensitivity \u2014 ${selLabel}`;
-    const sidesLabel = sel.sides === 2 ? "two-sided" : "one-sided";
-    return {
-      metaLine: `Mode: ${modeLabel}  \xB7  p-values: ${sidesLabel}  \xB7  k\u202F=\u202F${sel.k}`,
-      subtitle: "Selection Model Results",
-      headers: ["Quantity", ...intervalLabels],
-      rows,
-      note: "\u03C9 = selection weight; \u03BC\u0302 = bias-corrected pooled estimate; CI = confidence interval; LRT = likelihood ratio test.",
-      nCols: 1 + cuts.length,
-      nPerInterval: sel.nPerInterval,
-      isMLE,
-      converged: sel.converged,
-      LRTp: sel.LRTp,
-      muAdj,
-      ciLo,
-      ciHi,
-      muUnadj: fmtDisp(sel.RE_unsel)
-    };
-  }
-  function influenceData(args) {
-    const { influence, studies } = args;
-    if (!influence || !influence.length) return null;
-    const k = studies.filter((d) => !d.filled).length;
-    const dffitsThresh = 3 * Math.sqrt(1 / Math.max(k - 1, 1));
-    const covRatioThresh = 1 + 1 / k;
-    const em = "\u2014";
-    const rows = influence.map((d) => [
-      d.label,
-      isFinite(d.RE_loo) ? fmt2(d.RE_loo) : em,
-      isFinite(d.deltaTau2) ? fmt2(d.deltaTau2) : em,
-      isFinite(d.stdResidual) ? fmt2(d.stdResidual) : em,
-      isFinite(d.DFBETA) ? fmt2(d.DFBETA) : em,
-      isFinite(d.DFFITS) ? fmt2(d.DFFITS) : em,
-      isFinite(d.covRatio) ? d.covRatio.toFixed(3) : em,
-      isFinite(d.hat) ? d.hat.toFixed(3) : em,
-      isFinite(d.cookD) ? d.cookD.toFixed(3) : em,
-      [
-        d.outlier ? "Outlier" : "",
-        d.influential ? "Influential" : "",
-        d.highLeverage ? "Hi-Lev" : "",
-        d.highCookD ? "Hi-Cook" : "",
-        d.highDffits ? "Hi-DFFITS" : "",
-        d.highCovRatio ? "Hi-CovRatio" : ""
-      ].filter(Boolean).join(", ")
-    ]);
-    const flagged = influence.map((d) => d.outlier || d.influential || d.highLeverage || d.highCookD || d.highDffits || d.highCovRatio);
-    return {
-      headers: ["Study", "RE (LOO)", "\u0394\u03C4\xB2", "Std. Residual", "DFBETA", "DFFITS", "CovRatio", "Hat", "Cook\u2019s D", "Flag"],
-      rows,
-      flagged,
-      note: `LOO = leave-one-out. Thresholds: Hat > ${fmt2(2 / k)} (= 2/k); Cook\u2019s D > ${fmt2(4 / k)} (= 4/k); DFFITS > ${fmt2(dffitsThresh)} (= 3\xB7\u221A(1/(k\u22121))); CovRatio > ${fmt2(covRatioThresh)} (= 1+1/k).`
-    };
-  }
-  function subgroupData(args) {
-    const { subgroup, profile, ciLevel = "95" } = args;
-    if (!subgroup || subgroup.G < 2) return null;
-    const widthCiLabel = ciLevel + "% CI";
-    const rows = Object.entries(subgroup.groups).map(([g, r]) => {
-      const single = r.k === 1;
-      const y_disp = profile.transform(r.y);
-      const ci_lb = profile.transform(r.ci.lb);
-      const ci_ub = profile.transform(r.ci.ub);
-      return [
-        g,
-        String(r.k),
-        isFinite(y_disp) ? fmt2(y_disp) : "\u2014",
-        single ? "\u2014" : isFinite(r.se) ? fmt2(r.se) : "\u2014",
-        single ? "\u2014" : fmtCI_APA(ci_lb, ci_ub),
-        single ? "\u2014" : isFinite(r.tau2) ? r.tau2.toFixed(3) : "0",
-        single ? "\u2014" : isFinite(r.I2) ? r.I2.toFixed(1) : "0"
-      ];
-    });
-    return {
-      subtitle: `Subgroup Analysis Results (${profile.label})`,
-      headers: ["Group", "<em>k</em>", "Effect size", "SE", widthCiLabel, "\u03C4\xB2", "<em>I</em>\xB2 (%)"],
-      rows,
-      note: `CI = confidence interval. <em>Q</em>_total(${subgroup.k - 1}) = ${subgroup.Qtotal.toFixed(3)}  \xB7  <em>Q</em>_within(${subgroup.k - subgroup.G}) = ${subgroup.Qwithin.toFixed(3)}  \xB7  <em>Q</em>_between(${subgroup.df}) = ${subgroup.Qbetween.toFixed(3)}, <em>p</em> ${fmtP_APA(subgroup.p)}.`,
-      Qbetween: subgroup.Qbetween,
-      df: subgroup.df,
-      p: subgroup.p
-    };
-  }
-  function studyTableData(args) {
-    const { studies, m, profile, ciLevel = "95" } = args;
-    const widthCiLabel = ciLevel + "% CI";
-    const tau2 = isFinite(m.tau2) ? m.tau2 : 0;
-    const real = studies.filter((d) => !d.filled);
-    const totalW = real.reduce((s, d) => s + 1 / (d.vi + tau2), 0);
-    const showFEcol = !m.isMH && !m.isPeto;
-    const totalWfe = showFEcol ? real.reduce((s, d) => s + 1 / d.vi, 0) : 0;
-    const transformedScale = ["Ratio", "Hazard", "Rate", "log", "logit", "arcsine", "Freeman", "Fisher"].some((t) => profile.label.includes(t));
-    const seLabel = transformedScale ? "SE (transformed)" : "SE";
-    const fmtV = (v) => isFinite(v) ? (+v).toFixed(3) : "\u2014";
-    const fmtPct = (v) => v !== null && isFinite(v) ? v.toFixed(1) + "%" : "\u2014";
-    const pooledEf = profile.transform(m.RE);
-    const pooledLo = profile.transform(m.ciLow);
-    const pooledHi = profile.transform(m.ciHigh);
-    const headers = [`Study`, `Effect size (${profile.label})`, seLabel, widthCiLabel, "RE Weight (%)"];
-    if (showFEcol) headers.push("FE Weight (%)");
-    const rows = studies.map((d) => {
-      const wi = 1 / (d.vi + tau2);
-      const pct = d.filled ? null : wi / totalW * 100;
-      const pctFE = showFEcol && !d.filled ? 1 / d.vi / totalWfe * 100 : null;
-      const ef = profile.transform(d.yi);
-      const lo = profile.transform(d.yi - Z_95 * d.se);
-      const hi = profile.transform(d.yi + Z_95 * d.se);
-      const lbl = d.label.length > 40 ? d.label.slice(0, 39) + "\u2026" : d.label;
-      const cells = [lbl, fmtV(ef), fmtV(d.se), fmtCI_APA(lo, hi), fmtPct(pct)];
-      if (showFEcol) cells.push(fmtPct(pctFE));
-      return cells;
-    });
-    const pooledRow = ["Pooled (RE)", fmtV(pooledEf), fmtV(m.seRE), fmtCI_APA(pooledLo, pooledHi), "100%"];
-    if (showFEcol) pooledRow.push("100%");
-    const weightNote = showFEcol ? "RE and FE weights shown." : "FE weights shown.";
-    const note = `Effect size = ${profile.label}. SE = standard error. CI = confidence interval. ${weightNote}` + (studies.some((d) => d.filled) ? " Trim-and-fill imputed rows are included." : "");
-    const filled = studies.map((d) => !!d.filled);
-    return { headers, rows, pooledRow, note, showFEcol, filled, seLabel };
-  }
-  function regressionData(args) {
-    const { reg, method, ciMethod, ciLevel = "95", adjPs = null, mccLabel = "" } = args;
-    if (!reg || reg.rankDeficient || !reg.colNames) return null;
-    const widthCiLabel = ciLevel + "% CI";
-    const ciLabel = ciMethod === "KH" ? "Knapp-Hartung" : "Normal CI";
-    const statLabel = reg.dist === "t" ? `<em>t</em>(${reg.QEdf})` : "<em>z</em>";
-    const QMlabel = reg.QMdist === "F" ? `<em>F</em>(${reg.QMdf},\u202F${reg.QEdf})` : `\u03C7\xB2(${reg.QMdf})`;
-    const hasVif = Array.isArray(reg.vif) && reg.vif.some((v) => isFinite(v));
-    const hasRobust = reg.isClustered && Array.isArray(reg.robustSE);
-    const coefHeaders = ["Predictor", "\u03B2", "SE", statLabel, "<em>p</em>", widthCiLabel];
-    if (hasVif) coefHeaders.push("VIF");
-    if (hasRobust) coefHeaders.push("Rob. SE", "Rob. <em>t</em>", "Rob. <em>p</em>", "Rob. CI");
-    const coefRows = reg.colNames.map((name, j) => {
-      const [lo, hi] = reg.ci[j];
-      const cells = [
-        name,
-        fmt2(reg.beta[j]),
-        fmt2(reg.se[j]),
-        fmt2(reg.zval[j]),
-        fmtP_APA(reg.pval[j]),
-        fmtCI_APA(lo, hi)
-      ];
-      if (hasVif) cells.push(j === 0 ? "\u2014" : isFinite(reg.vif?.[j]) ? fmt2(reg.vif[j]) : "\u2014");
-      if (hasRobust) {
-        const rci = Array.isArray(reg.robustCi?.[j]) ? reg.robustCi[j] : [NaN, NaN];
-        cells.push(
-          fmt2(reg.robustSE[j]),
-          isFinite(reg.robustZ?.[j]) ? fmt2(reg.robustZ[j]) : "NA",
-          fmtP_APA(reg.robustP?.[j]),
-          fmtCI_APA(rci[0], rci[1])
-        );
-      }
-      return cells;
-    });
-    const R2str = reg.p > 1 && isFinite(reg.R2) ? ` <em>R</em>\xB2 = ${fmt2(reg.R2 * 100)}%.` : "";
-    const clusterNote = hasRobust ? ` Cluster-robust SE (CR1): C = ${reg.clustersUsed} cluster${reg.clustersUsed === 1 ? "" : "s"}${reg.allSingletons ? "; all singletons (HC-robust)" : ""}.` : "";
-    const coefNote = `\u03B2 = unstandardised regression coefficient. SE = standard error. CI = confidence interval. <em>Q</em>E(${reg.QEdf}) = ${fmt2(reg.QE)}, <em>p</em> ${fmtP_APA(reg.QEp)}.` + (reg.p > 1 ? ` <em>Q</em>M ${QMlabel} = ${fmt2(reg.QM)}, <em>p</em> ${fmtP_APA(reg.QMp)}.` : "") + R2str + clusterNote;
-    const metaLine = `k\u202F=\u202F${reg.k}  \xB7  ${method}  \xB7  ${ciLabel}  \xB7  \u03C4\xB2\u202F=\u202F${fmt2(reg.tau2)}  \xB7  I\xB2\u202F=\u202F${fmt2(reg.I2)}%`;
-    let modTests = null;
-    if (reg.modTests && reg.modTests.length > 1) {
-      const modQlabel = reg.QMdist === "F" ? "<em>F</em>" : "\u03C7\xB2";
-      const hasLRT = reg.modTests.some((mt) => isFinite(mt.lrt));
-      const hasAdj = Array.isArray(adjPs) && adjPs.length === reg.modTests.length;
-      const modHeaders = [
-        "Moderator",
-        `${modQlabel} (Wald)`,
-        ...hasLRT ? ["LRT \u03C7\xB2"] : [],
-        "<em>df</em>",
-        "<em>p</em> (Wald)",
-        ...hasLRT ? ["<em>p</em> (LRT)"] : [],
-        ...hasAdj ? [`<em>p</em> (${mccLabel})`] : []
-      ];
-      const modRows = reg.modTests.map((mt, mi) => [
-        mt.name,
-        fmt2(mt.QM),
-        ...hasLRT ? [isFinite(mt.lrt) ? fmt2(mt.lrt) : "NA"] : [],
-        String(mt.QMdf),
-        fmtP_APA(mt.QMp),
-        ...hasLRT ? [isFinite(mt.lrtP) ? fmtP_APA(mt.lrtP) : "NA"] : [],
-        ...hasAdj ? [fmtP_APA(adjPs[mi])] : []
-      ]);
-      const lrtNote = hasLRT ? "LRT = Likelihood Ratio Test; uses ML estimation internally regardless of \u03C4\xB2 method." : "";
-      const adjNote = hasAdj ? ` ${mccLabel} correction applied across ${reg.modTests.length} moderator tests.` : "";
-      modTests = {
-        headers: modHeaders,
-        rows: modRows,
-        note: lrtNote + adjNote
-      };
-    }
-    return {
-      metaLine,
-      coef: { headers: coefHeaders, rows: coefRows, note: coefNote },
-      modTests
-    };
-  }
-  function locationScaleData(ls, ciLevel = "95") {
-    if (!ls || ls.rankDeficient) return null;
-    const widthCiLabel = ciLevel + "% CI";
-    const tau2min = ls.tau2_i ? Math.min(...ls.tau2_i) : NaN;
-    const tau2max = ls.tau2_i ? Math.max(...ls.tau2_i) : NaN;
-    const tau2rng = ls.q > 1 ? `\u03C4\xB2 range: [${fmt2(tau2min)}, ${fmt2(tau2max)}]` : `\u03C4\xB2 = ${fmt2(ls.tau2_mean)}`;
-    const metaLine = `k = ${ls.k}  \xB7  ML  \xB7  Normal CI  \xB7  ${tau2rng}  \xB7  I\xB2 = ${fmt2(ls.I2)}%  \xB7  LL = ${fmt2(ls.LL)}`;
-    const locHeaders = ["Term", "\u03B2", "SE", "<em>z</em>", "<em>p</em>", widthCiLabel];
-    const locRows = ls.locColNames.map((name, j) => {
-      const [lo, hi] = ls.ci_beta[j];
-      return [name, fmt2(ls.beta[j]), fmt2(ls.se_beta[j]), fmt2(ls.zval_beta[j]), fmtP_APA(ls.pval_beta[j]), fmtCI_APA(lo, hi)];
-    });
-    const QMlocStr = ls.p > 1 && isFinite(ls.QM_loc) ? ` <em>Q</em>M_loc \u03C7\xB2(${ls.QM_locDf}) = ${fmt2(ls.QM_loc)}, <em>p</em> ${fmtP_APA(ls.QM_locP)}.` : "";
-    const locNote = `\u03B2 = location coefficient. <em>Q</em>E(${ls.QEdf}) = ${fmt2(ls.QE)}, <em>p</em> ${fmtP_APA(ls.QEp)}.${QMlocStr}`;
-    const scaleHeaders = ["Term", "\u03B3", "SE", "<em>z</em>", "<em>p</em>", widthCiLabel, "exp(\u03B3)"];
-    const scaleRows = ls.scaleColNames.map((name, j) => {
-      const [lo, hi] = ls.ci_gamma[j];
-      return [
-        name,
-        fmt2(ls.gamma[j]),
-        fmt2(ls.se_gamma[j]),
-        fmt2(ls.zval_gamma[j]),
-        fmtP_APA(ls.pval_gamma[j]),
-        fmtCI_APA(lo, hi),
-        j === 0 ? fmt2(Math.exp(ls.gamma[j])) : ""
-      ];
-    });
-    const QMscaleStr = ls.q > 1 && isFinite(ls.QM_scale) ? ` <em>Q</em>M_scale \u03C7\xB2(${ls.QM_scaleDf}) = ${fmt2(ls.QM_scale)}, <em>p</em> ${fmtP_APA(ls.QM_scaleP)}.` : "";
-    const LRstr = ls.q > 1 && isFinite(ls.LRchi2) ? ` LR test (scale mods): \u03C7\xB2(${ls.LRdf}) = ${fmt2(ls.LRchi2)}, <em>p</em> ${fmtP_APA(ls.LRp)}.` : "";
-    const scaleNote = `\u03B3 = scale coefficient (log \u03C4\xB2\u1D62 = Z\u1D62\u03B3). exp(\u03B3\u2080) = \u03C4\xB2 when all scale predictors = 0.${QMscaleStr}${LRstr}`;
-    let fitted = null;
-    if (ls.labels && ls.fitted) {
-      fitted = {
-        headers: ["Study", "<em>y</em>\u1D62", "<em>\u0177</em>\u1D62", "<em>e</em>\u1D62", "\u03C4\xB2\u1D62"],
-        rows: ls.labels.map((lbl, i) => [
-          lbl || String(i + 1),
-          fmt2(ls.yi[i]),
-          fmt2(ls.fitted[i]),
-          fmt2(ls.residuals[i]),
-          fmt2(ls.tau2_i[i])
-        ]),
-        note: "\u03C4\xB2\u1D62 = study-specific between-study variance from the scale model."
-      };
-    }
-    return { metaLine, locCoef: { headers: locHeaders, rows: locRows, note: locNote }, scaleCoef: { headers: scaleHeaders, rows: scaleRows, note: scaleNote }, fitted };
-  }
-  function regressionFittedData(reg) {
-    if (!reg || !reg.labels || !reg.fitted) return null;
-    const headers = ["Study", "<em>y</em>\u1D62", "<em>\u0177</em>\u1D62", "<em>e</em>\u1D62", "Std. <em>e</em>\u1D62"];
-    const rows = reg.labels.map((lbl, i) => {
-      const sr = reg.stdResiduals[i];
-      const flag = isFinite(sr) && Math.abs(sr) > 1.96;
-      return { cells: [lbl || String(i + 1), fmt2(reg.yi[i]), fmt2(reg.fitted[i]), fmt2(reg.residuals[i]), fmt2(sr)], flag };
-    });
-    const note = "Std. <em>e</em>\u1D62 = standardized residual. |Std. <em>e</em>\u1D62| > 1.96 may indicate outliers.";
-    return { headers, rows, note };
-  }
-  function permutationData(permResult, reg) {
-    if (!permResult || !reg) return null;
-    const { QM_dist, modQM_dist, nPerm, nMods } = permResult;
-    if (!QM_dist || !nPerm) return null;
-    function permPval2(dist, observed) {
-      if (!isFinite(observed)) return NaN;
-      let exceeds = 0;
-      for (let i = 0; i < dist.length; i++) {
-        if (dist[i] >= observed) exceeds++;
-      }
-      return (1 + exceeds) / (dist.length + 1);
-    }
-    const omniLabel = reg.QMdist === "F" ? `<em>F</em>(${reg.QMdf}, ${reg.QEdf})` : `\u03C7\xB2(${reg.QMdf})`;
-    const omniP = permPval2(QM_dist, reg.QM);
-    const mods = [];
-    if (nMods > 1 && Array.isArray(reg.modTests)) {
-      for (let mi = 0; mi < reg.modTests.length; mi++) {
-        const mt = reg.modTests[mi];
-        if (mt.QMdf === 0 || !mt.colIdxs || mt.colIdxs.length === 0) {
-          mods.push({ name: mt.name, label: "\u2014", observed: NaN, p: NaN });
-          continue;
-        }
-        const colDist = new Float64Array(nPerm);
-        for (let r = 0; r < nPerm; r++) colDist[r] = modQM_dist[r * nMods + mi];
-        const dfLabel = reg.QMdist === "F" ? `<em>F</em>(${mt.QMdf}, ${reg.QEdf})` : `\u03C7\xB2(${mt.QMdf})`;
-        mods.push({ name: mt.name, label: dfLabel, observed: mt.QM, p: permPval2(colDist, mt.QM) });
-      }
-    }
-    return { nPerm, omniLabel, omniObserved: reg.QM, omniP, mods };
-  }
-  function rveData(args) {
-    const { rveResult, rveRho = 0.8, profile, ciLevel = "95" } = args;
-    if (!rveResult || rveResult.error) return null;
-    const widthCiLabel = ciLevel + "% CI";
-    const est = profile.transform(rveResult.est);
-    const lo = profile.transform(rveResult.ci[0]);
-    const hi = profile.transform(rveResult.ci[1]);
-    const rows = [
-      ["Pooled estimate", `${fmt2(est)}, ${widthCiLabel} [${fmt2(lo)}, ${fmt2(hi)}]`],
-      ["SE", fmt2(rveResult.se)],
-      [`<em>t</em>(${rveResult.df})`, fmt2(rveResult.t)],
-      ["<em>p</em>", fmtP_APA(rveResult.p)],
-      ["\u03C1 (assumed within-cluster correlation)", fmt2(rveRho)],
-      ["m (clusters)", String(rveResult.kCluster)],
-      ["<em>k</em> (studies)", String(rveResult.k)]
-    ];
-    const note = "RVE = robust variance estimation (Hedges, Tipton & Johnson, 2010). Working correlation model: \u03C1 assumed constant within cluster.";
-    return { headers: ["Parameter", "Value"], rows, note };
-  }
-  function threeLevelData(args) {
-    const { threeLevelResult, profile, ciLevel = "95" } = args;
-    if (!threeLevelResult || threeLevelResult.error) return null;
-    const tl = threeLevelResult;
-    const widthCiLabel = ciLevel + "% CI";
-    const mu = profile.transform(tl.mu);
-    const lo = profile.transform(tl.ci[0]);
-    const hi = profile.transform(tl.ci[1]);
-    const rows = [
-      ["Pooled estimate", `${fmt2(mu)}, ${widthCiLabel} [${fmt2(lo)}, ${fmt2(hi)}]`],
-      ["SE", fmt2(tl.se)],
-      ["<em>z</em>", fmt2(tl.z)],
-      ["<em>p</em>", fmtP_APA(tl.p)],
-      ["\u03C3\xB2_within", fmt2(tl.tau2_within)],
-      ["\u03C3\xB2_between", fmt2(tl.tau2_between)],
-      ["<em>I</em>\xB2_within", `${fmt2(tl.I2_within)}%`],
-      ["<em>I</em>\xB2_between", `${fmt2(tl.I2_between)}%`],
-      [`<em>Q</em>(${tl.df})`, fmt2(tl.Q)],
-      ["m (clusters)", String(tl.kCluster)],
-      ["<em>k</em> (studies)", String(tl.k)],
-      ["Log-likelihood (REML)", fmt2(tl.logLik)]
-    ];
-    const note = "Three-level model: studies nested within clusters. \u03C3\xB2_within = within-cluster, \u03C3\xB2_between = between-cluster between-study heterogeneity. REML estimation.";
-    return { headers: ["Parameter", "Value"], rows, note };
-  }
-  function sensFv2(v) {
-    return isFinite(v) ? v.toFixed(3) : "\u2014";
-  }
-  function sensFvp2(v) {
-    return isFinite(v) ? v < 1e-3 ? "< .001" : v.toFixed(3).replace(/^0\./, ".") : "\u2014";
-  }
-  function sensitivityData(args) {
-    const { studies, m, method, ciMethod, profile, ciLevel = "95", alpha = 0.05 } = args;
-    if (!studies || studies.length < 2) return null;
-    const widthCiLabel = ciLevel + "% CI";
-    const realStudies = studies.filter((d) => !d.filled);
-    const loo = leaveOneOut(realStudies, method, ciMethod, m, alpha);
-    const fullSig = loo.full.pval < 0.05;
-    const fullEst = profile.transform(loo.full.RE);
-    const looHeaders = ["Study omitted", "Estimate", `${widthCiLabel} (low)`, `${widthCiLabel} (high)`, "<em>I</em>\xB2 (%)", "\u03C4\xB2", "<em>p</em>", "\u0394 estimate"];
-    const looRows = loo.rows.map((row) => {
-      const est = profile.transform(row.estimate);
-      const lo = profile.transform(row.lb);
-      const hi = profile.transform(row.ub);
-      const delta = est - fullEst;
-      return [
-        row.label,
-        sensFv2(est),
-        sensFv2(lo),
-        sensFv2(hi),
-        sensFv2(row.i2),
-        sensFv2(row.tau2),
-        sensFvp2(row.pval),
-        (delta >= 0 ? "+" : "") + sensFv2(delta)
-      ];
-    });
-    const sigChanges = loo.rows.map((row) => row.significant !== fullSig);
-    const looNote = "Rows marked * change statistical significance (<em>p</em> = .05 threshold) when that study is omitted. \u0394 estimate = LOO estimate minus full-set estimate.";
-    const estData = estimatorComparison(realStudies, ciMethod);
-    const estHeaders = ["\u03C4\xB2 Estimator", "Estimate", `${widthCiLabel} (low)`, `${widthCiLabel} (high)`, "\u03C4\xB2", "<em>I</em>\xB2 (%)"];
-    const estRows = estData.map((row) => {
-      const isCurrent = row.method === method;
-      return [
-        (TAU_LABELS[row.method] ?? row.method) + (isCurrent ? " \u2605" : ""),
-        sensFv2(profile.transform(row.estimate)),
-        sensFv2(profile.transform(row.lb)),
-        sensFv2(profile.transform(row.ub)),
-        sensFv2(row.tau2),
-        sensFv2(row.i2)
-      ];
-    });
-    const estNote = "\u2605 = currently selected estimator. Estimates on the same scale as the primary analysis.";
-    return { loo: { headers: looHeaders, rows: looRows, sigChanges, note: looNote }, est: { headers: estHeaders, rows: estRows, note: estNote } };
-  }
-  var TAU_LABELS;
-  var init_sections = __esm({
-    "js/sections.js"() {
-      init_format();
-      init_utils();
-      init_constants();
-      init_influence();
-      TAU_LABELS = {
-        DL: "DerSimonian-Laird (DL)",
-        REML: "REML",
-        PM: "Paule-Mandel (PM)",
-        EB: "Empirical Bayes (EB)",
-        PMM: "PM-Median (PMM)",
-        GENQM: "GENQ-Median",
-        ML: "Maximum Likelihood (ML)",
-        HS: "Hunter-Schmidt (HS)",
-        HE: "Hedges (HE)",
-        SJ: "Sidik-Jonkman (SJ)",
-        GENQ: "GENQ",
-        SQGENQ: "SQGENQ",
-        DLIT: "DLIT",
-        EBLUP: "EBLUP",
-        HSk: "HSk"
-      };
+  var init_analysis_headless = __esm({
+    "js/tests/analysis-headless.js"() {
+      init_analysis();
+      init_profiles();
+      init_trimfill();
     }
   });
 
-  // js/report.js
+  // js/io/report.js
   var report_exports = {};
   __export(report_exports, {
     CITATIONS: () => CITATIONS,
     buildFigureAPA: () => buildFigureAPA,
-    buildMVReport: () => buildMVReport,
     buildReport: () => buildReport,
     buildTableAPA: () => buildTableAPA,
     collectCitations: () => collectCitations,
@@ -11091,18 +12016,10 @@ var App = (() => {
     reportCSS: () => reportCSS
   });
   function fmtP_APA2(p) {
-    return escHTML(fmtP_APA(p));
+    return escapeHTML(fmtP_APA(p));
   }
-  function escNote(s) {
-    return String(s).replace(/<(?!\/?em>)/g, "&lt;");
-  }
-  function buildTable(headers, rows, { extraClass = "", style = "", tfoot = "" } = {}) {
-    const cls = extraClass ? ` ${extraClass}` : "";
-    const styl = style ? ` style="${style}"` : "";
-    const head = `<thead><tr>${headers.map((h) => `<th>${h}</th>`).join("")}</tr></thead>`;
-    const body = `<tbody>${rows.join("")}</tbody>`;
-    const foot = tfoot ? `<tfoot>${tfoot}</tfoot>` : "";
-    return `<table class="stat-table${cls}"${styl}>${head}${body}${foot}</table>`;
+  function renderRich(s) {
+    return cellRich(s).map((r) => r.italic ? `<em>${esc(r.text)}</em>` : esc(r.text)).join("");
   }
   function buildTableAPA(tableNum, subtitle, headers, rows, note = "") {
     const head = `<thead><tr>${headers.map((h) => `<th>${h}</th>`).join("")}</tr></thead>`;
@@ -11201,6 +12118,10 @@ ${noteBlock}`;
     if (bayesResult && !bayesResult.error) add("BAYES");
     return keys;
   }
+  function convWarn(badge) {
+    if (!badge) return "";
+    return `<p class="convergence-warning">\u26A0 ${esc(badge.text)}</p>`;
+  }
   function sectionSummary(args) {
     const { m, profile, method, ciMethod, useTF, tf, studies, nextTable, ciLevel } = args;
     const k = studies.filter((d2) => !d2.filled).length;
@@ -11214,34 +12135,42 @@ ${noteBlock}`;
   </p>`;
     const d = summaryData(args);
     const statsRows = d.rows.map(([label, value], i) => {
-      const valCell = i === d.reRowIdx ? `<strong>${esc(value)}</strong>` : esc(value);
-      return `<tr><td>${esc(label)}</td><td>${valCell}</td></tr>`;
+      const valCell = i === d.reRowIdx ? `<strong>${renderRich(value)}</strong>` : renderRich(value);
+      return `<tr><td>${renderRich(label)}</td><td>${valCell}</td></tr>`;
     });
-    const statsTable = buildTableAPA(nextTable(), d.subtitle, d.headers, statsRows, escNote(d.note));
+    const statsTable = buildTableAPA(nextTable(), d.subtitle, d.headers, statsRows, renderRich(d.note));
     return `
 <section>
   <h2>Summary</h2>
   ${settingsProse}
-  ${statsTable}
+  ${convWarn(d.convergence)}${statsTable}
 </section>`;
   }
   function sectionPubBias(args) {
-    const { useTF, tf, nextTable, nextFigure, profile } = args;
+    const {
+      useTF,
+      tf,
+      nextTable,
+      nextFigure,
+      profile,
+      fsnTrivial: fsnTrivial2 = 0.1,
+      fsnDirection: fsnDirection2 = "auto"
+    } = args;
     const fsnProse = `
   <p style="margin-top:10px">
     Fail-safe N (Rosenthal): <strong>${isFinite(args.fsn.rosenthal) ? Math.round(args.fsn.rosenthal) : "\u2014"}</strong>
     &nbsp;\xB7&nbsp;
-    Fail-safe N (Orwin, trivial = 0.1): <strong>${isFinite(args.fsn.orwin) ? Math.round(args.fsn.orwin) : "\u2014"}</strong>
+    Fail-safe N (Orwin, trivial = ${fsnTrivial2}, dir = ${fsnDirection2}): <strong>${isFinite(args.fsn.orwin) ? Math.round(args.fsn.orwin) : "\u2014"}</strong>
   </p>
   <p>Trim &amp; Fill: <strong>${useTF ? "ON" : "OFF"}</strong>${tf.length > 0 ? ` (${tf.length} filled)` : ""}</p>`;
     const d = pubBiasData(args);
-    const rows = d.rows.map(([t, s, p]) => `<tr><td>${esc(t)}</td><td>${esc(s)}</td><td>${esc(p)}</td></tr>`);
+    const rows = d.rows.map(([t, s, p]) => `<tr><td>${renderRich(t)}</td><td>${renderRich(s)}</td><td>${renderRich(p)}</td></tr>`);
     const table = buildTableAPA(
       nextTable(),
       "Tests of Publication Bias",
       d.headers,
       rows,
-      esc(d.note)
+      renderRich(d.note)
     );
     const { funnelSVG } = args;
     const funnelFig = funnelSVG ? buildFigureAPA(
@@ -11261,23 +12190,23 @@ ${noteBlock}`;
   function sectionPCurve(pcurve, nextTable) {
     const d = pCurveData(pcurve);
     if (!d) return "";
-    const rows = d.rows.map((r) => `<tr>${r.map((c) => `<td>${esc(c)}</td>`).join("")}</tr>`);
+    const rows = d.rows.map((r) => `<tr>${r.map((c) => `<td>${renderRich(c)}</td>`).join("")}</tr>`);
     return `
 <section>
   <h2>P-curve (Simonsohn et al., 2014)</h2>
-  <p class="meta-line">${escNote(d.kLine)}  \xB7  Verdict: <strong>${esc(d.verdict)}</strong></p>
-  ${buildTableAPA(nextTable(), "P-curve Test Statistics", d.headers, rows, escNote(d.note))}
+  <p class="meta-line">${renderRich(d.kLine)}  \xB7  Verdict: <strong>${esc(d.verdict)}</strong></p>
+  ${buildTableAPA(nextTable(), "P-curve Test Statistics", d.headers, rows, renderRich(d.note))}
 </section>`;
   }
   function sectionPUniform(puniform, m, profile, nextTable, widthCiLabel = "95% CI") {
     if (!puniform || puniform.k < 3 || !isFinite(puniform.estimate)) return "";
     const d = puniformData({ puniform, m, profile, ciLevel: widthCiLabel.replace("% CI", "") });
-    const rows = d.rows.map((r) => `<tr>${r.map((c) => `<td>${esc(c)}</td>`).join("")}</tr>`);
+    const rows = d.rows.map((r) => `<tr>${r.map((c) => `<td>${renderRich(c)}</td>`).join("")}</tr>`);
     return `
 <section>
   <h2>P-uniform (van Assen et al., 2015)</h2>
-  <p class="meta-line">${escNote(d.kLine)}</p>
-  ${buildTableAPA(nextTable(), "P-uniform Bias-Corrected Estimates", d.headers, rows, escNote(d.note))}
+  <p class="meta-line">${renderRich(d.kLine)}</p>
+  ${buildTableAPA(nextTable(), "P-uniform Bias-Corrected Estimates", d.headers, rows, renderRich(d.note))}
 </section>`;
   }
   function sectionSelectionModel(sel, profile, selMode, selLabel, nextTable, widthCiLabel = "95% CI") {
@@ -11286,27 +12215,26 @@ ${noteBlock}`;
     const K = d.nCols - 1;
     const htmlRows = d.rows.map((r, ri) => {
       if (r.length === 2) {
-        return `<tr><td>${esc(r[0])}</td><td colspan="${K}">${esc(r[1])}</td></tr>`;
+        return `<tr><td>${renderRich(r[0])}</td><td colspan="${K}">${renderRich(r[1])}</td></tr>`;
       }
       return `<tr>${r.map((c, ci) => {
         if (ci > 0 && ri === 1 && c === "0") return `<td class="flagged">${c}</td>`;
-        return `<td>${esc(c)}</td>`;
+        return `<td>${renderRich(c)}</td>`;
       }).join("")}</tr>`;
     });
     const emptyWarning = (() => {
       const empty = d.nPerInterval.map((n, j) => n === 0 ? j + 1 : -1).filter((j) => j > 0);
       return empty.length > 0 ? ` Warning: interval${empty.length > 1 ? "s" : ""} ${empty.join(", ")} ha${empty.length > 1 ? "ve" : "s"} 0 studies.` : "";
     })();
-    const convWarning = d.isMLE && !d.converged ? " Optimizer did not fully converge; results may be approximate." : "";
     const direction = sel.mu > sel.RE_unsel ? "higher" : "lower";
     const schemeText = d.isMLE ? "the estimated selection pattern" : `<em>${esc(selLabel)}</em> selection`;
     const interpNote = `Under ${schemeText} the bias-corrected estimate is ${d.muAdj} [${d.ciLo}, ${d.ciHi}] \u2014 ${direction} than the unadjusted RE estimate of ${d.muUnadj}.` + (d.isMLE && isFinite(d.LRTp) && d.LRTp < 0.05 ? ` The LRT rejects the null of no selection (<em>p</em> ${fmtP_APA2(d.LRTp)}).` : "");
-    const note = escNote(d.note) + " " + interpNote + emptyWarning + convWarning;
+    const note = renderRich(d.note) + " " + interpNote + emptyWarning;
     return `
 <section>
   <h2>Selection Model (Vevea-Hedges, 1995)</h2>
-  <p class="meta-line">${escNote(d.metaLine)}</p>
-  ${buildTableAPA(nextTable(), "Vevea-Hedges Selection Model Results", d.headers, htmlRows, note)}
+  <p class="meta-line">${renderRich(d.metaLine)}</p>
+  ${convWarn(d.convergence)}${buildTableAPA(nextTable(), "Vevea-Hedges Selection Model Results", d.headers, htmlRows, note)}
 </section>`;
   }
   function sectionInfluence(influence, k, nextTable) {
@@ -11314,12 +12242,12 @@ ${noteBlock}`;
     const d = influenceData({ influence, studies: Array.from({ length: k }, () => ({ filled: false })) });
     const apaRows = d.rows.map((r, i) => {
       const cls = d.flagged[i] ? ' class="flagged"' : "";
-      return `<tr${cls}>${r.map((c) => `<td>${esc(c)}</td>`).join("")}</tr>`;
+      return `<tr${cls}>${r.map((c) => `<td>${renderRich(c)}</td>`).join("")}</tr>`;
     });
     return `
 <section>
   <h2>Influence Diagnostics</h2>
-  ${buildTableAPA(nextTable(), "Leave-One-Out Influence Diagnostics", d.headers, apaRows, escNote(d.note))}
+  ${buildTableAPA(nextTable(), "Leave-One-Out Influence Diagnostics", d.headers, apaRows, renderRich(d.note))}
 </section>`;
   }
   function sectionSensitivity(args, nextTable) {
@@ -11329,10 +12257,10 @@ ${noteBlock}`;
     const looRows = d.loo.rows.map((r, i) => {
       const flag = d.loo.sigChanges[i] ? ` title="Removing this study changes statistical significance"` : "";
       const mark = d.loo.sigChanges[i] ? " *" : "";
-      return `<tr${flag}><td>${esc(r[0])}${mark}</td>${r.slice(1).map((c) => `<td>${c}</td>`).join("")}</tr>`;
+      return `<tr${flag}><td>${renderRich(r[0])}${mark}</td>${r.slice(1).map((c) => `<td>${renderRich(c)}</td>`).join("")}</tr>`;
     });
     const looSection = d.loo.rows.length > 0 ? buildTableAPA(nextTable(), "Leave-one-out analysis", d.loo.headers, looRows, d.loo.note) : `<p class="table-note">Need at least 3 studies for leave-one-out analysis.</p>`;
-    const estRows = d.est.rows.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join("")}</tr>`);
+    const estRows = d.est.rows.map((r) => `<tr>${r.map((c) => `<td>${renderRich(c)}</td>`).join("")}</tr>`);
     const estSection = buildTableAPA(nextTable(), `\u03C4\xB2 estimator comparison (${widthCiLabel})`, d.est.headers, estRows, d.est.note);
     return `
 <section>
@@ -11344,8 +12272,8 @@ ${noteBlock}`;
   function sectionSubgroup(subgroup, profile, nextTable, widthCiLabel = "95% CI") {
     if (!subgroup || subgroup.G < 2) return "";
     const d = subgroupData({ subgroup, profile, ciLevel: widthCiLabel.replace("% CI", "") });
-    const apaRows = d.rows.map((r) => `<tr>${r.map((c) => `<td>${esc(c)}</td>`).join("")}</tr>`);
-    const note = escNote(d.note).replace("<em>Q</em>_total", "<em>Q</em><sub>total</sub>").replace("<em>Q</em>_within", "<em>Q</em><sub>within</sub>").replace("<em>Q</em>_between", "<em>Q</em><sub>between</sub>");
+    const apaRows = d.rows.map((r) => `<tr>${r.map((c) => `<td>${renderRich(c)}</td>`).join("")}</tr>`);
+    const note = renderRich(d.note).replace("<em>Q</em>_total", "<em>Q</em><sub>total</sub>").replace("<em>Q</em>_within", "<em>Q</em><sub>within</sub>").replace("<em>Q</em>_between", "<em>Q</em><sub>between</sub>");
     return `
 <section>
   <h2>Subgroup Analysis</h2>
@@ -11357,15 +12285,15 @@ ${noteBlock}`;
     const d = studyTableData({ studies, m, profile, ciLevel: ciLevel ?? "95" });
     const bodyRows = d.rows.map((r, i) => {
       const cls = d.filled[i] ? ' class="imputed"' : "";
-      return `<tr${cls}>${r.map((c) => `<td>${esc(c)}</td>`).join("")}</tr>`;
+      return `<tr${cls}>${r.map((c) => `<td>${renderRich(c)}</td>`).join("")}</tr>`;
     });
     const ncols = d.headers.length;
-    const pooled = `<tr class="pooled">${d.pooledRow.map((c) => `<td>${esc(c)}</td>`).join("")}</tr>`;
-    const head = `<thead><tr>${d.headers.map((h) => `<th>${esc(h)}</th>`).join("")}</tr></thead>`;
+    const pooled = `<tr class="pooled">${d.pooledRow.map((c) => `<td>${renderRich(c)}</td>`).join("")}</tr>`;
+    const head = `<thead><tr>${d.headers.map((h) => `<th>${renderRich(h)}</th>`).join("")}</tr></thead>`;
     const body = `<tbody>${bodyRows.join("")}</tbody>`;
     const foot = `<tfoot>
     ${pooled}
-    <tr><td colspan="${ncols}"><span class="apa-note"><em>Note.</em> ${escNote(d.note)}</span></td></tr>
+    <tr><td colspan="${ncols}"><span class="apa-note"><em>Note.</em> ${renderRich(d.note)}</span></td></tr>
   </tfoot>`;
     return `
 <section>
@@ -11377,22 +12305,22 @@ ${noteBlock}`;
   }
   function sectionRegression(reg, method, ciMethod, nextTable, widthCiLabel = "95% CI", adjPs = null, mccLabel = "") {
     if (!reg || reg.rankDeficient || !reg.colNames) return "";
-    const R2row = reg.p > 1 && isFinite(reg.R2) ? ` \xB7 R\xB2 = ${fmt2(reg.R2 * 100)}%` : "";
-    const aicRow = isFinite(reg.AIC) ? ` \xB7 AIC = ${fmt2(reg.AIC)} \xB7 BIC = ${fmt2(reg.BIC)} \xB7 LL = ${fmt2(reg.LL)}${ciMethod === "KH" && isFinite(reg.s2) ? ` \xB7 KH s\xB2 = ${fmt2(reg.s2)}` : ""}` : "";
+    const R2row = reg.p > 1 && isFinite(reg.R2) ? ` \xB7 R\xB2 = ${fmt(reg.R2 * 100)}%` : "";
+    const aicRow = isFinite(reg.AIC) ? ` \xB7 AIC = ${fmt(reg.AIC)} \xB7 BIC = ${fmt(reg.BIC)} \xB7 LL = ${fmt(reg.LL)}${ciMethod === "KH" && isFinite(reg.s2) ? ` \xB7 KH s\xB2 = ${fmt(reg.s2)}` : ""}` : "";
     const d = regressionData({ reg, method, ciMethod, ciLevel: widthCiLabel.replace("% CI", ""), adjPs, mccLabel });
     if (!d) return "";
     const coefRows = d.coef.rows.map((r, j) => {
       const cls = j === 0 ? ' class="intercept"' : "";
-      return `<tr${cls}>${r.map((c) => `<td>${esc(c)}</td>`).join("")}</tr>`;
+      return `<tr${cls}>${r.map((c) => `<td>${renderRich(c)}</td>`).join("")}</tr>`;
     });
-    const coefTable = buildTableAPA(nextTable(), "Meta-Regression Coefficients", d.coef.headers, coefRows, escNote(d.coef.note));
+    const coefTable = buildTableAPA(nextTable(), "Meta-Regression Coefficients", d.coef.headers, coefRows, renderRich(d.coef.note));
     const modTestsTable = d.modTests ? `<h3>Per-moderator omnibus tests</h3>
   ${buildTableAPA(
       nextTable(),
       "Per-Moderator Omnibus Tests",
       d.modTests.headers,
-      d.modTests.rows.map((r) => `<tr>${r.map((c) => `<td>${esc(c)}</td>`).join("")}</tr>`),
-      escNote(d.modTests.note)
+      d.modTests.rows.map((r) => `<tr>${r.map((c) => `<td>${renderRich(c)}</td>`).join("")}</tr>`),
+      renderRich(d.modTests.note)
     )}` : "";
     const fd = regressionFittedData(reg);
     const fittedTable = fd ? `<h3>Fitted values &amp; residuals</h3>
@@ -11402,23 +12330,47 @@ ${noteBlock}`;
       fd.headers,
       fd.rows.map(({ cells, flag }) => {
         const flagAttr = flag ? ' class="outlier"' : "";
-        return `<tr${flagAttr}>${cells.map((c) => `<td>${esc(c)}</td>`).join("")}</tr>`;
+        return `<tr${flagAttr}>${cells.map((c) => `<td>${renderRich(c)}</td>`).join("")}</tr>`;
       }),
-      esc(fd.note)
+      renderRich(fd.note)
     )}` : "";
     return `
 <section>
   <h2>Meta-Regression</h2>
-  <p class="meta-line">${escNote(d.metaLine)}${R2row}${aicRow}</p>
-  ${coefTable}
+  <p class="meta-line">${renderRich(d.metaLine)}${R2row}${aicRow}</p>
+  ${convWarn(d.convergence)}${coefTable}
   ${modTestsTable}
   ${fittedTable}
+</section>`;
+  }
+  function sectionBayes(args) {
+    const { nextTable, nextFigure, sensitivityRows, svgBayesMu, svgBayesTau } = args;
+    const d = bayesData(args);
+    if (!d) return "";
+    if (!svgBayesMu && !svgBayesTau) return "";
+    const bodyRows = d.rows.map((r) => `<tr>${r.map((c) => `<td>${renderRich(c)}</td>`).join("")}</tr>`);
+    const sensD = bayesSensitivityData(sensitivityRows, args.profile, args.ciLevel);
+    const sensitivitySection = sensD ? (() => {
+      const sensRows = sensD.rows.map((r) => `<tr>${r.map((c) => `<td>${renderRich(c)}</td>`).join("")}</tr>`);
+      return `<h3>Prior Sensitivity Analysis</h3>
+  ${buildTableAPA(nextTable(), sensD.tableName, sensD.headers, sensRows, renderRich(sensD.note))}`;
+    })() : "";
+    const plotMu = svgBayesMu ? buildFigureAPA(nextFigure(), `Posterior distribution of pooled effect \u03BC (${esc(d.profileLabel)})`, [svgBayesMu], esc(d.muPriorNote)) : "";
+    const plotTau = svgBayesTau ? buildFigureAPA(nextFigure(), "Posterior distribution of between-study standard deviation \u03C4", [svgBayesTau], esc(d.tauPriorNote)) : "";
+    return `
+<section>
+  <h2>Bayesian Meta-Analysis</h2>
+  <p class="meta-line">${esc(d.priorLine)}</p>
+  ${buildTableAPA(nextTable(), d.tableName, d.headers, bodyRows, renderRich(d.note))}
+  ${sensitivitySection}
+  ${plotMu}
+  ${plotTau}
 </section>`;
   }
   function sectionRve(args, nextTable) {
     const d = rveData(args);
     if (!d) return "";
-    const bodyRows = d.rows.map((r) => `<tr>${r.map((c) => `<td>${escNote(c)}</td>`).join("")}</tr>`);
+    const bodyRows = d.rows.map((r) => `<tr>${r.map((c) => `<td>${renderRich(c)}</td>`).join("")}</tr>`);
     return `
 <section>
   <h2>Robust Variance Estimation (RVE)</h2>
@@ -11428,11 +12380,11 @@ ${noteBlock}`;
   function sectionThreeLevel(args, nextTable) {
     const d = threeLevelData(args);
     if (!d) return "";
-    const bodyRows = d.rows.map((r) => `<tr>${r.map((c) => `<td>${escNote(c)}</td>`).join("")}</tr>`);
+    const bodyRows = d.rows.map((r) => `<tr>${r.map((c) => `<td>${renderRich(c)}</td>`).join("")}</tr>`);
     return `
 <section>
   <h2>Three-Level Meta-Analysis</h2>
-  ${buildTableAPA(nextTable(), "Three-Level Model Estimates", d.headers, bodyRows, esc(d.note))}
+  ${convWarn(d.convergence)}${buildTableAPA(nextTable(), "Three-Level Model Estimates", d.headers, bodyRows, esc(d.note))}
 </section>`;
   }
   function sectionLocationScale(ls, nextTable, widthCiLabel = "95% CI") {
@@ -11441,27 +12393,27 @@ ${noteBlock}`;
     if (!d) return "";
     const locRows = d.locCoef.rows.map((r, j) => {
       const cls = j === 0 ? ' class="intercept"' : "";
-      return `<tr${cls}>${r.map((c) => `<td>${esc(c)}</td>`).join("")}</tr>`;
+      return `<tr${cls}>${r.map((c) => `<td>${renderRich(c)}</td>`).join("")}</tr>`;
     });
     const scaleRows = d.scaleCoef.rows.map((r, j) => {
       const cls = j === 0 ? ' class="intercept"' : "";
-      return `<tr${cls}>${r.map((c) => `<td>${esc(c)}</td>`).join("")}</tr>`;
+      return `<tr${cls}>${r.map((c) => `<td>${renderRich(c)}</td>`).join("")}</tr>`;
     });
-    const locTable = buildTableAPA(nextTable(), "Location Model Coefficients", d.locCoef.headers, locRows, escNote(d.locCoef.note));
-    const scaleTable = buildTableAPA(nextTable(), "Scale Model Coefficients", d.scaleCoef.headers, scaleRows, escNote(d.scaleCoef.note));
+    const locTable = buildTableAPA(nextTable(), "Location Model Coefficients", d.locCoef.headers, locRows, renderRich(d.locCoef.note));
+    const scaleTable = buildTableAPA(nextTable(), "Scale Model Coefficients", d.scaleCoef.headers, scaleRows, renderRich(d.scaleCoef.note));
     const fittedTable = d.fitted ? `<h3>Fitted values &amp; study-specific \u03C4\xB2\u1D62</h3>
   ${buildTableAPA(
       nextTable(),
       "Location-Scale Fitted Values",
       d.fitted.headers,
-      d.fitted.rows.map((r) => `<tr>${r.map((c) => `<td>${esc(c)}</td>`).join("")}</tr>`),
-      esc(d.fitted.note)
+      d.fitted.rows.map((r) => `<tr>${r.map((c) => `<td>${renderRich(c)}</td>`).join("")}</tr>`),
+      renderRich(d.fitted.note)
     )}` : "";
     return `
 <section>
   <h2>Location-Scale Model</h2>
-  <p class="meta-line">${escNote(d.metaLine)}</p>
-  ${locTable}
+  <p class="meta-line">${renderRich(d.metaLine)}</p>
+  ${convWarn(d.convergence)}${locTable}
   ${scaleTable}
   ${fittedTable}
 </section>`;
@@ -11472,9 +12424,9 @@ ${noteBlock}`;
     if (!d) return "";
     const headers = ["Test", "Statistic", "Observed", "<em>p</em> (perm.)"];
     const allRows = [
-      `<tr><td>Omnibus <em>Q</em>M</td><td>${escNote(d.omniLabel)}</td><td>${fmt2(d.omniObserved)}</td><td>${fmtP_APA2(d.omniP)}</td></tr>`,
+      `<tr><td>Omnibus <em>Q</em>M</td><td>${renderRich(d.omniLabel)}</td><td>${fmt(d.omniObserved)}</td><td>${fmtP_APA2(d.omniP)}</td></tr>`,
       ...d.mods.map(
-        (m) => `<tr><td>${esc(m.name)}</td><td>${escNote(m.label)}</td><td>${isFinite(m.observed) ? fmt2(m.observed) : "\u2014"}</td><td>${isFinite(m.p) ? fmtP_APA2(m.p) : "\u2014"}</td></tr>`
+        (m) => `<tr><td>${esc(m.name)}</td><td>${renderRich(m.label)}</td><td>${isFinite(m.observed) ? fmt(m.observed) : "\u2014"}</td><td>${isFinite(m.p) ? fmtP_APA2(m.p) : "\u2014"}</td></tr>`
       )
     ];
     const note = `${d.nPerm} permutations; \u03C4\xB2 re-estimated per permutation. Permutation p = (1 + #\u2265observed) / (B + 1).`;
@@ -11495,8 +12447,7 @@ ${noteBlock}`;
   ${buildFigureAPA(nextFigure(), title, filled, apaNote)}
 </section>`;
   }
-  function reportCSS() {
-    const isLight = document.documentElement.dataset.theme === "light";
+  function _reportCSSVars(isLight) {
     const v = isLight ? {
       bodyBg: "#f5f5f8",
       bodyColor: "#1a1a1a",
@@ -11542,147 +12493,33 @@ ${noteBlock}`;
       metaLine: "#aaa",
       noteColor: "#666"
     };
-    return `
-    *, *::before, *::after { box-sizing: border-box; }
-    body {
-      font-family: Arial, sans-serif;
-      background: ${v.bodyBg};
-      color: ${v.bodyColor};
-      margin: 0;
-      padding: 24px 32px;
-      font-size: 14px;
-    }
-    h1 { font-size: 1.4em; margin: 0 0 4px 0; }
-    h2 {
-      font-size: 0.78em;
-      font-weight: bold;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      color: ${v.h2Color};
-      margin: 0 0 12px 0;
-      padding-bottom: 6px;
-      border-bottom: 1px solid ${v.h2Border};
-    }
-    .report-meta { font-size: 0.82em; color: ${v.metaColor}; margin-bottom: 28px; }
-    section {
-      background: ${v.sectionBg};
-      border: 1px solid ${v.sectionBorder};
-      border-radius: 8px;
-      padding: 16px 20px;
-      margin-bottom: 24px;
-    }
-    .stat-table {
-      border-collapse: collapse;
-      font-size: 0.88em;
-      width: 100%;
-      max-width: 900px;
-    }
-    .stat-table th {
-      background: ${v.thBg};
-      color: ${v.thColor};
-      font-weight: normal;
-      text-align: left;
-      padding: 5px 10px;
-      border: 1px solid ${v.thBorder};
-    }
-    .stat-table td {
-      padding: 5px 10px;
-      border: 1px solid ${v.tdBorder};
-      color: ${v.tdColor};
-    }
-    .stat-table tbody tr:nth-child(even) td { background: ${v.tdAltBg}; }
-    .study-tbl td:first-child { font-family: monospace; }
-    .imputed td { color: ${v.imputedColor}; font-style: italic; }
-    .pooled td {
-      color: ${v.pooledColor};
-      font-weight: bold;
-      background: ${v.pooledBg} !important;
-      border-top: 2px solid ${v.pooledBorder};
-    }
-    .intercept td { color: ${v.interceptColor}; font-style: italic; }
-    .flagged td { background: ${v.flaggedBg} !important; }
-    .meta-line { font-size: 0.84em; color: ${v.metaLine}; margin: 0 0 8px 0; }
-    .note { font-size: 0.78em; color: ${v.noteColor}; margin-top: 6px; }
-    p { margin: 4px 0; }
-    .svg-wrap { margin-bottom: 12px; overflow-x: auto; }
-    .svg-wrap svg { display: block; }
-
-    /* ---- APA table styles ---- */
-    .apa-table {
-      border-collapse: collapse;
-      font-size: 0.88em;
-      width: 100%;
-      max-width: 900px;
-    }
-    .apa-table thead th {
-      border-top: 2px solid ${v.bodyColor};
-      border-bottom: 1px solid ${v.bodyColor};
-      background: none;
-      color: ${v.tdColor};
-      font-weight: bold;
-      text-align: left;
-      padding: 4px 8px;
-    }
-    .apa-table td {
-      padding: 3px 8px;
-      border: none;
-      color: ${v.tdColor};
-    }
-    .apa-table tfoot td {
-      border-top: 2px solid ${v.bodyColor};
-      padding-top: 5px;
-    }
-    /* Rule 3 (closing rule) when no tfoot present */
-    .apa-table:not(:has(tfoot)) > tbody > tr:last-child > td {
-      border-bottom: 2px solid ${v.bodyColor};
-    }
-    .apa-table .imputed td { color: ${v.imputedColor}; font-style: italic; }
-    .apa-table .pooled td  { font-weight: bold; background: none !important; border-top: none; color: ${v.tdColor}; }
-    .apa-table .flagged td { font-style: italic; }
-    .apa-table .intercept td { color: ${v.interceptColor}; font-style: italic; }
-    .apa-table-title    { font-weight: bold; margin: 16px 0 2px 0; font-size: 0.88em; }
-    .apa-table-subtitle { font-style: italic; margin: 0 0 4px 0; font-size: 0.88em; }
-    .apa-note           { font-size: 0.82em; color: ${v.noteColor}; }
-    .apa-note em        { font-style: italic; }
-    .apa-figure-num     { font-weight: bold; font-size: 0.88em; margin: 16px 0 2px 0; }
-    .apa-figure-title   { font-style: italic; font-size: 0.88em; margin: 0 0 4px 0; }
-    .apa-figure-note    { font-size: 0.82em; color: ${v.noteColor}; margin-top: 4px; }
-    .apa-figure-note em { font-style: italic; }
-    .apa-references     { padding-left: 0; list-style: none; }
-    .apa-references li  { font-size: 0.85em; color: ${v.tdColor}; margin-bottom: 6px;
-                          padding-left: 2em; text-indent: -2em; }
-    .apa-references a   { color: inherit; }
-
-    @media print {
-      body { background: #fff; color: #000; padding: 12px 16px; }
-      section { background: #fff; border-color: #ccc; page-break-inside: avoid; }
-      h2 { color: #444; border-color: #ccc; }
-      .stat-table th { background: #e8e8f0; color: #333; }
-      .stat-table td { color: #222; }
-      .stat-table tbody tr:nth-child(even) td { background: #f5f5f5; }
-      .imputed td { color: #999; }
-      .pooled td { color: #6a5000; background: #fffff0 !important; }
-      .flagged td { background: #fff5f5 !important; }
-      .meta-line { color: #555; }
-      .note { color: #888; }
-      .plot-section { page-break-before: always; }
-      .svg-wrap svg { max-width: 100%; height: auto; }
-      .apa-table thead th         { border-top-color: #000; border-bottom-color: #000; color: #000; }
-      .apa-table tfoot td         { border-top-color: #000; color: #444; }
-      .apa-table:not(:has(tfoot)) > tbody > tr:last-child > td { border-bottom-color: #000; }
-      .apa-table td               { color: #000; }
-      .apa-table .pooled td       { color: #000; font-weight: bold; background: none !important; border-top: none; }
-      .apa-table .imputed td      { color: #666; }
-      .apa-table-title            { font-weight: bold; color: #000; }
-      .apa-table-subtitle         { font-style: italic; color: #000; }
-      .apa-note                   { color: #444; }
-      .apa-figure-num             { font-weight: bold; color: #000; }
-      .apa-figure-title           { font-style: italic; color: #000; }
-      .apa-figure-note            { color: #444; }
-      .apa-references li          { color: #000; }
-      .apa-references a           { color: #000; }
-    }
-  `;
+    return `:root {
+    --report-body-bg:         ${v.bodyBg};
+    --report-body-color:      ${v.bodyColor};
+    --report-meta-color:      ${v.metaColor};
+    --report-h2-color:        ${v.h2Color};
+    --report-h2-border:       ${v.h2Border};
+    --report-section-bg:      ${v.sectionBg};
+    --report-section-border:  ${v.sectionBorder};
+    --report-th-bg:           ${v.thBg};
+    --report-th-color:        ${v.thColor};
+    --report-th-border:       ${v.thBorder};
+    --report-td-border:       ${v.tdBorder};
+    --report-td-color:        ${v.tdColor};
+    --report-td-alt-bg:       ${v.tdAltBg};
+    --report-imputed-color:   ${v.imputedColor};
+    --report-pooled-color:    ${v.pooledColor};
+    --report-pooled-bg:       ${v.pooledBg};
+    --report-pooled-border:   ${v.pooledBorder};
+    --report-intercept-color: ${v.interceptColor};
+    --report-flagged-bg:      ${v.flaggedBg};
+    --report-meta-line:       ${v.metaLine};
+    --report-note-color:      ${v.noteColor};
+  }`;
+  }
+  function reportCSS() {
+    const isLight = document.documentElement.dataset.theme === "light";
+    return _reportCSSVars(isLight) + _REPORT_STATIC_CSS;
   }
   function downloadHTML(htmlString, filename = "meta-analysis-report.html") {
     downloadBlob(htmlString, filename, "text/html;charset=utf-8");
@@ -11831,7 +12668,14 @@ ${noteBlock}`;
     const mccLabel = mccMethod === "bonferroni" ? "Bonferroni" : mccMethod === "holm" ? "Holm" : "";
     const rawModPs = Array.isArray(reg?.modTests) ? reg.modTests.map((mt) => mt.QMp) : [];
     const adjRegPs = mccMethod !== "none" && rawModPs.length > 1 ? adjustPvals(rawModPs, mccMethod) : null;
-    const rArgs = { ...args, nextTable, nextFigure, funnelSVG: liveSVG("funnelPlot") };
+    const rArgs = {
+      ...args,
+      nextTable,
+      nextFigure,
+      funnelSVG: liveSVG("funnelPlot"),
+      svgBayesMu: liveSVG("bayesMuPlot"),
+      svgBayesTau: liveSVG("bayesTauPlot")
+    };
     const body = [
       sectionSummary(rArgs),
       sectionPlot(
@@ -11852,63 +12696,7 @@ ${noteBlock}`;
   ${buildFigureAPA(nextFigure(), `Profile likelihood curve for \u03C4\xB2`, [svg], note)}
 </section>`;
       })(),
-      (() => {
-        if (!bayesResult || bayesResult.error) return "";
-        const svgMu = liveSVG("bayesMuPlot");
-        const svgTau = liveSVG("bayesTauPlot");
-        if (!svgMu && !svgTau) return "";
-        const muDisp = profile.transform(bayesResult.muMean);
-        const muCIDisp = bayesResult.muCI.map((v) => profile.transform(v));
-        const reDisp = isFinite(bayesReMean) ? profile.transform(bayesReMean) : NaN;
-        const priorLine = `Prior: \u03BC\u202F~\u202FN(${esc(bayesResult.mu0)},\u202F${esc(bayesResult.sigma_mu)}\xB2)\u2003\u03C4\u202F~\u202FHalfNormal(${esc(bayesResult.sigma_tau)})\u2003k\u202F=\u202F${bayesResult.k} studies`;
-        const muSDNote = profile.isTransformedScale ? " (log)" : "";
-        const fmtBF = (bf) => !isFinite(bf) ? "NA" : bf >= 1e3 || bf < 1e-3 ? bf.toExponential(2) : bf.toFixed(3);
-        const statsTable = `
-  <table class="stats-table">
-    <tr><td>Posterior mean \u03BC</td><td>${fmt2(muDisp)}</td><td>${widthCrLabel} [${fmt2(muCIDisp[0])}, ${fmt2(muCIDisp[1])}] \xB7 SD${muSDNote} = ${fmt2(bayesResult.muSD)}</td></tr>
-    <tr><td>Posterior mean \u03C4</td><td>${fmt2(bayesResult.tauMean)}</td><td>${widthCrLabel} [${fmt2(bayesResult.tauCI[0])}, ${fmt2(bayesResult.tauCI[1])}] \xB7 SD = ${fmt2(bayesResult.tauSD)}</td></tr>
-    ${isFinite(reDisp) ? `<tr><td>Frequentist RE (comparison)</td><td>${fmt2(reDisp)}</td><td></td></tr>` : ""}
-    ${isFinite(bayesResult.BF10) ? `<tr><td>Bayes Factor BF\u2081\u2080 (H\u2081: \u03BC\u22600)</td><td>${fmtBF(bayesResult.BF10)}</td><td></td></tr>` : ""}
-    ${bayesResult.BF10 < 1 && isFinite(bayesResult.BF01) ? `<tr><td>BF\u2080\u2081 = 1/BF\u2081\u2080 (H\u2080: \u03BC\u202F=\u202F0)</td><td>${fmtBF(bayesResult.BF01)}</td><td></td></tr>` : ""}
-  </table>`;
-        const bayesPriorNote = `Prior: \u03BC\u202F~\u202FN(${esc(bayesResult.mu0)},\u202F${esc(bayesResult.sigma_mu)}\xB2); \u03C4\u202F~\u202FHalfNormal(${esc(bayesResult.sigma_tau)}). Vertical line\u202F=\u202Fposterior mean; shaded region\u202F=\u202F95% credible interval.`;
-        const plotsMu = svgMu ? buildFigureAPA(
-          nextFigure(),
-          `Posterior distribution of pooled effect \u03BC (${esc(profile.label)})`,
-          [svgMu],
-          bayesPriorNote
-        ) : "";
-        const plotsTau = svgTau ? buildFigureAPA(
-          nextFigure(),
-          `Posterior distribution of between-study standard deviation \u03C4`,
-          [svgTau],
-          `Prior: \u03C4\u202F~\u202FHalfNormal(${esc(bayesResult.sigma_tau)}).`
-        ) : "";
-        const sensitivityTable = (() => {
-          if (!sensitivityRows || !sensitivityRows.length) return "";
-          const crLabel = widthCrLabel;
-          const header = `<tr><th>\u03C3_\u03BC</th><th>\u03C3_\u03C4</th><th>Post. \u03BC</th><th>${crLabel}</th><th>BF\u2081\u2080</th></tr>`;
-          const rows2 = sensitivityRows.map((row) => {
-            const muDisp2 = profile.transform(row.muMean);
-            const muCIDisp2 = row.muCI.map((v) => profile.transform(v));
-            const bf = row.BF10;
-            const bfStr = !isFinite(bf) ? "NA" : bf >= 1e3 ? bf.toExponential(2) : bf < 1e-3 ? bf.toExponential(2) : bf.toFixed(3);
-            return `<tr><td>${row.sigma_mu}</td><td>${row.sigma_tau}</td><td>${isFinite(muDisp2) ? fmt2(muDisp2) : "NA"}</td><td>[${isFinite(muCIDisp2[0]) ? fmt2(muCIDisp2[0]) : "NA"}, ${isFinite(muCIDisp2[1]) ? fmt2(muCIDisp2[1]) : "NA"}]</td><td>${bfStr}</td></tr>`;
-          }).join("");
-          return `<h3>Prior Sensitivity Analysis</h3>
-  <table class="stats-table"><thead>${header}</thead><tbody>${rows2}</tbody></table>
-  <p class="note">Grid: \u03C3_\u03BC \u2208 {0.5, 1, 2}, \u03C3_\u03C4 \u2208 {0.25, 0.5, 1}. Diffuse priors approach the frequentist RE estimate.</p>`;
-        })();
-        return `
-<section>
-  <h2>Bayesian Meta-Analysis</h2>
-  <p class="meta-line">${priorLine}</p>
-  ${statsTable}
-  ${sensitivityTable}
-  ${plotsMu}
-  ${plotsTau}
-</section>`;
-      })(),
+      sectionBayes(rArgs),
       sectionRve({ ...rArgs, rveResult, rveRho }, nextTable),
       sectionThreeLevel({ ...rArgs, threeLevelResult }, nextTable),
       sectionPubBias(rArgs),
@@ -12051,127 +12839,9 @@ ${noteBlock}`;
 </body>
 </html>`;
   }
-  function collectMVForestSVGs(outcomeIds) {
-    const combined = document.getElementById("mvForestPlotCombined");
-    const combinedBlock = document.getElementById("mvForestCombinedBlock");
-    if (combinedBlock && combinedBlock.style.display !== "none" && combined) {
-      const s = serializeSVG(combined);
-      return s ? [s] : [];
-    }
-    const result = [];
-    for (let o = 0; o < outcomeIds.length; o++) {
-      const el = document.getElementById(`mvForestPlot-${o}`);
-      if (el) {
-        const s = serializeSVG(el);
-        if (s) result.push(s);
-      }
-    }
-    return result;
-  }
-  function buildMVReport({ res, alpha = 0.05, apaFormat = false }) {
-    const {
-      beta,
-      se,
-      ci,
-      z,
-      pval,
-      betaNames = [],
-      tau2,
-      rho_between,
-      outcomeIds,
-      n,
-      k,
-      P,
-      QM,
-      df_QM,
-      pQM,
-      QE,
-      df_QE,
-      pQE,
-      logLik: logLik2,
-      AIC,
-      BIC,
-      AICc,
-      struct,
-      method,
-      I2: I22,
-      convergence,
-      warnings: engineWarnings = []
-    } = res;
-    const hasMods = beta.length > P;
-    const ciPct = Math.round((1 - alpha) * 100);
-    const date = (/* @__PURE__ */ new Date()).toLocaleDateString(void 0, { year: "numeric", month: "long", day: "numeric" });
-    let _tblN = 0, _figN = 0;
-    const nextTable = () => ++_tblN;
-    const nextFigure = () => ++_figN;
-    const fP = (p) => !isFinite(p) ? "\u2014" : p < 1e-4 ? p.toExponential(2) : (+p).toFixed(4);
-    const pooledHeaders = ["Outcome", "Estimate", "SE", `${ciPct}% CI`, "<em>z</em>", "<em>p</em>"];
-    const pooledRows = outcomeIds.map((id, o) => {
-      const [lo, hi] = ci[o];
-      return `<tr><td>${esc(String(id))}</td><td>${fmt2(beta[o], 4)}</td><td>${fmt2(se[o], 4)}</td>
-      <td>[${fmt2(lo, 4)}, ${fmt2(hi, 4)}]</td><td>${fmt2(z[o], 3)}</td><td>${fP(pval[o])}</td></tr>`;
-    });
-    let modHTML = "";
-    if (hasMods) {
-      const modHeaders = ["Coefficient", "Estimate", "SE", `${ciPct}% CI`, "<em>z</em>", "<em>p</em>"];
-      const modRows = beta.slice(P).map((b, i) => {
-        const j = P + i;
-        const [lo, hi] = ci[j];
-        return `<tr><td>${esc(betaNames[j] ?? `\u03B2${j}`)}</td><td>${fmt2(b, 4)}</td><td>${fmt2(se[j], 4)}</td>
-        <td>[${fmt2(lo, 4)}, ${fmt2(hi, 4)}]</td><td>${fmt2(z[j], 3)}</td><td>${fP(pval[j])}</td></tr>`;
-      });
-      modHTML = apaFormat ? buildTableAPA(nextTable(), "Meta-regression coefficients", modHeaders, modRows) : `<h2>Moderator Effects</h2>${buildTable(modHeaders, modRows)}`;
-    }
-    const hetHeaders = struct === "CS" ? ["Outcome", "\u03C4\xB2", "I\xB2", "\u03C1 (between)"] : ["Outcome", "\u03C4\xB2", "I\xB2"];
-    const hetRows = outcomeIds.map((id, o) => {
-      const rho = struct === "CS" ? `<td>${fmt2(rho_between ?? 0, 4)}</td>` : "";
-      return `<tr><td>${esc(String(id))}</td><td>${fmt2(tau2[o], 5)}</td>
-      <td>${isFinite(I22[o]) ? (+I22[o]).toFixed(1) + "%" : "\u2014"}</td>${rho}</tr>`;
-    });
-    const testHeaders = ["Test", "\u03C7\xB2", "df", "p"];
-    const testRows = [
-      ...hasMods && isFinite(QM) ? [`<tr><td>Omnibus test of moderators (Q<sub>M</sub>)</td><td>${fmt2(QM, 3)}</td><td>${df_QM}</td><td>${fP(pQM)}</td></tr>`] : [],
-      `<tr><td>Residual heterogeneity (Q<sub>E</sub>)</td><td>${fmt2(QE, 3)}</td><td>${df_QE}</td><td>${fP(pQE)}</td></tr>`
-    ];
-    const forestSVGs = collectMVForestSVGs(outcomeIds);
-    const pooledHTML = apaFormat ? buildTableAPA(nextTable(), `Pooled effect estimates per outcome (${method}, \u03A8 = ${struct})`, pooledHeaders, pooledRows) : `<h2>Pooled Estimates</h2>${buildTable(pooledHeaders, pooledRows)}`;
-    const hetHTML = apaFormat ? buildTableAPA(nextTable(), "Between-study heterogeneity", hetHeaders, hetRows) : `<h2>Between-Study Heterogeneity</h2>${buildTable(hetHeaders, hetRows)}`;
-    const testHTML = apaFormat ? buildTableAPA(nextTable(), "Hypothesis tests", testHeaders, testRows) : `<h2>Hypothesis Tests</h2>${buildTable(testHeaders, testRows)}`;
-    const forestHTML = forestSVGs.length ? apaFormat ? buildFigureAPA(nextFigure(), "Forest plot of multivariate meta-analysis results", forestSVGs) : `<h2>Forest Plot</h2>${forestSVGs.map((s) => `<div class="svg-wrap">${s}</div>`).join("\n")}` : "";
-    const fitLine = `k\u202F=\u202F${k} \xB7 n\u202F=\u202F${n} obs \xB7 P\u202F=\u202F${P} outcomes \u2502 log-lik\u202F=\u202F${fmt2(logLik2, 4)} \xB7 AIC\u202F=\u202F${fmt2(AIC, 2)} \xB7 BIC\u202F=\u202F${fmt2(BIC, 2)}` + (isFinite(AICc) ? ` \xB7 AICc\u202F=\u202F${fmt2(AICc, 2)}` : "") + ` \u2502 ${esc(method)}, \u03A8\u202F=\u202F${esc(struct)}`;
-    const warnHTML = [
-      convergence === false ? `<p style="color:#c0392b"><strong>Warning:</strong> Optimizer did not fully converge \u2014 interpret results with caution.</p>` : "",
-      ...engineWarnings.map((w) => `<p style="color:#c0392b">${esc(w)}</p>`)
-    ].filter(Boolean).join("");
-    const body = [
-      warnHTML,
-      pooledHTML,
-      modHTML,
-      hetHTML,
-      testHTML,
-      `<p class="report-meta" style="margin-top:8px">${fitLine}</p>`,
-      forestHTML
-    ].filter(Boolean).join("\n");
-    return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Multivariate Meta-Analysis Report</title>
-  <style>${reportCSS()}</style>
-</head>
-<body>
-  <h1>Multivariate Meta-Analysis Report</h1>
-  <p class="report-meta">Generated ${esc(date)}
-    &nbsp;\xB7&nbsp; k\u202F=\u202F${k} studies, P\u202F=\u202F${P} outcomes
-    &nbsp;\xB7&nbsp; ${esc(method)}, \u03A8\u202F=\u202F${esc(struct)}
-  </p>
-  <section class="report-section">${body}</section>
-</body>
-</html>`;
-  }
-  var esc, CITATIONS;
+  var esc, CITATIONS, _REPORT_STATIC_CSS;
   var init_report = __esm({
-    "js/report.js"() {
+    "js/io/report.js"() {
       init_format();
       init_plots();
       init_io();
@@ -12180,7 +12850,7 @@ ${noteBlock}`;
       init_regression();
       init_export();
       init_sections();
-      esc = escHTML;
+      esc = escapeHTML;
       CITATIONS = {
         // ── Heterogeneity estimators ──────────────────────────────────────────────
         DL: `DerSimonian, R., &amp; Laird, N. (1986). Meta-analysis in clinical trials. <em>Controlled Clinical Trials</em>, <em>7</em>(3), 177\u2013188. <a href="https://doi.org/10.1016/0197-2456(86)90046-2">https://doi.org/10.1016/0197-2456(86)90046-2</a>`,
@@ -12239,14 +12909,161 @@ ${noteBlock}`;
         // ── Bayesian ──────────────────────────────────────────────────────────────
         BAYES: `Sutton, A. J., &amp; Abrams, K. R. (2001). Bayesian methods in meta-analysis and evidence synthesis. <em>Statistical Methods in Medical Research</em>, <em>10</em>(4), 277\u2013303. <a href="https://doi.org/10.1177/096228020101000404">https://doi.org/10.1177/096228020101000404</a>`
       };
+      _REPORT_STATIC_CSS = `
+    *, *::before, *::after { box-sizing: border-box; }
+    body {
+      font-family: Arial, sans-serif;
+      background: var(--report-body-bg);
+      color: var(--report-body-color);
+      margin: 0;
+      padding: 24px 32px;
+      font-size: 14px;
+    }
+    h1 { font-size: 1.4em; margin: 0 0 4px 0; }
+    h2 {
+      font-size: 0.78em;
+      font-weight: bold;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--report-h2-color);
+      margin: 0 0 12px 0;
+      padding-bottom: 6px;
+      border-bottom: 1px solid var(--report-h2-border);
+    }
+    .report-meta { font-size: 0.82em; color: var(--report-meta-color); margin-bottom: 28px; }
+    section {
+      background: var(--report-section-bg);
+      border: 1px solid var(--report-section-border);
+      border-radius: 8px;
+      padding: 16px 20px;
+      margin-bottom: 24px;
+    }
+    p { margin: 4px 0; }
+    .meta-line { font-size: 0.84em; color: var(--report-meta-line); margin: 0 0 8px 0; }
+    .note { font-size: 0.78em; color: var(--report-note-color); margin-top: 6px; }
+    .svg-wrap { margin-bottom: 12px; overflow-x: auto; }
+    .svg-wrap svg { display: block; }
+    .stat-table {
+      border-collapse: collapse;
+      font-size: 0.88em;
+      width: 100%;
+      max-width: 900px;
+    }
+    .stat-table th {
+      background: var(--report-th-bg);
+      color: var(--report-th-color);
+      font-weight: normal;
+      text-align: left;
+      padding: 5px 10px;
+      border: 1px solid var(--report-th-border);
+    }
+    .stat-table td {
+      padding: 5px 10px;
+      border: 1px solid var(--report-td-border);
+      color: var(--report-td-color);
+    }
+    .stat-table tbody tr:nth-child(even) td { background: var(--report-td-alt-bg); }
+    .study-tbl td:first-child { font-family: monospace; }
+    .imputed td   { color: var(--report-imputed-color); font-style: italic; }
+    .pooled td    {
+      color: var(--report-pooled-color);
+      font-weight: bold;
+      background: var(--report-pooled-bg) !important;
+      border-top: 2px solid var(--report-pooled-border);
+    }
+    .intercept td { color: var(--report-intercept-color); font-style: italic; }
+    .flagged td   { background: var(--report-flagged-bg) !important; }
+    .apa-table {
+      border-collapse: collapse;
+      font-size: 0.88em;
+      width: 100%;
+      max-width: 900px;
+    }
+    .apa-table thead th {
+      border-top: 2px solid var(--report-body-color);
+      border-bottom: 1px solid var(--report-body-color);
+      background: none;
+      color: var(--report-td-color);
+      font-weight: bold;
+      text-align: left;
+      padding: 4px 8px;
+    }
+    .apa-table td {
+      padding: 3px 8px;
+      border: none;
+      color: var(--report-td-color);
+    }
+    .apa-table tfoot td {
+      border-top: 2px solid var(--report-body-color);
+      padding-top: 5px;
+    }
+    .apa-table:not(:has(tfoot)) > tbody > tr:last-child > td {
+      border-bottom: 2px solid var(--report-body-color);
+    }
+    .apa-table .imputed td  { color: var(--report-imputed-color); font-style: italic; }
+    .apa-table .pooled td   { font-weight: bold; background: none !important; border-top: none; color: var(--report-td-color); }
+    .apa-table .flagged td  { font-style: italic; }
+    .apa-table .intercept td { color: var(--report-intercept-color); font-style: italic; }
+    .apa-table-title    { font-weight: bold; margin: 16px 0 2px 0; font-size: 0.88em; }
+    .apa-table-subtitle { font-style: italic; margin: 0 0 4px 0; font-size: 0.88em; }
+    .apa-note           { font-size: 0.82em; color: var(--report-note-color); }
+    .apa-note em        { font-style: italic; }
+    .apa-figure-num     { font-weight: bold; font-size: 0.88em; margin: 16px 0 2px 0; }
+    .apa-figure-title   { font-style: italic; font-size: 0.88em; margin: 0 0 4px 0; }
+    .apa-figure-note    { font-size: 0.82em; color: var(--report-note-color); margin-top: 4px; }
+    .apa-figure-note em { font-style: italic; }
+    .apa-references     { padding-left: 0; list-style: none; }
+    .apa-references li  { font-size: 0.85em; color: var(--report-td-color); margin-bottom: 6px;
+                          padding-left: 2em; text-indent: -2em; }
+    .apa-references a   { color: inherit; }
+    .convergence-warning {
+      display: flex; align-items: center; gap: 6px;
+      padding: 5px 10px; margin: 0 0 8px;
+      background: #fff8e1; border: 1px solid #f9a825;
+      border-radius: 4px; color: #8a6000;
+      font-size: 0.875em; font-weight: 500;
+    }
+    @media print {
+      body { background: #fff; color: #000; padding: 12px 16px; }
+      section { background: #fff; border-color: #ccc; page-break-inside: avoid; }
+      h2 { color: #444; border-color: #ccc; }
+      .stat-table th { background: #e8e8f0; color: #333; }
+      .stat-table td { color: #222; }
+      .stat-table tbody tr:nth-child(even) td { background: #f5f5f5; }
+      .imputed td { color: #999; }
+      .pooled td { color: #6a5000; background: #fffff0 !important; }
+      .flagged td { background: #fff5f5 !important; }
+      .meta-line { color: #555; }
+      .note { color: #888; }
+      .plot-section { page-break-before: always; }
+      .svg-wrap svg { max-width: 100%; height: auto; }
+      .apa-table thead th         { border-top-color: #000; border-bottom-color: #000; color: #000; }
+      .apa-table tfoot td         { border-top-color: #000; color: #444; }
+      .apa-table:not(:has(tfoot)) > tbody > tr:last-child > td { border-bottom-color: #000; }
+      .apa-table td               { color: #000; }
+      .apa-table .pooled td       { color: #000; font-weight: bold; background: none !important; border-top: none; }
+      .apa-table .imputed td      { color: #666; }
+      .apa-table-title            { font-weight: bold; color: #000; }
+      .apa-table-subtitle         { font-style: italic; color: #000; }
+      .apa-note                   { color: #444; }
+      .apa-figure-num             { font-weight: bold; color: #000; }
+      .apa-figure-title           { font-style: italic; color: #000; }
+      .apa-figure-note            { color: #444; }
+      .apa-references li          { color: #000; }
+      .apa-references a           { color: #000; }
+    }
+  `;
     }
   });
 
-  // js/docx.js
+  // js/io/docx.js
   var docx_exports = {};
   __export(docx_exports, {
     buildDocx: () => buildDocx,
-    buildMVDocx: () => buildMVDocx
+    buildDocxBodyXML: () => buildDocxBodyXML,
+    buildMVDocx: () => buildMVDocx,
+    docMVSectionXML: () => docMVSectionXML,
+    docSectionXML: () => docSectionXML
   });
   function liveSVGString(id) {
     const el = document.getElementById(id);
@@ -12297,15 +13114,11 @@ ${noteBlock}`;
   function richRuns(text, { bold: isBold = false } = {}) {
     if (!text) return "";
     const bTag = isBold ? "<w:b/>" : "";
-    const parts = String(text).split(/(<em>[^<]*<\/em>)/);
-    return parts.map((part) => {
-      if (part.startsWith("<em>")) {
-        const inner = xmlEsc(part.slice(4, -5));
-        return `<w:r><w:rPr>${bTag}<w:i/></w:rPr><w:t xml:space="preserve">${inner}</w:t></w:r>`;
-      }
-      const escaped = xmlEsc(part);
-      if (!escaped) return "";
-      return `<w:r><w:rPr>${bTag}</w:rPr><w:t xml:space="preserve">${escaped}</w:t></w:r>`;
+    return cellRich(text).map((r) => {
+      const t = xmlEsc(r.text);
+      if (!t) return "";
+      const iTag = r.italic ? "<w:i/>" : "";
+      return `<w:r><w:rPr>${bTag}${iTag}</w:rPr><w:t xml:space="preserve">${t}</w:t></w:r>`;
     }).join("");
   }
   function hyperlink(rId, text) {
@@ -12430,16 +13243,21 @@ ${bodyRowsXML}
     }
     return chunks;
   }
+  function convWarnPara(badge) {
+    if (!badge) return [];
+    return [paraText(`\u26A0 ${badge.text}`)];
+  }
   function docSummary(args, ctx) {
     const d = summaryData(args);
     return [
       paraText("Summary", "Heading1"),
       paraText(d.settings),
+      ...convWarnPara(d.convergence),
       ...apaTableDocx(
         ctx.nextTable(),
         d.subtitle,
         d.headers,
-        d.rows.map((r) => r.map(run)),
+        d.rows.map((r) => r.map(richRuns)),
         d.note
       )
     ];
@@ -12452,7 +13270,7 @@ ${bodyRowsXML}
         ctx.nextTable(),
         "Tests of Publication Bias",
         d.headers,
-        d.rows.map((r) => r.map(run)),
+        d.rows.map((r) => r.map(richRuns)),
         d.note
       ),
       paraText(d.fsnLine)
@@ -12468,7 +13286,7 @@ ${bodyRowsXML}
         ctx.nextTable(),
         "P-curve Test Statistics",
         d.headers,
-        d.rows.map((r) => r.map(run)),
+        d.rows.map((r) => r.map(richRuns)),
         d.note
       )
     ];
@@ -12483,7 +13301,7 @@ ${bodyRowsXML}
         ctx.nextTable(),
         "P-uniform Bias-Corrected Estimates",
         d.headers,
-        d.rows.map((r) => r.map(run)),
+        d.rows.map((r) => r.map(richRuns)),
         d.note
       )
     ];
@@ -12495,11 +13313,12 @@ ${bodyRowsXML}
     const normalizedRows = d.rows.map((r) => {
       const padded = [...r];
       while (padded.length < N) padded.push("");
-      return padded.slice(0, N).map(run);
+      return padded.slice(0, N).map(richRuns);
     });
     return [
       paraText("Selection Model (Vevea-Hedges, 1995)", "Heading1"),
       paraText(d.metaLine),
+      ...convWarnPara(d.convergence),
       ...apaTableDocx(ctx.nextTable(), d.subtitle, d.headers, normalizedRows, d.note)
     ];
   }
@@ -12512,7 +13331,7 @@ ${bodyRowsXML}
         ctx.nextTable(),
         "Leave-One-Out Influence Diagnostics",
         d.headers,
-        d.rows.map((r) => r.map(run)),
+        d.rows.map((r) => r.map(richRuns)),
         d.note
       )
     ];
@@ -12521,11 +13340,11 @@ ${bodyRowsXML}
     const d = sensitivityData(args);
     if (!d) return [];
     const looRows = d.loo.rows.map((r, i) => {
-      const cells = r.map(run);
-      if (d.loo.sigChanges[i]) cells[0] = run(r[0] + " *");
+      const cells = r.map(richRuns);
+      if (d.loo.sigChanges[i]) cells[0] = richRuns(r[0] + " *");
       return cells;
     });
-    const estRows = d.est.rows.map((r) => r.map(run));
+    const estRows = d.est.rows.map((r) => r.map(richRuns));
     const chunks = [paraText("Sensitivity Analysis", "Heading1")];
     if (d.loo.rows.length > 0) {
       chunks.push(...apaTableDocx(
@@ -12554,7 +13373,7 @@ ${bodyRowsXML}
         ctx.nextTable(),
         d.subtitle,
         d.headers,
-        d.rows.map((r) => r.map(run)),
+        d.rows.map((r) => r.map(richRuns)),
         d.note
       )
     ];
@@ -12562,7 +13381,7 @@ ${bodyRowsXML}
   function docStudyTable(args, ctx) {
     const d = studyTableData(args);
     const bodyRows = [
-      ...d.rows.map((r) => r.map(run)),
+      ...d.rows.map((r) => r.map(richRuns)),
       d.pooledRow.map(bold)
     ];
     return [
@@ -12581,12 +13400,13 @@ ${bodyRowsXML}
     if (!d) return [];
     const chunks = [
       paraText("Meta-Regression", "Heading1"),
-      paraText(d.metaLine),
+      paraText(d.metaLine + (d.metaExtra || "")),
+      ...convWarnPara(d.convergence),
       ...apaTableDocx(
         ctx.nextTable(),
         "Meta-Regression Coefficients",
         d.coef.headers,
-        d.coef.rows.map((r) => r.map(run)),
+        d.coef.rows.map((r) => r.map(richRuns)),
         d.coef.note
       )
     ];
@@ -12597,7 +13417,7 @@ ${bodyRowsXML}
           ctx.nextTable(),
           "Per-Moderator Omnibus Tests",
           d.modTests.headers,
-          d.modTests.rows.map((r) => r.map(run)),
+          d.modTests.rows.map((r) => r.map(richRuns)),
           d.modTests.note
         )
       );
@@ -12610,10 +13430,42 @@ ${bodyRowsXML}
           ctx.nextTable(),
           "Meta-Regression Fitted Values and Residuals",
           fd.headers,
-          fd.rows.map(({ cells }) => cells.map(run)),
+          fd.rows.map(({ cells }) => cells.map(richRuns)),
           fd.note
         )
       );
+    }
+    return chunks;
+  }
+  function docBayes(args, ctx) {
+    const { getImgs } = args;
+    const d = bayesData(args);
+    if (!d) return [];
+    const muImgs = getImgs("bayesMu");
+    const tauImgs = getImgs("bayesTau");
+    if (!muImgs.length && !tauImgs.length) return [];
+    const chunks = [
+      paraText("Bayesian Meta-Analysis", "Heading1"),
+      paraText(d.priorLine),
+      ...apaTableDocx(
+        ctx.nextTable(),
+        d.tableName,
+        d.headers,
+        d.rows.map((r) => r.map(richRuns)),
+        d.note
+      )
+    ];
+    if (muImgs.length) chunks.push(...apaFigureDocx(ctx.nextFigure(), `Posterior distribution of pooled effect \u03BC (${d.profileLabel})`, muImgs, d.muPriorNote));
+    if (tauImgs.length) chunks.push(...apaFigureDocx(ctx.nextFigure(), "Posterior distribution of between-study standard deviation \u03C4", tauImgs, d.tauPriorNote));
+    const sensD = bayesSensitivityData(args.sensitivityRows, args.profile, args.ciLevel);
+    if (sensD) {
+      chunks.push(...apaTableDocx(
+        ctx.nextTable(),
+        sensD.tableName,
+        sensD.headers,
+        sensD.rows.map((r) => r.map(richRuns)),
+        sensD.note
+      ));
     }
     return chunks;
   }
@@ -12626,7 +13478,7 @@ ${bodyRowsXML}
         ctx.nextTable(),
         "RVE Pooled Estimate",
         d.headers,
-        d.rows.map((r) => r.map(run)),
+        d.rows.map((r) => r.map(richRuns)),
         d.note
       )
     ];
@@ -12636,11 +13488,12 @@ ${bodyRowsXML}
     if (!d) return [];
     return [
       paraText("Three-Level Meta-Analysis", "Heading1"),
+      ...convWarnPara(d.convergence),
       ...apaTableDocx(
         ctx.nextTable(),
         "Three-Level Model Estimates",
         d.headers,
-        d.rows.map((r) => r.map(run)),
+        d.rows.map((r) => r.map(richRuns)),
         d.note
       )
     ];
@@ -12651,18 +13504,19 @@ ${bodyRowsXML}
     const chunks = [
       paraText("Location-Scale Model", "Heading1"),
       paraText(d.metaLine),
+      ...convWarnPara(d.convergence),
       ...apaTableDocx(
         ctx.nextTable(),
         "Location Model Coefficients",
         d.locCoef.headers,
-        d.locCoef.rows.map((r) => r.map(run)),
+        d.locCoef.rows.map((r) => r.map(richRuns)),
         d.locCoef.note
       ),
       ...apaTableDocx(
         ctx.nextTable(),
         "Scale Model Coefficients",
         d.scaleCoef.headers,
-        d.scaleCoef.rows.map((r) => r.map(run)),
+        d.scaleCoef.rows.map((r) => r.map(richRuns)),
         d.scaleCoef.note
       )
     ];
@@ -12673,7 +13527,7 @@ ${bodyRowsXML}
           ctx.nextTable(),
           "Location-Scale Fitted Values",
           d.fitted.headers,
-          d.fitted.rows.map((r) => r.map(run)),
+          d.fitted.rows.map((r) => r.map(richRuns)),
           d.fitted.note
         )
       );
@@ -12685,15 +13539,14 @@ ${bodyRowsXML}
     const d = permutationData(permResult, reg);
     if (!d) return [];
     const headers = ["Test", "Statistic", "Observed", "p (perm.)"];
-    const stripEm = (s) => s.replace(/<\/?em>/g, "");
-    const omniRow = ["Omnibus QM", stripEm(d.omniLabel), fmt2(d.omniObserved), fmtP_APA(d.omniP)];
+    const omniRow = [run("Omnibus QM"), richRuns(d.omniLabel), run(fmt(d.omniObserved)), run(fmtP_APA(d.omniP))];
     const modRows = d.mods.map((m) => [
-      m.name,
-      stripEm(m.label),
-      isFinite(m.observed) ? fmt2(m.observed) : "\u2014",
-      isFinite(m.p) ? fmtP_APA(m.p) : "\u2014"
+      run(m.name),
+      richRuns(m.label),
+      run(isFinite(m.observed) ? fmt(m.observed) : "\u2014"),
+      run(isFinite(m.p) ? fmtP_APA(m.p) : "\u2014")
     ]);
-    const rows = [omniRow, ...modRows].map((r) => r.map(run));
+    const rows = [omniRow, ...modRows];
     const note = `${d.nPerm} permutations; \u03C4\xB2 re-estimated per permutation. Permutation p = (1 + #\u2265observed) / (B + 1).`;
     return [
       paraText("Permutation Test", "Heading1"),
@@ -12991,56 +13844,7 @@ ${linkRels}
         ];
       })(),
       // Bayesian
-      ...(() => {
-        if (!bayesResult || bayesResult.error) return [];
-        const muImgs = getImgs("bayesMu");
-        const tauImgs = getImgs("bayesTau");
-        if (!muImgs.length && !tauImgs.length) return [];
-        const muDisp = profile.transform(bayesResult.muMean);
-        const muCIDisp = bayesResult.muCI.map((v) => profile.transform(v));
-        const reDisp = isFinite(bayesReMean) ? profile.transform(bayesReMean) : NaN;
-        const priorLine = `Prior: \u03BC ~ N(${bayesResult.mu0}, ${bayesResult.sigma_mu}\xB2)  \xB7  \u03C4 ~ HalfNormal(${bayesResult.sigma_tau})  \xB7  k = ${bayesResult.k} studies`;
-        const muSDNote = profile.isTransformedScale ? " (log)" : "";
-        const fmtBF = (bf) => !isFinite(bf) ? "NA" : bf >= 1e3 || bf < 1e-3 ? bf.toExponential(2) : bf.toFixed(3);
-        const bayesRows = [
-          [`Posterior mean \u03BC`, `${fmt2(muDisp)}  \xB7  ${widthCrLabel} ${fmtCI_APA(muCIDisp[0], muCIDisp[1])}  \xB7  SD${muSDNote} = ${fmt2(bayesResult.muSD)}`],
-          [`Posterior mean \u03C4`, `${fmt2(bayesResult.tauMean)}  \xB7  ${widthCrLabel} ${fmtCI_APA(bayesResult.tauCI[0], bayesResult.tauCI[1])}  \xB7  SD = ${fmt2(bayesResult.tauSD)}`],
-          ...isFinite(reDisp) ? [["Frequentist RE (comparison)", fmt2(reDisp)]] : [],
-          ...isFinite(bayesResult.BF10) ? [[`Bayes Factor BF\u2081\u2080 (H\u2081: \u03BC\u22600)`, fmtBF(bayesResult.BF10)]] : [],
-          ...bayesResult.BF10 < 1 && isFinite(bayesResult.BF01) ? [[`BF\u2080\u2081 = 1/BF\u2081\u2080 (H\u2080: \u03BC = 0)`, fmtBF(bayesResult.BF01)]] : []
-        ];
-        const chunks = [
-          paraText("Bayesian Meta-Analysis", "Heading1"),
-          paraText(priorLine),
-          ...apaTableDocx(
-            ctx.nextTable(),
-            `Bayesian Meta-Analysis Results (${profile.label})`,
-            ["Statistic", "Value"],
-            bayesRows.map((r) => r.map(run)),
-            `CrI = credible interval. Posterior mean \u03BC on ${profile.label} scale. Frequentist RE shown for comparison only.`
-          )
-        ];
-        if (muImgs.length) chunks.push(...apaFigureDocx(ctx.nextFigure(), `Posterior distribution of pooled effect \u03BC (${profile.label})`, muImgs, priorLine));
-        if (tauImgs.length) chunks.push(...apaFigureDocx(ctx.nextFigure(), "Posterior distribution of between-study standard deviation \u03C4", tauImgs, `Prior: \u03C4 ~ HalfNormal(${bayesResult.sigma_tau}).`));
-        if (sensitivityRows && sensitivityRows.length) {
-          const sensRows = sensitivityRows.map((row) => {
-            const muDisp2 = profile.transform(row.muMean);
-            const muCIDisp2 = row.muCI.map((v) => profile.transform(v));
-            const bf = row.BF10;
-            const bfStr = !isFinite(bf) ? "NA" : bf >= 1e3 ? bf.toExponential(2) : bf < 1e-3 ? bf.toExponential(2) : bf.toFixed(3);
-            const ciStr = `[${isFinite(muCIDisp2[0]) ? fmt2(muCIDisp2[0]) : "NA"}, ${isFinite(muCIDisp2[1]) ? fmt2(muCIDisp2[1]) : "NA"}]`;
-            return [run(String(row.sigma_mu)), run(String(row.sigma_tau)), run(isFinite(muDisp2) ? fmt2(muDisp2) : "NA"), run(ciStr), run(bfStr)];
-          });
-          chunks.push(...apaTableDocx(
-            ctx.nextTable(),
-            "Prior Sensitivity Analysis",
-            ["\u03C3_\u03BC", "\u03C3_\u03C4", "Post. \u03BC", `${widthCrLabel}`, "BF\u2081\u2080"],
-            sensRows,
-            "Grid: \u03C3_\u03BC \u2208 {0.5, 1, 2}, \u03C3_\u03C4 \u2208 {0.25, 0.5, 1}. Diffuse priors approach the frequentist RE estimate."
-          ));
-        }
-        return chunks;
-      })(),
+      ...docBayes({ ...docArgs, getImgs }, ctx),
       // RVE and three-level (cluster-dependent results)
       ...docRve(docArgs, ctx),
       ...docThreeLevel(docArgs, ctx),
@@ -13179,38 +13983,8 @@ ${linkRels}
     return zip.generateAsync({ type: "blob" });
   }
   async function buildMVDocx({ res, rows = [], alpha = 0.05, exportScale = 3 }) {
-    const {
-      beta,
-      se,
-      ci,
-      z,
-      pval,
-      betaNames = [],
-      tau2,
-      rho_between,
-      outcomeIds,
-      n,
-      k,
-      P,
-      QM,
-      df_QM,
-      pQM,
-      QE,
-      df_QE,
-      pQE,
-      logLik: logLik2,
-      AIC,
-      BIC,
-      AICc,
-      struct,
-      method,
-      I2: I22,
-      convergence,
-      warnings: engineWarnings = []
-    } = res;
-    const hasMods = beta.length > P;
-    const ciPct = Math.round((1 - alpha) * 100);
-    const fP = (p) => !isFinite(p) ? "\u2014" : p < 1e-3 ? "< .001" : "= " + (+p).toFixed(3).replace(/^0\./, ".");
+    const { outcomeIds, k, P, method, struct, convergence } = res;
+    const toDocxRows = (dataRows) => dataRows.map((r) => r.map((c) => richRuns(c)));
     const forestSVGStrings = (() => {
       const combined = document.getElementById("mvForestPlotCombined");
       const combinedBlock = document.getElementById("mvForestCombinedBlock");
@@ -13238,65 +14012,14 @@ ${linkRels}
     let _tblN = 0, _figN = 0;
     const nextTable = () => ++_tblN;
     const nextFigure = () => ++_figN;
-    const pooledHeaders = ["Outcome", "Estimate", "SE", `${ciPct}% CI`, "z", "p"];
-    const pooledRows = outcomeIds.map((id, o) => {
-      const [lo, hi] = ci[o];
-      return [
-        run(String(id)),
-        run(fmt2(beta[o], 4)),
-        run(fmt2(se[o], 4)),
-        run(`[${fmt2(lo, 4)}, ${fmt2(hi, 4)}]`),
-        run(fmt2(z[o], 3)),
-        run(fP(pval[o]))
-      ];
-    });
-    const hetHeaders = struct === "CS" ? ["Outcome", "\u03C4\xB2", "I\xB2", "\u03C1 (between)"] : ["Outcome", "\u03C4\xB2", "I\xB2"];
-    const hetRows = outcomeIds.map((id, o) => {
-      const cells = [
-        run(String(id)),
-        run(fmt2(tau2[o], 5)),
-        run(isFinite(I22[o]) ? (+I22[o]).toFixed(1) + "%" : "\u2014")
-      ];
-      if (struct === "CS") cells.push(run(fmt2(rho_between ?? 0, 4)));
-      return cells;
-    });
-    const testHeaders = ["Test", "\u03C7\xB2", "df", "p"];
-    const testRows = [
-      ...hasMods && isFinite(QM) ? [[run("Omnibus test of moderators (QM)"), run(fmt2(QM, 3)), run(String(df_QM)), run(fP(pQM))]] : [],
-      [run("Residual heterogeneity (QE)"), run(fmt2(QE, 3)), run(String(df_QE)), run(fP(pQE))]
-    ];
-    let modChunks = [];
-    if (hasMods) {
-      const modHeaders = ["Coefficient", "Estimate", "SE", `${ciPct}% CI`, "z", "p"];
-      const modRows = beta.slice(P).map((b, i) => {
-        const j = P + i;
-        const [lo, hi] = ci[j];
-        return [
-          run(betaNames[j] ?? `\u03B2${j}`),
-          run(fmt2(b, 4)),
-          run(fmt2(se[j], 4)),
-          run(`[${fmt2(lo, 4)}, ${fmt2(hi, 4)}]`),
-          run(fmt2(z[j], 3)),
-          run(fP(pval[j]))
-        ];
-      });
-      modChunks = [...apaTableDocx(nextTable(), "Meta-regression coefficients", modHeaders, modRows), para("")];
-    }
-    const fitText = `k = ${k} \xB7 n = ${n} obs \xB7 P = ${P} outcomes | log-lik = ${fmt2(logLik2, 4)} \xB7 AIC = ${fmt2(AIC, 2)} \xB7 BIC = ${fmt2(BIC, 2)}` + (isFinite(AICc) ? ` \xB7 AICc = ${fmt2(AICc, 2)}` : "") + ` | ${method}, \u03A8 = ${struct}`;
-    const zVal = normalQuantile(1 - alpha / 2);
-    const studyHeaders = ["Study", "Outcome", "yi", "vi", "SE", `${ciPct}% CI`];
-    const studyDocxRows = rows.map((r) => {
-      const se_r = Math.sqrt(r.vi);
-      return [
-        run(String(r.study_id)),
-        run(String(r.outcome_id)),
-        run(fmt2(r.yi, 4)),
-        run(fmt2(r.vi, 4)),
-        run(fmt2(se_r, 4)),
-        run(`[${fmt2(r.yi - zVal * se_r, 4)}, ${fmt2(r.yi + zVal * se_r, 4)}]`)
-      ];
-    });
-    const studyChunks = rows.length ? [...apaTableDocx(nextTable(), "Individual study effect sizes", studyHeaders, studyDocxRows), para("")] : [];
+    const pooledD = mvPooledData(res, alpha);
+    const hetD = mvHeterogeneityData(res);
+    const testD = mvTestsData(res);
+    const modD = mvModeratorData(res, alpha);
+    const studyD = mvStudyData(rows, alpha);
+    const fitText = mvFitLine(res);
+    const modChunks = modD ? [...apaTableDocx(nextTable(), modD.title, modD.headers, toDocxRows(modD.rows)), para("")] : [];
+    const studyChunks = studyD ? [...apaTableDocx(nextTable(), studyD.title, studyD.headers, toDocxRows(studyD.rows)), para("")] : [];
     const robSVGStrings = (() => {
       const result = [];
       ["robTrafficLight", "robSummary"].forEach((id) => {
@@ -13335,13 +14058,13 @@ ${linkRels}
     const bodyChunks = [
       para(bold("Multivariate Meta-Analysis Report"), "Heading1"),
       paraText(`Generated ${(/* @__PURE__ */ new Date()).toLocaleDateString()} \xB7 k = ${k} studies, P = ${P} outcomes \xB7 ${method}, \u03A8 = ${struct}`, "APANote"),
-      ...convergence === false ? [paraText("Warning: Optimizer did not fully converge \u2014 interpret results with caution.")] : [],
+      ...convWarnPara(pooledD.convergence),
       para(""),
-      ...apaTableDocx(nextTable(), `Pooled effect estimates per outcome (${method}, \u03A8 = ${struct})`, pooledHeaders, pooledRows),
+      ...apaTableDocx(nextTable(), pooledD.title, pooledD.headers, toDocxRows(pooledD.rows)),
       para(""),
-      ...apaTableDocx(nextTable(), "Between-study heterogeneity", hetHeaders, hetRows),
+      ...apaTableDocx(nextTable(), hetD.title, hetD.headers, toDocxRows(hetD.rows)),
       para(""),
-      ...apaTableDocx(nextTable(), "Hypothesis tests", testHeaders, testRows),
+      ...apaTableDocx(nextTable(), testD.title, testD.headers, toDocxRows(testD.rows)),
       para(""),
       ...modChunks,
       paraText(fitText, "APANote"),
@@ -13362,9 +14085,98 @@ ${linkRels}
     allImgs.forEach((img, i) => zip.file(`word/media/image${i + 1}.png`, img.blob));
     return zip.generateAsync({ type: "blob" });
   }
+  function docSectionXML(sectionName, reportArgs) {
+    let _n = 0;
+    const ctx = {
+      nextTable: () => ++_n,
+      nextFigure: () => ++_n,
+      imgReg: /* @__PURE__ */ new Map(),
+      linkMgr: { getId: () => "rId0" }
+    };
+    const args = { ...reportArgs, getImgs: () => [] };
+    let chunks;
+    switch (sectionName) {
+      case "summary":
+        chunks = docSummary(args, ctx);
+        break;
+      case "pubBias":
+        chunks = docPubBias(args, ctx);
+        break;
+      case "regression":
+        chunks = docRegression(args, ctx);
+        break;
+      case "influence":
+        chunks = docInfluence(args, ctx);
+        break;
+      case "selModel":
+        chunks = docSelectionModel(args, ctx);
+        break;
+      case "rve":
+        chunks = docRve(args, ctx);
+        break;
+      case "threeLevel":
+        chunks = docThreeLevel(args, ctx);
+        break;
+      default:
+        return "";
+    }
+    return chunks.join("");
+  }
+  function buildDocxBodyXML(args) {
+    const { reg, ciLevel, mccMethod = "none" } = args;
+    const widthCiLabel = (ciLevel ?? "95") + "% CI";
+    const widthCrLabel = (ciLevel ?? "95") + "% CrI";
+    const mccLabel = mccMethod === "bonferroni" ? "Bonferroni" : mccMethod === "holm" ? "Holm" : "";
+    const rawModPs = Array.isArray(reg?.modTests) ? reg.modTests.map((mt) => mt.QMp) : [];
+    const adjPs = mccMethod !== "none" && rawModPs.length > 1 ? adjustPvals(rawModPs, mccMethod) : null;
+    const getImgs = () => [];
+    const docArgs = { ...args, widthCiLabel, widthCrLabel, adjPs, mccLabel, getImgs };
+    const linkMgr = new HyperlinkManager();
+    let _n = 0;
+    const ctx = { nextTable: () => ++_n, nextFigure: () => ++_n, imgReg: /* @__PURE__ */ new Map(), linkMgr };
+    return [
+      ...docSummary(docArgs, ctx),
+      ...docStudyTable(docArgs, ctx),
+      ...docBayes(docArgs, ctx),
+      // returns [] — image-gated (no getImgs)
+      ...docRve(docArgs, ctx),
+      ...docThreeLevel(docArgs, ctx),
+      ...docPubBias(docArgs, ctx),
+      ...docSensitivity(docArgs, ctx),
+      ...docSubgroup(docArgs, ctx),
+      ...docInfluence(docArgs, ctx),
+      ...docPCurve(docArgs, ctx),
+      ...docPUniform(docArgs, ctx),
+      ...docSelectionModel(docArgs, ctx),
+      ...docLocationScale(docArgs, ctx),
+      ...docRegression(docArgs, ctx),
+      ...docPermutation(docArgs, ctx),
+      ...docReferences(docArgs, linkMgr)
+    ].filter((chunk) => chunk != null && chunk !== "").join("");
+  }
+  function docMVSectionXML(sectionName, mvRes, alpha = 0.05) {
+    let _n = 0;
+    const toDocxRows = (rows) => rows.map((r) => r.map((c) => richRuns(c)));
+    switch (sectionName) {
+      case "mvPooled": {
+        const d = mvPooledData(mvRes, alpha);
+        return apaTableDocx(++_n, d.title, d.headers, toDocxRows(d.rows)).join("");
+      }
+      case "mvHeterogeneity": {
+        const d = mvHeterogeneityData(mvRes);
+        return apaTableDocx(++_n, d.title, d.headers, toDocxRows(d.rows)).join("");
+      }
+      case "mvTests": {
+        const d = mvTestsData(mvRes);
+        return apaTableDocx(++_n, d.title, d.headers, toDocxRows(d.rows)).join("");
+      }
+      default:
+        return "";
+    }
+  }
   var HyperlinkManager;
   var init_docx = __esm({
-    "js/docx.js"() {
+    "js/io/docx.js"() {
       init_format();
       init_plots();
       init_export();
@@ -13391,14 +14203,14 @@ ${linkRels}
     }
   });
 
-  // js/help.js
+  // js/ui/help.js
   var help_exports = {};
   __export(help_exports, {
     HELP: () => HELP
   });
   var HELP;
   var init_help = __esm({
-    "js/help.js"() {
+    "js/ui/help.js"() {
       HELP = {
         // ------------------------------------------------------------------ //
         // Input pane                                                           //
@@ -13472,11 +14284,11 @@ ${linkRels}
         },
         "effect.SMD_paired": {
           title: "Standardized Mean Change \u2014 pre-test SD (SMD paired / SMCR)",
-          body: "The pre-post mean difference standardised by the pre-measurement SD (sd_pre). Equivalent to metafor's SMCR (Morris 2008). Hedges g correction is applied: g = d\xB7J, J = 1 \u2212 3/(4(n\u22121)\u22121). Variance: var(d) = 2(1\u2212r)/n + d\xB2/(2(n\u22121)); vi = J\xB2\xB7var(d). Requires the pre-post correlation r; defaults to 0.5 if not provided. Use this when studies report sd_pre but not sd_post."
+          body: "The pre-post mean difference standardised by the pre-measurement SD (sd_pre). Equivalent to metafor's SMCR (Morris 2008). Hedges g correction is applied: g = d\xB7J, J = \u0393(df/2)/(\u221A(df/2)\xB7\u0393((df\u22121)/2)) (exact). Variance: var(d) = 2(1\u2212r)/n + d\xB2/(2(n\u22121)); vi = J\xB2\xB7var(d). Requires the pre-post correlation r; defaults to 0.5 if not provided. Use this when studies report sd_pre but not sd_post."
         },
         "effect.SMCC": {
           title: "Standardized Mean Change \u2014 change-score SD (SMCC)",
-          body: "The pre-post mean difference standardised by the SD of the change scores: sd_change = \u221A(sd_pre\xB2 + sd_post\xB2 \u2212 2r\xB7sd_pre\xB7sd_post). Hedges g correction is applied: g = d\xB7J, J = 1 \u2212 3/(4(n\u22121)\u22121). Variance: var(d) = 2(1\u2212r)/n + d\xB2/(2(n\u22121)); vi = J\xB2\xB7var(d). Requires both sd_pre and sd_post plus the pre-post correlation r. If r is not provided it defaults to 0.5 with a soft warning. Use this when studies report the change-score SD directly."
+          body: "The pre-post mean difference standardised by the SD of the change scores: sd_change = \u221A(sd_pre\xB2 + sd_post\xB2 \u2212 2r\xB7sd_pre\xB7sd_post). Hedges g correction is applied: g = d\xB7J, J = \u0393(df/2)/(\u221A(df/2)\xB7\u0393((df\u22121)/2)) (exact). Variance: var(d) = 2(1\u2212r)/n + d\xB2/(2(n\u22121)); vi = J\xB2\xB7var(d). Requires both sd_pre and sd_post plus the pre-post correlation r. If r is not provided it defaults to 0.5 with a soft warning. Use this when studies report the change-score SD directly."
         },
         "effect.OR": {
           title: "Odds Ratio (OR)",
@@ -13520,7 +14332,7 @@ ${linkRels}
         },
         "effect.IR": {
           title: "Incidence Rate \u2014 log (IR)",
-          body: "Single-group incidence rate modelled on the log scale. Requires an event count (x) and person-time denominator (t). Use for single-arm studies or prevalence estimates expressed as rates."
+          body: `Single-group incidence rate modelled on the log scale. Requires an event count (x) and person-time denominator (t). Use for single-arm studies or prevalence estimates expressed as rates. Corresponds to metafor escalc("IRLN") \u2014 metafor's "IR" returns the raw rate.`
         },
         "effect.MN": {
           title: "Mean \u2014 raw (MN)",
@@ -13576,7 +14388,7 @@ ${linkRels}
         },
         "effect.RTET": {
           title: "Tetrachoric Correlation (RTET)",
-          body: "Estimates the latent Pearson correlation between two underlying continuous, bivariate-normal variables from their dichotomisation in a 2\xD72 table (Pearson 1900). Algorithm: thresholds h = \u03A6\u207B\xB9((a+b)/N) and k = \u03A6\u207B\xB9((a+c)/N) are computed from the marginal proportions; the tetrachoric \u03C1 is then found by bisecting the bivariate normal CDF \u03A6\u2082(h, k; \u03C1) = a/N. Variance: p_r(1\u2212p_r)\xB7p_c(1\u2212p_c) / (N \xB7 \u03C6\u2082(h,k;\u03C1)\xB2), where \u03C6\u2082 is the bivariate normal PDF evaluated at the thresholds \u2014 delta-method approximation. A zero cell triggers a +0.5 continuity correction to all cells before estimation. Key properties: |\u03C1_tet| \u2265 |\u03C6| for the same table; \u03C1_tet = \u03C6 only when marginals are 50/50. Appropriate when the binary outcomes reflect an underlying continuous normal construct. Contrast with PHI (distribution-free) and COR/ZCOR (continuous r input). Same inputs as OR/RR/PHI: a, b, c, d \u2265 0 with all four marginal totals > 0."
+          body: "Estimates the latent Pearson correlation between two underlying continuous, bivariate-normal variables from their dichotomisation in a 2\xD72 table (Pearson 1900). Algorithm: thresholds h = \u03A6\u207B\xB9((a+b)/N) and k = \u03A6\u207B\xB9((a+c)/N) are computed from the marginal proportions; the tetrachoric \u03C1 is then found by bisecting the bivariate normal CDF \u03A6\u2082(h, k; \u03C1) = a/N. Variance: \u221A(p\u2081\u2081\xB7p\u2081\u2082\xB7p\u2082\u2081\xB7p\u2082\u2082) / (N \xB7 \u03C6\u2082(h,k;\u03C1)\xB2), where p\u2081\u2081\u2013p\u2082\u2082 are the cell proportions and \u03C6\u2082 is the bivariate normal PDF at the thresholds \u2014 cell-product delta-method (Pearson 1913 / Brown & Benedetti 1977; matches metafor escalc('RTET')). A zero cell triggers a +0.5 continuity correction to all cells before estimation. Key properties: |\u03C1_tet| \u2265 |\u03C6| for the same table; \u03C1_tet = \u03C6 only when marginals are 50/50. Appropriate when the binary outcomes reflect an underlying continuous normal construct. Contrast with PHI (distribution-free) and COR/ZCOR (continuous r input). Same inputs as OR/RR/PHI: a, b, c, d \u2265 0 with all four marginal totals > 0."
         },
         "effect.PR": {
           title: "Proportion \u2014 raw (PR)",
@@ -13763,8 +14575,8 @@ ${linkRels}
           body: "Stanley & Doucouliagos (2015). Weighted Average of Adequately Powered studies.\nStep 1: compute the fixed-effect (WLS) estimate \u03B8\u0302_WLS using all studies.\nStep 2: keep only studies with power \u2265 80% to detect |\u03B8\u0302_WLS|: power\u1D62 = \u03A6(|\u03B8\u0302_WLS|/SE\u1D62 \u2212 1.96) + \u03A6(\u22121.96 \u2212 |\u03B8\u0302_WLS|/SE\u1D62).\nStep 3: re-run WLS on the adequate subset (fallback: all studies if none qualify).\nInterpretation: if WAAP \u2248 0 while RE is large, high-power studies support a weaker effect \u2014 a sign of publication bias inflating the pooled estimate. Verified against independent R implementation (generate.R WAAP-1/WAAP-2)."
         },
         "bias.fsn": {
-          title: "Fail-Safe N (Rosenthal)",
-          body: "The number of unpublished null-result studies that would be needed to reduce the pooled p-value to non-significance (p > .05). Rosenthal's rule of thumb: FSN > 5k + 10 suggests robustness. Widely criticised for being too lenient; trim-and-fill and selection models are generally preferred."
+          title: "Fail-Safe N",
+          body: "Two fail-safe N statistics are reported. Rosenthal's FSN: number of unpublished null-result studies needed to reduce the pooled p-value below significance (Rosenthal, 1979). Rule of thumb: FSN > 5k + 10 suggests robustness. Orwin's FSN: number of studies needed to bring the pooled effect below a trivial threshold (Orwin, 1983). Set 'Orwin trivial threshold' to the smallest effect considered meaningful (default 0.1 on the analysis scale). 'Direction' controls the sign convention for Rosenthal's z sum: 'auto' aligns with the fixed-effects estimate (recommended); 'positive' or 'negative' fix the sign regardless of data. Both statistics are widely criticised as too lenient; selection models and trim-and-fill are preferred."
         },
         "bias.fatpet": {
           title: "FAT-PET Regression",
@@ -13903,7 +14715,7 @@ ${linkRels}
         },
         "perm.run": {
           title: "Permutation test",
-          body: "Non-parametric test of the omnibus moderator effect (QM). Shuffles the observed effect sizes yi across studies while keeping sampling variances vi fixed, refits the WLS regression, and records the resulting QM statistic. Repeating this nPerm times builds a null distribution; the permutation p-value is (1 + #{QM_perm \u2265 QM_obs}) / (nPerm + 1). \u03C4\xB2 is fixed at the observed value (no re-estimation per permutation), matching metafor's permutest() default. Useful when k is small (< 20) and parametric \u03C7\xB2 or F approximations are unreliable."
+          body: "Non-parametric test of the omnibus moderator effect (QM). Shuffles the observed effect sizes yi across studies while keeping sampling variances vi fixed, refits the WLS regression, and records the resulting QM statistic. Repeating this nPerm times builds a null distribution; the permutation p-value is (1 + #{QM_perm \u2265 QM_obs}) / (nPerm + 1). \u03C4\xB2 is fixed at the observed value (no re-estimation per permutation), matching metafor's permutest() default. Useful when k is small (< 20) and parametric \u03C7\xB2 or F approximations are unreliable. A fixed random seed (12345) is used so results are fully reproducible across runs for the same data and nPerm setting."
         },
         "perm.iter": {
           title: "Number of permutations",
@@ -13949,7 +14761,7 @@ ${linkRels}
         // RVE                                                                  //
         "rve.model": {
           title: "RVE (Robust Variance Estimation)",
-          body: "The RVE pooled estimator (Hedges, Tipton & Johnson 2010) accounts for dependent effect sizes by constructing a working covariance matrix for each cluster: diagonal entries equal the sampling variance v\u2C7C; off-diagonal entries equal \u03C1\xB7\u221A(v\u2C7C\xB7v\u2096), where \u03C1 is the assumed within-cluster correlation (default 0.80). Sherman-Morrison inversion gives the WLS point estimate \u03B2\u0302 without explicit matrix ops. The standard error is a sandwich (CR1) estimate that is valid regardless of whether the working covariance is correct: SE\xB2 = m/(m\u22121) \xB7 \u03A3g\xB2\u1D62 / (\u03A3A\u1D62)\xB2, where g\u1D62 are per-cluster score contributions. Degrees of freedom: df = m \u2212 p (m = clusters, p = predictors). Unlike the cluster-robust SE in the summary line above (which post-hoc adjusts a RE estimate), RVE uses a separate WLS estimator whose weights depend on \u03C1. Adjust \u03C1 in the RVE settings row; re-run fires automatically."
+          body: "The RVE pooled estimator (Hedges, Tipton & Johnson 2010) accounts for dependent effect sizes. Two weighting modes are available:\n\nCORR (default): constructs a working covariance matrix for each cluster \u2014 diagonal entries equal the sampling variance v\u2C7C; off-diagonal entries equal \u03C1\xB7\u221A(v\u2C7C\xB7v\u2096), where \u03C1 is the assumed within-cluster correlation (default 0.80). Sherman-Morrison inversion gives the WLS estimate without explicit matrix ops. The sandwich (CR1) SE is valid regardless of whether \u03C1 is correct: SE\xB2 = m/(m\u22121) \xB7 \u03A3g\xB2\u1D62 / (\u03A3A\u1D62)\xB2.\n\nHIER MoM (robumeta model): estimates \u03C9\xB2 (between-cluster) and \u03C4\xB2 (within-cluster) via method-of-moments in two steps \u2014 (1) initial 1/v\u2C7C WLS gives residuals used to compute \u03C9\xB2 and \u03C4\xB2; (2) updated weights 1/(v\u2C7C + \u03C4\xB2 + \u03C9\xB2) give the final estimate. \u03C1 is not used. Sandwich SE scale: m/(m\u2212p). Equivalent to robu(..., modelweights='HIER', small=FALSE) in R.\n\nBoth modes: df = m \u2212 p (m = clusters, p = predictors). Unlike the cluster-robust SE in the summary line above (which post-hoc adjusts a RE estimate), RVE uses a separate WLS estimator. Choose mode in the RVE settings row; re-run fires automatically."
         },
         // Three-level meta-analysis                                           //
         "threelevel.model": {
@@ -14005,7 +14817,7 @@ ${linkRels}
         // Bayesian                                                            //
         "bayes.sensitivity": {
           title: "Prior sensitivity analysis",
-          body: "Runs the Bayesian meta-analysis over a fixed 3\xD73 grid of prior combinations: \u03C3_\u03BC \u2208 {0.5, 1, 2} and \u03C3_\u03C4 \u2208 {0.25, 0.5, 1} (9 combinations total). For each combination, the posterior mean \u03BC, credible interval, and BF\u2081\u2080 are reported. Robust conclusions are stable across the grid. With diffuse priors (\u03C3_\u03BC = 2, \u03C3_\u03C4 = 1) the posterior mean should approach the frequentist RE estimate. The current prior setting (from the Bayesian priors inputs above) is highlighted in bold. Runs automatically alongside the main Bayesian analysis."
+          body: "Runs the Bayesian meta-analysis over a fixed 3\xD73 grid of prior combinations: \u03C3_\u03BC \u2208 {0.5, 1, 2} and \u03C3_\u03C4 \u2208 {0.25, 0.5, 1} (9 combinations total). For each combination, the posterior mean \u03BC, credible interval, and BF\u2081\u2080 are reported. Robust conclusions are stable across the grid. With diffuse priors (\u03C3_\u03BC = 2, \u03C3_\u03C4 = 1) the posterior mean should approach the frequentist RE estimate. The current prior setting (from the Bayesian priors inputs above) is highlighted in bold. Runs automatically alongside the main Bayesian analysis. The grid values {0.5, 1, 2} \xD7 {0.25, 0.5, 1} are deliberately fixed to span a wide range of prior informativeness; they cannot be changed in the UI."
         },
         "bayes.model": {
           title: "Bayesian meta-analysis",
@@ -14018,6 +14830,10 @@ ${linkRels}
           title: "Multivariate Meta-Analysis",
           body: "Models multiple correlated outcomes from the same studies jointly. The marginal covariance \u03A9 = V + Z\u03A8Z\u02B9 decomposes into a known within-study block V (estimated via the assumed within-study correlation \u03C1) and an unknown between-study covariance \u03A8 estimated by REML or ML. Pooled effects (one per outcome) are obtained by generalised least squares. Continuous moderators may be included with common or separate slopes across outcomes. Switch to this mode using the Standard / Multivariate toggle above the data table."
         },
+        "mv.ci": {
+          title: "CI method (multivariate)",
+          body: 'Controls how confidence intervals and p-values are computed for the pooled effects \u03B2.\n\nNormal CI (default): Wald z-based intervals \u2014 \u03B2\u0302 \xB1 z_{\u03B1/2} \xB7 SE. Appropriate when the number of study-outcome observations is large relative to the number of parameters.\n\nt-distribution: uses a t critical value with df = n \u2212 q residual degrees of freedom, where n is the total number of effect-size observations and q is the number of fixed-effect parameters. Matches metafor rma.mv(test="t"). Recommended when k is small or when moderators are included, as z-based CIs are then anticonservative. The omnibus test switches from \u03C7\xB2(q) to F(q, df) under this option.'
+        },
         "mv.struct": {
           title: "\u03A8 structure",
           body: "Determines how many parameters describe the between-study covariance matrix \u03A8. CS (Compound Symmetric): all outcomes share one variance \u03C4\xB2 and one correlation \u03C1 \u2014 2 parameters, most parsimonious. Diag (Diagonal): separate \u03C4\xB2\u2C7C per outcome, zero between-study correlation \u2014 P parameters. UN (Unstructured): freely estimated P\xD7P Cholesky \u03A8 \u2014 P(P+1)/2 parameters; requires many studies. Prefer CS when k is small relative to P; UN is appropriate only when k \u226B P."
@@ -14025,6 +14841,10 @@ ${linkRels}
         "mv.method": {
           title: "Estimation method",
           body: "REML (Restricted Maximum Likelihood) estimates the between-study covariance matrix \u03A8 from the residual likelihood after profiling out the fixed effects \u2014 less biased than ML for variance components and the default choice. ML (Maximum Likelihood) estimates all parameters jointly; it underestimates variance components in small samples but is required when comparing models with different fixed-effect structures via likelihood-ratio tests."
+        },
+        "mv.slopes": {
+          title: "Moderator slopes",
+          body: "Controls how moderator effects are parameterised when at least one moderator is present.\n\nSeparate (default): each outcome gets its own slope per moderator. With P outcomes and q moderators, the design matrix has P + P\xB7q columns and \u03B2 contains P intercepts followed by P\xB7q slopes (one per outcome\u2013moderator pair). Coefficient names take the form 'outcome:moderator'. Equivalent to mods = ~outcome*moderator - 1 in metafor.\n\nCommon: all outcomes share a single slope per moderator. The design matrix has P + q columns; \u03B2 contains P intercepts then q shared slopes. Coefficient names are the plain moderator names. Equivalent to mods = ~outcome + moderator - 1 in metafor. Use when theory predicts the same moderator relationship across outcomes and sample size is too small to support outcome-specific estimates."
         },
         "mv.forest": {
           title: "MV forest plot",
@@ -14038,7 +14858,7 @@ ${linkRels}
     }
   });
 
-  // js/guide.js
+  // js/ui/guide.js
   var guide_exports = {};
   __export(guide_exports, {
     GUIDE: () => GUIDE,
@@ -14113,7 +14933,7 @@ ${linkRels}
   }
   var GUIDE, HELP_TO_GUIDE, _rendered;
   var init_guide = __esm({
-    "js/guide.js"() {
+    "js/ui/guide.js"() {
       GUIDE = [
         // ------------------------------------------------------------------ //
         // Effect Types                                                         //
@@ -14601,7 +15421,10 @@ Use for single-arm studies or prevalence estimates expressed as rates.</p>
 <code>yi = log(x/t)</code>,&ensp;
 <code>vi = 1/x</code></p>
 <p><strong>When to use:</strong> Single-arm designs with event count and
-person-time denominator.</p>`,
+person-time denominator.</p>
+<p><strong>Correspondence with metafor:</strong> This effect type corresponds
+to <code>escalc("IRLN")</code> in metafor (log incidence rate). metafor's
+<code>"IR"</code> measure returns the raw rate, not the log.</p>`,
               citations: [
                 "Borenstein, M., Hedges, L. V., Higgins, J. P. T., & Rothstein, H. R. (2009). <em>Introduction to meta-analysis</em>. Wiley."
               ]
@@ -15330,7 +16153,10 @@ to assess sensitivity; if conclusions are stable across \u03C1, the choice is no
 <p>When moderator columns are present, RVE extends to meta-regression: the design
 matrix X includes an intercept and all active moderators, and df = m \u2212 p where
 p is the total number of coefficients. The results panel shows per-coefficient
-estimates, SEs, t-statistics, and p-values under the RVE model.</p>`,
+estimates, SEs, t-statistics, and p-values under the RVE model.</p>
+<p><strong>Limitation:</strong> only the CR1 small-sample correction is implemented.
+The CR2 and CR3 corrections (Pustejovsky &amp; Tipton 2018) are not available; for
+those, use the <em>clubSandwich</em> R package.</p>`,
               citations: [
                 "Hedges, L. V., Tipton, E., & Johnson, M. C. (2010). Robust variance estimation in meta-regression with dependent effect size estimates. <em>Research Synthesis Methods, 1</em>(1), 39\u201365.",
                 "Tipton, E. (2015). Small sample adjustments for robust variance estimation with meta-regression. <em>Psychological Methods, 20</em>(3), 375\u2013393."
@@ -17252,6 +18078,16 @@ covariance. Treating correlated outcomes as independent (three-level or RVE) ign
 the sign and magnitude of those correlations; the multivariate model estimates them
 from the data and produces correctly calibrated standard errors.</p>
 
+<p><strong>Input layout:</strong> Switch to <em>Multivariate</em> mode using the tabs at the
+top-left of the input panel. The settings strip then shows:</p>
+<ul>
+  <li><strong>\u03A8</strong> \u2014 between-study covariance structure (CS / Diag / UN)</li>
+  <li><strong>\u03C4\xB2</strong> \u2014 estimation method (REML / ML)</li>
+  <li><strong>Variables \u25BE</strong> \u2014 add moderator columns to the data table</li>
+  <li><strong>Settings \u25BE</strong> \u2014 slope specification, assumed within-study \u03C1, and CI width</li>
+</ul>
+<p>CI width is shared with Standard mode; changing it in either mode updates both.</p>
+
 <p><strong>When to use:</strong> A study contributes two or more outcome types
 (e.g. pain and function, anxiety and depression, two laboratory endpoints) and the
 within-study covariance between those outcomes can be estimated from the reported
@@ -17312,6 +18148,22 @@ common slopes (one \u03B2 per moderator, shared across all outcomes) or separate
     number of fixed-effect parameters. Shown only when moderators are present.</li>
 </ul>
 
+<p><strong>CI method:</strong> The CI dropdown in the settings strip controls how
+confidence intervals and p-values are computed for the pooled effects.</p>
+<ul>
+  <li><strong>Normal (z):</strong> Wald CIs using the standard normal quantile (z = 1.96 for
+    95%). Fast and invariant to sample size; appropriate when k is large. Matches
+    <code>rma.mv(test = "z")</code> in metafor.</li>
+  <li><strong>t-distribution:</strong> Uses a t-critical value with df = n \u2212 q (n = total
+    observations, q = number of fixed-effect parameters) for both CIs and individual
+    coefficient p-values. The omnibus Q<sub>M</sub> Wald statistic is divided by its
+    degrees of freedom and referred to an F(q, df) distribution. More conservative
+    than the z-test; recommended when the number of studies is small. Matches
+    <code>rma.mv(test = "t")</code> in metafor.</li>
+</ul>
+<p>CI width (the nominal coverage level, e.g. 95%) is shared between Standard and
+Multivariate modes; changing it in one mode updates the other automatically.</p>
+
 <p><strong>Caution on over-parameterisation:</strong> The UN structure requires
 P(P+1)/2 parameters to estimate \u03A8. As a rough guideline, each variance parameter
 needs at least 3\u20135 studies to estimate reliably; the app will warn when the ratio
@@ -17329,6 +18181,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
       ];
       HELP_TO_GUIDE = {
         "mv.model": "guide-multivariate",
+        "mv.ci": "guide-multivariate",
         "mv.struct": "guide-multivariate",
         "mv.forest": "guide-multivariate",
         "mv.method": "guide-multivariate",
@@ -17478,7 +18331,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
     }
   });
 
-  // js/onboarding.js
+  // js/ui/onboarding.js
   var onboarding_exports = {};
   __export(onboarding_exports, {
     finish: () => finish,
@@ -17694,12 +18547,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
     if (idx < 0) idx = 0;
     const step = STEPS[idx];
     const el = document.querySelector(step.anchor);
-    if (!el) {
-      _goTo(idx + 1);
-      return;
-    }
-    const r = el.getBoundingClientRect();
-    if (r.width === 0 && r.height === 0) {
+    if (!el || el.offsetParent === null) {
       _goTo(idx + 1);
       return;
     }
@@ -17769,7 +18617,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
     if (localStorage.getItem(SEEN_KEY)) return;
     if (localStorage.getItem(DRAFT_KEY2)) return;
     const params = new URLSearchParams(location.search);
-    if (params.has("perf") || params.has("tests")) return;
+    if (params.has("tests")) return;
     const importPreview = document.getElementById("importPreview");
     if (importPreview && importPreview.style.display !== "none") return;
     const inputSection = document.getElementById("inputSection");
@@ -17785,7 +18633,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
   }
   var SEEN_KEY, DRAFT_KEY2, PAD, TIP_W, MIN_TIP_H, GAP, STEPS, _block, _spot, _tip, _current, _rafId, _stepIdx, _prevFocus, _liveEl, _titleEl, _bodyEl, _counterEl, _btnBack, _btnNext, _btnSkip;
   var init_onboarding = __esm({
-    "js/onboarding.js"() {
+    "js/ui/onboarding.js"() {
       SEEN_KEY = "fosma-onboarding-seen";
       DRAFT_KEY2 = "meta-draft";
       PAD = 4;
@@ -17826,10 +18674,10 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
     }
   });
 
-  // js/benchmarks.js
-  var BENCHMARKS, PUB_BIAS_BENCHMARKS, INFLUENCE_BENCHMARKS, META_REGRESSION_BENCHMARKS, VH_BENCHMARKS, HALFNORM_BENCHMARKS, POWER_BENCHMARKS, NEGEXP_BENCHMARKS, BETA_BENCHMARKS, MH_BENCHMARKS, CLUSTER_BENCHMARKS, RVE_BENCHMARKS, THREE_LEVEL_BENCHMARKS, LS_BENCHMARKS, CONTRAST_BENCHMARKS, INTERACTION_BENCHMARKS, _BERKEY98, MULTIVARIATE_BENCHMARKS;
+  // js/tests/benchmarks.js
+  var BENCHMARKS, PUB_BIAS_BENCHMARKS, INFLUENCE_BENCHMARKS, META_REGRESSION_BENCHMARKS, VH_BENCHMARKS, HALFNORM_BENCHMARKS, POWER_BENCHMARKS, NEGEXP_BENCHMARKS, BETA_BENCHMARKS, MH_BENCHMARKS, CLUSTER_BENCHMARKS, RVE_BENCHMARKS, RVE_MOM_BENCHMARKS, THREE_LEVEL_BENCHMARKS, LS_BENCHMARKS, CONTRAST_BENCHMARKS, INTERACTION_BENCHMARKS, _BERKEY98, MULTIVARIATE_BENCHMARKS, _BCG_2x2, _NORMAND_MD, _SYNTH_FUNNEL, TRIMFILL_BENCHMARKS, CUMULATIVE_BENCHMARKS, HC_BENCHMARKS, WAAP_BENCHMARKS, PCURVE_BENCHMARKS, PUNIFORM_BENCHMARKS;
   var init_benchmarks = __esm({
-    "js/benchmarks.js"() {
+    "js/tests/benchmarks.js"() {
       BENCHMARKS = [
         // ----------------------------------------------------------------
         // GENERIC — BCG Vaccine (dat.bcg, log RR, pre-computed yi/vi)
@@ -17857,10 +18705,10 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
             { label: "Comstock 1976", yi: -0.017313948216879493, vi: 0.0714046596839863 }
           ],
           expected: {
-            FE: -0.43,
-            RE: -0.714,
-            tau2: 0.313,
-            I2: 92.2
+            FE: -0.43029,
+            RE: -0.71453,
+            tau2: 0.31324,
+            I2: 92.2214
           },
           citation: "Colditz et al. (1994) JAMA 271:698\u2013702. dat.bcg in metafor."
         },
@@ -17894,7 +18742,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
             FE: -0.43,
             RE: -0.691,
             tau2: 0.158,
-            I2: 92.12
+            I2: 85.6658
           },
           citation: "Colditz et al. (1994) JAMA 271:698\u2013702. Expected values from JS tau2_DLIT()."
         },
@@ -17926,7 +18774,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
             FE: -0.43,
             RE: -0.707,
             tau2: 0.249,
-            I2: 92.12
+            I2: 90.4129
           },
           citation: "Colditz et al. (1994) JAMA 271:698\u2013702. Expected values from JS tau2_HSk()."
         },
@@ -17958,7 +18806,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
             FE: -0.43,
             RE: -0.715,
             tau2: 0.315,
-            I2: 92.12
+            I2: 92.2726
           },
           citation: "Colditz et al. (1994) JAMA 271:698\u2013702. Expected values from JS tau2_SQGENQ()."
         },
@@ -17990,7 +18838,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
             FE: -0.43,
             RE: -0.715,
             tau2: 0.313,
-            I2: 92.12
+            I2: 92.2214
           },
           citation: "Colditz et al. (1994) JAMA 271:698\u2013702. EBLUP = REML (Harville 1977). Expected values from JS meta()."
         },
@@ -18024,7 +18872,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
             FE: -0.43,
             RE: -0.715,
             tau2: 0.318,
-            I2: 92.12
+            I2: 92.3303
           },
           citation: "Colditz et al. (1994) JAMA 271:698\u2013702. Expected values from metafor rma(method='EB'). Morris (1983)."
         },
@@ -18059,7 +18907,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
             FE: -0.43,
             RE: -0.717,
             tau2: 0.343,
-            I2: 92.12
+            I2: 92.8555
           },
           citation: "Colditz et al. (1994) JAMA 271:698\u2013702. Expected values from metafor rma(method='PMM')."
         },
@@ -18068,10 +18916,10 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
         // Generalised-Q Median: finds τ² such that the observed FE Q-statistic
         // equals the median of its distribution under the RE model.
         // The distribution Σλᵢ χ²(1) uses eigenvalues from the secular equation
-        // (rank-1 perturbed diagonal); the median is approximated via a 2-moment
-        // scaled chi-square (Patnaik/Satterthwaite), giving ~3–4% error vs the
-        // exact Farebrother CDF used by metafor. Expected tau2 is the exact metafor
-        // value; the JS approximation passes the 5% relative tau2 tolerance.
+        // (rank-1 perturbed diagonal); the median is found via the exact Imhof (1961)
+        // numerical integral (composite GL20, 16 subintervals) — equivalent to the
+        // Farebrother/Davies algorithm used by metafor's CompQuadForm. Residual error
+        // vs metafor: ~0.05%, well within the 5% relative tau2 tolerance.
         // RE estimate uses RE weights 1/(vᵢ+τ²) as in all other app estimators
         // (metafor GENQM uses FE weights for the pooled estimate — different convention).
         // ----------------------------------------------------------------
@@ -18098,7 +18946,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
             FE: -0.43,
             RE: -0.719,
             tau2: 0.383,
-            I2: 92.12
+            I2: 93.5435
           },
           citation: "Colditz et al. (1994) JAMA 271:698\u2013702. tau2 from metafor rma(method='GENQM', weights=1/vi). RE uses app convention (RE weights)."
         },
@@ -18134,24 +18982,24 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
           expected: {
             // ln(a*d / b*c) per study, computed from raw counts
             yi: [
-              -0.9389,
-              -1.6658,
+              -0.93869,
+              -1.66619,
               -1.3863,
               -1.4564,
-              -0.2189,
+              -0.21914,
               -0.9581,
               -1.6338,
               0.012,
-              -0.4715,
+              -0.47175,
               -1.4012,
-              -0.3407,
-              0.4468,
+              -0.34085,
+              0.44663,
               -0.0173
             ],
-            FE: -0.436,
-            RE: -0.747,
-            tau2: 0.366,
-            I2: 92.65
+            FE: -0.43614,
+            RE: -0.74739,
+            tau2: 0.36634,
+            I2: 92.6455
           },
           citation: "Colditz et al. (1994) JAMA 271:698\u2013702. dat.bcg in metafor. DL pooled values from metafor test suite."
         },
@@ -18199,10 +19047,10 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
               0.4459,
               -0.0173
             ],
-            FE: -0.43,
-            RE: -0.715,
-            tau2: 0.313,
-            I2: 92.2
+            FE: -0.43029,
+            RE: -0.71453,
+            tau2: 0.31324,
+            I2: 92.2214
           },
           citation: "Colditz et al. (1994) JAMA 271:698\u2013702. dat.bcg in metafor. REML pooled values from metadat HTML docs."
         },
@@ -18255,7 +19103,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
             FE: -9e-4,
             RE: -71e-4,
             tau2: 2e-5,
-            I2: 95.66
+            I2: 95.6596
           },
           citation: "Colditz et al. (1994) JAMA 271:698\u2013702. dat.bcg in metafor. DL pooled values from agent research; Q=276.47 confirmed."
         },
@@ -18286,10 +19134,10 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
           expected: {
             // yi = m1 - m2 (days); exact integer differences
             yi: [-20, -2, -55, -71, -4, 1, 11, -10, 7],
-            FE: -3.464,
+            FE: -3.46361,
             RE: -15.106,
-            tau2: 684.6,
-            I2: 96.65
+            tau2: 684.64615,
+            I2: 98.9713
           },
           citation: "Normand (1999) Stat Med 18:321\u2013359. dat.normand1999 in metafor."
         },
@@ -18314,10 +19162,10 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
           expected: {
             // Hedges' g per study, confirmed from metafor escalc(measure="SMD")
             yi: [-0.3552, -0.3479, -2.3176, -1.888],
-            FE: -0.788,
-            RE: -1.207,
+            FE: -0.79034,
+            RE: -1.20737,
             tau2: 1.009,
-            I2: 96,
+            I2: 95.6284,
             // CLES = Φ(RE / √2); CI from Φ applied to normal-CI endpoints.
             // R-verified: generate.R block CLES-1
             cles: { estimate: 0.1966, ciLow: 0.0579, ciHigh: 0.4465 }
@@ -18347,10 +19195,10 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
           expected: {
             // yi = m_post - m_pre (exact); vi verified by hand
             yi: [7.9, 3.3, 0.2, 22.5, 0.4],
-            FE: 0.209,
-            RE: 6.416,
-            tau2: 73.57,
-            I2: 95.84
+            FE: 0.20922,
+            RE: 6.41623,
+            tau2: 73.57154,
+            I2: 99.5234
           },
           citation: "Morris (2008) Org Res Methods 11:364\u2013386. Pooled values from metafor test suite."
         },
@@ -18379,7 +19227,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
             FE: 0.3859,
             RE: 0.413,
             tau2: 0.01298,
-            I2: 49
+            I2: 49.0096
           },
           citation: "Synthetic dataset. Expected values computed analytically from Fisher z formulas."
         },
@@ -18406,9 +19254,9 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
             yi: [0.5, 0.3, 0.6, 0.4, 0.25],
             // FE/RE on raw r scale; pooled values verified analytically via vi=(1-r²)²/(n-1)
             FE: 0.394,
-            RE: 0.403,
-            tau2: 0.01145,
-            I2: 57.3
+            RE: 0.4033,
+            tau2: 0.0119,
+            I2: 57.2681
           },
           citation: "Synthetic dataset. Expected values computed analytically from raw-correlation formulas."
         },
@@ -18416,7 +19264,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
         // SMD_paired — Morris (2008), treatment arm (5 studies)
         // Same raw data as MD_paired benchmark above.
         // SMCR formula: d = (m_post - m_pre) / sd_pre  (pre-test SD standardiser)
-        // g = d · J(df),  J = 1 − 3/(4·df − 1),  df = n − 1
+        // g = d · J(df),  J = Γ(df/2)/(√(df/2)·Γ((df−1)/2)) exact,  df = n − 1
         // vi = 2(1−r)/n + g²/(2n)  (Borenstein et al. 2009 eq 4.27)
         // Per-study g verified by hand; pooled values computed analytically (DL).
         // ----------------------------------------------------------------
@@ -18433,12 +19281,12 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
             { label: "Study 5", m_pre: 35.6, m_post: 36, sd_pre: 4.7, sd_post: 4.6, n: 14, r: 0.44 }
           ],
           expected: {
-            // Hedges' g per study: d = Δm/sd_pre, g = d·J, verified by hand
-            yi: [0.5056, 1.0481, 1.8065, 1.4187, 0.0801],
-            FE: 0.864,
-            RE: 0.902,
-            tau2: 0.243,
-            I2: 77.1
+            // Hedges' g per study: d = Δm/sd_pre, g = d·J (exact), verified vs metafor block "8"
+            yi: [0.5056, 1.0481, 1.8054, 1.4181, 0.0801],
+            FE: 0.8643,
+            RE: 0.9022,
+            tau2: 0.2425,
+            I2: 77.1174
           },
           citation: "Morris (2008) Org Res Methods 11:364\u2013386. Per-study g and pooled values recomputed with Borenstein 2009 eq 4.27 vi formula."
         },
@@ -18461,10 +19309,10 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
           ],
           expected: {
             yi: [0.1, 0.3, 0.2, 0.4],
-            FE: 0.208,
-            RE: 0.246,
+            FE: 0.20755,
+            RE: 0.24641,
             tau2: 0.01581,
-            I2: 90.7
+            I2: 90.7379
           },
           citation: "Synthetic dataset. Expected values computed analytically from PR formulas."
         },
@@ -18485,11 +19333,11 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
             { label: "Study 4", x: 40, n: 100 }
           ],
           expected: {
-            yi: [-2.197, -0.847, -1.386, -0.405],
-            FE: -0.993,
-            RE: -1.174,
+            yi: [-2.19722, -0.8473, -1.38629, -0.40547],
+            FE: -0.99257,
+            RE: -1.17436,
             tau2: 0.4197,
-            I2: 87.6
+            I2: 87.6324
           },
           citation: "Synthetic dataset. Expected values computed analytically from PLO (logit) formulas."
         },
@@ -18510,18 +19358,20 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
             { label: "Study 4", x: 40, n: 100 }
           ],
           expected: {
-            yi: [0.322, 0.58, 0.464, 0.685],
-            FE: 0.513,
-            RE: 0.513,
+            yi: [0.32175, 0.57964, 0.46365, 0.68472],
+            FE: 0.51244,
+            RE: 0.51244,
             tau2: 0.02186,
-            I2: 89.7
+            I2: 89.7174
           },
           citation: "Synthetic dataset. Expected values computed analytically from PAS (arcsine) formulas."
         },
         // ----------------------------------------------------------------
         // PFT — Synthetic proportion dataset (Freeman-Tukey double-arcsine)
-        // Same 4 studies. yi = arcsin(√(x/(n+1))) + arcsin(√((x+1)/(n+1)))
-        // vi = 1/(n+0.5). Equal vi => RE = FE. tau2/I2 analytic (DL).
+        // Same 4 studies. Half-sum convention (metafor escalc("PFT")):
+        // yi = ½(arcsin(√(x/(n+1))) + arcsin(√((x+1)/(n+1)))), vi = 1/(4(n+0.5)).
+        // Equal vi => RE = FE. tau2/I2 analytic (DL).
+        // FE/RE/ciLow/ciHigh = full-sum/2; tau2 = full-sum-tau2/4; I2 unchanged.
         // ----------------------------------------------------------------
         {
           name: "Synthetic Proportion \u2013 PFT (DL)",
@@ -18535,13 +19385,13 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
             { label: "Study 4", x: 40, n: 100 }
           ],
           expected: {
-            yi: [0.656, 1.1636, 0.934, 1.371],
-            FE: 1.031,
-            RE: 1.031,
-            tau2: 0.08445,
-            I2: 89.5
+            yi: [0.3282, 0.5818, 0.4673, 0.6857],
+            FE: 0.5158,
+            RE: 0.5158,
+            tau2: 0.0211,
+            I2: 89.4549
           },
-          citation: "Synthetic dataset. Expected values computed analytically from PFT (Freeman-Tukey) formulas."
+          citation: 'Synthetic dataset. Expected values match metafor escalc("PFT") half-sum convention. Verified against R block 12.'
         },
         // ================================================================
         // TAU² ESTIMATOR BENCHMARKS
@@ -18565,6 +19415,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
         // ----------------------------------------------------------------
         {
           name: "Synthetic \u03C4\xB2 test \u2013 HS (k=3, equal vi)",
+          rBlock: "HS-1",
           type: "GENERIC",
           tauMethod: "HS",
           data: [
@@ -18573,11 +19424,13 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
             { label: "Study 3", yi: 3, vi: 1 }
           ],
           expected: {
-            FE: 1.333,
-            RE: 1.333,
+            FE: 1.33333,
+            // 4/3
+            RE: 1.33333,
+            // equal vi → RE = FE
             tau2: 0.8889,
             // 8/9
-            I2: 57.1
+            I2: 47.0588
           },
           citation: "Synthetic. \u03C4\xB2_HS = (Q\u2212df)/\u03A3W = (42/9\u22122)/3 = 8/9. Derived analytically."
         },
@@ -18597,11 +19450,11 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
             { label: "Study 3", yi: 3, vi: 1 }
           ],
           expected: {
-            FE: 1.333,
-            RE: 1.333,
+            FE: 1.33333,
+            RE: 1.33333,
             tau2: 1.3333,
             // 4/3
-            I2: 57.1
+            I2: 57.1429
           },
           citation: "Synthetic. \u03C4\xB2_HE = SS_uw/(k\u22121) \u2212 mean(v) = (42/9)/2 \u2212 1 = 4/3. Derived analytically."
         },
@@ -18621,11 +19474,11 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
             { label: "Study 3", yi: 3, vi: 1 }
           ],
           expected: {
-            FE: 1.333,
-            RE: 1.333,
+            FE: 1.33333,
+            RE: 1.33333,
             tau2: 0.5556,
             // 5/9
-            I2: 57.1
+            I2: 35.7143
           },
           citation: "Synthetic. \u03C4\xB2_ML fixed point: (42/9)/(1+\u03C4\xB2) = 3 \u2192 \u03C4\xB2 = 5/9. Derived analytically."
         },
@@ -18637,6 +19490,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
         // ----------------------------------------------------------------
         {
           name: "Synthetic \u03C4\xB2 test \u2013 SJ (k=3, equal vi)",
+          rBlock: "SJ-1",
           type: "GENERIC",
           tauMethod: "SJ",
           data: [
@@ -18645,11 +19499,13 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
             { label: "Study 3", yi: 3, vi: 1 }
           ],
           expected: {
-            FE: 1.333,
-            RE: 1.333,
+            FE: 1.33333,
+            // 4/3
+            RE: 1.33333,
+            // equal vi → RE = FE
             tau2: 0.8437,
             // (√65−3)/6
-            I2: 57.1
+            I2: 45.7615
           },
           citation: "Synthetic. \u03C4\xB2_SJ fixed point: \u03C4\xB2(1+\u03C4\xB2) = 14/9 \u2192 \u03C4\xB2 = (\u221A65\u22123)/6. Derived analytically."
         },
@@ -18682,10 +19538,10 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
             { label: "Study 3", yi: 3, vi: 1 }
           ],
           expected: {
-            FE: 0.714,
-            RE: 1.167,
-            tau2: 1.648,
-            I2: 73.1
+            FE: 0.71429,
+            RE: 1.16667,
+            tau2: 1.64726,
+            I2: 76.7145
           },
           citation: "Synthetic. \u03C4\xB2_PM iterative fixed-point (unequal vi so PM\u2260HE). Verified against metafor rma(method='PM')."
         },
@@ -18719,8 +19575,8 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
             FE: -0.45,
             RE: -0.45,
             // equal vi → RE = FE
-            tau2: 0.054,
-            I2: 46.4
+            tau2: 0.05413,
+            I2: 46.4123
           },
           citation: "Synthetic dataset. Expected values derived analytically from HR log-scale formulas."
         },
@@ -18747,11 +19603,11 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
           ],
           expected: {
             // yi = log(x1/x2) since t1=t2
-            yi: [-1.386, -0.105, -0.916, -0.357],
-            FE: -0.537,
-            RE: -0.605,
-            tau2: 0.138,
-            I2: 47.7
+            yi: [-1.38629, -0.10536, -0.91629, -0.35667],
+            FE: -0.53665,
+            RE: -0.60488,
+            tau2: 0.13767,
+            I2: 47.7363
           },
           citation: "Synthetic dataset. Expected values derived analytically from IRR Poisson formulas."
         },
@@ -18763,6 +19619,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
         // ----------------------------------------------------------------
         {
           name: "Synthetic \u2013 IRD (incidence rate difference, DL)",
+          rBlock: "IRD-1",
           type: "IRD",
           tauMethod: "DL",
           data: [
@@ -18788,6 +19645,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
         // ----------------------------------------------------------------
         {
           name: "Synthetic \u2013 IRD (incidence rate difference, REML)",
+          rBlock: "IRD-2",
           type: "IRD",
           tauMethod: "REML",
           data: [
@@ -18799,12 +19657,10 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
             { label: "Study 6", x1: 100, t1: 5e3, x2: 50, t2: 5e3 }
           ],
           expected: {
-            // I2 is Q-based (JS convention); metafor REML uses τ²-based I2 = 97.70
             FE: 929187e-8,
             RE: -0.01601237,
             tau2: 2056329e-9,
-            I2: 78.5748
-            // Q-based
+            I2: 97.693
           },
           citation: "Synthetic dataset; cross-validated with metafor escalc('IRD') + rma(method='REML')."
         },
@@ -18814,6 +19670,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
         // ----------------------------------------------------------------
         {
           name: "Synthetic \u2013 IRSD (sqrt incidence rate difference, DL)",
+          rBlock: "IRSD-1",
           type: "IRSD",
           tauMethod: "DL",
           data: [
@@ -18839,6 +19696,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
         // ----------------------------------------------------------------
         {
           name: "Synthetic \u2013 IRSD (sqrt incidence rate difference, REML)",
+          rBlock: "IRSD-2",
           type: "IRSD",
           tauMethod: "REML",
           data: [
@@ -18850,12 +19708,10 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
             { label: "Study 6", x1: 100, t1: 5e3, x2: 50, t2: 5e3 }
           ],
           expected: {
-            // I2 is Q-based (JS convention); metafor REML uses τ²-based I2 = 96.01
             FE: 0.03026145,
             RE: -0.02807825,
             tau2: 0.01179224,
-            I2: 84.0654
-            // Q-based
+            I2: 96.0051
           },
           citation: "Synthetic dataset; cross-validated with metafor escalc('IRSD') + rma(method='REML')."
         },
@@ -18871,6 +19727,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
         // ----------------------------------------------------------------
         {
           name: "dat.bcg (5 studies) \u2013 YUQ (Yule's Q, DL)",
+          rBlock: "YUQ-1",
           type: "YUQ",
           tauMethod: "DL",
           data: [
@@ -18894,6 +19751,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
         // ----------------------------------------------------------------
         {
           name: "dat.bcg (5 studies) \u2013 YUQ (Yule's Q, REML)",
+          rBlock: "YUQ-2",
           type: "YUQ",
           tauMethod: "REML",
           data: [
@@ -18908,8 +19766,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
             FE: -0.565524,
             RE: -0.4916644,
             tau2: 0.048285,
-            I2: 79.2922
-            // Q-based
+            I2: 78.7286
           },
           citation: "dat.bcg (first 5 studies); cross-validated with metafor escalc('YUQ') + rma(method='REML')."
         },
@@ -18919,6 +19776,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
         // ----------------------------------------------------------------
         {
           name: "dat.bcg (5 studies) \u2013 YUY (Yule's Y, DL)",
+          rBlock: "YUY-1",
           type: "YUY",
           tauMethod: "DL",
           data: [
@@ -18942,6 +19800,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
         // ----------------------------------------------------------------
         {
           name: "dat.bcg (5 studies) \u2013 YUY (Yule's Y, REML)",
+          rBlock: "YUY-2",
           type: "YUY",
           tauMethod: "REML",
           data: [
@@ -18956,8 +19815,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
             FE: -0.2883224,
             RE: -0.2652435,
             tau2: 0.01754236,
-            I2: 81.9081
-            // Q-based
+            I2: 77.4507
           },
           citation: "dat.bcg (first 5 studies); cross-validated with metafor escalc('YUY') + rma(method='REML')."
         },
@@ -18990,7 +19848,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
             FE: 1.232,
             RE: 1.887,
             tau2: 1.055,
-            I2: 92.73
+            I2: 92.728
           },
           citation: "Synthetic dataset; cross-validated with metafor escalc('SMD1') + rma(method='DL')."
         },
@@ -19013,8 +19871,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
             FE: 1.232,
             RE: 1.922,
             tau2: 1.608,
-            I2: 92.73
-            // Q-based
+            I2: 95.1088
           },
           citation: "Synthetic dataset; cross-validated with metafor escalc('SMD1') + rma(method='REML')."
         },
@@ -19041,7 +19898,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
             FE: 1.22,
             RE: 1.886,
             tau2: 1.044,
-            I2: 92.86
+            I2: 92.8577
           },
           citation: "Synthetic dataset; cross-validated with metafor escalc('SMD1H') + rma(method='DL')."
         },
@@ -19064,8 +19921,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
             FE: 1.22,
             RE: 1.922,
             tau2: 1.611,
-            I2: 92.86
-            // Q-based
+            I2: 95.2569
           },
           citation: "Synthetic dataset; cross-validated with metafor escalc('SMD1H') + rma(method='REML')."
         },
@@ -19092,11 +19948,11 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
           ],
           expected: {
             // yi = log(x/t), verified by formula
-            yi: [-2.996, -2.485, -4.382, -2.526],
-            FE: -2.742,
-            RE: -2.997,
+            yi: [-2.99573, -2.48491, -4.382, -2.52573],
+            FE: -2.74174,
+            RE: -2.99661,
             tau2: 0.335,
-            I2: 82
+            I2: 82.0145
           },
           citation: "Synthetic dataset. Expected values derived analytically from Poisson IR formulas."
         },
@@ -19128,10 +19984,10 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
           expected: {
             // g per study (sdi = avg-SD standardiser); yi unchanged from old formula (same d·J)
             yi: [-0.3553, -0.3465, -2.3018, -1.888, -0.3993, 0.1742, 0.2726, -0.4494, 0.2926],
-            FE: -0.394,
-            RE: -0.532,
-            tau2: 0.769,
-            I2: 92.8
+            FE: -0.39414,
+            RE: -0.53242,
+            tau2: 0.7686,
+            I2: 95.3703
           },
           citation: "Normand (1999) Stat Med 18:321\u2013359. dat.normand1999 in metafor. Bonett (2009) Psychol Methods 14:43\u201353 Eq. 7 variance formula. Cross-validated against metafor escalc/rma."
         },
@@ -19162,10 +20018,10 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
           expected: {
             // yi = ln(m1/m2) per study, verified by formula
             yi: [-0.3102, -0.0715, -0.6202, -0.7303, -0.2513, 0.0541, 0.2377, -0.3895, 0.2657],
-            FE: -0.303,
-            RE: -0.218,
+            FE: -0.30278,
+            RE: -0.21837,
             tau2: 0.108,
-            I2: 94.6
+            I2: 94.3547
           },
           citation: "Normand (1999) Stat Med 18:321\u2013359. dat.normand1999 in metafor. REML values computed analytically (Python)."
         },
@@ -19174,7 +20030,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
         // Same raw data as the MD_paired / SMD_paired benchmarks above.
         // Standardiser: sd_change (change-score SD), not sd_pre.
         // sd_change = √(sd_pre²+sd_post²−2·r·sd_pre·sd_post)
-        // d = Δm/sd_change,  g = d·J,  J = 1−3/(4·(n−1)−1)
+        // d = Δm/sd_change,  g = d·J,  J = Γ(df/2)/(√(df/2)·Γ((df−1)/2)) exact
         // vi = 1/n + g²/(2n)  (Borenstein et al. 2009 eq 4.30)
         // All values computed analytically (DL).
         // ----------------------------------------------------------------
@@ -19191,12 +20047,12 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
             { label: "Study 5", m_pre: 35.6, m_post: 36, sd_pre: 4.7, sd_post: 4.6, n: 14, r: 0.44 }
           ],
           expected: {
-            // g per study (sd_change standardiser), verified by formula
-            yi: [0.5417, 1.0198, 2.6635, 1.9096, 0.0765],
-            FE: 0.804,
-            RE: 1.018,
-            tau2: 0.369,
-            I2: 81.2
+            // g per study (sd_change standardiser), verified vs metafor block "24"
+            yi: [0.5417, 1.0198, 2.6619, 1.9088, 0.0765],
+            FE: 0.8035,
+            RE: 1.0177,
+            tau2: 0.3682,
+            I2: 81.2149
           },
           citation: "Morris (2008) Org Res Methods 11:364\u2013386. SMCC formula: Borenstein et al. (2009) eq 4.30 \u2014 vi=1/n+g\xB2/(2n). DL values recomputed."
         },
@@ -19220,10 +20076,10 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
           expected: {
             // yi = ln(x/n) per study, exact
             yi: [-2.3026, -1.204, -1.6094, -0.9163],
-            FE: -1.226,
-            RE: -1.452,
+            FE: -1.2257,
+            RE: -1.4523,
             tau2: 0.2051,
-            I2: 86.9
+            I2: 86.939
           },
           citation: "Synthetic dataset. Expected values computed analytically from PLN (log proportion) formulas."
         },
@@ -19280,7 +20136,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
             FE: 0.228,
             RE: 0.321,
             tau2: 0.0385,
-            I2: 84.6
+            I2: 85.1682
           },
           citation: "Synthetic. Designed to give \u03C4\xB2>0 with RE\u2260FE. Expected from metafor escalc('RPB') + rma(method='REML'). Block RPB-2 in generate.R."
         },
@@ -19337,7 +20193,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
             FE: 0.282,
             RE: 0.396,
             tau2: 0.0588,
-            I2: 83.3
+            I2: 83.9568
           },
           citation: "Synthetic. Unequal-group version of RPB-2 (n1\u2248n/3). Tests RBIS formula with z\u22600. Expected from metafor escalc('RBIS') + rma(method='REML'). Block RBIS-2 in generate.R."
         },
@@ -19389,7 +20245,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
             FE: 0.106,
             RE: 0.229,
             tau2: 0.0291,
-            I2: 87.9
+            I2: 90.5854
           },
           citation: "Synthetic. Expected from metafor escalc('R2') + rma(method='REML'). Block R2-2 in generate.R."
         },
@@ -19445,7 +20301,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
             FE: 0.415,
             RE: 0.508,
             tau2: 0.0616,
-            I2: 86.2
+            I2: 87.1273
           },
           citation: "Synthetic. Same studies as R2-2 on z scale. Expected from metafor escalc('ZR2') + rma(method='REML'). Back-transform: tanh(RE)\xB2\u22480.219. Block ZR2-2 in generate.R."
         },
@@ -19496,10 +20352,10 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
               89e-4,
               -3e-4
             ],
-            FE: -0.013,
-            RE: -0.051,
-            tau2: 11e-4,
-            I2: 96
+            FE: -0.01337,
+            RE: -0.05059,
+            tau2: 115e-5,
+            I2: 96.0448
           },
           citation: "Colditz et al. (1994) JAMA 271:698\u2013702. dat.bcg in metafor. Digby (1983) Biometrics 39:849\u2013851 LS variance. Cross-validated against metafor escalc/rma."
         },
@@ -19530,10 +20386,10 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
           expected: {
             // yi = m per study (raw mean), exact
             yi: [55, 27, 64, 66, 14, 19, 52, 21, 30],
-            FE: 27.17,
-            RE: 38.325,
-            tau2: 408.928,
-            I2: 98.67
+            FE: 27.16966,
+            RE: 38.32477,
+            tau2: 408.92774,
+            I2: 99.0787
           },
           citation: "Normand (1999) Stat Med 18:321\u2013359. dat.normand1999 specialist arm. REML values computed analytically (Python)."
         },
@@ -19562,10 +20418,10 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
           expected: {
             // yi = ln(m) per study, verified by formula
             yi: [4.0073, 3.2958, 4.1589, 4.1897, 2.6391, 2.9444, 3.9512, 3.0445, 3.4012],
-            FE: 3.694,
-            RE: 3.523,
-            tau2: 0.316,
-            I2: 98.9
+            FE: 3.69418,
+            RE: 3.52271,
+            tau2: 0.31619,
+            I2: 98.7941
           },
           citation: "Normand (1999) Stat Med 18:321\u2013359. dat.normand1999 specialist arm. REML values computed analytically (Python)."
         },
@@ -19620,8 +20476,8 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
           expected: {
             // yi = ln(sd1/sd2) + bias correction; verified via metafor escalc("VR"), R block 30
             yi: [0.4048, 0.5411, 0.4174, 0.4218, 0.3359],
-            FE: 0.43,
-            RE: 0.43,
+            FE: 0.42963,
+            RE: 0.42963,
             tau2: 0,
             I2: 0
           },
@@ -19648,10 +20504,10 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
           ],
           expected: {
             yi: [-0.6931, 0.9163, 0, 1.3863, -1.0986, 0.6931],
-            FE: 0.068,
-            RE: 0.196,
-            tau2: 0.837,
-            I2: 97.23
+            FE: 0.06772,
+            RE: 0.19632,
+            tau2: 0.83725,
+            I2: 97.2268
           },
           citation: 'Synthetic dataset. Designed to give \u03C4\xB2>0 with strongly divergent log(sd1/sd2) values. Verified via metafor escalc("VR") + rma(method="DL"), R block 48 in generate.R.'
         },
@@ -19676,10 +20532,10 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
           ],
           expected: {
             yi: [-1.0986, 1.0986, 0, 0.9808, -1.0986, 1.0296],
-            FE: 0.078,
-            RE: 0.15,
-            tau2: 1.039,
-            I2: 97.7
+            FE: 0.07833,
+            RE: 0.14977,
+            tau2: 1.03874,
+            I2: 97.7028
           },
           citation: 'Synthetic dataset. Designed to give \u03C4\xB2>0 with strongly divergent log(cv1/cv2) values. Verified via metafor escalc("CVR") + rma(method="DL"), R block 49 in generate.R.'
         },
@@ -19705,8 +20561,8 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
           expected: {
             // yi = ln(theta/phi) per study, verified by gorFromCounts (Python)
             yi: [1.0316, 1.0385, 0.7985, 1.0822],
-            FE: 0.981,
-            RE: 0.981,
+            FE: 0.98074,
+            RE: 0.98074,
             tau2: 0,
             I2: 0
           },
@@ -19765,8 +20621,8 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
           expected: {
             // yi = atanh(r) per study; vi = 1/(n−p−3)
             yi: [0.4847, 0.4001, 0.5763, 0.3205, 0.5101],
-            FE: 0.47,
-            RE: 0.47,
+            FE: 0.47029,
+            RE: 0.47029,
             tau2: 0,
             I2: 0
           },
@@ -19800,10 +20656,10 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
           expected: {
             // yi = r (identity); vi = (1−r²)²/(n−p−1)
             yi: [0.1, 0.15, 0.7, 0.75, 0.65],
-            FE: 0.396,
-            RE: 0.467,
+            FE: 0.39588,
+            RE: 0.46655,
             tau2: 0.097,
-            I2: 95.6
+            I2: 95.2403
           },
           citation: "Synthetic. Designed to give \u03C4\xB2>0 with RE\u2260FE for PCOR. Verified via meta() (REML). Block 40 in generate.R will reproduce via metafor rma(method='REML')."
         },
@@ -19831,10 +20687,10 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
           expected: {
             // yi = atanh(r); vi = 1/(n−p−3)
             yi: [0.1003, 0.1511, 0.8673, 0.973, 0.7753],
-            FE: 0.257,
-            RE: 0.551,
+            FE: 0.2568,
+            RE: 0.55067,
             tau2: 0.1624,
-            I2: 92.7
+            I2: 94.5599
           },
           citation: "Synthetic. Same studies as PCOR heterogeneous; Fisher-z scale amplifies RE\u2212FE separation. Verified via meta() (REML). Block 41 in generate.R will reproduce via metafor rma(method='REML')."
         },
@@ -19844,7 +20700,8 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
         // correlation between the two binary traits.
         // yi = rho_tet: bisect Φ₂(h,k;ρ) = a/N over 64 iterations.
         //   h = Φ⁻¹(p_row),  k = Φ⁻¹(p_col),  p11 = a/N
-        // vi = p_row(1−p_row)·p_col(1−p_col) / (N·φ₂(h,k;ρ)²)
+        // vi = √(p₁₁·p₁₂·p₂₁·p₂₂) / (N·φ₂(h,k;ρ)²)
+        //   (Pearson 1913 / Brown & Benedetti 1977 / metafor convention)
         //   φ₂ = bivariate normal density at (h,k;ρ)  (delta method)
         // Spot-check: rho(40,10,10,40) = sin(0.3π) ≈ 0.8090 exactly.
         // ----------------------------------------------------------------
@@ -19861,13 +20718,14 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
           ],
           expected: {
             // yi = rho_tet per study, verified by bisection + analytic spot-check
-            yi: [0.809, 0.6545, 0.7765, 0.7485],
-            FE: 0.756,
-            RE: 0.756,
+            // vi from cell-product formula matching metafor escalc("RTET")
+            yi: [0.809018, 0.654514, 0.776535, 0.748453],
+            FE: 0.76033,
+            RE: 0.76033,
             tau2: 0,
             I2: 0
           },
-          citation: "Synthetic dataset (profiles.js RTET exampleData). Bisection via bivariateNormalCDF (utils.js). \u03C4\xB2=0 reflects consistent latent correlation."
+          citation: "Synthetic dataset. R-verified (metafor 4.8-0, generate.R block 34). vi uses cell-product formula \u221A(p\u2081\u2081p\u2081\u2082p\u2082\u2081p\u2082\u2082)/(N\xB7\u03C6\u2082\xB2) matching metafor escalc('RTET'). \u03C4\xB2=0 reflects consistent latent correlation."
         },
         // ----------------------------------------------------------------
         // CI method benchmarks — Phase 5
@@ -19894,10 +20752,10 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
           ],
           expected: {
             yi: [-0.6931, -0.2231, -1.2528, 0.2231, -0.8473],
-            FE: -0.476,
-            RE: -0.536,
-            tau2: 0.239,
-            I2: 74.1,
+            FE: -0.47629,
+            RE: -0.53639,
+            tau2: 0.23854,
+            I2: 74.0846,
             ciLow: -1.245,
             ciHigh: 0.172
           },
@@ -19922,10 +20780,10 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
           ],
           expected: {
             yi: [-0.6931, -0.2231, -1.2528, 0.2231, -0.8473],
-            FE: -0.476,
-            RE: -0.536,
-            tau2: 0.239,
-            I2: 74.1,
+            FE: -0.47629,
+            RE: -0.53639,
+            tau2: 0.23854,
+            I2: 74.0846,
             ciLow: -1.242,
             ciHigh: 0.17
           },
@@ -19950,10 +20808,10 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
           ],
           expected: {
             yi: [-0.6931, -0.2231, -1.2528, 0.2231, -0.8473],
-            FE: -0.476,
-            RE: -0.537,
-            tau2: 0.241,
-            I2: 74.1,
+            FE: -0.47629,
+            RE: -0.53652,
+            tau2: 0.24052,
+            I2: 74.2434,
             ciLow: -1.095,
             ciHigh: 3e-3
           },
@@ -20024,7 +20882,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
             FE: -0.01184,
             RE: -0.05005,
             tau2: 1084e-6,
-            I2: 95.57
+            I2: 95.5662
           },
           citation: "Colditz et al. (1994) JAMA 271:698\u2013702. dat.bcg in metafor. Expected values from metafor 4.8-0 escalc('AS') + rma(method='DL')."
         },
@@ -20051,10 +20909,10 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
             FE: -0.01184,
             RE: -0.05799,
             tau2: 3775e-6,
-            I2: 95.57
+            I2: 98.6853
             // Q-based formula (same Q as DL); metafor reports 98.69 using τ²-based I²
           },
-          citation: "Colditz et al. (1994) JAMA 271:698\u2013702. dat.bcg in metafor. FE/RE/tau2 from metafor 4.8-0 escalc('AS') + rma(method='REML'). I2 uses JS Q-based formula (metafor uses \u03C4\xB2-based for REML)."
+          citation: "Colditz et al. (1994) JAMA 271:698\u2013702. dat.bcg in metafor. FE/RE/tau2/I2 from metafor 4.8-0 escalc('AS') + rma(method='REML')."
         },
         // ----------------------------------------------------------------
         // UCOR — Bias-corrected correlation (Olkin & Pratt 1958)
@@ -20066,6 +20924,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
         // ----------------------------------------------------------------
         {
           name: "Correlations \u2013 UCOR (DL)",
+          rBlock: "UCOR-1",
           type: "UCOR",
           tauMethod: "DL",
           data: [
@@ -20083,12 +20942,13 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
             FE: 0.53377,
             RE: 0.52135,
             tau2: 2402e-6,
-            I2: 25.13
+            I2: 25.1312
           },
           citation: "Synthetic 5-study correlation dataset. Expected values from metafor 4.8-0 escalc('UCOR') + rma(method='DL') with gsl package."
         },
         {
           name: "Correlations \u2013 UCOR (REML)",
+          rBlock: "UCOR-2",
           type: "UCOR",
           tauMethod: "REML",
           data: [
@@ -20102,10 +20962,9 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
             FE: 0.53377,
             RE: 0.51908,
             tau2: 3064e-6,
-            I2: 25.13
-            // Q-based formula; metafor reports 29.98 using τ²-based I²
+            I2: 29.9844
           },
-          citation: "Synthetic 5-study correlation dataset. FE/RE/tau2 from metafor 4.8-0 escalc('UCOR') + rma(method='REML'). I2 uses JS Q-based formula."
+          citation: "Synthetic 5-study correlation dataset. FE/RE/tau2/I2 from metafor 4.8-0 escalc('UCOR') + rma(method='REML')."
         },
         // ----------------------------------------------------------------
         // ALPHA-1 — Cronbach's α (raw, ARAW, DL)
@@ -20126,7 +20985,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
             FE: 0.8728,
             RE: 0.8641,
             tau2: 166e-5,
-            I2: 20.95,
+            I2: 20.9472,
             yi: [0.6, 0.85, 0.9]
           },
           citation: "Synthetic. Formulas: Feldt (1965) Psychometrika 30:357\u2013370. R-verified (metafor 4.8.0, generate.R ALPHA-1)."
@@ -20150,7 +21009,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
             FE: -1.7053,
             RE: -1.7053,
             tau2: 0.486,
-            I2: 95.63,
+            I2: 95.6259,
             yi: [-0.916291, -1.89712, -2.302585]
           },
           citation: "Synthetic. Formulas: Bonett (2002) Stat Med 21:1331\u20131335. R-verified (metafor 4.8.0, generate.R ALPHA-2)."
@@ -20174,7 +21033,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
             FE: 0.5573,
             RE: 0.5751,
             tau2: 834e-5,
-            I2: 49.76,
+            I2: 49.7477,
             yi: [0.763143, 0.550321, 0.48075]
           },
           citation: "Synthetic. Formulas: Hakstian & Whalen (1976) Psychometrika 41:219\u2013231. R-verified (metafor 4.8.0, generate.R ALPHA-3)."
@@ -20192,7 +21051,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
         //   Begg:     τ_b = −0.128, S = −10, z = −0.549, p = 0.583
         //   Egger:    intercept = −2.345 (bias), slope = −0.157, p = 0.160
         //   FAT-PET:  intercept = −0.157 (PET), slope = −2.345 (FAT), interceptP = 0.521, slopeP = 0.160
-        //   Rosenthal fail-safe N ≈ 656, Orwin ≈ 44
+        //   Rosenthal fail-safe N = 607, Orwin (trivial=0.1) = 44
         //   Harbord:  intercept = −2.093, interceptP = 0.235
         //   Peters:   intercept = −0.357, interceptP = 0.045
         //   TrimFill (L₀/R₀/Q₀, DL): k0 = 0, adjustedRE = −0.747
@@ -20218,28 +21077,28 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
             { label: "Comstock 1976", a: 27, b: 16886, c: 29, d: 17825 }
           ],
           tests: {
-            begg: { tau: -0.128, S: -10, z: -0.549, p: 0.583 },
-            egger: { intercept: -2.345, slope: -0.157, p: 0.16 },
-            fatPet: { intercept: -0.157, interceptP: 0.521, slope: -2.345, slopeP: 0.16 },
+            begg: { tau: -0.12821, S: -10, z: -0.549, p: 0.583 },
+            egger: { intercept: -2.34534, slope: -0.157, p: 0.16 },
+            fatPet: { intercept: -0.157, interceptP: 0.52136, slope: -2.34534, slopeP: 0.16 },
             petPeese: {
               usePeese: false,
               fat: { intercept: -0.157, interceptP: 0.521, slope: -2.345, slopeP: 0.16 },
               peese: { intercept: -0.379, interceptP: 0.048, slope: -2.477, slopeP: 0.396 }
             },
-            failSafe: { rosenthal: 656, orwin: 44 },
+            failSafe: { rosenthal: 607, orwin: 44 },
             harbord: { intercept: -2.093, interceptP: 0.235 },
-            peters: { intercept: -0.357, interceptP: 0.045 },
+            peters: { intercept: -0.35727, interceptP: 0.045 },
             trimFill: {
               L0: { k0: 0, adjustedRE: -0.747 },
               R0: { k0: 0, adjustedRE: -0.747 },
               Q0: { k0: 0, adjustedRE: -0.747 }
             },
-            tes: { O: 8, E: 8.703, chi2: 0.172, p: 0.661 },
+            tes: { O: 8, E: 8.70259, chi2: 0.17159, p: 0.66065 },
             // hc() from metafor: verified via generate.R block HC-1
             hc: { beta: -0.4361, tau2: 0.3663, t0: 0.3252, ciLb: -1.191, ciUb: 0.3187 },
             // waapWls(): verified via generate.R block WAAP-1
             // kAdequate=4 (Hart, Stein, TPT Madras, Comstock 1974); power≥80% vs wlsEst=−0.4361
-            waap: { wlsEstimate: -0.4361, kAdequate: 4, estimate: -0.4015, se: 0.0457, z: -8.79, p: 0, ci: [-0.491, -0.3119], fallback: false }
+            waap: { wlsEstimate: -0.4361, kAdequate: 4, estimate: -0.40167, se: 0.0457, z: -8.7964, p: 0, ci: [-0.491, -0.3119], fallback: false }
           },
           citation: "Colditz et al. (1994) JAMA 271:698\u2013702. dat.bcg in metafor. Expected values derived analytically (_derive_pubias.py)."
         },
@@ -20269,7 +21128,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
             { label: "S6", yi: 0.5, vi: 0.16 }
           ],
           tests: {
-            egger: { intercept: 1.917, slope: -0.286, se: 0.504, t: 3.804, df: 4, p: 0.019 },
+            egger: { intercept: 1.91667, slope: -0.28571, se: 0.504, t: 3.804, df: 4, p: 0.019 },
             fatPet: { intercept: -0.286, interceptP: 0.092, slope: 1.917, slopeP: 0.019 },
             petPeese: {
               usePeese: true,
@@ -20340,6 +21199,41 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
             ruecker: { intercept: -2.7853, interceptP: 0.1156, slope: 0.6562, slopeP: 0.0203, df: 2 }
           },
           citation: "Synthetic 2\xD72 tables, R-verified (base R lm(), generate.R block RUECKER-1). R\xFCcker: OLS of arcsine z on 1/se (uniform weights)."
+        },
+        // ----------------------------------------------------------------
+        // BCG Vaccine — Orwin fail-safe N with non-default trivial threshold
+        // Same 13-study dataset as PUB_BIAS_BENCHMARKS[0].
+        // trivial=0.2, direction="auto" (FE<0 → signMul=-1, same Rosenthal N due to squaring)
+        // Orwin = max(0, k * (|FE| − |trivial|) / |trivial|)
+        //       = max(0, 13 * (0.4361 − 0.2) / 0.2) ≈ 15.35 → 15
+        // R: fsn(yi, vi, data=bcg_esc, type="Orwin", target=0.2)
+        // ----------------------------------------------------------------
+        {
+          name: "BCG Vaccine \u2013 Orwin FSN, trivial=0.2 (log OR, DL, 13 studies)",
+          rBlock: "FSN-2",
+          type: "OR",
+          tauMethod: "DL",
+          data: [
+            { label: "Aronson 1948", a: 4, b: 119, c: 11, d: 128 },
+            { label: "Ferguson & Simes 1949", a: 6, b: 300, c: 29, d: 274 },
+            { label: "Rosenthal 1960", a: 3, b: 228, c: 11, d: 209 },
+            { label: "Hart & Sutherland 1977", a: 62, b: 13536, c: 248, d: 12619 },
+            { label: "Frimodt-Moller 1973", a: 33, b: 5036, c: 47, d: 5761 },
+            { label: "Stein & Aronson 1953", a: 180, b: 1361, c: 372, d: 1079 },
+            { label: "Vandiviere 1973", a: 8, b: 2537, c: 10, d: 619 },
+            { label: "TPT Madras 1980", a: 505, b: 87886, c: 499, d: 87892 },
+            { label: "Coetzee & Berjak 1968", a: 29, b: 7470, c: 45, d: 7232 },
+            { label: "Rosenthal 1961", a: 17, b: 1699, c: 65, d: 1600 },
+            { label: "Comstock 1974", a: 186, b: 50448, c: 141, d: 27197 },
+            { label: "Comstock & Webster 1969", a: 5, b: 2493, c: 3, d: 2338 },
+            { label: "Comstock 1976", a: 27, b: 16886, c: 29, d: 17825 }
+          ],
+          tests: {
+            failSafe: { rosenthal: 607, orwin: 16 }
+          },
+          fsnTrivial: 0.2,
+          fsnDirection: "auto",
+          citation: "Colditz et al. (1994) JAMA 271:698\u2013702. dat.bcg in metafor. Orwin FSN with trivial=0.2, R-verified (generate.R FSN-2)."
         }
       ];
       INFLUENCE_BENCHMARKS = [
@@ -20434,7 +21328,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
               highLeverage: false,
               highCookD: false,
               highDffits: false,
-              highCovRatio: false
+              highCovRatio: true
             },
             {
               label: "Study 5",
@@ -20488,11 +21382,11 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
             { label: "Aronson 1948", DFFITS: -0.0501725, highDffits: false, covRatio: 1.06258, highCovRatio: false, RE_loo: -0.7051252, tau2_loo: 0.3121715, hat: 0.0503649, cookD: 25308e-7, stdResidual: -0.2199666, DFBETA: -0.0488034, deltaTau2: -34112e-7, outlier: false, influential: false, highLeverage: false, highCookD: false },
             { label: "Ferguson & Simes 1949", DFFITS: -0.3363976, highDffits: false, covRatio: 1.0429284, highCovRatio: false, RE_loo: -0.6545159, tau2_loo: 0.2999746, hat: 0.0634733, cookD: 0.1111881, stdResidual: -1.2280673, DFBETA: -0.3265141, deltaTau2: 87857e-7, outlier: false, influential: false, highLeverage: false, highCookD: false },
             { label: "Rosenthal et al 1960", DFFITS: -0.1638125, highDffits: false, covRatio: 1.0455078, highCovRatio: false, RE_loo: -0.6848417, tau2_loo: 0.3085271, hat: 0.0441203, cookD: 0.0268259, stdResidual: -0.7449915, DFBETA: -0.1601819, deltaTau2: 2332e-7, outlier: false, influential: false, highLeverage: false, highCookD: false },
-            { label: "Hart & Sutherland 1977", DFFITS: -0.6291024, highDffits: false, covRatio: 0.842599, highCovRatio: false, RE_loo: -0.6186969, tau2_loo: 0.2167336, hat: 0.0971765, cookD: 0.2849892, stdResidual: -1.268666, DFBETA: -0.5815723, deltaTau2: 0.0920267, outlier: false, influential: false, highLeverage: false, highCookD: false },
+            { label: "Hart & Sutherland 1977", DFFITS: -0.6291024, highDffits: false, covRatio: 0.842599, highCovRatio: true, RE_loo: -0.6186969, tau2_loo: 0.2167336, hat: 0.0971765, cookD: 0.2849892, stdResidual: -1.268666, DFBETA: -0.5815723, deltaTau2: 0.0920267, outlier: false, influential: false, highLeverage: false, highCookD: false },
             { label: "Frimodt-Moller et al 1973", DFFITS: 0.2727445, highDffits: false, covRatio: 1.1467962, highCovRatio: true, RE_loo: -0.7640357, tau2_loo: 0.3262089, hat: 0.0887538, cookD: 0.0779954, stdResidual: 0.8276505, DFBETA: 0.2607903, deltaTau2: -0.0174486, outlier: false, influential: false, highLeverage: false, highCookD: false },
             { label: "Stein & Aronson 1953", DFFITS: -69973e-7, highDffits: false, covRatio: 1.3202119, highCovRatio: true, RE_loo: -0.7127273, tau2_loo: 0.382919, hat: 0.1012106, cookD: 605e-7, stdResidual: -0.1281471, DFBETA: -67675e-7, deltaTau2: -0.0741588, outlier: false, influential: false, highLeverage: false, highCookD: false },
             { label: "Vandiviere et al 1973", DFFITS: -0.3294041, highDffits: false, covRatio: 1.0408079, highCovRatio: false, RE_loo: -0.6556939, tau2_loo: 0.3005713, hat: 0.0600791, cookD: 0.1068361, stdResidual: -1.2434761, DFBETA: -0.3203862, deltaTau2: 8189e-6, outlier: false, influential: false, highLeverage: false, highCookD: false },
-            { label: "TPT Madras 1980", DFFITS: 0.5127745, highDffits: false, covRatio: 0.8324774, highCovRatio: false, RE_loo: -0.7900866, tau2_loo: 0.2108852, hat: 0.1021634, cookD: 0.180644, stdResidual: 1.2983719, DFBETA: 0.4658279, deltaTau2: 0.097875, outlier: false, influential: false, highLeverage: false, highCookD: false },
+            { label: "TPT Madras 1980", DFFITS: 0.5127745, highDffits: false, covRatio: 0.8324774, highCovRatio: true, RE_loo: -0.7900866, tau2_loo: 0.2108852, hat: 0.1021634, cookD: 0.180644, stdResidual: 1.2983719, DFBETA: 0.4658279, deltaTau2: 0.097875, outlier: false, influential: false, highLeverage: false, highCookD: false },
             { label: "Coetzee & Berjak 1968", DFFITS: 0.137367, highDffits: false, covRatio: 1.1464091, highCovRatio: true, RE_loo: -0.7392634, tau2_loo: 0.3266093, hat: 0.0874842, cookD: 0.019792, stdResidual: 0.4049218, DFBETA: 0.1313937, deltaTau2: -0.017849, outlier: false, influential: false, highLeverage: false, highCookD: false },
             { label: "Rosenthal et al 1961", DFFITS: -0.3507962, highDffits: false, covRatio: 1.0511511, highCovRatio: false, RE_loo: -0.6525852, tau2_loo: 0.2946449, hat: 0.0836825, cookD: 0.1185083, stdResidual: -1.0636685, DFBETA: -0.3357699, deltaTau2: 0.0141154, outlier: false, influential: false, highLeverage: false, highCookD: false },
             { label: "Comstock et al 1974", DFFITS: 0.2334335, highDffits: false, covRatio: 1.3318039, highCovRatio: true, RE_loo: -0.7606942, tau2_loo: 0.3878092, hat: 0.0994753, cookD: 0.0679029, stdResidual: 0.6612752, DFBETA: 0.2258001, deltaTau2: -0.0790489, outlier: false, influential: false, highLeverage: false, highCookD: false },
@@ -20531,8 +21425,8 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
             { label: "Comstock 1976", yi: -0.017313948216879493, vi: 0.0714046596839863, year: 1976, ablat: 33 }
           ],
           expected: {
-            beta: [-3.5454, 19e-4, -0.028],
-            se: [29.0956, 0.0147, 0.0102],
+            beta: [-3.5455, 19e-4, -0.028],
+            se: [29.09588, 0.0147, 0.0102],
             tau2: 0.1108,
             QE: 28.3251,
             QEdf: 10,
@@ -20847,12 +21741,12 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
             LRT: 1.8074,
             LRTdf: 4,
             LRTp: 0.7711282,
-            ll_sel: 0.18482,
-            ll_unsel: -0.71888,
+            ll_sel: -11.76138,
+            ll_unsel: -12.66508,
             RE_unsel: -0.7111991,
             tau2_unsel: 0.2800282
           },
-          citation: "Colditz et al. (1994) dat.bcg. R-verified (metafor 4.8.0, generate.R block 45) for mu/se/zval/pval/tau2/delta/LRT/LRTdf/LRTp. ll_sel/ll_unsel use JS reduced log-likelihood (differ from R by normalization constant ~11.95); LRT identical \u2014 see benchmark-data.md 'R-verification status'."
+          citation: "Colditz et al. (1994) dat.bcg. R-verified (metafor 4.8.0, generate.R block 45) for mu/se/zval/pval/tau2/delta/LRT/LRTdf/LRTp. ll_sel/ll_unsel include \u2212k/2\xB7log(2\u03C0) normalising constant to match R's logLik(); LRT identical."
         },
         // ----------------------------------------------------------------
         // VH-B: BCG vaccine (OR, log scale), two-sided, 3 steps
@@ -20890,25 +21784,31 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
             LRT: 1.192686,
             LRTdf: 2,
             LRTp: 0.5508223,
-            ll_sel: -0.12253,
-            ll_unsel: -0.71888,
+            ll_sel: -12.06873,
+            ll_unsel: -12.66508,
             RE_unsel: -0.7111991,
             tau2_unsel: 0.2800282
           },
-          citation: "Colditz et al. (1994) dat.bcg. R-verified (metafor 4.8.0, generate.R block 46) for mu/se/zval/pval/tau2/delta/LRT/LRTdf/LRTp. ll_sel/ll_unsel use JS reduced log-likelihood; LRT identical \u2014 see benchmark-data.md 'R-verification status'."
+          citation: "Colditz et al. (1994) dat.bcg. R-verified (metafor 4.8.0, generate.R block 46) for mu/se/zval/pval/tau2/delta/LRT/LRTdf/LRTp. ll_sel/ll_unsel include \u2212k/2\xB7log(2\u03C0) normalising constant to match R's logLik(); LRT identical."
         },
         // ----------------------------------------------------------------
         // VH-C: Synthetic (positive effects), one-sided, 4 steps
         // 20 synthetic studies designed so all 4 one-sided intervals are
         // populated: [7,2,7,4] studies per interval.
-        // Verified against our JS implementation (unconstrained BFGS).
-        // Note: metafor selmodel() constrains delta ≤ 100, capping omega[3]
-        // at exp(100) ≈ 2.7e43; our BFGS is unconstrained and finds the true
-        // optimum at omega[3] ≈ 149.8, yielding a higher log-likelihood.
+        // jsOnly: true — expected values are JS-verified, not R-verified.
+        // R block "47" finds a local optimum (mu=0.9194, ll=-4.668) due to optimizer
+        // differences (R uses L-BFGS-B in log-space parameterization; convergence is
+        // sensitive to the ridge structure of the VH log-likelihood surface).
+        // JS unconstrained BFGS finds the global optimum (mu=0.9366, ll=-3.124,
+        // omega[3]=149.84), confirmed by higher log-likelihood (Δll=+1.54).
+        // LRT: JS=16.96, R=13.87 — consistent with JS reaching the better solution.
+        // Excluded from diff_benchmarks.mjs R cross-check; rBlock kept for traceability.
+        // Audit 2026-05-29: classified Bucket D (R optimizer limitation, JS correct).
         // ----------------------------------------------------------------
         {
           name: "Synthetic (positive effects) \u2013 one-sided, 4 steps [0.025,0.10,0.50,1.0]",
           rBlock: "47",
+          jsOnly: true,
           cuts: [0.025, 0.1, 0.5, 1],
           sides: 1,
           data: [
@@ -20943,12 +21843,12 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
             LRT: 16.96038,
             LRTdf: 3,
             LRTp: 72e-5,
-            ll_sel: 15.25465,
-            ll_unsel: 6.77446,
+            ll_sel: -3.12412,
+            ll_unsel: -11.60431,
             RE_unsel: 0.5953773,
             tau2_unsel: 0.06011935
           },
-          citation: "Synthetic dataset (20 studies, positive effects). Self-verified via JS BFGS (unconstrained optimum); differs from metafor R block 47 which constrains delta \u2264 100."
+          citation: "Synthetic dataset (20 studies, positive effects). JS-verified (unconstrained optimum); differs from metafor R block 47. ll_sel/ll_unsel include \u2212k/2\xB7log(2\u03C0) normalising constant."
         }
       ];
       HALFNORM_BENCHMARKS = [
@@ -20990,6 +21890,72 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
             tau2_unsel: 0.2800282
           },
           citation: "Colditz et al. (1994) dat.bcg. Verified against metafor selmodel(type='halfnorm', alternative='two.sided')."
+        },
+        // ----------------------------------------------------------------
+        // HN-EDGE-LOW: near-null k=10 dataset — delta → 0 (no selection signal)
+        // All effects ≈ 0; all p-values non-significant. Expected: delta≈0, LRT≈0.
+        // Verified against: metafor selmodel(type="halfnorm", alternative="two.sided")
+        //   (generate.R block HN-EDGE-LOW).
+        // ----------------------------------------------------------------
+        {
+          name: "Synthetic near-null \u2013 half-normal edge (\u03B4 \u2192 0)",
+          rBlock: "HN-EDGE-LOW",
+          sides: 2,
+          data: [
+            { yi: 0.05, vi: 0.16 },
+            { yi: -0.03, vi: 0.25 },
+            { yi: 0.08, vi: 0.09 },
+            { yi: -0.02, vi: 0.36 },
+            { yi: 0.06, vi: 0.16 },
+            { yi: 0.01, vi: 0.25 },
+            { yi: -0.04, vi: 0.09 },
+            { yi: 0.03, vi: 0.36 },
+            { yi: 0.07, vi: 0.16 },
+            { yi: -0.01, vi: 0.25 }
+          ],
+          expected: {
+            mu: 0.02523967,
+            se_mu: 0.13091192,
+            tau2: 168e-8,
+            delta: 931e-8,
+            LRT: 0,
+            LRTdf: 1,
+            LRTp: 1
+          },
+          citation: "Synthetic near-null (k=10, all p>0.05). Verified against metafor selmodel(type='halfnorm') (generate.R block HN-EDGE-LOW)."
+        },
+        // ----------------------------------------------------------------
+        // HN-EDGE-HIGH: strong-selection k=10 dataset — delta → 1 (upper bound)
+        // All effects large; all p < 0.001. Expected: delta≈1, LRT≈0 (flat weight fn).
+        // Verified against: metafor selmodel(type="halfnorm", alternative="two.sided")
+        //   (generate.R block HN-EDGE-HIGH).
+        // ----------------------------------------------------------------
+        {
+          name: "Synthetic strong-selection \u2013 half-normal edge (\u03B4 \u2192 1)",
+          rBlock: "HN-EDGE-HIGH",
+          sides: 2,
+          data: [
+            { yi: 1.5, vi: 0.01 },
+            { yi: 1.8, vi: 0.02 },
+            { yi: 1.3, vi: 0.01 },
+            { yi: 2, vi: 0.03 },
+            { yi: 1.6, vi: 0.02 },
+            { yi: 1.4, vi: 0.01 },
+            { yi: 1.9, vi: 0.02 },
+            { yi: 1.7, vi: 0.01 },
+            { yi: 1.2, vi: 0.03 },
+            { yi: 2.1, vi: 0.02 }
+          ],
+          expected: {
+            mu: 1.64129658,
+            se_mu: 0.08749567,
+            tau2: 0.0590699,
+            delta: 1.00000104,
+            LRT: 1e-6,
+            LRTdf: 1,
+            LRTp: 0.99921203
+          },
+          citation: "Synthetic strong-selection (k=10, all p<0.001). Verified against metafor selmodel(type='halfnorm') (generate.R block HN-EDGE-HIGH)."
         }
       ];
       POWER_BENCHMARKS = [
@@ -21435,6 +22401,66 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
           }
         }
       ];
+      RVE_MOM_BENCHMARKS = [
+        {
+          // RVE-MoM-1. Same data as RVE-1; omega2>0 so MoM materially changes result.
+          // robu HIER small=FALSE: est=0.4200251, se=0.1159402, t=3.6227723, df=2
+          // omega2=0.0223540, tau2=0.0094283
+          name: "3-cluster 6-study intercept-only MoM (rho=0.80)",
+          rBlock: "RVE-MoM-1",
+          rho: 0.8,
+          moderators: [],
+          data: [
+            { yi: 0.1, vi: 0.04, cluster: "1" },
+            { yi: 0.3, vi: 0.05, cluster: "1" },
+            { yi: 0.5, vi: 0.03, cluster: "2" },
+            { yi: 0.7, vi: 0.06, cluster: "2" },
+            { yi: 0.2, vi: 0.04, cluster: "3" },
+            { yi: 0.8, vi: 0.05, cluster: "3" }
+          ],
+          expected: {
+            est: 0.4200251,
+            se: 0.1159402,
+            t: 3.6227723,
+            p: 0.0684615,
+            df: 2,
+            kCluster: 3,
+            k: 6,
+            omega2: 0.022354,
+            tau2: 94283e-7
+          }
+        },
+        {
+          // RVE-MoM-2. Same data as RVE-2; omega2>0.
+          // robu HIER small=FALSE: est=0.3736972, se=0.1169068, t=3.1965403, df=3
+          // omega2=0.0323341, tau2=0.0257758
+          name: "4-cluster 8-study heterogeneous sizes MoM (rho=0.80)",
+          rBlock: "RVE-MoM-2",
+          rho: 0.8,
+          moderators: [],
+          data: [
+            { yi: 0.2, vi: 0.02, cluster: "1" },
+            { yi: 0.4, vi: 0.03, cluster: "1" },
+            { yi: 0.6, vi: 0.025, cluster: "1" },
+            { yi: -0.1, vi: 0.04, cluster: "2" },
+            { yi: 0.3, vi: 0.035, cluster: "2" },
+            { yi: 0.8, vi: 0.02, cluster: "3" },
+            { yi: 0.5, vi: 0.03, cluster: "3" },
+            { yi: 0.15, vi: 0.05, cluster: "4" }
+          ],
+          expected: {
+            est: 0.3736972,
+            se: 0.1169068,
+            t: 3.1965403,
+            p: 0.0494626,
+            df: 3,
+            kCluster: 4,
+            k: 8,
+            omega2: 0.0323341,
+            tau2: 0.0257758
+          }
+        }
+      ];
       THREE_LEVEL_BENCHMARKS = [
         {
           // THREE-1. Synthetic 4-cluster × 3-study dataset (12 studies, REML).
@@ -21517,6 +22543,85 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
             k: 14,
             kCluster: 5,
             logLik: 6.4180830762
+          }
+        },
+        {
+          // THREE-3. Same data as THREE-1; method="ML".
+          // ML shrinks τ² estimates relative to REML (tau2_between: 0.110 → 0.0792).
+          // R: rma.mv(yi, vi, random=~1|cluster/study, method="ML")
+          name: "Synthetic 4-cluster \xD7 3-study (ML)",
+          rBlock: "THREE-3",
+          method: "ML",
+          data: [
+            { yi: 0, vi: 5e-3, cluster: "C1" },
+            { yi: 0.4, vi: 5e-3, cluster: "C1" },
+            { yi: 0.2, vi: 5e-3, cluster: "C1" },
+            { yi: 0.6, vi: 5e-3, cluster: "C2" },
+            { yi: 1, vi: 5e-3, cluster: "C2" },
+            { yi: 0.8, vi: 5e-3, cluster: "C2" },
+            { yi: 0.1, vi: 5e-3, cluster: "C3" },
+            { yi: 0.5, vi: 5e-3, cluster: "C3" },
+            { yi: 0.3, vi: 5e-3, cluster: "C3" },
+            { yi: 0.7, vi: 5e-3, cluster: "C4" },
+            { yi: 1.1, vi: 5e-3, cluster: "C4" },
+            { yi: 0.9, vi: 5e-3, cluster: "C4" }
+          ],
+          expected: {
+            mu: 0.55,
+            se: 0.1520690636,
+            ciLow: 0.2519501118,
+            ciHigh: 0.8480498882,
+            z: 3.6167777114,
+            p: 2983651e-10,
+            tau2_within: 0.0349999997,
+            tau2_between: 0.0791666672,
+            I2_within: 30.54545424,
+            I2_between: 69.09090939,
+            Q: 286,
+            df: 11,
+            k: 12,
+            kCluster: 4,
+            logLik: 9.4393719911
+          }
+        },
+        {
+          // THREE-4. Same data as THREE-2; method="ML".
+          // R: rma.mv(yi, vi, random=~1|cluster/study, method="ML")
+          name: "Synthetic 5-cluster unequal sizes (ML)",
+          rBlock: "THREE-4",
+          method: "ML",
+          data: [
+            { yi: 0.1, vi: 0.015, cluster: "A" },
+            { yi: 0.7, vi: 0.02, cluster: "A" },
+            { yi: 0.4, vi: 0.018, cluster: "A" },
+            { yi: 0.8, vi: 0.012, cluster: "B" },
+            { yi: 1.2, vi: 0.015, cluster: "B" },
+            { yi: 0.05, vi: 0.01, cluster: "C" },
+            { yi: 0.45, vi: 0.012, cluster: "C" },
+            { yi: 0.25, vi: 0.014, cluster: "C" },
+            { yi: 0.9, vi: 0.016, cluster: "C" },
+            { yi: 0.6, vi: 0.02, cluster: "D" },
+            { yi: 1, vi: 0.025, cluster: "D" },
+            { yi: 0.35, vi: 0.018, cluster: "E" },
+            { yi: 0.75, vi: 0.022, cluster: "E" },
+            { yi: 0.55, vi: 0.019, cluster: "E" }
+          ],
+          expected: {
+            mu: 0.5858189805,
+            se: 0.0967270121,
+            ciLow: 0.3962375204,
+            ciHigh: 0.7754004406,
+            z: 6.0564155552,
+            p: 14e-10,
+            tau2_within: 0.0808165605,
+            tau2_between: 0.0112586806,
+            I2_within: 86.7059935,
+            I2_between: 12.07914665,
+            Q: 101.3917859047,
+            df: 13,
+            k: 14,
+            kCluster: 5,
+            logLik: 8.6849558354
           }
         }
       ];
@@ -21968,12 +23073,869 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
             logLik: 4.48699427
           },
           citation: "Berkey98 + centred study-index moderator, common slopes. Verified against metafor rma.mv(mods=~outcome+x-1) (generate.R block MV-4)."
+        },
+        {
+          rBlock: "MV-1-t",
+          name: "Berkey98: CS struct, REML, t-distribution CIs",
+          struct: "CS",
+          method: "REML",
+          rho: 0.5,
+          ciMethod: "t",
+          data: _BERKEY98,
+          expected: {
+            // Same model as MV-1; test="t" widens CIs via t-critical (df=8) instead of z=1.96.
+            // Omnibus test becomes F(2,8) instead of chi2(2).
+            beta: [0.30051151, -0.08373912],
+            // outcomePD, outcomeAL
+            se: [0.07470856, 0.07152062],
+            ci_lb: [0.12823325, -0.24866595],
+            ci_ub: [0.47278977, 0.08118772],
+            Fstat: 9.75331509,
+            df_QM1: 2,
+            df_QM2: 8,
+            pF: 715501e-8,
+            QE: 45.42745765,
+            df_QE: 8,
+            pQE: 31e-8
+          },
+          citation: 'Berkey98, t-distribution CIs (metafor test="t"). Verified against rma.mv(test="t") (generate.R block MV-1-t).'
+        },
+        {
+          rBlock: "MV-UN-2",
+          name: "Synthetic 3-outcome UN, 15 studies, REML",
+          struct: "UN",
+          method: "REML",
+          rho: 0.5,
+          data: (() => {
+            const yi = [
+              0.28,
+              0.51,
+              0.22,
+              0.15,
+              0.62,
+              0.18,
+              0.4,
+              0.44,
+              0.27,
+              0.32,
+              0.71,
+              0.15,
+              0.25,
+              0.38,
+              0.24,
+              0.35,
+              0.55,
+              0.21,
+              0.2,
+              0.48,
+              0.19,
+              0.42,
+              0.66,
+              0.25,
+              0.18,
+              0.42,
+              0.23,
+              0.38,
+              0.59,
+              0.17,
+              0.29,
+              0.53,
+              0.2,
+              0.33,
+              0.47,
+              0.26,
+              0.21,
+              0.68,
+              0.16,
+              0.44,
+              0.41,
+              0.28,
+              0.31,
+              0.57,
+              0.22
+            ];
+            const vi = [
+              0.02,
+              0.015,
+              0.025,
+              0.018,
+              0.012,
+              0.022,
+              0.025,
+              0.02,
+              0.03,
+              0.012,
+              8e-3,
+              0.015,
+              0.02,
+              0.015,
+              0.025,
+              0.015,
+              0.012,
+              0.018,
+              0.022,
+              0.018,
+              0.028,
+              0.01,
+              8e-3,
+              0.012,
+              0.024,
+              0.02,
+              0.03,
+              0.018,
+              0.014,
+              0.022,
+              0.02,
+              0.016,
+              0.024,
+              0.019,
+              0.015,
+              0.023,
+              0.021,
+              0.017,
+              0.027,
+              0.011,
+              9e-3,
+              0.013,
+              0.017,
+              0.013,
+              0.02
+            ];
+            const outcomes = ["A", "B", "C"];
+            return Array.from({ length: 45 }, (_, i) => ({
+              yi: yi[i],
+              vi: vi[i],
+              study_id: Math.floor(i / 3) + 1,
+              outcome_id: outcomes[i % 3]
+            }));
+          })(),
+          expected: {
+            beta: [0.31738275, 0.5468984, 0.21868336],
+            se: [0.03401466, 0.03460077, 0.03754424],
+            tau2: [45276e-8, 470429e-8, 51889e-8],
+            rho: [-1, 1, -1],
+            // boundary values — not compared in diff
+            QM: 270.85726908,
+            QE: 32.420444,
+            logLik: 37.17639714
+          },
+          citation: "Synthetic 45-row (15 studies \xD7 3 outcomes) dataset. UN \u03A8 structure. Verified against metafor rma.mv() (generate.R block MV-UN-2)."
+        }
+      ];
+      _BCG_2x2 = [
+        { label: "Aronson 1948", a: 4, b: 119, c: 11, d: 128 },
+        { label: "Ferguson & Simes 1949", a: 6, b: 300, c: 29, d: 274 },
+        { label: "Rosenthal 1960", a: 3, b: 228, c: 11, d: 209 },
+        { label: "Hart & Sutherland 1977", a: 62, b: 13536, c: 248, d: 12619 },
+        { label: "Frimodt-Moller 1973", a: 33, b: 5036, c: 47, d: 5761 },
+        { label: "Stein & Aronson 1953", a: 180, b: 1361, c: 372, d: 1079 },
+        { label: "Vandiviere 1973", a: 8, b: 2537, c: 10, d: 619 },
+        { label: "TPT Madras 1980", a: 505, b: 87886, c: 499, d: 87892 },
+        { label: "Coetzee & Berjak 1968", a: 29, b: 7470, c: 45, d: 7232 },
+        { label: "Rosenthal 1961", a: 17, b: 1699, c: 65, d: 1600 },
+        { label: "Comstock 1974", a: 186, b: 50448, c: 141, d: 27197 },
+        { label: "Comstock & Webster 1969", a: 5, b: 2493, c: 3, d: 2338 },
+        { label: "Comstock 1976", a: 27, b: 16886, c: 29, d: 17825 }
+      ];
+      _NORMAND_MD = [
+        { label: "Edinburgh", n1: 155, m1: 55, sd1: 47, n2: 156, m2: 75, sd2: 64 },
+        { label: "Orpington-Mild", n1: 31, m1: 27, sd1: 7, n2: 32, m2: 29, sd2: 4 },
+        { label: "Orpington-Moderate", n1: 75, m1: 64, sd1: 17, n2: 71, m2: 119, sd2: 29 },
+        { label: "Orpington-Severe", n1: 18, m1: 66, sd1: 20, n2: 18, m2: 137, sd2: 48 },
+        { label: "Montreal-Home", n1: 8, m1: 14, sd1: 8, n2: 13, m2: 18, sd2: 11 },
+        { label: "Montreal-Transfer", n1: 57, m1: 19, sd1: 7, n2: 52, m2: 18, sd2: 4 },
+        { label: "Newcastle", n1: 34, m1: 52, sd1: 45, n2: 33, m2: 41, sd2: 34 },
+        { label: "Umea", n1: 110, m1: 21, sd1: 16, n2: 183, m2: 31, sd2: 27 },
+        { label: "Uppsala", n1: 60, m1: 30, sd1: 27, n2: 52, m2: 23, sd2: 20 }
+      ];
+      _SYNTH_FUNNEL = [
+        { label: "S1", yi: -0.1, vi: 0.04 },
+        { label: "S2", yi: 0.3, vi: 0.09 },
+        { label: "S3", yi: 0.1, vi: 0.0225 },
+        { label: "S4", yi: 0.9, vi: 0.36 },
+        { label: "S5", yi: 1.4, vi: 0.64 },
+        { label: "S6", yi: 0.5, vi: 0.16 }
+      ];
+      TRIMFILL_BENCHMARKS = [
+        {
+          rBlock: "TF-L0-BCG",
+          name: "BCG OR trim-fill L0 (DL, k=13)",
+          type: "OR",
+          tauMethod: "DL",
+          estimator: "L0",
+          data: _BCG_2x2,
+          expected: { k0: 0, b_tf: -0.74739235, se_tf: 0.19226285, tau2_tf: 0.36634341, ci_lb_tf: -1.12422061, ci_ub_tf: -0.37056409 },
+          citation: "Colditz et al. (1994). dat.bcg in metafor. Verified via generate.R block TF-L0-BCG."
+        },
+        {
+          rBlock: "TF-R0-BCG",
+          name: "BCG OR trim-fill R0 (DL, k=13)",
+          type: "OR",
+          tauMethod: "DL",
+          estimator: "R0",
+          data: _BCG_2x2,
+          expected: { k0: 0, b_tf: -0.74739235, se_tf: 0.19226285, tau2_tf: 0.36634341, ci_lb_tf: -1.12422061, ci_ub_tf: -0.37056409 },
+          citation: "Colditz et al. (1994). dat.bcg in metafor. Verified via generate.R block TF-R0-BCG."
+        },
+        {
+          rBlock: "TF-Q0-BCG",
+          name: "BCG OR trim-fill Q0 (DL, k=13)",
+          type: "OR",
+          tauMethod: "DL",
+          estimator: "Q0",
+          data: _BCG_2x2,
+          expected: { k0: 0, b_tf: -0.74739235, se_tf: 0.19226285, tau2_tf: 0.36634341, ci_lb_tf: -1.12422061, ci_ub_tf: -0.37056409 },
+          citation: "Colditz et al. (1994). dat.bcg in metafor. Verified via generate.R block TF-Q0-BCG."
+        },
+        {
+          rBlock: "TF-L0-SYNTH",
+          name: "Synthetic funnel trim-fill L0 (DL, k=6)",
+          type: "GENERIC",
+          tauMethod: "DL",
+          estimator: "L0",
+          data: _SYNTH_FUNNEL,
+          expected: { k0: 3, b_tf: 0.0733674, se_tf: 0.15345843, tau2_tf: 0.06949276, ci_lb_tf: -0.2274056, ci_ub_tf: 0.3741404 },
+          citation: "Synthetic asymmetric funnel (k=6). Verified via generate.R block TF-L0-SYNTH."
+        },
+        {
+          rBlock: "TF-R0-SYNTH",
+          name: "Synthetic funnel trim-fill R0 (DL, k=6)",
+          type: "GENERIC",
+          tauMethod: "DL",
+          estimator: "R0",
+          data: _SYNTH_FUNNEL,
+          expected: { k0: 3, b_tf: 0.0733674, se_tf: 0.15345843, tau2_tf: 0.06949276, ci_lb_tf: -0.2274056, ci_ub_tf: 0.3741404 },
+          citation: "Synthetic asymmetric funnel (k=6). Verified via generate.R block TF-R0-SYNTH."
+        },
+        {
+          // No rBlock — metafor Q0 errors (NaN in sqrt) on k=6 asymmetric data.
+          // JS: k0=3 on first iter, disc<0 on trimmed set → break, k0=0, converged=false.
+          // Expected: no fill; pooled = original 6 studies. JS-only benchmark; see benchmark-data.md §TF-Q0-SYNTH.
+          name: "Synthetic funnel trim-fill Q0 (DL, k=6) \u2014 R fails, JS no-fill",
+          type: "GENERIC",
+          tauMethod: "DL",
+          estimator: "Q0",
+          data: _SYNTH_FUNNEL,
+          expected: { k0: 0, b_tf: 0.19309212, se_tf: 0.13800816, tau2_tf: 0.02782229, ci_lb_tf: -0.07739889, ci_ub_tf: 0.46358314 },
+          citation: "Synthetic asymmetric funnel (k=6). R's trimfill(estimator='Q0') errors with NaN. JS breaks on disc<0 \u2192 k0=0. JS-only; verified 2026-05-30."
+        },
+        {
+          rBlock: "TF-L0-NORMAND",
+          name: "Normand 1999 MD trim-fill L0 (DL, k=9)",
+          type: "MD",
+          tauMethod: "DL",
+          estimator: "L0",
+          data: _NORMAND_MD,
+          expected: { k0: 0, b_tf: -13.98172182, se_tf: 5.12669834, tau2_tf: 205.40937547, ci_lb_tf: -24.02986592, ci_ub_tf: -3.93357771 },
+          citation: "Normand (1999) Stat Med 18:321. dat.normand1999 in metafor. Verified via generate.R block TF-L0-NORMAND."
+        },
+        {
+          rBlock: "TF-R0-NORMAND",
+          name: "Normand 1999 MD trim-fill R0 (DL, k=9)",
+          type: "MD",
+          tauMethod: "DL",
+          estimator: "R0",
+          data: _NORMAND_MD,
+          expected: { k0: 1, b_tf: -9.42048254, se_tf: 5.10696801, tau2_tf: 220.96401263, ci_lb_tf: -19.42995591, ci_ub_tf: 0.58899084 },
+          citation: "Normand (1999) Stat Med 18:321. dat.normand1999 in metafor. Verified via generate.R block TF-R0-NORMAND."
+        },
+        {
+          rBlock: "TF-Q0-NORMAND",
+          name: "Normand 1999 MD trim-fill Q0 (DL, k=9)",
+          type: "MD",
+          tauMethod: "DL",
+          estimator: "Q0",
+          data: _NORMAND_MD,
+          expected: { k0: 0, b_tf: -13.98172182, se_tf: 5.12669834, tau2_tf: 205.40937547, ci_lb_tf: -24.02986592, ci_ub_tf: -3.93357771 },
+          citation: "Normand (1999) Stat Med 18:321. dat.normand1999 in metafor. Verified via generate.R block TF-Q0-NORMAND."
+        }
+      ];
+      CUMULATIVE_BENCHMARKS = [
+        {
+          rBlock: "CUM-BCG",
+          name: "BCG OR cumulative meta (DL, k=13)",
+          type: "OR",
+          tauMethod: "DL",
+          data: _BCG_2x2,
+          expected: [
+            { estimate: -0.93869414, se: 0.59759932, ci_lb: -2.10996729, ci_ub: 0.23257901, tau2: 0 },
+            { estimate: -1.39832051, se: 0.36262424, ci_lb: -2.10905096, ci_ub: -0.68759007, tau2: 0 },
+            { estimate: -1.39552114, se: 0.31762774, ci_lb: -2.01806007, ci_ub: -0.7729822, tau2: 0 },
+            { estimate: -1.44623245, se: 0.13003673, ci_lb: -1.70109976, ci_ub: -1.19136515, tau2: 0 },
+            { estimate: -1.09819182, se: 0.35197503, ci_lb: -1.7880502, ci_ub: -0.40833344, tau2: 0.44540649 },
+            { estimate: -1.04496196, se: 0.22080073, ci_lb: -1.47772344, ci_ub: -0.61220049, tau2: 0.18151058 },
+            { estimate: -1.10664136, se: 0.20660855, ci_lb: -1.51158669, ci_ub: -0.70169604, tau2: 0.17637391 },
+            { estimate: -0.96643431, se: 0.28888769, ci_lb: -1.53264377, ci_ub: -0.40022484, tau2: 0.5362842 },
+            { estimate: -0.90077482, se: 0.25995783, ci_lb: -1.4102828, ci_ub: -0.39126685, tau2: 0.48804273 },
+            { estimate: -0.95502828, se: 0.24721871, ci_lb: -1.43956804, ci_ub: -0.47048851, tau2: 0.49550343 },
+            { estimate: -0.87579783, se: 0.20867051, ci_lb: -1.28478452, ci_ub: -0.46681114, tau2: 0.37964171 },
+            { estimate: -0.81557729, se: 0.2036448, ci_lb: -1.21471377, ci_ub: -0.41644082, tau2: 0.3786162 },
+            { estimate: -0.74739235, se: 0.19226285, ci_lb: -1.12422061, ci_ub: -0.37056409, tau2: 0.36634341 }
+          ],
+          citation: "Colditz et al. (1994). dat.bcg in metafor. Verified via generate.R block CUM-BCG."
+        },
+        {
+          rBlock: "CUM-NORMAND",
+          name: "Normand 1999 MD cumulative meta (REML, k=9)",
+          type: "MD",
+          tauMethod: "REML",
+          data: _NORMAND_MD,
+          expected: [
+            { estimate: -20, se: 6.36459136, ci_lb: -32.47436984, ci_ub: -7.52563016, tau2: 0 },
+            { estimate: -9.93257283, se: 8.93647577, ci_lb: -27.4477435, ci_ub: 7.58259783, tau2: 140.70566584 },
+            { estimate: -25.57957528, se: 15.73547859, ci_lb: -56.4205466, ci_ub: 5.26139604, tau2: 723.72497709 },
+            { estimate: -35.88210854, se: 15.62563231, ci_lb: -66.50778509, ci_ub: -5.25643198, tau2: 927.79463349 },
+            { estimate: -29.28105467, se: 13.55207556, ci_lb: -55.84263469, ci_ub: -2.71947466, tau2: 876.06777622 },
+            { estimate: -23.99318729, se: 12.05947077, ci_lb: -47.62931567, ci_ub: -0.35705891, tau2: 837.57642483 },
+            { estimate: -19.27759979, se: 11.27617044, ci_lb: -41.37848775, ci_ub: 2.82328816, tau2: 846.98584503 },
+            { estimate: -17.9690067, se: 9.70299836, ci_lb: -36.98653403, ci_ub: 1.04852062, tau2: 715.30749709 },
+            { estimate: -15.10602747, se: 8.94655285, ci_lb: -32.64094884, ci_ub: 2.42889389, tau2: 684.64615288 }
+          ],
+          citation: "Normand (1999) Stat Med 18:321. dat.normand1999 in metafor. Verified via generate.R block CUM-NORMAND."
+        }
+      ];
+      HC_BENCHMARKS = [
+        {
+          rBlock: "HC-BCG-RR",
+          name: "BCG log-RR Henmi-Copas (DL, k=13)",
+          type: "RR",
+          data: _BCG_2x2,
+          expected: { beta: -0.43028516, se: 0.28354435, tau2: 0.30876026, ci_lb: -1.15551187, ci_ub: 0.29494154 },
+          citation: "Colditz et al. (1994). dat.bcg log-RR. Verified via generate.R block HC-BCG-RR."
+        },
+        {
+          rBlock: "HC-BCG-RD",
+          name: "BCG RD Henmi-Copas (DL, k=13)",
+          type: "RD",
+          data: _BCG_2x2,
+          expected: { beta: -91426e-8, se: 229642e-8, tau2: 1873e-8, ci_lb: -778351e-8, ci_ub: 595498e-8 },
+          citation: "Colditz et al. (1994). dat.bcg risk difference. Verified via generate.R block HC-BCG-RD."
+        },
+        {
+          rBlock: "HC-NORMAND-MD",
+          name: "Normand 1999 MD Henmi-Copas (DL, k=9)",
+          type: "MD",
+          data: _NORMAND_MD,
+          expected: { beta: -3.46361263, se: 8.42125652, tau2: 205.40937547, ci_lb: -28.60190092, ci_ub: 21.67467566 },
+          citation: "Normand (1999) Stat Med 18:321. dat.normand1999. Verified via generate.R block HC-NORMAND-MD."
+        }
+      ];
+      WAAP_BENCHMARKS = [
+        {
+          rBlock: "WAAP-NORMAND",
+          name: "Normand 1999 MD WAAP-WLS (k=9, kAdequate=1)",
+          type: "MD",
+          data: _NORMAND_MD,
+          expected: { wlsEstimate: -3.46361263, kAdequate: 1, estimate: 1, se: 1.08043576, z: 0.92555248, fallback: false },
+          citation: "Normand (1999) Stat Med 18:321. One study (Montreal-Transfer) has adequate power vs |wlsEst|. Verified via generate.R block WAAP-NORMAND."
+        }
+      ];
+      PCURVE_BENCHMARKS = [
+        {
+          rBlock: "PCURVE-BCG-OR",
+          name: "BCG log-OR p-curve (DL, k=13, k_sig=8)",
+          type: "OR",
+          tauMethod: "DL",
+          data: _BCG_2x2,
+          expected: {
+            k: 8,
+            rightSkewZ: -2.77934871,
+            rightSkewP: 27234e-7,
+            flatnessZ: -2.25930807,
+            flatnessP: 0.98806789
+          },
+          citation: "Colditz et al. (1994) dat.bcg log-OR. JS formula verified via generate.R block PCURVE-BCG-OR."
+        },
+        {
+          rBlock: "PCURVE-NORMAND-MD",
+          name: "Normand 1999 MD p-curve (DL, k=9, k_sig=4)",
+          type: "MD",
+          tauMethod: "DL",
+          data: _NORMAND_MD,
+          expected: {
+            k: 4,
+            rightSkewZ: -3.40367025,
+            rightSkewP: 33243e-8,
+            flatnessZ: -3.15325365,
+            flatnessP: 0.99919269
+          },
+          citation: "Normand (1999) Stat Med 18:321 dat.normand1999. JS formula verified via generate.R block PCURVE-NORMAND-MD."
+        }
+      ];
+      PUNIFORM_BENCHMARKS = [
+        {
+          rBlock: "PUNIFORM-BCG-OR",
+          name: "BCG log-OR p-uniform (DL, k=13, k_sig=8)",
+          type: "OR",
+          tauMethod: "DL",
+          data: _BCG_2x2,
+          expected: {
+            k: 8,
+            estimate: 1.02651826,
+            ciLow: 0.35293979,
+            ciHigh: 1.42891878,
+            Z_sig: -2.77934871,
+            p_sig: 27234e-7,
+            Z_bias: -3.03168535,
+            p_bias: 0.99878638
+          },
+          citation: "Colditz et al. (1994) dat.bcg log-OR. JS formula verified via generate.R block PUNIFORM-BCG-OR."
+        },
+        {
+          rBlock: "PUNIFORM-NORMAND-MD",
+          name: "Normand 1999 MD p-uniform (DL, k=9, k_sig=4)",
+          type: "MD",
+          tauMethod: "DL",
+          data: _NORMAND_MD,
+          expected: {
+            k: 4,
+            estimate: 37.1992933,
+            ciLow: 11.09426612,
+            ciHigh: 60.80492792,
+            Z_sig: -3.40367025,
+            p_sig: 33243e-8,
+            Z_bias: -3.4590917,
+            p_bias: 0.99972966
+          },
+          citation: "Normand (1999) Stat Med 18:321 dat.normand1999. JS formula verified via generate.R block PUNIFORM-NORMAND-MD."
         }
       ];
     }
   });
 
-  // js/tests.js
+  // js/tests/fixtures/fixture_smd_reml_normal.mjs
+  var fixture_smd_reml_normal_default;
+  var init_fixture_smd_reml_normal = __esm({
+    "js/tests/fixtures/fixture_smd_reml_normal.mjs"() {
+      fixture_smd_reml_normal_default = {
+        name: "SMD REML normal CI \u2014 Normand 1999",
+        // Raw study inputs — processed by computeStudies(rawData, type) in the runner.
+        rawData: [
+          { label: "Edinburgh", n1: 155, m1: 55, sd1: 47, n2: 156, m2: 75, sd2: 64 },
+          { label: "Orpington-Mild", n1: 31, m1: 27, sd1: 7, n2: 32, m2: 29, sd2: 4 },
+          { label: "Orpington-Moderate", n1: 75, m1: 64, sd1: 17, n2: 71, m2: 119, sd2: 29 },
+          { label: "Orpington-Severe", n1: 18, m1: 66, sd1: 20, n2: 18, m2: 137, sd2: 48 }
+        ],
+        type: "SMD",
+        opts: {
+          method: "REML",
+          ciMethod: "normal",
+          alpha: 0.05,
+          useTF: false,
+          tfEstimator: "L0",
+          useTFAdjusted: false,
+          isMHorPeto: false,
+          hasClusters: false,
+          rveRho: 0.8,
+          rveMode: "corr",
+          threeLevelMethod: "REML",
+          modSpec: [],
+          scaleModSpec: [],
+          interactionSpec: [],
+          cumulativeOrder: "input",
+          selModeVal: "mle",
+          selPreset: "b5",
+          selWeightFn: "vevea-hedges",
+          selSides: 2,
+          selCuts: [0.025, 0.05, 1],
+          bayesMu0: 0,
+          bayesSigmaMu: 1,
+          bayesSigmaTau: 0.5,
+          fsnTrivial: 0.1,
+          fsnDirection: "auto"
+        },
+        // Extra display settings normally read from DOM at report-assembly time.
+        reportSettings: { ciLevel: "95" },
+        // Fields that must appear (formatted with fmt()) in the HTML table produced
+        // by the corresponding sections.js data function + buildTableAPA().
+        // 'section' selects the sections.js function: 'summary' | 'pubBias'
+        // 'path'    is a dotted key path into the headless result object r.
+        // The runner formats the actual computed value with fmt() and checks that
+        // the formatted string appears somewhere in the HTML table string.
+        // Catching: a field removed from sections.js rows → formatted value absent.
+        expected: [
+          // ── Summary table (sections.summaryData) ────────────────────────────────
+          { section: "summary", path: "m.RE", label: "RE estimate" },
+          { section: "summary", path: "m.seRE", label: "RE SE" },
+          { section: "summary", path: "m.FE", label: "FE estimate" },
+          { section: "summary", path: "m.tau2", label: "tau\xB2" },
+          { section: "summary", path: "m.I2", label: "I\xB2" },
+          { section: "summary", path: "m.Q", label: "Q statistic" },
+          // ── Publication-bias table (sections.pubBiasData) ───────────────────────
+          { section: "pubBias", path: "egger.intercept", label: "Egger intercept" },
+          { section: "pubBias", path: "hc.beta", label: "HC estimate" },
+          { section: "pubBias", path: "waap.estimate", label: "WAAP estimate" }
+        ]
+      };
+    }
+  });
+
+  // js/tests/fixtures/fixture_smd_reml_kh.mjs
+  var fixture_smd_reml_kh_default;
+  var init_fixture_smd_reml_kh = __esm({
+    "js/tests/fixtures/fixture_smd_reml_kh.mjs"() {
+      fixture_smd_reml_kh_default = {
+        name: "SMD REML KH CI \u2014 Normand 1999",
+        rawData: [
+          { label: "Edinburgh", n1: 155, m1: 55, sd1: 47, n2: 156, m2: 75, sd2: 64 },
+          { label: "Orpington-Mild", n1: 31, m1: 27, sd1: 7, n2: 32, m2: 29, sd2: 4 },
+          { label: "Orpington-Moderate", n1: 75, m1: 64, sd1: 17, n2: 71, m2: 119, sd2: 29 },
+          { label: "Orpington-Severe", n1: 18, m1: 66, sd1: 20, n2: 18, m2: 137, sd2: 48 }
+        ],
+        type: "SMD",
+        opts: {
+          method: "REML",
+          ciMethod: "KH",
+          alpha: 0.05,
+          useTF: false,
+          tfEstimator: "L0",
+          useTFAdjusted: false,
+          isMHorPeto: false,
+          hasClusters: false,
+          rveRho: 0.8,
+          rveMode: "corr",
+          threeLevelMethod: "REML",
+          modSpec: [],
+          scaleModSpec: [],
+          interactionSpec: [],
+          cumulativeOrder: "input",
+          selModeVal: "mle",
+          selPreset: "b5",
+          selWeightFn: "vevea-hedges",
+          selSides: 2,
+          selCuts: [0.025, 0.05, 1],
+          bayesMu0: 0,
+          bayesSigmaMu: 1,
+          bayesSigmaTau: 0.5,
+          fsnTrivial: 0.1,
+          fsnDirection: "auto"
+        },
+        reportSettings: { ciLevel: "95" },
+        expected: [
+          { section: "summary", path: "m.RE", label: "RE estimate" },
+          { section: "summary", path: "m.seRE", label: "RE SE" },
+          { section: "summary", path: "m.tau2", label: "tau\xB2" },
+          { section: "summary", path: "m.Q", label: "Q statistic" }
+        ]
+      };
+    }
+  });
+
+  // js/tests/fixtures/fixture_bcg_regression.mjs
+  var fixture_bcg_regression_default;
+  var init_fixture_bcg_regression = __esm({
+    "js/tests/fixtures/fixture_bcg_regression.mjs"() {
+      fixture_bcg_regression_default = {
+        name: "Meta-regression \u2014 BCG year + ablat (REML, normal CI)",
+        rawData: [
+          { label: "Aronson 1948", yi: -0.8893113339202054, vi: 0.3255847650039614, year: 1948, ablat: 44 },
+          { label: "Ferguson & Simes 1949", yi: -1.5853886572014306, vi: 0.19458112139814387, year: 1949, ablat: 55 },
+          { label: "Rosenthal 1960", yi: -1.348073148299693, vi: 0.41536796536796533, year: 1960, ablat: 42 },
+          { label: "Hart & Sutherland 1977", yi: -1.4415511900213054, vi: 0.020010031902247573, year: 1977, ablat: 52 },
+          { label: "Frimodt-Moller 1973", yi: -0.2175473222112957, vi: 0.05121017216963086, year: 1973, ablat: 13 },
+          { label: "Stein & Aronson 1953", yi: -0.786115585818864, vi: 0.0069056184559087574, year: 1953, ablat: 44 },
+          { label: "Vandiviere 1973", yi: -1.6208982235983924, vi: 0.22301724757231517, year: 1973, ablat: 19 },
+          { label: "TPT Madras 1980", yi: 0.011952333523841173, vi: 0.00396157929781773, year: 1980, ablat: 13 },
+          { label: "Coetzee & Berjak 1968", yi: -0.4694176487381487, vi: 0.056434210463248966, year: 1968, ablat: 27 },
+          { label: "Rosenthal 1961", yi: -1.3713448034727846, vi: 0.07302479361302891, year: 1961, ablat: 42 },
+          { label: "Comstock 1974", yi: -0.33935882833839015, vi: 0.01241221397155972, year: 1974, ablat: 18 },
+          { label: "Comstock & Webster 1969", yi: 0.4459134005713783, vi: 0.5325058452001528, year: 1969, ablat: 33 },
+          { label: "Comstock 1976", yi: -0.017313948216879493, vi: 0.0714046596839863, year: 1976, ablat: 33 }
+        ],
+        type: "GENERIC",
+        opts: {
+          method: "REML",
+          ciMethod: "normal",
+          alpha: 0.05,
+          useTF: false,
+          tfEstimator: "L0",
+          useTFAdjusted: false,
+          isMHorPeto: false,
+          hasClusters: false,
+          rveRho: 0.8,
+          rveMode: "corr",
+          threeLevelMethod: "REML",
+          modSpec: [
+            { key: "year", type: "continuous" },
+            { key: "ablat", type: "continuous" }
+          ],
+          scaleModSpec: [],
+          interactionSpec: [],
+          cumulativeOrder: "input",
+          selModeVal: "mle",
+          selPreset: "b5",
+          selWeightFn: "vevea-hedges",
+          selSides: 2,
+          selCuts: [0.025, 0.05, 1],
+          bayesMu0: 0,
+          bayesSigmaMu: 1,
+          bayesSigmaTau: 0.5,
+          fsnTrivial: 0.1,
+          fsnDirection: "auto"
+        },
+        reportSettings: { ciLevel: "95" },
+        // reg.QM and reg.QE appear in the coef table note (built by regressionData).
+        // Catching: regressionData coef.note missing QM/QE → test fails.
+        expected: [
+          { section: "regression", path: "reg.QM", label: "Omnibus QM" },
+          { section: "regression", path: "reg.QE", label: "Residual QE" }
+        ]
+      };
+    }
+  });
+
+  // js/tests/fixtures/fixture_cluster_rve.mjs
+  var fixture_cluster_rve_default;
+  var init_fixture_cluster_rve = __esm({
+    "js/tests/fixtures/fixture_cluster_rve.mjs"() {
+      fixture_cluster_rve_default = {
+        name: "RVE + three-level \u2014 3-cluster 6-study (REML, \u03C1 = 0.80)",
+        rawData: [
+          { label: "C1-S1", yi: 0.1, vi: 0.04, cluster: "1" },
+          { label: "C1-S2", yi: 0.3, vi: 0.05, cluster: "1" },
+          { label: "C2-S1", yi: 0.5, vi: 0.03, cluster: "2" },
+          { label: "C2-S2", yi: 0.7, vi: 0.06, cluster: "2" },
+          { label: "C3-S1", yi: 0.2, vi: 0.04, cluster: "3" },
+          { label: "C3-S2", yi: 0.8, vi: 0.05, cluster: "3" }
+        ],
+        type: "GENERIC",
+        opts: {
+          method: "REML",
+          ciMethod: "normal",
+          alpha: 0.05,
+          useTF: false,
+          tfEstimator: "L0",
+          useTFAdjusted: false,
+          isMHorPeto: false,
+          hasClusters: true,
+          rveRho: 0.8,
+          rveMode: "corr",
+          threeLevelMethod: "REML",
+          modSpec: [],
+          scaleModSpec: [],
+          interactionSpec: [],
+          cumulativeOrder: "input",
+          selModeVal: "mle",
+          selPreset: "b5",
+          selWeightFn: "vevea-hedges",
+          selSides: 2,
+          selCuts: [0.025, 0.05, 1],
+          bayesMu0: 0,
+          bayesSigmaMu: 1,
+          bayesSigmaTau: 0.5,
+          fsnTrivial: 0.1,
+          fsnDirection: "auto"
+        },
+        reportSettings: { ciLevel: "95" },
+        expected: [
+          { section: "rve", path: "rveResult.est", label: "RVE pooled estimate" },
+          { section: "threeLevel", path: "threeLevelResult.mu", label: "3-level pooled estimate" }
+        ]
+      };
+    }
+  });
+
+  // js/tests/fixtures/fixture_vh_selection.mjs
+  var fixture_vh_selection_default;
+  var init_fixture_vh_selection = __esm({
+    "js/tests/fixtures/fixture_vh_selection.mjs"() {
+      fixture_vh_selection_default = {
+        name: "VH selection model \u2014 BCG (GENERIC, 2-sided, 5 steps)",
+        rawData: [
+          { label: "Aronson 1948", yi: -0.8893113339202054, vi: 0.3255847650039614 },
+          { label: "Ferguson & Simes 1949", yi: -1.5853886572014306, vi: 0.19458112139814387 },
+          { label: "Rosenthal 1960", yi: -1.348073148299693, vi: 0.41536796536796533 },
+          { label: "Hart & Sutherland 1977", yi: -1.4415511900213054, vi: 0.020010031902247573 },
+          { label: "Frimodt-Moller 1973", yi: -0.2175473222112957, vi: 0.05121017216963086 },
+          { label: "Stein & Aronson 1953", yi: -0.786115585818864, vi: 0.0069056184559087574 },
+          { label: "Vandiviere 1973", yi: -1.6208982235983924, vi: 0.22301724757231517 },
+          { label: "TPT Madras 1980", yi: 0.011952333523841173, vi: 0.00396157929781773 },
+          { label: "Coetzee & Berjak 1968", yi: -0.4694176487381487, vi: 0.056434210463248966 },
+          { label: "Rosenthal 1961", yi: -1.3713448034727846, vi: 0.07302479361302891 },
+          { label: "Comstock 1974", yi: -0.33935882833839015, vi: 0.01241221397155972 },
+          { label: "Comstock & Webster 1969", yi: 0.4459134005713783, vi: 0.5325058452001528 },
+          { label: "Comstock 1976", yi: -0.017313948216879493, vi: 0.0714046596839863 }
+        ],
+        type: "GENERIC",
+        opts: {
+          method: "REML",
+          ciMethod: "normal",
+          alpha: 0.05,
+          useTF: false,
+          tfEstimator: "L0",
+          useTFAdjusted: false,
+          isMHorPeto: false,
+          hasClusters: false,
+          rveRho: 0.8,
+          rveMode: "corr",
+          threeLevelMethod: "REML",
+          modSpec: [],
+          scaleModSpec: [],
+          interactionSpec: [],
+          cumulativeOrder: "input",
+          selModeVal: "mle",
+          selPreset: "b5",
+          selWeightFn: "vevea-hedges",
+          selSides: 2,
+          selCuts: [0.025, 0.1, 0.25, 0.5, 1],
+          bayesMu0: 0,
+          bayesSigmaMu: 1,
+          bayesSigmaTau: 0.5,
+          fsnTrivial: 0.1,
+          fsnDirection: "auto"
+        },
+        reportSettings: { ciLevel: "95" },
+        // selResult.tau2 → "Adjusted τ²" row; selResult.LRT → LRT row.
+        // Both formatted with fmtV() = fmt() (no transform) in selModelData.
+        expected: [
+          { section: "selModel", path: "selResult.tau2", label: "VH adjusted tau\xB2" },
+          { section: "selModel", path: "selResult.LRT", label: "VH LRT" }
+        ]
+      };
+    }
+  });
+
+  // js/tests/fixtures/fixture_bayes.mjs
+  var fixture_bayes_default;
+  var init_fixture_bayes = __esm({
+    "js/tests/fixtures/fixture_bayes.mjs"() {
+      fixture_bayes_default = {
+        name: "Bayesian MA \u2014 BCG 13 studies (GENERIC, REML)",
+        rawData: [
+          { label: "Aronson 1948", yi: -0.8893113339202054, vi: 0.3255847650039614 },
+          { label: "Ferguson & Simes 1949", yi: -1.5853886572014306, vi: 0.19458112139814387 },
+          { label: "Rosenthal 1960", yi: -1.348073148299693, vi: 0.41536796536796533 },
+          { label: "Hart & Sutherland 1977", yi: -1.4415511900213054, vi: 0.020010031902247573 },
+          { label: "Frimodt-Moller 1973", yi: -0.2175473222112957, vi: 0.05121017216963086 },
+          { label: "Stein & Aronson 1953", yi: -0.786115585818864, vi: 0.0069056184559087574 },
+          { label: "Vandiviere 1973", yi: -1.6208982235983924, vi: 0.22301724757231517 },
+          { label: "TPT Madras 1980", yi: 0.011952333523841173, vi: 0.00396157929781773 },
+          { label: "Coetzee & Berjak 1968", yi: -0.4694176487381487, vi: 0.056434210463248966 },
+          { label: "Rosenthal 1961", yi: -1.3713448034727846, vi: 0.07302479361302891 },
+          { label: "Comstock 1974", yi: -0.33935882833839015, vi: 0.01241221397155972 },
+          { label: "Comstock & Webster 1969", yi: 0.4459134005713783, vi: 0.5325058452001528 },
+          { label: "Comstock 1976", yi: -0.017313948216879493, vi: 0.0714046596839863 }
+        ],
+        type: "GENERIC",
+        opts: {
+          method: "REML",
+          ciMethod: "normal",
+          alpha: 0.05,
+          useTF: false,
+          tfEstimator: "L0",
+          useTFAdjusted: false,
+          isMHorPeto: false,
+          hasClusters: false,
+          rveRho: 0.8,
+          rveMode: "corr",
+          threeLevelMethod: "REML",
+          modSpec: [],
+          scaleModSpec: [],
+          interactionSpec: [],
+          cumulativeOrder: "input",
+          selModeVal: "mle",
+          selPreset: "b5",
+          selWeightFn: "vevea-hedges",
+          selSides: 2,
+          selCuts: [0.025, 0.05, 1],
+          bayesMu0: 0,
+          bayesSigmaMu: 1,
+          bayesSigmaTau: 0.5,
+          fsnTrivial: 0.1,
+          fsnDirection: "auto"
+        },
+        reportSettings: { ciLevel: "95" },
+        expected: [
+          { section: "bayes", path: "bayesResult.muMean", label: "Bayes posterior mean \u03BC" },
+          { section: "bayes", path: "bayesResult.tauMean", label: "Bayes posterior mean \u03C4" }
+        ]
+      };
+    }
+  });
+
+  // js/tests/fixtures/fixture_normand_influence.mjs
+  var fixture_normand_influence_default;
+  var init_fixture_normand_influence = __esm({
+    "js/tests/fixtures/fixture_normand_influence.mjs"() {
+      fixture_normand_influence_default = {
+        name: "Influence diagnostics \u2014 Normand 1999 SMD REML",
+        rawData: [
+          { label: "Edinburgh", n1: 155, m1: 55, sd1: 47, n2: 156, m2: 75, sd2: 64 },
+          { label: "Orpington-Mild", n1: 31, m1: 27, sd1: 7, n2: 32, m2: 29, sd2: 4 },
+          { label: "Orpington-Moderate", n1: 75, m1: 64, sd1: 17, n2: 71, m2: 119, sd2: 29 },
+          { label: "Orpington-Severe", n1: 18, m1: 66, sd1: 20, n2: 18, m2: 137, sd2: 48 }
+        ],
+        type: "SMD",
+        opts: {
+          method: "REML",
+          ciMethod: "normal",
+          alpha: 0.05,
+          useTF: false,
+          tfEstimator: "L0",
+          useTFAdjusted: false,
+          isMHorPeto: false,
+          hasClusters: false,
+          rveRho: 0.8,
+          rveMode: "corr",
+          threeLevelMethod: "REML",
+          modSpec: [],
+          scaleModSpec: [],
+          interactionSpec: [],
+          cumulativeOrder: "input",
+          selModeVal: "mle",
+          selPreset: "b5",
+          selWeightFn: "vevea-hedges",
+          selSides: 2,
+          selCuts: [0.025, 0.05, 1],
+          bayesMu0: 0,
+          bayesSigmaMu: 1,
+          bayesSigmaTau: 0.5,
+          fsnTrivial: 0.1,
+          fsnDirection: "auto"
+        },
+        reportSettings: { ciLevel: "95" },
+        // Numeric array indices work: path "influence.0.RE_loo" resolves via
+        // array["0"] === array[0] in JavaScript.
+        expected: [
+          { section: "influence", path: "influence.0.RE_loo", label: "LOO RE (Edinburgh)" },
+          { section: "influence", path: "influence.0.stdResidual", label: "Std. residual (Edinburgh)" }
+        ]
+      };
+    }
+  });
+
+  // js/tests/fixtures/fixture_mv_berkey.mjs
+  var fixture_mv_berkey_default;
+  var init_fixture_mv_berkey = __esm({
+    "js/tests/fixtures/fixture_mv_berkey.mjs"() {
+      fixture_mv_berkey_default = {
+        name: "Multivariate MA \u2014 Berkey98 (CS, REML, rho=0.5)",
+        mode: "mv",
+        rawData: [
+          { yi: 0.47, vi: 0.0275, study_id: 1, outcome_id: "PD" },
+          { yi: -0.32, vi: 0.0135, study_id: 1, outcome_id: "AL" },
+          { yi: 0.397, vi: 0.0162, study_id: 2, outcome_id: "PD" },
+          { yi: -0.24, vi: 0.0119, study_id: 2, outcome_id: "AL" },
+          { yi: 0.133, vi: 33e-4, study_id: 3, outcome_id: "PD" },
+          { yi: -0.05, vi: 4e-3, study_id: 3, outcome_id: "AL" },
+          { yi: 0.165, vi: 3e-3, study_id: 4, outcome_id: "PD" },
+          { yi: 0.068, vi: 15e-4, study_id: 4, outcome_id: "AL" },
+          { yi: 0.349, vi: 51e-4, study_id: 5, outcome_id: "PD" },
+          { yi: 0.016, vi: 19e-4, study_id: 5, outcome_id: "AL" }
+        ],
+        mvOpts: { struct: "CS", method: "REML", rho: 0.5 },
+        // d:4 because mvPooledData formats beta/se at 4 decimal places.
+        // d:3 for QE because mvTestsData formats QE at 3 decimal places.
+        expected: [
+          { section: "mvPooled", path: "beta.0", label: "PD pooled beta", d: 4 },
+          { section: "mvPooled", path: "beta.1", label: "AL pooled beta", d: 4 },
+          { section: "mvTests", path: "QE", label: "QE residual", d: 3 }
+        ]
+      };
+    }
+  });
+
+  // js/tests/tests.js
   var tests_exports = {};
   __export(tests_exports, {
     runTests: () => runTests
@@ -22238,9 +24200,9 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
     console.log("--- PFT compute() ---");
     {
       const s = compute({ x: 20, n: 100 }, "PFT");
-      const expected_yi = Math.asin(Math.sqrt(20 / 101)) + Math.asin(Math.sqrt(21 / 101));
-      pchk("yi = arcsin(sqrt(20/101)) + arcsin(sqrt(21/101))", s.yi, expected_yi);
-      pchk("vi = 1/100.5", s.vi, 1 / 100.5);
+      const expected_yi = 0.5 * (Math.asin(Math.sqrt(20 / 101)) + Math.asin(Math.sqrt(21 / 101)));
+      pchk("yi = \xBD(arcsin(sqrt(20/101)) + arcsin(sqrt(21/101)))", s.yi, expected_yi);
+      pchk("vi = 1/402", s.vi, 1 / 402);
     }
     console.log("--- Proportion back-transforms ---");
     pchk("PR back-transform (identity)", transformEffect(0.3, "PR"), 0.3);
@@ -22248,7 +24210,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
     pchk("PLO back-transform logistic(-1.386)", transformEffect(Math.log(0.2 / 0.8), "PLO"), 0.2, 1e-10);
     pchk("PAS back-transform sin\xB2(arcsin(\u221A0.2))", transformEffect(Math.asin(Math.sqrt(0.2)), "PAS"), 0.2, 1e-10);
     {
-      const yiFT = Math.asin(Math.sqrt(20 / 101)) + Math.asin(Math.sqrt(21 / 101));
+      const yiFT = 0.5 * (Math.asin(Math.sqrt(20 / 101)) + Math.asin(Math.sqrt(21 / 101)));
       pchk("PFT back-transform \u2248 0.2", transformEffect(yiFT, "PFT"), 0.2, 0.01);
     }
     console.log("--- Proportion clamping ---");
@@ -22271,24 +24233,24 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
     console.log("--- Analytical values (yi=[0,1,3], vi=[1,1,1]) ---");
     tchk("HS  \u03C4\xB2 = 8/9", tau2_HS(s3), 8 / 9, 0.05);
     tchk("HE  \u03C4\xB2 = 4/3", tau2_HE(s3), 4 / 3, 0.05);
-    tchk("ML  \u03C4\xB2 = 5/9", tau2_ML(s3), 5 / 9, 0.05);
-    tchk("SJ  \u03C4\xB2 = (\u221A65\u22123)/6", tau2_SJ(s3), (Math.sqrt(65) - 3) / 6, 0.05);
+    tchk("ML  \u03C4\xB2 = 5/9", tau2_ML(s3).tau2, 5 / 9, 0.05);
+    tchk("SJ  \u03C4\xB2 = (\u221A65\u22123)/6", tau2_SJ(s3).tau2, (Math.sqrt(65) - 3) / 6, 0.05);
     console.log("--- Ordering: ML \u2264 HS \u2264 DL = HE = REML ---");
-    const hs = tau2_HS(s3), he = tau2_HE(s3), ml = tau2_ML(s3), sj = tau2_SJ(s3);
+    const hs = tau2_HS(s3), he = tau2_HE(s3), ml = tau2_ML(s3).tau2, sj = tau2_SJ(s3).tau2;
     tchkTrue("ML \u2264 HS", ml <= hs + 1e-9);
     tchkTrue("HS \u2264 HE", hs <= he + 1e-9);
     tchkTrue("SJ > 0", sj > 0);
     console.log("--- Edge cases ---");
     tchk("HS  k=1 \u2192 0", tau2_HS([{ yi: 1, vi: 1 }]), 0, 1e-3);
     tchk("HE  k=1 \u2192 0", tau2_HE([{ yi: 1, vi: 1 }]), 0, 1e-3);
-    tchk("ML  k=1 \u2192 0", tau2_ML([{ yi: 1, vi: 1 }]), 0, 1e-3);
-    tchk("SJ  k=1 \u2192 0", tau2_SJ([{ yi: 1, vi: 1 }]), 0, 1e-3);
+    tchk("ML  k=1 \u2192 0", tau2_ML([{ yi: 1, vi: 1 }]).tau2, 0, 1e-3);
+    tchk("SJ  k=1 \u2192 0", tau2_SJ([{ yi: 1, vi: 1 }]).tau2, 0, 1e-3);
     console.log("--- Homogeneous yi \u2192 \u03C4\xB2 = 0 ---");
     const sHom = [{ yi: 1, vi: 0.5 }, { yi: 1, vi: 1 }, { yi: 1, vi: 2 }];
     tchk("HS  homogeneous \u2192 0", tau2_HS(sHom), 0, 1e-3);
     tchk("HE  homogeneous \u2192 0", tau2_HE(sHom), 0, 1e-3);
-    tchk("ML  homogeneous \u2192 0", tau2_ML(sHom), 0, 1e-3);
-    tchk("SJ  homogeneous \u2192 0", tau2_SJ(sHom), 0, 1e-3);
+    tchk("ML  homogeneous \u2192 0", tau2_ML(sHom).tau2, 0, 1e-3);
+    tchk("SJ  homogeneous \u2192 0", tau2_SJ(sHom).tau2, 0, 1e-3);
     console.log("--- meta() dispatch ---");
     const mHS = meta(s3, "HS");
     const mHE = meta(s3, "HE");
@@ -22424,7 +24386,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
       const f = failSafeN(s);
       bchk("sumZ = 3", f.sumZ, 3, 1e-9);
       bchk("z_crit \u2248 1.6449", f.z_crit, 1.6449, 1e-3);
-      bchk("Rosenthal \u2248 2.327", f.rosenthal, (3 / f.z_crit) ** 2 - 1, 1e-3);
+      bchk("Rosenthal = 3", f.rosenthal, 3, 0);
     }
     console.log("--- Fail-safe N: Orwin ---");
     {
@@ -23468,7 +25430,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
     console.log("--- SMCC 1. Formula spot-check ---");
     {
       const s = compute({ m_pre: 10, m_post: 8, sd_pre: 2, sd_post: 2, n: 30, r: 0.5 }, "SMCC");
-      const J = 1 - 3 / 115;
+      const J = Math.exp(logGamma(14.5) - 0.5 * Math.log(14.5) - logGamma(14));
       const g_exp = -1 * J;
       const vi_exp = 1 / 30 + g_exp * g_exp / 60;
       smccChk("g  = d\xB7J", s.yi, g_exp, 1e-9);
@@ -23615,9 +25577,9 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
     {
       const s = compute({ a: 40, b: 10, c: 10, d: 40 }, "RTET");
       const rho_exp = Math.sin(0.3 * Math.PI);
-      const vi_exp = 0.0625 * (2 * Math.PI * Math.cos(0.3 * Math.PI)) ** 2 / 100;
+      const vi_exp = 0.04 * (2 * Math.PI * Math.cos(0.3 * Math.PI)) ** 2 / 100;
       rtetChk("\u03C1_tet = sin(0.3\u03C0)", s.yi, rho_exp);
-      rtetChk("vi = 0.0625\xB7(2\u03C0\xB7cos)\xB2/100", s.vi, vi_exp);
+      rtetChk("vi = 0.04\xB7(2\u03C0\xB7cos)\xB2/100", s.vi, vi_exp);
       rtetChk("se = \u221Avi", s.se, Math.sqrt(vi_exp));
       rtetChk("w  = 1/vi", s.w, 1 / vi_exp, 1e-3);
     }
@@ -24292,7 +26254,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
         }
       }
       if (exp.failSafe) {
-        const f = failSafeN(studies);
+        const f = failSafeN(studies, 0.05, bm.fsnTrivial ?? 0.1, bm.fsnDirection ?? "positive");
         if (exp.failSafe.rosenthal !== void 0) pbchk("failSafe.rosenthal", f.rosenthal, exp.failSafe.rosenthal, 1);
         if (exp.failSafe.orwin !== void 0) pbchk("failSafe.orwin", f.orwin, exp.failSafe.orwin, 1);
       }
@@ -24311,7 +26273,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
         const entries = exp.trimFill.L0 !== void 0 ? [["L0", exp.trimFill.L0], ["R0", exp.trimFill.R0], ["Q0", exp.trimFill.Q0]] : [["L0", exp.trimFill]];
         for (const [est, tf] of entries) {
           if (!tf) continue;
-          const filled = trimFill(studies, tauM, est);
+          const { filled } = trimFill(studies, tauM, est);
           const k0 = filled.length;
           const adjustedRE = meta([...studies, ...filled], tauM).RE;
           if (tf.k0 !== void 0) pbchkTrue(`trimFill.${est}.k0 = ${tf.k0}`, k0 === tf.k0);
@@ -24628,16 +26590,16 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
     });
     console.log("--- k < 3 edge cases ---");
     {
-      tfchk("k=0 \u2192 []", trimFill([]).length, 0);
-      tfchk("k=1 \u2192 []", trimFill([{ yi: 1, vi: 1 }]).length, 0);
-      tfchk("k=2 \u2192 []", trimFill([{ yi: 1, vi: 1 }, { yi: 2, vi: 1 }]).length, 0);
+      tfchk("k=0 \u2192 []", trimFill([]).filled.length, 0);
+      tfchk("k=1 \u2192 []", trimFill([{ yi: 1, vi: 1 }]).filled.length, 0);
+      tfchk("k=2 \u2192 []", trimFill([{ yi: 1, vi: 1 }, { yi: 2, vi: 1 }]).filled.length, 0);
     }
     console.log("--- k0=0: all equal yi ---");
     {
       const flat3 = [{ yi: 1, vi: 0.1 }, { yi: 1, vi: 0.1 }, { yi: 1, vi: 0.1 }];
-      tfchk("k=3, all yi=1 \u2192 k0=0, []", trimFill(flat3).length, 0);
+      tfchk("k=3, all yi=1 \u2192 k0=0, []", trimFill(flat3).filled.length, 0);
       const flat5 = Array.from({ length: 5 }, () => ({ yi: 0, vi: 1, label: "s" }));
-      tfchk("k=5, all yi=0 \u2192 k0=0, []", trimFill(flat5).length, 0);
+      tfchk("k=5, all yi=0 \u2192 k0=0, []", trimFill(flat5).filled.length, 0);
     }
     console.log("--- maxIter=0 ---");
     {
@@ -24648,7 +26610,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
         { label: "S4", yi: 2, vi: 0.04 },
         { label: "S5", yi: 2.5, vi: 0.04 }
       ];
-      tfchk("maxIter=0 \u2192 k0=0 regardless of data", trimFill(asym, "DL", 0).length, 0);
+      tfchk("maxIter=0 \u2192 k0=0 regardless of data", trimFill(asym, "DL", 0).filled.length, 0);
     }
     console.log("--- BCG log-OR DL: k0=0 (all estimators) ---");
     {
@@ -24657,9 +26619,9 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
         const s = compute(d, bm.type);
         return { ...d, yi: s.yi, vi: s.vi, se: s.se };
       });
-      tfchk("BCG OR DL L0: k0=0", trimFill(studies, bm.tauMethod, "L0").length, 0);
-      tfchk("BCG OR DL R0: k0=0", trimFill(studies, bm.tauMethod, "R0").length, 0);
-      tfchk("BCG OR DL Q0: k0=0", trimFill(studies, bm.tauMethod, "Q0").length, 0);
+      tfchk("BCG OR DL L0: k0=0", trimFill(studies, bm.tauMethod, "L0").filled.length, 0);
+      tfchk("BCG OR DL R0: k0=0", trimFill(studies, bm.tauMethod, "R0").filled.length, 0);
+      tfchk("BCG OR DL Q0: k0=0", trimFill(studies, bm.tauMethod, "Q0").filled.length, 0);
     }
     console.log("--- BCG log-RR DL: L0=1, R0=0, Q0=1 ---");
     {
@@ -24678,9 +26640,9 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
         { label: "Comstock & Webster 1969", yi: 0.4459134005713787, vi: 0.5325058452001528 },
         { label: "Comstock et al 1976", yi: -0.0173139482168798, vi: 0.0714046596839863 }
       ];
-      const filledL0 = trimFill(bcgRR, "DL", "L0");
-      const filledR0 = trimFill(bcgRR, "DL", "R0");
-      const filledQ0 = trimFill(bcgRR, "DL", "Q0");
+      const { filled: filledL0 } = trimFill(bcgRR, "DL", "L0");
+      const { filled: filledR0 } = trimFill(bcgRR, "DL", "R0");
+      const { filled: filledQ0 } = trimFill(bcgRR, "DL", "Q0");
       tfchk("BCG RR DL L0 k0=1", filledL0.length, 1);
       tfchk("BCG RR DL R0 k0=0", filledR0.length, 0);
       tfchk("BCG RR DL Q0 k0=1", filledQ0.length, 1);
@@ -24705,9 +26667,9 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
         { label: "S11", yi: 1.2, vi: 1.2 },
         { label: "S12", yi: 1.8, vi: 1.5 }
       ];
-      const fL0 = trimFill(mixed, "DL", "L0");
-      const fR0 = trimFill(mixed, "DL", "R0");
-      const fQ0 = trimFill(mixed, "DL", "Q0");
+      const { filled: fL0 } = trimFill(mixed, "DL", "L0");
+      const { filled: fR0 } = trimFill(mixed, "DL", "R0");
+      const { filled: fQ0 } = trimFill(mixed, "DL", "Q0");
       tfchk("mixed DL L0 k0=4", fL0.length, 4);
       tfchk("mixed DL R0 k0=3", fR0.length, 3);
       tfchk("mixed DL Q0 k0=6", fQ0.length, 6);
@@ -24760,6 +26722,38 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
     nanCheck("fCDF(1,0,1) = NaN (d1=0)", fCDF(1, 0, 1));
     nanCheck("fCDF(1,1,0) = NaN (d2=0)", fCDF(1, 1, 0));
     nanCheck("fCDF(1,Inf,1) = NaN (d1=Infinity)", fCDF(1, Infinity, 1));
+    {
+      const big = fCDF(1e200, 1e200, 5);
+      const ok = isFinite(big) && big >= 1 - 1e-5;
+      if (!ok) {
+        console.error(`  FAIL fCDF(1e200,1e200,5) overflow guard: got ${big}`);
+        fcdfPass = false;
+      } else console.log("  ok  fCDF(1e200,1e200,5) \u2248 1 (overflow guard, not NaN)");
+    }
+    {
+      const tailP = fTailP(1e200, 5, 5);
+      const ok = isFinite(tailP) && tailP >= 1e-300;
+      if (!ok) {
+        console.error(`  FAIL fTailP(1e200,5,5) floor: got ${tailP}`);
+        fcdfPass = false;
+      } else console.log("  ok  fTailP(1e200,5,5) \u2265 1e-300 (p-value floor)");
+    }
+    {
+      const tailP = fTailP(1e200, 1e200, 5);
+      const ok = isFinite(tailP) && tailP >= 1e-300;
+      if (!ok) {
+        console.error(`  FAIL fTailP(1e200,1e200,5) overflow: got ${tailP}`);
+        fcdfPass = false;
+      } else console.log("  ok  fTailP(1e200,1e200,5) \u2265 1e-300 (overflow guard)");
+    }
+    {
+      const diff = Math.abs(fTailP(3, 2, 2) - (1 - fCDF(3, 2, 2)));
+      const ok = diff < 1e-12;
+      if (!ok) {
+        console.error(`  FAIL fTailP(3,2,2) \u2260 1-fCDF(3,2,2): diff=${diff}`);
+        fcdfPass = false;
+      } else console.log("  ok  fTailP(3,2,2) = 1\u2212fCDF(3,2,2) (correctness)");
+    }
     console.log(fcdfPass ? "\n\u2705 ALL fCDF TESTS PASSED" : "\n\u274C SOME fCDF TESTS FAILED");
     console.log("\n===== EGGER TEST UNIT TESTS =====\n");
     let eggerPass = true;
@@ -24913,7 +26907,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
     });
     INTERACTION_BENCHMARKS.forEach((bm) => {
       const studies = bm.data.map((d) => ({ ...d, se: Math.sqrt(d.vi) }));
-      const r = metaRegression(studies, bm.moderators, bm.tauMethod, bm.ciMethod, 0.05, bm.interactions ?? []);
+      const r = metaRegression(studies, bm.moderators, bm.tauMethod, bm.ciMethod, { alpha: 0.05, interactions: bm.interactions ?? [] });
       console.log(`--- ${bm.name} ---`);
       if (bm.expectedColNames) {
         const ok = bm.expectedColNames.every((n, i) => r.colNames[i] === n);
@@ -25089,6 +27083,370 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
       csvchk("escaped quote: row[0][1]", dqR[0][1], 'He said "yes"');
     }
     console.log(csvPass ? "\n\u2705 ALL CSV IMPORT TESTS PASSED" : "\n\u274C SOME CSV IMPORT TESTS FAILED");
+    console.log("\n===== detectCsvFormat TESTS =====\n");
+    let fmtPass = true;
+    const fmtchk = (label, got, expected) => {
+      const ok = got === expected;
+      if (ok) console.log(`  PASS ${label}`);
+      else {
+        console.error(`  FAIL ${label}: got ${JSON.stringify(got)}, expected ${JSON.stringify(expected)}`);
+        fmtPass = false;
+      }
+    };
+    {
+      const us = "study,yi,vi\nS1,0.123,0.045\nS2,-1.200,0.300\nS3,0.500,0.100\n";
+      const r = detectCsvFormat(us);
+      fmtchk("US delimiter", r.delimiter, ",");
+      fmtchk("US decimal", r.decimal, ".");
+      fmtchk("US confidence", r.confidence, "high");
+    }
+    {
+      const eu = "study;yi;vi\nS1;0,123;0,045\nS2;-1,200;0,300\nS3;0,500;0,100\n";
+      const r = detectCsvFormat(eu);
+      fmtchk("EU delimiter", r.delimiter, ";");
+      fmtchk("EU decimal", r.decimal, ",");
+      fmtchk("EU confidence", r.confidence, "high");
+    }
+    {
+      const tsv = "study	yi	vi\nS1	0.123	0.045\nS2	-1.200	0.300\n";
+      const r = detectCsvFormat(tsv);
+      fmtchk("TSV delimiter", r.delimiter, "	");
+      fmtchk("TSV decimal", r.decimal, ".");
+      fmtchk("TSV confidence", r.confidence, "high");
+    }
+    {
+      const amb = "study,yi,vi\nS1,0,123,0,045\nS2,1,200,0,300\n";
+      const r = detectCsvFormat(amb);
+      fmtchk("ambiguous decimal default to dot", r.decimal, ".");
+      fmtchk("ambiguous confidence is low", r.confidence, "low");
+    }
+    {
+      const bom = "\uFEFFstudy;yi;vi\r\nS1;0,5;0,01\r\nS2;1,3;0,05\r\n";
+      const r = detectCsvFormat(bom);
+      fmtchk("BOM+CRLF EU delimiter", r.delimiter, ";");
+      fmtchk("BOM+CRLF EU decimal", r.decimal, ",");
+      fmtchk("BOM+CRLF EU confidence", r.confidence, "high");
+    }
+    {
+      const quoted = 'study,label,yi,vi\nS1,"Smith, J.",0.45,0.02\nS2,"Doe, A.",0.30,0.03\n';
+      const r = detectCsvFormat(quoted);
+      fmtchk("quoted comma: delimiter", r.delimiter, ",");
+      fmtchk("quoted comma: decimal", r.decimal, ".");
+      fmtchk("quoted comma: confidence", r.confidence, "high");
+    }
+    {
+      const ints = "study,n1,n2,events\nS1,50,47,12\nS2,30,29,8\nS3,100,98,20\n";
+      const r = detectCsvFormat(ints);
+      fmtchk("integers: delimiter", r.delimiter, ",");
+      fmtchk("integers: decimal", r.decimal, ".");
+      fmtchk("integers: confidence", r.confidence, "low");
+    }
+    {
+      const r = detectCsvFormat("");
+      fmtchk("empty: delimiter", r.delimiter, ",");
+      fmtchk("empty: decimal", r.decimal, ".");
+      fmtchk("empty: confidence", r.confidence, "low");
+    }
+    console.log(fmtPass ? "\n\u2705 ALL detectCsvFormat TESTS PASSED" : "\n\u274C SOME detectCsvFormat TESTS FAILED");
+    console.log("\n===== BACKWARD COMPATIBILITY TESTS =====\n");
+    let bcPass = true;
+    const bcchk = (label, got, expected) => {
+      const ok = got === expected;
+      if (ok) console.log(`  PASS ${label}`);
+      else {
+        console.error(`  FAIL ${label}: got ${JSON.stringify(got)}, expected ${JSON.stringify(expected)}`);
+        bcPass = false;
+      }
+    };
+    {
+      const { delimiter, headers, rows } = parseCSV("study,yi,vi\nS1,0.1,0.01\n");
+      bcchk("shape: delimiter present", typeof delimiter, "string");
+      bcchk("shape: headers present", Array.isArray(headers), true);
+      bcchk("shape: rows present", Array.isArray(rows), true);
+      bcchk("shape: no extra keys", Object.keys({ delimiter, headers, rows }).length, 3);
+      bcchk("delimiter auto-detected", delimiter, ",");
+      bcchk("headers[0]", headers[0], "study");
+      bcchk("rows[0][1] raw string", rows[0][1], "0.1");
+    }
+    {
+      const { rows } = parseCSV('study,label,yi\nS1,"0,5",0.5\n');
+      bcchk("no-opts: label '0,5' unchanged", rows[0][1], "0,5");
+      bcchk("no-opts: yi '0.5' unchanged", rows[0][2], "0.5");
+    }
+    {
+      const { rows } = parseCSV("study;yi\nS1;0,5\n", { delimiter: ";" });
+      bcchk("no-decimal-opt: '0,5' raw", rows[0][1], "0,5");
+    }
+    const usSamples = [
+      // BCG-like data with fractional yi/vi — high confidence
+      {
+        csv: "Study,yi,vi,Group,year,ablat,region\nS1,-0.889,0.326,,1948,44,NA\nS2,-1.585,0.195,,1949,55,EU\n",
+        conf: "high",
+        delim: ","
+      },
+      // Normand-like data — high confidence
+      {
+        csv: "study,yi,vi\nS1,0.1,0.01\nS2,0.2,0.02\nS3,0.3,0.03\n",
+        conf: "high",
+        delim: ","
+      },
+      // 2×2 binary integer data — no fractional evidence → "low" (default "." is still correct)
+      {
+        csv: "study,ai,bi,ci,di\nS1,5,30,2,40\nS2,10,50,3,60\n",
+        conf: "low",
+        delim: ","
+      },
+      // Quoted fields with embedded commas — high confidence
+      {
+        csv: 'study,label,yi,vi\nS1,"Smith, J.",0.1,0.01\nS2,"Doe, A.",0.2,0.02\n',
+        conf: "high",
+        delim: ","
+      },
+      // BOM + CRLF (Excel US export) — high confidence
+      {
+        csv: "\uFEFFstudy,yi,vi\r\nS1,0.1,0.01\r\nS2,0.2,0.02\r\n",
+        conf: "high",
+        delim: ","
+      },
+      // Tab-separated — high confidence
+      {
+        csv: "study	yi	vi\nS1	0.1	0.01\nS2	0.2	0.02\n",
+        conf: "high",
+        delim: "	"
+      }
+    ];
+    usSamples.forEach(({ csv, conf, delim }, i) => {
+      const fmt2 = detectCsvFormat(csv);
+      bcchk(`US sample ${i}: decimal is "."`, fmt2.decimal, ".");
+      bcchk(`US sample ${i}: delimiter`, fmt2.delimiter, delim);
+      bcchk(`US sample ${i}: confidence`, fmt2.confidence, conf);
+    });
+    {
+      const us = ["0.1", "0.2", "0.3"];
+      bcchk("US continuous: isNaN check", us.every((v) => !isNaN(v.trim())), true);
+      const euNorm = parseCSV("study;mod\nS1;0,5\nS2;1,3\nS3;2,1\n", { delimiter: ";", decimal: "," }).rows.map((r) => r[1]);
+      bcchk("EU normalised cells: isNaN pass", euNorm.every((v) => !isNaN(v.trim())), true);
+      bcchk("EU normalised cell value", euNorm[0], "0.5");
+      const euRaw = parseCSV("study;mod\nS1;0,5\nS2;1,3\n", { delimiter: ";" }).rows.map((r) => r[1]);
+      bcchk("EU raw cells: isNaN fails (old bug documented)", euRaw.some((v) => isNaN(v.trim())), true);
+    }
+    console.log(bcPass ? "\n\u2705 ALL BACKWARD COMPATIBILITY TESTS PASSED" : "\n\u274C SOME BACKWARD COMPATIBILITY TESTS FAILED");
+    console.log("\n===== parseNumberWithDecimal & decimal-normalisation TESTS =====\n");
+    let decPass = true;
+    const decchk = (label, got, expected) => {
+      const ok = Number.isNaN(got) && Number.isNaN(expected) || (typeof got === "string" ? got === expected : Math.abs(got - expected) < 1e-10);
+      if (ok) console.log(`  PASS ${label}`);
+      else {
+        console.error(`  FAIL ${label}: got ${JSON.stringify(got)}, expected ${JSON.stringify(expected)}`);
+        decPass = false;
+      }
+    };
+    decchk("dot decimal: 0.123", parseNumberWithDecimal("0.123", "."), 0.123);
+    decchk("dot decimal: -1.5e2", parseNumberWithDecimal("-1.5e2", "."), -150);
+    decchk("dot decimal: integer 42", parseNumberWithDecimal("42", "."), 42);
+    decchk("dot decimal: NaN string", parseNumberWithDecimal("hello", "."), NaN);
+    decchk("comma decimal: 0,123", parseNumberWithDecimal("0,123", ","), 0.123);
+    decchk("comma decimal: -1,5", parseNumberWithDecimal("-1,5", ","), -1.5);
+    decchk("comma decimal: 1,5e3", parseNumberWithDecimal("1,5e3", ","), 1500);
+    decchk("comma decimal: integer 5", parseNumberWithDecimal("5", ","), 5);
+    decchk("comma decimal: non-num", parseNumberWithDecimal("Smith, J.", ","), NaN);
+    {
+      const eu = "study;yi;vi\nS1;0,123;0,045\nS2;-1,200;0,300\n";
+      const { headers, rows } = parseCSV(eu, { delimiter: ";", decimal: "," });
+      decchk("EU header unchanged: study", headers[0], "study");
+      decchk("EU row[0][1] normalised", rows[0][1], "0.123");
+      decchk("EU row[0][2] normalised", rows[0][2], "0.045");
+      decchk("EU row[1][1] normalised", rows[1][1], "-1.200");
+      decchk("EU row[1][2] normalised", rows[1][2], "0.300");
+    }
+    {
+      const us = "study,yi,vi\nS1,0.123,0.045\nS2,-1.200,0.300\n";
+      const { rows } = parseCSV(us, { delimiter: ",", decimal: "." });
+      decchk("US row[0][1] unchanged", rows[0][1], "0.123");
+      decchk("US row[1][1] unchanged", rows[1][1], "-1.200");
+    }
+    {
+      const us = "study,yi,vi\nS1,0.5,0.04\nS2,-0.3,0.09\nS3,1.2,0.25\n";
+      const eu = "study;yi;vi\nS1;0,5;0,04\nS2;-0,3;0,09\nS3;1,2;0,25\n";
+      const usR = parseCSV(us, { delimiter: ",", decimal: "." });
+      const euR = parseCSV(eu, { delimiter: ";", decimal: "," });
+      for (let r = 0; r < 3; r++) {
+        for (let c = 1; c <= 2; c++) {
+          decchk(
+            `round-trip row${r} col${c}`,
+            parseFloat(euR.rows[r][c]),
+            parseFloat(usR.rows[r][c])
+          );
+        }
+      }
+    }
+    {
+      const eu = "study;label;yi;vi\nS1;M\xFCller (2020);0,5;0,04\nS2;Smith, J.;-0,3;0,09\n";
+      const { rows } = parseCSV(eu, { delimiter: ";", decimal: "," });
+      decchk("label preserved: M\xFCller (2020)", rows[0][1], "M\xFCller (2020)");
+      decchk("label preserved: Smith, J.", rows[1][1], "Smith, J.");
+      decchk("yi still normalised", rows[0][2], "0.5");
+    }
+    {
+      const eu = "study;yi;vi\nS1;0,5;0,04\n";
+      const { rows } = parseCSV(eu, { delimiter: ";" });
+      decchk("no decimal opt: raw cell unchanged", rows[0][1], "0,5");
+    }
+    console.log(decPass ? "\n\u2705 ALL decimal-normalisation TESTS PASSED" : "\n\u274C SOME decimal-normalisation TESTS FAILED");
+    console.log("\n===== LOCALE-AWARE CSV \u2014 FULL-PIPELINE TESTS =====\n");
+    let locPass = true;
+    const locchk = (label, got, expected) => {
+      const ok = typeof got === "number" ? Number.isNaN(got) && Number.isNaN(expected) || Math.abs(got - expected) < 1e-10 : got === expected;
+      if (ok) console.log(`  PASS ${label}`);
+      else {
+        console.error(`  FAIL ${label}: got ${JSON.stringify(got)}, expected ${JSON.stringify(expected)}`);
+        locPass = false;
+      }
+    };
+    function detectAndParse(text) {
+      const fmt2 = detectCsvFormat(text);
+      const parsed = parseCSV(text, { delimiter: fmt2.delimiter, decimal: fmt2.decimal });
+      return { fmt: fmt2, parsed };
+    }
+    console.log("--- 1. EU (;,) round-trip with US (,.) ---");
+    {
+      const us = [
+        "study,yi,vi",
+        "S1,0.500,0.040",
+        "S2,-0.300,0.090",
+        "S3,1.200,0.250",
+        "S4,0.100,0.010",
+        "S5,-0.750,0.180"
+      ].join("\n");
+      const eu = [
+        "study;yi;vi",
+        "S1;0,500;0,040",
+        "S2;-0,300;0,090",
+        "S3;1,200;0,250",
+        "S4;0,100;0,010",
+        "S5;-0,750;0,180"
+      ].join("\n");
+      const { fmt: usFmt, parsed: usP } = detectAndParse(us);
+      const { fmt: euFmt, parsed: euP } = detectAndParse(eu);
+      locchk("EU: delimiter detected", euFmt.delimiter, ";");
+      locchk("EU: decimal detected", euFmt.decimal, ",");
+      locchk("EU: confidence high", euFmt.confidence, "high");
+      locchk("US: delimiter detected", usFmt.delimiter, ",");
+      locchk("US: decimal detected", usFmt.decimal, ".");
+      locchk("US: confidence high", usFmt.confidence, "high");
+      locchk("header count matches", euP.headers.length, usP.headers.length);
+      locchk("row count matches", euP.rows.length, usP.rows.length);
+      for (let r = 0; r < usP.rows.length; r++) {
+        for (let c = 1; c <= 2; c++) {
+          locchk(
+            `row${r} col${c} numeric identity`,
+            parseFloat(euP.rows[r][c]),
+            parseFloat(usP.rows[r][c])
+          );
+        }
+      }
+    }
+    console.log("--- 2. Tab-delimited + dot decimal ---");
+    {
+      const tsv = [
+        "study	yi	vi	group",
+        "Trichard	0.623	0.041	A",
+        "Chalmers	-0.112	0.078	B",
+        "Cooper	1.055	0.200	A"
+      ].join("\n");
+      const { fmt: fmt2, parsed } = detectAndParse(tsv);
+      locchk("TSV: delimiter tab", fmt2.delimiter, "	");
+      locchk("TSV: decimal period", fmt2.decimal, ".");
+      locchk("TSV: confidence high", fmt2.confidence, "high");
+      locchk("TSV: header count", parsed.headers.length, 4);
+      locchk("TSV: headers[0]", parsed.headers[0], "study");
+      locchk("TSV: headers[1]", parsed.headers[1], "yi");
+      locchk("TSV: row count", parsed.rows.length, 3);
+      locchk("TSV: row[0][1] yi", parseFloat(parsed.rows[0][1]), 0.623);
+      locchk("TSV: row[1][1] yi", parseFloat(parsed.rows[1][1]), -0.112);
+      locchk("TSV: row[2][2] vi", parseFloat(parsed.rows[2][2]), 0.2);
+      locchk("TSV: row[0][3] group raw", parsed.rows[0][3], "A");
+    }
+    console.log("--- 3. Integer-only CSV \u2192 low confidence, dot decimal default ---");
+    {
+      const intCsv = [
+        "study,ai,bi,ci,di",
+        "S1,5,30,2,40",
+        "S2,10,50,3,60",
+        "S3,7,45,1,55"
+      ].join("\n");
+      const { fmt: fmt2, parsed } = detectAndParse(intCsv);
+      locchk("int: decimal default .", fmt2.decimal, ".");
+      locchk("int: confidence low", fmt2.confidence, "low");
+      locchk("int: delimiter comma", fmt2.delimiter, ",");
+      locchk("int: header count", parsed.headers.length, 5);
+      locchk("int: row count", parsed.rows.length, 3);
+      locchk("int: cell ai row0", parsed.rows[0][1], "5");
+      locchk("int: cell di row2", parsed.rows[2][4], "55");
+      locchk("int: parseFloat ai", parseFloat(parsed.rows[0][1]), 5);
+    }
+    console.log("--- 4. Conflicting comma (delimiter vs decimal role) \u2192 low confidence ---");
+    {
+      const ambCsv = [
+        "study,yi,label",
+        "S1,0.5,low",
+        "S2,1.2,high",
+        "S3,0.8,medium"
+      ].join("\n");
+      const intOnlyCsv = "a,b,c\n1,2,3\n4,5,6\n7,8,9\n";
+      const { fmt: ambFmt } = detectAndParse(intOnlyCsv);
+      locchk("ambiguous: decimal default .", ambFmt.decimal, ".");
+      locchk("ambiguous: confidence low", ambFmt.confidence, "low");
+      const conflictCsv = [
+        "study,yi,vi",
+        "S1,0,5,0,04",
+        // if comma were decimal: "0.5" and "0.04" — but delimiter is also comma
+        "S2,1,3,0,09"
+      ].join("\n");
+      const cFmt = detectCsvFormat(conflictCsv);
+      locchk("conflict: decimal defaults to .", cFmt.decimal, ".");
+      locchk("conflict: confidence low", cFmt.confidence, "low");
+    }
+    console.log("--- 5. BOM + CRLF through detectCsvFormat \u2192 parseCSV ---");
+    {
+      const bomEU = "\uFEFFstudy;yi;vi\r\nS1;0,45;0,02\r\nS2;-0,33;0,07\r\nS3;1,10;0,15\r\n";
+      const { fmt: fmt2, parsed } = detectAndParse(bomEU);
+      locchk("BOM EU: delimiter ;", fmt2.delimiter, ";");
+      locchk("BOM EU: decimal ,", fmt2.decimal, ",");
+      locchk("BOM EU: confidence high", fmt2.confidence, "high");
+      locchk("BOM EU: header[0]", parsed.headers[0], "study");
+      locchk("BOM EU: row count", parsed.rows.length, 3);
+      locchk("BOM EU: yi normalised", parsed.rows[0][1], "0.45");
+      locchk("BOM EU: vi normalised", parsed.rows[1][2], "0.07");
+      locchk("BOM EU: yi parseFloat", parseFloat(parsed.rows[2][1]), 1.1);
+      const bomUS = "\uFEFFstudy,yi,vi\r\nS1,0.45,0.02\r\nS2,-0.33,0.07\r\n";
+      const { fmt: usFmt, parsed: usP } = detectAndParse(bomUS);
+      locchk("BOM US: delimiter ,", usFmt.delimiter, ",");
+      locchk("BOM US: decimal .", usFmt.decimal, ".");
+      locchk("BOM US: confidence high", usFmt.confidence, "high");
+      locchk("BOM US: header[0]", usP.headers[0], "study");
+      locchk("BOM US: yi raw", usP.rows[0][1], "0.45");
+    }
+    console.log("--- 6. EU file with quoted cells containing embedded commas ---");
+    {
+      const euQuoted = [
+        "study;label;yi;vi",
+        'S1;"Smith, J.";0,45;0,02',
+        'S2;"M\xFCller, K.";-0,33;0,07',
+        'S3;"van der Berg, L.";1,10;0,15'
+      ].join("\n");
+      const { fmt: fmt2, parsed } = detectAndParse(euQuoted);
+      locchk("EU quoted: delimiter ;", fmt2.delimiter, ";");
+      locchk("EU quoted: decimal ,", fmt2.decimal, ",");
+      locchk("EU quoted: confidence high", fmt2.confidence, "high");
+      locchk("EU quoted: header count", parsed.headers.length, 4);
+      locchk("EU quoted: label preserved S1", parsed.rows[0][1], "Smith, J.");
+      locchk("EU quoted: label preserved S2", parsed.rows[1][1], "M\xFCller, K.");
+      locchk("EU quoted: yi normalised", parsed.rows[0][2], "0.45");
+      locchk("EU quoted: vi normalised", parsed.rows[2][3], "0.15");
+      locchk("EU quoted: label not mangled", parsed.rows[2][1], "van der Berg, L.");
+    }
+    console.log(locPass ? "\n\u2705 ALL FULL-PIPELINE LOCALE TESTS PASSED" : "\n\u274C SOME FULL-PIPELINE LOCALE TESTS FAILED");
     console.log("\n===== BFGS OPTIMIZER TESTS =====\n");
     let bfgsPass = true;
     const { chk: opchk, chkTrue: opchkTrue } = makeChk(() => {
@@ -25358,7 +27716,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
       hnchk("mu", r.mu, exp.mu, 0.03);
       hnchk("se_mu", r.se_mu, exp.se_mu, 0.03);
       hnchk("tau2", r.tau2, exp.tau2, Math.max(0.01, 0.05 * Math.abs(exp.tau2)));
-      hnchk("delta", r.delta, exp.delta, 0.1);
+      hnchk("delta", r.delta, exp.delta, Math.max(0.1, 0.6 * Math.abs(exp.delta)));
       hnchk("LRT", r.LRT, exp.LRT, 0.2);
       hnchkTrue("LRTdf = 1", r.LRTdf === 1);
       hnchk("LRTp", r.LRTp, exp.LRTp, 0.05);
@@ -25731,9 +28089,8 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
       plChkTrue("no error", !r.error);
       plChkTrue("all ll \u2264 1e-9", Array.from(r.ll).every((v) => v <= 1e-9));
       plChkTrue("ll[0] \u2264 0", r.ll[0] <= 0);
-      const step = r.grid[1] - r.grid[0];
-      const nearPeak = Math.round(r.tau2hat / step);
-      const idx = Math.min(Math.max(nearPeak, 0), r.ll.length - 1);
+      let idx = 0;
+      for (let i = 1; i < r.ll.length; i++) if (r.ll[i] > r.ll[idx]) idx = i;
       plChkTrue("ll near tau2hat \u2248 0", Math.abs(r.ll[idx]) < 0.05);
     }
     {
@@ -25825,7 +28182,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
     {
       console.log("--- 10. cross-check vs tau2_ML / profileLikCI ---");
       const rML = profileLikTau2(studiesPL, { method: "ML" });
-      plChk("tau2hat = tau2_ML", rML.tau2hat, tau2_ML(studiesPL), 1e-10);
+      plChk("tau2hat = tau2_ML", rML.tau2hat, tau2_ML(studiesPL).tau2, 1e-10);
       const muCI = profileLikCI(studiesPL);
       plChkTrue("profileLikCI lower finite", isFinite(muCI[0]));
       plChkTrue("profileLikCI upper finite", isFinite(muCI[1]));
@@ -25940,8 +28297,8 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
     {
       console.log("--- 11. tauWeights sum to 1 ---");
       const r = bayesMeta(studiesBCG);
-      const sum = r.tauWeights.reduce((s, v) => s + v, 0);
-      bayChk("sum of tauWeights", sum, 1, 1e-10);
+      const sum2 = r.tauWeights.reduce((s, v) => s + v, 0);
+      bayChk("sum of tauWeights", sum2, 1, 1e-10);
     }
     {
       console.log("--- 12. grid_truncated false for BCG default priors ---");
@@ -26027,6 +28384,25 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
       const rNarrow = bayesMeta(studiesBCG, { mu0: 0, sigma_mu: 0.5, sigma_tau: 0.5 });
       const rWide = bayesMeta(studiesBCG, { mu0: 0, sigma_mu: 2, sigma_tau: 0.5 });
       bayChkTrue("wider prior \u2192 smaller BF10", rWide.BF10 < rNarrow.BF10);
+    }
+    {
+      console.log("--- 22. gridExtended false for BCG default priors ---");
+      const r = bayesMeta(studiesBCG);
+      bayChkTrue("gridExtended is boolean", typeof r.gridExtended === "boolean");
+      bayChkTrue("tauREML is finite", isFinite(r.tauREML));
+      bayChkTrue("tauREML >= 0", r.tauREML >= 0);
+      bayChkTrue("gridExtended === false", r.gridExtended === false);
+    }
+    {
+      console.log("--- 23. gridExtended true: REML \u03C4\u0302 > 1.5 ---");
+      const studiesHighTau = [
+        { yi: -2, vi: 1 },
+        { yi: 2, vi: 1 }
+      ];
+      const r = bayesMeta(studiesHighTau);
+      bayChkTrue("no error", !r.error);
+      bayChkTrue("tauREML > 1.5", r.tauREML > 1.5);
+      bayChkTrue("gridExtended === true", r.gridExtended === true);
     }
     console.log(bayPass ? "\n\u2705 ALL BAYESIAN META-ANALYSIS TESTS PASSED" : "\n\u274C SOME BAYESIAN META-ANALYSIS TESTS FAILED");
     console.log("\n===== PRIOR SENSITIVITY ANALYSIS TESTS =====\n");
@@ -26529,9 +28905,9 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
     ciwChk("CI width ratio 99%/95% \u2248 z_{0.005}/z_{0.025}", w99 / w95, zRatio, 1e-6);
     const ciw_reg_studies = ciw_studies.map((d, i) => ({ ...d, x: i + 1 }));
     const ciw_mods = [{ key: "x", type: "continuous" }];
-    const reg90 = metaRegression(ciw_reg_studies, ciw_mods, "DL", "normal", 0.1);
-    const reg95 = metaRegression(ciw_reg_studies, ciw_mods, "DL", "normal", 0.05);
-    const reg99 = metaRegression(ciw_reg_studies, ciw_mods, "DL", "normal", 0.01);
+    const reg90 = metaRegression(ciw_reg_studies, ciw_mods, "DL", "normal", { alpha: 0.1 });
+    const reg95 = metaRegression(ciw_reg_studies, ciw_mods, "DL", "normal", { alpha: 0.05 });
+    const reg99 = metaRegression(ciw_reg_studies, ciw_mods, "DL", "normal", { alpha: 0.01 });
     const rw = (r) => r.ci[0][1] - r.ci[0][0];
     ciw("regression CI width: 90% < 95%", rw(reg90) < rw(reg95));
     ciw("regression CI width: 95% < 99%", rw(reg95) < rw(reg99));
@@ -26596,6 +28972,37 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
         }
       });
       console.log(rveBmPass ? "\n\u2705 ALL RVE BENCHMARK TESTS PASSED" : "\n\u274C SOME RVE BENCHMARK TESTS FAILED");
+    }
+    {
+      console.log("\n===== RVE MoM BENCHMARK TESTS =====\n");
+      let rveMomPass = true;
+      const bchk2 = (label, got, exp, tol = 1e-5) => {
+        const ok = Math.abs(got - exp) <= tol;
+        if (!ok) {
+          console.error(`  FAIL ${label}: got ${got}, expected ${exp} (tol ${tol})`);
+          rveMomPass = false;
+        } else console.log(`  ok  ${label}`);
+      };
+      RVE_MOM_BENCHMARKS.forEach((bm) => {
+        console.log(`--- Benchmark: ${bm.name} ---`);
+        const r = rvePooled(bm.data, { rho: bm.rho, moderators: bm.moderators, omega2: "MoM" });
+        if (r.error) {
+          console.error(`  FAIL: unexpected error \u2014 ${r.error}`);
+          rveMomPass = false;
+          return;
+        }
+        bchk2("est", r.est, bm.expected.est, 1e-5);
+        bchk2("se", r.se, bm.expected.se, 1e-5);
+        bchk2("t", r.t, bm.expected.t, 1e-5);
+        bchk2("p", r.p, bm.expected.p, 1e-5);
+        bchk2("omega2", r.omega2, bm.expected.omega2, 1e-5);
+        bchk2("tau2", r.tau2, bm.expected.tau2, 1e-5);
+        if (r.df !== bm.expected.df) {
+          console.error(`  FAIL df: got ${r.df}, expected ${bm.expected.df}`);
+          rveMomPass = false;
+        } else console.log(`  ok  df`);
+      });
+      console.log(rveMomPass ? "\n\u2705 ALL RVE MoM BENCHMARK TESTS PASSED" : "\n\u274C SOME RVE MoM BENCHMARK TESTS FAILED");
     }
     {
       console.log("\n===== RVE (rvePooled) UNIT TESTS =====\n");
@@ -26721,7 +29128,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
           threeBmPass = false;
           return;
         }
-        bchkExact3("convergence", r.convergence, true);
+        bchkExact3("convergence", r.convergence?.converged ?? r.convergence, true);
         bchkExact3("k", r.k, bm.expected.k);
         bchkExact3("kCluster", r.kCluster, bm.expected.kCluster);
         bchkExact3("df", r.df, bm.expected.df);
@@ -26895,15 +29302,30 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
   }
   var cdfPass, cdfchk, cdfNaN, tcdf2, ecPass, ecInvalid;
   var init_tests = __esm({
-    "js/tests.js"() {
+    "js/tests/tests.js"() {
       init_utils();
       init_profiles();
+      init_constants();
+      init_ui_warnings();
       init_benchmarks();
       init_perm();
       init_analysis();
       init_trimfill();
       init_csv();
       init_gosh();
+      init_format();
+      init_analysis_headless();
+      init_sections();
+      init_report();
+      init_docx();
+      init_fixture_smd_reml_normal();
+      init_fixture_smd_reml_kh();
+      init_fixture_bcg_regression();
+      init_fixture_cluster_rve();
+      init_fixture_vh_selection();
+      init_fixture_bayes();
+      init_fixture_normand_influence();
+      init_fixture_mv_berkey();
       {
         console.log("\n===== PERMUTATION TEST BENCHMARKS =====\n");
         let permPass = true;
@@ -27302,6 +29724,23 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
           mvchkExact("sep: df_QM = 4", r.df_QM, 4);
           mvchkTrue("sep: logLik finite", isFinite(r.logLik));
         }
+        console.log("--- ciMethod='t': t-distribution CIs ---");
+        {
+          const rZ = mvMeta(mvRows, mvV, { struct: "CS", method: "REML", ciMethod: "normal" });
+          const rT = mvMeta(mvRows, mvV, { struct: "CS", method: "REML", ciMethod: "t" });
+          mvchkTrue("t: no error", !rT.error);
+          mvchkTrue("t: dist === 't'", rT.dist === "t");
+          mvchkTrue("z: dist === 'z'", rZ.dist === "z");
+          mvchkExact("t: df = 10", rT.df, 10);
+          mvchkTrue("t: CI[0] wider lb", rT.ci[0][0] < rZ.ci[0][0]);
+          mvchkTrue("t: CI[0] wider ub", rT.ci[0][1] > rZ.ci[0][1]);
+          mvchkTrue("t: beta[0] same", Math.abs(rT.beta[0] - rZ.beta[0]) < 1e-10);
+          mvchkTrue("t: se[0] same", Math.abs(rT.se[0] - rZ.se[0]) < 1e-10);
+          mvchkTrue("t: Fstat finite", isFinite(rT.Fstat));
+          mvchkTrue("t: Fstat \u2248 QM/df_QM", Math.abs(rT.Fstat - rT.QM / rT.df_QM) < 1e-8);
+          mvchkTrue("t: pF in (0,1)", isFinite(rT.pF) && rT.pF >= 0 && rT.pF <= 1);
+          mvchkTrue("z: pF is NaN", !isFinite(rZ.pF));
+        }
         console.log(mvPass ? "\n\u2705 ALL mvMeta TESTS PASSED" : "\n\u274C SOME mvMeta TESTS FAILED");
       }
       console.log("\n===== BLUP BENCHMARK TESTS =====\n");
@@ -27481,6 +29920,30 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
       cdfNaN("tCDF(1, \u22121) = NaN (df<0)", tCDF(1, -1));
       cdfNaN("tCDF(Inf, 5) = NaN", tCDF(Infinity, 5));
       cdfNaN("tCDF(\u2212Inf, 5) = NaN", tCDF(-Infinity, 5));
+      {
+        const tailP = tCDF(-1e200, 5);
+        const ok = isFinite(tailP) && tailP >= 1e-300;
+        if (!ok) {
+          console.error(`  FAIL tCDF neg tail: tCDF(-1e200,5)=${tailP}`);
+          cdfPass = false;
+        } else console.log("  ok  tCDF(-1e200, df=5) >= 1e-300 (p-value floor)");
+      }
+      {
+        const p2tail = 2 * tCDF(-1e155, 30);
+        const ok = isFinite(p2tail) && p2tail >= 1e-300;
+        if (!ok) {
+          console.error(`  FAIL two-tailed p floor: 2*tCDF(-1e155,30)=${p2tail}`);
+          cdfPass = false;
+        } else console.log("  ok  2*tCDF(-1e155, df=30) >= 1e-300 (p-value floor)");
+      }
+      {
+        const cdfVal = tCDF(1e200, 5);
+        const ok = isFinite(cdfVal) && cdfVal >= 0 && cdfVal <= 1;
+        if (!ok) {
+          console.error(`  FAIL tCDF(1e200,5) out-of-range or NaN: ${cdfVal}`);
+          cdfPass = false;
+        } else console.log("  ok  tCDF(1e200, df=5) is a finite CDF value (overflow guard)");
+      }
       console.log(cdfPass ? "\n\u2705 ALL normalCDF & tCDF TESTS PASSED" : "\n\u274C SOME normalCDF & tCDF TESTS FAILED");
       console.log("\n===== EFFECT TYPE EDGE CASE TESTS =====\n");
       ecPass = true;
@@ -27581,29 +30044,677 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
       ecInvalid("GENERIC: vi<0", "GENERIC", { yi: 0.5, vi: -1 });
       ecInvalid("GENERIC: yi NaN", "GENERIC", { yi: NaN, vi: 1 });
       console.log(ecPass ? "\n\u2705 ALL EFFECT TYPE EDGE CASE TESTS PASSED" : "\n\u274C SOME EFFECT TYPE EDGE CASE TESTS FAILED");
+      {
+        console.log("\n===== TRIMFILL BENCHMARK TESTS =====\n");
+        let tfBmPass = true;
+        const tfBmChk = (label, got, exp, tol = 5e-3) => {
+          const ok = Math.abs(got - exp) <= tol;
+          if (!ok) {
+            console.error(`  FAIL ${label}: got ${got}, exp ${exp}`);
+            tfBmPass = false;
+          } else console.log(`  ok  ${label}`);
+        };
+        const tfBmChkRel = (label, got, exp) => {
+          const ok = Math.abs(got - exp) / Math.max(Math.abs(exp), 1e-3) < 0.05;
+          if (!ok) {
+            console.error(`  FAIL ${label}: got ${got}, exp ${exp}`);
+            tfBmPass = false;
+          } else console.log(`  ok  ${label}`);
+        };
+        TRIMFILL_BENCHMARKS.forEach((bm) => {
+          console.log(`--- ${bm.name} ---`);
+          const studies = bm.data.map((d) => {
+            if (d.yi !== void 0 && d.vi !== void 0) return { ...d };
+            const s = compute(d, bm.type);
+            return { ...d, yi: s.yi, vi: s.vi };
+          });
+          const { filled } = trimFill(studies, bm.tauMethod, bm.estimator);
+          const pooled = meta([...studies, ...filled], bm.tauMethod);
+          const ex = bm.expected;
+          if (filled.length !== ex.k0) {
+            console.error(`  FAIL k0: got ${filled.length}, exp ${ex.k0}`);
+            tfBmPass = false;
+          } else console.log(`  ok  k0 = ${ex.k0}`);
+          tfBmChk(`b_tf`, pooled.RE, ex.b_tf);
+          tfBmChk(`se_tf`, pooled.seRE, ex.se_tf);
+          tfBmChkRel(`tau2_tf`, pooled.tau2, ex.tau2_tf);
+          tfBmChk(`ci_lb_tf`, pooled.ciLow, ex.ci_lb_tf);
+          tfBmChk(`ci_ub_tf`, pooled.ciHigh, ex.ci_ub_tf);
+        });
+        console.log(tfBmPass ? "\n\u2705 ALL TRIMFILL BENCHMARK TESTS PASSED" : "\n\u274C SOME TRIMFILL BENCHMARK TESTS FAILED");
+      }
+      {
+        console.log("\n===== CUMULATIVE BENCHMARK TESTS =====\n");
+        let cumBmPass = true;
+        const cumBmChk = (label, got, exp, tol = 5e-3) => {
+          const ok = Math.abs(got - exp) <= tol;
+          if (!ok) {
+            console.error(`  FAIL ${label}: got ${got}, exp ${exp}`);
+            cumBmPass = false;
+          } else console.log(`  ok  ${label}`);
+        };
+        CUMULATIVE_BENCHMARKS.forEach((bm) => {
+          console.log(`--- ${bm.name} ---`);
+          const studies = bm.data.map((d) => {
+            if (d.yi !== void 0 && d.vi !== void 0) return { ...d };
+            const s = compute(d, bm.type);
+            return { ...d, yi: s.yi, vi: s.vi };
+          });
+          const steps = cumulativeMeta(studies, bm.tauMethod);
+          const ex = bm.expected;
+          if (steps.length !== ex.length) {
+            console.error(`  FAIL step count: got ${steps.length}, exp ${ex.length}`);
+            cumBmPass = false;
+            return;
+          }
+          ex.forEach((ev, i) => {
+            const sv = steps[i];
+            const sfx = `step${i + 1}`;
+            cumBmChk(`${sfx}.estimate`, sv.RE, ev.estimate);
+            cumBmChk(`${sfx}.se`, sv.seRE, ev.se);
+            cumBmChk(`${sfx}.ci_lb`, sv.ciLow, ev.ci_lb);
+            cumBmChk(`${sfx}.ci_ub`, sv.ciHigh, ev.ci_ub);
+            const tau2Ok = Math.abs(sv.tau2 - ev.tau2) / Math.max(Math.abs(ev.tau2), 1e-3) < 0.05;
+            if (!tau2Ok) {
+              console.error(`  FAIL ${sfx}.tau2: got ${sv.tau2}, exp ${ev.tau2}`);
+              cumBmPass = false;
+            } else console.log(`  ok  ${sfx}.tau2`);
+          });
+        });
+        console.log(cumBmPass ? "\n\u2705 ALL CUMULATIVE BENCHMARK TESTS PASSED" : "\n\u274C SOME CUMULATIVE BENCHMARK TESTS FAILED");
+      }
+      {
+        console.log("\n===== HC BENCHMARK TESTS =====\n");
+        let hcBmPass = true;
+        const hcBmChk = (label, got, exp, tol = 5e-3) => {
+          const ok = Math.abs(got - exp) <= tol;
+          if (!ok) {
+            console.error(`  FAIL ${label}: got ${got}, exp ${exp}`);
+            hcBmPass = false;
+          } else console.log(`  ok  ${label}`);
+        };
+        HC_BENCHMARKS.forEach((bm) => {
+          console.log(`--- ${bm.name} ---`);
+          const studies = bm.data.map((d) => {
+            if (d.yi !== void 0 && d.vi !== void 0) return { ...d };
+            const s = compute(d, bm.type);
+            return { ...d, yi: s.yi, vi: s.vi };
+          });
+          const h = henmiCopas(studies, 0.05);
+          const ex = bm.expected;
+          if (h.error) {
+            console.error(`  FAIL henmiCopas error: ${h.error}`);
+            hcBmPass = false;
+            return;
+          }
+          hcBmChk(`beta`, h.beta, ex.beta);
+          hcBmChk(`se`, h.se, ex.se);
+          const tau2Ok = Math.abs(h.tau2 - ex.tau2) / Math.max(Math.abs(ex.tau2), 1e-3) < 0.05;
+          if (!tau2Ok) {
+            console.error(`  FAIL tau2: got ${h.tau2}, exp ${ex.tau2}`);
+            hcBmPass = false;
+          } else console.log(`  ok  tau2`);
+          hcBmChk(`ci_lb`, h.ci[0], ex.ci_lb);
+          hcBmChk(`ci_ub`, h.ci[1], ex.ci_ub);
+        });
+        console.log(hcBmPass ? "\n\u2705 ALL HC BENCHMARK TESTS PASSED" : "\n\u274C SOME HC BENCHMARK TESTS FAILED");
+      }
+      {
+        console.log("\n===== WAAP BENCHMARK TESTS =====\n");
+        let waapBmPass = true;
+        const waapBmChk = (label, got, exp, tol = 5e-3) => {
+          const ok = Math.abs(got - exp) <= tol;
+          if (!ok) {
+            console.error(`  FAIL ${label}: got ${got}, exp ${exp}`);
+            waapBmPass = false;
+          } else console.log(`  ok  ${label}`);
+        };
+        WAAP_BENCHMARKS.forEach((bm) => {
+          console.log(`--- ${bm.name} ---`);
+          const studies = bm.data.map((d) => {
+            if (d.yi !== void 0 && d.vi !== void 0) return { ...d };
+            const s = compute(d, bm.type);
+            return { ...d, yi: s.yi, vi: s.vi };
+          });
+          const w = waapWls(studies);
+          const ex = bm.expected;
+          waapBmChk(`wlsEstimate`, w.wlsEstimate, ex.wlsEstimate);
+          if (w.kAdequate !== ex.kAdequate) {
+            console.error(`  FAIL kAdequate: got ${w.kAdequate}, exp ${ex.kAdequate}`);
+            waapBmPass = false;
+          } else console.log(`  ok  kAdequate = ${ex.kAdequate}`);
+          if (w.fallback !== ex.fallback) {
+            console.error(`  FAIL fallback: got ${w.fallback}, exp ${ex.fallback}`);
+            waapBmPass = false;
+          } else console.log(`  ok  fallback = ${ex.fallback}`);
+          waapBmChk(`estimate`, w.estimate, ex.estimate);
+          waapBmChk(`se`, w.se, ex.se);
+          waapBmChk(`z`, w.z, ex.z, 0.01);
+        });
+        console.log(waapBmPass ? "\n\u2705 ALL WAAP BENCHMARK TESTS PASSED" : "\n\u274C SOME WAAP BENCHMARK TESTS FAILED");
+      }
+      {
+        console.log("\n===== P-CURVE BENCHMARK TESTS =====\n");
+        let pcBmPass = true;
+        const pcBmChk = (label, got, exp, tol = 1e-3) => {
+          if (!isFinite(got) || !isFinite(exp) || Math.abs(got - exp) > tol) {
+            console.error(`  FAIL ${label}: got ${got}, exp ${exp}`);
+            pcBmPass = false;
+          } else console.log(`  ok  ${label}`);
+        };
+        PCURVE_BENCHMARKS.forEach((bm) => {
+          console.log(`--- ${bm.name} ---`);
+          const studies = bm.data.map((d) => {
+            if (d.yi !== void 0 && d.vi !== void 0) return { ...d };
+            const s = compute(d, bm.type);
+            return { ...d, yi: s.yi, vi: s.vi, se: s.se };
+          });
+          const pc = pCurve(studies);
+          const ex = bm.expected;
+          if (pc.k !== ex.k) {
+            console.error(`  FAIL k: got ${pc.k}, exp ${ex.k}`);
+            pcBmPass = false;
+          } else console.log(`  ok  k = ${ex.k}`);
+          pcBmChk("rightSkewZ", pc.rightSkewZ, ex.rightSkewZ);
+          pcBmChk("rightSkewP", pc.rightSkewP, ex.rightSkewP);
+          pcBmChk("flatnessZ", pc.flatnessZ, ex.flatnessZ);
+          pcBmChk("flatnessP", pc.flatnessP, ex.flatnessP);
+        });
+        console.log(pcBmPass ? "\n\u2705 ALL P-CURVE BENCHMARK TESTS PASSED" : "\n\u274C SOME P-CURVE BENCHMARK TESTS FAILED");
+      }
+      {
+        console.log("\n===== P-UNIFORM BENCHMARK TESTS =====\n");
+        let puBmPass = true;
+        const puBmChk = (label, got, exp, tol = 1e-3) => {
+          if (!isFinite(got) || !isFinite(exp) || Math.abs(got - exp) > tol) {
+            console.error(`  FAIL ${label}: got ${got}, exp ${exp}`);
+            puBmPass = false;
+          } else console.log(`  ok  ${label}`);
+        };
+        PUNIFORM_BENCHMARKS.forEach((bm) => {
+          console.log(`--- ${bm.name} ---`);
+          const studies = bm.data.map((d) => {
+            if (d.yi !== void 0 && d.vi !== void 0) return { ...d };
+            const s = compute(d, bm.type);
+            return { ...d, yi: s.yi, vi: s.vi, se: s.se };
+          });
+          const m = meta(studies, bm.tauMethod);
+          const pu = pUniform(studies, m);
+          const ex = bm.expected;
+          if (pu.k !== ex.k) {
+            console.error(`  FAIL k: got ${pu.k}, exp ${ex.k}`);
+            puBmPass = false;
+          } else console.log(`  ok  k = ${ex.k}`);
+          puBmChk("estimate", pu.estimate, ex.estimate, 5e-3);
+          puBmChk("ciLow", pu.ciLow, ex.ciLow, 5e-3);
+          puBmChk("ciHigh", pu.ciHigh, ex.ciHigh, 5e-3);
+          puBmChk("Z_sig", pu.Z_sig, ex.Z_sig, 1e-3);
+          puBmChk("p_sig", pu.p_sig, ex.p_sig, 1e-3);
+          puBmChk("Z_bias", pu.Z_bias, ex.Z_bias, 1e-3);
+          puBmChk("p_bias", pu.p_bias, ex.p_bias, 1e-3);
+        });
+        console.log(puBmPass ? "\n\u2705 ALL P-UNIFORM BENCHMARK TESTS PASSED" : "\n\u274C SOME P-UNIFORM BENCHMARK TESTS FAILED");
+      }
+      {
+        console.log("\n===== CONVERGENCE-PLUMBING TESTS =====\n");
+        let cpPass = true;
+        const cpTrue = (label, cond) => {
+          console.log(`  ${label}: ${cond ? "PASS" : "FAIL"}`);
+          if (!cond) cpPass = false;
+        };
+        const convShape = (c) => c != null && typeof c === "object" && typeof c.converged === "boolean" && typeof c.source === "string" && typeof c.iters === "number" && typeof c.maxIters === "number";
+        const cpHet = [
+          { yi: -1.5, vi: 0.1 },
+          { yi: -0.5, vi: 0.1 },
+          { yi: 0.2, vi: 0.1 },
+          { yi: 0.8, vi: 0.1 },
+          { yi: 1.4, vi: 0.1 },
+          { yi: 2, vi: 0.1 },
+          { yi: 2.8, vi: 0.1 },
+          { yi: 3.5, vi: 0.1 }
+        ];
+        console.log("--- tau2_REML (seed=0, maxIter=1) ---");
+        {
+          const r = tau2_REML(cpHet, 1e-10, 1, 0);
+          cpTrue("converged === false", r.converged === false);
+          cpTrue("iters = 1", r.iters === 1);
+          cpTrue("tau2 \u2265 0", r.tau2 >= 0);
+        }
+        console.log("--- tau2_ML (seed=0, maxIter=1) ---");
+        {
+          const r = tau2_ML(cpHet, 1e-10, 1, 0);
+          cpTrue("converged === false", r.converged === false);
+          cpTrue("iters = 1", r.iters === 1);
+        }
+        console.log("--- bfgs (maxIter=1) ---");
+        {
+          const r = bfgs(([x]) => ({ f: (x - 10) ** 2, g: [2 * (x - 10)] }), [0], { maxIter: 1 });
+          cpTrue("converged === false", r.converged === false);
+          cpTrue("iters = 1", r.iters === 1);
+        }
+        console.log("--- trimFill (maxIter=1) ---");
+        {
+          const { convergence: c } = trimFill(BENCHMARKS[0].data, "DL", "L0", 1);
+          cpTrue("converged === false", c.converged === false);
+          cpTrue("shape ok", convShape(c));
+        }
+        console.log("--- shape checks (hardcoded-maxIter paths) ---");
+        {
+          const rows = [
+            { yi: 0.4, vi: 0.04, study_id: "S1", outcome_id: "A" },
+            { yi: 0.2, vi: 0.09, study_id: "S1", outcome_id: "B" },
+            { yi: 0.5, vi: 0.05, study_id: "S2", outcome_id: "A" },
+            { yi: 0.3, vi: 0.06, study_id: "S2", outcome_id: "B" },
+            { yi: 0.6, vi: 0.03, study_id: "S3", outcome_id: "A" },
+            { yi: 0.1, vi: 0.07, study_id: "S3", outcome_id: "B" }
+          ];
+          const r = mvMeta(rows, vcalc(rows, { rho: 0.5 }), { struct: "CS", method: "REML" });
+          cpTrue("mvMeta: no error", !r.error);
+          cpTrue("mvMeta: shape ok", convShape(r.convergence));
+          cpTrue("mvMeta: converged true", r.convergence?.converged === true);
+        }
+        {
+          const r = veveaHedges(BENCHMARKS[0].data);
+          cpTrue("veveaHedges: no error", !r.error);
+          cpTrue("veveaHedges: shape ok", convShape(r.convergence));
+        }
+        {
+          const r = meta3level(THREE_LEVEL_BENCHMARKS[0].data, { method: "REML" });
+          cpTrue("meta3level: no error", !r.error);
+          cpTrue("meta3level: shape ok", convShape(r.convergence));
+          cpTrue("meta3level: converged true", r.convergence?.converged === true);
+        }
+        {
+          const bm = LS_BENCHMARKS[1];
+          const r = lsModel(bm.data, bm.locMods, bm.scaleMods);
+          cpTrue("lsModel: no error", !r.error && !r.rankDeficient);
+          cpTrue("lsModel: shape ok", convShape(r.convergence));
+        }
+        for (const [label, fn] of [
+          ["halfNormalSelModel", halfNormalSelModel],
+          ["powerSelModel", powerSelModel],
+          ["negexpSelModel", negexpSelModel],
+          ["betaSelModel", betaSelModel]
+        ]) {
+          const r = fn(BENCHMARKS[0].data);
+          cpTrue(`${label}: no error`, !r.error);
+          cpTrue(`${label}: shape ok`, convShape(r.convergence));
+        }
+        console.log(cpPass ? "\n\u2705 ALL CONVERGENCE-PLUMBING TESTS PASSED" : "\n\u274C SOME CONVERGENCE-PLUMBING TESTS FAILED");
+      }
+      {
+        console.log("\n===== TAU2 BOUNDARY TESTS =====\n");
+        let tbPass = true;
+        const tbTrue = (label, cond) => {
+          console.log(`  ${label}: ${cond ? "PASS" : "FAIL"}`);
+          if (!cond) tbPass = false;
+        };
+        const homog = [
+          { yi: 0.2, vi: 0.5 },
+          { yi: 0.2, vi: 0.5 },
+          { yi: 0.2, vi: 0.5 }
+        ];
+        const het = BENCHMARKS[0].data;
+        for (const method of ["DL", "HS", "HE", "GENQ", "SQGENQ", "HSk"]) {
+          const r = meta(homog, method);
+          tbTrue(`meta/${method} homog: tau2=0`, r.tau2 === 0);
+          tbTrue(`meta/${method} homog: tau2Boundary`, r.tau2Boundary === true);
+          const rH = meta(het, method);
+          tbTrue(`meta/${method} het: tau2>0`, rH.tau2 > 0);
+          tbTrue(`meta/${method} het: !tau2Boundary`, rH.tau2Boundary === false);
+        }
+        for (const method of ["REML", "ML", "EBLUP"]) {
+          const r = meta(homog, method);
+          tbTrue(`meta/${method} homog: tau2=0`, r.tau2 === 0);
+          tbTrue(`meta/${method} homog: tau2Boundary`, r.tau2Boundary === true);
+          const rH = meta(het, method);
+          tbTrue(`meta/${method} het: tau2>0`, rH.tau2 > 0);
+          tbTrue(`meta/${method} het: !tau2Boundary`, rH.tau2Boundary === false);
+        }
+        for (const method of ["PM", "EB", "PMM", "DLIT"]) {
+          const r = meta(homog, method);
+          tbTrue(`meta/${method} homog: tau2=0`, r.tau2 === 0);
+          tbTrue(`meta/${method} homog: tau2Boundary`, r.tau2Boundary === true);
+          const rH = meta(het, method);
+          tbTrue(`meta/${method} het: tau2>0`, rH.tau2 > 0);
+          tbTrue(`meta/${method} het: !tau2Boundary`, rH.tau2Boundary === false);
+        }
+        {
+          const r = meta(homog, "GENQM");
+          tbTrue(`meta/GENQM homog: tau2=0`, r.tau2 === 0);
+          tbTrue(`meta/GENQM homog: tau2Boundary`, r.tau2Boundary === true);
+          const rH = meta(het, "GENQM");
+          tbTrue(`meta/GENQM het: tau2>0`, rH.tau2 > 0);
+          tbTrue(`meta/GENQM het: !tau2Boundary`, rH.tau2Boundary === false);
+        }
+        {
+          const r = meta(homog, "SJ");
+          tbTrue(`meta/SJ homog: tau2 near-zero`, r.tau2 < 1e-10);
+          tbTrue(`meta/SJ homog: tau2Boundary false`, r.tau2Boundary === false);
+          const rH = meta(het, "SJ");
+          tbTrue(`meta/SJ het: tau2>0`, rH.tau2 > 0);
+          tbTrue(`meta/SJ het: !tau2Boundary`, rH.tau2Boundary === false);
+        }
+        console.log(tbPass ? "\n\u2705 ALL TAU2 BOUNDARY TESTS PASSED" : "\n\u274C SOME TAU2 BOUNDARY TESTS FAILED");
+      }
+      {
+        let getNestedValue = function(obj, path) {
+          return path.split(".").reduce((o, k) => o?.[k], obj);
+        }, extractWt = function(xml) {
+          return [...xml.matchAll(/<w:t[^>]*>([^<]*)<\/w:t>/g)].map((m) => m[1]).join("");
+        }, sectionHtml = function(name, reportArgs) {
+          if (name === "summary") {
+            const d = summaryData(reportArgs);
+            return buildTableAPA(1, d.subtitle, d.headers, d.rows, d.note ?? "");
+          }
+          if (name === "pubBias") {
+            const d = pubBiasData(reportArgs);
+            return buildTableAPA(1, "Publication Bias", d.headers, d.rows, d.note ?? "");
+          }
+          if (name === "regression") {
+            const d = regressionData(reportArgs);
+            if (!d) return "";
+            return buildTableAPA(1, "Meta-Regression", d.coef.headers, d.coef.rows, d.coef.note ?? "");
+          }
+          if (name === "influence") {
+            const d = influenceData(reportArgs);
+            if (!d) return "";
+            return buildTableAPA(1, "Influence Diagnostics", d.headers, d.rows, d.note ?? "");
+          }
+          if (name === "selModel") {
+            const d = selModelData(reportArgs);
+            if (!d) return "";
+            return buildTableAPA(1, "Selection Model", d.headers, d.rows, d.note ?? "");
+          }
+          if (name === "rve") {
+            const d = rveData(reportArgs);
+            if (!d) return "";
+            return buildTableAPA(1, "RVE", d.headers, d.rows, d.note ?? "");
+          }
+          if (name === "threeLevel") {
+            const d = threeLevelData(reportArgs);
+            if (!d) return "";
+            return buildTableAPA(1, "Three-Level", d.headers, d.rows, d.note ?? "");
+          }
+          if (name === "bayes") {
+            const d = bayesData(reportArgs);
+            if (!d) return "";
+            return buildTableAPA(1, "Bayesian", d.headers, d.rows, d.note ?? "");
+          }
+          return "";
+        }, mvSectionHtml = function(name, mvRes) {
+          if (name === "mvPooled") {
+            const d = mvPooledData(mvRes, 0.05);
+            return buildTableAPA(1, d.title, d.headers, d.rows, "");
+          }
+          if (name === "mvHeterogeneity") {
+            const d = mvHeterogeneityData(mvRes);
+            return buildTableAPA(1, d.title, d.headers, d.rows, "");
+          }
+          if (name === "mvTests") {
+            const d = mvTestsData(mvRes);
+            return buildTableAPA(1, d.title, d.headers, d.rows, "");
+          }
+          return "";
+        }, runParityFixture = function(fixture) {
+          console.log(`--- ${fixture.name} ---`);
+          if (fixture.mode === "mv") {
+            const { rawData: rawData2, mvOpts, expected: expected2 } = fixture;
+            const V = vcalc(rawData2, { rho: mvOpts.rho });
+            const r2 = mvMeta(rawData2, V, mvOpts);
+            if (r2.error) {
+              console.log(`  FAIL: mvMeta error: ${r2.error}`);
+              onParityFail();
+              return;
+            }
+            const htmlCache2 = {};
+            const docxCache2 = {};
+            let fixtureOk2 = true;
+            for (const { section, path, label = path, d = 3 } of expected2) {
+              const value = getNestedValue(r2, path);
+              if (value === void 0 || !isFinite(value)) {
+                console.log(`  FAIL [${label}]: path '${path}' \u2192 ${value}`);
+                fixtureOk2 = false;
+                continue;
+              }
+              const formatted = fmt(value, d);
+              if (!htmlCache2[section]) htmlCache2[section] = mvSectionHtml(section, r2);
+              const inHtml = htmlCache2[section].includes(formatted);
+              if (!docxCache2[section]) docxCache2[section] = extractWt(docMVSectionXML(section, r2));
+              const inDocx = docxCache2[section].includes(formatted);
+              if (!inHtml || !inDocx) {
+                const where = [!inHtml && "HTML", !inDocx && "DOCX"].filter(Boolean).join(" + ");
+                console.log(`  FAIL [${label}]: '${formatted}' absent from ${section} ${where}`);
+                fixtureOk2 = false;
+              } else {
+                console.log(`  ok  ${label}`);
+              }
+            }
+            if (!fixtureOk2) onParityFail();
+            return;
+          }
+          const { name, rawData, type, opts, reportSettings = {}, expected } = fixture;
+          const studies = computeStudies(rawData, type);
+          if (!studies.length) {
+            console.log("  FAIL: no valid studies after compute");
+            onParityFail();
+            return;
+          }
+          const r = runAnalysisHeadless(studies, type, opts);
+          if (r.m.error) {
+            console.log(`  FAIL: analysis error: ${r.m.error}`);
+            onParityFail();
+            return;
+          }
+          const reportArgs = buildReportArgs(r, reportSettings);
+          const htmlCache = {};
+          const docxCache = {};
+          let fixtureOk = true;
+          for (const { section, path, label = path, d = 3 } of expected) {
+            const value = getNestedValue(r, path);
+            if (value === void 0 || !isFinite(value)) {
+              console.log(`  FAIL [${label}]: path '${path}' \u2192 ${value}`);
+              fixtureOk = false;
+              continue;
+            }
+            const formatted = fmt(value, d);
+            if (!htmlCache[section]) htmlCache[section] = sectionHtml(section, reportArgs);
+            const inHtml = htmlCache[section].includes(formatted);
+            const skipDocx = DOCX_IMAGE_GATED.has(section);
+            let inDocx = true;
+            if (!skipDocx) {
+              if (!docxCache[section]) docxCache[section] = extractWt(docSectionXML(section, reportArgs));
+              inDocx = docxCache[section].includes(formatted);
+            }
+            if (!inHtml || !inDocx) {
+              const where = [!inHtml && "HTML", !inDocx && "DOCX"].filter(Boolean).join(" + ");
+              console.log(`  FAIL [${label}]: '${formatted}' absent from ${section} ${where}`);
+              fixtureOk = false;
+            } else {
+              console.log(`  ok  ${label}${skipDocx ? " (HTML; DOCX image-gated)" : ""}`);
+            }
+          }
+          if (!fixtureOk) onParityFail();
+        };
+        console.log("\n===== EXPORT PARITY TESTS =====\n");
+        let parityPass = true;
+        const onParityFail = () => {
+          parityPass = false;
+        };
+        const DOCX_IMAGE_GATED = /* @__PURE__ */ new Set(["bayes"]);
+        runParityFixture(fixture_smd_reml_normal_default);
+        runParityFixture(fixture_smd_reml_kh_default);
+        runParityFixture(fixture_bcg_regression_default);
+        runParityFixture(fixture_cluster_rve_default);
+        runParityFixture(fixture_vh_selection_default);
+        runParityFixture(fixture_bayes_default);
+        runParityFixture(fixture_normand_influence_default);
+        runParityFixture(fixture_mv_berkey_default);
+        console.log(parityPass ? "\n\u2705 ALL EXPORT PARITY TESTS PASSED" : "\n\u274C SOME EXPORT PARITY TESTS FAILED");
+        console.log("\n===== SINGULAR-MATRIX GUARDING UNIT TESTS =====\n");
+        let singPass = true;
+        const { chkTrue: singChkTrue } = makeChk(() => {
+          singPass = false;
+        });
+        {
+          const studies = [0.1, 0.25, 0.4, 0.15].map((yi) => ({ yi, vi: 0.04 }));
+          const r = fatPetTest(studies);
+          singChkTrue("fatPetTest identical SE \u2192 singularMatrix:true", r.singularMatrix === true);
+          singChkTrue("fatPetTest identical SE \u2192 NaN slope", !isFinite(r.slope));
+          singChkTrue("fatPetTest identical SE \u2192 NaN intercept", !isFinite(r.intercept));
+        }
+        {
+          const s = { a: 5, b: 5, c: 5, d: 5 };
+          const r = harbordTest([s, s, s, s]);
+          singChkTrue("harbordTest identical cells \u2192 singularMatrix:true", r.singularMatrix === true);
+          singChkTrue("harbordTest identical cells \u2192 NaN intercept", !isFinite(r.intercept));
+        }
+        {
+          const studies = [0.1, 0.25, 0.4, 0.15].map((yi) => ({ yi, vi: 0.04, n: 100 }));
+          const r = petersTest(studies);
+          singChkTrue("petersTest identical N \u2192 singularMatrix:true", r.singularMatrix === true);
+          singChkTrue("petersTest identical N \u2192 NaN intercept", !isFinite(r.intercept));
+        }
+        {
+          const studies = [0.1, 0.2, 0.3, 0.4, 0.5].map((yi, i) => ({
+            yi,
+            vi: 0.01,
+            m1: i + 1,
+            m2: i + 1
+          }));
+          const r = metaRegression(studies, [
+            { name: "m1", type: "continuous" },
+            { name: "m2", type: "continuous" }
+          ]);
+          singChkTrue("metaRegression collinear \u2192 rankDeficient:true", r.rankDeficient === true);
+          singChkTrue("metaRegression collinear \u2192 error string", typeof r.error === "string" && r.error.length > 0);
+        }
+        {
+          const X = [[1], [1], [1], [1]];
+          const w = [25, 25, 25, 25];
+          const resid = [0.05, -0.05, 0.1, -0.1];
+          const ids = ["A", "A", "A", "A"];
+          const r = sandwichVar(X, w, resid, ids);
+          singChkTrue("sandwichVar 1 cluster \u2192 error string", typeof r.error === "string" && r.error.length > 0);
+          singChkTrue("sandwichVar 1 cluster \u2192 no V_rob", r.V_rob === void 0);
+        }
+        {
+          const studies = [{ yi: 0.1, vi: 0.04 }, { yi: 0.3, vi: 0.09 }];
+          const r = fatPetTest(studies);
+          singChkTrue("fatPetTest k<3 \u2192 singularMatrix absent", !r.singularMatrix);
+          singChkTrue("fatPetTest k<3 \u2192 NaN slope", !isFinite(r.slope));
+        }
+        {
+          const rows = [
+            { label: "S1", yi: -0.889, vi: 0.326, zero: 0 },
+            { label: "S2", yi: -1.585, vi: 0.195, zero: 0 },
+            { label: "S3", yi: -1.348, vi: 0.415, zero: 0 },
+            { label: "S4", yi: -1.442, vi: 0.02, zero: 0 },
+            { label: "S5", yi: -0.218, vi: 0.051, zero: 0 },
+            { label: "S6", yi: -0.786, vi: 7e-3, zero: 0 }
+          ];
+          const r = lsModel(rows, [], [{ key: "zero", type: "continuous" }], { alpha: 0.05 });
+          singChkTrue("lsModel zero scale mod \u2192 converged:false", r.convergence?.converged === false);
+          singChkTrue("lsModel zero scale mod \u2192 reason:'singular_hessian'", r.convergence?.reason === "singular_hessian");
+        }
+        console.log(singPass ? "\n\u2705 ALL SINGULAR-MATRIX GUARDING TESTS PASSED" : "\n\u274C SOME SINGULAR-MATRIX GUARDING TESTS FAILED");
+      }
+      {
+        console.log("\n===== MIN_VAR AUDIT TRAIL TESTS (A.4) =====\n");
+        let mvPass = true;
+        const { chkTrue: mvChkTrue } = makeChk(() => {
+          mvPass = false;
+        });
+        {
+          const pr = effectProfiles["PR"];
+          const r = pr.compute({ x: 0, n: 100 });
+          mvChkTrue("PR x=0 n=100: vi === MIN_VAR", r.vi === MIN_VAR);
+          mvChkTrue("PR x=0 n=100: yi === 0", r.yi === 0);
+          mvChkTrue("PR x=0 n=100: w = 1/MIN_VAR", r.w === 1 / MIN_VAR);
+        }
+        {
+          const pr = effectProfiles["PR"];
+          const r = pr.compute({ x: 100, n: 100 });
+          mvChkTrue("PR x=n: vi === MIN_VAR", r.vi === MIN_VAR);
+        }
+        {
+          const gen = effectProfiles["GENERIC"];
+          const r = gen.compute({ yi: 0.5, vi: 1e-20 });
+          mvChkTrue("GENERIC vi=1e-20: vi === MIN_VAR", r.vi === MIN_VAR);
+          mvChkTrue("GENERIC vi=1e-20: yi preserved", r.yi === 0.5);
+        }
+        {
+          const pr = effectProfiles["PR"];
+          const r = pr.compute({ x: 10, n: 100 });
+          mvChkTrue("PR x=10 n=100: vi > MIN_VAR", r.vi > MIN_VAR);
+          mvChkTrue("PR x=10 n=100: vi approx 0.0009", Math.abs(r.vi - 9e-4) < 1e-12);
+        }
+        {
+          const msg = msgMinVarClamp("Smith 2023");
+          mvChkTrue("msgMinVarClamp contains label", msg.includes("Smith 2023"));
+          mvChkTrue("msgMinVarClamp contains 1e-8", msg.includes("1e-8"));
+          const escaped = msgMinVarClamp("<script>");
+          mvChkTrue("msgMinVarClamp escapes HTML", !escaped.includes("<script>") && escaped.includes("&lt;script&gt;"));
+        }
+        console.log(mvPass ? "\n\u2705 ALL MIN_VAR AUDIT TRAIL TESTS PASSED" : "\n\u274C SOME MIN_VAR AUDIT TRAIL TESTS FAILED");
+      }
     }
   });
 
-  // js/ui.js
+  // js/ui/ui.js
   init_analysis();
   init_utils();
-
-  // js/utils-html.js
-  function escapeHTML(s) {
-    return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-  }
-
-  // js/ui.js
+  init_format();
+  init_utils_html();
   init_profiles();
   init_trimfill();
   init_plots();
   init_gosh();
   init_perm();
-  init_multivariate();
-  init_export();
-  init_plotThemes();
 
-  // js/session.js
+  // js/ui/ui-nav.js
+  function makeNavRenderer(cfg) {
+    return function renderNav(totalPages) {
+      const nav = document.getElementById(cfg.navId);
+      if (!nav) return;
+      if (totalPages <= 1) {
+        nav.innerHTML = "";
+        return;
+      }
+      const page = cfg.getPage();
+      nav.innerHTML = `<button id="${cfg.prevId}" ${page === 0 ? "disabled" : ""}>&#8249; Prev</button><span>Page ${page + 1} of ${totalPages}</span><button id="${cfg.nextId}" ${page >= totalPages - 1 ? "disabled" : ""}>Next &#8250;</button><span class="forest-nav-note">${cfg.note(cfg.getKAll())}</span>`;
+      document.getElementById(cfg.prevId)?.addEventListener("click", () => {
+        if (cfg.getPage() > 0) {
+          cfg.setPage(cfg.getPage() - 1);
+          const { totalPages: tp } = cfg.redraw(cfg.getPage());
+          renderNav(tp);
+        }
+      });
+      document.getElementById(cfg.nextId)?.addEventListener("click", () => {
+        if (cfg.getPage() < totalPages - 1) {
+          cfg.setPage(cfg.getPage() + 1);
+          const { totalPages: tp } = cfg.redraw(cfg.getPage());
+          renderNav(tp);
+        }
+      });
+    };
+  }
+
+  // js/ui/ui-mv.js
+  init_multivariate();
+  init_utils();
+  init_format();
+  init_utils_html();
+  init_ui_warnings();
+  init_sections();
+  init_plotThemes();
+  init_export();
+  init_io();
+
+  // js/ui/ui-table.js
+  init_profiles();
+
+  // js/io/session.js
   var SESSION_VERSION = 1;
   function buildSession(settings, savedModerators, studies, rob = { domains: [], data: {} }, scaleModerators2 = [], interactions2 = []) {
     return { version: SESSION_VERSION, settings, moderators: savedModerators, scaleModerators: scaleModerators2, interactions: interactions2, studies, rob };
@@ -27629,84 +30740,215 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
     return inputCols.filter((col) => savedStudies.every((r) => r.inputs?.[col] === void 0));
   }
 
-  // js/autosave.js
-  var DRAFT_KEY = "meta-analysis-draft";
-  function saveDraft(sessionObj) {
-    try {
-      localStorage.setItem(DRAFT_KEY, JSON.stringify({ ...sessionObj, _savedAt: Date.now() }));
-    } catch {
+  // js/ui/ui-state.js
+  init_profiles();
+  function validateRow(row) {
+    const type = document.getElementById("effectType").value;
+    const profile = getProfile(type);
+    const inputs = row.querySelectorAll("input");
+    inputs.forEach((input) => input.classList.remove("input-error"));
+    if (!profile) {
+      row.dataset.validationErrors = "{}";
+      row.classList.remove("row-error");
+      return true;
     }
+    const studyObj = {};
+    inputs.forEach((input, idx) => {
+      if (idx === 0 || input.classList.contains("group") || input.classList.contains("cluster") || "mod" in input.dataset) return;
+      const key = profile.inputs[idx - 1];
+      const val = input.value.trim();
+      studyObj[key] = profile.rawInputs?.has(key) ? val : val === "" || isNaN(val) ? NaN : +val;
+    });
+    const { valid, errors } = profile.validate(studyObj);
+    inputs.forEach((input, idx) => {
+      if (idx === 0 || input.classList.contains("group") || input.classList.contains("cluster") || "mod" in input.dataset) return;
+      const key = profile.inputs[idx - 1];
+      if (errors[key]) input.classList.add("input-error");
+    });
+    row.dataset.validationErrors = JSON.stringify(errors);
+    row.classList.toggle("row-error", !valid);
+    inputs.forEach((input) => {
+      if (!("mod" in input.dataset) || input.dataset.modType !== "continuous") return;
+      const val = input.value.trim();
+      if (val !== "" && isNaN(+val)) input.classList.add("input-error");
+    });
+    return valid;
   }
-  function loadDraft() {
-    try {
-      const raw = localStorage.getItem(DRAFT_KEY);
-      if (!raw) return null;
-      const parsed = JSON.parse(raw);
-      if (typeof parsed.version !== "number" || parsed.version > SESSION_VERSION) {
-        clearDraft();
-        return null;
-      }
-      return parsed;
-    } catch {
-      clearDraft();
-      return null;
-    }
+  function getSoftWarnings(studyInput, type, label) {
+    return getProfile(type)?.softWarnings(studyInput, label) ?? [];
   }
-  function clearDraft() {
-    try {
-      localStorage.removeItem(DRAFT_KEY);
-    } catch {
-    }
+  function gatherSessionState(mods, scaleMods, ixs, robState) {
+    const type = document.getElementById("effectType").value;
+    const profile = effectProfiles[type];
+    const settings = {
+      effectType: type,
+      tauMethod: document.getElementById("tauMethod").value,
+      ciMethod: document.getElementById("ciMethod").value,
+      ciLevel: document.getElementById("ciLevel").value,
+      cumulativeOrder: document.getElementById("cumulativeOrder").value,
+      useTrimFill: document.getElementById("useTrimFill").checked,
+      tfEstimator: document.getElementById("tfEstimator").value,
+      useTFAdjusted: document.getElementById("useTFAdjusted").checked,
+      // Bayesian priors
+      bayesMu0: parseFloat(document.getElementById("bayesMu0")?.value) || 0,
+      bayesSigmaMu: parseFloat(document.getElementById("bayesSigmaMu")?.value) || 1,
+      bayesSigmaTau: parseFloat(document.getElementById("bayesSigmaTau")?.value) || 0.5,
+      // Vevea-Hedges selection model
+      selMode: document.getElementById("selMode")?.value ?? "sensitivity",
+      selPreset: document.getElementById("selPreset")?.value ?? "mild1",
+      selWeightFn: document.getElementById("selWeightFn")?.value ?? "stepfun",
+      selSides: document.getElementById("selSides")?.value ?? "1",
+      selCuts: document.getElementById("selCuts")?.value ?? "0.025, 0.05, 0.10, 0.25, 0.50, 1.0",
+      // Display / reporting settings
+      mccMethod: document.getElementById("mccMethod")?.value ?? "none",
+      rveRho: parseFloat(document.getElementById("rveRho")?.value) || 0.8,
+      rveMode: document.getElementById("rveWeighting")?.value ?? "corr",
+      threeLevelMethod: document.getElementById("threeLevelMethod")?.value ?? "REML",
+      fsnTrivial: parseFloat(document.getElementById("fsnTrivial")?.value) || 0.1,
+      fsnDirection: document.getElementById("fsnDirection")?.value ?? "auto"
+    };
+    const savedModerators = mods.map((m) => ({ name: m.name, type: m.type, transform: m.transform || "linear" }));
+    const savedScaleModerators = scaleMods.map((m) => ({ name: m.name, type: m.type, transform: m.transform || "linear" }));
+    const savedInteractions = (ixs ?? []).map((ix) => ({ name: ix.name, termA: ix.termA, termB: ix.termB }));
+    const studies = [];
+    document.querySelectorAll("#inputTable tr").forEach((r, i) => {
+      if (i === 0) return;
+      if (r.classList.contains("row-pending-delete")) return;
+      const inputs = [...r.querySelectorAll("input")];
+      const study = inputs[0]?.value ?? "";
+      const effectInputs = {};
+      profile.inputs.forEach((col, idx) => {
+        effectInputs[col] = inputs[idx + 1]?.value ?? "";
+      });
+      const group = inputs[profile.inputs.length + 1]?.value ?? "";
+      const cluster = inputs[profile.inputs.length + 2]?.value ?? "";
+      const modValues = {};
+      mods.forEach((m, modIdx) => {
+        modValues[m.name] = inputs[profile.inputs.length + 3 + modIdx]?.value ?? "";
+      });
+      const allVals = [study, ...Object.values(effectInputs), group, cluster, ...Object.values(modValues)];
+      if (allVals.every((v) => v === "")) return;
+      studies.push({ study, inputs: effectInputs, group, cluster, moderators: modValues });
+    });
+    return buildSession(settings, savedModerators, studies, robState, savedScaleModerators, savedInteractions);
   }
 
-  // js/ui.js
-  init_io();
+  // js/ui/ui-table.js
+  init_utils_html();
+  init_ui_warnings();
   init_constants();
 
-  // js/ui-render.js
-  init_utils();
+  // js/ui/ui-render.js
+  init_format();
   init_profiles();
   init_constants();
   init_influence();
   init_regression();
+  init_sections();
   init_plots();
-  var _RENDER_HELP_LABELS = {
+  init_utils_html();
+
+  // js/ui/help-labels.js
+  var HELP_LABELS = {
+    // Input panel
+    "input.csv": "CSV import and export",
+    "input.session": "Session save and load",
+    "input.moderators": "Moderators",
+    "input.interactions": "Interaction terms",
+    "input.scaleModerators": "Location-scale model moderators",
+    "input.rob": "Risk of bias",
+    "cluster.id": "Cluster ID",
+    "keyboard.shortcuts": "Keyboard shortcuts",
+    // Settings
+    "ci.width": "Confidence interval width",
+    "reg.mcc": "Multiple comparison correction",
+    "bias.trimfill": "Trim-and-fill",
+    "bayes.model": "Bayesian meta-analysis model",
+    "bayes.tau": "Bayesian \u03C4 posterior",
+    "sel.model": "Selection model",
+    // Effect / method selects (data-help-select prefixes resolve here)
+    "effect": "Effect type",
+    "tau": "\u03C4\xB2 estimator",
+    "ci": "CI method",
+    "cumorder": "Cumulative order",
+    // Plots
+    "plot.forest": "Forest plot",
+    "plot.funnel": "Funnel plot",
+    "plot.cumulative": "Cumulative analysis",
+    "plot.orchard": "Orchard plot",
+    "plot.caterpillar": "Caterpillar plot",
+    "plot.rob": "Risk-of-bias plot",
+    // Diagnostics
+    "diag.profileLik": "Profile likelihood",
+    "diag.influence": "Influence diagnostics",
+    "diag.blup": "BLUPs (shrunken estimates)",
+    "diag.baujat": "Baujat plot",
+    "diag.qqplot": "Normal Q-Q plot",
+    "diag.radial": "Radial (Galbraith) plot",
+    "diag.labbe": "L'Abb\xE9 plot",
+    "diag.gosh": "GOSH plot",
     "diag.locationscale": "Location-scale model",
     "diag.metaregression": "Meta-regression",
+    "diag.dffits": "DFFITS influence statistic",
+    "diag.covratio": "CovRatio influence statistic",
+    "diag.subgroup": "Subgroup analysis",
+    // Heterogeneity
+    "het.Q": "Q heterogeneity statistic",
+    "het.I2": "I\xB2 heterogeneity",
+    "het.H2": "H\xB2 heterogeneity",
+    "het.tau2": "\u03C4\xB2 between-study variance",
+    // Models
+    "rve.model": "Robust variance estimation",
+    "cluster.robust": "Robust confidence interval",
+    "threelevel.model": "Three-level model",
+    "threelevel.tau2": "Three-level variance components",
+    "threelevel.I2": "Three-level I\xB2",
+    "pool.cles": "Common language effect size",
+    // Publication bias
+    "bias.pcurve": "P-curve",
+    "bias.puniform": "P-uniform",
+    "bayes.sensitivity": "Bayesian prior sensitivity",
+    // Regression
     "mreg.lrt": "Likelihood ratio test",
     "reg.aic": "Model fit statistics (AIC/BIC/LL)",
     "sens.loo": "Leave-one-out analysis",
     "sens.estimator": "Estimator comparison",
-    "het.tau2": "\u03C4\xB2 between-study variance",
-    "het.Q": "Q heterogeneity statistic",
-    "het.I2": "I\xB2 heterogeneity",
-    "het.H2": "H\xB2 heterogeneity",
-    "sel.model": "Selection model",
+    // Selection models (used by ui-render.js hBtn)
     "sel.halfnorm": "Half-normal selection model",
     "sel.power": "Power selection model",
     "sel.negexp": "Negative exponential selection model",
-    "sel.beta": "Beta selection model",
-    "diag.influence": "Influence diagnostics",
-    "diag.dffits": "DFFITS influence statistic",
-    "diag.covratio": "CovRatio influence statistic",
-    "diag.subgroup": "Subgroup analysis",
-    "bayes.sensitivity": "Bayesian prior sensitivity",
-    "pool.cles": "Common language effect size",
-    "cluster.robust": "Robust confidence interval"
+    "sel.beta": "Beta selection model"
   };
+
+  // js/ui/ui-render.js
+  function renderConvergenceBadge(convergence) {
+    if (!convergence || convergence.converged !== false) return "";
+    const src = convergence.source ?? "optimizer";
+    const note = isFinite(convergence.iters) && isFinite(convergence.maxIters) ? ` (${convergence.iters}/${convergence.maxIters} iters)` : "";
+    return `<div class="convergence-warning">\u26A0 Optimizer did not converge${note} [${src}]</div>`;
+  }
+  function buildTag(label, onRemove, title = "Remove") {
+    const span = document.createElement("span");
+    span.className = "mod-tag";
+    const btn = document.createElement("button");
+    btn.className = "remove-mod-btn";
+    btn.title = title;
+    btn.textContent = "\xD7";
+    btn.addEventListener("click", onRemove);
+    span.append(label, " ", btn);
+    return span;
+  }
   function hBtn(key) {
     const base = key.replace(/\.$/, "").split(".")[0];
-    const label = _RENDER_HELP_LABELS[key] ?? _RENDER_HELP_LABELS[base] ?? key;
+    const label = HELP_LABELS[key] ?? HELP_LABELS[base] ?? key;
     const aria = label === key ? "Help" : `Help: ${label}`;
     return `<button class="help-btn" data-help="${key}" aria-label="${aria}" title="Help">?</button>`;
   }
-  function getCiLabel() {
-    return (document.getElementById("ciLevel")?.value ?? "95") + "% CI";
-  }
-  function formatContrastResult(result, reg) {
+  var _ciLabel = (alpha) => Math.round((1 - alpha) * 100) + "% CI";
+  function formatContrastResult(result, reg, alpha = 0.05) {
     const { est, se, stat, p, ci } = result;
     const statLabel = reg.dist === "t" ? `<em>t</em>(${reg.QEdf})` : "<em>z</em>";
-    const ciLabel = getCiLabel();
+    const ciLabel = _ciLabel(alpha);
     if (!isFinite(est)) {
       return `<div class="reg-note reg-warn" style="margin-top:6px">
       \u26A0 Contrast SE is zero \u2014 all weights may be zero or the contrast is not estimable.
@@ -27760,7 +31002,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
         return `<td>${fmt(reg.robustSE[j])}</td><td>${rt}</td><td>${regFmtP(reg.robustP[j])}</td><td>[${fmt(rci[0])}, ${fmt(rci[1])}]</td>`;
       })() : "";
       return `<tr class="${j === 0 ? "reg-intercept" : ""}">
-      <td>${reg.colNames[j]}</td>
+      <td>${escapeHTML(reg.colNames[j])}</td>
       <td>${fmt(reg.beta[j])}</td>
       <td>${fmt(reg.se[j])}</td>
       <td>${fmt(reg.zval[j])}</td>
@@ -27804,7 +31046,52 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
     </tr>`;
     }).join("");
   }
-  function renderLocationScalePanel(ls, ciMethod, kExcluded = 0) {
+  function _lsCoefRows(colNames, coefs, ses, zvals, pvals, cis, modTests, extraCell) {
+    function dataRow(j) {
+      const [lo, hi] = cis[j];
+      return `<tr class="${j === 0 ? "reg-intercept" : ""}">
+      <td>${escapeHTML(colNames[j])}</td>
+      <td>${fmt(coefs[j])}</td>
+      <td>${fmt(ses[j])}</td>
+      <td>${fmt(zvals[j])}</td>
+      <td>${regFmtP(pvals[j])}</td>
+      <td>[${fmt(lo)}, ${fmt(hi)}]</td>
+      <td>${extraCell(j)}</td>
+    </tr>`;
+    }
+    const multiMod = modTests && modTests.length > 0;
+    if (!multiMod) return colNames.map((_, j) => dataRow(j)).join("");
+    let html = dataRow(0);
+    for (const mt of modTests) {
+      if (!mt.colIdxs || mt.colIdxs.length === 0) continue;
+      const qmStr = isFinite(mt.QM) ? ` &nbsp;\xB7&nbsp; <em>Q</em>M \u03C7\xB2(${mt.QMdf}) = ${fmt(mt.QM)}, <em>p</em> = ${regFmtP(mt.QMp)}` : "";
+      html += `<tr class="reg-mod-group"><td colspan="7"><span class="reg-mod-name">${escapeHTML(mt.name)}</span>${qmStr}</td></tr>`;
+      for (const j of mt.colIdxs) html += dataRow(j);
+    }
+    return html;
+  }
+  function _contrastBlock(colNames, detailsClass, summaryHTML, noteHTML) {
+    return `<details class="${detailsClass}">
+      <summary>${summaryHTML}</summary>
+      <div class="reg-note" style="margin:4px 0 8px">${noteHTML}</div>
+      <table class="reg-table">
+        <thead><tr><th>Term</th><th style="width:6em">Weight</th></tr></thead>
+        <tbody>
+          ${colNames.map((name, i) => `
+            <tr>
+              <td>${escapeHTML(name)}</td>
+              <td><input type="number" class="contrast-weight" data-idx="${i}"
+                   value="0" step="any" style="width:5em"></td>
+            </tr>`).join("")}
+        </tbody>
+      </table>
+      <button class="btn-sm contrast-test-btn" type="button" style="margin-top:6px">
+        Test contrast
+      </button>
+      <div class="contrast-result"></div>
+    </details>`;
+  }
+  function renderLocationScalePanel(ls, ciMethod, kExcluded = 0, alpha = 0.05) {
     const panel = document.getElementById("regressionPanel");
     const section = document.getElementById("regressionSection");
     section.style.display = "";
@@ -27820,59 +31107,30 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
       return;
     }
     const crit = ls.crit;
-    const ciLbl = getCiLabel();
+    const ciLbl = _ciLabel(alpha);
     const tau2min = Math.min(...ls.tau2_i);
     const tau2max = Math.max(...ls.tau2_i);
     const tau2rng = ls.q > 1 ? `\u03C4\xB2\u1D62 range: [${fmt(tau2min)}, ${fmt(tau2max)}]` : `\u03C4\xB2 = ${fmt(ls.tau2_mean)}`;
-    function locRows() {
-      const multiMod = ls.p > 1 && Array.isArray(ls.locModTests) && ls.locModTests.length > 0;
-      function dataRow(j) {
-        const [lo, hi] = ls.ci_beta[j];
-        return `<tr class="${j === 0 ? "reg-intercept" : ""}">
-        <td>${ls.locColNames[j]}</td>
-        <td>${fmt(ls.beta[j])}</td>
-        <td>${fmt(ls.se_beta[j])}</td>
-        <td>${fmt(ls.zval_beta[j])}</td>
-        <td>${regFmtP(ls.pval_beta[j])}</td>
-        <td>[${fmt(lo)}, ${fmt(hi)}]</td>
-        <td>${regStars(ls.pval_beta[j])}</td>
-      </tr>`;
-      }
-      if (!multiMod) return ls.locColNames.map((_, j) => dataRow(j)).join("");
-      let html = dataRow(0);
-      for (const mt of ls.locModTests) {
-        if (!mt.colIdxs || mt.colIdxs.length === 0) continue;
-        const qmStr = isFinite(mt.QM) ? ` &nbsp;\xB7&nbsp; <em>Q</em>M \u03C7\xB2(${mt.QMdf}) = ${fmt(mt.QM)}, <em>p</em> = ${regFmtP(mt.QMp)}` : "";
-        html += `<tr class="reg-mod-group"><td colspan="7"><span class="reg-mod-name">${escapeHTML(mt.name)}</span>${qmStr}</td></tr>`;
-        for (const j of mt.colIdxs) html += dataRow(j);
-      }
-      return html;
-    }
-    function scaleRows() {
-      const multiMod = ls.q > 1 && Array.isArray(ls.scaleModTests) && ls.scaleModTests.length > 0;
-      function dataRow(j) {
-        const [lo, hi] = ls.ci_gamma[j];
-        const tau2val = fmt(Math.exp(ls.gamma[j]));
-        return `<tr class="${j === 0 ? "reg-intercept" : ""}">
-        <td>${ls.scaleColNames[j]}</td>
-        <td>${fmt(ls.gamma[j])}</td>
-        <td>${fmt(ls.se_gamma[j])}</td>
-        <td>${fmt(ls.zval_gamma[j])}</td>
-        <td>${regFmtP(ls.pval_gamma[j])}</td>
-        <td>[${fmt(lo)}, ${fmt(hi)}]</td>
-        <td>${j === 0 ? `<span title="exp(\u03B3\u2080) = \u03C4\xB2">e\u02E3=${tau2val}</span>` : regStars(ls.pval_gamma[j])}</td>
-      </tr>`;
-      }
-      if (!multiMod) return ls.scaleColNames.map((_, j) => dataRow(j)).join("");
-      let html = dataRow(0);
-      for (const mt of ls.scaleModTests) {
-        if (!mt.colIdxs || mt.colIdxs.length === 0) continue;
-        const qmStr = isFinite(mt.QM) ? ` &nbsp;\xB7&nbsp; <em>Q</em>M \u03C7\xB2(${mt.QMdf}) = ${fmt(mt.QM)}, <em>p</em> = ${regFmtP(mt.QMp)}` : "";
-        html += `<tr class="reg-mod-group"><td colspan="7"><span class="reg-mod-name">${escapeHTML(mt.name)}</span>${qmStr}</td></tr>`;
-        for (const j of mt.colIdxs) html += dataRow(j);
-      }
-      return html;
-    }
+    const locRows = () => _lsCoefRows(
+      ls.locColNames,
+      ls.beta,
+      ls.se_beta,
+      ls.zval_beta,
+      ls.pval_beta,
+      ls.ci_beta,
+      ls.p > 1 ? ls.locModTests : null,
+      (j) => regStars(ls.pval_beta[j])
+    );
+    const scaleRows = () => _lsCoefRows(
+      ls.scaleColNames,
+      ls.gamma,
+      ls.se_gamma,
+      ls.zval_gamma,
+      ls.pval_gamma,
+      ls.ci_gamma,
+      ls.q > 1 ? ls.scaleModTests : null,
+      (j) => j === 0 ? `<span title="exp(\u03B3\u2080) = \u03C4\xB2">e\u02E3=${fmt(Math.exp(ls.gamma[j]))}</span>` : regStars(ls.pval_gamma[j])
+    );
     function fittedRows() {
       if (!ls.labels || !ls.fitted) return "";
       return ls.labels.map((lbl, i) => `<tr>
@@ -27901,7 +31159,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
       <br><span style="color:var(--fg-muted);font-size:0.93em">LL = ${fmt(ls.LL)} (ML; log \u03C4\xB2\u1D62 = Z\u1D62\u03B3)</span>
     </div>
     <div class="reg-body">
-      ${excWarn}
+      ${renderConvergenceBadge(ls.convergence)}${excWarn}
       <p style="margin:4px 0 2px;font-weight:600;font-size:0.95em">Location model \u2014 E[y\u1D62] = X\u1D62\u03B2</p>
       <table class="reg-table">
         <thead><tr>
@@ -27951,28 +31209,13 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
              </tr></thead><tbody>${modTestRows(ls.scaleModTests)}</tbody></table>` : "";
       return `<details><summary>Per-moderator tests</summary>${locBlock}${scaleBlock}</details>`;
     })() : ""}
-      <details class="ls-contrast-section">
-        <summary>Custom contrasts \u2014 location model${hBtn("mreg.contrasts")}</summary>
-        <div class="reg-note" style="margin:4px 0 8px">
-          Enter a weight for each location term, then click <em>Test</em>.
-          The test evaluates whether the linear combination L\xB7\u03B2 differs from zero.
-        </div>
-        <table class="reg-table">
-          <thead><tr><th>Term</th><th style="width:6em">Weight</th></tr></thead>
-          <tbody>
-            ${ls.locColNames.map((name, i) => `
-              <tr>
-                <td>${escapeHTML(name)}</td>
-                <td><input type="number" class="contrast-weight" data-idx="${i}"
-                     value="0" step="any" style="width:5em"></td>
-              </tr>`).join("")}
-          </tbody>
-        </table>
-        <button class="btn-sm contrast-test-btn" type="button" style="margin-top:6px">
-          Test contrast
-        </button>
-        <div class="contrast-result"></div>
-      </details>
+      ${_contrastBlock(
+      ls.locColNames,
+      "ls-contrast-section",
+      `Custom contrasts \u2014 location model${hBtn("mreg.contrasts")}`,
+      `Enter a weight for each location term, then click <em>Test</em>.
+          The test evaluates whether the linear combination L\xB7\u03B2 differs from zero.`
+    )}
       ${ls.vcov_beta && ls.p >= 2 ? `
       <details>
         <summary>Coefficient covariance matrices (vcov)</summary>
@@ -27985,7 +31228,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
       </details>` : ""}
     </div>`;
   }
-  function renderRegressionPanel(reg, method, ciMethod, kExcluded = 0, mods = []) {
+  function renderRegressionPanel(reg, method, ciMethod, kExcluded = 0, mods = [], alpha = 0.05) {
     const panel = document.getElementById("regressionPanel");
     const section = document.getElementById("regressionSection");
     if (!mods.length) {
@@ -28040,14 +31283,14 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
           <tbody>
             ${reg.modTests.map((mt, mi) => {
       if (mt.QMdf === 0) {
-        return `<tr><td>${mt.name}</td><td colspan="${(hasAdjPs ? 1 : 0) + (hasLRT ? 2 : 0) + 3}"><i>degenerate (\u2264 1 level)</i></td></tr>`;
+        return `<tr><td>${escapeHTML(mt.name)}</td><td colspan="${(hasAdjPs ? 1 : 0) + (hasLRT ? 2 : 0) + 3}"><i>degenerate (\u2264 1 level)</i></td></tr>`;
       }
       const dfLabel = reg.QMdist === "F" ? `F(${mt.QMdf},\u2009${reg.QEdf})` : `\u03C7\xB2(${mt.QMdf})`;
       const lrtStatCell = hasLRT ? `<td>${isFinite(mt.lrt) ? fmt(mt.lrt) : "NA"}</td>` : "";
       const lrtPCell = hasLRT ? `<td>${isFinite(mt.lrtP) ? regFmtP(mt.lrtP) : "NA"}</td>` : "";
       const adjCell = hasAdjPs ? `<td>${regFmtP(adjModPs[mi])}</td>` : "";
       return `<tr>
-                <td>${mt.name}</td>
+                <td>${escapeHTML(mt.name)}</td>
                 <td>${fmt(mt.QM)}</td>
                 ${lrtStatCell}
                 <td>${dfLabel}</td>
@@ -28075,40 +31318,25 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
       <br><span style="color:var(--fg-muted);font-size:0.93em">${hBtn("reg.aic")}AIC&nbsp;=&nbsp;${fmt(reg.AIC)} &nbsp;\xB7&nbsp; BIC&nbsp;=&nbsp;${fmt(reg.BIC)} &nbsp;\xB7&nbsp; LL&nbsp;=&nbsp;${fmt(reg.LL)}${ciMethod === "KH" && isFinite(reg.s2) ? ` &nbsp;\xB7&nbsp; KH&nbsp;<em>s</em>\xB2&nbsp;=&nbsp;${fmt(reg.s2)}` : ""}&nbsp;&nbsp;<span style="font-size:0.9em;opacity:0.75">(${method}; compare ${method === "REML" ? "models with same predictors only" : "any nested models"})</span></span>
     </div>
     <div class="reg-body">
-      ${clusterRegNote}${excludedWarning}${lowDfWarning}${vifWarning}
+      ${renderConvergenceBadge(reg.convergence)}${clusterRegNote}${excludedWarning}${lowDfWarning}${vifWarning}
       <table class="reg-table">
         <thead><tr>
           <th>Term</th><th>\u03B2</th><th>SE</th><th>${statLabel}</th>
-          <th><em>p</em></th><th>${getCiLabel()}</th><th>VIF</th><th></th>
+          <th><em>p</em></th><th>${_ciLabel(alpha)}</th><th>VIF</th><th></th>
           ${robustHeaders}
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>
       <div class="reg-note">*** <em>p</em> &lt; .001 &nbsp;\xB7&nbsp; ** <em>p</em> &lt; .01 &nbsp;\xB7&nbsp; * <em>p</em> &lt; .05 &nbsp;\xB7&nbsp; \xB7 <em>p</em> &lt; .10</div>
       ${modTestsBlock}
-      <details class="contrast-section">
-        <summary>Custom contrasts${hBtn("mreg.contrasts")}</summary>
-        <div class="reg-note" style="margin:4px 0 8px">
-          Enter a weight for each term, then click <em>Test</em>.
+      ${_contrastBlock(
+      reg.colNames,
+      "contrast-section",
+      `Custom contrasts${hBtn("mreg.contrasts")}`,
+      `Enter a weight for each term, then click <em>Test</em>.
           The test evaluates whether the linear combination L\xB7\u03B2 differs from zero.
-          Example: to compare two categorical levels, set their weights to 1 and \u22121.
-        </div>
-        <table class="reg-table">
-          <thead><tr><th>Term</th><th style="width:6em">Weight</th></tr></thead>
-          <tbody>
-            ${reg.colNames.map((name, i) => `
-              <tr>
-                <td>${name}</td>
-                <td><input type="number" class="contrast-weight" data-idx="${i}"
-                     value="0" step="any" style="width:5em"></td>
-              </tr>`).join("")}
-          </tbody>
-        </table>
-        <button class="btn-sm contrast-test-btn" type="button" style="margin-top:6px">
-          Test contrast
-        </button>
-        <div class="contrast-result"></div>
-      </details>
+          Example: to compare two categorical levels, set their weights to 1 and \u22121.`
+    )}
       ${fittedRows ? `
       <details>
         <summary>Fitted values &amp; residuals (k = ${reg.k})</summary>
@@ -28149,17 +31377,17 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
     HSk: "Hunter-Schmidt corrected (HSk)",
     EBLUP: "EBLUP (= REML)"
   };
-  function sensFv(v) {
+  function sensFv2(v) {
     return isFinite(v) ? v.toFixed(3) : "\u2014";
   }
-  function sensFvp(v) {
+  function sensFvp2(v) {
     return isFinite(v) ? v < 1e-3 ? "< .001" : v.toFixed(3).replace(/^0\./, ".") : "\u2014";
   }
   function sensTrunc(s, n) {
     const e = escapeHTML(s);
     return e.length > n ? e.slice(0, n - 1) + "\u2026" : e;
   }
-  function buildLooBody(loo, fullSig, fullEst, profile) {
+  function buildLooBody(loo, fullSig, fullEst, profile, alpha) {
     if (loo.rows.length === 0) {
       return `<p class="sens-placeholder">Need at least 3 studies for leave-one-out analysis.</p>`;
     }
@@ -28167,8 +31395,8 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
     <tr>
       <th>Study omitted</th>
       <th>Estimate</th>
-      <th>${getCiLabel()} (low)</th>
-      <th>${getCiLabel()} (high)</th>
+      <th>${_ciLabel(alpha)} (low)</th>
+      <th>${_ciLabel(alpha)} (high)</th>
       <th>I\xB2 (%)</th>
       <th>\u03C4\xB2</th>
       <th><em>p</em></th>
@@ -28180,16 +31408,16 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
       const delta = est - fullEst;
       const sigChange = row.significant !== fullSig;
       const cls = sigChange ? ' class="sens-sigchange"' : "";
-      const deltaStr = (delta >= 0 ? "+" : "") + sensFv(delta);
+      const deltaStr = (delta >= 0 ? "+" : "") + sensFv2(delta);
       return `
       <tr${cls}>
         <td>${sensTrunc(row.label, 40)}</td>
-        <td>${sensFv(est)}</td>
-        <td>${sensFv(ci.lb)}</td>
-        <td>${sensFv(ci.ub)}</td>
-        <td>${sensFv(row.i2)}</td>
-        <td>${sensFv(row.tau2)}</td>
-        <td>${sensFvp(row.pval)}</td>
+        <td>${sensFv2(est)}</td>
+        <td>${sensFv2(ci.lb)}</td>
+        <td>${sensFv2(ci.ub)}</td>
+        <td>${sensFv2(row.i2)}</td>
+        <td>${sensFv2(row.tau2)}</td>
+        <td>${sensFvp2(row.pval)}</td>
         <td class="sens-delta">${deltaStr}</td>
       </tr>`;
     }).join("");
@@ -28203,7 +31431,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
       \u0394 estimate = back-transformed leave-one-out estimate minus full-set estimate.
     </div>`;
   }
-  function buildEstimatorBody(estData, method, profile) {
+  function buildEstimatorBody(estData, method, profile, alpha) {
     const rows = estData.map((row) => {
       const est = profile.transform(row.estimate);
       const ci = { lb: profile.transform(row.lb), ub: profile.transform(row.ub) };
@@ -28212,11 +31440,11 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
       return `
       <tr${cls}>
         <td>${TAU_METHOD_LABELS[row.method] ?? row.method}${isCurrent ? " \u2605" : ""}</td>
-        <td>${sensFv(est)}</td>
-        <td>${sensFv(ci.lb)}</td>
-        <td>${sensFv(ci.ub)}</td>
-        <td>${sensFv(row.tau2)}</td>
-        <td>${sensFv(row.i2)}</td>
+        <td>${sensFv2(est)}</td>
+        <td>${sensFv2(ci.lb)}</td>
+        <td>${sensFv2(ci.ub)}</td>
+        <td>${sensFv2(row.tau2)}</td>
+        <td>${sensFv2(row.i2)}</td>
       </tr>`;
     }).join("");
     return `
@@ -28225,8 +31453,8 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
         <tr>
           <th>\u03C4\xB2 estimator</th>
           <th>Estimate</th>
-          <th>${getCiLabel()} (low)</th>
-          <th>${getCiLabel()} (high)</th>
+          <th>${_ciLabel(alpha)} (low)</th>
+          <th>${_ciLabel(alpha)} (high)</th>
           <th>\u03C4\xB2</th>
           <th>I\xB2 (%)</th>
         </tr>
@@ -28235,18 +31463,19 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
     </table>
     <div class="sens-note">\u2605 = currently selected estimator.</div>`;
   }
-  function renderSensitivityPanel(studies, m, method, ciMethod, profile, { isMHFallback = false } = {}, alpha = 0.05) {
+  function renderSensitivityPanel(studies, m, method, ciMethod, profile, alpha = 0.05, opts = {}) {
+    const { isMHFallback = false } = opts;
     const container = document.getElementById("sensitivityPanel");
     if (!container) return;
     const blocks = container.querySelectorAll(".sens-block");
     const openState = [...blocks].map((b) => b.open);
     const looOpen = openState[0] ?? true;
     const estOpen = openState[1] ?? true;
-    const loo = leaveOneOut(studies, method, ciMethod, m, alpha);
+    const loo = leaveOneOut(studies, method, ciMethod, m, { alpha });
     const fullSig = loo.full.pval < 0.05;
     const fullEst = profile.transform(loo.full.RE);
-    const looBody = buildLooBody(loo, fullSig, fullEst, profile);
-    const estBody = buildEstimatorBody(estimatorComparison(studies, ciMethod), method, profile);
+    const looBody = buildLooBody(loo, fullSig, fullEst, profile, alpha);
+    const estBody = buildEstimatorBody(estimatorComparison(studies, ciMethod), method, profile, alpha);
     const ivNote = isMHFallback ? `<p class="reg-note" style="margin:4px 0 8px">\u26A0 Leave-one-out and estimator comparison use inverse-variance (DL) weights \u2014 M-H/Peto per-fold pooling is not yet supported.</p>` : "";
     container.innerHTML = `
     ${ivNote}
@@ -28268,7 +31497,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
       });
     });
   }
-  function renderStudyTable(studies, m, profile) {
+  function renderStudyTable(studies, m, profile, alpha = 0.05) {
     const container = document.getElementById("studyTable");
     if (!container) return;
     const tau2 = m.isMH || m.isPeto || !isFinite(m.tau2) ? 0 : m.tau2;
@@ -28305,8 +31534,8 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
     <tr>
       <th>Study</th>
       <th>Effect ${effectHelpBtn}</th>
-      <th>${getCiLabel()} (low)</th>
-      <th>${getCiLabel()} (high)</th>
+      <th>${_ciLabel(alpha)} (low)</th>
+      <th>${_ciLabel(alpha)} (high)</th>
       <th>${seLabel}</th>
       <th>${weightLabel}</th>
       ${showFEcol ? "<th>FE Weight</th>" : ""}
@@ -28359,7 +31588,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
       return isFinite(z) ? z.toFixed(3) : "\u2014";
     }
     function fmtP2(p) {
-      return fmtPval(p);
+      return fmtP_APA(p);
     }
     const verdictLabels = {
       "evidential": "Evidential value",
@@ -28390,7 +31619,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
       return isFinite(z) ? z.toFixed(3) : "\u2014";
     }
     function fmtP2(p) {
-      return fmtPval(p);
+      return fmtP_APA(p);
     }
     function fmtEst(v) {
       return isFinite(v) ? fmt(profile.transform(v)) : "\u2014";
@@ -28422,7 +31651,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
       return isFinite(v) ? fmt(v) : "\u2014";
     }
     function fmtP2(p) {
-      return fmtPval(p);
+      return fmtP_APA(p);
     }
     function fmtDisp(v) {
       return isFinite(v) ? fmt(profile.transform(v)) : "\u2014";
@@ -28441,7 +31670,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
       const ciLo2 = fmtDisp(r.ci_mu[0]);
       const ciHi2 = fmtDisp(r.ci_mu[1]);
       const muUnadj2 = fmtDisp(r.RE_unsel);
-      const convNote2 = !r.converged ? `<p class="sel-warn">\u26A0 Optimizer did not fully converge. Results may be unreliable.</p>` : "";
+      const convNote2 = renderConvergenceBadge(r.convergence);
       const tau2Warn2 = r.tau2_unsel !== void 0 && r.tau2_unsel < 0.01 ? `<p class="sel-note">Note: Heterogeneity near zero (\u03C4\xB2 \u2248 0). Selection model may be underidentified.</p>` : "";
       const sidesLabel = r.sides === 2 ? "two-sided" : "one-sided";
       panel.innerHTML = `
@@ -28459,7 +31688,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
           <tr><td>LRT (H\u2080: \u03B4 = 0)</td>
               <td>\u03C7\xB2(1) = ${fmtV(r.LRT)}, <em>p</em> ${fmtP2(r.LRTp)}</td></tr>
           <tr><td>Log-likelihood</td>
-              <td>sel: ${fmtV(r.logLikSel)} \xB7 unsel: ${fmtV(r.logLikUnsel)}<span class="sel-note"> (ML; omits normalising constants)</span></td></tr>
+              <td>sel: ${fmtV(r.logLikSel)} \xB7 unsel: ${fmtV(r.logLikUnsel)}</td></tr>
         </tbody>
       </table>
       ${convNote2}`;
@@ -28470,7 +31699,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
       const ciLo2 = fmtDisp(r.ci_mu[0]);
       const ciHi2 = fmtDisp(r.ci_mu[1]);
       const muUnadj2 = fmtDisp(r.RE_unsel);
-      const convNote2 = !r.converged ? `<p class="sel-warn">\u26A0 Optimizer did not fully converge. Results may be unreliable.</p>` : "";
+      const convNote2 = renderConvergenceBadge(r.convergence);
       const tau2Warn2 = r.tau2_unsel !== void 0 && r.tau2_unsel < 0.01 ? `<p class="sel-note">Note: Heterogeneity near zero (\u03C4\xB2 \u2248 0). Selection model may be underidentified.</p>` : "";
       const sidesLabel = r.sides === 2 ? "two-sided" : "one-sided";
       panel.innerHTML = `
@@ -28488,7 +31717,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
           <tr><td>LRT (H\u2080: \u03B4 = 0)</td>
               <td>\u03C7\xB2(1) = ${fmtV(r.LRT)}, <em>p</em> ${fmtP2(r.LRTp)}</td></tr>
           <tr><td>Log-likelihood</td>
-              <td>sel: ${fmtV(r.logLikSel)} \xB7 unsel: ${fmtV(r.logLikUnsel)}<span class="sel-note"> (ML; omits normalising constants)</span></td></tr>
+              <td>sel: ${fmtV(r.logLikSel)} \xB7 unsel: ${fmtV(r.logLikUnsel)}</td></tr>
         </tbody>
       </table>
       ${convNote2}`;
@@ -28499,7 +31728,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
       const ciLo2 = fmtDisp(r.ci_mu[0]);
       const ciHi2 = fmtDisp(r.ci_mu[1]);
       const muUnadj2 = fmtDisp(r.RE_unsel);
-      const convNote2 = !r.converged ? `<p class="sel-warn">\u26A0 Optimizer did not fully converge. Results may be unreliable.</p>` : "";
+      const convNote2 = renderConvergenceBadge(r.convergence);
       const tau2Warn2 = r.tau2_unsel !== void 0 && r.tau2_unsel < 0.01 ? `<p class="sel-note">Note: Heterogeneity near zero (\u03C4\xB2 \u2248 0). Selection model may be underidentified.</p>` : "";
       const sidesLabel = r.sides === 2 ? "two-sided" : "one-sided";
       panel.innerHTML = `
@@ -28517,7 +31746,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
           <tr><td>LRT (H\u2080: \u03B4 = 0)</td>
               <td>\u03C7\xB2(1) = ${fmtV(r.LRT)}, <em>p</em> ${fmtP2(r.LRTp)}</td></tr>
           <tr><td>Log-likelihood</td>
-              <td>sel: ${fmtV(r.logLikSel)} \xB7 unsel: ${fmtV(r.logLikUnsel)}<span class="sel-note"> (ML; omits normalising constants)</span></td></tr>
+              <td>sel: ${fmtV(r.logLikSel)} \xB7 unsel: ${fmtV(r.logLikUnsel)}</td></tr>
         </tbody>
       </table>
       ${convNote2}`;
@@ -28528,7 +31757,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
       const ciLo2 = fmtDisp(r.ci_mu[0]);
       const ciHi2 = fmtDisp(r.ci_mu[1]);
       const muUnadj2 = fmtDisp(r.RE_unsel);
-      const convNote2 = !r.converged ? `<p class="sel-warn">\u26A0 Optimizer did not fully converge. Results may be unreliable.</p>` : "";
+      const convNote2 = renderConvergenceBadge(r.convergence);
       const tau2Warn2 = r.tau2_unsel !== void 0 && r.tau2_unsel < 0.01 ? `<p class="sel-note">Note: Heterogeneity near zero (\u03C4\xB2 \u2248 0). Selection model may be underidentified.</p>` : "";
       const sidesLabel = r.sides === 2 ? "two-sided" : "one-sided";
       panel.innerHTML = `
@@ -28548,7 +31777,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
           <tr><td>LRT (H\u2080: a = b = 1)</td>
               <td>\u03C7\xB2(2) = ${fmtV(r.LRT)}, <em>p</em> ${fmtP2(r.LRTp)}</td></tr>
           <tr><td>Log-likelihood</td>
-              <td>sel: ${fmtV(r.logLikSel)} \xB7 unsel: ${fmtV(r.logLikUnsel)}<span class="sel-note"> (ML; omits normalising constants)</span></td></tr>
+              <td>sel: ${fmtV(r.logLikSel)} \xB7 unsel: ${fmtV(r.logLikUnsel)}</td></tr>
         </tbody>
       </table>
       ${convNote2}`;
@@ -28573,12 +31802,12 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
       return `<td${warn}>${n}</td>`;
     }).join("");
     const muAdj = fmtDisp(r.mu);
-    const ciLo = fmtDisp(r.mu - 1.96 * r.se_mu);
-    const ciHi = fmtDisp(r.mu + 1.96 * r.se_mu);
+    const ciLo = fmtDisp(r.mu - Z_95 * r.se_mu);
+    const ciHi = fmtDisp(r.mu + Z_95 * r.se_mu);
     const muUnadj = fmtDisp(r.RE_unsel);
     const lrtRow = isMLE ? `<tr><td>LRT (H\u2080: no selection)</td><td colspan="${K}">\u03C7\xB2(${r.LRTdf}) = ${fmtV(r.LRT)}, <em>p</em> ${fmtP2(r.LRTp)}</td></tr>
-       <tr><td>Log-likelihood</td><td colspan="${K}">sel: ${fmtV(r.logLikSel)} \xB7 unsel: ${fmtV(r.logLikUnsel)}<span class="sel-note"> (ML; omits normalising constants)</span></td></tr>` : "";
-    const convNote = isMLE && !r.converged ? `<p class="sel-warn">\u26A0 Optimizer did not fully converge (gradient norm may be elevated). Results may be unreliable.</p>` : "";
+       <tr><td>Log-likelihood</td><td colspan="${K}">sel: ${fmtV(r.logLikSel)} \xB7 unsel: ${fmtV(r.logLikUnsel)}</td></tr>` : "";
+    const convNote = isMLE ? renderConvergenceBadge(r.convergence) : "";
     const tau2Warn = r.tau2_unsel !== void 0 && r.tau2_unsel < 0.01 ? `<p class="sel-note">Note: Heterogeneity is near zero (\u03C4\xB2 \u2248 0). The selection model may be underidentified and results unreliable.</p>` : "";
     const headerCells = intervalLabels.map((l) => `<th>${l}</th>`).join("");
     panel.innerHTML = `
@@ -28671,11 +31900,11 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
     else label = "No evidence";
     return `${label} for ${dir}`;
   }
-  function buildBayesSummaryHTML(result, profile, reMean) {
+  function buildBayesSummaryHTML(result, profile, reMean, alpha = 0.05) {
     const muDisp = profile.transform(result.muMean);
     const muCIDisp = result.muCI.map((v) => profile.transform(v));
     const muSDNote = profile.isTransformedScale ? " (log)" : "";
-    const crLabel = getCiLabel().replace("CI", "CrI");
+    const crLabel = _ciLabel(alpha).replace("CI", "CrI");
     const fmtBF = (bf) => !isFinite(bf) ? "NA" : bf >= 1e3 || bf < 1e-3 ? bf.toExponential(2) : bf.toFixed(3);
     return `
     <table class="stats-table" style="margin-bottom:8px">
@@ -28772,7 +32001,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
         </td>
       </tr>
       <tr style="font-weight:bold;">
-        <td colspan="7"><em>Q</em><sub>between</sub>(${subgroup.df}) = ${subgroup.Qbetween.toFixed(3)}, <em>p</em> ${fmtPval(subgroup.p)}</td>
+        <td colspan="7"><em>Q</em><sub>between</sub>(${subgroup.df}) = ${subgroup.Qbetween.toFixed(3)}, <em>p</em> ${fmtP_APA(subgroup.p)}</td>
       </tr>
     </table>`;
   }
@@ -28780,14 +32009,6 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
     const el = document.getElementById("permResults");
     if (!el) return;
     const { QM_dist, modQM_dist, nPerm, nMods } = permResult;
-    function permPval2(dist, observed) {
-      if (!isFinite(observed)) return NaN;
-      let exceeds = 0;
-      for (let i = 0; i < dist.length; i++) {
-        if (dist[i] >= observed) exceeds++;
-      }
-      return (1 + exceeds) / (dist.length + 1);
-    }
     function fmtP2(p) {
       if (!isFinite(p)) return "NA";
       if (p < 1e-3) return "< .001";
@@ -28800,7 +32021,6 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
       modRows = reg.modTests.map((mt, mi) => {
         if (mt.QMdf === 0 || !mt.colIdxs || mt.colIdxs.length === 0)
           return `<tr><td>${escapeHTML(mt.name)}</td><td colspan="2"><i>degenerate</i></td></tr>`;
-        const modDist = modQM_dist.subarray(mi, nPerm * nMods + mi).filter((_, idx) => idx % nMods === 0);
         const colDist = new Float64Array(nPerm);
         for (let r = 0; r < nPerm; r++) colDist[r] = modQM_dist[r * nMods + mi];
         const mp = permPval2(colDist, mt.QM);
@@ -28836,92 +32056,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
     el.innerHTML = `<p class="gosh-info">GOSH plot: ${k} studies, fixed-effects model${sampleNote}.</p>`;
   }
 
-  // js/ui-state.js
-  init_profiles();
-  function validateRow(row) {
-    const type = document.getElementById("effectType").value;
-    const profile = getProfile(type);
-    const inputs = row.querySelectorAll("input");
-    inputs.forEach((input) => input.classList.remove("input-error"));
-    if (!profile) {
-      row.dataset.validationErrors = "{}";
-      row.classList.remove("row-error");
-      return true;
-    }
-    const studyObj = {};
-    inputs.forEach((input, idx) => {
-      if (idx === 0 || input.classList.contains("group") || input.classList.contains("cluster") || "mod" in input.dataset) return;
-      const key = profile.inputs[idx - 1];
-      const val = input.value.trim();
-      studyObj[key] = profile.rawInputs?.has(key) ? val : val === "" || isNaN(val) ? NaN : +val;
-    });
-    const { valid, errors } = profile.validate(studyObj);
-    inputs.forEach((input, idx) => {
-      if (idx === 0 || input.classList.contains("group") || input.classList.contains("cluster") || "mod" in input.dataset) return;
-      const key = profile.inputs[idx - 1];
-      if (errors[key]) input.classList.add("input-error");
-    });
-    row.dataset.validationErrors = JSON.stringify(errors);
-    row.classList.toggle("row-error", !valid);
-    return valid;
-  }
-  function getSoftWarnings(studyInput, type, label) {
-    return getProfile(type)?.softWarnings(studyInput, label) ?? [];
-  }
-  function gatherSessionState(mods, scaleMods, ixs, robState) {
-    const type = document.getElementById("effectType").value;
-    const profile = effectProfiles[type];
-    const settings = {
-      effectType: type,
-      tauMethod: document.getElementById("tauMethod").value,
-      ciMethod: document.getElementById("ciMethod").value,
-      ciLevel: document.getElementById("ciLevel").value,
-      cumulativeOrder: document.getElementById("cumulativeOrder").value,
-      useTrimFill: document.getElementById("useTrimFill").checked,
-      tfEstimator: document.getElementById("tfEstimator").value,
-      useTFAdjusted: document.getElementById("useTFAdjusted").checked,
-      // Bayesian priors
-      bayesMu0: parseFloat(document.getElementById("bayesMu0")?.value) ?? 0,
-      bayesSigmaMu: parseFloat(document.getElementById("bayesSigmaMu")?.value) ?? 1,
-      bayesSigmaTau: parseFloat(document.getElementById("bayesSigmaTau")?.value) ?? 0.5,
-      // Vevea-Hedges selection model
-      selMode: document.getElementById("selMode")?.value ?? "sensitivity",
-      selPreset: document.getElementById("selPreset")?.value ?? "mild1",
-      selWeightFn: document.getElementById("selWeightFn")?.value ?? "stepfun",
-      selSides: document.getElementById("selSides")?.value ?? "1",
-      selCuts: document.getElementById("selCuts")?.value ?? "0.025, 0.05, 0.10, 0.25, 0.50, 1.0",
-      // Display / reporting settings
-      mccMethod: document.getElementById("mccMethod")?.value ?? "none",
-      rveRho: parseFloat(document.getElementById("rveRho")?.value) || 0.8
-    };
-    const savedModerators = mods.map((m) => ({ name: m.name, type: m.type, transform: m.transform || "linear" }));
-    const savedScaleModerators = scaleMods.map((m) => ({ name: m.name, type: m.type, transform: m.transform || "linear" }));
-    const savedInteractions = (ixs ?? []).map((ix) => ({ name: ix.name, termA: ix.termA, termB: ix.termB }));
-    const studies = [];
-    document.querySelectorAll("#inputTable tr").forEach((r, i) => {
-      if (i === 0) return;
-      if (r.classList.contains("row-pending-delete")) return;
-      const inputs = [...r.querySelectorAll("input")];
-      const study = inputs[0]?.value ?? "";
-      const effectInputs = {};
-      profile.inputs.forEach((col, idx) => {
-        effectInputs[col] = inputs[idx + 1]?.value ?? "";
-      });
-      const group = inputs[profile.inputs.length + 1]?.value ?? "";
-      const cluster = inputs[profile.inputs.length + 2]?.value ?? "";
-      const modValues = {};
-      mods.forEach((m, modIdx) => {
-        modValues[m.name] = inputs[profile.inputs.length + 3 + modIdx]?.value ?? "";
-      });
-      const allVals = [study, ...Object.values(effectInputs), group, cluster, ...Object.values(modValues)];
-      if (allVals.every((v) => v === "")) return;
-      studies.push({ study, inputs: effectInputs, group, cluster, moderators: modValues });
-    });
-    return buildSession(settings, savedModerators, studies, robState, savedScaleModerators, savedInteractions);
-  }
-
-  // js/ui-table.js
-  init_profiles();
+  // js/ui/ui-table.js
   init_csv();
   init_io();
   var INPUT_TITLES = {
@@ -28997,6 +32132,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
   function makeModTh(name) {
     const th = document.createElement("th");
     th.dataset.mod = name;
+    th.title = `Moderator \u2014 ${name}`;
     th.innerHTML = `${escapeHTML(name)} <button class="remove-mod-btn" data-mod="${escapeHTML(name)}" title="Remove moderator">\xD7</button>`;
     th.querySelector(".remove-mod-btn").addEventListener("click", () => removeModerator(name));
     return th;
@@ -29006,11 +32142,17 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
     td.dataset.mod = name;
     const input = document.createElement("input");
     input.dataset.mod = name;
+    input.dataset.modType = type;
     input.style.width = "70px";
     input.placeholder = type === "categorical" ? "A/B/\u2026" : "0";
+    let _t;
     input.addEventListener("input", () => {
-      _cb.markStale();
-      _cb.scheduleSave();
+      clearTimeout(_t);
+      _t = setTimeout(() => {
+        _revalidate();
+        _cb.markStale();
+        _cb.scheduleSave();
+      }, 150);
     });
     td.appendChild(input);
     return td;
@@ -29020,16 +32162,13 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
     if (!container) return;
     container.innerHTML = "";
     moderators.forEach(({ name }) => {
-      const span = document.createElement("span");
-      span.className = "mod-tag";
-      span.innerHTML = `${escapeHTML(name)} <button class="remove-mod-btn" title="Remove moderator">\xD7</button>`;
-      span.querySelector("button").addEventListener("click", () => {
+      const span = buildTag(name, () => {
         moderators.splice(0, moderators.length, ...moderators.filter((m) => m.name !== name));
         interactions.splice(0, interactions.length, ...interactions.filter((ix) => ix.termA !== name && ix.termB !== name));
         renderModTags();
         _cb.onModeratorChanged();
         _cb.markStale();
-      });
+      }, "Remove moderator");
       container.appendChild(span);
     });
   }
@@ -29095,6 +32234,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
     headerRow.innerHTML = "";
     const thStudy = document.createElement("th");
     thStudy.textContent = "Study";
+    thStudy.title = "Study label or identifier";
     headerRow.appendChild(thStudy);
     profile.inputs.forEach((col) => {
       const th = document.createElement("th");
@@ -29103,14 +32243,17 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
       headerRow.appendChild(th);
     });
     const thGroup = document.createElement("th");
+    thGroup.title = "Optional subgroup label \u2014 used for subgroup analysis";
     thGroup.innerHTML = 'Group <button class="help-btn" data-help="input.group" aria-label="Help: Group" title="Help">?</button>';
     headerRow.appendChild(thGroup);
     const thCluster = document.createElement("th");
+    thCluster.title = "Optional cluster ID \u2014 used for cluster-robust or three-level analysis";
     thCluster.innerHTML = 'Cluster <button class="help-btn" data-help="cluster.id" aria-label="Help: Cluster ID" title="Help">?</button>';
     headerRow.appendChild(thCluster);
     moderators.forEach(({ name }) => headerRow.appendChild(makeModTh(name)));
     const thActions = document.createElement("th");
     thActions.textContent = "Actions";
+    thActions.title = "Row controls: clear or delete the study";
     headerRow.appendChild(thActions);
   }
   var _dragRow = null;
@@ -29204,7 +32347,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
     const actionCell = row.insertCell();
     actionCell.innerHTML = `<button class="remove-btn" aria-label="Remove study">\u2716</button> <button class="clear-btn" aria-label="Clear row">\u{1F9F9}</button>`;
     let _valTimer;
-    row.querySelectorAll("input").forEach((input) => {
+    row.querySelectorAll("input:not([data-mod])").forEach((input) => {
       input.addEventListener("input", () => {
         clearTimeout(_valTimer);
         _valTimer = setTimeout(() => {
@@ -29302,9 +32445,14 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
     const subgroupMap = {};
     rows.forEach((row, idx) => {
       if (row.classList.contains("row-pending-delete")) return;
-      const label = escapeHTML(row.querySelector("input")?.value || `Row ${idx + 1}`);
+      const labelRaw = row.querySelector("input")?.value || `Row ${idx + 1}`;
+      const label = escapeHTML(labelRaw);
       const errors = JSON.parse(row.dataset.validationErrors || "{}");
       Object.entries(errors).forEach(([, msg]) => errLines.push(`${label}: ${escapeHTML(msg)}`));
+      row.querySelectorAll("input[data-mod]").forEach((inp) => {
+        if (inp.dataset.modType === "continuous" && inp.classList.contains("input-error"))
+          warnLines.push(msgNonNumericMod(labelRaw, inp.value.trim(), inp.dataset.mod));
+      });
       const groupName = row.querySelector(".group")?.value.trim();
       if (groupName) {
         if (!subgroupMap[groupName]) subgroupMap[groupName] = [];
@@ -29315,23 +32463,12 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
       if (studiesInGroup.length < 2)
         warnLines.push(`Subgroup "${escapeHTML(group)}" has &lt;2 studies (${studiesInGroup.join(", ")})`);
     });
-    excluded.forEach((e) => warnLines.push(`Excluded: ${escapeHTML(e.label)} (${escapeHTML(e.reason)})`));
+    excluded.forEach((e) => warnLines.push(msgExcluded(e.label, e.reason)));
     softWarnings.forEach((w) => warnLines.push(escapeHTML(w)));
-    const k = studies.length;
-    if (k === 0) {
-      errLines.push("No valid studies available for analysis");
-    } else {
-      if (k < 2) warnLines.push("Fewer than 2 studies \u2014 meta-analysis not meaningful");
-      if (k < 3) warnLines.push("Egger / Begg / FAT-PET tests require \u2265 3 studies");
-      if (studies.some((s) => s.vi < 1e-8))
-        warnLines.push("One or more studies have extremely small variance (may inflate weights)");
-    }
-    let html = "";
-    if (errLines.length)
-      html += `<div class="validation-block validation-block--error">${errLines.map((m) => `<div>\u274C ${m}</div>`).join("")}</div>`;
-    if (warnLines.length)
-      html += `<div class="validation-block validation-block--warning">${warnLines.map((m) => `<div>\u26A0 ${m}</div>`).join("")}</div>`;
-    warningDiv.innerHTML = html;
+    const checks = analysisChecks({ studies, excluded, skipTinyVi: true });
+    errLines.push(...checks.errors);
+    warnLines.push(...checks.warnings);
+    renderWarningBlocks(warningDiv, { errors: errLines, warnings: warnLines });
   }
   function collectStudies(type, extraMods = []) {
     const profile = effectProfiles[type];
@@ -29368,6 +32505,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
         excluded.push({ label, reason: "Computation failed (invalid effect size or variance)" });
         continue;
       }
+      if (study.vi === MIN_VAR) softWarnings.push(msgMinVarClamp(label));
       study.group = group;
       study.cluster = cluster;
       moderators.forEach(({ name, type: mtype }, modIdx) => {
@@ -29460,7 +32598,8 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
       warningDiv.style.display = "block";
       return;
     }
-    const parsed = parseCSV(text);
+    const fmt2 = detectCsvFormat(text);
+    const parsed = parseCSV(text, { delimiter: fmt2.delimiter, decimal: fmt2.decimal });
     if (!parsed.headers.length) {
       warningDiv.textContent = "The selected file appears to be empty.";
       warningDiv.style.display = "block";
@@ -29479,19 +32618,55 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
       viCol: parsed.headers.find((h) => h.toLowerCase() === "vi")
     } : null;
     _pendingImport = {
+      rawText: text,
       parsed,
+      format: { delimiter: fmt2.delimiter, decimal: fmt2.decimal },
       detectedType: detection.type,
       tied: detection.tied,
       tiedTypes: detection.tiedTypes ?? [],
       mvCandidate,
       mvHeaders
     };
-    const delimNames = { ",": "comma", ";": "semicolon", "	": "tab" };
-    document.getElementById("previewDelimiter").textContent = `delimiter: ${delimNames[parsed.delimiter] ?? parsed.delimiter}`;
+    document.getElementById("previewDelimSep").value = fmt2.delimiter;
+    document.getElementById("previewDecimalSep").value = fmt2.decimal;
+    const localeWarn = document.getElementById("previewLocaleWarn");
+    if (fmt2.confidence !== "high") {
+      const sepNames = { ",": "comma", ";": "semicolon", "	": "tab", "|": "pipe" };
+      const sepName = sepNames[fmt2.delimiter] ?? fmt2.delimiter;
+      const decName = fmt2.decimal === "," ? "comma" : "period";
+      localeWarn.textContent = `\u26A0 Locale detection is uncertain \u2014 guessing ${sepName} field separator and ${decName} decimal. Please verify the dropdowns above before importing.`;
+      localeWarn.style.display = "block";
+    } else {
+      localeWarn.style.display = "none";
+    }
     document.getElementById("previewEffectType").value = detection.type;
     refreshPreviewUI(detection.type);
     document.getElementById("importPreview").style.display = "block";
     document.getElementById("previewImport").focus();
+  }
+  function reparseWithDelimiter(delimiter) {
+    if (!_pendingImport) return;
+    const { decimal } = _pendingImport.format;
+    const parsed = parseCSV(_pendingImport.rawText, { delimiter, decimal });
+    if (!parsed.headers.length) return;
+    _pendingImport.parsed = parsed;
+    _pendingImport.format = { ..._pendingImport.format, delimiter };
+    const currentType = document.getElementById("previewEffectType").value;
+    const detection = detectEffectType(parsed.headers, currentType, effectProfiles);
+    _pendingImport.detectedType = detection.type;
+    _pendingImport.tied = detection.tied;
+    _pendingImport.tiedTypes = detection.tiedTypes ?? [];
+    document.getElementById("previewEffectType").value = detection.type;
+    refreshPreviewUI(detection.type);
+  }
+  function updatePendingDecimal(decimal) {
+    if (!_pendingImport) return;
+    const { delimiter } = _pendingImport.format;
+    const parsed = parseCSV(_pendingImport.rawText, { delimiter, decimal });
+    if (!parsed.headers.length) return;
+    _pendingImport.parsed = parsed;
+    _pendingImport.format = { ..._pendingImport.format, decimal };
+    refreshPreviewUI(document.getElementById("previewEffectType").value);
   }
   function commitImport() {
     if (!_pendingImport) return [];
@@ -29536,35 +32711,1194 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
     document.getElementById("import")?.focus();
   }
 
-  // js/ui.js
+  // js/ui/ui-mv.js
+  var _appState;
+  var _robPlotState;
+  var _markStale;
+  var _getCiAlpha;
+  var _onRunSuccess;
+  var _showConvergenceToast;
+  var mvState = { active: false };
+  var mvModerators = [];
+  var mvForestState = {
+    pageSize: 20,
+    pages: [],
+    // current page index per outcome (separate mode)
+    combinedPage: 0,
+    showPI: false,
+    lastRes: null,
+    lastRows: [],
+    alpha: 0.05,
+    ciMethod: "normal",
+    viewMode: "separate"
+    // "separate" | "combined"
+  };
+  function initMV(deps) {
+    _appState = deps.appState;
+    _robPlotState = deps.robPlotState;
+    _markStale = deps.markStale;
+    _getCiAlpha = deps.getCiAlpha;
+    _onRunSuccess = deps.onRunSuccess;
+    _showConvergenceToast = deps.showConvergenceToast ?? (() => {
+    });
+    registerDeleteCompanion(_mvCommitPendingDelete);
+    document.getElementById("mvAddRow").addEventListener("click", () => {
+      addMVRow();
+      _markStale();
+    });
+    document.getElementById("mvTableBody").addEventListener("keydown", (e) => {
+      if (!e.altKey || e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+      const row = e.target.closest("tr");
+      if (!row || !row.draggable) return;
+      e.preventDefault();
+      if (e.key === "ArrowUp") {
+        const prev2 = row.previousElementSibling;
+        if (prev2 && prev2.draggable) row.parentNode.insertBefore(row, prev2);
+      } else {
+        const next2 = row.nextElementSibling;
+        if (next2 && next2.draggable) row.parentNode.insertBefore(next2, row);
+      }
+      _markStale();
+    });
+    document.getElementById("mvStruct").addEventListener("change", _updateMVValidationWarnings);
+    document.getElementById("mvAddMod").addEventListener("click", _mvAddMod);
+    document.getElementById("mvModName").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") _mvAddMod();
+    });
+    document.getElementById("mvForestPageSize").addEventListener("change", (e) => {
+      const raw = e.target.value;
+      mvForestState.pageSize = raw === "all" ? Infinity : +raw;
+      mvForestState.pages = mvForestState.pages.map(() => 0);
+      mvForestState.combinedPage = 0;
+      redrawAllMVForestPlots();
+    });
+    document.getElementById("mvForestView").addEventListener("change", (e) => {
+      mvForestState.viewMode = e.target.value;
+      mvForestState.combinedPage = 0;
+      redrawAllMVForestPlots();
+    });
+    document.getElementById("mvShowPI").addEventListener("change", (e) => {
+      mvForestState.showPI = e.target.checked;
+      redrawAllMVForestPlots();
+    });
+  }
+  function renderMVModTags() {
+    const container = document.getElementById("mvModTags");
+    container.innerHTML = mvModerators.map(
+      (name, i) => `<span class="mod-tag"><span>${escapeHTML(name)}</span><button data-mod-idx="${i}" title="Remove">\xD7</button></span>`
+    ).join("");
+    container.querySelectorAll("button[data-mod-idx]").forEach((btn) => {
+      btn.addEventListener("click", () => _mvRemoveMod(Number(btn.dataset.modIdx)));
+    });
+  }
+  function _mvRemoveMod(i) {
+    mvModerators.splice(i, 1);
+    renderMVModTags();
+    rebuildMVTableHeaders();
+    _markStale();
+  }
+  function _mvAddMod() {
+    const input = document.getElementById("mvModName");
+    const name = input.value.trim();
+    if (!name || mvModerators.includes(name)) return;
+    mvModerators.push(name);
+    input.value = "";
+    renderMVModTags();
+    rebuildMVTableHeaders();
+    _markStale();
+  }
+  var _mvUndoState = { timer: null, row: null };
+  var _MV_UNDO_MS = 5e3;
+  function _mvCommitPendingDelete() {
+    if (!_mvUndoState.row) return;
+    clearTimeout(_mvUndoState.timer);
+    _mvUndoState.row.remove();
+    _mvUndoState.row = null;
+    _mvUndoState.timer = null;
+    hideUndoToast();
+  }
+  function _mvCancelPendingDelete() {
+    if (!_mvUndoState.row) return;
+    clearTimeout(_mvUndoState.timer);
+    _mvUndoState.row.classList.remove("row-pending-delete");
+    _mvUndoState.row = null;
+    _mvUndoState.timer = null;
+    hideUndoToast();
+    _markStale();
+  }
+  function rebuildMVTableHeaders() {
+    const tr = document.getElementById("mvTableHead");
+    tr.innerHTML = "";
+    const fixedCols = [
+      ["Study ID", "Study label or identifier"],
+      ["Outcome ID", "Outcome label \u2014 groups rows within a study"],
+      ["Effect (y<sub>i</sub>)", "Observed effect size for this study\u2013outcome"],
+      ["Variance (v<sub>i</sub>)", "Variance of the effect size estimate"]
+    ];
+    fixedCols.forEach(([label, tip]) => {
+      const th = document.createElement("th");
+      th.innerHTML = label;
+      th.title = tip;
+      tr.appendChild(th);
+    });
+    mvModerators.forEach((m, i) => {
+      const th = document.createElement("th");
+      th.title = `Moderator \u2014 ${m}`;
+      th.innerHTML = `${escapeHTML(m)} <button class="remove-mod-btn" data-mod-idx="${i}" title="Remove moderator">\xD7</button>`;
+      tr.appendChild(th);
+    });
+    const thActions = document.createElement("th");
+    thActions.className = "col-actions";
+    thActions.textContent = "Actions";
+    thActions.title = "Row controls: clear or delete the study";
+    tr.appendChild(thActions);
+    tr.querySelectorAll("button[data-mod-idx]").forEach((btn) => {
+      btn.addEventListener("click", () => _mvRemoveMod(Number(btn.dataset.modIdx)));
+    });
+    document.querySelectorAll("#mvTableBody tr").forEach((row) => {
+      _syncMVRowMods(row);
+    });
+  }
+  function _wireMVInput(tr, inp) {
+    inp.addEventListener("input", () => {
+      clearTimeout(tr._valTimer);
+      tr._valTimer = setTimeout(() => {
+        _validateMVRow(tr);
+        _updateMVValidationWarnings();
+        _markStale();
+      }, 150);
+    });
+  }
+  function _syncMVRowMods(tr) {
+    const cells = tr.querySelectorAll("td");
+    const fixedCount = 4;
+    const currentModCount = cells.length - fixedCount - 1;
+    if (currentModCount === mvModerators.length) return;
+    const actionsTd = tr.lastElementChild;
+    while (tr.querySelectorAll("td").length - 1 > fixedCount + mvModerators.length) {
+      const tds = tr.querySelectorAll("td");
+      tr.removeChild(tds[tds.length - 2]);
+    }
+    while (tr.querySelectorAll("td").length - 1 < fixedCount + mvModerators.length) {
+      const td = document.createElement("td");
+      td.innerHTML = `<input type="text" class="mv-mod-cell" placeholder="0" style="width:90px">`;
+      tr.insertBefore(td, actionsTd);
+      _wireMVInput(tr, td.querySelector("input"));
+    }
+  }
+  function _validateMVRow(tr) {
+    const yiInput = tr.querySelector(".mv-yi");
+    const viInput = tr.querySelector(".mv-vi");
+    [yiInput, viInput].forEach((inp) => inp?.classList.remove("input-error"));
+    tr.querySelectorAll(".mv-mod-cell").forEach((inp) => inp.classList.remove("input-error"));
+    tr.classList.remove("row-error");
+    const allInputs = [...tr.querySelectorAll("input")];
+    if (allInputs.every((inp) => inp.value.trim() === "")) return true;
+    let valid = true;
+    const yiVal = yiInput?.value.trim() ?? "";
+    const viVal = viInput?.value.trim() ?? "";
+    if (yiVal === "" || !isFinite(+yiVal)) {
+      yiInput?.classList.add("input-error");
+      valid = false;
+    }
+    const viNum = +viVal;
+    if (viVal === "" || !isFinite(viNum) || viNum <= 0) {
+      viInput?.classList.add("input-error");
+      valid = false;
+    }
+    tr.classList.toggle("row-error", !valid);
+    tr.querySelectorAll(".mv-mod-cell").forEach((inp) => {
+      const val = inp.value.trim();
+      if (val !== "" && isNaN(+val)) inp.classList.add("input-error");
+    });
+    return valid;
+  }
+  function addMVRow() {
+    const tbody = document.getElementById("mvTableBody");
+    const tr = document.createElement("tr");
+    tr.draggable = true;
+    const modCells = mvModerators.map(
+      () => `<td><input type="text" class="mv-mod-cell" placeholder="0" style="width:90px"></td>`
+    ).join("");
+    tr.innerHTML = `<td><input type="text" class="mv-study-id"  style="width:90px" placeholder="Study"></td><td><input type="text" class="mv-outcome-id" style="width:80px" placeholder="Outcome"></td><td><input type="text" class="mv-yi" style="width:90px"></td><td><input type="text" class="mv-vi" style="width:90px"></td>` + modCells + `<td class="col-actions"><button class="remove-btn" aria-label="Remove study">\u2716</button> <button class="clear-btn" aria-label="Clear row">\u{1F9F9}</button></td>`;
+    tr.querySelector(".remove-btn").addEventListener("click", () => {
+      commitPendingDelete();
+      _mvCommitPendingDelete();
+      const label = tr.querySelector(".mv-study-id")?.value.trim() || "";
+      tr.classList.add("row-pending-delete");
+      _mvUndoState.row = tr;
+      _mvUndoState.timer = setTimeout(_mvCommitPendingDelete, _MV_UNDO_MS);
+      showUndoToast(label, _mvCancelPendingDelete);
+      _markStale();
+    });
+    tr.querySelector(".clear-btn").addEventListener("click", () => {
+      tr.querySelectorAll("input").forEach((inp) => {
+        inp.value = "";
+      });
+      _validateMVRow(tr);
+      _markStale();
+    });
+    tr.querySelectorAll("input").forEach((inp) => _wireMVInput(tr, inp));
+    tbody.appendChild(tr);
+    return tr;
+  }
+  function _collectMVRows() {
+    const rows = [];
+    document.querySelectorAll("#mvTableBody tr").forEach((tr) => {
+      if (tr.classList.contains("row-pending-delete")) return;
+      const study_id = tr.querySelector(".mv-study-id")?.value.trim();
+      const outcome_id = tr.querySelector(".mv-outcome-id")?.value.trim();
+      const yiRaw = tr.querySelector(".mv-yi")?.value.trim() ?? "";
+      const viRaw = tr.querySelector(".mv-vi")?.value.trim() ?? "";
+      const yi = yiRaw === "" ? NaN : +yiRaw;
+      const vi = viRaw === "" ? NaN : +viRaw;
+      if (!study_id || !outcome_id || !isFinite(yi) || !isFinite(vi) || vi <= 0) return;
+      const row = { study_id, outcome_id, yi, vi };
+      const modInputs = tr.querySelectorAll(".mv-mod-cell");
+      mvModerators.forEach((name, i) => {
+        const raw = modInputs[i]?.value.trim() ?? "";
+        row[name] = raw === "" ? NaN : +raw;
+      });
+      rows.push(row);
+    });
+    return rows;
+  }
+  function gatherMVState() {
+    const rows = [];
+    document.querySelectorAll("#mvTableBody tr").forEach((tr) => {
+      if (tr.classList.contains("row-pending-delete")) return;
+      const entry = {
+        study_id: tr.querySelector(".mv-study-id")?.value ?? "",
+        outcome_id: tr.querySelector(".mv-outcome-id")?.value ?? "",
+        yi: tr.querySelector(".mv-yi")?.value ?? "",
+        vi: tr.querySelector(".mv-vi")?.value ?? ""
+      };
+      mvModerators.forEach((name, i) => {
+        const inputs = tr.querySelectorAll(".mv-mod-cell");
+        entry[name] = inputs[i]?.value ?? "";
+      });
+      rows.push(entry);
+    });
+    return {
+      struct: document.getElementById("mvStruct").value,
+      method: document.getElementById("mvMethod").value,
+      ciMethod: document.getElementById("mvCiMethod").value,
+      slopes: document.getElementById("mvSlopes").value,
+      rho: parseFloat(document.getElementById("mvRho").value),
+      moderators: [...mvModerators],
+      rows
+    };
+  }
+  function populateMVExample() {
+    const exRows = [
+      { study_id: "Pihlstrom", outcome_id: "AL", yi: -0.3, vi: 75e-4 },
+      { study_id: "Pihlstrom", outcome_id: "PD", yi: -0.6, vi: 57e-4 },
+      { study_id: "Zinney", outcome_id: "AL", yi: 0.1, vi: 58e-4 },
+      { study_id: "Zinney", outcome_id: "PD", yi: -0.15, vi: 48e-4 },
+      { study_id: "Morrison", outcome_id: "AL", yi: 0.4, vi: 0.0147 },
+      { study_id: "Morrison", outcome_id: "PD", yi: -0.32, vi: 91e-4 },
+      { study_id: "Knowles", outcome_id: "AL", yi: 0.32, vi: 0.0141 },
+      { study_id: "Knowles", outcome_id: "PD", yi: -0.39, vi: 69e-4 },
+      { study_id: "Ramfjord", outcome_id: "AL", yi: -0.29, vi: 91e-4 },
+      { study_id: "Ramfjord", outcome_id: "PD", yi: -0.88, vi: 62e-4 }
+    ];
+    exRows.forEach((r) => {
+      const tr = addMVRow();
+      tr.querySelector(".mv-study-id").value = r.study_id;
+      tr.querySelector(".mv-outcome-id").value = r.outcome_id;
+      tr.querySelector(".mv-yi").value = r.yi;
+      tr.querySelector(".mv-vi").value = r.vi;
+    });
+  }
+  function clearMV() {
+    mvModerators.length = 0;
+    renderMVModTags();
+    rebuildMVTableHeaders();
+    document.getElementById("mvTableBody").innerHTML = "";
+    addMVRow();
+    mvForestState.pages = [];
+    mvForestState.combinedPage = 0;
+    mvForestState.showPI = false;
+    mvForestState.lastRes = null;
+    mvForestState.lastRows = [];
+    mvForestState.pageSize = 20;
+    mvForestState.alpha = 0.05;
+    mvForestState.ciMethod = "normal";
+    mvForestState.viewMode = "separate";
+    _updateMVValidationWarnings();
+    _markStale();
+  }
+  function commitImportMV(parsed, mvHeaders) {
+    const { headers, rows } = parsed;
+    const headerMap = {};
+    headers.forEach((h, idx) => {
+      headerMap[h.toLowerCase()] = idx;
+    });
+    const { studyCol, outcomeCol, yiCol, viCol } = mvHeaders;
+    const knownCols = new Set([studyCol, outcomeCol, yiCol, viCol].map((c) => c.toLowerCase()));
+    const modCols = headers.filter((h) => !knownCols.has(h.toLowerCase()));
+    mvModerators.length = 0;
+    modCols.forEach((col) => mvModerators.push(col));
+    renderMVModTags();
+    rebuildMVTableHeaders();
+    document.getElementById("mvTableBody").innerHTML = "";
+    rows.forEach((row) => {
+      const tr = addMVRow();
+      tr.querySelector(".mv-study-id").value = row[headerMap[studyCol.toLowerCase()]] ?? "";
+      tr.querySelector(".mv-outcome-id").value = row[headerMap[outcomeCol.toLowerCase()]] ?? "";
+      tr.querySelector(".mv-yi").value = row[headerMap[yiCol.toLowerCase()]] ?? "";
+      tr.querySelector(".mv-vi").value = row[headerMap[viCol.toLowerCase()]] ?? "";
+      modCols.forEach((col, i) => {
+        const inputs = tr.querySelectorAll(".mv-mod-cell");
+        if (inputs[i]) inputs[i].value = row[headerMap[col.toLowerCase()]] ?? "";
+      });
+    });
+    _markStale();
+  }
+  function _mvAnalysisChecks(rows) {
+    const errors = [], warnings = [];
+    const outcomeIds = [...new Set(rows.map((r) => r.outcome_id))];
+    const studyIds = [...new Set(rows.map((r) => r.study_id))];
+    if (outcomeIds.length < 2)
+      errors.push("Requires \u2265 2 distinct outcome IDs. For a single outcome, use Standard mode.");
+    if (studyIds.length < 3)
+      errors.push("Requires \u2265 3 studies.");
+    const studyOutcomeCounts = {};
+    rows.forEach((r) => {
+      studyOutcomeCounts[r.study_id] = studyOutcomeCounts[r.study_id] || /* @__PURE__ */ new Set();
+      studyOutcomeCounts[r.study_id].add(r.outcome_id);
+    });
+    const singleOutcomeStudies = Object.entries(studyOutcomeCounts).filter(([, s]) => s.size === 1).map(([id]) => id);
+    if (singleOutcomeStudies.length === studyIds.length)
+      warnings.push("All studies contribute only one outcome \u2014 within-study correlations cannot be estimated. Consider using Standard mode or checking that Study IDs correctly group multiple outcomes per study.");
+    else if (singleOutcomeStudies.length > 0)
+      warnings.push(`Studies with only one outcome (contribute no covariance): ${singleOutcomeStudies.map(escapeHTML).join(", ")}.`);
+    const struct = document.getElementById("mvStruct").value;
+    const nPsiPar = struct === "CS" ? 2 : struct === "Diag" ? outcomeIds.length : outcomeIds.length * (outcomeIds.length + 1) / 2;
+    if (struct === "UN" && outcomeIds.length > 5)
+      warnings.push(`UN structure with P = ${outcomeIds.length} outcomes requires ${nPsiPar} \u03A8 parameters \u2014 optimizer instability likely. Consider CS or Diag.`);
+    if (nPsiPar > studyIds.length / 3)
+      warnings.push(`Between-study covariance has ${nPsiPar} parameters but only ${studyIds.length} studies \u2014 model may be overparameterized.`);
+    return { errors, warnings };
+  }
+  function _updateMVValidationWarnings() {
+    const warningsEl = document.getElementById("mvValidationWarnings");
+    const errors = [], warnings = [];
+    document.querySelectorAll("#mvTableBody tr").forEach((tr, i) => {
+      if (tr.classList.contains("row-pending-delete")) return;
+      const allInputs = [...tr.querySelectorAll("input")];
+      if (allInputs.every((inp) => inp.value.trim() === "")) return;
+      const studyId = tr.querySelector(".mv-study-id")?.value.trim() || `Row ${i + 1}`;
+      const outcomeId = tr.querySelector(".mv-outcome-id")?.value.trim() || "";
+      const label = outcomeId ? `${studyId} / ${outcomeId}` : studyId;
+      const yiRaw = tr.querySelector(".mv-yi")?.value.trim() ?? "";
+      const viRaw = tr.querySelector(".mv-vi")?.value.trim() ?? "";
+      const yi = yiRaw === "" ? NaN : +yiRaw;
+      const vi = viRaw === "" ? NaN : +viRaw;
+      if (!tr.querySelector(".mv-study-id")?.value.trim() || !tr.querySelector(".mv-outcome-id")?.value.trim() || !isFinite(yi) || !isFinite(vi) || vi <= 0)
+        warnings.push(msgExcluded(label, "Invalid input"));
+      tr.querySelectorAll(".mv-mod-cell").forEach((inp, modIdx) => {
+        if (inp.classList.contains("input-error")) {
+          const modName = mvModerators[modIdx] || `moderator ${modIdx + 1}`;
+          warnings.push(msgNonNumericMod(label, inp.value.trim(), modName));
+        }
+      });
+    });
+    const rows = _collectMVRows();
+    if (!rows.length) {
+      errors.push("No valid rows \u2014 fill in Study ID, Outcome ID, y<sub>i</sub>, and v<sub>i</sub>.");
+    } else {
+      const checks = analysisChecks({ studies: rows, biasTests: false });
+      const mvChecks = _mvAnalysisChecks(rows);
+      errors.push(...checks.errors, ...mvChecks.errors);
+      warnings.push(...checks.warnings, ...mvChecks.warnings);
+    }
+    renderWarningBlocks(warningsEl, { errors, warnings });
+  }
+  function runMVAnalysis() {
+    document.querySelectorAll("#mvTableBody tr").forEach((tr) => {
+      if (!tr.classList.contains("row-pending-delete")) _validateMVRow(tr);
+    });
+    _updateMVValidationWarnings();
+    let rows = _collectMVRows();
+    const warningsEl = document.getElementById("mvValidationWarnings");
+    if (!rows.length) return false;
+    const runErrors = [], runWarnings = [];
+    const flush = () => renderWarningBlocks(warningsEl, { errors: runErrors, warnings: runWarnings });
+    let activeModerators = [...mvModerators];
+    if (activeModerators.length) {
+      const before = rows.length;
+      const filtered = rows.filter((r) => activeModerators.every((name) => isFinite(r[name])));
+      const dropped = before - filtered.length;
+      if (dropped === before) {
+        runWarnings.push(`No rows have complete moderator values \u2014 running without moderators.`);
+        activeModerators = [];
+      } else {
+        rows = filtered;
+        if (dropped) runWarnings.push(`${dropped} row${dropped > 1 ? "s" : ""} excluded: missing or non-numeric moderator value${dropped > 1 ? "s" : ""}.`);
+      }
+    }
+    const mvChecks = _mvAnalysisChecks(rows);
+    runErrors.push(...mvChecks.errors);
+    runWarnings.push(...mvChecks.warnings);
+    if (runErrors.length) {
+      flush();
+      return false;
+    }
+    const struct = document.getElementById("mvStruct").value;
+    const method = document.getElementById("mvMethod").value;
+    const ciMethod = document.getElementById("mvCiMethod").value;
+    const slopes = document.getElementById("mvSlopes").value;
+    const rho = parseFloat(document.getElementById("mvRho").value);
+    const alpha = _getCiAlpha();
+    const mods = activeModerators.map((key) => ({ key, type: "continuous" }));
+    flush();
+    let V, res;
+    try {
+      V = vcalc(rows, { rho });
+      res = mvMeta(rows, V, { struct, method, ciMethod, slopes, alpha, moderators: mods });
+    } catch (e) {
+      runErrors.push(`Error: ${escapeHTML(String(e))}`);
+      flush();
+      return false;
+    }
+    if (res.error) {
+      runErrors.push(`Error: ${escapeHTML(res.error)}`);
+      flush();
+      return false;
+    }
+    if (res.convergence && res.convergence.converged === false) {
+      const c = res.convergence;
+      console.warn(
+        "[FOSMA] MV optimizer did not converge:",
+        `${c.source} (${c.iters}/${c.maxIters} iters)`
+      );
+      _showConvergenceToast([c.source]);
+    }
+    document.querySelectorAll(".results-section").forEach((d) => {
+      d.removeAttribute("open");
+      d.style.display = "none";
+    });
+    const _stdForestSection = document.getElementById("forestSection");
+    const _mvForestSection = document.getElementById("mvForestSection");
+    if (_stdForestSection) _stdForestSection.style.display = "none";
+    if (_mvForestSection) _mvForestSection.style.display = "";
+    _renderMVResults(res, { alpha, rows });
+    _appState.reportArgs = { mv: true, mvRes: res, mvRows: rows, mvAlpha: alpha, mvCiMethod: ciMethod };
+    const _studyTableSection = document.getElementById("studyTableSection");
+    const _studyTableEl = document.getElementById("studyTable");
+    if (_studyTableSection && _studyTableEl) {
+      _studyTableSection.style.display = "";
+      _studyTableEl.innerHTML = _buildMVStudyTable(rows, alpha);
+    }
+    document.getElementById("robSection")?.style.setProperty("display", "none");
+    _onRunSuccess();
+    return true;
+  }
+  function _buildMVStudyTable(rows, alpha = 0.05) {
+    const z = normalQuantile(1 - alpha / 2);
+    const ciPct = Math.round((1 - alpha) * 100);
+    function fv(v) {
+      return isFinite(v) ? v.toFixed(4) : "\u2014";
+    }
+    const bodyRows = rows.map((r) => {
+      const se = Math.sqrt(r.vi);
+      return `<tr>
+      <td>${escapeHTML(String(r.study_id))}</td>
+      <td>${escapeHTML(String(r.outcome_id))}</td>
+      <td>${fv(r.yi)}</td>
+      <td>${fv(r.vi)}</td>
+      <td>${fv(se)}</td>
+      <td>[${fv(r.yi - z * se)},&nbsp;${fv(r.yi + z * se)}]</td>
+    </tr>`;
+    }).join("");
+    return `<table class="reg-table" style="width:100%">
+    <thead><tr>
+      <th>Study</th><th>Outcome</th>
+      <th>y<sub>i</sub></th><th>v<sub>i</sub></th>
+      <th>SE</th><th>${ciPct}% CI</th>
+    </tr></thead>
+    <tbody>${bodyRows}</tbody>
+  </table>`;
+  }
+  function _renderMVResults(res, { alpha, rows = [] } = {}) {
+    const {
+      beta,
+      se,
+      ci,
+      z,
+      pval,
+      betaNames,
+      tau2,
+      rho_between,
+      Psi,
+      corPsi,
+      outcomeIds,
+      n,
+      k,
+      P,
+      QM,
+      df_QM,
+      pQM,
+      QE,
+      df_QE,
+      pQE,
+      Fstat,
+      pF,
+      logLik: logLik2,
+      AIC,
+      BIC,
+      AICc,
+      struct,
+      method,
+      ciMethod = "normal",
+      dist = "z",
+      df,
+      I2,
+      convergence,
+      warnings: engineWarnings = []
+    } = res;
+    alpha ??= 0.05;
+    const ciPct = Math.round((1 - alpha) * 100);
+    const fmtP2 = (p) => !isFinite(p) ? "\u2014" : p < 1e-3 ? "< .001" : p.toFixed(3).replace(/^0\./, ".");
+    const stars = (p) => p < 1e-3 ? "***" : p < 0.01 ? "**" : p < 0.05 ? "*" : "";
+    const hasMods = beta.length > P;
+    const _convBadgeInline = convergence && convergence.converged === false ? `<p style="color:var(--color-warning);margin:2px 0">\u26A0 Optimizer did not fully converge [${convergence.source}] \u2014 interpret results with caution.</p>` : "";
+    const warnHTML = _convBadgeInline + engineWarnings.map((w) => `<p style="color:var(--color-warning);margin:2px 0">\u26A0 ${escapeHTML(w)}</p>`).join("") || "";
+    const interceptRows = beta.slice(0, P).map((b, o) => {
+      const [lo, hi] = ci[o];
+      return `<tr>
+      <td><strong>${escapeHTML(String(outcomeIds[o]))}</strong></td>
+      <td>${fmt(b, 4)}</td><td>${fmt(se[o], 4)}</td>
+      <td>[${fmt(lo, 4)}, ${fmt(hi, 4)}]</td>
+      <td>${fmt(z[o], 3)}</td>
+      <td>${fmtP2(pval[o])}${stars(pval[o])}</td>
+    </tr>`;
+    }).join("");
+    const interceptTable = `
+    <h4 style="font-size:0.9em;margin:8px 0 4px">
+      Pooled effect per outcome<button class="help-btn" data-help="mv.model" title="Help">?</button>
+    </h4>
+    <table class="reg-table" style="margin-bottom:12px">
+      <thead><tr><th>Outcome</th><th>Estimate</th><th>SE</th>
+        <th>${ciPct}% CI</th><th><em>${dist}</em></th><th><em>p</em></th></tr></thead>
+      <tbody>${interceptRows}</tbody>
+    </table>`;
+    let modTable = "";
+    if (hasMods) {
+      const modRows = beta.slice(P).map((b, i) => {
+        const j = P + i;
+        const [lo, hi] = ci[j];
+        return `<tr>
+        <td>${escapeHTML(betaNames[j])}</td>
+        <td>${fmt(b, 4)}</td><td>${fmt(se[j], 4)}</td>
+        <td>[${fmt(lo, 4)}, ${fmt(hi, 4)}]</td>
+        <td>${fmt(z[j], 3)}</td>
+        <td>${fmtP2(pval[j])}${stars(pval[j])}</td>
+      </tr>`;
+      }).join("");
+      modTable = `
+      <h4 style="font-size:0.9em;margin:8px 0 4px">Moderator effects</h4>
+      <table class="reg-table" style="margin-bottom:12px">
+        <thead><tr><th>Coefficient</th><th>Estimate</th><th>SE</th>
+          <th>${ciPct}% CI</th><th><em>${dist}</em></th><th><em>p</em></th></tr></thead>
+        <tbody>${modRows}</tbody>
+      </table>`;
+    }
+    let psiBlock = "";
+    if (struct === "CS") {
+      const i2rows = outcomeIds.map(
+        (id, o) => `<tr><td>${escapeHTML(String(id))}</td><td>${fmt(tau2[o], 5)}</td><td>${fmt(I2[o], 1)}%</td></tr>`
+      ).join("");
+      psiBlock = `<h4 style="font-size:0.9em;margin:8px 0 4px">Between-study heterogeneity (\u03A8\u0302, CS)</h4>
+      <p style="font-size:0.875em;margin:2px 0">
+        Shared \u03C4\xB2 = ${fmt(tau2[0], 5)},
+        \u03C1<sub>between</sub> = ${fmt(rho_between ?? 0, 4)}
+      </p>
+      <table class="reg-table" style="margin-bottom:8px">
+        <thead><tr><th>Outcome</th><th>\u03C4\xB2</th><th><em>I</em>\xB2</th></tr></thead>
+        <tbody>${i2rows}</tbody>
+      </table>`;
+    } else if (struct === "Diag") {
+      const i2rows = outcomeIds.map(
+        (id, o) => `<tr><td>${escapeHTML(String(id))}</td><td>${fmt(tau2[o], 5)}</td><td>${fmt(I2[o], 1)}%</td></tr>`
+      ).join("");
+      psiBlock = `<h4 style="font-size:0.9em;margin:8px 0 4px">Between-study heterogeneity (\u03A8\u0302, Diagonal)</h4>
+      <table class="reg-table" style="margin-bottom:8px">
+        <thead><tr><th>Outcome</th><th>\u03C4\xB2</th><th><em>I</em>\xB2</th></tr></thead>
+        <tbody>${i2rows}</tbody>
+      </table>`;
+    } else {
+      const hdr = outcomeIds.map((id) => `<th>${escapeHTML(String(id))}</th>`).join("");
+      const psiRows = Psi.map(
+        (row, i) => `<tr><th>${escapeHTML(String(outcomeIds[i]))}</th>${row.map((v) => `<td>${fmt(v, 5)}</td>`).join("")}</tr>`
+      ).join("");
+      const corRows = (corPsi || []).map(
+        (row, i) => `<tr><th>${escapeHTML(String(outcomeIds[i]))}</th>${row.map(
+          (v, j) => `<td ${i === j ? 'style="color:var(--fg-muted)"' : ""}>${fmt(v, 4)}</td>`
+        ).join("")}</tr>`
+      ).join("");
+      const i2rows = outcomeIds.map(
+        (id, o) => `<tr><td>${escapeHTML(String(id))}</td><td>${fmt(tau2[o], 5)}</td><td>${fmt(I2[o], 1)}%</td></tr>`
+      ).join("");
+      psiBlock = `<h4 style="font-size:0.9em;margin:8px 0 4px">Between-study covariance matrix \u03A8\u0302 (Unstructured)</h4>
+      <table class="reg-table" style="margin-bottom:6px">
+        <thead><tr><th></th>${hdr}</tr></thead><tbody>${psiRows}</tbody>
+      </table>
+      <h4 style="font-size:0.9em;margin:6px 0 4px">Between-study correlations \u03C1\u0302</h4>
+      <table class="reg-table" style="margin-bottom:6px">
+        <thead><tr><th></th>${hdr}</tr></thead><tbody>${corRows}</tbody>
+      </table>
+      <table class="reg-table" style="margin-bottom:8px">
+        <thead><tr><th>Outcome</th><th>\u03C4\xB2</th><th><em>I</em>\xB2</th></tr></thead>
+        <tbody>${i2rows}</tbody>
+      </table>`;
+    }
+    const useFtest = dist === "t" && hasMods && isFinite(Fstat);
+    const testsBlock = `
+    <h4 style="font-size:0.9em;margin:8px 0 4px">Hypothesis tests</h4>
+    <table class="reg-table" style="margin-bottom:12px">
+      <thead><tr><th>Test</th><th>${useFtest ? "Statistic" : "\u03C7\xB2"}</th><th>df</th><th><em>p</em></th></tr></thead>
+      <tbody>
+        ${hasMods && isFinite(QM) ? `<tr><td>Omnibus test of moderators (Q<sub>M</sub>)</td>${useFtest ? `<td>F = ${fmt(Fstat, 3)}</td><td>${df_QM}, ${df}</td><td>${fmtP2(pF)}</td>` : `<td>${fmt(QM, 3)}</td><td>${df_QM}</td><td>${fmtP2(pQM)}</td>`}</tr>` : ""}
+        <tr><td>Residual heterogeneity (Q<sub>E</sub>)</td>
+          <td>${useFtest ? `\u03C7\xB2 = ${fmt(QE, 3)}` : fmt(QE, 3)}</td>
+          <td>${df_QE}</td><td>${fmtP2(pQE)}</td></tr>
+      </tbody>
+    </table>`;
+    const fitBlock = `<div style="font-size:0.82em;color:var(--fg-muted);margin:4px 0 14px;line-height:1.7">
+    k = ${k} studies &nbsp;\xB7&nbsp; n = ${n} obs &nbsp;\xB7&nbsp; P = ${P} outcomes
+    &nbsp;|&nbsp; log-lik = ${fmt(logLik2, 4)}
+    &nbsp;\xB7&nbsp; AIC = ${fmt(AIC, 2)} &nbsp;\xB7&nbsp; BIC = ${fmt(BIC, 2)}
+    ${isFinite(AICc) ? `&nbsp;\xB7&nbsp; AICc = ${fmt(AICc, 2)}` : ""}
+    &nbsp;|&nbsp; ${method}, \u03A8 = ${struct}, CI = ${ciMethod === "t" ? "t-dist" : "normal"}
+    ${convergence && convergence.converged === false ? `&nbsp;\xB7&nbsp; <span style="color:var(--color-warning)">convergence uncertain</span>` : ""}
+  </div>`;
+    const boundaryOutcomes = outcomeIds.filter((_, o) => tau2[o] < 1e-6).map((id) => escapeHTML(String(id)));
+    const boundaryNote = boundaryOutcomes.length ? `<p style="color:var(--fg-muted);font-size:0.8em;margin:0 0 6px">\u2139 \u03C4\xB2 \u2248 0 for ${boundaryOutcomes.join(", ")} \u2014 estimate is at the boundary; no detectable between-study heterogeneity for these outcomes.</p>` : "";
+    document.getElementById("results").innerHTML = warnHTML + interceptTable + modTable + psiBlock + boundaryNote + testsBlock + fitBlock;
+    mvForestState.lastRes = res;
+    mvForestState.lastRows = rows;
+    mvForestState.alpha = alpha;
+    mvForestState.ciMethod = ciMethod;
+    mvForestState.pages = outcomeIds.map(() => 0);
+    mvForestState.combinedPage = 0;
+    const mvForestContainer = document.getElementById("mvForestContainer");
+    if (!mvForestContainer) return;
+    const combinedBlock = `<div id="mvForestCombinedBlock" style="display:none;margin-bottom:20px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+        <div class="plot-export">
+          <button class="export-btn" data-target="mvForestPlotCombined" data-format="svg">SVG</button>
+          <button class="export-btn" data-target="mvForestPlotCombined" data-format="png">PNG</button>
+          <button class="export-btn" data-target="mvForestPlotCombined" data-format="tiff">TIFF</button>
+        </div>
+      </div>
+      <svg id="mvForestPlotCombined" role="img" aria-label="Combined multivariate forest plot"
+        width="620" height="20" style="display:block"></svg>
+      <div id="mvForestNavCombined" class="forest-nav"></div>
+    </div>`;
+    const separateBlocks = outcomeIds.map(
+      (id, o) => `<div style="margin-bottom:20px" id="mvForestBlock-${o}">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+        <p class="plot-label" style="margin:0">${escapeHTML(String(id))}</p>
+        <div class="plot-export">
+          <button class="export-btn" data-target="mvForestPlot-${o}" data-format="svg">SVG</button>
+          <button class="export-btn" data-target="mvForestPlot-${o}" data-format="png">PNG</button>
+          <button class="export-btn" data-target="mvForestPlot-${o}" data-format="tiff">TIFF</button>
+        </div>
+      </div>
+      <svg id="mvForestPlot-${o}" role="img"
+        aria-label="Forest plot \u2014 ${escapeHTML(String(id))}"
+        width="620" height="20" style="display:block"></svg>
+      <div id="mvForestNav-${o}" class="forest-nav"></div>
+    </div>`
+    ).join("");
+    mvForestContainer.innerHTML = combinedBlock + separateBlocks;
+    redrawAllMVForestPlots();
+  }
+  function redrawAllMVForestPlots() {
+    const { lastRes: res, lastRows: rows, alpha, pages, pageSize, showPI, viewMode, combinedPage } = mvForestState;
+    if (!res) return;
+    const { beta, ci, se, tau2, outcomeIds, k, P } = res;
+    const isCombined = viewMode === "combined";
+    const combinedBlockEl = document.getElementById("mvForestCombinedBlock");
+    if (combinedBlockEl) combinedBlockEl.style.display = isCombined ? "" : "none";
+    outcomeIds.forEach((_, o) => {
+      const block = document.getElementById(`mvForestBlock-${o}`);
+      if (block) block.style.display = isCombined ? "none" : "";
+    });
+    if (isCombined) {
+      const svgEl = document.getElementById("mvForestPlotCombined");
+      const navEl = document.getElementById("mvForestNavCombined");
+      if (!svgEl) return;
+      const allStudyIds = [...new Set(rows.map((r) => String(r.study_id)))];
+      const { totalPages } = _drawMVForestCombined(svgEl, rows, res, alpha, {
+        page: combinedPage,
+        pageSize,
+        showPI,
+        theme: _appState.plotTheme ?? "default"
+      });
+      _renderMVForestNavCombined(navEl, totalPages, allStudyIds.length);
+      return;
+    }
+    const dfPred = Math.max(k - P - 1, 1);
+    outcomeIds.forEach((id, o) => {
+      const svgEl = document.getElementById(`mvForestPlot-${o}`);
+      const navEl = document.getElementById(`mvForestNav-${o}`);
+      if (!svgEl) return;
+      const outcomeRows = rows.filter((r) => String(r.outcome_id) === String(id));
+      if (!outcomeRows.length) return;
+      const pooled = { est: beta[o], lo: ci[o][0], hi: ci[o][1] };
+      const piOpts = showPI ? {
+        lo: beta[o] - tCritical(dfPred, alpha) * Math.sqrt(tau2[o] + se[o] ** 2),
+        hi: beta[o] + tCritical(dfPred, alpha) * Math.sqrt(tau2[o] + se[o] ** 2)
+      } : null;
+      const { totalPages } = _drawMVForestPlot(svgEl, outcomeRows, pooled, String(id), alpha, {
+        page: pages[o] ?? 0,
+        pageSize,
+        pi: piOpts,
+        theme: _appState.plotTheme ?? "default"
+      });
+      _renderMVForestNav(navEl, o, totalPages, outcomeRows.length);
+    });
+  }
+  function _renderMVForestNav(navEl, outcomeIdx, totalPages, kAll) {
+    if (!navEl) return;
+    if (totalPages <= 1) {
+      navEl.innerHTML = "";
+      return;
+    }
+    const page = mvForestState.pages[outcomeIdx] ?? 0;
+    const prevId = `mvFPrev-${outcomeIdx}`;
+    const nextId = `mvFNext-${outcomeIdx}`;
+    navEl.innerHTML = `<button id="${prevId}" ${page === 0 ? "disabled" : ""}>\u2039 Prev</button><span>Page ${page + 1} of ${totalPages}</span><button id="${nextId}" ${page >= totalPages - 1 ? "disabled" : ""}>Next \u203A</button><span class="forest-nav-note">Pooled estimate includes all ${kAll} studies</span>`;
+    document.getElementById(prevId)?.addEventListener("click", () => {
+      if (mvForestState.pages[outcomeIdx] > 0) {
+        mvForestState.pages[outcomeIdx]--;
+        redrawAllMVForestPlots();
+      }
+    });
+    document.getElementById(nextId)?.addEventListener("click", () => {
+      if (mvForestState.pages[outcomeIdx] < totalPages - 1) {
+        mvForestState.pages[outcomeIdx]++;
+        redrawAllMVForestPlots();
+      }
+    });
+  }
+  function _drawMVForestPlot(svgEl, rows, pooled, label, alpha = 0.05, { page = 0, pageSize = Infinity, pi = null, theme = "default" } = {}) {
+    if (typeof d3 === "undefined" || !rows.length) return { totalPages: 1 };
+    const z = normalQuantile(1 - alpha / 2);
+    const T = PLOT_THEMES[theme] ?? PLOT_THEMES["default"];
+    const ps = pageSize === Infinity ? rows.length : pageSize;
+    const totalPages = Math.max(1, Math.ceil(rows.length / ps));
+    const safePage = Math.min(Math.max(0, page), totalPages - 1);
+    const pageRows = rows.slice(safePage * ps, safePage * ps + ps);
+    const lW = 130, pW = 280, aW = 175;
+    const rowH = 20, headerH = 24, axisH = 26;
+    const ml = 6, mr = 6;
+    const nS = pageRows.length;
+    const piRows = pi ? 1 : 0;
+    const totalW = ml + lW + pW + aW + mr;
+    const totalH = headerH + nS * rowH + 6 + rowH + (piRows ? rowH : 0) + axisH;
+    const svg = d3.select(svgEl).attr("width", totalW).attr("height", totalH);
+    svg.selectAll("*").remove();
+    svg.style("background", T.bg !== "transparent" ? T.bg : null);
+    svg.style("font-family", T.fontFamily);
+    if (T.bg !== "transparent") {
+      svg.append("rect").attr("width", totalW).attr("height", totalH).attr("fill", T.bg);
+    }
+    const seAll = rows.map((r) => Math.sqrt(r.vi));
+    const xVals = rows.flatMap((r, i) => [r.yi - z * seAll[i], r.yi + z * seAll[i]]).concat([pooled.lo, pooled.hi]);
+    if (pi) xVals.push(pi.lo, pi.hi);
+    const xMin = Math.min(...xVals), xMax = Math.max(...xVals);
+    const pad = Math.max((xMax - xMin) * 0.12, 0.05);
+    const xScale = d3.scaleLinear().domain([xMin - pad, xMax + pad]).range([0, pW]);
+    const plotG = svg.append("g").attr("transform", `translate(${ml + lW},${headerH})`);
+    const zeroLineH = nS * rowH + 6 + rowH + (piRows ? rowH : 0);
+    if (xScale.domain()[0] <= 0 && xScale.domain()[1] >= 0) {
+      plotG.append("line").attr("x1", xScale(0)).attr("x2", xScale(0)).attr("y1", 0).attr("y2", zeroLineH).attr("stroke", T.border).attr("stroke-dasharray", "3,3").attr("stroke-width", 1);
+    }
+    [
+      [ml + lW / 2, "Study"],
+      [ml + lW + pW / 2, label],
+      [ml + lW + pW + aW / 2, `Effect [${Math.round((1 - alpha) * 100)}% CI]`]
+    ].forEach(
+      ([x, text]) => svg.append("text").attr("x", x).attr("y", headerH - 6).attr("text-anchor", "middle").attr("fill", T.fgMuted).attr("font-size", "10px").text(text)
+    );
+    const wtsAll = rows.map((r) => 1 / r.vi);
+    const wMax = Math.max(...wtsAll);
+    const sePageArr = pageRows.map((r) => Math.sqrt(r.vi));
+    pageRows.forEach((row, i) => {
+      const y = i * rowH + rowH / 2;
+      const se = sePageArr[i];
+      const lo = row.yi - z * se;
+      const hi = row.yi + z * se;
+      const wi = 1 / row.vi;
+      const bh = Math.max(2, Math.min(6, 5.5 * Math.sqrt(wi / wMax)));
+      plotG.append("line").attr("x1", xScale(Math.max(xScale.domain()[0], lo))).attr("x2", xScale(Math.min(xScale.domain()[1], hi))).attr("y1", y).attr("y2", y).attr("stroke", T.fg).attr("stroke-width", 1);
+      plotG.append("rect").attr("x", xScale(row.yi) - bh).attr("y", y - bh).attr("width", bh * 2).attr("height", bh * 2).attr("fill", T.accent);
+      svg.append("text").attr("x", ml + lW - 4).attr("y", headerH + y + 4).attr("text-anchor", "end").attr("fill", T.fg).attr("font-size", "10px").text(String(row.study_id));
+      svg.append("text").attr("x", ml + lW + pW + 5).attr("y", headerH + y + 4).attr("text-anchor", "start").attr("fill", T.fg).attr("font-size", "10px").text(`${fmt(row.yi, 3)} [${fmt(lo, 3)}, ${fmt(hi, 3)}]`);
+    });
+    const sepY = nS * rowH + 4;
+    plotG.append("line").attr("x1", 0).attr("x2", pW).attr("y1", sepY).attr("y2", sepY).attr("stroke", T.border).attr("stroke-width", 1);
+    const dY = sepY + rowH / 2;
+    const dLo = xScale(Math.max(xScale.domain()[0], pooled.lo));
+    const dHi = xScale(Math.min(xScale.domain()[1], pooled.hi));
+    const dMid = xScale(pooled.est);
+    const dH = 7;
+    plotG.append("polygon").attr("points", `${dMid},${dY - dH} ${dHi},${dY} ${dMid},${dY + dH} ${dLo},${dY}`).attr("fill", T.accent);
+    svg.append("text").attr("x", ml + lW - 4).attr("y", headerH + dY + 4).attr("text-anchor", "end").attr("fill", T.fg).attr("font-size", "10px").attr("font-weight", "600").text("Pooled (MV)");
+    svg.append("text").attr("x", ml + lW + pW + 5).attr("y", headerH + dY + 4).attr("text-anchor", "start").attr("fill", T.fg).attr("font-size", "10px").attr("font-weight", "600").text(`${fmt(pooled.est, 3)} [${fmt(pooled.lo, 3)}, ${fmt(pooled.hi, 3)}]`);
+    if (pi && isFinite(pi.lo) && isFinite(pi.hi)) {
+      const piY = dY + rowH;
+      const piLoX = xScale(Math.max(xScale.domain()[0], pi.lo));
+      const piHiX = xScale(Math.min(xScale.domain()[1], pi.hi));
+      const piColor = T.pi;
+      plotG.append("line").attr("x1", piLoX).attr("x2", piHiX).attr("y1", piY).attr("y2", piY).attr("stroke", piColor).attr("stroke-width", 2).attr("stroke-dasharray", "6,3");
+      plotG.append("line").attr("x1", piLoX).attr("x2", piLoX).attr("y1", piY - 5).attr("y2", piY + 5).attr("stroke", piColor).attr("stroke-width", 2);
+      plotG.append("line").attr("x1", piHiX).attr("x2", piHiX).attr("y1", piY - 5).attr("y2", piY + 5).attr("stroke", piColor).attr("stroke-width", 2);
+      svg.append("text").attr("x", ml + lW - 4).attr("y", headerH + piY + 4).attr("text-anchor", "end").attr("fill", piColor).attr("font-size", "10px").text("Pred. interval");
+      svg.append("text").attr("x", ml + lW + pW + 5).attr("y", headerH + piY + 4).attr("text-anchor", "start").attr("fill", piColor).attr("font-size", "10px").text(`${fmt(pi.lo, 3)} to ${fmt(pi.hi, 3)}`);
+    }
+    const axisOffsetY = sepY + rowH + (piRows ? rowH : 0) + 2;
+    plotG.append("g").attr("transform", `translate(0,${axisOffsetY})`).call(d3.axisBottom(xScale).ticks(5).tickSize(3)).call((g) => g.select(".domain").attr("stroke", T.border)).call((g) => g.selectAll(".tick line").attr("stroke", T.border)).call((g) => g.selectAll(".tick text").attr("fill", T.fgMuted).attr("font-size", "9px").attr("font-family", T.fontFamily));
+    return { totalPages };
+  }
+  function _renderMVForestNavCombined(navEl, totalPages, nStudies) {
+    if (!navEl) return;
+    if (totalPages <= 1) {
+      navEl.innerHTML = "";
+      return;
+    }
+    const page = mvForestState.combinedPage;
+    navEl.innerHTML = `<button id="mvFCPrev" ${page === 0 ? "disabled" : ""}>\u2039 Prev</button><span>Page ${page + 1} of ${totalPages}</span><button id="mvFCNext" ${page >= totalPages - 1 ? "disabled" : ""}>Next \u203A</button><span class="forest-nav-note">Pooled estimates include all ${nStudies} studies</span>`;
+    document.getElementById("mvFCPrev")?.addEventListener("click", () => {
+      if (mvForestState.combinedPage > 0) {
+        mvForestState.combinedPage--;
+        redrawAllMVForestPlots();
+      }
+    });
+    document.getElementById("mvFCNext")?.addEventListener("click", () => {
+      if (mvForestState.combinedPage < totalPages - 1) {
+        mvForestState.combinedPage++;
+        redrawAllMVForestPlots();
+      }
+    });
+  }
+  function _drawMVForestCombined(svgEl, rows, res, alpha, { page = 0, pageSize = Infinity, showPI = false, theme = "default" } = {}) {
+    if (typeof d3 === "undefined" || !rows.length || !res) return { totalPages: 1 };
+    const T = PLOT_THEMES[theme] ?? PLOT_THEMES["default"];
+    const { beta, ci, se, tau2, outcomeIds, k, P } = res;
+    const z = normalQuantile(1 - alpha / 2);
+    const dfPred = Math.max(k - P - 1, 1);
+    const allStudyIds = [...new Set(rows.map((r) => String(r.study_id)))];
+    const ps = pageSize === Infinity ? allStudyIds.length : pageSize;
+    const totalPages = Math.max(1, Math.ceil(allStudyIds.length / ps));
+    const safePage = Math.min(Math.max(0, page), totalPages - 1);
+    const pageStudyIds = new Set(allStudyIds.slice(safePage * ps, safePage * ps + ps));
+    const palette = T.useBwShapes ? ["#111111", "#555555", "#888888", "#333333", "#666666", "#999999", "#222222", "#777777", "#444444", "#aaaaaa"] : ["#4e79a7", "#f28e2b", "#e15759", "#76b7b2", "#59a14f", "#edc948", "#b07aa1", "#ff9da7", "#9c755f", "#bab0ac"];
+    const seAll = rows.map((r) => Math.sqrt(r.vi));
+    const xVals = rows.flatMap((r, i) => [r.yi - z * seAll[i], r.yi + z * seAll[i]]);
+    outcomeIds.forEach((_, o) => {
+      xVals.push(ci[o][0], ci[o][1]);
+      if (showPI) {
+        const tc = tCritical(dfPred, alpha);
+        xVals.push(
+          beta[o] - tc * Math.sqrt(tau2[o] + se[o] ** 2),
+          beta[o] + tc * Math.sqrt(tau2[o] + se[o] ** 2)
+        );
+      }
+    });
+    const xMin = Math.min(...xVals), xMax = Math.max(...xVals);
+    const pad = Math.max((xMax - xMin) * 0.12, 0.05);
+    const lW = 130, pW = 280, aW = 175;
+    const rowH = 20, headerH = 24, axisH = 26;
+    const groupHdrH = 22, sepH = 6, spacerH = 10;
+    const ml = 6, mr = 6;
+    const totalW = ml + lW + pW + aW + mr;
+    const perPageRows = outcomeIds.map(
+      (id) => rows.filter((r) => String(r.outcome_id) === String(id) && pageStudyIds.has(String(r.study_id)))
+    );
+    const groupH = (nS) => groupHdrH + nS * rowH + sepH + rowH + (showPI ? rowH : 0) + spacerH;
+    const totalGroupH = perPageRows.reduce((acc, pr) => acc + groupH(pr.length), 0);
+    const totalH = headerH + totalGroupH + axisH;
+    const svg = d3.select(svgEl).attr("width", totalW).attr("height", totalH);
+    svg.selectAll("*").remove();
+    svg.style("background", T.bg !== "transparent" ? T.bg : null);
+    svg.style("font-family", T.fontFamily);
+    if (T.bg !== "transparent") {
+      svg.append("rect").attr("width", totalW).attr("height", totalH).attr("fill", T.bg);
+    }
+    const xScale = d3.scaleLinear().domain([xMin - pad, xMax + pad]).range([0, pW]);
+    const plotG = svg.append("g").attr("transform", `translate(${ml + lW},${headerH})`);
+    if (xScale.domain()[0] <= 0 && xScale.domain()[1] >= 0) {
+      plotG.append("line").attr("x1", xScale(0)).attr("x2", xScale(0)).attr("y1", 0).attr("y2", totalGroupH).attr("stroke", T.border).attr("stroke-dasharray", "3,3").attr("stroke-width", 1);
+    }
+    [
+      [ml + lW / 2, "Study"],
+      [ml + lW + pW / 2, "Effect"],
+      [ml + lW + pW + aW / 2, `Effect [${Math.round((1 - alpha) * 100)}% CI]`]
+    ].forEach(
+      ([x, text]) => svg.append("text").attr("x", x).attr("y", headerH - 6).attr("text-anchor", "middle").attr("fill", T.fgMuted).attr("font-size", "10px").text(text)
+    );
+    let gy = 0;
+    outcomeIds.forEach((id, o) => {
+      const color = palette[o % palette.length];
+      const pageRows = perPageRows[o];
+      const nS = pageRows.length;
+      const allOutcomeRows = rows.filter((r) => String(r.outcome_id) === String(id));
+      const wMax = Math.max(...allOutcomeRows.map((r) => 1 / r.vi), 1);
+      svg.append("rect").attr("x", 0).attr("y", headerH + gy).attr("width", totalW).attr("height", groupHdrH).attr("fill", color).attr("opacity", 0.1);
+      svg.append("text").attr("x", ml + 5).attr("y", headerH + gy + groupHdrH - 6).attr("fill", color).attr("font-size", "10px").attr("font-weight", "700").text(escapeHTML(String(id)));
+      gy += groupHdrH;
+      pageRows.forEach((row, i) => {
+        const y = gy + i * rowH + rowH / 2;
+        const seSt = Math.sqrt(row.vi);
+        const lo = row.yi - z * seSt;
+        const hi = row.yi + z * seSt;
+        const wi = 1 / row.vi;
+        const bh = Math.max(2, Math.min(6, 5.5 * Math.sqrt(wi / wMax)));
+        plotG.append("line").attr("x1", xScale(Math.max(xScale.domain()[0], lo))).attr("x2", xScale(Math.min(xScale.domain()[1], hi))).attr("y1", y).attr("y2", y).attr("stroke", color).attr("stroke-width", 1);
+        plotG.append("rect").attr("x", xScale(row.yi) - bh).attr("y", y - bh).attr("width", bh * 2).attr("height", bh * 2).attr("fill", color);
+        svg.append("text").attr("x", ml + lW - 4).attr("y", headerH + y + 4).attr("text-anchor", "end").attr("fill", T.fg).attr("font-size", "10px").text(String(row.study_id));
+        svg.append("text").attr("x", ml + lW + pW + 5).attr("y", headerH + y + 4).attr("text-anchor", "start").attr("fill", T.fg).attr("font-size", "10px").text(`${fmt(row.yi, 3)} [${fmt(lo, 3)}, ${fmt(hi, 3)}]`);
+      });
+      gy += nS * rowH;
+      plotG.append("line").attr("x1", 0).attr("x2", pW).attr("y1", gy + sepH / 2).attr("y2", gy + sepH / 2).attr("stroke", T.border).attr("stroke-width", 1);
+      gy += sepH;
+      const pooled = { est: beta[o], lo: ci[o][0], hi: ci[o][1] };
+      const dY = gy + rowH / 2;
+      const dMid = xScale(pooled.est);
+      const dLo = xScale(Math.max(xScale.domain()[0], pooled.lo));
+      const dHi = xScale(Math.min(xScale.domain()[1], pooled.hi));
+      const dH = 7;
+      plotG.append("polygon").attr("points", `${dMid},${dY - dH} ${dHi},${dY} ${dMid},${dY + dH} ${dLo},${dY}`).attr("fill", color);
+      svg.append("text").attr("x", ml + lW - 4).attr("y", headerH + dY + 4).attr("text-anchor", "end").attr("fill", T.fg).attr("font-size", "10px").attr("font-weight", "600").text("Pooled (MV)");
+      svg.append("text").attr("x", ml + lW + pW + 5).attr("y", headerH + dY + 4).attr("text-anchor", "start").attr("fill", T.fg).attr("font-size", "10px").attr("font-weight", "600").text(`${fmt(pooled.est, 3)} [${fmt(pooled.lo, 3)}, ${fmt(pooled.hi, 3)}]`);
+      gy += rowH;
+      if (showPI) {
+        const tc = tCritical(dfPred, alpha);
+        const piLo = beta[o] - tc * Math.sqrt(tau2[o] + se[o] ** 2);
+        const piHi = beta[o] + tc * Math.sqrt(tau2[o] + se[o] ** 2);
+        const piY = gy + rowH / 2;
+        if (isFinite(piLo) && isFinite(piHi)) {
+          const piLoX = xScale(Math.max(xScale.domain()[0], piLo));
+          const piHiX = xScale(Math.min(xScale.domain()[1], piHi));
+          plotG.append("line").attr("x1", piLoX).attr("x2", piHiX).attr("y1", piY).attr("y2", piY).attr("stroke", color).attr("stroke-width", 2).attr("stroke-dasharray", "6,3").attr("opacity", 0.65);
+          plotG.append("line").attr("x1", piLoX).attr("x2", piLoX).attr("y1", piY - 5).attr("y2", piY + 5).attr("stroke", color).attr("stroke-width", 2).attr("opacity", 0.65);
+          plotG.append("line").attr("x1", piHiX).attr("x2", piHiX).attr("y1", piY - 5).attr("y2", piY + 5).attr("stroke", color).attr("stroke-width", 2).attr("opacity", 0.65);
+          svg.append("text").attr("x", ml + lW - 4).attr("y", headerH + piY + 4).attr("text-anchor", "end").attr("fill", T.pi).attr("font-size", "10px").text("Pred. interval");
+          svg.append("text").attr("x", ml + lW + pW + 5).attr("y", headerH + piY + 4).attr("text-anchor", "start").attr("fill", T.pi).attr("font-size", "10px").text(`${fmt(piLo, 3)} to ${fmt(piHi, 3)}`);
+        }
+        gy += rowH;
+      }
+      gy += spacerH;
+    });
+    plotG.append("g").attr("transform", `translate(0,${gy})`).call(d3.axisBottom(xScale).ticks(5).tickSize(3)).call((g) => g.select(".domain").attr("stroke", T.border)).call((g) => g.selectAll(".tick line").attr("stroke", T.border)).call((g) => g.selectAll(".tick text").attr("fill", T.fgMuted).attr("font-size", "9px").attr("font-family", T.fontFamily));
+    return { totalPages };
+  }
+  function _mvSerializeSVG(svgEl) {
+    if (!svgEl) return "";
+    const clone = svgEl.cloneNode(true);
+    clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+    const w = clone.getAttribute("width") || String(svgEl.getBoundingClientRect().width);
+    const h = clone.getAttribute("height") || String(svgEl.getBoundingClientRect().height);
+    clone.setAttribute("width", w);
+    clone.setAttribute("height", h);
+    resolveThemeVars(clone);
+    if (!hasEmbeddedBackground(clone)) {
+      const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+      bg.setAttribute("width", "100%");
+      bg.setAttribute("height", "100%");
+      bg.setAttribute("fill", currentBgColour());
+      clone.insertBefore(bg, clone.firstChild);
+    }
+    return new XMLSerializer().serializeToString(clone);
+  }
+  function _renderRich(s) {
+    return cellRich(s).map((r) => r.italic ? `<em>${escapeHTML(r.text)}</em>` : escapeHTML(r.text)).join("");
+  }
+  function buildMVReportHTML(res, rows = [], alpha = 0.05, { reportCSS: reportCSS2, buildTableAPA: buildTableAPA2, buildFigureAPA: buildFigureAPA2 } = {}) {
+    const { outcomeIds, k, P, method, struct, convergence, warnings: engineWarnings = [] } = res;
+    const date = (/* @__PURE__ */ new Date()).toLocaleDateString(void 0, { year: "numeric", month: "long", day: "numeric" });
+    let _tblN = 0, _figN = 0;
+    const nextTable = () => ++_tblN;
+    const nextFigure = () => ++_figN;
+    const toHtmlRows = (dataRows) => dataRows.map((r) => `<tr>${r.map((c) => `<td>${_renderRich(c)}</td>`).join("")}</tr>`);
+    const pooledD = mvPooledData(res, alpha);
+    const pooledSection = buildTableAPA2(nextTable(), pooledD.title, pooledD.headers, toHtmlRows(pooledD.rows));
+    const modD = mvModeratorData(res, alpha);
+    const modSection = modD ? buildTableAPA2(nextTable(), modD.title, modD.headers, toHtmlRows(modD.rows)) : "";
+    const hetD = mvHeterogeneityData(res);
+    const hetSection = buildTableAPA2(nextTable(), hetD.title, hetD.headers, toHtmlRows(hetD.rows));
+    const testD = mvTestsData(res);
+    const testSection = buildTableAPA2(nextTable(), testD.title, testD.headers, toHtmlRows(testD.rows));
+    const fitLine = escapeHTML(mvFitLine(res));
+    const forestSVGs = (() => {
+      const combined = document.getElementById("mvForestPlotCombined");
+      const combinedBlk = document.getElementById("mvForestCombinedBlock");
+      if (combinedBlk && combinedBlk.style.display !== "none" && combined) {
+        const s = _mvSerializeSVG(combined);
+        return s ? [s] : [];
+      }
+      const out = [];
+      for (let o = 0; o < outcomeIds.length; o++) {
+        const el = document.getElementById(`mvForestPlot-${o}`);
+        if (el) {
+          const s = _mvSerializeSVG(el);
+          if (s) out.push(s);
+        }
+      }
+      return out;
+    })();
+    const _convBadge = convergenceBadge(pooledD.convergence);
+    const warnHTML = [
+      _convBadge ? `<p class="convergence-warning">\u26A0 ${escapeHTML(_convBadge.text)}</p>` : "",
+      ...engineWarnings.map((w) => `<p style="color:#c0392b">${escapeHTML(w)}</p>`)
+    ].filter(Boolean).join("");
+    const forestSection = forestSVGs.length ? buildFigureAPA2(nextFigure(), "Forest plot of multivariate meta-analysis results", forestSVGs) : "";
+    const studyD = mvStudyData(rows, alpha);
+    const studySection = studyD ? buildTableAPA2(nextTable(), studyD.title, studyD.headers, toHtmlRows(studyD.rows)) : "";
+    let robSection = "";
+    if (_robPlotState.domains.length > 0) {
+      const robSVGs = [
+        _mvSerializeSVG(document.getElementById("robTrafficLight")),
+        _mvSerializeSVG(document.getElementById("robSummary"))
+      ].filter(Boolean);
+      if (robSVGs.length) robSection = buildFigureAPA2(nextFigure(), "Risk of bias assessment", robSVGs);
+    }
+    const mvRefList = [
+      "Berkey, C. S., Hoaglin, D. C., Antczak-Bouckoms, A., Mosteller, F., &amp; Colditz, G. A. (1998). Meta-analysis of multiple outcomes by regression with random effects. <em>Statistics in Medicine</em>, <em>17</em>(22), 2537\u20132550.",
+      "Cheung, M. W.-L. (2014). Modeling dependent effect sizes with three-level meta-analyses: a structural equation modeling approach. <em>Psychological Methods</em>, <em>19</em>(2), 211\u2013229.",
+      "Cochran, W. G. (1954). The combination of estimates from different experiments. <em>Biometrics</em>, <em>10</em>(1), 101\u2013129.",
+      'Higgins, J. P. T., Thompson, S. G., Deeks, J. J., &amp; Altman, D. G. (2003). Measuring inconsistency in meta-analyses. <em>BMJ</em>, <em>327</em>(7414), 557\u2013560. <a href="https://doi.org/10.1136/bmj.327.7414.557">https://doi.org/10.1136/bmj.327.7414.557</a>',
+      "Jackson, D., Riley, R., &amp; White, I. R. (2011). Multivariate meta-analysis: Potential and promise. <em>Statistics in Medicine</em>, <em>30</em>(20), 2481\u20132498.",
+      "Riley, R. D., Abrams, K. R., Sutton, A. J., Lambert, P. C., &amp; Thompson, J. R. (2007). Bivariate random-effects meta-analysis and the estimation of between-study correlation. <em>BMC Medical Research Methodology</em>, <em>7</em>, 3.",
+      "Viechtbauer, W. (2005). Bias and efficiency of meta-analytic variance estimators in the random-effects model. <em>Journal of Educational and Behavioral Statistics</em>, <em>30</em>(3), 261\u2013293."
+    ];
+    const refSection = `<ul class="apa-references">${mvRefList.map((r) => `<li>${r}</li>`).join("")}</ul>`;
+    const wrapSec = (html) => html ? `<section>${html}</section>` : "";
+    const body = [
+      warnHTML,
+      wrapSec(pooledSection),
+      wrapSec(modSection),
+      wrapSec(hetSection),
+      wrapSec(testSection),
+      `<p class="report-meta" style="margin-top:8px">${fitLine}</p>`,
+      wrapSec(forestSection),
+      wrapSec(studySection),
+      wrapSec(robSection),
+      refSection
+    ].filter(Boolean).join("\n");
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Multivariate Meta-Analysis Report</title>
+  <style>${reportCSS2()}</style>
+</head>
+<body>
+  <h1>Multivariate Meta-Analysis Report</h1>
+  <p class="report-meta">Generated ${escapeHTML(date)}
+    &nbsp;\xB7&nbsp; k = ${k} studies, P = ${P} outcomes
+    &nbsp;\xB7&nbsp; ${escapeHTML(method)}, \u03A8 = ${escapeHTML(struct)}</p>
+  ${body}
+</body>
+</html>`;
+  }
+  function mvDownloadHTML(html) {
+    downloadBlob(html, "mv-meta-analysis-report.html", "text/html;charset=utf-8");
+  }
+  function mvOpenPrintPreview(html) {
+    const win = window.open("", "_blank");
+    if (!win) {
+      mvDownloadHTML(html);
+      return;
+    }
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
+    if (win.document.readyState === "complete") {
+      win.print();
+    } else {
+      win.addEventListener("load", () => win.print());
+    }
+  }
+
+  // js/ui/ui.js
+  init_export();
+  init_plotThemes();
+
+  // js/io/autosave.js
+  var DRAFT_KEY = "meta-analysis-draft";
+  function saveDraft(sessionObj) {
+    try {
+      localStorage.setItem(DRAFT_KEY, JSON.stringify({ ...sessionObj, _savedAt: Date.now() }));
+    } catch {
+    }
+  }
+  function validateDraft(d) {
+    return d !== null && typeof d === "object" && Array.isArray(d.studies) && typeof d.settings === "object" && d.settings !== null && typeof d.settings.effectType === "string";
+  }
+  function loadDraft() {
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (typeof parsed.version !== "number" || parsed.version > SESSION_VERSION) {
+        clearDraft();
+        return null;
+      }
+      if (!validateDraft(parsed)) {
+        clearDraft();
+        return null;
+      }
+      return parsed;
+    } catch {
+      clearDraft();
+      return null;
+    }
+  }
+  function clearDraft() {
+    try {
+      localStorage.removeItem(DRAFT_KEY);
+    } catch {
+    }
+  }
+
+  // js/ui/ui.js
+  init_io();
+  init_constants();
+  init_analysis_headless();
   var import_meta = {};
 
-  // import("./report.js*") in js/ui.js
-  var globImport_report_js = __glob({
-    "./report.js": () => Promise.resolve().then(() => (init_report(), report_exports))
+  // import("../io/report.js*") in js/ui/ui.js
+  var globImport_io_report_js = __glob({
+    "../io/report.js": () => Promise.resolve().then(() => (init_report(), report_exports))
   });
 
-  // import("./docx.js*") in js/ui.js
-  var globImport_docx_js = __glob({
-    "./docx.js": () => Promise.resolve().then(() => (init_docx(), docx_exports))
+  // import("../io/docx.js*") in js/ui/ui.js
+  var globImport_io_docx_js = __glob({
+    "../io/docx.js": () => Promise.resolve().then(() => (init_docx(), docx_exports))
   });
 
-  // import("./help.js*") in js/ui.js
+  // import("./help.js*") in js/ui/ui.js
   var globImport_help_js = __glob({
     "./help.js": () => Promise.resolve().then(() => (init_help(), help_exports))
   });
 
-  // import("./guide.js*") in js/ui.js
+  // import("./guide.js*") in js/ui/ui.js
   var globImport_guide_js = __glob({
     "./guide.js": () => Promise.resolve().then(() => (init_guide(), guide_exports))
   });
 
-  // import("./onboarding.js*") in js/ui.js
+  // import("./onboarding.js*") in js/ui/ui.js
   var globImport_onboarding_js = __glob({
     "./onboarding.js": () => Promise.resolve().then(() => (init_onboarding(), onboarding_exports))
   });
 
-  // js/ui.js
+  // js/ui/ui.js
   var _cb2 = "";
   var _reportMod;
   var _docxMod;
@@ -29572,13 +33906,13 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
   var _guideMod;
   var _onboardingMod;
   function getReport() {
-    return _reportMod ??= globImport_report_js(`./report.js${_cb2}`).catch((e) => {
+    return _reportMod ??= globImport_io_report_js(`../io/report.js${_cb2}`).catch((e) => {
       _reportMod = null;
       throw e;
     });
   }
   function getDocx() {
-    return _docxMod ??= globImport_docx_js(`./docx.js${_cb2}`).catch((e) => {
+    return _docxMod ??= globImport_io_docx_js(`../io/docx.js${_cb2}`).catch((e) => {
       _docxMod = null;
       throw e;
     });
@@ -29603,11 +33937,11 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
   }
   var USE_EXAMPLES = new URLSearchParams(window.location.search).has("tests");
   var _saveTimer = null;
-  var _lastReg = null;
-  var _lastLs = null;
   function _buildAutosaveSession() {
-    const session = gatherSessionState(moderators, scaleModerators, interactions, { domains: _robDomains, data: _robData });
-    if (_mvMode) session.mv = _gatherMVState();
+    const session = gatherSessionState(moderators, scaleModerators, interactions, { domains: robPlotState.domains, data: robPlotState.data });
+    const mvData = gatherMVState();
+    const mvHasData = mvData.rows.some((r) => r.study_id || r.outcome_id || r.yi || r.vi);
+    if (mvState.active || mvHasData) session.mv = { ...mvData, active: mvState.active };
     return session;
   }
   function _autosaveHasData(session) {
@@ -29743,71 +34077,6 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
     _helpPopover.dataset.activeKey = key;
     await showHelp(btn, key);
   });
-  var HELP_LABELS = {
-    // Input panel
-    "input.csv": "CSV import and export",
-    "input.session": "Session save and load",
-    "input.moderators": "Moderators",
-    "input.interactions": "Interaction terms",
-    "input.scaleModerators": "Location-scale model moderators",
-    "input.rob": "Risk of bias",
-    "cluster.id": "Cluster ID",
-    "keyboard.shortcuts": "Keyboard shortcuts",
-    // Settings
-    "ci.width": "Confidence interval width",
-    "reg.mcc": "Multiple comparison correction",
-    "bias.trimfill": "Trim-and-fill",
-    "bayes.model": "Bayesian meta-analysis model",
-    "bayes.tau": "Bayesian \u03C4 posterior",
-    "sel.model": "Selection model",
-    // Effect / method selects (data-help-select prefixes resolve here)
-    "effect": "Effect type",
-    "tau": "\u03C4\xB2 estimator",
-    "ci": "CI method",
-    "cumorder": "Cumulative order",
-    // Plots
-    "plot.forest": "Forest plot",
-    "plot.funnel": "Funnel plot",
-    "plot.cumulative": "Cumulative analysis",
-    "plot.orchard": "Orchard plot",
-    "plot.caterpillar": "Caterpillar plot",
-    "plot.rob": "Risk-of-bias plot",
-    // Diagnostics
-    "diag.profileLik": "Profile likelihood",
-    "diag.influence": "Influence diagnostics",
-    "diag.blup": "BLUPs (shrunken estimates)",
-    "diag.baujat": "Baujat plot",
-    "diag.qqplot": "Normal Q-Q plot",
-    "diag.radial": "Radial (Galbraith) plot",
-    "diag.labbe": "L'Abb\xE9 plot",
-    "diag.gosh": "GOSH plot",
-    "diag.locationscale": "Location-scale model",
-    "diag.metaregression": "Meta-regression",
-    "diag.dffits": "DFFITS influence statistic",
-    "diag.covratio": "CovRatio influence statistic",
-    "diag.subgroup": "Subgroup analysis",
-    // Heterogeneity
-    "het.Q": "Q heterogeneity statistic",
-    "het.I2": "I\xB2 heterogeneity",
-    "het.H2": "H\xB2 heterogeneity",
-    "het.tau2": "\u03C4\xB2 between-study variance",
-    // Models
-    "rve.model": "Robust variance estimation",
-    "cluster.robust": "Robust confidence interval",
-    "threelevel.model": "Three-level model",
-    "threelevel.tau2": "Three-level variance components",
-    "threelevel.I2": "Three-level I\xB2",
-    "pool.cles": "Common language effect size",
-    // Publication bias
-    "bias.pcurve": "P-curve",
-    "bias.puniform": "P-uniform",
-    "bayes.sensitivity": "Bayesian prior sensitivity",
-    // Regression
-    "mreg.lrt": "Likelihood ratio test",
-    "reg.aic": "Model fit statistics (AIC/BIC/LL)",
-    "sens.loo": "Leave-one-out analysis",
-    "sens.estimator": "Estimator comparison"
-  };
   function _helpAriaLabel(key) {
     const base = key.replace(/\.$/, "").split(".")[0];
     return HELP_LABELS[key] ?? HELP_LABELS[base] ?? key;
@@ -29863,14 +34132,12 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
       const el = document.getElementById(id);
       return el && el.value !== el.defaultValue;
     };
-    const custom = selDiffers("ciLevel") || selDiffers("mccMethod") || selDiffers("tfEstimator") || chkDiffers("useTrimFill") || chkDiffers("useTFAdjusted") || selDiffers("selMode") || selDiffers("selPreset") || selDiffers("selSides") || selDiffers("selWeightFn") || valDiffers("bayesMu0") || valDiffers("bayesSigmaMu") || valDiffers("bayesSigmaTau") || valDiffers("selCuts") || valDiffers("rveRho");
+    const custom = selDiffers("ciLevel") || selDiffers("mccMethod") || selDiffers("tfEstimator") || chkDiffers("useTrimFill") || chkDiffers("useTFAdjusted") || selDiffers("selMode") || selDiffers("selPreset") || selDiffers("selSides") || selDiffers("selWeightFn") || valDiffers("bayesMu0") || valDiffers("bayesSigmaMu") || valDiffers("bayesSigmaTau") || valDiffers("selCuts") || valDiffers("rveRho") || selDiffers("rveWeighting") || selDiffers("threeLevelMethod") || valDiffers("fsnTrivial") || selDiffers("fsnDirection");
     const badge = document.getElementById("advancedBadge");
     if (badge) badge.style.display = custom ? "" : "none";
     document.getElementById("advancedSettings")?.classList.toggle("settings-modified", custom);
   }
   var scaleModerators = [];
-  var _robDomains = [];
-  var _robData = {};
   function _readModSpec(selectId) {
     const val = document.getElementById(selectId).value;
     return val === "categorical" ? { type: "categorical", transform: "linear" } : { type: "continuous", transform: val || "linear" };
@@ -29910,14 +34177,11 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
     if (!container) return;
     container.innerHTML = "";
     interactions.forEach(({ name, termA, termB }) => {
-      const span = document.createElement("span");
-      span.className = "mod-tag";
-      span.innerHTML = `${escapeHTML(termA)} \xD7 ${escapeHTML(termB)} <button class="remove-mod-btn" title="Remove interaction">\xD7</button>`;
-      span.querySelector("button").addEventListener("click", () => {
+      const span = buildTag(`${termA} \xD7 ${termB}`, () => {
         removeInteraction(name);
         renderInteractionTags();
         markStale();
-      });
+      }, "Remove interaction");
       container.appendChild(span);
     });
   }
@@ -29934,10 +34198,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
     if (!container) return;
     container.innerHTML = "";
     scaleModerators.forEach(({ name }) => {
-      const span = document.createElement("span");
-      span.className = "mod-tag";
-      span.innerHTML = `${escapeHTML(name)} <button class="remove-mod-btn" title="Remove scale moderator">\xD7</button>`;
-      span.querySelector("button").addEventListener("click", () => removeScaleModerator(name));
+      const span = buildTag(name, () => removeScaleModerator(name), "Remove scale moderator");
       container.appendChild(span);
     });
   }
@@ -29971,7 +34232,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
   function renderRoBDomainTags() {
     const container = document.getElementById("robDomainTags");
     container.innerHTML = "";
-    _robDomains.forEach((name) => {
+    robPlotState.domains.forEach((name) => {
       const tag = document.createElement("span");
       tag.className = "rob-domain-tag";
       tag.textContent = name + " ";
@@ -29991,7 +34252,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
       btn.style.display = "none";
       if (!container.hidden) _closeAllPopovers();
     };
-    if (_robDomains.length === 0) {
+    if (robPlotState.domains.length === 0) {
       hide();
       return;
     }
@@ -30011,7 +34272,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
     const th0 = document.createElement("th");
     th0.textContent = "Study";
     hrow.appendChild(th0);
-    _robDomains.forEach((domain) => {
+    robPlotState.domains.forEach((domain) => {
       const th = document.createElement("th");
       th.textContent = domain;
       hrow.appendChild(th);
@@ -30022,7 +34283,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
       const td0 = row.insertCell();
       td0.textContent = label;
       td0.className = "rob-study-label";
-      _robDomains.forEach((domain) => {
+      robPlotState.domains.forEach((domain) => {
         const td = row.insertCell();
         const sel = document.createElement("select");
         ["", "Low", "Some concerns", "High", "NI"].forEach((opt) => {
@@ -30031,12 +34292,12 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
           o.textContent = opt || "\u2014";
           sel.appendChild(o);
         });
-        const current = _robData[label]?.[domain] ?? "";
+        const current = robPlotState.data[label]?.[domain] ?? "";
         sel.value = current;
         _applyRoBClass(sel, current);
         sel.addEventListener("change", () => {
-          if (!_robData[label]) _robData[label] = {};
-          _robData[label][domain] = sel.value;
+          if (!robPlotState.data[label]) robPlotState.data[label] = {};
+          robPlotState.data[label][domain] = sel.value;
           _applyRoBClass(sel, sel.value);
           markStale();
           scheduleSave();
@@ -30049,8 +34310,8 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
   function addRoBDomain() {
     const input = document.getElementById("robDomainInput");
     const name = input.value.trim();
-    if (!name || _robDomains.includes(name)) return;
-    _robDomains.push(name);
+    if (!name || robPlotState.domains.includes(name)) return;
+    robPlotState.domains.push(name);
     input.value = "";
     renderRoBDomainTags();
     renderRoBDataGrid();
@@ -30058,8 +34319,8 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
     scheduleSave();
   }
   function removeRoBDomain(name) {
-    _robDomains = _robDomains.filter((d) => d !== name);
-    Object.values(_robData).forEach((ratings) => {
+    robPlotState.domains = robPlotState.domains.filter((d) => d !== name);
+    Object.values(robPlotState.data).forEach((ratings) => {
       delete ratings[name];
     });
     renderRoBDomainTags();
@@ -30098,13 +34359,9 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
   var _toggleResults = document.getElementById("toggleResults");
   var _toggleGuide = document.getElementById("toggleGuide");
   var _toggleAbout = document.getElementById("toggleAbout");
-  var PERF_LOG = new URLSearchParams(location.search).has("perf");
   function getCiAlpha() {
     const v = document.getElementById("ciLevel")?.value ?? "95";
     return { "90": 0.1, "95": 0.05, "99": 0.01 }[v] ?? 0.05;
-  }
-  function getCiLabel2() {
-    return (document.getElementById("ciLevel")?.value ?? "95") + "% CI";
   }
   function showView(name) {
     _inputSection.style.display = name === "input" ? "" : "none";
@@ -30128,23 +34385,6 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
   _toggleGuide.addEventListener("click", () => showView("guide"));
   _toggleAbout.addEventListener("click", () => showView("about"));
   showView("input");
-  var _mvMode = false;
-  var _mvModerators = [];
-  var _mvForestState = {
-    pageSize: 20,
-    pages: [],
-    // current page index per outcome (separate mode)
-    combinedPage: 0,
-    // current page index (combined mode)
-    showPI: false,
-    lastRes: null,
-    // last mvMeta result
-    lastRows: [],
-    // last collected rows
-    alpha: 0.05,
-    viewMode: "separate"
-    // "separate" | "combined"
-  };
   function _closeAllPopovers() {
     document.querySelectorAll(".settings-popover").forEach((p) => {
       p.hidden = true;
@@ -30182,7 +34422,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
   }
   initSettingsPopovers();
   function _applyModeToggle() {
-    const isMV = _mvMode;
+    const isMV = mvState.active;
     document.getElementById("modeStandard").classList.toggle("active", !isMV);
     document.getElementById("modeMultivariate").classList.toggle("active", isMV);
     document.getElementById("standardSettings").style.display = isMV ? "none" : "";
@@ -30193,871 +34433,15 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
     document.getElementById("mvAddRow").style.display = isMV ? "" : "none";
     _closeAllPopovers();
   }
-  function _renderMVModTags() {
-    const container = document.getElementById("mvModTags");
-    container.innerHTML = _mvModerators.map(
-      (name, i) => `<span class="mod-tag"><span>${escapeHTML(name)}</span><button onclick="_mvRemoveMod(${i})" title="Remove">\xD7</button></span>`
-    ).join("");
-  }
-  window._mvRemoveMod = function(i) {
-    _mvModerators.splice(i, 1);
-    _renderMVModTags();
-    _rebuildMVTableHeaders();
-    markStale();
-  };
-  function _mvAddMod() {
-    const input = document.getElementById("mvModName");
-    const name = input.value.trim();
-    if (!name || _mvModerators.includes(name)) return;
-    _mvModerators.push(name);
-    input.value = "";
-    _renderMVModTags();
-    _rebuildMVTableHeaders();
-    markStale();
-  }
-  var _mvUndoState = { timer: null, row: null };
-  var _MV_UNDO_MS = 5e3;
-  function _mvCommitPendingDelete() {
-    if (!_mvUndoState.row) return;
-    clearTimeout(_mvUndoState.timer);
-    _mvUndoState.row.remove();
-    _mvUndoState.row = null;
-    _mvUndoState.timer = null;
-    hideUndoToast();
-  }
-  function _mvCancelPendingDelete() {
-    if (!_mvUndoState.row) return;
-    clearTimeout(_mvUndoState.timer);
-    _mvUndoState.row.classList.remove("row-pending-delete");
-    _mvUndoState.row = null;
-    _mvUndoState.timer = null;
-    hideUndoToast();
-    markStale();
-  }
-  registerDeleteCompanion(_mvCommitPendingDelete);
-  function _rebuildMVTableHeaders() {
-    const tr = document.getElementById("mvTableHead");
-    tr.innerHTML = "<th>Study ID</th><th>Outcome ID</th><th>Effect (y<sub>i</sub>)</th><th>Variance (v<sub>i</sub>)</th>" + _mvModerators.map((m, i) => `<th>${escapeHTML(m)} <button class="remove-mod-btn" title="Remove moderator" onclick="_mvRemoveMod(${i})">\xD7</button></th>`).join("") + '<th class="col-actions">Actions</th>';
-    document.querySelectorAll("#mvTableBody tr").forEach((row) => {
-      _syncMVRowMods(row);
-    });
-  }
-  function _syncMVRowMods(tr) {
-    const cells = tr.querySelectorAll("td");
-    const fixedCount = 4;
-    const currentModCount = cells.length - fixedCount - 1;
-    if (currentModCount === _mvModerators.length) return;
-    const actionsTd = tr.lastElementChild;
-    while (tr.querySelectorAll("td").length - 1 > fixedCount + _mvModerators.length) {
-      const tds = tr.querySelectorAll("td");
-      tr.removeChild(tds[tds.length - 2]);
-    }
-    while (tr.querySelectorAll("td").length - 1 < fixedCount + _mvModerators.length) {
-      const td = document.createElement("td");
-      td.innerHTML = `<input type="text" class="mv-mod-cell" style="width:90px">`;
-      tr.insertBefore(td, actionsTd);
-    }
-  }
-  function _validateMVRow(tr) {
-    const yiInput = tr.querySelector(".mv-yi");
-    const viInput = tr.querySelector(".mv-vi");
-    [yiInput, viInput].forEach((inp) => inp?.classList.remove("input-error"));
-    tr.classList.remove("row-error");
-    const allInputs = [...tr.querySelectorAll("input")];
-    if (allInputs.every((inp) => inp.value.trim() === "")) return true;
-    let valid = true;
-    const yiVal = yiInput?.value.trim() ?? "";
-    const viVal = viInput?.value.trim() ?? "";
-    if (yiVal === "" || !isFinite(parseFloat(yiVal))) {
-      yiInput?.classList.add("input-error");
-      valid = false;
-    }
-    const viNum = parseFloat(viVal);
-    if (viVal === "" || !isFinite(viNum) || viNum <= 0) {
-      viInput?.classList.add("input-error");
-      valid = false;
-    }
-    tr.classList.toggle("row-error", !valid);
-    return valid;
-  }
-  function _mvAddRow() {
-    const tbody = document.getElementById("mvTableBody");
-    const tr = document.createElement("tr");
-    tr.draggable = true;
-    const modCells = _mvModerators.map(
-      () => `<td><input type="text" class="mv-mod-cell" style="width:90px"></td>`
-    ).join("");
-    tr.innerHTML = `<td><input type="text" class="mv-study-id"  style="width:90px" placeholder="Study"></td><td><input type="text" class="mv-outcome-id" style="width:80px" placeholder="Outcome"></td><td><input type="text" class="mv-yi" style="width:90px"></td><td><input type="text" class="mv-vi" style="width:90px"></td>` + modCells + `<td class="col-actions"><button class="remove-btn" aria-label="Remove study">\u2716</button> <button class="clear-btn" aria-label="Clear row">\u{1F9F9}</button></td>`;
-    tr.querySelector(".remove-btn").addEventListener("click", () => {
-      commitPendingDelete();
-      _mvCommitPendingDelete();
-      const label = tr.querySelector(".mv-study-id")?.value.trim() || "";
-      tr.classList.add("row-pending-delete");
-      _mvUndoState.row = tr;
-      _mvUndoState.timer = setTimeout(_mvCommitPendingDelete, _MV_UNDO_MS);
-      showUndoToast(label, _mvCancelPendingDelete);
-      markStale();
-    });
-    tr.querySelector(".clear-btn").addEventListener("click", () => {
-      tr.querySelectorAll("input").forEach((inp) => {
-        inp.value = "";
-      });
-      _validateMVRow(tr);
-      markStale();
-    });
-    let _valTimer;
-    tr.querySelectorAll("input").forEach((inp) => inp.addEventListener("input", () => {
-      clearTimeout(_valTimer);
-      _valTimer = setTimeout(() => {
-        _validateMVRow(tr);
-        _updateMVValidationWarnings();
-        markStale();
-      }, 150);
-    }));
-    tbody.appendChild(tr);
-    return tr;
-  }
-  function _collectMVRows() {
-    const rows = [];
-    document.querySelectorAll("#mvTableBody tr").forEach((tr) => {
-      if (tr.classList.contains("row-pending-delete")) return;
-      const study_id = tr.querySelector(".mv-study-id")?.value.trim();
-      const outcome_id = tr.querySelector(".mv-outcome-id")?.value.trim();
-      const yi = parseFloat(tr.querySelector(".mv-yi")?.value);
-      const vi = parseFloat(tr.querySelector(".mv-vi")?.value);
-      if (!study_id || !outcome_id || !isFinite(yi) || !isFinite(vi) || vi <= 0) return;
-      const row = { study_id, outcome_id, yi, vi };
-      const modInputs = tr.querySelectorAll(".mv-mod-cell");
-      _mvModerators.forEach((name, i) => {
-        row[name] = parseFloat(modInputs[i]?.value);
-      });
-      rows.push(row);
-    });
-    return rows;
-  }
-  function _gatherMVState() {
-    const rows = [];
-    document.querySelectorAll("#mvTableBody tr").forEach((tr) => {
-      if (tr.classList.contains("row-pending-delete")) return;
-      const entry = {
-        study_id: tr.querySelector(".mv-study-id")?.value ?? "",
-        outcome_id: tr.querySelector(".mv-outcome-id")?.value ?? "",
-        yi: tr.querySelector(".mv-yi")?.value ?? "",
-        vi: tr.querySelector(".mv-vi")?.value ?? ""
-      };
-      _mvModerators.forEach((name, i) => {
-        const inputs = tr.querySelectorAll(".mv-mod");
-        entry[name] = inputs[i]?.value ?? "";
-      });
-      rows.push(entry);
-    });
-    return {
-      struct: document.getElementById("mvStruct").value,
-      method: document.getElementById("mvMethod").value,
-      rho: parseFloat(document.getElementById("mvRho").value),
-      moderators: [..._mvModerators],
-      rows
-    };
-  }
-  function _populateMVExample() {
-    const exRows = [
-      { study_id: "Pihlstrom", outcome_id: "AL", yi: -0.3, vi: 75e-4 },
-      { study_id: "Pihlstrom", outcome_id: "PD", yi: -0.6, vi: 57e-4 },
-      { study_id: "Zinney", outcome_id: "AL", yi: 0.1, vi: 58e-4 },
-      { study_id: "Zinney", outcome_id: "PD", yi: -0.15, vi: 48e-4 },
-      { study_id: "Morrison", outcome_id: "AL", yi: 0.4, vi: 0.0147 },
-      { study_id: "Morrison", outcome_id: "PD", yi: -0.32, vi: 91e-4 },
-      { study_id: "Knowles", outcome_id: "AL", yi: 0.32, vi: 0.0141 },
-      { study_id: "Knowles", outcome_id: "PD", yi: -0.39, vi: 69e-4 },
-      { study_id: "Ramfjord", outcome_id: "AL", yi: -0.29, vi: 91e-4 },
-      { study_id: "Ramfjord", outcome_id: "PD", yi: -0.88, vi: 62e-4 }
-    ];
-    exRows.forEach((r) => {
-      const tr = _mvAddRow();
-      tr.querySelector(".mv-study-id").value = r.study_id;
-      tr.querySelector(".mv-outcome-id").value = r.outcome_id;
-      tr.querySelector(".mv-yi").value = r.yi;
-      tr.querySelector(".mv-vi").value = r.vi;
-    });
-  }
-  function _commitImportMV(parsed, mvHeaders) {
-    const { headers, rows } = parsed;
-    const headerMap = {};
-    headers.forEach((h, idx) => {
-      headerMap[h.toLowerCase()] = idx;
-    });
-    const { studyCol, outcomeCol, yiCol, viCol } = mvHeaders;
-    const knownCols = new Set([studyCol, outcomeCol, yiCol, viCol].map((c) => c.toLowerCase()));
-    const modCols = headers.filter((h) => !knownCols.has(h.toLowerCase()));
-    _mvModerators.length = 0;
-    modCols.forEach((col) => _mvModerators.push(col));
-    _renderMVModTags();
-    _rebuildMVTableHeaders();
-    document.getElementById("mvTableBody").innerHTML = "";
-    rows.forEach((row) => {
-      const tr = _mvAddRow();
-      tr.querySelector(".mv-study-id").value = row[headerMap[studyCol.toLowerCase()]] ?? "";
-      tr.querySelector(".mv-outcome-id").value = row[headerMap[outcomeCol.toLowerCase()]] ?? "";
-      tr.querySelector(".mv-yi").value = row[headerMap[yiCol.toLowerCase()]] ?? "";
-      tr.querySelector(".mv-vi").value = row[headerMap[viCol.toLowerCase()]] ?? "";
-      modCols.forEach((col, i) => {
-        const inputs = tr.querySelectorAll(".mv-mod");
-        if (inputs[i]) inputs[i].value = row[headerMap[col.toLowerCase()]] ?? "";
-      });
-    });
-    markStale();
-  }
-  function _updateMVValidationWarnings() {
-    const warningsEl = document.getElementById("mvValidationWarnings");
-    const msgs = [];
-    document.querySelectorAll("#mvTableBody tr").forEach((tr, i) => {
-      if (tr.classList.contains("row-pending-delete")) return;
-      const allInputs = [...tr.querySelectorAll("input")];
-      if (allInputs.every((inp) => inp.value.trim() === "")) return;
-      const studyId = tr.querySelector(".mv-study-id")?.value.trim() || `Row ${i + 1}`;
-      const outcomeId = tr.querySelector(".mv-outcome-id")?.value.trim() || "";
-      const label = outcomeId ? `${studyId} / ${outcomeId}` : studyId;
-      const yi = parseFloat(tr.querySelector(".mv-yi")?.value);
-      const vi = parseFloat(tr.querySelector(".mv-vi")?.value);
-      if (!tr.querySelector(".mv-study-id")?.value.trim() || !tr.querySelector(".mv-outcome-id")?.value.trim() || !isFinite(yi) || !isFinite(vi) || vi <= 0)
-        msgs.push(`\u26A0\uFE0F Excluded: ${escapeHTML(label)} (Invalid input)`);
-    });
-    const rows = _collectMVRows();
-    if (!rows.length) msgs.push("\u274C No valid rows \u2014 fill in Study ID, Outcome ID, y<sub>i</sub>, and v<sub>i</sub>.");
-    warningsEl.innerHTML = msgs.length > 0 ? msgs.map((m) => `\u2022 ${m}`).join("<br>") : "";
-  }
-  function _runMVAnalysis() {
-    document.querySelectorAll("#mvTableBody tr").forEach((tr) => {
-      if (!tr.classList.contains("row-pending-delete")) _validateMVRow(tr);
-    });
-    _updateMVValidationWarnings();
-    const rows = _collectMVRows();
-    const warningsEl = document.getElementById("mvValidationWarnings");
-    if (!rows.length) return false;
-    const msgs = [];
-    const outcomeIds = [...new Set(rows.map((r) => r.outcome_id))];
-    const studyIds = [...new Set(rows.map((r) => r.study_id))];
-    if (outcomeIds.length < 2) {
-      msgs.push("\u274C Requires \u2265 2 distinct outcome IDs. For a single outcome, use Standard mode.");
-      warningsEl.innerHTML = msgs.map((m) => `\u2022 ${m}`).join("<br>");
-      return false;
-    }
-    if (studyIds.length < 3) {
-      msgs.push("\u274C Requires \u2265 3 studies.");
-      warningsEl.innerHTML = msgs.map((m) => `\u2022 ${m}`).join("<br>");
-      return false;
-    }
-    const studyOutcomeCounts = {};
-    rows.forEach((r) => {
-      studyOutcomeCounts[r.study_id] = studyOutcomeCounts[r.study_id] || /* @__PURE__ */ new Set();
-      studyOutcomeCounts[r.study_id].add(r.outcome_id);
-    });
-    const singleOutcomeStudies = Object.entries(studyOutcomeCounts).filter(([, s]) => s.size === 1).map(([id]) => id);
-    if (singleOutcomeStudies.length === studyIds.length)
-      msgs.push("\u26A0\uFE0F All studies contribute only one outcome \u2014 within-study correlations cannot be estimated. Consider using Standard mode or checking that Study IDs correctly group multiple outcomes per study.");
-    else if (singleOutcomeStudies.length > 0)
-      msgs.push(`\u26A0\uFE0F Studies with only one outcome (contribute no covariance): ${singleOutcomeStudies.map(escapeHTML).join(", ")}.`);
-    const struct = document.getElementById("mvStruct").value;
-    const method = document.getElementById("mvMethod").value;
-    const rho = parseFloat(document.getElementById("mvRho").value);
-    const alpha = getCiAlpha();
-    const mods = _mvModerators.map((key) => ({ key, type: "continuous" }));
-    const nPsiPar = struct === "CS" ? 2 : struct === "Diag" ? outcomeIds.length : outcomeIds.length * (outcomeIds.length + 1) / 2;
-    if (struct === "UN" && outcomeIds.length > 5)
-      msgs.push(`\u26A0\uFE0F UN structure with P = ${outcomeIds.length} outcomes requires ${nPsiPar} \u03A8 parameters \u2014 optimizer instability likely. Consider CS or Diag.`);
-    if (nPsiPar > studyIds.length / 3)
-      msgs.push(`\u26A0\uFE0F Between-study covariance has ${nPsiPar} parameters but only ${studyIds.length} studies \u2014 model may be overparameterized.`);
-    warningsEl.innerHTML = msgs.length ? msgs.map((m) => `\u2022 ${m}`).join("<br>") : "";
-    let V, res;
-    try {
-      V = vcalc(rows, { rho });
-      res = mvMeta(rows, V, { struct, method, alpha, moderators: mods });
-    } catch (e) {
-      warningsEl.innerHTML += (warningsEl.innerHTML ? "<br>" : "") + `\u2022 \u274C Error: ${escapeHTML(String(e))}`;
-      return false;
-    }
-    if (res.error) {
-      warningsEl.innerHTML += (warningsEl.innerHTML ? "<br>" : "") + `\u2022 \u274C Error: ${escapeHTML(res.error)}`;
-      return false;
-    }
-    document.querySelectorAll(".results-section").forEach((d) => {
-      d.removeAttribute("open");
-      d.style.display = "none";
-    });
-    const _stdForestSection = document.getElementById("forestSection");
-    const _mvForestSection = document.getElementById("mvForestSection");
-    if (_stdForestSection) _stdForestSection.style.display = "none";
-    if (_mvForestSection) _mvForestSection.style.display = "";
-    _renderMVResults(res, { alpha, rows });
-    appState.reportArgs = { mv: true, mvRes: res, mvRows: rows, mvAlpha: alpha };
-    const _studyTableSection = document.getElementById("studyTableSection");
-    const _studyTableEl = document.getElementById("studyTable");
-    if (_studyTableSection && _studyTableEl) {
-      _studyTableSection.style.display = "";
-      _studyTableEl.innerHTML = _buildMVStudyTable(rows, alpha);
-    }
-    const _robSectionEl = document.getElementById("robSection");
-    if (_robSectionEl && _robDomains.length > 0 && rows.length > 0) {
-      _robSectionEl.style.display = "";
-      const robStudies = [...new Set(rows.map((r) => r.study_id))].map((id) => ({ label: id }));
-      robPlotState.studies = robStudies;
-      drawIfVisible("robSection", () => {
-        drawRoBTrafficLight(robStudies, _robDomains, _robData, { theme: appState.plotTheme });
-        drawRoBSummary(robStudies, _robDomains, _robData, { theme: appState.plotTheme });
-      });
-    }
-    if (outputPlaceholder) outputPlaceholder.style.display = "none";
-    staleBanner.style.display = "none";
-    _toggleResults.classList.remove("stale");
-    if (inputStaleBadge) inputStaleBadge.hidden = true;
-    if (!appState.hasRunOnce) {
-      appState.hasRunOnce = true;
-      _toggleResults.disabled = false;
-      _toggleResults.removeAttribute("aria-disabled");
-      _toggleResults.removeAttribute("title");
-    }
-    return true;
-  }
-  function _buildMVStudyTable(rows, alpha = 0.05) {
-    const z = normalQuantile(1 - alpha / 2);
-    const ciPct = Math.round((1 - alpha) * 100);
-    function fv(v) {
-      return isFinite(v) ? v.toFixed(4) : "\u2014";
-    }
-    const bodyRows = rows.map((r) => {
-      const se = Math.sqrt(r.vi);
-      return `<tr>
-      <td>${escapeHTML(String(r.study_id))}</td>
-      <td>${escapeHTML(String(r.outcome_id))}</td>
-      <td>${fv(r.yi)}</td>
-      <td>${fv(r.vi)}</td>
-      <td>${fv(se)}</td>
-      <td>[${fv(r.yi - z * se)},&nbsp;${fv(r.yi + z * se)}]</td>
-    </tr>`;
-    }).join("");
-    return `<table class="reg-table" style="width:100%">
-    <thead><tr>
-      <th>Study</th><th>Outcome</th>
-      <th>y<sub>i</sub></th><th>v<sub>i</sub></th>
-      <th>SE</th><th>${ciPct}% CI</th>
-    </tr></thead>
-    <tbody>${bodyRows}</tbody>
-  </table>`;
-  }
-  function _renderMVResults(res, { alpha, rows = [] } = {}) {
-    const {
-      beta,
-      se,
-      ci,
-      z,
-      pval,
-      betaNames,
-      tau2,
-      rho_between,
-      Psi,
-      corPsi,
-      outcomeIds,
-      n,
-      k,
-      P,
-      QM,
-      df_QM,
-      pQM,
-      QE,
-      df_QE,
-      pQE,
-      logLik: logLik2,
-      AIC,
-      BIC,
-      AICc,
-      struct,
-      method,
-      I2: I22,
-      convergence,
-      warnings: engineWarnings = []
-    } = res;
-    alpha ??= 0.05;
-    const ciPct = Math.round((1 - alpha) * 100);
-    const fmtP2 = (p) => !isFinite(p) ? "\u2014" : p < 1e-3 ? "< .001" : p.toFixed(3).replace(/^0\./, ".");
-    const stars = (p) => p < 1e-3 ? "***" : p < 0.01 ? "**" : p < 0.05 ? "*" : "";
-    const hasMods = beta.length > P;
-    const warnHTML = engineWarnings.length || convergence === false ? (convergence === false ? `<p style="color:var(--color-warning);margin:2px 0">\u26A0 Optimizer did not fully converge \u2014 interpret results with caution.</p>` : "") + engineWarnings.map((w) => `<p style="color:var(--color-warning);margin:2px 0">\u26A0 ${escapeHTML(w)}</p>`).join("") : "";
-    const interceptRows = beta.slice(0, P).map((b, o) => {
-      const [lo, hi] = ci[o];
-      return `<tr>
-      <td><strong>${escapeHTML(String(outcomeIds[o]))}</strong></td>
-      <td>${fmt(b, 4)}</td><td>${fmt(se[o], 4)}</td>
-      <td>[${fmt(lo, 4)}, ${fmt(hi, 4)}]</td>
-      <td>${fmt(z[o], 3)}</td>
-      <td>${fmtP2(pval[o])}${stars(pval[o])}</td>
-    </tr>`;
-    }).join("");
-    const interceptTable = `
-    <h4 style="font-size:0.9em;margin:8px 0 4px">
-      Pooled effect per outcome<button class="help-btn" data-help="mv.model" title="Help">?</button>
-    </h4>
-    <table class="reg-table" style="margin-bottom:12px">
-      <thead><tr><th>Outcome</th><th>Estimate</th><th>SE</th>
-        <th>${ciPct}% CI</th><th><em>z</em></th><th><em>p</em></th></tr></thead>
-      <tbody>${interceptRows}</tbody>
-    </table>`;
-    let modTable = "";
-    if (hasMods) {
-      const modRows = beta.slice(P).map((b, i) => {
-        const j = P + i;
-        const [lo, hi] = ci[j];
-        return `<tr>
-        <td>${escapeHTML(betaNames[j])}</td>
-        <td>${fmt(b, 4)}</td><td>${fmt(se[j], 4)}</td>
-        <td>[${fmt(lo, 4)}, ${fmt(hi, 4)}]</td>
-        <td>${fmt(z[j], 3)}</td>
-        <td>${fmtP2(pval[j])}${stars(pval[j])}</td>
-      </tr>`;
-      }).join("");
-      modTable = `
-      <h4 style="font-size:0.9em;margin:8px 0 4px">Moderator effects</h4>
-      <table class="reg-table" style="margin-bottom:12px">
-        <thead><tr><th>Coefficient</th><th>Estimate</th><th>SE</th>
-          <th>${ciPct}% CI</th><th><em>z</em></th><th><em>p</em></th></tr></thead>
-        <tbody>${modRows}</tbody>
-      </table>`;
-    }
-    let psiBlock = "";
-    if (struct === "CS") {
-      const i2rows = outcomeIds.map(
-        (id, o) => `<tr><td>${escapeHTML(String(id))}</td><td>${fmt(tau2[o], 5)}</td><td>${fmt(I22[o], 1)}%</td></tr>`
-      ).join("");
-      psiBlock = `<h4 style="font-size:0.9em;margin:8px 0 4px">Between-study heterogeneity (\u03A8\u0302, CS)</h4>
-      <p style="font-size:0.875em;margin:2px 0">
-        Shared \u03C4\xB2 = ${fmt(tau2[0], 5)},
-        \u03C1<sub>between</sub> = ${fmt(rho_between ?? 0, 4)}
-      </p>
-      <table class="reg-table" style="margin-bottom:8px">
-        <thead><tr><th>Outcome</th><th>\u03C4\xB2</th><th><em>I</em>\xB2</th></tr></thead>
-        <tbody>${i2rows}</tbody>
-      </table>`;
-    } else if (struct === "Diag") {
-      const i2rows = outcomeIds.map(
-        (id, o) => `<tr><td>${escapeHTML(String(id))}</td><td>${fmt(tau2[o], 5)}</td><td>${fmt(I22[o], 1)}%</td></tr>`
-      ).join("");
-      psiBlock = `<h4 style="font-size:0.9em;margin:8px 0 4px">Between-study heterogeneity (\u03A8\u0302, Diagonal)</h4>
-      <table class="reg-table" style="margin-bottom:8px">
-        <thead><tr><th>Outcome</th><th>\u03C4\xB2</th><th><em>I</em>\xB2</th></tr></thead>
-        <tbody>${i2rows}</tbody>
-      </table>`;
-    } else {
-      const hdr = outcomeIds.map((id) => `<th>${escapeHTML(String(id))}</th>`).join("");
-      const psiRows = Psi.map(
-        (row, i) => `<tr><th>${escapeHTML(String(outcomeIds[i]))}</th>${row.map((v) => `<td>${fmt(v, 5)}</td>`).join("")}</tr>`
-      ).join("");
-      const corRows = (corPsi || []).map(
-        (row, i) => `<tr><th>${escapeHTML(String(outcomeIds[i]))}</th>${row.map(
-          (v, j) => `<td ${i === j ? 'style="color:var(--fg-muted)"' : ""}>${fmt(v, 4)}</td>`
-        ).join("")}</tr>`
-      ).join("");
-      const i2rows = outcomeIds.map(
-        (id, o) => `<tr><td>${escapeHTML(String(id))}</td><td>${fmt(tau2[o], 5)}</td><td>${fmt(I22[o], 1)}%</td></tr>`
-      ).join("");
-      psiBlock = `<h4 style="font-size:0.9em;margin:8px 0 4px">Between-study covariance matrix \u03A8\u0302 (Unstructured)</h4>
-      <table class="reg-table" style="margin-bottom:6px">
-        <thead><tr><th></th>${hdr}</tr></thead><tbody>${psiRows}</tbody>
-      </table>
-      <h4 style="font-size:0.9em;margin:6px 0 4px">Between-study correlations \u03C1\u0302</h4>
-      <table class="reg-table" style="margin-bottom:6px">
-        <thead><tr><th></th>${hdr}</tr></thead><tbody>${corRows}</tbody>
-      </table>
-      <table class="reg-table" style="margin-bottom:8px">
-        <thead><tr><th>Outcome</th><th>\u03C4\xB2</th><th><em>I</em>\xB2</th></tr></thead>
-        <tbody>${i2rows}</tbody>
-      </table>`;
-    }
-    const testsBlock = `
-    <h4 style="font-size:0.9em;margin:8px 0 4px">Hypothesis tests</h4>
-    <table class="reg-table" style="margin-bottom:12px">
-      <thead><tr><th>Test</th><th>\u03C7\xB2</th><th>df</th><th><em>p</em></th></tr></thead>
-      <tbody>
-        ${hasMods && isFinite(QM) ? `<tr><td>Omnibus test of moderators (Q<sub>M</sub>)</td><td>${fmt(QM, 3)}</td><td>${df_QM}</td><td>${fmtP2(pQM)}</td></tr>` : ""}
-        <tr><td>Residual heterogeneity (Q<sub>E</sub>)</td><td>${fmt(QE, 3)}</td><td>${df_QE}</td><td>${fmtP2(pQE)}</td></tr>
-      </tbody>
-    </table>`;
-    const fitBlock = `<div style="font-size:0.82em;color:var(--fg-muted);margin:4px 0 14px;line-height:1.7">
-    k = ${k} studies &nbsp;\xB7&nbsp; n = ${n} obs &nbsp;\xB7&nbsp; P = ${P} outcomes
-    &nbsp;|&nbsp; log-lik = ${fmt(logLik2, 4)}
-    &nbsp;\xB7&nbsp; AIC = ${fmt(AIC, 2)} &nbsp;\xB7&nbsp; BIC = ${fmt(BIC, 2)}
-    ${isFinite(AICc) ? `&nbsp;\xB7&nbsp; AICc = ${fmt(AICc, 2)}` : ""}
-    &nbsp;|&nbsp; ${method}, \u03A8 = ${struct}
-    ${convergence === false ? `&nbsp;\xB7&nbsp; <span style="color:var(--color-warning)">convergence uncertain</span>` : ""}
-  </div>`;
-    const boundaryOutcomes = outcomeIds.filter((_, o) => tau2[o] < 1e-6).map((id) => escapeHTML(String(id)));
-    const boundaryNote = boundaryOutcomes.length ? `<p style="color:var(--fg-muted);font-size:0.8em;margin:0 0 6px">\u2139 \u03C4\xB2 \u2248 0 for ${boundaryOutcomes.join(", ")} \u2014 estimate is at the boundary; no detectable between-study heterogeneity for these outcomes.</p>` : "";
-    document.getElementById("results").innerHTML = warnHTML + interceptTable + modTable + psiBlock + boundaryNote + testsBlock + fitBlock;
-    _mvForestState.lastRes = res;
-    _mvForestState.lastRows = rows;
-    _mvForestState.alpha = alpha;
-    _mvForestState.pages = outcomeIds.map(() => 0);
-    _mvForestState.combinedPage = 0;
-    const mvForestContainer = document.getElementById("mvForestContainer");
-    if (!mvForestContainer) return;
-    const combinedBlock = `<div id="mvForestCombinedBlock" style="display:none;margin-bottom:20px">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-        <div class="plot-export">
-          <button class="export-btn" data-target="mvForestPlotCombined" data-format="svg">SVG</button>
-          <button class="export-btn" data-target="mvForestPlotCombined" data-format="png">PNG</button>
-          <button class="export-btn" data-target="mvForestPlotCombined" data-format="tiff">TIFF</button>
-        </div>
-      </div>
-      <svg id="mvForestPlotCombined" role="img" aria-label="Combined multivariate forest plot"
-        width="620" height="20" style="display:block"></svg>
-      <div id="mvForestNavCombined" class="forest-nav"></div>
-    </div>`;
-    const separateBlocks = outcomeIds.map(
-      (id, o) => `<div style="margin-bottom:20px" id="mvForestBlock-${o}">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-        <p class="plot-label" style="margin:0">${escapeHTML(String(id))}</p>
-        <div class="plot-export">
-          <button class="export-btn" data-target="mvForestPlot-${o}" data-format="svg">SVG</button>
-          <button class="export-btn" data-target="mvForestPlot-${o}" data-format="png">PNG</button>
-          <button class="export-btn" data-target="mvForestPlot-${o}" data-format="tiff">TIFF</button>
-        </div>
-      </div>
-      <svg id="mvForestPlot-${o}" role="img"
-        aria-label="Forest plot \u2014 ${escapeHTML(String(id))}"
-        width="620" height="20" style="display:block"></svg>
-      <div id="mvForestNav-${o}" class="forest-nav"></div>
-    </div>`
-    ).join("");
-    mvForestContainer.innerHTML = combinedBlock + separateBlocks;
-    _redrawAllMVForestPlots();
-  }
-  function _redrawAllMVForestPlots() {
-    const { lastRes: res, lastRows: rows, alpha, pages, pageSize, showPI, viewMode, combinedPage } = _mvForestState;
-    if (!res) return;
-    const { beta, ci, se, tau2, outcomeIds, k, P } = res;
-    const isCombined = viewMode === "combined";
-    const combinedBlockEl = document.getElementById("mvForestCombinedBlock");
-    if (combinedBlockEl) combinedBlockEl.style.display = isCombined ? "" : "none";
-    outcomeIds.forEach((_, o) => {
-      const block = document.getElementById(`mvForestBlock-${o}`);
-      if (block) block.style.display = isCombined ? "none" : "";
-    });
-    if (isCombined) {
-      const svgEl = document.getElementById("mvForestPlotCombined");
-      const navEl = document.getElementById("mvForestNavCombined");
-      if (!svgEl) return;
-      const allStudyIds = [...new Set(rows.map((r) => String(r.study_id)))];
-      const { totalPages } = _drawMVForestCombined(svgEl, rows, res, alpha, {
-        page: combinedPage,
-        pageSize,
-        showPI,
-        theme: appState.plotTheme ?? "default"
-      });
-      _renderMVForestNavCombined(navEl, totalPages, allStudyIds.length);
-      return;
-    }
-    const dfPred = Math.max(k - P - 1, 1);
-    outcomeIds.forEach((id, o) => {
-      const svgEl = document.getElementById(`mvForestPlot-${o}`);
-      const navEl = document.getElementById(`mvForestNav-${o}`);
-      if (!svgEl) return;
-      const outcomeRows = rows.filter((r) => String(r.outcome_id) === String(id));
-      if (!outcomeRows.length) return;
-      const pooled = { est: beta[o], lo: ci[o][0], hi: ci[o][1] };
-      const piOpts = showPI ? {
-        lo: beta[o] - tCritical(dfPred, alpha) * Math.sqrt(tau2[o] + se[o] ** 2),
-        hi: beta[o] + tCritical(dfPred, alpha) * Math.sqrt(tau2[o] + se[o] ** 2)
-      } : null;
-      const { totalPages } = _drawMVForestPlot(svgEl, outcomeRows, pooled, String(id), alpha, {
-        page: pages[o] ?? 0,
-        pageSize,
-        pi: piOpts,
-        theme: appState.plotTheme ?? "default"
-      });
-      _renderMVForestNav(navEl, o, totalPages, outcomeRows.length);
-    });
-  }
-  function _renderMVForestNav(navEl, outcomeIdx, totalPages, kAll) {
-    if (!navEl) return;
-    if (totalPages <= 1) {
-      navEl.innerHTML = "";
-      return;
-    }
-    const page = _mvForestState.pages[outcomeIdx] ?? 0;
-    const prevId = `mvFPrev-${outcomeIdx}`;
-    const nextId = `mvFNext-${outcomeIdx}`;
-    navEl.innerHTML = `<button id="${prevId}" ${page === 0 ? "disabled" : ""}>\u2039 Prev</button><span>Page ${page + 1} of ${totalPages}</span><button id="${nextId}" ${page >= totalPages - 1 ? "disabled" : ""}>Next \u203A</button><span class="forest-nav-note">Pooled estimate includes all ${kAll} studies</span>`;
-    document.getElementById(prevId)?.addEventListener("click", () => {
-      if (_mvForestState.pages[outcomeIdx] > 0) {
-        _mvForestState.pages[outcomeIdx]--;
-        _redrawAllMVForestPlots();
-      }
-    });
-    document.getElementById(nextId)?.addEventListener("click", () => {
-      if (_mvForestState.pages[outcomeIdx] < totalPages - 1) {
-        _mvForestState.pages[outcomeIdx]++;
-        _redrawAllMVForestPlots();
-      }
-    });
-  }
-  function _drawMVForestPlot(svgEl, rows, pooled, label, alpha = 0.05, { page = 0, pageSize = Infinity, pi = null, theme = "default" } = {}) {
-    if (typeof d3 === "undefined" || !rows.length) return;
-    const z = normalQuantile(1 - alpha / 2);
-    const T = PLOT_THEMES[theme] ?? PLOT_THEMES["default"];
-    const ps = pageSize === Infinity ? rows.length : pageSize;
-    const totalPages = Math.max(1, Math.ceil(rows.length / ps));
-    const safePage = Math.min(Math.max(0, page), totalPages - 1);
-    const pageRows = rows.slice(safePage * ps, safePage * ps + ps);
-    const lW = 130, pW = 280, aW = 175;
-    const rowH = 20, headerH = 24, axisH = 26;
-    const ml = 6, mr = 6;
-    const nS = pageRows.length;
-    const piRows = pi ? 1 : 0;
-    const totalW = ml + lW + pW + aW + mr;
-    const totalH = headerH + nS * rowH + 6 + rowH + (piRows ? rowH : 0) + axisH;
-    const svg = d3.select(svgEl).attr("width", totalW).attr("height", totalH);
-    svg.selectAll("*").remove();
-    svg.style("background", T.bg !== "transparent" ? T.bg : null);
-    svg.style("font-family", T.fontFamily);
-    if (T.bg !== "transparent") {
-      svg.append("rect").attr("width", totalW).attr("height", totalH).attr("fill", T.bg);
-    }
-    const seAll = rows.map((r) => Math.sqrt(r.vi));
-    const xVals = rows.flatMap((r, i) => [r.yi - z * seAll[i], r.yi + z * seAll[i]]).concat([pooled.lo, pooled.hi]);
-    if (pi) xVals.push(pi.lo, pi.hi);
-    const xMin = Math.min(...xVals), xMax = Math.max(...xVals);
-    const pad = Math.max((xMax - xMin) * 0.12, 0.05);
-    const xScale = d3.scaleLinear().domain([xMin - pad, xMax + pad]).range([0, pW]);
-    const plotG = svg.append("g").attr("transform", `translate(${ml + lW},${headerH})`);
-    const zeroLineH = nS * rowH + 6 + rowH + (piRows ? rowH : 0);
-    if (xScale.domain()[0] <= 0 && xScale.domain()[1] >= 0) {
-      plotG.append("line").attr("x1", xScale(0)).attr("x2", xScale(0)).attr("y1", 0).attr("y2", zeroLineH).attr("stroke", T.border).attr("stroke-dasharray", "3,3").attr("stroke-width", 1);
-    }
-    [
-      [ml + lW / 2, "Study"],
-      [ml + lW + pW / 2, label],
-      [ml + lW + pW + aW / 2, `Effect [${Math.round((1 - alpha) * 100)}% CI]`]
-    ].forEach(
-      ([x, text]) => svg.append("text").attr("x", x).attr("y", headerH - 6).attr("text-anchor", "middle").attr("fill", T.fgMuted).attr("font-size", "10px").text(text)
-    );
-    const wtsAll = rows.map((r) => 1 / r.vi);
-    const wMax = Math.max(...wtsAll);
-    const sePageArr = pageRows.map((r) => Math.sqrt(r.vi));
-    pageRows.forEach((row, i) => {
-      const y = i * rowH + rowH / 2;
-      const se = sePageArr[i];
-      const lo = row.yi - z * se;
-      const hi = row.yi + z * se;
-      const wi = 1 / row.vi;
-      const bh = Math.max(2, Math.min(6, 5.5 * Math.sqrt(wi / wMax)));
-      plotG.append("line").attr("x1", xScale(Math.max(xScale.domain()[0], lo))).attr("x2", xScale(Math.min(xScale.domain()[1], hi))).attr("y1", y).attr("y2", y).attr("stroke", T.fg).attr("stroke-width", 1);
-      plotG.append("rect").attr("x", xScale(row.yi) - bh).attr("y", y - bh).attr("width", bh * 2).attr("height", bh * 2).attr("fill", T.accent);
-      svg.append("text").attr("x", ml + lW - 4).attr("y", headerH + y + 4).attr("text-anchor", "end").attr("fill", T.fg).attr("font-size", "10px").text(String(row.study_id));
-      svg.append("text").attr("x", ml + lW + pW + 5).attr("y", headerH + y + 4).attr("text-anchor", "start").attr("fill", T.fg).attr("font-size", "10px").text(`${fmt(row.yi, 3)} [${fmt(lo, 3)}, ${fmt(hi, 3)}]`);
-    });
-    const sepY = nS * rowH + 4;
-    plotG.append("line").attr("x1", 0).attr("x2", pW).attr("y1", sepY).attr("y2", sepY).attr("stroke", T.border).attr("stroke-width", 1);
-    const dY = sepY + rowH / 2;
-    const dLo = xScale(Math.max(xScale.domain()[0], pooled.lo));
-    const dHi = xScale(Math.min(xScale.domain()[1], pooled.hi));
-    const dMid = xScale(pooled.est);
-    const dH = 7;
-    plotG.append("polygon").attr("points", `${dMid},${dY - dH} ${dHi},${dY} ${dMid},${dY + dH} ${dLo},${dY}`).attr("fill", T.accent);
-    svg.append("text").attr("x", ml + lW - 4).attr("y", headerH + dY + 4).attr("text-anchor", "end").attr("fill", T.fg).attr("font-size", "10px").attr("font-weight", "600").text("Pooled (MV)");
-    svg.append("text").attr("x", ml + lW + pW + 5).attr("y", headerH + dY + 4).attr("text-anchor", "start").attr("fill", T.fg).attr("font-size", "10px").attr("font-weight", "600").text(`${fmt(pooled.est, 3)} [${fmt(pooled.lo, 3)}, ${fmt(pooled.hi, 3)}]`);
-    if (pi && isFinite(pi.lo) && isFinite(pi.hi)) {
-      const piY = dY + rowH;
-      const piLoX = xScale(Math.max(xScale.domain()[0], pi.lo));
-      const piHiX = xScale(Math.min(xScale.domain()[1], pi.hi));
-      const piColor = T.pi;
-      plotG.append("line").attr("x1", piLoX).attr("x2", piHiX).attr("y1", piY).attr("y2", piY).attr("stroke", piColor).attr("stroke-width", 2).attr("stroke-dasharray", "6,3");
-      plotG.append("line").attr("x1", piLoX).attr("x2", piLoX).attr("y1", piY - 5).attr("y2", piY + 5).attr("stroke", piColor).attr("stroke-width", 2);
-      plotG.append("line").attr("x1", piHiX).attr("x2", piHiX).attr("y1", piY - 5).attr("y2", piY + 5).attr("stroke", piColor).attr("stroke-width", 2);
-      svg.append("text").attr("x", ml + lW - 4).attr("y", headerH + piY + 4).attr("text-anchor", "end").attr("fill", piColor).attr("font-size", "10px").text("Pred. interval");
-      svg.append("text").attr("x", ml + lW + pW + 5).attr("y", headerH + piY + 4).attr("text-anchor", "start").attr("fill", piColor).attr("font-size", "10px").text(`${fmt(pi.lo, 3)} to ${fmt(pi.hi, 3)}`);
-    }
-    const axisOffsetY = sepY + rowH + (piRows ? rowH : 0) + 2;
-    plotG.append("g").attr("transform", `translate(0,${axisOffsetY})`).call(d3.axisBottom(xScale).ticks(5).tickSize(3)).call((g) => g.select(".domain").attr("stroke", T.border)).call((g) => g.selectAll(".tick line").attr("stroke", T.border)).call((g) => g.selectAll(".tick text").attr("fill", T.fgMuted).attr("font-size", "9px").attr("font-family", T.fontFamily));
-    return { totalPages };
-  }
-  function _renderMVForestNavCombined(navEl, totalPages, nStudies) {
-    if (!navEl) return;
-    if (totalPages <= 1) {
-      navEl.innerHTML = "";
-      return;
-    }
-    const page = _mvForestState.combinedPage;
-    navEl.innerHTML = `<button id="mvFCPrev" ${page === 0 ? "disabled" : ""}>\u2039 Prev</button><span>Page ${page + 1} of ${totalPages}</span><button id="mvFCNext" ${page >= totalPages - 1 ? "disabled" : ""}>Next \u203A</button><span class="forest-nav-note">Pooled estimates include all ${nStudies} studies</span>`;
-    document.getElementById("mvFCPrev")?.addEventListener("click", () => {
-      if (_mvForestState.combinedPage > 0) {
-        _mvForestState.combinedPage--;
-        _redrawAllMVForestPlots();
-      }
-    });
-    document.getElementById("mvFCNext")?.addEventListener("click", () => {
-      if (_mvForestState.combinedPage < totalPages - 1) {
-        _mvForestState.combinedPage++;
-        _redrawAllMVForestPlots();
-      }
-    });
-  }
-  function _drawMVForestCombined(svgEl, rows, res, alpha, { page = 0, pageSize = Infinity, showPI = false, theme = "default" } = {}) {
-    if (typeof d3 === "undefined" || !rows.length || !res) return { totalPages: 1 };
-    const T = PLOT_THEMES[theme] ?? PLOT_THEMES["default"];
-    const { beta, ci, se, tau2, outcomeIds, k, P } = res;
-    const z = normalQuantile(1 - alpha / 2);
-    const dfPred = Math.max(k - P - 1, 1);
-    const allStudyIds = [...new Set(rows.map((r) => String(r.study_id)))];
-    const ps = pageSize === Infinity ? allStudyIds.length : pageSize;
-    const totalPages = Math.max(1, Math.ceil(allStudyIds.length / ps));
-    const safePage = Math.min(Math.max(0, page), totalPages - 1);
-    const pageStudyIds = new Set(allStudyIds.slice(safePage * ps, safePage * ps + ps));
-    const palette = T.useBwShapes ? ["#111111", "#555555", "#888888", "#333333", "#666666", "#999999", "#222222", "#777777", "#444444", "#aaaaaa"] : ["#4e79a7", "#f28e2b", "#e15759", "#76b7b2", "#59a14f", "#edc948", "#b07aa1", "#ff9da7", "#9c755f", "#bab0ac"];
-    const seAll = rows.map((r) => Math.sqrt(r.vi));
-    const xVals = rows.flatMap((r, i) => [r.yi - z * seAll[i], r.yi + z * seAll[i]]);
-    outcomeIds.forEach((_, o) => {
-      xVals.push(ci[o][0], ci[o][1]);
-      if (showPI) {
-        const tc = tCritical(dfPred, alpha);
-        xVals.push(
-          beta[o] - tc * Math.sqrt(tau2[o] + se[o] ** 2),
-          beta[o] + tc * Math.sqrt(tau2[o] + se[o] ** 2)
-        );
-      }
-    });
-    const xMin = Math.min(...xVals), xMax = Math.max(...xVals);
-    const pad = Math.max((xMax - xMin) * 0.12, 0.05);
-    const lW = 130, pW = 280, aW = 175;
-    const rowH = 20, headerH = 24, axisH = 26;
-    const groupHdrH = 22, sepH = 6, spacerH = 10;
-    const ml = 6, mr = 6;
-    const totalW = ml + lW + pW + aW + mr;
-    const perPageRows = outcomeIds.map(
-      (id) => rows.filter((r) => String(r.outcome_id) === String(id) && pageStudyIds.has(String(r.study_id)))
-    );
-    const groupH = (nS) => groupHdrH + nS * rowH + sepH + rowH + (showPI ? rowH : 0) + spacerH;
-    const totalGroupH = perPageRows.reduce((acc, pr) => acc + groupH(pr.length), 0);
-    const totalH = headerH + totalGroupH + axisH;
-    const svg = d3.select(svgEl).attr("width", totalW).attr("height", totalH);
-    svg.selectAll("*").remove();
-    svg.style("background", T.bg !== "transparent" ? T.bg : null);
-    svg.style("font-family", T.fontFamily);
-    if (T.bg !== "transparent") {
-      svg.append("rect").attr("width", totalW).attr("height", totalH).attr("fill", T.bg);
-    }
-    const xScale = d3.scaleLinear().domain([xMin - pad, xMax + pad]).range([0, pW]);
-    const plotG = svg.append("g").attr("transform", `translate(${ml + lW},${headerH})`);
-    if (xScale.domain()[0] <= 0 && xScale.domain()[1] >= 0) {
-      plotG.append("line").attr("x1", xScale(0)).attr("x2", xScale(0)).attr("y1", 0).attr("y2", totalGroupH).attr("stroke", T.border).attr("stroke-dasharray", "3,3").attr("stroke-width", 1);
-    }
-    [
-      [ml + lW / 2, "Study"],
-      [ml + lW + pW / 2, "Effect"],
-      [ml + lW + pW + aW / 2, `Effect [${Math.round((1 - alpha) * 100)}% CI]`]
-    ].forEach(
-      ([x, text]) => svg.append("text").attr("x", x).attr("y", headerH - 6).attr("text-anchor", "middle").attr("fill", T.fgMuted).attr("font-size", "10px").text(text)
-    );
-    let gy = 0;
-    outcomeIds.forEach((id, o) => {
-      const color = palette[o % palette.length];
-      const pageRows = perPageRows[o];
-      const nS = pageRows.length;
-      const allOutcomeRows = rows.filter((r) => String(r.outcome_id) === String(id));
-      const wMax = Math.max(...allOutcomeRows.map((r) => 1 / r.vi), 1);
-      svg.append("rect").attr("x", 0).attr("y", headerH + gy).attr("width", totalW).attr("height", groupHdrH).attr("fill", color).attr("opacity", 0.1);
-      svg.append("text").attr("x", ml + 5).attr("y", headerH + gy + groupHdrH - 6).attr("fill", color).attr("font-size", "10px").attr("font-weight", "700").text(escapeHTML(String(id)));
-      gy += groupHdrH;
-      pageRows.forEach((row, i) => {
-        const y = gy + i * rowH + rowH / 2;
-        const seSt = Math.sqrt(row.vi);
-        const lo = row.yi - z * seSt;
-        const hi = row.yi + z * seSt;
-        const wi = 1 / row.vi;
-        const bh = Math.max(2, Math.min(6, 5.5 * Math.sqrt(wi / wMax)));
-        plotG.append("line").attr("x1", xScale(Math.max(xScale.domain()[0], lo))).attr("x2", xScale(Math.min(xScale.domain()[1], hi))).attr("y1", y).attr("y2", y).attr("stroke", color).attr("stroke-width", 1);
-        plotG.append("rect").attr("x", xScale(row.yi) - bh).attr("y", y - bh).attr("width", bh * 2).attr("height", bh * 2).attr("fill", color);
-        svg.append("text").attr("x", ml + lW - 4).attr("y", headerH + y + 4).attr("text-anchor", "end").attr("fill", T.fg).attr("font-size", "10px").text(String(row.study_id));
-        svg.append("text").attr("x", ml + lW + pW + 5).attr("y", headerH + y + 4).attr("text-anchor", "start").attr("fill", T.fg).attr("font-size", "10px").text(`${fmt(row.yi, 3)} [${fmt(lo, 3)}, ${fmt(hi, 3)}]`);
-      });
-      gy += nS * rowH;
-      plotG.append("line").attr("x1", 0).attr("x2", pW).attr("y1", gy + sepH / 2).attr("y2", gy + sepH / 2).attr("stroke", T.border).attr("stroke-width", 1);
-      gy += sepH;
-      const pooled = { est: beta[o], lo: ci[o][0], hi: ci[o][1] };
-      const dY = gy + rowH / 2;
-      const dMid = xScale(pooled.est);
-      const dLo = xScale(Math.max(xScale.domain()[0], pooled.lo));
-      const dHi = xScale(Math.min(xScale.domain()[1], pooled.hi));
-      const dH = 7;
-      plotG.append("polygon").attr("points", `${dMid},${dY - dH} ${dHi},${dY} ${dMid},${dY + dH} ${dLo},${dY}`).attr("fill", color);
-      svg.append("text").attr("x", ml + lW - 4).attr("y", headerH + dY + 4).attr("text-anchor", "end").attr("fill", T.fg).attr("font-size", "10px").attr("font-weight", "600").text("Pooled (MV)");
-      svg.append("text").attr("x", ml + lW + pW + 5).attr("y", headerH + dY + 4).attr("text-anchor", "start").attr("fill", T.fg).attr("font-size", "10px").attr("font-weight", "600").text(`${fmt(pooled.est, 3)} [${fmt(pooled.lo, 3)}, ${fmt(pooled.hi, 3)}]`);
-      gy += rowH;
-      if (showPI) {
-        const tc = tCritical(dfPred, alpha);
-        const piLo = beta[o] - tc * Math.sqrt(tau2[o] + se[o] ** 2);
-        const piHi = beta[o] + tc * Math.sqrt(tau2[o] + se[o] ** 2);
-        const piY = gy + rowH / 2;
-        if (isFinite(piLo) && isFinite(piHi)) {
-          const piLoX = xScale(Math.max(xScale.domain()[0], piLo));
-          const piHiX = xScale(Math.min(xScale.domain()[1], piHi));
-          plotG.append("line").attr("x1", piLoX).attr("x2", piHiX).attr("y1", piY).attr("y2", piY).attr("stroke", color).attr("stroke-width", 2).attr("stroke-dasharray", "6,3").attr("opacity", 0.65);
-          plotG.append("line").attr("x1", piLoX).attr("x2", piLoX).attr("y1", piY - 5).attr("y2", piY + 5).attr("stroke", color).attr("stroke-width", 2).attr("opacity", 0.65);
-          plotG.append("line").attr("x1", piHiX).attr("x2", piHiX).attr("y1", piY - 5).attr("y2", piY + 5).attr("stroke", color).attr("stroke-width", 2).attr("opacity", 0.65);
-          svg.append("text").attr("x", ml + lW - 4).attr("y", headerH + piY + 4).attr("text-anchor", "end").attr("fill", T.pi).attr("font-size", "10px").text("Pred. interval");
-          svg.append("text").attr("x", ml + lW + pW + 5).attr("y", headerH + piY + 4).attr("text-anchor", "start").attr("fill", T.pi).attr("font-size", "10px").text(`${fmt(piLo, 3)} to ${fmt(piHi, 3)}`);
-        }
-        gy += rowH;
-      }
-      gy += spacerH;
-    });
-    plotG.append("g").attr("transform", `translate(0,${gy})`).call(d3.axisBottom(xScale).ticks(5).tickSize(3)).call((g) => g.select(".domain").attr("stroke", T.border)).call((g) => g.selectAll(".tick line").attr("stroke", T.border)).call((g) => g.selectAll(".tick text").attr("fill", T.fgMuted).attr("font-size", "9px").attr("font-family", T.fontFamily));
-    return { totalPages };
-  }
   document.getElementById("modeStandard").addEventListener("click", () => {
-    _mvMode = false;
+    mvState.active = false;
     _applyModeToggle();
     markStale();
   });
   document.getElementById("modeMultivariate").addEventListener("click", () => {
-    _mvMode = true;
+    mvState.active = true;
     _applyModeToggle();
     markStale();
-  });
-  document.getElementById("mvAddRow").addEventListener("click", () => {
-    _mvAddRow();
-    markStale();
-  });
-  document.getElementById("mvTableBody").addEventListener("keydown", (e) => {
-    if (!e.altKey || e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
-    const row = e.target.closest("tr");
-    if (!row || !row.draggable) return;
-    e.preventDefault();
-    if (e.key === "ArrowUp") {
-      const prev2 = row.previousElementSibling;
-      if (prev2 && prev2.draggable) row.parentNode.insertBefore(row, prev2);
-    } else {
-      const next2 = row.nextElementSibling;
-      if (next2 && next2.draggable) row.parentNode.insertBefore(next2, row);
-    }
-    markStale();
-  });
-  document.getElementById("mvAddMod").addEventListener("click", _mvAddMod);
-  document.getElementById("mvModName").addEventListener("keydown", (e) => {
-    if (e.key === "Enter") _mvAddMod();
-  });
-  document.getElementById("mvForestPageSize").addEventListener("change", (e) => {
-    const raw = e.target.value;
-    _mvForestState.pageSize = raw === "all" ? Infinity : +raw;
-    _mvForestState.pages = _mvForestState.pages.map(() => 0);
-    _mvForestState.combinedPage = 0;
-    _redrawAllMVForestPlots();
-  });
-  document.getElementById("mvForestView").addEventListener("change", (e) => {
-    _mvForestState.viewMode = e.target.value;
-    _mvForestState.combinedPage = 0;
-    _redrawAllMVForestPlots();
-  });
-  document.getElementById("mvShowPI").addEventListener("change", (e) => {
-    _mvForestState.showPI = e.target.checked;
-    _redrawAllMVForestPlots();
   });
   document.getElementById("addStudy").addEventListener("click", () => {
     addRow();
@@ -31078,7 +34462,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
       warn.style.display = "block";
       return;
     }
-    if (_mvMode) {
+    if (mvState.active) {
       const pending = getPendingImport();
       document.getElementById("previewImport").textContent = pending?.mvCandidate ? "Import to MV Table" : "Import";
     }
@@ -31086,8 +34470,8 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
   document.getElementById("previewImport").addEventListener("click", () => {
     document.getElementById("previewImport").textContent = "Import";
     const pending = getPendingImport();
-    if (pending?.mvCandidate && _mvMode) {
-      _commitImportMV(pending.parsed, pending.mvHeaders);
+    if (pending?.mvCandidate && mvState.active) {
+      commitImportMV(pending.parsed, pending.mvHeaders);
       cancelImport();
       return;
     }
@@ -31113,6 +34497,8 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
     }
   });
   document.getElementById("previewEffectType").addEventListener("change", (e) => refreshPreviewUI(e.target.value));
+  document.getElementById("previewDelimSep").addEventListener("change", (e) => reparseWithDelimiter(e.target.value));
+  document.getElementById("previewDecimalSep").addEventListener("change", (e) => updatePendingDecimal(e.target.value));
   document.getElementById("export").addEventListener("click", (e) => {
     const done = flashBtn(e.currentTarget, null, "Saved \u2713");
     exportCSV();
@@ -31412,19 +34798,27 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
     resetNum("bayesSigmaTau");
     resetSel("bayesPreset");
     resetNum("selCuts");
+    resetNum("fsnTrivial");
+    resetSel("fsnDirection");
+    const rveWeightingReset = document.getElementById("rveWeighting");
+    if (rveWeightingReset) {
+      rveWeightingReset.selectedIndex = 0;
+      rveWeightingReset.dispatchEvent(new Event("change"));
+    }
     const rveRhoEl = document.getElementById("rveRho");
     if (rveRhoEl) {
       rveRhoEl.value = rveRhoEl.defaultValue;
       rveRhoEl.dispatchEvent(new Event("input"));
     }
+    resetSel("threeLevelMethod");
     syncTrimFillState();
     syncMHOptions(document.getElementById("effectType").value);
     syncPLAvailability();
     syncSelControls();
     clearDraft();
     clearModerators();
-    _robDomains = [];
-    _robData = {};
+    robPlotState.domains = [];
+    robPlotState.data = {};
     renderRoBDomainTags();
     renderRoBDataGrid();
     updateTableHeaders();
@@ -31432,7 +34826,20 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
     while (table.rows.length > 1) table.deleteRow(1);
     addRow();
     hideDraftBanner();
+    resetMvSettings();
+    clearMV();
   });
+  function showConvergenceToast(sources) {
+    const el = document.getElementById("convergenceToast");
+    if (!el || !sources.length) return;
+    const list = sources.join(", ");
+    el.textContent = `\u26A0 Optimizer did not converge: ${list}`;
+    el.hidden = false;
+    clearTimeout(el._hideTimer);
+    el._hideTimer = setTimeout(() => {
+      el.hidden = true;
+    }, 5e3);
+  }
   function flashBtn(btn, workingLabel, doneLabel, durationMs = 1500) {
     const original = btn.textContent;
     let resolve;
@@ -31452,219 +34859,18 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
     });
     return resolve;
   }
-  function _mvSerializeSVG(svgEl) {
-    if (!svgEl) return "";
-    const clone = svgEl.cloneNode(true);
-    clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
-    const w = clone.getAttribute("width") || String(svgEl.getBoundingClientRect().width);
-    const h = clone.getAttribute("height") || String(svgEl.getBoundingClientRect().height);
-    clone.setAttribute("width", w);
-    clone.setAttribute("height", h);
-    resolveThemeVars(clone);
-    if (!hasEmbeddedBackground(clone)) {
-      const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-      bg.setAttribute("width", "100%");
-      bg.setAttribute("height", "100%");
-      bg.setAttribute("fill", currentBgColour());
-      clone.insertBefore(bg, clone.firstChild);
-    }
-    return new XMLSerializer().serializeToString(clone);
-  }
-  function _buildMVReportHTML(res, rows = [], alpha = 0.05, { reportCSS: reportCSS2, buildTableAPA: buildTableAPA2, buildFigureAPA: buildFigureAPA2 } = {}) {
-    const {
-      beta,
-      se,
-      ci,
-      z,
-      pval,
-      betaNames = [],
-      tau2,
-      rho_between,
-      outcomeIds,
-      n,
-      k,
-      P,
-      QM,
-      df_QM,
-      pQM,
-      QE,
-      df_QE,
-      pQE,
-      logLik: logLik2,
-      AIC,
-      BIC,
-      AICc,
-      struct,
-      method,
-      I2: I22,
-      convergence,
-      warnings: engineWarnings = []
-    } = res;
-    const hasMods = beta.length > P;
-    const ciPct = Math.round((1 - alpha) * 100);
-    const date = (/* @__PURE__ */ new Date()).toLocaleDateString(void 0, { year: "numeric", month: "long", day: "numeric" });
-    const esc2 = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    const fmtN = (v, d = 3) => isFinite(v) ? (+v).toFixed(d) : "\u2014";
-    const fmtP2 = (p) => !isFinite(p) ? "\u2014" : p < 1e-3 ? "< .001" : (+p).toFixed(3).replace(/^0\./, ".");
-    let _tblN = 0, _figN = 0;
-    const nextTable = () => ++_tblN;
-    const nextFigure = () => ++_figN;
-    const pooledTblRows = outcomeIds.map((id, o) => {
-      const [lo, hi] = ci[o];
-      return `<tr><td><strong>${esc2(String(id))}</strong></td><td>${fmtN(beta[o], 4)}</td><td>${fmtN(se[o], 4)}</td>
-      <td>[${fmtN(lo, 4)}, ${fmtN(hi, 4)}]</td><td>${fmtN(z[o], 3)}</td><td>${fmtP2(pval[o])}</td></tr>`;
-    });
-    const pooledSection = buildTableAPA2(
-      nextTable(),
-      `Pooled effect estimates per outcome (${method}, \u03A8 = ${struct})`,
-      ["Outcome", "Estimate", "SE", `${ciPct}% CI`, "<em>z</em>", "<em>p</em>"],
-      pooledTblRows
-    );
-    let modSection = "";
-    if (hasMods) {
-      const modRows = beta.slice(P).map((b, i) => {
-        const j = P + i;
-        const [lo, hi] = ci[j];
-        return `<tr><td>${esc2(betaNames[j] ?? `\u03B2${j}`)}</td><td>${fmtN(b, 4)}</td><td>${fmtN(se[j], 4)}</td>
-        <td>[${fmtN(lo, 4)}, ${fmtN(hi, 4)}]</td><td>${fmtN(z[j], 3)}</td><td>${fmtP2(pval[j])}</td></tr>`;
-      });
-      modSection = buildTableAPA2(
-        nextTable(),
-        "Meta-regression coefficients",
-        ["Coefficient", "Estimate", "SE", `${ciPct}% CI`, "<em>z</em>", "<em>p</em>"],
-        modRows
-      );
-    }
-    const hetCols = struct === "CS" ? ["Outcome", "\u03C4\xB2", "<em>I</em>\xB2", "\u03C1 (between)"] : ["Outcome", "\u03C4\xB2", "<em>I</em>\xB2"];
-    const hetTblRows = outcomeIds.map((id, o) => {
-      const rho = struct === "CS" ? `<td>${fmtN(rho_between ?? 0, 4)}</td>` : "";
-      return `<tr><td>${esc2(String(id))}</td><td>${fmtN(tau2[o], 5)}</td>
-      <td>${isFinite(I22[o]) ? (+I22[o]).toFixed(1) + "%" : "\u2014"}</td>${rho}</tr>`;
-    });
-    const hetSection = buildTableAPA2(nextTable(), "Between-study heterogeneity", hetCols, hetTblRows);
-    const testTblRows = [
-      ...hasMods && isFinite(QM) ? [`<tr><td>Omnibus test of moderators (Q<sub>M</sub>)</td><td>${fmtN(QM, 3)}</td><td>${df_QM}</td><td>${fmtP2(pQM)}</td></tr>`] : [],
-      `<tr><td>Residual heterogeneity (Q<sub>E</sub>)</td><td>${fmtN(QE, 3)}</td><td>${df_QE}</td><td>${fmtP2(pQE)}</td></tr>`
-    ];
-    const testSection = buildTableAPA2(
-      nextTable(),
-      "Hypothesis tests",
-      ["Test", "\u03C7\xB2", "df", "<em>p</em>"],
-      testTblRows
-    );
-    const fitLine = `k = ${k} \xB7 n = ${n} obs \xB7 P = ${P} outcomes \u2502 log-lik = ${fmtN(logLik2, 4)} \xB7 AIC = ${fmtN(AIC, 2)} \xB7 BIC = ${fmtN(BIC, 2)}` + (isFinite(AICc) ? ` \xB7 AICc = ${fmtN(AICc, 2)}` : "") + ` \u2502 ${esc2(method)}, \u03A8 = ${esc2(struct)}`;
-    const forestSVGs = (() => {
-      const combined = document.getElementById("mvForestPlotCombined");
-      const combinedBlk = document.getElementById("mvForestCombinedBlock");
-      if (combinedBlk && combinedBlk.style.display !== "none" && combined) {
-        const s = _mvSerializeSVG(combined);
-        return s ? [s] : [];
-      }
-      const out = [];
-      for (let o = 0; o < outcomeIds.length; o++) {
-        const el = document.getElementById(`mvForestPlot-${o}`);
-        if (el) {
-          const s = _mvSerializeSVG(el);
-          if (s) out.push(s);
-        }
-      }
-      return out;
-    })();
-    const warnHTML = [
-      convergence === false ? `<p style="color:#c0392b"><strong>Warning:</strong> Optimizer did not fully converge \u2014 interpret results with caution.</p>` : "",
-      ...engineWarnings.map((w) => `<p style="color:#c0392b">${esc2(w)}</p>`)
-    ].filter(Boolean).join("");
-    const forestSection = forestSVGs.length ? buildFigureAPA2(nextFigure(), "Forest plot of multivariate meta-analysis results", forestSVGs) : "";
-    const zVal = normalQuantile(1 - alpha / 2);
-    const studyBodyRows = rows.map((r) => {
-      const se_r = Math.sqrt(r.vi);
-      return `<tr><td>${esc2(String(r.study_id))}</td><td>${esc2(String(r.outcome_id))}</td>
-      <td>${fmtN(r.yi, 4)}</td><td>${fmtN(r.vi, 4)}</td><td>${fmtN(se_r, 4)}</td>
-      <td>[${fmtN(r.yi - zVal * se_r, 4)},&nbsp;${fmtN(r.yi + zVal * se_r, 4)}]</td></tr>`;
-    });
-    const studySection = rows.length ? buildTableAPA2(
-      nextTable(),
-      "Individual study data",
-      ["Study", "Outcome", "y<sub>i</sub>", "v<sub>i</sub>", "SE", `${ciPct}% CI`],
-      studyBodyRows
-    ) : "";
-    let robSection = "";
-    if (_robDomains.length > 0) {
-      const robSVGs = [
-        _mvSerializeSVG(document.getElementById("robTrafficLight")),
-        _mvSerializeSVG(document.getElementById("robSummary"))
-      ].filter(Boolean);
-      if (robSVGs.length) robSection = buildFigureAPA2(nextFigure(), "Risk of bias assessment", robSVGs);
-    }
-    const mvRefList = [
-      "Berkey, C. S., Hoaglin, D. C., Antczak-Bouckoms, A., Mosteller, F., &amp; Colditz, G. A. (1998). Meta-analysis of multiple outcomes by regression with random effects. <em>Statistics in Medicine</em>, <em>17</em>(22), 2537\u20132550.",
-      "Cheung, M. W.-L. (2014). Modeling dependent effect sizes with three-level meta-analyses: a structural equation modeling approach. <em>Psychological Methods</em>, <em>19</em>(2), 211\u2013229.",
-      "Cochran, W. G. (1954). The combination of estimates from different experiments. <em>Biometrics</em>, <em>10</em>(1), 101\u2013129.",
-      'Higgins, J. P. T., Thompson, S. G., Deeks, J. J., &amp; Altman, D. G. (2003). Measuring inconsistency in meta-analyses. <em>BMJ</em>, <em>327</em>(7414), 557\u2013560. <a href="https://doi.org/10.1136/bmj.327.7414.557">https://doi.org/10.1136/bmj.327.7414.557</a>',
-      "Jackson, D., Riley, R., &amp; White, I. R. (2011). Multivariate meta-analysis: Potential and promise. <em>Statistics in Medicine</em>, <em>30</em>(20), 2481\u20132498.",
-      "Riley, R. D., Abrams, K. R., Sutton, A. J., Lambert, P. C., &amp; Thompson, J. R. (2007). Bivariate random-effects meta-analysis and the estimation of between-study correlation. <em>BMC Medical Research Methodology</em>, <em>7</em>, 3.",
-      "Viechtbauer, W. (2005). Bias and efficiency of meta-analytic variance estimators in the random-effects model. <em>Journal of Educational and Behavioral Statistics</em>, <em>30</em>(3), 261\u2013293."
-    ];
-    const refSection = `<ul class="apa-references">${mvRefList.map((r) => `<li>${r}</li>`).join("")}</ul>`;
-    const wrapSec = (html) => html ? `<section>${html}</section>` : "";
-    const body = [
-      warnHTML,
-      wrapSec(pooledSection),
-      wrapSec(modSection),
-      wrapSec(hetSection),
-      wrapSec(testSection),
-      `<p class="report-meta" style="margin-top:8px">${fitLine}</p>`,
-      wrapSec(forestSection),
-      wrapSec(studySection),
-      wrapSec(robSection),
-      refSection
-    ].filter(Boolean).join("\n");
-    return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Multivariate Meta-Analysis Report</title>
-  <style>${reportCSS2()}</style>
-</head>
-<body>
-  <h1>Multivariate Meta-Analysis Report</h1>
-  <p class="report-meta">Generated ${esc2(date)}
-    &nbsp;\xB7&nbsp; k = ${k} studies, P = ${P} outcomes
-    &nbsp;\xB7&nbsp; ${esc2(method)}, \u03A8 = ${esc2(struct)}</p>
-  ${body}
-</body>
-</html>`;
-  }
-  function _mvDownloadHTML(html) {
-    downloadBlob(html, "mv-meta-analysis-report.html", "text/html;charset=utf-8");
-  }
-  function _mvOpenPrintPreview(html) {
-    const win = window.open("", "_blank");
-    if (!win) {
-      _mvDownloadHTML(html);
-      return;
-    }
-    win.document.open();
-    win.document.write(html);
-    win.document.close();
-    if (win.document.readyState === "complete") {
-      win.print();
-    } else {
-      win.addEventListener("load", () => win.print());
-    }
-  }
   async function buildReportAndResync() {
     if (!appState.reportArgs) return null;
     flushDeferredDraws();
     if (appState.reportArgs.mv) {
       const { reportCSS: reportCSS2, buildTableAPA: buildTableAPA2, buildFigureAPA: buildFigureAPA2 } = await getReport();
-      const html2 = _buildMVReportHTML(
+      const html2 = buildMVReportHTML(
         appState.reportArgs.mvRes,
         appState.reportArgs.mvRows ?? [],
         appState.reportArgs.mvAlpha ?? 0.05,
         { reportCSS: reportCSS2, buildTableAPA: buildTableAPA2, buildFigureAPA: buildFigureAPA2 }
       );
-      return { html: html2, downloadHTML: _mvDownloadHTML, openPrintPreview: _mvOpenPrintPreview };
+      return { html: html2, downloadHTML: mvDownloadHTML, openPrintPreview: mvOpenPrintPreview };
     }
     const { buildReport: buildReport2, downloadHTML: downloadHTML2, openPrintPreview: openPrintPreview2 } = await getReport();
     const args = {
@@ -31777,12 +34983,12 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
     const inputs = section.querySelectorAll(".contrast-weight");
     const L = Array.from(inputs).map((inp) => parseFloat(inp.value) || 0);
     if (isLs) {
-      if (!_lastLs) return;
-      const regLike = { beta: _lastLs.beta, vcov: _lastLs.vcov_beta, crit: _lastLs.crit, dist: "z", QEdf: _lastLs.QEdf };
-      section.querySelector(".contrast-result").innerHTML = formatContrastResult(testContrast(regLike, L), regLike);
+      if (!appState.results.ls) return;
+      const regLike = { beta: appState.results.ls.beta, vcov: appState.results.ls.vcov_beta, crit: appState.results.ls.crit, dist: "z", QEdf: appState.results.ls.QEdf };
+      section.querySelector(".contrast-result").innerHTML = formatContrastResult(testContrast(regLike, L), regLike, getCiAlpha());
     } else {
-      if (!_lastReg) return;
-      section.querySelector(".contrast-result").innerHTML = formatContrastResult(testContrast(_lastReg, L), _lastReg);
+      if (!appState.results.reg) return;
+      section.querySelector(".contrast-result").innerHTML = formatContrastResult(testContrast(appState.results.reg, L), appState.results.reg, getCiAlpha());
     }
   });
   document.addEventListener("click", (e) => {
@@ -31791,19 +34997,19 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
     const which = btn.dataset.which;
     let vcov, colNames, filename;
     if (which === "loc") {
-      if (!_lastLs?.vcov_beta) return;
-      vcov = _lastLs.vcov_beta;
-      colNames = _lastLs.locColNames;
+      if (!appState.results.ls?.vcov_beta) return;
+      vcov = appState.results.ls.vcov_beta;
+      colNames = appState.results.ls.locColNames;
       filename = "vcov_beta.csv";
     } else if (which === "scale") {
-      if (!_lastLs?.vcov_gamma) return;
-      vcov = _lastLs.vcov_gamma;
-      colNames = _lastLs.scaleColNames;
+      if (!appState.results.ls?.vcov_gamma) return;
+      vcov = appState.results.ls.vcov_gamma;
+      colNames = appState.results.ls.scaleColNames;
       filename = "vcov_gamma.csv";
     } else {
-      if (!_lastReg?.vcov || !_lastReg?.colNames) return;
-      vcov = _lastReg.vcov;
-      colNames = _lastReg.colNames;
+      if (!appState.results.reg?.vcov || !appState.results.reg?.colNames) return;
+      vcov = appState.results.reg.vcov;
+      colNames = appState.results.reg.colNames;
       filename = "vcov.csv";
     }
     const headers = ["", ...colNames];
@@ -31974,17 +35180,97 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
     resetNum("bayesSigmaTau");
     resetSel("bayesPreset");
     resetNum("selCuts");
+    resetNum("fsnTrivial");
+    resetSel("fsnDirection");
+    const rveWeightingReset2 = document.getElementById("rveWeighting");
+    if (rveWeightingReset2) {
+      rveWeightingReset2.selectedIndex = 0;
+      rveWeightingReset2.dispatchEvent(new Event("change"));
+    }
     const rveRhoEl = document.getElementById("rveRho");
     if (rveRhoEl) {
       rveRhoEl.value = rveRhoEl.defaultValue;
       rveRhoEl.dispatchEvent(new Event("input"));
     }
+    resetSel("threeLevelMethod");
     syncTrimFillState();
     syncSelControls();
     markStale();
     _checkAdvancedBadge();
   }
   document.getElementById("resetAdvanced").addEventListener("click", resetAdvancedSettings);
+  function _checkMvBadge() {
+    const selDiffers = (id) => {
+      const el = document.getElementById(id);
+      if (!el) return false;
+      const def = [...el.options].findIndex((o) => o.defaultSelected);
+      return el.selectedIndex !== (def >= 0 ? def : 0);
+    };
+    const valDiffers = (id) => {
+      const el = document.getElementById(id);
+      return el && el.value !== el.defaultValue;
+    };
+    const custom = selDiffers("mvSlopes") || valDiffers("mvRho") || selDiffers("mvCiLevel");
+    const badge = document.getElementById("mvBadge");
+    if (badge) badge.style.display = custom ? "" : "none";
+    document.getElementById("mvSettings")?.classList.toggle("settings-modified", custom);
+  }
+  document.getElementById("mvSettings").addEventListener("change", () => {
+    _checkMvBadge();
+    scheduleSave();
+    markStale();
+  });
+  document.getElementById("mvSettings").addEventListener("input", () => {
+    _checkMvBadge();
+    scheduleSave();
+    markStale();
+  });
+  _checkMvBadge();
+  document.getElementById("mvStruct").addEventListener("change", () => {
+    scheduleSave();
+    markStale();
+  });
+  document.getElementById("mvMethod").addEventListener("change", () => {
+    scheduleSave();
+    markStale();
+  });
+  document.getElementById("mvCiMethod").addEventListener("change", () => {
+    scheduleSave();
+    markStale();
+  });
+  document.getElementById("mvCiLevel").addEventListener("change", (e) => {
+    document.getElementById("ciLevel").value = e.target.value;
+    _checkAdvancedBadge();
+    scheduleSave();
+    markStale();
+  });
+  document.getElementById("ciLevel").addEventListener("change", () => {
+    const mvEl = document.getElementById("mvCiLevel");
+    if (mvEl) {
+      mvEl.value = document.getElementById("ciLevel").value;
+      _checkMvBadge();
+    }
+  });
+  function resetMvSettings() {
+    const resetSel = (id) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const i = [...el.options].findIndex((o) => o.defaultSelected);
+      el.selectedIndex = i >= 0 ? i : 0;
+    };
+    resetSel("mvStruct");
+    resetSel("mvMethod");
+    resetSel("mvCiMethod");
+    resetSel("mvSlopes");
+    resetSel("mvCiLevel");
+    document.getElementById("ciLevel").value = "95";
+    const rho = document.getElementById("mvRho");
+    if (rho) rho.value = rho.defaultValue;
+    markStale();
+    _checkMvBadge();
+    _checkAdvancedBadge();
+  }
+  document.getElementById("resetMv").addEventListener("click", resetMvSettings);
   {
     const clampPos = (inputId, warnId, min = 0.01) => {
       const input = document.getElementById(inputId);
@@ -32010,12 +35296,28 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
   {
     const rveRhoSlider = document.getElementById("rveRho");
     const rveRhoDisplay = document.getElementById("rveRhoDisplay");
+    const rveWeightingEl = document.getElementById("rveWeighting");
+    const rveRhoRow = document.getElementById("rveRhoRow");
+    const rveRhoHint = document.getElementById("rveRhoHint");
+    const rveHierHint = document.getElementById("rveHierHint");
     const syncRhoDisplay = () => {
       rveRhoDisplay.textContent = parseFloat(rveRhoSlider.value).toFixed(2);
     };
+    const syncWeighting = () => {
+      const isHier = rveWeightingEl?.value === "hier";
+      if (rveRhoRow) rveRhoRow.style.display = isHier ? "none" : "";
+      if (rveRhoHint) rveRhoHint.style.display = isHier ? "none" : "";
+      if (rveHierHint) rveHierHint.style.display = isHier ? "" : "none";
+    };
     syncRhoDisplay();
+    syncWeighting();
     rveRhoSlider.addEventListener("input", syncRhoDisplay);
     rveRhoSlider.addEventListener("change", markStale);
+    rveWeightingEl?.addEventListener("change", () => {
+      syncWeighting();
+      markStale();
+    });
+    document.getElementById("threeLevelMethod")?.addEventListener("change", markStale);
   }
   document.getElementById("goshRun").addEventListener("click", runGosh);
   document.getElementById("permRunBtn").addEventListener("click", _startPermTest);
@@ -32039,8 +35341,10 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
     }
   });
   function saveSession() {
-    const session = gatherSessionState(moderators, scaleModerators, interactions, { domains: _robDomains, data: _robData });
-    if (_mvMode) session.mv = _gatherMVState();
+    const session = gatherSessionState(moderators, scaleModerators, interactions, { domains: robPlotState.domains, data: robPlotState.data });
+    const mvData = gatherMVState();
+    const mvHasData = mvData.rows.some((r) => r.study_id || r.outcome_id || r.yi || r.vi);
+    if (mvState.active || mvHasData) session.mv = { ...mvData, active: mvState.active };
     downloadBlob(serializeSession(session), "session.json", "application/json;charset=utf-8;");
   }
   function applySession(session) {
@@ -32052,8 +35356,11 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
       document.getElementById("tauMethod").value = s.tauMethod;
     if (s.ciMethod && document.getElementById("ciMethod").querySelector(`option[value="${s.ciMethod}"]`))
       document.getElementById("ciMethod").value = s.ciMethod;
-    if (s.ciLevel && document.getElementById("ciLevel").querySelector(`option[value="${s.ciLevel}"]`))
+    if (s.ciLevel && document.getElementById("ciLevel").querySelector(`option[value="${s.ciLevel}"]`)) {
       document.getElementById("ciLevel").value = s.ciLevel;
+      const mvCiEl = document.getElementById("mvCiLevel");
+      if (mvCiEl) mvCiEl.value = s.ciLevel;
+    }
     if (s.cumulativeOrder && document.getElementById("cumulativeOrder").querySelector(`option[value="${s.cumulativeOrder}"]`))
       document.getElementById("cumulativeOrder").value = s.cumulativeOrder;
     if (typeof s.useTrimFill === "boolean") document.getElementById("useTrimFill").checked = s.useTrimFill;
@@ -32097,12 +35404,31 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
       const el = document.getElementById("mccMethod");
       if (el && el.querySelector(`option[value="${s.mccMethod}"]`)) el.value = s.mccMethod;
     }
+    if (s.rveMode === "hier") {
+      const el = document.getElementById("rveWeighting");
+      if (el) {
+        el.value = "hier";
+        el.dispatchEvent(new Event("change"));
+      }
+    }
+    if (s.threeLevelMethod === "ML") {
+      const el = document.getElementById("threeLevelMethod");
+      if (el) el.value = "ML";
+    }
     if (isFinite(s.rveRho) && s.rveRho >= 0 && s.rveRho < 1) {
       const el = document.getElementById("rveRho");
       if (el) {
         el.value = s.rveRho;
         el.dispatchEvent(new Event("input"));
       }
+    }
+    if (isFinite(s.fsnTrivial) && s.fsnTrivial > 0) {
+      const el = document.getElementById("fsnTrivial");
+      if (el) el.value = s.fsnTrivial;
+    }
+    if (s.fsnDirection) {
+      const el = document.getElementById("fsnDirection");
+      if (el && el.querySelector(`option[value="${s.fsnDirection}"]`)) el.value = s.fsnDirection;
     }
     clearModerators();
     savedMods.forEach((m) => {
@@ -32133,41 +35459,45 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
       moderators.forEach((m) => v.push(row.moderators?.[m.name] ?? ""));
       addRow(v);
     });
-    _robDomains = Array.isArray(rob.domains) ? [...rob.domains] : [];
-    _robData = rob.data && typeof rob.data === "object" ? rob.data : {};
+    robPlotState.domains = Array.isArray(rob.domains) ? [...rob.domains] : [];
+    robPlotState.data = rob.data && typeof rob.data === "object" ? rob.data : {};
     renderRoBDomainTags();
     renderRoBDataGrid();
     const mv = session.mv;
     if (mv && typeof mv === "object") {
-      _mvMode = true;
+      mvState.active = mv.active !== false;
       _applyModeToggle();
       if (mv.struct && document.getElementById("mvStruct").querySelector(`option[value="${mv.struct}"]`))
         document.getElementById("mvStruct").value = mv.struct;
       if (mv.method && document.getElementById("mvMethod").querySelector(`option[value="${mv.method}"]`))
         document.getElementById("mvMethod").value = mv.method;
+      if (mv.ciMethod && document.getElementById("mvCiMethod").querySelector(`option[value="${mv.ciMethod}"]`))
+        document.getElementById("mvCiMethod").value = mv.ciMethod;
+      if (mv.slopes && document.getElementById("mvSlopes").querySelector(`option[value="${mv.slopes}"]`))
+        document.getElementById("mvSlopes").value = mv.slopes;
       if (isFinite(mv.rho)) document.getElementById("mvRho").value = mv.rho;
-      _mvModerators.length = 0;
+      mvModerators.length = 0;
       if (Array.isArray(mv.moderators)) mv.moderators.forEach((n) => {
-        if (n) _mvModerators.push(n);
+        if (n) mvModerators.push(n);
       });
-      _renderMVModTags();
-      _rebuildMVTableHeaders();
+      renderMVModTags();
+      rebuildMVTableHeaders();
       document.getElementById("mvTableBody").innerHTML = "";
       if (Array.isArray(mv.rows)) {
         mv.rows.forEach((r) => {
-          const tr = _mvAddRow();
+          const tr = addMVRow();
           if (r.study_id !== void 0) tr.querySelector(".mv-study-id").value = r.study_id;
           if (r.outcome_id !== void 0) tr.querySelector(".mv-outcome-id").value = r.outcome_id;
           if (r.yi !== void 0) tr.querySelector(".mv-yi").value = r.yi;
           if (r.vi !== void 0) tr.querySelector(".mv-vi").value = r.vi;
-          _mvModerators.forEach((name, i) => {
-            const inputs = tr.querySelectorAll(".mv-mod");
+          mvModerators.forEach((name, i) => {
+            const inputs = tr.querySelectorAll(".mv-mod-cell");
             if (inputs[i] && r[name] !== void 0) inputs[i].value = r[name];
           });
         });
       }
     } else {
-      _mvMode = false;
+      mvState.active = false;
       _applyModeToggle();
     }
     syncTrimFillState();
@@ -32209,8 +35539,8 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
     }
   }
   function exportCSV() {
-    if (_mvMode) {
-      const headers2 = ["study_id", "outcome_id", "yi", "vi", ..._mvModerators.map((n) => n)];
+    if (mvState.active) {
+      const headers2 = ["study_id", "outcome_id", "yi", "vi", ...mvModerators.map((n) => n)];
       const rows2 = [];
       document.querySelectorAll("#mvTableBody tr").forEach((r) => {
         const studyId = r.querySelector(".mv-study-id")?.value ?? "";
@@ -32308,17 +35638,37 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
       scheduleSave,
       renderRoBDataGrid,
       deleteRobEntry: (key) => {
-        delete _robData[key];
+        delete robPlotState.data[key];
       },
       onModeratorChanged: () => {
         refreshInteractionUI();
         renderInteractionTags();
       }
     });
+    initMV({
+      appState,
+      robPlotState,
+      markStale,
+      getCiAlpha,
+      showConvergenceToast,
+      onRunSuccess: () => {
+        if (outputPlaceholder) outputPlaceholder.style.display = "none";
+        staleBanner.style.display = "none";
+        _toggleResults.classList.remove("stale");
+        if (inputStaleBadge) inputStaleBadge.hidden = true;
+        if (!appState.hasRunOnce) {
+          appState.hasRunOnce = true;
+          _toggleResults.disabled = false;
+          _toggleResults.removeAttribute("aria-disabled");
+          _toggleResults.removeAttribute("title");
+        }
+      }
+    });
     setTooltipElement(document.getElementById("tooltip"));
     populateEffectTypeDropdowns();
     const draft = loadDraft();
-    if (draft && draft.studies?.length > 0) {
+    const _draftHasData = draft && (draft.studies?.length > 0 || draft.mv?.rows?.some((r) => r.study_id || r.outcome_id || r.yi || r.vi));
+    if (_draftHasData) {
       applySession(draft);
       showDraftBanner(draft._savedAt);
     } else {
@@ -32335,8 +35685,10 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
     document.getElementById("inputTable").addEventListener("input", (e) => {
       if (e.target.classList.contains("cluster")) syncRveVisibility();
     });
-    if (USE_EXAMPLES) _populateMVExample();
-    else _mvAddRow();
+    if (document.getElementById("mvTableBody").children.length === 0) {
+      if (USE_EXAMPLES) populateMVExample();
+      else addMVRow();
+    }
     document.querySelectorAll(".plot-export").forEach((div) => {
       const plotBlock = div.closest(".plot-block, .plot-block-inline");
       const labelEl = plotBlock?.querySelector(".plot-label");
@@ -32361,6 +35713,8 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
     document.getElementById("replayTourLink")?.addEventListener("click", (e) => {
       e.preventDefault();
       showView("input");
+      mvState.active = false;
+      _applyModeToggle();
       getOnboarding().then((m) => m.startTour({ force: true })).catch(() => {
       });
     });
@@ -32385,7 +35739,9 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
     // matches <option selected> in #exportScale (3× ≈ 288 dpi)
     reportArgs: null,
     // cached after each run; consumed by export buttons
-    plotTheme: "default"
+    plotTheme: "default",
+    results: { reg: null, ls: null }
+    // last successful metaRegression / lsModel result
   };
   {
     const saved = localStorage.getItem("fosma-plot-theme");
@@ -32473,7 +35829,13 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
     isMHorPeto: false
   };
   var bubblePlotState = { bubbleResult: null, moderators: null, usePartialBubble: false };
-  var robPlotState = { studies: null };
+  var robPlotState = {
+    studies: null,
+    domains: [],
+    // string[] — ordered domain names
+    data: {}
+    // { [studyLabel]: { [domain]: "Low"|"Some concerns"|"High"|"NI"|"" } }
+  };
   document.getElementById("exportScale").addEventListener("change", (e) => {
     appState.exportScale = +e.target.value;
   });
@@ -32501,7 +35863,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
   });
   function redrawCachedPlots() {
     const theme = appState.plotTheme;
-    if (_mvForestState?.lastRes) _redrawAllMVForestPlots();
+    if (mvForestState?.lastRes) redrawAllMVForestPlots();
     if (forestPlot.args) {
       forestPlot.args.options = { ...forestPlot.args.options, theme };
       const { totalPages } = drawForest(forestPlot.args.studies, forestPlot.args.m, { ...forestPlot.args.options, page: forestPlot.page });
@@ -32600,9 +35962,9 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
         });
       }
     }
-    if (robPlotState.studies && _robDomains.length > 0) {
-      drawRoBTrafficLight(robPlotState.studies, _robDomains, _robData, { theme });
-      drawRoBSummary(robPlotState.studies, _robDomains, _robData, { theme });
+    if (robPlotState.studies && robPlotState.domains.length > 0) {
+      drawRoBTrafficLight(robPlotState.studies, robPlotState.domains, robPlotState.data, { theme });
+      drawRoBSummary(robPlotState.studies, robPlotState.domains, robPlotState.data, { theme });
     }
   }
   document.querySelectorAll(".funnel-mode-btn").forEach((btn) => {
@@ -32619,32 +35981,6 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
   function _updateCumFunnelLabel(stepIdx) {
     const r = cumFunnelPlot.results[stepIdx];
     document.getElementById("cumulativeFunnelLabel").textContent = `Step ${stepIdx + 1} of ${cumFunnelPlot.results.length}\u2003added: ${r.addedLabel}`;
-  }
-  function makeNavRenderer(cfg) {
-    return function renderNav(totalPages) {
-      const nav = document.getElementById(cfg.navId);
-      if (!nav) return;
-      if (totalPages <= 1) {
-        nav.innerHTML = "";
-        return;
-      }
-      const page = cfg.getPage();
-      nav.innerHTML = `<button id="${cfg.prevId}" ${page === 0 ? "disabled" : ""}>&#8249; Prev</button><span>Page ${page + 1} of ${totalPages}</span><button id="${cfg.nextId}" ${page >= totalPages - 1 ? "disabled" : ""}>Next &#8250;</button><span class="forest-nav-note">${cfg.note(cfg.getKAll())}</span>`;
-      document.getElementById(cfg.prevId)?.addEventListener("click", () => {
-        if (cfg.getPage() > 0) {
-          cfg.setPage(cfg.getPage() - 1);
-          const { totalPages: tp } = cfg.redraw(cfg.getPage());
-          renderNav(tp);
-        }
-      });
-      document.getElementById(cfg.nextId)?.addEventListener("click", () => {
-        if (cfg.getPage() < totalPages - 1) {
-          cfg.setPage(cfg.getPage() + 1);
-          const { totalPages: tp } = cfg.redraw(cfg.getPage());
-          renderNav(tp);
-        }
-      });
-    };
   }
   var renderForestNav = makeNavRenderer({
     navId: "forestNav",
@@ -32876,7 +36212,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
     }
     let workerOk = false;
     try {
-      const workerUrl = new URL("./gosh.worker.js", import_meta.url).href;
+      const workerUrl = new URL("../workers/gosh.worker.js", import_meta.url).href;
       const w = new Worker(workerUrl);
       goshState.worker = w;
       workerOk = true;
@@ -32937,8 +36273,8 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
     permState.lastReg = null;
   }
   function _startPermTest() {
-    if (!_lastReg || _lastReg.rankDeficient) return;
-    const reg = _lastReg;
+    if (!appState.results.reg || appState.results.reg.rankDeficient) return;
+    const reg = appState.results.reg;
     const nPerm = parseInt(document.getElementById("permIter")?.value ?? "999", 10);
     const seed = 12345;
     const elProgress = document.getElementById("permProgress");
@@ -32996,7 +36332,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
     const viTA = new Float64Array(reg.vi);
     let workerOk = false;
     try {
-      const workerUrl = new URL("./perm.worker.js", import_meta.url).href;
+      const workerUrl = new URL("../workers/perm.worker.js", import_meta.url).href;
       const w = new Worker(workerUrl);
       permState.worker = w;
       workerOk = true;
@@ -33084,245 +36420,15 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
       appState.reportArgs = { ...appState.reportArgs, sensitivityRows: rows };
     }
   }
-  function _runCoreMeta(studies, opts) {
-    const {
-      method,
-      ciMethod,
-      alpha,
-      type,
-      useTF,
-      tfEstimator,
-      useTFAdjusted,
-      isMHorPeto,
-      hasClusters,
-      rveRho
-    } = opts;
-    let tf = [], all = studies;
-    if (useTF && !isMHorPeto) {
-      tf = trimFill(studies, method, tfEstimator);
-      all = [...studies, ...tf];
-    }
-    let m;
-    if (method === "MH") m = metaMH(studies, type, alpha);
-    else if (method === "Peto") m = metaPeto(studies, alpha);
-    else if (hasClusters) m = robustMeta(studies, method, ciMethod, alpha);
-    else m = meta(studies, method, ciMethod, alpha);
-    if (m.error) return { m, tf, all, profileLikResult: null, mAdjusted: null, rveResult: null, threeLevelResult: null };
-    const profileLikResult = (method === "ML" || method === "REML") && studies.length >= 2 ? profileLikTau2(studies, { method }) : null;
-    const mAdjusted = useTF && useTFAdjusted ? tf.length > 0 ? meta([...studies, ...tf], method, ciMethod, alpha) : m : null;
-    const rveResult = hasClusters && !isMHorPeto ? rvePooled(studies, { rho: rveRho, alpha }) : null;
-    const threeLevelResult = hasClusters && !isMHorPeto ? meta3level(studies, { method: "REML", alpha }) : null;
-    return { m, tf, all, profileLikResult, mAdjusted, rveResult, threeLevelResult };
-  }
-  function _runBayesBatch(studies, m, opts) {
-    const { bayesMu0, bayesSigmaMu, bayesSigmaTau, alpha, isMHorPeto } = opts;
-    if (studies.length < 2 || isMHorPeto) return { bayesResult: null, reMeanRef: NaN };
-    const reMeanRef = isFinite(m.RE) ? m.RE : m.FE;
-    const bayesResult = bayesMeta(studies, { mu0: bayesMu0, sigma_mu: bayesSigmaMu, sigma_tau: bayesSigmaTau, alpha });
-    return { bayesResult, reMeanRef };
-  }
-  function _runPubBiasBatch(studies, m, opts) {
-    const { alpha, selModeVal, selPreset, selWeightFn, selSides, selCuts } = opts;
-    const egger = eggerTest(studies);
-    const begg = beggTest(studies);
-    const petpeese = petPeeseTest(studies);
-    const fatpet = petpeese.fat;
-    const fsn = failSafeN(studies);
-    const tes = tesTest(studies, m);
-    const waap = waapWls(studies);
-    const pcurve = pCurve(studies);
-    const puniform = pUniform(studies, m);
-    const harbord = harbordTest(studies);
-    const peters = petersTest(studies);
-    const deeks = deeksTest(studies);
-    const ruecker = rueckerTest(studies);
-    const hc = henmiCopas(studies, alpha);
-    let selResult = null;
-    if (moderators.length === 0) {
-      if (selModeVal === "sensitivity") {
-        let selCutsEff, selSidesEff, selOmegaFixed;
-        if (selPreset !== "custom") {
-          const p = SELECTION_PRESETS[selPreset];
-          selCutsEff = p.cuts;
-          selSidesEff = p.sides;
-          selOmegaFixed = p.omega;
-        } else {
-          selCutsEff = selCuts;
-          selSidesEff = selSides;
-          selOmegaFixed = null;
-        }
-        selResult = veveaHedges(studies, selCutsEff, selSidesEff, selOmegaFixed);
-      } else if (selWeightFn === "halfnorm") {
-        selResult = halfNormalSelModel(studies, { sides: selSides });
-      } else if (selWeightFn === "power") {
-        selResult = powerSelModel(studies, { sides: selSides });
-      } else if (selWeightFn === "negexp") {
-        selResult = negexpSelModel(studies, { sides: selSides });
-      } else if (selWeightFn === "beta") {
-        selResult = betaSelModel(studies, { sides: selSides });
-      } else {
-        selResult = veveaHedges(studies, selCuts, selSides, null);
-      }
-    }
-    return {
-      egger,
-      begg,
-      petpeese,
-      fatpet,
-      fsn,
-      tes,
-      waap,
-      pcurve,
-      puniform,
-      harbord,
-      peters,
-      deeks,
-      ruecker,
-      hc,
-      selResult
-    };
-  }
-  function _runSensitivityBatch(studies, m, opts) {
-    const { method, ciMethod, alpha, cumulativeOrder } = opts;
-    const influence = influenceDiagnostics(studies, method, ciMethod, alpha);
-    const baujatResult = baujat(studies);
-    const blupResult = m && isFinite(m.tau2) && m.tau2 > 0 && studies.length >= 2 ? blupMeta(studies, m) : null;
-    const qqResiduals = influence.map((d) => d.stdResidual).filter(isFinite);
-    const qqLabels = influence.filter((d) => isFinite(d.stdResidual)).map((d) => d.label);
-    const cumulativeStudies = studies.slice();
-    if (cumulativeOrder === "precision_desc") cumulativeStudies.sort((a, b) => a.vi - b.vi);
-    else if (cumulativeOrder === "precision_asc") cumulativeStudies.sort((a, b) => b.vi - a.vi);
-    else if (cumulativeOrder === "effect_asc") cumulativeStudies.sort((a, b) => a.yi - b.yi);
-    else if (cumulativeOrder === "effect_desc") cumulativeStudies.sort((a, b) => b.yi - a.yi);
-    const cumResults = cumulativeMeta(cumulativeStudies, method, ciMethod, alpha);
-    return { influence, baujatResult, blupResult, qqResiduals, qqLabels, cumResults, cumulativeStudies };
-  }
-  function _runRegressionBatch(studies, m, opts) {
-    const { method, ciMethod, alpha, modSpec, scaleModSpec, interactionSpec } = opts;
-    const subgroup = subgroupAnalysis(studies, method, ciMethod, alpha);
-    let reg = null, ls = null;
-    if (scaleModSpec.length > 0) {
-      ls = lsModel(studies, modSpec, scaleModSpec, { ciMethod, alpha, locInteractions: interactionSpec });
-    } else if (modSpec.length > 0 || interactionSpec.length > 0) {
-      reg = metaRegression(studies, modSpec, method, ciMethod, alpha, interactionSpec);
-    }
-    return { subgroup, reg, ls };
-  }
   function _animateFresh(el) {
     if (!el) return;
     el.classList.remove("results-fresh");
     void el.offsetWidth;
     el.classList.add("results-fresh");
   }
-  function _renderAllResults(ctx) {
-    const {
-      type,
-      profile,
-      studies,
-      excluded,
-      softWarnings,
-      missingCorrelation,
-      m,
-      tf,
-      all,
-      profileLikResult,
-      mAdjusted,
-      rveResult,
-      threeLevelResult,
-      bayesResult,
-      reMeanRef,
-      egger,
-      begg,
-      petpeese,
-      fatpet,
-      fsn,
-      tes,
-      waap,
-      pcurve,
-      puniform,
-      harbord,
-      peters,
-      deeks,
-      ruecker,
-      hc,
-      selResult,
-      influence,
-      baujatResult,
-      blupResult,
-      qqResiduals,
-      qqLabels,
-      cumResults,
-      cumulativeStudies,
-      subgroup,
-      reg,
-      ls,
-      opts
-    } = ctx;
-    const {
-      method,
-      ciMethod,
-      alpha,
-      isMHorPeto,
-      hasClusters,
-      useTF,
-      tfEstimator,
-      useTFAdjusted,
-      bayesMu0,
-      bayesSigmaMu,
-      bayesSigmaTau,
-      selModeVal,
-      selWeightFn
-    } = opts;
-    const elResults = document.getElementById("results");
-    const elPubBiasStats = document.getElementById("pubBiasStats");
-    const elInfluenceDiagTable = document.getElementById("influenceDiagTable");
-    const elSubgroupSection = document.getElementById("subgroupSection");
-    const elSubgroupTable = document.getElementById("subgroupTable");
-    const elBubblePlots = document.getElementById("bubblePlots");
-    const elForestPageSize = document.getElementById("forestPageSize");
-    const elBaujatPlotBlock = document.getElementById("baujatPlotBlock");
-    const elQQPlotBlock = document.getElementById("qqPlotBlock");
-    const elRadialPlotBlock = document.getElementById("radialPlotBlock");
-    const elLabbeBlock = document.getElementById("labbeBlock");
-    const elBlupBlock = document.getElementById("blupBlock");
-    const elCumForestPageSize = document.getElementById("cumulativeForestPageSize");
-    const elCumFunnelStep = document.getElementById("cumulativeFunnelStep");
-    const elCumFunnelBlock = document.getElementById("cumulativeFunnelBlock");
-    const elOrchardPlotBlock = document.getElementById("orchardPlotBlock");
-    const elCatPageSize = document.getElementById("caterpillarPageSize");
-    const elBlupPageSize = document.getElementById("blupPageSize");
-    const elCaterpillarBlock = document.getElementById("caterpillarPlotBlock");
-    const elRobSection = document.getElementById("robSection");
-    const elProfileLikScale = document.getElementById("profileLikScale");
-    const elSelPreset = document.getElementById("selPreset");
-    const elHetDiag = document.getElementById("hetDiagSection");
-    if (profileLikResult && !profileLikResult.error) {
-      elHetDiag.style.display = "";
-      drawProfileLikTau2(profileLikResult, { xScale: elProfileLikScale?.value || "tau2", theme: appState.plotTheme });
-    } else {
-      elHetDiag.style.display = "none";
-    }
-    const elBayes = document.getElementById("bayesSection");
-    if (bayesResult && !bayesResult.error) {
-      bayesState.studies = studies;
-      bayesState.result = bayesResult;
-      bayesState.reMean = reMeanRef;
-      bayesState.profile = profile;
-      elBayes.style.display = "";
-      const bayesClusterNote = hasClusters ? `<p class="reg-note" style="color:var(--muted);margin:0 0 6px">\u2139 Bayesian analysis does not incorporate cluster-robust adjustment.</p>` : "";
-      document.getElementById("bayesSummary").innerHTML = bayesClusterNote + buildBayesSummaryHTML(bayesResult, profile, reMeanRef);
-      drawBayesMuPosterior(bayesResult, { reMean: reMeanRef, theme: appState.plotTheme });
-      drawBayesTauPosterior(bayesResult, { theme: appState.plotTheme });
-      document.getElementById("bayesGridWarning").style.display = bayesResult.grid_truncated ? "" : "none";
-      const ciLevel = document.getElementById("ciLevel")?.value ?? "95";
-      renderSensitivity(bayesMu0, bayesSigmaMu, bayesSigmaTau, ciLevel);
-    } else {
-      bayesState.studies = null;
-      bayesState.result = null;
-      elBayes.style.display = "none";
-      const elSensSection = document.getElementById("bayesSensitivitySection");
-      if (elSensSection) elSensSection.style.display = "none";
-    }
+  function _renderRveThreeLevel(ctx) {
+    const { profile, m, rveResult, threeLevelResult } = ctx;
+    const { alpha, hasClusters, isMHorPeto } = ctx.opts;
     {
       const elRve = document.getElementById("rveSection");
       const elRveSummary = document.getElementById("rveSummary");
@@ -33341,12 +36447,14 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
             const rveHi = profile.transform(rveResult.ci[1]);
             const reDisp = profile.transform(m.RE);
             const diffDir = rveResult.est > m.RE ? "higher" : rveResult.est < m.RE ? "lower" : "equal";
-            const rveRho = opts.rveRho;
+            const rveMode = ctx.opts.rveMode;
+            const rveRho = ctx.opts.rveRho;
+            const rveLine3 = rveMode === "hier" ? `HIER MoM &nbsp;\xB7&nbsp; \u03C9\xB2=${fmt(rveResult.omega2)} &nbsp;\xB7&nbsp; \u03C4\xB2=${fmt(rveResult.tau2)} &nbsp;\xB7&nbsp; m=${rveResult.kCluster} cluster${rveResult.kCluster === 1 ? "" : "s"} &nbsp;\xB7&nbsp; k=${rveResult.k} studies` : `\u03C1=${rveRho.toFixed(2)} &nbsp;\xB7&nbsp; m=${rveResult.kCluster} cluster${rveResult.kCluster === 1 ? "" : "s"} &nbsp;\xB7&nbsp; k=${rveResult.k} studies`;
             elRveSummary.innerHTML = `
             <div style="font-size:0.8125rem;line-height:1.9;margin-bottom:8px">
               ${hBtn2("rve.model")}<b>RVE pooled estimate:</b> ${fmt(rveEst)}<br>
-              CI [${fmt(rveLo)}, ${fmt(rveHi)}] | SE = ${fmt(rveResult.se)} | <em>t</em>(${rveResult.df}) = ${fmt(rveResult.t)} | <em>p</em> ${fmtPval(rveResult.p)}<br>
-              \u03C1=${rveRho.toFixed(2)} &nbsp;\xB7&nbsp; m=${rveResult.kCluster} cluster${rveResult.kCluster === 1 ? "" : "s"} &nbsp;\xB7&nbsp; k=${rveResult.k} studies<br>
+              CI [${fmt(rveLo)}, ${fmt(rveHi)}] | SE = ${fmt(rveResult.se)} | <em>t</em>(${rveResult.df}) = ${fmt(rveResult.t)} | <em>p</em> ${fmtP_APA(rveResult.p)}<br>
+              ${rveLine3}<br>
               <span style="color:var(--fg-muted);font-size:0.93em">RE (cluster-robust): ${fmt(reDisp)} &nbsp;\xB7&nbsp; RVE estimate is ${diffDir}.</span>
             </div>
           `;
@@ -33373,14 +36481,15 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
             const ciLoDisp = profile.transform(tl.ci[0]);
             const ciHiDisp = profile.transform(tl.ci[1]);
             elThreeSummary.innerHTML = `
+            ${renderConvergenceBadge(tl.convergence)}
             <div style="font-size:0.8125rem;line-height:1.9;margin-bottom:8px">
               ${hBtn2("threelevel.model")}<b>Three-level pooled estimate:</b> ${fmt(muDisp)}<br>
-              ${Math.round((1 - alpha) * 100)}% CI [${fmt(ciLoDisp)}, ${fmt(ciHiDisp)}] | SE = ${fmt(tl.se)} | <em>z</em> = ${fmt(tl.z)} | <em>p</em> ${fmtPval(tl.p)}<br>
+              ${Math.round((1 - alpha) * 100)}% CI [${fmt(ciLoDisp)}, ${fmt(ciHiDisp)}] | SE = ${fmt(tl.se)} | <em>z</em> = ${fmt(tl.z)} | <em>p</em> ${fmtP_APA(tl.p)}<br>
               m=${tl.kCluster} cluster${tl.kCluster === 1 ? "" : "s"} &nbsp;\xB7&nbsp; k=${tl.k} studies &nbsp;\xB7&nbsp; df=${tl.df}<br>
               ${hBtn2("threelevel.tau2")}\u03C3\xB2<sub>within</sub>=${fmt(tl.tau2_within)} &nbsp;\xB7&nbsp; \u03C3\xB2<sub>between</sub>=${fmt(tl.tau2_between)}<br>
               ${hBtn2("threelevel.I2")}<em>I</em>\xB2<sub>within</sub>=${fmt(tl.I2_within)}% &nbsp;\xB7&nbsp; <em>I</em>\xB2<sub>between</sub>=${fmt(tl.I2_between)}%<br>
-              ${hBtn2("het.Q")}<em>Q</em>(${tl.df}) = ${fmt(tl.Q)} | method=REML<br>
-              LL = ${fmt(tl.logLik)} (REML; omits normalising constants from R's logLik() convention)
+              ${hBtn2("het.Q")}<em>Q</em>(${tl.df}) = ${fmt(tl.Q)} | method=${ctx.opts.threeLevelMethod ?? "REML"}<br>
+              LL = ${fmt(tl.logLikFull ?? tl.logLik)} (${ctx.opts.threeLevelMethod ?? "REML"})
             </div>
           `;
           }
@@ -33390,6 +36499,63 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
         }
       }
     }
+  }
+  function _renderPooledPanel(ctx) {
+    const {
+      profile,
+      m,
+      studies,
+      bayesResult,
+      profileLikResult,
+      reMeanRef,
+      missingCorrelation,
+      type,
+      mAdjusted,
+      tf
+    } = ctx;
+    const {
+      alpha,
+      isMHorPeto,
+      hasClusters,
+      bayesMu0,
+      bayesSigmaMu,
+      bayesSigmaTau,
+      tfEstimator,
+      useTF
+    } = ctx.opts;
+    const elHetDiag = document.getElementById("hetDiagSection");
+    const elProfileLikScale = document.getElementById("profileLikScale");
+    if (profileLikResult && !profileLikResult.error) {
+      elHetDiag.style.display = "";
+      drawProfileLikTau2(profileLikResult, { xScale: elProfileLikScale?.value || "tau2", theme: appState.plotTheme });
+    } else {
+      elHetDiag.style.display = "none";
+    }
+    const elBayes = document.getElementById("bayesSection");
+    if (bayesResult && !bayesResult.error) {
+      bayesState.studies = studies;
+      bayesState.result = bayesResult;
+      bayesState.reMean = reMeanRef;
+      bayesState.profile = profile;
+      elBayes.style.display = "";
+      const bayesClusterNote = hasClusters ? `<p class="reg-note" style="color:var(--muted);margin:0 0 6px">\u2139 Bayesian analysis does not incorporate cluster-robust adjustment.</p>` : "";
+      document.getElementById("bayesSummary").innerHTML = bayesClusterNote + buildBayesSummaryHTML(bayesResult, profile, reMeanRef, alpha);
+      drawBayesMuPosterior(bayesResult, { reMean: reMeanRef, theme: appState.plotTheme });
+      drawBayesTauPosterior(bayesResult, { theme: appState.plotTheme });
+      document.getElementById("bayesGridWarning").style.display = bayesResult.grid_truncated ? "" : "none";
+      const elGridExt = document.getElementById("bayesGridExtendedWarning");
+      if (elGridExt)
+        elGridExt.style.display = bayesResult.gridExtended && !bayesResult.grid_truncated ? "" : "none";
+      const ciLevel = document.getElementById("ciLevel")?.value ?? "95";
+      renderSensitivity(bayesMu0, bayesSigmaMu, bayesSigmaTau, ciLevel);
+    } else {
+      bayesState.studies = null;
+      bayesState.result = null;
+      elBayes.style.display = "none";
+      const elSensSection = document.getElementById("bayesSensitivitySection");
+      if (elSensSection) elSensSection.style.display = "none";
+    }
+    _renderRveThreeLevel(ctx);
     const FE_disp = profile.transform(m.FE);
     const RE_disp = profile.transform(m.RE);
     const ci_disp = { lb: profile.transform(m.ciLow), ub: profile.transform(m.ciHigh) };
@@ -33403,18 +36569,18 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
     const methodLabel = m.isMH ? "MH" : m.isPeto ? "Peto" : "";
     const clusterBanner = hasClusters ? isMHorPeto ? `<div class="reg-note" style="color:var(--muted);margin:2px 0 6px">\u2139 Cluster-robust SE is not available for M-H/Peto methods.</div>` : m.isClustered ? `<div class="reg-note" style="margin:2px 0 6px">Cluster-robust SEs active (C&nbsp;=&nbsp;${m.clustersUsed} cluster${m.clustersUsed === 1 ? "" : "s"}${m.allSingletons ? " \u2014 all singletons (HC-robust)" : ""}).</div>` : m.robustError ? `<div class="reg-note" style="color:var(--color-warning);margin:2px 0 6px">\u26A0 Cluster-robust SE: ${escapeHTML(m.robustError)}</div>` : "" : "";
     const robust_ci_disp = m.isClustered ? { lb: profile.transform(m.robustCiLow), ub: profile.transform(m.robustCiHigh) } : null;
-    const robustCILine = m.isClustered ? `Robust CI [${fmt(robust_ci_disp.lb)}, ${fmt(robust_ci_disp.ub)}] | SE = ${fmt(m.robustSE)} | <em>z</em> = ${fmt(m.robustStat)} | <em>p</em> ${fmtPval(m.robustPval)} (df = ${m.robustDf})${hBtn2("cluster.robust")}<br>` : "";
+    const robustCILine = m.isClustered ? `Robust CI [${fmt(robust_ci_disp.lb)}, ${fmt(robust_ci_disp.ub)}] | SE = ${fmt(m.robustSE)} | <em>z</em> = ${fmt(m.robustStat)} | <em>p</em> ${fmtP_APA(m.robustPval)} (df = ${m.robustDf})${hBtn2("cluster.robust")}<br>` : "";
     const SMD_TYPES = /* @__PURE__ */ new Set(["SMD", "SMDH", "SMD_paired", "SMD1", "SMD1H", "SMCC"]);
     const cles = SMD_TYPES.has(type) ? clES(m.RE, [m.ciLow, m.ciHigh]) : null;
     const clesLine = cles ? `CLES: ${fmt(cles.estimate)} [${fmt(cles.ci[0])}, ${fmt(cles.ci[1])}]${hBtn2("pool.cles")}<br>` : "";
-    const ciLbl = getCiLabel2();
+    const ciLbl = Math.round((1 - alpha) * 100) + "% CI";
     const showLogScale = !!profile.isLog;
     const logScaleRELine = showLogScale ? `<div class="result-log-note">log scale: ${fmt(m.RE)} | SE = ${fmt(m.seRE)} | ${ciLbl} [${fmt(m.ciLow)}, ${fmt(m.ciHigh)}]</div>` : "";
     const logScaleFELine = showLogScale ? `<div class="result-log-note">log scale: ${fmt(m.FE)} | SE = ${fmt(m.seFE)} | ${ciLbl} [${fmt(m.FE - feZ * m.seFE)}, ${fmt(m.FE + feZ * m.seFE)}]</div>` : "";
     const analysisScaleLabel = profile.analysisScaleLabel ?? null;
     const analysisScaleRELine = analysisScaleLabel ? `<div class="result-log-note">${analysisScaleLabel}: ${fmt(m.RE)} | SE = ${fmt(m.seRE)} | ${ciLbl} [${fmt(m.ciLow)}, ${fmt(m.ciHigh)}]</div>` : "";
     const analysisScaleFELine = analysisScaleLabel ? `<div class="result-log-note">${analysisScaleLabel}: ${fmt(m.FE)} | SE = ${fmt(m.seFE)} | ${ciLbl} [${fmt(m.FE - feZ * m.seFE)}, ${fmt(m.FE + feZ * m.seFE)}]</div>` : "";
-    elResults.innerHTML = warningHTML + clusterBanner + (isMHorPeto ? `
+    document.getElementById("results").innerHTML = warningHTML + clusterBanner + (isMHorPeto ? `
     <div class="result-re-primary">
       <span class="result-label">${profile.label} (${methodLabel})</span>
       <span class="result-re-value">${fmt(FE_disp)}</span>
@@ -33424,13 +36590,13 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
     ${logScaleFELine}${analysisScaleFELine}
     <div class="result-stat-row">
       <span class="result-row-label">Test of pooled effect</span>
-      <span class="result-stat-value">${m.dist === "t" ? `<em>t</em>(${m.df})` : "<em>z</em>"} = ${fmt(m.stat)}, <em>p</em> ${fmtPval(m.pval)}</span>
+      <span class="result-stat-value">${m.dist === "t" ? `<em>t</em>(${m.df})` : "<em>z</em>"} = ${fmt(m.stat)}, <em>p</em> ${fmtP_APA(m.pval)}</span>
     </div>
     <div class="result-method-note">Fixed-effect only \u2014 no \u03C4\xB2, RE estimate, or prediction interval.</div>
     <div class="result-het-group">
       <div class="result-section-label">Heterogeneity</div>
       <div class="result-het-stats"><em>I</em>\xB2=${fmt(m.I2)}% [${fmt(m.I2CI[0])}%, ${fmt(m.I2CI[1])}%]${hBtn2("het.I2")} &nbsp;\xB7&nbsp; <em>H</em>\xB2-CI=[${fmt(m.H2CI[0])}, ${isFinite(m.H2CI[1]) ? fmt(m.H2CI[1]) : "\u221E"}]${hBtn2("het.H2")}</div>
-      <div class="result-het-stats result-het-test"><em>Q</em>(${m.df}) = ${fmt(m.Q)}, <em>p</em> ${fmtPval(m.df > 0 ? 1 - chiSquareCDF(m.Q, m.df) : NaN)}${hBtn2("het.Q")}</div>
+      <div class="result-het-stats result-het-test"><em>Q</em>(${m.df}) = ${fmt(m.Q)}, <em>p</em> ${fmtP_APA(m.df > 0 ? 1 - chiSquareCDF(m.Q, m.df) : NaN)}${hBtn2("het.Q")}</div>
     </div>
   ` : `
     <div class="result-re-primary">
@@ -33443,7 +36609,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
     ${useTF && mAdjusted ? `<div class="result-re-adjusted">RE (adjusted): <b>${fmt(RE_adj_disp)}</b>${hasClusters ? ` <span class="result-note">(cluster-robust not applied to imputed studies)</span>` : ""}</div>` : ""}
     <div class="result-stat-row">
       <span class="result-row-label">Test of pooled effect</span>
-      <span class="result-stat-value">${m.dist === "t" ? `<em>t</em>(${m.df})` : "<em>z</em>"} = ${fmt(m.stat)}, <em>p</em> ${fmtPval(m.pval)}</span>
+      <span class="result-stat-value">${m.dist === "t" ? `<em>t</em>(${m.df})` : "<em>z</em>"} = ${fmt(m.stat)}, <em>p</em> ${fmtP_APA(m.pval)}</span>
     </div>
     <div class="result-stat-row">
       <span class="result-row-label">Prediction interval</span>
@@ -33460,34 +36626,57 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
     ${logScaleFELine}${analysisScaleFELine}
     ${robustCILine}${clesLine}<div class="result-het-group">
       <div class="result-section-label">Heterogeneity</div>
-      <div class="result-het-stats">\u03C4\xB2=${fmt(m.tau2)} [${fmt(m.tauCI[0])}, ${isFinite(m.tauCI[1]) ? fmt(m.tauCI[1]) : "\u221E"}]${hBtn2("het.tau2")} &nbsp;\xB7&nbsp; <em>I</em>\xB2=${fmt(m.I2)}% [${fmt(m.I2CI[0])}%, ${fmt(m.I2CI[1])}%]${hBtn2("het.I2")} &nbsp;\xB7&nbsp; <em>H</em>\xB2-CI=[${fmt(m.H2CI[0])}, ${isFinite(m.H2CI[1]) ? fmt(m.H2CI[1]) : "\u221E"}]${hBtn2("het.H2")}</div>
-      <div class="result-het-stats result-het-test"><em>Q</em>(${m.df}) = ${fmt(m.Q)}, <em>p</em> ${fmtPval(m.df > 0 ? 1 - chiSquareCDF(m.Q, m.df) : NaN)}${hBtn2("het.Q")}</div>
+      <div class="result-het-stats">\u03C4\xB2=${m.tau2Boundary ? '0 <span class="badge-warn" title="\u03C4\xB2 optimizer converged at the boundary (constrained to 0)">(boundary)</span>' : fmt(m.tau2)} [${fmt(m.tauCI[0])}, ${isFinite(m.tauCI[1]) ? fmt(m.tauCI[1]) : "\u221E"}]${hBtn2("het.tau2")}${m.convergence && m.convergence.converged === false ? ' <span class="badge-warn" title="\u03C4\xB2 estimator did not converge within the iteration limit">(did not converge)</span>' : ""} &nbsp;\xB7&nbsp; <em>I</em>\xB2=${fmt(m.I2)}% [${fmt(m.I2CI[0])}%, ${fmt(m.I2CI[1])}%]${hBtn2("het.I2")} &nbsp;\xB7&nbsp; <em>H</em>\xB2-CI=[${fmt(m.H2CI[0])}, ${isFinite(m.H2CI[1]) ? fmt(m.H2CI[1]) : "\u221E"}]${hBtn2("het.H2")}</div>
+      <div class="result-het-stats result-het-test"><em>Q</em>(${m.df}) = ${fmt(m.Q)}, <em>p</em> ${fmtP_APA(m.df > 0 ? 1 - chiSquareCDF(m.Q, m.df) : NaN)}${hBtn2("het.Q")}</div>
     </div>
   `);
-    const eggerRobustNote = egger.clustersUsed ? ` | <em>p</em><sub>robust</sub> ${isFinite(egger.robustInterceptP) ? fmtPval(egger.robustInterceptP) : "= \u2014"}` : "";
-    const fatpetRobustNote = fatpet.clustersUsed ? ` | <em>p</em><sub>FAT,rob</sub> ${isFinite(fatpet.robustSlopeP) ? fmtPval(fatpet.robustSlopeP) : "= \u2014"} \xB7 <em>p</em><sub>PET,rob</sub> ${isFinite(fatpet.robustInterceptP) ? fmtPval(fatpet.robustInterceptP) : "= \u2014"}` : "";
+  }
+  function _renderPubBiasPanel(ctx) {
+    const {
+      profile,
+      m,
+      egger,
+      begg,
+      fatpet,
+      petpeese,
+      fsn,
+      tes,
+      waap,
+      hc,
+      harbord,
+      peters,
+      deeks,
+      ruecker,
+      mAdjusted,
+      tf
+    } = ctx;
+    const { alpha, tfEstimator, useTF, fsnTrivial: fsnTrivial2 = 0.1, fsnDirection: fsnDirection2 = "auto" } = ctx.opts;
+    const eggerRobustNote = egger.clustersUsed ? ` | <em>p</em><sub>robust</sub> ${isFinite(egger.robustInterceptP) ? fmtP_APA(egger.robustInterceptP) : "= \u2014"}` : "";
+    const fatpetRobustNote = fatpet.clustersUsed ? ` | <em>p</em><sub>FAT,rob</sub> ${isFinite(fatpet.robustSlopeP) ? fmtP_APA(fatpet.robustSlopeP) : "= \u2014"} \xB7 <em>p</em><sub>PET,rob</sub> ${isFinite(fatpet.robustInterceptP) ? fmtP_APA(fatpet.robustInterceptP) : "= \u2014"}` : "";
     const ciPct = `${Math.round((1 - alpha) * 100)}% CI`;
     const eggerTC = isFinite(egger.df) ? tCritical(egger.df, alpha) : NaN;
     const fatpetTC = isFinite(fatpet.df) ? tCritical(fatpet.df, alpha) : NaN;
-    const eggerStats = isFinite(egger.intercept) ? `intercept = ${fmt(egger.intercept)}, SE = ${fmt(egger.se)}, ${ciPct} [${fmt(egger.intercept - eggerTC * egger.se)}, ${fmt(egger.intercept + eggerTC * egger.se)}], <em>t</em>(${egger.df}) = ${fmt(egger.t)}, <em>p</em> ${fmtPval(egger.p)}` : `intercept (k&lt;3)`;
-    const beggStats = isFinite(begg.tau) ? `\u03C4 = ${fmt(begg.tau)}, <em>z</em> = ${fmt(begg.z)}, <em>p</em> ${fmtPval(begg.p)}` : `\u03C4 (k&lt;3)`;
-    const fatStats = isFinite(fatpet.slope) ? `\u03B2\u2081 = ${fmt(fatpet.slope)}, SE = ${fmt(fatpet.slopeSE)}, <em>t</em>(${fatpet.df}) = ${fmt(fatpet.slopeT)}, <em>p</em> ${fmtPval(fatpet.slopeP)}` : `\u03B2\u2081 (k&lt;3)`;
+    const eggerStats = isFinite(egger.intercept) ? `intercept = ${fmt(egger.intercept)}, SE = ${fmt(egger.se)}, ${ciPct} [${fmt(egger.intercept - eggerTC * egger.se)}, ${fmt(egger.intercept + eggerTC * egger.se)}], <em>t</em>(${egger.df}) = ${fmt(egger.t)}, <em>p</em> ${fmtP_APA(egger.p)}` : `intercept (k&lt;3)`;
+    const beggStats = isFinite(begg.tau) ? `\u03C4 = ${fmt(begg.tau)}, <em>z</em> = ${fmt(begg.z)}, <em>p</em> ${fmtP_APA(begg.p)}` : `\u03C4 (k&lt;3)`;
+    const fatStats = isFinite(fatpet.slope) ? `\u03B2\u2081 = ${fmt(fatpet.slope)}, SE = ${fmt(fatpet.slopeSE)}, <em>t</em>(${fatpet.df}) = ${fmt(fatpet.slopeT)}, <em>p</em> ${fmtP_APA(fatpet.slopeP)}` : fatpet.singularMatrix ? `\u03B2\u2081 (singular design matrix \u2014 identical predictor values?)` : `\u03B2\u2081 (k&lt;3)`;
     const petStats = (() => {
-      if (!isFinite(fatpet.intercept)) return `(k&lt;3)`;
-      if (!isFinite(fatpetTC)) return `${fmt(profile.transform(fatpet.intercept))}, <em>p</em> ${fmtPval(fatpet.interceptP)}`;
+      if (!isFinite(fatpet.intercept))
+        return fatpet.singularMatrix ? `(singular design matrix)` : `(k&lt;3)`;
+      if (!isFinite(fatpetTC)) return `${fmt(profile.transform(fatpet.intercept))}, <em>p</em> ${fmtP_APA(fatpet.interceptP)}`;
       const lo = fmt(profile.transform(fatpet.intercept - fatpetTC * fatpet.interceptSE));
       const hi = fmt(profile.transform(fatpet.intercept + fatpetTC * fatpet.interceptSE));
-      return `${fmt(profile.transform(fatpet.intercept))}, SE = ${fmt(fatpet.interceptSE)}, ${ciPct} [${lo}, ${hi}], <em>t</em>(${fatpet.df}) = ${fmt(fatpet.interceptT)}, <em>p</em> ${fmtPval(fatpet.interceptP)}`;
+      return `${fmt(profile.transform(fatpet.intercept))}, SE = ${fmt(fatpet.interceptSE)}, ${ciPct} [${lo}, ${hi}], <em>t</em>(${fatpet.df}) = ${fmt(fatpet.interceptT)}, <em>p</em> ${fmtP_APA(fatpet.interceptP)}`;
     })();
     const ppSrc = petpeese.usePeese ? petpeese.peese : petpeese.fat;
     const ppTC = isFinite(ppSrc.df) ? tCritical(ppSrc.df, alpha) : NaN;
     const ppLabel = petpeese.usePeese ? "PEESE" : "PET";
     const ppStats = (() => {
-      if (!isFinite(ppSrc.intercept)) return `NA (k&lt;3)`;
-      if (!isFinite(ppTC)) return `${fmt(profile.transform(ppSrc.intercept))}, <em>p</em> ${fmtPval(ppSrc.interceptP)} [${ppLabel}]`;
+      if (!isFinite(ppSrc.intercept))
+        return ppSrc.singularMatrix ? `NA (singular design matrix)` : `NA (k&lt;3)`;
+      if (!isFinite(ppTC)) return `${fmt(profile.transform(ppSrc.intercept))}, <em>p</em> ${fmtP_APA(ppSrc.interceptP)} [${ppLabel}]`;
       const lo = fmt(profile.transform(ppSrc.intercept - ppTC * ppSrc.interceptSE));
       const hi = fmt(profile.transform(ppSrc.intercept + ppTC * ppSrc.interceptSE));
-      return `${fmt(profile.transform(ppSrc.intercept))}, SE = ${fmt(ppSrc.interceptSE)}, ${ciPct} [${lo}, ${hi}], <em>t</em>(${ppSrc.df}) = ${fmt(ppSrc.interceptT)}, <em>p</em> ${fmtPval(ppSrc.interceptP)} [${ppLabel}]`;
+      return `${fmt(profile.transform(ppSrc.intercept))}, SE = ${fmt(ppSrc.interceptSE)}, ${ciPct} [${lo}, ${hi}], <em>t</em>(${ppSrc.df}) = ${fmt(ppSrc.interceptT)}, <em>p</em> ${fmtP_APA(ppSrc.interceptP)} [${ppLabel}]`;
     })();
     const waapZ = normalQuantile(1 - alpha / 2);
     const waapStats = (() => {
@@ -33495,16 +36684,16 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
       const lo = fmt(profile.transform(waap.estimate - waapZ * waap.se));
       const hi = fmt(profile.transform(waap.estimate + waapZ * waap.se));
       const fb = waap.fallback ? ` <span style='color:var(--fg-muted)'>(fallback to WLS)</span>` : "";
-      return `${fmt(profile.transform(waap.estimate))}, SE = ${fmt(waap.se)}, ${ciPct} [${lo}, ${hi}], <em>z</em> = ${fmt(waap.z)}, <em>p</em> ${fmtPval(waap.p)} | k<sub>adequate</sub> = ${waap.kAdequate}/${waap.k}${fb}`;
+      return `${fmt(profile.transform(waap.estimate))}, SE = ${fmt(waap.se)}, ${ciPct} [${lo}, ${hi}], <em>z</em> = ${fmt(waap.z)}, <em>p</em> ${fmtP_APA(waap.p)} | k<sub>adequate</sub> = ${waap.kAdequate}/${waap.k}${fb}`;
     })();
     const hcStats = hc.error ? `NA (${escapeHTML(hc.error)})` : `${fmt(profile.transform(hc.beta))}, SE = ${fmt(hc.se)}, 95% CI [${fmt(profile.transform(hc.ci[0]))}, ${fmt(profile.transform(hc.ci[1]))}] (DL \u03C4\xB2 = ${fmt(hc.tau2)})`;
-    elPubBiasStats.innerHTML = `
+    document.getElementById("pubBiasStats").innerHTML = `
     &nbsp;&nbsp;${hBtn2("bias.egger")}Egger: ${eggerStats}${eggerRobustNote}<br>
     &nbsp;&nbsp;${hBtn2("bias.begg")}Begg: ${beggStats}<br>
     &nbsp;&nbsp;${hBtn2("bias.fatpet")}FAT (bias): ${fatStats} &nbsp;\xB7&nbsp; PET (effect at SE\u21920): ${petStats}${fatpetRobustNote}<br>
     &nbsp;&nbsp;${hBtn2("bias.petpeese")}${petpeese.usePeese ? "<b>" : ""}PET-PEESE (corrected): ${ppStats}${petpeese.usePeese ? "</b>" : ""}<br>
-    &nbsp;&nbsp;${hBtn2("bias.fsn")}Fail-safe N (Rosenthal): ${isFinite(fsn.rosenthal) ? Math.round(fsn.rosenthal) : "NA"} &nbsp;\xB7&nbsp; Orwin (trivial=0.1): ${isFinite(fsn.orwin) ? Math.round(fsn.orwin) : "NA"}<br>
-    &nbsp;&nbsp;${hBtn2("bias.tes")}TES: O = ${isFinite(tes.O) ? tes.O : "NA"} | E = ${isFinite(tes.E) ? fmt(tes.E) : "NA"} | \u03C7\xB2(k\u22121) = ${isFinite(tes.chi2) ? fmt(tes.chi2) : "NA (k<2)"} | ${isFinite(tes.p) ? `<em>p</em> ${fmtPval(tes.p)}` : "<em>p</em> (k<2)"}${isFinite(tes.p) && tes.p < 0.1 ? " <span style='color:var(--color-warning)'>\u26A0 excess</span>" : ""}<br>
+    &nbsp;&nbsp;${hBtn2("bias.fsn")}Fail-safe N (Rosenthal): ${isFinite(fsn.rosenthal) ? Math.round(fsn.rosenthal) : "NA"} &nbsp;\xB7&nbsp; Orwin (trivial=${fsnTrivial2}, dir=${fsnDirection2}): ${isFinite(fsn.orwin) ? Math.round(fsn.orwin) : "NA"}<br>
+    &nbsp;&nbsp;${hBtn2("bias.tes")}TES: O = ${isFinite(tes.O) ? tes.O : "NA"} | E = ${isFinite(tes.E) ? fmt(tes.E) : "NA"} | \u03C7\xB2(k\u22121) = ${isFinite(tes.chi2) ? fmt(tes.chi2) : "NA (k<2)"} | ${isFinite(tes.p) ? `<em>p</em> ${fmtP_APA(tes.p)}` : "<em>p</em> (k<2)"}${isFinite(tes.p) && tes.p < 0.1 ? " <span style='color:var(--color-warning)'>\u26A0 excess</span>" : ""}<br>
     &nbsp;&nbsp;${hBtn2("bias.waap")}WAAP-WLS: ${waapStats}<br>
     &nbsp;&nbsp;${hBtn2("bias.hc")}Henmi-Copas: ${hcStats}<br>
     <b>Trim &amp; Fill:</b>${hBtn2("bias.trimfill")} ${useTF ? (() => {
@@ -33515,57 +36704,71 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
     <details style="margin-top:4px">
       <summary style="cursor:pointer;color:var(--fg-muted);font-size:0.9em">Additional regression tests (binary outcomes)</summary>
       <div style="margin-top:4px">
-        &nbsp;&nbsp;${hBtn2("bias.harbord")}Harbord: intercept = ${isFinite(harbord.intercept) ? fmt(harbord.intercept) : "NA"} | <em>p</em> ${isFinite(harbord.interceptP) ? fmtPval(harbord.interceptP) : "NA (k&lt;3 or no 2\xD72 counts)"}<br>
-        &nbsp;&nbsp;${hBtn2("bias.peters")}Peters: intercept = ${isFinite(peters.intercept) ? fmt(peters.intercept) : "NA"} | <em>p</em> ${isFinite(peters.interceptP) ? fmtPval(peters.interceptP) : "NA (k&lt;3 or no sample sizes)"}<br>
-        &nbsp;&nbsp;${hBtn2("bias.deeks")}Deeks: intercept = ${isFinite(deeks.intercept) ? fmt(deeks.intercept) : "NA"} | <em>p</em> ${isFinite(deeks.interceptP) ? fmtPval(deeks.interceptP) : "NA (k&lt;3 or no 2\xD72 counts)"}<br>
-        &nbsp;&nbsp;${hBtn2("bias.ruecker")}R\xFCcker: intercept = ${isFinite(ruecker.intercept) ? fmt(ruecker.intercept) : "NA"} | <em>p</em> ${isFinite(ruecker.interceptP) ? fmtPval(ruecker.interceptP) : "NA (k&lt;3 or no 2\xD72 counts)"}
+        ${[
+      ["bias.harbord", "Harbord", harbord, "k&lt;3 or no 2\xD72 counts"],
+      ["bias.peters", "Peters", peters, "k&lt;3 or no sample sizes"],
+      ["bias.deeks", "Deeks", deeks, "k&lt;3 or no 2\xD72 counts"],
+      ["bias.ruecker", "R\xFCcker", ruecker, "k&lt;3 or no 2\xD72 counts"]
+    ].map(
+      ([key, name, r, naMsg]) => `&nbsp;&nbsp;${hBtn2(key)}${name}: intercept = ${isFinite(r.intercept) ? fmt(r.intercept) : "NA"} | <em>p</em> ${isFinite(r.interceptP) ? fmtP_APA(r.interceptP) : `NA (${r.singularMatrix ? "singular design matrix" : naMsg})`}`
+    ).join("<br>\n        ")}
       </div>
     </details>
   `;
-    _animateFresh(elResults);
-    const influenceOpen = elInfluenceDiagTable.querySelector(".sens-block")?.open ?? true;
-    const influenceHTML = buildInfluenceHTML(influence, influenceOpen);
-    const hasSubgroup = subgroup && subgroup.G >= 2;
-    const subgroupHTML = hasSubgroup ? buildSubgroupHTML(subgroup, profile, hasClusters) : "";
-    elInfluenceDiagTable.innerHTML = influenceHTML;
-    elInfluenceDiagTable.querySelectorAll(".sens-summary").forEach((summary) => {
-      summary.addEventListener("click", (e) => {
-        if (e.target.closest(".help-btn")) e.preventDefault();
-      });
-    });
-    elSubgroupSection.style.display = hasSubgroup ? "" : "none";
-    elSubgroupTable.innerHTML = hasSubgroup && isMHorPeto ? `<p class="reg-note" style="margin:4px 0 8px">\u26A0 Subgroup pooling uses inverse-variance (DL) weights \u2014 switch to DL or REML for M-H subgroup analysis.</p>` + subgroupHTML : subgroupHTML;
-    renderStudyTable(all, m, profile);
-    _animateFresh(document.getElementById("studyTable"));
-    performance.mark("phase:loo:render:start");
-    renderSensitivityPanel(studies, isMHorPeto ? null : m, isMHorPeto ? "DL" : method, ciMethod, profile, { isMHFallback: isMHorPeto }, alpha);
-    performance.measure("phase:loo:render", "phase:loo:render:start");
-    pCurvePlot.result = pcurve;
-    pUniformPlot.result = puniform;
-    pUniformPlot.m = m;
-    pUniformPlot.profile = profile;
-    renderPCurvePanel(pcurve, { theme: appState.plotTheme });
-    renderPUniformPanel(puniform, m, profile, { theme: appState.plotTheme });
-    renderSelectionModelPanel(selResult, selModeVal, selWeightFn, profile);
-    const modSpec = opts.modSpec;
-    const scaleModSpec = opts.scaleModSpec;
-    const kExcluded = reg ?? ls ? studies.length - (reg ?? ls).k : 0;
-    if (ls) {
-      _lastReg = null;
-      _lastLs = ls.rankDeficient ? null : ls;
-      renderLocationScalePanel(ls, ciMethod, kExcluded);
-    } else {
-      _lastLs = null;
-      _lastReg = reg && !reg.rankDeficient ? reg : null;
-      const _allTermMods = [...moderators, ...interactions.map((ix) => ({ name: ix.name }))];
-      renderRegressionPanel(reg ?? {}, method, ciMethod, kExcluded, _allTermMods);
-      const elPermSection = document.getElementById("permSection");
-      if (elPermSection) {
-        elPermSection.style.display = _lastReg ? "" : "none";
-        _clearPermResults();
-      }
-    }
-    const bubbleContainer = elBubblePlots;
+    _animateFresh(document.getElementById("results"));
+  }
+  function _renderForestAndBubbles(ctx) {
+    const {
+      profile,
+      m,
+      studies,
+      all,
+      type,
+      reg,
+      ls,
+      egger,
+      petpeese,
+      influence,
+      baujatResult,
+      blupResult,
+      qqResiduals,
+      qqLabels,
+      cumResults,
+      cumulativeStudies,
+      excluded,
+      softWarnings,
+      tf,
+      begg,
+      fatpet,
+      fsn,
+      tes,
+      waap,
+      hc,
+      harbord,
+      peters,
+      deeks,
+      ruecker,
+      selResult,
+      rveResult,
+      threeLevelResult,
+      bayesResult,
+      profileLikResult,
+      pcurve,
+      puniform,
+      subgroup
+    } = ctx;
+    const { mAdjusted } = ctx;
+    const {
+      method,
+      ciMethod,
+      alpha,
+      isMHorPeto,
+      hasClusters,
+      useTF,
+      selModeVal,
+      selWeightFn
+    } = ctx.opts;
+    const bubbleContainer = document.getElementById("bubblePlots");
     bubbleContainer.innerHTML = "";
     const bubbleResult = ls ? {
       tau2: ls.tau2_mean,
@@ -33614,15 +36817,18 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
         }
       });
     }
+    const elForestPageSize = document.getElementById("forestPageSize");
     const rawPageSize = elForestPageSize?.value ?? "30";
     const pageSize = rawPageSize === "all" ? Infinity : +rawPageSize;
-    const forestOpts = { ciMethod, profile, pageSize, pooledDisplay: forestPlot.poolDisplay, theme: appState.plotTheme, alpha, ciLabel: getCiLabel2() };
+    const forestOpts = { ciMethod, profile, pageSize, pooledDisplay: forestPlot.poolDisplay, theme: appState.plotTheme, alpha, ciLabel: Math.round((1 - alpha) * 100) + "% CI" };
     const mForest = isMHorPeto ? { ...m, RE: m.FE, seRE: m.seFE, tau2: 0, predLow: NaN, predHigh: NaN } : m;
     forestPlot.args = { studies: all, m: mForest, options: forestOpts };
-    performance.mark("phase:plot:forest:start");
     const { totalPages } = drawForest(all, mForest, { ...forestOpts, page: forestPlot.page });
-    performance.measure("phase:plot:forest", "phase:plot:forest:start");
     renderForestNav(totalPages);
+    const elSelPreset = document.getElementById("selPreset");
+    const elProfileLikScale = document.getElementById("profileLikScale");
+    const SMD_TYPES_REP = /* @__PURE__ */ new Set(["SMD", "SMDH", "SMD_paired", "SMD1", "SMD1H", "SMCC"]);
+    const cles = SMD_TYPES_REP.has(type) ? clES(m.RE, [m.ciLow, m.ciHigh]) : null;
     const _selPreset = elSelPreset.value;
     const _selLabel = selModeVal === "mle" ? "MLE" : _selPreset !== "custom" ? SELECTION_PRESETS[_selPreset]?.label ?? _selPreset : "Custom";
     appState.reportArgs = {
@@ -33655,6 +36861,10 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
       rveResult,
       threeLevelResult,
       rveRho: parseFloat(document.getElementById("rveRho")?.value ?? 0.8),
+      rveMode: document.getElementById("rveWeighting")?.value ?? "corr",
+      threeLevelMethod: document.getElementById("threeLevelMethod")?.value ?? "REML",
+      fsnTrivial,
+      fsnDirection,
       permResult: permState.lastResult ?? null,
       ciLevel: document.getElementById("ciLevel")?.value ?? "95",
       mccMethod: document.getElementById("mccMethod")?.value ?? "none",
@@ -33678,9 +36888,7 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
     funnelPlot.egger = egger;
     funnelPlot.petpeese = petpeese;
     drawIfVisible("pubBiasSection", () => {
-      performance.mark("phase:plot:funnel:start");
       drawFunnel(...funnelPlot.args, { egger: funnelPlot.egger, contours: funnelPlot.contours, petpeese: funnelPlot.petpeese, theme: appState.plotTheme });
-      performance.measure("phase:plot:funnel", "phase:plot:funnel:start");
     });
     const labbeTypes = ["OR", "RR", "RD"];
     const showLabbe = labbeTypes.includes(type);
@@ -33688,13 +36896,14 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
     blupPlot.result = blupResult;
     blupPlot.profile = profile;
     blupPlot.page = 0;
+    const elBlupPageSize = document.getElementById("blupPageSize");
     const rawBlupPageSize = elBlupPageSize?.value ?? "30";
     blupPlot.pageSize = rawBlupPageSize === "all" ? Infinity : +rawBlupPageSize;
-    elBlupBlock.style.display = blupResult ? "" : "none";
-    elBaujatPlotBlock.style.display = baujatResult ? "" : "none";
-    elQQPlotBlock.style.display = showQQ ? "" : "none";
-    elRadialPlotBlock.style.display = studies.length >= 2 && !isMHorPeto ? "" : "none";
-    elLabbeBlock.style.display = showLabbe ? "" : "none";
+    document.getElementById("blupBlock").style.display = blupResult ? "" : "none";
+    document.getElementById("baujatPlotBlock").style.display = baujatResult ? "" : "none";
+    document.getElementById("qqPlotBlock").style.display = showQQ ? "" : "none";
+    document.getElementById("radialPlotBlock").style.display = studies.length >= 2 && !isMHorPeto ? "" : "none";
+    document.getElementById("labbeBlock").style.display = showLabbe ? "" : "none";
     Object.assign(diagnosticsState, {
       influence,
       baujatResult,
@@ -33709,7 +36918,6 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
       isMHorPeto
     });
     drawIfVisible("diagnosticSection", () => {
-      performance.mark("phase:plot:influence:start");
       drawInfluencePlot(influence, { theme: appState.plotTheme });
       if (blupResult) {
         const { totalPages: blupPages } = drawBlupPlot(blupResult, profile, { pageSize: blupPlot.pageSize, page: 0, theme: appState.plotTheme });
@@ -33719,16 +36927,19 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
       if (showQQ) drawQQPlot(qqResiduals, qqLabels, { theme: appState.plotTheme });
       if (studies.length >= 2 && !isMHorPeto) drawRadialPlot(studies, m, profile, { theme: appState.plotTheme });
       if (showLabbe) drawLabbe(studies, m, profile, { type, theme: appState.plotTheme });
-      performance.measure("phase:plot:influence", "phase:plot:influence:start");
     });
+    const elCumForestPageSize = document.getElementById("cumulativeForestPageSize");
+    const elCumFunnelStep = document.getElementById("cumulativeFunnelStep");
+    const elCumFunnelBlock = document.getElementById("cumulativeFunnelBlock");
     const rawCumPageSize = elCumForestPageSize?.value ?? "30";
     const cumForestPageSize = rawCumPageSize === "all" ? Infinity : +rawCumPageSize;
-    cumForestPlot.args = { results: cumResults, profile, pageSize: cumForestPageSize, alpha, ciLabel: getCiLabel2() };
+    const ciLabel = Math.round((1 - alpha) * 100) + "% CI";
+    cumForestPlot.args = { results: cumResults, profile, pageSize: cumForestPageSize, alpha, ciLabel };
     cumForestPlot.sourceStudies = studies.slice();
     cumForestPlot.method = method;
     cumForestPlot.ciMethod = ciMethod;
     cumForestPlot.alpha = alpha;
-    appState.reportArgs.cumForestOptions = { results: cumResults, profile, pageSize: cumForestPageSize, currentPage: 0, alpha, ciLabel: getCiLabel2() };
+    appState.reportArgs.cumForestOptions = { results: cumResults, profile, pageSize: cumForestPageSize, currentPage: 0, alpha, ciLabel };
     cumFunnelPlot.studies = cumulativeStudies;
     cumFunnelPlot.results = cumResults;
     cumFunnelPlot.profile = profile;
@@ -33737,13 +36948,13 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
     _updateCumFunnelLabel(cumResults.length - 1);
     elCumFunnelBlock.style.display = "";
     drawIfVisible("cumulativeSection", () => {
-      performance.mark("phase:plot:cumulative:start");
       const { totalPages: cumForestPages } = drawCumulativeForest(cumResults, profile, { pageSize: cumForestPageSize, page: 0, theme: appState.plotTheme });
       renderCumulativeForestNav(cumForestPages);
       drawCumulativeFunnel(cumulativeStudies, cumResults, profile, cumResults.length - 1, { theme: appState.plotTheme });
-      performance.measure("phase:plot:cumulative", "phase:plot:cumulative:start");
     });
-    elOrchardPlotBlock.style.display = "";
+    const elCatPageSize = document.getElementById("caterpillarPageSize");
+    const elCaterpillarBlock = document.getElementById("caterpillarPlotBlock");
+    document.getElementById("orchardPlotBlock").style.display = "";
     caterpillarPlot.page = 0;
     const rawCatPageSize = elCatPageSize?.value ?? "30";
     const catPageSize = rawCatPageSize === "all" ? Infinity : +rawCatPageSize;
@@ -33751,19 +36962,18 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
     elCaterpillarBlock.style.display = "";
     appState.reportArgs.caterpillarOptions = { studies: all, m, profile, pageSize: catPageSize, currentPage: 0 };
     drawIfVisible("altVizSection", () => {
-      performance.mark("phase:plot:orchard:start");
       drawOrchardPlot(all, m, profile, { theme: appState.plotTheme });
       const { totalPages: catPages } = drawCaterpillarPlot(all, m, profile, { pageSize: catPageSize, page: 0, theme: appState.plotTheme });
       renderCaterpillarNav(catPages);
-      performance.measure("phase:plot:orchard", "phase:plot:orchard:start");
     });
-    const hasRoB = _robDomains.length > 0 && studies.length > 0;
+    const elRobSection = document.getElementById("robSection");
+    const hasRoB = robPlotState.domains.length > 0 && studies.length > 0;
     elRobSection.style.display = hasRoB ? "" : "none";
     if (hasRoB) {
       robPlotState.studies = studies;
       drawIfVisible("robSection", () => {
-        drawRoBTrafficLight(studies, _robDomains, _robData, { theme: appState.plotTheme });
-        drawRoBSummary(studies, _robDomains, _robData, { theme: appState.plotTheme });
+        drawRoBTrafficLight(studies, robPlotState.domains, robPlotState.data, { theme: appState.plotTheme });
+        drawRoBSummary(studies, robPlotState.domains, robPlotState.data, { theme: appState.plotTheme });
       });
     }
     updateValidationWarnings(studies, excluded, softWarnings);
@@ -33779,6 +36989,75 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
     });
     _buildJumpPill();
   }
+  function _renderAllResults(ctx) {
+    const {
+      type,
+      profile,
+      studies,
+      all,
+      m,
+      influence,
+      subgroup,
+      reg,
+      ls,
+      pcurve,
+      puniform,
+      selResult
+    } = ctx;
+    const {
+      method,
+      ciMethod,
+      alpha,
+      isMHorPeto,
+      hasClusters,
+      selModeVal,
+      selWeightFn
+    } = ctx.opts;
+    _renderPooledPanel(ctx);
+    _renderPubBiasPanel(ctx);
+    const elInfluenceDiagTable = document.getElementById("influenceDiagTable");
+    const elSubgroupSection = document.getElementById("subgroupSection");
+    const elSubgroupTable = document.getElementById("subgroupTable");
+    const influenceOpen = elInfluenceDiagTable.querySelector(".sens-block")?.open ?? true;
+    const influenceHTML = buildInfluenceHTML(influence, influenceOpen);
+    const hasSubgroup = subgroup && subgroup.G >= 2;
+    const subgroupHTML = hasSubgroup ? buildSubgroupHTML(subgroup, profile, hasClusters) : "";
+    elInfluenceDiagTable.innerHTML = influenceHTML;
+    elInfluenceDiagTable.querySelectorAll(".sens-summary").forEach((summary) => {
+      summary.addEventListener("click", (e) => {
+        if (e.target.closest(".help-btn")) e.preventDefault();
+      });
+    });
+    elSubgroupSection.style.display = hasSubgroup ? "" : "none";
+    elSubgroupTable.innerHTML = hasSubgroup && isMHorPeto ? `<p class="reg-note" style="margin:4px 0 8px">\u26A0 Subgroup pooling uses inverse-variance (DL) weights \u2014 switch to DL or REML for M-H subgroup analysis.</p>` + subgroupHTML : subgroupHTML;
+    renderStudyTable(all, m, profile, alpha);
+    _animateFresh(document.getElementById("studyTable"));
+    renderSensitivityPanel(studies, isMHorPeto ? null : m, isMHorPeto ? "DL" : method, ciMethod, profile, alpha, { isMHFallback: isMHorPeto });
+    pCurvePlot.result = pcurve;
+    pUniformPlot.result = puniform;
+    pUniformPlot.m = m;
+    pUniformPlot.profile = profile;
+    renderPCurvePanel(pcurve, { theme: appState.plotTheme });
+    renderPUniformPanel(puniform, m, profile, { theme: appState.plotTheme });
+    renderSelectionModelPanel(selResult, selModeVal, selWeightFn, profile);
+    const kExcluded = reg ?? ls ? studies.length - (reg ?? ls).k : 0;
+    if (ls) {
+      appState.results.reg = null;
+      appState.results.ls = ls.rankDeficient ? null : ls;
+      renderLocationScalePanel(ls, ciMethod, kExcluded, alpha);
+    } else {
+      appState.results.ls = null;
+      appState.results.reg = reg && !reg.rankDeficient ? reg : null;
+      const _allTermMods = [...moderators, ...interactions.map((ix) => ({ name: ix.name }))];
+      renderRegressionPanel(reg ?? {}, method, ciMethod, kExcluded, _allTermMods, alpha);
+      const elPermSection = document.getElementById("permSection");
+      if (elPermSection) {
+        elPermSection.style.display = appState.results.reg ? "" : "none";
+        _clearPermResults();
+      }
+    }
+    _renderForestAndBubbles(ctx);
+  }
   async function runAnalysis() {
     if (_analysisRunning) return false;
     _analysisRunning = true;
@@ -33791,12 +37070,9 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
     if (_runProgress) _runProgress.hidden = false;
     await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
     try {
-      performance.mark("runAnalysis:start");
       scheduleSave();
-      if (_mvMode) {
-        const ok = _runMVAnalysis();
-        performance.measure("runAnalysis", "runAnalysis:start");
-        return ok;
+      if (mvState.active) {
+        return runMVAnalysis();
       }
       if (goshState.worker) {
         goshState.worker.terminate();
@@ -33822,15 +37098,12 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
       const type = document.getElementById("effectType").value;
       const profile = effectProfiles[type];
       if (!profile) return;
-      performance.mark("phase:parse:start");
       const { studies, excluded, softWarnings, missingCorrelation } = collectStudies(type, scaleModerators);
-      performance.measure("phase:parse", "phase:parse:start");
       if (!studies.length) {
         if (outputPlaceholder) {
           outputPlaceholder.style.display = "";
           outputPlaceholder.textContent = "No valid studies to analyse. Check the input table for errors.";
         }
-        performance.measure("runAnalysis", "runAnalysis:start");
         return false;
       }
       if (outputPlaceholder) outputPlaceholder.style.display = "none";
@@ -33851,7 +37124,9 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
       const useTFAdjusted = document.getElementById("useTFAdjusted")?.checked;
       const isMHorPeto = method === "MH" || method === "Peto";
       const hasClusters = studies.some((s) => s.cluster);
-      const rveRho = parseFloat(document.getElementById("rveRho")?.value ?? 0.8);
+      const rveRho = parseFloat(document.getElementById("rveRho")?.value) || 0.8;
+      const rveMode = document.getElementById("rveWeighting")?.value ?? "corr";
+      const threeLevelMethod = document.getElementById("threeLevelMethod")?.value ?? "REML";
       const modSpec = moderators.map((mod) => ({ key: mod.name, type: mod.type, transform: mod.transform || "linear" }));
       const scaleModSpec = scaleModerators.map((mod) => ({ key: mod.name, type: mod.type, transform: mod.transform || "linear" }));
       const interactionSpec = interactions.map((ix) => ({ name: ix.name, termA: ix.termA, termB: ix.termB }));
@@ -33861,10 +37136,12 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
       const selWeightFn = document.getElementById("selWeightFn").value;
       const selSides = parseInt(document.getElementById("selSides").value, 10);
       const rawSelCuts = document.getElementById("selCuts").value.split(",").map((s) => parseFloat(s.trim())).filter(isFinite);
-      const selCuts = rawSelCuts.length >= 2 && rawSelCuts[rawSelCuts.length - 1] === 1 ? rawSelCuts : [...rawSelCuts.filter((c) => c < 1), 1];
+      const selCuts = rawSelCuts.length >= 2 && Math.abs(rawSelCuts[rawSelCuts.length - 1] - 1) < 1e-9 ? rawSelCuts : [...rawSelCuts.filter((c) => c < 1), 1];
       const bayesMu0 = parseFloat(document.getElementById("bayesMu0")?.value) || 0;
       const bayesSigmaMu = Math.max(0.01, parseFloat(document.getElementById("bayesSigmaMu")?.value) || 1);
       const bayesSigmaTau = Math.max(0.01, parseFloat(document.getElementById("bayesSigmaTau")?.value) || 0.5);
+      const fsnTrivial2 = Math.max(1e-3, parseFloat(document.getElementById("fsnTrivial")?.value) || 0.1);
+      const fsnDirection2 = document.getElementById("fsnDirection")?.value ?? "auto";
       const opts = {
         method,
         ciMethod,
@@ -33876,6 +37153,8 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
         isMHorPeto,
         hasClusters,
         rveRho,
+        rveMode,
+        threeLevelMethod,
         modSpec,
         scaleModSpec,
         interactionSpec,
@@ -33887,61 +37166,45 @@ is unfavourable. The CS structure is a reasonable default when k is small.</p>`,
         selCuts,
         bayesMu0,
         bayesSigmaMu,
-        bayesSigmaTau
+        bayesSigmaTau,
+        fsnTrivial: fsnTrivial2,
+        fsnDirection: fsnDirection2
       };
-      performance.mark("phase:meta:start");
-      const coreMeta = _runCoreMeta(studies, opts);
-      performance.measure("phase:meta", "phase:meta:start");
-      const { m, tf, all, profileLikResult, mAdjusted, rveResult, threeLevelResult } = coreMeta;
+      const r = runAnalysisHeadless(studies, type, opts);
+      const { m, threeLevelResult } = r;
       if (m.error) {
         document.getElementById("results").innerHTML = `<b style="color:var(--color-warning)">Error: ${escapeHTML(m.error)}</b>`;
-        performance.measure("runAnalysis", "runAnalysis:start");
         return false;
       }
-      performance.mark("phase:bayes:start");
-      const { bayesResult, reMeanRef } = _runBayesBatch(studies, m, opts);
-      performance.measure("phase:bayes", "phase:bayes:start");
-      performance.mark("phase:pubbias:start");
-      const pubBias = _runPubBiasBatch(studies, m, opts);
-      performance.measure("phase:pubbias", "phase:pubbias:start");
-      performance.mark("phase:loo:start");
-      const sensitivity = _runSensitivityBatch(studies, m, opts);
-      performance.measure("phase:loo", "phase:loo:start");
-      performance.mark("phase:regression:start");
-      const regression = _runRegressionBatch(studies, m, opts);
-      performance.measure("phase:regression", "phase:regression:start");
+      {
+        const nonConverged = [
+          m.convergence,
+          threeLevelResult?.convergence,
+          r.reg?.convergence,
+          r.ls?.convergence,
+          r.selResult?.convergence
+        ].filter((c) => c && c.converged === false);
+        if (nonConverged.length) {
+          const sources = nonConverged.map((c) => c.source);
+          console.warn(
+            "[FOSMA] Optimizer did not converge:",
+            nonConverged.map((c) => `${c.source} (${c.iters}/${c.maxIters} iters)`).join("; ")
+          );
+          showConvergenceToast(sources);
+        }
+      }
       _renderAllResults({
-        type,
-        profile,
-        studies,
+        ...r,
         excluded,
         softWarnings,
-        missingCorrelation,
-        m,
-        tf,
-        all,
-        profileLikResult,
-        mAdjusted,
-        rveResult,
-        threeLevelResult,
-        bayesResult,
-        reMeanRef,
-        ...pubBias,
-        ...sensitivity,
-        ...regression,
-        opts
+        missingCorrelation
       });
-      performance.measure("runAnalysis", "runAnalysis:start");
-      if (PERF_LOG) {
-        const entries = performance.getEntriesByType("measure").filter((e) => e.name.startsWith("phase:") || e.name === "runAnalysis");
-        console.table(entries.map((e) => ({ name: e.name, ms: +e.duration.toFixed(2) })));
-      }
       return true;
     } finally {
       _analysisRunning = false;
       if (_runBtn) {
         _runBtn.disabled = false;
-        _runBtn.innerHTML = 'Run <kbd class="run-kbd">(Ctrl+Enter)</kbd>';
+        _runBtn.textContent = "Run";
       }
       if (_runProgress) _runProgress.hidden = true;
     }

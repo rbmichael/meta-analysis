@@ -9,7 +9,7 @@ import { build } from 'esbuild';
 import { readFileSync } from 'fs';
 
 await build({
-  entryPoints: ['js/ui.js'],
+  entryPoints: ['js/ui/ui.js'],
   bundle: true,
   outfile: 'bundle.js',
   format: 'iife',
