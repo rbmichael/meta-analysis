@@ -135,6 +135,17 @@
   background: var(--bg-row-alt);
 }
 
+/* ---- Author / citation block ---- */
+.about-citation {
+  margin: 8px 0 0 0;
+  padding: 10px 14px;
+  border-left: 3px solid var(--border-hover);
+  background: var(--bg-row-alt);
+  border-radius: 0 var(--radius-xs) var(--radius-xs) 0;
+  color: var(--fg-subtle);
+  font-size: var(--font-size-base);
+}
+
 /* ---- Quickstart bar (shortcuts + replay link) ---- */
 .about-quickstart {
   font-size: var(--font-size-base);
