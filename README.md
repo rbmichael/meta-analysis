@@ -348,6 +348,12 @@ BibTeX:
 
 ---
 
+## Conflict of interest and funding
+
+The author declares no conflicts of interest. This work received no external funding.
+
+---
+
 ## License
 
 MIT
