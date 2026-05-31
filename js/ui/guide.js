@@ -1271,7 +1271,10 @@ to assess sensitivity; if conclusions are stable across ρ, the choice is not cr
 <p>When moderator columns are present, RVE extends to meta-regression: the design
 matrix X includes an intercept and all active moderators, and df = m − p where
 p is the total number of coefficients. The results panel shows per-coefficient
-estimates, SEs, t-statistics, and p-values under the RVE model.</p>`,
+estimates, SEs, t-statistics, and p-values under the RVE model.</p>
+<p><strong>Limitation:</strong> only the CR1 small-sample correction is implemented.
+The CR2 and CR3 corrections (Pustejovsky &amp; Tipton 2018) are not available; for
+those, use the <em>clubSandwich</em> R package.</p>`,
         citations: [
           "Hedges, L. V., Tipton, E., & Johnson, M. C. (2010). Robust variance estimation in meta-regression with dependent effect size estimates. <em>Research Synthesis Methods, 1</em>(1), 39–65.",
           "Tipton, E. (2015). Small sample adjustments for robust variance estimation with meta-regression. <em>Psychological Methods, 20</em>(3), 375–393.",
